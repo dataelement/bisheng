@@ -3,7 +3,7 @@ import { useSubjectSearch } from "./useSubjectSearch"
 import { SubjectBusinessId, SubjectSearchStatus } from "./SubjectSearchStatus"
 import { useLazyDepartmentTree } from "@/components/bs-comp/department"
 
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Checkbox } from '@bisheng/ui';
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import {
@@ -163,7 +163,8 @@ export default function DepartmentUsersSelect({
   })
   const searchingUsers = search.loading
   const searchedUsers = search.rows
-  useEffect(() => { if (!open) search.changeKeyword("") }, [open])
+  const changeSearchKeyword = search.changeKeyword
+  useEffect(() => { if (!open) changeSearchKeyword("") }, [open, changeSearchKeyword])
 
   const setPicked = (user: DepartmentUserOption, departmentPath: string) => {
     const id = Number(user.value)
@@ -208,7 +209,7 @@ export default function DepartmentUsersSelect({
         onClick={() => setPicked(u, departmentPath)}
       >
         <div className="relative shrink-0 self-stretch" style={{ width: depth * TREE_INDENT_PER_LEVEL }} aria-hidden />
-        <Checkbox checked={selected} disabled={locked} onClick={(e) => e.stopPropagation()} onCheckedChange={() => setPicked(u, departmentPath)} />
+        <Checkbox className="peer" checked={selected} disabled={locked} onClick={(e) => e.stopPropagation()} onCheckedChange={() => setPicked(u, departmentPath)} />
         <UserIcon className="mx-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate">{u.label}</span>
         <SubjectBusinessId value={u.external_id} />
@@ -362,7 +363,7 @@ export default function DepartmentUsersSelect({
                         setPicked({ value: u.user_id, label: u.user_name, external_id: u.external_id }, deptLabel)
                       }
                     >
-                      <Checkbox
+                      <Checkbox className="peer"
                         checked={selectedMap.has(Number(u.user_id))}
                         disabled={lockedSet.has(Number(u.user_id))}
                         onClick={(e) => e.stopPropagation()}

@@ -1,7 +1,8 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Loader2, Link2, Search, Check } from "lucide-react";
-import { Tooltip, TooltipTrigger, TooltipContent } from "~/components/ui/Tooltip2";
+
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { useLocalize } from "~/hooks";
@@ -48,27 +49,16 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
         : null;
 
     const versionLine = entry.doc_code
-        ? `${entry.doc_code} · 当前主版本 V${entry.current_primary_version_no ?? 1}`
-        : `当前主版本 V${entry.current_primary_version_no ?? 1}`;
+        ? `${entry.doc_code} · ${localize("com_knowledge.version.primary_version_label", { version: entry.current_primary_version_no ?? 1 })}`
+        : localize("com_knowledge.version.primary_version_label", { version: entry.current_primary_version_no ?? 1 });
 
     return (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border-base bg-white px-4 py-3 hover:border-blue-500 hover:bg-[#F4F8FF] transition-colors group">
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <p className="min-w-0 cursor-default truncate text-[14px] font-medium text-text-1">
+                    <SharedTooltip  content={entry.title} side="top" ><p className="min-w-0 cursor-default truncate text-[14px] font-medium text-text-1">
                                 {entry.title}
-                            </p>
-                        </TooltipTrigger>
-                        <TooltipContent
-                            noArrow
-                            side="top"
-                            className="max-w-xs rounded-md bg-[#1D2129] px-2 py-1 text-[12px] text-white"
-                        >
-                            {entry.title}
-                        </TooltipContent>
-                    </Tooltip>
+                            </p></SharedTooltip>
                     <span className="shrink-0 rounded bg-[#FFF3E8] px-1.5 py-0.5 text-[12px] text-[#F76F44]">
                         {localize("com_knowledge.version.similarity_label")} {(entry.similarity * 100).toFixed(0)}%
                     </span>
@@ -219,22 +209,11 @@ export function RelateDocumentPanel({
                     <p className="text-[12px] text-text-3 mb-1">
                         {localize("com_knowledge.version.section_current_file")}
                     </p>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <p className="truncate text-[16px] font-medium text-text-1 mb-1">
+                    <SharedTooltip  content={file.name} side="top" ><p className="truncate text-[16px] font-medium text-text-1 mb-1">
                                 {file.name}
-                            </p>
-                        </TooltipTrigger>
-                        <TooltipContent
-                            noArrow
-                            side="top"
-                            className="max-w-xs rounded-md bg-[#1D2129] px-2 py-1 text-[12px] text-white"
-                        >
-                            {file.name}
-                        </TooltipContent>
-                    </Tooltip>
+                            </p></SharedTooltip>
                     <p className="text-[12px] text-text-3">
-                        当前主版本 V{file.version_no ?? 1} · 上传人 {file.user_name ?? "未知"}
+                        {localize("com_knowledge.version.primary_version_uploader", { version: file.version_no ?? 1, name: file.user_name ?? localize("com_ui_unknown") })}
                     </p>
                 </div>
                 <span className="shrink-0 rounded bg-[#FFF3E8] px-2 py-0.5 text-[12px] text-[#F76F44] font-medium mt-1">

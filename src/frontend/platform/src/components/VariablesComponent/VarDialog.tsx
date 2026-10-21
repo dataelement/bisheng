@@ -10,7 +10,7 @@ import { generateUUID } from '../../utils';
 
 import { DialogContent, DialogFooter } from '../bs-ui/dialog';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../bs-ui/tabs';
+import { Tabs } from '@bisheng/ui';
 
 export default function VarDialog({ data, onSave, onClose }) {
 
@@ -79,31 +79,17 @@ export default function VarDialog({ data, onSave, onClose }) {
     </div>
 
     return (<DialogContent className="sm:max-w-[425px]">
-        <Tabs defaultValue={item.type}
-            className="w-full"
-            onValueChange={(t) => setItem(prevItem => ({
+        <Tabs defaultActiveKey={item.type} className="w-full" onChange={(t) => setItem(prevItem => ({
                 ...prevItem,
                 type: t
-            }))} >
-            <TabsList className="">
-                <TabsTrigger value="text" className="roundedrounded-xl">{t('flow.text')}</TabsTrigger>
-                <TabsTrigger value="select">{t('flow.dropdown')}</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="text">
-                {VariablesName}
-                <div>
+            }))} items={[{ key: "text", label: <>{t('flow.text')}</>, children: <div >{VariablesName}<div>
                     <label className='text-sm text-gray-500'>{t('flow.maxLength')}：</label>
                     <Input value={item.maxLength} onChange={(e) => setItem(prevItem => ({
                         ...prevItem,
                         maxLength: e.target.value
                     }))} className={"mt-2"} />
-                </div>
-            </TabsContent>
-            <TabsContent value="select" className='pb-10 px-2 max-h-80 overflow-y-auto scrollbar-hide'>
-                {VariablesName}
-                <label className='text-sm text-gray-500'>{t('flow.options')}：</label>
-                <DragDropContext onDragEnd={handleDragEnd}>
+                </div></div> },
+{ key: "select", label: <>{t('flow.dropdown')}</>, children: <div className='pb-10 px-2 max-h-80 overflow-y-auto scrollbar-hide'>{VariablesName}<label className='text-sm text-gray-500'>{t('flow.options')}：</label><DragDropContext onDragEnd={handleDragEnd}>
                     <Droppable droppableId="list" direction="vertical" >
                         {(provide) => (
                             <div  {...provide.droppableProps} ref={provide.innerRef}>
@@ -137,17 +123,14 @@ export default function VarDialog({ data, onSave, onClose }) {
                             </div>
                         )}
                     </Droppable>
-                </DragDropContext>
-                <button onClick={() =>
+                </DragDropContext><button onClick={() =>
                     setItem(prevItem => ({
                         ...prevItem,
                         options: [...prevItem.options, { key: generateUUID(4), value: "" }]
                     }))
                 }>
                     <Plus className={"h-4 w-4 mt-2 hover:text-accent-foreground"} />
-                </button>
-            </TabsContent>
-        </Tabs>
+                </button></div> }]} />
         <DialogFooter>
             <Button className='px-8' variant="outlined" size="small" onClick={() => onClose(false)} color="default">{t('cancel')}</Button>
             <Button className='px-8' onClick={handleSave} size="small">{t('save')}</Button>

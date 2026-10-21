@@ -1190,7 +1190,9 @@
     "recent_apps_hint": "最近使用过的应用都在这里～",
     "service_maintenance_title": "哎呀，系统出了点小状况",
     "service_maintenance": "短暂停留一下，马上恢复正常使用",
-    "refresh": "刷新重试"
+    "refresh": "刷新重试",
+    "unknown_name": "未知应用",
+    "featured": "精选"
   },
   "com_knowledge": {
     "add_new": "新增",
@@ -1567,7 +1569,9 @@
       "search_button": "搜索",
       "section_dismiss": "不关联推荐文档",
       "section_dismiss_subtitle": "当前文件保持现有状态,不写入推荐的版本链。",
-      "btn_close": "关闭"
+      "btn_close": "关闭",
+      "primary_version_label": "当前主版本 V{{version}}",
+      "primary_version_uploader": "当前主版本 V{{version}} · 上传人 {{name}}"
     },
     "move_to": "移动到",
     "current_space_tag": "（当前）",

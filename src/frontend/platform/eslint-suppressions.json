@@ -1063,9 +1063,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 6
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/modals/L2ParamsModal/index.tsx": {
@@ -3055,7 +3052,7 @@
   },
   "src/test/knowledgeSpaceGrantSubjects.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 17
+      "count": 16
     },
     "no-restricted-syntax": {
       "count": 26
@@ -3091,7 +3088,7 @@
   },
   "src/test/subjectSearchUser.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 6
     },
     "no-restricted-syntax": {
       "count": 1

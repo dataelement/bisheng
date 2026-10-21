@@ -1,7 +1,8 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { cn } from "~/utils";
 import useFinePointer from "~/hooks/useFinePointer";
 import useLocalize from "~/hooks/useLocalize";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from "~/components/ui/Popover";
 // Imported as a module (not a /public URL) so the bundler resolves it against
 // the app's base path and fingerprints it — no env-var lookup at render time.
@@ -55,18 +56,7 @@ export function WechatLinkHint({
     // mx-1 gives the highlighted phrase breathing room from the grey text on
     // both sides; CJK copy has no natural word spacing.
     const highlighted = hasHover ? (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <span className="mx-1 cursor-pointer text-blue-500 no-underline">{linkLabel}</span>
-            </TooltipTrigger>
-            <TooltipContent
-                side="top"
-                className={WECHAT_GUIDE_CARD}
-                arrowClassName="bg-white fill-white"
-            >
-                {guideBody}
-            </TooltipContent>
-        </Tooltip>
+        <SharedTooltip  content={guideBody} side="top" ><span className="mx-1 cursor-pointer text-blue-500 no-underline">{linkLabel}</span></SharedTooltip>
     ) : (
         <Popover>
             <PopoverTrigger asChild>

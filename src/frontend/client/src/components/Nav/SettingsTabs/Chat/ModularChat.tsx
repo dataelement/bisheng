@@ -1,5 +1,5 @@
 import { useRecoilState } from 'recoil';
-import { Switch } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -25,7 +25,7 @@ export default function ModularChatSwitch({
         id="modularChat"
         checked={modularChat}
         onCheckedChange={handleCheckedChange}
-        className="ml-4"
+        className="peer ml-4"
         data-testid="modularChat"
       />
     </div>

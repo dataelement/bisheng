@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import React, { useRef } from 'react';
-import { Button, FileUpload, TooltipAnchor } from '~/components/ui';
+import { Button, FileUpload } from '~/components/ui';
 import { AttachmentIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
@@ -19,16 +20,9 @@ const AttachFileButton = ({
 
   return (
     <FileUpload ref={inputRef} handleFileChange={handleFileChange}>
-      <TooltipAnchor
-        role="button"
-        id="attach-file"
-        aria-label={localize('com_sidepanel_attach_files')}
-        disabled={isUploadDisabled}
-        className={cn(
+      <SharedTooltip  content={localize('com_sidepanel_attach_files')}  ><div role="button" id="attach-file" aria-label={localize('com_sidepanel_attach_files')} disabled={isUploadDisabled} className={cn(
           'flex items-center justify-center rounded-full p-1 transition-colors focus-visible:outline-none dark:focus-visible:outline-none ',
-        )}
-        description={localize('com_sidepanel_attach_files')}
-        onKeyDownCapture={(e) => {
+        )} onKeyDownCapture={(e) => {
           if (disabled) return
           if (!inputRef.current) {
             return;
@@ -37,21 +31,17 @@ const AttachFileButton = ({
             inputRef.current.value = '';
             inputRef.current.click();
           }
-        }}
-        onClick={() => {
+        }} onClick={() => {
           if (!inputRef.current) {
             return;
           }
           inputRef.current.value = '';
           inputRef.current.click();
-        }}
-      >
-        <div className="flex w-full items-center justify-center gap-2">
+        }} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.click(); } }}><div className="flex w-full items-center justify-center gap-2">
           <Button disabled={isUploadDisabled}>
             {disabled && <Loader2 className='animate-spin' />}
             {localize('com_knowledge_add_file')}</Button>
-        </div>
-      </TooltipAnchor>
+        </div></div></SharedTooltip>
     </FileUpload>
   );
 };

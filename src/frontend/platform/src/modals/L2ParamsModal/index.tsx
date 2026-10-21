@@ -14,7 +14,7 @@ import {
     DialogTrigger,
 } from "../../components/bs-ui/dialog";
 import { Label } from "../../components/bs-ui/label";
-import { Switch } from "../../components/bs-ui/switch";
+import { Switch } from '@bisheng/ui';
 import { TemplateVariableType } from "../../types/api";
 import { FlowType } from "../../types/flow";
 import { classNames } from "../../utils";
@@ -64,7 +64,7 @@ const Item = ({ name, data }: { name: string, data: TemplateVariableType }) => {
                     }
                 </div>
             </div>
-            <Switch id="airplane-mode" checked={data.l2} onCheckedChange={handleSwitch} />
+            <Switch className="peer" id="airplane-mode" checked={data.l2} onCheckedChange={handleSwitch} />
         </div>
     );
 };

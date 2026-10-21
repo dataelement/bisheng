@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { SearchInput } from '@bisheng/ui';
 // components/ToolSelector.tsx
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -8,7 +9,7 @@ import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 import { LoadIcon } from '../bs-icons/loading';
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
+
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
 
 const ToolSelector = ({
@@ -281,16 +282,7 @@ const ToolSelector = ({
                           >
                             <div className="flex items-center">
                               <AlignJustify className="w-4 h-4 mr-2 text-gray-400" />
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="truncate max-w-[240px]">{tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool', defaultValue: tool.name }) : tool.name}</span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>{tool.name}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
+                              <SharedTooltipProvider ><SharedTooltip  content={<><p>{tool.name}</p></>} ><span className="truncate max-w-[240px]">{tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool', defaultValue: tool.name }) : tool.name}</span></SharedTooltip></SharedTooltipProvider>
                             </div>
                             <div className="flex items-center gap-3 ml-2">
                               {showDefaultChecked && (
@@ -410,10 +402,11 @@ const ToolSelector = ({
                         state={getGroupState(tool)}
                         onChange={(checked) => toggleGroup(tool, checked)}
                       />
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="flex flex-col min-w-0">
+                      <SharedTooltipProvider ><SharedTooltip  content={tool.description && (
+                              <p className='text-xs mt-1 max-w-[240px]'>
+                                {tool.is_preset === 1 ? t(`categories.${tool.name}.desc`, { ns: 'tool' }) : tool.description}
+                              </p>
+                            )} ><div className="flex flex-col min-w-0">
                               <p className="truncate max-w-[180px]">
                                 {(tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool', defaultValue: tool.name }) : tool.name).split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
                                   part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
@@ -429,17 +422,7 @@ const ToolSelector = ({
                                   {tool.is_preset === 1 ? t(`categories.${tool.name}.desc`, { ns: 'tool', defaultValue: tool.description || '' }) : tool.description}
                                 </p>
                               )}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {tool.description && (
-                              <p className='text-xs mt-1 max-w-[240px]'>
-                                {tool.is_preset === 1 ? t(`categories.${tool.name}.desc`, { ns: 'tool' }) : tool.description}
-                              </p>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                            </div></SharedTooltip></SharedTooltipProvider>
                     </div>
 
                     <AccordionContent>
@@ -455,10 +438,7 @@ const ToolSelector = ({
                             {isToolSelected(tool.id, child.id) && <Check className="w-3 h-3" style={{ color: 'white' }} />}
                           </div>
                           <div className="min-w-0">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <p className="truncate max-w-[180px]">
+                            <SharedTooltipProvider ><SharedTooltip  content={<><p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.name`, { ns: 'tool', defaultValue: child.name }) : child.name}</p></>} ><p className="truncate max-w-[180px]">
                                     {(tool.is_preset === 1 ? t(`tools.${child.tool_key}.name`, { ns: 'tool', defaultValue: child.name }) : child.name).split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
                                       part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
                                         <span key={i} className="bg-yellow-200">{part}</span>
@@ -466,24 +446,9 @@ const ToolSelector = ({
                                         <span key={i}>{part}</span>
                                       )
                                     ))}
-                                  </p>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.name`, { ns: 'tool', defaultValue: child.name }) : child.name}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                                  </p></SharedTooltip></SharedTooltipProvider>
                             {child.desc && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <p className="text-xs text-gray-500 truncate max-w-[260px] mt-1">{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool', defaultValue: child.desc || '' }) : child.desc}</p>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool', defaultValue: child.desc || '' }) : child.desc}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
+                              <SharedTooltipProvider ><SharedTooltip  content={<><p className='max-w-[240px]'>{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool', defaultValue: child.desc || '' }) : child.desc}</p></>} ><p className="text-xs text-gray-500 truncate max-w-[260px] mt-1">{tool.is_preset === 1 ? t(`tools.${child.tool_key}.desc`, { ns: 'tool', defaultValue: child.desc || '' }) : child.desc}</p></SharedTooltip></SharedTooltipProvider>
                             )}
                           </div>
                         </div>

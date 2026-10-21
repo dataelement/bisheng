@@ -1,7 +1,7 @@
 export * from './AlertDialog';
-export * from './Breadcrumb';
+
 export * from './Button';
-export * from './Checkbox';
+
 export * from './CommentDialog';
 export * from './DataTableColumnHeader';
 export * from './Dialog';
@@ -18,13 +18,13 @@ export * from './Slider';
 export * from './Separator';
 export * from './InputCombobox';
 export * from './Skeleton';
-export * from './Switch';
+
 export * from './Table';
-export * from './Tabs';
-export * from './Tag';
-export * from './Textarea';
+
+
+
 export * from './TextareaAutosize';
-export * from './Tooltip';
+
 export * from './Pagination';
 export * from './Progress';
 export * from './InputOTP';

@@ -1,19 +1,11 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useCallback, useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import debounce from 'lodash/debounce';
 import { TrashIcon, MessageSquare, ArrowUpDown } from 'lucide-react';
 import type { SharedLinkItem, SharedLinksListParams } from '~/types/chat';
-import {
-  OGDialog,
-  OGDialogTrigger,
-  OGDialogContent,
-  OGDialogHeader,
-  OGDialogTitle,
-  Button,
-  TooltipAnchor,
-  Label,
-} from '~/components/ui';
+import { OGDialog, OGDialogTrigger, OGDialogContent, OGDialogHeader, OGDialogTitle, Button, Label } from '~/components/ui';
 import { useDeleteSharedLinkMutation, useSharedLinksQuery } from '~/hooks/queries/data-provider';
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import DataTable from '~/components/ui/DataTable';
@@ -230,10 +222,7 @@ export default function SharedLinks() {
         },
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <TooltipAnchor
-              description={localize('com_ui_view_source')}
-              render={
-                <Button
+            <SharedTooltip  content={localize('com_ui_view_source')}  ><Button
                   variant="ghost"
                   className="h-8 w-8 p-0 hover:bg-surface-hover"
                   onClick={() => {
@@ -242,22 +231,15 @@ export default function SharedLinks() {
                   title={localize('com_ui_view_source')}
                 >
                   <MessageSquare className="size-4" />
-                </Button>
-              }
-            ></TooltipAnchor>
-            <TooltipAnchor
-              description={localize('com_ui_delete')}
-              render={
-                <Button
+                </Button></SharedTooltip>
+            <SharedTooltip  content={localize('com_ui_delete')}  ><Button
                   variant="ghost"
                   className="h-8 w-8 p-0 hover:bg-surface-hover"
                   onClick={() => handleDeleteClick(row.original)}
                   title={localize('com_ui_delete')}
                 >
                   <TrashIcon className="size-4" />
-                </Button>
-              }
-            ></TooltipAnchor>
+                </Button></SharedTooltip>
           </div>
         ),
       },

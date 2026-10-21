@@ -1,3 +1,5 @@
+import { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardPortal } from '~/components/ui/HoverCard';
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { CircleHelp, FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
@@ -10,7 +12,7 @@ import {
     ActionMenuItem,
     actionMenuLabelClassName,
 } from "~/components/ActionMenu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
@@ -192,27 +194,17 @@ export function KnowledgeSpaceHeader({
                                         <span className={actionMenuLabelClassName}>
                                             {localize("com_knowledge.upload_file")}
                                         </span>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <span
+                                        <SharedTooltip  content={localize(
+                                                    bishengConfig?.enable_media_upload
+                                                        ? "com_knowledge.upload_file_types_tip"
+                                                        : "com_knowledge.upload_file_types_tip_without_media",
+                                                )} side="top" ><span
                                                     className="ml-auto inline-flex size-4 shrink-0 items-center justify-center text-[#8a94a6]"
                                                     onClick={(event) => event.stopPropagation()}
                                                     onPointerDown={(event) => event.stopPropagation()}
                                                 >
                                                     <CircleHelp className="size-3.5" />
-                                                </span>
-                                            </TooltipTrigger>
-                                            <TooltipContent
-                                                side="top"
-                                                className="z-[999] max-w-md"
-                                            >
-                                                {localize(
-                                                    bishengConfig?.enable_media_upload
-                                                        ? "com_knowledge.upload_file_types_tip"
-                                                        : "com_knowledge.upload_file_types_tip_without_media",
-                                                )}
-                                            </TooltipContent>
-                                        </Tooltip>
+                                                </span></SharedTooltip>
                                     </div>
                                 </ActionMenuItem>
                                 <ActionMenuItem
@@ -265,12 +257,7 @@ export function KnowledgeSpaceHeader({
                         <h1 className="min-w-0 truncate text-base leading-8 text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
                             {space.name}
                         </h1>
-                        <Tooltip>
-                            <TooltipTrigger className="shrink-0 cursor-pointer">
-                                <Outlined.Info className="size-4 text-text-3 outline-none hover:text-blue-500" />
-                            </TooltipTrigger>
-                            <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
-                                <div className="space-y-1.5 text-gray-800 text-sm">
+                        <HoverCard openDelay={100} closeDelay={100} ><HoverCardTrigger asChild><button type="button" className="shrink-0 cursor-pointer"><Outlined.Info className="size-4 text-text-3 outline-none hover:text-blue-500" /></button></HoverCardTrigger><HoverCardPortal><HoverCardContent className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">{<><div className="space-y-1.5 text-gray-800 text-sm">
                                     <div><span className="text-gray-400">{localize("com_knowledge.space_desc_label")}</span>
                                         <p>{space.description || "-"}</p>
                                     </div>
@@ -283,9 +270,7 @@ export function KnowledgeSpaceHeader({
                                     <div><span className="text-gray-400">{localize("com_knowledge.total_files_label")}</span>
                                         <p>{space.totalFileCount || 0}</p>
                                     </div>
-                                </div>
-                            </TooltipContent>
-                        </Tooltip>
+                                </div></>}</HoverCardContent></HoverCardPortal></HoverCard>
                     </div>
                 )}
             </div>

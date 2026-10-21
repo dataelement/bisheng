@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useState, useCallback } from 'react';
 import { QrCode, RotateCw, Trash2 } from 'lucide-react';
 import type { TSharedLinkGetResponse } from '~/types/chat';
@@ -7,7 +8,7 @@ import {
   useUpdateSharedLinkMutation,
   useDeleteSharedLinkMutation,
 } from '~/hooks/queries/data-provider';
-import { Button, OGDialog, Spinner, TooltipAnchor, Label } from '~/components';
+import { Button, OGDialog, Spinner, Label } from '~/components';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { NotificationSeverity } from '~/common';
 import { useToastContext } from '~/Providers';
@@ -117,11 +118,9 @@ export default function SharedLinkButton({
         )}
         {shareId && (
           <div className="flex items-center gap-2">
-            <TooltipAnchor
-              description={localize('com_ui_refresh_link')}
-              render={(props) => (
+            <SharedTooltip  content={localize('com_ui_refresh_link')}  >
                 <Button
-                  {...props}
+
                   onClick={() => updateSharedLink()}
                   variant="outline"
                   disabled={isUpdateLoading}
@@ -132,26 +131,19 @@ export default function SharedLinkButton({
                     <RotateCw className="size-4" />
                   )}
                 </Button>
-              )}
-            />
+              </SharedTooltip>
 
-            <TooltipAnchor
-              description={showQR ? localize('com_ui_hide_qr') : localize('com_ui_show_qr')}
-              render={(props) => (
-                <Button {...props} onClick={() => setShowQR(!showQR)} variant="outline">
+            <SharedTooltip  content={showQR ? localize('com_ui_hide_qr') : localize('com_ui_show_qr')}  >
+                <Button  onClick={() => setShowQR(!showQR)} variant="outline">
                   <QrCode className="size-4" />
                 </Button>
-              )}
-            />
+              </SharedTooltip>
 
-            <TooltipAnchor
-              description={localize('com_ui_delete')}
-              render={(props) => (
-                <Button {...props} onClick={() => setShowDeleteDialog(true)} variant="destructive">
+            <SharedTooltip  content={localize('com_ui_delete')}  >
+                <Button  onClick={() => setShowDeleteDialog(true)} variant="destructive">
                   <Trash2 className="size-4" />
                 </Button>
-              )}
-            />
+              </SharedTooltip>
           </div>
         )}
         <OGDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

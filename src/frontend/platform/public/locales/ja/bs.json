@@ -742,7 +742,8 @@
     "varOptionRequired": "オプションの内容を入力してください",
     "optionRepeated": "オプションが重複しています",
     "incorrectIdFormatMessage": "ID の形式が誤っています（英数字からなる5桁の文字列）",
-    "idAlreadyExistsMessage": "この ID はすでに存在します"
+    "idAlreadyExistsMessage": "この ID はすでに存在します",
+    "publishedVersionCannotSave": "公開中のバージョンは編集・保存できません"
   },
   "lib": {
     "knowledgeBaseId": "ナレッジベースID",

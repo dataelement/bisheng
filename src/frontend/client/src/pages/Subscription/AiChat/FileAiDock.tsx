@@ -1,12 +1,8 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Outlined } from "bisheng-icons";
 import { TextareaAutosize } from "~/components/ui";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "~/components/ui/Tooltip2";
+
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
@@ -422,23 +418,14 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                     )}
                 >
                     {!open && messages.length > 0 && (
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
+                        <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_ui_expand")}</p></>} ><button
                                         type="button"
                                         onClick={() => setOpen(true)}
                                         aria-label={localize("com_ui_expand")}
                                         className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
                                     >
                                         <Outlined.DoubleDown className="size-4 rotate-180" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{localize("com_ui_expand")}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                                    </button></SharedTooltip></SharedTooltipProvider>
                     )}
 
                     <div
@@ -457,40 +444,22 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                 <div className="min-w-0 flex-1" aria-hidden />
                                 {/* Clear · DoubleDown — bare 16px icons, 12px gap, right-aligned (matches the knowledge dock). */}
                                 <div className="flex shrink-0 items-center justify-end gap-3 py-1">
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <button
+                                    <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_subscription.clear_chat")}</p></>} ><button
                                                     type="button"
                                                     onClick={handleClear}
                                                     aria-label={localize("com_subscription.clear_chat")}
                                                     className="inline-flex size-4 shrink-0 items-center justify-center text-text-1 transition-colors hover:text-text-2"
                                                 >
                                                     <Outlined.Delete className="size-4 shrink-0" />
-                                                </button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p>{localize("com_subscription.clear_chat")}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <button
+                                                </button></SharedTooltip></SharedTooltipProvider>
+                                    <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_ui_collapse")}</p></>} side="top" ><button
                                                     type="button"
                                                     onClick={() => setOpen(false)}
                                                     aria-label={localize("com_ui_collapse")}
                                                     className="inline-flex size-4 shrink-0 items-center justify-center text-text-3 transition-colors hover:text-text-2"
                                                 >
                                                     <Outlined.DoubleDown className="size-4 shrink-0" />
-                                                </button>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="top">
-                                                <p>{localize("com_ui_collapse")}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
+                                                </button></SharedTooltip></SharedTooltipProvider>
                                 </div>
                             </div>
 

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { OptionTypes } from '~/types/chat';
 import type { DynamicSettingProps } from '~/types/chat';
-import { Label, Checkbox, HoverCard, HoverCardTrigger } from '~/components/ui';
+import { Label, HoverCard, HoverCardTrigger } from '~/components/ui';
+import { Checkbox } from '@bisheng/ui';
 import { TranslationKeys, useLocalize, useParameterEffects } from '~/hooks';
 import { useChatContext } from '~/Providers';
 import OptionHover from './OptionHover';
@@ -79,7 +80,7 @@ function DynamicCheckbox({
               disabled={readonly}
               checked={selectedValue}
               onCheckedChange={handleCheckedChange}
-              className="mt-[2px] focus:ring-opacity-20 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-50 dark:focus:ring-gray-600 dark:focus:ring-opacity-50 dark:focus:ring-offset-0"
+              className="peer mt-[2px] focus:ring-opacity-20 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-50 dark:focus:ring-gray-600 dark:focus:ring-opacity-50 dark:focus:ring-offset-0"
             />
           </div>
         </HoverCardTrigger>

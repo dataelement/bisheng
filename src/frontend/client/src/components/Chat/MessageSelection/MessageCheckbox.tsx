@@ -13,7 +13,7 @@
 
 import { useMessageSelection } from '~/hooks/useMessageSelection';
 import { useSelectionMessages } from './SelectionMessagesContext';
-import { Checkbox } from '~/components/ui/Checkbox';
+import { Checkbox } from '@bisheng/ui';
 
 interface MessageCheckboxProps {
     /** The chat this message belongs to (currently unused — Context-scoped). */
@@ -41,7 +41,7 @@ export function MessageCheckbox({ messageId, className }: MessageCheckboxProps) 
             // while selection mode is active.
             onClick={(event) => event.stopPropagation()}
             onCheckedChange={() => toggleMessage(messageId, messages)}
-            className={className}
+            className={`peer ${(className) || ''}`}
         />
     );
 }

@@ -54,16 +54,9 @@ vi.mock("@/components/bs-ui/accordion", () => ({
 
 
 
-vi.mock("@/components/bs-ui/badge", () => ({
-  Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-}))
 
-vi.mock("@/components/bs-ui/tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-}))
+
+
 
 vi.mock("@/components/bs-comp/permission/PermissionDialog", () => ({
   PermissionDialog: () => <div data-testid="permission-dialog" />,

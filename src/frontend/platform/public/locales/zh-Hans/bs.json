@@ -747,7 +747,8 @@
     "varOptionRequired": "请输入选项内容",
     "optionRepeated": "选项重复",
     "incorrectIdFormatMessage": "ID格式有误（包含字符和数字组成的5位字符）",
-    "idAlreadyExistsMessage": "该ID已存在"
+    "idAlreadyExistsMessage": "该ID已存在",
+    "publishedVersionCannotSave": "上线中不可编辑保存"
   },
   "lib": {
     "knowledgeBaseId": "知识库ID",

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useRecoilValue } from "recoil";
-import { Switch } from "~/components/ui";
+import { Switch } from '@bisheng/ui';
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
@@ -76,8 +76,8 @@ export const ChatToolDown = ({
                 {localize("com_tools_web_search")}
               </span>
             </div>
-            <Switch
-              variant="tool"
+            <Switch className="peer"
+
               disabled={disabled}
               checked={searchType === "netSearch"}
               onCheckedChange={(val) => {
@@ -151,7 +151,7 @@ export const LinsiTools = ({ tools, setTools }) => {
                 </span>
               </div>
               <Switch
-                className="data-[state=checked]:bg-blue-600"
+                className="peer data-[state=checked]:bg-blue-600"
                 checked={tool.checked}
                 onCheckedChange={(val) =>
                   setTools(

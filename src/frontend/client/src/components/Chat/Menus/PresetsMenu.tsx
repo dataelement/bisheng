@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import type { FC } from 'react';
 import { BookCopy } from 'lucide-react';
 import { Content, Portal, Root, Trigger } from '@radix-ui/react-popover';
 import { EditPresetDialog, PresetItems } from './Presets';
 import { useLocalize, usePresets } from '~/hooks';
 import { useChatContext } from '~/Providers';
-import { TooltipAnchor } from '~/components';
+
 
 const PresetsMenu: FC = () => {
   const localize = useLocalize();
@@ -23,19 +24,7 @@ const PresetsMenu: FC = () => {
   const { preset } = useChatContext();
   return (
     <Root>
-      <Trigger asChild>
-        <TooltipAnchor
-          id="presets-button"
-          aria-label={localize('com_endpoint_examples')}
-          description={localize('com_endpoint_examples')}
-          tabIndex={0}
-          role="button"
-          data-testid="presets-button"
-          className="inline-flex size-10 items-center justify-center rounded-lg border border-border-light bg-transparent text-text-primary transition-all ease-in-out hover:bg-surface-tertiary disabled:pointer-events-none disabled:opacity-50 radix-state-open:bg-surface-tertiary"
-        >
-          <BookCopy size={16} aria-label="Preset Icon" />
-        </TooltipAnchor>
-      </Trigger>
+      <SharedTooltip  content={localize('com_endpoint_examples')}  ><Trigger asChild><div id="presets-button" aria-label={localize('com_endpoint_examples')} tabIndex={0} role="button" data-testid="presets-button" className="inline-flex size-10 items-center justify-center rounded-lg border border-border-light bg-transparent text-text-primary transition-all ease-in-out hover:bg-surface-tertiary disabled:pointer-events-none disabled:opacity-50 radix-state-open:bg-surface-tertiary"  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.click(); } }}><BookCopy size={16} aria-label="Preset Icon" /></div></Trigger></SharedTooltip>
       <Portal>
         <div
           style={{

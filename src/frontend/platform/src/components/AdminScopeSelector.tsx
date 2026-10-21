@@ -2,11 +2,7 @@
 // `useAdminScope` and render only for the global super admin.
 
 import * as React from "react"
-import {
-    Tabs,
-    TabsList,
-    TabsTrigger,
-} from "@/components/bs-ui/tabs"
+import { Tabs } from '@bisheng/ui';
 
 // `'global'` represents no scope (full tree); numbers are tenant ids.
 export type AdminScopeValue = number | "global"
@@ -48,18 +44,14 @@ export function AdminScopeSelector({
     )
 
     return (
-        <Tabs value={String(value)} onValueChange={handleValueChange}>
-            <TabsList>
-                {tenants.map((t) => (
-                    <TabsTrigger
-                        key={String(t.value)}
-                        value={String(t.value)}
-                        disabled={disabled}
-                    >
-                        {t.label}
-                    </TabsTrigger>
-                ))}
-            </TabsList>
-        </Tabs>
+        <Tabs
+            activeKey={String(value)}
+            onChange={handleValueChange}
+            items={tenants.map((tenant) => ({
+                key: String(tenant.value),
+                label: tenant.label,
+                disabled,
+            }))}
+        />
     )
 }

@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button } from '@bisheng/ui';
 
 import {
@@ -10,12 +11,7 @@ DropdownMenuTrigger,
 import { Switch } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
-import {
-Tooltip,
-TooltipContent,
-TooltipProvider,
-TooltipTrigger,
-} from "@/components/bs-ui/tooltip";
+
 import type {
 PermissionActionLevel,
 PermissionCatalogAction,
@@ -249,8 +245,7 @@ export function ActionLevelBoard({
       )}
 
       {/* The only scroll area on this tab: the level columns, header and banners stay put. */}
-      <TooltipProvider delayDuration={200}>
-        <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1 xl:grid-cols-5">
+      <SharedTooltipProvider delayDuration={200}><div className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1 xl:grid-cols-5">
           {LEVELS.map((level) => {
             const key = levelKey(level)
             const zoneActions = normalizedActions.filter(
@@ -328,27 +323,18 @@ export function ActionLevelBoard({
                             className="size-4 shrink-0 cursor-grab text-muted-foreground"
                           />
 
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                          <SharedTooltip  content={<><p className="font-medium">
                                 {actionLabel(t, action.code, action.name)}
-                              </p>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-64">
-                              <p className="font-medium">
-                                {actionLabel(t, action.code, action.name)}
-                              </p>
-                              <p className="mt-0.5 opacity-80">{action.code}</p>
-                              <p className="mt-1 opacity-80">
+                              </p><p className="mt-0.5 opacity-80">{action.code}</p><p className="mt-1 opacity-80">
                                 {t("actionLevel.appliesTo")}:{" "}
                                 {action.resource_types
                                   .map((resourceType) =>
                                     resourceTypeLabel(t, resourceType),
                                   )
                                   .join("、")}
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
+                              </p></>} ><p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                                {actionLabel(t, action.code, action.name)}
+                              </p></SharedTooltip>
 
                           <Switch
                             aria-label={`${t("actionLevel.active")}.${action.code}`}
@@ -423,8 +409,7 @@ export function ActionLevelBoard({
               </div>
             )
           })}
-        </div>
-      </TooltipProvider>
+        </div></SharedTooltipProvider>
     </section>
   )
 }

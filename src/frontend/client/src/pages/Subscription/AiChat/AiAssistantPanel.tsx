@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { useLocalize } from "~/hooks";
 /**
  * AI Assistant Panel — complete chat interface.
@@ -10,12 +11,7 @@ import { ChevronsRight } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useRecoilState } from "recoil";
 import { Button } from "~/components";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "~/components/ui/Tooltip2";
+
 import { useAuthContext } from "~/hooks/AuthContext";
 import { useGetBsConfig, useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import store from "~/store";
@@ -211,22 +207,13 @@ export function AiAssistantPanel({
     };
 
     const clearChatControl = (
-        <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
+        <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_subscription.clear_chat")}</p></>} ><Button
                         variant="ghost"
                         className="text-gray-400 p-0.5 group relative w-5 h-5"
                         onClick={handleClearConversation}
                     >
                         <ChannelClearIcon className="size-4" />
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                    <p>{localize("com_subscription.clear_chat")}</p>
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
+                    </Button></SharedTooltip></SharedTooltipProvider>
     );
 
     return (
@@ -251,10 +238,7 @@ export function AiAssistantPanel({
                 <div className="min-w-0 flex-1" aria-hidden />
                 <div className="flex shrink-0 items-center gap-2">
                     {clearChatControl}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
+                    <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_ui_collapse")}</p></>} side="bottom" ><Button
                                     variant="ghost"
                                     type="button"
                                     size="icon"
@@ -263,13 +247,7 @@ export function AiAssistantPanel({
                                     aria-label={localize("com_ui_collapse")}
                                 >
                                     <ChevronsRight className="size-4 shrink-0" strokeWidth={2} aria-hidden />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">
-                                <p>{localize("com_ui_collapse")}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                                </Button></SharedTooltip></SharedTooltipProvider>
                 </div>
             </div>
 
