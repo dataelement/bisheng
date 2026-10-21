@@ -14,6 +14,7 @@ import { ConversationData, QueryKeys } from '~/types/chat';
 import { useToastContext } from '~/Providers';
 import store from '~/store';
 import { activeSessionIdState, LinsightInfo, linsightMapState, SopStatus, submissionState, SubmissionState } from '~/store/linsight';
+import { taskErrorInfoFromOutput } from '~/hooks/linsightErrorInfo';
 import {
     addConversation,
     formatTime,
@@ -132,6 +133,7 @@ export const useLinsightManager = () => {
             tasks: buildTaskTree(tasks),
             file_list: item.output_result?.final_files || [],
             taskError: 'failed' === item.status ? item.output_result?.error_message : '',
+            taskErrorInfo: taskErrorInfoFromOutput(item.status, item.output_result),
             // Carry the persisted task ChatMessage id + verdict, exactly as the
             // live final_result handler does, so like/dislike targets the right
             // row instead of a streaming placeholder.
@@ -201,6 +203,7 @@ export const useLinsightManager = () => {
             files: files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
             tasks: customTask ? tasks : buildTaskTree(tasks),
             taskError: 'failed' === status ? output_result?.error_message : '',
+            taskErrorInfo: taskErrorInfoFromOutput(status, output_result),
             file_list: output_result?.final_files || [],
             sop: 'sop_generation_failed' === status ? '' : sop,
             sopError: 'sop_generation_failed' === status ? sop : '',
