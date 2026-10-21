@@ -35,6 +35,7 @@ from collections.abc import Awaitable, Callable
 
 from langchain.agents.middleware._retry import calculate_delay
 from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from loguru import logger
 
@@ -607,6 +608,18 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         # loop mid-reasoning; re-raise for a clean, classified task-level failure.
         if not self.is_subagent:
             raise exc
+        self.take_degrade_slot(exc)
+        return AIMessage(content=_DEGRADE_MESSAGE)
+
+    def take_degrade_slot(self, exc: Exception) -> None:
+        """Count one skipped subagent step; re-raise ``exc`` once over ``max_degrade``.
+
+        Also used by ``SubagentContextOverflowMiddleware`` on the main graph, so a
+        subagent that stays over the context window after compression draws from
+        the same per-task allowance (F087 spec AC-16). That relies on this counter
+        being shared by every ``task`` call of the task — see the KNOWN GAP note
+        in ``__init__``; bucketing it per call would silently change AC-16.
+        """
         self._degrade_count += 1
         if self._degrade_count > self.max_degrade:
             logger.warning(
@@ -619,7 +632,6 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             "[linsight-resilience] subagent model call degraded "
             f"({self._degrade_count}/{self.max_degrade}): {type(exc).__name__}: {exc}"
         )
-        return AIMessage(content=_DEGRADE_MESSAGE)
 
     async def awrap_model_call(
         self,
@@ -775,3 +787,74 @@ def build_resilience_middleware(
         soft_landing_turns=getattr(linsight_conf, "soft_landing_turns", 8),
         budget_sink=budget_sink,
     )
+
+
+# F087: what the main planner reads when a delegated step stayed over the model's
+# context window even after the subagent compressed its own history. Unlike
+# _DEGRADE_MESSAGE it asks for a SMALLER re-delegation: repeating the same `task`
+# call would overflow again.
+_SUBAGENT_OVERFLOW_MESSAGE = (
+    "⚠️ 这一步交给子任务执行时，内容超出了模型一次能处理的长度，没有完成。"
+    "请把这一步拆成范围更小的几步再分别委派，或基于已获得的信息继续；不要原样重复同一个委派。"
+    "在最终交付物中用用户的语言简要说明此处缺失，不要原样输出本提示。\n"
+    "[System note] This delegated step exceeded the model's context window even after "
+    "compression and was not completed. Split it into smaller delegations or continue "
+    "with what you already have; do not repeat the same delegation. Briefly acknowledge "
+    "the gap in the final deliverable using the user's language, and do not echo this "
+    "notice verbatim."
+)
+
+_TASK_TOOL_NAME = "task"
+
+
+class SubagentContextOverflowMiddleware(AgentMiddleware):
+    """Main graph: turn a subagent's unrecoverable context overflow into a tool result.
+
+    The subagent's own resilience middleware sits INSIDE the framework's
+    summarization middleware, so it re-raises a context overflow to let that
+    middleware compress and retry. Only once the error has left the subagent graph
+    is it certain the retry failed too; it then surfaces here through the `task`
+    tool (deepagents' ``task`` awaits the subgraph without catching, and the tool
+    node re-raises non-validation errors). F087 design decision 9, spec AC-16.
+
+    The result uses the default (success) status on purpose: an ``error`` status
+    would also count towards the tool-loop breaker's failure streak.
+    """
+
+    def __init__(self, budget: LinsightModelResilienceMiddleware, context_window: dict | None = None):
+        super().__init__()
+        self._budget = budget
+        self._context_window = context_window if context_window is not None else {}
+
+    def _overflow_result(self, request, exc: Exception) -> ToolMessage:
+        # Over the shared allowance → re-raised, the task fails as context_overflow.
+        self._budget.take_degrade_slot(exc)
+        logger.warning(
+            "[linsight-context-window] subagent overflow window={} source={} reported_input_tokens={}: {}",
+            self._context_window.get("window"),
+            self._context_window.get("source"),
+            getattr(exc, "reported_input_tokens", None) or "unknown",
+            exc,
+        )
+        tool_call = request.tool_call or {}
+        return ToolMessage(
+            content=_SUBAGENT_OVERFLOW_MESSAGE,
+            tool_call_id=tool_call.get("id") or "",
+            name=tool_call.get("name") or _TASK_TOOL_NAME,
+        )
+
+    async def awrap_tool_call(self, request, handler):
+        if (request.tool_call or {}).get("name") != _TASK_TOOL_NAME:
+            return await handler(request)
+        try:
+            return await handler(request)
+        except ContextOverflowError as exc:
+            return self._overflow_result(request, exc)
+
+    def wrap_tool_call(self, request, handler):
+        if (request.tool_call or {}).get("name") != _TASK_TOOL_NAME:
+            return handler(request)
+        try:
+            return handler(request)
+        except ContextOverflowError as exc:
+            return self._overflow_result(request, exc)
