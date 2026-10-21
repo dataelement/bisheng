@@ -190,25 +190,10 @@ class TestFrontendModelData(unittest.TestCase):
         model_names = [m["model_name"] for m in self.model_data["minimax"]]
         self.assertIn("MiniMax-M3", model_names)
 
-    def test_minimax_has_m27_model(self):
-        """MiniMax-M2.7 should be listed as an LLM model."""
+    def test_minimax_recommended_models(self):
+        """New providers start with Flash, followed by M3."""
         model_names = [m["model_name"] for m in self.model_data["minimax"]]
-        self.assertIn("MiniMax-M2.7", model_names)
-
-    def test_minimax_has_m27_highspeed_model(self):
-        """MiniMax-M2.7-highspeed should be listed as an LLM model."""
-        model_names = [m["model_name"] for m in self.model_data["minimax"]]
-        self.assertIn("MiniMax-M2.7-highspeed", model_names)
-
-    def test_minimax_older_models_retained(self):
-        """Existing supported models must remain selectable after adding M3."""
-        model_names = [m["model_name"] for m in self.model_data["minimax"]]
-        for legacy in ("MiniMax-M2.5", "MiniMax-M2.5-highspeed", "MiniMax-Text-01"):
-            self.assertIn(legacy, model_names)
-
-    def test_minimax_m3_is_first(self):
-        """MiniMax-M3 should be the first (default) model."""
-        self.assertEqual(self.model_data["minimax"][0]["model_name"], "MiniMax-M3")
+        self.assertEqual(model_names, ["MiniMax-M3.1-Flash", "MiniMax-M3"])
 
     def test_minimax_models_are_llm_type(self):
         """All MiniMax models should be of type 'llm'."""
@@ -216,8 +201,8 @@ class TestFrontendModelData(unittest.TestCase):
             self.assertEqual(model["model_type"], "llm")
 
     def test_minimax_model_count(self):
-        """Adding M3 must retain every existing model option."""
-        self.assertEqual(len(self.model_data["minimax"]), 6)
+        """The new-provider preset contains only the two recommended models."""
+        self.assertEqual(len(self.model_data["minimax"]), 2)
 
 
 class TestFrontendCustomForm(unittest.TestCase):
@@ -226,11 +211,11 @@ class TestFrontendCustomForm(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.form_path = os.path.join(
-            os.path.dirname(__file__), "../../../frontend/platform/src/pages/ModelPage/manage/CustomForm.tsx"
+            os.path.dirname(__file__), "../../../frontend/platform/src/pages/ModelPage/manage/modelProviderFields.ts"
         )
         cls.form_path = os.path.normpath(cls.form_path)
         if not os.path.exists(cls.form_path):
-            raise unittest.SkipTest("Frontend CustomForm.tsx not available in checkout")
+            raise unittest.SkipTest("Frontend modelProviderFields.ts not available in checkout")
         with open(cls.form_path) as f:
             cls.form_source = f.read()
 
@@ -255,7 +240,16 @@ class TestMiniMaxLLMServerTypeEnum(unittest.TestCase):
 
     def test_minimax_server_type_exists(self):
         """MINIMAX should be defined in LLMServerType enum."""
-        self.assertIn("MINIMAX = 'minimax'", self.const_source)
+        tree = ast.parse(self.const_source)
+        enum = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "LLMServerType")
+        values = {
+            target.id: ast.literal_eval(node.value)
+            for node in enum.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        self.assertEqual(values["MINIMAX"], "minimax")
 
 
 class TestOpenAIParamsFunction(unittest.TestCase):
@@ -333,7 +327,16 @@ class TestOpenAIParamsFunction(unittest.TestCase):
 
     def test_preserves_model_name(self):
         """Model name should be preserved."""
-        for name in ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"]:
+        for name in [
+            "MiniMax-M3.1-Flash",
+            "MiniMax-M3",
+            "MiniMax-M2.7",
+            "MiniMax-M2.7-highspeed",
+            "MiniMax-M2.5",
+            "MiniMax-M2.5-highspeed",
+            "MiniMax-Text-01",
+            "custom-model",
+        ]:
             result = self._openai_params_fn(
                 {"model": name}, {"openai_api_key": "key", "openai_api_base": "https://api.minimax.io/v1"}, {}
             )
