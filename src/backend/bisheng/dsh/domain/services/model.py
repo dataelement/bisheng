@@ -8,6 +8,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from loguru import logger
+from pydantic import ValidationError
 
 from bisheng.common.errcode.dsh import (
     DshContextLengthExceededError,
@@ -21,11 +22,13 @@ from bisheng.common.errcode.dsh import (
 )
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities, DshChatRequest
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
+from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
+from bisheng.dsh.infrastructure.responses_adapter import DshResponsesAdapter
 from bisheng.dsh.infrastructure.telemetry import record_settlement, request_trace
 
 
@@ -70,6 +73,7 @@ class DshModelService:
         self.billing_timezone = billing_timezone
         self.timezone = ZoneInfo(billing_timezone)
         self.adapter = DshChatAdapter()
+        self.responses_adapter = DshResponsesAdapter()
         self.audit_factory = audit_factory
 
     async def list_models(self, principal: DshPrincipal) -> dict:
@@ -81,9 +85,13 @@ class DshModelService:
                     model, server = await self.model_loader(model_id)
                 except DshModelNotAllowedError:
                     continue
-                capabilities = self.capabilities_for(model, server)
-                if isawaitable(capabilities):
-                    capabilities = await capabilities
+                try:
+                    capabilities = self.capabilities_for(model, server)
+                    if isawaitable(capabilities):
+                        capabilities = await capabilities
+                except (ValueError, ValidationError):
+                    logger.warning("DSH model {} has invalid protocol configuration", model.id)
+                    continue
                 if capabilities is None:
                     continue
                 created = model.create_time
@@ -100,6 +108,11 @@ class DshModelService:
                         "owned_by": "bisheng",
                         "display_name": model_display_name(model, server),
                         "capabilities": capabilities.client_fields(),
+                        **(
+                            {"reasoning": capabilities.reasoning.model_dump(exclude_none=True)}
+                            if capabilities.reasoning
+                            else {}
+                        ),
                     }
                 )
             return {"object": "list", "data": result}
@@ -107,11 +120,12 @@ class DshModelService:
     async def complete(
         self,
         principal: DshPrincipal,
-        request: DshChatRequest,
+        request: DshChatRequest | DshResponsesRequest,
         *,
         request_id: str | None = None,
         audit_context=None,
         audit_callback=None,
+        conversation=None,
     ):
         request_id = request_id or str(uuid4())
         with principal_scope(principal), request_trace(request_id):
@@ -124,15 +138,25 @@ class DshModelService:
             model, server = await self.model_loader(request.model_id)
             if model.id != request.model_id:
                 raise DshModelNotAllowedError()
-            capabilities: ChatCapabilities | None = self.capabilities_for(model, server)
-            if isawaitable(capabilities):
-                capabilities = await capabilities
+            try:
+                capabilities: ChatCapabilities | None = self.capabilities_for(model, server)
+                if isawaitable(capabilities):
+                    capabilities = await capabilities
+            except (ValueError, ValidationError) as exc:
+                raise DshUnsupportedParameterError() from exc
             if capabilities is None:
                 raise DshUnsupportedParameterError()
             llm = self.llm_builder(model, server, principal, request)
-            execution = self.adapter.prepare(
+            native = isinstance(request, DshResponsesRequest)
+            adapter = self.responses_adapter if native else self.adapter
+            execution = adapter.prepare(
                 request, llm, capabilities, max_output_tokens=(model.config or {}).get("max_tokens")
             )
+            if conversation is not None:
+                headers = conversation.upstream_headers(principal, model.id)
+                execution.parameters["extra_headers"] = headers
+                if native or capabilities.prompt_cache_key:
+                    execution.parameters["prompt_cache_key"] = headers["session_id"]
             started = self.now()
             started = started.replace(tzinfo=UTC) if started.tzinfo is None else started
             event = UsageEvent(
@@ -181,7 +205,9 @@ class DshModelService:
             except Exception as error:
                 await self._settle(event, execution, "FAILED", "upstream_error")
                 raise self._public_error(error) from error
-            await self._settle(event, execution, "SUCCEEDED")
+            await self._settle(event, execution, getattr(execution, "status", "SUCCEEDED"))
+            if native:
+                return result
             return {
                 "id": "chatcmpl-" + event.request_id,
                 "object": "chat.completion",
@@ -245,6 +271,15 @@ class DshModelService:
         record_settlement(terminal)
 
     async def _stream(self, principal, request, execution, event):
+        if isinstance(request, DshResponsesRequest):
+            source = self._stream_responses(execution, event)
+            try:
+                async for frame in source:
+                    yield frame
+            finally:
+                # Closing this generator does not close the inner one; do it explicitly.
+                await source.aclose()
+            return
         source = execution.stream()
         common = {
             "id": "chatcmpl-" + event.request_id,
@@ -282,6 +317,35 @@ class DshModelService:
         if request.stream_options is not None:
             yield sse({**common, "choices": [], "usage": usage_response(execution.usage)})
         yield "data: [DONE]\n\n"
+
+    async def _stream_responses(self, execution, event):
+        source = execution.stream()
+        try:
+            async for item in source:
+                if item["type"] in {"response.completed", "response.failed", "response.incomplete"}:
+                    terminal = item
+                else:
+                    yield "event: " + item["type"] + "\n" + sse(item)
+        except (asyncio.CancelledError, GeneratorExit):
+            await source.aclose()
+            await asyncio.shield(self._settle(event, execution, "CANCELLED", "cancelled"))
+            raise
+        except Exception as error:
+            try:
+                await self._settle(event, execution, "FAILED", "upstream_error")
+                public = self._public_error(error)
+            except DshUsageUnavailableError as settlement_error:
+                public = settlement_error
+            yield "event: error\n" + sse({"type": "error", **error_response(public, event.request_id)})
+            return
+        finally:
+            await source.aclose()
+        try:
+            await self._settle(event, execution, execution.status)
+        except DshUsageUnavailableError as error:
+            yield "event: error\n" + sse({"type": "error", **error_response(error, event.request_id)})
+            return
+        yield "event: " + terminal["type"] + "\n" + sse(terminal)
 
 
 class PreparedStream:

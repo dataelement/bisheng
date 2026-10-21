@@ -103,7 +103,7 @@ class ModelAuditRuntime:
             "parent_conversation_id": context.parent_conversation_id,
             "context_invalid": context.invalid,
             "started_at": started,
-            "input_units": len(request.messages) + 1,
+            "input_units": len(request.messages if hasattr(request, "messages") else request.input) + 1,
         }
         return AuditCapture(
             metadata,

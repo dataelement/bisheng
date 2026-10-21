@@ -1,0 +1,2 @@
+# Import-time defaults only; tool API tests use injected dependencies.
+{}

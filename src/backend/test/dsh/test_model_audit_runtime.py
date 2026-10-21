@@ -63,9 +63,11 @@ async def test_queue_is_bounded_including_inflight_and_shutdown_has_deadline():
     assert queue.closed and not queue.events and queue.used_bytes == 0
 
 
-async def test_production_mode_failure_creates_only_minimal_diagnostic(monkeypatch):
+@pytest.mark.parametrize("native", [False, True])
+async def test_production_mode_failure_creates_only_minimal_diagnostic(monkeypatch, native):
     from bisheng.dsh.audit_runtime import ModelAuditRuntime
     from bisheng.dsh.domain.schemas.chat import DshChatRequest
+    from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
     from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 
     async with fixture() as (harness, _client, _objects):
@@ -82,7 +84,9 @@ async def test_production_mode_failure_creates_only_minimal_diagnostic(monkeypat
         with principal_scope(principal):
             capture = await runtime.capture(
                 principal,
-                DshChatRequest(model="bisheng:42", messages=[{"role": "user", "content": "must-not-retain"}]),
+                DshResponsesRequest(model="bisheng:42", input=[{"role": "user", "content": "must-not-retain"}])
+                if native
+                else DshChatRequest(model="bisheng:42", messages=[{"role": "user", "content": "must-not-retain"}]),
                 "mode-failed",
                 NOW,
                 harness.model,
