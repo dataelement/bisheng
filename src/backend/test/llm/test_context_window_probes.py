@@ -215,3 +215,55 @@ async def test_llamacpp_non_json_props_still_falls_back():
 async def test_unexpected_body_shape_gives_none():
     snapshot = _snapshot("ollama", {"base_url": "http://ollama:11434"}, model_name="qwen3")
     assert await probe_context_window(snapshot, _client({"GET http://ollama:11434/api/ps": {"models": None}})) is None
+
+
+DASHSCOPE_MODELS = {
+    "output": {
+        "total": 1,
+        "models": [
+            {
+                "model": "qwen3-max",
+                "model_info": {"context_window": 262144, "max_input_tokens": 258048, "max_output_tokens": 65536},
+            }
+        ],
+    }
+}
+
+
+async def test_qwen_singapore_reads_the_native_api():
+    snapshot = _snapshot("qwen", {"base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"}, "qwen3-max")
+    result = await probe_context_window(
+        snapshot, _client({"GET https://dashscope-intl.aliyuncs.com/api/v1/models?model=qwen3-max": DASHSCOPE_MODELS})
+    )
+
+    # max_input_tokens is already an input-only limit.
+    assert result == ProbeResult(window=258048, kind="input", source="published")
+
+
+async def test_qwen_workspace_host_is_used_as_is():
+    base = "https://ws-123.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    snapshot = _snapshot("qwen", {"base_url": base}, "qwen3-max")
+    url = "GET https://ws-123.cn-beijing.maas.aliyuncs.com/api/v1/models?model=qwen3-max"
+    result = await probe_context_window(snapshot, _client({url: DASHSCOPE_MODELS}))
+
+    assert result.window == 258048
+
+
+async def test_qwen_falls_back_to_context_window_when_input_limit_is_null():
+    body = {
+        "output": {
+            "models": [{"model": "qwen3-max", "model_info": {"context_window": 131072, "max_input_tokens": None}}]
+        }
+    }
+    snapshot = _snapshot("qwen", {"base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"}, "qwen3-max")
+    result = await probe_context_window(
+        snapshot, _client({"GET https://dashscope-intl.aliyuncs.com/api/v1/models?model=qwen3-max": body})
+    )
+
+    assert result == ProbeResult(window=131072, kind="total", source="published")
+
+
+async def test_qwen_beijing_default_host_has_no_workspace_and_is_unknown():
+    """Beijing needs {WorkspaceId}.cn-beijing.maas.aliyuncs.com; the default host carries none."""
+    snapshot = _snapshot("qwen", {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"}, "qwen3-max")
+    assert await probe_context_window(snapshot, _client({})) is None

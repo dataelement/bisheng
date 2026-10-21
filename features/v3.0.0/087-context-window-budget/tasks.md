@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 2026-10-21 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-21 用户确认 |
 | tasks.md | ✅ 已拆解 | 两轮 `/sdd-review tasks`，第二轮剩余 7 条已修复 |
-| 实现 | 🔄 进行中 | 19 / 35 完成（P0 只剩 T018 端到端验证，用户决定到客户现场再验） |
+| 实现 | 🔄 进行中 | 31 / 35 完成（P0 已合入 feat/3.0.0 6c6a62311；P1、P2 已实现；T018、T028 端到端验证待客户现场） |
 
 ---
 
@@ -181,57 +181,57 @@
 
 ## Wave 4 — P1
 
-- [ ] **T019**: 技术验证：替换框架压缩中间件
+- [x] **T019**: 技术验证：替换框架压缩中间件
   **文件**: 验证脚本放 scratchpad；结论写入 design.md 决策 7
   **逻辑**: 回答决策 7 的两个问题；确认 BiSheng 子类改 `name` 后不被排除规则移除；确认主图、子图都能拿到当次参数。不通过时停下与用户重新确认路线。
   **依赖**: T018
 
-- [ ] **T020**: 中日韩计数与用量基数的测试
+- [x] **T020**: 中日韩计数与用量基数的测试
   **文件**: `src/backend/test/linsight/test_context_token_counter.py`
   **逻辑**: 纯中文、中英混合；有 usage 基数时只估算增量；无 usage 时全量估算；最近一条是降级合成消息（无 usage）时向前找。
   **覆盖 AC**: AC-21
   **依赖**: 无
 
-- [ ] **T021**: 中日韩计数与用量基数的实现
+- [x] **T021**: 中日韩计数与用量基数的实现
   **文件**: `src/backend/bisheng/linsight/domain/services/context_budget.py`
   **逻辑**: 按 design 决策 10 实现纯函数。
   **测试**: T020 通过
   **覆盖 AC**: AC-21
   **依赖**: T020
 
-- [ ] **T022**: BiSheng 压缩中间件子类的测试
+- [x] **T022**: BiSheng 压缩中间件子类的测试
   **文件**: `src/backend/test/linsight/test_context_summarization.py`
   **逻辑**: 摘要输入不超过 `0.5 × 可用输入`；保留部分不超过 `0.1 × 可用输入`；摘要第一次失败、重试成功；两次都失败 → 抛 `LinsightContextCompressFailedError`，任务 `error_type == "context_compress_failed"`、`error_code == 11076`，日志有错误级别记录，已生成文件保留，失败文本没有作为摘要进入下一次请求；计数使用 T021 的函数。
   **覆盖 AC**: AC-17, AC-18, AC-21, AC-24
   **依赖**: T019, T021
 
-- [ ] **T023**: BiSheng 压缩中间件子类的实现
+- [x] **T023**: BiSheng 压缩中间件子类的实现
   **文件**: `src/backend/bisheng/linsight/domain/services/context_budget.py`、`src/backend/bisheng/linsight/domain/services/agent_factory.py`
   **逻辑**: 按 T019 的结论接入，主图与研究员子图都使用。
   **测试**: T022 通过
   **覆盖 AC**: AC-17, AC-18, AC-21, AC-24
   **依赖**: T022
 
-- [ ] **T024**: 单条工具结果转存与读文件截断的测试
+- [x] **T024**: 单条工具结果转存与读文件截断的测试
   **文件**: `src/backend/test/linsight/test_tool_result_budget.py`
   **逻辑**: 已知上下文长度时，超过 `0.1 × 可用输入` 的工具结果写入 `/large_tool_results/<tool_call_id>`，返回开头片段与路径；`read_file` 结果截断到同一上限并提示分页，不转存；主图与子图都生效；未知上下文长度时行为与改动前一致。
   **覆盖 AC**: AC-19, AC-20
   **依赖**: T021
 
-- [ ] **T025**: 单条工具结果转存与读文件截断的实现
+- [x] **T025**: 单条工具结果转存与读文件截断的实现
   **文件**: `src/backend/bisheng/linsight/domain/services/context_budget.py`、`src/backend/bisheng/linsight/domain/services/agent_factory.py`
   **逻辑**: 新增 `wrap_tool_call` 中间件；提示文案与 `tool_loop_middleware` 现有的取回提示一致。与 T023 改同一组文件，串行执行。
   **测试**: T024 通过
   **覆盖 AC**: AC-19, AC-20, AC-24
   **依赖**: T023, T024
 
-- [ ] **T026**: 百炼读取器的测试
+- [x] **T026**: 百炼读取器的测试
   **文件**: 追加到 `src/backend/test/llm/test_context_window_probes.py`
   **逻辑**: 从兼容模式地址推导原生地址；北京区域缺 WorkspaceId 时按未知处理；`source == "published"`。
   **覆盖 AC**: AC-10
   **依赖**: T008
 
-- [ ] **T027**: 百炼读取器的实现
+- [x] **T027**: 百炼读取器的实现
   **文件**: `src/backend/bisheng/llm/domain/services/context_window_probes.py`
   **测试**: T026 通过
   **覆盖 AC**: AC-10
@@ -246,13 +246,13 @@
 
 ## Wave 5 — P2
 
-- [ ] **T029**: 死配置清理的测试
+- [x] **T029**: 死配置清理的测试
   **文件**: `src/backend/test/common/test_linsight_conf_legacy_keys.py`
   **逻辑**: 含 AC-22 所列 6 个键的 `linsight` 配置能被 `LinsightConf` 正常加载；删除后这些属性不再存在。
   **覆盖 AC**: AC-22, AC-23
   **依赖**: 无
 
-- [ ] **T030**: 删除死配置
+- [x] **T030**: 删除死配置
   **文件**: `src/backend/bisheng/core/config/settings.py`（`LinsightConf`）、`src/backend/bisheng/initdb_config.yaml`、`src/backend/bisheng_langchain/linsight/const.py`
   **逻辑**: 从 `LinsightConf` 和 `initdb_config.yaml` 删除 6 个字段。`const.py` 的 `ExecConfig` 类没有任何引用（已 grep 确认），整个类删除；同文件的 `TaskStatus` 等仍在使用，保留。`test/common/test_config_backfill.py` 使用自带的内联配置，不受影响。
   **测试**: T029 通过
@@ -261,7 +261,7 @@
 
 ## 收尾
 
-- [ ] **T031**: P0 代码审查与合并
+- [x] **T031**: P0 代码审查与合并
   **逻辑**: `/code-review --base feat/3.0.0`，合并 P0。
   **依赖**: T018
 
@@ -315,5 +315,10 @@
 - T035 偏离：`useLinsightManager.tsx` 净增 3 行（2 处调用 + 1 行导入），不是"不超过 2 行"。
 - T010 偏离：`unwrap` 增加"遇到超窗 / 压缩失败异常即停止"，原 design 未写 → 已补 design §5 坑 17。
 - T015：发现框架主动压缩后不再接住超窗 → design §5 坑 15、16。
+- T031：两轮 `/code-review`，修复提交 `fix(F087): address code review findings`，2026-10-21 合入 feat/3.0.0（6c6a62311）。
+- T019：验证脚本 `scratchpad/spike/spike_t019.py`（会话临时目录，未入库），结论写入 design 决策 7。与原计划不同：BiSheng 压缩部件通过 harness profile 的 `extra_middleware` 工厂注入，而不是 `middleware=`，因此位于 resilience 内层（决策 7 已说明，未推翻任何已确认决策）。
+- T023：P0 的 `test_context_overflow_flow.py` 改为按生产方式装配（`bisheng_summarization()`），并调小工具结果以单独覆盖超窗重试路径（design 坑 20）。
+- T026 / T027：百炼北京等区域的原生接口 host 需要 WorkspaceId；默认地址 `dashscope.aliyuncs.com` 不带它，按未知处理（官方文档 2026-10-21 核实）。新加坡、香港与已带 workspace 的 `*.maas.aliyuncs.com` 可读。
+- T030：同时更新 `docs/architecture/05-linsight-agent.md` 的配置表。
 - T018 推迟：2026-10-21 用户决定在客户现场（vLLM 133120）做端到端验证，界面三项手动检查一并在现场做。
 - T017 / T035 验证：改动的 3 个文件 eslint、tsc 无错误；`pnpm lint` / `pnpm typecheck` 整体报错都在其他文件（worktree 软链了 vibe 分支的 node_modules，未与 feat/3.0.0 干净环境对比）；`check-i18n`、`locales check` 通过。手动界面验证未做。

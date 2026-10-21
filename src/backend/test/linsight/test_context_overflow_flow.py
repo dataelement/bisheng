@@ -15,6 +15,7 @@ import httpx
 import openai
 import pytest
 from deepagents import create_deep_agent
+from deepagents.backends import StateBackend
 from deepagents.graph import DeepAgentState
 from langchain_core.exceptions import ContextOverflowError
 from langchain_core.language_models import BaseChatModel
@@ -25,6 +26,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from bisheng.common.services.llm_error_classifier import classify_for_event
 from bisheng.core.config.settings import LinsightConf
+from bisheng.linsight.domain.services.context_budget import bisheng_summarization
 from bisheng.linsight.domain.services.resilience_middleware import (
     _SUBAGENT_OVERFLOW_MESSAGE,
     SubagentContextOverflowMiddleware,
@@ -60,6 +62,12 @@ class _ScriptedModel(BaseChatModel):
     def _llm_type(self) -> str:
         return "scripted"
 
+    def _get_ls_params(self, stop=None, **kwargs):
+        # A provider of its own: bisheng_summarization() registers a harness profile
+        # per provider for the whole process (design §5 gotcha 18), and other test
+        # modules build deep agents from a same-named "_ScriptedModel" class.
+        return {"ls_provider": "f087-overflow-flow", "ls_model_name": "scripted"}
+
     def bind_tools(self, *args, **kwargs):
         return self
 
@@ -77,7 +85,7 @@ class _ScriptedModel(BaseChatModel):
 @tool
 def fetch(page: int) -> str:
     """Fetch one page of a long document."""
-    return f"第{page}页 " + "长文档内容" * 1200
+    return f"第{page}页 " + "长文档内容" * 400
 
 
 def _fetch_calls(n: int) -> Iterator[AIMessage]:
@@ -86,7 +94,14 @@ def _fetch_calls(n: int) -> Iterator[AIMessage]:
 
 
 def _build(model: _ScriptedModel, conf: LinsightConf, context_window: dict):
+    """The production assembly: BishengSummarizationMiddleware swapped in (P1), which
+    sits INSIDE the resilience middleware (design decision 7)."""
     researcher_resilience = build_resilience_middleware(conf, is_subagent=True)
+    with bisheng_summarization(model, StateBackend(), model.profile["max_input_tokens"]):
+        return _create(model, conf, context_window, researcher_resilience)
+
+
+def _create(model, conf, context_window, researcher_resilience):
     return create_deep_agent(
         model=model,
         tools=[fetch],
