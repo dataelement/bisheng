@@ -22,6 +22,8 @@ export interface ErrorDiagnostics {
   route: string;
   /** Who hit it, when the host knows. */
   user?: string;
+  /** External user identifier supplied by the host. */
+  external_id?: string;
   message: string;
   /** First stack frame that belongs to the app, for the compact payloads. */
   topFrame?: string;
@@ -40,6 +42,7 @@ export interface CollectDiagnosticsInput {
   /** Host-supplied build string; hosts that cannot produce one pass "unknown". */
   version: string;
   user?: string;
+  external_id?: string;
   /** Overridable so tests are not at the mercy of the clock. */
   now?: Date;
 }
@@ -140,7 +143,7 @@ export function formatErrorTime(at: Date): string {
   return `${formatUtc8Timestamp(at)} (UTC+8)`;
 }
 
-export function collectDiagnostics({ error, version, user, now }: CollectDiagnosticsInput): ErrorDiagnostics {
+export function collectDiagnostics({ error, version, user, external_id, now }: CollectDiagnosticsInput): ErrorDiagnostics {
   const at = now ?? new Date();
   const statusPrefix =
     typeof error.status === 'number' ? `${error.status} ${error.statusText ?? ''}`.trim() : '';
@@ -154,6 +157,7 @@ export function collectDiagnostics({ error, version, user, now }: CollectDiagnos
     version,
     route: `${window.location.pathname}${window.location.search}`,
     user,
+    external_id,
     message,
     topFrame,
     stack: error.stack,
@@ -190,11 +194,15 @@ function shortenRoute(route: string): string {
 
 /** Compact, line-oriented, and readable as plain text if the scanner just prints it. */
 export function buildQrPayload(d: ErrorDiagnostics): string {
-  const lines = [
+  const header = [
     `BS1|${d.traceId}|${d.errorCode}`,
     d.version,
     d.timestamp,
     shortenRoute(d.route),
+    d.external_id ? `external_id: ${d.external_id}` : '',
+  ].filter(Boolean);
+  const lines = [
+    ...header,
     d.message,
     d.topFrame ? `@ ${d.topFrame}` : '',
   ].filter(Boolean);
@@ -203,9 +211,9 @@ export function buildQrPayload(d: ErrorDiagnostics): string {
   // the top are what makes the rest findable, so they are never the ones cut.
   let payload = lines.join('\n');
   if (payload.length > QR_BUDGET) {
-    const head = lines.slice(0, 4).join('\n');
+    const head = header.join('\n');
     const room = Math.max(0, QR_BUDGET - head.length - 2);
-    payload = `${head}\n${lines.slice(4).join('\n').slice(0, room)}`;
+    payload = `${head}\n${lines.slice(header.length).join('\n').slice(0, room)}`;
   }
   return payload;
 }
