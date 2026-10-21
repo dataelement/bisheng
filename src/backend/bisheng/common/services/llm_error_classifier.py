@@ -358,9 +358,9 @@ def classify_behavior(exc: BaseException) -> Behavior:
     the generic rate-limit retry branch.
     """
     # 1) FAIL_FAST — unrecoverable, do not retry and do not waste degrade budget.
-    # A context overflow must reach the framework's summarization middleware (the
-    # OUTER layer) untouched; retrying the same request or degrading it would hide
-    # it from that middleware (F087 design decision 9).
+    # A context overflow must reach the task-mode summarization middleware (the
+    # OUTER layer, F087 design decision 7) untouched; retrying the same request or
+    # degrading it would hide it from that middleware (design decision 9).
     if _is_context_overflow(exc) or _is_context_compress_failed(exc):
         return Behavior.FAIL_FAST
     if _is_quota(exc):

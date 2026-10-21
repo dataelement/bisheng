@@ -1369,12 +1369,19 @@ async def create_linsight_agent(
     # main graph's subagent-overflow handler draws from its degrade allowance.
     researcher_resilience = build_resilience_middleware(linsight_conf, is_subagent=True)
     middlewares: list = [
+        # F087 P1: BiSheng summarization replaces the framework's (design decision
+        # 7). FIRST in the list = outermost, so it wraps resilience the way the
+        # framework middleware did: resilience retries never re-run compression,
+        # and a context overflow it re-raises is compressed and retried here.
+        *_summarization(model, backend, context_window),
         build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
         # F087: a `task` call whose subagent stayed over the context window after
         # compression comes back as a tool result instead of failing the task.
         SubagentContextOverflowMiddleware(researcher_resilience, context_window),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
+        # F087 P1: one tool result <= 10% of the usable input (known windows only).
+        *_result_budget(backend, context_window),
     ]
     # F069 P1: per-turn source table (+ one-shot "add the handles" nudge after a
     # handle-less output/*.md write). awrap_model_call only — never wrap_tool_call
@@ -1478,6 +1485,8 @@ async def create_linsight_agent(
     researcher_tools = researcher.get("tools") or []
     researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_citation_tool(t) for t in researcher_tools)
     researcher["middleware"] = [
+        # Same summarization (own instance) outermost on the subagent's graph.
+        *_summarization(model, backend, context_window),
         researcher_resilience,
         # Same tool-loop breaker on the subagent's own graph (its tool calls run in
         # a separate subgraph the main-graph middleware never wraps).
@@ -1488,6 +1497,8 @@ async def create_linsight_agent(
         # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
         # carries over; revisit if it is ever added to that deny list.
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
+        # Same per-result budget on the subagent's graph, at the same depth as the main graph's.
+        *_result_budget(backend, context_window),
         # F069 P1: the researcher gets the source table too (no nudge — it does
         # not write deliverables).
         *(_researcher_source_middleware(citation_scope) if (citation_handles and researcher_citable) else []),
@@ -1504,40 +1515,66 @@ async def create_linsight_agent(
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the
     # prompt never points at an "Available Skills" section that does not exist.
-    return create_deep_agent(
-        model=model,
-        tools=[*tools, *hitl_tools, *export_tools],
-        system_prompt=_with_caller_instructions(
-            _with_citation_rules(
-                _build_linsight_system_prompt(
-                    has_kb,
-                    skills_present=skills_advertised,
-                    # Gates the hard "no export_docx/export_pdf" rule: only meaningful
-                    # when the skill's script route can actually run in this session.
-                    has_code_interpreter=has_code_interpreter,
-                    has_web_search=has_web,
-                    citation_handles=citation_handles,
-                    unattended=unattended,
+    # F087 P1: drop deepagents' own summarization from the main graph and every
+    # subagent; ours is already first in their middleware lists (design decision 7).
+    from bisheng.linsight.domain.services.context_budget import bisheng_summarization
+
+    with bisheng_summarization(model):
+        return create_deep_agent(
+            model=model,
+            tools=[*tools, *hitl_tools, *export_tools],
+            system_prompt=_with_caller_instructions(
+                _with_citation_rules(
+                    _build_linsight_system_prompt(
+                        has_kb,
+                        skills_present=skills_advertised,
+                        # Gates the hard "no export_docx/export_pdf" rule: only meaningful
+                        # when the skill's script route can actually run in this session.
+                        has_code_interpreter=has_code_interpreter,
+                        has_web_search=has_web,
+                        citation_handles=citation_handles,
+                        unattended=unattended,
+                    ),
+                    has_kb or has_web,
+                    handles=citation_handles,
                 ),
-                has_kb or has_web,
-                handles=citation_handles,
+                caller_instructions(session_model),
             ),
-            caller_instructions(session_model),
-        ),
-        middleware=middlewares,
-        subagents=[researcher],
-        # The main graph already defaults to DeepAgentState, but deepagents only
-        # forwards an explicit state_schema to subagents. Without it the researcher
-        # falls back to create_agent's AgentState, whose messages channel is not a
-        # DeltaChannel: it inherits this checkpointer and stores the full message
-        # list at every step, so one subagent run writes O(N^2) bytes to Redis
-        # (~90 MB measured for a 200-step researcher on 105). With it, subagent
-        # checkpoints hold deltas plus a snapshot every 50 updates.
-        state_schema=DeepAgentState,
-        backend=backend,
-        checkpointer=checkpointer,
-        store=None,
-    )
+            middleware=middlewares,
+            subagents=[researcher],
+            # The main graph already defaults to DeepAgentState, but deepagents only
+            # forwards an explicit state_schema to subagents. Without it the researcher
+            # falls back to create_agent's AgentState, whose messages channel is not a
+            # DeltaChannel: it inherits this checkpointer and stores the full message
+            # list at every step, so one subagent run writes O(N^2) bytes to Redis
+            # (~90 MB measured for a 200-step researcher on 105). With it, subagent
+            # checkpoints hold deltas plus a snapshot every 50 updates.
+            state_schema=DeepAgentState,
+            backend=backend,
+            checkpointer=checkpointer,
+            store=None,
+        )
+
+
+def _summarization(model, backend, context_window: dict) -> list:
+    """BiSheng's summarization middleware for one graph, or none when the model's
+    provider is unknown (the framework's own then stays, see bisheng_summarization)."""
+    from deepagents._models import get_model_provider
+
+    from bisheng.linsight.domain.services.context_budget import BishengSummarizationMiddleware
+
+    if not get_model_provider(model):
+        return []
+    return [BishengSummarizationMiddleware(model, backend, context_window.get("usable_input"))]
+
+
+def _result_budget(backend, context_window: dict) -> list:
+    usable_input = context_window.get("usable_input")
+    if not usable_input:
+        return []
+    from bisheng.linsight.domain.services.context_budget import ToolResultBudgetMiddleware
+
+    return [ToolResultBudgetMiddleware(backend, usable_input)]
 
 
 async def _apply_context_window(model: BaseChatModel, svid: str, sink: dict | None) -> None:

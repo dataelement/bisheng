@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 from loguru import logger
@@ -238,7 +238,49 @@ async def _probe_moonshot(snapshot: ModelSnapshot, client: httpx.AsyncClient) ->
     return ProbeResult(window=window, kind="total", source="published") if window else None
 
 
+# Hosts whose native DashScope API needs no WorkspaceId (Singapore, Hong Kong);
+# a ``<workspace>.<region>.maas.aliyuncs.com`` host already carries it.
+_DASHSCOPE_OPEN_HOSTS = ("dashscope-intl.aliyuncs.com", "cn-hongkong.dashscope.aliyuncs.com")
+
+
+def _dashscope_models_url(base: str) -> str | None:
+    """Native ``/api/v1/models`` URL for a DashScope compatible-mode base URL.
+
+    The default mainland host ``dashscope.aliyuncs.com`` has no WorkspaceId, which
+    the Beijing / Tokyo / Frankfurt / Virginia endpoints require in the host, so it
+    yields ``None`` rather than a guessed URL (spec AC-10).
+    """
+    host = urlsplit(base).netloc
+    if host in _DASHSCOPE_OPEN_HOSTS or host.endswith(".maas.aliyuncs.com"):
+        return f"https://{host}/api/v1/models"
+    return None
+
+
+async def _probe_qwen(snapshot: ModelSnapshot, client: httpx.AsyncClient) -> ProbeResult | None:
+    """Alibaba Bailian (DashScope) native model API: ``output.models[].model_info``.
+
+    ``max_input_tokens`` is an input-only limit; ``context_window`` is the total.
+    """
+    url = _dashscope_models_url(_base_url(snapshot.client_params))
+    if url is None:
+        return None
+    response = await client.get(url, params={"model": snapshot.model_name}, headers=_bearer(snapshot.client_params))
+    response.raise_for_status()
+    payload = response.json()
+    models = ((payload or {}).get("output") or {}).get("models") or []
+    entry = next((m for m in models if isinstance(m, dict) and m.get("model") == snapshot.model_name), None)
+    info = entry.get("model_info") if entry else None
+    if not isinstance(info, dict):
+        return None
+    window = _positive_int(info.get("max_input_tokens"))
+    if window is not None:
+        return ProbeResult(window=window, kind="input", source="published")
+    window = _positive_int(info.get("context_window"))
+    return ProbeResult(window=window, kind="total", source="published") if window else None
+
+
 PROBES: dict[str, ProbeFn] = {
+    LLMServerType.QWEN.value: _probe_qwen,
     LLMServerType.VLLM.value: _probe_openai_models,
     LLMServerType.OPENAI.value: _probe_openai_type,
     LLMServerType.LLAMACPP.value: _probe_llamacpp,
