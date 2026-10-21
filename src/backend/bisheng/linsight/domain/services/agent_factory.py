@@ -771,6 +771,7 @@ async def create_linsight_agent(
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
     """
     from deepagents import create_deep_agent
+    from deepagents.graph import DeepAgentState
 
     svid = svid or session_model.id
     model, supports_vision = await _resolve_model(session_model, model_id)
@@ -946,6 +947,14 @@ async def create_linsight_agent(
         ),
         middleware=middlewares,
         subagents=[researcher],
+        # The main graph already defaults to DeepAgentState, but deepagents only
+        # forwards an explicit state_schema to subagents. Without it the researcher
+        # falls back to create_agent's AgentState, whose messages channel is not a
+        # DeltaChannel: it inherits this checkpointer and stores the full message
+        # list at every step, so one subagent run writes O(N^2) bytes to Redis
+        # (~90 MB measured for a 200-step researcher on 105). With it, subagent
+        # checkpoints hold deltas plus a snapshot every 50 updates.
+        state_schema=DeepAgentState,
         backend=backend,
         checkpointer=checkpointer,
         store=None,
