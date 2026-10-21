@@ -5,9 +5,12 @@ import { PassInput } from '@/components/bs-ui/input';
 import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { QuestionTooltip } from '@/components/bs-ui/tooltip';
+import { getSandboxConfApi, saveSandboxConfApi, testSandboxConfApi } from "@/controllers/API/tools";
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { InputField } from "./InputField";
+import { SandboxEndpointFields, type SandboxProbeResult } from "./SandboxEndpointFields";
+import { parseSandboxEndpoints, sandboxSavePlan } from "./sandboxEndpoint";
 
 const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const { t } = useTranslation('tool');
@@ -34,6 +37,39 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     });
 
     const [errors, setErrors] = useState({});
+    const [saving, setSaving] = useState(false);
+    const [testing, setTesting] = useState(false);
+    const [probeResults, setProbeResults] = useState<SandboxProbeResult[]>([]);
+    const loadedSandbox = useRef({ addressText: '', token: '' });
+    const [sandbox, setSandbox] = useState({
+        addressText: '',
+        token: '',
+        addressSource: 'default',
+        tokenSource: 'default',
+        deploymentAddress: '',
+    });
+
+    useEffect(() => {
+        let cancelled = false;
+        getSandboxConfApi()
+            .then((data) => {
+                if (cancelled || !data) return;
+                const addressText = Array.isArray(data.endpoints) ? data.endpoints.join('\n') : '';
+                const token = data.token || '';
+                loadedSandbox.current = { addressText, token };
+                setSandbox({
+                    addressText,
+                    token,
+                    addressSource: data.address_source || 'default',
+                    tokenSource: data.token_source || 'default',
+                    deploymentAddress: data.deployment_address || '',
+                });
+            })
+            .catch(() => undefined);
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (domainRef.current) {
@@ -83,39 +119,63 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
         return isValid;
     };
 
-    const handleSubmit = (e) => {
+    const handleTestConnection = async () => {
+        setTesting(true);
+        try {
+            const data = await testSandboxConfApi({
+                endpoints: parseSandboxEndpoints(sandbox.addressText),
+                token: sandbox.token,
+            });
+            setProbeResults(Array.isArray(data?.results) ? data.results : []);
+        } catch {
+            setProbeResults([]);
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (validateForm()) {
-            // Build complete form data and save both configurations
-            const submitData = {
-                type: localFormData.executionMode,
-                config: {
-                    e2b: {
-                        type: localFormData.serviceProvider,
-                        // Save configuration according to the selected service provider
-                        ...(localFormData.serviceProvider === 'private' && {
-                            domain: localFormData.privateDomain,
-                            api_key: localFormData.privateApiKey
-                        }),
-                        ...(localFormData.serviceProvider === 'official' && {
-                            api_key: localFormData.officialApiKey
-                        })
-                    },
-                    // Save both configurations
-                    private: {
+        if (!validateForm()) return;
+        const submitData = {
+            type: localFormData.executionMode,
+            config: {
+                e2b: {
+                    type: localFormData.serviceProvider,
+                    ...(localFormData.serviceProvider === 'private' && {
                         domain: localFormData.privateDomain,
                         api_key: localFormData.privateApiKey
-                    },
-                    official: {
+                    }),
+                    ...(localFormData.serviceProvider === 'official' && {
                         api_key: localFormData.officialApiKey
-                    },
-                    // Pool URL / token stay in system config, never extra.
-                    container: {}
-                }
-            };
-
-            onSubmit(submitData);
+                    })
+                },
+                private: {
+                    domain: localFormData.privateDomain,
+                    api_key: localFormData.privateApiKey
+                },
+                official: {
+                    api_key: localFormData.officialApiKey
+                },
+                container: {}
+            }
+        };
+        const changed = sandbox.addressText !== loadedSandbox.current.addressText
+            || sandbox.token !== loadedSandbox.current.token;
+        if (sandboxSavePlan(localFormData.executionMode, changed) === 'sandbox-then-tool') {
+            setSaving(true);
+            try {
+                await saveSandboxConfApi({
+                    endpoints: parseSandboxEndpoints(sandbox.addressText),
+                    token: sandbox.token,
+                });
+            } catch {
+                return;
+            } finally {
+                setSaving(false);
+            }
         }
+        onSubmit(submitData);
     };
 
     return (
@@ -150,6 +210,21 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                     </div>
                 </RadioGroup>
             </div>
+
+            {localFormData.executionMode === 'container' && (
+                <SandboxEndpointFields
+                    addressText={sandbox.addressText}
+                    token={sandbox.token}
+                    addressSource={sandbox.addressSource}
+                    tokenSource={sandbox.tokenSource}
+                    deploymentAddress={sandbox.deploymentAddress}
+                    testing={testing}
+                    results={probeResults}
+                    onAddressChange={(value) => setSandbox((prev) => ({ ...prev, addressText: value }))}
+                    onTokenChange={(value) => setSandbox((prev) => ({ ...prev, token: value }))}
+                    onTest={handleTestConnection}
+                />
+            )}
 
             {/* Show configuration only when E2B sandbox execution is selected */}
             {localFormData.executionMode === 'e2b' && (
@@ -213,7 +288,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                         {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
-                <Button className="px-11" onClick={handleSubmit}>
+                <Button className="px-11" disabled={saving} onClick={handleSubmit}>
                     {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>

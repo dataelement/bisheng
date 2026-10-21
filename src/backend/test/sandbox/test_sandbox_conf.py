@@ -21,19 +21,20 @@ def clean_sandbox_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_sandbox_conf_defaults_without_yaml_section(clean_sandbox_env: None) -> None:
     settings = Settings()
     conf = settings.sandbox_conf
-    assert conf.discover_host_pattern == "code-runner-{n}"
-    assert conf.discover_index_start == 1
-    assert conf.discover_ttl_s == 60
+    assert "discover_host_pattern" not in SandboxConf.model_fields
+    assert "discover_index_start" not in SandboxConf.model_fields
+    assert "discover_ttl_s" not in SandboxConf.model_fields
+    assert "discover_port" not in SandboxConf.model_fields
+    assert "discover_max" not in SandboxConf.model_fields
     assert "code_node_enabled" not in SandboxConf.model_fields
     assert conf.endpoints == []
 
 
-def test_sandbox_conf_env_overrides_discover_host_pattern(
-    clean_sandbox_env: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sandbox_conf_ignores_retired_discover_env(clean_sandbox_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(f"{_ENV_PREFIX}DISCOVER_HOST_PATTERN", "code-runner-{n}.code-runner")
     settings = Settings()
-    assert settings.sandbox_conf.discover_host_pattern == "code-runner-{n}.code-runner"
+    assert not hasattr(settings.sandbox_conf, "discover_host_pattern")
+    assert settings.sandbox_conf.endpoints == []
 
 
 def test_sandbox_conf_has_no_orchestrator_enum(clean_sandbox_env: None) -> None:

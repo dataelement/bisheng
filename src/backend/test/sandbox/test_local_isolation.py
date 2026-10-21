@@ -40,9 +40,9 @@ def conf(monkeypatch: pytest.MonkeyPatch, tmp_path) -> SandboxConf:
 # --- configuration ---------------------------------------------------------
 
 
-def test_local_isolation_defaults_to_off(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_local_isolation_defaults_to_uid(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BS_SANDBOX_CONF__LOCAL_ISOLATION", raising=False)
-    assert SandboxConf().local_isolation == "off"
+    assert SandboxConf().local_isolation == "uid"
 
 
 @pytest.mark.parametrize(

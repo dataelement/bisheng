@@ -39,3 +39,11 @@ class SandboxCodeNodeOutputTooLargeError(BaseErrorCode):
 class SandboxCodeNodeNoResultError(BaseErrorCode):
     Code: int = 28008
     Msg: str = "Code node finished without returning a result from main"
+
+
+class SandboxEndpointInvalidError(BaseErrorCode):
+    Code: int = 28009
+    Msg: str = (
+        "Sandbox address must be http or https, include a hostname and a legal port, "
+        "must not be empty, must be unique after stripping a trailing slash, and at most 32"
+    )
