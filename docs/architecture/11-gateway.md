@@ -2,6 +2,8 @@
 
 bisheng-gateway 是 BiSheng 的**商业拓展套件**，作为 Java 网关层部署在前端与后端之间，提供 SSO/OAuth 统一认证、内容安全审查（敏感词过滤）、流量控制（限流/在线计数）和 API 反向代理能力。它是一个独立的 Java 项目（私有仓库 `dataelement/bisheng-gateway`），拥有独立的数据库表和配置，通过 HTTP 与 bisheng 后端通信。
 
+> DSH 原生接入已在 `feat/bisheng-work-110` 中解除本章所述 Java Gateway 依赖。DSH 登录、换证、设备会话和模型鉴权由 Python 提供，商业席位入口移除；其余 Gateway 商业能力仍按本章适用范围维护。新部署及切换说明见 [DSH 无 Gateway 发布](../../features/v3.0.0/110-dsh-local-access/deployment.md)。
+
 ## 1. 系统架构
 
 ### 1.1 请求流转路径

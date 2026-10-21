@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="95.573" timestamp="2026-10-20T15:45:25.799798+08:00" hostname="zhangguoqingdeMac-mini.local"><testcase classname="test.database.test_alembic_single_head" name="test_single_alembic_head" time="0.036" /><testcase classname="test.database.test_alembic_dsh_deployed_upgrade" name="test_deployed_audit_head_upgrades_without_replaying_legacy_migrations" time="0.010" /><testcase classname="test.database.test_alembic_dsh_deployed_upgrade" name="test_native_session_head_can_join_the_deployed_audit_lineage" time="0.032" /><testcase classname="test.database.test_dsh_audit_work110_migrations" name="test_audit_port_preserves_target_ancestry_and_uses_new_revision_ids" time="0.009" /><testcase classname="test.database.test_dsh_audit_work110_migrations" name="test_audit_port_ddl_chain_is_idempotent_and_preserves_request_facts[False]" time="0.097" /><testcase classname="test.database.test_dsh_audit_work110_migrations" name="test_audit_port_ddl_chain_is_idempotent_and_preserves_request_facts[True]" time="0.084" /><testcase classname="test.e2e.test_e2e_dsh_no_gateway" name="test_native_login_quota_and_content_audit" time="94.867"><failure message="httpx.ReadTimeout">@contextlib.contextmanager
+    def map_httpcore_exceptions() -&gt; typing.Iterator[None]:
+        global HTTPCORE_EXC_MAP
+        if len(HTTPCORE_EXC_MAP) == 0:
+            HTTPCORE_EXC_MAP = _load_httpcore_exceptions()
+        try:
+&gt;           yield
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_transports/default.py:101:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_transports/default.py:394: in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpcore/_async/connection_pool.py:256: in handle_async_request
+    raise exc from None
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpcore/_async/connection_pool.py:236: in handle_async_request
+    response = await connection.handle_async_request(
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpcore/_async/connection.py:103: in handle_async_request
+    return await self._connection.handle_async_request(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpcore/_async/http11.py:136: in handle_async_request
+    raise exc
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpcore/_async/http11.py:106: in handle_async_request
+    ) = await self._receive_response_headers(**kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpcore/_async/http11.py:177: in _receive_response_headers
+    event = await self._receive_event(timeout=timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpcore/_async/http11.py:217: in _receive_event
+    data = await self._network_stream.read(
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpcore/_backends/anyio.py:32: in read
+    with map_exceptions(exc_map):
+../../../../../../.local/share/uv/python/cpython-3.11.13-macos-aarch64-none/lib/python3.11/contextlib.py:158: in __exit__
+    self.gen.throw(typ, value, traceback)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+map = {&lt;class 'TimeoutError'&gt;: &lt;class 'httpcore.ReadTimeout'&gt;, &lt;class 'anyio.BrokenResourceError'&gt;: &lt;class 'httpcore.ReadErr... 'anyio.ClosedResourceError'&gt;: &lt;class 'httpcore.ReadError'&gt;, &lt;class 'anyio.EndOfStream'&gt;: &lt;class 'httpcore.ReadError'&gt;}
+
+    @contextlib.contextmanager
+    def map_exceptions(map: ExceptionMapping) -&gt; typing.Iterator[None]:
+        try:
+            yield
+        except Exception as exc:  # noqa: PIE786
+            for from_exc, to_exc in map.items():
+                if isinstance(exc, from_exc):
+&gt;                   raise to_exc(exc) from exc
+E                   httpcore.ReadTimeout
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpcore/_exceptions.py:14: ReadTimeout
+
+The above exception was the direct cause of the following exception:
+
+scenario = (&lt;httpx.AsyncClient object at 0x109c8e550&gt;, Credentials(&lt;redacted&gt;), {'concurrent_session_limit': 0, 'create_time': '2...0-20T15:43:03', 'create_user': 1, 'default_role_ids': [2], ...}, 7, [Credentials(&lt;redacted&gt;), Credentials(&lt;redacted&gt;)])
+
+    async def test_native_login_quota_and_content_audit(scenario):
+        """AC-01, AC-02, AC-03, AC-05, AC-06, AC-07, AC-08: native access, quota and audit."""
+        client, admin, department, model_id, users = scenario
+        model = f"bisheng:{model_id}"
+        assert_resp_200(
+            await client.put(
+                f"{API_BASE}/dsh/admin/models/{model_id}/subjects/DEPARTMENT/{department['id']}/policy",
+                headers=admin,
+                json={"expected_version": 0, "enabled": True, "monthly_token_limit": 100000},
+            )
+        )
+        await _personal_policy(client, admin, users[0]["id"], model_id, True, 10000)
+        for user in users:
+            tokens = await native_desktop_session(client, user["platform_token"], department["name"])
+            user["desktop"] = {"Authorization": "Bearer " + tokens["access_token"]}
+            response = await client.get(f"{API_BASE}/dsh/models", headers=user["desktop"])
+            assert response.status_code == 200 and model in {item["id"] for item in response.json()["data"]}
+        requests = []
+        for index, user in enumerate(users):
+            before = await client.get(f"{API_BASE}/dsh/usage", params={"model": model}, headers=user["desktop"])
+            assert before.status_code == 200 and before.json()["used"] == 0
+            assert before.json()["limit"] == (10000 if index == 0 else 100000)
+&gt;           response = await client.post(
+                f"{API_BASE}/dsh/chat/completions",
+                headers=user["desktop"],
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": "Only reply DSH110_SUITE_OK. Do not call tools."}],
+                    "max_tokens": 256,
+                    "stream": bool(index),
+                    "audit_context": {"conversation_id": department["name"] + str(index), "request_kind": "chat"},
+                },
+            )
+
+test/e2e/test_e2e_dsh_no_gateway.py:182:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_client.py:1859: in post
+    return await self.request(
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_client.py:1540: in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_client.py:1629: in send
+    response = await self._send_handling_auth(
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_client.py:1657: in _send_handling_auth
+    response = await self._send_handling_redirects(
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_client.py:1694: in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_client.py:1730: in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_transports/default.py:393: in handle_async_request
+    with map_httpcore_exceptions():
+../../../../../../.local/share/uv/python/cpython-3.11.13-macos-aarch64-none/lib/python3.11/contextlib.py:158: in __exit__
+    self.gen.throw(typ, value, traceback)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    @contextlib.contextmanager
+    def map_httpcore_exceptions() -&gt; typing.Iterator[None]:
+        global HTTPCORE_EXC_MAP
+        if len(HTTPCORE_EXC_MAP) == 0:
+            HTTPCORE_EXC_MAP = _load_httpcore_exceptions()
+        try:
+            yield
+        except Exception as exc:
+            mapped_exc = None
+
+            for from_exc, to_exc in HTTPCORE_EXC_MAP.items():
+                if not isinstance(exc, from_exc):
+                    continue
+                # We want to map to the most specific exception we can find.
+                # Eg if `exc` is an `httpcore.ReadTimeout`, we want to map to
+                # `httpx.ReadTimeout`, not just `httpx.TimeoutException`.
+                if mapped_exc is None or issubclass(to_exc, mapped_exc):
+                    mapped_exc = to_exc
+
+            if mapped_exc is None:  # pragma: no cover
+                raise
+
+            message = str(exc)
+&gt;           raise mapped_exc(message) from exc
+E           httpx.ReadTimeout
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_transports/default.py:118: ReadTimeout</failure></testcase></testsuite></testsuites>

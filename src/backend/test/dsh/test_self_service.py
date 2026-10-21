@@ -23,7 +23,8 @@ USER = SimpleNamespace(user_id=20, tenant_id=2)
 
 def runtime():
     return SimpleNamespace(
-        settings=SimpleNamespace(platform_public_url="http://test"), gateway=SimpleNamespace(request=AsyncMock())
+        settings=SimpleNamespace(platform_public_url="http://test"),
+        sessions=SimpleNamespace(page=AsyncMock(), revoke=AsyncMock()),
     )
 
 
@@ -31,7 +32,7 @@ async def test_browser_identity_cannot_select_another_subject(monkeypatch):
     rt = runtime()
     identity = AsyncMock(return_value=SimpleNamespace(active=True, tenant_active=True, natural_person=True))
     monkeypatch.setattr(CurrentIdentityRecords, "get", identity)
-    rt.gateway.request.return_value = {"items": [], "next_cursor": None, "has_more": False}
+    rt.sessions.page.return_value = {"items": [], "next_cursor": None, "has_more": False}
     app = FastAPI()
     app.include_router(api.router, prefix="/api/v1")
     app.dependency_overrides[UserPayload.get_login_user] = lambda: USER
@@ -42,26 +43,22 @@ async def test_browser_identity_cannot_select_another_subject(monkeypatch):
         assert response.headers["cache-control"] == "no-store"
         assert response.json()["data"]["items"] == []
         identity.assert_awaited_with("2", "20")
-        assert rt.gateway.request.await_args.args[1]["user_id"] == "20"
-        assert rt.gateway.request.await_args.args[1]["tenant_id"] == "2"
+        rt.sessions.page.assert_awaited_once_with(2, 20, cursor=None, limit=20)
         assert (await client.get("/api/v1/dsh/me/sessions?limit=101")).status_code == 400
         session_id = str(uuid4())
-        rt.gateway.request.reset_mock()
+        rt.sessions.revoke.reset_mock()
         for origin in (None, "http://evil"):
             headers = {"origin": origin} if origin else {}
             assert (
                 await client.post(f"/api/v1/dsh/me/sessions/{session_id}/revoke", headers=headers, json={})
             ).status_code == 403
-        rt.gateway.request.assert_not_awaited()
-        rt.gateway.request.return_value = {"session_id": session_id, "state": "REVOKED"}
+        rt.sessions.revoke.assert_not_awaited()
+        rt.sessions.revoke.return_value = {"session_id": session_id, "state": "REVOKED"}
         response = await client.post(
             f"/api/v1/dsh/me/sessions/{session_id}/revoke", headers={"origin": "http://test"}, json={"user_id": 99}
         )
         assert response.status_code == 200
-        assert rt.gateway.request.await_args.args == (
-            "self_revoke",
-            {"tenant_id": "2", "user_id": "20", "session_id": session_id},
-        )
+        rt.sessions.revoke.assert_awaited_once_with(2, 20, session_id)
 
         async def disabled():
             raise DshDshDisabledError()
@@ -91,7 +88,7 @@ async def test_moved_or_disabled_user_never_reaches_gateway(monkeypatch):
             await service.sessions(USER)
         with pytest.raises(DshUserDisabledError):
             await service.revoke(USER, str(uuid4()))
-    rt.gateway.request.assert_not_awaited()
+    rt.sessions.revoke.assert_not_awaited()
 
 
 def test_primary_department_is_display_only_and_missing_is_null(user_store):  # noqa: F811
@@ -153,7 +150,7 @@ async def test_usage_exposes_only_authorized_models_without_a_seat(monkeypatch):
     result = await service.usage(USER)
     assert result["models"] == [{"model_id": 4, "name": "Provider / Model", "limit": 100, "used": 10, "remaining": 90}]
     assert result["billing_timezone"] == "Asia/Shanghai"
-    rt.gateway.request.assert_not_awaited()
+    rt.sessions.revoke.assert_not_awaited()
 
 
 async def test_annual_usage_uses_authenticated_identity_and_shared_summary(monkeypatch):
@@ -200,4 +197,4 @@ async def test_annual_usage_uses_authenticated_identity_and_shared_summary(monke
         app.dependency_overrides[UserPayload.get_login_user] = anonymous
         assert (await client.get("/api/v1/dsh/me/usage-summary")).status_code == 401
         reader.assert_not_awaited()
-    rt.gateway.request.assert_not_awaited()
+    rt.sessions.revoke.assert_not_awaited()

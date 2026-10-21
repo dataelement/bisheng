@@ -1,5 +1,7 @@
 # DSH Desktop 接入 BiSheng：客户端开发与联调接口契约
 
+> **2026-10-14 模型审计可选扩展（待实现与真实联调）**：客户端并行开发请同时阅读 [模型审计客户端接口契约 0.3](./audit-guardrails-proposal/client-api-audit-extension.md) 和 [任务清单](./audit-guardrails-proposal/tasks.md#client-work)。仅在服务端 `GET /dsh/config` 明确公布能力后附加 `conversation_id`、`request_kind`；无能力或无效关联字段不重放模型请求。本扩展不要求升级 `contract_version=0.5.0`，本文其余既有线协议保持不变；此说明不表示当前部署已经支持审计。
+
 > 2026-10-08 唤起协议更新：默认唤起地址改为 `bisheng://login`，仍自动附加当前毕昇 origin 的 `server` 参数。已保存的地址不自动覆盖；已有环境需在“客户端 → 接入设置”保存新地址。
 
 > 2026-09-29 界面名称与地址默认值更新（唤起默认值已按 2026-10-08 修订）：毕昇网站的 DSH / DSH Desktop 文案统一显示为“客户端”（英文 Client，日文 クライアント），接口路径、字段和错误码不变。未保存配置或缺少相应字段时，`launch_url` 默认 `bisheng://login`，`download_url` 默认 `https://www.dshdesktop.com/zh/enterprise/`。已保存的自定义地址保持不变，显式空下载地址仍隐藏下载入口；已有环境如需使用新下载地址，应在“客户端 → 接入设置”中修改并保存。

@@ -15,6 +15,7 @@ from bisheng.dsh.api.dependencies import DshRuntime, desktop_principal, get_runt
 from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.domain.schemas.chat import DshChatRequest
 from bisheng.dsh.domain.schemas.conversation import AUDIT_CONTEXT_KEY, ConversationHint, parse_conversation
+from bisheng.dsh.domain.schemas.model_audit_context import parse_audit_context
 from bisheng.dsh.domain.schemas.responses import MAX_REQUEST_BYTES, DshResponsesRequest
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model import PreparedStream
@@ -26,6 +27,9 @@ router = APIRouter(route_class=DshRoute)
 
 async def read_model_request(request: Request, model) -> tuple:
     """Bounded read of a model request; ``audit_context`` is metadata, not model input."""
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
+    if content_type and content_type != "application/json" and not content_type.endswith("+json"):
+        raise DshInvalidRequestError()
     body = bytearray()
     async for chunk in request.stream():
         if len(body) + len(chunk) > MAX_REQUEST_BYTES:
@@ -35,8 +39,12 @@ async def read_model_request(request: Request, model) -> tuple:
         raw = json.loads(body)
         if not isinstance(raw, dict):
             raise DshInvalidRequestError()
-        hint: ConversationHint | None = parse_conversation(raw.pop(AUDIT_CONTEXT_KEY, None))
-        return model.model_validate(raw), hint
+        # One negotiated field feeds audit capture and supplier affinity alike.
+        raw_context = raw.pop(AUDIT_CONTEXT_KEY, None)
+        parsed = model.model_validate(raw)
+        hint: ConversationHint | None = parse_conversation(raw_context)
+        message_count = len(parsed.messages) if hasattr(parsed, "messages") else len(parsed.input)
+        return parsed, hint, parse_audit_context(raw_context, message_count=message_count)
     except (json.JSONDecodeError, UnicodeError, ValidationError, RecursionError):
         raise DshInvalidRequestError() from None
 
@@ -71,9 +79,16 @@ async def models(principal: DshPrincipal = Depends(desktop_principal), runtime: 
 
 
 async def _complete(request, model, principal, runtime):
-    body, hint = await read_model_request(request, model)
+    body, hint, audit_context = await read_model_request(request, model)
     service = await get_model_runtime(runtime)
-    result = await service.complete(principal, body, conversation=hint)
+    result = await service.complete(
+        principal,
+        body,
+        request_id=request.state.request_id,
+        audit_context=audit_context,
+        audit_callback=lambda capture: setattr(request.state, "audit_capture", capture),
+        conversation=hint,
+    )
     return DshStreamingResponse(result) if isinstance(result, PreparedStream) else result
 
 

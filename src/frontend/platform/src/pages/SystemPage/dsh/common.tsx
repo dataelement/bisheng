@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next'
 interface ChoiceProps {
     label: string
     value: string
-    options: { value: string; label: string }[]
+    options: { value: string; label: string; disabled?: boolean }[]
     onChange: (value: string) => void
     disabled?: boolean
 }
@@ -29,7 +29,7 @@ export function DshChoice({
             </SelectTrigger>
             <SelectContent>
                 {options.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
+                    <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
                         {option.label}
                     </SelectItem>
                 ))}

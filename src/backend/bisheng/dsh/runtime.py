@@ -55,6 +55,7 @@ class ModelRuntime:
     quota: QuotaRedis
     settings: object
     activation_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    audit: object | None = None
 
     async def activate(self):
         async with self.activation_lock:
@@ -71,15 +72,26 @@ class ModelRuntime:
             logger.exception("DSH quota storage is unavailable")
             raise DshQuotaUnavailableError() from None
 
-    async def complete(self, principal, request, *, conversation=None):
+    async def complete(
+        self, principal, request, *, request_id=None, audit_context=None, audit_callback=None, conversation=None
+    ):
         from bisheng.dsh.domain.services.access import principal_scope
 
         with principal_scope(principal):
             month = datetime.now(UTC).astimezone(ZoneInfo(self.settings.billing_timezone)).strftime("%Y-%m")
             await self.prepare_month(principal, month)
-            return await self.model.complete(principal, request, conversation=conversation)
+            return await self.model.complete(
+                principal,
+                request,
+                request_id=request_id,
+                audit_context=audit_context,
+                audit_callback=audit_callback,
+                conversation=conversation,
+            )
 
     async def close(self):
+        if self.audit is not None:
+            await self.audit.close()
         self.quota.topology.close()
         await self.quota.redis.aclose()
 
@@ -118,6 +130,9 @@ async def get_model_runtime(runtime) -> ModelRuntime:
 
     capabilities = desktop_model_capabilities
 
+    from bisheng.dsh.audit_runtime import ModelAuditRuntime
+
+    audit = ModelAuditRuntime(config, redis)
     model = DshModelService(
         policy_reader=read_policy,
         model_loader=LLMService.get_dsh_model_snapshot,
@@ -126,7 +141,8 @@ async def get_model_runtime(runtime) -> ModelRuntime:
         usage=usage,
         now=lambda: datetime.now(UTC),
         billing_timezone=config.billing_timezone,
+        audit_factory=audit.capture,
     )
-    result = ModelRuntime(model, usage, quota, config)
+    result = ModelRuntime(model, usage, quota, config, audit=audit)
     runtime.models = result
     return result

@@ -1,5 +1,6 @@
 """Native Responses execution, using the configured SDK client without Chat conversion."""
 
+import asyncio
 import json
 
 import httpx
@@ -87,6 +88,32 @@ class ResponsesExecution:
         self.bytes = 0
         self.terminal = False
         self.sequence = -1
+        self.capture = None
+        self.audit_input = None
+
+    def audit(self, method, value):
+        if self.capture is not None:
+            try:
+                getattr(self.capture, method)(value)
+            except Exception as error:
+                # Optional audit observation must never alter model execution.
+                logger.warning("DSH audit observer failed ({})", type(error).__name__)
+
+    def input_units(self):
+        request = self.audit_input
+        if request is None:
+            return
+        yield {
+            "parameters": {
+                key: value
+                for key in type(request).model_fields
+                if key not in {"input", "tools", "tool_choice"}
+                if (value := getattr(request, key)) is not None
+            },
+            "tools": request.tools or [],
+            "tool_choice": request.tool_choice,
+        }
+        yield from request.input
 
     def _bounded(self, value):
         size = len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode())
@@ -125,6 +152,20 @@ class ResponsesExecution:
         return result
 
     async def invoke(self):
+        self.audit("entered", self.input_units())
+        try:
+            result = await self._invoke()
+            self.audit("output", result)
+            self.audit("terminal", self.status)
+            return result
+        except asyncio.CancelledError:
+            self.audit("terminal", "CANCELLED")
+            raise
+        except Exception:
+            self.audit("terminal", "FAILED")
+            raise
+
+    async def _invoke(self):
         async with self.client.responses.with_streaming_response.create(**self.parameters) as response:
             response.http_response.stream = BoundedSupplierStream(response.http_response.stream)
             parsed = await response.parse()
@@ -134,6 +175,23 @@ class ResponsesExecution:
             return self._response(raw)
 
     async def stream(self):
+        self.audit("entered", self.input_units())
+        source = self._stream()
+        try:
+            async for event in source:
+                self.audit("output", event)
+                yield event
+            self.audit("terminal", self.status)
+        except (asyncio.CancelledError, GeneratorExit):
+            self.audit("terminal", "CANCELLED")
+            raise
+        except Exception:
+            self.audit("terminal", "FAILED")
+            raise
+        finally:
+            await source.aclose()
+
+    async def _stream(self):
         async with self.client.responses.with_streaming_response.create(**self.parameters) as response:
             response.http_response.stream = BoundedSupplierStream(response.http_response.stream)
             self.source = await response.parse()

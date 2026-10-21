@@ -54,6 +54,13 @@ _IS_SUPER_CACHE_TTL_SECONDS = 300
 # These exact method/path pairs own their credential checks. This is not a tenant bypass list.
 DSH_CREDENTIAL_ROUTES = frozenset(
     {
+        ("POST", "/api/v1/dsh/authorizations"),
+        ("POST", "/api/v1/dsh/token"),
+        ("POST", "/api/v1/dsh/logout"),
+        ("POST", "/api/dsh/authorizations"),
+        ("POST", "/api/dsh/token"),
+        ("POST", "/api/dsh/logout"),
+        ("GET", "/api/v1/dsh/profile"),
         ("GET", "/api/v1/dsh/config"),
         ("GET", "/api/v1/dsh/browser-config"),
         ("GET", "/api/v1/dsh/models"),
@@ -63,8 +70,6 @@ DSH_CREDENTIAL_ROUTES = frozenset(
         ("GET", "/api/v1/dsh/market/workbenches"),
         ("POST", "/api/v1/dsh/market/sync"),
         ("POST", "/api/v1/dsh/chat/completions"),
-        ("POST", "/api/v1/internal/dsh/identity/redeem"),
-        ("POST", "/api/v1/internal/dsh/identity/check"),
     }
 )
 
@@ -390,7 +395,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
         ip = get_request_ip(request)
         req_path = request.url.path
         dsh_owned = owns_dsh_credential(request.method, req_path)
-        path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/v1/internal/dsh/")) else request.url
+        path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/dsh/", "/api/v1/internal/dsh/")) else request.url
         trace_id_var.set(trace_id)
 
         # Tenant context injection from JWT cookie. Decode the JWT once and

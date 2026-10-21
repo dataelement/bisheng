@@ -3,6 +3,7 @@
 import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -76,6 +77,15 @@ async def test_sdk_wire_and_shared_settlement(app_setup, stream, status, known_u
     service = runtime.model
     captured = []
     final = result(status, known_usage)
+    audit = Mock()
+    audit.entered.side_effect = lambda units: list(units)
+    audit_contexts = []
+
+    async def capture_factory(principal, request, request_id, started, model, server, context):
+        audit_contexts.append((request_id, context))
+        return audit
+
+    service.audit_factory = capture_factory
 
     async def supplier(request):
         captured.append((dict(request.headers), json.loads(request.content), request.url.path))
@@ -112,7 +122,16 @@ async def test_sdk_wire_and_shared_settlement(app_setup, stream, status, known_u
                 headers={"Authorization": "Bearer dedicated"},
             )
     assert response.status_code == 200
+    audit.entered.assert_called_once()
+    audit.terminal.assert_called_once_with("FAILED" if status == "failed" else "SUCCEEDED")
+    audit.usage.assert_called_once_with("SETTLED" if known_usage else "USAGE_UNKNOWN")
+    audit.response.assert_called_once_with("COMPLETED")
+    assert audit.output.called
+    request_id, context = audit_contexts[0]
+    assert request_id == response.headers["X-Request-ID"] == ledger.events[-1].request_id
+    assert context.conversation_id == "conv-1" and context.request_kind == "chat"
     headers, payload, path = captured[0]
+    assert "audit_context" not in payload
     assert path == "/v1/responses" and payload["model"] == "supplier-model"
     assert payload["store"] is False and payload["reasoning"]["effort"] == "high"
     assert payload["include"] == ["reasoning.encrypted_content"]
@@ -252,7 +271,11 @@ async def test_unknown_events_and_missing_sequence_do_not_fail_stream():
     """Suppliers add event types and proxies may drop sequence_number."""
     from bisheng.dsh.infrastructure.responses_adapter import ResponsesExecution
 
-    terminal = {"status": "completed", "output": [], "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}}
+    terminal = {
+        "status": "completed",
+        "output": [],
+        "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+    }
     events = [
         {"type": "response.created", "response": {"model": "supplier-model"}},
         {"type": "response.some_future_event", "delta": "x"},

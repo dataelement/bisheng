@@ -8,25 +8,25 @@ import pytest
 from bisheng.dsh.domain.services.role_migration import migrate_role_policies, role_migration_plan
 
 
-def member(direct=6000, role=100000):
+def member(direct=6000, role=100000, configured=True):
     return {
         "user_id": 20,
-        "direct_enabled": True,
+        "direct_enabled": configured,
         "direct_monthly_token_limit": direct,
         "direct_version": 3,
         "direct_pending_operation_id": None,
-        "monthly_token_limit": max(direct, role),
+        "monthly_token_limit": direct if configured else role,
         "sources": [{"subject_type": "ROLE", "monthly_token_limit": role}],
     }
 
 
-@pytest.mark.parametrize("direct,expected", [(0, 100000), (6000, 100000), (1000000, 1000000)])
-def test_role_plan_preserves_the_maximum(direct, expected):
+@pytest.mark.parametrize("direct,expected", [(0, 0), (6000, 6000), (1000000, 1000000)])
+def test_role_plan_preserves_personal_precedence(direct, expected):
     assert role_migration_plan([member(direct)])[0]["target_limit"] == expected
 
 
 async def test_failed_user_write_keeps_role_policy_enabled():
-    user = member()
+    user = member(configured=False)
     service = SimpleNamespace(
         model_subjects=AsyncMock(
             return_value={"roles": [{"subject_id": 41, "enabled": True, "monthly_token_limit": 100000, "version": 1}]}
@@ -53,7 +53,7 @@ async def test_dry_run_and_completed_migration_are_write_free():
 
 
 async def test_migration_verifies_personal_quota_before_retiring_roles_and_is_repeatable():
-    user = member()
+    user = member(configured=False)
     role = {"subject_id": 41, "enabled": True, "monthly_token_limit": 100000, "version": 1}
     events = []
 
@@ -61,7 +61,7 @@ async def test_migration_verifies_personal_quota_before_retiring_roles_and_is_re
         events.append("personal")
         assert request.monthly_token_limit == 100000
         assert request.expected_version == 3
-        user.update(direct_monthly_token_limit=100000, direct_version=4)
+        user.update(direct_enabled=True, direct_monthly_token_limit=100000, direct_version=4)
         return {"status": "SUCCEEDED", "operation_id": request.operation_id}
 
     async def save_role(actor, model_id, subject_type, subject_id, request, **kwargs):

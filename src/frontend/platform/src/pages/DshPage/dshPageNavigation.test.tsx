@@ -67,6 +67,14 @@ describe('DshPage navigation', () => {
             'active',
         )
 
+        expect(screen.queryByRole('tab', { name: 'dsh.modelAudit' })).toBeNull()
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'dsh.auditTab' }), {
+            button: 0,
+            ctrlKey: false,
+        })
+        expect(screen.getByTestId('location')).toHaveTextContent('/dsh?tab=model-audit')
+        expect(screen.getByTestId('dsh-section')).toHaveTextContent('model-audit')
+
         fireEvent.mouseDown(screen.getByRole('tab', { name: 'dsh.accessSettings' }), {
             button: 0,
             ctrlKey: false,
@@ -98,9 +106,9 @@ describe('DshPage navigation', () => {
             </MemoryRouter>,
         )
         expect(screen.queryByRole('tab', { name: 'dsh.operations' })).toBeNull()
-        expect(screen.getByRole('tab', { name: 'dsh.licenseAndSeats' })).toHaveAttribute('data-state', 'active')
-        expect(screen.getByTestId('dsh-section')).toHaveTextContent('license')
-        expect(resolveDshSection('?tab=operations')).toBe('license')
+        expect(screen.getByRole('tab', { name: 'dsh.modelsAndQuotas' })).toHaveAttribute('data-state', 'active')
+        expect(screen.getByTestId('dsh-section')).toHaveTextContent('models')
+        expect(resolveDshSection('?tab=operations')).toBe('models')
         expect(resolveDshSection('?tab=operations', ['access'])).toBe('access')
     })
 })
