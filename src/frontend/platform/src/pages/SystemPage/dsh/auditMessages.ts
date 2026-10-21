@@ -1,4 +1,5 @@
 import type { AuditBodyFrame, AuditMessageSource } from "@/types/dshModelAudit";
+import { ResponsesAuditAssembler } from "./auditResponses";
 
 export type AuditText = { parts: string[]; length: number };
 export type AuditToolCall = {
@@ -68,6 +69,10 @@ export class AuditMessageAssembler {
   };
   private reply?: AuditMessage;
   private key = 0;
+  private readonly responses = new ResponsesAuditAssembler({
+    message: (channel, role, index) => this.message(channel, role, index),
+    content: (message, value) => this.content(message, value),
+  });
 
   accept(frame: AuditBodyFrame) {
     if (frame.type === "annotations") {
@@ -113,6 +118,7 @@ export class AuditMessageAssembler {
       }
       if (this.reply) this.reply.incomplete = true;
       this.reply = undefined;
+      this.responses.reset();
       this.entries.push({ type: "gap", key: this.key++ });
     }
   }
@@ -121,10 +127,15 @@ export class AuditMessageAssembler {
     this.flush(interrupted);
     if (interrupted) {
       if (this.reply) this.reply.incomplete = true;
+      this.responses.finish();
     }
   }
 
-  private message(channel: PartFrame["channel"], role: string): AuditMessage {
+  private message(
+    channel: PartFrame["channel"],
+    role: string,
+    index?: number,
+  ): AuditMessage {
     const message: AuditMessage = {
       type: "message",
       key: this.key++,
@@ -136,6 +147,10 @@ export class AuditMessageAssembler {
       incomplete: false,
       unparsed: false,
     };
+    if (channel === "input" && index !== undefined) {
+      message.unitIndex = index;
+      if (index > 0) message.sources = this.sources.get(index - 1);
+    }
     this.entries.push(message);
     return message;
   }
@@ -152,14 +167,21 @@ export class AuditMessageAssembler {
       for (const part of value) {
         if (
           object(part) &&
-          part.type === "text" &&
+          ["text", "input_text", "output_text"].includes(String(part.type)) &&
           typeof part.text === "string"
         )
           this.content(message, part.text);
+        else if (
+          object(part) &&
+          part.type === "refusal" &&
+          typeof part.refusal === "string"
+        )
+          this.content(message, part.refusal);
         else {
           const block = {
             kind:
-              object(part) && part.type === "image_url"
+              object(part) &&
+              ["image_url", "input_image"].includes(String(part.type))
                 ? ("image" as const)
                 : ("data" as const),
             text: text(),
@@ -210,6 +232,7 @@ export class AuditMessageAssembler {
     }
     if (unit.broken || !object(value)) {
       this.reply = undefined;
+      this.responses.reset();
       const message = this.message(unit.channel, "unknown");
       message.unparsed = true;
       message.incomplete = unit.broken || interrupted;
@@ -227,7 +250,15 @@ export class AuditMessageAssembler {
       !value.role
     )
       return;
-    if (unit.channel === "output" && object(value.delta)) {
+    if (this.responses.accept(value, unit.channel, unit.index, interrupted)) {
+      this.reply = undefined;
+    } else if (
+      unit.channel === "output" &&
+      object(value.message) &&
+      typeof value.message.role === "string"
+    ) {
+      this.readMessage(unit.channel, unit.index, value.message, interrupted);
+    } else if (unit.channel === "output" && object(value.delta)) {
       const message = (this.reply ??= this.message("output", "assistant"));
       this.content(message, value.delta.content);
       append(message.reasoning, value.delta.reasoning_content);
@@ -240,23 +271,29 @@ export class AuditMessageAssembler {
     ) {
       this.reply = undefined;
     } else if (typeof value.role === "string") {
-      const message = this.message(unit.channel, value.role);
-      message.unitIndex = unit.index;
-      if (unit.channel === "input" && unit.index > 0)
-        message.sources = this.sources.get(unit.index - 1);
-      message.name = typeof value.name === "string" ? value.name : undefined;
-      message.toolCallId =
-        typeof value.tool_call_id === "string" ? value.tool_call_id : undefined;
-      this.content(message, value.content);
-      append(message.reasoning, value.reasoning_content);
-      this.tools(message, value.tool_calls, false);
-      message.incomplete = interrupted;
-      this.reply = undefined;
+      this.readMessage(unit.channel, unit.index, value, interrupted);
     } else {
       const message = this.message(unit.channel, "unknown");
       message.unparsed = true;
       this.content(message, raw);
       this.reply = undefined;
     }
+  }
+
+  private readMessage(
+    channel: PartFrame["channel"],
+    index: number,
+    value: ObjectValue,
+    interrupted: boolean,
+  ) {
+    const message = this.message(channel, String(value.role), index);
+    message.name = typeof value.name === "string" ? value.name : undefined;
+    message.toolCallId =
+      typeof value.tool_call_id === "string" ? value.tool_call_id : undefined;
+    this.content(message, value.content);
+    append(message.reasoning, value.reasoning_content);
+    this.tools(message, value.tool_calls, false);
+    message.incomplete = interrupted;
+    this.reply = undefined;
   }
 }

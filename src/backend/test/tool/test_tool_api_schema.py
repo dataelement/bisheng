@@ -123,3 +123,23 @@ def test_huge_integer_is_rejected_not_crashing():
     assert schema.validate({"amount": 3}) == {"amount": 3}
     with pytest.raises(DshToolArgumentsInvalidError):
         schema.validate({"amount": 10**400})
+
+
+@pytest.mark.parametrize("authentication_location", ["header", "query"])
+@pytest.mark.parametrize("argument_location", ["body", "query"])
+def test_authentication_name_collisions_are_scoped_to_the_wire_location(authentication_location, argument_location):
+    tool, category = saved_schema({"token": {"type": "string"}})
+    category.extra = json.dumps({"api_location": authentication_location, "parameter_name": "token"})
+    if argument_location == "query":
+        parameters = [{"name": "token", "in": "query", "required": True, "schema": {"type": "string"}}]
+        document = json.loads(category.openapi_schema)
+        document["paths"]["/search"]["post"] = {"operationId": "search", "parameters": parameters}
+        category.openapi_schema = json.dumps(document)
+        tool.extra = json.dumps({"path": "/search", "method": "post", "parameters": parameters})
+    if authentication_location == argument_location:
+        with pytest.raises(DshToolUnsupportedError):
+            SavedToolSchema.from_saved(tool, category)
+    else:
+        assert SavedToolSchema.from_saved(tool, category).validate({"token": "business-value"}) == {
+            "token": "business-value"
+        }

@@ -329,7 +329,12 @@ class SavedToolSchema:
                 raise ValueError("Nested query serialization is unsupported")
             if _signature(parameters, document) != _signature(extra["parameters"], document):
                 raise ValueError("Saved operation does not match schema")
-            if _parse_json(category.extra).get("parameter_name") in schema["properties"]:
+            authentication = _parse_json(category.extra)
+            # Query credentials cannot be caller-controlled; other wire locations are independent.
+            if authentication.get("api_location") == "query" and any(
+                parameter["in"] == "query" and parameter["name"] == authentication.get("parameter_name")
+                for parameter in parameters
+            ):
                 raise ValueError("Authentication parameter is not caller controlled")
             return cls(schema)
         except DshToolUnsupportedError:
