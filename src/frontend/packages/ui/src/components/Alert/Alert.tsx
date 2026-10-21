@@ -132,6 +132,35 @@ const CLOSE_MS = 200;
 /** §5.3 — two is the ceiling; a third exit means the copy is doing too much. */
 const MAX_ACTIONS = 2;
 
+/*
+ * DARK_TEXT — why half the text roles carry a `dark:` override (§4, 2026-10-21).
+ *
+ * The neutral ramp's dim rungs and the brand blue are calibrated against the
+ * page surface (#121212). An alert does not sit on it: in dark mode the
+ * `*-tint` tokens are deep saturated washes, and 成功 (#004D1C) is much lighter
+ * in luminance than the other three, which makes it the binding case. Measured
+ * against it: 次要文字色 4.4:1, 品牌色 2.7:1, 禁用文字色 1.58:1 — the close
+ * button was all but gone and the brand action sank into the green.
+ *
+ * So in dark mode every failing role moves up one or two rungs, and nothing
+ * else changes:
+ *   - 正文 under a title -> 主文字色 (9.35:1). Nothing is exposed between 主
+ *     and 次, so the tonal step cannot survive; the title keeps the lead
+ *     through its 500 weight, which is how it reads on a colored surface
+ *     anyway.
+ *   - 关闭按钮 -> 次要文字色 at rest (4.4:1; a graphic needs 3:1), 主文字色 on
+ *     hover. Still one rung quieter than the copy, which is the whole point of
+ *     §4's「faint until hovered」.
+ *   - 主动作 -> the brand ramp's lightest exposed step, blue-700 (5.32:1).
+ *     Hover brightens to 主文字色 rather than following the ramp's own hover
+ *     step, which in dark moves AWAY from the surface (blue-400, 2.33:1) and
+ *     would leave a hovered link harder to read than a resting one. The
+ *     secondary action already clears it (5.85:1) and only takes the hover.
+ *
+ * Toast puts the same roles on the same tints and has the same gap; leaving it
+ * alone here is deliberate — Alert §10 records it for the designer.
+ */
+
 interface TextFlags {
   /** The body wrapped, so the box leaves the 40px single-line form (§4). */
   wrapped: boolean;
@@ -300,12 +329,14 @@ export function Alert({
             ) : null}
             {/* §4: 主文字色 on its own, 次要文字色 under a title — never the
                 semantic color, which the icon and the tint already say and
-                which does not have the contrast for a whole sentence here. */}
+                which does not have the contrast for a whole sentence here.
+                Dark mode takes the body back up to 主文字色 and lets the title
+                lead by weight alone (DARK_TEXT above). */}
             <p
               ref={descriptionRef}
               className={cn(
                 'line-clamp-2 break-words text-body',
-                title ? 'mt-1 text-text-2' : 'text-text-1',
+                title ? 'mt-1 text-text-2 dark:text-text-1' : 'text-text-1',
               )}
               title={flags.descriptionClipped ? description : undefined}
             >
@@ -334,7 +365,10 @@ export function Alert({
                   color={index === 0 ? 'primary' : 'default'}
                   variant="link"
                   size="small"
-                  className="btn-touch-hit px-0"
+                  className={cn(
+                    'btn-touch-hit px-0 dark:hover:text-text-1',
+                    index === 0 && 'dark:text-blue-700',
+                  )}
                   onClick={action.onClick}
                 >
                   {action.label}
@@ -351,7 +385,8 @@ export function Alert({
               type="button"
               aria-label={closeLabel}
               className={cn(
-                'btn-touch-hit relative ml-4 flex shrink-0 text-text-4 transition-colors hover:text-text-2',
+                'btn-touch-hit relative ml-4 flex shrink-0 transition-colors',
+                'text-text-4 hover:text-text-2 dark:text-text-2 dark:hover:text-text-1',
                 firstLine,
               )}
               onClick={() => setClosing(true)}
