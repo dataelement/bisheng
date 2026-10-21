@@ -265,8 +265,7 @@ class AdmissionPolicy:
                     ]
         elif kind == "Service":
             self._service(comparison, plan)
-        elif kind == "Secret":
-            comparison = secret_projection(comparison)
+        comparison = template_projection(comparison)
         if _normalize(comparison) != _normalize(expected):
             _deny("admission_template_mismatch")
 
@@ -396,6 +395,26 @@ def secret_projection(obj: dict) -> dict:
         json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     return comparison
+
+
+def template_projection(obj: dict) -> dict:
+    """Safe for the backend ledger: no Secret bytes or environment values."""
+    if obj.get("kind") == "Secret":
+        return secret_projection(obj)
+    projected = copy.deepcopy(obj)
+    if projected.get("kind") == "Pod":
+        spec = projected.get("spec", {})
+        for container in [*spec.get("containers", []), *spec.get("initContainers", [])]:
+            for env in container.get("env", []):
+                if "valueFrom" in env:
+                    if env.pop("value", ""):
+                        _deny("admission_environment_ambiguous")
+                    continue
+                raw = env.pop("value", "")
+                if not isinstance(raw, str):
+                    _deny("admission_environment_invalid")
+                env["value_sha256"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return projected
 
 
 def create_app(policy: AdmissionPolicy):

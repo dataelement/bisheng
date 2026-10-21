@@ -184,3 +184,35 @@ def test_template_digest_is_stable_and_changes_with_frozen_inputs(plan):
     a = pod_template(plan)
     assert template_digest(a) == template_digest(pod_template(plan))
     assert template_digest(a) != template_digest(pod_template(replace(plan, command=("python", "other.py"))))
+
+
+def test_business_credentials_use_only_app_scoped_secret_references(plan):
+    from runtime_manager.k8s_templates import pod_template
+
+    obj = pod_template(replace(plan, app_secret="app-credentials-a", secret_env=("BISHENG_APP_API_KEY", "HTTPS_PROXY")))
+    containers = obj["spec"]["containers"]
+    app = next(x for x in containers if x["name"] == "app")
+    selected = [x for x in app["env"] if x["name"] in {"BISHENG_APP_API_KEY", "HTTPS_PROXY"}]
+    assert len(selected) == 2
+    assert all(x["valueFrom"]["secretKeyRef"]["name"] == "app-credentials-a" for x in selected)
+    assert not any("value" in x for x in selected)
+    for container in containers + obj["spec"]["initContainers"]:
+        if container["name"] != "app":
+            assert "app-credentials-a" not in str(container)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"app_secret": "", "secret_env": ("BISHENG_APP_API_KEY",)},
+        {"app_secret": "../credentials", "secret_env": ("BISHENG_APP_API_KEY",)},
+        {"app_secret": "app-a", "secret_env": ("RTM_PLATFORM_SECRET",)},
+        {"app_secret": "app-a", "secret_env": ("APP_PORT",)},
+        {"app_secret": "app-a", "secret_env": ("DUPLICATE", "DUPLICATE")},
+    ],
+)
+def test_secret_environment_mapping_cannot_overlap_or_expose_control_fields(plan, change):
+    from runtime_manager.k8s_templates import pod_template
+
+    with pytest.raises(ValueError):
+        pod_template(replace(plan, **change))

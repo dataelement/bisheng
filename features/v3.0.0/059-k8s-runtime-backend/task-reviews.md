@@ -295,3 +295,24 @@ T004来源：[官方50.0.2变更记录](https://cryptography.io/en/latest/change
 T002/T021后续核对：材料 key_id 存储宽度修正为64，与已确认wire一致，并新增数据库列/最大长度验签守卫。T027注册文件改为main以保留固定根路径P；不是协议路径变更。
 
 检查点：runtime 593 passed、10 skipped；backend 71 passed，随后新增key_id宽度守卫1 passed，uv frozen/offline锁检查通过。
+
+## Task Review: T073
+
+**任务**：F086字节计数器继承与迁移汇合。**类型**：基础设施。
+**文件**：`f059_merge_f086_heads.py`、`test_runtime_model_contracts.py`；输入为F086本地来源提交`667546bb77`中的Vibe专有模型/迁移/静态测试。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 无SDK、外部接口或领域跨层调用 |
+| 2 | 命名 | PASS | revision采用f059可读ID |
+| 3 | 序列化 | N/A | 无HTTP |
+| 4 | 数据库 | PASS | 显式merge两原parent；BIGINT只扩容不缩窄，无数据回填；历史authorization_id和待绑定uid的NULL是限定合同 |
+| 5 | 前端 | N/A | 无UI |
+| 6 | 信息泄漏 | PASS | 无敏感数据 |
+| 7 | 设计同步 | PASS | design和prerequisites记录来源/约束及未交付边界 |
+
+**验证**：27 passed（单head、模型类型/约束及K8s账本）；原F086同一来源21 passed。DM8使用通用编译器走shared helper的静态分支，未运行真实DM8。Ruff/逐文件arch-guard通过。
+**元数据验证**：两个增量目标；依赖T003完成；模型/迁移基础设施无需配对业务测试。
+**结果**：PASS。
+
+T009/T013增量L1：应用凭据支持只给app容器的Secret引用，材料Secret不混用；backend审批投影仅接收/存放Secret内容与Pod环境值摘要。补测红阶段已记录，绿阶段模板+准入68 passed；禁止原始workload私钥进入backend，manager登记须先投影，准入对实际K8s请求独立投影比较。

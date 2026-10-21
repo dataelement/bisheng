@@ -62,6 +62,8 @@ class PodPlan:
     pvc_name: str = ""
     scratch_pvc: str = ""
     material_secret: str = ""
+    app_secret: str = ""
+    secret_env: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict, repr=False)
     helper_env: dict[str, str] = field(default_factory=dict, repr=False)
     deadline_seconds: int | None = None
@@ -92,7 +94,14 @@ class PodPlan:
         for value in (self.image, self.helper_image):
             if not _IMAGE.fullmatch(value):
                 raise ValueError("k8s_image_digest_required")
-        for value in (self.pvc_name, self.scratch_pvc, self.material_secret, self.runtime_class, self.pull_secret):
+        for value in (
+            self.pvc_name,
+            self.scratch_pvc,
+            self.material_secret,
+            self.app_secret,
+            self.runtime_class,
+            self.pull_secret,
+        ):
             if value and not _NAME.fullmatch(value):
                 raise ValueError("k8s_reference_invalid")
         if not isinstance(self.command, tuple) or any(
@@ -129,6 +138,25 @@ class PodPlan:
         )
         if material and not self.material_secret:
             raise ValueError("k8s_material_secret_required")
+        if (
+            not isinstance(self.secret_env, tuple)
+            or len(self.secret_env) > 256
+            or any(not isinstance(k, str) or not _ENV.fullmatch(k) for k in self.secret_env)
+        ):
+            raise ValueError("k8s_secret_environment_invalid")
+        if len(set(self.secret_env)) != len(self.secret_env) or set(self.secret_env) & set(self.env):
+            raise ValueError("k8s_secret_environment_overlap")
+        if bool(self.app_secret) != bool(self.secret_env):
+            raise ValueError("k8s_app_secret_required")
+        if self.secret_env and self.purpose not in {"serve", "probe", "preview"}:
+            raise ValueError("k8s_app_credentials_purpose_refused")
+        if any(
+            k.startswith(("RTM_", "KUBERNETES_", "MINIO_"))
+            or k in _BLOCKED_ENV
+            or (self.mode == "bundle" and k == "PATH")
+            for k in self.secret_env
+        ):
+            raise ValueError("k8s_secret_environment_refused")
         for env in (self.env, self.helper_env):
             if not isinstance(env, dict) or len(env) > 256:
                 raise ValueError("k8s_environment_invalid")
@@ -312,6 +340,10 @@ def pod_template(plan: PodPlan) -> dict:
                     _mount("environment", "/opt/venv", readonly=True),
                 ]
             app = _container(plan, "app", command=plan.command, mounts=mounts, env=plan.env)
+            app["env"].extend(
+                {"name": key, "valueFrom": {"secretKeyRef": {"name": plan.app_secret, "key": key}}}
+                for key in sorted(plan.secret_env)
+            )
             if plan.mode == "bundle":
                 app["workingDir"] = "/workspace/app"
                 app["env"].append(

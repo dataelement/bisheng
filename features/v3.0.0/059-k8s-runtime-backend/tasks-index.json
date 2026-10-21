@@ -94,6 +94,30 @@
       "review": "PASS"
     },
     {
+      "id": "T073",
+      "wave": 1,
+      "kind": "基础设施",
+      "title": "F086 字节计数器继承与迁移汇合",
+      "files": [
+        "src/backend/bisheng/core/database/alembic/versions/f059_merge_f086_heads.py",
+        "src/backend/test/app_runtime/test_runtime_model_contracts.py"
+      ],
+      "logic": "继承 F086 667546bb77 的 Vibe专有 BIGINT 修复（通用发布线没有该模型）；新增显式 merge revision保留两个原parent，恢复单head；静态守卫覆盖新表、授权历史NULL和UID未绑定NULL的限定语义，其他约束不放宽；DM8不做真实连接。",
+      "acs": [
+        "AC-15",
+        "AC-39",
+        "AC-48",
+        "AC-56"
+      ],
+      "depends": [
+        "T003"
+      ],
+      "pair": null,
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T005",
       "wave": 1,
       "kind": "基础设施",
@@ -108,7 +132,9 @@
         "AC-55",
         "AC-56"
       ],
-      "depends": [],
+      "depends": [
+        "T073"
+      ],
       "pair": null,
       "command": ""
     },

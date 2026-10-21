@@ -114,9 +114,9 @@
 | app-proxy、`platform_egress.py` | backend 路由/策略投影，不依赖 manager 提供路由 | 保留授权、HTTP/WS/CONNECT；增加材料用途的范围化策略 |
 | `.github/workflows/runtime-images.yml` | tag `v*` 和 workflow_dispatch；原生双架构镜像、目录产物 | 同版本发布执行 helper/OCI 组装器；增加 K8s 清单和契约测试 |
 
-本基线尚无 K8s executor、部署 Chart 或真实运行验收。原 F086 工作树的多租户启动及 BIGINT 修复仍未被本基线包含，见 discovery；正式平台链路验证前按发布线归属继承，不能复制第二套模型/权限实现。
+本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已在发布线基线上准备，待授权先进入发布线后继承，不能复制权限分叉。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T004、T006–T015及T020/T021已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。F086公共前置T005、业务控制API、材料委托/传输、执行器/helper及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：T001–T004、T006–T015、T020/T021及T073已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。F086公共前置T005、业务控制API、材料委托/传输、执行器/helper及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -172,7 +172,7 @@ flowchart LR
 | 生产 `/data/app.db` 及 WAL/SHM | 每应用独占 PVC | 无 Pod ownerReference；保留策略 Retain，停用/升级/卸载不删 |
 | 迁移前尚未确认的备份 | 生产 PVC 的平台保留子目录 | 平台确认前不清理；不能只存维护 Pod emptyDir |
 | 预检/预览工作数据库 | 独立 scratch/preview PVC 或 emptyDir | 初始按批准结构建空库，不挂生产 PVC；会话结束清理 |
-| 材料私钥、拉取凭据、受控数据票据 | 独立 Kubernetes Secret，仅指定容器引用 | 不写应用包、共享 scratch、日志或业务容器环境；拉取凭据只供 kubelet或可信组装器 |
+| 材料私钥、业务应用/出站凭据、拉取凭据、受控数据票据 | 独立 Kubernetes Secret，仅指定容器引用 | 不写应用包、共享 scratch、日志或业务容器环境；拉取凭据只供 kubelet或可信组装器 |
 
 生产 PVC 固定划分 `business/` 和 `platform/`：业务容器只把 `business/` 以 subPath 挂到 `/data`，维护/数据 helper 可访问对应平台保留目录；快照、停止/迁移记录和数据请求结果不暴露给业务容器。目录由受信初始化步骤按冻结 UID/GID 建立，不解释用户提供的 subPath。
 
@@ -229,7 +229,7 @@ K8s 1.28 不保证未启动容器都有终止记录；其 kubelet 延迟终态�
 manager 通过现有服务 HMAC 在 backend 创建材料授权；后台从已验证的操作、部署/预览和 delivery 计算范围，不接受调用方任意指定材料、租户或应用。
 
 1. 授权区分 `operation` 与 `deployment-init`。前者有效期不超过操作 deadline，终态/取消即失效；后者绑定当前 generation/owner_epoch 和已登记生产 Pod UID。它在准备正式候选时要求当前归属仍是该有效 deploy/recover 操作、版本已批准且 delivery 已验证；切换后要求仍是当前 serving 归属，可在原 deploy 操作 completed 后继续初始化。不能要求候选在取材料前已经进入正式路由，也不能让已被替代的旧代次续期。
-2. 每个受信传输容器使用独立 Ed25519 密钥对：私钥仅挂该容器 Secret，backend 保存公钥、用途和撤销信息。业务容器无挂载；不用 manager HMAC 作签名 key。manager 创建 Pod 后提交 UID 绑定事实，绑定前初始化请求等待，不接受自报 UID 建立授权。
+2. 每个受信传输容器使用独立 Ed25519 密钥对：私钥仅挂该容器 Secret，backend 保存公钥、用途和撤销信息。资源登记先在manager端将Secret内容及Pod环境值投影为摘要，backend不接收私钥或持久保存明文环境；准入对实际资源执行同一投影再比较。业务凭据通过独立Secret引用只注入app，材料Secret只给传输容器。业务容器无挂载；不用 manager HMAC 作签名 key。manager 创建 Pod 后提交 UID 绑定事实，绑定前初始化请求等待，不接受自报 UID 建立授权。
 3. 交换请求包含授权 ID、Pod UID、时间戳、nonce、目标材料；签名输入、头、动作和传输格式固定为 6.2.1 的 `material-v1`，不得另行猜测或复用服务 HMAC。请求签名与当前后台归属共同校验。时间偏差上界 60 秒，nonce 窗口 120 秒，Redis/授权不可确认时拒绝。签名证明持钥，UID 权威仍是 manager 已登记事实，不能由字段本身证明。
 4. backend 对下载发 300 秒、单材料、只读传输票据；上传票据另限有效操作和获批输出类型，ticket 仅存哈希。过期票据直接拒绝；续取须重新签名并核验当前有效归属和冻结引用，不能只用旧票据。上传只授予有效准备/数据维护操作，部署初始化绝不取得上传、快照恢复或控制权限。
 5. 预览初始化绑定当前有效预览操作、会话使用者和审批期限；回收/审批终态即撤销，不能借正式部署身份取得生产材料或生产附件。
@@ -587,3 +587,4 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-21 | T002–T004模型/DDL/密码依赖、T011停止证据完成本地验证；补记数据互斥字段与历史NULL/运维回填；T012准入红阶段 | 按现有租户发现和DDL-only规范实施，未改变架构决策 |
 | 2026-10-21 | T013准入HTTPS入口及T015事务账本完成本地验证；收尾计划不依赖业务操作终态，模板补齐默认NoExecute容忍 | 记录实施和API默认值兼容，部署尚待验收 |
 | 2026-10-21 | T021两端material-v1编码/验签及真实互验完成；固定wire不变，授权/传输层仍待实现 | 本地阶段进展 |
+| 2026-10-21 | 继承F086专有BIGINT并显式merge迁移；T009/T013补业务Secret引用和无明文资源投影；公共启动修复仍等发布线授权 | 保留源迁移历史与凭据边界，未改变D1–D8 |

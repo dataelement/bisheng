@@ -1,0 +1,21 @@
+{
+  "feature": "F059",
+  "status": "pending_public_release_authorization",
+  "public_bootstrap": {
+    "source_commit": "0e3c156e5",
+    "branch": "codex/f086-tenant-bootstrap",
+    "release_base": "8510a9645382c7ac5f886503e26ae68cb8a0d935",
+    "tests": "17 passed",
+    "inherited": false,
+    "reason": "await explicit authorization to update shared feat/3.0.0"
+  },
+  "vibe_byte_counters": {
+    "source_commit": "667546bb77",
+    "source_branch": "codex/086-vibe-runtime-delivery",
+    "branch_specific_reason": "runtime_delivery.py does not exist on feat/3.0.0",
+    "imported": true,
+    "integration_revision": "f059_merge_f086_heads",
+    "tests": "27 passed",
+    "deliberate_divergence": "Combine BigInteger and existing String imports; static model guard includes new K8s models and explicitly nullable historical authorization_id/unbound uid unique keys. Neither source revision parent is changed."
+  }
+}

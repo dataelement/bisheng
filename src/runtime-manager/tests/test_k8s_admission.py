@@ -40,12 +40,14 @@ def template():
 
 @pytest.fixture
 def plan(template):
+    from runtime_manager.k8s_admission import template_projection
+
     return {
         "resource_ref": "resource-a",
         "namespace": NAMESPACE,
         "name": template["metadata"]["name"],
         "kind": "Pod",
-        "template": copy.deepcopy(template),
+        "template": template_projection(template),
         "uid": UID,
         "allow_create": True,
         "allow_update": True,
@@ -403,3 +405,14 @@ def test_extreme_resource_quantities_are_rejected_without_large_allocation(templ
     obj = copy.deepcopy(template)
     obj["spec"]["containers"][0]["resources"]["limits"]["memory"] = value
     assert not allowed(policy(lambda _: plan), request(obj))
+
+
+def test_pod_approved_plan_never_contains_plaintext_environment_credentials(template):
+    from runtime_manager.k8s_admission import template_projection
+
+    secret = "fake-application-runtime-credential"
+    template["spec"]["containers"][0]["env"].append({"name": "BISHENG_APP_API_KEY", "value": secret})
+    projection = template_projection(template)
+    assert secret not in str(projection)
+    assert projection["spec"]["containers"][0]["env"][-1]["value_sha256"]
+    assert template["spec"]["containers"][0]["env"][-1]["value"] == secret

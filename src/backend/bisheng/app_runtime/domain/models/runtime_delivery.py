@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Column, String, UniqueConstraint, text
+from sqlalchemy import BigInteger, Column, String, UniqueConstraint, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -60,7 +60,7 @@ class RuntimeArtifact(ScopedRuntimeRecord, table=True):
     kind: str = Field(max_length=32)
     visibility: str = Field(default="private", max_length=16)
     sha256: str = Field(max_length=64)
-    size_bytes: int = 0
+    size_bytes: int = Field(default=0, sa_column=Column(BigInteger, nullable=False, default=0))
     object_key: str = Field(default="", max_length=512)
     platform: str = Field(default="", max_length=64)
     producer_operation_id: str = Field(default="", max_length=36)
@@ -211,7 +211,7 @@ class RuntimeTransfer(ScopedRuntimeRecord, table=True):
     action: str = Field(max_length=16)
     ticket_hash: str = Field(max_length=64)
     expires_at: datetime
-    offset: int = 0
+    offset: int = Field(default=0, sa_column=Column(BigInteger, nullable=False, default=0))
     parts: list = Field(default_factory=list, sa_column=Column(JsonType, nullable=False))
     state: str = Field(default="open", max_length=24)
 
