@@ -328,7 +328,7 @@ class LinsightStateMessageManager:
                 await pipe.execute()
 
             # Database updating
-            await LinsightExecuteTaskDao.update_by_id(
+            await LinsightExecuteTaskDao.update_fields_by_id(
                 task_id,
                 status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED,
                 history=task_model.history,
@@ -385,7 +385,7 @@ class LinsightStateMessageManager:
 
             task_key = f"{self._keys['execution_tasks']}{task_id}"
             await self._redis_client.aset(task_key, task_model.model_dump(), expiration=self.DEFAULT_EXPIRATION)
-            await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
+            await LinsightExecuteTaskDao.update_fields_by_id(task_id, history=task_model.history)
             self._logger.info(f"Re-stamped {answer_idx} clarify answer(s) onto task {task_id} history")
         except Exception as e:
             # Non-critical: live rendering is unaffected; only the refreshed view
@@ -497,7 +497,7 @@ class LinsightStateMessageManager:
                 now - self._last_history_db_flush.get(task_id, float("-inf"))
             ) < self.THINKING_DB_FLUSH_INTERVAL
             if not (is_thinking_delta and recently_flushed):
-                await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
+                await LinsightExecuteTaskDao.update_fields_by_id(task_id, history=task_model.history)
                 self._last_history_db_flush[task_id] = now
 
             # Tool-call steps carry the model's chosen input params (e.g. the

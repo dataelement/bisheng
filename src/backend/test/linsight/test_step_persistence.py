@@ -66,6 +66,7 @@ def _make_manager(monkeypatch):
 
     mgr.get_execution_task = fake_get
     monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_by_id", fake_update)
+    monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_fields_by_id", fake_update)
     return mgr, store
 
 
@@ -540,6 +541,7 @@ def _make_answer_manager(monkeypatch, history, task_data):
 
     mgr.get_execution_task = fake_get
     monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_by_id", fake_update)
+    monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_fields_by_id", fake_update)
     return mgr, store
 
 
