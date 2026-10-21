@@ -126,6 +126,17 @@ def parse_key(keys: list[str], setting_str: str = None, include_key: bool = Fals
     return ["\n".join(value) for value in value_of_key]
 
 
+def _apply_linsight_overrides(conf: LinsightConf, overrides: dict) -> None:
+    """Copy the DB ``linsight`` section onto ``conf``, skipping keys it no longer defines.
+
+    Deployed config rows still carry retired keys (F087 P2: ``tool_buffer`` and
+    others); pydantic's ``setattr`` raises on an unknown field.
+    """
+    for k, v in (overrides or {}).items():
+        if k in LinsightConf.model_fields:
+            setattr(conf, k, v)
+
+
 class ConfigService(Settings):
     """Configure service classes, inherited fromSettingsto provide configuration access"""
 
@@ -504,18 +515,14 @@ class ConfigService(Settings):
         # Get Ideas-related configuration items
         all_config = self.get_all_config()
         conf = LinsightConf(debug=self.linsight_conf.debug)
-        linsight_conf = all_config.get("linsight", {})
-        for k, v in linsight_conf.items():
-            setattr(conf, k, v)
+        _apply_linsight_overrides(conf, all_config.get("linsight", {}))
         return conf
 
     async def aget_linsight_conf(self) -> LinsightConf:
         # Get Ideas-related configuration items
         all_config = await self.aget_all_config()
         conf = LinsightConf(debug=self.linsight_conf.debug)
-        linsight_conf = all_config.get("linsight", {})
-        for k, v in linsight_conf.items():
-            setattr(conf, k, v)
+        _apply_linsight_overrides(conf, all_config.get("linsight", {}))
         return conf
 
     async def aget_intelligence_center_conf(self) -> IntelligenceCenterConf:
