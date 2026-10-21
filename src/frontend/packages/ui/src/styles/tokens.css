@@ -203,8 +203,13 @@
 /* Dark mode — the Arco gray ramp, dark variant (official @arco-design/color
  * gray.dark). Lightness INVERTS (gray-1 darkest, gray-10 lightest), so the
  * semantic text / fill / border tokens defined in :root as var(--arco-gray-N)
- * auto-flip here without being redeclared — custom properties resolve lazily at
- * use time. Brand + functional dark ramps live at the end of this block (green
+ * flip without being redeclared — BUT only when `.dark` is on <html>, the
+ * element :root matches. var() inside a custom property is resolved on the
+ * element that DECLARES it, not where it is used: put `.dark` on <body> alone
+ * and every alias below stays light while the literal ramps flip (dark tint,
+ * near-black text — platform shipped exactly that until 2026-10-21). A host may
+ * add `.dark` to <body> as well, never instead.
+ * Brand + functional dark ramps live at the end of this block (green
  * theme's brand ramp is re-overridden in .dark.theme-green further down).
  * One semantic token is re-pointed below (--text-2) — the same-rung flip is
  * kept for everything else. */
