@@ -1,3 +1,5 @@
+import { readDesktopSettingsSection } from "./desktopSettings";
+import { DesktopSettingsPane } from "./sections/DesktopSettingsPane";
 import { Badge } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
@@ -92,6 +94,9 @@ export default function SettingsPage() {
     if (target.delta !== undefined) navigate(target.delta);
     else navigate(target.path, { replace: true });
   };
+
+  const desktopSection = readDesktopSettingsSection(rawSection, location.search);
+  if (desktopSection) return <DesktopSettingsPane key={desktopSection} section={desktopSection} onCountsChanged={refreshCount} />;
 
   if (!isMenu && !isSettingsPageSection(rawSection)) {
     // Desktop has no menu screen — /settings and unknown sections land on the default
