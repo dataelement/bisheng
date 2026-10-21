@@ -1,16 +1,16 @@
 // @ts-strict-ignore
-import { Switch } from "@/components/bs-ui/switch"
-import { QuestionTooltip } from "@/components/bs-ui/tooltip"
-import { WorkflowNode } from "@/types/flow"
-import { useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
-import FileTypeSelect from "./FileTypeSelect"
-import { normalizeFileAccept, type UploadFileKind } from "@/util/fileAcceptUtils"
-import InputItem from "./InputItem"
-import { Label } from "@/components/bs-ui/label"
-import { Badge } from "@/components/bs-ui/badge"
-import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select"
-import { Check } from "lucide-react"
+import { Label } from "@/components/bs-ui/label";
+import { Select,SelectContent,SelectTrigger } from "@/components/bs-ui/select";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
+import { WorkflowNode } from "@/types/flow";
+import { normalizeFileAccept,type UploadFileKind } from "@/util/fileAcceptUtils";
+import { Switch,Tag } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
+import FileTypeSelect from "./FileTypeSelect";
+import InputItem from "./InputItem";
+
 
 type category = WorkflowNode['group_params'][number]
 
@@ -145,7 +145,7 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                                 onClick={() => handleStrategyChange(option.value)}
                             >
                                 <span className="w-64 overflow-hidden text-ellipsis">{option.label}</span>
-                                {mode === option.value && <Check className="h-4 w-4" />}
+                                {mode === option.value && <Outlined.Check className="h-4 w-4" />}
                             </div>
                         ))}
                     </SelectContent>
@@ -170,7 +170,7 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                         )}
                         <div className="flex justify-between items-center">
                             <Label className="bisheng-label">{t("fileParseResult")}</Label>
-                            <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">dialog_files_content</Badge>
+                            <Tag size="small" color="brand" className="">dialog_files_content</Tag>
                         </div>
                     </>
                 )}
@@ -181,7 +181,7 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                             <Label className="bisheng-label">{t(`node.${node.type}.${imageFileItem.key}.label`)}</Label>
                             <QuestionTooltip content={t("extractImages")} />
                         </div>
-                        <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">dialog_image_files</Badge>
+                        <Tag size="small" color="brand" className="">dialog_image_files</Tag>
                     </div>
                 )}
 
@@ -191,7 +191,7 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                         <Label className="bisheng-label">{t("filePath")}</Label>
                         <QuestionTooltip content={t("storeUploadFiles")} />
                     </div>
-                    <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">dialog_file_paths</Badge>
+                    <Tag size="small" color="brand" className="">dialog_file_paths</Tag>
                 </div>
             </div>
         </div>

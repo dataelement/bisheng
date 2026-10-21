@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
+import { Tabs } from '@bisheng/ui';
 import { readFileLibDatabase } from "@/controllers/API";
 import { getSelectableKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
 import { memo, useEffect, useRef, useState } from "react";
@@ -9,12 +9,8 @@ import { useTranslation } from "react-i18next";
 const TabsHead = memo(({ onChange }: { onChange: (v: string) => void }) => {
     const { t } = useTranslation()
 
-    return <Tabs defaultValue="file" className="mb-2" onValueChange={onChange}>
-        <TabsList className="grid w-full grid-cols-2 py-1 max-w-80">
-            <TabsTrigger value="file" className="text-xs">{t('lib.fileData')}</TabsTrigger>
-            <TabsTrigger value="qa" className="text-xs">{t('lib.qaData')}</TabsTrigger>
-        </TabsList>
-    </Tabs>
+    return <Tabs defaultActiveKey="file" className="mb-2" onChange={onChange} items={[{ key: "file", label: <>{t('lib.fileData')}</> },
+{ key: "qa", label: <>{t('lib.qaData')}</> }]} />
 })
 
 // F041: file / knowledge-space tab head, opt-in via `enableSpace` (assistant app).
@@ -22,12 +18,8 @@ const TabsHead = memo(({ onChange }: { onChange: (v: string) => void }) => {
 const SpaceTabsHead = memo(({ onChange }: { onChange: (v: string) => void }) => {
     const { t } = useTranslation()
 
-    return <Tabs defaultValue="file" className="mb-2" onValueChange={onChange}>
-        <TabsList className="grid w-full grid-cols-2 py-1 max-w-80">
-            <TabsTrigger value="file" className="text-xs">{t('build.documentKnowledgeBase')}</TabsTrigger>
-            <TabsTrigger value="space" className="text-xs">{t('build.knowledgeSpace')}</TabsTrigger>
-        </TabsList>
-    </Tabs>
+    return <Tabs defaultActiveKey="file" className="mb-2" onChange={onChange} items={[{ key: "file", label: <>{t('build.documentKnowledgeBase')}</> },
+{ key: "space", label: <>{t('build.knowledgeSpace')}</> }]} />
 })
 
 const enum KnowledgeType {

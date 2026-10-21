@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DiscoveredModel } from '@/controllers/API/modelDiscovery';
-import { importableModels } from './modelDiscoveryState';
+import { availableModelTypes, importableModels } from './modelDiscoveryState';
 
 const models: DiscoveredModel[] = [
     { model_name: 'gpt-4o', display_name: 'GPT', model_type: 'llm', type_source: 'registry' },
@@ -17,4 +17,9 @@ describe('catalog import', () => {
     it('filters unselected and unsupported provider types', () => {
         expect(importableModels(models, new Set(['whisper-1', 'private']), { private: 'llm' }, [], 'vllm').map(model => model.model_name)).toEqual(['private']);
     });
+});
+
+it.each(['volcengine', 'tencent'])('uses the current ASR adapter boundary for %s', provider => {
+    expect(availableModelTypes(provider)).toContain('asr');
+    expect(availableModelTypes(provider)).not.toContain('tts');
 });

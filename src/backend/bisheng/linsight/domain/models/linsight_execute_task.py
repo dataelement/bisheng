@@ -166,6 +166,24 @@ class LinsightExecuteTaskDao(object):
             await session.refresh(task)
             return task
 
+    @classmethod
+    async def update_fields_by_id(cls, task_id: str, **kwargs) -> None:
+        """Write the given columns with a single UPDATE, without loading the row.
+
+        update_by_id SELECTs the whole row and refreshes it after the commit, so
+        every call reads the history CLOB back twice. History is written on every
+        agent step and grows with the run; on DaMeng each of those reads left
+        roughly one copy of the CLOB in worker memory, which is how long task-mode
+        runs drove the worker into OOM. Use this when the caller does not need the
+        updated row back.
+        """
+        if not kwargs:
+            return
+        async with get_async_db_session() as session:
+            statement = update(LinsightExecuteTask).where(LinsightExecuteTask.id == task_id).values(**kwargs)
+            await session.exec(statement)
+            await session.commit()
+
     # accordingsession_version_idBulk update task status
     @classmethod
     async def batch_update_status_by_session_version_id(cls, session_version_ids: List[str],

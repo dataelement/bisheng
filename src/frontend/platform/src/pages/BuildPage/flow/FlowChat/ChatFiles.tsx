@@ -1,13 +1,15 @@
 // @ts-strict-ignore
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { notification } from '@bisheng/ui';
+
 import { generateUUID } from "@/components/bs-ui/utils";
 import Loading from "@/components/ui/loading";
 import { locationContext } from "@/contexts/locationContext";
 import { uploadChatFile } from "@/controllers/API/flow";
-import { MAX_MEDIA_FILES, isMediaFileName } from "@/util/fileAcceptUtils";
+import { MAX_MEDIA_FILES,isMediaFileName } from "@/util/fileAcceptUtils";
 import { getFileExtension } from "@/util/utils";
-import { FileIcon, PaperclipIcon, X } from "lucide-react";
-import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
+import { Outlined } from "bisheng-icons";
+
+import { forwardRef,useContext,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const checkFileType = (file, accepts) => {
@@ -34,7 +36,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
     const remainingUploadsRef = useRef(0);
     const { appConfig } = useContext(locationContext);
     // const fileAccepts = useMemo(() => appConfig.libAccepts.map((ext) => `.${ext}`), [appConfig.libAccepts]);
-    const { toast } = useToast();
+
 
     const fileInputRef = useRef(null);
     const fileSizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024; // File size limit in bytes
@@ -66,10 +68,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
             }
 
             if (invalidTypeFiles.length > 0) {
-                return toast({
-                    variant: 'error',
-                    description: t('com_ui_upload_file_type_error')
-                }); // 请确保你有对应多语言key或直接写死中文测试
+                return notification.open({ type: 'error', description: String(t('com_ui_upload_file_type_error') ?? '') }); // 请确保你有对应多语言key或直接写死中文测试
             }
             // 2. 再校验文件大小
             if (file.size > fileSizeLimit) {
@@ -87,18 +86,12 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
         const existingMediaCount = filesRef.current.filter((f) => isMediaFileName(f.name)).length;
         const incomingMediaCount = validFiles.filter(({ file }) => isMediaFileName(file.name)).length;
         if (existingMediaCount + incomingMediaCount > MAX_MEDIA_FILES) {
-            return toast({
-                variant: 'error',
-                description: t('chat.mediaFileTooMany'),
-            });
+            return notification.open({ type: 'error', description: String(t('chat.mediaFileTooMany') ?? '') });
         }
 
         // 显示无效文件提示（区分类型/大小错误）
         if (invalidTips.length > 0) {
-            toast({
-                variant: 'info',
-                description: invalidTips.join('；'),
-            });
+            notification.open({ type: 'info', description: String(invalidTips.join('；') ?? '') });
         }
 
         // 只要有有效文件就继续上传流程
@@ -154,10 +147,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                     onChange(uploadedFileIds);
                 }
             }).catch(() => {
-                toast({
-                    variant: 'error',
-                    description: t('chat.fileUploadFailed', { name: file.name }),
-                });
+                notification.open({ type: 'error', description: String(t('chat.fileUploadFailed', { name: file.name }) ?? '') });
                 handleFileRemove(file.name);
                 remainingUploadsRef.current -= 1;
                 if (remainingUploadsRef.current === 0) {
@@ -219,12 +209,12 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                             onClick={() => handleFileRemove(file.name)}
                             className="hidden group-hover:block absolute -right-1 -top-1 bg-gray-50 border-2 border-gray-300 text-gray-600 rounded-full cursor-pointer"
                         >
-                            <X size={14} />
+                            <Outlined.Close size={14} />
                         </span>
 
                         {/* File Icon */}
                         <div className="w-8 h-8 bg-gray-200 rounded-md flex items-center justify-center">
-                            {file.isUploading ? <Loading className="size-4" /> : <FileIcon className="w-6 h-6 text-gray-600" />}
+                            {file.isUploading ? <Loading className="size-4" /> : <Outlined.File className="w-6 h-6 text-gray-600" />}
                         </div>
 
                         {/* File details */}
@@ -246,7 +236,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                 className={`absolute right-10 top-5 cursor-pointer ${disabled ? 'text-gray-400 cursor-not-allowed' : ''}`}
                 onClick={() => !disabled && fileInputRef.current.click()}
             >
-                <PaperclipIcon size={18} />
+                <Outlined.Attachment size={18} />
             </div>
 
             {/* File Input */}

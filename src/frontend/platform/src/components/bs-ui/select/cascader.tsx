@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Input } from '@bisheng/ui';
 import { LoadIcon } from "@/components/bs-icons";
 import { ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Select, SelectContent, SelectTrigger } from ".";
-import { Input } from "../input";
+
 
 /**
  * Cascader 组件支持以下属性：
@@ -182,7 +183,7 @@ export default function Cascader({ error = false, selectClass = '', close = fals
 
     return <Select open={open} onOpenChange={setOpen}>
         <SelectTrigger className={`${error && 'border-red-500'} group data-[placeholder]:text-inherit ${selectClass}`}>
-            <Input className="border-none bg-transparent px-0 focus-visible:ring-0 read-only:text-inherit" placeholder={placeholder} readOnly value={values.map(el => el.label).join('/')} />
+            <Input placeholder={placeholder} readOnly value={values.map(el => el.label).join('/')} className={"border-none bg-transparent px-0 focus-visible:ring-0 read-only:text-inherit"} />
             {close && values.length !== 0 && <X
                 className="hidden group-hover:block bg-border text-[#666] rounded-full p-0.5"
                 width={14}

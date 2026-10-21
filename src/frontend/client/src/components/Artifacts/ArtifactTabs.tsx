@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import * as Tabs from '@radix-ui/react-tabs';
 import type { SandpackPreviewRef, CodeEditorRef } from '@codesandbox/sandpack-react';
 import type { Artifact } from '~/common';
 import useArtifactProps from '~/hooks/Artifacts/useArtifactProps';
@@ -10,12 +9,14 @@ import { cn } from '~/utils';
 
 export default function ArtifactTabs({
   artifact,
+  activeTab,
   isMermaid,
   editorRef,
   previewRef,
   isSubmitting,
 }: {
   artifact: Artifact;
+  activeTab: string;
   isMermaid: boolean;
   isSubmitting: boolean;
   editorRef: React.MutableRefObject<CodeEditorRef>;
@@ -27,9 +28,8 @@ export default function ArtifactTabs({
   const { files, fileKey, template, sharedProps } = useArtifactProps({ artifact });
   return (
     <>
-      <Tabs.Content
+      {activeTab === 'code' ? <div
         ref={contentRef}
-        value="code"
         id="artifacts-code"
         className={cn('flex-grow overflow-auto')}
       >
@@ -42,9 +42,8 @@ export default function ArtifactTabs({
           sharedProps={sharedProps}
           isSubmitting={isSubmitting}
         />
-      </Tabs.Content>
-      <Tabs.Content
-        value="preview"
+      </div> :
+      <div
         className={cn('flex-grow overflow-auto', isMermaid ? 'bg-[#282C34]' : 'bg-white')}
       >
         <ArtifactPreview
@@ -54,7 +53,7 @@ export default function ArtifactTabs({
           previewRef={previewRef}
           sharedProps={sharedProps}
         />
-      </Tabs.Content>
+      </div>}
     </>
   );
 }

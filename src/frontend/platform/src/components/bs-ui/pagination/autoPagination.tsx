@@ -1,6 +1,8 @@
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Input } from '@bisheng/ui';
 import { useState } from 'react';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './index';
-import { Input } from '../input';
+
 import { useTranslation } from 'react-i18next';
 
 interface IProps {
@@ -136,15 +138,7 @@ const AutoPagination = ({
                     <PaginationItem key="jump">
                         <div className="flex items-center text-sm gap-1">
                             <span>{jumpToText}</span>
-                            <Input
-                                type="number"
-                                className="w-[40px] h-6 text-center p-0"
-                                boxClassName="w-auto"
-                                value={jumpPage}
-                                onChange={handleJumpInputChange}
-                                onBlur={handleJumpInputBlur}
-                                onKeyDown={(e) => e.key === 'Enter' && handleJumpPage()}
-                            />
+                            <Input type="number" value={jumpPage} onChange={(event) => { if (!isNumberDraftWithinBounds(event.currentTarget.value, {  })) return; handleJumpInputChange(event); }} onBlur={handleJumpInputBlur} onKeyDown={(e) => e.key === 'Enter' && handleJumpPage()} className={["w-auto", "w-[40px] h-6 text-center p-0"].filter(Boolean).join(" ")} />
                             <span>{pageText}</span>
                         </div>
                     </PaginationItem>

@@ -104,6 +104,8 @@ const EDGE_FADE = {
 };
 
 export interface TabsProps {
+  /** Accessible name of the navigation tab list, supplied by the caller. */
+  'aria-label'?: string;
   /** At least 2 — a single tab is just content, not tabs (§1). */
   items: TabItem[];
   /** §3 — deeper containers take smaller rungs: page header large, dialogs small. */
@@ -133,6 +135,7 @@ export interface TabsProps {
 }
 
 function Tabs({
+  'aria-label': ariaLabel,
   items,
   size = 'medium',
   variant = 'brand',
@@ -202,6 +205,7 @@ function Tabs({
           `divider={false}` drops it when the container already draws that edge. */}
       <div className={cn('flex items-end', divider && 'border-b border-border-base')}>
         <TabsPrimitive.List
+          aria-label={ariaLabel}
           ref={listRef}
           onScroll={updateFade}
           className={cn(

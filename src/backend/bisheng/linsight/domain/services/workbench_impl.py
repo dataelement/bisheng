@@ -78,6 +78,40 @@ class TaskNode:
         return task_dict
 
 
+def build_e2b_file_list(file_dir: str) -> list[WriteEntry]:
+    """Files the E2B sandbox receives when the code tool is constructed.
+
+    The walk happens at tool init, so skill bundles have to already be in
+    ``file_dir``. A file over ``SIZE_AUTOPUSH`` (5 MiB) is left out; the local
+    and container executors still read it from the session directory.
+    """
+    file_list: list[WriteEntry] = []
+    oversized: list[str] = []
+    for root, _dirs, files in os.walk(file_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            try:
+                if os.path.getsize(file_path) > SIZE_AUTOPUSH:
+                    oversized.append(file_path)
+                    continue
+            except OSError:
+                # Unstattable file: let it through rather than silently dropping
+                # it — the push itself will surface any real problem.
+                pass
+            file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
+    if oversized:
+        # Never let a bounded copy-in look complete: the model is told these
+        # paths exist, so a silent drop reads as "the tool is broken".
+        logger.warning(
+            "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
+            "pushed into the sandbox: {}",
+            len(oversized),
+            SIZE_AUTOPUSH,
+            ", ".join(os.path.basename(p) for p in oversized),
+        )
+    return file_list
+
+
 class LinsightWorkbenchImpl:
     """LinsightWorkbench Implementation Class"""
 
@@ -340,6 +374,8 @@ class LinsightWorkbenchImpl:
                 )
 
             # Create Ideas Conversation Version (id == svid used for the workspace)
+            from bisheng.linsight.domain.services.skill_provisioning import pending_skill_snapshot
+
             linsight_session_version = LinsightSessionVersion(
                 id=svid,
                 session_id=chat_id,
@@ -354,6 +390,7 @@ class LinsightWorkbenchImpl:
                 pending_files=pending_files,
                 model=submit_obj.model,
                 skills=submit_obj.skills,
+                skill_snapshot=pending_skill_snapshot(submit_obj.skill_ids),
                 api_meta=api_meta,
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
@@ -2282,32 +2319,10 @@ class LinsightWorkbenchImpl:
         # free through local_sync_path. Filter here so the E2B ceiling is honoured
         # without shrinking what the local executor can reach.
         # Container mode copy-in happens at run() (AC-11); do not pre-scan.
+        # Skill bundles are already in file_dir: task startup copies them before
+        # this tool is built, so the walk below sees /skills/.
         if executor_type != "container":
-            file_list = []
-            oversized: list[str] = []
-            for root, dirs, files in os.walk(file_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    try:
-                        if os.path.getsize(file_path) > SIZE_AUTOPUSH:
-                            oversized.append(file_path)
-                            continue
-                    except OSError:
-                        # Unstattable file: let it through rather than silently dropping
-                        # it — the push itself will surface any real problem.
-                        pass
-                    file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
-            if oversized:
-                # Never let a bounded copy-in look complete: the model is told these
-                # paths exist, so a silent drop reads as "the tool is broken".
-                logger.warning(
-                    "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
-                    "pushed into the sandbox: {}",
-                    len(oversized),
-                    SIZE_AUTOPUSH,
-                    ", ".join(os.path.basename(p) for p in oversized),
-                )
-            code_config["config"]["e2b"]["file_list"] = file_list
+            code_config["config"]["e2b"]["file_list"] = build_e2b_file_list(file_dir)
 
         bisheng_code_tool.extra = code_config
 
@@ -2369,6 +2384,17 @@ class LinsightWorkbenchImpl:
                     "Failed to initialize BiSheng code interpreter tool: session_version_id={}",
                     session_version.id,
                 )
+
+        # Image View is a visual-model config row, not a LangChain tool.
+        # Daily chat skips it and wires pixel viewing separately. Passing the
+        # row to load_tools raises "Got unknown tool image_view" and aborts
+        # the task before skills or any other tool run.
+        from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
+
+        image_view_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key=IMAGE_VIEW_TOOL_KEY)
+        if image_view_tool and image_view_tool.id in tool_ids:
+            tool_ids.remove(image_view_tool.id)
+            logger.info("skip image_view tool id={}: config row is not a callable tool", image_view_tool.id)
 
         # Unified-resource direction (2026-06-16): task mode reuses the daily
         # tool selection directly. Every selected tool id (a real GptsTools id

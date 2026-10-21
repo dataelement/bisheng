@@ -1,26 +1,26 @@
 // @ts-strict-ignore
-"use client"
+import { Button, Input, notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 
-import type React from "react"
+import type React from "react";
 
-import { Button } from "@/components/bs-ui/button"
-import { ButtonGroup } from "@/components/bs-ui/button/group"
-import { Input } from "@/components/bs-ui/input"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import Tip from "@/components/bs-ui/tooltip/tip"
-import { locationContext } from "@/contexts/locationContext"
-import { CircleAlert } from "lucide-react"
-import { useContext, useEffect, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+
+import { ButtonGroup } from "@/components/bs-ui/button/group";
+
+
+import { locationContext } from "@/contexts/locationContext";
+import { Tooltip as Tip } from "@bisheng/ui";
+
+import { LoadingIcon } from "@/components/bs-icons/loading";
+import { useContext,useEffect,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
-    DashboardStatus,
-    useDashboardPermissions,
-    usePublishDashboard,
-} from "../../hook"
-import { Dashboard } from "../../types/dataConfig"
-import { EditorCanvas } from "../editor/EditorCanvas"
-import { ExpandIcon } from "@/components/bs-icons/expand"
-import { LoadingIcon } from "@/components/bs-icons/loading"
+DashboardStatus,
+useDashboardPermissions,
+usePublishDashboard,
+} from "../../hook";
+import { Dashboard } from "../../types/dataConfig";
+import { EditorCanvas } from "../editor/EditorCanvas";
 
 interface DashboardDetailProps {
     dashboard: Dashboard | null
@@ -49,7 +49,7 @@ export function DashboardDetail({
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
     const { appConfig } = useContext(locationContext)
-    const { toast } = useToast()
+
     const dashboardId = dashboard ? String(dashboard.id) : ""
     const {
         permissions,
@@ -95,10 +95,7 @@ export function DashboardDetail({
 
         if (trimmedTitle.length > 200) {
             setTitle(dashboard.title)
-            return toast({
-                description: t('charLimit200'),
-                variant: "error",
-            })
+            return notification.open({ type: "error", description: String(t('charLimit200') ?? '') })
         }
 
         if (trimmedTitle !== dashboard.title) {
@@ -143,25 +140,12 @@ export function DashboardDetail({
                 <div className="flex items-center gap-4 flex-1 min-w-0">
                     <div className="flex-1 min-w-0 flex items-center">
                         {isCollapsed && <Tip content={t('expandList')}>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className={"hover:text-primary bg-background mr-4"}
-                                onClick={() => setIsCollapsed(!isCollapsed)}
-                            >
-                                <ExpandIcon className="h-4 w-4 hover:text-primary" />
+                            <Button variant="text" size="medium" className={"hover:text-primary bg-background mr-4"} onClick={() => setIsCollapsed(!isCollapsed)} color="default" iconOnly>
+                                <Outlined.Right className="h-4 w-4 hover:text-primary" />
                             </Button>
                         </Tip>}
                         {isEditingTitle ? (
-                            <Input
-                                ref={inputRef}
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                onBlur={handleBlur}
-                                onKeyDown={handleKeyDown}
-                                boxClassName="w-auto"
-                                className="max-w-96 text-base font-semibold h-6 px-2 py-1 border-primary"
-                            />
+                            <Input ref={inputRef} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={handleBlur} onKeyDown={handleKeyDown} className={["w-auto", "max-w-96 text-base font-semibold h-6 px-2 py-1 border-primary"].filter(Boolean).join(" ")} />
                         ) : (
                             <h1
                                 className="max-w-96 text-base font-semibold truncate cursor-pointer hover:text-primary transition-colors"
@@ -176,19 +160,19 @@ export function DashboardDetail({
                                 <span className="text-muted-foreground">{t('createdBy')}: </span>
                                 {dashboard.user_name}</p>
                             <Tip
-                                styleClasses="bg-white text-gary-400 border"
+
                                 content={
                                     <div >
-                                        <p className="text-sm text-gray-500">{t('createdBy')}: </p>
+                                        <p className="text-sm">{t('createdBy')}: </p>
                                         <p className="text-sm mb-1.5">{dashboard.user_name}</p>
-                                        <p className="text-sm text-gray-500">{t('createTime')}: </p>
+                                        <p className="text-sm">{t('createTime')}: </p>
                                         <p className="text-sm mb-1.5">{dashboard.create_time.replace('T', ' ')}</p>
-                                        <p className="text-sm text-gray-500">{t('lastUpdateTime')}: </p>
+                                        <p className="text-sm">{t('lastUpdateTime')}: </p>
                                         <p className="text-sm mb-1.5">{dashboard.update_time.replace('T', ' ')}</p>
                                     </div>
                                 }
                                 side={'bottom'}>
-                                <CircleAlert color="#999" size={16} className="cursor-pointer rotate-180" />
+                                <Outlined.Info color="#999" size={16} className="cursor-pointer" />
                             </Tip>
                         </>}
                     </div>
@@ -196,27 +180,18 @@ export function DashboardDetail({
 
                 <div className="flex items-center gap-2">
                     <ButtonGroup>
-                        <Button variant="outline" size="sm" onClick={handleFullscreen}>{t('fullScreen')}</Button>
-                        {appConfig.isDashboardPro && canEdit && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
-                        <Button variant="outline" size="sm" onClick={() => onShare(dashboard.id)}>{t('share')}</Button>
+                        <Button variant="outlined" size="small" onClick={handleFullscreen} color="default">{t('fullScreen')}</Button>
+                        {appConfig.isDashboardPro && canEdit && <Button variant="outlined" size="small" onClick={() => publish(dashboard.id, isPublished)} color="default">{isPublished ? t('unpublish') : t('publish')}</Button>}
+                        <Button variant="outlined" size="small" onClick={() => onShare(dashboard.id)} color="default">{t('share')}</Button>
                     </ButtonGroup>
 
-                    {appConfig.isDashboardPro && <Button
-                        variant="outline"
-                        className="disabled:pointer-events-auto"
-                        disabled={dashboard.is_default}
-                        size="sm"
-                        onClick={() => onDefault(dashboard.id)}>
+                    {appConfig.isDashboardPro && <Button variant="outlined" className="disabled:pointer-events-auto" disabled={dashboard.is_default} size="small" onClick={() => onDefault(dashboard.id)} color="default">
                         {dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}
                     </Button>}
 
                     {appConfig.isDashboardPro && canEdit &&
-                        <Tip content={isPublished ? t('editAfterUnpublish') : ""} side={"top"} styleClasses="-translate-x-12" >
-                            <Button
-                                className="disabled:pointer-events-auto"
-                                disabled={isPublished}
-                                size="sm"
-                                onClick={() => onEdit(dashboard.id)}>
+                        <Tip disabled={!isPublished} content={isPublished ? t('editAfterUnpublish') : ""} side={"top"}  >
+                            <Button className="disabled:pointer-events-auto" disabled={isPublished} size="small" onClick={() => onEdit(dashboard.id)}>
                                 {t('editDashboard')}
                             </Button>
                         </Tip>

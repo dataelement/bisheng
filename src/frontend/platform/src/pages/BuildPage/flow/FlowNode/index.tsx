@@ -1,24 +1,26 @@
 // @ts-strict-ignore
+import { toast } from '@bisheng/ui';
 import { LoadingIcon } from '@/components/bs-icons/loading';
-import { Card, CardContent } from '@/components/bs-ui/card';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
+import { Card,CardContent } from '@/components/bs-ui/card';
+
 import { cname } from '@/components/bs-ui/utils';
 import { locationContext } from '@/contexts/locationContext';
 import { WorkflowNode } from '@/types/flow';
-import { Handle, NodeToolbar, Position } from '@xyflow/react';
-import { ChevronDown } from 'lucide-react';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Handle,NodeToolbar,Position } from '@xyflow/react';
+import { Outlined } from "bisheng-icons";
+
+import { useCallback,useContext,useEffect,useMemo,useRef,useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Sidebar from '../Sidebar';
 import EditText from './EditText';
 import NodeLogo from './NodeLogo';
 import NodeTabs from './NodeTabs';
 import NodeToolbarComponent from './NodeToolbarComponent';
 import ParameterGroup from './ParameterGroup';
+import ParameterSubGroup from './ParameterSubGroup';
 import RunLog from './RunLog';
 import { RunTest } from './RunTest';
 import { useUpdateVariableState } from './flowNodeStore';
-import { useTranslation } from 'react-i18next';
-import ParameterSubGroup from './ParameterSubGroup';
 
 export const CustomHandle = ({ id = '', node, isLeft = false, className = '' }) => {
     const [openLeft, setOpenLeft] = useState(false);
@@ -109,7 +111,7 @@ export const CustomHandle = ({ id = '', node, isLeft = false, className = '' }) 
 function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNode, selected: boolean, isConnectable: boolean }) {
     const [focusUpdate, setFocusUpdate] = useState(false)
     const runRef = useRef(null)
-    const { message } = useToast()
+
     const [currentTab, setCurrentTab] = useState<undefined | string>(node.tab && node.tab.value)
     const { t } = useTranslation('flow')
     const { appConfig } = useContext(locationContext)
@@ -175,10 +177,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         // vilidate node
         const errors = await validateAll({ tmp: true })
 
-        if (errors.length) return message({
-            description: errors,
-            variant: 'warning'
-        })
+        if (errors.length) return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
 
         runRef.current.run(node)
     }
@@ -217,7 +216,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                     const searchStr = map[type]
                     if (!currentValue.includes(searchStr)) {
                         hackCountRef.current++
-                        const hackSpace = hackCountRef.current % 2 === 0 ? ' ' : '' // Avoid React's refresh mechanism 
+                        const hackSpace = hackCountRef.current % 2 === 0 ? ' ' : '' // Avoid React's refresh mechanism
                         targetParam.value = currentValue === '\n' ? searchStr : `${currentValue}\n${searchStr}${hackSpace}`;
                     }
                 }
@@ -289,7 +288,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 setExpend(!expend)
                                 node.expand = !expend
                             }}>
-                            <ChevronDown
+                            <Outlined.Down
                                 className={`bisheng-label ${expend && 'rotate-180'}`}
                                 size={16}
                             /></div>}

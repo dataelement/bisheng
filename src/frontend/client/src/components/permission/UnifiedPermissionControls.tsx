@@ -1,7 +1,7 @@
 import { Button, RadioCard, RadioGroup } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { ComponentType, ReactNode } from "react";
-import { Switch } from "~/components/ui/Switch";
+import { Switch } from '@bisheng/ui';
 
 export type SettingsSectionKind = "basic" | "advanced" | "permission";
 
@@ -119,7 +119,7 @@ export function SettingsSwitchRow({
         {children}
       </div>
       {/* Compact settings rows use the small档 (designer call, 2026-08-25). */}
-      <Switch
+      <Switch className="peer"
         size="small"
         aria-label={label}
         checked={checked}

@@ -1,8 +1,9 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AppAvator from '~/components/Avator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize } from '~/hooks';
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
@@ -56,18 +57,9 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
     }
 
     return (
-        <TooltipProvider delayDuration={300}>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <p ref={ref} className={pClassName}>
+        <SharedTooltipProvider delayDuration={300}><SharedTooltip  content={text} side="bottom"  align="start"><p ref={ref} className={pClassName}>
                         {text}
-                    </p>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start" className="max-w-[200px]">
-                    {text}
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
+                    </p></SharedTooltip></SharedTooltipProvider>
     );
 }
 
@@ -134,14 +126,14 @@ export function MobileAppHistoryDropdown({
                         <div className="flex min-w-0 flex-1 flex-col justify-center">
                             <div className="flex items-center justify-between">
                                 <h3 className="truncate text-[14px] font-medium leading-[22px]">
-                                    {flowData?.name || '未知应用'}
+                                    {flowData?.name || localize("com_app.unknown_name")}
                                 </h3>
                                 <div className="ml-1 flex size-[16px] shrink-0 items-center justify-center">
                                     <AppSwitcherDropdown />
                                 </div>
                             </div>
                             <TruncatedLineTooltip
-                                text={flowData?.description || '暂无描述信息'}
+                                text={flowData?.description || localize("com_app_no_description_placeholder")}
                                 className="truncate text-[12px] leading-[19.5px] text-[#a9aeb8]"
                             />
                         </div>

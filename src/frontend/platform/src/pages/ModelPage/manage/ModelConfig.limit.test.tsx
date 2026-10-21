@@ -1,4 +1,3 @@
-import { TooltipProvider } from "@/components/bs-ui/tooltip";
 import { getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -9,7 +8,6 @@ vi.mock("@/controllers/API/finetune", () => ({
   getLLmServerDetail: vi.fn(), updateLLmServer: vi.fn(), addLLmServer: vi.fn(), deleteLLmServer: vi.fn(),
 }));
 vi.mock("@/controllers/request", () => ({ captureAndAlertRequestErrorHoc: (value: unknown) => value }));
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({ useToast: () => ({ message: vi.fn() }) }));
 vi.mock("@/contexts/userContext", async () => ({
   userContext: (await import("react")).createContext({ user: { role: "admin" } }),
 }));
@@ -39,8 +37,8 @@ it.each([true, false])("preserves daily quota state %s and saves changes through
     config: {}, models: [model],
   });
   vi.mocked(updateLLmServer).mockResolvedValue({} as Awaited<ReturnType<typeof updateLLmServer>>);
-  render(<TooltipProvider><ModelConfig id={7} onGetName={vi.fn()} onBack={vi.fn()} onReload={vi.fn()}
-    onBerforSave={vi.fn(() => false)} onAfterSave={vi.fn()} /></TooltipProvider>);
+  render(<ModelConfig id={7} onGetName={vi.fn()} onBack={vi.fn()} onReload={vi.fn()}
+    onBerforSave={vi.fn(() => false)} onAfterSave={vi.fn()} />);
   await screen.findByDisplayValue("provider");
   const toggle = screen.getByRole("switch");
   expect(toggle.getAttribute("aria-checked")).toBe(String(enabled));

@@ -1,13 +1,16 @@
-import { Button } from "@/components/bs-ui/button";
+import { Button } from '@bisheng/ui';
+
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
+DropdownMenu,
+DropdownMenuContent,
+DropdownMenuItem,
+DropdownMenuTrigger,
 } from "@/components/bs-ui/dropdownMenu";
-import Tip from "@/components/bs-ui/tooltip/tip";
+import { Outlined } from "bisheng-icons";
+import { KnowledgeTooltip } from "./KnowledgeTooltip";
+
 import { cn } from "@/utils";
-import { ChevronDown, CircleHelp, Link2, Upload } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 
@@ -33,7 +36,7 @@ export default function AddKnowledgeFileMenu({
             <DropdownMenuTrigger asChild disabled={disabled}>
                 <Button className={cn("h-9 gap-2 px-4 md:px-6", buttonClassName)}>
                     {t("add", { defaultValue: "新增" })}
-                    <ChevronDown className="size-4" />
+                    <Outlined.Down className="size-4" />
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-[140px] bg-white p-1">
@@ -41,17 +44,17 @@ export default function AddKnowledgeFileMenu({
                     className="h-9 cursor-pointer gap-2 px-3"
                     onSelect={onUploadFile}
                 >
-                    <Upload className="size-4" />
+                    <Outlined.Upload className="size-4" />
                     <span>{t("uploadFile")}</span>
                     {supportedFormatsLabel ? (
-                        <Tip content={supportedFormatsLabel} side="left">
+                        <KnowledgeTooltip content={supportedFormatsLabel} side="left">
                             <span
                                 className="ml-auto inline-flex size-4 items-center justify-center text-[#8a94a6]"
                                 onClick={(event) => event.stopPropagation()}
                             >
-                                <CircleHelp className="size-3.5" />
+                                <Outlined.Question className="size-3.5" />
                             </span>
-                        </Tip>
+                        </KnowledgeTooltip>
                     ) : null}
                 </DropdownMenuItem>
                 {knowledgeUploadCapabilities.webLink && (

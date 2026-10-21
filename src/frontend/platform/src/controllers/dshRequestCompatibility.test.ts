@@ -23,7 +23,12 @@ vi.mock('axios', () => ({
         }),
     },
 }))
-vi.mock('@/components/bs-ui/toast/use-toast', () => ({ toast: captured.toast }))
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({ toast: captured.toast }))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 vi.mock('i18next', () => ({ default: { t: (key: string) => key } }))
 import './request'
 import { consumeLoginReturnTo, rememberDesktopLoginReturnTo } from '@/utils/loginReturnTo'

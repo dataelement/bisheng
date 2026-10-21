@@ -31,6 +31,7 @@ from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
 from bisheng_langchain.gpts.tools.local_file.local_file import LocalFileTool
 from bisheng_langchain.gpts.tools.sql_agent.tool import SqlAgentAPIWrapper, SqlAgentTool
+from bisheng_langchain.gpts.tools.web_fetch.tool import build_web_fetch_tool
 from bisheng_langchain.gpts.tools.web_search.tool import SearchTool, WebSearchTool
 from bisheng_langchain.rag import BishengRAGTool
 from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper
@@ -121,6 +122,7 @@ _EXTRA_PARAM_TOOLS: dict[str, tuple[Callable[[KwArg(Any)], BaseTool], list[str |
     ),
     "sql_agent": (_get_sql_agent, ["llm", "sql_address"], []),
     "web_search": (_get_web_search, ["type", "config"], []),
+    "web_fetch": (build_web_fetch_tool, [], ["type", "config", "max_chars"]),
 }
 
 _API_TOOLS: dict[str, tuple[Callable[..., BaseTool], list[str]]] = {**ALL_API_TOOLS}  # type: ignore

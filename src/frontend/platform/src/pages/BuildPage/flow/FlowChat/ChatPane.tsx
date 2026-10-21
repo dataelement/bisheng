@@ -1,9 +1,8 @@
 // @ts-strict-ignore
-import { getFlowApi } from "@/controllers/API/flow";
-import { useEffect, useMemo } from "react";
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { useEffect,useMemo } from "react";
 import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
-import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 
 export default function ChatPane({ debug = false, autoRun = false, chatId, flow, wsUrl = '',version }: { debug?: boolean, autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
     const { changeChatId } = useMessageStore()

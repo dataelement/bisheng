@@ -1,13 +1,14 @@
 // @ts-strict-ignore
-import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import Tip from "@/components/bs-ui/tooltip/tip";
+import { Button, Input } from '@bisheng/ui';
+
+
+import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
 import { generateUUID } from "@/components/bs-ui/utils";
-import { isVarInFlow, updateVariableNameByCondition } from "@/util/flowUtils";
-import { ChevronDown, RefreshCcw, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { FlowTooltip as Tip } from "@/pages/BuildPage/flow/FlowTooltip";
+import { isVarInFlow,updateVariableNameByCondition } from "@/util/flowUtils";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useMemo,useState } from "react";
 import { useTranslation } from 'react-i18next';
 import { CustomHandle } from "..";
 import useFlowStore from "../../flowStore";
@@ -68,7 +69,7 @@ const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onD
                         ) : (
                             <span className="text-gray-400 mt-0.5">{t('selectVariable')}</span>
                         )}
-                        <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                        <Outlined.Down className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
                     </div>
                 </Tip>
             </SelectVar>
@@ -127,26 +128,21 @@ const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onD
                                         } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
                                 >
                                     <span className="flex items-center">{item.right_label}</span>
-                                    <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                                    <Outlined.Down className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
                                 </div>
                             </Tip>
                         </SelectVar>
                     ) : (
-                        <Input
-                            placeholder={
+                        <Input placeholder={
                                 item.comparison_operation === 'regex'
                                     ? t('inputRegexPlaceholder')
                                     : t('inputValuePlaceholder')
-                            }
-                            value={item.right_value}
-                            onChange={handleValueChange}
-                            className={`${required && !item.right_value && 'border-red-500'} h-8`}
-                        />
+                            } value={item.right_value} onChange={handleValueChange} className={`${required && !item.right_value && 'border-red-500'} h-8`} />
                     )}
                 </>
             )}
             {del && (
-                <Trash2
+                <Outlined.Delete
                     size={18}
                     onClick={() => onDeleteItem(index)}
                     className="min-w-5 hover:text-red-600 cursor-pointer hover-reveal-child"
@@ -268,7 +264,7 @@ export default function ConditionItem({ nodeId, node, data: paramItem, onChange,
         return () => onVarEvent && onVarEvent(() => { });
     }, [paramItem, value]);
 
-    // Update Preset Questions 
+    // Update Preset Questions
     // const [_, forceUpdate] = useState(false)
     const [updateVariable] = useUpdateVariableState()
     useEffect(() => {
@@ -294,7 +290,7 @@ export default function ConditionItem({ nodeId, node, data: paramItem, onChange,
                     <div className="flex justify-between items-center">
                         <p className="mt-2 mb-3 text-sm font-bold">{t('if')}</p> {/* 如果 */}
                         {value.length > 1 && (
-                            <Trash2
+                            <Outlined.Delete
                                 size={14}
                                 onClick={() => deleteCondition(val.id)}
                                 className="hover:text-red-600 cursor-pointer group-hover:opacity-100 opacity-0"
@@ -326,23 +322,15 @@ export default function ConditionItem({ nodeId, node, data: paramItem, onChange,
                         {val.conditions.length > 1 && (
                             <div className="absolute left-1 top-0 w-4 h-full py-4">
                                 <div className="h-full border border-foreground border-dashed border-r-0 rounded-l-sm">
-                                    <Badge
-                                        variant="outline"
-                                        className="absolute top-1/2 left-0.5 -translate-x-1/2 -translate-y-1/2 px-1 py-0 text-primary bg-[#E6ECF6] cursor-pointer"
-                                        onClick={() => handleOperatorChange(vindex)}
-                                    >
+                                    <Button size="small" variant="text" className="absolute top-1/2 left-0.5 -translate-x-1/2 -translate-y-1/2 px-1 py-0 text-primary cursor-pointer" onClick={() => handleOperatorChange(vindex)} color="default">
                                         {val.operator}
-                                        <RefreshCcw size={12} />
-                                    </Badge>
+                                        <Outlined.Refresh size={12} />
+                                    </Button>
                                 </div>
                             </div>
                         )}
                     </div>
-                    <Button
-                        onClick={() => handleAddItem(val.id)}
-                        variant="outline"
-                        className="border-primary text-primary mt-2 h-8"
-                    >
+                    <Button onClick={() => handleAddItem(val.id)} variant="outlined" className="border-primary text-primary mt-2 h-8" color="default">
                         + {t('addCondition')} {/* 添加条件 */}
                     </Button>
                     <CustomHandle id={val.id} node={node} className="top-[20px] -right-[30px]" />
@@ -353,11 +341,7 @@ export default function ConditionItem({ nodeId, node, data: paramItem, onChange,
                 <p className="mt-2 mb-3 text-sm font-bold">{t('else')}</p> {/* 否则 */}
                 <CustomHandle node={node} className="top-[12px] -right-[30px]" />
             </div>
-            <Button
-                onClick={handleAddCondition}
-                variant="outline"
-                className="border-primary text-primary mt-2 h-8"
-            >
+            <Button onClick={handleAddCondition} variant="outlined" className="border-primary text-primary mt-2 h-8" color="default">
                 + {t('addBranch')} {/* 添加分支 */}
             </Button>
         </div>

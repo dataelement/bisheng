@@ -59,7 +59,7 @@ const buttonStyles = cva(
         outlined: 'border bg-bg-page',
         filled: '',
         text: '',
-        link: 'underline-offset-4',
+        link: '',
       },
       // Heights/radii per §2 (24/32/40, 4/6/8px). Font sizes reference the
       // PRIMITIVE type scale vars on purpose: the semantic --text-body remaps
@@ -127,7 +127,7 @@ const buttonStyles = cva(
         color: 'primary',
         variant: 'link',
         class:
-          'text-blue-500 hover:text-blue-400 hover:underline coarse-pointer:active:text-blue-600',
+          'text-blue-500 hover:text-blue-400 coarse-pointer:active:text-blue-600',
       },
       {
         color: 'default',
@@ -159,7 +159,7 @@ const buttonStyles = cva(
         color: 'default',
         variant: 'link',
         class:
-          'text-btn-gray-text hover:text-btn-gray-text/80 hover:underline coarse-pointer:active:text-btn-gray-text',
+          'text-btn-gray-text hover:text-btn-gray-text/80 coarse-pointer:active:text-btn-gray-text',
       },
       {
         color: 'danger',
@@ -190,7 +190,7 @@ const buttonStyles = cva(
         color: 'danger',
         variant: 'link',
         class:
-          'text-btn-danger hover:text-btn-danger-hover hover:underline coarse-pointer:active:text-btn-danger-active',
+          'text-btn-danger hover:text-btn-danger-hover coarse-pointer:active:text-btn-danger-active',
       },
       /* ---- bordered padding 7/15/15 incl. 1px border (§2 visual parity) ---- */
       { variant: 'outlined', size: 'small', class: 'px-[7px]' },

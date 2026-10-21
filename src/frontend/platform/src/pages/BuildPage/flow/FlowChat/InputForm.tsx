@@ -1,15 +1,16 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { Button, toast } from '@bisheng/ui';
+
+import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import InputComponent from "@/components/inputComponent";
 import InputFileComponent from "@/components/inputFileComponent";
-import { WorkflowNodeParam } from "@/types/flow";
-import { useRef, useState, useContext } from "react";
-import { useTranslation } from "react-i18next";
 import { locationContext } from "@/contexts/locationContext";
-import { fileAcceptToInputAccept, normalizeFileAccept } from "@/util/fileAcceptUtils";
+import { WorkflowNodeParam } from "@/types/flow";
+import { fileAcceptToInputAccept,normalizeFileAccept } from "@/util/fileAcceptUtils";
+import { useContext,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const enum FormItemType {
     Text = 'text',
@@ -38,7 +39,7 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
         formDataRef.current[item.key].fileName = fileName
     }
 
-    const { message } = useToast()
+
     const submit = () => {
         const valuesObject = {}
         let stringObject = ""
@@ -55,10 +56,7 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
         })
 
         if (errors.length) {
-            return message({
-                description: errors,
-                variant: 'warning'
-            })
+            return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
         }
         const myEvent = new CustomEvent('inputFormEvent', {
             detail: {
@@ -105,7 +103,7 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
                                                                 value: el.text
                                                             }))
                                                         }
-                                                        placeholder={'请选择'}
+                                                        placeholder={t('selectOption', { ns: 'flow' })}
                                                         onChange={(v) => {
                                                             setMultiVal(prev => ({ ...prev, [item.key]: v }));
                                                             handleChange(item, v.join(','))
@@ -153,7 +151,7 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
                         </div>
                     ))
                 }
-                <Button size="sm" className="w-full" onClick={submit}>{t('report.start')}</Button>
+                <Button size="small" className="w-full" onClick={submit}>{t('report.start')}</Button>
             </div>
         </div>
     </div>

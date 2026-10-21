@@ -22,6 +22,11 @@ class ServerAddError(BaseErrorCode):
     Msg: str = "Failed to add service provider, some models failed to initialize"
 
 
+class SpeechCredentialError(BaseErrorCode):
+    Code: int = 10804
+    Msg: str = "Volcengine rejected this Resource ID. Check the speech resource granted to these credentials."
+
+
 class WorkbenchEmbeddingError(BaseErrorCode):
     Code: int = 10810
     Msg: str = "Please configure the workbench embedding model."

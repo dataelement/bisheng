@@ -1,37 +1,39 @@
 // @ts-strict-ignore
+import { Button, SearchInput, notification } from '@bisheng/ui';
 import CardComponent from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
+import { hasResourceAction,useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
-import { MoveOneIcon } from "@/components/bs-icons/moveOne";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "@/components/bs-ui/button";
-import { SearchInput } from "@/components/bs-ui/input";
+import { Outlined } from "bisheng-icons";
+
+
 import LoadMore from "@/components/bs-comp/loadMore";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+
+
+import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
 import SelectSearch from "@/components/bs-ui/select/select";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { userContext } from "@/contexts/userContext";
-import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
-import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
-import { deleteFlowFromDatabase, getAppsApi, getFlowApi } from "@/controllers/API/flow";
-import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/controllers/API/workflow";
+import { changeAssistantStatusApi,createAssistantsApi,deleteAssistantApi,getAssistantDetailApi,saveAssistanttApi } from "@/controllers/API/assistant";
+import { deleteFlowFromDatabase,getAppsApi,getFlowApi } from "@/controllers/API/flow";
+import { copyReportTemplate,createWorkflowApi,onlineWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { AppNumType, AppType } from "@/types/app";
+import { AppNumType,AppType } from "@/types/app";
 import { FlowType } from "@/types/flow";
 import { useInfiniteCursorTable } from "@/util/hook";
 import { generateUUID } from "@/utils";
-import { useContext, useEffect, useRef, useState } from "react";
+import { Tag } from "@bisheng/ui";
+import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import CreateApp from "./CreateApp";
-import { useCreateTemp, useErrorPrompt, useQueryLabels } from "./hook";
 import CardSelectVersion from "./CardSelectVersion";
+import CreateApp from "./CreateApp";
 import CreateTemp from "./CreateTemp";
+import { useCreateTemp,useQueryLabels } from "./hook";
 
 /** 按应用上线(2)/下线(1)状态筛选，与后端 ``/api/v1/workflow/list?status=`` 一致 */
 export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultValue?: string; onChange: (v: string) => void }) => {
@@ -104,7 +106,7 @@ export default function apps() {
         i18n.loadNamespaces('flow');
     }, [i18n]);
     const { user } = useContext(userContext);
-    const { message } = useToast()
+
     const navigate = useNavigate()
 
     // Build page lists apps the user can manage. Backend treats managed=true
@@ -263,10 +265,10 @@ export default function apps() {
         })
     }
 
-    const { toast } = useToast()
+
     const handleSetting = (data) => {
         if (!data.write) {
-            return toast({ variant: 'warning', description: '无编辑权限' })
+            return notification.open({ type: 'warning', description: String('无编辑权限') })
         }
         if (data.flow_type === 5) {
             navigate(`/assistant/${data.id}`, { state: { flow: data } })
@@ -290,7 +292,7 @@ export default function apps() {
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
             <div className="flex gap-4">
-                <SearchInput className="w-64" placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)}></SearchInput>
+                <SearchInput placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)} className={"w-64"}></SearchInput>
                 <SelectType all onChange={(v) => {
                     tempTypeRef.current = v
                     filterData({ type: v })
@@ -311,11 +313,7 @@ export default function apps() {
                     onValueChange={handleLabelSearch}>
                 </SelectSearch>
                 {canCreateApp && (
-                    <Button
-                        variant="ghost"
-                        className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto"
-                        onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)}
-                    ><MoveOneIcon className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
+                    <Button variant="text" className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto" onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)} color="default"><Outlined.MoveToFolder className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
                 )}
             </div>
             {/* list */}
@@ -384,9 +382,9 @@ export default function apps() {
                                         </LabelShow>
                                     }
                                     footer={
-                                        <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === AppNumType.ASSISTANT && 'bg-[#fdb136]'}`}>
+                                        <span className="absolute bottom-0 right-0"><Tag size="small" color={item.flow_type === AppNumType.ASSISTANT ? "warning" : "brand"}>
                                             {typeCnNames[item.flow_type]}
-                                        </Badge>
+                                        </Tag></span>
                                     }
                                 ></CardComponent>
                             ))

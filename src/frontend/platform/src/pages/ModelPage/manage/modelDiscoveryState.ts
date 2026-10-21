@@ -1,3 +1,4 @@
+import { asrProviders, ttsProviders } from "./speechConfig";
 import { DiscoveredModel, ModelType } from "@/controllers/API/modelDiscovery";
 
 export const discoveryProviders = new Set([
@@ -28,9 +29,7 @@ export const modelTypes: ModelType[] = [
   "tts",
 ];
 export function availableModelTypes(provider: string): ModelType[] {
-  return ["openai", "azure_openai", "qwen", "qianfan"].includes(provider)
-    ? modelTypes
-    : modelTypes.filter((type) => type !== "asr" && type !== "tts");
+  return modelTypes.filter(type => (type !== "asr" || asrProviders.includes(provider)) && (type !== "tts" || ttsProviders.includes(provider)));
 }
 export function importableModels(
   catalog: DiscoveredModel[],

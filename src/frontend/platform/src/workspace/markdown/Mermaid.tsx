@@ -1,9 +1,9 @@
 // @ts-strict-ignore
-"use client"
+import { Button } from '@bisheng/ui';
 
 import type React from "react"
 
-import { Button } from "@/components/bs-ui/button"
+
 import { Separator } from "@/components/bs-ui/separator"
 import { formatDate } from "@/util/utils"
 import { copyText } from "@/utils"
@@ -210,43 +210,23 @@ export default function MermaidBlock({ children }: { children: string }) {
                 {/* 头部切换按钮 */}
                 <div className="flex items-center justify-between p-2 relative z-10 bg-muted">
                     <div className="flex gap-1 bg-background rounded-md">
-                        <Button
-                            onClick={() => setMode("chart")}
-                            variant={mode === "chart" ? "default" : "ghost"}
-                            className="text-xs h-8"
-                        >
+                        <Button onClick={() => setMode("chart")} variant={mode === "chart" ? "default" : "ghost"} className="text-xs h-8">
                             图表
                         </Button>
-                        <Button
-                            onClick={() => setMode("code")}
-                            variant={mode === "code" ? "default" : "ghost"}
-                            className="text-xs h-8"
-                        >
+                        <Button onClick={() => setMode("code")} variant={mode === "code" ? "default" : "ghost"} className="text-xs h-8">
                             代码
                         </Button>
                     </div>
                     {mode === "chart" && (
                         <div className="flex items-center">
-                            <Button
-                                onClick={handleZoomOut}
-                                variant="ghost"
-                                size="icon"
-                                className="text-xs h-8"
-                                disabled={zoom <= 0.5}
-                            >
+                            <Button onClick={handleZoomOut} variant="text" size="medium" className="text-xs h-8" disabled={zoom <= 0.5} color="default" iconOnly>
                                 <ZoomOut size={16} />
                             </Button>
-                            <Button
-                                onClick={handleZoomIn}
-                                variant="ghost"
-                                size="icon"
-                                className="text-xs h-8"
-                                disabled={zoom >= 3}
-                            >
+                            <Button onClick={handleZoomIn} variant="text" size="medium" className="text-xs h-8" disabled={zoom >= 3} color="default" iconOnly>
                                 <ZoomIn size={16} />
                             </Button>
                             <Separator orientation="vertical" className="h-4 mx-1" />
-                            <Button onClick={handleDownload} variant="ghost" className="text-xs h-8">
+                            <Button onClick={handleDownload} variant="text" className="text-xs h-8" color="default">
                                 <DownloadIcon size={16} />
                                 下载
                             </Button>
@@ -254,7 +234,7 @@ export default function MermaidBlock({ children }: { children: string }) {
                     )}
                     {mode === "code" && (
                         <div className="flex items-center">
-                            <Button onClick={handleCopy} variant="ghost" className="text-xs h-8">
+                            <Button onClick={handleCopy} variant="text" className="text-xs h-8" color="default">
                                 <Copy size={16} />
                                 {copySuccess ? "已复制" : "复制"}
                             </Button>

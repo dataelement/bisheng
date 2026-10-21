@@ -1,16 +1,16 @@
+import { Button, SearchInput, notification } from '@bisheng/ui';
+
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 // src/pages/BuildPage/bench/OrgKbConfig.tsx
 //
-// v2.5 Module D 组织知识库配置面板。
-// 两栏布局：左侧为已配置的知识库（拖拽排序、是否默认勾选、删除），
-// 右侧为全部文档知识库（按更新时间倒序），支持按名称/描述模糊搜索。
-// 结果以 OrgKbConfig 数组持久化进 WorkstationConfig.orgKbs。
+
 import { BookIcon } from "@/components/bs-icons/knowledge";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { SearchInput } from "@/components/bs-ui/input";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
+
 import { readFileLibDatabase } from "@/controllers/API";
-import { AlignJustify, Plus, Trash2 } from "lucide-react";
+import { Tooltip, TooltipProvider } from "@bisheng/ui";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import { useTranslation } from "react-i18next";
@@ -46,7 +46,7 @@ function KbTypeIcon() {
 
 export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     const { t } = useTranslation();
-    const { toast } = useToast();
+
     const [search, setSearch] = useState("");
     const [list, setList] = useState<KnowledgeBase[]>([]);
     const [loading, setLoading] = useState(false);
@@ -55,7 +55,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     const fetchKbs = async (name: string) => {
         setLoading(true);
         try {
-            const doc: any = await readFileLibDatabase({ cursor: null, pageSize: 100, name, type: 0, action: 'use' });
+            const doc: any = await readFileLibDatabase({ cursor: null, pageSize: 100, name, type: 0, action: "use" });
             const merged = ((doc?.data || []) as KnowledgeBase[]).map((k) => ({ ...k, type: 0 }));
             merged.sort((a, b) => {
                 const ta = a.update_time ? new Date(a.update_time).getTime() : 0;
@@ -64,7 +64,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
             });
             setList(merged);
         } catch {
-            toast({ variant: "error", description: t("bench.fetchKbFailed") });
+            notification.open({ type: "error", description: String(t("bench.fetchKbFailed") ?? '') });
         } finally {
             setLoading(false);
         }
@@ -85,9 +85,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
         const q = search.trim().toLowerCase();
         if (!q) return list;
         return list.filter(
-            (kb) =>
-                kb.name?.toLowerCase().includes(q) ||
-                (kb.description || "").toLowerCase().includes(q),
+            (kb) => kb.name?.toLowerCase().includes(q) || (kb.description || "").toLowerCase().includes(q),
         );
     }, [list, search]);
 
@@ -111,9 +109,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     };
 
     const handleDefaultCheckedChange = (kbId: number, defaultChecked: boolean) => {
-        onChange(
-            orgKbs.map((k) => (k.id === kbId ? { ...k, default_checked: defaultChecked } : k)),
-        );
+        onChange(orgKbs.map((k) => (k.id === kbId ? { ...k, default_checked: defaultChecked } : k)));
     };
 
     const handleRemove = (kbId: number) => {
@@ -131,31 +127,22 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
 
     return (
         <div className="mt-2 min-w-0 max-w-full">
-            <p className="text-sm text-muted-foreground mb-2">
-                {t("bench.configureOrgKbs", "配置组织知识库")}
-            </p>
+            <p className="text-sm text-muted-foreground mb-2">{t("bench.configureOrgKbs")}</p>
             <div className="flex min-w-0 w-full max-w-full gap-4">
                 {/* Selected panel */}
-                <div
-                    className="flex w-1/2 min-w-0 max-w-[50%] border rounded-lg bg-white"
-                    style={{ minHeight: 280 }}
-                >
+                <div className="flex w-1/2 min-w-0 max-w-[50%] border rounded-lg bg-white" style={{ minHeight: 280 }}>
                     <div className="flex-1 p-4 flex flex-col min-w-0">
                         {orgKbs.length > 0 && (
                             <div className="flex items-center justify-between pb-2 text-xs text-muted-foreground">
-                                <span>{t("bench.knowledgeBaseCol", "知识库")}</span>
+                                <span>{t("bench.knowledgeBaseCol")}</span>
                                 <span>{t("bench.defaultChecked")}</span>
                             </div>
                         )}
                         {orgKbs.length === 0 ? (
                             <div className="flex-1 rounded-lg border-2 border-dashed bg-gray-50 flex flex-col items-center justify-center py-8 text-center">
-                                <Plus className="w-6 h-6 text-gray-400 mb-2" />
-                                <div className="text-sm text-gray-500 mb-1">
-                                    {t("bench.noOrgKbConfigured", "暂未配置组织知识库")}
-                                </div>
-                                <div className="text-xs text-gray-400">
-                                    {t("bench.pickFromRight", "请在右侧全部知识库中选择")}
-                                </div>
+                                <Outlined.Plus className="w-6 h-6 text-gray-400 mb-2" />
+                                <div className="text-sm text-gray-500 mb-1">{t("bench.noOrgKbConfigured")}</div>
+                                <div className="text-xs text-gray-400">{t("bench.pickFromRight")}</div>
                             </div>
                         ) : (
                             <DragDropContext onDragEnd={handleDragEnd}>
@@ -178,25 +165,29 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                                             ref={dragProvided.innerRef}
                                                             {...dragProvided.draggableProps}
                                                             {...dragProvided.dragHandleProps}
-                                                            className={`flex items-center gap-2 rounded-lg px-3 py-2 min-w-0 ${snapshot.isDragging
-                                                                ? "bg-blue-50 shadow-md"
-                                                                : "bg-white border"
-                                                                }`}
+                                                            className={`flex items-center gap-2 rounded-lg px-3 py-2 min-w-0 ${
+                                                                snapshot.isDragging
+                                                                    ? "bg-blue-50 shadow-md"
+                                                                    : "bg-white border"
+                                                            }`}
                                                         >
-                                                            <AlignJustify className="w-4 h-4 shrink-0 text-gray-400" />
+                                                            <Outlined.Drag className="w-4 h-4 shrink-0 text-gray-400" />
                                                             <div className="shrink-0 text-primary">
                                                                 <KbTypeIcon />
                                                             </div>
                                                             <TooltipProvider>
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <span className="block min-w-0 flex-1 truncate text-sm">
-                                                                            {kb.name}
-                                                                        </span>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent>
-                                                                        <p className="max-w-[240px] break-words">{kb.name}</p>
-                                                                    </TooltipContent>
+                                                                <Tooltip
+                                                                    content={
+                                                                        <>
+                                                                            <p className="max-w-[240px] break-words">
+                                                                                {kb.name}
+                                                                            </p>
+                                                                        </>
+                                                                    }
+                                                                >
+                                                                    <span className="block min-w-0 flex-1 truncate text-sm">
+                                                                        {kb.name}
+                                                                    </span>
                                                                 </Tooltip>
                                                             </TooltipProvider>
                                                             <Checkbox
@@ -206,14 +197,9 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                                                     handleDefaultCheckedChange(kb.id, !!v)
                                                                 }
                                                             />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleRemove(kb.id)}
-                                                                className="text-gray-500 shrink-0"
-                                                                title={t("bench.remove")}
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
+                                                            <Button type="button" variant="text" onClick={() => handleRemove(kb.id)} className="shrink-0" title={t("bench.remove")} color="default">
+                                                                <Outlined.Delete className="w-4 h-4" />
+                                                            </Button>
                                                         </div>
                                                     )}
                                                 </Draggable>
@@ -233,19 +219,12 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                     style={{ minHeight: 280 }}
                 >
                     <div className="shrink-0 border-b p-3 min-w-0">
-                        <h3 className="mb-2 text-sm font-medium">{t("bench.allKbs", "全部知识库")}</h3>
-                        <SearchInput
-                            className="w-full min-w-0 max-w-full"
-                            placeholder={t("bench.searchKbName", "搜索知识库名称")}
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
+                        <h3 className="mb-2 text-sm font-medium">{t("bench.allKbs")}</h3>
+                        <SearchInput placeholder={t("bench.searchKbName")} value={search} onChange={(e) => setSearch(e.target.value)} className={"w-full min-w-0 max-w-full"} />
                     </div>
                     <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-2" style={{ maxHeight: 360 }}>
                         {loading && (
-                            <div className="py-8 text-center text-sm text-muted-foreground">
-                                {t("bench.loading")}
-                            </div>
+                            <div className="py-8 text-center text-sm text-muted-foreground">{t("bench.loading")}</div>
                         )}
                         {!loading && filteredList.length === 0 && (
                             <div className="py-8 text-center text-sm text-muted-foreground">
@@ -269,15 +248,16 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                             <KbTypeIcon />
                                         </div>
                                         <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <span className="block min-w-0 max-w-full flex-1 truncate text-sm">
-                                                        {kb.name}
-                                                    </span>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                    <p className="max-w-[240px] break-words">{kb.name}</p>
-                                                </TooltipContent>
+                                            <Tooltip
+                                                content={
+                                                    <>
+                                                        <p className="max-w-[240px] break-words">{kb.name}</p>
+                                                    </>
+                                                }
+                                            >
+                                                <span className="block min-w-0 max-w-full flex-1 truncate text-sm">
+                                                    {kb.name}
+                                                </span>
                                             </Tooltip>
                                         </TooltipProvider>
                                     </label>
@@ -286,6 +266,6 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                     </div>
                 </div>
             </div>
-        </div >
+        </div>
     );
 }

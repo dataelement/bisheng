@@ -10,6 +10,7 @@
 //                                when the GET envelope returns
 //                                inherited_from_root=true.
 
+import { Tag } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import { Tenant } from "@/types/api/tenant";
 import { User } from "@/types/api/user";
@@ -95,8 +96,8 @@ export function InheritedBadge({ visible }: { visible: boolean }): JSX.Element |
     const { t } = useTranslation('model');
     if (!visible) return null;
     return (
-        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+        <Tag size="small" color="brand" className="ml-2">
             {t('model.systemConfigInheritedBadge')}
-        </span>
+        </Tag>
     );
 }

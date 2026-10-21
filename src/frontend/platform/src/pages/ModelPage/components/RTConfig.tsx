@@ -1,10 +1,12 @@
 // @ts-strict-ignore
+import { Button, Input } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Plus } from "lucide-react";
+
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/bs-ui/button";
-import { Input } from "../../../components/bs-ui/input";
+
+
 import {
     Table,
     TableBody,
@@ -78,7 +80,7 @@ export default function RTConfig({ open, onChange }) {
             </div>
             <DialogFooter>
                 <div className="flex justify-start mt-4">
-                    <Button variant='outline' className="flex w-[120px]" onClick={() => setShowAdd(true)}><Plus className="mr-2 size-5" />{t('bs:create')}</Button>
+                    <Button variant="outlined" className="flex w-[120px]" onClick={() => setShowAdd(true)} color="default"><Outlined.Plus className="mr-2 size-5" />{t('bs:create')}</Button>
                 </div>
             </DialogFooter>
         </DialogContent>

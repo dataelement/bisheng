@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button"
+import { Button, Input, notification } from '@bisheng/ui';
+
 import {
   Dialog,
   DialogContent,
@@ -7,12 +8,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
+
 import { Label } from "@/components/bs-ui/label"
 import DepartmentUsersSelect, {
   type DepartmentUserOption,
 } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+
 import { mountTenantApi } from "@/controllers/API/department"
 import { grantTenantAdminApi } from "@/controllers/API/tenant"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
@@ -43,6 +44,8 @@ export function MountTenantDialog({
     !loading
 
   const handleSubmit = async () => {
+        if ((String((tenantName) ?? '').length > 128)) return;
+
     if (!canSubmit) return
     setLoading(true)
     try {
@@ -67,19 +70,12 @@ export function MountTenantDialog({
       }
 
       if (failed.length === 0) {
-        toast({
-          title: t("bs:tenant.mountSuccess", { defaultValue: "挂载成功" }),
-          variant: "success",
-        })
+        notification.open({ type: "success", title: String(t("bs:tenant.mountSuccess", { defaultValue: "挂载成功" }) ?? ''), description: "" })
       } else {
-        toast({
-          title: t("bs:tenant.mountSuccess", { defaultValue: "挂载成功" }),
-          description: t("bs:tenant.adminGrantPartial", {
+        notification.open({ type: "warning", title: String(t("bs:tenant.mountSuccess", { defaultValue: "挂载成功" }) ?? ''), description: String(t("bs:tenant.adminGrantPartial", {
             defaultValue: "以下用户未能授予管理员，请在成员管理中重试: {{names}}",
             names: failed.join(", "),
-          }),
-          variant: "warning",
-        })
+          }) ?? '') })
       }
       onMounted()
     } finally {
@@ -119,13 +115,7 @@ export function MountTenantDialog({
               {t("bs:tenant.name", { defaultValue: "租户名称" })}{" "}
               <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="tenant_name"
-              value={tenantName}
-              onChange={(e) => setTenantName(e.target.value)}
-              maxLength={128}
-              className="mt-1"
-            />
+            <Input id="tenant_name" value={tenantName} onChange={(e) => setTenantName(e.target.value)} maxLength={128} className={"mt-1"} showCount />
           </div>
 
           <div>
@@ -167,10 +157,10 @@ export function MountTenantDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={loading}>
+          <Button variant="outlined" onClick={onClose} disabled={loading} color="default">
             {t("cancel", { defaultValue: "取消" })}
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
+          <Button onClick={handleSubmit} disabled={((String((tenantName) ?? '').length > 128)) || (!canSubmit)}>
             {loading
               ? t("bs:tenant.mounting", { defaultValue: "挂载中..." })
               : t("bs:tenant.mountConfirm", { defaultValue: "确认挂载" })}

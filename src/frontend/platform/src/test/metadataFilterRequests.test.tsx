@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import MetadataFilter from "@/pages/BuildPage/flow/FlowNode/component/MetadataFilter";
 import { act, render, screen, waitFor } from "@testing-library/react";
@@ -25,9 +25,7 @@ vi.mock("@/components/bs-ui/select", () => ({
   SelectValue: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
 
-vi.mock("@/components/bs-ui/input", () => ({
-  Input: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-}));
+
 
 describe("MetadataFilter metadata loading", () => {
   beforeEach(() => {

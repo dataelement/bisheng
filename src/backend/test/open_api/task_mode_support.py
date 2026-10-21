@@ -88,7 +88,8 @@ def install_task_mode_seams(monkeypatch):
     async def _model_info(_model_id):
         return state.model, (SimpleNamespace() if state.model else None)
 
-    async def _enabled():
+    async def _enabled(user_id=None):
+        del user_id
         return [SimpleNamespace(name=n, display_name=n, description=None) for n in state.skills]
 
     async def _by_ids(ids):

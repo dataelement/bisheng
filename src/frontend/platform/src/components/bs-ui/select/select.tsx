@@ -1,6 +1,7 @@
+import { SearchInput } from '@bisheng/ui';
 import React, { ChangeEvent } from "react"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { SearchInput } from "../input";
+
 
 interface SelectSearchProps {
     value: any,
@@ -32,8 +33,7 @@ const _SelectSearch: React.FC<SelectSearchProps> = ({
             <SelectValue placeholder={selectPlaceholder} />
         </SelectTrigger>
         <SelectContent className={contentClass}>
-            <SearchInput inputClassName="h-8 mb-2 dark:border-gray-700" placeholder={inputPlaceholder}
-                onChange={(e) => onChange(e)} onKeyDown={e => e.stopPropagation()} iconClassName="w-4 h-4" />
+            <SearchInput placeholder={inputPlaceholder} onChange={(e) => onChange(e)} onKeyDown={e => e.stopPropagation()} className={"h-8 mb-2 dark:border-gray-700"} />
             <SelectGroup>
                 {children}
                 {options.map(el => (

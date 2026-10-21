@@ -1,5 +1,5 @@
 import { useRecoilState } from 'recoil';
-import { Switch } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -14,7 +14,7 @@ export default function SlashCommandSwitch() {
   return (
     <div className="flex items-center justify-between">
       <div>{localize('com_nav_slash_command_description')}</div>
-      <Switch
+      <Switch className="peer"
         id="slashCommand"
         checked={slashCommand}
         onCheckedChange={handleCheckedChange}

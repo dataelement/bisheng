@@ -1,5 +1,6 @@
-import { Badge } from "@/components/bs-ui/badge";
-import { Info } from "lucide-react";
+import { Button } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
 import { useTranslation } from "react-i18next";
 
 const enum SourceType {
@@ -25,9 +26,9 @@ export default function SourceEntry({ extra, end, source, className = '', onSour
         {(() => {
             switch (source) {
                 case SourceType.FILE:
-                    return <Badge className="cursor-pointer" onClick={onSource}>{t('chat.source')}</Badge>;
+                    return <Button size="small" variant="link" onClick={onSource}>{t('chat.source')}</Button>;
                 case SourceType.NO_PERMISSION:
-                    return <p className="flex text-xs text-gray-400 gap-1 items-center"><Info className="text-red-300" />{t('chat.noAccess')}</p>;
+                    return <p className="flex text-xs text-gray-400 gap-1 items-center"><Outlined.Info className="text-red-300" />{t('chat.noAccess')}</p>;
                 case SourceType.LINK:
                     return (
                         <div className="flex flex-col text-blue-500 text-xs">

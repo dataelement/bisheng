@@ -1,5 +1,5 @@
+import { Switch } from "@bisheng/ui";
 // src/features/chat-config/components/ToggleSection.tsx
-import { Switch } from "@/components/bs-ui/switch";
 import { ReactNode } from "react";
 
 export const ToggleSection = ({
@@ -7,7 +7,7 @@ export const ToggleSection = ({
     enabled,
     onToggle,
     children,
-    extra
+    extra,
 }: {
     title: string;
     enabled: boolean;
@@ -21,7 +21,6 @@ export const ToggleSection = ({
                 <span>{title}</span>
             </p>
             <div className="flex items-center gap-2 ml-2">
-
                 <Switch checked={enabled} onCheckedChange={onToggle} />
                 {extra} {/* Render extra content here */}
             </div>

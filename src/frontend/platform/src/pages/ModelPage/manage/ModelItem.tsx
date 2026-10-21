@@ -1,5 +1,6 @@
+import { asrHints } from "./speechConfig";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+import { Button } from "@bisheng/ui";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
+import { Input, Textarea } from "@bisheng/ui";
 import { Label } from "@/components/bs-ui/label";
 import {
   Select,
@@ -18,8 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/bs-ui/select";
-import { Switch } from "@/components/bs-ui/switch";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { Switch } from "@bisheng/ui";
+import { ModelFieldHint as QuestionTooltip } from "./ModelFieldHint";
 import { ModelType } from "@/controllers/API/modelDiscovery";
 import {
   ChevronDown,
@@ -197,8 +198,8 @@ export function ModelItem({
           {tModel(`model.type_${model.model_type}`)}
         </span>
         <Button
-          size="sm"
-          variant="ghost"
+          size="small"
+          variant="text" color="default"
           aria-expanded={expanded}
           aria-controls={controlId}
           onClick={() => setExpanded((previous) => !previous)}
@@ -213,8 +214,8 @@ export function ModelItem({
           )}
         </Button>
         <Button
-          size="icon"
-          variant="ghost"
+          size="small" iconOnly
+          variant="text" color="default"
           aria-label={tModel("model.removeConfiguredModel", {
             name: model.model_name || model.name,
           })}
@@ -240,6 +241,7 @@ export function ModelItem({
                 onChange={handleInput}
                 className="h-8"
               ></Input>
+              {model.model_type === "asr" && asrHints[type] && <p className="text-xs text-muted-foreground">{t(asrHints[type])}</p>}
               {error && <span className="text-red-500 text-xs">{error}</span>}
             </div>
             <div className="w-full shrink-0 sm:w-40">
@@ -321,7 +323,7 @@ export function ModelItem({
                         )}
                         <div className="flex items-center justify-between gap-4">
                           <Label>{t("model.pasteAdvancedParamsHere")}</Label>
-                          <Button variant="link" size="sm" className="h-auto shrink-0 px-0"
+                          <Button variant="link" size="small" className="h-auto shrink-0 px-0"
                             onClick={() => { setInputAdvancedParams(advancedParams); setJsonError(false); }}>
                             {t("model.insertParamsExample")}
                           </Button>
@@ -337,7 +339,7 @@ export function ModelItem({
                               setJsonError(true);
                             }
                           }}
-                          className={`mt-1 font-mono text-sm ${jsonError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          textareaClassName={`mt-1 font-mono text-sm ${jsonError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                           rows={10}
                           placeholder={advancedParams}
                         />
@@ -348,7 +350,7 @@ export function ModelItem({
                         )}
                       </div>
                       <DialogFooter className="mt-4">
-                        <Button variant="outline" onClick={handleCloseDialog}>
+                        <Button variant="outlined" color="default" onClick={handleCloseDialog}>
                           {t("model.cancel")}
                         </Button>
                         <Button onClick={handleSaveAdvancedParams}>

@@ -1,10 +1,10 @@
 // @ts-strict-ignore
 import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal";
 import ThumbsMessage from "@/pages/ChatAppPage/components/ThumbsMessage";
-import { useEffect, useRef } from "react";
+import { useEffect,useRef } from "react";
 import { useTranslation } from "react-i18next";
 import FileBs from "./FileBs";
-import MessageBs, { ReasoningLog } from "./MessageBs";
+import MessageBs,{ ReasoningLog } from "./MessageBs";
 import MessageSystem from "./MessageSystem";
 import MessageUser from "./MessageUser";
 import RunLog from "./RunLog";

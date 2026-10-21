@@ -172,6 +172,7 @@ async def init_default_data():
                     await session.commit()
 
                 await _ensure_image_view_tool(session)
+                await _ensure_web_fetch_tool(session)
 
             # Initialize Databaseconfig while init bypass is still active.
             await settings.init_config()
@@ -203,6 +204,8 @@ async def init_default_data():
                     dashboard_report.current_count,
                     dashboard_report.missing_count,
                 )
+
+            await _sync_web_fetch_tool()
 
         except Exception as exc:
             # if the exception involves tables already existing
@@ -566,6 +569,180 @@ async def _ensure_image_view_tool(session) -> None:
         )
     )
     await session.commit()
+
+
+WEB_FETCH_TOOL_KEY = "web_fetch"
+
+
+def _load_web_fetch_seed() -> tuple[dict, dict]:
+    """Return the (tool type, tool) seed rows of the web fetch tool.
+
+    The seed JSON is the single source of the tool's name, description,
+    parameters and default config (F085 design pitfall 9).
+    """
+    tools = json.loads(read_from_conf("../database/data/t_gpts_tools.json"))
+    tool = next(item for item in tools if item.get("tool_key") == WEB_FETCH_TOOL_KEY)
+    tool_types = json.loads(read_from_conf("../database/data/t_gpts_tools_type.json"))
+    tool_type = next(item for item in tool_types if item.get("id") == tool["type"])
+    return tool_type, tool
+
+
+async def _ensure_web_fetch_tool(session) -> bool:
+    """Insert the web fetch built-in tool into a database seeded before F085.
+
+    Returns True when this call inserted the rows.
+    """
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+
+    existing = (
+        await session.exec(
+            select(GptsTools).where(
+                GptsTools.tool_key == WEB_FETCH_TOOL_KEY,
+                GptsTools.tenant_id == DEFAULT_TENANT_ID,
+                GptsTools.is_delete == 0,
+            )
+        )
+    ).first()
+    if existing is not None:
+        return False
+    type_seed, tool_seed = _load_web_fetch_seed()
+    tool_type = GptsToolsType(
+        **{key: value for key, value in type_seed.items() if key != "id"},
+        tenant_id=DEFAULT_TENANT_ID,
+    )
+    session.add(tool_type)
+    await session.flush()
+    session.add(
+        GptsTools(
+            **{key: value for key, value in tool_seed.items() if key not in ("id", "type")},
+            type=tool_type.id,
+            tenant_id=DEFAULT_TENANT_ID,
+        )
+    )
+    await session.commit()
+    logger.info("Inserted the web fetch built-in tool: type_id={}", tool_type.id)
+    return True
+
+
+async def _web_fetch_tool_types_by_tenant() -> dict[int, int]:
+    """Map each tenant that has the web fetch tool to its tool type id."""
+    from bisheng.core.context.tenant import bypass_tenant_filter
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            rows = (
+                await session.exec(
+                    select(GptsTools.tenant_id, GptsTools.type).where(
+                        GptsTools.tool_key == WEB_FETCH_TOOL_KEY,
+                        GptsTools.is_delete == 0,
+                    )
+                )
+            ).all()
+    return {int(tenant_id): int(type_id) for tenant_id, type_id in rows if tenant_id and type_id}
+
+
+async def _project_web_fetch_tool_types() -> None:
+    """Project every tenant's web fetch tool type that has no permission projection yet.
+
+    One read finds the gaps, so a healthy startup writes nothing. Each missing
+    projection is written in its own tenant context: the projection repository
+    is tenant-filtered and startup has no tenant context of its own.
+    """
+    from bisheng.api.services.f048_system_resource_bootstrap import load_system_owned_resource_inventory
+    from bisheng.core.context.tenant import current_tenant_id
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+    from bisheng.permission.application.system_resource_reconcile import (
+        SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+        inspect_system_owned_resources,
+        reconcile_system_owned_resources,
+    )
+
+    type_by_tenant = await _web_fetch_tool_types_by_tenant()
+    if not type_by_tenant:
+        return
+    inventory = await load_system_owned_resource_inventory()
+    specs = tuple(
+        spec for spec in inventory.resources if type_by_tenant.get(spec.tenant_id) == int(spec.resource_id)
+    )
+    missing = [state.resource for state in await inspect_system_owned_resources(specs) if state.state == "MISSING"]
+    if not missing:
+        return
+    components = (await get_f048_process_runtime()).components
+    await components.marker.wait_until_ready(
+        timeout_seconds=float(settings.openfga.recent_consistency_window_seconds) + 5.0,
+    )
+    for spec in missing:
+        token = current_tenant_id.set(spec.tenant_id)
+        try:
+            await reconcile_system_owned_resources(
+                components.facade,
+                (spec,),
+                apply=True,
+                operator_id=SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+            )
+            logger.info("Projected the web fetch tool type for tenant {}", spec.tenant_id)
+        except Exception:
+            logger.exception("Failed to project the web fetch tool type for tenant {}", spec.tenant_id)
+        finally:
+            current_tenant_id.reset(token)
+
+
+async def _tenants_missing_web_fetch_tool() -> list[int]:
+    """Active child tenants that have no web fetch tool row yet."""
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+    from bisheng.database.models.tenant import Tenant
+
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            tenant_ids = (
+                await session.exec(select(Tenant.id).where(Tenant.id != DEFAULT_TENANT_ID, Tenant.status == "active"))
+            ).all()
+            covered = set(
+                (
+                    await session.exec(
+                        select(GptsTools.tenant_id).where(
+                            GptsTools.tool_key == WEB_FETCH_TOOL_KEY,
+                            GptsTools.is_delete == 0,
+                        )
+                    )
+                ).all()
+            )
+    return [tenant_id for tenant_id in tenant_ids if tenant_id not in covered]
+
+
+async def _sync_web_fetch_tool() -> None:
+    """Make the web fetch tool usable everywhere after an upgrade (F085).
+
+    Runs on every startup and only fills gaps: child tenants without the tool
+    get a copy, then every tool type without a permission projection gets one.
+    The projection check looks at projections, not rows, so a copy whose
+    projection failed is still repaired on the next start. A failure is logged
+    and never stops the startup.
+    """
+    from bisheng.core.context.tenant import current_tenant_id
+
+    if getattr(getattr(settings, "multi_tenant", None), "enabled", False):
+        try:
+            tenant_ids = await _tenants_missing_web_fetch_tool()
+        except Exception:
+            logger.exception("Failed to list tenants missing the web fetch tool")
+            tenant_ids = []
+        from bisheng.workstation.domain.services import WorkStationService
+
+        for tenant_id in tenant_ids:
+            # The copy projects the copied types too, which needs a tenant context.
+            token = current_tenant_id.set(tenant_id)
+            try:
+                await WorkStationService.acopy_root_builtin_tools_to_tenant(tenant_id)
+            except Exception:
+                logger.exception("Failed to copy the web fetch tool to tenant {}", tenant_id)
+            finally:
+                current_tenant_id.reset(token)
+    if settings.openfga.enabled:
+        try:
+            await _project_web_fetch_tool_types()
+        except Exception:
+            logger.exception("Failed to project the web fetch tool; non-admin users cannot use it yet")
 
 
 def upload_preset_minio_file():

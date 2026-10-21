@@ -1,14 +1,15 @@
 // @ts-strict-ignore
+import { Button, Input, Textarea, toast } from '@bisheng/ui';
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
-import { LoadIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, InputList, Textarea } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { InputList } from '@/components/bs-comp/formFields/InputList';
+
 import { generateSimilarQa, updateQa } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { AnnotationFormHandle, AnnotationFormProps } from "./annotationTypes";
 
 const DEFAULT_FORM = {
     knowledgeLib: [],
@@ -17,7 +18,7 @@ const DEFAULT_FORM = {
     answer: ''
 };
 
-const SaveQaLibForm = forwardRef(({ onMarked }, ref) => {
+const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ onMarked }, ref) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState({ ...DEFAULT_FORM });
@@ -68,10 +69,7 @@ const SaveQaLibForm = forwardRef(({ onMarked }, ref) => {
 
     const handleModelGenerate = async () => {
         if (!form.question) {
-            return message({
-                variant: 'warning',
-                description: t('log.enterQuestion')
-            });
+            return toast.show({ type: 'warning', message: String(t('log.enterQuestion') ?? '') });
         }
         setLoading(true);
         captureAndAlertRequestErrorHoc(generateSimilarQa(form.question, form.answer).then(res => {
@@ -87,7 +85,7 @@ const SaveQaLibForm = forwardRef(({ onMarked }, ref) => {
         }));
     };
 
-    const { message } = useToast();
+
     const handleSubmit = async () => {
         const isKnowledgeLibEmpty = form.knowledgeLib.length === 0;
         const isQuestionEmpty = !form.question.trim();
@@ -100,24 +98,15 @@ const SaveQaLibForm = forwardRef(({ onMarked }, ref) => {
                 answer: isAnswerEmpty
             });
 
-            return message({
-                variant: 'warning',
-                description: t('log.qaLibQuestionAnswerRequired')
-            });
+            return toast.show({ type: 'warning', message: String(t('log.qaLibQuestionAnswerRequired') ?? '') });
         }
 
         const _similarQuestions = form.similarQuestions.filter((question) => question.trim() !== '');
         if (_similarQuestions.some((q) => q.length > 100)) {
-            return message({
-                variant: 'warning',
-                description: t('log.max100CharsForSimilarQuestions')
-            });
+            return toast.show({ type: 'warning', message: String(t('log.max100CharsForSimilarQuestions') ?? '') });
         }
         if (form.answer.length > 1000) {
-            return message({
-                variant: 'warning',
-                description: t('log.max1000CharsForAnswer')
-            });
+            return toast.show({ type: 'warning', message: String(t('log.max1000CharsForAnswer') ?? '') });
         }
 
         captureAndAlertRequestErrorHoc(updateQa('', {
@@ -125,11 +114,8 @@ const SaveQaLibForm = forwardRef(({ onMarked }, ref) => {
             answers: [form.answer],
             knowledge_id: form.knowledgeLib[0].value,
             source: 2
-        }).then(res => {
-            message({
-                variant: 'success',
-                description: t('log.saveSuccess')
-            });
+        }).then(() => {
+            toast.show({ type: 'success', message: String(t('log.saveSuccess') ?? '') });
             onMarked?.()
         }));
         close();
@@ -164,7 +150,7 @@ const SaveQaLibForm = forwardRef(({ onMarked }, ref) => {
                     </div>
                     <div>
                         <label htmlFor="question" className="bisheng-label"><span className="text-red-500">*</span>{t('log.question')}</label>
-                        <Input name="question" className={`col-span-3 ${error.question && 'border-red-400'}`} value={form.question} onChange={handleInputChange} />
+                        <Input id="question" name="question" value={form.question} onChange={handleInputChange} className={`col-span-3 ${error.question && 'border-red-400'}`} />
                     </div>
                     <div>
                         <label htmlFor="similarQuestions" className="bisheng-label">{t('log.similarQuestions')}</label>
@@ -174,18 +160,18 @@ const SaveQaLibForm = forwardRef(({ onMarked }, ref) => {
                                 onChange={handleSimilarQuestionsChange}
                             />
                         </div>
-                        <Button className="mt-2" size="sm" onClick={handleModelGenerate} disabled={loading}>
-                            {loading && <LoadIcon />} {t('log.aiGenerate')}
+                        <Button className="mt-2" size="small" onClick={handleModelGenerate} loading={loading} disabled={Boolean(loading)}>
+                            {t('log.aiGenerate')}
                         </Button>
                     </div>
                     <div>
                         <label htmlFor="answer" className="bisheng-label"><span className="text-red-500">*</span>{t('log.answer')}</label>
-                        <Textarea name="answer" className={`col-span-3 min-h-36 ${error.answer && 'border-red-400'}`} value={form.answer} onChange={handleInputChange} />
+                        <Textarea id="answer" name="answer" value={form.answer} onChange={handleInputChange} textareaClassName={`col-span-3 min-h-36 ${error.answer && 'border-red-400'}`} />
                     </div>
                 </div>
                 <DialogFooter>
-                    <DialogClose>
-                        <Button variant="outline" className="px-11" type="button" onClick={close}>{t('log.cancel')}</Button>
+                    <DialogClose asChild>
+                        <Button variant="outlined" className="px-11" type="button" onClick={close} color="default">{t('log.cancel')}</Button>
                     </DialogClose>
                     <Button type="submit" className="px-11" onClick={handleSubmit}>{t('log.confirm')}</Button>
                 </DialogFooter>

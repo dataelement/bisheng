@@ -1,5 +1,5 @@
-import { Button } from "@/components/bs-ui/button";
-import { Checkbox } from "@/components/bs-ui/checkBox";
+import { Button } from "@bisheng/ui";
+import { Checkbox } from "@bisheng/ui";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
+import { Input } from "@bisheng/ui";
 import {
   Select,
   SelectContent,
@@ -232,8 +232,8 @@ export function ModelDiscovery({
     <>
       <Button
         ref={triggerRef}
-        size="sm"
-        variant="outline"
+        size="small"
+        variant="outlined" color="default"
         onClick={() => {
           if (catalog) setOpen(true);
           else void handleFetch();
@@ -340,8 +340,8 @@ export function ModelDiscovery({
                   </span>
                 )}
                 <Button
-                  size="sm"
-                  variant="ghost"
+                  size="small"
+                  variant="text" color="default"
                   disabled={loading}
                   onClick={() => void handleFetch()}
                 >
@@ -495,7 +495,7 @@ export function ModelDiscovery({
               {t("model.selectedModelCount", { count: eligible.length })}
             </span>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => handleOpenChange(false)}>
+              <Button variant="outlined" color="default" onClick={() => handleOpenChange(false)}>
                 {t("model.cancel")}
               </Button>
               <Button

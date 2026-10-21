@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { notification } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { toast } from "@/components/bs-ui/toast/use-toast";
+
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
 import { hasDesktopLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
@@ -202,10 +203,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     history.pushState(null, '', BASE_URL + '/403')
                     return
                 }
-                toast({
-                    variant: 'error',
-                    description: i18next.t('menu.noAdminConsoleAccess'),
-                })
+                notification.open({ type: 'error', description: String(i18next.t('menu.noAdminConsoleAccess') ?? '') })
                 // Hard-navigate to the workspace client. Must NOT use history.back()
                 // here: under the SSO flow the previous history entry is the IdP /
                 // portal page, so "going back" silently re-triggers SSO and produces

@@ -1,9 +1,11 @@
 // @ts-strict-ignore
-import { Loader2 } from "lucide-react";
+import { Button } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge } from "../../../components/bs-ui/badge";
-import { Button } from "../../../components/bs-ui/button";
+import { Tag } from "@bisheng/ui";
+
 import EditLabel from "../../../components/bs-ui/editLabel";
 import { alertContext } from "../../../contexts/alertContext";
 import { getModelInfoApi } from "../../../controllers/API";
@@ -32,9 +34,8 @@ export const BadgeView = ({ value }) => {
     const { t } = useTranslation()
     // 训练成功
     // return null
-    const colors = ['', '', 'text-red-500', '', 'text-green-500', 'text-green-500']
     const texts = ['', t('finetune.trainingInProgress'), t('finetune.trainingFailed'), t('finetune.taskAborted'), t('finetune.trainingSuccess'), t('finetune.publishSuccess')]
-    return <Badge size="sm" variant="secondary" className={`${colors[value]} break-keep`}>{texts[value]}</Badge>
+    return <Tag size="small" dot className="shrink-0 whitespace-nowrap" color={value === 2 ? "danger" : value >= 4 ? "success" : value === 1 ? "warning" : "default"}>{texts[value]}</Tag>
 }
 
 const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete, onStop }) => {
@@ -93,19 +94,19 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     return <div className="absolute right-4 flex gap-2">
         {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="sm" disabled={loading} onClick={cancelPublish}>
-                {loading && <Loader2 className="animate-spin mr-2" size={14} />}
+            <Button size="small" disabled={loading} onClick={cancelPublish}>
+                {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
                 {t('finetune.cancelPublish')}
             </Button> :
             status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="sm" disabled={loading} onClick={handlePublish}>
-                    {loading && <Loader2 className="animate-spin mr-2" size={14} />}
+                <Button size="small" disabled={loading} onClick={handlePublish}>
+                    {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
                     {t('finetune.publish')}
                 </Button> : null
         }
         {status === TaskStatus.TRAINING_IN_PROGRESS ?
-            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
-            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('bs:delete')}</Button>
+            <Button size="small" className="bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
+            <Button size="small" className="bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('bs:delete')}</Button>
         }
     </div>
 }

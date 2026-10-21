@@ -280,3 +280,18 @@ async def test_silicon_classifies_aliases_using_native_subtype_filters(monkeypat
     assert [m["model_type"] for m in result["models"]] == ["embedding", "rerank"]
     assert all(m["type_source"] == "metadata" for m in result["models"])
     assert len(requests) == 8
+
+
+@pytest.mark.parametrize("payload", [{"ResponseMetadata": "bad"}, {"data": [], "error": "private-body"}])
+async def test_malformed_vendor_errors_are_sanitized(monkeypatch, payload):
+    transport(monkeypatch, lambda request: httpx.Response(200, json=payload))
+    with pytest.raises(ModelDiscoveryError) as error:
+        await ModelDiscoveryService.discover("openai", {})
+    assert "private-body" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "name,kind", [("glm-asr-2512", "asr"), ("glm-tts", "tts"), ("hunyuan-embedding", "embedding"), ("glm-image", None)]
+)
+def test_specialized_models_precede_chat_family_names(name, kind):
+    assert identify_type({"id": name})[0] == kind

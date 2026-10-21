@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Request, UploadFile, WebSocket
 from loguru import logger
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -23,6 +23,7 @@ from ..domain.schemas import (
     LLMServerCreateReq,
     WorkbenchModelConfig,
 )
+from ..domain.services.asr_realtime import run_realtime_asr
 from ..domain.services.model_discovery import ModelDiscoveryRequest
 
 router = APIRouter(prefix="/llm", tags=["LLM"])
@@ -278,6 +279,14 @@ async def invoke_workbench_asr(
     """Call the workbench'sasrModels Convert Voice to Text"""
     text = await LLMService.invoke_workbench_asr(login_user, file)
     return resp_200(data=text)
+
+
+@router.websocket("/workbench/asr/ws")
+async def workbench_asr_ws(
+    websocket: WebSocket,
+    login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
+):
+    await run_realtime_asr(websocket, login_user)
 
 
 @router.post("/workbench/tts")

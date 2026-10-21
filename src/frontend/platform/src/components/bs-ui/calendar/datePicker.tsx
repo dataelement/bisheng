@@ -1,10 +1,11 @@
 // @ts-strict-ignore
-"use client"
+import { Button } from '@bisheng/ui';
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import { formatDate } from "@/util/utils"
 import { CalendarDays, Clock } from "lucide-react"
 import { useMemo, useEffect, useState, useCallback, useRef } from "react"
-import { Button } from "../button"
+
 import { Calendar } from "../calendar"
 import { cname } from "../utils"
 import { useTranslation } from "react-i18next"
@@ -227,11 +228,7 @@ const TimePicker = ({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-2 font-normal"
-        >
+        <Button variant="outlined" size="small" className="h-8 px-2 font-normal" color="default">
           <Clock className="mr-1.5 h-3.5 w-3.5" />
           {timeStr}
         </Button>
@@ -259,19 +256,10 @@ const TimePicker = ({
             />
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleNow}
-              className="flex-1"
-            >
+            <Button variant="outlined" size="small" onClick={handleNow} className="flex-1" color="default">
               {t('now')}
             </Button>
-            <Button
-              size="sm"
-              onClick={handleConfirm}
-              className="flex-1"
-            >
+            <Button size="small" onClick={handleConfirm} className="flex-1">
               {t('confirm1')}
             </Button>
           </div>
@@ -380,14 +368,10 @@ export function DatePicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          disabled={disabled}
-          className={cname(
+        <Button variant="outlined" disabled={disabled} className={cname(
             "w-full justify-start text-left font-normal bg-search-input",
             !dateStr && "text-muted-foreground"
-          )}
-        >
+          )} color="default">
           <CalendarDays className={cname(
             "h-4 w-4",
             !dateStr && "mr-2"
@@ -418,18 +402,10 @@ export function DatePicker({
                   onChange={handleTimeChange}
                 />
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleNow}
-                  >
+                  <Button variant="outlined" size="small" onClick={handleNow} color="default">
                     {t('now')}
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleConfirm}
-                    disabled={!date}
-                  >
+                  <Button size="small" onClick={handleConfirm} disabled={!date}>
                     {t('confirm1')}
                   </Button>
                 </div>

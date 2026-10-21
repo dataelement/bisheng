@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { AppType } from "@/types/app";
 import { useEffect, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
-import { Button } from "../../components/bs-ui/button";
+
 import {
     Table,
     TableBody,
@@ -80,7 +81,7 @@ export default function Templates() {
         <div className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide">
             <div className="flex justify-between">
                 <SelectType defaultValue={type} onChange={(v) => navigate(`/build/temps/${v}`)} />
-                <Button size="sm" onClick={() => navigate('/build/apps')}>{t('returnToAppList')}</Button>
+                <Button size="small" onClick={() => navigate('/build/apps')}>{t('returnToAppList')}</Button>
             </div>
             <Table className="mb-[50px]">
                 <TableHeader>

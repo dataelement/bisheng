@@ -1,36 +1,38 @@
 // @ts-strict-ignore
-import { useSubjectTable } from "@/components/bs-comp/selectComponent/useSubjectTable"
-import { SubjectBusinessId, SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus"
-import { FilterIcon } from "@/components/bs-icons/filter";
+import { Button, SearchInput } from '@bisheng/ui';
+import { SubjectBusinessId,SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus";
+import { useSubjectTable } from "@/components/bs-comp/selectComponent/useSubjectTable";
+import { Outlined } from "bisheng-icons";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+
+import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
 import FilterUserGroup from "@/components/bs-ui/select/filter";
-import { getRolesApi, getUserGroupsApi } from "@/controllers/API/user";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-    ColumnResizeHandle,
-    useResizableColumns,
+ColumnResizeHandle,
+useResizableColumns,
 } from "@/components/bs-ui/table/useResizableColumns";
 import { cname } from "@/components/bs-ui/utils";
+import { getRolesApi,getUserGroupsApi } from "@/controllers/API/user";
+import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
+import { useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SearchInput } from "../../../components/bs-ui/input";
+
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableFooter,
-    TableHead,
-    TableHeader,
-    TableRow
+Table,
+TableBody,
+TableCell,
+TableFooter,
+TableHead,
+TableHeader,
+TableRow
 } from "../../../components/bs-ui/table";
 import { userContext } from "../../../contexts/userContext";
-import { disableUserApi, getUsersApi } from "../../../controllers/API/user";
+import { disableUserApi,getUsersApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import UserRoleModal from "./UserRoleModal";
-import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
-import { PlusIcon } from "@/components/bs-icons";
+
 import CreateUser from "./CreateUser";
 
 function UsersFilter({ options, onChecked, nameKey, placeholder, onFilter }) {
@@ -68,7 +70,7 @@ function UsersFilter({ options, onChecked, nameKey, placeholder, onFilter }) {
     return <Popover open={open} onOpenChange={(bln) => { setOpen(bln); setSearchKey('') }}>
         <PopoverTrigger>
             {/* @ts-ignore */}
-            <FilterIcon onClick={() => setOpen(!open)} className={_value.length ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
+            <Outlined.Filter onClick={() => setOpen(!open)} className={_value.length ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
         </PopoverTrigger>
         <PopoverContent>
             <FilterUserGroup
@@ -198,7 +200,7 @@ export default function Users(params) {
                     <SearchInput placeholder={t("subjectSearch.userPlaceholder")} {...subjectSearch.inputProps}></SearchInput>
                 </div>
                 {user.role === 'admin' && <Button className="flex justify-around" onClick={() => setOpenCreate(true)}>
-                    <PlusIcon className="text-primary" />
+                    <Outlined.Plus className="text-primary" />
                     <span className="text-[#fff] mx-4">{t('create')}</span>
                 </Button>}
             </div>

@@ -104,17 +104,18 @@ def identify_type(item: dict) -> tuple[str | None, str]:
         return None, "unsupported"
     name = str(item.get("id") or item.get("name") or "").lower().split("/")[-1]
     if re.match(
-        r"^(?:gpt-image|dall-e|flux|stable-diffusion|sora|doubao-seedream|doubao-seedance|gemini[^/]*-image)", name
+        r"^(?:gpt-image|dall-e|flux|stable-diffusion|sora|glm-image|cogview|cogvideox|doubao-seedream|doubao-seedance|gemini[^/]*-image)",
+        name,
     ):
         return None, "unsupported"
     registry = (
         ("rerank", r"^(?:bge-reranker|qwen3-reranker|rerank|jina-reranker)"),
         (
             "embedding",
-            r"^(?:text-embedding|embedding|doubao-embedding|gemini-embedding|bge-(?:m3|large|base|small)|qwen3-embedding|nomic-embed|mxbai-embed|jina-embeddings|all-minilm)",
+            r"^(?:text-embedding|embedding|hunyuan-embedding|doubao-embedding|gemini-embedding|bge-(?:m3|large|base|small)|qwen3-embedding|nomic-embed|mxbai-embed|jina-embeddings|all-minilm)",
         ),
-        ("asr", r"^(?:whisper|paraformer|sensevoice|fun-asr|qwen[^/]*-asr|gpt-4o(?:-mini)?-transcribe)"),
-        ("tts", r"^(?:tts-1|cosyvoice|gpt-4o-mini-tts|qwen[^/]*-tts|gemini[^/]*-tts)"),
+        ("asr", r"^(?:glm-asr|whisper|paraformer|sensevoice|fun-asr|qwen[^/]*-asr|gpt-4o(?:-mini)?-transcribe)"),
+        ("tts", r"^(?:glm-tts|tts-1|cosyvoice|gpt-4o-mini-tts|qwen[^/]*-tts|gemini[^/]*-tts)"),
         (
             "llm",
             r"^(?:gpt-|chatgpt-|o[134](?:-|$)|claude-|deepseek-(?:chat|reasoner|flash|pro|coder|r\d|v\d)|qwen(?:[0-9.]+)?-(?:turbo|plus|max|chat|\d+(?:\.\d+)?b|coder|vl|omni|next|instruct|flash|thinking)|doubao-(?:\d+(?:[-.]\d+)*-)?(?:seed(?:[-.]|$)|pro|lite|vision|thinking|ui-tars)|gemini-[\d.]|llama[\d.-]*|gemma[\d.-]*|mistral|mixtral|moonshot-|kimi-|glm-|minimax-m|hunyuan-)",

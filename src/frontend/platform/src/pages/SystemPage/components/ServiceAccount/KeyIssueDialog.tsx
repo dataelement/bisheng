@@ -1,39 +1,43 @@
-import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
-import DepartmentUsersSelect, {
-  type DepartmentUserOption,
-} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
-import { Button } from "@/components/bs-ui/button"
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker"
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Button, Input, notification } from '@bisheng/ui';
+import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect";
+import DepartmentUsersSelect,{
+type DepartmentUserOption,
+} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect";
+
+import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
-import { Label } from "@/components/bs-ui/label"
-import { toast } from "@/components/bs-ui/toast/use-toast"
-import { QuestionTooltip } from "@/components/bs-ui/tooltip"
+Dialog,
+DialogContent,
+DialogDescription,
+DialogFooter,
+DialogHeader,
+DialogTitle,
+} from "@/components/bs-ui/dialog";
+
+import { Label } from "@/components/bs-ui/label";
+
+
+import { QuestionHint as QuestionTooltip } from '@/components/bs-comp/QuestionHint';
 import {
-  issueServiceAccountKeyApi,
-  updateServiceAccountKeyApi,
-} from "@/controllers/API/serviceAccount"
-import { createDelegateCandidateSource } from "@/controllers/API/serviceAccountCandidates"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+issueServiceAccountKeyApi,
+updateServiceAccountKeyApi,
+} from "@/controllers/API/serviceAccount";
+import { createDelegateCandidateSource } from "@/controllers/API/serviceAccountCandidates";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import type {
-  ApiKeyIssued,
-  ApiKeyItem,
-  ApiKeyUpdateForm,
-  DelegateScopeInput,
-  OpenApiScopeItem,
-} from "@/types/api/openApi"
-import { formatDate } from "@/util/utils"
-import { Loader2 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
+ApiKeyIssued,
+ApiKeyItem,
+ApiKeyUpdateForm,
+DelegateScopeInput,
+OpenApiScopeItem,
+} from "@/types/api/openApi";
+import { formatDate } from "@/util/utils";
+
+import { useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface KeyIssueDialogProps {
   serviceAccountId: number
@@ -140,6 +144,8 @@ export function KeyIssueDialog({
   }
 
   const handleSubmit = async () => {
+        if ((String((name) ?? '').length > 128)) return;
+
     if (!name.trim() || delegateInvalid) return
     const delegateScopes: DelegateScopeInput[] = selectedScopes.includes(
       "delegate",
@@ -193,11 +199,7 @@ export function KeyIssueDialog({
           ),
         )
         if (!updated) return
-        toast({
-          title: t("openApiManagement.keys.edit"),
-          description: t("openApiManagement.feedback.keyUpdated"),
-          variant: "success",
-        })
+        notification.open({ type: "success", title: String(t("openApiManagement.keys.edit") ?? ''), description: String(t("openApiManagement.feedback.keyUpdated") ?? '') })
         onUpdated()
         return
       }
@@ -205,11 +207,7 @@ export function KeyIssueDialog({
         issueServiceAccountKeyApi(serviceAccountId, payload),
       )
       if (!issued) return
-      toast({
-        title: t("openApiManagement.keys.issue"),
-        description: t("openApiManagement.feedback.keyIssued"),
-        variant: "success",
-      })
+      notification.open({ type: "success", title: String(t("openApiManagement.keys.issue") ?? ''), description: String(t("openApiManagement.feedback.keyIssued") ?? '') })
       onIssued(issued)
     } finally {
       setLoading(false)
@@ -241,7 +239,11 @@ export function KeyIssueDialog({
                     {t("openApiManagement.keys.endpointsTitle")}\n{endpointText}
                   </span>
                 }
-              />
+              >
+                <Button type="button" size="small" variant="text" color="default" iconOnly aria-label={t("openApiManagement.keys.endpointsTitle")}>
+                  <Outlined.Question />
+                </Button>
+              </QuestionTooltip>
             ) : null}
           </span>
           <span className="block text-xs text-muted-foreground">
@@ -278,12 +280,7 @@ export function KeyIssueDialog({
         <div className="max-h-[60vh] space-y-4 overflow-y-auto py-2 pr-1">
           <div className="space-y-2">
             <Label>{t("openApiManagement.fields.name")} *</Label>
-            <Input
-              value={name}
-              maxLength={128}
-              placeholder={t("openApiManagement.keys.namePlaceholder")}
-              onChange={(event) => setName(event.target.value)}
-            />
+            <Input value={name} maxLength={128} placeholder={t("openApiManagement.keys.namePlaceholder")} onChange={(event) => setName(event.target.value)} showCount />
           </div>
           <div className="space-y-2">
             <Label>{t("openApiManagement.fields.expiresAt")}</Label>
@@ -295,12 +292,7 @@ export function KeyIssueDialog({
                 onChange={(date) => setExpiresAt(toBackendDateTime(date))}
               />
               {expiresAt ? (
-                <Button
-                  type="button"
-                  variant="link"
-                  className="shrink-0 px-0"
-                  onClick={() => setExpiresAt(null)}
-                >
+                <Button type="button" variant="link" className="shrink-0 px-0" onClick={() => setExpiresAt(null)}>
                   {t("openApiManagement.keys.clearExpiry")}
                 </Button>
               ) : null}
@@ -401,19 +393,13 @@ export function KeyIssueDialog({
                     {delegateDepartments.length ? (
                       <div className="flex flex-wrap gap-2 pt-1">
                         {delegateDepartments.map((department) => (
-                          <Button
-                            key={department.id}
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
+                          <Button key={department.id} type="button" size="small" variant="outlined" onClick={() =>
                               setDelegateDepartments((current) =>
                                 current.filter(
                                   (item) => item.id !== department.id,
                                 ),
                               )
-                            }
-                          >
+                            } color="default">
                             {department.name} ×
                           </Button>
                         ))}
@@ -431,19 +417,12 @@ export function KeyIssueDialog({
           ) : null}
         </div>
         <DialogFooter>
-          <Button
-            variant="outline"
-            disabled={loading}
-            onClick={() => handleOpenChange(false)}
-          >
+          <Button variant="outlined" disabled={loading} onClick={() => handleOpenChange(false)} color="default">
             {t("cancel")}
           </Button>
-          <Button
-            disabled={loading || !name.trim() || delegateInvalid}
-            onClick={handleSubmit}
-          >
+          <Button disabled={((String((name) ?? '').length > 128)) || (loading || !name.trim() || delegateInvalid)} onClick={handleSubmit}>
             {loading ? (
-              <Loader2
+              <Outlined.Loading
                 aria-hidden="true"
                 className="mr-2 size-4 animate-spin"
               />

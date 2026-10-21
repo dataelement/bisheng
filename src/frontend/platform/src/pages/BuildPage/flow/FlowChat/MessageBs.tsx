@@ -1,20 +1,21 @@
 // @ts-strict-ignore
 import MessageButtons from "@/components/bs-comp/chatComponent/MessageButtons";
 import SourceEntry from "@/components/bs-comp/chatComponent/SourceEntry";
-import { ToastIcon } from "@/components/bs-icons";
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { cname } from "@/components/bs-ui/utils";
 import { WorkflowMessage } from "@/types/flow";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
-import { ChevronDown } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { Outlined } from "bisheng-icons";
+
+import CitationReferencesDrawer from "@/components/bs-comp/chatComponent/CitationReferencesDrawer";
+import { normalizeCitationItems,parseLegacyWebCitationContent } from "@/components/bs-comp/chatComponent/citationUtils";
+import { useMemo,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
 import ChatFile from "./ChatFileFile";
 import MessageMarkDown from "./MessageMarkDown";
 import { useMessageStore } from "./messageStore";
-import { useTranslation } from "react-i18next";
-import CitationReferencesDrawer from "@/components/bs-comp/chatComponent/CitationReferencesDrawer";
-import { normalizeCitationItems, parseLegacyWebCitationContent } from "@/components/bs-comp/chatComponent/citationUtils";
 
 
 const ReasoningLog = ({ loading, msg = '' }) => {
@@ -29,16 +30,16 @@ const ReasoningLog = ({ loading, msg = '' }) => {
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
                 {loading ?
                     <div className="flex items-center font-bold gap-2 text-sm">
-                        <LoadIcon className="text-primary duration-300" />
+                        <Outlined.Loading size={16} className="animate-spin text-primary duration-300" />
                         <span>{t('thinking')}</span>
                     </div>
                     :
                     <div className="flex items-center font-bold gap-2 text-sm">
-                        <ToastIcon type="success" />
+                        <Outlined.CheckCircle size={16} className="text-success" />
                         <span>{t('thoughtCompleted')}</span>
                     </div>
                 }
-                <ChevronDown className={open && 'rotate-180'} />
+                <Outlined.Down size={16} className={open && 'rotate-180'} />
             </div>
             <div className={cname('bg-[#F5F6F8] dark:bg-[#313336] px-4 py-2 overflow-hidden text-sm ', open ? 'h-auto' : 'h-0 p-0')}>
                 {msg.split('\n').map((line, index) => (

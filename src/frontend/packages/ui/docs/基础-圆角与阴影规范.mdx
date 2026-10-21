@@ -252,14 +252,16 @@ BISHENG 的投影走「淡」路线：带一点蓝黑色、透明度很低，把
 
 ### 2.1 投影两档
 
-| 档位 | 投影值 | Tailwind 类（即 token 名） | 用在哪 |
-|---|---|---|---|
-| 浮层投影 Popup | `0 2px 16px -2px rgba(0,23,66,0.10)` | `shadow-popup` | 下拉菜单、选择器面板、气泡卡片、悬浮提示——点开即现、点外即走的临时浮层 |
-| 模态投影 Modal | `0 0 16px 0 rgba(3,7,117,0.05)` | `shadow-modal` | 弹窗、抽屉——要求用户处理完才关闭的打断式浮层 |
+| 档位 | 投影值（浅色） | 投影值（深色） | Tailwind 类（即 token 名） | 用在哪 |
+|---|---|---|---|---|
+| 浮层投影 Popup | `0 2px 16px -2px rgba(0,23,66,0.10)` | `0 2px 16px -2px rgba(0,0,0,0.5)` | `shadow-popup` | 下拉菜单、选择器面板、气泡卡片、悬浮提示——点开即现、点外即走的临时浮层 |
+| 模态投影 Modal | `0 0 16px 0 rgba(3,7,117,0.05)` | `0 0 16px 0 rgba(0,0,0,0.4)` | `shadow-modal` | 弹窗、抽屉——要求用户处理完才关闭的打断式浮层 |
 
 <ShadowTiers />
 
-代码里取用类名即可，不要自己写投影值。
+代码里取用类名即可，不要自己写投影值。深色值由 token 自动切换，组件不写 `dark:shadow-*`。
+
+**深色模式下，与页面同色（`bg-bg-page`）的浮层还要加描边** `dark:border dark:border-border-base`：深色页面上投影再深也只是一圈暗晕，分不出浮层和页面的边界。目前通知提醒、面包屑折叠菜单按此处理；弹窗卡片本身常带描边。底色自带色调的浮层（文字提示、轻提示）不需要。
 
 ### 2.2 使用规则
 
@@ -369,7 +371,7 @@ BISHENG 的投影走「淡」路线：带一点蓝黑色、透明度很低，把
 3. Dialog 基座含 `sm:rounded-lg`，业务覆写圆角必须连 `sm:` 变体一起写（`rounded-2xl sm:rounded-2xl`）；弹窗统一 16px 落地时直接改基座为 `rounded-2xl`，此坑随之消失。
 4. 弹窗边框 `border-[#ebebeb]` 属裸 hex，迁移时换语义 token `border-border-base`（色彩规范 semantic 层）。
 5. `design-token.mdx` 增加「阴影 Shadow」节，从 SSOT 渲染（SHADOW 进 cjs 之后做，别手抄值）。
-6. 待决策（不阻塞 v1）：① 两档投影色是否统一为同一蓝黑基色（现浮层 rgba(0,23,66,·) vs 模态 rgba(3,7,117,·)，肉眼几乎无差）；② `.shadow-stroke`（13 处）/ `shadow-outline`（6 处）两个自定义类的去留；③ 暗色模式是否为投影单独给值（现方案：同值不调）；④ 下拉基准（DropdownMenu / Select）是否补 1px 边框（边框已改为非硬性，见 §2.2）。
+6. 待决策（不阻塞 v1）：① 两档投影色是否统一为同一蓝黑基色（现浮层 rgba(0,23,66,·) vs 模态 rgba(3,7,117,·)，肉眼几乎无差）；② `.shadow-stroke`（13 处）/ `shadow-outline`（6 处）两个自定义类的去留；③ ~~暗色模式是否为投影单独给值~~ **2026-10-21 已定：单独给值**（黑色、更高不透明度，见 §2.1），页面同色浮层另加深色描边；④ 下拉基准（DropdownMenu / Select）是否补 1px 边框（边框已改为非硬性，见 §2.2）。
 7. 组件-Modal弹窗.md 待决策清单「圆角：弹窗用几 px？」可勾销，标注「2026-07-23 定 16px，见基础-圆角与阴影规范」。
 8a. §3 毛玻璃的 agent 执行口径:禁用 `backdrop-blur-*`(含 `backdrop-blur-[4px]` 等任意值、`hover:` 等变体前缀)与任意属性写法 `[backdrop-filter:blur(…)]`;CSS 里同样禁 `backdrop-filter` / `-webkit-backdrop-filter`。2026-08-04 已全量清除 client 33 处 + platform 7 处,含两处只在 `@apply` 里出现、grep `backdrop-blur` 抓不到的写法。
 

@@ -1,9 +1,11 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Button, Input } from '@bisheng/ui';
+
+
+import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from 'react-i18next';
 
 const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
@@ -43,7 +45,7 @@ const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
                     </SelectGroup>
                 </SelectContent>
             </Select>
-            <Trash2 onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
+            <Outlined.Delete size={16} onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
         </div>
     );
 };
@@ -121,7 +123,7 @@ export default function CodeOutputItem({ nodeId, data, onValidate, onChange, i18
                     onDeleteItem={handleDeleteItem}
                 />
             ))}
-            <Button onClick={handleAddItem} variant="outline" className="border-primary text-primary mt-2 h-8">
+            <Button onClick={handleAddItem} variant="outlined" className="border-primary text-primary mt-2 h-8" color="default">
                 {t('addNewParameter')}
             </Button>
         </div>

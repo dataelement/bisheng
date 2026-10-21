@@ -5,14 +5,7 @@ import { Component, useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The real SearchInput renders an SVG asset that jsdom cannot mount.
-vi.mock("@/components/bs-ui/input", async () => {
-    const { forwardRef } = await import("react");
-    return {
-        SearchInput: forwardRef<HTMLInputElement, { placeholder?: string; onChange?: (e: unknown) => void }>(
-            ({ placeholder, onChange }, ref) => <input ref={ref} placeholder={placeholder} onChange={onChange} />
-        ),
-    };
-});
+
 
 /**
  * jsdom has no IntersectionObserver. This stub keeps the one browser rule the

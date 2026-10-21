@@ -2,13 +2,8 @@ import { KeyRoundIcon } from 'lucide-react';
 import { AuthType, AgentCapabilities } from '~/types/chat';
 import { useFormContext, Controller, useWatch } from 'react-hook-form';
 import type { AgentForm } from '~/common';
-import {
-  Checkbox,
-  HoverCard,
-  HoverCardContent,
-  HoverCardPortal,
-  HoverCardTrigger,
-} from '~/components/ui';
+import { HoverCard, HoverCardContent, HoverCardPortal, HoverCardTrigger } from '~/components/ui';
+import { Checkbox } from '@bisheng/ui';
 import { useLocalize, useCodeApiKeyForm } from '~/hooks';
 import { CircleHelpIcon } from '~/components/svg';
 import ApiKeyDialog from './ApiKeyDialog';
@@ -58,7 +53,7 @@ export default function Action({ authType = '', isToolAuthenticated = false }) {
                 {...field}
                 checked={runCodeIsEnabled ? runCodeIsEnabled : isToolAuthenticated && field.value}
                 onCheckedChange={handleCheckboxChange}
-                className="relative float-left mr-2 inline-flex h-4 w-4 cursor-pointer"
+                className="peer relative float-left mr-2 inline-flex h-4 w-4 cursor-pointer"
                 value={field.value.toString()}
                 disabled={runCodeIsEnabled ? false : !isToolAuthenticated}
               />

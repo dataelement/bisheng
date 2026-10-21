@@ -1,18 +1,20 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/bs-ui/dropdownMenu"
-import { Input } from "@/components/bs-ui/input"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { useComponentEditorStore } from "@/store/dashboardStore"
-import { Copy, Edit3, GripHorizontalIcon, MoreHorizontal, MoreVerticalIcon, Trash2 } from "lucide-react"
-import { memo, useEffect, useRef, useState } from "react"
-import { ChartType, Dashboard, DashboardComponent } from "../../types/dataConfig"
-import { ChartContainer } from "../charts/ChartContainer"
-import { QueryFilter } from "../charts/QueryFilter"
-import "./index.css"
-import { cn } from "@/utils"
-import { useTranslation } from "react-i18next"
-import Tip from "@/components/bs-ui/tooltip/tip"
+import { Button, Input, notification } from '@bisheng/ui';
+
+import { DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSub,DropdownMenuSubContent,DropdownMenuSubTrigger,DropdownMenuTrigger } from "@/components/bs-ui/dropdownMenu";
+
+
+import { useComponentEditorStore } from "@/store/dashboardStore";
+import { cn } from "@/utils";
+import { Tooltip as Tip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { GripHorizontalIcon } from "lucide-react";
+import { memo,useEffect,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { ChartType,Dashboard,DashboardComponent } from "../../types/dataConfig";
+import { ChartContainer } from "../charts/ChartContainer";
+import { QueryFilter } from "../charts/QueryFilter";
+import "./index.css";
 
 interface ComponentWrapperProps {
     component: DashboardComponent
@@ -35,7 +37,7 @@ export const ComponentWrapper = memo(({
     const [isHovered, setIsHovered] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
-    const { toast } = useToast()
+
     const [title, setTitle] = useState('')
     const { hasChange, copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
@@ -75,10 +77,7 @@ export const ComponentWrapper = memo(({
 
         if (trimmedTitle.length < 1 || trimmedTitle.length > 200) {
             setTitle(component.title)
-            toast({
-                description: t('charLimit200'),
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String(t('charLimit200') ?? '') })
             return
         }
 
@@ -151,12 +150,8 @@ export const ComponentWrapper = memo(({
                 <div className="absolute top-2 right-2 z-10">
                     <DropdownMenu onOpenChange={(b) => b && handleClick()}>
                         <DropdownMenuTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 bg-background/80 border border-border shadow-sm hover:bg-accent dark:border-gray-500 dark:text-gray-500"
-                            >
-                                <MoreVerticalIcon className="h-4 w-4" />
+                            <Button variant="text" size="medium" className="h-6 w-6 bg-background/80 border border-border shadow-sm hover:bg-accent dark:border-gray-500 dark:text-gray-500" color="default" iconOnly>
+                                <Outlined.More className="h-4 w-4" />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className={isDark && 'dark border-gray-700'}>
@@ -167,7 +162,7 @@ export const ComponentWrapper = memo(({
                                         e.stopPropagation()
                                         onDuplicate(componentData)
                                     }}>
-                                        <Copy className="h-4 w-4 mr-2" />
+                                        <Outlined.Copy className="h-4 w-4 mr-2" />
                                         {t('duplicate')}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
@@ -177,7 +172,7 @@ export const ComponentWrapper = memo(({
                                             onDelete(component.id)
                                         }}
                                     >
-                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        <Outlined.Delete className="h-4 w-4 mr-2" />
                                         {t('delete')}
                                     </DropdownMenuItem>
                                 </>
@@ -189,7 +184,7 @@ export const ComponentWrapper = memo(({
                                             e.stopPropagation()
                                             setIsEditing(true)
                                         }}>
-                                            <Edit3 className="h-4 w-4 mr-2" />
+                                            <Outlined.Edit className="h-4 w-4 mr-2" />
                                             {t('rename')}
                                         </DropdownMenuItem>
                                     }
@@ -197,12 +192,12 @@ export const ComponentWrapper = memo(({
                                         e.stopPropagation()
                                         onDuplicate(componentData)
                                     }}>
-                                        <Copy className="h-4 w-4 mr-2" />
+                                        <Outlined.Copy className="h-4 w-4 mr-2" />
                                         {t('duplicate')}
                                     </DropdownMenuItem>
                                     <DropdownMenuSub>
                                         <DropdownMenuSubTrigger onClick={(e) => e.stopPropagation()}>
-                                            <Copy className="h-4 w-4 mr-2" />
+                                            <Outlined.Copy className="h-4 w-4 mr-2" />
                                             {t('copyTo')}
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent onClick={(e) => e.stopPropagation()}>
@@ -219,7 +214,7 @@ export const ComponentWrapper = memo(({
                                                                 onCopyTo(componentData, dashboard.id)
                                                             }}
                                                         >
-                                                            <Tip content={dashboard.title} styleClasses="max-w-60 max-h-60 overflow-auto bg-black no-scrollbar">
+                                                            <Tip content={dashboard.title} >
                                                                 <div className="max-w-60 truncate">{dashboard.title}</div>
                                                             </Tip>
                                                         </DropdownMenuItem>
@@ -234,7 +229,7 @@ export const ComponentWrapper = memo(({
                                             onDelete(component.id)
                                         }}
                                     >
-                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        <Outlined.Delete className="h-4 w-4 mr-2" />
                                         {t('delete')}
                                     </DropdownMenuItem>
                                 </>
@@ -249,15 +244,7 @@ export const ComponentWrapper = memo(({
                 {!['query', 'metric'].includes(componentData.type) && (
                     <div className="group mb-2 relative">
                         {isEditing ? (
-                            <Input
-                                ref={inputRef}
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                onBlur={handleRenameBlur}
-                                onKeyDown={handleKeyDown}
-                                className="max-w-40 h-5 px-2 text-sm font-medium border-primary"
-                                onClick={(e) => e.stopPropagation()}
-                            />
+                            <Input ref={inputRef} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={handleRenameBlur} onKeyDown={handleKeyDown} onClick={(e) => e.stopPropagation()} className={"max-w-40 h-5 px-2 text-sm font-medium border-primary"} />
                         ) : (
                             <h3
                                 className={cn("text-sm font-medium truncate text-foreground",

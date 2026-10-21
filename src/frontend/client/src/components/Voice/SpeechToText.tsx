@@ -1,311 +1,106 @@
-// @ts-strict-ignore
-"use client"
+import { Outlined } from 'bisheng-icons';
+import { useEffect, useRef, useState } from 'react';
+import { useRecoilState } from 'recoil';
+import { getVoiceModels, selectVoiceModels, transcribeVoice } from '~/api/voice';
+import { useVoiceTarget } from '~/hooks/useVoice';
+import { Button } from '~/components/ui';
+import { useLocalize } from '~/hooks';
+import { useToastContext } from '~/Providers';
+import { VoiceSession } from '../../../../shared/voice/session';
+import { getAsrWebSocketUrl } from '../../../../shared/voice/url';
+import { interruptAudioAtom, useRecordingAudioLoading } from './textToSpeechStore';
 
-import { Outlined } from "bisheng-icons"
-import { LoaderCircle } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
-import { useRecoilState } from "recoil"
-import { transcribeVoice } from "~/api/voice"
-import { useLocalize } from "~/hooks"
-import { useVoiceTarget } from "~/hooks/useVoice"
-import { useToastContext } from "~/Providers"
-import { Button } from ".."
-import VoiceRecordingIcon from "../ui/icon/Voice"
-import { interruptAudioAtom, useRecordingAudioLoading } from "./textToSpeechStore"
-
-// --- Core Audio Processing Logic ---
-
-/**
- * Encodes an AudioBuffer to WAV format
- * Converts multi-channel audio to mono to reduce noise
- */
-const encodeWAV = (audioBuffer: AudioBuffer): Blob => {
-    const sampleRate = audioBuffer.sampleRate
-    const channels = audioBuffer.numberOfChannels
-    let samples = audioBuffer.getChannelData(0)
-
-    // Convert multi-channel to mono (reduces noise)
-    if (channels > 1) {
-        const monoSamples = new Float32Array(samples.length)
-        for (let i = 0; i < samples.length; i++) {
-            let sum = 0
-            for (let c = 0; c < channels; c++) {
-                sum += audioBuffer.getChannelData(c)[i]
-            }
-            monoSamples[i] = sum / channels
-        }
-        samples = monoSamples
-    }
-
-    // Encode WAV file header
-    const buffer = new ArrayBuffer(44 + samples.length * 2)
-    const view = new DataView(buffer)
-
-    const writeString = (view: DataView, offset: number, string: string) => {
-        for (let i = 0; i < string.length; i++) {
-            view.setUint8(offset + i, string.charCodeAt(i))
-        }
-    }
-
-    // RIFF Chunk
-    writeString(view, 0, "RIFF")
-    view.setUint32(4, 36 + samples.length * 2, true)
-    writeString(view, 8, "WAVE")
-
-    // fmt Chunk
-    writeString(view, 12, "fmt ")
-    view.setUint32(16, 16, true)
-    view.setUint16(20, 1, true) // PCM format
-    view.setUint16(22, 1, true) // Mono channel
-    view.setUint32(24, sampleRate, true)
-    view.setUint32(28, sampleRate * 2, true)
-    view.setUint16(32, 2, true)
-    view.setUint16(34, 16, true) // 16-bit
-
-    // data Chunk
-    writeString(view, 36, "data")
-    view.setUint32(40, samples.length * 2, true)
-
-    // Write PCM data
-    let offset = 44
-    for (let i = 0; i < samples.length; i++) {
-        const s = Math.max(-1, Math.min(1, samples[i]))
-        view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
-        offset += 2
-    }
-
-    return new Blob([view], { type: "audio/wav" })
+interface SpeechToTextProps {
+  disabled?: boolean;
+  realtime?: boolean;
+  modelId?: string;
+  stopSignal?: number;
+  onChange: (text: string) => void;
+  onRecordingStart?: () => void;
+  onRecordingEnd?: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
-/**
- * Converts a Blob to WAV format using Web Audio API
- */
-const convertBlobToWav = async (blob: Blob): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
-            sampleRate: 44100,
-        })
-        const fileReader = new FileReader()
+export function SpeechToTextComponent(props: SpeechToTextProps) {
+  const [recording, setRecording] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const sessionRef = useRef<VoiceSession | null>(null);
+  const callbacks = useRef(props);
+  callbacks.current = props;
+  const localize = useLocalize();
+  const voiceTarget = useVoiceTarget();
+  const { showToast } = useToastContext();
+  const [interruptAudio] = useRecoilState(interruptAudioAtom);
+  const [, setAudioOpening] = useRecordingAudioLoading();
+  const errorRef = useRef(() => {});
+  const startingRef = useRef(false);
+  errorRef.current = () => showToast({ message: localize('voice_input.failed'), status: 'error' });
 
-        fileReader.onload = async () => {
-            try {
-                const audioBuffer = await audioContext.decodeAudioData(fileReader.result as ArrayBuffer)
-                const wavBlob = encodeWAV(audioBuffer)
-                resolve(wavBlob)
-                audioContext.close()
-            } catch (err) {
-                reject(new Error("Audio decoding failed: " + (err as Error).message))
-                audioContext.close()
-            }
-        }
+  useEffect(() => { sessionRef.current?.stop(); }, [interruptAudio]);
+  useEffect(() => () => { sessionRef.current?.cancel(); }, []);
+  useEffect(() => { sessionRef.current?.stop(); }, [props.stopSignal]);
+  useEffect(() => { if (props.disabled) sessionRef.current?.cancel(); }, [props.disabled]);
 
-        fileReader.onerror = () => {
-            reject(new Error("Failed to read audio file"))
-        }
+  const handleClick = () => {
+    if (recording) { sessionRef.current?.stop(); return; }
+    if (sessionRef.current || props.disabled || startingRef.current) return;
+    void begin();
+  };
 
-        fileReader.readAsArrayBuffer(blob)
-    })
-}
-
-// --- Main Component ---
-
-interface SpeechToTextComponentProps {
-    disabled?: boolean
-    onChange: (text: string) => void
-}
-
-const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProps) => {
-    const { showToast } = useToastContext()
-    const [isRecording, _setIsRecording] = useState(false)
-    const isRecordingRef = useRef(false)
-    const setIsRecording = useCallback((value: boolean) => {
-        isRecordingRef.current = value
-        _setIsRecording(value)
-    }, [_setIsRecording])
-    const [isProcessing, setIsProcessing] = useState(false)
-    const localize = useLocalize();
-    const voiceTarget = useVoiceTarget();
-
-
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-    const audioChunksRef = useRef<Blob[]>([])
-    const audioContextRef = useRef<AudioContext | null>(null)
-    const streamRef = useRef<MediaStream | null>(null)
-
-    const [interruptAudio] = useRecoilState(interruptAudioAtom)
-    const [_, setAudioOpening] = useRecordingAudioLoading()
-
-    useEffect(() => {
-        stopRecording(null)
-    }, [interruptAudio])
-
-    /**
-     * Cleans up all audio resources
-     */
-    const cleanupResources = useCallback(async () => {
-        // Stop all media tracks
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach((track) => track.stop())
-            streamRef.current = null
-        }
-
-        // Close audio context
-        if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-            await audioContextRef.current.close()
-            audioContextRef.current = null
-        }
-
-        // Clear media recorder
-        mediaRecorderRef.current = null
-        setAudioOpening(false)
-    }, [])
-
-    /**
-     * Sends audio to speech-to-text API
-     */
-    const convertSpeechToText = useCallback(
-        async (audioBlob: Blob) => {
-            try {
-                const formData = new FormData()
-                formData.append("file", audioBlob, "recording.wav")
-                const res = await transcribeVoice(formData, voiceTarget)
-                const responseData = res.data
-                const transcript = responseData || ""
-
-                // Pass recognized text to parent component
-                // if (!transcript) {
-                //     return showToast({ message: localize('no_text_recognized'), status: "info" })
-                // }
-                onChange(transcript)
-            } catch (err) {
-                console.error("Speech recognition error:", err)
-                showToast({ message: localize('no_text_recognized'), status: "warning" })
-            } finally {
-                setIsProcessing(false)
-            }
+  const begin = async () => {
+    startingRef.current = true;
+    try {
+      // The button was rendered from a cached model. Read the current one so an
+      // admin switch does not require a full page reload.
+      const models = selectVoiceModels(await getVoiceModels(voiceTarget));
+      const modelId = models.asr_model?.id ? String(models.asr_model.id) : '';
+      if (!modelId || sessionRef.current || callbacks.current.disabled) {
+        if (!modelId) errorRef.current();
+        return;
+      }
+      callbacks.current.onRecordingStart?.();
+      const session = new VoiceSession({
+        realtime: voiceTarget.version === 'v1' && !!models.asr_model?.realtime,
+        modelId,
+        websocketUrl: getAsrWebSocketUrl(import.meta.env.BASE_URL, window.location.origin),
+        transcribe: async (form) => {
+          const response = await transcribeVoice(form, voiceTarget);
+          return typeof response.data === 'string' ? response.data : '';
         },
-        [onChange, showToast, localize, voiceTarget],
-    )
+      }, {
+        onState: (active, pending) => {
+          setRecording(active);
+          setBusy(pending);
+          setAudioOpening(active);
+          callbacks.current.onBusyChange?.(pending);
+        },
+        onText: (text) => callbacks.current.onChange(text),
+        onError: () => errorRef.current(),
+        onEnd: () => {
+          sessionRef.current = null;
+          callbacks.current.onRecordingEnd?.();
+        },
+      });
+      sessionRef.current = session;
+      void session.start();
+    } catch {
+      errorRef.current();
+    } finally {
+      startingRef.current = false;
+    }
+  };
 
-    /**
-     * Starts audio recording with optimized settings
-     */
-    const startRecording = useCallback(async (e) => {
-        try {
-            setAudioOpening(true)
-            e.preventDefault();
-            audioChunksRef.current = []
-            setIsProcessing(false)
-            // Ten minute recording limit
-            setTimeout(() => {
-                if (!isRecordingRef.current) return
-                setIsProcessing(true)
-                mediaRecorderRef.current?.stop()
-                setIsRecording(false)
-            }, 600000)
-
-            // Request microphone access with noise reduction settings
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    sampleRate: 44100,
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                },
-            })
-
-            streamRef.current = stream
-
-            // Initialize AudioContext for optimized encoding
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
-                sampleRate: 44100,
-            })
-            audioContextRef.current = audioContext
-
-            // Initialize MediaRecorder with optimal codec
-            const options = { mimeType: "audio/webm; codecs=opus" }
-            const mediaRecorder = new MediaRecorder(stream, options)
-            mediaRecorderRef.current = mediaRecorder
-
-            // Collect audio data chunks
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    audioChunksRef.current.push(event.data)
-                }
-            }
-
-            // Handle recording stop
-            mediaRecorder.onstop = async () => {
-                if (window.interruptAudio) {
-                    setIsProcessing(false)
-                    return cleanupResources()
-                }
-                try {
-                    setIsProcessing(true)
-
-                    // Convert recorded audio to WAV format
-                    const rawBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
-                    const wavBlob = await convertBlobToWav(rawBlob)
-
-                    // Send to speech-to-text API
-                    await convertSpeechToText(wavBlob)
-                } catch (conversionError) {
-                    console.error("Audio conversion failed:", conversionError)
-                    showToast({ message: "Audio format conversion failed, please try again", status: "warning" })
-                    setIsProcessing(false)
-                } finally {
-                    await cleanupResources()
-                    setIsProcessing(false)
-                }
-            }
-
-            // Start recording
-            mediaRecorder.start()
-            setIsRecording(true)
-        } catch (err) {
-            console.error("Microphone access error:", err)
-            showToast({ message: "Microphone access denied", status: "warning" })
-            await cleanupResources()
-        }
-    }, [convertSpeechToText, showToast, cleanupResources, interruptAudio])
-
-    /**
-     * Stops the current recording
-     */
-    const stopRecording = useCallback((e) => {
-        e?.preventDefault();
-        if (isProcessing) return
-
-        if (mediaRecorderRef.current && isRecording) {
-            setIsProcessing(true)
-            mediaRecorderRef.current.stop()
-            setIsRecording(false)
-        }
-    }, [isRecording, isProcessing])
-
-    return (
-        <div className="relative z-10">
-            {/* Recording control button */}
-            <div className={disabled ? 'cursor-not-allowed' : ''}>
-                {isProcessing && <LoaderCircle size={30} className="animate-spin p-1" />}
-                {!isProcessing && isRecording && (
-                    <Button size={'icon'} variant='outline' onClick={stopRecording} className="rounded-full w-8 h-8">
-                        {/* <AudioLines size={18} className="animate-pulse" /> */}
-                        <VoiceRecordingIcon onClick={() => { }} />
-                    </Button>
-                )}
-                {!isProcessing && !isRecording && (
-                    <Button size={'icon'} disabled={disabled} onClick={startRecording} className="rounded-full w-8 h-8">
-                        <Outlined.Microphone size={18} />
-                    </Button>
-                )}
-            </div>
-
-            {/* Recording pulse animation */}
-            {isRecording && <div className="pulse-ring"></div>}
-        </div>
-    )
+  const label = localize(recording ? 'voice_input.pause' : 'voice_input.start');
+  return (
+    <Button
+      type="button" size="icon" variant={recording ? 'outline' : 'default'}
+      className="rounded-full w-8 h-8" disabled={!recording && (props.disabled || busy)}
+      aria-label={label} title={label} aria-pressed={recording}
+      onMouseDown={(event) => event.preventDefault()} onClick={handleClick}
+    >
+      {recording ? <Outlined.PlayerPause size={18} /> : <Outlined.Microphone size={18} />}
+    </Button>
+  );
 }
 
-export default SpeechToTextComponent
+export default SpeechToTextComponent;

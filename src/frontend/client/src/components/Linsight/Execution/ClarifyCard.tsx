@@ -11,7 +11,7 @@
 import { ArrowRight, Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Textarea } from '~/components/ui';
+import { Textarea } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
@@ -68,7 +68,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
     const skipText = localize('com_linsight_clarify_skipped');
 
     const finishAndSubmit = (finalAnswers: Record<string, string[]>) => {
-        if (submitted) return;
+        if (submitted || freeText.length > 10000) return;
         setSubmitted(true);
         // merge custom input text into each question's answer list
         const merged: Record<string, string[]> = {};
@@ -361,6 +361,7 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                     disabled={disabled || submitted}
                     rows={4}
                     maxLength={10000}
+                    showCount
                     placeholder={localize('com_linsight_clarify_input_placeholder')}
                     onChange={(e) => setFreeText(e.target.value)}
                     onKeyDown={(e) => {
@@ -370,7 +371,8 @@ function ClarifyCardInteractive({ data, disabled = false, onSubmit }: ClarifyCar
                             handleConfirm();
                         }
                     }}
-                    className="mt-4 resize-none text-sm rounded-xl border-none shadow-none bg-[#F5F7FA] placeholder:text-text-3 focus-visible:ring-0 focus-visible:outline-none"
+                    className="mt-4"
+                    textareaClassName="resize-none"
                 />
             )}
 

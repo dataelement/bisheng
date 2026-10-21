@@ -1,8 +1,8 @@
 // @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getKnowledgeDetailApi, readFileLibDatabase } from "@/controllers/API";
-import { useEffect, useRef, useState } from "react";
+import { getKnowledgeDetailApi,readFileLibDatabase } from "@/controllers/API";
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 

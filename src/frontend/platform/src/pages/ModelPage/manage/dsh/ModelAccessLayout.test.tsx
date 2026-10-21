@@ -99,9 +99,9 @@ describe('model access layout', () => {
         render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
         await screen.findByText('Engineering')
         expect(screen.queryByText('Platform')).toBeNull()
-        const root = screen.getByRole('button', { name: 'Organization · ▾' })
+        const root = screen.getByRole('button', { name: 'dsh.collapseDepartment: Organization' })
         expect(root).toHaveAttribute('aria-expanded', 'true')
-        const child = screen.getByRole('button', { name: 'Engineering · ▾' })
+        const child = screen.getByRole('button', { name: 'dsh.expandDepartment: Engineering' })
         expect(child).toHaveAttribute('aria-expanded', 'false')
         expect(screen.getByRole('navigation')).toBeTruthy()
         await waitFor(() =>

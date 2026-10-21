@@ -1,24 +1,28 @@
 // @ts-strict-ignore
-import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
-import { GithubIcon } from '@/components/bs-icons/github';
-import { LoadingIcon } from '@/components/bs-icons/loading';
+import { Button, Input, toast, notification } from '@bisheng/ui';
+import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+import { GithubIcon } from "@/components/bs-icons/github";
+
 import { useContext, useEffect, useRef, useState } from "react";
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from "react-i18next";
 import json from "../../../package.json";
-import { Button } from "../../components/bs-ui/button";
-import { Input } from "../../components/bs-ui/input";
+
+
 // import { alertContext } from "../contexts/alertContext";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { useLocation, useNavigate } from 'react-router-dom';
+
+import { locationContext } from "@/contexts/locationContext";
+import { getSSOurlApi, ldapLoginApi } from "@/controllers/API/pro";
+import { getBrandAssetUrl } from "@/utils/brand";
+import { consumeLoginReturnTo } from "@/utils/loginReturnTo";
+import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import LoginBridge from './loginBridge';
-import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from './utils';
-import { locationContext } from '@/contexts/locationContext';
-import { ldapLoginApi, getSSOurlApi } from '@/controllers/API/pro';
-import { getBrandAssetUrl } from '@/utils/brand';
-import { consumeLoginReturnTo } from '@/utils/loginReturnTo';
-import { getWorkspaceClientUrl } from '@/utils/workspaceUrl';
+import LoginBridge from "./loginBridge";
+import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from "./utils";
 
 interface LoginPageProps {
     // Backdoor entry: skip SSO auto-redirect and clear any stored third-party
@@ -29,75 +33,75 @@ interface LoginPageProps {
 export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
-    const { message, toast } = useToast()
-    const navigate = useNavigate()
-    const { appConfig } = useContext(locationContext)
-    const isLoading = false
 
-    const personIdRef = useRef(null)
-    const userNameRef = useRef(null)
-    const pwdRef = useRef(null)
-    const agenPwdRef = useRef(null)
+    const navigate = useNavigate();
+    const { appConfig } = useContext(locationContext);
+    const isLoading = false;
+
+    const personIdRef = useRef(null);
+    const userNameRef = useRef(null);
+    const pwdRef = useRef(null);
+    const agenPwdRef = useRef(null);
 
     // login or register
-    const [showLogin, setShowLogin] = useState(true)
+    const [showLogin, setShowLogin] = useState(true);
 
     // Check third-party redirect login before rendering the login form
-    const [oauthLoading, setOauthLoading] = useState(true)
-    const [oauthData, setOauthData] = useState<any>(null)
+    const [oauthLoading, setOauthLoading] = useState(true);
+    const [oauthData, setOauthData] = useState<any>(null);
 
     useEffect(() => {
         if (forceLocal) {
             // Strip any stale third-party URLs left by a previous visit to `/`,
             // otherwise the 401 interceptor and logout handlers would still
             // redirect this session to the IdP.
-            localStorage.removeItem('THIRD_PARTY_LOGIN_URL')
-            localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
+            localStorage.removeItem("THIRD_PARTY_LOGIN_URL");
+            localStorage.removeItem("THIRD_PARTY_LOGOUT_URL");
         }
         getSSOurlApi()
             .then((urls: any) => {
-                setOauthData(urls)
+                setOauthData(urls);
                 if (urls?.ldap) {
-                    setHasLdap(true)
+                    setHasLdap(true);
                 }
                 if (urls?.ldapCheckboxLabel) {
-                    setLdapCheckboxLabel(urls.ldapCheckboxLabel)
-                    setIsLdapLogin(true)
+                    setLdapCheckboxLabel(urls.ldapCheckboxLabel);
+                    setIsLdapLogin(true);
                 }
                 if (forceLocal) {
                     // Backdoor route: never persist redirect URLs and never auto-jump.
-                    setOauthLoading(false)
-                    return
+                    setOauthLoading(false);
+                    return;
                 }
                 // Persist redirect URLs for interceptor access (401 / logout)
                 if (urls?.redirect_login_url) {
-                    localStorage.setItem('THIRD_PARTY_LOGIN_URL', urls.redirect_login_url)
+                    localStorage.setItem("THIRD_PARTY_LOGIN_URL", urls.redirect_login_url);
                 } else {
-                    localStorage.removeItem('THIRD_PARTY_LOGIN_URL')
+                    localStorage.removeItem("THIRD_PARTY_LOGIN_URL");
                 }
                 if (urls?.redirect_logout_url) {
-                    localStorage.setItem('THIRD_PARTY_LOGOUT_URL', urls.redirect_logout_url)
+                    localStorage.setItem("THIRD_PARTY_LOGOUT_URL", urls.redirect_logout_url);
                 } else {
-                    localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
+                    localStorage.removeItem("THIRD_PARTY_LOGOUT_URL");
                 }
                 // Redirect immediately if third-party login URL is configured
                 if (urls?.redirect_login_url) {
-                    window.location.href = urls.redirect_login_url
-                    return
+                    window.location.href = urls.redirect_login_url;
+                    return;
                 }
-                setOauthLoading(false)
+                setOauthLoading(false);
             })
             .catch(() => {
                 // Third-party service unavailable — fall through to normal login
-                setOauthLoading(false)
-            })
-    }, [forceLocal])
+                setOauthLoading(false);
+            });
+    }, [forceLocal]);
 
-    useLoginError()
+    useLoginError();
 
     // captcha
-    const captchaRef = useRef(null)
-    const [captchaData, setCaptchaData] = useState({ captcha_key: '', user_capthca: false, captcha: '' });
+    const captchaRef = useRef(null);
+    const [captchaData, setCaptchaData] = useState({ captcha_key: "", user_capthca: false, captcha: "" });
 
     useEffect(() => {
         fetchCaptchaData();
@@ -110,45 +114,42 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                 const enabled =
                     rawFlag === true ||
                     rawFlag === 1 ||
-                    (typeof rawFlag === 'string'
-                        && ['true', '1', 'yes', 'on'].includes(String(rawFlag).trim().toLowerCase()));
+                    (typeof rawFlag === "string" &&
+                        ["true", "1", "yes", "on"].includes(String(rawFlag).trim().toLowerCase()));
                 setCaptchaData({
-                    captcha_key: raw?.captcha_key ?? '',
-                    captcha: raw?.captcha ?? '',
+                    captcha_key: raw?.captcha_key ?? "",
+                    captcha: raw?.captcha ?? "",
                     user_capthca: enabled,
                 });
             })
             .catch(() => {
-                setCaptchaData({ captcha_key: '', captcha: '', user_capthca: false });
+                setCaptchaData({ captcha_key: "", captcha: "", user_capthca: false });
             });
     };
 
-    const [hasLdap, setHasLdap] = useState(false)
-    const [ldapCheckboxLabel, setLdapCheckboxLabel] = useState('')
-    const [isLdapLogin, setIsLdapLogin] = useState(true)
-    const enableDualLogin = hasLdap && !!ldapCheckboxLabel
-    // 仅当网关下发了「LDAP / 本地」切换文案时，才走 LDAP 口令登录；否则有 LDAP 配置也走 Bisheng
-    // 本地登录（含验证码），避免「界面不显示验证码却走 LDAP/空 captcha_key」导致后端报验证码错误。
-    const shouldUseLdap = hasLdap && !!ldapCheckboxLabel && isLdapLogin
-    const showCaptcha = captchaData.user_capthca && (!showLogin || !shouldUseLdap)
+    const [hasLdap, setHasLdap] = useState(false);
+    const [ldapCheckboxLabel, setLdapCheckboxLabel] = useState("");
+    const [isLdapLogin, setIsLdapLogin] = useState(true);
+    const enableDualLogin = hasLdap && !!ldapCheckboxLabel;
+
+    const shouldUseLdap = hasLdap && !!ldapCheckboxLabel && isLdapLogin;
+    const showCaptcha = captchaData.user_capthca && (!showLogin || !shouldUseLdap);
 
     const handleLogin = async () => {
-        const error = []
-        const [personId, pwd] = [personIdRef.current.value, pwdRef.current.value]
-        if (!personId) error.push(t('login.pleaseEnterPersonId'))
-        if (!pwd) error.push(t('login.pleaseEnterPassword'))
-        if (!shouldUseLdap && captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
-        if (error.length) return message({
-            title: `${t('prompt')}`,
-            variant: 'warning',
-            description: error
-        })
+        const error = [];
+        const [personId, pwd] = [personIdRef.current.value, pwdRef.current.value];
+        if (!personId) error.push(t("login.pleaseEnterPersonId"));
+        if (!pwd) error.push(t("login.pleaseEnterPassword"));
+        if (!shouldUseLdap && captchaData.user_capthca && !captchaRef.current.value)
+            error.push(t("login.pleaseEnterCaptcha"));
+        if (error.length)
+            return toast.show({ type: "warning", message: [String(`${t("prompt")}`), error.filter(Boolean).join('\n')].filter(Boolean).join('\n') });
         // if (error.length) return setErrorData({
         //     title: `${t('prompt')}:`,
         //     list: error,
         // });
 
-        const encryptPwd = shouldUseLdap ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
+        const encryptPwd = shouldUseLdap ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd);
         captureAndAlertRequestErrorHoc(
             (shouldUseLdap
                 ? ldapLoginApi(personId, encryptPwd)
@@ -157,234 +158,237 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                 // v2.5.1: leaf tenant is derived from the user's primary department.
                 // Ignore any stale "requires_tenant_selection" response fields.
                 if (res.requires_tenant_selection) {
-                    sessionStorage.removeItem('pending_tenants')
+                    sessionStorage.removeItem("pending_tenants");
                 }
 
-                window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
-                localStorage.setItem('isLogin', '1')
+                window.self === window.top
+                    ? localStorage.removeItem("ws_token")
+                    : localStorage.setItem("ws_token", res.access_token);
+                localStorage.setItem("isLogin", "1");
                 // A 401 anywhere in the two SPAs stores where the user was; come
                 // back to it. Validated + consumed in one place so this path and
                 // the SSO landing in App.tsx cannot drift apart.
-                const returnTo = consumeLoginReturnTo()
+                const returnTo = consumeLoginReturnTo();
                 if (returnTo) {
-                    location.href = returnTo
+                    location.href = returnTo;
                 } else {
-                    const entry = (res as { default_entry?: string }).default_entry
-                    if (entry === 'workspace') {
-                        location.href = getWorkspaceClientUrl('/')
+                    const entry = (res as { default_entry?: string }).default_entry;
+                    if (entry === "workspace") {
+                        location.href = getWorkspaceClientUrl("/");
                     } else {
                         // Both areas or admin-only: default to admin shell first.
-                        location.href = `${__APP_ENV__.BASE_URL}/admin`
+                        location.href = `${__APP_ENV__.BASE_URL}/admin`;
                     }
                 }
-            }), (error) => {
-                if (error?.code === 10601) { // 密码过期
-                    localStorage.setItem('account', personId)
-                    navigate('/reset', { state: { noback: true } })
-                    return true // Skip the default error toast; resetPwd page shows its own
+            }),
+            (error) => {
+                if (error?.code === 10601) {
+                    // 密码过期
+                    localStorage.setItem("account", personId);
+                    navigate("/reset", { state: { noback: true } });
+                    return true; // Skip the default error toast; resetPwd page shows its own
                 }
-            })
+            },
+        );
 
-        fetchCaptchaData()
-    }
+        fetchCaptchaData();
+    };
 
     const handleRegister = async () => {
-        const error = []
+        const error = [];
         const [personId, userName, pwd, apwd] = [
             personIdRef.current.value,
             userNameRef.current?.value,
             pwdRef.current.value,
-            agenPwdRef.current.value
-        ]
+            agenPwdRef.current.value,
+        ];
         if (!personId) {
-            error.push(t('login.pleaseEnterPersonId'))
+            error.push(t("login.pleaseEnterPersonId"));
         }
         if (!userName) {
-            error.push(t('login.pleaseEnterUserName'))
+            error.push(t("login.pleaseEnterUserName"));
         }
         if (personId.length < 2) {
-            error.push(t('login.personIdTooShort'))
+            error.push(t("login.personIdTooShort"));
         }
         if (!/.{8,}/.test(pwd)) {
-            error.push(t('login.passwordTooShort'))
+            error.push(t("login.passwordTooShort"));
         }
         if (!PWD_RULE.test(pwd)) {
-            error.push(t('login.passwordError'))
+            error.push(t("login.passwordError"));
         }
         if (pwd !== apwd) {
-            error.push(t('login.passwordMismatch'))
+            error.push(t("login.passwordMismatch"));
         }
         if (captchaData.user_capthca && !captchaRef.current.value) {
-            error.push(t('login.pleaseEnterCaptcha'))
+            error.push(t("login.pleaseEnterCaptcha"));
         }
         if (error.length) {
-            return message({
-                title: `${t('prompt')}`,
-                variant: 'warning',
-                description: error
-            })
+            return toast.show({ type: "warning", message: [String(`${t("prompt")}`), error.filter(Boolean).join('\n')].filter(Boolean).join('\n') });
         }
-        const encryptPwd = await handleEncrypt(pwd)
-        captureAndAlertRequestErrorHoc(registerApi(userName, personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(res => {
-            // setSuccessData({ title: t('login.registrationSuccess') })
-            message({
-                title: `${t('prompt')}`,
-                variant: 'success',
-                description: [t('login.registrationSuccess')]
-            })
-            pwdRef.current.value = ''
-            setShowLogin(true)
-        }))
+        const encryptPwd = await handleEncrypt(pwd);
+        captureAndAlertRequestErrorHoc(
+            registerApi(userName, personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(
+                (res) => {
+                    // setSuccessData({ title: t('login.registrationSuccess') })
+                    toast.show({ type: "success", message: [String(`${t("prompt")}`), ([t("login.registrationSuccess")]).filter(Boolean).join('\n')].filter(Boolean).join('\n') });
+                    pwdRef.current.value = "";
+                    setShowLogin(true);
+                },
+            ),
+        );
 
-        fetchCaptchaData()
-    }
+        fetchCaptchaData();
+    };
 
     // Show loading spinner while checking for third-party redirect
     if (oauthLoading) {
-        return <div className='w-full h-full bg-background-dark flex justify-center items-center'>
-            <LoadingIcon className="w-48 text-primary" />
-        </div>
+        return (
+            <div className="w-full h-full bg-background-dark flex justify-center items-center">
+                <LoadingIcon className="w-48 text-primary" />
+            </div>
+        );
     }
 
-    return <div className='w-full min-h-screen bg-background-dark flex items-center justify-center sm:py-4 overflow-y-auto'>
-        <div className='relative z-10 sm:w-[1280px] w-full sm:h-[720px] h-full sm:shrink-0 border rounded-lg shadow-xl overflow-hidden bg-background-login'>
-            <div className='w-[420px] h-[704px] m-[8px] hidden sm:block relative z-20'>
-                <img src={getBrandAssetUrl('loginHeroLight', '/assets/bisheng/login-logo-big.png')} alt="logo_picture" className='w-full h-full dark:hidden' />
-                <img src={getBrandAssetUrl('loginHeroDark', '/assets/bisheng/login-logo-dark.png')} alt="logo_picture" className='w-full h-full hidden dark:block' />
-                {/* <iframe src={__APP_ENV__.BASE_URL + '/face.html'} className='w-full h-full'></iframe> */}
-            </div>
-            <div className='absolute w-full h-full z-10 flex justify-end top-0'>
-                <div className='w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative'>
-                    <div>
-                        <img src={getBrandAssetUrl('headerLogoLight', '/assets/bisheng/login-logo-small.png')} className="block w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:hidden" alt="" />
-                        <img src={getBrandAssetUrl('headerLogoDark', '/assets/bisheng/logo-small-dark.png')} className="w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:block hidden" alt="" />
-                        <span className='block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]'>{t('login.slogen')}</span>
-                    </div>
-                    <div className="grid gap-[12px] mt-[68px]">
-                        <div className="grid">
-                            <Input
-                                id="email"
-                                className='h-[48px] dark:bg-login-input'
-                                ref={personIdRef}
-                                placeholder={t('login.account')}
-                                type="text"
-                                autoCapitalize="none"
-                                autoComplete="username"
-                                autoCorrect="off"
+    return (
+        <div className="w-full min-h-screen bg-background-dark flex items-center justify-center sm:py-4 overflow-y-auto">
+            <div className="relative z-10 sm:w-[1280px] w-full sm:h-[720px] h-full sm:shrink-0 border rounded-lg shadow-xl overflow-hidden bg-background-login">
+                <div className="w-[420px] h-[704px] m-[8px] hidden sm:block relative z-20">
+                    <img
+                        src={getBrandAssetUrl("loginHeroLight", "/assets/bisheng/login-logo-big.png")}
+                        alt="logo_picture"
+                        className="w-full h-full dark:hidden"
+                    />
+                    <img
+                        src={getBrandAssetUrl("loginHeroDark", "/assets/bisheng/login-logo-dark.png")}
+                        alt="logo_picture"
+                        className="w-full h-full hidden dark:block"
+                    />
+                    {/* <iframe src={__APP_ENV__.BASE_URL + '/face.html'} className='w-full h-full'></iframe> */}
+                </div>
+                <div className="absolute w-full h-full z-10 flex justify-end top-0">
+                    <div className="w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative">
+                        <div>
+                            <img
+                                src={getBrandAssetUrl("headerLogoLight", "/assets/bisheng/login-logo-small.png")}
+                                className="block w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:hidden"
+                                alt=""
                             />
-                        </div>
-                        {
-                            !showLogin && <div className="grid">
-                                <Input
-                                    id="userName"
-                                    className='h-[48px] dark:bg-login-input'
-                                    ref={userNameRef}
-                                    placeholder={t('login.userName')}
-                                />
-                            </div>
-                        }
-                        <div className="grid">
-                            <Input
-                                id="pwd"
-                                className='h-[48px] dark:bg-login-input'
-                                ref={pwdRef}
-                                placeholder={t('login.password')}
-                                type="password"
-                                onKeyDown={e => e.key === 'Enter' && showLogin && handleLogin()}
+                            <img
+                                src={getBrandAssetUrl("headerLogoDark", "/assets/bisheng/logo-small-dark.png")}
+                                className="w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:block hidden"
+                                alt=""
                             />
+                            <span className="block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]">
+                                {t("login.slogen")}
+                            </span>
                         </div>
-                        {
-                            !showLogin && <div className="grid">
-                                <Input
-                                    id="pwd"
-                                    className='h-[48px] dark:bg-login-input'
-                                    ref={agenPwdRef}
-                                    placeholder={t('login.confirmPassword')}
-                                    type="password"
-                                />
+                        <div className="grid gap-[12px] mt-[68px]">
+                            <div className="grid">
+                                <Input size="large" id="email" ref={personIdRef} placeholder={t("login.account")} type="text" autoCapitalize="none" autoComplete="username" autoCorrect="off" />
                             </div>
-                        }
-                        {
-                            showCaptcha && (<div className="flex items-center gap-4">
-                                <Input
-                                    type="text"
-                                    ref={captchaRef}
-                                    placeholder={t('login.pleaseEnterCaptcha')}
-                                    className="form-input px-4 py-2 border border-gray-300 focus:outline-none"
-                                />
-                                <img
-                                    src={'data:image/jpg;base64,' + captchaData.captcha} // 这里应该是你的验证码图片的URL
-                                    alt="captcha"
-                                    onClick={fetchCaptchaData} // 这里应该是你的刷新验证码函数
-                                    className="cursor-pointer h-10 bg-gray-100 border border-gray-300"
-                                    style={{ width: '120px' }} // 根据需要调整宽度
-                                />
-                            </div>
-                            )
-                        }
-                        {
-                            showLogin ? <>
-                                {enableDualLogin && (
-                                    <label className="flex items-center gap-2 text-sm text-tx-color">
-                                        <input
-                                            type="checkbox"
-                                            checked={isLdapLogin}
-                                            onChange={(event) => setIsLdapLogin(event.target.checked)}
-                                        />
-                                        <span>{ldapCheckboxLabel}</span>
-                                    </label>
-                                )}
-                                <div className="text-center">
-                                    {!shouldUseLdap && appConfig.register && <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>}
+                            {!showLogin && (
+                                <div className="grid">
+                                    <Input size="large" id="userName" ref={userNameRef} placeholder={t("login.userName")} />
                                 </div>
-                                <Button
-                                    className='h-[48px] mt-[32px] dark:bg-button'
-                                    disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button>
-                            </> :
+                            )}
+                            <div className="grid">
+                                <Input size="large" id="pwd" ref={pwdRef} placeholder={t("login.password")} type="password" onKeyDown={(e) => e.key === "Enter" && showLogin && handleLogin()} />
+                            </div>
+                            {!showLogin && (
+                                <div className="grid">
+                                    <Input size="large" id="pwd" ref={agenPwdRef} placeholder={t("login.confirmPassword")} type="password" />
+                                </div>
+                            )}
+                            {showCaptcha && (
+                                <div className="flex items-center gap-4">
+                                    <Input size="large" type="text" ref={captchaRef} placeholder={t("login.pleaseEnterCaptcha")} />
+                                    <img
+                                        src={"data:image/jpg;base64," + captchaData.captcha} // 这里应该是你的验证码图片的URL
+                                        alt="captcha"
+                                        onClick={fetchCaptchaData} // 这里应该是你的刷新验证码函数
+                                        className="cursor-pointer h-10 bg-gray-100 border border-gray-300"
+                                        style={{ width: "120px" }} // 根据需要调整宽度
+                                    />
+                                </div>
+                            )}
+                            {showLogin ? (
+                                <>
+                                    {enableDualLogin && (
+                                        <label className="flex items-center gap-2 text-sm text-tx-color">
+                                            <Checkbox
+                                                checked={isLdapLogin}
+                                                onCheckedChange={(checked) => setIsLdapLogin(checked === true)}
+                                            />
+                                            <span>{ldapCheckboxLabel}</span>
+                                        </label>
+                                    )}
+                                    <div className="text-center">
+                                        {!shouldUseLdap && appConfig.register && (
+                                            <a
+                                                href="javascript:;"
+                                                className=" text-blue-500 text-sm hover:underline"
+                                                onClick={() => setShowLogin(false)}
+                                            >
+                                                {t("login.noAccountRegister")}
+                                            </a>
+                                        )}
+                                    </div>
+                                    <Button size="large" className="mt-[32px]" disabled={isLoading} onClick={handleLogin}>
+                                        {t("login.loginButton")}
+                                    </Button>
+                                </>
+                            ) : (
                                 <>
                                     <div className="text-center">
-                                        <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(true)}>{t('login.haveAccountLogin')}</a>
+                                        <a
+                                            href="javascript:;"
+                                            className=" text-blue-500 text-sm hover:underline"
+                                            onClick={() => setShowLogin(true)}
+                                        >
+                                            {t("login.haveAccountLogin")}
+                                        </a>
                                     </div>
-                                    <Button
-                                        className='h-[48px] mt-[32px] dark:bg-button'
-                                        disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
+                                    <Button size="large" className="mt-[32px]" disabled={isLoading} onClick={handleRegister}>
+                                        {t("login.registerButton")}
+                                    </Button>
                                 </>
-                        }
-                        {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setHasLdap} />}
-                    </div>
-                    <div className=" absolute right-[16px] bottom-[16px] flex">
-                        <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
-                        {!appConfig.noFace && <div className='help flex'>
-                            <a href={"https://github.com/dataelement/bisheng"} target="_blank">
-                                <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#1b1f23] hover:text-[white] hover:cursor-pointer" />
-                            </a>
-                            <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
-                                <BookOpenIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px]  hover:bg-[#0055e3] hover:text-[white] hover:cursor-pointer" />
-                            </a>
-                        </div>}
+                            )}
+                            {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setHasLdap} />}
+                        </div>
+                        <div className=" absolute right-[16px] bottom-[16px] flex">
+                            <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
+                            {!appConfig.noFace && (
+                                <div className="help flex">
+                                    <a href={"https://github.com/dataelement/bisheng"} target="_blank">
+                                        <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#1b1f23] hover:text-[white] hover:cursor-pointer" />
+                                    </a>
+                                    <a
+                                        href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"}
+                                        target="_blank"
+                                    >
+                                        <Outlined.BookOpenText className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px]  hover:bg-[#0055e3] hover:text-[white] hover:cursor-pointer" />
+                                    </a>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    );
 };
-
-
-
 
 export const useLoginError = () => {
     const location = useLocation();
-    const { toast } = useToast();
+
     const { t } = useTranslation();
 
     useEffect(() => {
         const queryParams = new URLSearchParams(location.search);
-        const code = queryParams.get('status_code')
+        const code = queryParams.get("status_code");
         if (code) {
-            toast({
-                variant: 'error',
-                description: t('errors.' + code)
-            })
+            notification.open({ type: "error", description: String(t("errors." + code) ?? '') });
         }
-    }, [location])
-}
+    }, [location]);
+};

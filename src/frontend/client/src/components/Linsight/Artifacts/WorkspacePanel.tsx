@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 /**
  * F035: INLINE workspace panel for the chat-embedded task mode. Replaces the
  * legacy right-side drawer (WorkspaceDrawer + FilePreviewPanel) with a card
@@ -16,7 +17,7 @@ import { Segmented } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { useEffect, useState } from 'react';
 import type { ChatCitation } from '~/api/chatApi';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize } from '~/hooks';
 import { EmptyStateIllustration } from '~/components/illustrations';
 import { cn } from '~/utils';
@@ -187,14 +188,9 @@ export function WorkspacePanel({
                 )}
                 {/* F074: this X closes the report AND its source; the source pane
                     has its own, differently drawn, collapse button. */}
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <button type="button" aria-label={localize('com_citation.close_workspace')} className={iconBtn} onClick={onClose}>
+                <SharedTooltip  content={localize('com_citation.close_workspace')} ><button type="button" aria-label={localize('com_citation.close_workspace')} className={iconBtn} onClick={onClose}>
                             <Outlined.Close className="size-4" />
-                        </button>
-                    </TooltipTrigger>
-                    <TooltipContent>{localize('com_citation.close_workspace')}</TooltipContent>
-                </Tooltip>
+                        </button></SharedTooltip>
             </div>
             {/* preview body — scrollbar-os: respect OS scrollbar setting. Kept
                 mounted on the source tab so the report keeps its place. */}
