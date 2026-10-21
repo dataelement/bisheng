@@ -212,3 +212,33 @@ def test_context_window_is_not_sent_to_the_provider():
 
     assert "context_window" not in params
     assert params["top_p"] == 0.8
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # vLLM: the output reservation alone is too big — a configuration error.
+        "'max_tokens' or 'max_completion_tokens' is too large: 40000. This model's maximum context length "
+        "is 32768 tokens and your request has 100 input tokens (40000 > 32768 - 100).",
+        # Legacy form where only the completion side overflows.
+        "This model's maximum context length is 32768 tokens. However, you requested 40100 tokens "
+        "(100 in the messages, 40000 in the completion).",
+    ],
+)
+def test_oversized_max_tokens_is_not_a_context_overflow(message):
+    """Compressing history cannot fix max_tokens; it must stay a plain 400 (design decision 6)."""
+    assert as_context_overflow(_openai_400(message)) is None
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # Input grew past N - max_tokens: compressing history fixes it.
+        "'max_tokens' or 'max_completion_tokens' is too large: 4096. This model's maximum context length "
+        "is 32768 tokens and your request has 30000 input tokens (4096 > 32768 - 30000).",
+        "This model's maximum context length is 32768 tokens. However, you requested 34096 tokens "
+        "(30000 in the messages, 4096 in the completion).",
+    ],
+)
+def test_input_plus_reservation_over_the_window_is_an_overflow(message):
+    assert as_context_overflow(_openai_400(message)) is not None

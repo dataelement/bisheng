@@ -13,9 +13,10 @@ Sources, first match wins (design.md decision 3):
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from loguru import logger
@@ -51,10 +52,12 @@ class ModelSnapshot:
     model_id: int
     model_name: str
     server_type: str
-    model_config: dict
+    # Kept out of repr: both can carry API keys, and loguru's traceback
+    # diagnostics print local variables.
+    model_config: dict = field(repr=False)
     # The chat client's constructor arguments as BishengLLM built them: base URL,
     # API key, proxy, max_tokens (or num_ctx for Ollama).
-    client_params: dict
+    client_params: dict = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -125,6 +128,20 @@ def _cache_key(model_id: int) -> str:
     return f"{CACHE_KEY_PREFIX}{model_id}"
 
 
+def _fingerprint(snapshot: ModelSnapshot) -> str:
+    """What the cached answer was read against.
+
+    A worker process may still hold the pre-save model config for up to a minute
+    (``LLM_CACHE``) and write the old answer back right after the save cleared
+    Redis; a value whose fingerprint no longer matches is treated as a miss.
+    """
+    params = snapshot.client_params
+    base = params.get("base_url") or params.get("openai_api_base") or params.get("api_base")
+    base = base or params.get("anthropic_api_url") or ""
+    raw = f"{snapshot.server_type}|{base}|{snapshot.model_name}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
 async def _default_cache() -> _Cache:
     from bisheng.core.cache.redis_manager import get_redis_client
 
@@ -172,13 +189,14 @@ class ContextWindowService:
     @classmethod
     async def _probe_cached(cls, snapshot: ModelSnapshot, cache: _Cache | None) -> ProbeResult | None:
         key = _cache_key(snapshot.model_id)
+        fingerprint = _fingerprint(snapshot)
         try:
             cache = cache or await _default_cache()
             cached = await cache.aget(key)
         except Exception:
             logger.opt(exception=True).warning("[linsight-context-window] cache read failed key={}", key)
             cache, cached = None, None
-        if isinstance(cached, dict):
+        if isinstance(cached, dict) and cached.get("fingerprint") == fingerprint:
             if cached.get("failed"):
                 return None
             if _positive_int(cached.get("window")) and cached.get("kind") in ("total", "input"):
@@ -187,9 +205,12 @@ class ContextWindowService:
         probed = await probe_context_window(snapshot)
         if cache is not None:
             value, ttl = (
-                ({"failed": True}, CACHE_TTL_FAILURE)
+                ({"failed": True, "fingerprint": fingerprint}, CACHE_TTL_FAILURE)
                 if probed is None
-                else ({"window": probed.window, "kind": probed.kind, "source": probed.source}, CACHE_TTL_SUCCESS)
+                else (
+                    {"window": probed.window, "kind": probed.kind, "source": probed.source, "fingerprint": fingerprint},
+                    CACHE_TTL_SUCCESS,
+                )
             )
             try:
                 await cache.aset(key, value, expiration=ttl)

@@ -198,3 +198,20 @@ async def test_timeout_gives_none():
 
 async def test_unsupported_server_type_gives_none():
     assert await probe_context_window(_snapshot("zhipu", {"base_url": "x"}), _client({})) is None
+
+
+async def test_llamacpp_non_json_props_still_falls_back():
+    def handler(request):
+        if request.url.path == "/props":
+            return httpx.Response(200, text="<html>not json</html>")
+        return httpx.Response(200, json={"data": [{"id": "qwen3-32b", "meta": {"n_ctx": 16384}}]})
+
+    snapshot = _snapshot("llamacpp", {"base_url": "http://llama:8080/v1"})
+    result = await probe_context_window(snapshot, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+    assert result.window == 16384
+
+
+async def test_unexpected_body_shape_gives_none():
+    snapshot = _snapshot("ollama", {"base_url": "http://ollama:11434"}, model_name="qwen3")
+    assert await probe_context_window(snapshot, _client({"GET http://ollama:11434/api/ps": {"models": None}})) is None

@@ -62,9 +62,35 @@ def _error_text(exc: BaseException) -> str:
     return "\n".join(parts)
 
 
+_WINDOW_PATTERN = re.compile(r"maximum context length is (\d+)", re.IGNORECASE)
+# New vLLM wording: "'max_tokens' or 'max_completion_tokens' is too large: X".
+_TOO_LARGE_PATTERN = re.compile(r"is too large: (\d+)", re.IGNORECASE)
+# Legacy wording: "(M in the messages, C in the completion)".
+_COMPLETION_PATTERN = re.compile(r"(\d+) in the completion", re.IGNORECASE)
+
+
+def _is_output_side(text: str) -> bool:
+    """The output reservation ALONE does not fit the window: a configuration error.
+
+    vLLM reports both "input + max_tokens exceeds the window" and "max_tokens by
+    itself exceeds the window" with the same "maximum context length is N"
+    sentence. Only the second is unfixable by compressing history — the first is
+    the most common overflow for a model with max_tokens set, since the input
+    crosses N - max_tokens first. So only "reservation >= N" stays a plain 400
+    (and keeps marking the model as misconfigured, design decision 6).
+    """
+    window = _WINDOW_PATTERN.search(text)
+    if window is None:
+        return False
+    reservation = _TOO_LARGE_PATTERN.search(text) or _COMPLETION_PATTERN.search(text)
+    return reservation is not None and int(reservation.group(1)) >= int(window.group(1))
+
+
 def matches_context_overflow(text: str) -> bool:
     lowered = text.lower()
-    return any(rule.marker.lower() in lowered for rule in RULES)
+    if not any(rule.marker.lower() in lowered for rule in RULES):
+        return False
+    return not _is_output_side(text)
 
 
 def extract_input_tokens(text: str) -> int | None:
@@ -76,7 +102,8 @@ def extract_input_tokens(text: str) -> int | None:
     return None
 
 
-def _rebuild(exc: BaseException, text: str) -> ContextOverflowError:
+def _rebuild(exc: BaseException) -> ContextOverflowError:
+    import anthropic
     import openai
 
     message = getattr(exc, "message", None) or str(exc)
@@ -84,11 +111,7 @@ def _rebuild(exc: BaseException, text: str) -> ContextOverflowError:
         from langchain_openai.chat_models.base import OpenAIContextOverflowError
 
         return OpenAIContextOverflowError(message=message, response=exc.response, body=exc.body)
-    try:
-        import anthropic
-    except ImportError:  # anthropic is an optional provider SDK
-        anthropic = None
-    if anthropic is not None and isinstance(exc, anthropic.APIStatusError):
+    if isinstance(exc, anthropic.APIStatusError):
         from langchain_anthropic.chat_models import AnthropicContextOverflowError
 
         return AnthropicContextOverflowError(message=message, response=exc.response, body=exc.body)
@@ -109,7 +132,7 @@ def as_context_overflow(exc: BaseException) -> ContextOverflowError | None:
     if isinstance(exc, ContextOverflowError):
         overflow = exc
     elif matches_context_overflow(text):
-        overflow = _rebuild(exc, text)
+        overflow = _rebuild(exc)
     else:
         return None
     if getattr(overflow, "reported_input_tokens", None) is None:

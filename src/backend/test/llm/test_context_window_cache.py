@@ -115,3 +115,34 @@ def test_saving_or_verifying_a_model_drops_its_cached_window():
     assert "ContextWindowService.invalidate" in inspect.getsource(LLMService.update_llm_server)
     assert "ContextWindowService.invalidate" in inspect.getsource(LLMService.verify_model_status)
     assert "ContextWindowService.invalidate" not in inspect.getsource(LLMService.update_model_online)
+
+
+async def test_value_read_against_an_older_config_is_a_miss(probe):
+    """A worker still on the pre-save config may write the old answer back after the save."""
+    redis = _FakeRedis()
+    old = _snapshot()
+    await ContextWindowService.resolve_snapshot(old, cache=redis)
+
+    moved = ModelSnapshot(
+        model_id=7,
+        model_name="qwen3-32b",
+        server_type="vllm",
+        model_config={},
+        client_params={"base_url": "http://new-vllm.local/v1"},
+    )
+    probe["result"] = ProbeResult(window=65536, kind="total", source="deployed")
+    result = await ContextWindowService.resolve_snapshot(moved, cache=redis)
+
+    assert result.window == 65536
+    assert probe["calls"] == 2
+
+
+def test_snapshot_repr_hides_credentials():
+    snapshot = ModelSnapshot(
+        model_id=7,
+        model_name="m",
+        server_type="vllm",
+        model_config={"user_kwargs": {"api_key": "sk-secret"}},
+        client_params={"api_key": "sk-secret"},
+    )
+    assert "sk-secret" not in repr(snapshot)

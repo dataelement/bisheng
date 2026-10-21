@@ -70,6 +70,8 @@
 - **备选**：A. 进程内 TTL 缓存；B. Redis；C. 写进模型配置表。
 - **选定**：B。键为 `linsight:context_window:<model_id>`。读取成功时缓存 1 小时，读取失败时缓存一个"失败"标记 5 分钟。清除时机：凡是调用 `invalidate_llm_info_cache` 表示"模型配置变了"的异步入口，都同时删除对应的键。目前是 `update_llm_server`（`llm/domain/services/llm.py:1066`）和 `verify_model_status`（`:1102`）。`invalidate_llm_info_cache` 本身是同步函数、只清进程内缓存，不在它内部发 Redis 请求。删除模型时不清除，键在 1 小时内自然过期，且模型已不存在、不会再被读取。
 - **原因**：A 违反 C8，API 进程清不掉 worker 进程的缓存；C 已在采访中否决（D2），部署变化后要人工重新保存才能更新。
+- **防止旧值写回**：保存配置只清了 API 进程的 `LLM_CACHE`，任务执行进程最多还会用旧配置 60 秒；这期间它会把按旧配置读到的结果重新写进 Redis，并保留 1 小时。所以缓存值带一个 `fingerprint`（服务商类型、base URL、模型名的哈希），读取时与当前配置不一致就当作未命中、重新读取。
+- **日志不带密钥**：`ModelSnapshot` 的 `client_params`、`model_config` 含 API key，两个字段设为不进 repr。loguru 的文件日志默认开启 `diagnose`，打印 traceback 时会输出局部变量。读取器里的请求头也含密钥，所以 `probe_context_window` 对预期之外的异常只记录异常类型，不打印 traceback。
 - **何时该重新考虑**：出现需要"立刻"反映部署变化的现场需求时，可在管理端加"重新读取"操作，而不是缩短 TTL。
 - **注意**：手动来源（高级配置、Ollama 字段）不进缓存，每次从模型配置读取。模型配置本身经过 `LLM_CACHE`（进程内 60 秒），所以保存配置后最多 60 秒生效。这一点满足 spec AC-06 的"下一次任务"要求，因为保存时同时清了 `LLM_CACHE`。
 
@@ -96,7 +98,8 @@
   1. 日常模式的错误分类（`workstation/domain/services/chat_service.py:2377` 调用 `label_error`）会得到 `context_overflow`，前端共用 `ChatErrorCard`。因此新文案必须对两种模式都成立，不能写"请拆分任务"这类只适用于任务模式的话（决策 8）。
   2. 所有场景下超窗都不再把模型标为异常（决策 6）。
   3. 日常模式、助手、工作流里没有使用 `SummarizationMiddleware`（已 grep 确认，只有 linsight 使用 deepagents），所以不会因为异常类型变化而触发新的压缩行为。
-- **输入 token 数的提取（AC-15）**：每条规则可以附带一个提取输入 token 数的正则，例如 vLLM 的 `your prompt contains at least (\d+) input tokens` 或 `\(parameter=input_tokens, value=(\d+)\)`。提取结果存在超窗异常的 `reported_input_tokens` 属性，提取不到时为 `None`，日志记为 `unknown`。记录日志的位置：主图失败时由 `task_exec._handle_task_failure` 记录；子任务超窗时由决策 9 的中间件记录。
+- **输出预留本身超过上下文长度不算超窗**：vLLM 对"输入加 `max_tokens` 超过上下文长度"和"`max_tokens` 本身就超过上下文长度"用的是同一句 "maximum context length is N"。前者是带 `max_tokens` 的模型最常见的超窗（输入先越过 `N − max_tokens`），压缩历史能解决，按超窗处理；后者是模型配置错误，压缩解决不了，仍按普通 400 处理并把模型标为异常（决策 6）。判断方式：从报错中解析出输出预留（新版 `is too large: X`，旧版 `C in the completion`），只有它不小于上下文长度 N 时才排除。曾经按"messages 部分小于 N 就排除"实现，把前一种常见超窗也排除掉了，第二轮代码审查发现后改为现在的判据。
+- **输入 token 数的提取（AC-15）**：识别规则之外另有一张提取正则表（`_INPUT_TOKEN_PATTERNS`），例如 vLLM 的 `your prompt contains at least (\d+) input tokens` 或 `\(parameter=input_tokens, value=(\d+)\)`。提取结果存在超窗异常的 `reported_input_tokens` 属性，提取不到时为 `None`，日志记为 `unknown`。记录日志的位置：主图失败时由 `task_exec._handle_task_failure` 记录；子任务超窗时由决策 9 的中间件记录。
 - **流式路径**：任务模式用 `astream` 驱动，`BishengLLM.streaming` 默认开启，实际走 `_astream`。超窗在请求开始时就被拒绝，异常在第一次迭代时抛出，所以在 `_astream` 里包一层识别即可，不会出现"已经输出一半再超窗"的情况。
 - **何时该重新考虑**：langchain 各 partner 包自己识别了这些文本，这张表就可以缩减。
 
@@ -168,7 +171,7 @@
 | 字段 / 结构 | 类型 / 格式 | 说明 | 谁会消费 |
 |---|---|---|---|
 | 模型高级配置 `user_kwargs.context_window` | 正整数 | 管理员手动指定的上下文长度。构造客户端前必须取出，不能发给服务商 | `ContextWindowService`、`BishengLLM._get_llm_params` |
-| Redis `linsight:context_window:<model_id>` | `{"value": int, "kind": "total"\|"input", "source": str}` 或 `{"failed": true}` | 服务商接口读取结果；TTL 成功 3600 秒、失败 300 秒 | `ContextWindowService` |
+| Redis `linsight:context_window:<model_id>` | `{"window": int, "kind": "total"\|"input", "source": str, "fingerprint": str}` 或 `{"failed": true, "fingerprint": str}` | 服务商接口读取结果；TTL 成功 3600 秒、失败 300 秒。`fingerprint` 是服务商类型、base URL、模型名的哈希，与当前配置不一致时按未命中处理（决策 4） | `ContextWindowService` |
 | `output_result.error_type` | `"context_overflow"` \| `"context_compress_failed"` | 新增两个失败类型 | client `ChatErrorCard`、历史恢复 |
 | `output_result.error_code` | 11075 \| 11076 | 新增错误码 | 日志、开放 API 调用方 |
 | 日志 `[linsight-context-window]` | `model_id=… window=… kind=… source=… usable_input=…` | 任务开始时记录（AC-09）；超窗失败时再加 `reported_input_tokens`（AC-15） | 现场运维 |
@@ -177,7 +180,11 @@
 
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
-| `llm/domain/services/context_window.py`（新增） | 按优先级确定上下文长度；包含各服务商读取器、Redis 缓存、失效函数；算出可用输入 | 不了解 deepagents，不设置 profile |
+| `llm/domain/services/context_window.py`（新增） | 按优先级确定上下文长度；Redis 缓存与失效；算出可用输入 | 不了解 deepagents，不设置 profile；不发 HTTP 请求 |
+| `llm/domain/services/context_window_probes.py`（新增） | 各服务商读取器（`PROBES` 注册表）；单次超时 3 秒；读不到返回 `None` | 不缓存 |
+| `llm/domain/llm/context_overflow.py`（新增） | 超窗识别规则表、输入 token 数提取正则、改抛超窗异常（`as_context_overflow`） | 不处理其他错误 |
+| `llm/domain/llm/exceptions.py`（新增） | `LLMContextOverflowError`：没有 langchain 对应类的 SDK 使用 | — |
+| `resilience_middleware.py` `SubagentContextOverflowMiddleware`（新增） | 决策 9：主图上只处理 `task` 工具的超窗异常，返回说明并计入研究员的降级次数 | 不处理其他工具 |
 | `llm/domain/llm/llm.py` `BishengLLM` | 识别超窗错误并改抛；构造客户端前从高级配置取出 `context_window` | 不做压缩 |
 | `llm/domain/utils.py` 四个调用装饰器 | 超窗时不把模型标为异常 | — |
 | `linsight/domain/services/agent_factory.py` | 调用 `ContextWindowService`，设置 profile，记日志；挂载决策 9 的 `task` 超窗中间件 | 不读取服务商接口 |
@@ -203,12 +210,12 @@
 | 9 | vLLM 的 `/v1/models` 里 LoRA 适配器条目的 `max_model_len` 为 null | 读不到适配器的上下文长度 | 读取器沿 `parent` 字段找基础模型 |
 | 10 | 百炼的模型信息接口在 DashScope 原生地址，不在 `/compatible-mode/v1` 下，北京区域还需要 WorkspaceId | 按兼容地址拼接口会 404 | P1 读取器；推导不出时按未知处理 |
 | 11 | harness profile 是进程级全局注册的 | P1 的注册会影响同进程内所有 deepagents agent | 决策 7，目前只有 linsight 使用 deepagents |
+| 12 | 压缩时生成摘要的调用失败后，langchain 返回字符串 `Error generating summary: …` 并继续执行（`langchain/agents/middleware/summarization.py:846`） | 历史被换成一行错误文本，任务带着失忆继续跑 | P1 子类识别并重试（AC-17、AC-18） |
 | 13 | 研究员 resilience 实例的 `_degrade_count` 被同一任务的所有 `task` 调用共用，代码注释把这标为 KNOWN GAP（`resilience_middleware.py:393`） | AC-16 依赖的正是"同一任务累计"这个口径。有人按注释把计数改成按调用分桶，AC-16 会被悄悄破坏 | 改动这个计数器时同步改 AC-16 及其测试 |
 | 14 | P0 下 deepagents 按 4 个字符 1 个 token 估算，中文少算 2 倍以上 | 以为 P0 已经能在中文任务上提前压缩，实际常常是"超窗后压缩重试" | 决策 1 的 P0 局限；P1 决策 10 |
 | 15 | deepagents 只在"这次调用没有主动压缩"时才接住超窗并压缩重试；如果这次调用已经因为达到阈值而主动压缩，压缩后的请求再超窗，异常直接抛出，不会再压缩一次（`deepagents/middleware/summarization.py` 的 `awrap_model_call`，主动压缩分支里的 `handler` 调用不在 `try` 中） | 以为"超窗后一定会压缩重试"；实际上主动压缩后仍超窗时任务直接按 AC-14 失败。这与 spec"同一次请求最多压缩一次"一致 | 测试 `test_context_overflow_flow.py` 的上下文长度取 20000，使历史介于保留量和触发阈值之间，才能覆盖超窗重试路径 |
 | 16 | 压缩后保留的 10% 能装下全部历史时，框架判定"没有可压缩的内容"，超窗后只做一次原样重试 | 以为超窗后一定发生了压缩；日志里看不到摘要调用 | 无需处理；保留比例由 P1 的 AC-24 约束 |
 | 17 | `unwrap` 原本沿 `__cause__` 一直走到最底层的 SDK 异常；超窗异常是 `raise ... from 原异常`，会被越过 | 分类器拿到普通的 400，标成 unknown | `unwrap` 遇到超窗异常或压缩失败异常即停止（`llm_error_classifier.py`）；日常模式的 `label_error(unwrap(exc))` 因此也能识别 |
-| 12 | 压缩时生成摘要的调用失败后，langchain 返回字符串 `Error generating summary: …` 并继续执行（`langchain/agents/middleware/summarization.py:846`） | 历史被换成一行错误文本，任务带着失忆继续跑 | P1 子类识别并重试（AC-17、AC-18） |
 
 ---
 
@@ -222,7 +229,7 @@
 | `ErrorType.CONTEXT_OVERFLOW` / `CONTEXT_COMPRESS_FAILED` | `output_result.error_type`、`ERROR_MESSAGE` 事件 | client 任务模式界面；开放 API 任务模式（F073）返回的失败信息 |
 | 错误码 11075 / 11076 | `common/errcode/linsight.py`；文案在 `packages/locales` 的 `api_errors` | 日志、开放 API 调用方。需要在 constitution C5 和 release-contract"已分配模块编码"中登记（灵思模块 110 已分配，这里只是新增号） |
 | `ContextWindowService.resolve` / `invalidate` | 内部 Python API | linsight agent_factory；llm 模块保存配置的入口 |
-| 超窗异常：`OpenAIContextOverflowError` / `AnthropicContextOverflowError` / `LLMContextOverflowError`，均为 `ContextOverflowError` 且保留原 SDK 类型 | 异常类型 | deepagents 压缩中间件、resilience、错误分类器；日常模式错误分类 |
+| 超窗异常：`OpenAIContextOverflowError` / `AnthropicContextOverflowError`（保留 openai / anthropic 的 SDK 类型）/ `LLMContextOverflowError`（其他 SDK 及 openai 的非 HTTP 状态错误，只保留 `body`、`status_code`），均为 `ContextOverflowError` | 异常类型 | deepagents 压缩中间件、resilience、错误分类器；日常模式错误分类 |
 
 ### 6.2 我依赖别人的（Incoming）
 
@@ -272,3 +279,5 @@
 |---|---|---|
 | 2026-10-21 | 初版 | spec 确认 |
 | 2026-10-21 | §5 增坑 15、16、17 | P0 实现与集成测试中发现 |
+| 2026-10-21 | 决策 4 增缓存指纹与 repr 脱敏；决策 5 增输出侧超限排除；§4.2、§4.3、§6.1 与代码对齐 | `/code-review` 第一轮 |
+| 2026-10-21 | 决策 5 输出侧判据改为"输出预留 ≥ 上下文长度"；读取器兜底异常只记类型 | `/code-review` 第二轮 |

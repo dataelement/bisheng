@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
+from urllib.parse import quote
 
 import httpx
 from loguru import logger
@@ -134,7 +135,7 @@ async def _probe_llamacpp(snapshot: ModelSnapshot, client: httpx.AsyncClient) ->
         window = _positive_int(settings.get("n_ctx")) if isinstance(settings, dict) else None
         if window is not None:
             return ProbeResult(window=window, kind="total", source="deployed")
-    except httpx.HTTPError:
+    except (httpx.HTTPError, ValueError):
         logger.opt(exception=True).debug("llama.cpp /props unavailable, trying /v1/models")
     entries = _model_entries(await _get_json(client, f"{root}/v1/models", _bearer(snapshot.client_params)))
     entry = _find_entry(entries, snapshot.model_name) or (entries[0] if len(entries) == 1 else None)
@@ -209,7 +210,8 @@ async def _probe_anthropic(snapshot: ModelSnapshot, client: httpx.AsyncClient) -
     if not key:
         return None
     headers = {"x-api-key": str(key), "anthropic-version": "2023-06-01"}
-    payload = await _get_json(client, f"{_strip_v1(base)}/v1/models/{snapshot.model_name}", headers)
+    model = quote(snapshot.model_name, safe="")
+    payload = await _get_json(client, f"{_strip_v1(base)}/v1/models/{model}", headers)
     window = _positive_int(payload.get("max_input_tokens")) if isinstance(payload, dict) else None
     return ProbeResult(window=window, kind="input", source="published") if window else None
 
@@ -263,13 +265,24 @@ async def probe_context_window(snapshot: ModelSnapshot, client: httpx.AsyncClien
             return await probe(snapshot, client)
         async with httpx.AsyncClient(timeout=PROBE_TIMEOUT_SECONDS, proxy=_proxy(snapshot.client_params)) as owned:
             return await probe(snapshot, owned)
-    except (httpx.HTTPError, ValueError) as exc:
-        # Unreachable endpoint, timeout, non-2xx or non-JSON body: no reliable number.
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError, TypeError, KeyError, AttributeError) as exc:
+        # Unreachable endpoint, timeout, non-2xx, non-JSON or unexpectedly shaped
+        # body (e.g. Ollama's `{"models": null}`): no reliable number.
         logger.warning(
             "[linsight-context-window] probe failed model_id={} server_type={}: {}: {}",
             snapshot.model_id,
             snapshot.server_type,
             type(exc).__name__,
             exc,
+        )
+        return None
+    except Exception as exc:
+        # Anything else is a probe bug, not a provider answer. Log the type only:
+        # a traceback's local variables would include the Authorization header.
+        logger.warning(
+            "[linsight-context-window] probe crashed model_id={} server_type={}: {}",
+            snapshot.model_id,
+            snapshot.server_type,
+            type(exc).__name__,
         )
         return None
