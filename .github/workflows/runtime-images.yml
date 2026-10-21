@@ -80,7 +80,7 @@ jobs:
             image="dataelement/bisheng-${name}:${RUNTIME_RELEASE}"
             if docker buildx imagetools inspect "$image" > /tmp/index-existing 2>/tmp/index-error; then
               echo "Refusing existing index $image"; exit 1
-            elif ! rg -qi 'manifest unknown|not found|no such manifest' /tmp/index-error; then
+            elif ! grep -Eqi 'manifest unknown|not found|no such manifest' /tmp/index-error; then
               cat /tmp/index-error >&2; exit 1
             fi
             docker buildx imagetools create --tag "$image" "$image-amd64" "$image-arm64"

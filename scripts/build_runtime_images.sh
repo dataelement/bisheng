@@ -15,7 +15,7 @@ build_one() {
   metadata="dist/${name}-${TARGET_ARCH}.json"
   if docker buildx imagetools inspect "$image" >"$metadata.existing" 2>"$metadata.error"; then
     echo "Refusing to overwrite published image: $image" >&2; exit 1
-  elif ! rg -qi 'manifest unknown|not found|no such manifest' "$metadata.error"; then
+  elif ! grep -Eqi 'manifest unknown|not found|no such manifest' "$metadata.error"; then
     cat "$metadata.error" >&2; exit 1
   fi
   if [[ -n "$target" ]]; then args+=(--target "$target"); fi
