@@ -17,7 +17,7 @@
 .dsh-chat-surface .dsh-composer-add:disabled { opacity:.5; cursor:default; }
 .dsh-chat-surface { --dsh-add-background:rgba(0,0,0,.04); }
 body[data-dsh-chat-theme=dark] .dsh-chat-surface { --dsh-add-background:rgba(255,255,255,.05); }
-body[data-dsh-chat-theme] .dsh-add-menu [role^="menuitem"] {
+body[data-dsh-chat-theme] .dsh-add-menu [role^="menuitem"]:not(.dsh-command-skill-row) {
   min-height:34px; padding:6px 8px; border-radius:8px; font-size:13px; line-height:20px;
   color:rgb(var(--text-1));
 }
@@ -130,8 +130,21 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
 .dsh-command-name { font-size:var(--dsh-command-name-size); font-weight:400; line-height:20px; flex:0 0 auto; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsh-command-skills .skill-menu-text,
 .dsh-command-skill-text { display:flex; align-items:baseline; gap:8px; }
-.dsh-command-panel .dsh-command-skill-row { align-items:center; }
-.dsh-command-panel [role="menuitemcheckbox"] > span:last-child { margin-left:auto; flex:none; }
+/* Match the native Work skill picker: one typography owner for rows and search. */
+.dsh-skill-picker { display:flex; flex-direction:column; min-height:0; }
+.dsh-skill-picker-search {
+  width:auto; min-width:0; margin:2px 2px 3px; padding:5px 7px;
+  border:.5px solid transparent; border-radius:8px; outline:none;
+  background:transparent; color:rgb(var(--text-1));
+  font-family:inherit; font-size:var(--dsh-command-name-size); font-weight:400; line-height:20px;
+}
+.dsh-command-panel .dsh-command-skill-row {
+  display:flex; align-items:center; gap:6px; padding:5px 7px; border-radius:8px;
+  cursor:pointer; color:rgb(var(--text-1));
+  font-family:inherit; font-size:var(--dsh-command-name-size); font-weight:400; line-height:20px;
+}
+.dsh-command-skill-row[aria-checked=true] .dsh-command-name { color:rgb(var(--brand-500)); }
+.dsh-command-panel [role="menuitemcheckbox"]:not(.dsh-command-skill-row) > span:last-child { margin-left:auto; flex:none; }
 
 .dsh-knowledge-columns { display:flex; justify-content:space-between; margin-top:20px; padding:0 8px 10px; color:rgb(var(--text-3)); font-size:12px; border-bottom:1px solid rgb(var(--border-base)); }
 .dsh-knowledge-list { max-height: min(440px, 48vh); margin-top:8px; }

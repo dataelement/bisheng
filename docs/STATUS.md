@@ -1,3 +1,12 @@
+## 2026-10-21 — 任务模式技能选择器对齐原生 Work
+
+- 产品范围：Chat 任务模式的技能选择菜单沿用原生 Work 的紧凑列表与轻量搜索；技能授权、筛选和多选行为保持原有数据链路。
+- 根因：通用网页 SkillSelector 的 14px 名称 / 12px 描述工具类覆盖了 command 布局的 12px / 11px 字号，搜索框与分隔线也来自通用布局。command 呈现现在直接使用共享菜单样式，通用选择器继续由默认布局负责；外层菜单统一管理滚动与渐变。
+- 版本核验：网页工作树 codex/desktop-unified-navigation 已快进至共享 feat/bisheng-work-120@5ec475a7f；当前桌面运行 .worktrees/bisheng-work-chat-work 的开发 Electron，Harness 0.2.0-rc.2，Chat 加载 3006。当前差异定位到网页选择器，桌面包保持原版本。
+- 自动检查：完整前端类型检查与修改文件 ESLint 通过；全量 lint 报告平台 95 项、客户端 24 项既有错误，修改文件诊断为零。生产构建及 3006 / 桌面实际验收继续执行。
+- 发布方案：以 3006 当前 ea3db2177-menu-fade-native-20261020 发布为基础，仅合入本次两个客户端文件，保留同期平台、后台及其余客户端内容。
+- 证据目录：主工作区 outputs/skill-menu-native-20261021。
+
 ## 2026-10-20 · 原生菜单渐隐对齐
 
 - 对照已安装 BISHENG Dev 的 Work 加号菜单及 Harness input-trigger 实现：单层 16px 面板底色渐变，仅在下方有滚动余量时显示。Chat 采用同一逻辑，单一滚动容器统一一级菜单与技能列表，并移除额外底部留白。

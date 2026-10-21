@@ -1,8 +1,8 @@
 /**
  * F035 Track H: multi-select list of enabled skills, rendered inside the
  * "+" menu's "Add Skill" submenu. Data: GET /api/v1/linsight/skill/selectable
- * (enabled skills only, plain login auth). Selections become chips above the
- * textarea; only checked skills are sent with the submission. Supports keyword
+ * (enabled skills only, plain login auth). Selections become references in the
+ * composer; only checked skills are sent with the submission. Supports keyword
  * search over display name + description.
  */
 import { Loader2 } from 'lucide-react';
@@ -25,7 +25,6 @@ interface SkillSelectorProps {
 }
 
 interface SkillRowProps {
-    layout?: 'default' | 'command';
     skill: TaskModeSkill;
     isChecked: boolean;
     onToggle: (skill: TaskModeSkill) => void;
@@ -36,7 +35,7 @@ interface SkillRowProps {
  * the full text moves into a tooltip — but only when something actually
  * overflows, which we can only know by measuring, hence the per-row component.
  */
-function SkillRow({ skill, isChecked, onToggle, layout }: SkillRowProps) {
+function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
     const [nameRef, nameClipped] = useIsClipped<HTMLParagraphElement>(skill.display_name);
     const [descRef, descClipped] = useIsClipped<HTMLParagraphElement>(skill.description);
     const showTooltip = nameClipped || descClipped;
@@ -56,20 +55,19 @@ function SkillRow({ skill, isChecked, onToggle, layout }: SkillRowProps) {
                         'data-[highlighted]:bg-fill-2 focus:bg-fill-2',
                         // Selected rows carry the state themselves (brand tint + a
                         // trailing check) now that the leading checkbox is gone.
-                        layout === 'command' && 'dsh-command-skill-row',
                         isChecked && 'bg-blue-500/[0.07] data-[highlighted]:bg-blue-500/[0.07] focus:bg-blue-500/[0.07]',
                     )}
                 >
                     {/* Both lines are single-line; the full text lives in the tooltip. */}
-                    <div className={cn("min-w-0 flex-1", layout === 'command' && 'dsh-command-skill-text')}>
+                    <div className="min-w-0 flex-1">
                         <p
                             ref={nameRef}
-                            className={cn('truncate text-[14px] leading-5', layout === 'command' && 'dsh-command-name', isChecked ? 'text-blue-500' : 'text-text-1')}
+                            className={cn('truncate text-[14px] leading-5', isChecked ? 'text-blue-500' : 'text-text-1')}
                         >
                             {skill.display_name}
                         </p>
                         {skill.description && (
-                            <p ref={descRef} className={cn("truncate text-[12px] leading-4 text-text-3", layout === 'command' && 'dsh-command-description')}>
+                            <p ref={descRef} className="truncate text-[12px] leading-4 text-text-3">
                                 {skill.description}
                             </p>
                         )}
@@ -81,7 +79,7 @@ function SkillRow({ skill, isChecked, onToggle, layout }: SkillRowProps) {
                 repeats what is already fully visible is noise. Once it does show, it
                 carries the whole row: a name-only tooltip next to a visible
                 description reads as if the description were missing. */}
-            {layout !== 'command' && showTooltip && (
+            {showTooltip && (
                 <TooltipContent
                     side="right"
                     align="start"
@@ -153,6 +151,53 @@ export function SkillSelector({ selected, onChange, layout }: SkillSelectorProps
                 : [...selected, { name: skill.name, display_name: skill.display_name, description: skill.description }],
         );
     };
+
+    // The composer owns command-menu presentation; the shared selector below
+    // retains the standard page layout. Both use the same filtering and selection.
+    if (layout === 'command') {
+        return (
+            <div className="dsh-skill-picker">
+                <input
+                    className="dsh-skill-picker-search"
+                    aria-label={localize('com_linsight_skill_search')}
+                    placeholder={localize('com_linsight_skill_search')}
+                    value={keyword}
+                    onChange={(event) => setKeyword(event.target.value)}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                />
+                <div ref={listAreaRef} style={keyword ? { minHeight: unfilteredHeight } : undefined}>
+                    {isFetching && skills.length === 0 ? (
+                        <div className="flex justify-center py-4">
+                            <Loader2 size={16} className="animate-spin text-text-3" />
+                        </div>
+                    ) : filtered.length === 0 ? (
+                        <StateView size="inline" title={localize('com_linsight_skill_empty')} />
+                    ) : filtered.map((skill) => {
+                        const isChecked = selected.some((item) => item.name === skill.name);
+                        return (
+                            <DropdownMenuItem
+                                key={skill.name}
+                                className="dsh-command-skill-row"
+                                role="menuitemcheckbox"
+                                aria-checked={isChecked}
+                                onSelect={(event) => {
+                                    event.preventDefault();
+                                    handleToggle(skill);
+                                }}
+                            >
+                                <span className="dsh-command-name">{skill.display_name}</span>
+                                {skill.description && (
+                                    <span className="dsh-command-description">{skill.description}</span>
+                                )}
+                                {isChecked && <Outlined.Check size={14} className="shrink-0 text-blue-500" />}
+                            </DropdownMenuItem>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
 
     return (
         // gap-2: 8px between the search box and the list below it, so the first
@@ -228,7 +273,6 @@ export function SkillSelector({ selected, onChange, layout }: SkillSelectorProps
                                 never cuts across a selected row's tinted background. */}
                             {i > 0 && <div aria-hidden className="mx-2 h-px shrink-0 bg-fill-2" />}
                             <SkillRow
-                                layout={layout}
                                 skill={skill}
                                 isChecked={selected.some((s) => s.name === skill.name)}
                                 onToggle={handleToggle}
