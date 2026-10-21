@@ -40,6 +40,35 @@ def test_config_carrying_retired_keys_still_loads():
     assert not hasattr(conf, "tool_buffer")
 
 
+LEGACY_DB_CONFIG = {"linsight": {"tool_buffer": 100000, "max_file_num": 5, "max_steps": 2500}}
+
+
+def test_db_config_with_retired_keys_loads_through_the_sync_loader(monkeypatch):
+    """The real loader copies DB keys with setattr, which pydantic rejects for unknown fields."""
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(type(settings), "get_all_config", lambda self: LEGACY_DB_CONFIG)
+
+    conf = settings.get_linsight_conf()
+
+    assert conf.max_steps == 2500
+    assert not hasattr(conf, "tool_buffer")
+
+
+async def test_db_config_with_retired_keys_loads_through_the_async_loader(monkeypatch):
+    from bisheng.common.services.config_service import settings
+
+    async def fake_all_config(self):
+        return LEGACY_DB_CONFIG
+
+    monkeypatch.setattr(type(settings), "aget_all_config", fake_all_config)
+
+    conf = await settings.aget_linsight_conf()
+
+    assert conf.max_steps == 2500
+    assert not hasattr(conf, "tool_buffer")
+
+
 def test_shipped_initdb_config_has_no_retired_keys():
     from pathlib import Path
 

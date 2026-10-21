@@ -226,6 +226,7 @@
 | 19 | `ToolResultBudgetMiddleware` 借用了 `FilesystemMiddleware` 的私有方法 `_intercept_large_tool_result` / `_process_large_message` 来写 `/large_tool_results/` | deepagents 升级改名或改签名时转存会报错 | `pyproject.toml` 锁 `<0.7`；`test_tool_result_budget.py` 在真实图上验证，升级时会先失败 |
 | 20 | P1 之后 CJK 计数更准，原来按 4 个字符估算时不会触发的主动压缩现在会触发；而主动压缩之后再超窗不会重试（坑 15） | 测试或现场观察到"没有超窗重试"不代表退化，而是提前压缩生效了 | `test_context_overflow_flow.py` 调小了工具结果，单独覆盖超窗重试路径 |
 | 21 | langchain 裁剪摘要输入时用 `start_on="human"`。任务模式的历史只有开头一条用户消息，从尾部截取的片段里找不到它，裁剪结果为空，摘要变成固定句子 `Previous conversation was too long to summarize.`，而且不算失败 | 每次压缩都把全部历史换成这句话，任务失忆后继续运行 | `BishengSummarizationMiddleware._trim_for_summary`：保留开头指令和最新步骤，最新一步本身过大时截断其文本；这句固定文本也算摘要失败 |
+| 22 | 已部署环境数据库配置的 `linsight` 段仍带着 P2 删除的键（`tool_buffer` 等）。`LinsightConf` 构造时忽略未知键，但 `get_linsight_conf` / `aget_linsight_conf` 用 `setattr` 逐个写入，pydantic 对未知字段的 `setattr` 会抛异常 | 所有读取任务模式配置的请求都失败，工作台首页 `/workstation/config` 报错打不开（2026-10-22 在 3002 上复现） | `config_service._apply_linsight_overrides`：只写入 `LinsightConf` 定义了的键 |
 
 ---
 
@@ -295,3 +296,4 @@
 | 2026-10-21 | 决策 5 输出侧判据改为"输出预留 ≥ 上下文长度"；读取器兜底异常只记类型 | `/code-review` 第二轮 |
 | 2026-10-21 | P1 实现：决策 7 验证结论、§4.3 增 context_budget.py、§5 增坑 18、19、20；P2 删除死配置 | P1 / P2 实现 |
 | 2026-10-21 | P1 代码审查：压缩部件改为放在中间件列表第一位（不再经 `extra_middleware` 注入）；摘要输入裁剪改为保留开头指令和最新步骤；`ls`/`glob`/`grep` 输出按单条上限截断；§5 增坑 21 | `/code-review`（T032）|
+| 2026-10-22 | §5 增坑 22：数据库配置里的已删除键让任务模式配置读取报错 | 3002 部署验证 |
