@@ -1,46 +1,33 @@
-"""Read-only provider catalog discovery and conservative capability matching."""
+"""Read-only provider discovery with explicit source and bounded pagination."""
 
 import asyncio
-import ipaddress
 import json
 import re
-from urllib.parse import urlsplit, urlunsplit
+from typing import Literal
+from urllib.parse import urlsplit
 
 import httpx
 from pydantic import BaseModel, Field
 
 from bisheng.common.errcode.llm import ModelDiscoveryError
 
+from .model_discovery_providers import (
+    build_plan,
+    next_page,
+    preset_catalog,
+    validate_url,
+)
+
 
 class ModelDiscoveryRequest(BaseModel):
     provider: str = Field(min_length=1, max_length=40)
     config: dict[str, str | None] = Field(default_factory=dict)
     server_id: int | None = Field(default=None, gt=0)
+    source: Literal["auto", "live", "preset"] = "auto"
+    # Request-scoped discovery credentials never enter saved inference settings.
+    options: dict[str, str] = Field(default_factory=dict, repr=False)
 
 
-DEFAULT_BASES = {
-    "openai": "https://api.openai.com/v1",
-    "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    "deepseek": "https://api.deepseek.com/v1",
-    "silicon": "https://api.siliconflow.cn/v1",
-    "moonshot": "https://api.moonshot.cn/v1",
-    "zhipu": "https://open.bigmodel.cn/api/paas/v4",
-    "qianfan": "https://qianfan.baidubce.com/v2",
-    "anthropic": "https://api.anthropic.com/v1",
-}
-COMPATIBLE = {
-    "openai",
-    "qwen",
-    "deepseek",
-    "silicon",
-    "moonshot",
-    "zhipu",
-    "qianfan",
-    "vllm",
-    "xinference",
-    "llamacpp",
-    "MindIE",
-}
 TYPE_ALIASES = {
     "llm": "llm",
     "chat": "llm",
@@ -51,6 +38,10 @@ TYPE_ALIASES = {
     "text-embedding": "embedding",
     "rerank": "rerank",
     "reranking": "rerank",
+    "reranker": "rerank",
+    "tg": "llm",
+    "tr": "embedding",
+    "me": "embedding",
     "asr": "asr",
     "audio_transcription": "asr",
     "speech-to-text": "asr",
@@ -66,11 +57,51 @@ def identify_type(item: dict) -> tuple[str | None, str]:
     """Explicit capabilities win; aliases stay unclassified for human review."""
     info = item.get("model_info") or {}
     info = info if isinstance(info, dict) else {}
-    for value in (item.get("model_type"), item.get("type"), item.get("task"), item.get("mode"), info.get("mode")):
+    capabilities = item.get("capabilities") or []
+    if isinstance(capabilities, dict):
+        capabilities = [
+            key
+            for key, value in capabilities.items()
+            if value is True or (isinstance(value, dict) and value.get("supported"))
+        ]
+    capabilities = capabilities if isinstance(capabilities, list) else []
+    values = [
+        item.get("model_type"),
+        item.get("sub_type"),
+        item.get("type"),
+        item.get("task"),
+        item.get("mode"),
+        info.get("mode"),
+        *capabilities,
+    ]
+    kinds = {
+        TYPE_ALIASES[value.lower()] for value in values if isinstance(value, str) and value.lower() in TYPE_ALIASES
+    }
+    if len(kinds) == 1:
+        return kinds.pop(), "metadata"
+    if len(kinds) > 1:
+        return None, "unknown"
+    for value in values:
         if isinstance(value, str) and value.lower() in TYPE_ALIASES:
             return TYPE_ALIASES[value.lower()], "metadata"
-        if value in ("image", "image_generation", "video", "video_generation", "text-to-image"):
+        if isinstance(value, str) and value.lower() in (
+            "image",
+            "image_generation",
+            "video",
+            "video_generation",
+            "text-to-image",
+            "image-to-image",
+            "text-to-video",
+            "ig",
+            "vg",
+            "3d-generation",
+        ):
             return None, "unsupported"
+    metadata = item.get("inference_metadata") or {}
+    metadata = metadata if isinstance(metadata, dict) else {}
+    outputs = item.get("output_modalities") or metadata.get("response_modality") or []
+    if isinstance(outputs, list) and any(str(value).lower() in {"image", "video"} for value in outputs):
+        return None, "unsupported"
     name = str(item.get("id") or item.get("name") or "").lower().split("/")[-1]
     if re.match(
         r"^(?:gpt-image|dall-e|flux|stable-diffusion|sora|doubao-seedream|doubao-seedance|gemini[^/]*-image)", name
@@ -86,7 +117,7 @@ def identify_type(item: dict) -> tuple[str | None, str]:
         ("tts", r"^(?:tts-1|cosyvoice|gpt-4o-mini-tts|qwen[^/]*-tts|gemini[^/]*-tts)"),
         (
             "llm",
-            r"^(?:gpt-|chatgpt-|o[134](?:-|$)|claude-|deepseek-(?:chat|reasoner|flash|pro|coder|r\d|v\d)|qwen(?:[0-9.]+)?-(?:turbo|plus|max|chat|\d+(?:\.\d+)?b|coder|vl|omni|next|instruct|flash|thinking)|doubao-(?:\d+(?:[-.]\d+)*-)?(?:seed(?:[-.]|$)|pro|lite|vision|thinking|ui-tars)|gemini-[\d.]|llama[\d.-]*|gemma[\d.-]*|mistral|mixtral|moonshot-|kimi-|glm-)",
+            r"^(?:gpt-|chatgpt-|o[134](?:-|$)|claude-|deepseek-(?:chat|reasoner|flash|pro|coder|r\d|v\d)|qwen(?:[0-9.]+)?-(?:turbo|plus|max|chat|\d+(?:\.\d+)?b|coder|vl|omni|next|instruct|flash|thinking)|doubao-(?:\d+(?:[-.]\d+)*-)?(?:seed(?:[-.]|$)|pro|lite|vision|thinking|ui-tars)|gemini-[\d.]|llama[\d.-]*|gemma[\d.-]*|mistral|mixtral|moonshot-|kimi-|glm-|minimax-m|hunyuan-)",
         ),
     )
     for kind, pattern in registry:
@@ -95,66 +126,12 @@ def identify_type(item: dict) -> tuple[str | None, str]:
     return None, "unknown"
 
 
-def connection(provider: str, config: dict) -> tuple[str, dict]:
-    if provider not in COMPATIBLE | {"ollama", "anthropic"}:
-        raise ModelDiscoveryError(msg="This provider requires manual model configuration.", reason="unsupported")
-    base = (
-        (
-            config.get("openai_api_base")
-            or config.get("base_url")
-            or config.get("host_base_url")
-            or DEFAULT_BASES.get(provider)
-            or ""
-        )
-        .strip()
-        .rstrip("/")
-    )
-    parsed = urlsplit(base)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username
-        or parsed.password
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise ModelDiscoveryError(msg="Enter a valid HTTP or HTTPS API base URL.", reason="address")
-    if parsed.hostname == "metadata.google.internal":
-        raise ModelDiscoveryError(msg="Enter a model service API base URL.", reason="address")
-    try:
-        address = ipaddress.ip_address(parsed.hostname)
-    except ValueError:
-        address = None
-    if address and (address.is_link_local or str(address) == "100.100.100.200"):
-        raise ModelDiscoveryError(msg="Enter a model service API base URL.", reason="address")
-    key = (
-        config.get("openai_api_key")
-        or config.get("api_key")
-        or config.get("siliconflow_api_key")
-        or config.get("anthropic_api_key")
-        or ""
-    ).strip()
-    if key and set(key) == {"*"}:
-        raise ModelDiscoveryError(msg="Enter the API key for this connection.", reason="auth")
-    headers = {"Authorization": f"Bearer {key}"} if key else {}
-    if provider == "anthropic":
-        headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
-    if provider == "ollama":
-        path = parsed.path.rstrip("/")
-        path = path[:-3] if path.endswith("/v1") else path
-        path = path[:-4] if path.endswith("/api") else path
-        url = urlunsplit((parsed.scheme, parsed.netloc, path + "/api/tags", "", ""))
-    else:
-        url = base if base.endswith("/models") else base + "/models"
-    return url, headers
-
-
 def normalize_catalog(payload: dict, provider: str) -> list[dict]:
     raw = payload.get("models") if provider == "ollama" else payload.get("data")
     if provider == "xinference" and "data" not in payload:
         raw = payload
     if not isinstance(raw, (list, dict)):
-        raise ModelDiscoveryError(msg="The API returned an unsupported model list format.", reason="format")
+        raise ModelDiscoveryError(reason="format")
     if isinstance(raw, dict):
         raw = [{**value, "id": key} for key, value in raw.items() if isinstance(value, dict)]
     models = {}
@@ -164,8 +141,10 @@ def normalize_catalog(payload: dict, provider: str) -> list[dict]:
         model_id = item.get("id") or item.get("name") or item.get("model_uid")
         if not isinstance(model_id, str) or not model_id.strip() or len(model_id) > 100:
             continue
+        if item.get("lifecycle") == "retired":
+            continue
         model_id = model_id.strip()
-        kind, source = identify_type({**item, "id": model_id})
+        kind, source = identify_type({**item, "id": item.get("classification_name") or model_id})
         models[model_id] = {
             "model_name": model_id,
             "display_name": str(item.get("display_name") or model_id)[:200],
@@ -175,79 +154,112 @@ def normalize_catalog(payload: dict, provider: str) -> list[dict]:
     return sorted(models.values(), key=lambda model: model["model_name"].lower())
 
 
+async def read_catalog(client: httpx.AsyncClient, method: str, url: str, **kwargs) -> dict:
+    try:
+        async with client.stream(method, url, **kwargs) as response:
+            if response.status_code in {401, 403}:
+                raise ModelDiscoveryError(reason="auth")
+            if response.status_code in {404, 405, 501}:
+                raise ModelDiscoveryError(reason="unsupported")
+            if response.status_code == 429:
+                raise ModelDiscoveryError(reason="rate_limit")
+            if response.status_code >= 300:
+                raise ModelDiscoveryError()
+            content = bytearray()
+            async for chunk in response.aiter_bytes():
+                content.extend(chunk)
+                if len(content) > 4 * 1024 * 1024:
+                    raise ModelDiscoveryError(reason="limit")
+            payload = json.loads(content)
+    except httpx.TimeoutException:
+        raise ModelDiscoveryError(reason="timeout") from None
+    except httpx.HTTPError:
+        raise ModelDiscoveryError(reason="connection") from None
+    except (ValueError, TypeError, UnicodeError):
+        raise ModelDiscoveryError(reason="format") from None
+    if not isinstance(payload, dict):
+        raise ModelDiscoveryError(reason="format")
+    metadata = payload.get("ResponseMetadata") or {}
+    if not isinstance(metadata, dict):
+        raise ModelDiscoveryError(reason="format")
+    if payload.get("error") or payload.get("success") is False or metadata.get("Error"):
+        raise ModelDiscoveryError()
+    return payload
+
+
+async def enrich_silicon(client: httpx.AsyncClient, url: str, headers: dict, models: dict) -> None:
+    """The official list exposes capability through filters, rather than row fields."""
+    subtypes = ["chat", "embedding", "reranker", "speech-to-text", "text-to-image", "image-to-image", "text-to-video"]
+
+    async def fetch(subtype):
+        return await read_catalog(client, "GET", url, headers=headers, params={"sub_type": subtype})
+
+    responses = await asyncio.gather(*(fetch(subtype) for subtype in subtypes))
+    capabilities: dict[str, set[tuple[str | None, str]]] = {}
+    for subtype, payload in zip(subtypes, responses, strict=True):
+        rows = payload.get("data")
+        if not isinstance(rows, list):
+            raise ModelDiscoveryError(reason="format")
+        for row in rows:
+            if isinstance(row, dict) and row.get("id") in models:
+                capabilities.setdefault(row["id"], set()).add(identify_type({"sub_type": subtype}))
+    for name, kinds in capabilities.items():
+        kind, source = next(iter(kinds)) if len(kinds) == 1 else (None, "unknown")
+        models[name].update(model_type=kind, type_source=source)
+
+
 class ModelDiscoveryService:
     @classmethod
-    async def discover(cls, provider: str, config: dict) -> dict:
+    async def discover(cls, provider: str, config: dict, *, source="auto", options=None) -> dict:
         try:
             async with asyncio.timeout(55):
-                return await cls._discover(provider, config)
+                return await cls._discover(provider, config, source, options or {})
         except TimeoutError:
-            raise ModelDiscoveryError(
-                msg="Fetching models timed out. Check the API address and retry.", reason="timeout"
-            ) from None
+            raise ModelDiscoveryError(reason="timeout") from None
 
     @classmethod
-    async def _discover(cls, provider: str, config: dict) -> dict:
-        url, headers = connection(provider, config)
+    async def _discover(cls, provider: str, config: dict, source: str, options: dict) -> dict:
+        plan = build_plan(provider, config, source, options)
+        if plan.protocol == "preset":
+            payload, docs = preset_catalog(provider)
+            return {
+                "models": normalize_catalog(payload, provider),
+                "source": "preset",
+                "scope": "catalog",
+                "catalog_date": "2026-10-21",
+                "docs_url": docs,
+            }
         proxy = config.get("openai_proxy") or None
         if proxy:
-            proxy_url = urlsplit(proxy)
-            if (
-                proxy_url.scheme not in {"http", "https"}
-                or not proxy_url.hostname
-                or proxy_url.query
-                or proxy_url.fragment
-            ):
-                raise ModelDiscoveryError(msg="Enter a valid HTTP or HTTPS proxy API base URL.", reason="address")
+            validate_url(proxy)
         models = {}
-        params = {"limit": 1000} if provider == "anthropic" else {}
+        seen_pages = set()
         async with httpx.AsyncClient(timeout=20, follow_redirects=False, proxy=proxy, trust_env=False) as client:
             for _ in range(50):
-                try:
-                    async with client.stream("GET", url, headers=headers, params=params) as response:
-                        if response.status_code in {401, 403}:
-                            raise ModelDiscoveryError(
-                                msg="The model service rejected this API key or its permissions.", reason="auth"
-                            )
-                        if response.status_code == 404:
-                            raise ModelDiscoveryError(
-                                msg="This API address provides no model list. Use manual configuration.",
-                                reason="unsupported",
-                            )
-                        if response.status_code >= 300:
-                            raise ModelDiscoveryError(msg="The model service is temporarily unavailable. Retry later.")
-                        content = bytearray()
-                        async for chunk in response.aiter_bytes():
-                            content.extend(chunk)
-                            if len(content) > 4 * 1024 * 1024:
-                                raise ModelDiscoveryError(
-                                    msg="The model list exceeds the response size limit.", reason="limit"
-                                )
-                        payload = json.loads(content)
-                except httpx.TimeoutException:
-                    raise ModelDiscoveryError(
-                        msg="Fetching models timed out. Check the API address and retry.", reason="timeout"
-                    ) from None
-                except httpx.HTTPError:
-                    raise ModelDiscoveryError(
-                        msg="Unable to connect to the model service. Check the address and retry.", reason="connection"
-                    ) from None
-                except (ValueError, TypeError):
-                    raise ModelDiscoveryError(
-                        msg="The API returned an unsupported model list format.", reason="format"
-                    ) from None
-                if not isinstance(payload, dict):
-                    raise ModelDiscoveryError()
-                for model in normalize_catalog(payload, provider):
+                method, url, kwargs = plan.request(options)
+                payload = await read_catalog(client, method, url, **kwargs)
+                normalized, more = next_page(plan, payload)
+                page_models = normalize_catalog(
+                    normalized,
+                    "ollama" if provider == "ollama" else "xinference" if provider == "xinference" else "openai",
+                )
+                fingerprint = tuple(model["model_name"] for model in page_models)
+                if fingerprint and fingerprint in seen_pages:
+                    raise ModelDiscoveryError(reason="format")
+                seen_pages.add(fingerprint)
+                for model in page_models:
                     models[model["model_name"]] = model
                 if len(models) > 5000:
-                    raise ModelDiscoveryError(msg="The model list exceeds the model count limit.", reason="limit")
-                if not payload.get("has_more"):
-                    return {"models": sorted(models.values(), key=lambda model: model["model_name"].lower())}
-                cursor = payload.get("last_id")
-                if not cursor or cursor == params.get("after_id"):
-                    raise ModelDiscoveryError(
-                        msg="The model service returned an invalid pagination cursor.", reason="format"
-                    )
-                params["after_id"] = cursor
-        raise ModelDiscoveryError(msg="The model list exceeds the page count limit.", reason="limit")
+                    raise ModelDiscoveryError(reason="limit")
+                if not more:
+                    if provider == "silicon" and urlsplit(plan.url).hostname in {
+                        "api.siliconflow.cn",
+                        "api.siliconflow.com",
+                    }:
+                        await enrich_silicon(client, plan.url, plan.headers, models)
+                    return {
+                        "models": sorted(models.values(), key=lambda model: model["model_name"].lower()),
+                        "source": "live",
+                        "scope": plan.scope,
+                    }
+        raise ModelDiscoveryError(reason="limit")

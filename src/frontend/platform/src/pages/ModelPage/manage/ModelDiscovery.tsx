@@ -19,6 +19,8 @@ import {
 import {
   DiscoveredModel,
   DiscoveryConnection,
+  DiscoveryResult,
+  DiscoverySource,
   ModelType,
   discoverModels,
 } from "@/controllers/API/modelDiscovery";
@@ -30,6 +32,8 @@ import {
   discoveryProviders,
   importableModels,
 } from "./modelDiscoveryState";
+
+import { ModelDiscoveryOptions } from "./ModelDiscoveryOptions";
 
 interface ModelDiscoveryProps {
   provider: string;
@@ -49,6 +53,12 @@ export function ModelDiscovery({
   onImport,
 }: ModelDiscoveryProps) {
   const { t } = useTranslation("model");
+  const [source, setSource] = useState<DiscoverySource>("auto");
+  const [options, setOptions] = useState<Record<string, string>>({});
+  const [resultInfo, setResultInfo] = useState<DiscoveryResult | null>(null);
+  const [deploymentNames, setDeploymentNames] = useState<
+    Record<string, string>
+  >({});
   const [open, setOpen] = useState(false);
   const [catalog, setCatalog] = useState<DiscoveredModel[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -62,13 +72,28 @@ export function ModelDiscovery({
   const lastConnection = useRef("");
   const supported = discoveryProviders.has(provider);
   const allowedTypes = availableModelTypes(provider);
-  const eligible = importableModels(
+  const needsDeployment = resultInfo?.scope === "azure_models";
+  const candidates = importableModels(
     catalog || [],
     selected,
     types,
-    existing,
+    needsDeployment ? [] : existing,
     provider,
   );
+  const eligible = needsDeployment
+    ? candidates
+        .flatMap((model) => {
+          const name = deploymentNames[model.model_name]?.trim();
+          return name && name.length <= 100 && !existing.includes(name)
+            ? [{ ...model, model_name: name }]
+            : [];
+        })
+        .filter(
+          (model, index, models) =>
+            models.findIndex((item) => item.model_name === model.model_name) ===
+            index,
+        )
+    : candidates;
   const visible = (catalog || []).filter((model) => {
     const type = types[model.model_name] || model.model_type;
     return (
@@ -82,7 +107,12 @@ export function ModelDiscovery({
   const selectable = visible.filter((model) => {
     const type = types[model.model_name] || model.model_type;
     return (
-      !existing.includes(model.model_name) &&
+      !existing.includes(
+        needsDeployment
+          ? deploymentNames[model.model_name]?.trim()
+          : model.model_name,
+      ) &&
+      (!needsDeployment || !!deploymentNames[model.model_name]?.trim()) &&
       model.type_source !== "unsupported" &&
       type &&
       allowedTypes.includes(type)
@@ -95,6 +125,8 @@ export function ModelDiscovery({
   useEffect(() => {
     requestVersion.current += 1;
     lastConnection.current = "";
+    setResultInfo(null);
+    setDeploymentNames({});
     setCatalog(null);
     setSelected(new Set());
     setTypes({});
@@ -103,6 +135,8 @@ export function ModelDiscovery({
     setError("");
     setLoading(false);
     setOpen(false);
+    setSource("auto");
+    setOptions({});
     return () => {
       requestVersion.current += 1;
     };
@@ -112,19 +146,24 @@ export function ModelDiscovery({
     if (!supported) return;
     const connection = getConnection();
     if (!connection) return;
-    const identity = JSON.stringify(connection);
+    const identity = JSON.stringify([connection, source, options]);
     if (automatic && identity === lastConnection.current) return;
     lastConnection.current = identity;
     const version = ++requestVersion.current;
     setOpen(true);
     setLoading(true);
     setError("");
+    setResultInfo(null);
+    setDeploymentNames({});
     setCatalog(null);
     setSelected(new Set());
     setTypes({});
     try {
-      const result = await discoverModels(connection);
-      if (version === requestVersion.current) setCatalog(result.models);
+      const result = await discoverModels({ ...connection, source, options });
+      if (version === requestVersion.current) {
+        setCatalog(result.models);
+        setResultInfo(result);
+      }
     } catch (failure: unknown) {
       if (version === requestVersion.current) {
         lastConnection.current = "";
@@ -139,6 +178,11 @@ export function ModelDiscovery({
           "connection",
           "format",
           "limit",
+          "credentials",
+          "workspace",
+          "resource",
+          "region",
+          "rate_limit",
         ]);
         setError(
           t(
@@ -158,6 +202,30 @@ export function ModelDiscovery({
     if (autoFetchVersion > 0) void fetchCurrent.current(true);
   }, [autoFetchVersion]);
 
+  const handleOptionsChange = (
+    nextSource: DiscoverySource,
+    nextOptions: Record<string, string>,
+  ) => {
+    requestVersion.current += 1;
+    lastConnection.current = "";
+    setSource(nextSource);
+    setOptions(nextOptions);
+    setCatalog(null);
+    setResultInfo(null);
+    setDeploymentNames({});
+    setSelected(new Set());
+    setTypes({});
+    setError("");
+    setLoading(false);
+  };
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setOptions({});
+      lastConnection.current = "";
+    }
+  };
+
   if (!supported) return null;
 
   return (
@@ -174,7 +242,7 @@ export function ModelDiscovery({
         <Plus className="mr-1 size-4" />
         {t("model.selectModels")}
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
           className="flex max-h-[calc(100vh-64px)] w-[calc(100vw-32px)] flex-col sm:max-w-[720px]"
           onCloseAutoFocus={(event) => {
@@ -186,7 +254,36 @@ export function ModelDiscovery({
             <DialogTitle>{t("model.selectModels")}</DialogTitle>
             <DialogDescription>{t("model.modelPickerHint")}</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-3 min-h-0">
+          <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
+            <ModelDiscoveryOptions
+              provider={provider}
+              source={source}
+              options={options}
+              onChange={handleOptionsChange}
+            />
+            {resultInfo && (
+              <div role="status" className="text-xs text-muted-foreground">
+                <p>
+                  {t(
+                    resultInfo.source === "preset"
+                      ? "model.discoveryPresetNotice"
+                      : `model.discoveryScope_${resultInfo.scope || "catalog"}`,
+                    { date: resultInfo.catalog_date },
+                  )}
+                </p>
+                {resultInfo.source === "preset" &&
+                  resultInfo.docs_url?.startsWith("https://") && (
+                    <a
+                      className="text-primary"
+                      href={resultInfo.docs_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {t("model.discoveryDocs")}
+                    </a>
+                  )}
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <Input
                 aria-label={t("model.searchDiscoveredModels")}
@@ -273,7 +370,11 @@ export function ModelDiscovery({
               {!loading &&
                 !error &&
                 visible.map((model) => {
-                  const added = existing.includes(model.model_name);
+                  const added = existing.includes(
+                    needsDeployment
+                      ? deploymentNames[model.model_name]?.trim()
+                      : model.model_name,
+                  );
                   const type = types[model.model_name] || model.model_type;
                   const unsupported =
                     model.type_source === "unsupported" ||
@@ -286,7 +387,13 @@ export function ModelDiscovery({
                       <Checkbox
                         aria-label={model.model_name}
                         checked={selected.has(model.model_name)}
-                        disabled={added || unsupported || !type}
+                        disabled={
+                          added ||
+                          unsupported ||
+                          !type ||
+                          (needsDeployment &&
+                            !deploymentNames[model.model_name]?.trim())
+                        }
                         onCheckedChange={(checked) =>
                           setSelected((previous) => {
                             const next = new Set(previous);
@@ -297,7 +404,10 @@ export function ModelDiscovery({
                         }
                       />
                       <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <p className="min-w-0 truncate text-sm" title={model.model_name}>
+                        <p
+                          className="min-w-0 truncate text-sm"
+                          title={model.model_name}
+                        >
                           {model.model_name}
                         </p>
                         {(added || unsupported) && (
@@ -310,6 +420,23 @@ export function ModelDiscovery({
                           </span>
                         )}
                       </div>
+                      {needsDeployment && (
+                        <Input
+                          className="w-36"
+                          aria-label={t("model.discoveryDeploymentFor", {
+                            name: model.model_name,
+                          })}
+                          placeholder={t("model.discoveryDeploymentName")}
+                          value={deploymentNames[model.model_name] || ""}
+                          maxLength={100}
+                          onChange={(event) =>
+                            setDeploymentNames((previous) => ({
+                              ...previous,
+                              [model.model_name]: event.target.value,
+                            }))
+                          }
+                        />
+                      )}
                       {model.type_source === "unknown" &&
                       !added &&
                       !unsupported ? (
@@ -368,7 +495,7 @@ export function ModelDiscovery({
               {t("model.selectedModelCount", { count: eligible.length })}
             </span>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>
+              <Button variant="outline" onClick={() => handleOpenChange(false)}>
                 {t("model.cancel")}
               </Button>
               <Button
@@ -376,7 +503,7 @@ export function ModelDiscovery({
                 onClick={() => {
                   onImport(eligible);
                   setSelected(new Set());
-                  setOpen(false);
+                  handleOpenChange(false);
                 }}
               >
                 {t("model.addSelectedModels", { count: eligible.length })}

@@ -43,3 +43,11 @@ API 或历史版本保存为对象的 user_kwargs 先转换为编辑器 JSON 文
 本 PR 保持每日限流工具、模型和服务商结构、创建/更新中的配额字段赋值逻辑。前端 saveData 继续携带 formData.limit_flag 与 formData.limit。同步和异步检查覆盖关闭、阈值、同服务商共享、服务商隔离与日期分桶；真实组件检查覆盖回填和保存。
 
 验证结果、官方基线问题对比及真实环境边界见 verification.md。发布时按当前环境构建完整候选，只合入本功能文件及语言键，保护当前 client、其他后端能力和业务配置。
+
+## 2026-10-21 厂商适配
+
+发现层拆分为查询协调、厂商请求计划与预置目录。请求增加 `source`（auto/live/preset）及仅限当前请求的 `options`；旧请求省略两者时沿用 auto。响应增加 `source`、`scope`，预置目录另带 `docs_url` 与 `catalog_date`。发现凭据由 options 独立传递，服务商保存合同保持原字段。
+
+百炼原生分页使用 page_no/page_size 和 output.total，能力字段进入类型归一化。火山管理请求使用 V4 签名，读取 Running 接入点。Azure 默认模型目录使用 api-key；可选 ARM 凭据读取部署，nextLink 限定同一账户路径。硅基流动用官方 sub_type 筛选补全能力，Anthropic 使用其原生地址及游标。各协议共享页数、结果数、响应大小与总时限上限。
+
+四家预置目录按官方域名选择，兼容网关继续实时查询；实时失败返回明确原因。未知类型由用户确认，能力与现有运行适配器共同决定能否添加。所有具体来源与限制见 providers.md。

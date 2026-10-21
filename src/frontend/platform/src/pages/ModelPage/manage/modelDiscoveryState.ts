@@ -2,6 +2,11 @@ import { DiscoveredModel, ModelType } from "@/controllers/API/modelDiscovery";
 
 export const discoveryProviders = new Set([
   "openai",
+  "azure_openai",
+  "volcengine",
+  "tencent",
+  "spark",
+  "minimax",
   "qwen",
   "deepseek",
   "silicon",

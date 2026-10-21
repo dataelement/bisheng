@@ -642,7 +642,9 @@ class LLMService:
             if stored is None:
                 raise NotFoundError.http_exception()
             config = JsonFieldMasker().update_json_with_masked(stored.config or {}, config)
-        return await ModelDiscoveryService.discover(data.provider, cls.strip_config_whitespace(config))
+        return await ModelDiscoveryService.discover(
+            data.provider, cls.strip_config_whitespace(config), source=data.source, options=data.options
+        )
 
     @classmethod
     async def get_one_llm(

@@ -1,8 +1,6 @@
 """Isolated catalog tests; run with --confcutdir=test/llm."""
 
 import ast
-import importlib.util
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,13 +8,11 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from test.llm.discovery_test_loader import catalog, providers
+
 REAL_CLIENT = httpx.AsyncClient
 
 path = Path(__file__).parents[2] / "bisheng/llm/domain/services/model_discovery.py"
-spec = importlib.util.spec_from_file_location("catalog_under_test", path)
-catalog = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = catalog
-spec.loader.exec_module(catalog)
 
 
 @pytest.mark.parametrize(
@@ -57,7 +53,7 @@ def test_capabilities_precede_model_family(item, kind, source):
     ],
 )
 def test_provider_address_normalization(provider, config, url):
-    assert catalog.connection(provider, config)[0] == url
+    assert providers.connection(provider, config)[0] == url
 
 
 @pytest.mark.parametrize(
@@ -72,12 +68,12 @@ def test_provider_address_normalization(provider, config, url):
 )
 def test_invalid_addresses_are_rejected(address):
     with pytest.raises(catalog.ModelDiscoveryError):
-        catalog.connection("vllm", {"openai_api_base": address})
+        providers.connection("vllm", {"openai_api_base": address})
 
 
 def test_masked_key_requires_saved_connection_resolution():
     with pytest.raises(catalog.ModelDiscoveryError):
-        catalog.connection("openai", {"openai_api_key": "********"})
+        providers.connection("openai", {"openai_api_key": "********"})
 
 
 def test_native_and_compatible_shapes_and_deduplication():
@@ -149,7 +145,11 @@ async def test_timeout_and_invalid_response_are_business_failures(monkeypatch):
 
 async def test_empty_and_invalid_json(monkeypatch):
     mock_transport(monkeypatch, lambda request: httpx.Response(200, json={"data": []}))
-    assert await catalog.ModelDiscoveryService.discover("openai", {}) == {"models": []}
+    assert await catalog.ModelDiscoveryService.discover("openai", {}) == {
+        "models": [],
+        "source": "live",
+        "scope": "catalog",
+    }
     mock_transport(monkeypatch, lambda request: httpx.Response(200, text="<html>invalid</html>"))
     with pytest.raises(catalog.ModelDiscoveryError) as caught:
         await catalog.ModelDiscoveryService.discover("openai", {})
@@ -230,7 +230,7 @@ async def test_masked_key_reuses_saved_key_and_honors_new_address():
         object(),
     )
     namespace["ModelDiscoveryService"].discover.assert_awaited_once_with(
-        "openai", {"openai_api_key": "fixture", "openai_api_base": "http://new.internal/v1"}
+        "openai", {"openai_api_key": "fixture", "openai_api_base": "http://new.internal/v1"}, source="auto", options={}
     )
 
 
@@ -241,7 +241,9 @@ async def test_new_connection_uses_input_without_reading_saved_secrets():
     )
     coordinator.get_one_llm.assert_not_called()
     namespace["LLMDao"].aget_server_by_id.assert_not_called()
-    namespace["ModelDiscoveryService"].discover.assert_awaited_once_with("openai", {"openai_api_key": "fixture"})
+    namespace["ModelDiscoveryService"].discover.assert_awaited_once_with(
+        "openai", {"openai_api_key": "fixture"}, source="auto", options={}
+    )
 
 
 def test_anthropic_key_is_masked_and_preserved_on_unchanged_edit():
