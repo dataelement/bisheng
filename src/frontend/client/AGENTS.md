@@ -10,6 +10,8 @@ pnpm install   # run at src/frontend/ (pnpm workspace root; npm is disabled)
 pnpm dev       # dev server on :4001 (or `pnpm dev:client` from the workspace root)
 ```
 
+Both apps extend `../config/` for TypeScript, ESLint, PostCSS and Vite proxy helpers. Shared dependency versions are managed by the workspace catalog. See `../config/README.md`.
+
 ## Tech Stack
 Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (shadcn/ui) + **Recoil** + **react-query v4 (@tanstack)** + react-i18next + react-router-dom v6 + **lucide-react** + axios (wrapped in `~/api/request.ts`)
 

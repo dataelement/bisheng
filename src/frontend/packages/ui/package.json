@@ -10,7 +10,8 @@
     ".": "./src/index.ts",
     "./tokens.css": "./src/styles/tokens.css",
     "./tailwind-preset": "./tailwind-preset.cjs",
-    "./design-token": "./design-token.cjs"
+    "./design-token": "./design-token.cjs",
+    "./cn": "./src/utils/cn.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

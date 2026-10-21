@@ -6,12 +6,6 @@ import reportWebVitals from "./reportWebVitals";
 import './i18n';
 // @ts-ignore
 import "./style/index.css";
-// @ts-ignore
-import "./style/applies.css";
-// @ts-ignore
-import "./style/classes.css";
-// @ts-ignore
-import "./style/markdown.css";
 // Shared tokens must win over legacy platform variables such as --radius.
 import '@bisheng/ui/tokens.css';
 import { QueryClient, QueryClientProvider } from "react-query";
