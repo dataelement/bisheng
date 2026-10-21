@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import PermissionPublishNotReadyError
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.permission.domain.models import ResourcePermissionMode
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
@@ -147,23 +147,24 @@ async def reconcile_system_owned_resources(
             if item.state != "MISSING":
                 continue
             resource = item.resource
-            await runtime.authorize_system_owned(
-                actor=PermissionActor(
-                    user_id=operator_id,
-                    current_tenant_id=resource.tenant_id,
-                ),
-                target=VerifiedPermissionTarget.from_business_service(
-                    tenant_id=resource.tenant_id,
-                    resource_type=resource.resource_type,
-                    resource_id=resource.resource_id,
-                    resource_version=0,
-                    context_version=resource.context_version,
-                ),
-                action_codes=resource.action_codes,
-                idempotency_key=(
-                    f"f048:system-bootstrap:{resource.tenant_id}:{resource.resource_type}:{resource.resource_id}"
-                ),
-            )
+            with tenant_execution_scope(resource.tenant_id):
+                await runtime.authorize_system_owned(
+                    actor=PermissionActor(
+                        user_id=operator_id,
+                        current_tenant_id=resource.tenant_id,
+                    ),
+                    target=VerifiedPermissionTarget.from_business_service(
+                        tenant_id=resource.tenant_id,
+                        resource_type=resource.resource_type,
+                        resource_id=resource.resource_id,
+                        resource_version=0,
+                        context_version=resource.context_version,
+                    ),
+                    action_codes=resource.action_codes,
+                    idempotency_key=(
+                        f"f048:system-bootstrap:{resource.tenant_id}:{resource.resource_type}:{resource.resource_id}"
+                    ),
+                )
     after = await inspect_system_owned_resources(normalized)
     if apply and any(item.state != "CURRENT" for item in after):
         scopes = ", ".join(item.resource.object_key for item in after if item.state != "CURRENT")
