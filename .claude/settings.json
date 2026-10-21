@@ -2,17 +2,24 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|StrReplace",
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'FILE=\"$CLAUDE_FILE\"; if [ -n \"$FILE\" ] && echo \"$FILE\" | grep -q \"\\.py$\"; then cd /Users/lilu/Projects/bisheng/src/backend && if [ -f .venv/bin/ruff ]; then .venv/bin/ruff format \"$FILE\" 2>/dev/null; .venv/bin/ruff check --fix \"$FILE\" 2>/dev/null; fi; fi'",
-            "async": true
-          },
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent_hooks.py\" claude-post-edit",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/lilu/Projects/bisheng/scripts/arch-guard.sh \"$CLAUDE_FILE\"",
-            "async": false
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent_hooks.py\" claude-pre-tool",
+            "timeout": 10
           }
         ]
       }

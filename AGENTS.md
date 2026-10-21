@@ -141,7 +141,7 @@ The two React apps **must not be mixed**. Apply rules by directory:
 
 ## 5. Architecture Guard (Auto-enforced)
 
-`scripts/arch-guard.sh` runs after every Write/Edit via PostToolUse hook:
+`scripts/arch-guard.sh` runs after an agent write (Cursor `postToolUse`, Claude Code `PostToolUse`). A VIOLATION exits 1 and the hook feeds the message back. A WARNING exits 0. Rules 9-11 look at added lines only, so existing files are not failed just because they are touched.
 
 | # | Rule | Severity |
 |---|------|----------|
@@ -153,8 +153,11 @@ The two React apps **must not be mixed**. Apply rules by directory:
 | 6 | Frontend store must not call HTTP directly (use `controllers/API/` or `api/`) | WARNING |
 | 7 | No hardcoded secrets (password/secret/token literals) | WARNING |
 | 8 | DAO/Model must not read `RoleAccessDao` for permission filtering | VIOLATION |
+| 9 | New Python lines must not use `sqlalchemy.JSON`, `mysql.JSON`, `LONGTEXT`, `MEDIUMTEXT`, `information_schema`, `JSON_EXTRACT` / `JSON_CONTAINS` / `JSON_SEARCH`. `dialect_helpers.py` and `src/backend/test/` are exempt | VIOLATION |
+| 10 | New TS lines must not import the `axios` package, except `platform` `controllers/request.ts` and `client` `api/request.ts` | VIOLATION |
+| 11 | `platform` and `client` must not import each other | VIOLATION |
 
-**VIOLATION rules must be fixed immediately** — these are v2.5 refactor boundaries.
+**VIOLATION rules must be fixed immediately** — these are v2.5 refactor boundaries. Hook entry: `.cursor/hooks.json` and `.claude/settings.json`, both calling `scripts/agent_hooks.py`.
 
 ---
 
