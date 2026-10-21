@@ -1089,6 +1089,7 @@ class QuestionService:
         job_category: str | None = None,
         asked_from: date | None = None,
         asked_to: date | None = None,
+        question_type: str | None = None,
     ) -> tuple[list[Question], int]:
         """列表：filter=mine|invited_me 与 display_status；status=3/4 不当待采纳。"""
         viewer = self._require_user(user, user_id)
@@ -1130,6 +1131,7 @@ class QuestionService:
             invited_expert_ids=invited_ids,
             asked_from=asked_from,
             asked_to=asked_to,
+            question_type=question_type,
             viewer_user_id=viewer_id,
             viewer_is_admin=is_expert_library_admin(viewer),
         )

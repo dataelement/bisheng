@@ -139,3 +139,15 @@ def normalize_question_type(value: Any) -> str:
     if text == QUESTION_TYPE_DIRECTED:
         return QUESTION_TYPE_DIRECTED
     return QUESTION_TYPE_PUBLIC
+
+
+def normalize_list_question_type_filter(value: Any) -> str | None:
+    """列表筛选用 question_type; 空表示不按类型过滤."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text == QUESTION_TYPE_DIRECTED:
+        return QUESTION_TYPE_DIRECTED
+    if text == QUESTION_TYPE_PUBLIC:
+        return QUESTION_TYPE_PUBLIC
+    return None

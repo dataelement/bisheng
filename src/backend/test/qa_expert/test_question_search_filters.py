@@ -131,6 +131,58 @@ async def test_query_filters_before_paging_and_counts_current_tenant(search_engi
     assert rows == [] and total == 1
 
 
+async def test_unresolved_and_solved_hide_directed_from_others_admin_sees_all(search_engine):
+    """未解决/已解决与默认列表同一可见性: 外人看不到定向题, 专家库管理员看全部."""
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    async with AsyncSession(search_engine, expire_on_commit=False) as session:
+        session.add(
+            Question(
+                id=40,
+                user_id=77,
+                title="定向已解决",
+                description="正文",
+                business_domain="设备",
+                question_type="directed",
+                answer_count=1,
+                adopt_count=1,
+                created_at=datetime(2026, 10, 14),
+            )
+        )
+        await session.commit()
+    repo = repository_module.QuestionRepository()
+    outsider, _ = await repo.list_all(viewer_user_id=99, display_status="unresolved", viewer_is_admin=False)
+    assert 4 not in {row.id for row in outsider}
+    invited, _ = await repo.list_all(viewer_user_id=11, display_status="unresolved", viewer_is_admin=False)
+    assert 4 in {row.id for row in invited}
+    solved_out, _ = await repo.list_all(viewer_user_id=99, display_status="solved", viewer_is_admin=False)
+    assert 40 not in {row.id for row in solved_out}
+    admin_unresolved, _ = await repo.list_all(viewer_user_id=99, display_status="unresolved", viewer_is_admin=True)
+    admin_solved, _ = await repo.list_all(viewer_user_id=99, display_status="solved", viewer_is_admin=True)
+    assert 4 in {row.id for row in admin_unresolved}
+    assert 40 in {row.id for row in admin_solved}
+
+
+async def test_list_question_type_filter_public_and_directed(search_engine):
+    """question_type 在仓储层过滤; 与既有可见性规则叠加."""
+    repo = repository_module.QuestionRepository()
+    public_rows, public_total = await repo.list_all(viewer_user_id=99, question_type="public", viewer_is_admin=False)
+    assert 4 not in {row.id for row in public_rows}
+    assert public_total >= len(public_rows)
+    assert all(getattr(row, "question_type", "public") != "directed" for row in public_rows)
+
+    directed_rows, directed_total = await repo.list_all(
+        viewer_user_id=11, question_type="directed", viewer_is_admin=False
+    )
+    assert {row.id for row in directed_rows} == {4}
+    assert directed_total == 1
+
+    outsider_directed, outsider_total = await repo.list_all(
+        viewer_user_id=99, question_type="directed", viewer_is_admin=False
+    )
+    assert outsider_directed == [] and outsider_total == 0
+
+
 async def test_directed_visibility_and_admin_anonymous_name(search_engine):
     repo = repository_module.QuestionRepository()
     rows, total = await repo.list_all(viewer_user_id=11, keyword="问题4")
@@ -195,3 +247,5 @@ async def test_http_search_filters_query_real_database(search_engine):
         response = await client.get("/api/v1/qa_experts/questions", params={"keyword": "答案专属"})
         assert response.json()["data"]["total"] == 1
         assert response.json()["data"]["questions"][0]["id"] == 2
+        invalid = await client.get("/api/v1/qa_experts/questions", params={"question_type": "secret"})
+        assert invalid.status_code == 422

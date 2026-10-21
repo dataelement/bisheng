@@ -550,6 +550,10 @@ class QuestionListQuery(BaseModel):
     job_category: str | None = Field(default=None, max_length=200, description="受邀专家职位类")
     asked_from: date | None = Field(default=None, description="提问开始日期, 包含当日")
     asked_to: date | None = Field(default=None, description="提问结束日期, 包含当日")
+    question_type: str | None = Field(
+        default=None,
+        description="问题类型筛选: public 公开 / directed 定向, 空为全部",
+    )
     sort_by: str = Field(default="latest", description="排序: latest/hot/unanswered/answered_by_me")
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
