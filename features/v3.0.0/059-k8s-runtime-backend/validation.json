@@ -1,0 +1,46 @@
+{
+  "feature": "F059",
+  "recorded_at": "2026-10-21T13:50:33.283799+00:00",
+  "validated_source_commit": "ea3b1f6afb68da2b52ba4fd1fcf0bb5e060510ba",
+  "sdd": {
+    "spec_confirmed": true,
+    "design_confirmed": true,
+    "tasks_review": "LGTM",
+    "l1_completed": 17,
+    "tasks_total": 73,
+    "e2e": "not_started",
+    "l2": "not_started"
+  },
+  "checks": {
+    "runtime": {
+      "passed": 600,
+      "skipped": 10,
+      "exit_code": 0,
+      "log": "/private/tmp/f059-runtime-final-checkpoint.log"
+    },
+    "backend": {
+      "passed": 82,
+      "exit_code": 0,
+      "log": "/private/tmp/f059-backend-final-checkpoint.log"
+    },
+    "public_tenant_fix": {
+      "passed": 17,
+      "source_commit": "0e3c156e5",
+      "pushed": false,
+      "log": "/private/tmp/f059-public-prereq-tests.log"
+    },
+    "alembic_head": "f059_merge_f086_heads",
+    "uv_lock_frozen_offline": "passed",
+    "ruff": "passed for changed files",
+    "arch_guard": "passed per changed Python file"
+  },
+  "not_executed": [
+    "real Kubernetes deployment on 189",
+    "F059 full platform E2E",
+    "new revisions on real MySQL or DM8",
+    "DM8 driver-specific DDL (generic compiler only)",
+    "new image multi-architecture CI build",
+    "offline installation"
+  ],
+  "blocking_integration_prerequisite": "Public tenant bootstrap must first enter feat/3.0.0; shared-branch push authorization requested asynchronously and still pending."
+}

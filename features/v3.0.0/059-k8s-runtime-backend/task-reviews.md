@@ -316,3 +316,5 @@ T002/T021后续核对：材料 key_id 存储宽度修正为64，与已确认wire
 **结果**：PASS。
 
 T009/T013增量L1：应用凭据支持只给app容器的Secret引用，材料Secret不混用；backend审批投影仅接收/存放Secret内容与Pod环境值摘要。补测红阶段已记录，绿阶段模板+准入68 passed；禁止原始workload私钥进入backend，manager登记须先投影，准入对实际K8s请求独立投影比较。
+
+最终本地检查点（源提交`ea3b1f6afb68da2b52ba4fd1fcf0bb5e060510ba`）：runtime **600 passed、10 skipped**；backend **82 passed**；公共启动补丁 **17 passed**。真实K8s/平台、镜像CI及新revision数据库升级均未执行。完整边界与本地日志见[validation.json](./validation.json)。公共发布线授权仍待用户答复。
