@@ -191,6 +191,7 @@ class Config:
     data_helper_gid: int = 10001
 
     # --- orchestration backend -------------------------------------------
+    executor_kind: str = "docker"
     docker_host: str = ""
     network: str = DEFAULT_NETWORK
 
@@ -360,6 +361,12 @@ class Config:
             return self.app_facing_base_url.rstrip("/")
         return f"http://{self.host}:{self.port}"
 
+    def __post_init__(self):
+        if self.executor_kind not in {"docker", "kubernetes"}:
+            raise ValueError("runtime_executor_invalid")
+        if self.executor_kind == "kubernetes" and self.protocol_version != 2:
+            raise ValueError("kubernetes_requires_protocol_v2")
+
     def with_overrides(self, **kwargs) -> Config:
         return replace(self, **kwargs)
 
@@ -381,6 +388,7 @@ def load_config() -> Config:
         protocol_version=_env_int("RTM_PROTOCOL_VERSION", 1),
         image_pull_policy=_env_str("RTM_IMAGE_PULL_POLICY", "if-not-present"),
         data_helper_image=_env_str("RTM_DATA_HELPER_IMAGE"),
+        executor_kind=_env_str("RTM_EXECUTOR", "docker"),
         docker_host=_env_str("RTM_DOCKER_HOST"),
         network=_env_str("RTM_NETWORK", DEFAULT_NETWORK) or DEFAULT_NETWORK,
         data_root=Path(_env_str("RTM_DATA_ROOT", DEFAULT_DATA_ROOT) or DEFAULT_DATA_ROOT),

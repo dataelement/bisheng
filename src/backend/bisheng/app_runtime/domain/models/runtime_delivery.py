@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Column, UniqueConstraint, text
+from sqlalchemy import Column, String, UniqueConstraint, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -25,6 +25,11 @@ class RuntimeRecord(SQLModelSerializable):
 class ScopedRuntimeRecord(RuntimeRecord):
     tenant_id: int = Field(default=0, index=True)
     app_id: str = Field(index=True, max_length=36)
+
+
+def _transfer_authorization(context):
+    """New legacy inserts acquire a scope; historical rows stay NULL until ops backfill."""
+    return context.get_current_parameters().get("operation_id")
 
 
 class RuntimeProfile(RuntimeRecord, table=True):
@@ -104,6 +109,7 @@ class RuntimeAssignment(ScopedRuntimeRecord, table=True):
     generation: int = 0
     owner_epoch: int = 1
     active_operation_id: str = Field(default="", max_length=36)
+    data_operation_id: str = Field(default="", max_length=36, sa_column_kwargs={"server_default": ""})
 
 
 class RuntimeNode(RuntimeRecord, table=True):
@@ -116,6 +122,12 @@ class RuntimeNode(RuntimeRecord, table=True):
     heartbeat_at: datetime
     generation: int = 1
     status: str = Field(default="ready", max_length=24)
+    executor_kind: str = Field(default="docker", max_length=24, sa_column_kwargs={"server_default": "docker"})
+    capabilities: dict | None = Field(default_factory=dict, sa_column=Column(JsonType, nullable=True))
+    controller_holder: str = Field(default="", max_length=64, sa_column_kwargs={"server_default": ""})
+    controller_epoch: int = Field(default=0, sa_column_kwargs={"server_default": text("0")})
+    lease_until: datetime | None = None
+    probe_report: dict | None = Field(default_factory=dict, sa_column=Column(JsonType, nullable=True))
 
 
 class RuntimeCapacityReservation(ScopedRuntimeRecord, table=True):
@@ -182,8 +194,18 @@ class RuntimeEgressPolicy(ScopedRuntimeRecord, table=True):
 
 class RuntimeTransfer(ScopedRuntimeRecord, table=True):
     __tablename__ = "runtime_transfer"
-    __table_args__ = (UniqueConstraint("operation_id", "artifact_id", "action", name="uq_runtime_transfer_action"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "authorization_kind", "authorization_id", "artifact_id", "action", name="uq_rt_transfer_authority"
+        ),
+    )
     operation_id: str = Field(max_length=36)
+    authorization_kind: str = Field(
+        default="operation", max_length=24, sa_column_kwargs={"server_default": "operation"}
+    )
+    authorization_id: str | None = Field(
+        default=None, sa_column=Column(String(36), nullable=True, default=_transfer_authorization)
+    )
     artifact_id: str = Field(max_length=36)
     node_id: str = Field(max_length=64)
     action: str = Field(max_length=16)
