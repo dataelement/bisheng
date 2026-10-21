@@ -264,14 +264,14 @@ export function ModelItem({
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid min-h-8 w-80 max-w-full shrink-0 grid-cols-[9rem_minmax(0,1fr)] items-center gap-4 self-end">
+            <div className="ml-auto grid min-h-8 w-96 max-w-full shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-6 self-end">
               <div className="flex min-h-8 items-center">
                 {model.model_type === "llm" &&
                   ["qwen", "tencent", "moonshot", "minimax"].includes(type) && (
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <Label
                         htmlFor={`${controlId}-search`}
-                        className="text-xs text-muted-foreground whitespace-nowrap"
+                        className="text-xs text-muted-foreground"
                       >
                         {t("model.webSearch")}
                       </Label>
@@ -281,6 +281,7 @@ export function ModelItem({
                       />
                       <Switch
                         id={`${controlId}-search`}
+                        className="shrink-0"
                         checked={isWebSearchEnabled}
                         onCheckedChange={handleSwitchChange}
                       />
@@ -295,7 +296,7 @@ export function ModelItem({
                       <button
                         type="button"
                         aria-label={t("model.advancedParamsConfig")}
-                        className="flex min-h-8 items-center gap-1 text-left text-primary text-xs"
+                        className="flex min-h-8 items-center gap-1 whitespace-nowrap text-left text-primary text-xs"
                       >
                         <Settings size={16} strokeWidth={2} className="shrink-0" />
                         <span>{t("model.advancedParamsConfig")}</span>
