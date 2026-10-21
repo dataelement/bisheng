@@ -46,6 +46,7 @@ from ..utils import (
     wrapper_bisheng_model_limit_check_async,
 )
 from .base import BishengBase
+from .context_overflow import as_context_overflow
 
 
 def _get_user_kwargs(model_config: dict) -> dict:
@@ -264,6 +265,21 @@ _llm_node_type: dict = {
 }
 
 
+def _raise_as_context_overflow(exc: Exception) -> None:
+    """Re-raise a provider's context-window rejection as ``ContextOverflowError``.
+
+    Runs inside the decorated call so the status wrapper sees the converted type
+    and leaves the model's health alone (design.md decisions 5 and 6). Returns
+    normally for any other error; the caller then re-raises it unchanged.
+    """
+    overflow = as_context_overflow(exc)
+    if overflow is None:
+        return
+    if overflow is exc:
+        raise exc
+    raise overflow from exc
+
+
 class BishengLLM(BishengBase, BaseChatModel):
     """
     Use the llm model that has been launched in model management
@@ -344,6 +360,10 @@ class BishengLLM(BishengBase, BaseChatModel):
                 f"{exc} provider={server_info.name!r} type={server_info.type} "
                 f"model_id={model_info.id} model={model_info.model_name}"
             ) from exc
+        # F087: task mode reads ``context_window`` from the advanced config; the
+        # handlers merge the advanced config into the client kwargs, so drop it
+        # here or it would be sent to the provider as an unknown parameter.
+        params.pop("context_window", None)
         return params
 
     def _get_default_params(self, server_config: dict, model_config: dict) -> dict:
@@ -381,15 +401,19 @@ class BishengLLM(BishengBase, BaseChatModel):
         stream: bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        if getattr(self.llm, "streaming", False):
-            # langchain-openai 1.x no longer aggregates a streaming response inside
-            # `_generate` (it returns a raw `Stream` and relies on `_generate_with_cache`
-            # to dispatch streaming models to `_stream`). Because we delegate to the inner
-            # model directly, aggregate the stream here — this also keeps `on_llm_new_token`
-            # callbacks firing so workflow / chat UI streaming keeps working.
-            ret = generate_from_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
-        else:
-            ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+        try:
+            if getattr(self.llm, "streaming", False):
+                # langchain-openai 1.x no longer aggregates a streaming response inside
+                # `_generate` (it returns a raw `Stream` and relies on `_generate_with_cache`
+                # to dispatch streaming models to `_stream`). Because we delegate to the inner
+                # model directly, aggregate the stream here — this also keeps `on_llm_new_token`
+                # callbacks firing so workflow / chat UI streaming keeps working.
+                ret = generate_from_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
+            else:
+                ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+        except Exception as exc:
+            _raise_as_context_overflow(exc)
+            raise
         return normalize_reasoning_content(ret)
 
     @wrapper_bisheng_model_limit_check_async
@@ -401,12 +425,18 @@ class BishengLLM(BishengBase, BaseChatModel):
         stream: bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        if getattr(self.llm, "streaming", False):
-            # See `_generate`: aggregate the inner stream so `on_llm_new_token` callbacks
-            # keep firing (workflow / chat UI streaming) instead of returning a raw Stream.
-            ret = await agenerate_from_stream(self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs))
-        else:
-            ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+        try:
+            if getattr(self.llm, "streaming", False):
+                # See `_generate`: aggregate the inner stream so `on_llm_new_token` callbacks
+                # keep firing (workflow / chat UI streaming) instead of returning a raw Stream.
+                ret = await agenerate_from_stream(
+                    self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs)
+                )
+            else:
+                ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+        except Exception as exc:
+            _raise_as_context_overflow(exc)
+            raise
         return normalize_reasoning_content(ret)
 
     def _get_ls_params(self, stop: list[str] | None = None, **kwargs: Any) -> LangSmithParams:
@@ -434,8 +464,12 @@ class BishengLLM(BishengBase, BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
-            yield normalize_reasoning_content(one)
+        try:
+            for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
+                yield normalize_reasoning_content(one)
+        except Exception as exc:
+            _raise_as_context_overflow(exc)
+            raise
 
     @wrapper_bisheng_model_generator_async
     async def _astream(
@@ -445,5 +479,9 @@ class BishengLLM(BishengBase, BaseChatModel):
         run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
-            yield normalize_reasoning_content(one)
+        try:
+            async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+                yield normalize_reasoning_content(one)
+        except Exception as exc:
+            _raise_as_context_overflow(exc)
+            raise

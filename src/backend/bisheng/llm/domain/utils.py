@@ -6,6 +6,7 @@ from typing import Any, Union
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.outputs import ChatGenerationChunk, ChatResult, GenerationChunk
 from loguru import logger
 
@@ -297,6 +298,12 @@ def wrapper_bisheng_model_limit_check(func):
             result = func(*args, **kwargs)
 
             return result
+        except ContextOverflowError:
+            # F087: the request was too long for the model, not a broken model —
+            # record the failed call but leave the model's status alone.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
             remark = str(e)
@@ -307,7 +314,8 @@ def wrapper_bisheng_model_limit_check(func):
             # Avoid blocking the main thread by uploading logs asynchronously using the thread pool
             first_token_cost_time = telemetry_callback.first_token_time if telemetry_callback else 0
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, result=result)
-            self.sync_update_model_status(status, remark)
+            if status is not None:
+                self.sync_update_model_status(status, remark)
 
     return wrapper
 
@@ -338,6 +346,12 @@ def wrapper_bisheng_model_limit_check_async(func):
             # The caller gave up (a probe timeout, a closed request). The call did
             # not succeed, but nothing says the model is broken either: record a
             # failed invocation and leave the model status to the caller.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
+        except ContextOverflowError:
+            # F087: the request was too long for the model, not a broken model —
+            # record the failed call but leave the model's status alone.
             status = None
             telemetry_status = StatusEnum.FAILED
             raise
@@ -377,6 +391,12 @@ def wrapper_bisheng_model_generator(func):
                 yield item
                 if first_token_cost_time == 0:
                     first_token_cost_time = int((time.time() - start_time) * 1000)
+        except ContextOverflowError:
+            # F087: the request was too long for the model, not a broken model —
+            # record the failed call but leave the model's status alone.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
             remark = str(e)
@@ -385,7 +405,8 @@ def wrapper_bisheng_model_generator(func):
         finally:
             end_time = time.time()
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, True, result=item)
-            self.sync_update_model_status(status, remark)
+            if status is not None:
+                self.sync_update_model_status(status, remark)
 
     return wrapper
 
@@ -410,6 +431,12 @@ def wrapper_bisheng_model_generator_async(func):
                 yield item
                 if first_token_cost_time == 0:
                     first_token_cost_time = int((time.time() - start_time) * 1000)
+        except ContextOverflowError:
+            # F087: the request was too long for the model, not a broken model —
+            # record the failed call but leave the model's status alone.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
             remark = str(e)
@@ -418,7 +445,8 @@ def wrapper_bisheng_model_generator_async(func):
         finally:
             end_time = time.time()
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, True, result=item)
-            await self.update_model_status(status, remark)
+            if status is not None:
+                await self.update_model_status(status, remark)
 
     return wrapper
 
