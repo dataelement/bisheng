@@ -2,7 +2,7 @@ import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
 import { Input } from '@bisheng/ui';
 
 import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
+import { RadioGroup, Radio } from '@bisheng/ui';
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -37,12 +37,12 @@ export function FlowRadio({ limit, onChange }: { limit: number; onChange: (val: 
             onValueChange={(value: LimitType) => handleCommit(value, value === LimitType.LIMITED ? '10' : '0')}>
             <div>
                 <Label className="flex justify-center">
-                    <RadioGroupItem className="mr-2" value={LimitType.UNLIMITED} />{t('system.unlimited')}
+                    <Radio className="mr-2" value={LimitType.UNLIMITED} />{t('system.unlimited')}
                 </Label>
             </div>
             <div>
                 <Label className="flex justify-center">
-                    <RadioGroupItem className="mr-2" value={LimitType.LIMITED} />{t('system.limit')}
+                    <Radio className="mr-2" value={LimitType.LIMITED} />{t('system.limit')}
                 </Label>
             </div>
             {status === LimitType.LIMITED && <div className="mt-[-3px] flex items-center">

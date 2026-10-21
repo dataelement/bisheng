@@ -1,3 +1,4 @@
+import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, SearchInput } from '@bisheng/ui';
 import { Segmented, Tooltip as SharedTooltip, Switch, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -9,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { ColumnResizeHandle } from "@/components/bs-ui/table/useResizableColumns";
-import { TooltipProvider } from "@/components/bs-ui/tooltip";
+
 import { cname } from "@/components/bs-ui/utils";
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
 
@@ -114,8 +115,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                 {t("bs:department.inheritedAdmins")}
               </span>
               {inheritedAdmins.map((admin) => (
-                <TooltipProvider key={`${admin.user_id}-${admin.sourceDeptName}`} delayDuration={200}>
-                  <SharedTooltip
+                <SharedTooltipProvider delayDuration={200}><SharedTooltip
                     content={t("bs:department.inheritedAdminSource", {
                       department: admin.sourceDeptName,
                     })}
@@ -123,8 +123,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                     <span tabIndex={0} className="inline-flex cursor-default">
                       <Tag size="small" color="default">{admin.user_name}</Tag>
                     </span>
-                  </SharedTooltip>
-                </TooltipProvider>
+                  </SharedTooltip></SharedTooltipProvider>
               ))}
             </div>
           )}
@@ -203,8 +202,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
       )}
 
       {memberScope === "dept" && (
-        <TooltipProvider delayDuration={200}>
-          <Table noScroll className="!w-auto min-w-full" style={{ tableLayout: "fixed", width: mrc.totalWidth }}>
+        <SharedTooltipProvider delayDuration={200}><Table noScroll className="!w-auto min-w-full" style={{ tableLayout: "fixed", width: mrc.totalWidth }}>
             <TableHeader>
               <TableRow>
                 <TableHead {...mrc.getThProps(0)}>
@@ -321,8 +319,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                 ))
               )}
             </TableBody>
-          </Table>
-        </TooltipProvider>
+          </Table></SharedTooltipProvider>
       )}
 
       {memberScope === "dept" && (

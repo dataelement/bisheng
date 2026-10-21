@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button } from '@bisheng/ui';
 import { ChevronDown } from "lucide-react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip";
+
 
 export default function ActionButton({
     children,
@@ -19,16 +20,7 @@ export default function ActionButton({
 
     return <div className="flex items-center">
         <>
-            {buttonTipContent ? <TooltipProvider>
-                <Tooltip delayDuration={delayDuration}>
-                    <TooltipTrigger asChild>
-                        <Button variant={variant} className={`rounded-r-none ${className}`} {...props}>{children}</Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-[#fff] text-gray-800">
-                        {buttonTipContent}
-                    </TooltipContent>
-                </Tooltip>
-            </TooltipProvider> :
+            {buttonTipContent ? <SharedTooltipProvider delayDuration={delayDuration}><SharedTooltip  content={buttonTipContent} ><Button variant={variant} className={`rounded-r-none ${className}`} {...props}>{children}</Button></SharedTooltip></SharedTooltipProvider> :
                 <Button variant={variant} className={`rounded-r-none ${className}`} {...props}>{children}</Button>
             }
         </>

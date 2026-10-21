@@ -3,8 +3,8 @@ import { Button, Textarea } from '@bisheng/ui';
 import { FileText, Variable } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import SanitizedHTMLWrapper from "../../components/SanitizedHTMLWrapper";
-import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Badge } from "../../components/bs-ui/badge";
+import { Tooltip as ShadTooltip } from '@bisheng/ui';
+import { Tag } from '@bisheng/ui';
 
 import { DialogTitle } from "../../components/bs-ui/dialog";
 
@@ -245,13 +245,13 @@ export default function GenericModal({
                         <ShadTooltip
                           key={getRandomKeyByssmm() + index}
                           content={word.replace(/[{}]/g, "")}
-                          asChild={false}
                         >
-                          <Badge
+                          <span tabIndex={0} className="inline-flex"><Tag
                             key={index}
-                            variant="gray"
-                            size="md"
-                            className="m-1 max-w-[40vw] cursor-default truncate p-2.5 text-sm"
+
+
+                            className="m-1"
+                            maxWidth={400}
                           >
                             <div className="relative bottom-[1px]">
                               <span>
@@ -261,7 +261,7 @@ export default function GenericModal({
                                   : word.replace(/[{}]/g, "")}
                               </span>
                             </div>
-                          </Badge>
+                          </Tag></span>
                         </ShadTooltip>
                       ))}
                     </div>

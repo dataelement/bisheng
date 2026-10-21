@@ -2,7 +2,8 @@
 import { Button } from '@bisheng/ui';
 import { FileIcon } from "@/components/bs-icons/file";
 
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+
+import { QuestionHint as QuestionTooltip } from '@/components/bs-comp/QuestionHint';
 import { uploadFileApi } from "@/controllers/API";
 import { cn } from "@/util/utils";
 import { CheckCircle2Icon, RefreshCw, RotateCw, XCircle } from "lucide-react";

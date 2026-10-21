@@ -1,7 +1,7 @@
 // @ts-strict-ignore
 import { Button } from '@bisheng/ui';
 
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Checkbox } from '@bisheng/ui';
 import {
   getGrantablePermissionModelsApi,
   mutateResourceGrantsApi,
@@ -347,7 +347,7 @@ export function PermissionGrantTab({
         {subjectType === "department" &&
           !hideDepartmentIncludeChildrenControl && (
             <label className="mt-3 flex h-10 shrink-0 items-center gap-2 text-sm">
-              <Checkbox
+              <Checkbox className="peer"
                 checked={includeChildren}
                 onCheckedChange={(checked) =>
                   handleIncludeChildrenChange(checked === true)
@@ -464,7 +464,7 @@ export function PermissionGrantTab({
 
           {subjectType === "department" && (
             <label className="flex min-h-11 items-center gap-2 text-sm">
-              <Checkbox
+              <Checkbox className="peer"
                 checked={includeChildren}
                 onCheckedChange={(checked) =>
                   handleIncludeChildrenChange(checked === true)

@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useRef, useEffect, useCallback } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { useUpdateMessageMutation } from '~/hooks/queries';
 import type { TEditProps } from '~/common';
 import { useChatContext, useAddedChatContext } from '~/Providers';
-import { TextareaAutosize, TooltipAnchor } from '~/components/ui';
+import { TextareaAutosize } from '~/components/ui';
 import { cn, removeFocusRings } from '~/utils';
 import { useLocalize } from '~/hooks';
 import Container from './Container';
@@ -172,40 +173,25 @@ const EditMessage = ({
         />
       </div>
       <div className="mt-2 flex w-full justify-center text-center">
-        <TooltipAnchor
-          description="Ctrl + Enter / ⌘ + Enter"
-          render={
-            <button
+        <SharedTooltip  content={"Ctrl + Enter / ⌘ + Enter"}  ><button
               ref={submitButtonRef}
               className="btn btn-primary relative mr-2"
               disabled={isSubmitting}
               onClick={handleSubmit(resubmitMessage)}
             >
               {localize('com_ui_save_submit')}
-            </button>
-          }
-        />
-        <TooltipAnchor
-          description="Shift + Enter"
-          render={
-            <button
+            </button></SharedTooltip>
+        <SharedTooltip  content={"Shift + Enter"}  ><button
               ref={saveButtonRef}
               className="btn btn-secondary relative mr-2"
               disabled={isSubmitting}
               onClick={handleSubmit(updateMessage)}
             >
               {localize('com_ui_save')}
-            </button>
-          }
-        />
-        <TooltipAnchor
-          description="Esc"
-          render={
-            <button className="btn btn-neutral relative" onClick={() => enterEdit(true)}>
+            </button></SharedTooltip>
+        <SharedTooltip  content={"Esc"}  ><button className="btn btn-neutral relative" onClick={() => enterEdit(true)}>
               {localize('com_ui_cancel')}
-            </button>
-          }
-        />
+            </button></SharedTooltip>
       </div>
     </Container>
   );

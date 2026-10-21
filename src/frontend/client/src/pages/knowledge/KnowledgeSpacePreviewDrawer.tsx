@@ -1,8 +1,9 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useEffect, useRef, useState } from "react";
 import { EmptyStateIllustration, NoPermissionIllustration } from "~/components/illustrations";
 import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -478,16 +479,9 @@ export function KnowledgeSpacePreviewDrawer({
                                 {space.name}
                             </SheetTitle>
                             {space.description && (
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <p className="text-sm text-text-3 leading-relaxed line-clamp-2 cursor-default text-left">
+                                <SharedTooltip  content={space.description} ><p className="text-sm text-text-3 leading-relaxed line-clamp-2 cursor-default text-left">
                                             {space.description}
-                                        </p>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="shadow-lg py-2 max-w-md text-sm">
-                                        {space.description}
-                                    </TooltipContent>
-                                </Tooltip>
+                                        </p></SharedTooltip>
                             )}
 
                             <div className="flex items-center gap-1.5 mb-3 mt-4">

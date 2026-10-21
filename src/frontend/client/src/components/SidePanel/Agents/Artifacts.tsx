@@ -1,13 +1,8 @@
 import { useFormContext } from 'react-hook-form';
 import { ArtifactModes, AgentCapabilities } from '~/types/chat';
 import type { AgentForm } from '~/common';
-import {
-  Switch,
-  HoverCard,
-  HoverCardPortal,
-  HoverCardContent,
-  HoverCardTrigger,
-} from '~/components/ui';
+import { HoverCard, HoverCardPortal, HoverCardContent, HoverCardTrigger } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import { CircleHelpIcon } from '~/components/svg';
 import { ESide } from '~/common';
@@ -114,7 +109,7 @@ function SwitchItem({
           id={id}
           checked={checked}
           onCheckedChange={onCheckedChange}
-          className="ml-4"
+          className="peer ml-4"
           data-testid={id}
           disabled={disabled}
         />

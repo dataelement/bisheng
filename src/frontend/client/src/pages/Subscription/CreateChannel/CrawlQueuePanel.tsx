@@ -1,7 +1,8 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 // src/frontend/client/src/pages/Subscription/CreateChannel/CrawlQueuePanel.tsx
 import { Loader2, X, ArrowRight, TriangleAlert, CircleCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { useLocalize } from "~/hooks";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import type { CrawlQueueItem } from "../hooks/useCrawlQueue";
 import { crawlErrorMessageKey } from "./crawlErrorUtils";
 
@@ -101,9 +102,7 @@ export function CrawlQueuePanel({
                         }
                         // failed
                         return (
-                            <Tooltip key={item.id}>
-                                <TooltipTrigger asChild>
-                                    <div
+                            <SharedTooltip key={item.id} content={localize(crawlErrorMessageKey(item.errorCode))} side="top" ><div
                                         role="button"
                                         tabIndex={0}
                                         onClick={onOpenFeedback}
@@ -119,12 +118,7 @@ export function CrawlQueuePanel({
                                         <span className="flex-1 truncate text-[14px] leading-[22px] text-text-1">
                                             {truncate(item.url)}
                                         </span>
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[280px] bg-[rgba(23,23,23,0.85)]">
-                                    {localize(crawlErrorMessageKey(item.errorCode))}
-                                </TooltipContent>
-                            </Tooltip>
+                                    </div></SharedTooltip>
                         );
                     })}
                 </div>

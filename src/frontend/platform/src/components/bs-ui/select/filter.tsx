@@ -2,7 +2,7 @@
 import { Button, SearchInput } from '@bisheng/ui';
 import { FilterIcon } from "@/components/bs-icons/filter";
 
-import { Checkbox } from "@/components/bs-ui/checkBox";
+import { Checkbox } from '@bisheng/ui';
 import * as SelectPrimitive from "@radix-ui/react-select";
 import React from 'react';
 import { useTranslation } from "react-i18next";
@@ -60,7 +60,7 @@ const FilterUserGroup: React.FC<FilterUserGroupProps> = ({
       <div className="mt-2 max-h-[260px] min-h-20 overflow-y-auto">
         {options.map((i) => (
           <div className="flex items-center space-x-2 text-gray-500 mb-1" key={i.id}>
-            <Checkbox id={i.id} checked={value.includes(i.id)} onCheckedChange={() => onChecked(i.id)} />
+            <Checkbox className="peer" id={i.id} checked={value.includes(i.id)} onCheckedChange={() => onChecked(i.id)} />
             <label htmlFor={i.id} className="cursor-pointer text-sm">{i[nameKey]}</label>
           </div>
         ))}

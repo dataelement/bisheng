@@ -1,7 +1,8 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { SearchInput } from '@bisheng/ui';
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+
 import { getGroupFlowsApi, getDepartmentFlowsApi } from "@/controllers/API/pro";
 import { useTable } from "@/util/hook";
 import { CircleHelp } from "lucide-react";
@@ -60,16 +61,7 @@ export function FlowControl({ entityId, entityType, type, onChange }: FlowContro
         <div className="flex items-center mb-4 justify-between">
             <div className="flex items-center space-x-2">
                 <p className="text-xl font-bold">{label}</p>
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger>
-                            <CircleHelp className="w-4 h-4" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p>{t('system.iconHover')}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
+                <SharedTooltipProvider ><SharedTooltip  content={<><p>{t('system.iconHover')}</p></>} ><button type="button" ><CircleHelp className="w-4 h-4" /></button></SharedTooltip></SharedTooltipProvider>
             </div>
             <SearchInput placeholder={placeholder} onChange={handleSearch} />
         </div>

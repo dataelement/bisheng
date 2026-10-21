@@ -1,7 +1,8 @@
 import { useRecoilState } from 'recoil';
 import HoverCardSettings from '../HoverCardSettings';
 import { ForkOptions } from '~/types/chat';
-import { Dropdown, Switch } from '~/components/ui';
+import { Dropdown } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -26,7 +27,7 @@ export const ForkSettings = () => {
             id="rememberDefaultFork"
             checked={remember}
             onCheckedChange={setRemember}
-            className="ml-4"
+            className="peer ml-4"
             data-testid="rememberDefaultFork"
           />
         </div>
@@ -58,7 +59,7 @@ export const ForkSettings = () => {
             id="splitAtTarget"
             checked={splitAtTarget}
             onCheckedChange={setSplitAtTarget}
-            className="ml-4"
+            className="peer ml-4"
             data-testid="splitAtTarget"
           />
         </div>

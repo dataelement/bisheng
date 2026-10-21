@@ -1263,7 +1263,9 @@
     "recent_apps_hint": "Your recently used apps are all here～",
     "service_maintenance_title": "Oops, we hit a small hiccup",
     "service_maintenance": "Hang tight for a moment — we'll be back to normal shortly.",
-    "refresh": "Refresh to retry"
+    "refresh": "Refresh to retry",
+    "unknown_name": "Unknown app",
+    "featured": "Featured"
   },
   "com_knowledge": {
     "add_new": "Add",
@@ -1640,7 +1642,9 @@
       "search_button": "Search",
       "section_dismiss": "Skip linking",
       "section_dismiss_subtitle": "Keep the current file as a standalone document; do not add it to a version chain.",
-      "btn_close": "Close"
+      "btn_close": "Close",
+      "primary_version_label": "Current primary version V{{version}}",
+      "primary_version_uploader": "Current primary version V{{version}} · Uploaded by {{name}}"
     },
     "move_to": "Move to",
     "current_space_tag": "(current)",
@@ -1957,7 +1961,8 @@
     "wechat_link_label": "WeChat article link",
     "wechat_article_link_label": "WeChat article link",
     "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar.",
-    "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it"
+    "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it",
+    "main_channel": "Channel name"
   },
   "com_tools": {
     "image_view": "Image View"

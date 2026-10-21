@@ -5,7 +5,7 @@
  * bsConfig.linsightConfig.tools. No chips are generated for tools.
  */
 import { ChevronDown, Hammer } from 'lucide-react';
-import { Switch } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -61,7 +61,7 @@ export function ToolsSelect({ tools, disabled = false, onChange, compact = false
                             </span>
                         </div>
                         <Switch
-                            className="data-[state=checked]:bg-blue-600"
+                            className="peer data-[state=checked]:bg-blue-600"
                             disabled={disabled}
                             checked={tool.checked}
                             onCheckedChange={(checked) =>

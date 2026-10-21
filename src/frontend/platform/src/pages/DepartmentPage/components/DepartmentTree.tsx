@@ -1,9 +1,8 @@
+import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, SearchInput } from '@bisheng/ui';
 
 
-import {
-TooltipProvider
-} from "@/components/bs-ui/tooltip";
+
 import { DepartmentTreeNode } from "@/types/api/department";
 import { cn } from "@/utils";
 import { Tooltip as SharedTooltip,Tag } from "@bisheng/ui";
@@ -202,12 +201,10 @@ export function DepartmentTree({
                 node.is_tenant_root ? "text-primary" : "text-muted-foreground",
               )}
             />
-            <TooltipProvider delayDuration={250}>
-              <SharedTooltip content={node.is_tenant_root ? `${node.name} · ${t("bs:tenant.mountedBadge")}` : node.name}><span className="flex-1 truncate">
+            <SharedTooltipProvider delayDuration={250}><SharedTooltip content={node.is_tenant_root ? `${node.name} · ${t("bs:tenant.mountedBadge")}` : node.name}><span className="flex-1 truncate">
                     {node.name}
                     {isArchived ? ` ${t("bs:department.archivedTag")}` : ""}
-                  </span></SharedTooltip>
-            </TooltipProvider>
+                  </span></SharedTooltip></SharedTooltipProvider>
             {node.is_tenant_root && (
               <span title={t("bs:tenant.mountedBadge")}><Tag size="small" color="brand" className="mr-1 shrink-0">{t("bs:tenant.mountedTag")}</Tag></span>
             )}

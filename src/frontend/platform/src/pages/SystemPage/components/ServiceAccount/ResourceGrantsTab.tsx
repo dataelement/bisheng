@@ -1,3 +1,4 @@
+import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, SearchInput, notification, toast } from '@bisheng/ui';
 import { Tooltip as SharedTooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -20,9 +21,7 @@ TableHeader,
 TableRow,
 } from "@/components/bs-ui/table";
 
-import {
-TooltipProvider
-} from "@/components/bs-ui/tooltip";
+
 import { getResourcePermissionContextApi } from "@/controllers/API/permission";
 import {
 listServiceAccountKeysApi,
@@ -238,8 +237,7 @@ export function ResourceGrantsTab({
   }
 
   return (
-    <TooltipProvider delayDuration={100}>
-      <div className="space-y-4 py-4">
+    <SharedTooltipProvider delayDuration={100}><div className="space-y-4 py-4">
         {!loadingData ? <GrantScopeNotice keys={keys} /> : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -489,7 +487,6 @@ export function ResourceGrantsTab({
           onConfirmGrant={() => void handleConfirmRevoke()}
           onConfirmAll={() => void handleConfirmRevokeAll()}
         />
-      </div>
-    </TooltipProvider>
+      </div></SharedTooltipProvider>
   )
 }

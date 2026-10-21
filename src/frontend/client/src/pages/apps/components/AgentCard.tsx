@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import type { AppItem } from '~/@types/app';
 import { Button } from '~/components';
 import AppAvator from '~/components/Avator';
@@ -7,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '~/components/ui';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize, useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';
 import { Outlined } from 'bisheng-icons';
@@ -148,10 +149,7 @@ export function AgentCard({
             </div>
           ) : null
         ) : showPin ? (
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
+          <SharedTooltipProvider delayDuration={200}><SharedTooltip  content={isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')} ><button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -184,13 +182,7 @@ export function AgentCard({
                   ) : (
                     <Outlined.Pin size={18} className="shrink-0 text-text-2" />
                   )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                </button></SharedTooltip></SharedTooltipProvider>
         ) : null}
       </div>
 
@@ -204,7 +196,7 @@ export function AgentCard({
         <div className="mt-auto flex w-full min-w-0 items-center justify-between gap-1">
           <div className="relative min-w-0 flex-1 overflow-hidden">
             <div className="flex items-center gap-1 overflow-hidden whitespace-nowrap">
-              {(agent.tags && agent.tags.length > 0 ? agent.tags : [{ name: '精选' }]).map((tag, idx) => (
+              {(agent.tags && agent.tags.length > 0 ? agent.tags : [{ name: localize("com_app.featured") }]).map((tag, idx) => (
                 <div
                   key={idx}
                   className="shrink-0 rounded-[4px] bg-fill-2 px-2 py-0.5 text-[12px] font-normal leading-[20px] text-text-2"

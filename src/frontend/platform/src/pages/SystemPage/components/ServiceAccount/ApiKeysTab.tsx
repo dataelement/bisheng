@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, notification } from '@bisheng/ui';
 import { Tag } from "@bisheng/ui";
 
@@ -12,13 +13,7 @@ TableHeader,
 TableRow,
 } from "@/components/bs-ui/table";
 
-import {
-Portal,
-Tooltip,
-TooltipContent,
-TooltipProvider,
-TooltipTrigger,
-} from "@/components/bs-ui/tooltip";
+
 import {
 listOpenApiScopesApi,
 listServiceAccountKeysPageApi,
@@ -160,20 +155,9 @@ export function ApiKeysTab({
     if (!names.length) return "-"
 
     return (
-      <TooltipProvider delayDuration={100}>
-        <Tooltip>
-          <TooltipTrigger type="button" className="block w-full truncate text-left">
-            {names.join(", ")}
-          </TooltipTrigger>
-          <Portal>
-            <TooltipContent side="top" align="start" className="max-w-96">
-              <div className="max-h-64 overflow-y-auto whitespace-pre-line break-words text-left">
+      <SharedTooltipProvider delayDuration={100}><SharedTooltip  content={<><div className="max-h-64 overflow-y-auto whitespace-pre-line break-words text-left">
                 {names.join("\n")}
-              </div>
-            </TooltipContent>
-          </Portal>
-        </Tooltip>
-      </TooltipProvider>
+              </div></>} side="top"  align="start"><button type="button" className="block w-full truncate text-left">{names.join(", ")}</button></SharedTooltip></SharedTooltipProvider>
     )
   }
 
