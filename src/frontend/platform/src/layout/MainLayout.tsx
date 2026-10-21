@@ -394,7 +394,7 @@ export default function MainLayout() {
                                                 tabIndex={0}
                                                 className="h-[72px] w-[78px] cursor-pointer bg-background-tip rounded-lg hover:bg-[#1b1f23] hover:text-[white] transition-all dark:hover:bg-background-tip-darkhover"
                                             >
-                                                <Link to={"https://github.com/dataelement/bisheng"} target="_blank">
+                                                <Link className="flex h-full w-full flex-col items-center justify-center" to={"https://github.com/dataelement/bisheng"} target="_blank">
                                                     <GithubIcon className="side-bar-button-size mx-auto w-5 h-5 " />
                                                     <span className="block text-[12px] mt-[8px] font-bold">
                                                         {t("menu.github")}
@@ -417,7 +417,7 @@ export default function MainLayout() {
                                                 className="h-[72px] w-[78px] cursor-pointer bg-background-tip rounded-lg p-0 align-top hover:bg-[#0055e3] hover:text-[white]  transition-all"
                                             >
                                                 <Link
-                                                    className="m-0 p-0"
+                                                    className="m-0 flex h-full w-full flex-col items-center justify-center p-0"
                                                     to={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"}
                                                     target="_blank"
                                                 >
