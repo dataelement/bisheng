@@ -50,7 +50,7 @@ export function HeaderMenu() {
             <div className="build-tab flex justify-center h-[65px] items-center relative">
                 <Segmented
                     size="large"
-                    aria-label={t("menu.models")}
+                    aria-label={t("model.modelManagement")}
                     value={location.pathname.replace(__APP_ENV__.BASE_URL, "").split("/").pop()}
                     onChange={(value) => navigate(`/model/${value}`)}
                     options={[
