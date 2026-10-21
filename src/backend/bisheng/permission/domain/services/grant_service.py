@@ -10,6 +10,7 @@ from loguru import logger
 from bisheng.common.errcode.permission import (
     GrantLevelForbiddenError,
     InvalidPermissionModeError,
+    PermissionInvalidResourceError,
     PermissionModelStateConflictError,
     PermissionMutationTooLargeError,
     PermissionVersionConflictError,
@@ -216,8 +217,7 @@ class GrantService:
         if context.system_authorized:
             return
         if not any(
-            capability.model.derived_level is not None
-            and "manage_permission" in capability.model.action_codes
+            capability.model.derived_level is not None and "manage_permission" in capability.model.action_codes
             for capability in context.capabilities
         ):
             raise GrantLevelForbiddenError(msg="Actor has no effective manage_permission model source")
@@ -257,13 +257,107 @@ class GrantService:
             compiled.extend(deltas)
 
         final_grants = tuple(grants[model_key] for model_key in grant_order)
+        return await self._project_changes(
+            context,
+            final_grants,
+            tuple(compiled),
+            len(changes),
+            idempotency_key,
+        )
+
+    async def reconcile_business_owner(
+        self,
+        context: GrantMutationContext,
+        *,
+        source: GrantSourceRecord | None,
+        idempotency_key: str,
+    ) -> GrantMutationResult | None:
+        """Rebind a business-verified department owner outside ordinary grants.
+
+        The Knowledge adapter verifies the department binding and current owner.
+        Ordinary mutations retain their unconditional protected-source fence.
+        Legacy creator sources on this verified department space are retired;
+        independent direct and inherited permissions are preserved.
+        """
+        target = context.target
+        prefix = f"{target.resource_id}:admin:"
+        if not context.system_authorized or target.resource_type != "knowledge_space":
+            raise PermissionInvalidResourceError()
+        if context.mode != "CUSTOM":
+            raise InvalidPermissionModeError()
+        if source is not None and (
+            not source.protected
+            or not source.active
+            or source.source_type != "SPACE_MEMBERSHIP"
+            or source.subject_type != "user"
+            or source.source_ref != f"{prefix}{source.subject_id}"
+            or source.projected_subject != f"user:{source.subject_id}"
+        ):
+            raise PermissionInvalidResourceError()
+        owner_model = self.require_grantable_model(context, "owner")
+        grants = {g.model.model_key: g for g in context.grants}
+        compiled: list[ProjectionTupleDelta] = []
+        changes = 0
+        for key, grant in tuple(grants.items()):
+            for existing in grant.sources:
+                managed = existing.protected and (
+                    (
+                        existing.source_type == "CREATOR"
+                        and existing.source_ref == f"knowledge_space:{target.resource_id}"
+                    )
+                    or (existing.source_type == "SPACE_MEMBERSHIP" and existing.source_ref.startswith(prefix))
+                )
+                if not existing.active or not managed:
+                    continue
+                if (
+                    source is not None
+                    and key == "owner"
+                    and existing
+                    == replace(
+                        source,
+                        source_id=existing.source_id,
+                        version=existing.version,
+                    )
+                ):
+                    source = existing
+                    continue
+                mutation = self._sources.remove_source(grants[key], source_id=existing.source_id)
+                grants[key] = mutation.grant
+                compiled.extend(mutation.deltas)
+                changes += 1
+        if source is not None:
+            owner_grant = self._target_grant(grants, owner_model)
+            mutation = self._sources.add_source(owner_grant, source)
+            grants["owner"] = mutation.grant
+            compiled.extend(mutation.deltas)
+            changes += int(not mutation.idempotent)
+        if changes == 0:
+            return None
+        if changes > 50:
+            raise PermissionMutationTooLargeError()
+        return await self._project_changes(
+            context,
+            tuple(grants[g.model.model_key] for g in context.grants),
+            tuple(compiled),
+            changes,
+            idempotency_key,
+        )
+
+    async def _project_changes(
+        self,
+        context: GrantMutationContext,
+        final_grants: tuple[GrantSnapshot, ...],
+        compiled: tuple[ProjectionTupleDelta, ...],
+        change_item_count: int,
+        idempotency_key: str,
+    ) -> GrantMutationResult:
         visibility = self._visibility.compile(
             tenant_id=context.target.tenant_id,
             grants=final_grants,
             existing_sources=context.existing_visible_sources,
         )
         net_deltas = merge_projection_deltas(
-            self._net_deltas(tuple(compiled)),
+            self._net_deltas(compiled),
             visibility.deltas,
         )
         plan = ProjectionPlan(
@@ -277,7 +371,7 @@ class GrantService:
             store_id=context.store_id,
             model_id=context.model_id,
             operator_id=context.operator_id,
-            change_item_count=len(changes),
+            change_item_count=change_item_count,
             deltas=net_deltas,
         )
         operation = await self._projection.prepare(plan)
@@ -295,7 +389,7 @@ class GrantService:
                 raise
         outcome = await self._projection.execute(plan)
         await self._state.finalize(context, final_grants, visibility, outcome)
-        await self._emit(context, outcome, len(changes), len(net_deltas))
+        await self._emit(context, outcome, change_item_count, len(net_deltas))
         return GrantMutationResult(
             grants=final_grants,
             resource_version=outcome.target_version,

@@ -33,7 +33,6 @@ import { KnowledgeSpaceAccessMode } from "./KnowledgeSpaceAccessMode";
 import { useKnowledgeSpacePermissionPicker } from "./hooks/useKnowledgeSpacePermissionPicker";
 import {
   decorateDepartmentSpaceRows,
-  isCreatorDisplayRow,
   restoreDepartmentSpaceRows,
 } from "./departmentSpaceCreator";
 import {
@@ -114,10 +113,9 @@ export function KnowledgeSpaceSettingsPage() {
     );
   const disabledIds = useMemo<Record<SubjectType, number[]>>(
     () => ({
-      // The display-only creator row holds no grant, so the creator stays pickable.
       user: displayedPermissionRows
         .filter(
-          (row) => row.subjectType === "user" && !isCreatorDisplayRow(row),
+          (row) => row.subjectType === "user",
         )
         .map((row) => row.subjectId),
       department: displayedPermissionRows

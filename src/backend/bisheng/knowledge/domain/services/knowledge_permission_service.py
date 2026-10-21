@@ -13,6 +13,7 @@ from bisheng.common.errcode.permission import (
 from bisheng.common.services.metric_log import emit_metric
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.tenant import UserTenantDao
+from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
     KnowledgeDao,
@@ -349,6 +350,8 @@ class KnowledgeContainerPermissionPort(Protocol):
 
     async def sync_business_source_model(self, **kwargs): ...
 
+    async def sync_business_owner(self, **kwargs): ...
+
     async def remove_ordinary_sources(self, **kwargs): ...
 
     async def remove_subject_sources(self, **kwargs): ...
@@ -549,6 +552,27 @@ class F048KnowledgeContainerPermissionAdapter:
         return await self._permission.project_delete(
             actor=actor,
             target=target,
+        )
+
+    async def sync_department_owner(self, *, resource_id: str, operator_user_id: int):
+        """Attest department-only ownership from the canonical business binding."""
+        record = await self._loader.load_permission_record("knowledge_space", resource_id)
+        binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(resource_id))
+        if record is None or binding is None or binding.tenant_id != record.tenant_id:
+            raise PermissionInvalidResourceError()
+        if binding.admin_user_id is not None:
+            tenant_rows = await UserTenantDao.aget_user_tenants(binding.admin_user_id)
+            if not any(
+                row.tenant_id == record.tenant_id and row.status == "active" and row.is_active == 1
+                for row in tenant_rows
+            ):
+                raise PermissionInvalidResourceError()
+        actor = PermissionActor(user_id=operator_user_id, current_tenant_id=record.tenant_id)
+        target = self._target(record, actor, "knowledge_space", resource_id)
+        return await self._permission.sync_business_owner(
+            actor=actor,
+            target=target,
+            owner_user_id=binding.admin_user_id,
         )
 
     async def sync_membership(

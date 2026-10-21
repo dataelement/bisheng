@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -8,6 +9,19 @@ import pytest
 from bisheng.common.errcode.permission import PermissionTupleWriteError
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRequest
+
+
+@pytest.fixture(autouse=True)
+def owner_binding_lock():
+    @asynccontextmanager
+    async def locked(*args, **kwargs):
+        yield SimpleNamespace(admin_user_id=2, created_by=1)
+
+    with patch(
+        "bisheng.knowledge.domain.repositories.department_space_owner_repository.DepartmentSpaceOwnerRepository.lock_binding",
+        new=locked,
+    ):
+        yield
 
 
 def _user(*, user_id: int = 1, tenant_id: int = 7):
@@ -488,7 +502,7 @@ async def test_space_admin_materialize_dispatches_affected_space_once():
         ),
         patch.object(
             DepartmentKnowledgeSpaceService,
-            "_grant_space_admin_manager",
+            "_grant_space_admin_owner",
             new=AsyncMock(return_value=True),
         ),
         patch(
@@ -524,7 +538,7 @@ async def test_space_admin_materialize_does_not_dispatch_when_fga_write_fails():
         ),
         patch.object(
             DepartmentKnowledgeSpaceService,
-            "_grant_space_admin_manager",
+            "_grant_space_admin_owner",
             new=AsyncMock(return_value=False),
         ),
         patch(
@@ -551,7 +565,7 @@ async def test_space_admin_dematerialize_dispatches_affected_space_once():
         ),
         patch.object(
             DepartmentKnowledgeSpaceService,
-            "_revoke_space_admin_manager",
+            "_revoke_space_admin_owner",
             new=AsyncMock(return_value=True),
         ),
         patch(
@@ -582,7 +596,7 @@ async def test_space_admin_dematerialize_does_not_dispatch_when_fga_write_fails(
         ),
         patch.object(
             DepartmentKnowledgeSpaceService,
-            "_revoke_space_admin_manager",
+            "_revoke_space_admin_owner",
             new=AsyncMock(return_value=False),
         ),
         patch(
@@ -594,7 +608,6 @@ async def test_space_admin_dematerialize_does_not_dispatch_when_fga_write_fails(
         await DepartmentKnowledgeSpaceService._dematerialize_space_admin(space_id=11, user_id=2)
 
     reconcile.assert_not_awaited()
-
 
 
 @pytest.mark.skip(

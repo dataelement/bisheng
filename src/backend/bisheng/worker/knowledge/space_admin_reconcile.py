@@ -1,7 +1,7 @@
 """Celery task — 6h reconcile of the F045 single-space-admin materialization.
 
 ``department_knowledge_space.admin_user_id`` is the source of truth; the ADMIN
-member row and the OpenFGA ``knowledge_space#manager`` tuple are materialized
+member row and the F048 protected owner Grant are materialized
 copies written on a best-effort basis (DB and FGA are not transactional). This
 task is the catch-all safety net for:
 
@@ -36,7 +36,7 @@ async def _reconcile_async() -> None:
         SpaceChannelMemberDao,
         UserRoleEnum,
     )
-    from bisheng.core.context.tenant import bypass_tenant_filter, set_current_tenant_id
+    from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
     from bisheng.core.database import get_async_db_session
     from bisheng.knowledge.domain.models.department_knowledge_space import (
         DepartmentKnowledgeSpace,
@@ -55,12 +55,12 @@ async def _reconcile_async() -> None:
     repaired = 0
     invalidated = 0
     for binding in bindings:
-        if binding.admin_user_id is None:
-            continue
-        if binding.tenant_id:
-            set_current_tenant_id(int(binding.tenant_id))
-        admin_user_id = int(binding.admin_user_id)
+        token = set_current_tenant_id(int(binding.tenant_id or 1))
+        admin_user_id = int(binding.admin_user_id) if binding.admin_user_id else None
         try:
+            if admin_user_id is None:
+                await DepartmentKnowledgeSpaceService._cleanup_replaced_space_admins(space_id=int(binding.space_id))
+                continue
             user = await UserDao.aget_user(admin_user_id)
             if user is None or user.delete:
                 # Missed invalidation hook — flip the space to pending now.
@@ -74,12 +74,13 @@ async def _reconcile_async() -> None:
                 or member.membership_source != SPACE_ADMIN_MEMBERSHIP_SOURCE
             )
             # _materialize_space_admin is idempotent: it repairs the member row
-            # and (re)writes the manager tuple, covering the failed-FGA case
+            # and reconciles the owner Grant, covering the failed-FGA case
             # even when the member row itself looks healthy.
             await DepartmentKnowledgeSpaceService._materialize_space_admin(
                 space_id=int(binding.space_id),
                 user_id=admin_user_id,
             )
+            await DepartmentKnowledgeSpaceService._cleanup_replaced_space_admins(space_id=int(binding.space_id))
             if drifted:
                 repaired += 1
                 logger.warning(
@@ -93,6 +94,9 @@ async def _reconcile_async() -> None:
                 binding.space_id,
                 binding.admin_user_id,
             )
+
+        finally:
+            current_tenant_id.reset(token)
 
     logger.info(
         "F045 space-admin reconcile done: bindings=%s repaired=%s invalidated=%s",

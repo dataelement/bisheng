@@ -105,9 +105,8 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [isDepartmentSpace, setIsDepartmentSpace] = useState(false);
   const [canEdit, setCanEdit] = useState(mode === "create");
-  // In a department space, the configured responsible user is the user-facing
-  // creator. The audit creator must stay hidden, especially while no responsible
-  // user has been configured.
+  // Department ownership follows the configured responsible user. The actual
+  // creation operator remains an audit fact, not a displayed creator source.
   const [departmentCreator, setDepartmentCreator] =
     useState<DepartmentSpaceCreator | null>(null);
   const [canManagePermissions, setCanManagePermissions] = useState(false);

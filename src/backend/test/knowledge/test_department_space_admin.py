@@ -9,6 +9,7 @@ column swap semantics themselves are covered by the DAO conditional UPDATE
 AC coverage: AC-01 .. AC-11 (spec.md §2.1-§2.3).
 """
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -35,6 +36,19 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 from test.department.test_department_knowledge_space_service import _load_service_class
 
 _SERVICE_MODULE = "bisheng.knowledge.domain.services.department_knowledge_space_service"
+
+
+@pytest.fixture(autouse=True)
+def owner_binding_lock():
+    @asynccontextmanager
+    async def locked(*args, **kwargs):
+        yield SimpleNamespace(admin_user_id=2, created_by=1)
+
+    with patch(
+        "bisheng.knowledge.domain.repositories.department_space_owner_repository.DepartmentSpaceOwnerRepository.lock_binding",
+        new=locked,
+    ):
+        yield
 
 
 def _make_login_user(*, user_id: int = 1, is_admin: bool = True):
@@ -386,8 +400,9 @@ async def test_replace_admin_on_pending_space_restores_normal_state():
 @pytest.fixture
 def membership_adapter():
     _load_service_class()
-    adapter = SimpleNamespace(sync_membership=AsyncMock())
+    adapter = SimpleNamespace(sync_membership=AsyncMock(), sync_department_owner=AsyncMock())
     with (
+        patch(f"{_SERVICE_MODULE}.get_f048_resource_adapter", new_callable=AsyncMock, return_value=adapter),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.get_f048_resource_adapter",
             new_callable=AsyncMock,
@@ -402,7 +417,8 @@ def membership_adapter():
 
 
 @pytest.mark.asyncio
-async def test_dematerialize_restores_promoted_member_role(membership_adapter):
+@pytest.mark.parametrize("original_role,model_key", [(UserRoleEnum.MEMBER, "viewer"), (UserRoleEnum.ADMIN, "manager")])
+async def test_dematerialize_restores_promoted_member_role(membership_adapter, original_role, model_key):
     service = _load_service_class()
     module = __import__(_SERVICE_MODULE, fromlist=["SPACE_ADMIN_MEMBERSHIP_SOURCE"])
     member = SpaceChannelMember(
@@ -412,7 +428,7 @@ async def test_dematerialize_restores_promoted_member_role(membership_adapter):
         user_role=UserRoleEnum.ADMIN,
         status=MembershipStatusEnum.ACTIVE,
         membership_source=module.SPACE_ADMIN_MEMBERSHIP_SOURCE,
-        department_admin_promoted_from_role=UserRoleEnum.MEMBER.value,
+        department_admin_promoted_from_role=original_role.value,
     )
     with (
         patch(
@@ -424,7 +440,7 @@ async def test_dematerialize_restores_promoted_member_role(membership_adapter):
     ):
         await service._dematerialize_space_admin(space_id=101, user_id=2)
 
-    assert member.user_role == UserRoleEnum.MEMBER
+    assert member.user_role == original_role
     assert member.membership_source == "manual"
     assert member.department_admin_promoted_from_role is None
     mock_update.assert_awaited_once_with(member)
@@ -432,7 +448,7 @@ async def test_dematerialize_restores_promoted_member_role(membership_adapter):
         resource_id="101",
         operator_user_id=2,
         subject_user_id=2,
-        model_key="viewer",
+        model_key=model_key,
     )
 
 
@@ -470,13 +486,14 @@ async def test_dematerialize_removes_pure_admin_row(membership_adapter):
 
 
 @pytest.mark.asyncio
-async def test_materialize_promotes_existing_member_and_grants_manager(membership_adapter):
+@pytest.mark.parametrize("original_role", [UserRoleEnum.MEMBER, UserRoleEnum.ADMIN])
+async def test_materialize_promotes_existing_member_and_grants_owner(membership_adapter, original_role):
     service = _load_service_class()
     member = SpaceChannelMember(
         business_id="101",
         business_type=BusinessTypeEnum.SPACE,
         user_id=2,
-        user_role=UserRoleEnum.MEMBER,
+        user_role=original_role,
         status=MembershipStatusEnum.ACTIVE,
         membership_source="manual",
     )
@@ -491,18 +508,19 @@ async def test_materialize_promotes_existing_member_and_grants_manager(membershi
         await service._materialize_space_admin(space_id=101, user_id=2)
 
     assert member.user_role == UserRoleEnum.ADMIN
-    assert member.department_admin_promoted_from_role == UserRoleEnum.MEMBER.value
+    assert member.department_admin_promoted_from_role == original_role.value
     membership_adapter.sync_membership.assert_awaited_once_with(
         resource_id="101",
         operator_user_id=2,
         subject_user_id=2,
-        model_key="manager",
+        model_key=None,
     )
+    membership_adapter.sync_department_owner.assert_awaited_once_with(resource_id="101", operator_user_id=2)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("existing_admin", [False, True])
-async def test_materialize_grants_manager_for_new_or_existing_admin(membership_adapter, existing_admin):
+async def test_materialize_grants_owner_for_new_or_existing_admin(membership_adapter, existing_admin):
     service = _load_service_class()
     member = (
         SpaceChannelMember(
@@ -528,8 +546,9 @@ async def test_materialize_grants_manager_for_new_or_existing_admin(membership_a
         resource_id="101",
         operator_user_id=2,
         subject_user_id=2,
-        model_key="manager",
+        model_key=None,
     )
+    membership_adapter.sync_department_owner.assert_awaited_once_with(resource_id="101", operator_user_id=2)
 
 
 @pytest.mark.asyncio
@@ -557,7 +576,7 @@ async def test_repeated_dematerialize_preserves_restored_member_permissions(memb
 
 
 @pytest.mark.asyncio
-async def test_failed_manager_projection_is_retried_for_existing_admin(membership_adapter):
+async def test_failed_owner_projection_is_reported_and_retried_for_existing_admin(membership_adapter):
     service = _load_service_class()
     member = SpaceChannelMember(
         business_id="101",
@@ -567,7 +586,7 @@ async def test_failed_manager_projection_is_retried_for_existing_admin(membershi
         status=MembershipStatusEnum.ACTIVE,
         membership_source="space_admin",
     )
-    membership_adapter.sync_membership.side_effect = [RuntimeError("projection unavailable"), None]
+    membership_adapter.sync_department_owner.side_effect = [RuntimeError("projection unavailable"), None]
     with (
         patch(
             f"{_SERVICE_MODULE}.SpaceChannelMemberDao.async_find_member", new_callable=AsyncMock, return_value=member
@@ -578,11 +597,13 @@ async def test_failed_manager_projection_is_retried_for_existing_admin(membershi
             new_callable=AsyncMock,
         ) as reconcile,
     ):
-        await service._materialize_space_admin(space_id=101, user_id=2)
+        with pytest.raises(RuntimeError, match="projection unavailable"):
+            await service._materialize_space_admin(space_id=101, user_id=2)
         reconcile.assert_not_awaited()
         await service._materialize_space_admin(space_id=101, user_id=2)
         reconcile.assert_awaited_once_with(101)
-    assert membership_adapter.sync_membership.await_count == 2
+    assert membership_adapter.sync_department_owner.await_count == 2
+    assert membership_adapter.sync_membership.await_count == 1
     assert member.user_role == UserRoleEnum.ADMIN
 
 
@@ -718,3 +739,65 @@ async def test_non_pending_space_passes_gate(binding):
     ):
         assert await service.is_space_pending_admin(101) is False
         await service.ensure_space_not_pending_admin(101)  # must not raise
+
+
+async def test_teardown_failure_preserves_the_previous_role_for_retry(membership_adapter):
+    service = _load_service_class()
+    member = SpaceChannelMember(
+        business_id="101",
+        business_type=BusinessTypeEnum.SPACE,
+        user_id=2,
+        user_role=UserRoleEnum.ADMIN,
+        status=MembershipStatusEnum.ACTIVE,
+        membership_source="space_admin",
+        department_admin_promoted_from_role="member",
+    )
+    membership_adapter.sync_department_owner.side_effect = RuntimeError("projection unavailable")
+    with (
+        patch(f"{_SERVICE_MODULE}.SpaceChannelMemberDao.async_find_member", new=AsyncMock(return_value=member)),
+        patch(f"{_SERVICE_MODULE}.SpaceChannelMemberDao.update", new=AsyncMock()) as update,
+    ):
+        with pytest.raises(RuntimeError, match="projection unavailable"):
+            await service._dematerialize_space_admin(space_id=101, user_id=2)
+    assert member.membership_source == "space_admin"
+    assert member.department_admin_promoted_from_role == "member"
+    assert member.user_role == UserRoleEnum.ADMIN
+    update.assert_not_awaited()
+
+
+async def test_saving_current_responsible_finishes_interrupted_old_member_teardown():
+    service = _load_service_class()
+    with (
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceDao.aget_by_department_id",
+            new=AsyncMock(return_value=_binding(admin_user_id=3)),
+        ),
+        patch.object(service, "_validate_admin_candidate", new=AsyncMock(return_value=3)),
+        patch.object(service, "_materialize_space_admin", new=AsyncMock()),
+        patch.object(service, "_cleanup_replaced_space_admins", new=AsyncMock()) as cleanup,
+        patch(
+            f"{_SERVICE_MODULE}.KnowledgeSpaceService.get_space_info",
+            new=AsyncMock(return_value=SimpleNamespace(id=101)),
+        ),
+    ):
+        await service.replace_admin(
+            request=SimpleNamespace(), login_user=_make_login_user(), department_id=10, new_admin_user_id=3
+        )
+    cleanup.assert_awaited_once_with(space_id=101)
+
+
+async def test_cleanup_only_retires_stale_business_responsible_members(membership_adapter):
+    service = _load_service_class()
+    members = [
+        SimpleNamespace(user_id=2, membership_source="space_admin"),
+        SimpleNamespace(user_id=3, membership_source="space_admin"),
+        SimpleNamespace(user_id=4, membership_source="manual"),
+    ]
+    with (
+        patch(
+            f"{_SERVICE_MODULE}.SpaceChannelMemberDao.async_get_members_by_space", new=AsyncMock(return_value=members)
+        ),
+        patch.object(service, "_dematerialize_space_admin_locked", new=AsyncMock()) as teardown,
+    ):
+        await service._cleanup_replaced_space_admins(space_id=101)
+    teardown.assert_awaited_once_with(space_id=101, user_id=3)

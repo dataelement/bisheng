@@ -33,6 +33,7 @@ from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeRead
+from bisheng.knowledge.domain.repositories.department_space_owner_repository import DepartmentSpaceOwnerRepository
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceBatchCreateReq,
     DepartmentKnowledgeSpaceVisibilityReq,
@@ -592,7 +593,12 @@ class DepartmentKnowledgeSpaceService:
 
     @classmethod
     async def _materialize_space_admin(cls, *, space_id: int, user_id: int) -> None:
-        """Materialize the single space admin: ADMIN member row + manager Grant.
+        async with DepartmentSpaceOwnerRepository.lock_binding(space_id, expected_admin_user_id=user_id):
+            await cls._materialize_space_admin_locked(space_id=space_id, user_id=user_id)
+
+    @classmethod
+    async def _materialize_space_admin_locked(cls, *, space_id: int, user_id: int) -> None:
+        """Materialize the single space admin: ADMIN member row + protected owner Grant.
 
         The ``department_knowledge_space.admin_user_id`` column is the source of
         truth; the membership Grant supplies the admin's effective permissions
@@ -603,9 +609,7 @@ class DepartmentKnowledgeSpaceService:
             if existing.membership_source != SPACE_ADMIN_MEMBERSHIP_SOURCE:
                 # Remember the pre-promotion role so a later replacement can
                 # demote back instead of dropping the membership (AC-07).
-                existing.department_admin_promoted_from_role = (
-                    existing.user_role.value if existing.user_role != UserRoleEnum.ADMIN else None
-                )
+                existing.department_admin_promoted_from_role = existing.user_role.value
                 existing.membership_source = SPACE_ADMIN_MEMBERSHIP_SOURCE
             existing.user_role = UserRoleEnum.ADMIN
             existing.status = MembershipStatusEnum.ACTIVE
@@ -620,81 +624,90 @@ class DepartmentKnowledgeSpaceService:
                 membership_source=SPACE_ADMIN_MEMBERSHIP_SOURCE,
             )
             await SpaceChannelMemberDao.async_insert_member(member)
-        if await cls._grant_space_admin_manager(space_id=space_id, user_id=user_id):
+        if await cls._grant_space_admin_owner(space_id=space_id, user_id=user_id):
             await cls._reconcile_file_change_approvers(space_id)
 
     @classmethod
     async def _dematerialize_space_admin(cls, *, space_id: int, user_id: int) -> None:
-        """Clear the space-admin materialization for ``user_id`` (AC-07).
+        async with DepartmentSpaceOwnerRepository.lock_binding(space_id, excluded_admin_user_id=user_id):
+            await cls._dematerialize_space_admin_locked(space_id=space_id, user_id=user_id)
 
-        A member promoted from an ordinary role reverts to it; a pure admin row
-        is removed. The membership Grant follows the resulting member role.
-        """
-        restored_role = None
+    @classmethod
+    async def _dematerialize_space_admin_locked(cls, *, space_id: int, user_id: int) -> None:
+        """Keep the previous-role marker until permission restoration succeeds."""
         existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
-        if existing is not None and existing.membership_source == SPACE_ADMIN_MEMBERSHIP_SOURCE:
-            previous_role = existing.department_admin_promoted_from_role
-            if previous_role:
-                existing.user_role = UserRoleEnum(previous_role)
-                restored_role = existing.user_role
+        managed = existing is not None and existing.membership_source == SPACE_ADMIN_MEMBERSHIP_SOURCE
+        restored_role = None
+        if managed and existing.department_admin_promoted_from_role:
+            restored_role = UserRoleEnum(existing.department_admin_promoted_from_role)
+        elif existing is not None and not managed and existing.status == MembershipStatusEnum.ACTIVE:
+            restored_role = existing.user_role
+        projected = await cls._revoke_space_admin_owner(
+            space_id=space_id,
+            user_id=user_id,
+            restored_role=restored_role,
+        )
+        if not projected:
+            return
+        if managed:
+            if restored_role is not None:
+                existing.user_role = restored_role
                 existing.membership_source = "manual"
                 existing.department_admin_promoted_from_role = None
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
             else:
                 await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
-        elif existing is not None and existing.status == MembershipStatusEnum.ACTIVE:
-            # A retry must preserve a member role restored by an earlier call.
-            restored_role = existing.user_role
-        if await cls._revoke_space_admin_manager(space_id=space_id, user_id=user_id, restored_role=restored_role):
-            await cls._reconcile_file_change_approvers(space_id)
+        await cls._reconcile_file_change_approvers(space_id)
 
     @classmethod
-    async def _grant_space_admin_manager(cls, *, space_id: int, user_id: int) -> bool:
-        """Project the space admin through the F048 business membership source.
-
-        Projection failure is logged and reported as ``False``: the DB column
-        stays the source of truth and the reconcile task repairs the Grant, so the
-        swap itself must not roll back. The boolean lets callers batch the F046
-        file-change approver reconciliation after the Grant is ready.
-        """
-        try:
-            await KnowledgeSpaceService.sync_direct_space_user_permissions(
-                space_id,
-                user_id,
-                UserRoleEnum.ADMIN,
-                is_active=True,
+    async def _cleanup_replaced_space_admins(cls, *, space_id: int) -> None:
+        """Finish old-member teardown after a failed or interrupted handover."""
+        async with DepartmentSpaceOwnerRepository.lock_binding(space_id) as binding:
+            adapter = await get_f048_resource_adapter("knowledge_space")
+            changed = await adapter.sync_department_owner(
+                resource_id=str(space_id),
+                operator_user_id=int(binding.admin_user_id or binding.created_by or 1),
             )
-            return True
-        except Exception as e:
-            _logger.warning(
-                "Failed to project space admin manager Grant for space %s user %s: %s",
+            members = await SpaceChannelMemberDao.async_get_members_by_space(
                 space_id,
-                user_id,
-                e,
+                user_roles=[UserRoleEnum.ADMIN],
             )
-            return False
+            for member in members:
+                if (
+                    member.membership_source == SPACE_ADMIN_MEMBERSHIP_SOURCE
+                    and member.user_id != binding.admin_user_id
+                ):
+                    await cls._dematerialize_space_admin_locked(space_id=space_id, user_id=member.user_id)
+            if changed is not None:
+                await cls._reconcile_file_change_approvers(space_id)
 
     @classmethod
-    async def _revoke_space_admin_manager(
+    async def _grant_space_admin_owner(cls, *, space_id: int, user_id: int) -> bool:
+        """Project the current business owner and retire the legacy manager copy."""
+        adapter = await get_f048_resource_adapter("knowledge_space")
+        await adapter.sync_department_owner(resource_id=str(space_id), operator_user_id=user_id)
+        await adapter.sync_membership(
+            resource_id=str(space_id),
+            operator_user_id=user_id,
+            subject_user_id=user_id,
+            model_key=None,
+        )
+        return True
+
+    @classmethod
+    async def _revoke_space_admin_owner(
         cls, *, space_id: int, user_id: int, restored_role: UserRoleEnum | None = None
     ) -> bool:
-        try:
-            await KnowledgeSpaceService.sync_direct_space_user_permissions(
-                space_id,
-                user_id,
-                restored_role,
-                is_active=restored_role is not None,
-            )
-            return True
-        except Exception as e:
-            _logger.warning(
-                "Failed to remove space admin manager Grant for space %s user %s: %s",
-                space_id,
-                user_id,
-                e,
-            )
-            return False
+        adapter = await get_f048_resource_adapter("knowledge_space")
+        await adapter.sync_department_owner(resource_id=str(space_id), operator_user_id=user_id)
+        await KnowledgeSpaceService.sync_direct_space_user_permissions(
+            space_id,
+            user_id,
+            restored_role,
+            is_active=restored_role is not None,
+        )
+        return True
 
     @classmethod
     async def _reconcile_file_change_approvers(cls, space_id: int) -> None:
@@ -861,6 +874,7 @@ class DepartmentKnowledgeSpaceService:
         previous_admin = binding.admin_user_id
         if previous_admin == new_admin:
             await cls._materialize_space_admin(space_id=binding.space_id, user_id=new_admin)
+            await cls._cleanup_replaced_space_admins(space_id=binding.space_id)
             return await space_service.get_space_info(binding.space_id)
 
         swapped = await DepartmentKnowledgeSpaceDao.areplace_admin(

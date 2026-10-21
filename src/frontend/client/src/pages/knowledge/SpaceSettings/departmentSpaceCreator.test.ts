@@ -1,11 +1,10 @@
 /**
- * Department space roster: the 创建者 tag belongs to the configured responsible
- * user. The super admin recorded as the audit creator never appears here.
+ * Department owner rows preserve their real permission model and do not
+ * mislabel the configured responsible user as the creation operator.
  */
 
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
 import {
-  CREATOR_DISPLAY_MODEL_KEY,
   decorateDepartmentSpaceRows,
   restoreDepartmentSpaceRows,
 } from "./departmentSpaceCreator";
@@ -16,9 +15,10 @@ const owner: PermissionDraftRow = {
   subjectType: "user",
   subjectId: 7,
   subjectName: "zhang",
-  modelKey: "manager",
+  modelKey: "owner",
+  protected: true,
   assigneeId: "a-owner",
-  sourceType: "DIRECT",
+  sourceType: "SPACE_MEMBERSHIP",
 };
 
 const viewer: PermissionDraftRow = {
@@ -36,9 +36,9 @@ describe("decorateDepartmentSpaceRows", () => {
     expect(decorateDepartmentSpaceRows(rows, null)).toBe(rows);
   });
 
-  it("tags the configured responsible user as the creator", () => {
+  it("preserves the real owner model without a creator tag", () => {
     const [ownerRow, viewerRow] = decorateDepartmentSpaceRows([owner, viewer], creator);
-    expect(ownerRow).toMatchObject({ subjectId: 7, modelKey: "manager", sourceType: "creator" });
+    expect(ownerRow).toMatchObject({ subjectId: 7, modelKey: "owner", protected: true, sourceType: undefined });
     expect(viewerRow).toEqual(viewer);
   });
 
@@ -47,16 +47,8 @@ describe("decorateDepartmentSpaceRows", () => {
     expect(decorateDepartmentSpaceRows(rows, null)).toBe(rows);
   });
 
-  it("adds a display row only for a configured responsible user whose grant is missing", () => {
-    const [first, viewerRow] = decorateDepartmentSpaceRows([viewer], creator);
-    expect(first).toMatchObject({
-      subjectId: 7,
-      subjectName: "zhang",
-      modelKey: CREATOR_DISPLAY_MODEL_KEY,
-      sourceType: "creator",
-      protected: true,
-    });
-    expect(viewerRow).toEqual(viewer);
+  it("does not manufacture an owner when the real grant is missing", () => {
+    expect(decorateDepartmentSpaceRows([viewer], creator)).toEqual([viewer]);
   });
 });
 

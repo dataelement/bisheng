@@ -718,6 +718,55 @@ class F048PermissionRuntime:
             idempotency_key=idempotency_key,
         )
 
+    async def sync_business_owner(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        owner_user_id: int | None,
+    ):
+        """Reconcile the owner attested by the department-space adapter."""
+        if (
+            target.resource_type != "knowledge_space"
+            or actor.current_tenant_id != target.tenant_id
+            or (owner_user_id is not None and owner_user_id <= 0)
+        ):
+            raise PermissionInvalidResourceError()
+        context = replace(
+            await self.build_grant_context(actor=actor, target=target),
+            system_authorized=True,
+            capabilities=(),
+        )
+        source = None
+        if owner_user_id is not None:
+            owner_grant = next(g for g in context.grants if g.model.model_key == "owner")
+            provisional = self._sources.canonicalize_source(
+                source_id=1,
+                subject_type="user",
+                subject_id=str(owner_user_id),
+                source_type="SPACE_MEMBERSHIP",
+                source_ref=f"{target.resource_id}:admin:{owner_user_id}",
+                protected=True,
+            )
+            source = replace(
+                provisional,
+                source_id=stable_assignee_id(
+                    grant_key=owner_grant.grant_id,
+                    source_fingerprint=provisional.source_fingerprint,
+                ),
+            )
+        return await self._grants.reconcile_business_owner(
+            context,
+            source=source,
+            idempotency_key=_idempotency_key(
+                "department-owner",
+                target.tenant_id,
+                target.resource_id,
+                target.resource_version,
+                owner_user_id,
+            ),
+        )
+
     async def sync_business_source_model(
         self,
         *,

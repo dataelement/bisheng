@@ -23,6 +23,7 @@
 | 领域对象 | Owner Feature | 说明 |
 |---------|--------------|------|
 | —（无新增） | F076-subject-id-search | 按现有接口增加 ID 完整值/前缀检索；用户、部门使用 external_id，用户组使用数字 ID；保留原名称匹配与性能优化、稳定身份及授权写入规则。前后端同版更新，不加版本探测、查询模式、能力开关或候选复检；无数据迁移，必要时仅补查询索引 |
+| —（无新增领域对象） | F077-cofco-department-space-owner | 仅中粮部门知识空间：负责人使用既有 owner 模型，任免时转移负责人来源并恢复原成员权限，保留独立授权和创建审计。专用业务口仅对已核验部门绑定校准历史 creator；INV-25 普通资源及公开授权入口的 protected creator 规则不变。用户已确认并授权开发，设计与验证见 F077 文档 |
 | —（无新增） | F043-report-node-optimization | 在既有工作流报告节点模板链路上：①新增「手动触发保存」端点（转发 forcesave 指令到 OnlyOffice，落盘仍走既有 callback）；②变量占位符格式扩展为 `{{显示名\|nodeId.field}}`（向后兼容旧 `{{nodeId.field}}`，解析仍以 nodeId 为键）。**范围仅工作流报告节点**——旧「技能」体系独立报告页入口已关闭、变量机制独立（`{id}_{name}`），不纳入、不做兼容投入，待随技能残留代码一并清理；不引入新领域对象/表/DAO |
 | —（无新增） | F044-model-status-manual-verify | 在既有 `LLMModel` 上新增 `status_update_time` 字段（Alembic）与「手动验证单模型」对外 API；复用既有按类型探活逻辑，状态写入仍经由既有 LLM service/DAO；不引入新领域对象 |
 | —（无新增） | F045-chat-image-preview | 纯 client 前端渲染改造（日常/任务/工作流会话消息附件的图片分流 + 失效占位）；不触碰后端与存储 |
