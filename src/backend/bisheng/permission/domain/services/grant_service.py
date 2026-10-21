@@ -303,7 +303,11 @@ class GrantService:
                 managed = existing.protected and (
                     (
                         existing.source_type == "CREATOR"
-                        and existing.source_ref == f"knowledge_space:{target.resource_id}"
+                        and existing.source_ref
+                        in {
+                            f"knowledge_space:{target.resource_id}",
+                            f"creator:knowledge_space:{target.resource_id}",
+                        }
                     )
                     or (existing.source_type == "SPACE_MEMBERSHIP" and existing.source_ref.startswith(prefix))
                 )

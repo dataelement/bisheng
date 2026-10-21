@@ -750,8 +750,11 @@ class F048PermissionRuntime:
             )
             source = replace(
                 provisional,
+                # A reappointment starts a new assignee lifecycle. Reusing an
+                # inactive identity would pair version 1 with its old SQL version.
+                # The resource version keeps retries of this appointment stable.
                 source_id=stable_assignee_id(
-                    grant_key=owner_grant.grant_id,
+                    grant_key=f"{owner_grant.grant_id}:at:{target.resource_version}",
                     source_fingerprint=provisional.source_fingerprint,
                 ),
             )
@@ -865,8 +868,10 @@ class F048PermissionRuntime:
             else:
                 stable_source = replace(
                     source,
+                    # Restoring a revoked membership needs a fresh lifecycle,
+                    # just like reappointing a department owner above.
                     source_id=stable_assignee_id(
-                        grant_key=target_grant.grant_id,
+                        grant_key=f"{target_grant.grant_id}:at:{target.resource_version}",
                         source_fingerprint=source.source_fingerprint,
                     ),
                 )

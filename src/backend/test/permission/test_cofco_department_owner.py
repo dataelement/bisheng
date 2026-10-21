@@ -36,11 +36,19 @@ def source(sources, user_id, *, creator=False, source_id=101):
 
 
 @pytest.mark.asyncio
-async def test_owner_handover_retires_old_creator_and_preserves_independent_owner():
+@pytest.mark.parametrize("creator_ref", ["knowledge_space:42", "creator:knowledge_space:42"])
+async def test_owner_handover_retires_old_creator_and_preserves_independent_owner(creator_ref):
     service, sources, projection, state, _ = _service()
     ctx = context()
     owner = ctx.grants[-1]
-    old = source(sources, 2, creator=True)
+    old = sources.canonicalize_source(
+        source_id=101,
+        subject_type="user",
+        subject_id="2",
+        source_type="CREATOR",
+        source_ref=creator_ref,
+        protected=True,
+    )
     independent = sources.canonicalize_source(
         source_id=102,
         subject_type="user",
