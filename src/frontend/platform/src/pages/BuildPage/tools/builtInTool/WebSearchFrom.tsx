@@ -439,11 +439,11 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
 
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outlined" className="px-11" type="button" color="default">
+                        <Button variant="outlined" type="button" color="default">
                             {t('build.cancel')}
                         </Button>
                     </DialogClose>
-                    <Button className="px-11" type="submit" disabled={isApi && loading}>
+                    <Button type="submit" disabled={isApi && loading}>
                         {t('build.confirm')}
                     </Button>
                 </DialogFooter>

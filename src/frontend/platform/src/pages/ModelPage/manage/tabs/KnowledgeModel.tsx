@@ -101,8 +101,8 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) =
                     }} rows={16} textareaClassName={"mt-1"} />
             </div>
             <DialogFooter>
-                <Button variant="outlined" className="px-11" type="button" onClick={handleCancel} color="default">{t('model.cancel')}</Button>
-                <Button disabled={false} type="submit" className="px-11" onClick={() => {
+                <Button variant="outlined" type="button" onClick={handleCancel} color="default">{t('model.cancel')}</Button>
+                <Button disabled={false} type="submit" onClick={() => {
                     modifyNotSavedRef.current = false
                     onSave(textValue)
                     setOpen(false)
@@ -359,8 +359,8 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 onChange={(val) => handleModelChange('asr_model_id', { ...form, asrModelId: val })}
             />
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
-                <Button className="px-10" disabled={saveload} onClick={handleSave}>
+                <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
+                <Button disabled={saveload} onClick={handleSave}>
                     {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>

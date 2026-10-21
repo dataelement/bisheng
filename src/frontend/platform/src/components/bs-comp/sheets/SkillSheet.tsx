@@ -67,11 +67,11 @@ export default function SkillSheet({ select, children, onSelect }) {
                   footer={
                     <div className="flex justify-end">
                       {select.some((_) => _.id === flow.id) ? (
-                        <Button size="small" className="h-6" disabled>
+                        <Button size="small" disabled>
                           {t("build.added")}
                         </Button>
                       ) : (
-                        <Button size="small" className="h-6" onClick={() => onSelect(flow)}>
+                        <Button size="small" onClick={() => onSelect(flow)}>
                           {t("build.add")}
                         </Button>
                       )}

@@ -353,7 +353,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 {/* Batch Actions */}
                 {selectedFileObjs.length > 0 && (
                     <div className="flex items-center gap-2 mr-1 md:mr-0 pr-2 md:pr-4 border-r border-gray-200 dark:border-gray-700">
-                        <Button variant="outlined" onClick={handleBatchDownload} disabled={isDownloading} className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4" color="default">
+                        <Button variant="outlined" onClick={handleBatchDownload} disabled={isDownloading} className="flex items-center gap-1 disabled:pointer-events-auto sm:px-4" color="default">
                             {isDownloading ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : <Outlined.Download size={16} />}
                             <span className="hidden sm:inline">{t('download', { ns: 'bs' })}</span>
                         </Button>
@@ -366,7 +366,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                 isEditable={canBatchEditTags}
                                 mode="batch"
                             >
-                                <Button variant="outlined" disabled={!canBatchEditTags} className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4" onClick={(e) => e.stopPropagation()} color="default">
+                                <Button variant="outlined" disabled={!canBatchEditTags} className="flex items-center gap-1 disabled:pointer-events-auto sm:px-4" onClick={(e) => e.stopPropagation()} color="default">
                                     <Outlined.Tag size={16} />
                                     <span className="hidden sm:inline">{t('tags')}</span>
                                 </Button>
@@ -374,13 +374,13 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                             </KnowledgeTooltip>
                         )}
                         {canDeleteKb && (
-                            <Button variant="outlined" onClick={handleBatchDelete} className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4" color="default">
+                            <Button variant="outlined" onClick={handleBatchDelete} className="flex items-center gap-1 disabled:pointer-events-auto sm:px-4" color="default">
                                 <Outlined.Delete size={16} />
                                 <span className="hidden sm:inline">{t('delete')}</span>
                             </Button>
                         )}
                         {canEditKb && hasSelectedFailedFiles && (
-                                <Button variant="outlined" onClick={handleBatchRetry} className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4" color="default">
+                                <Button variant="outlined" onClick={handleBatchRetry} className="flex items-center gap-1 disabled:pointer-events-auto sm:px-4" color="default">
                                     <Outlined.Refresh size={16} />
                                     <span className="hidden sm:inline">{t('retry')}</span>
                                 </Button>
@@ -396,7 +396,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                         setIsAllSelected(false);
                     }} />
                     {canEditKb && (
-                        <Button variant="outlined" onClick={() => setMetadataOpen(true)} className="px-2 md:px-4 whitespace-nowrap h-9" color="default">
+                        <Button variant="outlined" onClick={() => setMetadataOpen(true)} className="md:px-4 whitespace-nowrap" color="default">
                             <Outlined.FileEditing size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
                             <span className="hidden md:inline">{t('metaData')}</span>
                         </Button>

@@ -52,11 +52,11 @@ export default function ColFilterUser({ label, onFilter }) {
                     )}
                 </div>
                 <div className="flex justify-between mt-4">
-                    <Button variant="text" className="px-8 h-8" onClick={() => {
+                    <Button variant="text" onClick={() => {
                         setValue([])
                         onFilter([])
                     }} color="default">{t('system.reset')}</Button>
-                    <Button className="px-8 h-8" onClick={() => {
+                    <Button onClick={() => {
                         setOpen(false)
                         onFilter(value)
                     }}>{t('system.confirm')}</Button>

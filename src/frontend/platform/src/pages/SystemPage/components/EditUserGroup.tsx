@@ -270,8 +270,8 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
 
         </div>
         <div className="flex shrink-0 items-center justify-center gap-4 border-t bg-background-login py-3">
-            <Button variant="outlined" className="px-16" onClick={() => onChange()} color="default">{t('cancel')}</Button>
-            <Button className="px-16" onClick={() => { void handleSave(); }}>{t('save')}</Button>
+            <Button variant="outlined" onClick={() => onChange()} color="default">{t('cancel')}</Button>
+            <Button onClick={() => { void handleSave(); }}>{t('save')}</Button>
         </div>
     </div>
     )

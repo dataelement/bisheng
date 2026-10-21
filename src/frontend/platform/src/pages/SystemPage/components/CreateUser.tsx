@@ -95,8 +95,8 @@ export default function CreateUser({ open, onClose, onSave }) {
                 </div>
             </div>
             <DialogFooter>
-                <Button variant="outlined" className="h-10 w-[120px] px-16" onClick={handleCancel} color="default">{t('cancel')}</Button>
-                <Button className="px-16 h-10 w-[120px]" onClick={handleConfirm}>{t('confirm')}</Button>
+                <Button variant="outlined" onClick={handleCancel} color="default">{t('cancel')}</Button>
+                <Button onClick={handleConfirm}>{t('confirm')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

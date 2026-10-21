@@ -71,8 +71,8 @@ const FilterUserGroup: React.FC<FilterUserGroupProps> = ({
         )}
       </div>
       <div className="flex justify-between mt-4">
-        <Button variant="text" className="px-8 h-8" onClick={onClearChecked} color="default">{t('system.reset')}</Button>
-        <Button className="px-8 h-8" onClick={onOk}>{t('system.confirm')}</Button>
+        <Button variant="text" onClick={onClearChecked} color="default">{t('system.reset')}</Button>
+        <Button onClick={onOk}>{t('system.confirm')}</Button>
       </div>
     </div>
   );

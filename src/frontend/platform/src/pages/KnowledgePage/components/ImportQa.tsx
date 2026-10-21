@@ -59,7 +59,7 @@ const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
                 </div>
                 <DialogFooter>
                     <DialogClose>
-                        <Button type="submit" className="px-11">
+                        <Button type="submit">
                             {t('confirm')}
                         </Button>
                     </DialogClose>
@@ -284,11 +284,11 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                 </div>}
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outlined" className="px-11" type="button" onClick={close} color="default">
+                        <Button variant="outlined" type="button" onClick={close} color="default">
                             {t('cancel')}
                         </Button>
                     </DialogClose>
-                    <Button loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit} disabled={Boolean(saveLoad)}>
+                    <Button loading={saveLoad} type="submit" onClick={handleSubmit} disabled={Boolean(saveLoad)}>
                         {t('submit')}
                     </Button>
                 </DialogFooter>

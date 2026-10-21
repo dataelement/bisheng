@@ -82,7 +82,7 @@ export default function RTConfig({ open, onChange }) {
             </div>
             <DialogFooter>
                 <div className="flex justify-start mt-4">
-                    <Button variant="outlined" className="flex w-[120px]" onClick={() => setShowAdd(true)} color="default"><Outlined.Plus className="mr-2 size-5" />{t('bs:create')}</Button>
+                    <Button variant="outlined" className="flex" onClick={() => setShowAdd(true)} color="default"><Outlined.Plus className="mr-2 size-5" />{t('bs:create')}</Button>
                 </div>
             </DialogFooter>
         </DialogContent>

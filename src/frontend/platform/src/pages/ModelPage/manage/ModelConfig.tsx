@@ -349,9 +349,9 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             </div>
         </div>
         <div className="absolute right-0 bottom-0 p-4 flex gap-4">
-            {id !== -1 && <Button className="px-8" variant="solid" onClick={handleModelDel} color="danger">{t('model.delete')}</Button>}
-            <Button className="px-8" variant="outlined" onClick={() => onBack()} color="default">{t('model.cancel')}</Button>
-            <Button className="px-16" loading={isLoading} onClick={handleSave} disabled={((String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))) || (Boolean(isLoading) || (!formData.type))}>
+            {id !== -1 && <Button variant="outlined" onClick={handleModelDel} color="danger">{t('model.delete')}</Button>}
+            <Button variant="outlined" onClick={() => onBack()} color="default">{t('model.cancel')}</Button>
+            <Button loading={isLoading} onClick={handleSave} disabled={((String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))) || (Boolean(isLoading) || (!formData.type))}>
                 {t('model.save')}
             </Button>
         </div>

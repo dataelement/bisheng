@@ -95,7 +95,7 @@ export default function EvaluationPage() {
       <div className="h-full overflow-y-auto pb-10">
         <div className="mb-10 w-full">
             <div className="flex items-center justify-end gap-4">
-              <Button className="px-8 text-[#fff]" onClick={() => navigate("/evaluation/create")}>
+              <Button onClick={() => navigate("/evaluation/create")}>
                 {t("create")}
               </Button>
             </div>

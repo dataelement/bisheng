@@ -210,11 +210,11 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
 
             <DialogFooter className="mt-6">
                 <DialogClose>
-                    <Button variant="outlined" className="px-11" type="button" color="default">
+                    <Button variant="outlined" type="button" color="default">
                         {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
-                <Button className="px-11" onClick={handleSubmit}>
+                <Button onClick={handleSubmit}>
                     {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>

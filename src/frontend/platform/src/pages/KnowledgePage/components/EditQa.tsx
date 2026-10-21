@@ -169,11 +169,11 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
                 </div>
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outlined" className="px-11" type="button" onClick={close} color="default">
+                        <Button variant="outlined" type="button" onClick={close} color="default">
                             {t('cancel2')}
                         </Button>
                     </DialogClose>
-                    <Button loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit} disabled={Boolean(saveLoad)}>
+                    <Button loading={saveLoad} type="submit" onClick={handleSubmit} disabled={Boolean(saveLoad)}>
                         {t('confirm')}
                     </Button>
                 </DialogFooter>

@@ -125,9 +125,9 @@ function CreateModal({ open, setOpen, onSuccess }) {
             </div>
             <DialogFooter>
                 <DialogClose asChild>
-                    <Button variant="outlined" className="px-11" type="button" onClick={() => setOpen(false)} color="default">{t('label.cancel')}</Button>
+                    <Button variant="outlined" type="button" onClick={() => setOpen(false)} color="default">{t('label.cancel')}</Button>
                 </DialogClose>
-                <Button type="submit" className="px-11" disabled={apps.length === 0 || users.length === 0} onClick={handleCreate}>{t('label.create')}</Button>
+                <Button type="submit" disabled={apps.length === 0 || users.length === 0} onClick={handleCreate}>{t('label.create')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

@@ -71,7 +71,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
     if (!docx.path) return <div className="relative size-full">
         <div className="absolute -top-10 z-10 flex gap-4">
             <DialogClose className="">
-                <Button variant="outlined" size="medium" className="bg-[#fff] size-8" color="default" iconOnly><Outlined.Left size={16} /></Button>
+                <Button variant="outlined" size="medium" color="default" iconOnly><Outlined.Left size={16} /></Button>
             </DialogClose>
         </div>
         <div className="bg-accent size-full flex justify-center items-center">
@@ -97,7 +97,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
             <div ref={iframeRef} className="relative flex-1 border bg-accent">
                 <div className="absolute -top-10 z-10 flex gap-4">
                     <DialogClose className="">
-                        <Button variant="outlined" size="medium" className="bg-[#fff] size-8" color="default" iconOnly><Outlined.Left size={16} /></Button>
+                        <Button variant="outlined" size="medium" color="default" iconOnly><Outlined.Left size={16} /></Button>
                     </DialogClose>
                     {show && <SelectVar
                         nodeId={nodeId}
@@ -110,9 +110,9 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
                                 setShow(true)
                             }, 1);
                         }}>
-                        <Button className="h-8">{t('inserVar')}<Outlined.Down size={14} /></Button>
+                        <Button>{t('inserVar')}<Outlined.Down size={14} /></Button>
                     </SelectVar>}
-                    <Button className="h-8" disabled={saving} onClick={handleSave}>
+                    <Button disabled={saving} onClick={handleSave}>
                         {saving && <LoadingIcon className="mr-1 size-4" />}
                         {t('report.saveTemplate')}
                     </Button>

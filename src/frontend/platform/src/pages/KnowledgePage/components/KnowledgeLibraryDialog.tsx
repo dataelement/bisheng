@@ -236,21 +236,21 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outlined" className="px-8 h-8" color="default">{t('cancel')}</Button>
+                    <Button variant="outlined" color="default">{t('cancel')}</Button>
                 </DialogClose>
                 {mode === 'create' ? (
                     <>
-                        <Button variant="outlined" className="px-8 h-8 flex" onClick={() => handleCreate(false)} disabled={isSubmitting} color="default">
+                        <Button variant="outlined" className="flex" onClick={() => handleCreate(false)} disabled={isSubmitting} color="default">
                             {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                             {t('finishCreate')}
                         </Button>
-                        <Button type="submit" className="px-8 h-8 flex" onClick={() => handleCreate(true)} disabled={isSubmitting}>
+                        <Button type="submit" className="flex" onClick={() => handleCreate(true)} disabled={isSubmitting}>
                             {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                             {t('createImport', { ns: 'bs' })}
                         </Button>
                     </>
                 ) : (
-                    <Button type="submit" className="px-8 h-8 flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
+                    <Button type="submit" className="flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
                         {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                         {t('confirm')}
                     </Button>

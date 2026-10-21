@@ -176,10 +176,10 @@ export default function SystemLog() {
                     </Select>
                 </div>
                 <div>
-                    <Button className="mr-3 px-6" onClick={handleSearch}>
+                    <Button className="mr-3" onClick={handleSearch}>
                         {t('log.searchButton')}
                     </Button>
-                    <Button variant="outlined" className="px-6" onClick={handleReset} color="default">
+                    <Button variant="outlined" onClick={handleReset} color="default">
                         {t('log.resetButton')}
                     </Button>
                 </div>

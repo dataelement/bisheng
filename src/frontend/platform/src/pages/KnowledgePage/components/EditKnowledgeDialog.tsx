@@ -84,9 +84,9 @@ export default function KnowledgeBaseSettingsDialog({
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outlined" className="px-11" type="button" color="default">{t('cancel', {ns: 'bs'})}</Button>
+                    <Button variant="outlined" type="button" color="default">{t('cancel', {ns: 'bs'})}</Button>
                 </DialogClose>
-                <Button type="submit" className="px-11" onClick={handleSubmit} disabled={(String((formData.name) ?? '').length > 30) || (String((formData.desc) ?? '').length > 200)}>{t('confirm', {ns: 'bs'})}</Button>
+                <Button type="submit" onClick={handleSubmit} disabled={(String((formData.name) ?? '').length > 30) || (String((formData.desc) ?? '').length > 200)}>{t('confirm', {ns: 'bs'})}</Button>
             </DialogFooter>
         </DialogContent>
     );

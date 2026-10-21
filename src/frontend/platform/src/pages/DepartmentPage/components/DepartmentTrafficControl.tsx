@@ -78,7 +78,7 @@ export function DepartmentTrafficControl({ dept }: Props) {
             />
 
             <div className="flex justify-center gap-4 pt-4">
-                <Button className="px-16" onClick={handleSave}>{t('save')}</Button>
+                <Button onClick={handleSave}>{t('save')}</Button>
             </div>
         </div>
     )

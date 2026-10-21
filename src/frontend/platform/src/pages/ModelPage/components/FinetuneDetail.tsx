@@ -105,8 +105,8 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
                 </Button> : null
         }
         {status === TaskStatus.TRAINING_IN_PROGRESS ?
-            <Button size="small" className="bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
-            <Button size="small" className="bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('bs:delete')}</Button>
+            <Button size="small" color="danger" onClick={stopClick}>{t('finetune.stop')}</Button> :
+            <Button size="small" color="danger" onClick={deleteClick}>{t('bs:delete')}</Button>
         }
     </div>
 }

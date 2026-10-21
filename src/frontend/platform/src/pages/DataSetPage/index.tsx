@@ -56,7 +56,7 @@ export default function index() {
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10">
                 <div className="flex justify-end gap-4 items-center">
                     <SearchInput placeholder={t('dataset.name')} onChange={(e) => search(e.target.value)} className={"w-56 shrink-0"} />
-                    <Button className="px-8 text-[#FFFFFF]" onClick={() => modelRef.current.open()}>{t('dataset.create')}</Button>
+                    <Button onClick={() => modelRef.current.open()}>{t('dataset.create')}</Button>
                 </div>
                 <Table>
                     <TableHeader>

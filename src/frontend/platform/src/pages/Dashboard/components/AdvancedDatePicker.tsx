@@ -359,8 +359,8 @@ if (!isNaN(v) && v >= 0 && v <= 23) setEndHour(v); }} className={"w-16 h-6"} />
 
           {/* Footer Action */}
           <div className="flex justify-end gap-2 px-3 mb-3">
-            <Button className="h-6" variant="text" size="small" onClick={handleClear} color="default">{t('clear')}</Button>
-            <Button className="h-6" size="small" onClick={handleConfirm} disabled={(String((startHour) ?? '') !== '' && (!Number.isFinite(Number(startHour)) || Number(startHour) < 0 || Number(startHour) > 23)) || (String((endHour) ?? '') !== '' && (!Number.isFinite(Number(endHour)) || Number(endHour) < 0 || Number(endHour) > 23))}>{t('confirm')}</Button>
+            <Button variant="text" size="small" onClick={handleClear} color="default">{t('clear')}</Button>
+            <Button size="small" onClick={handleConfirm} disabled={(String((startHour) ?? '') !== '' && (!Number.isFinite(Number(startHour)) || Number(startHour) < 0 || Number(startHour) > 23)) || (String((endHour) ?? '') !== '' && (!Number.isFinite(Number(endHour)) || Number(endHour) < 0 || Number(endHour) > 23))}>{t('confirm')}</Button>
           </div>
 
         </div>
