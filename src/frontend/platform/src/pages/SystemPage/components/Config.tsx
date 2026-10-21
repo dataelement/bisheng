@@ -43,6 +43,7 @@ export default function Config() {
     return <div className="flex h-full max-w-[80%] mx-auto flex-col pt-6 pb-4">
         <p className="font-bold mb-2 shrink-0">{t('system.parameterConfig')}</p>
         <AceEditor
+            width="100%"
             value={config || ''}
             mode="yaml"
             theme={"twilight"}

@@ -18,7 +18,8 @@ export default function FilterByUser({ value, placeholder, onChange }: FilterByU
     delay: 500,
     fetchPage: (keyword, page, signal) => getUsersApi({ name: keyword, page, pageSize: 20 }, { signal }),
   })
-  const options = search.loading || search.failed || search.tooLong ? [] : search.rows.map(user => ({
+  // Retain loaded rows during pagination so the dropdown keeps its scroll position.
+  const options = search.tooLong ? [] : search.rows.map(user => ({
     label: user.external_id ? `${user.user_name} (${t("subjectSearch.userId")}: ${user.external_id})` : user.user_name,
     value: String(user.user_id),
   }))
