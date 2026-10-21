@@ -197,9 +197,21 @@ class AuditCapture:
             except Exception as error:
                 logger.warning("DSH audit activity finish unavailable ({})", type(error).__name__)
 
-    def response(self, result):
+    def response(self, result, reason=None):
         if self.started:
             self._put(self._event("response", metadata={"response_result": result}))
+            if reason in {
+                "error_response",
+                "peer_disconnected",
+                "response_cancelled",
+                "send_failed",
+                "response_interrupted",
+            }:
+                self._put(
+                    self._event("evidence", metadata={"event_type": "RESPONSE_FAILURE", "reason": reason}),
+                    self.evidence_queue,
+                    critical=False,
+                )
 
     def usage(self, result):
         if self.started:

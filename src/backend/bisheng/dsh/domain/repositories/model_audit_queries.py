@@ -82,8 +82,20 @@ class DshModelAuditQueryRepository(AuditTreeQueryRepository, AuditConversationRe
         data = {
             key: as_utc(getattr(row, key))
             for key in names
-            if key not in {"usage", "status_reasons", "status_pending", "user_name"}
+            if key
+            not in {"usage", "status_reasons", "status_pending", "user_name", "model_error_code", "response_error_code"}
         }
+        failure = (
+            self.one(
+                DshModelAuditEvidence,
+                DshModelAuditEvidence.request_id == row.request_id,
+                DshModelAuditEvidence.event_type == "RESPONSE_FAILURE",
+            )
+            if row.response_result in {"ERROR", "INTERRUPTED", "UNKNOWN"}
+            else None
+        )
+        data["model_error_code"] = getattr(usage, "error_code", None)
+        data["response_error_code"] = failure.reason if failure else None
         names_by_id = self.user_names([row.user_id]) if user_names is None else user_names
         data["user_name"] = names_by_id.get(row.user_id)
         _, data["status_reasons"], data["status_pending"] = audit_status_facts(row)

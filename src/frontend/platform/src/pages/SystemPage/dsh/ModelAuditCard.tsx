@@ -3,6 +3,7 @@ import type { ModelAuditRecord } from "@/types/dshModelAudit";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dshTime } from "./common";
+import { auditFailure } from "./auditFailures";
 import { ModelAuditBody } from "./ModelAuditBody";
 
 interface ModelAuditCardProps {
@@ -66,7 +67,10 @@ export function ModelAuditCard({
           {t("dsh.modelAuditView.kinds." + (row.request_kind || "unknown"))}
         </span>
         <span className="whitespace-nowrap">
-          {t("dsh.modelAuditView.sources.origin." + (row.session_origin || "unknown"))}
+          {t(
+            "dsh.modelAuditView.sources.origin." +
+              (row.session_origin || "unknown"),
+          )}
         </span>
         <Button
           variant="link"
@@ -129,6 +133,43 @@ export function ModelAuditCard({
               </dd>
             </div>
           ))}
+          {(
+            [
+              [
+                "model",
+                row.model_error_code,
+                ["FAILED", "CANCELLED", "UNKNOWN"].includes(row.model_result),
+              ],
+              [
+                "response",
+                row.response_error_code,
+                ["ERROR", "INTERRUPTED", "UNKNOWN"].includes(
+                  row.response_result,
+                ),
+              ],
+            ] as const
+          ).map(([axis, code, failed]) => {
+            if (!failed) return null;
+            const reason = auditFailure(code, axis);
+            return (
+              <div key={axis} className="flex gap-2">
+                <dt className="shrink-0">
+                  {t("dsh.modelAuditView.failures." + axis)}
+                </dt>
+                <dd className="min-w-0 break-all">
+                  {t("dsh.modelAuditView.failures." + reason.key)}
+                  {reason.status && (
+                    <span className="whitespace-nowrap">
+                      {" · " +
+                        t("dsh.modelAuditView.failures.http_status", {
+                          status: reason.status,
+                        })}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            );
+          })}
           {(row.status_reasons || []).map((reason) => (
             <div key={reason}>
               {t("dsh.modelAuditView.reasons." + reason.replace(":", "_"), {

@@ -120,8 +120,12 @@ it("places the original between the request header and the independently colored
   expect(
     screen.getByText("dsh.modelAuditView.states.INTERRUPTED"),
   ).toBeVisible();
-  expect(screen.queryByRole("button", { name: "dsh.modelAuditView.timeline" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "dsh.modelAuditView.sources.parent" })).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "dsh.modelAuditView.timeline" }),
+  ).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "dsh.modelAuditView.sources.parent" }),
+  ).toBeNull();
   expect(navigate).not.toHaveBeenCalled();
   fireEvent.keyDown(body, { key: "Escape" });
   expect(toggle).toHaveBeenCalledOnce();
@@ -151,4 +155,46 @@ it("does not make metadata-only or uncaptured records fetchable", () => {
   fireEvent.click(button);
   expect(onToggle).not.toHaveBeenCalled();
   expect(bodies.render).not.toHaveBeenCalled();
+});
+
+it("AC-12, AC-13: shows model and response reasons independently and handles old records", () => {
+  const { rerender } = render(
+    <ModelAuditCard
+      row={{
+        ...row,
+        model_result: "FAILED",
+        model_error_code: "upstream_http_401",
+        response_result: "ERROR",
+        response_error_code: "error_response",
+      }}
+      expanded={false}
+      onToggle={vi.fn()}
+      onNavigate={vi.fn()}
+    />,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }),
+  );
+  expect(screen.getByText("dsh.modelAuditView.failures.model")).toBeVisible();
+  expect(
+    screen.getByText(/dsh.modelAuditView.failures.authentication/),
+  ).toBeVisible();
+  expect(
+    screen.getByText(/dsh.modelAuditView.failures.http_status/),
+  ).toBeVisible();
+  expect(
+    screen.getByText("dsh.modelAuditView.failures.error_response"),
+  ).toBeVisible();
+  rerender(
+    <ModelAuditCard
+      row={row}
+      expanded={false}
+      onToggle={vi.fn()}
+      onNavigate={vi.fn()}
+    />,
+  );
+  expect(screen.queryByText("dsh.modelAuditView.failures.model")).toBeNull();
+  expect(
+    screen.getByText("dsh.modelAuditView.failures.unavailable"),
+  ).toBeVisible();
 });

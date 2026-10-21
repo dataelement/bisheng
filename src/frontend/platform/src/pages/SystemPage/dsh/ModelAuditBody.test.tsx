@@ -269,7 +269,7 @@ describe("audit body NDJSON-to-message UI", () => {
     );
     render(<ModelAuditBody requestId="request" />);
     await screen.findByText("dsh.modelAuditView.transfer.completed");
-    const [input, output] = screen.getAllByRole("article");
+    const [output, input] = screen.getAllByRole("article");
     expect(within(input).getByText(/roles.tool/)).toBeInTheDocument();
     expect(within(input).getByText(/call-old/)).toBeInTheDocument();
     expect(within(output).getByText("lookup")).toBeInTheDocument();
@@ -397,4 +397,41 @@ describe("audit body NDJSON-to-message UI", () => {
     expect(signal.aborted).toBe(true);
     expect(screen.queryByText(/First live piece/)).toBeNull();
   });
+});
+
+it("AC-14: reverses the complete message list before pagination and retains compacted history", async () => {
+  source(
+    frames([
+      {
+        channel: "input",
+        value: { role: "system", content: "Compacted session summary" },
+      },
+      ...Array.from({ length: 101 }, (_, i) => ({
+        channel: "input" as const,
+        value: { role: "user", content: `Synthetic history ${i}` },
+      })),
+      { channel: "output", value: { delta: { content: "Newest answer" } } },
+    ]),
+  );
+  render(<ModelAuditBody requestId="request" />);
+  await screen.findByText("dsh.modelAuditView.transfer.completed");
+  expect(screen.getByText("dsh.modelAuditView.newest_first")).toBeVisible();
+  const articles = screen.getAllByRole("article");
+  expect(articles).toHaveLength(100);
+  expect(within(articles[0]).getByText("Newest answer")).toBeVisible();
+  expect(within(articles[1]).getByText("Synthetic history 100")).toBeVisible();
+  expect(screen.queryByText("Compacted session summary")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
+  expect(screen.getAllByRole("article")).toHaveLength(3);
+  expect(
+    within(screen.getAllByRole("article")[2]).getByText(
+      "Compacted session summary",
+    ),
+  ).toBeVisible();
+  expect(screen.getByText("Synthetic history 0")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "dsh.previous" }));
+  expect(
+    within(screen.getAllByRole("article")[0]).getByText("Newest answer"),
+  ).toBeVisible();
+  expect(api.stream).toHaveBeenCalledOnce();
 });

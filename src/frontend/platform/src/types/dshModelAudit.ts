@@ -57,6 +57,8 @@ export type ModelAuditRecord = {
   output_bytes: number;
   model_result: (typeof modelResults)[number];
   response_result: (typeof responseResults)[number];
+  model_error_code?: string | null;
+  response_error_code?: string | null;
   usage_settlement: (typeof settlements)[number];
   content_status: (typeof contentStates)[number];
   usage: {

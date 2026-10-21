@@ -17,6 +17,7 @@ from bisheng.dsh.domain.schemas.responses import (
     InputItem,
     Message,
 )
+from bisheng.dsh.infrastructure.model_errors import provider_failure_code
 
 OUTPUT_ITEM = TypeAdapter(InputItem)
 TERMINAL = {"response.completed", "response.failed", "response.incomplete"}
@@ -149,6 +150,7 @@ class ResponsesExecution:
             result["error"] = {"code": "upstream_error", "message": "The model request failed."}
         if raw["status"] == "failed":
             self.status = "FAILED"
+            self.failure_code = provider_failure_code(raw.get("error"))
         return result
 
     async def invoke(self):

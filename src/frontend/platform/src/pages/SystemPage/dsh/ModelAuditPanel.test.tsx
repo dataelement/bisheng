@@ -326,14 +326,16 @@ describe("request-card audit UI", () => {
     );
     await screen.findByText("dsh.modelAuditView.transfer.completed");
     expect(container.querySelectorAll("article")).toHaveLength(100);
-    expect(screen.queryByText("segment-fragment-999")).toBeNull();
+    expect(screen.getByText("segment-fragment-999")).toBeVisible();
+    expect(screen.queryByText("segment-fragment-0")).toBeNull();
     const region = screen.getByRole("region", {
       name: "dsh.modelAuditView.message_content",
     });
     region.scrollTop = 200;
     for (let index = 0; index < 9; index++)
       fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
-    await screen.findByText("segment-fragment-999");
+    await screen.findByText("segment-fragment-0");
+    expect(screen.queryByText("segment-fragment-999")).toBeNull();
     expect(container.querySelectorAll("article")).toHaveLength(100);
     expect(api.body).toHaveBeenCalledTimes(1);
     expect(region.scrollTop).toBe(0);

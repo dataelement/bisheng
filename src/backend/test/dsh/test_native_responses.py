@@ -77,6 +77,8 @@ async def test_sdk_wire_and_shared_settlement(app_setup, stream, status, known_u
     service = runtime.model
     captured = []
     final = result(status, known_usage)
+    if status == "failed":
+        final["error"] = {"code": "rate_limit_exceeded", "message": "private-provider-body"}
     audit = Mock()
     audit.entered.side_effect = lambda units: list(units)
     audit_contexts = []
@@ -95,7 +97,7 @@ async def test_sdk_wire_and_shared_settlement(app_setup, stream, status, known_u
             {
                 "type": "response.created",
                 "sequence_number": 0,
-                "response": {**final, "status": "in_progress", "output": [], "usage": None},
+                "response": {**final, "status": "in_progress", "output": [], "usage": None, "error": None},
             },
             {"type": f"response.{status}", "sequence_number": 1, "response": final},
         ]
@@ -149,6 +151,9 @@ async def test_sdk_wire_and_shared_settlement(app_setup, stream, status, known_u
     assert ledger.events[-1].status == (
         "USAGE_UNKNOWN" if not known_usage else "FAILED" if status == "failed" else "SUCCEEDED"
     )
+    if status == "failed":
+        assert ledger.events[-1].error_code == "upstream_rate_limited"
+        assert "private-provider-body" not in response.text
     assert ledger.events[-1].total_tokens == (12 if known_usage else None)
     assert ledger.events[-1].cache_read_tokens == (8 if known_usage else None)
 

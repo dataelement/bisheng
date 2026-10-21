@@ -27,6 +27,7 @@ from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
+from bisheng.dsh.infrastructure.model_errors import model_failure_code
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.responses_adapter import DshResponsesAdapter
 from bisheng.dsh.infrastructure.telemetry import record_settlement, request_trace
@@ -203,7 +204,7 @@ class DshModelService:
                 await asyncio.shield(self._settle(event, execution, "CANCELLED", "cancelled"))
                 raise
             except Exception as error:
-                await self._settle(event, execution, "FAILED", "upstream_error")
+                await self._settle(event, execution, "FAILED", model_failure_code(error))
                 raise self._public_error(error) from error
             await self._settle(event, execution, getattr(execution, "status", "SUCCEEDED"))
             if native:
@@ -249,7 +250,9 @@ class DshModelService:
                     "ended_at": now,
                     "settled_at": now if usage.total_tokens is not None else None,
                     "provider_request_id": execution.provider_request_id,
-                    "error_code": error_code or ("usage_missing" if usage.total_tokens is None else None),
+                    "error_code": error_code
+                    or getattr(execution, "failure_code", None)
+                    or ("usage_missing" if usage.total_tokens is None else None),
                     "latency_ms": max(0, int((now - event.started_at).total_seconds() * 1000)),
                 }
             ).model_dump()
@@ -300,7 +303,7 @@ class DshModelService:
             raise
         except Exception as error:
             try:
-                await self._settle(event, execution, "FAILED", "upstream_error")
+                await self._settle(event, execution, "FAILED", model_failure_code(error))
                 public = self._public_error(error)
             except DshUsageUnavailableError as settlement_error:
                 public = settlement_error
@@ -332,7 +335,7 @@ class DshModelService:
             raise
         except Exception as error:
             try:
-                await self._settle(event, execution, "FAILED", "upstream_error")
+                await self._settle(event, execution, "FAILED", model_failure_code(error))
                 public = self._public_error(error)
             except DshUsageUnavailableError as settlement_error:
                 public = settlement_error

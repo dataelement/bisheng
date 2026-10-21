@@ -55,6 +55,8 @@ class AuditRequestMetadata(AuditDTO):
     input_bytes: int
     output_bytes: int
     usage: dict | None = None
+    model_error_code: str | None = None
+    response_error_code: str | None = None
     last_write_at: datetime | None = None
     audit_status: Literal["NORMAL", "ABNORMAL"] | None = None
     status_reasons: list[str] = Field(default_factory=list)

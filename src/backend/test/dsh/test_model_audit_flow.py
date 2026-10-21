@@ -449,7 +449,7 @@ async def test_transport_send_failure_keeps_model_and_original_success():
     from bisheng.dsh.domain.schemas.chat import DshChatRequest
     from bisheng.dsh.domain.services.access import DshPrincipal
 
-    async with fixture() as (harness, _client, _objects):
+    async with fixture() as (harness, client, _objects):
         captures = []
         result = await harness.service.complete(
             DshPrincipal(tenant_id="2", user_id="20", seat_id="seat", session_id="session", grant_version=1),
@@ -469,3 +469,6 @@ async def test_transport_send_failure_keeps_model_and_original_success():
             row = DshModelAuditWriteRepository(session).request("send-fault")
             assert row.model_result == "SUCCEEDED" and row.content_status == "COMPLETE"
             assert row.response_result == "INTERRUPTED" and row.usage_settlement == "SETTLED"
+        metadata = assert_resp_200(await client.get(BASE + "/requests/send-fault", headers=ADMIN))
+        assert metadata["response_error_code"] == "send_failed"
+        assert metadata["model_error_code"] is None

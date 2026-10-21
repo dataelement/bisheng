@@ -1,5 +1,6 @@
 """DSH's frozen real-HTTP error envelope; legacy business codes remain internal."""
 
+import asyncio
 from uuid import uuid4
 
 from fastapi import Request
@@ -59,15 +60,19 @@ class AuditObservedResponse(Response):
         self.raw_headers, self.status_code = response.raw_headers, response.status_code
         self.background = None
 
-    def notify(self, result):
+    def notify(self, result, reason=None):
         try:
-            self.capture.response(result)
+            if reason is None:
+                self.capture.response(result)
+            else:
+                self.capture.response(result, reason)
         except Exception as error:
             # Optional audit observation cannot change transport behavior.
             logger.warning("DSH audit response observer failed ({})", type(error).__name__)
 
     async def __call__(self, scope, receive, send):
         completed = False
+        failure_reason = None
         error_frame = self.status_code >= 400
 
         async def observed_send(message):
@@ -77,13 +82,25 @@ class AuditObservedResponse(Response):
             await send(message)
             if message["type"] == "http.response.body" and not message.get("more_body", False):
                 completed = True
-                self.notify("ERROR" if error_frame else "COMPLETED")
+                if error_frame:
+                    self.notify("ERROR", "error_response")
+                else:
+                    self.notify("COMPLETED")
 
         try:
             await self.response(scope, receive, observed_send)
+        except asyncio.CancelledError:
+            failure_reason = "response_cancelled"
+            raise
+        except (ClientDisconnect, ConnectionResetError, BrokenPipeError):
+            failure_reason = "peer_disconnected"
+            raise
+        except Exception:
+            failure_reason = "send_failed"
+            raise
         finally:
             if not completed:
-                self.notify("INTERRUPTED")
+                self.notify("INTERRUPTED", failure_reason or "response_interrupted")
 
 
 class ToolInvocationRoute(DshRoute):

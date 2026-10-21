@@ -61,7 +61,8 @@ export function ModelAuditBody({ requestId, tenantId }: ModelAuditBodyProps) {
       messages.current = new AuditMessageAssembler();
     };
   }, [requestId, tenantId]);
-  const count = messages.current.entries.length;
+  const entries = [...messages.current.entries].reverse();
+  const count = entries.length;
   return (
     <div
       ref={region}
@@ -74,6 +75,7 @@ export function ModelAuditBody({ requestId, tenantId }: ModelAuditBodyProps) {
         <p role={state === "interrupted" ? "alert" : "status"}>
           {t("dsh.modelAuditView.transfer." + state)}
         </p>
+        <p>{t("dsh.modelAuditView.newest_first")}</p>
         {messages.current.partial && (
           <p role="alert">{t("dsh.modelAuditView.gap")}</p>
         )}
@@ -96,17 +98,15 @@ export function ModelAuditBody({ requestId, tenantId }: ModelAuditBodyProps) {
           </p>
         )}
       </div>
-      {messages.current.entries
-        .slice(segment * 100, (segment + 1) * 100)
-        .map((entry) =>
-          entry.type === "message" ? (
-            <ModelAuditMessage key={entry.key} message={entry} />
-          ) : (
-            <p key={entry.key} role="alert">
-              {t("dsh.modelAuditView.gap")}
-            </p>
-          ),
-        )}
+      {entries.slice(segment * 100, (segment + 1) * 100).map((entry) =>
+        entry.type === "message" ? (
+          <ModelAuditMessage key={entry.key} message={entry} />
+        ) : (
+          <p key={entry.key} role="alert">
+            {t("dsh.modelAuditView.gap")}
+          </p>
+        ),
+      )}
       <DshPager
         hideUnavailable
         previous={segment > 0}
