@@ -6,34 +6,39 @@ from cachetools import TTLCache
 
 # Service Provider Enumeration
 class LLMServerType(Enum):
-    OPENAI = 'openai'
-    AZURE_OPENAI = 'azure_openai'
-    OLLAMA = 'ollama'
-    XINFERENCE = 'xinference'
-    LLAMACPP = 'llamacpp'
-    VLLM = 'vllm'
-    QWEN = 'qwen'  # Ali Tongyi Qianqian
-    QIAN_FAN = 'qianfan'  # Baidu Qianfan
-    ZHIPU = 'zhipu'  # Zhi Spectrum Qing Yan
-    MINIMAX = 'minimax'
-    ANTHROPIC = 'anthropic'
-    DEEPSEEK = 'deepseek'
-    SPARK = 'spark'  # Xunfei Starfire Large Model
-    BISHENG_RT = 'bisheng_rt'
-    TENCENT = 'tencent'  # Tencent Cloud
-    MOONSHOT = 'moonshot'  # Dark Side of the Moonkimi
-    VOLCENGINE = 'volcengine'  # Large model of a volcanic engine
-    SILICON = 'silicon'  # Silicon-based flow
-    MIND_IE = 'MindIE'  # Ascendant Inference Engine MindIE
+    OPENAI = "openai"
+    AZURE_OPENAI = "azure_openai"
+    OLLAMA = "ollama"
+    XINFERENCE = "xinference"
+    LLAMACPP = "llamacpp"
+    VLLM = "vllm"
+    QWEN = "qwen"  # Ali Tongyi Qianqian
+    QIAN_FAN = "qianfan"  # Baidu Qianfan
+    ZHIPU = "zhipu"  # Zhi Spectrum Qing Yan
+    MINIMAX = "minimax"
+    ANTHROPIC = "anthropic"
+    DEEPSEEK = "deepseek"
+    SPARK = "spark"  # Xunfei Starfire Large Model
+    BISHENG_RT = "bisheng_rt"
+    TENCENT = "tencent"  # Tencent Cloud
+    MOONSHOT = "moonshot"  # Dark Side of the Moonkimi
+    VOLCENGINE = "volcengine"  # Large model of a volcanic engine
+    SILICON = "silicon"  # Silicon-based flow
+    MIND_IE = "MindIE"  # Ascendant Inference Engine MindIE
 
 
 # Model Type Enumeration
 class LLMModelType(Enum):
-    LLM = 'llm'
-    EMBEDDING = 'embedding'
-    RERANK = 'rerank'
-    ASR = 'asr'
-    TTS = 'tts'
+    LLM = "llm"
+    EMBEDDING = "embedding"
+    RERANK = "rerank"
+    ASR = "asr"
+    ASR_RT = "asr_rt"
+    TTS = "tts"
+
+    @classmethod
+    def is_speech(cls, model_type: str) -> bool:
+        return model_type in (cls.ASR.value, cls.ASR_RT.value)
 
 
 class LLMModelStatus(Enum):

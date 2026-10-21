@@ -23,6 +23,25 @@ export const asrHints: Record<string, string> = {
     qwen: 'model.streamingAsrHint', volcengine: 'model.volcAsrHint',
     qianfan: 'model.baiduAsrHint', tencent: 'model.tencentAsrHint',
 };
+export const asrFileHints: Record<string, string> = {
+    openai: 'model.fileAsrHint', azure_openai: 'model.fileAsrHint', qwen: 'model.fileAsrHint',
+};
+
+export function isSpeechModelType(modelType: string): boolean {
+    return modelType === 'asr' || modelType === 'asr_rt';
+}
+
+/** Every provider can pick either mode. Save-time calls decide whether it works. */
+export function speechModelTypes(): string[] {
+    return ['asr', 'asr_rt'];
+}
+
+/** Realtime engine names stay on asr_rt rows. File rows use a separate hint. */
+export function asrHintKey(provider: string, modelType: string): string | undefined {
+    if (modelType === 'asr_rt') return asrHints[provider];
+    if (modelType === 'asr') return asrFileHints[provider] ?? 'model.fileAsrHint';
+    return undefined;
+}
 
 export function getSpeechFields(provider: string, config: ProviderConfig, t: TFunction): ConfigField[] {
     const field = (key: string, label: string, type = 'text', defaultValue = ''): ConfigField =>

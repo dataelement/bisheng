@@ -1,4 +1,4 @@
-import { asrHints, asrProviders, ttsProviders } from "./speechConfig";
+import { asrHintKey, speechModelTypes, ttsProviders } from "./speechConfig";
 import { Badge } from "@/components/bs-ui/badge";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
@@ -56,6 +56,7 @@ const MODEL_TYPE_LABELS: Record<string, string> = {
     embedding: 'Embedding',
     rerank: 'Rerank',
     asr: 'ASR',
+    asr_rt: 'ASR Realtime',
     tts: 'TTS',
 };
 
@@ -161,6 +162,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
     };
 
     const displayName = data.model_name.trim() || t('model.untitledModel');
+    const hintKey = asrHintKey(type, modelType);
+    const typeOptions = speechModelTypes();
 
     return (
         <div className="rounded-md border p-4">
@@ -190,7 +193,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                     </Label>
                     <Input value={data.model_name} onChange={handleNameChange} className="h-8" />
                     {nameError && <span className="text-xs text-red-500">{nameError}</span>}
-                    {modelType === "asr" && asrHints[type] && <p className="text-xs text-muted-foreground">{t(asrHints[type])}</p>}
+                    {hintKey && <p className="text-xs text-muted-foreground">{t(hintKey)}</p>}
                 </div>
                 <div className="space-y-2">
                     <Label className="bisheng-label">{t('model.modelType')}</Label>
@@ -203,7 +206,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                                 <SelectItem value="llm">LLM</SelectItem>
                                 <SelectItem value="embedding">Embedding</SelectItem>
                                 <SelectItem value="rerank">Rerank</SelectItem>
-                                {asrProviders.includes(type) && <SelectItem value="asr">ASR</SelectItem>}
+                                {typeOptions.includes("asr") && <SelectItem value="asr">ASR</SelectItem>}
+                                {typeOptions.includes("asr_rt") && <SelectItem value="asr_rt">ASR Realtime</SelectItem>}
                                 {ttsProviders.includes(type) && <SelectItem value="tts">TTS</SelectItem>}
                             </SelectGroup>
                         </SelectContent>

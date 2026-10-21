@@ -19,6 +19,7 @@ import { useQuery } from "react-query"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
+import { isSpeechModelType } from "./speechConfig"
 import { ScopeBar } from "./ScopeBar"
 import SystemModelConfig from "./SystemModelConfig"
 
@@ -333,7 +334,7 @@ export function useModel(type = 'llm') {
                         label: model.model_name
                     }
                     if (!model.online) return
-                    if (model.model_type === 'asr') {
+                    if (isSpeechModelType(model.model_type)) {
                         serverAsrItem.children.push(item)
                     } else if (model.model_type === 'tts') {
                         serverTtsItem.children.push(item)

@@ -16,7 +16,7 @@ interface SpeechToTextProps {
   modelId?: string;
   stopSignal?: number;
   onChange: (text: string) => void;
-  onRecordingStart?: () => void;
+  onRecordingStart?: (realtime?: boolean) => void;
   onRecordingEnd?: () => void;
   onBusyChange?: (busy: boolean) => void;
 }
@@ -58,9 +58,10 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
         if (!modelId) errorRef.current();
         return;
       }
-      callbacks.current.onRecordingStart?.();
+      const realtime = voiceTarget.version === 'v1' && !!models.asr_model?.realtime;
+      callbacks.current.onRecordingStart?.(realtime);
       const session = new VoiceSession({
-        realtime: voiceTarget.version === 'v1' && !!models.asr_model?.realtime,
+        realtime,
         modelId,
         websocketUrl: getAsrWebSocketUrl(import.meta.env.BASE_URL, window.location.origin),
         transcribe: async (form) => {

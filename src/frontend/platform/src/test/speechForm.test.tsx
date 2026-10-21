@@ -15,6 +15,17 @@ describe('speech credentials form', () => {
         expect(ref.current?.getData()[1]).toBe('API Key');
         expect(ref.current?.getData()[0].base_url).toBe('https://qianfan.baidubce.com/v2');
     });
+    it('shows speech credentials for a realtime-only provider and hides chat fields', () => {
+        const ref = createRef<CustomFormHandle>();
+        const config = { speech_app_id: '123', speech_secret_id: 'fixture-id', speech_secret_key: '********' };
+        const { getByText, queryByText } = render(
+            <CustomForm ref={ref} showDefault={true} provider="tencent" formData={config} modelTypes={['asr_rt']} />,
+        );
+        expect(getByText('model.speechCredentials')).toBeTruthy();
+        expect(queryByText('API Key')).toBeNull();
+        expect(queryByText('Base URL')).toBeNull();
+        expect(ref.current?.getData()[1]).toBe('');
+    });
     it('preserves existing chat credentials when only ASR fields are displayed', () => {
         const ref = createRef<CustomFormHandle>();
         const config = { base_url: 'https://api.hunyuan.cloud.tencent.com/v1', api_key: '********', speech_app_id: '123', speech_secret_id: 'fixture-id', speech_secret_key: '********' };
