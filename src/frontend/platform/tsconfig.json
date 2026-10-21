@@ -1,23 +1,14 @@
 {
+  "extends": "../config/tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "target": "ES2020",
-    "plugins": [{ "name": "typescript-strict-plugin" }],
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
+    "plugins": [
+      {
+        "name": "typescript-strict-plugin"
+      }
+    ],
     "strict": false,
-    "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
-    "module": "esnext",
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "noImplicitAny": false,
     "paths": {
       "@/*": ["src/*"]
     }

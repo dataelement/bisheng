@@ -1,6 +1,6 @@
 import { SubjectIdentity } from "./SubjectIdentity";
 import { useSubjectKeyword } from "./useSubjectKeyword";
-import { Checkbox } from "~/components/ui/Checkbox";
+import { Checkbox } from '@bisheng/ui';
 import { Button, SearchInput, Tag } from "@bisheng/ui";
 import { getCreationUserGroups, getUserGroups } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
@@ -160,7 +160,7 @@ export function SubjectSearchUserGroup({
                       and the slot would only be dead space. The checkbox leads. */}
                   <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
                     <Checkbox
-                      className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                      className="peer border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                       checked={selectedIds.has(group.id) || isDisabled}
                       disabled={isDisabled}
                     />

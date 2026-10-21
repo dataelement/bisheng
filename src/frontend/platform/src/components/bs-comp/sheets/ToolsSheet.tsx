@@ -77,10 +77,10 @@ export default function ToolsSheet({ select, onSelect, children }) {
                     </div>
                     <div className="flex-1 bg-background-main p-5 pt-12 h-full overflow-auto scrollbar-hide">
                         <div className="mb-4">
-                            {type === 'custom' && <Button className="mt-4  text-[white]" onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=api")}>
+                            {type === 'custom' && <Button className="mt-4" onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=api")}>
                                 {t('create')}{t("tools.createCustomTool")}
                             </Button>}
-                            {type === 'mcp' && <Button className="mt-4  text-[white]" onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=mcp")}>
+                            {type === 'mcp' && <Button className="mt-4" onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=mcp")}>
                                 {t("tools.addMcpServer")}
                             </Button>}
                             {type === 'mcp' && <Button variant="outlined" disabled={loading} className="mt-4 ml-4" onClick={async () => {

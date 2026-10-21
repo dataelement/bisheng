@@ -109,8 +109,8 @@ export default function ToolItem({
                         }
                         {
                             select && (select.some(_ => _.id === api.id) ?
-                                <Button size="small" className="absolute right-4 bottom-2 h-6" disabled>{t("build.added", { ns: 'bs' })}</Button>
-                                : <Button size="small" className="absolute right-4 bottom-2 h-6" onClick={() => onSelect(api)}>{t("build.add", { ns: 'bs' })}</Button>)
+                                <Button size="small" className="absolute right-4 bottom-2" disabled>{t("build.added", { ns: 'bs' })}</Button>
+                                : <Button size="small" className="absolute right-4 bottom-2" onClick={() => onSelect(api)}>{t("build.add", { ns: 'bs' })}</Button>)
                         }
                     </div>
                 ))}

@@ -16,9 +16,7 @@ vi.mock("@/components/bs-ui/calendar/datePicker", () => ({
   ),
 }))
 
-vi.mock("@/components/bs-ui/tooltip", () => ({
-  QuestionTooltip: () => <button aria-label="scope-endpoints" type="button" />,
-}))
+
 
 vi.mock("@/components/bs-comp/selectComponent/DepartmentUsersSelect", () => ({
   default: () => null,
@@ -80,7 +78,7 @@ describe("service-account key issue dialog", () => {
     expect(screen.queryByText("knowledge:read")).not.toBeInTheDocument()
     expect(screen.queryByText("/api/v2/filelib/")).not.toBeInTheDocument()
     expect(
-      screen.getAllByRole("button", { name: "scope-endpoints" }),
+      screen.getAllByRole("button", { name: "openApiManagement.keys.endpointsTitle" }),
     ).toHaveLength(2)
     expect(
       screen.getByText("openApiManagement.scopes.delegate.label"),

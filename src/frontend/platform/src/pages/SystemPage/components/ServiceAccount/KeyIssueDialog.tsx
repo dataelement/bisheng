@@ -19,7 +19,8 @@ DialogTitle,
 
 import { Label } from "@/components/bs-ui/label";
 
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+
+import { QuestionHint as QuestionTooltip } from '@/components/bs-comp/QuestionHint';
 import {
 issueServiceAccountKeyApi,
 updateServiceAccountKeyApi,
@@ -238,7 +239,11 @@ export function KeyIssueDialog({
                     {t("openApiManagement.keys.endpointsTitle")}\n{endpointText}
                   </span>
                 }
-              />
+              >
+                <Button type="button" size="small" variant="text" color="default" iconOnly aria-label={t("openApiManagement.keys.endpointsTitle")}>
+                  <Outlined.Question />
+                </Button>
+              </QuestionTooltip>
             ) : null}
           </span>
           <span className="block text-xs text-muted-foreground">

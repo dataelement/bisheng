@@ -6,7 +6,7 @@ import { debounce } from "lodash-es"
 import { Check, ChevronDown, Loader2, Search, X } from "lucide-react"
 import * as React from "react"
 import { useTranslation } from "react-i18next"
-import { Badge } from "../badge"
+import { Badge, Tag } from '@bisheng/ui';
 
 
 import { cname } from "../utils"
@@ -320,10 +320,13 @@ const SelectedValues = React.memo<{
             {displayedOptions.map((option) => {
                 const isLocked = lockedValues.includes(option.value)
                 return (
-                    <Badge
+                    <Tag
                         key={option.value}
-                        variant={option.error ? "destructive" : "secondary"}
-                        className="bg-primary/20 text-primary hover:bg-primary/15 gap-1"
+
+                        color={option.error ? 'danger' : 'default'}
+                        closable={!isLocked && !option.loading}
+                        closeLabel={t('delete')}
+                        onClose={() => onRemove(option.value)}
                     >
                         <span className="">
                             {option.loading ? (
@@ -335,22 +338,11 @@ const SelectedValues = React.memo<{
                                 option.label
                             )}
                         </span>
-                        {!isLocked && !option.loading && (
-                            <Button variant="text" size="small" className="h-auto p-0 text-primary" onClick={(e) => {
-                                    e.preventDefault()
-                                    e.stopPropagation()
-                                    onRemove(option.value)
-                                }} color="default">
-                                <X className="h-3 w-3" />
-                            </Button>
-                        )}
-                    </Badge>
+                    </Tag>
                 )
             })}
             {remainingCount > 0 && (
-                <Badge variant="outline" className="pointer-events-none text-primary">
-                    +{remainingCount} {t('more')}
-                </Badge>
+                <span className="inline-flex items-center gap-1"><Badge count={remainingCount} />{t('more')}</span>
             )}
         </div>
     )

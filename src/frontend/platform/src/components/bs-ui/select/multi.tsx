@@ -1,9 +1,11 @@
 // @ts-strict-ignore
+import { Outlined } from 'bisheng-icons';
+import { useTranslation } from "react-i18next";
 import { SearchInput } from '@bisheng/ui';
 import { Check, X } from "lucide-react"
 import React, { useEffect, useRef, useState } from "react"
 import { Select, SelectContent, SelectTrigger } from "."
-import { Badge } from "../badge"
+import { Tag } from '@bisheng/ui';
 
 import { cname, useDebounce } from "../utils"
 
@@ -94,6 +96,7 @@ const MultiSelect = ({
     onChange, ...props
 }: IProps) => {
 
+    const { t } = useTranslation();
     const [values, setValues] = React.useState(defaultValue)
     const [optionFilter, setOptionFilter] = React.useState(options)
     const [created, creatInput] = useState(false)
@@ -111,6 +114,7 @@ const MultiSelect = ({
 
     // delete
     const handleDelete = (value: string) => {
+        if (props.disabled) return;
         const newValues = (values as any[]).filter((item) => {
             const _value = onScrollLoad ? (item as Option).value : item;
             return _value !== value
@@ -219,7 +223,7 @@ const MultiSelect = ({
             }
         }}
     >
-        <SelectTrigger className={cname(`group min-h-9 py-1 ${error && 'border-red-500'} ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}>
+        <SelectTrigger asChild showIcon={false} className={cname(`group min-h-9 py-1 ${error && 'border-red-500'} ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}><div tabIndex={props.disabled ? -1 : 0} aria-disabled={props.disabled || undefined}>
             {
                 !multiple && (values.length ? <span className="text-foreground">{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
@@ -228,21 +232,36 @@ const MultiSelect = ({
                     onScrollLoad ? <div className="flex flex-wrap w-full">
                         {
                             values.map(item =>
-                                <Badge onPointerDown={(e) => e.stopPropagation()} key={item.value}
-                                    className={`flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all ${errorKeys.includes(item.value) && 'bg-red-100 border-red-600'}`}>
-                                    {item.label}
-                                    {lockedValues.includes(item.value) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item.value)}></X>}
-                                </Badge>
+                                <span onKeyDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()} key={item.value}>
+                                    <Tag
+                                        className="m-[2px]"
+                                        disabled={props.disabled}
+                                        color={errorKeys.includes(item.value) ? 'danger' : 'default'}
+                                        closable={!lockedValues.includes(item.value)}
+                                        closeLabel={t('delete')}
+                                        onClose={() => handleDelete(item.value)}
+                                    >
+                                        {item.label}
+                                    </Tag>
+                                </span>
                             )
                         }
                     </div> : <div className="flex flex-wrap w-full">
                         {
                             // 使用key反推label
                             options.filter(option => (values as string[]).includes(option.value)).map(option =>
-                                <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all  11">
-                                    {option.label}
-                                    {lockedValues.includes(option.value) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(option.value)}></X>}
-                                </Badge>
+                                <span onKeyDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()} key={option.value}>
+                                    <Tag
+                                        className="m-[2px]"
+                                        disabled={props.disabled}
+                                        color={errorKeys.includes(option.value) ? 'danger' : 'default'}
+                                        closable={!lockedValues.includes(option.value)}
+                                        closeLabel={t('delete')}
+                                        onClose={() => handleDelete(option.value)}
+                                    >
+                                        {option.label}
+                                    </Tag>
+                                </span>
                             )
                         }
                     </div>)
@@ -255,7 +274,7 @@ const MultiSelect = ({
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={handleClearClick}
             />}
-        </SelectTrigger>
+        <Outlined.Down className="h-4 w-4 min-w-4 shrink-0 text-text-3 group-data-[state=open]:rotate-180" /></div></SelectTrigger>
         <SelectContent
             className={contentClassName + ' overflow-visible'}
             headNode={
@@ -270,6 +289,7 @@ const MultiSelect = ({
                 {
                     optionFilter.map((item) => (
                         <MultiItem
+                            key={item.value}
                             active={values.some(val => val === item.value || val.value === item.value)}
                             value={item.value}
                             onClick={handleSwitch}

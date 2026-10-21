@@ -38,10 +38,10 @@ export function DialogWithRepeatFiles({
                     ))}
                 </ul>
                 <DialogFooter>
-                    <Button className="h-8" variant="outlined" onClick={unRetry} color="default">
+                    <Button variant="outlined" onClick={unRetry} color="default">
                         {t('keepOriginal')}
                     </Button>
-                    <Button className="h-8" disabled={retryLoad} onClick={() => onRetry(repeatFiles)}>
+                    <Button disabled={retryLoad} onClick={() => onRetry(repeatFiles)}>
                         {retryLoad && <span className="loading loading-spinner loading-xs mr-1"></span>}
                         {t('override')}
                     </Button>

@@ -79,14 +79,14 @@ export default function Header({ loca, onSave, onLine, onTabChange, canEdit: can
             ]} /> : <span>{t('api.assistantOrchestration')}</span>}
         <div className="flex gap-4 items-center">
             {canManage && assistantState?.id && (
-                <Button type="button" variant="outlined" className="flex items-center gap-2 px-4" onClick={() => setPermDialogOpen(true)} color="default">
+                <Button type="button" variant="outlined" className="flex items-center gap-2" onClick={() => setPermDialogOpen(true)} color="default">
                     <Shield className="h-4 w-4 shrink-0" />
                     {t('build.authorizationManagement')}
                 </Button>
             )}
-            <Button variant="outlined" className="px-10" type="button" disabled={!canEdit} onClick={onSave} color="default">{t('build.save')}</Button>
+            <Button variant="outlined" type="button" disabled={!canEdit} onClick={onSave} color="default">{t('build.save')}</Button>
             {(assistantState.status === OnlineState.OnLine ? canUnpublish : canPublish) ? (
-                <Button type="submit" className="px-10" onClick={() => onLine(assistantState.status === OnlineState.OffLine)}>
+                <Button type="submit" onClick={() => onLine(assistantState.status === OnlineState.OffLine)}>
                     {assistantState.status === OnlineState.OnLine ? t('build.offline') : t('build.online')}
                 </Button>
             ) : null}

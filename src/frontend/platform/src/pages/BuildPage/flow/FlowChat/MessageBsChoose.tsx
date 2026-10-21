@@ -100,7 +100,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                                 <div>
                                     <Textarea ref={textRef} disabled={inputSended} defaultValue={data.message.input_msg || data.message.hisValue} textareaClassName={"w-full"} />
                                     <div className="flex justify-end mt-2">
-                                        <Button className="h-8" disabled={inputSended} onClick={handleSend}>{inputSended ? t('chat.confirmed') : t('chat.confirm')}</Button>
+                                        <Button disabled={inputSended} onClick={handleSend}>{inputSended ? t('chat.confirmed') : t('chat.confirm')}</Button>
                                     </div>
                                 </div>
                                 : <div>

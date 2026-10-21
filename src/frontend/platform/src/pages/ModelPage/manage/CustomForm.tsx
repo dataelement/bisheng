@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getModelProviders } from './modelProviderFields';
-import { configWithDefaults, getConfigError, getSpeechFields, speechDocs, speechProviders } from './speechConfig';
+import { configWithDefaults, getConfigError, getSpeechFields, isSpeechModelType, speechDocs, speechProviders } from './speechConfig';
 import type { ConfigField, ProviderConfig } from './speechConfig';
 
 interface CustomFormProps {
@@ -48,8 +48,8 @@ export const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(function
 ) {
     const { t } = useTranslation();
     const [form, setForm] = useState(formData);
-    const hasSpeech = speechProviders.includes(provider) && modelTypes.includes('asr');
-    const speechOnly = hasSpeech && modelTypes.every(type => type === 'asr');
+    const hasSpeech = speechProviders.includes(provider) && modelTypes.some(isSpeechModelType);
+    const speechOnly = hasSpeech && modelTypes.every(isSpeechModelType);
     const commonFields = speechOnly ? [] : getModelProviders()[provider] || [];
     const speechFields = hasSpeech ? getSpeechFields(provider, form, t) : [];
     const fields = [...commonFields, ...speechFields];

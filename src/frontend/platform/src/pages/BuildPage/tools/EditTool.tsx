@@ -306,13 +306,13 @@ const EditTool = forwardRef((props: any, ref) => {
                         <div className="flex gap-2">
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outlined" className="dark:bg-[#282828]" color="default"><Outlined.Plus /> {t('tools.importFromUrl')}</Button>
+                                    <Button variant="outlined" color="default"><Outlined.Plus /> {t('tools.importFromUrl')}</Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-80" align="end">
                                     <div className="flex items-center gap-4">
                                         <Input id="schemaUrl" name="schemaUrl" placeholder="https://" onChange={(e) => schemaUrl.current = e.target.value} />
                                         <PopoverClose>
-                                            <Button size="small" className="w-16" onClick={handleImportSchema}>{t('skills.import')}</Button>
+                                            <Button size="small" onClick={handleImportSchema}>{t('skills.import')}</Button>
                                         </PopoverClose>
                                     </div>
                                 </PopoverContent>
@@ -496,7 +496,7 @@ const EditTool = forwardRef((props: any, ref) => {
                         <Button size="small" variant="solid" className="absolute left-6" onClick={handleDelete} color="danger">{t('tools.delete')}</Button>
                     )}
                     <Button size="small" variant="outlined" onClick={() => setEditShow(false)} color="default">{t('tools.cancel')}</Button>
-                    <Button size="small" className="text-[white]" disabled={saveLoading} onClick={handleSave}>{t('tools.save')}</Button>
+                    <Button size="small" disabled={saveLoading} onClick={handleSave}>{t('tools.save')}</Button>
                 </SheetFooter>
             </SheetContent>
         </Sheet >

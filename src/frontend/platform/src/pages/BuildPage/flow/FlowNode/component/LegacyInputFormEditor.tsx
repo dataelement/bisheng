@@ -462,10 +462,10 @@ export function LegacyInputFormEditor({ nodeId, nodeData, initialData, onSubmit,
             {formData.formType === FormType.File && (FileForm)}
 
             <div className="flex space-x-4 justify-end">
-                <Button className="px-8" type="button" variant="outlined" onClick={onCancel} color="default">
+                <Button type="button" variant="outlined" onClick={onCancel} color="default">
                     {t("cancel")}
                 </Button>
-                <Button className="px-8" type="submit">
+                <Button type="submit">
                     {t("confirm")}
                 </Button>
             </div>

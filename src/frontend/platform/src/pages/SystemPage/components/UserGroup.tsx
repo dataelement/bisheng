@@ -235,9 +235,10 @@ export default function UserGroups() {
                                     {...ugRc.getTdProps(4)}
                                     className="whitespace-nowrap text-right"
                                 >
-                                    <Button variant="link" disabled={loading || !canEditUserGroup(user, ug)} onClick={() => setUserGroup({ ...ug })} className="px-0 pl-6">{t('edit')}
-                                    </Button>
-                                    <Button variant="link" disabled={loading || !canDeleteUserGroup(user, ug)} onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
+                                    <div className="flex justify-end gap-2">
+                                        <Button size="small" variant="link" disabled={loading || !canEditUserGroup(user, ug)} onClick={() => setUserGroup({ ...ug })}>{t('edit')}</Button>
+                                        <Button size="small" variant="link" color="danger" disabled={loading || !canDeleteUserGroup(user, ug)} onClick={() => handleDelete(ug)}>{t('delete')}</Button>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TFunction } from 'i18next';
-import { asrProviders, ttsProviders, configWithDefaults, getConfigError, getSpeechFields } from '../pages/ModelPage/manage/speechConfig';
+import { asrHintKey, asrProviders, speechModelTypes, ttsProviders, configWithDefaults, getConfigError, getSpeechFields } from '../pages/ModelPage/manage/speechConfig';
 import { getModelProviders } from '../pages/ModelPage/manage/modelProviderFields';
 
 const t = ((key: string) => key) as TFunction;
@@ -8,6 +8,11 @@ const t = ((key: string) => key) as TFunction;
 describe('native speech provider configuration', () => {
     it('offers ASR for the added providers while preserving TTS capabilities', () => {
         expect(asrProviders).toEqual(['openai', 'azure_openai', 'qwen', 'volcengine', 'qianfan', 'tencent']);
+        expect(speechModelTypes()).toEqual(['asr', 'asr_rt']);
+        expect(asrHintKey('qwen', 'asr')).toBe('model.fileAsrHint');
+        expect(asrHintKey('qwen', 'asr_rt')).toBe('model.streamingAsrHint');
+        expect(asrHintKey('tencent', 'asr_rt')).toBe('model.tencentAsrHint');
+        expect(asrHintKey('tencent', 'asr')).toBe('model.fileAsrHint');
         expect(ttsProviders).toEqual(['openai', 'azure_openai', 'qwen', 'qianfan']);
     });
     it('requires speech credentials independently of LLM keys', () => {

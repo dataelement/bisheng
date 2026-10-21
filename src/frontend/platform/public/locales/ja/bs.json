@@ -672,6 +672,7 @@
     "getApiKey": "{{provider}} の API キーを取得",
     "formatExample": "形式の例：{{example}}",
     "streamingAsrHint": "リアルタイム音声認識は paraformer-realtime-v2、paraformer-realtime-v1、qwen3-asr-flash-realtime に対応しています。保存して接続テストを実行後、ワークベンチの ASR モデルとして選択してください。",
+    "fileAsrHint": "ファイル認識です。録音全体をアップロードしてから文字起こしします。",
     "speechCredentials": "リアルタイム音声認識設定",
     "providerSilicon": "SiliconFlow",
     "providerTencent": "Tencent Cloud",
@@ -742,7 +743,8 @@
     "varOptionRequired": "オプションの内容を入力してください",
     "optionRepeated": "オプションが重複しています",
     "incorrectIdFormatMessage": "ID の形式が誤っています（英数字からなる5桁の文字列）",
-    "idAlreadyExistsMessage": "この ID はすでに存在します"
+    "idAlreadyExistsMessage": "この ID はすでに存在します",
+    "publishedVersionCannotSave": "公開中のバージョンは編集・保存できません"
   },
   "lib": {
     "knowledgeBaseId": "ナレッジベースID",

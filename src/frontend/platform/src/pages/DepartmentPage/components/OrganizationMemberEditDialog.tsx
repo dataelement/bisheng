@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, Input, notification } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
@@ -14,12 +15,7 @@ import {
 import { Label } from "@/components/bs-ui/label"
 import MultiSelect from "@/components/bs-ui/select/multi"
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/bs-ui/tooltip"
+
 import { cn } from "@/utils"
 import {
   applyDepartmentMemberEditApi,
@@ -388,10 +384,9 @@ export function OrganizationMemberEditDialog({
                       />
                     ) : (
                       <>
-                        <TooltipProvider delayDuration={300}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div
+                        <SharedTooltipProvider delayDuration={300}><SharedTooltip  content={<><p className="break-words text-left text-xs">
+                                {form.primary_department.name}
+                              </p></>} side="bottom" ><div
                                 className={cn(
                                   "mt-1 flex h-9 w-full min-w-0 cursor-default items-center rounded-md border border-input bg-muted px-3 py-1 text-sm text-foreground shadow-sm",
                                 )}
@@ -399,15 +394,7 @@ export function OrganizationMemberEditDialog({
                                 <span className="min-w-0 flex-1 truncate">
                                   {form.primary_department.name}
                                 </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="z-[100] max-w-md">
-                              <p className="break-words text-left text-xs">
-                                {form.primary_department.name}
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                              </div></SharedTooltip></SharedTooltipProvider>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {t("bs:department.memberEditPrimaryReadonly")}
                         </p>

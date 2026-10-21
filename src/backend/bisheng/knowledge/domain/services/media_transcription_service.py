@@ -28,8 +28,8 @@ from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.llm.asr import BishengASR, is_asr_provider_supported
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
 from bisheng.llm.domain.services.llm import LLMService
-from bisheng.utils.util import calculate_md5
 from bisheng.utils.async_utils import run_async_safe
+from bisheng.utils.util import calculate_md5
 
 # Standard /audio/transcriptions takes the whole file in one request (OpenAI caps
 # it at 25 MB, gateways often lower). 5 minutes of 16k mono wav is ~9.6 MB.
@@ -180,7 +180,7 @@ class KnowledgeMediaTranscriptionService:
         model_info = LLMDao.get_model_by_id(int(knowledge_llm.asr_model_id))
         if not model_info:
             raise AsrModelConfigDeletedError()
-        if model_info.model_type != LLMModelType.ASR.value:
+        if not LLMModelType.is_speech(model_info.model_type):
             raise AsrModelTypeError(model_type=model_info.model_type)
 
         server_info = LLMDao.get_server_by_id(model_info.server_id)

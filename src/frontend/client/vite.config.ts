@@ -1,10 +1,11 @@
+import { createFrontendProxy, frontendEnvDefinitions, createMinioWarning, loadFrontendEnv, resolveApiTarget } from '../config/vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
 import * as http from 'node:http';
 import path from 'path';
 import { visualizer } from "rollup-plugin-visualizer";
 import type { Plugin } from 'vite';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import { compression } from 'vite-plugin-compression2';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -31,27 +32,8 @@ const app_env = {
 
 const minioPathRE = /^\/(?:workspace\/)?(?:bisheng|tmp-dir)(?:\/|$)/;
 
-// Emit one loud, actionable warning the first time MinIO answers a proxied
-// object request with 403. For presigned (SigV4) URLs to the public bucket a
-// 403 is almost always SignatureDoesNotMatch: the dev proxy forwards Host =
-// <proxy target host>, but the URL was signed for the backend `sharepoint`
-// host. The classic trap is `127.0.0.1` vs `localhost` (not interchangeable for
-// signing). Without this, the only symptom is silently broken images.
-let warnedMinio403 = false;
-function warnMinioSignatureMismatch(envVar: string, targetHost: string, requestUrl: string): void {
-  if (warnedMinio403) return;
-  warnedMinio403 = true;
-  console.warn(
-    `\n\x1b[33m[bisheng:minio-proxy] ⚠️  MinIO returned 403 for "${requestUrl}".\n` +
-    `  Almost certainly a SigV4 host mismatch: the dev proxy forwards Host=${targetHost},\n` +
-    `  but the presigned URL was signed for a different host.\n` +
-    `  Fix: set ${envVar} so its host EXACTLY equals backend config.yaml\n` +
-    `  object_storage.minio.sharepoint  (note: 127.0.0.1 ≠ localhost).\x1b[0m\n`,
-  );
-}
-
 function minioFileProxyPlugin(minioTarget: string): Plugin {
-  const minioTargetHost = new URL(minioTarget).host;
+  const warnMinio = createMinioWarning('VITE_MINIO_PROXY_TARGET', minioTarget);
   return {
     name: 'bisheng:minio-file-proxy',
     apply: 'serve',
@@ -84,7 +66,7 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
           },
           (proxyRes) => {
             if (proxyRes.statusCode === 403) {
-              warnMinioSignatureMismatch('VITE_DEV_MINIO_TARGET', minioTargetHost, requestUrl);
+              warnMinio(requestUrl);
             }
             res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
             proxyRes.pipe(res);
@@ -111,14 +93,14 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
-  const env = loadEnv(mode, path.join(__dirname, '..'));
+  const env = loadFrontendEnv(mode, __dirname);
   // MinIO object proxy for bucket paths (/bisheng/...): these must reach MinIO,
   // NOT the backend (7860 only 404s on object keys). Override per environment via
   // VITE_DEV_MINIO_TARGET, whose host MUST match the backend `sharepoint` config —
   // SigV4 presigned URLs sign the Host header, so a mismatch yields 403
   // SignatureDoesNotMatch (e.g. set http://localhost:9000 when sharepoint=localhost:9000).
-  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://127.0.0.1:9000';
-  const apiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:7860';
+  const minioTarget = env.VITE_MINIO_PROXY_TARGET || env.VITE_DEV_MINIO_TARGET || 'http://127.0.0.1:9000';
+  const apiTarget = resolveApiTarget(env, 'VITE_DEV_API_TARGET');
   // Per-request proxy logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
   // dozens of lines per page load and buries the warnings that matter.
   const proxyLog = env.VITE_PROXY_LOG === '1';
@@ -129,6 +111,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     base: app_env.BASE_URL || '/',
     define: {
+      ...frontendEnvDefinitions(env, ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_']),
       __APP_ENV__: JSON.stringify(app_env),
       // vconsole ships ONLY when explicitly requested (npm run build:vconsole,
       // which sets VITE_ENABLE_VCONSOLE=true). A plain `npm run build` never
@@ -153,32 +136,10 @@ export default defineConfig(({ command, mode }) => {
             return path.replace(/^\/workspace/, '');
           },
         },
-        '/workspace/api': {
-          target: apiTarget,
-          changeOrigin: true,
-          // changeOrigin rewrites Host to the backend. The ASR socket rejects an
-          // Origin that does not match the browser host; see configure below.
-          xfwd: true,
-          secure: false,
-          ws: true,
-          configure: (proxy) => {
-            // http-proxy writes X-Forwarded-Host only on HTTP. The websocket
-            // upgrade still has Host rewritten by changeOrigin, so copy the
-            // browser host here or the ASR origin check closes the socket.
-            proxy.on('proxyReqWs', (proxyReq, req) => {
-              const host = req.headers.host;
-              if (host) proxyReq.setHeader('x-forwarded-host', host);
-            });
-            if (proxyLog) {
-              proxy.on('proxyReq', (proxyReq) => {
-                console.log('Proxying request to:', proxyReq.path);
-              });
-            }
-          },
-          rewrite: (path) => {
-            return path.replace(/^\/workspace/, '');
-          },
-        },
+        '/workspace/api': createFrontendProxy(apiTarget, {
+          verbose: proxyLog,
+          rewrite: (url) => url.replace(/^\/workspace/, ''),
+        }),
         '/workspace/tmp-dir': {
           target: minioTarget,
           changeOrigin: true,

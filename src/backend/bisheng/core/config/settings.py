@@ -883,22 +883,13 @@ class SandboxConf(BaseModel):
     ``SANDBOX_ENABLE_UID_ISOLATION``), not here.
 
     Env overlay uses ``BS_SANDBOX_CONF__<FIELD>`` (double underscore), e.g.
-    ``BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN``. There is no ``deploy_mode`` /
-    ``orchestrator`` field — replica discovery is the hostname pattern only.
+    ``BS_SANDBOX_CONF__ENDPOINTS``. Runners are that explicit URL list only.
+    There is no hostname scan and no ``deploy_mode`` / ``orchestrator`` field.
     """
 
     model_config = ConfigDict(extra="ignore")
 
-    endpoints: list[str] = Field(
-        default_factory=list, description="Explicit runner URLs; non-empty skips DNS discovery"
-    )
-    discover_host_pattern: str = Field(default="code-runner-{n}", description="Hostname pattern with {n} placeholder")
-    discover_index_start: int = Field(default=1, description="First replica index (compose=1, k8s=0)")
-    discover_max: int = Field(default=32, description="Stop scanning after this many consecutive indices")
-    discover_ttl_s: int = Field(
-        default=60, description="Background refresh interval for discovered runner URLs (seconds)"
-    )
-    discover_port: int = Field(default=8080, description="Runner HTTP port used with discovered hostnames")
+    endpoints: list[str] = Field(default_factory=list, description="Runner URLs, one per replica. Empty means no pool.")
     token: str = Field(default="", description="Shared runner auth token; override via BS_SANDBOX_CONF__TOKEN")
     pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
     default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
@@ -914,9 +905,9 @@ class SandboxConf(BaseModel):
 
     # --- type=local isolation (LocalExecutor) ---
     local_isolation: str = Field(
-        default="off",
-        description="type=local child processes: 'uid' runs them as a throwaway uid in a private run dir; "
-        "'off' keeps the legacy same-user execution",
+        default="uid",
+        description="type=local child processes. Default 'uid' runs them as a throwaway uid in a private "
+        "run dir. Set 'off' (or an empty string) to keep the legacy same-user execution",
     )
     local_run_root: str = Field(default="/tmp/bisheng-local-run", description="Parent dir of per-run dirs")
     local_rlimit_as_bytes: int = Field(default=2 * 1024**3, description="RLIMIT_AS of the child")

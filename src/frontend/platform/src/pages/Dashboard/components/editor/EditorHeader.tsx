@@ -283,13 +283,13 @@ export function EditorHeader({
                         <DialogDescription>{t('unsavedChangesWarning')}</DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button className="leave h-8" onClick={handleSaveAndClose}>
+                        <Button className="leave" onClick={handleSaveAndClose}>
                             {t('saveAndLeave')}
                         </Button>
-                        <Button className="h-8" variant="solid" onClick={() => navigator(-1)} color="danger">
+                        <Button variant="solid" onClick={() => navigator(-1)} color="danger">
                             {t('leaveWithoutSaving')}
                         </Button>
-                        <Button className="h-8" variant="outlined" onClick={() => setLiveModalOpen(false)} color="default">
+                        <Button variant="outlined" onClick={() => setLiveModalOpen(false)} color="default">
                             {t('cancel')}
                         </Button>
                     </DialogFooter>

@@ -210,14 +210,14 @@ export function RolesView({ controller }: RolesViewProps) {
                     {el.is_readonly ? (
                       <span className="text-sm text-muted-foreground">&mdash;</span>
                     ) : (
-                      <>
-                        <Button variant="link" className="px-0 pl-4" onClick={() => openEdit(el)}>
+                      <div className="flex justify-end gap-2">
+                        <Button size="small" variant="link" onClick={() => openEdit(el)}>
                           {t("edit")}
                         </Button>
-                        <Button variant="link" disabled={[1, 2].includes(el.id)} className="px-0 pl-4 text-red-500" onClick={() => onDelete(el)}>
+                        <Button size="small" variant="link" color="danger" disabled={[1, 2].includes(el.id)} onClick={() => onDelete(el)}>
                           {t("delete")}
                         </Button>
-                      </>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>

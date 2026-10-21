@@ -86,8 +86,8 @@ export default function UserRoleModal({ user, onClose, onChange }) {
                 setRoleItems(items => [...items, { key: Date.now(), groupId: '', roles: [] }])
             } color="default" iconOnly><Outlined.Plus className="size-5" /> </Button>
             <DialogFooter>
-                <Button variant="outlined" className="h-10 w-[120px] px-16" onClick={onClose} color="default">{t('cancel')}</Button>
-                <Button className="px-16 h-10 w-[120px]" onClick={handleSave}>{t('save')}</Button>
+                <Button variant="outlined" onClick={onClose} color="default">{t('cancel')}</Button>
+                <Button onClick={handleSave}>{t('save')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

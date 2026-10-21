@@ -61,8 +61,8 @@ export default function WorkflowModel({ llmOptions, onBack }) {
                 />
             </div>
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
-                <Button className="px-10" onClick={handleSave}>{t('model.save')}</Button>
+                <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
+                <Button onClick={handleSave}>{t('model.save')}</Button>
             </div>
         </div>
     );

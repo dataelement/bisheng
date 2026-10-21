@@ -161,10 +161,10 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                         </div>
                     }
                     <div className="mb-4">
-                        {type === 'edit' && <Button id="create-apitool" className="mt-4  text-[white]" onClick={() => editRef.current.open()}>
+                        {type === 'edit' && <Button id="create-apitool" className="mt-4" onClick={() => editRef.current.open()}>
                             {t('create')}{t("tools.createCustomTool")}
                         </Button>}
-                        {type === 'mcp' && <Button id="create-mcptool" className="mt-4  text-[white]" onClick={() => mcpDialogRef.current.open()}>
+                        {type === 'mcp' && <Button id="create-mcptool" className="mt-4" onClick={() => mcpDialogRef.current.open()}>
                             {t("tools.addMcpServer")}
                         </Button>}
                         {type === 'mcp' && <Button variant="outlined" disabled={btnLoading} className="mt-4 ml-4" onClick={async () => {

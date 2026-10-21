@@ -75,11 +75,11 @@ export function ImageViewForm({ formData = {}, onSubmit }: ImageViewFormProps) {
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outlined" className="px-11" type="button" color="default">
+                    <Button variant="outlined" type="button" color="default">
                         {t("cancel", { ns: "bs" })}
                     </Button>
                 </DialogClose>
-                <Button className="px-11" type="submit" disabled={!selected}>
+                <Button type="submit" disabled={!selected}>
                     {t("save", { ns: "bs" })}
                 </Button>
             </DialogFooter>

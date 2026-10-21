@@ -1,9 +1,10 @@
+import json
 import os
 
 import yaml
 from loguru import logger
 
-from bisheng.common.models.config import Config, ConfigKeyEnum
+from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import (
@@ -18,10 +19,70 @@ from bisheng.core.config.settings import (
     ShougangConf,
     SystemLoginMethod,
     WorkflowConf,
+    decrypt_token,
 )
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 
 config_file = os.getenv("config", "config.yaml")
+
+SANDBOX_ENDPOINT_CACHE_KEY = "config:sandbox_endpoint"
+SANDBOX_ENDPOINT_CACHE_TTL = 60
+_SANDBOX_UNREADABLE = "sandbox endpoint config unreadable; using deployment config"
+
+
+def sandbox_endpoint_payload_ok(value: object) -> bool:
+    """Page payload: dict with a list of address strings and a ciphertext string."""
+    if not isinstance(value, dict):
+        return False
+    endpoints = value.get("endpoints")
+    token_enc = value.get("token_enc")
+    if not isinstance(endpoints, list) or any(not isinstance(item, str) for item in endpoints):
+        return False
+    return isinstance(token_enc, str)
+
+
+def write_sandbox_endpoint_cache(payload: dict) -> None:
+    """Overwrite the execution cache. Only the save path calls this."""
+    if not sandbox_endpoint_payload_ok(payload):
+        raise ValueError("invalid sandbox endpoint cache payload")
+    get_redis_client_sync().set(
+        SANDBOX_ENDPOINT_CACHE_KEY,
+        {"endpoints": list(payload["endpoints"]), "token_enc": payload["token_enc"]},
+        expiration=SANDBOX_ENDPOINT_CACHE_TTL,
+    )
+
+
+def _merge_sandbox_page(base, payload: dict):
+    """Overlay a valid page payload onto deployment config. None means decrypt failed."""
+    update: dict = {}
+    if payload["endpoints"]:
+        update["endpoints"] = list(payload["endpoints"])
+    if payload["token_enc"]:
+        try:
+            update["token"] = decrypt_token(payload["token_enc"])
+        except Exception:
+            return None
+    if not update:
+        return base
+    return base.model_copy(update=update)
+
+
+def _read_sandbox_cache() -> tuple[str, dict | None]:
+    """Return (hit|miss|invalid|error, payload). error/invalid are not rewritten."""
+    try:
+        cached = get_redis_client_sync().get(SANDBOX_ENDPOINT_CACHE_KEY)
+    except Exception:
+        return "error", None
+    if cached is None:
+        return "miss", None
+    if sandbox_endpoint_payload_ok(cached):
+        return "hit", cached
+    return "invalid", None
+
+
+def load_sandbox_conf():
+    """Effective sandbox access for executors. Patch this in tests."""
+    return settings.get_sandbox_conf()
 
 
 def read_from_conf(file_path: str) -> str:
@@ -231,8 +292,7 @@ class ConfigService(Settings):
         if source_indent == target_indent:
             return block
         return [
-            f"{target_indent}{line[len(source_indent) :]}" if line.startswith(source_indent) else line
-            for line in block
+            f"{target_indent}{line[len(source_indent) :]}" if line.startswith(source_indent) else line for line in block
         ]
 
     @staticmethod
@@ -508,6 +568,51 @@ class ConfigService(Settings):
         if mcp_conf:
             return McpConf(**mcp_conf)
         return McpConf()
+
+    def get_sandbox_conf(self):
+        """Effective sandbox access: page config over deployment, per field.
+
+        A missing cache key is filled with setNx. A bad cache entry or a Redis
+        error is not rewritten here, so an in-flight read cannot clobber a save.
+        """
+
+        state, cached = _read_sandbox_cache()
+        if state == "hit":
+            merged = _merge_sandbox_page(self.sandbox_conf, cached)
+            if merged is None:
+                logger.error(_SANDBOX_UNREADABLE)
+                return self.sandbox_conf
+            return merged
+
+        try:
+            row = ConfigDao.get_config(ConfigKeyEnum.SANDBOX_ENDPOINT)
+        except Exception:
+            logger.error(_SANDBOX_UNREADABLE)
+            return self.sandbox_conf
+        if row is None or not row.value:
+            return self.sandbox_conf
+        try:
+            parsed = json.loads(row.value)
+        except Exception:
+            logger.error(_SANDBOX_UNREADABLE)
+            return self.sandbox_conf
+        if not sandbox_endpoint_payload_ok(parsed):
+            logger.error(_SANDBOX_UNREADABLE)
+            return self.sandbox_conf
+        merged = _merge_sandbox_page(self.sandbox_conf, parsed)
+        if merged is None:
+            logger.error(_SANDBOX_UNREADABLE)
+            return self.sandbox_conf
+        if state == "miss":
+            try:
+                get_redis_client_sync().setNx(
+                    SANDBOX_ENDPOINT_CACHE_KEY,
+                    {"endpoints": list(parsed["endpoints"]), "token_enc": parsed["token_enc"]},
+                    SANDBOX_ENDPOINT_CACHE_TTL,
+                )
+            except Exception:
+                logger.error("sandbox endpoint cache fill failed")
+        return merged
 
 
 settings = ConfigService.load_settings_from_yaml(config_file)

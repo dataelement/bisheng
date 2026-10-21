@@ -183,9 +183,9 @@ const CreateDataSet = forwardRef<CreateDataSetHandle, CreateDataSetProps>(({ onC
                 </div>
                 <DialogFooter>
                     <DialogClose asChild>
-                        <Button variant="outlined" className="px-11" type="button" onClick={() => setOpen(false)} color="default">{t('cancel')}</Button>
+                        <Button variant="outlined" type="button" onClick={() => setOpen(false)} color="default">{t('cancel')}</Button>
                     </DialogClose>
-                    <Button type="submit" className="px-11" onClick={handleSubmit}>{t('confirm')}</Button>
+                    <Button type="submit" onClick={handleSubmit}>{t('confirm')}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

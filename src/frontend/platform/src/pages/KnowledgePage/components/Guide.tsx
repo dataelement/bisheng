@@ -42,7 +42,7 @@ export default function Guide() {
                         <AlertDialogCancel onClick={handleCancelClick} className="px-11">
                             {t('cancel')}
                         </AlertDialogCancel>
-                        <Button onClick={handleOkClick} className="px-11">
+                        <Button onClick={handleOkClick}>
                             {t('dontRemind')}
                         </Button>
                     </AlertDialogFooter>

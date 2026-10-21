@@ -2,7 +2,7 @@
 import { Input, SearchInput, toast } from '@bisheng/ui';
 import { TrashIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Checkbox } from "@/components/bs-ui/checkBox";
+import { Checkbox } from '@bisheng/ui';
 
 import { Label } from "@/components/bs-ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
@@ -177,7 +177,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
             <div className="mt-4 h-[200px] overflow-y-auto">
                 {data.map(d => <div className="flex group justify-between h-8 rounded-sm px-2 hover:bg-[#EBF0FF] dark:hover:bg-gray-700">
                     <div className="flex place-items-center space-x-2">
-                        <Checkbox id={d.value} checked={d.selected} onCheckedChange={() => handleChecked(d.value)} />
+                        <Checkbox className="peer" id={d.value} checked={d.selected} onCheckedChange={() => handleChecked(d.value)} />
                         {
                             d.edit
                                 ? <Input autoFocus type="text" value={d.label || ''} onChange={(e) => handleChange(e, d.value)} onKeyDown={(e) => handleSave(e, d.value)} className={"h-6"} />

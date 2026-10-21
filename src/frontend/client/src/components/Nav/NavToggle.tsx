@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
-import { TooltipAnchor } from '~/components/ui';
+
 import { cn } from '~/utils';
 
 export default function NavToggle({
@@ -61,24 +62,10 @@ export default function NavToggle({
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <TooltipAnchor
-        side={side === 'right' ? 'left' : 'right'}
-        aria-label={side === 'left' ? localize('com_ui_chat_history') : localize('com_ui_controls')}
-        aria-expanded={navVisible}
-        aria-controls={side === 'left' ? 'chat-history-nav' : 'controls-nav'}
-        id={`toggle-${side}-nav`}
-        onClick={(e) => {
+      <SharedTooltip  content={navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar')} side={(side === 'right' ? 'left' : 'right')?.split('-')[0] as 'top' | 'right' | 'bottom' | 'left'} ><div aria-label={side === 'left' ? localize('com_ui_chat_history') : localize('com_ui_controls')} aria-expanded={navVisible} aria-controls={side === 'left' ? 'chat-history-nav' : 'controls-nav'} id={`toggle-${side}-nav`} onClick={(e) => {
           onToggle(e);
           setIsHovering(false)
-        }}
-        role="button"
-        description={
-          navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar')
-        }
-        className="flex items-center justify-center"
-        tabIndex={0}
-      >
-        <span className="" data-state="closed">
+        }} role="button" className="flex items-center justify-center" tabIndex={0}  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.click(); } }}><span className="" data-state="closed">
           <div
             className="flex h-[72px] w-8 items-center justify-center"
             style={{
@@ -110,8 +97,7 @@ export default function NavToggle({
               />
             </div>
           </div>
-        </span>
-      </TooltipAnchor>
+        </span></div></SharedTooltip>
     </div>
   );
 }

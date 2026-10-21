@@ -164,22 +164,29 @@ export function DashboardSidebar({
             )}
         >
             {
-                !isCollapsed && <div className="header relative flex items-center justify-between h-[52px] px-2 pr-11 border-b">
+                // Both header buttons share this row: centring them in the same
+                // 52px flex line is what keeps them aligned — the collapse
+                // button used to be absolutely positioned at top-2, which left
+                // it 2px above the 32px add button.
+                //
+                // The condition also has to sit outside Tip: it reads
+                // children.props, so a falsy child crashes the whole page.
+                !isCollapsed && <div className="header flex items-center justify-between h-[52px] px-2 border-b">
                     <p className="text-base font-bold">{t('dashboardList')}</p>
-                    {
-                        canCreate && <Tip content={t('addDashboard')} >
-                            <Button variant="text" size="medium" onClick={handleCreate} color="default" iconOnly><Outlined.Plus size={16} /></Button>
+                    <div className="flex items-center gap-1">
+                        {
+                            canCreate && <Tip content={t('addDashboard')} >
+                                <Button variant="text" size="medium" onClick={handleCreate} color="default" iconOnly><Outlined.Plus size={16} /></Button>
+                            </Tip>
+                        }
+                        <Tip content={t('collapseList')}>
+                            <Button variant="text" size="medium" className="hover:text-primary" onClick={() => setIsCollapsed(!isCollapsed)} color="default" iconOnly>
+                                <Outlined.Left className="h-4 w-4" />
+                            </Button>
                         </Tip>
-                    }
+                    </div>
                 </div>
             }
-            <Tip content={t('collapseList')}>
-                {
-                    !isCollapsed && <Button variant="text" size="medium" className={"absolute top-2 z-10 hover:text-primary bg-background right-2"} onClick={() => setIsCollapsed(!isCollapsed)} color="default" iconOnly>
-                        <Outlined.SidebarMenu className="h-4 w-4 rotate-180" />
-                    </Button>
-                }
-            </Tip>
 
 
             {!isCollapsed && (

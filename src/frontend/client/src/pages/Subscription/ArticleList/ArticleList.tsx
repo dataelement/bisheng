@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { Tabs } from "@bisheng/ui";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { EmptyStateIllustration } from "~/components/illustrations";
@@ -18,7 +19,7 @@ import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelSwitcher, SERIF_FONT_STACK } from "./ChannelSwitcher";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip2";
+
 import { CopyShareLinkButton, buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { Outlined } from "bisheng-icons";
 import { cn, copyText } from "~/utils";
@@ -124,18 +125,10 @@ function TruncatedTabLabel({ name }: { name: string }) {
     }, [name]);
 
     return (
-        <Tooltip
-            open={open}
-            onOpenChange={(next) => {
+        <SharedTooltip open={open} onOpenChange={(next) => {
                 if (next && !isTruncated) return;
                 setOpen(next);
-            }}
-        >
-            <TooltipTrigger asChild>
-                <span ref={labelRef} className="block max-w-[240px] truncate">{name}</span>
-            </TooltipTrigger>
-            <TooltipContent>{name}</TooltipContent>
-        </Tooltip>
+            }} content={name} ><span ref={labelRef} className="block max-w-[240px] truncate">{name}</span></SharedTooltip>
     );
 }
 

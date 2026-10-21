@@ -2,7 +2,7 @@
 import { Button, SearchInput } from '@bisheng/ui';
 import { FilterIcon } from "@/components/bs-icons";
 
-import { Checkbox } from "@/components/bs-ui/checkBox";
+import { Checkbox } from '@bisheng/ui';
 
 import { Label } from "@/components/bs-ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
@@ -41,7 +41,7 @@ export default function ColFilterUser({ label, onFilter }) {
                 <div className="mt-2 max-h-[260px] min-h-20 overflow-y-auto">
                     {options.map((el) => (
                         <div className="flex items-center space-x-2 mb-1" key={el.value}>
-                            <Checkbox id={el.value} checked={value.includes(el.value)} onCheckedChange={() => handlerChecked(el.value)} />
+                            <Checkbox className="peer" id={el.value} checked={value.includes(el.value)} onCheckedChange={() => handlerChecked(el.value)} />
                             <Label htmlFor={el.value} className="cursor-pointer text-sm truncate">{el.label}</Label>
                         </div>
                     ))}
@@ -52,11 +52,11 @@ export default function ColFilterUser({ label, onFilter }) {
                     )}
                 </div>
                 <div className="flex justify-between mt-4">
-                    <Button variant="text" className="px-8 h-8" onClick={() => {
+                    <Button variant="text" onClick={() => {
                         setValue([])
                         onFilter([])
                     }} color="default">{t('system.reset')}</Button>
-                    <Button className="px-8 h-8" onClick={() => {
+                    <Button onClick={() => {
                         setOpen(false)
                         onFilter(value)
                     }}>{t('system.confirm')}</Button>

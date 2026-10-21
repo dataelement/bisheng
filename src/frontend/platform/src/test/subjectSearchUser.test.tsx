@@ -17,9 +17,6 @@ vi.mock("@/controllers/API/permission", () => ({
 
 
 
-vi.mock("@/components/bs-ui/checkBox", () => ({
-  Checkbox: ({ checked }: any) => <input type="checkbox" readOnly checked={checked} />,
-}));
 
 const mockedGrantSubjectUsers = vi.mocked(getGrantSubjectUsersApi);
 

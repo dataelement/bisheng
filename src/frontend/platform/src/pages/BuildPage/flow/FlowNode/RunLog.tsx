@@ -256,7 +256,7 @@ export const ResultFile = ({ title, name, fileUrl }: { title: string, name: stri
                 className="w-full h-12 p-2 block text-muted-foreground dark:bg-black"
             />
 
-            <Button onClick={handleDownload} className="h-6 mt-2">
+            <Button onClick={handleDownload} className="mt-2" size="small">
                 {t('downloadFullContent')}
             </Button>
         </div>

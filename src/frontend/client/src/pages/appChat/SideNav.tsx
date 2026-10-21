@@ -1,10 +1,11 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
 import { MobileSidebarHeaderTabs } from '~/components/Nav/MobileSidebarHeaderTabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { UserPopMenu } from '~/layouts/UserPopMenu';
@@ -54,18 +55,9 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
     }
 
     return (
-        <TooltipProvider delayDuration={300}>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <p ref={ref} className={pClassName}>
+        <SharedTooltipProvider delayDuration={300}><SharedTooltip  content={text} side="bottom"  align="start"><p ref={ref} className={pClassName}>
                         {text}
-                    </p>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="start" className="max-w-[200px]">
-                    {text}
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
+                    </p></SharedTooltip></SharedTooltipProvider>
     );
 }
 
@@ -156,7 +148,7 @@ export function SideNav() {
                         <div className="flex-1 flex flex-col min-w-0 justify-center">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-[14px] font-medium leading-[22px] truncate">
-                                    {flowData?.name || '未知应用'}
+                                    {flowData?.name || localize("com_app.unknown_name")}
                                 </h3>
                                 {/* App switcher dropdown */}
                                 <div className="shrink-0 size-[16px] flex items-center justify-center ml-1">
@@ -164,7 +156,7 @@ export function SideNav() {
                                 </div>
                             </div>
                             <TruncatedLineTooltip
-                                text={flowData?.description || '暂无描述信息'}
+                                text={flowData?.description || localize("com_app_no_description_placeholder")}
                                 className="text-[12px] text-[#a9aeb8] leading-[19.5px] truncate"
                             />
                         </div>

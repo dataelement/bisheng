@@ -141,7 +141,7 @@ export function DashboardDetail({
                     <div className="flex-1 min-w-0 flex items-center">
                         {isCollapsed && <Tip content={t('expandList')}>
                             <Button variant="text" size="medium" className={"hover:text-primary bg-background mr-4"} onClick={() => setIsCollapsed(!isCollapsed)} color="default" iconOnly>
-                                <Outlined.SidebarMenu className="h-4 w-4 hover:text-primary" />
+                                <Outlined.Right className="h-4 w-4 hover:text-primary" />
                             </Button>
                         </Tip>}
                         {isEditingTitle ? (
@@ -172,7 +172,7 @@ export function DashboardDetail({
                                     </div>
                                 }
                                 side={'bottom'}>
-                                <Outlined.Info color="#999" size={16} className="cursor-pointer rotate-180" />
+                                <Outlined.Info color="#999" size={16} className="cursor-pointer" />
                             </Tip>
                         </>}
                     </div>

@@ -834,6 +834,7 @@
     "getApiKey": "Get a {{provider}} API key",
     "formatExample": "Example: {{example}}",
     "streamingAsrHint": "Streaming speech recognition supports paraformer-realtime-v2, paraformer-realtime-v1 and qwen3-asr-flash-realtime. Save and test the model, then select it as the workbench ASR model.",
+    "fileAsrHint": "File recognition. Upload the full recording, then transcribe it.",
     "speechCredentials": "Real-time speech recognition",
     "providerSilicon": "SiliconFlow",
     "providerTencent": "Tencent Cloud",
@@ -904,7 +905,8 @@
     "varOptionRequired": "options are required",
     "optionRepeated": "Option repeated",
     "incorrectIdFormatMessage": "Incorrect ID format (should be a 5-character combination of letters and numbers)",
-    "idAlreadyExistsMessage": "This ID already exists"
+    "idAlreadyExistsMessage": "This ID already exists",
+    "publishedVersionCannotSave": "Published versions cannot be edited or saved"
   },
   "lib": {
     "knowledgeBaseId": "Knowledge ID",

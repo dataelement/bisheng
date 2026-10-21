@@ -23,7 +23,7 @@ import {
 } from '~/api/messageExport';
 import { translateApiErrorMessage } from '~/api/request';
 import { Button } from '~/components/ui/Button';
-import { Checkbox } from '~/components/ui/Checkbox';
+import { Checkbox } from '@bisheng/ui';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { useLocalize } from '~/hooks';
 import { type SelectableMessage, useMessageSelection } from '~/hooks/useMessageSelection';
@@ -81,7 +81,7 @@ export function MessageSelectionToolbar({
             const ids = getSelectedIds(messages);
             if (!ids.length) {
                 showToast({
-                    message: localize('workstation.messageExport.noSelection') ?? '请先选择消息',
+                    message: localize('workstation.messageExport.noSelection'),
                     severity: NotificationSeverity.WARNING,
                 });
                 return;
@@ -121,7 +121,7 @@ export function MessageSelectionToolbar({
         const ids = getSelectedIds(messages);
         if (!ids.length) {
             showToast({
-                message: localize('workstation.messageExport.noSelection') ?? '请先选择消息',
+                message: localize('workstation.messageExport.noSelection'),
                 severity: NotificationSeverity.WARNING,
             });
             return;
@@ -175,7 +175,7 @@ export function MessageSelectionToolbar({
                 className="flex shrink-0 cursor-pointer items-center gap-2 text-sm"
                 title={localize('workstation.messageExport.selectAll')}
             >
-                <Checkbox
+                <Checkbox className="peer"
                     checked={selectAllChecked}
                     onCheckedChange={(v) => setGlobalSelectAll(v === true)}
                 />

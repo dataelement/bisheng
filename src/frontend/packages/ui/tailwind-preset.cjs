@@ -237,6 +237,16 @@ module.exports = {
     },
   },
   plugins: [
+    plugin(({ addUtilities }) => {
+      // Shared exception to native scrollbars: hide them without disabling scrolling.
+      addUtilities({
+        '.no-scrollbar, .scrollbar-hide': {
+          'scrollbar-width': 'none',
+          '-ms-overflow-style': 'none',
+          '&::-webkit-scrollbar': { display: 'none', width: '0', height: '0' },
+        },
+      });
+    }),
     plugin(({ addVariant }) => {
       // Primary input: mouse + hover vs touch / coarse pointer.
       addVariant('fine-pointer', '@media (hover: hover) and (pointer: fine)');

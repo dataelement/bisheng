@@ -1,7 +1,7 @@
 // @ts-strict-ignore
 import { Button, SearchInput } from '@bisheng/ui';
 import { AssistantIcon, SkillIcon } from "@/components/bs-icons";
-import { Badge } from "@/components/bs-ui/badge";
+import { Tag } from '@bisheng/ui';
 
 import { getChatOnlineApi } from "@/controllers/API/assistant";
 import { useDebounce } from "@/util/hook";
@@ -70,9 +70,9 @@ export default function SkillChatSheet({ children, onSelect }) {
                                 description={flow.desc}
                                 type="sheet"
                                 footer={
-                                    <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
+                                    <Tag className="absolute right-0 bottom-0" color={flow.flow_type === 'flow' ? 'skill' : 'default'}>
                                         {flow.flow_type === 'flow' ? t('build.skill') : t('build.assistant')}
-                                    </Badge>
+                                    </Tag>
                                 }
                                 onClick={() => { onSelect(flow); setOpen(false) }}
                             />

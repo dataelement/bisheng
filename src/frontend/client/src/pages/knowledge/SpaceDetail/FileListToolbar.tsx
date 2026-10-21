@@ -1,7 +1,7 @@
 import { Outlined } from "bisheng-icons";
 
 import { FileStatus, SortDirection, SortType } from "~/api/knowledge";
-import { Checkbox } from "~/components";
+import { Checkbox } from '@bisheng/ui';
 import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import {
     DropdownMenu,
@@ -105,7 +105,7 @@ export function FileListToolbar({
         >
             <Checkbox
                 aria-label={localize("com_knowledge.select_all")}
-                className={SELECTION_CHECKBOX_CLASS}
+                className={`peer ${(SELECTION_CHECKBOX_CLASS) || ''}`}
                 checked={isIndeterminate ? "indeterminate" : isAllSelected}
                 disabled={!hasSelectableFiles}
                 onCheckedChange={onSelectAll}

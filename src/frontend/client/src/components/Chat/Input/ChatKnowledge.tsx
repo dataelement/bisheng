@@ -1,9 +1,8 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import {
-  Glasses,
-  PaperclipIcon,
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +12,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/components/ui";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { useGetOrgToolPages } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
 import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hooks";
@@ -210,8 +209,6 @@ export const ChatKnowledge = ({
     }
   };
 
-  const hasAnySelection = value.length > 0;
-  const orgEnabled = !!config?.knowledgeBase?.enabled;
 
   const [openSub, setOpenSub] = useState<'org' | null>(null);
   // 仅 <=576 走移动端下钻面板；577~768 保持桌面级联交互（右侧展开）
@@ -279,10 +276,7 @@ export const ChatKnowledge = ({
   return (
     <SkillUploadHost>{(openSkillUpload) => (
     <DropdownMenu open={rootOpen} onOpenChange={handleRootOpenChange}>
-      <TooltipProvider delayDuration={50}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild disabled={disabled}>
+      <SharedTooltipProvider delayDuration={50}><SharedTooltip disabled={variant === 'knowledge'} content={localize('com_knowledge_add_file')} side="bottom" ><DropdownMenuTrigger asChild disabled={disabled}>
               {variant === 'knowledge' ? (
                 <button
                   ref={triggerRef}
@@ -331,17 +325,7 @@ export const ChatKnowledge = ({
                   <Outlined.Plus size={18} />
                 </button>
               )}
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          {/* The knowledge pill already shows its label inline, so it needs no
-              tooltip; only the icon-only "+" trigger gets one. */}
-          {variant !== 'knowledge' && (
-            <TooltipContent side="bottom" sideOffset={6}>
-              {localize('com_knowledge_add_file')}
-            </TooltipContent>
-          )}
-        </Tooltip>
-      </TooltipProvider>
+            </DropdownMenuTrigger></SharedTooltip></SharedTooltipProvider>
 
       <DropdownMenuContent
         ref={menuContentRef}

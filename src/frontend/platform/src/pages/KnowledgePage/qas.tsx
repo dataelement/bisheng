@@ -321,14 +321,14 @@ export default function QasPage() {
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex gap-4 items-center">
                             <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
-                            {canEditKb && <Button variant="outlined" className="px-8" onClick={() => importRef.current.open()} color="default">{t('import')}</Button>}
-                            {canEditKb && <Button variant="outlined" className="px-8" onClick={() => {
+                            {canEditKb && <Button variant="outlined" onClick={() => importRef.current.open()} color="default">{t('import')}</Button>}
+                            {canEditKb && <Button variant="outlined" onClick={() => {
                                 getQaFile(id).then(res => {
                                     const fileUrl = res.file_list[0];
                                     downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
                                 })
                             }} color="default">{t('export')}</Button>}
-                            {canEditKb && <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>}
+                            {canEditKb && <Button onClick={() => editRef.current.open()}>{t('createQA')}</Button>}
                         </div>
                     </div>
                 </div>

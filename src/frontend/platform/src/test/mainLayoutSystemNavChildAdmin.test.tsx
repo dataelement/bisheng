@@ -59,16 +59,7 @@ vi.mock("@/components/bs-ui/separator", () => ({
   Separator: () => null,
 }));
 
-vi.mock("@/components/bs-ui/tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
-  ),
-}));
+
 
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: vi.fn(),

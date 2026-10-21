@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { PlusCircle } from 'lucide-react';
 import { isAssistantsEndpoint } from '~/types/chat';
 import type { TConversation } from '~/types/chat';
 import { useChatContext, useAddedChatContext } from '~/Providers';
-import { TooltipAnchor } from '~/components';
+
 import { mainTextareaId } from '~/common';
 import { useLocalize } from '~/hooks';
 
@@ -35,18 +36,7 @@ function AddMultiConvo() {
   }
 
   return (
-    <TooltipAnchor
-      id="add-multi-conversation-button"
-      aria-label={localize('com_ui_add_multi_conversation')}
-      description={localize('com_ui_add_multi_conversation')}
-      tabIndex={0}
-      role="button"
-      onClick={clickHandler}
-      data-testid="parameters-button"
-      className="inline-flex size-10 items-center justify-center rounded-lg border border-border-light bg-transparent text-text-primary transition-all ease-in-out hover:bg-surface-tertiary disabled:pointer-events-none disabled:opacity-50 radix-state-open:bg-surface-tertiary"
-    >
-      <PlusCircle size={16} aria-label="Plus Icon" />
-    </TooltipAnchor>
+    <SharedTooltip  content={localize('com_ui_add_multi_conversation')}  ><div id="add-multi-conversation-button" aria-label={localize('com_ui_add_multi_conversation')} tabIndex={0} role="button" onClick={clickHandler} data-testid="parameters-button" className="inline-flex size-10 items-center justify-center rounded-lg border border-border-light bg-transparent text-text-primary transition-all ease-in-out hover:bg-surface-tertiary disabled:pointer-events-none disabled:opacity-50 radix-state-open:bg-surface-tertiary"  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.click(); } }}><PlusCircle size={16} aria-label="Plus Icon" /></div></SharedTooltip>
   );
 }
 

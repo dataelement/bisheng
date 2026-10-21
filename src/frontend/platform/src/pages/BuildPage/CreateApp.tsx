@@ -257,11 +257,11 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                     </div>
                     <DialogFooter>
                         <DialogClose>
-                            <Button variant="outlined" className="px-11" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })} color="default">
+                            <Button variant="outlined" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })} color="default">
                                 {t('cancel')}
                             </Button>
                         </DialogClose>
-                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading)} type="submit" className="px-11" onClick={handleSubmit}>
+                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading)} type="submit" onClick={handleSubmit}>
                             {loading && <Outlined.Loading className="animate-spin mr-2" />}
                             {t(isEditMode ? 'save' : 'create')}
                         </Button>

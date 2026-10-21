@@ -31,9 +31,7 @@ vi.mock("@/pages/Dashboard/components/editor/EditorCanvas", () => ({
   EditorCanvas: () => <div>dashboard canvas</div>,
 }))
 
-vi.mock("@/components/bs-ui/tooltip/tip", () => ({
-  default: ({ children }: { children: ReactNode }) => <>{children}</>,
-}))
+
 
 vi.mock("@/components/bs-ui/dropdownMenu", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,

@@ -421,13 +421,13 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                         <SearchInput placeholder={t('segment.searchSegments')} onChange={(e) => search(e.target.value)} disabled={!selectedFileId} />
                     </div>
                     {canEditKb && (
-                    <Button variant="outlined" onClick={handleMetadataClick} className="px-4 whitespace-nowrap" color="default">
+                    <Button variant="outlined" onClick={handleMetadataClick} className="whitespace-nowrap" color="default">
                         <Outlined.FileEditing size={16} strokeWidth={1.5} className="mr-1" />
                         {t('metadialog.title')}
                     </Button>
                     )}
                     {canEditKb && (
-                        <Button onClick={handleAdjustSegmentation} className={`px-4 whitespace-nowrap`}>
+                        <Button onClick={handleAdjustSegmentation} className="whitespace-nowrap">
                             {t('segment.adjustStrategy')}
                         </Button>
                     )}

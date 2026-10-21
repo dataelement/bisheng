@@ -9,7 +9,7 @@
 | Path | Project | Stack |
 |------|---------|-------|
 | `src/backend/` | FastAPI + Celery Workers + Linsight Worker | Python 3.11+, uv, SQLModel, LangGraph |
-| `src/frontend/platform/` | Admin / builder UI | Vite 5 + **Zustand** + react-query v3 + bs-ui |
+| `src/frontend/platform/` | Admin / builder UI | Vite 6 + **Zustand** + react-query v3 + bs-ui |
 | `src/frontend/client/` | End-user chat UI (`/workspace` base path) | Vite 6 + **Recoil** + react-query v4 (@tanstack) + shadcn/ui |
 
 **Runtime topology** (full picture → `docs/architecture/01-architecture-overview.md`):

@@ -135,9 +135,9 @@ const rows = [
   ['品牌色 · 内联 var 写法', <span style={{ color: 'rgb(var(--brand-500))' }}><Outlined.Pin size={16} /> rgb(var(--brand-500))</span>],
   ['语义色（成功/警告/危险，不换肤）', (
     <span style={{ display: 'inline-flex', gap: 16 }}>
-      <span style={{ color: '#00b42a' }}><Outlined.CheckCircle size={16} /> 成功</span>
-      <span style={{ color: '#ff7d00' }}><Outlined.Attention size={16} /> 警告</span>
-      <span style={{ color: '#f53f3f' }}><Outlined.CloseCircle size={16} /> 危险</span>
+      <span className="text-success"><Outlined.CheckCircle size={16} /> 成功</span>
+      <span className="text-warning"><Outlined.Attention size={16} /> 警告</span>
+      <span className="text-danger"><Outlined.CloseCircle size={16} /> 危险</span>
     </span>
   )],
   ['加载态 · Outlined.Loading + animate-spin', <span style={{ color: 'rgb(var(--text-2))' }}><Outlined.Loading size={16} className="animate-spin" /> 加载中（不混用 lucide Loader2）</span>],

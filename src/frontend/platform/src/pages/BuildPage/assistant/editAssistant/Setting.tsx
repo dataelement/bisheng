@@ -237,8 +237,8 @@ export default function Setting() {
                   className="group mt-2 flex cursor-pointer items-center justify-between"
                 >
                   <div className="flex items-center gap-2">
-                    <TitleIconBg id={tool.id} className="h-7 w-7">
-                      <Outlined.Hammer />
+                    <TitleIconBg id={tool.id} className="h-6 w-6 shrink-0">
+                      <Outlined.Hammer size={16} />
                     </TitleIconBg>
                     <p className="text-sm">{tool.name}</p>
                   </div>

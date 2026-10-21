@@ -271,8 +271,8 @@ const ParagraphEdit = ({
                 <Markdown ref={markDownRef} edit={edit} isUns={isUns} title={fileName} q={chunkId + 1} value={value} />
                 {!value && <p className="absolute left-0 text-red-500 text-xs mt-2">{t('inputNotEmpty')}</p>}
                 {!isUns && <div className="flex justify-end gap-4">
-                    <Button className="px-6 h-8" variant="outlined" onClick={onClose} color="default">{t('cancel', { ns: 'bs' })}</Button>
-                    <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><Outlined.Loading className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>
+                    <Button variant="outlined" onClick={onClose} color="default">{t('cancel', { ns: 'bs' })}</Button>
+                    <Button loading={loading} disabled={loading} onClick={handleSave}>{t('save', { ns: 'bs' })}</Button>
                 </div>}
             </div>
             {isUns && <>
@@ -294,8 +294,8 @@ const ParagraphEdit = ({
                             <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
                         </div>
                         <div className="flex justify-end gap-4">
-                            {edit && <Button className="px-6 h-8" variant="outlined" onClick={onClose} color="default">{t('cancel', { ns: 'bs' })}</Button>}
-                            {edit && <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><Outlined.Loading className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>}
+                            {edit && <Button variant="outlined" onClick={onClose} color="default">{t('cancel', { ns: 'bs' })}</Button>}
+                            {edit && <Button loading={loading} disabled={loading} onClick={handleSave}>{t('save', { ns: 'bs' })}</Button>}
                             {!edit && <Outlined.Close className="cursor-pointer size-5 text-gray-500" onClick={onClose} />}
                         </div>
                     </div>

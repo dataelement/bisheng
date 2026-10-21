@@ -37,7 +37,6 @@ from bisheng.common.errcode.server import (
     TtsSynthesisFailedError,
 )
 from bisheng.common.models.config import ConfigKeyEnum
-from bisheng.core.ai.asr.realtime import realtime_protocol
 from bisheng.core.ai.asr.volcengine import SpeechAccessRejected, VolcengineRealtimeASRClient
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import (
@@ -699,10 +698,7 @@ class LLMService:
         """
         if server_type != LLMServerType.VOLCENGINE.value:
             return
-        if not any(
-            model.model_type == LLMModelType.ASR.value and realtime_protocol(server_type, model.model_name)
-            for model in models
-        ):
+        if not any(model.model_type == LLMModelType.ASR_RT.value for model in models):
             return
         try:
             await VolcengineRealtimeASRClient("bigmodel", config or {}).verify_access()
@@ -758,8 +754,12 @@ class LLMService:
                     await cls.get_bisheng_llm(model_id=one.id, ignore_online=True, **common_params)
                 elif one.model_type == LLMModelType.EMBEDDING.value:
                     await cls.get_bisheng_embedding(model_id=one.id, ignore_online=True, **common_params)
-                elif one.model_type == LLMModelType.ASR.value:
-                    await cls.get_bisheng_asr(model_id=one.id, ignore_online=True, **common_params)
+                elif LLMModelType.is_speech(one.model_type):
+                    # Constructing the client does not talk to the vendor. A sample
+                    # transcription does, and a refusal or an unreachable endpoint
+                    # drops the model instead of saving it as usable.
+                    async with asyncio.timeout(MODEL_TEST_TIMEOUT):
+                        await cls._invoke_model_probe(one, common_params)
                 elif one.model_type == LLMModelType.TTS.value:
                     await cls.get_bisheng_tts(model_id=one.id, ignore_online=True, **common_params)
 
@@ -904,7 +904,7 @@ class LLMService:
         elif model.model_type == LLMModelType.TTS.value:
             bisheng_tts = await cls.get_bisheng_tts(model_id=model.id, ignore_online=True, **common_params)
             await bisheng_tts.ainvoke("hello")
-        elif model.model_type == LLMModelType.ASR.value:
+        elif LLMModelType.is_speech(model.model_type):
             example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
             with open(example_file_path, "rb") as f:
                 bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True, **common_params)
@@ -972,7 +972,7 @@ class LLMService:
             if not workbench_llm.tts_model or not workbench_llm.tts_model.id:
                 workbench_llm.tts_model = WSModel(id=str(model.id), name=model.model_name)
                 await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
-        elif model.model_type == LLMModelType.ASR.value:
+        elif LLMModelType.is_speech(model.model_type):
             workbench_llm = await cls.get_workbench_llm()
             if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
                 workbench_llm.asr_model = WSModel(id=str(model.id), name=model.model_name)
@@ -1678,8 +1678,8 @@ class LLMService:
             inherited_from_root=inherited,
         )
         if config.asr_model and config.asr_model.id:
-            model, server = await BishengASR.get_model_server_info(int(config.asr_model.id))
-            config.asr_model.realtime = bool(model and server and realtime_protocol(server.type, model.model_name))
+            model, _server = await BishengASR.get_model_server_info(int(config.asr_model.id))
+            config.asr_model.realtime = bool(model and model.model_type == LLMModelType.ASR_RT.value)
         return config, inherited, blocked
 
     @classmethod

@@ -57,7 +57,7 @@ export default function Config() {
             className="min-h-0 w-full flex-1 rounded-lg border-[1px] border-border custom-scroll"
         />
         <div className="flex justify-center mt-4 shrink-0">
-            <Button className=" h-10 w-[120px] px-24 text-[#fff]" onClick={handleSave}>{t('save')}</Button>
+            <Button onClick={handleSave}>{t('save')}</Button>
         </div>
     </div>
 };

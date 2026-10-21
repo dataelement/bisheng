@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { Button } from '@bisheng/ui';
-import { Checkbox } from "@/components/bs-ui/checkBox";
+import { Checkbox } from '@bisheng/ui';
 import { Download } from "lucide-react";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -84,7 +84,7 @@ export default function ExportModal() {
           setDescription={setDescription}
         />
         <div className="flex items-center space-x-2">
-          <Checkbox
+          <Checkbox className="peer"
             id="terms"
             onCheckedChange={(event: boolean) => {
               setChecked(event);
