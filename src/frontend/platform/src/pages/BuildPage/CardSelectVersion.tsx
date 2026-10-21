@@ -1,9 +1,9 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
 import { changeCurrentVersion } from "@/controllers/API/flow";
 import { changeWorkflowCurrentVersion } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppNumType } from "@/types/app";
+import { Tooltip } from "@bisheng/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -54,16 +54,9 @@ export default function CardSelectVersion(
 
     const { t } = useTranslation()
 
-    if (showPop) return <TooltipProvider>
-        <Tooltip>
-            <TooltipTrigger>
-                <SelectComp {...props} value={value} onChange={setValue} />
-            </TooltipTrigger>
-            <TooltipContent>
+    if (showPop) return <Tooltip  content={<>
                 <p className="text-[white]">{t('skills.chooseOnline')}</p>
-            </TooltipContent>
-        </Tooltip>
-    </TooltipProvider>
+             </>}><span className="inline-flex" tabIndex={0}><SelectComp {...props} value={value} onChange={setValue} /></span></Tooltip>
 
 
     return <SelectComp {...props} value={value} disabled={!showPop} />

@@ -1,56 +1,44 @@
 // @ts-strict-ignore
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Button } from "../../../components/bs-ui/button";
+import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+import { useNavigate,useParams,useSearchParams } from "react-router-dom";
+
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow
 } from "../../../components/bs-ui/table";
+import { FileStatusFilter } from "./FileStatusFilter";
+import { StatusIndicator } from "./KnowledgeFileStatus";
+import { KnowledgeTooltip } from "./KnowledgeTooltip";
+export { StatusIndicator } from "./KnowledgeFileStatus";
 
 import { FileIcon } from "@/components/bs-icons/file";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import Tip from "@/components/bs-ui/tooltip/tip";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { downloadFile, truncateString } from "@/util/utils";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2, Download, Tag as TagIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, useContext } from "react";
+import { Checkbox } from "@bisheng/ui";
+
+
+import { downloadFile,truncateString } from "@/util/utils";
+
+import { locationContext } from "@/contexts/locationContext";
+import { useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SearchInput } from "../../../components/bs-ui/input";
+
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
-import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledgeFileApi, batchDownloadFileApi } from "../../../controllers/API";
+import { batchDownloadFileApi,deleteFile,getKnowledgeDetailApi,readFileByLibDatabase,retryKnowledgeFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import useKnowledgeStore from "../useKnowledgeStore";
-import { MetadataManagementDialog } from "./MetadataManagementDialog";
 import AddKnowledgeFileMenu from "./AddKnowledgeFileMenu";
+import { MetadataManagementDialog } from "./MetadataManagementDialog";
 import WebLinkImportDialog from "./WebLinkImportDialog";
 import FileTagList from "./tags/FileTagList";
 import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
-import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
-import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
-import { locationContext } from "@/contexts/locationContext";
-
-interface StatusIndicatorProps {
-    status: number;
-    remark?: string;
-}
-// 1. 定义状态配置映射表
-const STATUS_CONFIG: Record<number, { labelKey: string; colorClass: string; bgClass: string }> = {
-    1: { labelKey: "parsing", colorClass: "text-[#4D9BF0]", bgClass: "bg-[#4D9BF0]" },
-    2: { labelKey: "completed", colorClass: "text-green-500", bgClass: "bg-green-500" },
-    3: { labelKey: "parseFailed", colorClass: "text-red-500", bgClass: "bg-red-500" },
-    4: { labelKey: "parsing", colorClass: "text-[#4D9BF0]", bgClass: "bg-[#4D9BF0]" },
-    5: { labelKey: "queuing", colorClass: "text-yellow-500", bgClass: "bg-yellow-500" },
-    6: { labelKey: "timeout", colorClass: "text-red-500", bgClass: "bg-red-500" },
-    7: { labelKey: "violation", colorClass: "text-red-500", bgClass: "bg-red-500" },
-};
 
 function normalizeWebLinkDisplayName(fileName: string): string {
     const trimmed = fileName.trim().replace(/\.md$/i, "").trim();
@@ -63,113 +51,12 @@ function getKnowledgeFileDisplayName(file: Record<string, any>): string {
     return file.file_source === "web_link" ? normalizeWebLinkDisplayName(fileName) : fileName;
 }
 
-function formatSensitiveViolationMessage(hits: any[], t: (key: string, options?: Record<string, any>) => string) {
-    const words = hits
-        .map((item) => String(item?.word ?? "").trim())
-        .filter(Boolean)
-        .filter((word, index, arr) => arr.indexOf(word) === index);
-
-    if (!words.length) {
-        return t("sensitiveViolationMessage", { ns: "knowledge" });
-    }
-
-    return `${t("sensitiveViolationMessagePrefix", { ns: "knowledge" })}{${words.join(",")}}${t("sensitiveViolationMessageSuffix", { ns: "knowledge" })}`;
-}
-
-function formatMediaParseFailureMessage(obj: any, t: (key: string, options?: Record<string, any>) => string) {
-    return resolveKnowledgeParseFailure(obj, t) ?? "";
-}
-
-export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark }) => {
-    const { t } = useTranslation()
-    const config = STATUS_CONFIG[status];
-    const reason = useMemo(() => {
-        const trimmedRemark = remark?.trim();
-        if (!trimmedRemark) return "";
-
-        if (trimmedRemark.indexOf('{') === 0) {
-            try {
-                const obj = JSON.parse(trimmedRemark)
-                if (status === 7 && obj?.reason === "sensitive_check") {
-                    return formatSensitiveViolationMessage(Array.isArray(obj?.hits) ? obj.hits : [], t);
-                }
-                const mediaMessage = formatMediaParseFailureMessage(obj, t);
-                if (mediaMessage) return mediaMessage;
-                return t(`api_errors:${obj.status_code}`, { ...(obj.data || {}), defaultValue: obj.status_message || t('api_errors:fallback') })
-            } catch (error) {
-                return trimmedRemark
-            }
-        }
-        return trimmedRemark
-    }, [remark, status, t])
-
-    // 如果状态不在定义中，返回 null 或默认 UI
-    if (!config) return null;
-
-    const renderTooltip = () => {
-        let tooltipContent = "";
-
-        if (status === 3 && remark) {
-            tooltipContent = reason; // 解析失败的报错原因
-        } else if (status === 6) {
-            tooltipContent = t('timeoutTip', { ns: 'knowledge' })
-        }
-
-        if (!tooltipContent) return null;
-
-        return (
-            <TooltipProvider delayDuration={100}>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <CircleAlertIcon size={16} className="cursor-pointer" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="whitespace-pre-line">
-                        <div className="max-w-96 text-left break-all whitespace-normal">
-                            {tooltipContent}
-                        </div>
-                    </TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
-        );
-    };
-
-    const BadgeContent = (
-        <div className="flex items-center gap-2 cursor-default">
-            <span className={`size-[6px] rounded-full ${config?.bgClass}`}></span>
-            <span className={`font-[500] text-[14px] leading-[100%] text-center flex gap-0.5 items-center ${config?.colorClass}`}>
-                {t(config?.labelKey, { ns: 'knowledge' })}
-                {(status === 3 || status === 6) && renderTooltip()}
-            </span>
-        </div>
-    );
-
-    if (status === 7 && reason) {
-        return (
-            <TooltipProvider delayDuration={100}>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        {BadgeContent}
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="whitespace-pre-line">
-                        <div className="max-w-96 text-left break-all whitespace-normal">
-                            {reason}
-                        </div>
-                    </TooltipContent>
-                </Tooltip>
-            </TooltipProvider>
-        );
-    }
-
-    // 其他状态直接渲染内容
-    return BadgeContent;
-};
-
 export default function Files({ onPreview, canEditKb = false, canDeleteKb = false }) {
     const { appConfig } = useContext(locationContext);
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
     const [searchParams] = useSearchParams()
-    const { toast } = useToast()
+
 
     const { setEditable } = useKnowledgeStore();
     const initialAbnormalFilter = searchParams.get('fileStatus') === 'abnormal'
@@ -321,7 +208,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
         try {
             const fileIds = selectedFileObjs.map(f => Number(f.id));
             if (!fileIds.length) {
-                toast({ variant: 'error', description: t('selectFile', { ns: 'knowledge' }) });
+                notification.open({ type: 'error', description: String(t('selectFile', { ns: 'knowledge' }) ?? '') });
                 setIsDownloading(false);
                 return;
             }
@@ -340,10 +227,10 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                     downloadFile(url, `${libName}_${dateStr}_${timeStr}.zip`);
                 }
             } else {
-                toast({ variant: 'error', description: t('api_errors:10003') });
+                notification.open({ type: 'error', description: String(t('api_errors:10003') ?? '') });
             }
         } catch (e) {
-            toast({ variant: 'error', description: t('api_errors:10003') });
+            notification.open({ type: 'error', description: String(t('api_errors:10003') ?? '') });
         } finally {
             setIsDownloading(false);
         }
@@ -456,7 +343,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
 
             {loading && (
                 <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                    <LoadingIcon />
+                    <Outlined.Loading  className="size-4 animate-spin"/>
                 </div>
             )}
 
@@ -466,17 +353,12 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 {/* Batch Actions */}
                 {selectedFileObjs.length > 0 && (
                     <div className="flex items-center gap-2 mr-1 md:mr-0 pr-2 md:pr-4 border-r border-gray-200 dark:border-gray-700">
-                        <Button
-                            variant="outline"
-                            onClick={handleBatchDownload}
-                            disabled={isDownloading}
-                            className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
-                        >
-                            {isDownloading ? <LoadingIcon className="h-4 w-4 mr-1" /> : <Download size={16} />}
+                        <Button variant="outlined" onClick={handleBatchDownload} disabled={isDownloading} className="flex items-center gap-1 disabled:pointer-events-auto sm:px-4" color="default">
+                            {isDownloading ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : <Outlined.Download size={16} />}
                             <span className="hidden sm:inline">{t('download', { ns: 'bs' })}</span>
                         </Button>
                         {canEditKb && (
-                            <Tip content={!canBatchEditTags ? t('tagOperationRequiresCompletedFiles') : ''} side='bottom'>
+                            <KnowledgeTooltip content={!canBatchEditTags ? t('tagOperationRequiresCompletedFiles') : ''} side='bottom'>
                             <KnowledgeTagSelect
                                 knowledgeId={id}
                                 fileIds={selectedFileObjs.map(f => Number(f.id))}
@@ -484,35 +366,22 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                 isEditable={canBatchEditTags}
                                 mode="batch"
                             >
-                                <Button
-                                    variant="outline"
-                                    disabled={!canBatchEditTags}
-                                    className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <TagIcon size={16} />
+                                <Button variant="outlined" disabled={!canBatchEditTags} className="flex items-center gap-1 disabled:pointer-events-auto sm:px-4" onClick={(e) => e.stopPropagation()} color="default">
+                                    <Outlined.Tag size={16} />
                                     <span className="hidden sm:inline">{t('tags')}</span>
                                 </Button>
                             </KnowledgeTagSelect>
-                            </Tip>
+                            </KnowledgeTooltip>
                         )}
                         {canDeleteKb && (
-                            <Button
-                                variant="outline"
-                                onClick={handleBatchDelete}
-                                className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
-                            >
-                                <Trash2 size={16} />
+                            <Button variant="outlined" onClick={handleBatchDelete} className="flex items-center gap-1 disabled:pointer-events-auto sm:px-4" color="default">
+                                <Outlined.Delete size={16} />
                                 <span className="hidden sm:inline">{t('delete')}</span>
                             </Button>
                         )}
                         {canEditKb && hasSelectedFailedFiles && (
-                                <Button
-                                    variant="outline"
-                                    onClick={handleBatchRetry}
-                                    className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
-                                >
-                                    <RotateCw size={16} />
+                                <Button variant="outlined" onClick={handleBatchRetry} className="flex items-center gap-1 disabled:pointer-events-auto sm:px-4" color="default">
+                                    <Outlined.Refresh size={16} />
                                     <span className="hidden sm:inline">{t('retry')}</span>
                                 </Button>
                         )}
@@ -527,12 +396,8 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                         setIsAllSelected(false);
                     }} />
                     {canEditKb && (
-                        <Button
-                            variant="outline"
-                            onClick={() => setMetadataOpen(true)}
-                            className="px-2 md:px-4 whitespace-nowrap h-9"
-                        >
-                            <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
+                        <Button variant="outlined" onClick={() => setMetadataOpen(true)} className="md:px-4 whitespace-nowrap" color="default">
+                            <Outlined.FileEditing size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
                             <span className="hidden md:inline">{t('metaData')}</span>
                         </Button>
                     )}
@@ -573,140 +438,9 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
                                 {t('status')}
                                 <div className="relative">
-                                    <DropdownMenu open={isFilterOpen} onOpenChange={handleOpenChange}>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button
-                                                variant="ghost"
-                                                className={`flex items-center gap-1 ${selectedFilters.length > 0 ? 'text-blue-500' : ''}`}
-                                            >
-                                                <Filter size={16} />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent
-                                            className="h-full p-0 shadow-lg rounded-md border"
-                                            style={{
-                                                backgroundColor: 'white',
-                                                opacity: 1,
-                                            }}
-                                            align="end"
-                                        >
-                                            <div className="px-2">
-                                                {[
-                                                    {
-                                                        value: 2,
-                                                        label: 'Completed',
-                                                        color: 'text-green-500',
-                                                        icon: (
-                                                            <div className="flex items-center gap-2 mt-2">
-                                                                <span className="size-[6px] rounded-full bg-green-500"></span>
-                                                                <span className="font-[500] text-[14px] text-green-500 leading-[100%]">
-                                                                    {t("completed")}
-                                                                </span>
-                                                            </div>
-                                                        )
-                                                    },
-                                                    {
-                                                        value: 1,
-                                                        label: 'Parsing',
-                                                        color: 'text-[#4D9BF0]',
-                                                        icon: (
-                                                            <div className="flex items-center gap-2 mt-2">
-                                                                <span className="size-[6px] rounded-full bg-[#4D9BF0]"></span>
-                                                                <span className="font-[500] text-[14px] text-[#4D9BF0] leading-[100%]">
-                                                                    {t("parsing")}
-                                                                </span>
-                                                            </div>
-                                                        )
-                                                    },
-                                                    {
-                                                        value: 3,
-                                                        label: 'Parse Failed',
-                                                        color: 'text-red-500',
-                                                        icon: (
-                                                            <div className="flex items-center gap-2 mt-2">
-                                                                <span className="size-[6px] rounded-full bg-red-500"></span>
-                                                                <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
-                                                                    {t("parseFailed")}
-                                                                </span>
-                                                            </div>
-                                                        )
-                                                    },
-                                                    {
-                                                        value: 6,
-                                                        label: 'Timeout',
-                                                        color: 'text-red-500',
-                                                        icon: (
-                                                            <div className="flex items-center gap-2 mt-2">
-                                                                <span className="size-[6px] rounded-full bg-red-500"></span>
-                                                                <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
-                                                                    {t("timeout")}
-                                                                </span>
-                                                            </div>
-                                                        )
-                                                    },
-                                                    {
-                                                        value: 7,
-                                                        label: 'Violation',
-                                                        color: 'text-red-500',
-                                                        icon: (
-                                                            <div className="flex items-center gap-2 mt-2">
-                                                                <span className="size-[6px] rounded-full bg-red-500"></span>
-                                                                <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
-                                                                    {t("violation")}
-                                                                </span>
-                                                            </div>
-                                                        )
-                                                    }
-                                                ].map(({ value, label, color, icon }) => (
-                                                    <div
-                                                        key={value}
-                                                        className="flex items-center gap-3 px-2 py-1.5 hover:bg-gray-100 rounded cursor-pointer"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setTempFilters(prev =>
-                                                                prev.includes(value)
-                                                                    ? prev.filter(v => v !== value)
-                                                                    : [...prev, value]
-                                                            );
-                                                        }}
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={tempFilters.includes(value)}
-                                                            onChange={() => { }}
-                                                            className="h-4 w-4 mt-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                                        />
-                                                        <div className="flex items-center gap-2">
-                                                            {icon}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <div className="border-t border-gray-200"></div>
-                                            <div className="flex justify-around gap-2 px-3 py-2">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        resetFilters()
-                                                    }}
-                                                    disabled={tempFilters.length === 0}
-                                                >
-                                                    {t("reset")}
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        applyFilters()
-                                                    }}
-                                                >
-                                                    {t("confirm")}
-                                                </Button>
-                                            </div>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                                    <FileStatusFilter open={isFilterOpen} onOpenChange={handleOpenChange}
+                                        selected={selectedFilters} draft={tempFilters} onDraftChange={setTempFilters}
+                                        onApply={applyFilters} onReset={resetFilters} />
                                 </div>
                             </TableHead>
                             {hasRowActions && (
@@ -738,7 +472,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                     />
                                 </TableCell>
                                 <TableCell className="min-w-[250px]">
-                                    <Tip content={el.display_file_name || el.file_name} align="start" >
+                                    <KnowledgeTooltip content={el.display_file_name || el.file_name} align="start" >
                                         <div className="flex items-center gap-2">
                                             <FileIcon
                                                 type={(el.display_file_name || el.file_name).split('.').pop().toLowerCase() || 'txt'}
@@ -746,18 +480,13 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                             />
                                             {truncateString(el.display_file_name || el.file_name, 35)}
                                         </div>
-                                    </Tip>
+                                    </KnowledgeTooltip>
                                 </TableCell>
                                 <TableCell>
                                     {el.strategy[0] ? (
-                                        <TooltipProvider delayDuration={100}>
-                                            <Tooltip>
-                                                <TooltipTrigger className="truncate max-w-[106px]">{el.strategy[1].replace(/\n/g, '\\n')}</TooltipTrigger>
-                                                <TooltipContent>
-                                                    <div className="max-w-96 text-left break-all whitespace-normal">{el.strategy[1].replace(/\n/g, '\\n')}</div>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
+                                        <KnowledgeTooltip content={<><div className="max-w-96 text-left break-all whitespace-normal">{el.strategy[1].replace(/\n/g, '\\n')}</div></>}>
+<button type="button">{el.strategy[1].replace(/\n/g, '\\n')}</button>
+</KnowledgeTooltip>
                                     ) : splitRuleDesc(el)}
                                 </TableCell>
                                 <TableCell className="min-w-[150px]">
@@ -777,31 +506,19 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                 {hasRowActions && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
                                         {canEditKb && el.status === 3 && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={(e) => {
+                                                <Button variant="text" size="medium" onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleRetry([el]); // Single retry passes complete object
-                                                    }}
-                                                    className="disabled:pointer-events-auto"
-                                                    title={t('retry')}
-                                                >
-                                                    <RotateCw size={16} />
+                                                    }} className="disabled:pointer-events-auto" title={t('retry')} color="default" iconOnly>
+                                                    <Outlined.Refresh size={16} />
                                                 </Button>
                                         )}
                                         {canDeleteKb && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="disabled:pointer-events-auto"
-                                                onClick={(e) => {
+                                            <Button variant="text" size="medium" className="disabled:pointer-events-auto" onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleDelete(el.id);
-                                                }}
-                                                title={t('delete')}
-                                            >
-                                                <Trash2 size={16} />
+                                                }} title={t('delete')} color="default" iconOnly>
+                                                <Outlined.Delete size={16} />
                                             </Button>
                                         )}
                                     </div>

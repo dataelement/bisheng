@@ -1,5 +1,6 @@
-import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Button } from '@bisheng/ui';
+
+import { Checkbox } from '@bisheng/ui';
 import {
   Dialog,
   DialogContent,
@@ -7,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
+import { Tabs } from '@bisheng/ui';
 import {
   getResourcePermissionContextApi,
   type ApplyPermissionModeDraftResult,
@@ -181,45 +182,26 @@ export function PermissionDialog({
                 onApplied={handleModeApplied}
               />
 
-              <Tabs
-                value={subjectType}
-                onValueChange={(value) =>
-                  setSubjectType(value as SubjectType)
-                }
-                className="flex min-h-0 flex-1 flex-col px-5 pb-5 pt-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <TabsList className="h-auto w-fit shrink-0 rounded-[6px] border border-[#ECECEC] bg-white p-[3px] shadow-none">
-                    {SUBJECT_TABS.map((tab) => (
-                      <TabsTrigger
-                        key={tab.value}
-                        value={tab.value}
-                        className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:border-transparent data-[state=active]:bg-primary/10 data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:shadow-none data-[state=inactive]:border-transparent"
-                      >
-                        {t(tab.labelKey)}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-
-                  {canAddPermission && (
-                    <Button
-                      type="button"
-                      className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]"
-                      onClick={() => {
+              <div className="flex min-h-0 flex-1 flex-col px-5 pb-5 pt-4">
+                <Tabs
+                  size="small"
+                  activeKey={subjectType}
+                  onChange={(value) => setSubjectType(value as SubjectType)}
+                  items={SUBJECT_TABS.map((tab) => ({
+                    key: tab.value,
+                    label: t(tab.labelKey),
+                  }))}
+                  extra={canAddPermission && (
+                    <Button type="button" className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]" onClick={() => {
                         setGrantSubjectType(subjectType)
                         setGrantIncludeChildren(false)
                         setGrantDialogOpen(true)
-                      }}
-                    >
+                      }}>
                       {t("dialog.tabGrant")}
                     </Button>
                   )}
-                </div>
-
-                <TabsContent
-                  value={subjectType}
-                  className="mt-3 min-h-0 flex-1 overflow-hidden p-0"
-                >
+                />
+                <div className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
                   <PermissionListTab
                     resourceType={resourceType}
                     resourceId={resourceId}
@@ -229,8 +211,8 @@ export function PermissionDialog({
                     onRosterChange={setAssignees}
                     onMutationSuccess={handleGrantSuccess}
                   />
-                </TabsContent>
-              </Tabs>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -275,7 +257,7 @@ export function PermissionDialog({
 
                 {grantSubjectType === "department" && (
                   <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[14px] leading-[22px] text-[#212121]">
-                    <Checkbox
+                    <Checkbox className="peer"
                       checked={grantIncludeChildren}
                       onCheckedChange={(checked) =>
                         setGrantIncludeChildren(checked === true)

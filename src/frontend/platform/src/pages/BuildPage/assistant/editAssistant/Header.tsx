@@ -1,13 +1,16 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
-import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
+import { hasResourceAction,useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
+
+import { Dialog,DialogTrigger } from "@/components/bs-ui/dialog";
 import { useAssistantStore } from "@/store/assistantStore";
 import { OnlineState } from "@/types/flow";
-import { ChevronLeft, Shield, SquarePen } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Tabs } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { Shield } from "lucide-react";
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
@@ -49,13 +52,13 @@ export default function Header({ loca, onSave, onLine, onTabChange, canEdit: can
     const [tabType, setTabType] = useState('edit')
     return <div className="flex justify-between bg-background-login items-center border-b px-4">
         <div className="flex items-center gap-2 py-4">
-            <Button variant="outline" size="icon" onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/build/apps')}><ChevronLeft className="h-4 w-4" /></Button>
+            <Button variant="outlined" size="medium" onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/build/apps')} color="default" iconOnly><Outlined.Left className="h-4 w-4" /></Button>
             <AppAvator id={assistantState.name} url={assistantState.viewLogo || assistantState.logo} flowType={5} className="ml-4"></AppAvator>
             <span id="app-title" className="bisheng-title">{assistantState.name}</span>
             {/* edit dialog */}
             <Dialog open={editShow} onOpenChange={setEditShow}>
                 <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" disabled={!canEdit}><SquarePen className="w-4 h-4" /></Button>
+                    <Button variant="text" size="medium" disabled={!canEdit} color="default" iconOnly><Outlined.Edit className="w-4 h-4" /></Button>
                 </DialogTrigger>
                 {
                     editShow && <EditAssistantDialog
@@ -69,38 +72,21 @@ export default function Header({ loca, onSave, onLine, onTabChange, canEdit: can
                 }
             </Dialog>
         </div>
-        <div className="flex gap-4 items-center">
-            <div
-                className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`}
-                onClick={() => { setTabType('edit'); onTabChange('edit') }}
-            >{t('api.assistantOrchestration')}</div>
-            {canEdit && <div
-                className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`}
-                onClick={() => {
-                    setTabType('api');
-                    onTabChange('api')
-                }}
-            >{t('api.externalPublishing')}</div>}
-        </div>
+        {canEdit ? <Tabs activeKey={tabType} onChange={value => { setTabType(value); onTabChange(value) }}
+            items={[
+                { key: 'edit', label: t('api.assistantOrchestration') },
+                ...(canEdit ? [{ key: 'api', label: t('api.externalPublishing') }] : []),
+            ]} /> : <span>{t('api.assistantOrchestration')}</span>}
         <div className="flex gap-4 items-center">
             {canManage && assistantState?.id && (
-                <Button
-                    type="button"
-                    variant="outline"
-                    className="flex items-center gap-2 px-4"
-                    onClick={() => setPermDialogOpen(true)}
-                >
+                <Button type="button" variant="outlined" className="flex items-center gap-2" onClick={() => setPermDialogOpen(true)} color="default">
                     <Shield className="h-4 w-4 shrink-0" />
                     {t('build.authorizationManagement')}
                 </Button>
             )}
-            <Button variant="outline" className="px-10" type="button" disabled={!canEdit} onClick={onSave}>{t('build.save')}</Button>
+            <Button variant="outlined" type="button" disabled={!canEdit} onClick={onSave} color="default">{t('build.save')}</Button>
             {(assistantState.status === OnlineState.OnLine ? canUnpublish : canPublish) ? (
-                <Button
-                    type="submit"
-                    className="px-10"
-                    onClick={() => onLine(assistantState.status === OnlineState.OffLine)}
-                >
+                <Button type="submit" onClick={() => onLine(assistantState.status === OnlineState.OffLine)}>
                     {assistantState.status === OnlineState.OnLine ? t('build.offline') : t('build.online')}
                 </Button>
             ) : null}

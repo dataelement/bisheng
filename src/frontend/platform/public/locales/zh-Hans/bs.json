@@ -748,7 +748,8 @@
     "varOptionRequired": "请输入选项内容",
     "optionRepeated": "选项重复",
     "incorrectIdFormatMessage": "ID格式有误（包含字符和数字组成的5位字符）",
-    "idAlreadyExistsMessage": "该ID已存在"
+    "idAlreadyExistsMessage": "该ID已存在",
+    "publishedVersionCannotSave": "上线中不可编辑保存"
   },
   "lib": {
     "knowledgeBaseId": "知识库ID",
@@ -773,6 +774,7 @@
     "embeddingModelSelection": "知识库embedding模型选择"
   },
   "evaluation": {
+    "editPrompt": "编辑提示词",
     "id": "任务ID",
     "filename": "测试文件名称",
     "skillAssistant": "应用",
@@ -1104,7 +1106,9 @@
       "autoReplyNotEmpty": "自动回复内容不可为空",
       "workbenchSelectAtLeastOneWordType": "请至少选择一个敏感词表",
       "workbenchAutoReplyNotEmpty": "自动回复内容不能为空",
-      "workbenchAutoReplyMaxLength": "自动回复内容不能超过500字"
+      "workbenchAutoReplyMaxLength": "自动回复内容不能超过500字",
+      "customWordsNotEmpty": "自定义词表不能为空",
+      "sensitivePolicyLoading": "敏感词配置加载中，请稍后再试"
     },
     "saveSuccess": "保存成功",
     "contentSecurityDesc": "通过敏感词表或 API 对会话内容进行安全审查",
@@ -1155,7 +1159,17 @@
     "unsavedChangesLeave": "您有未保存的更改,确定要离开吗?",
     "leaveAndSave": "离开并保存",
     "leaveWithoutSave": "不保存,直接退出",
-    "selectModel": "选择一个模型"
+    "selectModel": "选择一个模型",
+    "contentSecurityReview": "内容安全审查",
+    "tagLibraryTagsPlaceholder": "每行一个标签",
+    "deleteTagLibraryDescWithCount": "删除后将影响 {{count}} 个知识空间，这些空间的自动生成标签会被关闭。是否继续？",
+    "deleteTagLibraryDescEmpty": "当前没有知识空间绑定此标签库。是否继续删除？",
+    "deleteTagLibraryTitle": "删除标签库",
+    "confirmDelete": "确认删除",
+    "autoTagGenerationTitle": "自动生成标签",
+    "autoTagGenerationDesc": "开启后，用户在创建/编辑知识空间时可选择标签库，文件解析成功后自动从标签库挑选标签写入。",
+    "searchTagLibrary": "搜索标签库名称",
+    "tagLibraryEmpty": "暂无标签库"
   },
   "bench": {
     "daily": "日常",
@@ -1191,7 +1205,35 @@
     "fetchKbFailed": "获取知识库列表失败",
     "addMoreModels": "添加更多模型",
     "home": "首页",
-    "appCenter": "应用"
+    "appCenter": "应用",
+    "departmentKnowledgeSpaceSaveSuccess": "保存成功",
+    "departmentKnowledgeSpaceConfigured": "已配置",
+    "departmentKnowledgeSpaceHidden": "已隐藏",
+    "departmentKnowledgeSpaceDefaultName": "默认空间名",
+    "departmentKnowledgeSpaceManager": "部门知识空间管理",
+    "departmentKnowledgeSpaceManagerDesc2": "勾选部门创建知识空间，取消勾选已配置部门可将其从列表隐藏（不会删除空间与数据）。",
+    "departmentKnowledgeSpaceClearAll": "取消全选",
+    "departmentKnowledgeSpaceSelectAll": "全选可创建部门",
+    "departmentKnowledgeSpaceChangePreview": "变更预览",
+    "departmentKnowledgeSpaceSelectedDesc": "默认生成“XX部门的知识空间”，超级管理员为 owner，部门管理员默认为 manager。",
+    "departmentKnowledgeSpaceNoChanges": "暂无变更",
+    "departmentKnowledgeSpacePendingCreate": "待创建",
+    "departmentKnowledgeSpacePendingRestore": "待恢复显示",
+    "departmentKnowledgeSpacePendingHide": "待隐藏",
+    "departmentKnowledgeSpaceSave": "保存",
+    "departmentKnowledgeSpace": "部门知识空间",
+    "departmentKnowledgeSpaceDesc": "统一管理部门知识空间创建，并查看已绑定部门的知识空间。",
+    "departmentKnowledgeSpaceCreatedList": "已创建知识空间",
+    "departmentKnowledgeSpaceCreatedListDesc": "已绑定部门的知识空间会统一展示在这里。",
+    "departmentKnowledgeSpaceCreatedEmpty": "暂无已创建的部门知识空间",
+    "departmentKnowledgeSpaceDepartmentLabel": "所属部门",
+    "knowledgeSpaceContentSecurityDesc": "对知识空间文件解析结果进行敏感词审查，命中后阻止写入向量库。",
+    "configureOrgKbs": "配置组织知识库",
+    "knowledgeBaseCol": "知识库",
+    "noOrgKbConfigured": "暂未配置组织知识库",
+    "pickFromRight": "请在右侧全部知识库中选择",
+    "allKbs": "全部知识库",
+    "searchKbName": "搜索知识库名称"
   },
   "tools": {
     "addTool": "添加工具",
@@ -1283,6 +1325,7 @@
     "notEmpty": "新密码不能为空"
   },
   "log": {
+    "thinkingContent": "思考内容",
     "systemIdEnum": {
       "chat": "会话",
       "build": "构建",
@@ -2212,7 +2255,21 @@
     "timeline_actionAssignApprovers": "指定审批人",
     "timeline_actionAssignFlow": "指定审批流",
     "timeline_actionRetryExecuteFailed": "重试执行",
-    "timeline_actionMarkManuallyCompleted": "标记已完成"
+    "timeline_actionMarkManuallyCompleted": "标记已完成",
+    "discardChangesTitle": "放弃更改",
+    "discardChangesDesc": "您有未保存的节点更改，确定要放弃吗？",
+    "cancelEditBtn": "取消编辑",
+    "saveChangesBtn": "保存更改",
+    "editNodesBtn": "编辑节点",
+    "nodeEditModeHint": "编辑中 — 增删改节点后点击「保存更改」才会生效，并自动创建新版本快照",
+    "addScenarioTitle": "新增审批场景",
+    "scenarioNameLabel": "场景名称",
+    "allPresetsAdded": "（所有预置场景已添加）",
+    "confirmAdd": "确认添加",
+    "saveSuccess": "保存成功",
+    "switchFlowDiscardDesc": "切换流程将丢失未保存的节点更改，确定继续吗？",
+    "moveUp": "上移",
+    "moveDown": "下移"
   },
   "skillManage": {
     "title": "技能管理",
@@ -2328,7 +2385,8 @@
     "noDownloadUrl": "暂无可下载文件地址",
     "tempKb": "临时知识库",
     "noPermission": "暂无权限查看该来源",
-    "sourceExpired": "来源已失效"
+    "sourceExpired": "来源已失效",
+    "noSummary": "暂无内容摘要"
   },
   "openApiManagement": {
     "list": {
@@ -2999,7 +3057,8 @@
     "individualQuota": "单独设置",
     "useDepartmentQuota": "继承部门默认额度",
     "inlineQuotaHelp": "修改部门额度时，默认成员同步更新；单独设置的成员保持个人额度。点击右上角保存生效。",
-    "monthlyQuotaWan": "每月额度（万 Token）"
+    "monthlyQuotaWan": "每月额度（万 Token）",
+    "usageDimension": "统计维度"
   },
   "request": {
     "session_expired": "登录过期",
@@ -3034,6 +3093,55 @@
     "searchMember": "搜索用户名称或 ID"
   },
   "tenant": {
-    "searchUser": "搜索用户名称或 ID"
+    "searchUser": "搜索用户名称或 ID",
+    "createDeprecatedDesc": "请通过部门挂载流程创建子租户；Root Tenant 由系统自动初始化。",
+    "inheritedFromRoot": "当前使用根租户配置",
+    "currentOverride": "当前租户已独立配置",
+    "noOverrideYet": "当前尚未保存独立配置",
+    "selectionDeprecatedTitle": "租户选择已下线",
+    "selectionDeprecatedDesc": "v2.5.1 起，租户不再由用户手动切换，系统会按主部门自动派生当前租户。",
+    "selectionDeprecatedRedirect": "如果你已登录，页面会自动跳转到管理端。",
+    "continueToAdmin": "继续进入管理端"
+  },
+  "sharedUi": {
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
+    "required": "不能为空",
+    "nonNegativeInteger": "请输入非负整数",
+    "minimum": "不能小于{{min}}",
+    "maximum": "不能大于{{max}}",
+    "addItem": "添加一项",
+    "removeItem": "删除此项",
+    "expand": "展开"
+  },
+  "tenant.mountedBadge": "子租户挂载点",
+  "tenant.mountedTag": "子租户",
+  "tenant.markAsTenant": "标记为子租户",
+  "tenant.unmountTitle": "取消挂载子租户",
+  "tenant.unmountConfirm": "解除挂载后，该子租户名下的所有资源（知识库、应用、会话等）将自动迁移到集团总部（Root），子租户本身归档保留供审计。子租户成员将作为总部成员继续使用，业务不中断。是否继续？",
+  "tenant.unmountOk": "确认取消挂载",
+  "tenant.unmountSuccess": "已取消挂载",
+  "tenant.unmount": "取消挂载",
+  "publicPages": {
+    "crawlFeedbackDefault": "请将您的网站爬取需求发送至邮箱：XXXX@XX",
+    "feedbackRequired": "请输入需求反馈提示文案",
+    "feedbackTooLong": "提示文案不可超过 1000 个字符",
+    "recommendedApps": "推荐应用",
+    "selectedApps": "已选应用",
+    "noConfiguredApps": "暂未配置任何应用",
+    "pickAppsFromRight": "请在右侧全部应用中选择应用",
+    "allApps": "全部应用",
+    "searchApps": "搜索应用名称或描述",
+    "noApps": "暂无应用",
+    "passwordExpired": "您的密码已过期，请及时修改",
+    "forbidden": "您无权访问该页面",
+    "loggingOut": "正在退出...",
+    "switchAccount": "切换账号",
+    "collapse": "收起",
+    "expand": "展开",
+    "close": "关闭",
+    "maskedFile": "是真的马赛克.msk",
+    "notFoundTitle": "页面不存在",
+    "notFoundDescription": "您访问的页面不存在或已被移除。"
   }
 }

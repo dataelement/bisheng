@@ -1,20 +1,21 @@
 // @ts-strict-ignore
-"use client"
+import { Button, Input, notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 
-import type React from "react"
+import type React from "react";
 
-import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/bs-ui/dropdownMenu"
-import { Input } from "@/components/bs-ui/input"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { locationContext } from "@/contexts/locationContext"
-import { cn } from "@/utils"
-import { MoreHorizontal } from "lucide-react"
-import { useContext, useEffect, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { useLazyDashboardPermission } from "../../hook"
-import { Dashboard } from "../../types/dataConfig"
+
+import { DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger } from "@/components/bs-ui/dropdownMenu";
+
+
+import { locationContext } from "@/contexts/locationContext";
+import { cn } from "@/utils";
+import { Tag } from "@bisheng/ui";
+
+import { useContext,useEffect,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useLazyDashboardPermission } from "../../hook";
+import { Dashboard } from "../../types/dataConfig";
 
 
 interface DashboardListItemProps {
@@ -47,7 +48,7 @@ export function DashboardListItem({
     const [isEditing, setIsEditing] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
     const [title, setTitle] = useState('')
-    const { toast } = useToast()
+
     const { appConfig } = useContext(locationContext)
 
     // Visibility is decided by the server list; edit/delete/manage_permission
@@ -89,10 +90,7 @@ export function DashboardListItem({
 
         if (trimmedTitle.length > 200) {
             setTitle(dashboard.title)
-            toast({
-                description: t('charLimit200'),
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String(t('charLimit200') ?? '') })
             return
         }
 
@@ -122,16 +120,7 @@ export function DashboardListItem({
         >
             <div className="flex-1 min-w-0 mr-2">
                 {isEditing ? (
-                    <Input
-                        ref={inputRef}
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        autoFocus={isEditing}
-                        onBlur={handleBlur}
-                        onKeyDown={handleKeyDown}
-                        className="h-5 px-2 border-primary"
-                        onClick={(e) => e.stopPropagation()}
-                    />
+                    <Input ref={inputRef} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus={isEditing} onBlur={handleBlur} onKeyDown={handleKeyDown} onClick={(e) => e.stopPropagation()} className={"h-5 px-2 border-primary"} />
                 ) : (
                     <div className={cn("truncate text-sm", selected && "text-primary")} title={dashboard.title} onDoubleClick={handleDoubleClick}>
                         {dashboard.title}
@@ -139,17 +128,14 @@ export function DashboardListItem({
                 )}
             </div>
             {permissionBadge}
-            {dashboard.is_default && <Badge variant="outline" className="border border-primary rounded-sm py-0 px-1 text-primary scale-75">{t('default')}</Badge>}
+            {dashboard.is_default && <Tag size="small" color="brand" className="shrink-0 whitespace-nowrap">{t('default')}</Tag>}
 
             <DropdownMenu onOpenChange={(open) => { if (open) ensureLoaded() }}>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="dashboard.actions"
-                        className={`h-5 w-0 ${isEditing ? "" : "group-hover:w-5"}`}
-                    >
-                        <MoreHorizontal className="h-4 w-4" />
+                    <Button variant="text" size="medium" aria-label="dashboard.actions" className={cn("h-5 w-5 shrink-0", isEditing
+                            ? "invisible"
+                            : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100")} color="default" iconOnly>
+                        <Outlined.More className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

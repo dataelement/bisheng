@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { notification } from '@bisheng/ui';
 // components/AudioPlayButton.tsx
 import { textToSpeech } from '@/controllers/API/workbench';
-import { Loader, Volume2 } from 'lucide-react';
+import { Outlined } from "bisheng-icons";
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from '../bs-ui/toast/use-toast';
+
 import { useAudioPlayerStore } from './audioPlayerStore';
 
 interface AudioPlayButtonProps {
@@ -98,11 +99,7 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
       });
     } catch (err) {
       console.error('播放请求异常详情:', err);
-      toast({
-        title: t('prompt'),
-        variant: 'error',
-        description: t('playbackUnavailable')
-      });
+      notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(t('playbackUnavailable') ?? '') });
       setLoading(false);
       setCurrentPlayingId(null);
     }
@@ -116,9 +113,9 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isThisLoading ? (
-          <Loader size={20} strokeWidth={1.8} color="#9ca3af" className={'mt-0.5 mr-1 animate-spin'} />
+          <Outlined.Loading size={20} color="#9ca3af" className={'mt-0.5 mr-1 animate-spin'} />
         ) : (
-          <Volume2 size={20} strokeWidth={1.8} color="#9ca3af" className={`cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary`} />
+          <Outlined.VolumeNotice size={20} color="#9ca3af" className={`cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary`} />
 
         )}
       </button>

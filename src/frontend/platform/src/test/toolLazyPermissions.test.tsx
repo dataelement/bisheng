@@ -3,7 +3,7 @@ import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
 import { getToolsApi } from "@/controllers/API/tools"
 import TabTools from "@/pages/BuildPage/tools"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react"
+import type { ReactNode } from "react"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -50,26 +50,13 @@ vi.mock("@/components/bs-ui/accordion", () => ({
   AccordionTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
-vi.mock("@/components/bs-ui/button", () => ({
-  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" {...props}>{children}</button>
-  ),
-}))
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-}))
 
-vi.mock("@/components/bs-ui/badge", () => ({
-  Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
-}))
 
-vi.mock("@/components/bs-ui/tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-}))
+
+
+
+
 
 vi.mock("@/components/bs-comp/permission/PermissionDialog", () => ({
   PermissionDialog: () => <div data-testid="permission-dialog" />,
@@ -144,7 +131,7 @@ describe("tool list lazy permissions", () => {
     await screen.findByText("API Tool")
 
     expect(getMyResourcePermissionsApi).not.toHaveBeenCalled()
-    expect(screen.queryByTestId("setting-icon")).toBeNull()
+    expect(screen.queryByLabelText("edit")).toBeNull()
 
     const row = screen.getByText("API Tool").closest(".group")
     expect(row).not.toBeNull()
@@ -152,7 +139,7 @@ describe("tool list lazy permissions", () => {
 
     await waitFor(() => {
       expect(getMyResourcePermissionsApi).toHaveBeenCalledWith("tool", "10")
-      expect(screen.getByTestId("setting-icon")).toBeInTheDocument()
+      expect(screen.getByLabelText("edit")).toBeInTheDocument()
     })
   })
 })

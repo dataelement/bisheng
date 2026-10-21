@@ -1,9 +1,10 @@
+import { Input } from '@bisheng/ui';
 import { useEffect, useRef } from "react";
 import { DictComponentType } from "../../types/components";
 
 import DictAreaModal from "../../modals/dictAreaModal";
 import { classNames } from "../../util/utils";
-import { Input } from "../bs-ui/input";
+
 
 export default function DictComponent({
     value,
@@ -33,17 +34,9 @@ export default function DictComponent({
                             onChange(obj);
                         }}
                     >
-                        <Input
-                            type="text"
-                            value={value}
-                            readOnly
-                            className={
-                                editNode
+                        <Input type="text" value={value} readOnly placeholder="Click to edit your dictionary..." className={editNode
                                     ? "input-edit-node input-disable pointer-events-none cursor-pointer"
-                                    : "input-disable pointer-events-none cursor-pointer text-gray-500"
-                            }
-                            placeholder="Click to edit your dictionary..."
-                        />
+                                    : "input-disable pointer-events-none cursor-pointer text-gray-500"} />
                     </DictAreaModal>
                 </div>
             }

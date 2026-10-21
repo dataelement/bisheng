@@ -1,6 +1,6 @@
 import { useRecoilState } from 'recoil';
 import HoverCardSettings from '~/components/Nav/SettingsTabs/HoverCardSettings';
-import { Switch } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -86,7 +86,7 @@ function SwitchItem({
         id={id}
         checked={checked}
         onCheckedChange={onCheckedChange}
-        className="ml-4"
+        className="peer ml-4"
         data-testid={id}
         disabled={disabled}
       />

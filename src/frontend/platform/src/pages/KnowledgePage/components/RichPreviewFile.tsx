@@ -1,6 +1,7 @@
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { ExternalLink } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Outlined } from "bisheng-icons";
+
+
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MarkdownView } from "./PreviewParagraph";
 import TxtFileViewer from "./TxtFileViewer";
@@ -137,7 +138,7 @@ function TextFromUrl({ fileUrl, section }: { fileUrl: string; section?: string }
   }, [fileUrl]);
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center text-gray-400"><LoadingIcon /></div>;
+    return <div className="flex h-full items-center justify-center text-gray-400"><Outlined.Loading  className="size-4 animate-spin"/></div>;
   }
   if (error) {
     return <div className="flex h-full items-center justify-center text-sm text-red-500">{error}</div>;
@@ -246,7 +247,7 @@ export default function RichPreviewFile({ file, previewData }: { file: any; prev
         </div>
         {sourceUrl ? (
           <a className="flex items-center gap-1 text-sm text-primary" href={sourceUrl} target="_blank" rel="noreferrer">
-            <ExternalLink className="size-4" />
+            <Outlined.ViewOnNewTab className="size-4" />
             {t("mediaPreview.openSourcePage")}
           </a>
         ) : null}

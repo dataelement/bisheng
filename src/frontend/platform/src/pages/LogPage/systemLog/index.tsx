@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
+import { Button } from '@bisheng/ui';
+
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
@@ -34,6 +35,10 @@ const useModules = () => {
 // the literal i18n key (`log.systemIdEnum.null`). Backend `_UI_VISIBLE_V2_ACTIONS`
 // already restricts which v2 rows reach the list — these helpers only need to
 // handle that whitelist plus a defensive fallback for unexpected rows.
+
+// Backend audit notes use this literal marker; it is stored data, not UI copy.
+// eslint-disable-next-line no-restricted-syntax
+const editMarker = '编辑后';
 
 // Structured action (`tenant.mount`, `approval.exception.assign_approver`) →
 // camelCase i18n leaf key (`tenantMount`, `approvalExceptionAssignApprover`).
@@ -135,7 +140,7 @@ export default function SystemLog() {
                         </SelectTrigger>
                         <SelectContent className="max-w-[200px] break-all">
                             <SelectGroup>
-                                {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
+                                {groups.filter(g => g.id != null && g.id !== '').map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
                             </SelectGroup>
                         </SelectContent>
                     </Select>
@@ -153,7 +158,7 @@ export default function SystemLog() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                {modules.map(m => <SelectItem value={m.value} key={m.value}>{t(m.name)}</SelectItem>)}
+                                {modules.filter(m => m.value != null && m.value !== '').map(m => <SelectItem value={m.value} key={m.value}>{t(m.name)}</SelectItem>)}
                             </SelectGroup>
                         </SelectContent>
                     </Select>
@@ -165,16 +170,16 @@ export default function SystemLog() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                {actions.map(a => <SelectItem value={a.value} key={a.value}>{t(a.name)}</SelectItem>)}
+                                {actions.filter(a => a.value != null && a.value !== '').map(a => <SelectItem value={a.value} key={a.value}>{t(a.name)}</SelectItem>)}
                             </SelectGroup>
                         </SelectContent>
                     </Select>
                 </div>
                 <div>
-                    <Button className="mr-3 px-6" onClick={handleSearch}>
+                    <Button className="mr-3" onClick={handleSearch}>
                         {t('log.searchButton')}
                     </Button>
-                    <Button variant="outline" className="px-6" onClick={handleReset}>
+                    <Button variant="outlined" onClick={handleReset} color="default">
                         {t('log.resetButton')}
                     </Button>
                 </div>
@@ -205,7 +210,7 @@ export default function SystemLog() {
                             <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderObjectName(log, t)}</div></TableCell>
                             <TableCell>{log.ip_address}</TableCell>
                             <TableCell className="max-w-[250px]">
-                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || t('log.objectTypeEnum.none')}</div>
+                                <div className="whitespace-pre-line break-all">{log.note?.replace(editMarker, `\n${editMarker}`) || t('log.objectTypeEnum.none')}</div>
                             </TableCell>
                         </TableRow>
                     ))}

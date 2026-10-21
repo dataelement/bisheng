@@ -1,18 +1,19 @@
 // @ts-strict-ignore
+import { Button, toast } from '@bisheng/ui';
 import CardComponent from "@/components/bs-comp/cardComponent";
 import ProgressItem from "@/components/bs-comp/knowledgeUploadComponent/ProgressItem";
-import { Button } from "@/components/bs-ui/button";
+
+
 import { generateUUID } from "@/components/bs-ui/utils";
 import { readFileByLibDatabase } from "@/controllers/API";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";
-import { createWorkflowApi, getWorkflowNodeTemplate } from "@/controllers/API/workflow";
+import { createWorkflowApi,getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { initNode } from "@/util/flowUtils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate,useParams } from "react-router-dom";
 import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
@@ -29,7 +30,7 @@ function resolveParseFailureReason(remark: unknown, t: TranslateFn) {
 export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const { t } = useTranslation('knowledge');
     const { t: flowT } = useTranslation('flow');
-    const { message } = useToast();
+
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
     const { id: kid } = useParams()
@@ -117,7 +118,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
                             const reason = resolveParseFailureReason(resItem.remark, t);
                             if (!notifiedFailedFileIdsRef.current.has(file.id)) {
                                 notifiedFailedFileIdsRef.current.add(file.id);
-                                message({ variant: 'error', description: reason });
+                                toast.show({ type: 'error', message: String(reason ?? '') });
                             }
                             updatedFiles[index] = { ...file, progress: 'end', error: true, reason };
                         }
@@ -155,7 +156,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [kid, kId, t, data, message]); // Add t to dependencies
+    }, [kid, kId, t, data]); // Add t to dependencies
 
     useEffect(() => {
         return () => {

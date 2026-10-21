@@ -1,29 +1,25 @@
 // @ts-strict-ignore
-"use client"
+import { Button } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 
-import { useEffect, useState } from "react"
-import { Button } from "@/components/bs-ui/button"
-import { Settings, X, Check } from "lucide-react"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
-import { Label } from "@/components/bs-ui/label"
-import { Checkbox } from "@/components/bs-ui/checkBox"
-import { useTranslation } from "react-i18next"
+
+import { useEffect,useState } from "react";
+import { MetricFormatDialog } from "./MetricFormatDialog";
+
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/bs-ui/dropdownMenu"
+DropdownMenu,
+DropdownMenuContent,
+DropdownMenuItem,
+DropdownMenuPortal,
+DropdownMenuSeparator,
+DropdownMenuSub,
+DropdownMenuSubContent,
+DropdownMenuSubTrigger,
+DropdownMenuTrigger,
+} from "@/components/bs-ui/dropdownMenu";
+import { useTranslation } from "react-i18next";
 
-interface DimensionItem {
+export interface DimensionItem {
   id: string
   name: string
   displayName: string
@@ -41,6 +37,8 @@ interface DimensionItem {
 }
 
 interface DimensionBlockProps {
+  isStack?: string;
+  isMetricCard?: boolean;
   isDimension: boolean
   dimensions: DimensionItem[]
   maxDimensions?: number
@@ -56,9 +54,9 @@ interface DimensionBlockProps {
   invalidIds?: Set<string>
 }
 
-type MetricFormat = {
+export type MetricFormat = {
   type: 'number' | 'percent' | 'duration' | 'storage'
-  decimalPlaces: number
+  decimalPlaces?: number
   unit?: string
   suffix?: string
   thousandSeparator: boolean
@@ -132,7 +130,7 @@ export function DimensionBlock({
   }, [editingMetric]);
   const getFieldTypeStyle = (dimension: DimensionItem) => {
   const isSelected = selectedDimensionId === dimension.id
-  
+
   //  (Blue)
   const dimensionStyle = isSelected
     ? 'bg-blue-100 border-blue-300 dark:bg-blue-900/40 dark:border-blue-700'
@@ -144,8 +142,8 @@ export function DimensionBlock({
     : 'bg-[#E7F8FA] border-[#88E1EB] dark:bg-cyan-950/30 dark:border-cyan-800'
 
   // error
-  const invalidStyle = invalidIds?.has(dimension.id) 
-    ? 'border-red-500 bg-red-50 dark:border-red-700 dark:bg-red-900/30' 
+  const invalidStyle = invalidIds?.has(dimension.id)
+    ? 'border-red-500 bg-red-50 dark:border-red-700 dark:bg-red-900/30'
     : ''
 
   const baseColor = dimension.fieldType === 'dimension' ? dimensionStyle : measureStyle
@@ -241,15 +239,8 @@ export function DimensionBlock({
 
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 p-0 hover:bg-transparent data-[state=open]:opacity-100"
-                        onMouseEnter={() => setHoveredIcon(dimension.id)}
-                        onMouseLeave={() => setHoveredIcon(null)}
-                        onClick={(e) => e.stopPropagation()} // 防止触发父级选中
-                      >
-                        <img src="/assets/dashboard/setting.svg" alt="设置" className="h-3 w-3 object-contain" />
+                      <Button variant="text" size="medium" className="h-6 w-6 p-0 hover:bg-transparent data-[state=open]:opacity-100" aria-label={t("settings")} onMouseEnter={() => setHoveredIcon(dimension.id)} onMouseLeave={() => setHoveredIcon(null)} onClick={(e) => e.stopPropagation()} color="default" iconOnly>
+                        <Outlined.Setting size={14} />
                       </Button>
                     </DropdownMenuTrigger>
 
@@ -277,7 +268,7 @@ export function DimensionBlock({
                                       className="justify-between"
                                     >
                                       {option.label}
-                                      {dimension.sort === option.value && <Check className="h-4 w-4" />}
+                                      {dimension.sort === option.value && <Outlined.Check className="h-4 w-4" />}
                                     </DropdownMenuItem>
                                   ))}
                                 </DropdownMenuSubContent>
@@ -313,7 +304,7 @@ export function DimensionBlock({
                                       className="justify-between"
                                     >
                                       {option.label}
-                                      {dimension.aggregation === option.value && <Check className="h-4 w-4" />}
+                                      {dimension.aggregation === option.value && <Outlined.Check className="h-4 w-4" />}
                                     </DropdownMenuItem>
                                   ))}
                                 </DropdownMenuSubContent>
@@ -336,7 +327,7 @@ export function DimensionBlock({
                                       className="justify-between"
                                     >
                                       {option.label}
-                                      {dimension.sort === option.value && <Check className="h-4 w-4" />}
+                                      {dimension.sort === option.value && <Outlined.Check className="h-4 w-4" />}
                                     </DropdownMenuItem>
                                   ))}
                                 </DropdownMenuSubContent>
@@ -368,17 +359,11 @@ export function DimensionBlock({
                   </DropdownMenu>
 
                   {/* 删除按钮 */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 p-0 hover:bg-red-200"
-                    onClick={(e) => {
+                  <Button variant="text" size="medium" className="h-6 w-6 p-0 hover:bg-red-200" onClick={(e) => {
                       e.stopPropagation(); // 防止拖拽或选中
                       onDelete(dimension.id);
-                    }}
-                    title={t('dimensionBlock.button.deleteField')}
-                  >
-                    <X className="h-3 w-3" />
+                    }} title={t('dimensionBlock.button.deleteField')} color="default" iconOnly>
+                    <Outlined.Close className="h-3 w-3" />
                   </Button>
                 </div>
               </div>
@@ -402,245 +387,7 @@ export function DimensionBlock({
       )}
 
       {editingMetric && localFormat && (
-        <Dialog
-          open={formatDialogOpen}
-          onOpenChange={(open) => {
-            setFormatDialogOpen(open)
-            if (!open) {
-              setEditingMetric(null)
-              setLocalFormat(null)
-            }
-          }}
-        >
-          <DialogContent className="sm:max-w-[520px]">
-            <DialogHeader>
-              <DialogTitle>{t('dimensionBlock.dialog.formatTitle')}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              <div>
-                <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.formatType')}</div>
-                <RadioGroup
-                  value={localFormat.type}
-                  onValueChange={(value) => {
-                    const newType = value as any;
-                    let newUnit = localFormat.unit;
-                    let newThousandSeparator = localFormat.thousandSeparator;
-                    if (newType === 'storage') {
-                      newUnit = 'B';
-                    } else if (newType === 'duration') {
-                      newUnit = 'ms';
-                    } else if (newType === 'percent') {
-                      newUnit = undefined;
-                      newThousandSeparator = false;
-                    } else {
-                      newUnit = localFormat.unit || '';
-                    }
-
-                    // 切换类型时，数值一律 0，小数位其他类型一律 2，互不影响
-                    const newDecimalPlaces = newType === 'number' ? 0 : 2;
-
-                    setLocalFormat({
-                      ...localFormat,
-                      type: newType,
-                      unit: newUnit,
-                      thousandSeparator: newThousandSeparator,
-                      decimalPlaces: newDecimalPlaces
-                    })
-                  }}
-                  className="flex gap-6"
-                >
-                  {[
-                    { label: t('dimensionBlock.dialog.formatTypes.number'), value: 'number' },
-                    { label: t('dimensionBlock.dialog.formatTypes.percent'), value: 'percent' },
-                    { label: t('dimensionBlock.dialog.formatTypes.duration'), value: 'duration' },
-                    { label: t('dimensionBlock.dialog.formatTypes.storage'), value: 'storage' }
-                  ].map(item => (
-                    <div key={item.value} className="flex items-center space-x-2">
-                      <RadioGroupItem value={item.value} id={`format-${item.value}`} />
-                      <Label htmlFor={`format-${item.value}`} className="text-sm cursor-pointer">
-                        {item.label}
-                      </Label>
-                    </div>
-                  ))}
-                </RadioGroup>
-              </div>
-
-              {/* 小数位数 - 默认0，上限5 */}
-              <div>
-                <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.decimalPlaces')}</div>
-                <Input
-                  type="number"
-                  min={0}
-                  max={5}
-                  step={1}
-                  value={localFormat.decimalPlaces}
-                  onInput={(e) => {
-                    const input = e.target as HTMLInputElement;
-                    const val = input.value;
-
-                    if (val === '') {
-                      setLocalFormat({ ...localFormat, decimalPlaces: undefined })
-                    } else {
-                      const numVal = Number(val);
-                      // 限制在 0-5 范围内
-                      if (numVal > 5) {
-                        input.value = '5';
-                        setLocalFormat({ ...localFormat, decimalPlaces: 5 })
-                      } else if (numVal < 0) {
-                        input.value = '0';
-                        setLocalFormat({ ...localFormat, decimalPlaces: 0 })
-                      } else {
-                        setLocalFormat({ ...localFormat, decimalPlaces: numVal })
-                      }
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const val = e.target.value;
-                    if (val === '' || isNaN(Number(val))) {
-                      const defaultDecimal = localFormat.type === 'number' ? 0 : 2;
-                      setLocalFormat({ ...localFormat, decimalPlaces: defaultDecimal })
-                    }
-                  }}
-                  className="w-full"
-                />
-              </div>
-
-              {/* 百分比 隐藏 单位+千分符；其他格式正常显示 */}
-              {localFormat.type !== 'percent' && (
-                <>
-                  {/* 单位 - 不同格式对应不同下拉选项 */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.unit')}</div>
-                      <Select
-                        value={localFormat.unit ||
-                          (localFormat.type === 'storage' ? 'B' :
-                            localFormat.type === 'duration' ? 'ms' :
-                              'none')}
-                        onValueChange={(value) => {
-                          const unitVal = value === "none" ? "" : value;
-                          setLocalFormat({ ...localFormat, unit: unitVal })
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={t('dimensionBlock.dialog.selectUnit')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {/* Select Items Logic */}
-                          {localFormat.type === 'number' && (
-                            <>
-                              <SelectItem value="none">{t('dimensionBlock.dialog.none')}</SelectItem>
-                              <SelectItem value="Thousand">Thousand (K)</SelectItem>
-                              <SelectItem value="Million">Million (M)</SelectItem>
-                              <SelectItem value="Billion">Billion (B)</SelectItem>
-                            </>
-                          )}
-                          {localFormat.type === 'duration' && (
-                            <>
-                              <SelectItem value="ms">ms</SelectItem>
-                              <SelectItem value="s">s</SelectItem>
-                              <SelectItem value="min">min</SelectItem>
-                              <SelectItem value="hour">hour</SelectItem>
-                            </>
-                          )}
-                          {localFormat.type === 'storage' && (
-                            <>
-                              <SelectItem value="B">B</SelectItem>
-                              <SelectItem value="KB">KB</SelectItem>
-                              <SelectItem value="MB">MB</SelectItem>
-                              <SelectItem value="GB">GB</SelectItem>
-                              <SelectItem value="TB">TB</SelectItem>
-                            </>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.suffix')}</div>
-                      <Input
-                        placeholder={t('dimensionBlock.dialog.enterSuffix')}
-                        value={localFormat.suffix || ""}
-                        onChange={(e) =>
-                          setLocalFormat({ ...localFormat, suffix: e.target.value })
-                        }
-                        className="w-full"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 千分符 */}
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={localFormat.thousandSeparator}
-                      onCheckedChange={(checked) =>
-                        setLocalFormat({
-                          ...localFormat,
-                          thousandSeparator: checked as boolean
-                        })
-                      }
-                      id="thousand-separator"
-                    />
-                    <label htmlFor="thousand-separator" className="text-sm cursor-pointer">
-                      {t('dimensionBlock.dialog.thousandSeparator')}
-                    </label>
-                  </div>
-                </>
-              )}
-
-              {/* 百分比 只显示后缀输入框 */}
-              {localFormat.type === 'percent' && (
-                <div>
-                  <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.suffix')}</div>
-                  <Input
-                    placeholder={t('dimensionBlock.dialog.enterSuffix')}
-                    value={localFormat.suffix || ""}
-                    onChange={(e) =>
-                      setLocalFormat({ ...localFormat, suffix: e.target.value })
-                    }
-                    className="w-full"
-                  />
-                </div>
-              )}
-
-              {/* 示例 - 匹配需求默认示例 */}
-              <div className="text-sm text-muted-foreground">
-                {t('dimensionBlock.dialog.example')}: {
-                  localFormat.type === 'percent' ? '99%' :
-                    localFormat.type === 'duration' ? '2000000' :
-                      localFormat.type === 'storage' ? '2000000' : '20000'
-                }
-              </div>
-
-            </div>
-
-            {/* Footer */}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setFormatDialogOpen(false)
-                setEditingMetric(null)
-                setLocalFormat(null)
-              }}>
-                {t('chartSelector.buttons.cancel')}
-              </Button>
-              <Button onClick={() => {
-                if (!editingMetric || !localFormat) return
-                const formatToSave: MetricFormat = {
-                  type: localFormat.type,
-                  decimalPlaces: localFormat.decimalPlaces,
-                  thousandSeparator: localFormat.type === 'percent' ? false : localFormat.thousandSeparator,
-                  unit: localFormat.type === 'percent' ? undefined : (localFormat.unit === "" ? undefined : localFormat.unit),
-                  suffix: localFormat.suffix === "" ? undefined : localFormat.suffix
-                }
-                onFormatChange?.(editingMetric.id, formatToSave)
-                setFormatDialogOpen(false)
-                setEditingMetric(null)
-                setLocalFormat(null)
-              }}>
-                {t('chartSelector.buttons.save')}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+<MetricFormatDialog {...{formatDialogOpen,setFormatDialogOpen,editingMetric,setEditingMetric,localFormat,setLocalFormat,onFormatChange}} />
       )}
     </div>
   )

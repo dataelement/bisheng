@@ -743,7 +743,8 @@
     "varOptionRequired": "オプションの内容を入力してください",
     "optionRepeated": "オプションが重複しています",
     "incorrectIdFormatMessage": "ID の形式が誤っています（英数字からなる5桁の文字列）",
-    "idAlreadyExistsMessage": "この ID はすでに存在します"
+    "idAlreadyExistsMessage": "この ID はすでに存在します",
+    "publishedVersionCannotSave": "公開中のバージョンは編集・保存できません"
   },
   "lib": {
     "knowledgeBaseId": "ナレッジベースID",
@@ -768,6 +769,7 @@
     "embeddingModelSelection": "ナレッジベース埋め込みモデル選択"
   },
   "evaluation": {
+    "editPrompt": "プロンプトを編集",
     "id": "タスクID",
     "filename": "テストファイル名",
     "skillAssistant": "アプリケーション",
@@ -1098,7 +1100,9 @@
       "autoReplyNotEmpty": "自動返信内容は空にできません",
       "workbenchSelectAtLeastOneWordType": "少なくとも1つのセンシティブワードリストを選択してください",
       "workbenchAutoReplyNotEmpty": "自動返信内容は空にできません",
-      "workbenchAutoReplyMaxLength": "自動返信内容は500文字以内にしてください"
+      "workbenchAutoReplyMaxLength": "自動返信内容は500文字以内にしてください",
+      "customWordsNotEmpty": "カスタム単語リストを入力してください",
+      "sensitivePolicyLoading": "コンテンツ審査設定を読み込み中です。しばらくしてから再試行してください。"
     },
     "saveSuccess": "保存に成功しました",
     "contentSecurityDesc": "センシティブワードリストまたは API によって会話内容のセキュリティ審査を行います",
@@ -1149,7 +1153,17 @@
     "unsavedChangesLeave": "未保存の変更があります。本当に離れますか？",
     "leaveAndSave": "保存して離れる",
     "leaveWithoutSave": "保存せずに終了",
-    "selectModel": "モデルを選択してください"
+    "selectModel": "モデルを選択してください",
+    "contentSecurityReview": "コンテンツ審査",
+    "tagLibraryTagsPlaceholder": "1行に1つのタグ",
+    "deleteTagLibraryDescWithCount": "{{count}}個のナレッジスペースに影響し、自動タグ付けが無効になります。このタグライブラリを削除しますか？",
+    "deleteTagLibraryDescEmpty": "このタグライブラリを利用するナレッジスペースはありません。削除しますか？",
+    "deleteTagLibraryTitle": "タグライブラリを削除",
+    "confirmDelete": "削除を確認",
+    "autoTagGenerationTitle": "自動タグ付け",
+    "autoTagGenerationDesc": "有効にすると、ナレッジスペースの作成・編集時にタグライブラリを選択できます。ファイル解析後にライブラリから適切なタグを付けます。",
+    "searchTagLibrary": "タグライブラリ名を検索",
+    "tagLibraryEmpty": "タグライブラリはありません"
   },
   "bench": {
     "daily": "日常",
@@ -1185,7 +1199,35 @@
     "fetchKbFailed": "ナレッジベース取得に失敗しました",
     "addMoreModels": "モデルを追加",
     "home": "ホーム",
-    "appCenter": "アプリ"
+    "appCenter": "アプリ",
+    "departmentKnowledgeSpaceSaveSuccess": "保存しました",
+    "departmentKnowledgeSpaceConfigured": "設定済み",
+    "departmentKnowledgeSpaceHidden": "非表示",
+    "departmentKnowledgeSpaceDefaultName": "既定のスペース名",
+    "departmentKnowledgeSpaceManager": "部門ナレッジスペース管理",
+    "departmentKnowledgeSpaceManagerDesc2": "部門を選択してナレッジスペースを作成します。設定済み部門の選択を解除すると、スペースやデータを削除せず非表示にできます。",
+    "departmentKnowledgeSpaceClearAll": "選択を解除",
+    "departmentKnowledgeSpaceSelectAll": "作成可能な部門をすべて選択",
+    "departmentKnowledgeSpaceChangePreview": "変更プレビュー",
+    "departmentKnowledgeSpaceSelectedDesc": "既定で「部門のナレッジスペース」を作成します。スーパー管理者が所有者、部門管理者がマネージャーになります。",
+    "departmentKnowledgeSpaceNoChanges": "変更なし",
+    "departmentKnowledgeSpacePendingCreate": "作成予定",
+    "departmentKnowledgeSpacePendingRestore": "再表示予定",
+    "departmentKnowledgeSpacePendingHide": "非表示予定",
+    "departmentKnowledgeSpaceSave": "保存",
+    "departmentKnowledgeSpace": "部門ナレッジスペース",
+    "departmentKnowledgeSpaceDesc": "部門ナレッジスペースの作成と関連部門をまとめて管理します。",
+    "departmentKnowledgeSpaceCreatedList": "作成済みナレッジスペース",
+    "departmentKnowledgeSpaceCreatedListDesc": "部門に関連付けられたナレッジスペースが表示されます。",
+    "departmentKnowledgeSpaceCreatedEmpty": "作成済みの部門ナレッジスペースはありません",
+    "departmentKnowledgeSpaceDepartmentLabel": "所属部門",
+    "knowledgeSpaceContentSecurityDesc": "ナレッジスペースの解析結果を審査し、機密語がある場合はベクトルストアへの登録を停止します。",
+    "configureOrgKbs": "組織ナレッジベースを設定",
+    "knowledgeBaseCol": "ナレッジベース",
+    "noOrgKbConfigured": "組織ナレッジベースは未設定です",
+    "pickFromRight": "右側の一覧からナレッジベースを選択してください",
+    "allKbs": "すべてのナレッジベース",
+    "searchKbName": "ナレッジベース名を検索"
   },
   "tools": {
     "addTool": "ツール追加",
@@ -1283,6 +1325,7 @@
     "notEmpty": "新しいパスワードは空にできません"
   },
   "log": {
+    "thinkingContent": "思考内容",
     "systemIdEnum": {
       "chat": "チャット",
       "build": "ビルド",
@@ -2212,7 +2255,21 @@
     "timeline_actionAssignApprovers": "承認者を指定",
     "timeline_actionAssignFlow": "承認フローを指定",
     "timeline_actionRetryExecuteFailed": "実行を再試行",
-    "timeline_actionMarkManuallyCompleted": "完了としてマーク"
+    "timeline_actionMarkManuallyCompleted": "完了としてマーク",
+    "discardChangesTitle": "変更を破棄",
+    "discardChangesDesc": "未保存のノード変更があります。破棄しますか？",
+    "cancelEditBtn": "編集をキャンセル",
+    "saveChangesBtn": "変更を保存",
+    "editNodesBtn": "ノードを編集",
+    "nodeEditModeHint": "編集中 — ノードの変更は「変更を保存」で反映され、新しいバージョンが作成されます。",
+    "addScenarioTitle": "承認シナリオを追加",
+    "scenarioNameLabel": "シナリオ名",
+    "allPresetsAdded": "（すべてのプリセットシナリオが追加済みです）",
+    "confirmAdd": "追加",
+    "saveSuccess": "保存しました",
+    "switchFlowDiscardDesc": "フローを切り替えると未保存のノード変更が失われます。続行しますか？",
+    "moveUp": "上に移動",
+    "moveDown": "下に移動"
   },
   "skillManage": {
     "title": "スキル管理",
@@ -2328,7 +2385,8 @@
     "noDownloadUrl": "ダウンロード可能なファイルアドレスがありません",
     "tempKb": "一時ナレッジベース",
     "noPermission": "このソースを閲覧する権限がありません",
-    "sourceExpired": "このソースは無効になりました"
+    "sourceExpired": "このソースは無効になりました",
+    "noSummary": "内容の要約はありません"
   },
   "openApiManagement": {
     "list": {
@@ -2999,7 +3057,8 @@
     "individualQuota": "個別設定",
     "useDepartmentQuota": "部門の既定枠を継承",
     "inlineQuotaHelp": "部門枠の変更は既定のメンバーに反映されます。個別設定は維持されます。保存すると適用されます。",
-    "monthlyQuotaWan": "月間利用枠（万 Token）"
+    "monthlyQuotaWan": "月間利用枠（万 Token）",
+    "usageDimension": "集計単位"
   },
   "request": {
     "session_expired": "セッションの有効期限が切れました",
@@ -3034,6 +3093,55 @@
     "searchMember": "ユーザー名または ID で検索"
   },
   "tenant": {
-    "searchUser": "ユーザー名または ID で検索"
+    "searchUser": "ユーザー名または ID で検索",
+    "createDeprecatedDesc": "部門をマウントして子テナントを作成してください。ルートテナントはシステムが自動で初期化します。",
+    "inheritedFromRoot": "ルートテナントの設定を使用中",
+    "currentOverride": "現在のテナントは独自設定を使用中",
+    "noOverrideYet": "独自設定はまだ保存されていません",
+    "selectionDeprecatedTitle": "テナント選択は廃止されました",
+    "selectionDeprecatedDesc": "v2.5.1以降、現在のテナントは主部門から自動的に決まります。手動での切り替えはできません。",
+    "selectionDeprecatedRedirect": "ログイン済みの場合は管理画面へ自動的に移動します。",
+    "continueToAdmin": "管理画面へ進む"
+  },
+  "sharedUi": {
+    "showPassword": "パスワードを表示",
+    "hidePassword": "パスワードを非表示",
+    "required": "必須項目です",
+    "nonNegativeInteger": "0以上の整数を入力してください",
+    "minimum": "{{min}}以上にしてください",
+    "maximum": "{{max}}以下にしてください",
+    "addItem": "項目を追加",
+    "removeItem": "項目を削除",
+    "expand": "展開"
+  },
+  "tenant.mountedBadge": "子テナントのマウント先",
+  "tenant.mountedTag": "子テナント",
+  "tenant.markAsTenant": "子テナントに設定",
+  "tenant.unmountTitle": "子テナントのマウントを解除",
+  "tenant.unmountConfirm": "マウント解除後、この子テナントのすべてのリソース（ナレッジベース、アプリ、会話など）は本部（Root）へ自動移行され、子テナントは監査用にアーカイブされます。メンバーは本部のメンバーとして引き続き利用でき、業務は中断されません。続行しますか？",
+  "tenant.unmountOk": "マウント解除を確認",
+  "tenant.unmountSuccess": "マウントを解除しました",
+  "tenant.unmount": "マウント解除",
+  "publicPages": {
+    "crawlFeedbackDefault": "ウェブサイトの収集依頼はこちらへ送信してください：XXXX@XX",
+    "feedbackRequired": "依頼フィードバックの案内文を入力してください",
+    "feedbackTooLong": "案内文は1,000文字以内で入力してください",
+    "recommendedApps": "おすすめアプリ",
+    "selectedApps": "選択済みアプリ",
+    "noConfiguredApps": "アプリは未設定です",
+    "pickAppsFromRight": "右側の一覧からアプリを選択してください",
+    "allApps": "すべてのアプリ",
+    "searchApps": "アプリ名や説明で検索",
+    "noApps": "アプリはありません",
+    "passwordExpired": "パスワードの有効期限が切れました。変更してください。",
+    "forbidden": "このページにアクセスする権限がありません",
+    "loggingOut": "ログアウト中…",
+    "switchAccount": "アカウントを切り替え",
+    "collapse": "折りたたむ",
+    "expand": "展開",
+    "close": "閉じる",
+    "maskedFile": "マスクされたファイル.msk",
+    "notFoundTitle": "ページが見つかりません",
+    "notFoundDescription": "アクセスしたページは存在しないか、削除されています。"
   }
 }

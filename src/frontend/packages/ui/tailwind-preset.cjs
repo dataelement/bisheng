@@ -10,7 +10,8 @@ const plugin = require('tailwindcss/plugin');
  * client adopted this preset and deleted its duplicated theme keys — verified by
  * diffing the fully-resolved theme AND the compiled CSS before/after (identical
  * but for the order of the two pointer variants, which the preset now owns).
- * platform has not adopted it yet and still has no semantic layer at all.
+ * platform also consumes the preset, retaining app-specific legacy keys while
+ * its component families migrate in batches.
  *
  * The CSS custom properties this file points at have a single definition too —
  * src/styles/tokens.css, which client loads from its entry. Change a token value
@@ -236,6 +237,16 @@ module.exports = {
     },
   },
   plugins: [
+    plugin(({ addUtilities }) => {
+      // Shared exception to native scrollbars: hide them without disabling scrolling.
+      addUtilities({
+        '.no-scrollbar, .scrollbar-hide': {
+          'scrollbar-width': 'none',
+          '-ms-overflow-style': 'none',
+          '&::-webkit-scrollbar': { display: 'none', width: '0', height: '0' },
+        },
+      });
+    }),
     plugin(({ addVariant }) => {
       // Primary input: mouse + hover vs touch / coarse pointer.
       addVariant('fine-pointer', '@media (hover: hover) and (pointer: fine)');

@@ -1,7 +1,8 @@
+import { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardPortal } from '~/components/ui/HoverCard';
 import { X } from 'lucide-react';
 import { useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
@@ -67,10 +68,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
       {/* App card：仅保留右侧大块 Tooltip；勿再套描述行的小 Tooltip（会与外层叠两层） */}
       <div className="shrink-0 pt-1">
         {flowData?.name || flowData?.description ? (
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
+          <HoverCard openDelay={300} closeDelay={100} ><HoverCardTrigger asChild><div tabIndex={0}
                   className="border-border-base border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px] cursor-default"
                   style={{ backgroundImage: 'linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)' }}
                 >
@@ -104,20 +102,11 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                       {localize('com_knowledge_start_new_chat')}
                     </button>
                   </div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent
-                side="right"
-                align="start"
-                noArrow={isGuest}
-                sideOffset={isGuest ? 8 : 0}
-                className={cn(
+                </div></HoverCardTrigger><HoverCardPortal><HoverCardContent side="right" align="start" sideOffset={isGuest ? 8 : 0} className={cn(
                   isGuest
                     ? 'max-w-[min(100vw-2rem,320px)] !rounded-[20px] !border !border-border-base !bg-white !p-5 !text-sm !font-normal !leading-normal !text-text-1 !shadow-[0_8px_32px_rgba(0,0,0,0.12)]'
                     : 'max-w-[320px] p-3',
-                )}
-              >
-                {isGuest ? (
+                )}>{isGuest ? (
                   <div className="flex flex-col gap-4 text-left text-text-1">
                     {flowData?.name ? (
                       <div>
@@ -160,10 +149,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                       </p>
                     )}
                   </div>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                )}</HoverCardContent></HoverCardPortal></HoverCard>
         ) : (
           <div
             className="border-border-base border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px] cursor-default"

@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useState, useId, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
 import * as Ariakit from '@ariakit/react';
@@ -6,7 +7,7 @@ import { Upload } from 'lucide-react';
 import type * as t from '~/common';
 import ExportModal from '~/components/Nav/ExportConversation/ExportModal';
 import { ShareButton } from '~/components/Conversations/ConvoOptions';
-import { DropdownPopup, TooltipAnchor } from '~/components/ui';
+import { DropdownPopup } from '~/components/ui';
 import { usePrefersMobileLayout, useLocalize } from '~/hooks';
 import store from '~/store';
 import { ShareOutlineIcon } from '~/components/icons';
@@ -75,10 +76,7 @@ export default function ExportAndShareMenu({
         isOpen={isPopoverActive}
         setIsOpen={setIsPopoverActive}
         trigger={
-          <TooltipAnchor
-            description={localize('com_endpoint_export_share')}
-            render={
-              <Ariakit.MenuButton
+          <SharedTooltip  content={localize('com_endpoint_export_share')}  ><Ariakit.MenuButton
                 id="export-menu-button"
                 aria-label="Export options"
                 className="inline-flex size-10 items-center justify-center rounded-lg border border-border-light bg-transparent text-text-primary transition-all ease-in-out hover:bg-surface-tertiary disabled:pointer-events-none disabled:opacity-50 radix-state-open:bg-surface-tertiary"
@@ -88,9 +86,7 @@ export default function ExportAndShareMenu({
                   aria-hidden="true"
                   focusable="false"
                 />
-              </Ariakit.MenuButton>
-            }
-          />
+              </Ariakit.MenuButton></SharedTooltip>
         }
         items={dropdownItems}
         className={isSmallScreen ? '' : 'absolute right-0 top-0 mt-2'}

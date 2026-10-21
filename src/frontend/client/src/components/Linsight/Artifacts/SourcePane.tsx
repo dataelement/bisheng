@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 /**
  * F074: the cited source file shown beside the report in the task-mode
  * workspace. It replaces the floating CitationDocumentPreviewDrawer there, which
@@ -15,7 +16,7 @@ import {
     resolveCitationDownloadUrl,
     toAbsolutePreviewUrl,
 } from '~/components/Chat/Messages/Content/citationUtils';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize } from '~/hooks';
 
 const iconBtn =
@@ -43,14 +44,9 @@ function IconButton({ label, onClick, disabled, children }: {
     children: React.ReactNode;
 }) {
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <button type="button" aria-label={label} className={iconBtn} onClick={onClick} disabled={disabled}>
+        <SharedTooltip  content={label} ><button type="button" aria-label={label} className={iconBtn} onClick={onClick} disabled={disabled}>
                     {children}
-                </button>
-            </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
-        </Tooltip>
+                </button></SharedTooltip>
     );
 }
 

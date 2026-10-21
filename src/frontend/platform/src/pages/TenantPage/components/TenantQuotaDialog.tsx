@@ -1,6 +1,7 @@
-// @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
-import { toast } from "@/components/bs-ui/toast/use-toast";
+import { Button, notification } from '@bisheng/ui';
+import { Input } from "@bisheng/ui";
+
+
 import { getTenantQuotaApi, setTenantQuotaApi } from "@/controllers/API/tenant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import type { Tenant, TenantQuota } from "@/types/api/tenant";
@@ -40,9 +41,9 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
 
   useEffect(() => {
     captureAndAlertRequestErrorHoc(
-      getTenantQuotaApi(tenant.id).then((res: any) => {
+      getTenantQuotaApi(tenant.id).then((res) => {
         setQuota(res);
-        const cfg = (res?.quota_config ?? {}) as Record<string, any>;
+        const cfg = (res?.quota_config ?? {}) as Record<string, unknown>;
         const next: Record<string, string> = {};
         Object.keys(cfg).forEach((k) => {
           // -1 means "unlimited"; render as empty so the user can either keep
@@ -50,16 +51,11 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
           next[k] = cfg[k] === -1 || cfg[k] == null ? "" : String(cfg[k]);
         });
         setInputs(next);
-      })
+      }),
     );
   }, [tenant.id]);
 
-  const quotaFields = useMemo(
-    () => [
-      { key: "storage_gb", label: t("tenant.knowledgeStorageUsage") + " (GB)" },
-    ],
-    [t]
-  );
+  const quotaFields = useMemo(() => [{ key: "storage_gb", label: t("tenant.knowledgeStorageUsage") + " (GB)" }], [t]);
 
   const errors = useMemo(() => {
     const map: Record<string, string> = {};
@@ -88,10 +84,8 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
     });
     setLoading(true);
     try {
-      await captureAndAlertRequestErrorHoc(
-        setTenantQuotaApi(tenant.id, config)
-      );
-      toast({ title: t("updateSuccess"), variant: "success" });
+      await captureAndAlertRequestErrorHoc(setTenantQuotaApi(tenant.id, config));
+      notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
       onSuccess();
     } finally {
       setLoading(false);
@@ -100,8 +94,13 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-background rounded-lg p-6 w-[480px] shadow-lg">
-        <h3 className="text-lg font-semibold mb-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tenant-quota-title"
+        className="bg-background rounded-lg p-6 w-[480px] shadow-lg"
+      >
+        <h3 id="tenant-quota-title" className="text-lg font-semibold mb-4">
           {t("tenant.quota")} - {displayTenantName(tenant.tenant_name)}
         </h3>
 
@@ -112,28 +111,33 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
               return (
                 <div key={key} className="flex items-start justify-between gap-4">
                   <div className="flex-1 pt-1">
-                    <label className="text-sm font-medium">{label}</label>
+                    <label htmlFor={`tenant-quota-${key}`} className="text-sm font-medium">
+                      {label}
+                    </label>
                     {quota.usage[key] != null && (
-                      <span className="text-xs text-muted-foreground ml-2">
-                        ({quota.usage[key]})
-                      </span>
+                      <span className="text-xs text-muted-foreground ml-2">({quota.usage[key]})</span>
                     )}
                   </div>
                   <div className="flex flex-col items-end">
-                    <input
+                    <Input
+                      id={`tenant-quota-${key}`}
                       type="number"
-                      className={`w-28 border rounded px-2 py-1 bg-background text-right ${
-                        error ? "border-red-500 focus:outline-red-500" : ""
-                      }`}
+                      className="w-28"
+                      inputClassName="text-right"
+                      status={error ? "error" : "default"}
+                      aria-describedby={error ? `tenant-quota-${key}-error` : undefined}
                       value={inputs[key] ?? ""}
-                      onChange={(e) => handleChange(key, e.target.value)}
+                      onChange={(e) => {  return handleChange(key, e.target.value); }}
                       min={0.1}
                       max={99999}
                       step={0.1}
                       placeholder={t("tenant.quotaPlaceholder")}
                     />
                     {error && (
-                      <p className="text-xs text-red-500 mt-1 max-w-[180px] text-right">
+                      <p
+                        id={`tenant-quota-${key}-error`}
+                        className="text-xs text-red-500 mt-1 max-w-[180px] text-right"
+                      >
                         {error}
                       </p>
                     )}
@@ -145,7 +149,7 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
         )}
 
         <div className="flex justify-end gap-2 mt-6">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outlined" onClick={onClose} color="default">
             {t("cancel")}
           </Button>
           <Button onClick={handleSave} disabled={loading || hasError}>

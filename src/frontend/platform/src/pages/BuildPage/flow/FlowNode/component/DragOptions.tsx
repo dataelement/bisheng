@@ -1,12 +1,14 @@
 // @ts-strict-ignore
-import { Button } from '@/components/bs-ui/button';
-import { Input } from '@/components/bs-ui/input';
+import { Button, Input } from '@bisheng/ui';
+
+
 import { generateUUID } from '@/components/bs-ui/utils';
-import { Handle, Position } from '@xyflow/react';
+import { Handle,Position } from '@xyflow/react';
+import { Outlined } from "bisheng-icons";
 import i18next from "i18next";
-import { Edit, GripVertical, Trash2 } from 'lucide-react'; // 图标
-import { forwardRef, useEffect, useRef, useState } from 'react';
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { GripVertical } from "lucide-react"; // 图标
+import { forwardRef,useEffect,useRef,useState } from 'react';
+import { DragDropContext,Draggable,Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 
 interface Iprops {
@@ -58,6 +60,8 @@ const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, o
     }
 
     const handleAddItem = () => {
+        if ((String((inputValue) ?? '').length > 50)) return;
+
         if (!inputValue.trim()) {
             setError(t('emptyOptionError')); // 使用国际化文本
             return;
@@ -153,19 +157,13 @@ const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, o
 
             {!onEditClick && <div className="mt-4">
                 {!isAdding ? (
-                    <Button onClick={handleBeforAddItem} type='button' variant='outline' className="border-primary text-primary mt-2">
+                    <Button onClick={handleBeforAddItem} type='button' variant="outlined" className="border-primary text-primary mt-2" color="default">
                         + {t('addOption')} {/* 添加选项 */}
                     </Button>
                 ) : (
                     <div className="flex items-center space-x-2">
-                        <Input
-                            value={inputValue}
-                            placeholder={t('inputOptionPlaceholder')} // 请输入选项展示文本
-                            onChange={(e) => setInputValue(e.target.value)}
-                            maxLength={50}
-                            showCount
-                        />
-                        <Button type="button" onClick={handleAddItem} className="flex-none">
+                        <Input value={inputValue} placeholder={t('inputOptionPlaceholder')} onChange={(e) => setInputValue(e.target.value)} maxLength={50} showCount />
+                        <Button type="button" onClick={handleAddItem} className="flex-none" disabled={(String((inputValue) ?? '').length > 50)}>
                             {t('confirm')} {/* 确定 */}
                         </Button>
                     </div>
@@ -202,23 +200,16 @@ const Option = ({ item, count, edit, onEditClick, onDelete, onChange }) => {
     return <>
         <div className="flex-1">
             {editing ?
-                <Input
-                    ref={inputRef}
-                    autoFocus
-                    className='border-none outline-none focus-visible:ring-transparent'
-                    value={item.text}
-                    onBlur={handleChange}
-                    onKeyDown={(e) => e.key === 'Enter' && handleChange()}
-                ></Input>
+                <Input ref={inputRef} autoFocus value={item.text} onBlur={handleChange} onKeyDown={(e) => e.key === 'Enter' && handleChange()} className={"border-none outline-none focus-visible:ring-transparent"}></Input>
                 : <div
                     className="h-9 leading-9 w-[200px] px-2 text-sm text-[#111] dark:text-gray-50 cursor-not-allowed opacity-50 truncate"
                 >{item.text}</div>}
         </div>
         <div className='flex gap-1 items-center pr-2'>
             <span className='text-xs text-muted-foreground group-hover:hidden'>{itemNames[item.type] || item.type}</span>
-            {(onEditClick || edit) && <Edit size={14} onClick={handleEdit} className='cursor-pointer text-muted-foreground hover:text-foreground hidden group-hover:block' />}
+            {(onEditClick || edit) && <Outlined.Edit size={14} onClick={handleEdit} className='cursor-pointer text-muted-foreground hover:text-foreground hidden group-hover:block' />}
             {count > 1 && (
-                <Trash2
+                <Outlined.Delete
                     size={14}
                     className="cursor-pointer text-gray-500 hover:text-red-500 transition-colors duration-200 hidden group-hover:block"
                     onClick={() => onDelete(item.text)}

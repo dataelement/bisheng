@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/Select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
+import { Tabs } from '@bisheng/ui';
 import { Textarea } from "@bisheng/ui";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useConfirm, useToastContext } from "~/Providers";
@@ -398,25 +398,12 @@ export function KnowledgeSpaceSettingsPage() {
                     }
                   />
                   {settings.form.autoTagEnabled && (
-                    <Tabs
-                      value={settings.form.autoTagMode}
-                      onValueChange={(value) =>
+                    <Tabs activeKey={settings.form.autoTagMode} onChange={(value) =>
                         settings.updateForm(
                           "autoTagMode",
                           value as "library" | "custom",
                         )
-                      }
-                    >
-                      <TabsList>
-                        <TabsTrigger value="library">
-                          {localize("com_knowledge.auto_tag_mode_library")}
-                        </TabsTrigger>
-                        <TabsTrigger value="custom">
-                          {localize("com_knowledge.auto_tag_mode_custom")}
-                        </TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="library" className="mt-3 space-y-2">
-                        <Select
+                      } items={[{ key: "library", label: <>{localize("com_knowledge.auto_tag_mode_library")}</>, children: <div className="mt-3 space-y-2"><Select
                           value={
                             settings.form.autoTagLibraryId
                               ? String(settings.form.autoTagLibraryId)
@@ -446,8 +433,7 @@ export function KnowledgeSpaceSettingsPage() {
                               </SelectItem>
                             ))}
                           </SelectContent>
-                        </Select>
-                        {settings.autoTagPreview.length > 0 && (
+                        </Select>{settings.autoTagPreview.length > 0 && (
                           <div className="flex flex-wrap gap-2 text-body-sm text-text-3">
                             {settings.autoTagPreview.slice(0, 20).map((tag) => (
                               <span
@@ -458,10 +444,8 @@ export function KnowledgeSpaceSettingsPage() {
                               </span>
                             ))}
                           </div>
-                        )}
-                      </TabsContent>
-                      <TabsContent value="custom" className="mt-3 space-y-2">
-                        <div className="flex items-center justify-between text-body-sm text-text-3">
+                        )}</div> },
+{ key: "custom", label: <>{localize("com_knowledge.auto_tag_mode_custom")}</>, children: <div className="mt-3 space-y-2"><div className="flex items-center justify-between text-body-sm text-text-3">
                           <span>
                             {
                               parseKnowledgeSpaceCustomTags(
@@ -485,8 +469,7 @@ export function KnowledgeSpaceSettingsPage() {
                             className="hidden"
                             onChange={handleCustomTagsUpload}
                           />
-                        </div>
-                        <Textarea
+                        </div><Textarea
                           value={settings.form.autoTagCustomText}
                           onChange={(event) =>
                             settings.updateForm(
@@ -498,9 +481,7 @@ export function KnowledgeSpaceSettingsPage() {
                             "com_knowledge.auto_tag_custom_tags_placeholder",
                           )}
                           rows={5}
-                        />
-                      </TabsContent>
-                    </Tabs>
+                        /></div> }]} />
                   )}
                 </div>
               </section>

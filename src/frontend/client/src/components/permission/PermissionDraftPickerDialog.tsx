@@ -3,7 +3,7 @@ import { Button, Radio, RadioGroup } from "@bisheng/ui";
 import type { ComponentProps } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ResourceType, SelectedSubject, SubjectType } from "~/api/permission";
-import { Checkbox } from "~/components/ui/Checkbox";
+import { Checkbox } from '@bisheng/ui';
 import {
   Dialog,
   DialogContent,
@@ -142,7 +142,7 @@ export function PermissionDraftPickerDialog({
             {subjectType === "department" && (
               <label className={INCLUDE_CHILDREN_LABEL_CLASS}>
                 <Checkbox
-                  className={INCLUDE_CHILDREN_CHECKBOX_CLASS}
+                  className={`peer ${(INCLUDE_CHILDREN_CHECKBOX_CLASS) || ''}`}
                   checked={includeChildren}
                   onCheckedChange={(checked) => setIncludeChildren(checked === true)}
                 />

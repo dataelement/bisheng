@@ -9,7 +9,7 @@
 | Path | Project | Stack |
 |------|---------|-------|
 | `src/backend/` | FastAPI + Celery Workers + Linsight Worker | Python 3.11+, uv, SQLModel, LangGraph |
-| `src/frontend/platform/` | Admin / builder UI | Vite 5 + **Zustand** + react-query v3 + bs-ui |
+| `src/frontend/platform/` | Admin / builder UI | Vite 6 + **Zustand** + react-query v3 + bs-ui |
 | `src/frontend/client/` | End-user chat UI (`/workspace` base path) | Vite 6 + **Recoil** + react-query v4 (@tanstack) + shadcn/ui |
 
 **Runtime topology** (full picture → `docs/architecture/01-architecture-overview.md`):
@@ -84,7 +84,7 @@ The 8 RULEs are the machine-enforcement arm of constitution **C1 / C4 / C6 / C7*
 5. branch feat/<version>/{NNN}-{name}  (create early; docs + code on the branch)
 6. implement wave-by-wave → /task-review <dir> <id> → check off
 7. /e2e-test <dir>  (mandatory)
-8. /code-review --base <main>  (+ CI auto-review)
+8. /sdd-code-review --base <main>  (+ CI auto-review)
 9. merge
 ```
 
@@ -126,7 +126,7 @@ Backend runtime pitfalls (tenant-filter SELECT-only gap, ruff hook import trap, 
 
 - **Docs index** → `docs/README.md` (navigation hub); onboarding & testing → `docs/architecture/09-development-guide.md`
 - **Architecture docs** → `docs/architecture/` (overview, permission, gateway, multi-tenant, data-models, …)
-- **Skills**: `/sdd-review`, `/task-review`, `/code-review`, `/e2e-test`, `/i18n-localizer`, `/react-component-refactor`
+- **Skills**: `/sdd-review`, `/task-review`, `/sdd-code-review`, `/e2e-test`, `/i18n-localizer`, `/react-component-refactor`. Single source in `.claude/skills/`; `.cursor/skills` and `.agents/skills` are symlinks to it — never add a copy there. `/sdd-code-review` is the project checklist review; Claude Code's built-in `/code-review` is a different tool.
 
 **Instruction files (AGENTS.md map).** Root = this file, loaded every session. Auto-loaded on top when editing the matching directory: `src/backend/`, `src/frontend/platform/`, `src/frontend/client/`, `src/frontend/packages/ui/` (shared component library + design-token SSOT), plus deep-dir specials `src/backend/bisheng/core/database/alembic/` (migrations), `src/backend/scripts/` (one-off scripts), `src/backend/bisheng/linsight/` (agent-framework contracts) and `src/backend/bisheng/linsight/builtin_skills/` (skill-pack authoring). Every `CLAUDE.md` is a symlink to its sibling `AGENTS.md` — edit `AGENTS.md` only. Put a new rule in the deepest file covering its scope (cross-app / cross-module → this file; app- or dir-specific → the nearest file); never duplicate a rule across levels — it *will* drift.
 

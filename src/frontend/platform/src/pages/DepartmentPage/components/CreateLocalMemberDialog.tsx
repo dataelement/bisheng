@@ -1,9 +1,10 @@
-import { Button } from "@/components/bs-ui/button"
+import { Button, Input, PasswordInput, notification } from '@bisheng/ui';
+
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import MultiSelect from "@/components/bs-ui/select/multi"
-import { Input, PasswordInput } from "@/components/bs-ui/input"
+
 import { Label } from "@/components/bs-ui/label"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+
 import {
   createDepartmentLocalMemberApi,
   getDepartmentAssignableRolesApi,
@@ -52,15 +53,15 @@ export function CreateLocalMemberDialog({
 
   const handleSubmit = async () => {
     if (!userName.trim()) {
-      toast({ title: t("prompt"), description: t("bs:department.localUserNameRequired"), variant: "error" })
+      notification.open({ type: "error", title: String(t("prompt") ?? ''), description: String(t("bs:department.localUserNameRequired") ?? '') })
       return
     }
     if (!personId.trim()) {
-      toast({ title: t("prompt"), description: t("bs:department.personIdRequired"), variant: "error" })
+      notification.open({ type: "error", title: String(t("prompt") ?? ''), description: String(t("bs:department.personIdRequired") ?? '') })
       return
     }
     if (!PWD_RULE.test(password)) {
-      toast({ title: t("prompt"), description: t("system.passwordRequirements"), variant: "error" })
+      notification.open({ type: "error", title: String(t("prompt") ?? ''), description: String(t("system.passwordRequirements") ?? '') })
       return
     }
     setSubmitting(true)
@@ -80,7 +81,7 @@ export function CreateLocalMemberDialog({
           person: res.person_id,
         })
         await copyText(`${t("bs:department.personId")}: ${res.person_id}\n${t("system.initialPassword")}: ${password}`)
-        toast({ title: t("bs:department.createLocalUser"), description: tip, variant: "success" })
+        notification.open({ type: "success", title: String(t("bs:department.createLocalUser") ?? ''), description: String(tip ?? '') })
         onCreated()
         onClose()
       }
@@ -98,34 +99,19 @@ export function CreateLocalMemberDialog({
         <div className="space-y-4 py-2">
           <div>
             <Label>{t("system.username")}</Label>
-            <Input
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              className="mt-1"
-              placeholder={t("bs:department.createLocalUserNamePlaceholder")}
-            />
+            <Input value={userName} onChange={(e) => setUserName(e.target.value)} placeholder={t("bs:department.createLocalUserNamePlaceholder")} className={"mt-1"} />
           </div>
           <div>
             <Label>{t("bs:department.personId")}</Label>
-            <Input
-              value={personId}
-              onChange={(e) => setPersonId(e.target.value)}
-              className="mt-1"
-              placeholder={t("bs:department.createLocalPersonIdPlaceholder")}
-            />
+            <Input value={personId} onChange={(e) => setPersonId(e.target.value)} placeholder={t("bs:department.createLocalPersonIdPlaceholder")} className={"mt-1"} />
           </div>
           <div>
             <Label>{t("system.initialPassword")}</Label>
-            <PasswordInput
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1"
-              placeholder={t("bs:department.createLocalPasswordPlaceholder")}
-            />
+            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t("bs:department.createLocalPasswordPlaceholder")} className={"mt-1"} revealLabel={t('sharedUi.showPassword')} hideLabel={t('sharedUi.hidePassword')} />
           </div>
           <div>
             <Label>{t("bs:department.primaryDeptFixed")}</Label>
-            <Input value={deptName} readOnly className="mt-1 bg-muted" />
+            <Input value={deptName} readOnly className={"mt-1 bg-muted"} />
           </div>
           <div>
             <Label>{t("bs:department.assignRoles")}</Label>
@@ -138,12 +124,7 @@ export function CreateLocalMemberDialog({
                 <p className="text-xs text-muted-foreground">
                   {t("bs:department.assignRolesEmptyHint")}
                 </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7"
-                  onClick={loadRoles}
-                >
+                <Button size="small" variant="outlined" onClick={loadRoles} color="default">
                   {t("bs:department.refreshRoles")}
                 </Button>
               </div>
@@ -163,7 +144,7 @@ export function CreateLocalMemberDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outlined" onClick={onClose} color="default">
             {t("cancel")}
           </Button>
           <Button disabled={submitting} onClick={handleSubmit}>

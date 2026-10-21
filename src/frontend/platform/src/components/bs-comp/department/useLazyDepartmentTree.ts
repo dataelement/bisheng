@@ -67,7 +67,7 @@ export interface LazyDepartmentTree {
   searchFailed: boolean
   searchTooLong: boolean
   retrySearch: () => void
-  searchInputProps: InputHTMLAttributes<HTMLInputElement>
+  searchInputProps: Omit<InputHTMLAttributes<HTMLInputElement>, "size" | "prefix">
   truncated: boolean
   matchedIds: Set<number>
   // locate / echo a deep value

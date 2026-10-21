@@ -1,26 +1,27 @@
 // @ts-strict-ignore
-import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Download, FileText, Loader2, X } from "lucide-react";
 import FileView from "@/components/bs-comp/FileView";
-import { cname } from "@/components/bs-ui/utils";
 import { FileIcon } from "@/components/bs-icons/file";
-import { ExcelPreview } from "@bisheng/file-viewers";
+import { cname } from "@/components/bs-ui/utils";
+import { getCitationDetail,type ChatCitation } from "@/controllers/API";
 import DocxPreview from "@/pages/KnowledgePage/components/DocxFileViewer";
-import TxtFileViewer from "@/pages/KnowledgePage/components/TxtFileViewer";
 import { MediaTranscriptTabs } from "@/pages/KnowledgePage/components/RichPreviewFile";
-import { getCitationDetail, type ChatCitation } from "@/controllers/API";
+import TxtFileViewer from "@/pages/KnowledgePage/components/TxtFileViewer";
+import { ExcelPreview } from "@bisheng/file-viewers";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
-  getCitationDocumentDownloadUrl,
-  getCitationDocumentFileType,
-  getCitationDocumentName,
-  getCitationDocumentPreviewUrl,
-  getCitationItemBBoxes,
-  isFilePreviewCitation,
-  isMediaCitation,
-  isRagCitationMissingPreviewUrl,
-  toAbsolutePreviewUrl,
-  type CitationPdfBBox,
+getCitationDocumentDownloadUrl,
+getCitationDocumentFileType,
+getCitationDocumentName,
+getCitationDocumentPreviewUrl,
+getCitationItemBBoxes,
+isFilePreviewCitation,
+isMediaCitation,
+isRagCitationMissingPreviewUrl,
+toAbsolutePreviewUrl,
+type CitationPdfBBox,
 } from "./citationUtils";
 
 declare const __APP_ENV__: any;
@@ -285,7 +286,7 @@ export function CitationDocumentPreviewContent({
     <div className={className || "flex h-full min-h-0 flex-1 flex-col"}>
       {isResolving ? (
         <div className="flex h-full items-center justify-center gap-2 text-[14px] text-[#86909C]">
-          <Loader2 className="size-4 animate-spin" />
+          <Outlined.Loading className="animate-spin size-4 animate-spin" />
           {t("citation.loadingPreview")}
         </div>
       ) : isMedia && fileUrl ? (
@@ -390,7 +391,7 @@ export default function CitationDocumentPreviewDrawer({
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          {(!isNarrowLayout || isFullBleedMobile) && <FileText className="size-4 shrink-0 text-[#165DFF]" />}
+          {(!isNarrowLayout || isFullBleedMobile) && <Outlined.File className="size-4 shrink-0 text-[#165DFF]" />}
           <h2
             className={cname(
               "min-w-0 truncate font-semibold text-[#1D2129]",
@@ -411,7 +412,7 @@ export default function CitationDocumentPreviewDrawer({
               )}
               aria-label={t("citation.downloadDocument")}
             >
-              <Download className="size-4" />
+              <Outlined.Download className="size-4" />
             </button>
           )}
         </div>
@@ -424,7 +425,7 @@ export default function CitationDocumentPreviewDrawer({
               className="inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]"
               aria-label={t("citation.downloadDocument")}
             >
-              <Download className="size-4" />
+              <Outlined.Download className="size-4" />
             </button>
           )}
           <button
@@ -436,7 +437,7 @@ export default function CitationDocumentPreviewDrawer({
             )}
             aria-label={t("citation.closeDocumentPreview")}
           >
-            <X className="size-4" strokeWidth={1.5} />
+            <Outlined.Close className="size-4" strokeWidth={1.5} />
           </button>
         </div>
       </div>

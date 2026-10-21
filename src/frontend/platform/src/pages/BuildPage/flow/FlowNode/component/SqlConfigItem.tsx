@@ -1,9 +1,10 @@
 // @ts-strict-ignore
-import { Input } from "@/components/bs-ui/input";
+import { Input } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
-import { Switch } from "@/components/bs-ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { useEffect, useState } from "react";
+import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
+import { Switch } from "@bisheng/ui";
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function SqlConfigItem({ data, onChange, onValidate }) {
@@ -123,39 +124,19 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
 
                     {/* 数据库地址 */}
                     <Label className="flex items-center bisheng-label">{t("dbAddress")}</Label> {/* 数据库地址 */}
-                    <Input
-                        className={`mt-2 nodrag ${errors.db_address ? "border-red-500" : ""}`}
-                        value={db_address}
-                        type="text"
-                        onChange={(e) => handleChange("db_address", e.target.value)}
-                    />
+                    <Input value={db_address} type="text" onChange={(e) => handleChange("db_address", e.target.value)} className={`mt-2 nodrag ${errors.db_address ? "border-red-500" : ""}`} />
 
                     {/* 数据库名称 */}
                     <Label className="flex items-center bisheng-label mt-4">{t("dbName")}</Label> {/* 数据库名称 */}
-                    <Input
-                        className={`mt-2 nodrag ${errors.db_name ? "border-red-500" : ""}`}
-                        value={db_name}
-                        type="text"
-                        onChange={(e) => handleChange("db_name", e.target.value)}
-                    />
+                    <Input value={db_name} type="text" onChange={(e) => handleChange("db_name", e.target.value)} className={`mt-2 nodrag ${errors.db_name ? "border-red-500" : ""}`} />
 
                     {/* 数据库用户名 */}
                     <Label className="flex items-center bisheng-label mt-4">{t("dbUsername")}</Label> {/* 数据库用户名 */}
-                    <Input
-                        className={`mt-2 nodrag ${errors.db_username ? "border-red-500" : ""}`}
-                        value={db_username}
-                        type="text"
-                        onChange={(e) => handleChange("db_username", e.target.value)}
-                    />
+                    <Input value={db_username} type="text" onChange={(e) => handleChange("db_username", e.target.value)} className={`mt-2 nodrag ${errors.db_username ? "border-red-500" : ""}`} />
 
                     {/* 数据库密码 */}
                     <Label className="flex items-center bisheng-label mt-4">{t("dbPassword")}</Label> {/* 数据库密码 */}
-                    <Input
-                        className={`mt-2 nodrag ${errors.db_password ? "border-red-500" : ""}`}
-                        value={db_password}
-                        type="password"
-                        onChange={(e) => handleChange("db_password", e.target.value)}
-                    />
+                    <Input value={db_password} type="password" onChange={(e) => handleChange("db_password", e.target.value)} className={`mt-2 nodrag ${errors.db_password ? "border-red-500" : ""}`} />
                 </>
             )}
         </div>

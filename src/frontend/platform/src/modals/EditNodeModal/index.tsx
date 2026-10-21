@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Button, toast } from '@bisheng/ui';
 import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CodeAreaComponent from "../../components/codeAreaComponent";
@@ -10,9 +11,8 @@ import InputListComponent from "../../components/inputListComponent";
 import IntComponent from "../../components/intComponent";
 import PromptAreaComponent from "../../components/promptComponent";
 import TextAreaComponent from "../../components/textAreaComponent";
-import ToggleShadComponent from "../../components/toggleShadComponent";
-import { Badge } from "../../components/bs-ui/badge";
-import { Button } from "../../components/bs-ui/button";
+import { Switch } from '@bisheng/ui';
+
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,7 @@ import { TabsContext } from "../../contexts/tabsContext";
 import { typesContext } from "../../contexts/typesContext";
 import { NodeDataType } from "../../types/flow";
 import { classNames, limitScrollFieldsModal } from "../../utils";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 
 export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const [open, setOpen] = useState(true);
@@ -75,12 +75,9 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
     }
   }
 
-  const { message } = useToast()
+
   const handleSave = () => {
-    if (isOnlineVersion()) return message({
-      description: '上线中不可编辑保存',
-      variant: 'warning'
-    })
+    if (isOnlineVersion()) return toast.show({ type: 'warning', message: t('flow.publishedVersionCannotSave') })
     setModalOpen(false)
   }
 
@@ -126,7 +123,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <span className="pr-2">{data.type}</span>
-            <Badge variant="secondary">ID:{idArr[0]}-
+            <div className="inline-flex items-center gap-1">ID:{idArr[0]}-
               <EditLabel
                 rule={[
                   {
@@ -151,14 +148,14 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
                 onChange={handleChangeId}>
                 {(val) => <>{val}</>}
               </EditLabel>
-            </Badge>
+            </div>
           </DialogTitle>
           <DialogDescription asChild>
             <div>
               <p className="sm:max-w-[700px] lg:max-w-[700px] break-words">
                 {data.node?.description}
               </p>
-              
+
               <div className="flex pt-3">
                 {/* <Variable className="edit-node-modal-variable "></Variable> */}
                 <span className="edit-node-modal-span">List</span>
@@ -252,10 +249,10 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
                             ) : data.node.template[n].type === "bool" ? (
                               <div className="ml-auto">
                                 {" "}
-                                <ToggleShadComponent
+                                <Switch
                                   disabled={disabled}
-                                  enabled={data.node.template[n].value}
-                                  setEnabled={(t) => {
+                                  checked={data.node.template[n].value}
+                                  onCheckedChange={(t) => {
                                     handleOnNewValue(t, n);
                                   }}
                                   size="small"
@@ -348,9 +345,9 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
                           </TableCell>
                           <TableCell className="p-0 text-right">
                             <div className="items-center text-center">
-                              <ToggleShadComponent
-                                enabled={!data.node.template[n].advanced}
-                                setEnabled={(e) =>
+                              <Switch
+                                checked={!data.node.template[n].advanced}
+                                onCheckedChange={(e) =>
                                   changeAdvanced(data.node.template[n])
                                 }
                                 disabled={disabled}
@@ -368,7 +365,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
         </div>
 
         <DialogFooter>
-          <Button className="mt-3 rounded-full" onClick={handleSave} type="submit" >save</Button>
+          <Button className="mt-3 rounded-full" onClick={handleSave} type="submit">save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

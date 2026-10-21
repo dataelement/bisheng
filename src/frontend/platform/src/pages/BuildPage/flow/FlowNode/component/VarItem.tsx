@@ -1,8 +1,9 @@
-import { Badge } from "@/components/bs-ui/badge";
 import { Label } from "@/components/bs-ui/label";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { ChevronUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
+import { Tag } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useUpdateVariableState } from "../flowNodeStore";
 
@@ -10,7 +11,7 @@ export default function VarItem({ data: paramItem, i18nPrefix }) {
     const [open, setOpen] = useState(true)
     const { t } = useTranslation('flow')
 
-    // Update Preset Questions 
+    // Update Preset Questions
     const [_, forceUpdate] = useState(false)
     const [updateVariable] = useUpdateVariableState()
     useEffect(() => {
@@ -40,12 +41,12 @@ export default function VarItem({ data: paramItem, i18nPrefix }) {
                 {t(`${i18nPrefix}label`)}
                 {paramItem.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
             </Label>
-            <ChevronUp className={open ? 'rotate-180' : ''} onClick={() => setOpen(!open)} />
+            <Outlined.Up size={16} className={open ? 'rotate-180' : ''} onClick={() => setOpen(!open)} />
         </div>
         <div className={open ? 'block' : 'hidden'}>
             {
                 paramItem.value.map((item, index) =>
-                    <Badge key={item.key} variant="outline" className="bg-[#E6ECF6] text-[#2B53A0] ml-1 mt-1 max-w-full truncate inline-block">{item.label}</Badge>
+                    <Tag size="small" color="brand" key={item.key} className="ml-1 mt-1 max-w-full truncate inline-block">{item.label}</Tag>
                 )
             }
         </div>
@@ -56,6 +57,6 @@ export default function VarItem({ data: paramItem, i18nPrefix }) {
             {t(`${i18nPrefix}label`)}
             {paramItem.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
         </Label>
-        <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{paramItem.key}</Badge>
+        <Tag size="small" color="brand" className="">{paramItem.key}</Tag>
     </div>
 };

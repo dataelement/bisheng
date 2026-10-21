@@ -1,18 +1,20 @@
 // @ts-strict-ignore
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { notification } from '@bisheng/ui';
+import { Dialog,DialogContent,DialogHeader,DialogTitle,DialogTrigger } from "@/components/bs-ui/dialog";
+
 import {
-    batchAddFileTagsApi,
-    createKnowledgeTagApi,
-    deleteKnowledgeTagApi,
-    getKnowledgeTagsApi,
-    KnowledgeTagItem,
-    setFileTagsApi
+batchAddFileTagsApi,
+createKnowledgeTagApi,
+deleteKnowledgeTagApi,
+getKnowledgeTagsApi,
+KnowledgeTagItem,
+setFileTagsApi
 } from "@/controllers/API/knowledgeTags";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { truncateString } from "@/util/utils";
-import { Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface KnowledgeTagSelectProps {
@@ -37,7 +39,7 @@ export default function KnowledgeTagSelect({
     isEditable = true,
     mode = 'auto'
 }: KnowledgeTagSelectProps) {
-    const { toast } = useToast();
+
     const { t } = useTranslation('knowledge');
     const [open, setOpen] = useState(false);
     const [tags, setTags] = useState<KnowledgeTagItem[]>([]);
@@ -105,7 +107,7 @@ export default function KnowledgeTagSelect({
         const name = value.trim();
         if (!name) return false;
         if (name.length > TAG_NAME_MAX_LENGTH) {
-            toast({ variant: 'error', description: t('tagNameMaxLength', { count: TAG_NAME_MAX_LENGTH }) });
+            notification.open({ type: 'error', description: String(t('tagNameMaxLength', { count: TAG_NAME_MAX_LENGTH }) ?? '') });
             return false;
         }
         return true;
@@ -155,7 +157,7 @@ export default function KnowledgeTagSelect({
         }
         setTags(prev => prev.filter(item => item.id !== tag.id));
         setSelectedTagIds(prev => prev.filter(id => id !== tag.id));
-        toast({ variant: 'success', description: t('tagDeleted') });
+        notification.open({ type: 'success', description: String(t('tagDeleted') ?? '') });
         setDeletingTagId(null);
     };
 
@@ -225,7 +227,7 @@ export default function KnowledgeTagSelect({
                                         toggleTag(tag.id);
                                     }}
                                 >
-                                    <X className="h-3.5 w-3.5" />
+                                    <Outlined.Close className="h-3.5 w-3.5" />
                                 </button>
                             </span>
                         ))}
@@ -277,7 +279,7 @@ export default function KnowledgeTagSelect({
                                             }}
                                             disabled={deletingTagId === tag.id}
                                         >
-                                            <Trash2 className="size-3" />
+                                            <Outlined.Delete className="size-3" />
                                         </button>
                                     </span>
                                 );

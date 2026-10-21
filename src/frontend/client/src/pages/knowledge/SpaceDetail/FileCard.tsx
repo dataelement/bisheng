@@ -1,9 +1,11 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { Download, MoreVertical, GitBranch, History, FileSearch } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useState, type MouseEvent } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Tag } from "@bisheng/ui";
-import { Button, Checkbox } from "~/components";
+import { Button } from "~/components";
+import { Checkbox } from '@bisheng/ui';
 import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
 import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import { Card, CardContent } from "~/components/ui/Card";
@@ -18,7 +20,7 @@ import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemRetryable, isKnowledgeItemUploading, type KnowledgeStatusTone } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -270,14 +272,7 @@ export function FileCard({
         );
 
         const wrapped = statusReason ? (
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <span className="inline-flex">{pill}</span>
-                </TooltipTrigger>
-                <TooltipContent noArrow side="top" className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white">
-                    {statusReason}
-                </TooltipContent>
-            </Tooltip>
+            <SharedTooltip  content={statusReason} side="top" ><span className="inline-flex">{pill}</span></SharedTooltip>
         ) : pill;
 
         // Inline (H5 row meta line) returns the bare pill; desktop card overlays it on the icon.
@@ -624,10 +619,10 @@ export function FileCard({
                 {!hideSelectionCheckbox && mobileListMode && (
                     <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
-                            className={cn(
+                            className={`peer ${(cn(
                                 SELECTION_CHECKBOX_CLASS,
                                 !isSelectable && "cursor-not-allowed opacity-50",
-                            )}
+                            )) || ''}`}
                             disabled={!isSelectable}
                             checked={isSelected}
                             onCheckedChange={(checked) => onSelect(!!checked)}
@@ -670,10 +665,10 @@ export function FileCard({
                             )}
                         >
                             <Checkbox
-                                className={cn(
+                                className={`peer ${(cn(
                                     SELECTION_CHECKBOX_CLASS,
                                     !isSelectable && "cursor-not-allowed opacity-50",
-                                )}
+                                )) || ''}`}
                                 disabled={!isSelectable}
                                 checked={isSelected}
                                 onCheckedChange={(checked) => onSelect(!!checked)}

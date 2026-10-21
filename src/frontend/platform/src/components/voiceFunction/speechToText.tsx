@@ -1,7 +1,6 @@
-import { Button } from "@/components/bs-ui/button";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Button, notification } from "@bisheng/ui";
 import { speechToText } from "@/controllers/API/workbench";
-import { Mic, Pause } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VoiceSession } from "../../../../shared/voice/session";
@@ -21,7 +20,6 @@ interface SpeechToTextProps {
 
 export function SpeechToTextComponent(props: SpeechToTextProps) {
   const { t } = useTranslation("knowledge");
-  const { toast } = useToast();
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const sessionRef = useRef<VoiceSession | null>(null);
@@ -31,7 +29,7 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
   const { setIsLoading } = useAudioStore();
   const errorRef = useRef(() => {});
   errorRef.current = () =>
-    toast({ description: t("voiceInput.failed"), variant: "error" });
+    notification.open({ description: t("voiceInput.failed"), type: "error" });
 
   useEffect(
     () => () => {
@@ -100,8 +98,10 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
     <div className="absolute right-12 top-5">
       <Button
         type="button"
-        size="icon"
-        variant="ghost"
+        size="small"
+        iconOnly
+        variant="text"
+        color="default"
         className="h-6 w-6"
         disabled={!recording && (props.disabled || busy)}
         aria-label={label}
@@ -110,7 +110,7 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
         onMouseDown={(event) => event.preventDefault()}
         onClick={handleClick}
       >
-        {recording ? <Pause size={18} /> : <Mic size={18} />}
+        {recording ? <Outlined.PlayerPause /> : <Outlined.Microphone />}
       </Button>
     </div>
   );

@@ -1,15 +1,14 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import MessagePanne from "@/components/bs-comp/chatComponent/MessagePanne";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { Button } from "@/components/bs-ui/button";
-import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
-import ShadTooltip from "@/components/ShadTooltipComponent";
+
+import { RadioGroup, Radio, Tooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { getMarkPermissionApi, getMarkStatusApi, getNextMarkChatApi, updateMarkStatusApi } from "@/controllers/API/log";
 import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
 import { AppNumType } from "@/types/app";
-import { ArrowLeft } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -43,18 +42,8 @@ const PageChange = () => {
     }
 
     return <div className="flex gap-2">
-        <Button
-            variant="outline"
-            disabled={!hasPrev}
-            className="border-primary text-primary text-xs h-8"
-            onClick={() => jumpToNext(-1)}
-        >{t('label.previousChat')}</Button>
-        <Button
-            variant="outline"
-            disabled={!hasNext}
-            className="border-primary text-primary text-xs h-8"
-            onClick={() => jumpToNext(1)}
-        >{t('label.nextChat')}</Button>
+        <Button variant="outlined" disabled={!hasPrev} className="border-primary text-primary text-xs h-8" onClick={() => jumpToNext(-1)} color="default">{t('label.previousChat')}</Button>
+        <Button variant="outlined" disabled={!hasNext} className="border-primary text-primary text-xs h-8" onClick={() => jumpToNext(1)} color="default">{t('label.nextChat')}</Button>
     </div>
 }
 
@@ -130,37 +119,27 @@ export default function index() {
         setStatus(status)
     }
 
-    return <div>
+    return <div className="flex h-full min-h-0 flex-col">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <div className="bg-background-login px-4">
-            <div className="flex justify-between items-center py-4">
+        <div className="bg-background-login px-4 flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 flex-wrap gap-3 justify-between items-center py-4">
                 <div className="flex items-center">
-                    <ShadTooltip content={t('back')} side="top">
-                        <Button
-                            className="w-[36px] px-2 rounded-full"
-                            variant="outline"
-                            onClick={() => navigator('/label/' + id)}
-                        ><ArrowLeft className="side-bar-button-size" /></Button>
-                    </ShadTooltip>
+                    <Tooltip content={t('back')} side="top">
+                        <Button size="medium" aria-label={t('back')} variant="outlined" onClick={() => navigator('/label/' + id)} color="default" iconOnly><Outlined.ArrowLeft size={16} /></Button>
+                    </Tooltip>
                     <span className=" text-gray-700 text-sm font-black pl-4">{t('label.returnToList')}</span>
                 </div>
-                <RadioGroup className="flex space-x-2 h-[20px] items-center" value={status}
+                <RadioGroup value={status}
                     onValueChange={(value: LabelStatus) => changeMarkStatus(value)} disabled={!isSelf && status !== LabelStatus.Unlabeled}>
-                    <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unlabeled} />{t('label.unlabeled')}
-                    </Label>
-                    <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Labeled} />{t('label.labeled')}
-                    </Label>
-                    <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unnecessary} />{t('label.unnecessary')}
-                    </Label>
+                    <Radio disabled={!mark} value={LabelStatus.Unlabeled}>{t('label.unlabeled')}</Radio>
+                    <Radio disabled={!mark} value={LabelStatus.Labeled}>{t('label.labeled')}</Radio>
+                    <Radio disabled={!mark} value={LabelStatus.Unnecessary}>{t('label.unnecessary')}</Radio>
                 </RadioGroup>
                 <PageChange />
             </div>
-            <div className="h-[calc(100vh-132px-var(--license-banner-h,0px))]">
+            <div className="min-h-0 flex-1">
                 {type === AppNumType.FLOW
                     ? <ChatMessages mark={mark} logo='' useName='' guideWord='' loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={handleMarkClick}></ChatMessages>
                     : <MessagePanne mark={mark} logo='' useName='' guideWord=''

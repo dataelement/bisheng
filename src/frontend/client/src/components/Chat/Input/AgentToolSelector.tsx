@@ -10,7 +10,7 @@ import { Settings2Icon, WebhookIcon } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useEffect } from "react";
 import { useRecoilState } from "recoil";
-import { Switch } from "~/components/ui";
+import { Switch } from '@bisheng/ui';
 import ApiAppIcon from "~/components/ui/icon/ApiApp";
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
 import { useLocalize } from "~/hooks";
@@ -166,8 +166,8 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
                 </span>
               </div>
               <Switch
-                variant="tool"
-                className="shrink-0"
+
+                className="peer shrink-0"
                 disabled={disabled}
                 checked={isChecked(group.id)}
                 onCheckedChange={() => toggle(group)}

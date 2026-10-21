@@ -1,12 +1,14 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { Button, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { FileSearch, GitBranch, History } from "lucide-react";
 import { useState } from "react";
 
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
-import { Checkbox, DropdownMenu, DropdownMenuTrigger } from "~/components";
+import { DropdownMenu, DropdownMenuTrigger } from "~/components";
+import { Checkbox } from '@bisheng/ui';
 import { ActionMenuContent, ActionMenuItem, ActionMenuLoadingRow } from "~/components/ActionMenu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
@@ -104,14 +106,7 @@ const StatusBadge = ({ file }: { file: KnowledgeFile }) => {
     // deliberately shows no reason either: the user opens the folder to see which file failed.
     if (!statusReason || status === FileStatus.WAITING || isFolderWithAbnormal) return pill;
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <div className="inline-flex max-w-full">{pill}</div>
-            </TooltipTrigger>
-            <TooltipContent noArrow side="top" className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white">
-                {statusReason}
-            </TooltipContent>
-        </Tooltip>
+        <SharedTooltip  content={statusReason} side="top" ><div className="inline-flex max-w-full">{pill}</div></SharedTooltip>
     );
 };
 
@@ -391,11 +386,11 @@ export function FileListRow({
                 // two handlers would cancel each other out on a checkbox click.
                 onClick={(e) => e.stopPropagation()}
                 disabled={!isSelectable}
-                className={cn(
+                className={`peer ${(cn(
                     "size-4 shrink-0",
                     SELECTION_CHECKBOX_CLASS,
                     !isSelectable && "cursor-not-allowed opacity-50",
-                )}
+                )) || ''}`}
             />
 
             <div
@@ -524,9 +519,7 @@ export function FileListRow({
                 onClick={(e) => e.stopPropagation()}
             >
                 {canDownload && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
+                    <SharedTooltip  content={localize("com_knowledge.download")} ><Button
                                 color="default"
                                 variant="text"
                                 size="medium"
@@ -536,10 +529,7 @@ export function FileListRow({
                                 onClick={(e) => { e.stopPropagation(); onDownload(); }}
                             >
                                 <Outlined.Download />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{localize("com_knowledge.download")}</TooltipContent>
-                    </Tooltip>
+                            </Button></SharedTooltip>
                 )}
                 {canDownload && showMoreMenu && (
                     <span aria-hidden className="mx-1 h-2 w-px shrink-0 bg-border-base" />

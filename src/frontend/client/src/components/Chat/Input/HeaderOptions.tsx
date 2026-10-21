@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useRecoilState } from 'recoil';
 import { Settings2 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
@@ -11,7 +12,7 @@ import {
 } from '~/types/chat';
 import type { TPreset, TInterfaceConfig } from '~/types/chat';
 import { EndpointSettings, SaveAsPresetDialog, AlternativeSettings } from '~/components/Endpoints';
-import { PluginStoreDialog, TooltipAnchor } from '~/components';
+import { PluginStoreDialog } from '~/components';
 import { ModelSelect } from '~/components/Input/ModelSelect';
 import { useSetIndexOptions, useLocalize } from '~/hooks';
 import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
@@ -83,18 +84,7 @@ export default function HeaderOptions({
               {!noSettings[endpoint] &&
                 interfaceConfig?.parameters === true &&
                 paramEndpoint === false && (
-                <TooltipAnchor
-                  id="parameters-button"
-                  aria-label={localize('com_ui_model_parameters')}
-                  description={localize('com_ui_model_parameters')}
-                  tabIndex={0}
-                  role="button"
-                  onClick={triggerAdvancedMode}
-                  data-testid="parameters-button"
-                  className="inline-flex size-10 items-center justify-center rounded-lg border border-border-light bg-transparent text-text-primary transition-all ease-in-out hover:bg-surface-tertiary disabled:pointer-events-none disabled:opacity-50 radix-state-open:bg-surface-tertiary"
-                >
-                  <Settings2 size={16} aria-label="Settings/Parameters Icon" />
-                </TooltipAnchor>
+                <SharedTooltip  content={localize('com_ui_model_parameters')}  ><div id="parameters-button" aria-label={localize('com_ui_model_parameters')} tabIndex={0} role="button" onClick={triggerAdvancedMode} data-testid="parameters-button" className="inline-flex size-10 items-center justify-center rounded-lg border border-border-light bg-transparent text-text-primary transition-all ease-in-out hover:bg-surface-tertiary disabled:pointer-events-none disabled:opacity-50 radix-state-open:bg-surface-tertiary"  onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.click(); } }}><Settings2 size={16} aria-label="Settings/Parameters Icon" /></div></SharedTooltip>
               )}
             </div>
             {interfaceConfig?.parameters === true && paramEndpoint === false && (

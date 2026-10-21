@@ -1,33 +1,36 @@
 // @ts-strict-ignore
-import { useTranslation } from "react-i18next"
-import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "../../../components/bs-ui/button";
-import { SearchInput } from "../../../components/bs-ui/input";
-import { PlusIcon } from "@/components/bs-icons/plus";
+import { Button, SearchInput, toast } from '@bisheng/ui';
+import { Tag } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { useTranslation } from "react-i18next";
+
+
+
+
 import { LoadingIcon } from "@/components/bs-icons/loading";
-import { deleteUserGroupV2, listUserGroupsV2, UserGroupV2 } from "@/controllers/API/userGroups";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
-import { message } from "@/components/bs-ui/toast/use-toast";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableFooter,
-    TableHead,
-    TableHeader,
-    TableRow
-} from "../../../components/bs-ui/table";
-import {
-    ColumnResizeHandle,
-    useResizableColumns,
-    type ResizableColumnDef,
+ColumnResizeHandle,
+useResizableColumns,
+type ResizableColumnDef,
 } from "@/components/bs-ui/table/useResizableColumns";
+
 import { cname } from "@/components/bs-ui/utils";
-import EditUserGroup from "./EditUserGroup";
 import { userContext } from "@/contexts/userContext";
+import { deleteUserGroupV2,listUserGroupsV2,UserGroupV2 } from "@/controllers/API/userGroups";
+import { useContext,useEffect,useMemo,useRef,useState } from "react";
+import {
+Table,
+TableBody,
+TableCell,
+TableFooter,
+TableHead,
+TableHeader,
+TableRow
+} from "../../../components/bs-ui/table";
+import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import EditUserGroup from "./EditUserGroup";
 
 const isGroupCreator = (user: any, ug: UserGroupV2) => {
     const creatorId = Number(ug.create_user)
@@ -104,7 +107,7 @@ export default function UserGroups() {
                         deleteUserGroupV2(ug.id).then(() => loadData()),
                     )
                     if (res === false) return
-                    message({ variant: "success", description: t("deleteSuccess") })
+                    toast.show({ type: "success", message: String(t("deleteSuccess") ?? '') })
                 } finally {
                     next()
                 }
@@ -171,7 +174,7 @@ export default function UserGroups() {
                     <SearchInput placeholder={t('system.groupName')} onChange={handleSearch}></SearchInput>
                 </div>
                 <Button className="flex justify-around" disabled={loading} onClick={() => setUserGroup({})}>
-                    <PlusIcon className="text-primary" />
+                    <Outlined.Plus className="size-4 shrink-0" />
                     <span className="text-[#fff] mx-4">{t('create')}</span>
                 </Button>
             </div>
@@ -224,18 +227,18 @@ export default function UserGroups() {
                                     {(ug.update_time || "").replace("T", " ")}
                                 </TableCell>
                                 <TableCell {...ugRc.getTdProps(3)}>
-                                    <Badge variant={ug.visibility === 'private' ? 'secondary' : 'outline'}>
+                                    <Tag size="small" color="default">
                                         {ug.visibility === 'private' ? t('system.visibilityPrivate') : t('system.visibilityPublic')}
-                                    </Badge>
+                                    </Tag>
                                 </TableCell>
                                 <TableCell
                                     {...ugRc.getTdProps(4)}
                                     className="whitespace-nowrap text-right"
                                 >
-                                    <Button variant="link" disabled={loading || !canEditUserGroup(user, ug)} onClick={() => setUserGroup({ ...ug })}
-                                        className="px-0 pl-6">{t('edit')}
-                                    </Button>
-                                    <Button variant="link" disabled={loading || !canDeleteUserGroup(user, ug)} onClick={() => handleDelete(ug)} className="text-red-500 px-0 pl-6">{t('delete')}</Button>
+                                    <div className="flex justify-end gap-2">
+                                        <Button size="small" variant="link" disabled={loading || !canEditUserGroup(user, ug)} onClick={() => setUserGroup({ ...ug })}>{t('edit')}</Button>
+                                        <Button size="small" variant="link" color="danger" disabled={loading || !canDeleteUserGroup(user, ug)} onClick={() => handleDelete(ug)}>{t('delete')}</Button>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}

@@ -1,7 +1,8 @@
 // @ts-strict-ignore
-import React, { useState, useEffect, useRef } from "react";
+import { Outlined } from "bisheng-icons";
 import * as mammoth from "mammoth";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { useEffect,useRef,useState } from "react";
+
 
 declare const __APP_ENV__: any;
 
@@ -86,7 +87,7 @@ const DocxPreview = ({ filePath }) => {
     if (loading) {
         return (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                <LoadingIcon />
+                <Outlined.Loading  className="size-4 animate-spin"/>
             </div>
         );
     }

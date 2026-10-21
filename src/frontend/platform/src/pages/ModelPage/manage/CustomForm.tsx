@@ -1,4 +1,4 @@
-import { Input } from '@/components/bs-ui/input';
+import { Input } from '@bisheng/ui';
 import { Label } from '@/components/bs-ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';

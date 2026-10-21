@@ -1,4 +1,4 @@
-import { Button } from "@/components/bs-ui/button"
+import { Button } from "@bisheng/ui"
 import { Label } from "@/components/bs-ui/label"
 import { useTranslation } from "react-i18next"
 

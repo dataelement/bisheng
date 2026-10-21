@@ -1,25 +1,27 @@
 // @ts-strict-ignore
-import { ClearIcon } from "@/components/bs-icons/clear";
-import { FormIcon } from "@/components/bs-icons/form";
-import { SendIcon } from "@/components/bs-icons/send";
-import { Button } from "@/components/bs-ui/button";
-import { Textarea } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Button, Textarea, notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
+
+
+
+
+
 import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { locationContext } from "@/contexts/locationContext";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { formatDate } from "@/util/utils";
-import { CirclePause } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+
+import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useVoiceDraft } from "@/hooks/useVoiceDraft";
 import GuideQuestions from "./GuideQuestions";
-import { isBlockingChatError, resolveChatErrorMessage } from "./chatErrorMessage";
+import { isBlockingChatError,resolveChatErrorMessage } from "./chatErrorMessage";
 import { useMessageStore } from "./messageStore";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
-    const { toast } = useToast()
+
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
 
@@ -119,11 +121,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
             wsRef.current.send(JSON.stringify(msg))
         } catch (error) {
-            toast({
-                title: 'There was an error sending the message',
-                variant: 'error',
-                description: error.message
-            });
+            notification.open({ type: 'error', title: String('There was an error sending the message'), description: String(error.message ?? '') });
         }
     }
 
@@ -157,10 +155,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
                     if (data.category === 'error') {
                         const errorMsg = resolveChatErrorMessage(data.message, t)
-                        toast({
-                            variant: 'error',
-                            description: errorMsg
-                        })
+                        notification.open({ type: 'error', description: String(errorMsg ?? '') })
                         updateCurrentMessage({
                             type: 'end_cover',
                             category: 'tool',
@@ -328,7 +323,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => { !inputLock.locked && onClickClear?.() }}
-                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
+                    ><Outlined.Delete className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></Outlined.Delete></div>
                 }
             </div>
             {/* form switch */}
@@ -337,7 +332,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
+                    ><Outlined.Upload size={32} className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></Outlined.Upload></div>
                 }
             </div>
             {/* send */}
@@ -356,20 +351,18 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         id="bs-send-btn"
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
                         onClick={() => { !inputLock.locked && handleSendClick() }}>
-                        <SendIcon className={`${inputLock.locked || audioOpening || voice.busy ? 'text-muted-foreground' : 'text-foreground'}`} />
+                        <Outlined.Send className={`${inputLock.locked || audioOpening || voice.busy ? 'text-muted-foreground' : 'text-foreground'}`} />
                     </div>
                 }
             </div>
             {/* stop autogen等待输入时专用*/}
             <div className="absolute w-full flex justify-center bottom-32">
-                {autogenStop && <Button
-                    className="rounded-full"
-                    variant="outline" onClick={() => {
+                {autogenStop && <Button className="rounded-full" variant="outlined" onClick={() => {
                         if (stop.disable) return
                         setStop({ show: true, disable: true });
                         setAutogenStop(false)
                         sendWsMsg({ "action": "stop" });
-                    }}><CirclePause className="mr-2" />Stop</Button>}
+                    }} color="default"><Outlined.PlayerPause className="mr-2" />Stop</Button>}
             </div>
             {/* question */}
             <Textarea
@@ -382,14 +375,12 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 onCompositionStart={voice.compositionStart}
                 onCompositionEnd={voice.compositionEnd}
                 placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
-                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                         event.preventDefault();
                         !inputLock.locked && handleSendClick()
                     }
-                }}
-            ></Textarea>
+                }} textareaClassName={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}></Textarea>
         </div>
         <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>
     </div>

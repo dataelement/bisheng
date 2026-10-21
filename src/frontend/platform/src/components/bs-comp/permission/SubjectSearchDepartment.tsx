@@ -1,6 +1,6 @@
 import { SubjectBusinessId } from "../selectComponent/SubjectSearchStatus"
 import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department"
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Checkbox } from '@bisheng/ui';
 import {
   getDepartmentChildrenApi,
   getDepartmentPathTreeApi,
@@ -103,7 +103,6 @@ export function SubjectSearchDepartment({
   // Subtree coverage remains a flag rather than enumerated descendant picks.
   useEffect(() => {
     onSelectionSummaryChange?.(value)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, onSelectionSummaryChange])
 
   const displayPath = (node: DepartmentTreeNode): string => {
@@ -141,7 +140,7 @@ export function SubjectSearchDepartment({
     const implicit = !explicit && !disabled && isImplicit(node)
     return (
       <Checkbox
-        className="mr-1.5 shrink-0"
+        className="peer mr-1.5 shrink-0"
         checked={explicit || implicit || disabled}
         disabled={disabled || implicit}
         onClick={(e) => e.stopPropagation()}
@@ -180,7 +179,7 @@ export function SubjectSearchDepartment({
       </div>
       {showIncludeChildrenToggle && (
         <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <Checkbox checked={includeChildren} onCheckedChange={(v) => onIncludeChildrenChange(v === true)} />
+          <Checkbox className="peer" checked={includeChildren} onCheckedChange={(v) => onIncludeChildrenChange(v === true)} />
           {t("includeChildren")}
         </label>
       )}

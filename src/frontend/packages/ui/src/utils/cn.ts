@@ -12,17 +12,13 @@ import { type ClassValue, clsx } from 'clsx';
  * 16px. Registering them in the `font-size` group makes cn() preserve size +
  * color together, and collapse size-vs-size correctly.
  *
- * NOTE: this uses the tailwind-merge **v1.x** config shape (`classGroups` at the
- * top level). v2+ nests it under `extend` — do not copy a v2 snippet here while
- * the dependency is pinned to ^1.14.0 (kept in the workspace catalog).
  */
-const twMerge = extendTailwindMerge({
-  classGroups: {
-    'font-size': [
-      { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
-    ],
-  },
-});
+const classGroups = {
+  'font-size': [
+    { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
+  ],
+};
+const twMerge = extendTailwindMerge({ extend: { classGroups } });
 
 /**
  * Merges the tailwind classes (using twMerge). Conditionally removes false values

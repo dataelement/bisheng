@@ -1,3 +1,5 @@
+import { notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 // Page-level admin-scope switcher for LLM management.
 //
 // v2.5.1: scope was originally exposed as a global HeaderTenantScope
@@ -7,7 +9,8 @@
 // lives on this page so its visible affordance matches where it changes
 // data. Renders nothing for non-super-admin users.
 
-import { ChevronDown } from "lucide-react"
+import { Button } from "@bisheng/ui"
+
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useQueryClient } from "react-query"
@@ -20,7 +23,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/bs-ui/dropdownMenu"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+
 import { getTenantsApi } from "@/controllers/API/tenant"
 import { useAdminScope } from "@/hooks/useAdminScope"
 import { Tenant } from "@/types/api/tenant"
@@ -85,7 +88,7 @@ function SuperAdminScopeSwitcher({
         if (rootTenant) {
             return displayTenantName(rootTenant.tenant_name) || rootTenant.tenant_code
         }
-        return t("tenant.adminScope.global", { defaultValue: "全树（默认）" })
+        return t("tenant.adminScope.global")
     }, [rootTenant, t])
 
     const currentLabel = useMemo(() => {
@@ -94,7 +97,7 @@ function SuperAdminScopeSwitcher({
         }
         const hit = tenants.find((row) => row.id === scope.scope_tenant_id)
         if (!hit) {
-            return t("tenant.adminScope.loading", { defaultValue: "加载中..." })
+            return t("tenant.adminScope.loading")
         }
         return displayTenantName(hit.tenant_name) || hit.tenant_code
     }, [scope.scope_tenant_id, tenants, t, rootLabel])
@@ -108,15 +111,11 @@ function SuperAdminScopeSwitcher({
             // -aware data (e.g. ModelSelect dropdowns).
             await queryClient.invalidateQueries()
             await onScopeChange?.()
-            toast({
-                variant: "success",
-                description: next === null
-                    ? t("tenant.adminScope.cleared", { defaultValue: "已恢复全树视图" })
+            notification.open({ type: "success", description: String(next === null
+                    ? t("tenant.adminScope.cleared")
                     : t("tenant.adminScope.switched", {
-                        defaultValue: "已切换管理视图",
                         name: tenants.find((r) => r.id === next)?.tenant_name || "",
-                    }),
-            })
+                    }) ?? '') })
         } catch {
             // request interceptor will surface the error toast
         }
@@ -127,22 +126,22 @@ function SuperAdminScopeSwitcher({
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <button
+                <Button
                     type="button"
-                    className="h-9 px-3 bg-secondary rounded-md flex items-center justify-center cursor-pointer hover:bg-secondary/80 transition-colors"
-                    title={t("tenant.adminScope.label", { defaultValue: "管理视图" }) + ": " + currentLabel}
-                    disabled={scopeLoading}
+                    variant="filled"
+                    title={t("tenant.adminScope.label") + ": " + currentLabel}
+                    disabled={scopeLoading} color="default"
                 >
                     <span className="text-xs text-muted-foreground mr-1">
-                        {t("tenant.adminScope.label", { defaultValue: "管理视图" })}：
+                        {t("tenant.adminScope.label")}{": "}
                     </span>
                     <span className="text-sm max-w-32 truncate">{currentLabel}</span>
-                    <ChevronDown className="ml-1 w-4 h-4" />
-                </button>
+                    <Outlined.Down className="ml-1 w-4 h-4" />
+                </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-[180px]">
                 <DropdownMenuLabel>
-                    {t("tenant.adminScope.label", { defaultValue: "管理视图" })}
+                    {t("tenant.adminScope.label")}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => handleSelect(null)}>
@@ -151,12 +150,12 @@ function SuperAdminScopeSwitcher({
                 </DropdownMenuItem>
                 {tenantsLoading && (
                     <DropdownMenuItem disabled>
-                        {t("tenant.adminScope.loading", { defaultValue: "加载中..." })}
+                        {t("tenant.adminScope.loading")}
                     </DropdownMenuItem>
                 )}
                 {!tenantsLoading && childTenants.length === 0 && (
                     <DropdownMenuItem disabled>
-                        {t("tenant.adminScope.noChild", { defaultValue: "暂无子租户" })}
+                        {t("tenant.adminScope.noChild")}
                     </DropdownMenuItem>
                 )}
                 {childTenants.map((row) => (

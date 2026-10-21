@@ -1,10 +1,12 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { FlagIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
+
 import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
-import { RefreshCw, Search, SquarePen } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
@@ -34,7 +36,7 @@ export default function MessageUser({ debug, mark = false, useName = '', data, o
         <div className="w-fit group min-h-8 max-w-[90%]">
             <div className="flex justify-end items-center mb-2 gap-2">
                 <div className={`text-right group-hover:opacity-100 opacity-0`}>
-                    <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                    <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, t('short', { ns: 'flow' }))}</span>
                 </div>
                 {useName && <p className="text-gray-600 text-sm">{useName}</p>}
             </div>
@@ -58,9 +60,9 @@ export default function MessageUser({ debug, mark = false, useName = '', data, o
                 </div> : (!Array.isArray(data.message.data) && <div className="flex justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <span></span>
                     {!debug && <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
-                        {!running && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
-                        {!running && <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />}
-                        {appConfig.dialogQuickSearch && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
+                        {!running && <Outlined.Edit className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
+                        {!running && <Outlined.Refresh className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />}
+                        {appConfig.dialogQuickSearch && <Outlined.Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
                     </div>}
                 </div>)
             }

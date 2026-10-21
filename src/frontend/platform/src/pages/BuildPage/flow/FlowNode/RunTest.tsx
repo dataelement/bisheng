@@ -1,21 +1,23 @@
 // @ts-strict-ignore
+import { Button, Textarea, toast } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 
-import { Button } from "@/components/bs-ui/button";
-import { Textarea } from "@/components/bs-ui/input";
+
+
 import { Label } from "@/components/bs-ui/label";
-import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
+import { Sheet,SheetClose,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
+
 import { runWorkflowNodeApi } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { WorkflowNode } from "@/types/flow";
 import { copyText } from "@/utils";
-import { Copy, CopyCheck } from "lucide-react";
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+
+import { forwardRef,useEffect,useImperativeHandle,useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useParams } from "react-router-dom";
 import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
-import { useParams } from "react-router-dom";
 
 interface Input {
     key: string,
@@ -49,7 +51,7 @@ export const ResultText = ({ title, value }: { title: string, value: any }) => {
     return <div className="nowheel nodrag mb-2 rounded-md border bg-search-input text-sm shadow-sm" onKeyDown={e => e.stopPropagation()}>
         <div className="border-b px-2 flex justify-between items-center">
             <p className="truncate">{title}</p>
-            {copyed ? <CopyCheck size={14} /> : <Copy size={14} className="cursor-pointer min-w-3" onClick={handleCopy} />}
+            {copyed ? <Outlined.Copied size={14} /> : <Outlined.Copy size={14} className="cursor-pointer min-w-3" onClick={handleCopy} />}
         </div>
         <textarea defaultValue={text} readOnly className="w-full min-h-28 p-2 block text-muted-foreground bg-gray-100 dark:bg-black outline-none" />
     </div>
@@ -61,7 +63,7 @@ export const RunTest = forwardRef((props, ref) => {
     const [inputs, setInputs] = useState<Input[]>([])
     const [loading, setLoading] = useState(false)
     const [node, setNode] = useState<WorkflowNode>(null)
-    const { message } = useToast()
+
     const { t } = useTranslation('flow')
     const [currentIndex, setCurrentIndex] = useState(0)
     const { id: workflow_id } = useParams();
@@ -146,10 +148,7 @@ export const RunTest = forwardRef((props, ref) => {
     const handleRunClick = async () => {
         inputs.some(input => {
             if (input.required && !input.value) {
-                message({
-                    variant: "warning",
-                    description: `${input.label} ${t('required')}`
-                })
+                toast.show({ type: "warning", message: String(`${input.label} ${t('required')}`) })
                 return true
             }
         })
@@ -249,17 +248,13 @@ export const RunTest = forwardRef((props, ref) => {
                                 {input.required && <span className="text-red-500">*</span>}
                                 {input.label}
                             </Label>
-                            <Textarea
-                                className=""
-                                defaultValue={input.value}
-                                onChange={(e) => {
+                            <Textarea defaultValue={input.value} onChange={(e) => {
                                     setInputs((prev) =>
                                         prev.map((item) =>
                                             item.key === input.key ? { ...item, value: e.target.value } : item
                                         )
                                     );
-                                }}
-                            />
+                                }} textareaClassName={""} />
                         </div>
                     ))}
 

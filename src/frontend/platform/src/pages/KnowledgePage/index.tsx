@@ -1,10 +1,5 @@
 // @ts-strict-ignore
-import {
-    Tabs,
-    TabsContent,
-    TabsList,
-    TabsTrigger,
-} from "../../components/bs-ui/tabs";
+import { Tabs } from "@bisheng/ui";
 
 import { useTranslation } from "react-i18next";
 import KnowledgeFile from "./KnowledgeFile";
@@ -22,18 +17,10 @@ export default function index() {
 
     return (
         <div className="w-full h-full px-2 pt-4 relative">
-            <Tabs defaultValue={defaultValue} className="w-full mb-[40px]">
-                <TabsList className="">
-                    <TabsTrigger value="file">{t('lib.fileData')}</TabsTrigger>
-                    <TabsTrigger value="qa" className="roundedrounded-xl">{t('lib.qaData')}</TabsTrigger>
-                </TabsList>
-                <TabsContent value="qa">
-                    <KnowledgeQa />
-                </TabsContent>
-                <TabsContent value="file">
-                    <KnowledgeFile />
-                </TabsContent>
-            </Tabs>
+            <Tabs defaultActiveKey={defaultValue} className="w-full mb-10" items={[
+                { key: 'file', label: t('lib.fileData'), children: <KnowledgeFile /> },
+                { key: 'qa', label: t('lib.qaData'), children: <KnowledgeQa /> },
+            ]} />
         </div>
     );
 }

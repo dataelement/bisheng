@@ -1,14 +1,16 @@
 // @ts-strict-ignore
-"use client"
+import { Button, Input } from '@bisheng/ui';
 
-import { Input } from "@/components/bs-ui/input"
-import { Label } from "@/components/bs-ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
-import { getDatasets, MetricConfig } from "@/controllers/API/dashboard"
-import { Calendar, ChevronDown, ChevronRight, ChevronUp, Clock3, Hash, Search, Type } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
-import { useQuery } from "react-query"
-import { useTranslation } from "react-i18next"
+import { Outlined } from "bisheng-icons";
+
+
+import { Label } from "@/components/bs-ui/label";
+import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
+import { getDatasets,MetricConfig } from "@/controllers/API/dashboard";
+import { Hash,Type } from "lucide-react";
+import { useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useQuery } from "react-query";
 
 export interface DatasetField {
     fieldCode: string          // 真正用来过滤 / SQL
@@ -21,6 +23,7 @@ export interface DatasetField {
 }
 
 interface DatasetSelectorProps {
+    isMetricCard?: boolean;
     selectedDatasetCode?: string
     onDatasetChange?: (datasetCode: string) => void
     onDragStart?: (e: React.DragEvent, data: any) => void
@@ -29,18 +32,18 @@ interface DatasetSelectorProps {
 }
 
 const TIME_ICONS: Record<string, JSX.Element> = {
-    year: <Clock3 color="#1d78ff" size={14} />,
-    quarter: <Clock3 color="#1d78ff" size={14} />,
-    month: <Clock3 color="#1d78ff" size={14} />,
-    week: <Clock3 color="#1d78ff" size={14} />,
-    day: <Clock3 color="#1d78ff" size={14} />,
-    hour: <Clock3 color="#1d78ff" size={14} />,
+    year: <Outlined.Time color="#1d78ff" size={14} />,
+    quarter: <Outlined.Time color="#1d78ff" size={14} />,
+    month: <Outlined.Time color="#1d78ff" size={14} />,
+    week: <Outlined.Time color="#1d78ff" size={14} />,
+    day: <Outlined.Time color="#1d78ff" size={14} />,
+    hour: <Outlined.Time color="#1d78ff" size={14} />,
 }
 
 const getFieldTypeIcon = (type: 'string' | 'number' | 'date') => {
     switch (type) {
         case 'date':
-            return <Calendar className="h-4 w-4 text-blue-500" />
+            return <Outlined.Calendar className="h-4 w-4 text-blue-500" />
         case 'number':
             return <Hash className="h-4 w-4 text-blue-500" />
         case 'string':
@@ -155,14 +158,8 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                         {/* 搜索框 */}
                         <div className="px-2 py-1.5">
                             <div className="relative">
-                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
-                                <Input
-                                    placeholder={t("datasetSelector.searchDataset")}
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-8 h-8"
-                                    onClick={(e) => e.stopPropagation()}
-                                />
+                                <Outlined.Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                                <Input placeholder={t("datasetSelector.searchDataset")} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onClick={(e) => e.stopPropagation()} className={"pl-8 h-8"} />
                             </div>
                         </div>
                         {/* 数据集列表 */}
@@ -175,7 +172,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                 {t("datasetSelector.noDatasetsFound")}
                             </div>
                         ) : (
-                            filteredDatasets.map((dataset) => (
+                            filteredDatasets.filter(dataset => dataset.dataset_code != null && dataset.dataset_code !== '').map((dataset) => (
                                 <SelectItem key={dataset.dataset_code} value={dataset.dataset_code}>
                                     {t(dataset.dataset_code)}
                                 </SelectItem>
@@ -190,17 +187,14 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                 <div className="flex-1 flex flex-col min-h-0">
                     {!isMetricCard && (
                         <div className="flex-1 flex flex-col min-h-0 border-b">
-                            <button
-                                className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors shrink-0"
-                                onClick={() => setDimensionsExpanded(!dimensionsExpanded)}
-                            >
+                            <Button type="button" variant="text" className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors shrink-0" onClick={() => setDimensionsExpanded(!dimensionsExpanded)} color="default">
                                 <span className="text-sm font-medium">{t("datasetSelector.dimensions")}</span>
                                 {dimensionsExpanded ? (
-                                    <ChevronDown className="h-4 w-4" />
+                                    <Outlined.Down className="h-4 w-4" />
                                 ) : (
-                                    <ChevronUp className="h-4 w-4" />
+                                    <Outlined.Up className="h-4 w-4" />
                                 )}
-                            </button>
+                            </Button>
 
                             {dimensionsExpanded && (
                                 <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-0 min-h-0">
@@ -260,17 +254,14 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
 
                     {/* 指标区域 - 占据下半部分 */}
                     <div className="flex-1 flex flex-col min-h-0">
-                        <button
-                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors shrink-0"
-                            onClick={() => setMetricsExpanded(!metricsExpanded)}
-                        >
+                        <Button type="button" variant="text" className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors shrink-0" onClick={() => setMetricsExpanded(!metricsExpanded)} color="default">
                             <span className="text-sm font-medium">{t("datasetSelector.metrics")}</span>
                             {metricsExpanded ? (
-                                <ChevronDown className="h-4 w-4" />
+                                <Outlined.Down className="h-4 w-4" />
                             ) : (
-                                <ChevronUp className="h-4 w-4" />
+                                <Outlined.Up className="h-4 w-4" />
                             )}
-                        </button>
+                        </Button>
 
                         {metricsExpanded && (
                             <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-2 min-h-0">

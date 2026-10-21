@@ -1,4 +1,9 @@
 {
+  "queryDateLabel": "Query date:",
+  "settings": "Settings",
+  "noValue": "None",
+  "removeSelectedValue": "Remove {{value}}",
+
   "chartSelector": {
     "title": "Chart Link Configuration",
     "selectCharts": "Select Linked Charts",

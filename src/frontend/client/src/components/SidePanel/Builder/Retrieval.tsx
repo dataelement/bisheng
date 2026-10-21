@@ -2,13 +2,8 @@ import { useEffect, useMemo } from 'react';
 import { Capabilities } from '~/types/chat';
 import type { AssistantsEndpoint } from '~/types/chat';
 import { useFormContext, Controller, useWatch } from 'react-hook-form';
-import {
-  Checkbox,
-  HoverCard,
-  HoverCardContent,
-  HoverCardPortal,
-  HoverCardTrigger,
-} from '~/components/ui';
+import { HoverCard, HoverCardContent, HoverCardPortal, HoverCardTrigger } from '~/components/ui';
+import { Checkbox } from '@bisheng/ui';
 import OptionHover from '~/components/SidePanel/Parameters/OptionHover';
 import { CircleHelpIcon } from '~/components/svg';
 import type { AssistantForm } from '~/common';
@@ -58,7 +53,7 @@ export default function Retrieval({
                 checked={field.value}
                 disabled={isDisabled}
                 onCheckedChange={field.onChange}
-                className="relative float-left mr-2 inline-flex h-4 w-4 cursor-pointer"
+                className="peer relative float-left mr-2 inline-flex h-4 w-4 cursor-pointer"
                 value={field.value.toString()}
               />
             )}

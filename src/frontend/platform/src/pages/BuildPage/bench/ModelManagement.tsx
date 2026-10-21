@@ -1,15 +1,16 @@
 // @ts-strict-ignore
+import { Button, Input } from '@bisheng/ui';
+import { Checkbox, Tooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 // src/features/chat-config/components/ModelManagement.tsx
-import { TrashIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Input } from "@/components/bs-ui/input";
+
+import { QuestionHint as QuestionTooltip } from "@/components/bs-comp/QuestionHint";
+
+
 import { Label } from "@/components/bs-ui/label";
-import { Switch } from "@/components/bs-ui/switch";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useModel } from "@/pages/ModelPage/manage";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/KnowledgeModel";
-import { Check, Plus } from "lucide-react";
+
 import { forwardRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -48,27 +49,44 @@ interface ModelManagementProps {
  *  line up, and the two used to carry the same literal twice, so widening one
  *  silently broke the alignment. The three trailing columns are wider than the
  *  Chinese text needs because English and Japanese labels are longer. */
-const MODEL_ROW_COLUMNS = "1.2fr 0.85fr 1.3fr 88px 140px 140px 36px"
+const MODEL_ROW_COLUMNS = "1.2fr 0.85fr 1.3fr 88px 140px 140px 36px";
 
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
-    ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onDescriptionChange, onVisualToggle, chatDefaultModelId, onChatDefaultChange, linsightDefaultModelId, onLinsightDefaultChange }, ref) => {
+    (
+        {
+            models,
+            errors,
+            error,
+            onAdd,
+            onRemove,
+            onModelChange,
+            onNameChange,
+            onDescriptionChange,
+            onVisualToggle,
+            chatDefaultModelId,
+            onChatDefaultChange,
+            linsightDefaultModelId,
+            onLinsightDefaultChange,
+        },
+        ref,
+    ) => {
         // `assistant` mode hits /api/v1/llm/assistant/llm_list which is already
         // filtered to the admin-configured assistant allowlist (default model
         // and its server are placed first). Avoids the fetch-all + client-side
         // filter round-trip.
-        const { llmOptions: assistantLlmOptions } = useModel('assistant');
+        const { llmOptions: assistantLlmOptions } = useModel("assistant");
         const { t } = useTranslation();
         const navigate = useNavigate();
 
         // Resolve the selected model's name from the cascader options so the
         // display-name input can fall back to it as placeholder when left empty.
         const getModelLabel = (id: string) => {
-            if (!id) return '';
+            if (!id) return "";
             for (const group of assistantLlmOptions) {
                 const hit = group.children?.find((el) => el.value == id);
                 if (hit) return hit.label;
             }
-            return '';
+            return "";
         };
 
         const selectFooter = (
@@ -77,10 +95,10 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                 onMouseDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    navigate('/model/management?systemModel=assis');
+                    navigate("/model/management?systemModel=assis");
                 }}
             >
-                + {t('bench.addMoreModels')}
+                + {t("bench.addMoreModels")}
             </div>
         );
 
@@ -102,141 +120,132 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         return (
             <div className="mt-2 border p-4 rounded-md bg-background overflow-x-auto">
                 <div className="min-w-[860px]">
-                <div className="grid mb-4 items-end" style={{ gridTemplateColumns: MODEL_ROW_COLUMNS }}>
-                    <div className="">
-                        <Label className="bisheng-label">{t('bench.model')}</Label>
-                    </div>
-                    <div className="">
-                        <Label className="bisheng-label">{t('bench.displayName')}</Label>
-                    </div>
-                    <div className="">
-                        <Label className="bisheng-label">{t('bench.modelDescription')}</Label>
-                    </div>
-                    {/* No whitespace-nowrap on these three: the cells are fixed-width
+                    <div className="grid mb-4 items-end" style={{ gridTemplateColumns: MODEL_ROW_COLUMNS }}>
+                        <div className="">
+                            <Label className="bisheng-label">{t("bench.model")}</Label>
+                        </div>
+                        <div className="">
+                            <Label className="bisheng-label">{t("bench.displayName")}</Label>
+                        </div>
+                        <div className="">
+                            <Label className="bisheng-label">{t("bench.modelDescription")}</Label>
+                        </div>
+                        {/* No whitespace-nowrap on these three: the cells are fixed-width
                         while the labels are translated, so nowrap made English and
                         Japanese overflow and paint on top of the next column
                         ("Vision" over "Linsight Default Model"). Wrapping keeps a long
                         translation inside its own column whatever its length. */}
-                    <div className="flex items-center justify-center gap-0.5 px-1 text-center">
-                        <Label className="bisheng-label">{t('bench.vision')}</Label>
-                        <QuestionTooltip className="text-[#999999] shrink-0" content={t('bench.visionText')} />
+                        <div className="flex items-center justify-center gap-0.5 px-1 text-center">
+                            <Label className="bisheng-label">{t("bench.vision")}</Label>
+                            <QuestionTooltip className="shrink-0" content={t("bench.visionText")} />
+                        </div>
+                        <div className="flex items-center justify-center px-1 text-center">
+                            <Label className="bisheng-label">{t("model:model.dailyDefaultModel")}</Label>
+                        </div>
+                        <div className="flex items-center justify-center gap-0.5 px-1 text-center">
+                            <Label className="bisheng-label">{t("model:model.linsightDefaultModel")}</Label>
+                            <QuestionTooltip
+                                className="shrink-0"
+                                content={t("model:model.linsightDefaultModelTooltip")}
+                            />
+                        </div>
+                        <div className="text-center"></div>
                     </div>
-                    <div className="flex items-center justify-center px-1 text-center">
-                        <Label className="bisheng-label">{t('model:model.dailyDefaultModel')}</Label>
-                    </div>
-                    <div className="flex items-center justify-center gap-0.5 px-1 text-center">
-                        <Label className="bisheng-label">{t('model:model.linsightDefaultModel')}</Label>
-                        <QuestionTooltip className="text-[#999999] shrink-0" content={t('model:model.linsightDefaultModelTooltip')} />
-                    </div>
-                    <div className="text-center">
-                    </div>
-                </div>
 
-                {models.map((model, index) => (
-                    <div
-                        key={model.key}
-                        ref={(el) => setItemRef(el, index)}
-                        className="grid items-center mb-4"
-                        style={{ gridTemplateColumns: MODEL_ROW_COLUMNS }}
-                    >
-                        <div className="pr-2" id={model.id}>
-                            {assistantLlmOptions.length > 0 ? (
-                                <ModelSelect
-                                    key={model.id}
-                                    label={''}
-                                    value={model.id}
-                                    options={assistantLlmOptions}
-                                    onChange={(val) => onModelChange(index, val)}
-                                    footer={selectFooter}
+                    {models.map((model, index) => (
+                        <div
+                            key={model.key}
+                            ref={(el) => setItemRef(el, index)}
+                            className="grid items-center mb-4"
+                            style={{ gridTemplateColumns: MODEL_ROW_COLUMNS }}
+                        >
+                            <div className="pr-2" id={model.id}>
+                                {assistantLlmOptions.length > 0 ? (
+                                    <ModelSelect
+                                        key={model.id}
+                                        label={""}
+                                        value={model.id}
+                                        options={assistantLlmOptions}
+                                        onChange={(val) => onModelChange(index, val)}
+                                        footer={selectFooter}
+                                    />
+                                ) : (
+                                    <ModelSelect
+                                        key={"model.id"}
+                                        label={""}
+                                        value={""}
+                                        options={[]}
+                                        onChange={(val) => {}}
+                                        footer={selectFooter}
+                                    />
+                                )}
+                                {errors[model.key] && (
+                                    <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[0]}</p>
+                                )}
+                            </div>
+                            <div className="pr-2">
+                                <Input value={model.displayName} onChange={(e) => onNameChange(index, e.target.value)} placeholder={getModelLabel(model.id) || t("bench.displayName")} />
+                                {errors[model.key] && (
+                                    <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[1]}</p>
+                                )}
+                            </div>
+                            <div className="pr-2">
+                                <Input value={model.description || ""} maxLength={MODEL_DESCRIPTION_MAX_LENGTH} onChange={(e) => onDescriptionChange?.(index, e.target.value)} placeholder={t("bench.modelDescriptionPlaceholder")} showCount />
+                            </div>
+
+                            <div className="flex items-center justify-center">
+                                <Checkbox
+                                    checked={model.visual || false}
+                                    onCheckedChange={(checked) => {
+                                        if (onVisualToggle) {
+                                            onVisualToggle(index, checked);
+                                        }
+                                    }}
                                 />
-                            ) : (
-                                <ModelSelect
-                                    key={'model.id'}
-                                    label={''}
-                                    value={''}
-                                    options={[]}
-                                    onChange={(val) => { }}
-                                    footer={selectFooter}
+                            </div>
+
+                            {/* Daily-mode default model: single-select radio across the whole column */}
+                            <div className="flex items-center justify-center">
+                                <input
+                                    type="radio"
+                                    name="chat-default-model"
+                                    className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                                    checked={!!model.id && String(model.id) === String(chatDefaultModelId ?? "")}
+                                    disabled={!model.id}
+                                    onChange={() => model.id && onChatDefaultChange?.(model.id)}
                                 />
-                            )}
-                            {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[0]}</p>}
-                        </div>
-                        <div className="pr-2">
-                            <Input
-                                value={model.displayName}
-                                onChange={(e) => onNameChange(index, e.target.value)}
-                                placeholder={getModelLabel(model.id) || t('bench.displayName')}
-                            />
-                            {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[1]}</p>}
-                        </div>
-                        <div className="pr-2">
-                            <Input
-                                value={model.description || ''}
-                                maxLength={MODEL_DESCRIPTION_MAX_LENGTH}
-                                onChange={(e) => onDescriptionChange?.(index, e.target.value)}
-                                placeholder={t('bench.modelDescriptionPlaceholder')}
-                            />
-                        </div>
+                            </div>
 
-                        <div className="flex items-center justify-center">
-                            <Checkbox
-                                checked={model.visual || false}
-                                onCheckedChange={(checked) => {
-                                    if (onVisualToggle) {
-                                        onVisualToggle(index, checked);
-                                    }
-                                }}
-                            />
-                        </div>
+                            {/* Linsight default model: single-select radio across the whole column */}
+                            <div className="flex items-center justify-center">
+                                <input
+                                    type="radio"
+                                    name="linsight-default-model"
+                                    className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                                    checked={!!model.id && model.id === linsightDefaultModelId}
+                                    disabled={!model.id}
+                                    onChange={() => model.id && onLinsightDefaultChange?.(model.id)}
+                                />
+                            </div>
 
-                        {/* Daily-mode default model: single-select radio across the whole column */}
-                        <div className="flex items-center justify-center">
-                            <input
-                                type="radio"
-                                name="chat-default-model"
-                                className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
-                                checked={!!model.id && String(model.id) === String(chatDefaultModelId ?? '')}
-                                disabled={!model.id}
-                                onChange={() => model.id && onChatDefaultChange?.(model.id)}
-                            />
+                            {}
+                            <div className="flex items-center justify-center">
+                                <Tooltip content={t("delete")}>
+                                    <Button type="button" variant="text" size="small" iconOnly aria-label={t("delete")} onClick={() => onRemove(index)}>
+                                        <Outlined.Delete className="text-gray-500 cursor-pointer size-4 hover:text-red-500 transition-colors" />
+                                    </Button>
+                                </Tooltip>
+                            </div>
                         </div>
-
-                        {/* Linsight default model: single-select radio across the whole column */}
-                        <div className="flex items-center justify-center">
-                            <input
-                                type="radio"
-                                name="linsight-default-model"
-                                className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
-                                checked={!!model.id && model.id === linsightDefaultModelId}
-                                disabled={!model.id}
-                                onChange={() => model.id && onLinsightDefaultChange?.(model.id)}
-                            />
-                        </div>
-
-                        {/* 删除按钮 */}
-                        <div className="flex items-center justify-center">
-                            <TrashIcon
-                                className="text-gray-500 cursor-pointer size-4 hover:text-red-500 transition-colors"
-                                onClick={() => onRemove(index)}
-                            />
-                        </div>
-                    </div>
-                ))}
-
+                    ))}
                 </div>
-                <Button
-                    variant="outline"
-                    className="border-none size-7 bg-gray-200 hover:bg-gray-300 transition-colors mt-2"
-                    size="icon"
-                    onClick={onAdd}
-                >
-                    <Plus className="size-5" />
+                <Button variant="outlined" className="mt-2" size="small" iconOnly onClick={onAdd} color="default">
+                    <Outlined.Plus className="size-5" />
                 </Button>
 
                 {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
             </div>
         );
-
-    }
-)
-ModelManagement.displayName = "ModelManagement"
+    },
+);
+ModelManagement.displayName = "ModelManagement";

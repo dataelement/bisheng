@@ -1,7 +1,9 @@
 // @ts-strict-ignore
-import ShadTooltip from "@/components/ShadTooltipComponent";
-import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
+import { Button, Input, notification } from '@bisheng/ui';
+import { Tooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+
 import { Label } from "@/components/bs-ui/label";
 import {
   Select,
@@ -11,10 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/bs-ui/select";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import {
-  QuestionTooltip
-} from "@/components/bs-ui/tooltip";
+
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
 import { TabsContext } from "@/contexts/tabsContext";
 import { createEvaluationApi } from "@/controllers/API/evaluate";
 import { getAppsApi } from "@/controllers/API/flow";
@@ -22,7 +22,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { TypeModal } from "@/utils";
 import { SelectViewport } from "@radix-ui/react-select";
 import { debounce, find } from "lodash-es";
-import { ArrowLeft, UploadIcon } from "lucide-react";
+
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
@@ -35,10 +35,10 @@ export default function EvaluatingCreate() {
 
   const { id } = useParams();
   const { flow: nextFlow } = useContext(TabsContext);
-  const { toast } = useToast()
+
   const flow = useMemo(() => {
     return id ? nextFlow : null;
-  }, [nextFlow]);
+  }, [id, nextFlow]);
   const [selectedType, setSelectedType] = useState<"workflow" | "assistant" | "flow" | "">("");
   const [selectedKeyId, setSelectedKeyId] = useState("");
   const [selectedVersion, setSelectedVersion] = useState("");
@@ -80,7 +80,7 @@ export default function EvaluatingCreate() {
     setFileName(names);
   };
 
-  const { getRootProps, getInputProps, isDragActive, rejectedFiles } = useDropzone({
+  const { getRootProps, getInputProps } = useDropzone({
     // Precise matching of CSV MIME types and extensions to avoid file bypass
     accept: {
       "text/csv": [".csv"],          // Standard CSV text type
@@ -155,10 +155,7 @@ export default function EvaluatingCreate() {
   };
 
   const handleError = (list) => {
-    toast({
-      variant: "error",
-      description: list
-    });
+    notification.open({ type: "error", description: String(list ?? '') });
   };
 
   // Type selection
@@ -227,14 +224,11 @@ export default function EvaluatingCreate() {
     <div className="relative box-border h-full overflow-auto">
       <div className="h-full overflow-y-auto p-6 pb-48">
         <div className="flex w-full justify-between">
-          <ShadTooltip content={t("back")} side="right">
-            <button
-              className="extra-side-bar-buttons w-[36px]"
-              onClick={() => navigate(-1)}
-            >
-              <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
-            </button>
-          </ShadTooltip>
+          <Tooltip content={t("back")} side="right">
+            <Button variant="text" size="medium" aria-label={t("back")} onClick={() => navigate(-1)} color="default" iconOnly>
+              <Outlined.ArrowLeft size={16} />
+            </Button>
+          </Tooltip>
         </div>
         {/* Form */}
         <div className="pt-6">
@@ -250,7 +244,7 @@ export default function EvaluatingCreate() {
                   <Select
                     value={selectedType}
                     onValueChange={(value) => {
-                      setSelectedType(value as any);
+                      setSelectedType(value as typeof selectedType);
                       setSelectedKeyId("");
                       handleTypeChange(value);
                     }}
@@ -284,17 +278,10 @@ export default function EvaluatingCreate() {
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      <Input
-                        value={query}
-                        onChange={handleInputChange}
-                        autoFocus
-                        className="my-2 mx-auto"
-                        placeholder={t("evaluation.selectInputPlaceholder")}
-                        onKeyDown={(e) => e.stopPropagation()}
-                      />
+                      <Input value={query} onChange={handleInputChange} autoFocus placeholder={t("evaluation.selectInputPlaceholder")} onKeyDown={(e) => e.stopPropagation()} className={"my-2 mx-auto"} />
                       <SelectViewport className="h-80">
                         <SelectGroup>
-                          {dataSource.map((item) => {
+                          {dataSource.filter(item => item.id != null && item.id !== '').map((item) => {
                             return (
                               <SelectItem key={item.id} value={item.id}>
                                 {item.name}
@@ -329,7 +316,7 @@ export default function EvaluatingCreate() {
                         <SelectGroup>
                           {find(dataSource, {
                             id: selectedKeyId,
-                          })?.version_list?.map((item) => {
+                          })?.version_list?.filter(item => item.id != null && item.id !== '').map((item) => {
                             return (
                               <SelectItem key={item.id} value={item.id}>
                                 {item.name}
@@ -354,12 +341,12 @@ export default function EvaluatingCreate() {
                     className="flex w-0 flex-1 items-center"
                   >
                     <input {...getInputProps()} />
-                    <div className="flex cursor-pointer text-sm items-center justify-center rounded-md border px-[12px] py-[6px] hover:border-primary">
-                      <UploadIcon size={14} />
+                    <Button type="button" variant="outlined" size="small" color="default">
+                      <Outlined.Upload size={14} />
                       <span className="whitespace-nowrap">
                         {t("code.uploadFile")}
                       </span>
-                    </div>
+                    </Button>
                     {fileName && (
                       <div className="ml-2 truncate">{fileName}</div>
                     )}
@@ -367,11 +354,7 @@ export default function EvaluatingCreate() {
                       &nbsp;{t("evaluation.fileExpandName")}&nbsp;csv
                     </Label>
                   </div>
-                  <Button
-                    className="ml-2"
-                    variant="link"
-                    onClick={handleDownloadTemplate}
-                  >
+                  <Button className="ml-2" variant="link" onClick={handleDownloadTemplate}>
                     {t("evaluation.downloadTemplate")}
                   </Button>
                 </div>
@@ -400,19 +383,10 @@ export default function EvaluatingCreate() {
               <div className="flex">
                 <div className="min-w-[180px]"></div>
                 <div className="flex flex-1 gap-4">
-                  <Button
-                    disabled={loading}
-                    className="extra-side-bar-save-disable flex-1"
-                    onClick={handleCreateEvaluation}
-                  >
+                  <Button disabled={loading} className="extra-side-bar-save-disable flex-1" onClick={handleCreateEvaluation}>
                     {t("evaluation.create")}
                   </Button>
-                  <Button
-                    disabled={loading}
-                    className="flex-1"
-                    variant="outline"
-                    onClick={() => navigate(-1)}
-                  >
+                  <Button disabled={loading} className="flex-1" variant="outlined" onClick={() => navigate(-1)} color="default">
                     {t("evaluation.cancel")}
                   </Button>
                 </div>

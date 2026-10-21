@@ -10,6 +10,8 @@ pnpm install   # run at src/frontend/ (pnpm workspace root; npm is disabled)
 pnpm dev       # dev server on :4001 (or `pnpm dev:client` from the workspace root)
 ```
 
+Both apps extend `../config/` for TypeScript, ESLint, PostCSS and Vite proxy helpers. Shared dependency versions are managed by the workspace catalog. See `../config/README.md`.
+
 ## Tech Stack
 Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (shadcn/ui) + **Recoil** + **react-query v4 (@tanstack)** + react-i18next + react-router-dom v6 + **lucide-react** + axios (wrapped in `~/api/request.ts`)
 
@@ -17,7 +19,7 @@ Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (shadcn/ui) + **Recoil
 - **Path Aliases**: `~/` (or `@/`) → `src/`.
 - **HTTP Requests**: wrapper is `~/api/request.ts`.
 - **State Management**: **Recoil is FROZEN** (archived by Meta; ledger #5) — no new atoms/selectors/`recoil` imports (lint-enforced via `no-restricted-imports`; existing usage is suppressed). Server state → react-query v4; local state → `useState`/props. If a feature genuinely needs new cross-page client state, raise it with shanghang (Jotai migration decision pending) — do not work around with Context or new libraries.
-- **UI Components**: shared library `@bisheng/ui` (`src/frontend/packages/ui/`) first — components migrated there (Button, …) keep re-export shims at `~/components/ui/<Name>` so both import paths work; everything else still lives in `~/components/ui/` (shadcn / Radix-based).
+- **UI Components**: shared library `@bisheng/ui` (`src/frontend/packages/ui/`) first — selection controls, Textarea, Tag/Badge, Tooltip and Tabs import directly from the shared library, without legacy implementations or compatibility exports. Older Button/Input entry points still delegate to the shared library. Rich hover information uses the existing HoverCard; other families remain in `~/components/ui/` (shadcn / Radix-based).
 - **Icons**: prefer `bisheng-icons` — `import { Outlined } from 'bisheng-icons'` → `<Outlined.Delete />` (variants `Outlined` / `Filled` / `Colored`). Use `lucide-react` ONLY as a fallback when `bisheng-icons` has no matching-semantic icon.
   - **⚠️ After upgrading `bisheng-icons`**, clear the Vite pre-bundle cache or new icons crash the page (`Element type is invalid`): `pnpm dev -- --force` (or `rm -rf node_modules/.vite && pnpm dev`). Its git-source `exports` field defeats Vite's dep-change detection, so the stale pre-bundled snapshot is served unless forced.
 - **File preview**: reuse what exists, never hand-roll a viewer. `~/pages/knowledge/FilePreview/` is the full set (`viewers/` covers pdf / docx / xlsx·csv / md / html / image / text, with the PDF worker already wired) and takes a `compactMode` prop for embedding in a panel; the Excel and image internals are further shared with platform via `@bisheng/file-viewers`. A new preview surface should pass file name / type / url into the existing component.

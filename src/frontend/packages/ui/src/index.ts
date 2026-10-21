@@ -10,6 +10,11 @@ export * from './components/Toast';
 // (组件-Notification通知提醒.md): imperative `notification.*` API + the single
 // <Notifier /> container. Shares Toast's queue core; copy comes from the caller.
 export * from './components/Notification';
+// Alert — the notice that stays: one line embedded in the page saying what
+// state this page or block is in (组件-Alert警告提示.md). JSX-mounted and
+// driven by the host's state, unlike the imperative pair above — a condition
+// that holds is not an event that happened.
+export * from './components/Alert';
 // Crash screen. Shared because the identifiers, the QR payload and the log file
 // have to be identical across the apps for a support handover to work — the
 // copy and the artwork are passed in, so the contract above still holds.

@@ -1,30 +1,32 @@
-import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
+import { Button } from '@bisheng/ui';
+import { Tag } from "@bisheng/ui";
+
+
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog"
+Dialog,
+DialogContent,
+DialogHeader,
+DialogTitle,
+} from "@/components/bs-ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/bs-ui/table"
-import { OrgSyncLog } from "@/types/api/orgSync"
-import { formatIsoDateTime } from "@/util/utils"
-import { useTranslation } from "react-i18next"
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow,
+} from "@/components/bs-ui/table";
+import { OrgSyncLog } from "@/types/api/orgSync";
+import { formatIsoDateTime } from "@/util/utils";
+import { useTranslation } from "react-i18next";
 
 function statusVariant(
   status: string
-): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "success") return "default"
-  if (status === "partial") return "secondary"
-  if (status === "failed") return "destructive"
-  return "outline"
+): "success" | "warning" | "danger" | "brand" {
+  if (status === "success") return "success"
+  if (status === "partial") return "warning"
+  if (status === "failed") return "danger"
+  return "brand"
 }
 
 function pickErrMsg(row: Record<string, unknown>): string {
@@ -92,9 +94,9 @@ export function GatewayLogDetailDialog({
               <span className="text-muted-foreground">
                 {t("gatewayDetail.status")}
               </span>
-              <Badge variant={statusVariant(log.status)}>
+              <Tag size="small" dot color={statusVariant(log.status)}>
                 {t(`runStatus.${log.status}`, log.status)}
-              </Badge>
+              </Tag>
               <span className="text-muted-foreground">
                 {t("gatewayDetail.configId")}: {log.config_id}
               </span>
@@ -170,7 +172,7 @@ export function GatewayLogDetailDialog({
             ) : null}
 
             <div className="flex justify-end">
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outlined" onClick={onClose} color="default">
                 {t("actions.close")}
               </Button>
             </div>
