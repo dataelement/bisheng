@@ -70,8 +70,8 @@ export default function UploadModal({
                 </div>
             </div>
             <DialogFooter>
-                <Button variant="outlined" className="h-8" onClick={onClose} color="default">{t('cancel')}</Button>
-                <Button type="submit" className="h-8" disabled={loading || !end} onClick={() => !loading && onSubmit(getResult())}>
+                <Button variant="outlined" onClick={onClose} color="default">{t('cancel')}</Button>
+                <Button type="submit" disabled={loading || !end} onClick={() => !loading && onSubmit(getResult())}>
                     {loading && <span className="loading loading-spinner loading-xs"></span>}
                     {t('create')}
                 </Button>

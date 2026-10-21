@@ -104,7 +104,7 @@ function ModelCatalogPanel({
       <aside aria-label={t("model.list")} className="flex min-h-0 flex-col rounded-xl border bg-muted/20 p-3">
         <div className="flex items-center justify-between gap-2 px-2 pb-3">
           <h2 className="text-sm font-semibold text-foreground">{t("model.list")}</h2>
-          <Button type="button" variant="outlined" className="px-2" aria-pressed={creating} onClick={() => setCreating(true)} color="default">
+          <Button type="button" variant="outlined" aria-pressed={creating} onClick={() => setCreating(true)} color="default">
             <Outlined.Plus aria-hidden="true" className="mr-1 size-4" />
             {t("model.create")}
           </Button>

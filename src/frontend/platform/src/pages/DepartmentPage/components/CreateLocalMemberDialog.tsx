@@ -124,7 +124,7 @@ export function CreateLocalMemberDialog({
                 <p className="text-xs text-muted-foreground">
                   {t("bs:department.assignRolesEmptyHint")}
                 </p>
-                <Button size="small" variant="outlined" className="h-7" onClick={loadRoles} color="default">
+                <Button size="small" variant="outlined" onClick={loadRoles} color="default">
                   {t("bs:department.refreshRoles")}
                 </Button>
               </div>

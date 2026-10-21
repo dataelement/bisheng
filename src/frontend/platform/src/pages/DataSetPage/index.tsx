@@ -56,7 +56,7 @@ export default function index() {
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10">
                 <div className="flex justify-end gap-4 items-center">
                     <SearchInput placeholder={t('dataset.name')} onChange={(e) => search(e.target.value)} className={"w-56 shrink-0"} />
-                    <Button className="px-8 text-[#FFFFFF]" onClick={() => modelRef.current.open()}>{t('dataset.create')}</Button>
+                    <Button onClick={() => modelRef.current.open()}>{t('dataset.create')}</Button>
                 </div>
                 <Table>
                     <TableHeader>
@@ -80,9 +80,11 @@ export default function index() {
                                 <TableCell className="max-w-[300px] break-all">
                                     <div className="truncate-multiline">{el.user_name || '--'}</div>
                                 </TableCell>
-                                <TableCell className="text-right" onClick={() => { window.libname = el.name; }}>
-                                    <Button variant="link" className="px-1" onClick={() => handleDownloadFile(el.name, el.url)}>{t('dataset.download')}</Button>
-                                    <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button>
+                                <TableCell onClick={() => { window.libname = el.name; }}>
+                                    <div className="flex justify-end gap-2">
+                                        <Button size="small" variant="link" onClick={() => handleDownloadFile(el.name, el.url)}>{t('dataset.download')}</Button>
+                                        <Button size="small" variant="link" color="danger" onClick={() => handleDelete(el.id)}>{t('delete')}</Button>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}

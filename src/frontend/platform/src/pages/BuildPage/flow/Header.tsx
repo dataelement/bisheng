@@ -249,7 +249,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             }
             {/* Left Section with Back Button and Title */}
             <div className="flex items-center">
-                <Button variant="outlined" size="medium" className={`${!dark && 'bg-[#fff]'} size-8`} onClick={returnPage} color="default" iconOnly><Outlined.Left size={16} /></Button>
+                <Button variant="outlined" size="medium" onClick={returnPage} color="default" iconOnly><Outlined.Left size={16} /></Button>
                 <div className="flex items-center ml-5">
                     <AppAvator id={flow.name} url={flow.viewUrl || flow.logo || loca?.logo} flowType={10} className=""></AppAvator>
                     <div className="pl-3">
@@ -276,11 +276,11 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             {/* Right Section with Options */}
             <div className="header-right flex items-center gap-2">
                 <Notification />
-                <Button variant="outlined" size="small" className={`${!dark && 'bg-[#fff]'} h-8 gap-1`} disabled={!canEdit} onClick={handleRunClick} color="default">
+                <Button variant="outlined" disabled={!canEdit} onClick={handleRunClick} color="default">
                     <Filled.PlayerPlay className="size-3.5" />
                     {t('run')}
                 </Button>
-                <Button variant="outlined" size="small" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} disabled={!canEdit || saving} onClick={async () => {
+                <Button variant="outlined" disabled={!canEdit || saving} onClick={async () => {
                     if (savingRef.current) return
                     savingRef.current = true
                     setSaving(true)
@@ -353,18 +353,18 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 }
                 {isOnlineVersion
                     ? (canUnpublish ? (
-                        <Button size="small" className="h-8 px-6" onClick={handleOfflineClick}>
+                        <Button onClick={handleOfflineClick}>
                             {t('takeOffline')}
                         </Button>
                     ) : null)
                     : (canPublish ? (
-                        <Button size="small" className="h-8 px-6" onClick={handleOnlineClick}>
+                        <Button onClick={handleOnlineClick}>
                             {t('goOnline')}
                         </Button>
                     ) : null)}
                 <Popover open={open && canEdit} onOpenChange={(next) => canEdit && setOpen(next)}>
                     <PopoverTrigger asChild >
-                        <Button size="medium" variant="outlined" disabled={!canEdit} className={`${!dark && 'bg-[#fff]'} size-8`} color="default" iconOnly>
+                        <Button size="medium" variant="outlined" disabled={!canEdit} color="default" iconOnly>
                             <Outlined.More size={16} />
                         </Button>
                     </PopoverTrigger>
@@ -412,19 +412,19 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         <DialogDescription>{t('currentVersionLaunched')}</DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="mt-4">
-                        <Button className="h-8" onClick={() => {
+                        <Button onClick={() => {
                             handleSaveNewVersion()
                             setModelVersionId(0)
                         }}>
                             {t('saveAsNewVersion')}
                         </Button>
-                        <Button className="leave h-8" variant="solid" onClick={() => {
+                        <Button className="leave" variant="solid" onClick={() => {
                             handleChangeVersion(modelVersionId)
                             setModelVersionId(0)
                         }} color="danger">
                             {t('dontSaveAndSwitch')}
                         </Button>
-                        <Button className="h-8" variant="outlined" onClick={() => setModelVersionId(0)} color="default">
+                        <Button variant="outlined" onClick={() => setModelVersionId(0)} color="default">
                             {t('cancel')}
                         </Button>
                     </DialogFooter>
@@ -438,13 +438,13 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         <p className="bisheng-label pt-2">{isOnlineVersion ? t('onlineVersionMessage') : t('unsavedChangesMessage')}</p>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button className="leave h-8" onClick={handleSaveAndClose}>
+                        <Button className="leave" onClick={handleSaveAndClose}>
                             {isOnlineVersion ? t('saveAsNewVersion') : t('leaveAndSave')}
                         </Button>
-                        <Button className="h-8" variant="solid" onClick={() => blocker.proceed?.()} color="danger">
+                        <Button variant="solid" onClick={() => blocker.proceed?.()} color="danger">
                             {t('dontSave')}
                         </Button>
-                        <Button className="h-8" variant="outlined" onClick={() => {
+                        <Button variant="outlined" onClick={() => {
                             const dom = document.getElementById("flow-page") as HTMLElement;
                             blocker.reset?.()
                             if (dom) dom.className = dom.className.replace('report-hidden', '');

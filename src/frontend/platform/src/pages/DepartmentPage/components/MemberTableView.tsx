@@ -296,18 +296,18 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                         const isSuperAdmin = m.roles.some((role) => role.id === 1);
                         const canResetPwd = user.role === "admin";
                         return (
-                          <div className="flex flex-wrap items-center justify-end gap-x-1">
+                          <div className="flex flex-wrap items-center justify-end gap-x-2">
                             {isSuperAdmin ? (
-                              <Button variant="link" size="small" disabled className="px-1">
+                              <Button variant="link" size="small" disabled>
                                 {t("edit")}
                               </Button>
                             ) : (
-                              <Button variant="link" size="small" className="px-1 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-60" disabled={isArchived || user.user_id === m.user_id || !m.enabled} onClick={() => handleEditUser(m)}>
+                              <Button variant="link" size="small" disabled={isArchived || user.user_id === m.user_id || !m.enabled} onClick={() => handleEditUser(m)}>
                                 {t("edit")}
                               </Button>
                             )}
                             {canResetPwd && (
-                              <Button variant="link" size="small" className="px-1 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-60" disabled={isArchived} onClick={() => !isArchived && userPwdModalRef.current?.open(m.user_id)}>
+                              <Button variant="link" size="small" disabled={isArchived} onClick={() => !isArchived && userPwdModalRef.current?.open(m.user_id)}>
                                 {t("system.resetPwd")}
                               </Button>
                             )}

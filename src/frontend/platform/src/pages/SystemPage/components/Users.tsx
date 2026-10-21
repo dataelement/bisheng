@@ -172,23 +172,22 @@ export default function Users(params) {
     const operations = (el) => {
         const isSuperAdmin = el.roles.some(role => role.id === 1)
         // 禁止编辑admin用户
-        if (isSuperAdmin) return <div>
-            <Button variant="link" disabled className="px-0">{t('edit')}</Button>
-            {/* <Button variant="link" disabled className="px-0 pl-4">{t('system.resetPwd')}</Button> */}
-            <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>
-            <Button variant="link" disabled className="text-red-500 px-0 pl-4">{t('disable')}</Button>
+        if (isSuperAdmin) return <div className="flex justify-end gap-2">
+            <Button size="small" variant="link" disabled>{t('edit')}</Button>
+            <Button size="small" variant="link" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>
+            <Button size="small" variant="link" color="danger" disabled>{t('disable')}</Button>
         </div>
 
-        return <div>
-            {/* 编辑 */}
-            <Button variant="link" disabled={user.user_id === el.user_id} onClick={() => setCurrentUser(el)} className="px-0">{t('edit')}</Button>
-            {/* 重置密码 */}
+        return <div className="flex justify-end gap-2">
+            {/* Edit */}
+            <Button size="small" variant="link" disabled={user.user_id === el.user_id} onClick={() => setCurrentUser(el)}>{t('edit')}</Button>
+            {/* Reset password */}
             {user.role === 'admin' &&
-                <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>}
-            {/* 禁用 */}
+                <Button size="small" variant="link" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>}
+            {/* Enable / disable */}
             {
-                el.delete === 1 ? <Button variant="link" onClick={() => handleEnableUser(el)} className="text-green-500 px-0 pl-4">{t('enable')}</Button> :
-                    <Button variant="link" disabled={user.user_id === el.user_id} onClick={() => handleDelete(el)} className="text-red-500 px-0 pl-4">{t('disable')}</Button>
+                el.delete === 1 ? <Button size="small" variant="link" onClick={() => handleEnableUser(el)}>{t('enable')}</Button> :
+                    <Button size="small" variant="link" color="danger" disabled={user.user_id === el.user_id} onClick={() => handleDelete(el)}>{t('disable')}</Button>
             }
         </div>
     }

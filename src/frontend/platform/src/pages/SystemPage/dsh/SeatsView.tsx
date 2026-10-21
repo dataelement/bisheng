@@ -191,7 +191,7 @@ export function SeatsView({ onOperation, operations, revision }: SeatsViewProps)
                     <TableCell>{dshTime(item.last_seen_at)}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button size="small" variant={item.state === "ASSIGNED" ? "destructive" : "outline"} disabled={busy} onClick={() => handleCommand(item)}>
+                        <Button size="small" variant="link" color={item.state === "ASSIGNED" ? "danger" : "primary"} disabled={busy} onClick={() => handleCommand(item)}>
                           {t(busy ? "dsh.PROCESSING" : item.state === "ASSIGNED" ? "dsh.revoke" : "dsh.reassign")}
                         </Button>
                       </div>

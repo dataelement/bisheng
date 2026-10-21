@@ -183,14 +183,14 @@ export default function EditAssistant() {
                 </DialogHeader>
                 <DialogFooter>
                     {
-                        assistantState.status !== OnlineState.OnLine && <Button className="leave h-8" onClick={handleSaveAndClose}>
+                        assistantState.status !== OnlineState.OnLine && <Button className="leave" onClick={handleSaveAndClose}>
                             {t('build.leaveAndSave')}
                         </Button>
                     }
-                    <Button className="h-8" variant="solid" onClick={() => blocker.proceed?.()} color="danger">
+                    <Button variant="solid" onClick={() => blocker.proceed?.()} color="danger">
                         {t('build.leaveWithoutSave')}
                     </Button>
-                    <Button className="h-8" variant="outlined" onClick={() => {
+                    <Button variant="outlined" onClick={() => {
                         blocker.reset?.()
                     }} color="default">
                         {t('cancel')}

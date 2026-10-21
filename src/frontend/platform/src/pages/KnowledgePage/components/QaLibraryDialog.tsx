@@ -207,17 +207,17 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                 </div>
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outlined" className="px-11" color="default">{t('cancel')}</Button>
+                        <Button variant="outlined" color="default">{t('cancel')}</Button>
                     </DialogClose>
                     {mode === 'create' ? (
                         <>
-                            <Button type="submit" className="px-11 flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
+                            <Button type="submit" className="flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
                                 {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                                 {t('completeCreation')}
                             </Button>
                             {/* <Button
                                 type="submit"
-                                className="px-8 h-8 flex"
+                                className="flex"
                                 onClick={() => handleCreate(true)}
                                 disabled={isSubmitting}
                             >
@@ -226,7 +226,7 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                             </Button> */}
                         </>
                     ) : (
-                        <Button type="submit" className="px-8 h-8 flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
+                        <Button type="submit" className="flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
                             {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                             {t('confirm')}
                         </Button>

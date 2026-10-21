@@ -154,9 +154,9 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
                     </div>
                     <DialogFooter>
                         <DialogClose asChild>
-                            <Button variant="outlined" className="px-11" type="button" onClick={close} color="default">{t('log.cancel')}</Button>
+                            <Button variant="outlined" type="button" onClick={close} color="default">{t('log.cancel')}</Button>
                         </DialogClose>
-                        <Button type="submit" className="px-11" onClick={handleSubmit}>{t('log.confirm')}</Button>
+                        <Button type="submit" onClick={handleSubmit}>{t('log.confirm')}</Button>
                     </DialogFooter>
                 </div>
             </DialogContent>

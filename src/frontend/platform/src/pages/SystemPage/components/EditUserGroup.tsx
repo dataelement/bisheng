@@ -256,7 +256,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
                                         {m.added_time}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button type="button" variant="link" className="h-auto p-0 text-red-500" onClick={() => removeMemberFromPick(m.user_id)}>
+                                        <Button type="button" size="small" variant="link" color="danger" onClick={() => removeMemberFromPick(m.user_id)}>
                                             {t('system.removeFromGroup')}
                                         </Button>
                                     </TableCell>
@@ -270,8 +270,8 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
 
         </div>
         <div className="flex shrink-0 items-center justify-center gap-4 border-t bg-background-login py-3">
-            <Button variant="outlined" className="px-16" onClick={() => onChange()} color="default">{t('cancel')}</Button>
-            <Button className="px-16" onClick={() => { void handleSave(); }}>{t('save')}</Button>
+            <Button variant="outlined" onClick={() => onChange()} color="default">{t('cancel')}</Button>
+            <Button onClick={() => { void handleSave(); }}>{t('save')}</Button>
         </div>
     </div>
     )

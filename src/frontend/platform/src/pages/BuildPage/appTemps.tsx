@@ -111,7 +111,7 @@ export default function Templates() {
                                                 <TableCell className="font-medium min-w-[400px]">{temp.name}</TableCell>
                                                 <TableCell className={snapshot.isDragging ? 'break-words' : `max-w-0 break-words`}>{temp.description}</TableCell>
                                                 <TableCell className="text-right pr-5">
-                                                    <Button variant="link" className="text-destructive" onClick={() => handleDelTemp(index, temp.id)}>{t('delete')}</Button>
+                                                    <Button size="small" variant="link" color="danger" onClick={() => handleDelTemp(index, temp.id)}>{t('delete')}</Button>
                                                 </TableCell>
                                             </tr>
                                         )}

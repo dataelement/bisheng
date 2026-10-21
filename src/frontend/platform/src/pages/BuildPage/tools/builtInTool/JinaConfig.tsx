@@ -39,11 +39,11 @@ const JinaApiKeyForm = ({ formData = {}, onSubmit }) => {
             {/* Dialog Footer */}
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outlined" className="px-11" type="button" color="default">
+                    <Button variant="outlined" type="button" color="default">
                         {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
-                <Button className="px-11" type="submit">
+                <Button type="submit">
                     {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>

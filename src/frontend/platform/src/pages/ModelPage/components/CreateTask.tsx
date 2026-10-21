@@ -190,8 +190,8 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             </div>
         </div>
         <div className="mt-6 flex gap-6">
-            <Button disabled={loading} className="h-10 px-12" onClick={handleCreate}>{t('bs:create')}</Button>
-            <Button disabled={loading} className="h-10 px-12" variant="outlined" onClick={onCancel} color="default">{t('bs:cancel')}</Button>
+            <Button disabled={loading} onClick={handleCreate}>{t('bs:create')}</Button>
+            <Button disabled={loading} variant="outlined" onClick={onCancel} color="default">{t('bs:cancel')}</Button>
         </div>
     </div>
 };

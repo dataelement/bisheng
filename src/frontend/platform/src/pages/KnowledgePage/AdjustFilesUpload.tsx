@@ -401,10 +401,10 @@ export default function AdjustFilesUpload() {
 
                 {/* Step 2 bottom buttons */}
                 <div className="fixed bottom-2 right-12 flex gap-4 bg-background p-2 rounded-lg shadow-sm z-10">
-                  <Button className="h-8" variant="outlined" onClick={handleBack} color="default">
+                  <Button variant="outlined" onClick={handleBack} color="default">
                     {t('previousStep')}
                   </Button>
-                  <Button className="h-8" onClick={handleNext} disabled={isNextDisabled || isSubmitting}>
+                  <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting}>
                     {isSubmitting ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : null}
                     {t('nextStep')}
                   </Button>

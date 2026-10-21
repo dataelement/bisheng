@@ -217,7 +217,7 @@ export function ActionLevelBoard({
                 count: pendingChanges.length,
               })}
             </span>
-            <Button variant="text" size="small" type="button" className="text-primary underline-offset-2 hover:underline" aria-expanded={showChangeList} onClick={() => setShowChangeList((current) => !current)} color="default">
+            <Button variant="text" size="small" type="button" className="underline-offset-2 hover:underline" aria-expanded={showChangeList} onClick={() => setShowChangeList((current) => !current)} color="primary">
               {showChangeList
                 ? t("actionLevel.hideChangeList")
                 : t("actionLevel.showChangeList")}

@@ -469,7 +469,7 @@ export function ModelEditor({
         )}
         {!isStandard && !createMode && (
           <div className="mr-auto flex min-w-0 items-center gap-2">
-            <Button type="button" variant="outlined" className="shrink-0 text-destructive" disabled={disabled || saving} onClick={handleDelete} color="default">
+            <Button type="button" variant="outlined" className="shrink-0" disabled={disabled || saving} onClick={handleDelete} color="danger">
               {t("model.delete")}
             </Button>
             <span

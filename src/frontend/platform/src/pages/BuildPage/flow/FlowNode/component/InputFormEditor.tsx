@@ -465,10 +465,10 @@ export function InputFormEditor({ nodeId, nodeData, initialData, onSubmit, onCan
             </div>
 
             <div className="flex shrink-0 space-x-4 justify-end pt-4">
-                <Button className="px-8" type="button" variant="outlined" onClick={onCancel} color="default">
+                <Button type="button" variant="outlined" onClick={onCancel} color="default">
                     {t("cancel")}
                 </Button>
-                <Button className="px-8" type="submit">
+                <Button type="submit">
                     {t("confirm")}
                 </Button>
             </div>

@@ -373,7 +373,7 @@ export default function AppUseLog() {
                             }}>
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>Add to dataset</Button> */}
                                 {
-                                    el.chat_id && <Button asChild variant="link" className="px-0"><Link
+                                    el.chat_id && <Button asChild size="small" variant="link"><Link
                                         to={el.flow_type === 15 ? `/log/chatlog/${el.chat_id}` : `/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                         onClick={handleCachePage}
                                     >{t('lib.details')}</Link></Button>

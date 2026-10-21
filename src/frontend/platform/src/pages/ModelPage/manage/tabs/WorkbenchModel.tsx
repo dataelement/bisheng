@@ -330,8 +330,8 @@ export default function WorkbenchModel({ onBack }) {
                 onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}
             />
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
-                <Button className="px-10" disabled={saveload} onClick={handleSave}>
+                <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
+                <Button disabled={saveload} onClick={handleSave}>
                     {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>

@@ -3,16 +3,14 @@ import { Button } from '@bisheng/ui';
 import { Alert,AlertDescription,AlertTitle } from "@/components/bs-ui/alert";
 
 import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
-import { darkContext } from "@/contexts/darkContext";
 import { Outlined } from "bisheng-icons";
 
-import { useContext,useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "./flowStore";
 
 export default function Notification() {
     const { t } = useTranslation();
-    const { dark } = useContext(darkContext);
     const [open, setOpen] = useState(false);
 
     const notifications = useFlowStore((state) => state.notifications);
@@ -21,7 +19,7 @@ export default function Notification() {
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button size="medium" variant="outlined" className={`${!dark && 'bg-[#fff]'} size-8 relative`} color="default" iconOnly>
+                <Button size="medium" variant="outlined" className="relative" color="default" iconOnly>
                     <Outlined.Bell size={16} />
                     {notifications.length > 0 && <div className="absolute top-1 right-1 rounded-full bg-status-red size-1.5"></div>}
                 </Button>

@@ -168,7 +168,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     </div>
                     <div className="group flex justify-end mt-2 h-[600px] relative">
                         <Textarea ref={areaRef} placeholder={t('prompt')} textareaClassName={"h-full"}></Textarea>
-                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={unfinished(LoadType.Prompt)} size="small" onClick={handleUsePropmt}>{t('build.use')}</Button>
+                        <Button className="group-hover:flex hidden absolute bottom-4 right-4" disabled={unfinished(LoadType.Prompt)} size="small" onClick={handleUsePropmt}>{t('build.use')}</Button>
                     </div>
                 </div>
                 {/* Automatic configuration */}
@@ -181,7 +181,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                         <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                             <div className="text-md mb-2 font-medium leading-none flex items-center">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <Outlined.Loading size={16} className="shrink-0 animate-spin ml-2 text-gray-600" />}</div>
                             <Textarea ref={guideAreaRef} textareaClassName={"bg-transparent border-none bg-gray-50 dark:bg-[#171717]"} borderless></Textarea>
-                            <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={unfinished(LoadType.GuideWord)} size="small" onClick={handleUseGuide}>{t('build.use')}</Button>
+                            <Button className="group-hover:flex hidden absolute bottom-4 right-4" disabled={unfinished(LoadType.GuideWord)} size="small" onClick={handleUseGuide}>{t('build.use')}</Button>
                         </div>
                         {/* Guide questions */}
                         <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
@@ -193,7 +193,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                                     ))
                                 }
                             </div>
-                            <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={unfinished(LoadType.GuideQuestion)} size="small" onClick={handleUserQuestion}>{t('build.use')}</Button>
+                            <Button className="group-hover:flex hidden absolute bottom-4 right-4" disabled={unfinished(LoadType.GuideQuestion)} size="small" onClick={handleUserQuestion}>{t('build.use')}</Button>
                         </div>
                         {/* Tools */}
                         <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
@@ -208,7 +208,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                                     ))
                                 }
                             </div>
-                            <Button className="group-hover:flex text-slate-50 hidden h-6 absolute bottom-4 right-4" disabled={unfinished(LoadType.Tool) || !tools.length} size="small" onClick={handleUseTools}>{t('build.use')}</Button>
+                            <Button className="group-hover:flex hidden absolute bottom-4 right-4" disabled={unfinished(LoadType.Tool) || !tools.length} size="small" onClick={handleUseTools}>{t('build.use')}</Button>
                         </div>
                         {/* Skills */}
                         {/* <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
@@ -224,7 +224,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                             }
                         </div>
                         <Button
-                            className="group-hover:flex text-slate-50 hidden h-6 absolute bottom-4 right-4"
+                            className="group-hover:flex hidden absolute bottom-4 right-4"
                             disabled={unfinished(LoadType.Flow) || !flows.length}
                             size="sm"
                             onClick={handleUseFlows}
@@ -237,9 +237,9 @@ export default function AutoPromptDialog({ onOpenChange }) {
         {/* Bottom button area - fixed at bottom */}
         <DialogFooter className="border-t pt-2">
             <DialogClose>
-                <Button variant="outlined" className="px-11" type="button" color="default">{t('cancle')}</Button>
+                <Button variant="outlined" type="button" color="default">{t('cancle')}</Button>
             </DialogClose>
-            <Button type="submit" className="px-11" disabled={!!loading || stoppedAt > 0} onClick={handleUseAll}>{t('build.useAll')}</Button>
+            <Button type="submit" disabled={!!loading || stoppedAt > 0} onClick={handleUseAll}>{t('build.useAll')}</Button>
         </DialogFooter>
     </DialogContent>
 };

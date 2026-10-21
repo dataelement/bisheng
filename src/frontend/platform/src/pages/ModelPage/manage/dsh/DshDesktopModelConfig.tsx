@@ -66,7 +66,7 @@ export function DshDesktopModelConfig({ data }: DshDesktopModelConfigProps) {
                   <ModelVisionSwitch modelId={model.id} />
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="link" onClick={() =>
+                  <Button size="small" variant="link" onClick={() =>
                       setSelected({
                         id: model.id,
                         name: model.model_name,

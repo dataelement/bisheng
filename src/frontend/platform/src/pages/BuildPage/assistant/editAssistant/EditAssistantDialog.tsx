@@ -118,9 +118,9 @@ export default function EditAssistantDialog({ logo, viewLogo, name, desc, onSave
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outlined" className="px-11" type="button" color="default">{t('build.cancel')}</Button>
+                <Button variant="outlined" type="button" color="default">{t('build.cancel')}</Button>
             </DialogClose>
-            <Button type="submit" className="px-11" onClick={handleSubmit} disabled={(String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)}>{t('build.confirm')}</Button>
+            <Button type="submit" onClick={handleSubmit} disabled={(String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)}>{t('build.confirm')}</Button>
         </DialogFooter>
     </DialogContent>
 };

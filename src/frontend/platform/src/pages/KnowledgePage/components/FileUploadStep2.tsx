@@ -301,13 +301,13 @@ const FileUploadStep2 = forwardRef(({
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
-                <Button variant="outlined" className="min-w-[88px]" onClick={() => {
+                <Button variant="outlined" onClick={() => {
                         onPrev()
                         step === 2 && setShowPreview(false)
                     }} color="default">
                     {t('previousStep')}
                 </Button>
-                <Button disabled={previewFailed || isSubmitting || strategies.length === 0} className="min-w-[88px]" onClick={internalHandleNext}>
+                <Button disabled={previewFailed || isSubmitting || strategies.length === 0} onClick={internalHandleNext}>
                     {isSubmitting ? (
                         <Outlined.Loading className="animate-spin h-12 w-12" />
                     ) : (

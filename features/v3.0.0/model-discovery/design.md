@@ -2,7 +2,7 @@
 
 ## 功能基线
 
-PR 分支 `codex/model-discovery-pr` 以官方 `upstream/feat/3.0.0` 的 `8de501334` 为当前集成基线。3006 演示分支 `codex/model-discovery-3006` 中 `b81a5ac4b..c20844e54` 的模型功能完整提取到本分支，保留官方模型名称去空白工具、10803 部分初始化失败提示、服务商翻译元数据、名称状态校验、连接字段提示、Minimax 原生搜索和参数示例草稿。其他 DSH、灵思和知识空间功能留在原交付中。产品规则见 prd.md，历史环境证据见 deployment.md。
+PR 分支 `codex/model-discovery-pr` 以官方 `upstream/feat/3.0.0` 的 `e64e991a1` 为当前集成基线。3006 演示分支 `codex/model-discovery-3006` 中 `b81a5ac4b..c20844e54` 的模型功能完整提取到本分支，保留官方模型名称去空白工具、10803 部分初始化失败提示、服务商翻译元数据、名称状态校验、连接字段提示、Minimax 原生搜索和参数示例草稿。其他 DSH、灵思和知识空间功能留在原交付中。产品规则见 prd.md，历史环境证据见 deployment.md。
 
 ## 模型发现接口
 

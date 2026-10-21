@@ -526,18 +526,16 @@ export default function ModelConfig({
       <div className="absolute right-0 bottom-0 p-4 flex gap-4">
         {id !== -1 && (
           <Button
-            className="px-8"
-            variant="solid" color="danger"
+            variant="outlined" color="danger"
             onClick={handleModelDel}
           >
             {t("model.delete")}
           </Button>
         )}
-        <Button className="px-8" variant="outlined" color="default" onClick={() => onBack()}>
+        <Button variant="outlined" color="default" onClick={() => onBack()}>
           {t("model.cancel")}
         </Button>
         <Button
-          className="px-16"
           disabled={!formData.type}
           loading={isLoading}
           onClick={handleSave}
