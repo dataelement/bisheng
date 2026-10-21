@@ -73,6 +73,7 @@ from bisheng.utils.mask_data import JsonFieldMasker
 
 from ..llm import BishengASR, BishengEmbedding, BishengLLM, BishengTTS
 from ..llm.rerank import BishengRerank
+from .model_discovery import ModelDiscoveryError, ModelDiscoveryRequest, ModelDiscoveryService
 
 # A probe sends a couple of tokens; anything slower than this is unusable in a
 # real request anyway, and without a cap one dead endpoint hangs the caller.
@@ -629,6 +630,23 @@ class LLMService:
             app_type=ApplicationTypeEnum.DSH_DESKTOP,
             user_id=user_id,
             streaming=streaming,
+        )
+
+    @classmethod
+    async def discover_models(cls, data: ModelDiscoveryRequest, operator: UserPayload) -> dict:
+        config = data.config
+        if data.server_id:
+            info = await cls.get_one_llm(data.server_id, operator=operator)
+            if info.is_root_shared_readonly:
+                raise LLMSystemConfigForbiddenError()
+            if info.type != data.provider:
+                raise ModelDiscoveryError(msg="The provider must match the saved connection.")
+            stored = await LLMDao.aget_server_by_id(data.server_id)
+            if stored is None:
+                raise NotFoundError.http_exception()
+            config = JsonFieldMasker().update_json_with_masked(stored.config or {}, config)
+        return await ModelDiscoveryService.discover(
+            data.provider, cls.strip_config_whitespace(config), source=data.source, options=data.options
         )
 
     @classmethod
