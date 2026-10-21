@@ -13,7 +13,15 @@ beforeAll(() => {
 const mockSetSkills = jest.fn();
 const mockSkills = [{ name: 'research' }];
 jest.mock('react-router-dom', () => ({ useNavigate: () => jest.fn() }));
-jest.mock('recoil', () => ({ useRecoilValue: () => ({}), useRecoilState: () => [mockSkills, mockSetSkills] }));
+jest.mock('recoil', () => ({
+  useRecoilValue: () => ({}),
+  useRecoilState: () => {
+    const React = jest.requireActual('react');
+    const [skills, setSkills] = React.useState(mockSkills);
+    const update = React.useCallback((value) => { mockSetSkills(value); setSkills(value); }, []);
+    return [skills, update];
+  },
+}));
 jest.mock('~/store/linsight', () => ({ taskModeSkillsState: () => 'skills' }));
 jest.mock('~/pages/appChat/store/atoms', () => ({ bishengConfState: 'config' }));
 jest.mock('~/components/Linsight/Input/useDefaultCheckedSkills', () => ({ useDefaultCheckedSkills: () => {} }));
@@ -145,4 +153,29 @@ test('returning to ordinary chat clears selected task skills', () => {
   expect(mockSetSkills).toHaveBeenCalledWith([]);
   expect(screen.queryByText('/research')).toBeNull();
   expect(screen.queryByRole('button', { name: 'skills' })).toBeNull();
+});
+
+
+test.each([true, false])('send acceptance %s controls the entire skill draft reset', (accepted) => {
+  const input = props();
+  input.onSend.mockReturnValue(accepted);
+  render(<AiChatInput {...input} />);
+  fireEvent.click(screen.getByRole('button', { name: 'upload' }));
+  const editor = screen.getByRole('textbox');
+  editor.append(document.createTextNode('Prepare a report'));
+  fireEvent.input(editor);
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(input.onSend).toHaveBeenCalledWith('Prepare a report', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
+  if (accepted) {
+    expect(mockSetSkills).toHaveBeenCalledWith([]);
+    expect(mockSetSkills.mock.invocationCallOrder[0]).toBeGreaterThan(input.onSend.mock.invocationCallOrder[0]);
+    expect(editor).not.toHaveTextContent('Prepare a report');
+    expect(editor).not.toHaveTextContent('/research');
+    expect(screen.queryByText('notes.txt')).toBeNull();
+  } else {
+    expect(mockSetSkills).not.toHaveBeenCalled();
+    expect(editor).toHaveTextContent('/research');
+    expect(editor).toHaveTextContent('Prepare a report');
+    expect(screen.getByTestId('attachments')).toHaveTextContent('notes.txt');
+  }
 });

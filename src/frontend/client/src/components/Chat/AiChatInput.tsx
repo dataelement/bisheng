@@ -104,7 +104,7 @@ interface AiChatInputProps {
     onModelAutoChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
-    onSend: (text: string, files?: any[] | null) => void;
+    onSend: (text: string, files?: any[] | null) => void | boolean;
     onStop: () => void;
     onScrollToBottom: () => void;
     /** Optional controlled value — for filling in preset questions */
@@ -199,9 +199,7 @@ const AiChatInput = memo(
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
         const { ref: toolbarRef } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
 
-        // Selecting a skill picks it into the fresh
-        // task session ('new'), then enters task mode (/linsight/new) where the
-        // selection is refilled as a chip. Keyed 'new' to match the landing page.
+        // Skills belong to the current draft, shared by the landing and conversation inputs.
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
 
         // True while an IME composition is in flight — see handleKeyDown.
@@ -387,12 +385,14 @@ const AiChatInput = memo(
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
             // bubble goes back to `cover_filepath` once parsing produces it.
-            onSend(trimmed, chatFiles?.map((file) => (
+            const accepted = onSend(trimmed, chatFiles?.map((file) => (
                 file?.mediaCoverUrl?.startsWith('blob:')
                     ? { ...file, mediaCoverUrl: undefined }
                     : file
             )) ?? chatFiles);
+            if (accepted === false) return;
             setText("");
+            if (taskMode && !isLingsi) setDailySkills([]);
             setChatFiles(null);
             setUploadingFiles([]);
             inputFilesRef.current?.clear();
@@ -406,7 +406,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, fileAccept, onSend, chatFiles, setText, showToast, localize]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, fileAccept, onSend, chatFiles, setText, taskMode, isLingsi, setDailySkills, showToast, localize]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);

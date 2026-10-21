@@ -508,7 +508,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
 
     const sendMessage = useCallback(
         (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
-            if ((!text.trim() && !(files?.length)) || isStreaming) return;
+            if ((!text.trim() && !(files?.length)) || isStreaming) return false;
             // This turn belongs to the conversation it started in, and every
             // write below must land there even if the user walks away mid-answer.
             // Shadowing the viewed-conversation writers with turn-scoped ones is
@@ -541,7 +541,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     }),
                     status: "warning",
                 });
-                return;
+                return false;
             }
 
             const filesForDisplay = (files ?? []).map((f) =>
@@ -1092,6 +1092,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             // Lock input immediately — don't wait for SSE open event
             setIsStreaming(true);
             beginStream(turn.cid, submission);
+            return true;
         },
         [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing]
     );

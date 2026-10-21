@@ -358,3 +358,15 @@ describe('task mode owns skill execution', () => {
         });
     });
 });
+
+
+test('an incomplete upload rejects submission before starting a stream', async () => {
+  const { result } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  let accepted;
+  act(() => {
+    accepted = result.current.sendMessage('Use this file', [{ name: 'draft.txt', valid: false }], { taskMode: true });
+  });
+  expect(accepted).toBe(false);
+  expect(mockOpenedStreams).toHaveLength(0);
+});
