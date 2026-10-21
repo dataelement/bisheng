@@ -10,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/bs-ui/select"
-import { Switch } from "@/components/bs-ui/switch"
 import {
   Table,
   TableBody,
@@ -20,7 +19,6 @@ import {
   TableRow,
 } from "@/components/bs-ui/table"
 import {
-  ColumnResizeHandle,
   useResizableColumns,
 } from "@/components/bs-ui/table/useResizableColumns"
 import { cname } from "@/components/bs-ui/utils"
@@ -48,11 +46,12 @@ import type {
   DepartmentSearchResult,
   DepartmentTreeNode,
 } from "@/types/api/department"
-import { buildMemberDisplayNameMap } from "@/utils/userDisplayName"
+import { formatUserDisplayName } from "@/utils/userDisplayName"
 import { Loader2 } from "lucide-react"
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CreateLocalMemberDialog } from "./CreateLocalMemberDialog"
+import { DepartmentMemberList } from "./DepartmentMemberList"
 import { OrganizationMemberEditDialog } from "./OrganizationMemberEditDialog"
 
 interface MemberTableProps {
@@ -112,11 +111,6 @@ export function MemberTable({
     setGlobalRows([])
     setGlobalTotal(0)
   }, [deptId])
-
-  const memberDisplayNames = useMemo(
-    () => buildMemberDisplayNameMap(members),
-    [members]
-  )
 
   // F038: ancestors (for inherited-admin lookup) come from a path-tree fetch
   // instead of walking a full tree that's no longer passed in. The chain is
@@ -330,9 +324,6 @@ export function MemberTable({
     onChanged()
   }, [loadMembers, onChanged])
 
-  const fmtTime = (v?: string | Date | null) =>
-    v ? String(v).replace("T", " ").slice(0, 19) : "-"
-
   const memberCols = useMemo(
     () => [
       { defaultWidth: 160, minWidth: 120 },
@@ -497,7 +488,7 @@ export function MemberTable({
                     >
                       <TableCell className="font-medium">
                         <span className="inline-flex flex-wrap items-center gap-1.5">
-                          {r.user_name}
+                          {formatUserDisplayName({ user_name: r.user_name, person_id: r.external_id })}
                           {r.enabled === false && (
                             <Badge variant="secondary" className="font-normal">
                               {t("bs:department.disabled")}
@@ -530,193 +521,18 @@ export function MemberTable({
       )}
 
       {memberScope === "dept" && (
-      <TooltipProvider delayDuration={200}>
-      <Table
-        noScroll
-        className="!w-auto min-w-full"
-        style={{ tableLayout: "fixed", width: mrc.totalWidth }}
-      >
-        <TableHeader>
-          <TableRow>
-            <TableHead {...mrc.getThProps(0)}>
-              {t("system.username")}
-              <ColumnResizeHandle
-                columnIndex={0}
-                lastColumn={0 === memberLastCol}
-                startResize={mrc.startResize}
-              />
-            </TableHead>
-            <TableHead {...mrc.getThProps(1)}>
-              {t("bs:department.memberType", "所属关系")}
-              <ColumnResizeHandle
-                columnIndex={1}
-                lastColumn={1 === memberLastCol}
-                startResize={mrc.startResize}
-              />
-            </TableHead>
-            <TableHead {...mrc.getThProps(2)}>
-              {t("bs:department.roles")}
-              <ColumnResizeHandle
-                columnIndex={2}
-                lastColumn={2 === memberLastCol}
-                startResize={mrc.startResize}
-              />
-            </TableHead>
-            <TableHead {...mrc.getThProps(3)}>
-              {t("bs:department.userGroups")}
-              <ColumnResizeHandle
-                columnIndex={3}
-                lastColumn={3 === memberLastCol}
-                startResize={mrc.startResize}
-              />
-            </TableHead>
-            <TableHead {...mrc.getThProps(4)}>
-              {t("bs:department.updateTime")}
-              <ColumnResizeHandle
-                columnIndex={4}
-                lastColumn={4 === memberLastCol}
-                startResize={mrc.startResize}
-              />
-            </TableHead>
-            <TableHead {...mrc.getThProps(5)}>
-              {t("bs:department.enabled")}
-              <ColumnResizeHandle
-                columnIndex={5}
-                lastColumn={5 === memberLastCol}
-                startResize={mrc.startResize}
-              />
-            </TableHead>
-            <TableHead
-              style={mrc.getThProps(6).style}
-              className={cname(mrc.getThProps(6).className, "text-right")}
-            >
-              {t("operations")}
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {members.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground">
-                {t("bs:department.noMembers")}
-              </TableCell>
-            </TableRow>
-          ) : (
-            members.map((m) => (
-              <TableRow
-                key={m.user_id}
-                data-member-row={m.user_id}
-                className={cname(
-                  highlightUserId != null && m.user_id === highlightUserId
-                    ? "bg-accent/50"
-                    : ""
-                )}
-              >
-                <TableCell {...mrc.getTdProps(0)} title={memberDisplayNames.get(m.user_id) ?? m.user_name}>
-                  {memberDisplayNames.get(m.user_id) ?? m.user_name}
-                </TableCell>
-                <TableCell {...mrc.getTdProps(1)}>
-                  <Badge variant={m.is_primary === 1 ? "default" : "outline"}>
-                    {m.is_primary === 1
-                      ? t("bs:department.primary")
-                      : t("bs:department.secondary")}
-                  </Badge>
-                </TableCell>
-                <TableCell {...mrc.getTdProps(2)}>
-                  {(() => {
-                    const roleNames: string[] = []
-                    if (m.is_department_admin) {
-                      roleNames.push(t("bs:department.deptAdminRoleName"))
-                    }
-                    roleNames.push(...m.roles.map((r) => r.role_name))
-                    const text = roleNames.join(", ") || "-"
-                    return (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="cursor-default truncate">{text}</div>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-sm whitespace-pre-wrap">
-                          {text}
-                        </TooltipContent>
-                      </Tooltip>
-                    )
-                  })()}
-                </TableCell>
-                <TableCell {...mrc.getTdProps(3)}>
-                  {(() => {
-                    const text =
-                      m.user_groups.map((g) => g.group_name).join(", ") || "-"
-                    return (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="cursor-default truncate">{text}</div>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-sm whitespace-pre-wrap">
-                          {text}
-                        </TooltipContent>
-                      </Tooltip>
-                    )
-                  })()}
-                </TableCell>
-                <TableCell {...mrc.getTdProps(4)} className="whitespace-nowrap text-muted-foreground">
-                  {fmtTime(m.update_time ?? m.create_time)}
-                </TableCell>
-                <TableCell {...mrc.getTdProps(5)}>
-                  <Switch
-                    checked={m.enabled}
-                    disabled={
-                      isArchived
-                      || (!m.enabled && !!m.disable_source && user?.role !== "admin")
-                    }
-                    onCheckedChange={(checked) =>
-                      handleToggleEnabled(m, Boolean(checked))
-                    }
-                  />
-                </TableCell>
-                <TableCell {...mrc.getTdProps(6)} className="text-right">
-                  {(() => {
-                    const isSuperAdmin = m.roles.some((role) => role.id === 1)
-                    const canResetPwd = user.role === "admin"
-                    return (
-                      <div className="flex flex-wrap items-center justify-end gap-x-1">
-                        {isSuperAdmin ? (
-                          <Button variant="link" size="sm" disabled className="px-1">
-                            {t("edit")}
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="link"
-                            size="sm"
-                            className="px-1 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-60"
-                            disabled={isArchived || user.user_id === m.user_id || !m.enabled}
-                            onClick={() => handleEditUser(m)}
-                          >
-                            {t("edit")}
-                          </Button>
-                        )}
-                        {canResetPwd && (
-                          <Button
-                            variant="link"
-                            size="sm"
-                            className="px-1 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-60"
-                            disabled={isArchived}
-                            onClick={() =>
-                              !isArchived && userPwdModalRef.current?.open(m.user_id)
-                            }
-                          >
-                            {t("system.resetPwd")}
-                          </Button>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-      </TooltipProvider>
+        <DepartmentMemberList
+          members={members}
+          mrc={mrc}
+          memberLastCol={memberLastCol}
+          highlightUserId={highlightUserId}
+          isArchived={isArchived}
+          isPlatformAdmin={user?.role === "admin"}
+          currentUserId={user?.user_id}
+          onToggleEnabled={handleToggleEnabled}
+          onEditUser={handleEditUser}
+          onResetPassword={(userId) => { userPwdModalRef.current?.open(userId) }}
+        />
       )}
 
       {memberScope === "dept" && (
