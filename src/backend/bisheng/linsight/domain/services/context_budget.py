@@ -12,7 +12,7 @@ import contextlib
 import contextvars
 import json
 import math
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from deepagents import HarnessProfile, register_harness_profile
@@ -25,7 +25,7 @@ from deepagents.middleware.filesystem import (
 from deepagents.middleware.summarization import SummarizationMiddleware, compute_summarization_defaults
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage, get_buffer_string, trim_messages
 from langchain_core.messages.utils import count_tokens_approximately
 from loguru import logger
 
@@ -123,14 +123,14 @@ def count_context_tokens(messages: Sequence[BaseMessage], tools: Sequence[Any] |
 # BiSheng summarization middleware (design.md decision 7)
 # ---------------------------------------------------------------------------
 
-_SUMMARY_ERROR_PREFIX = "Error generating summary"
+# What langchain returns instead of raising when the summary call fails, or when
+# trimming left nothing to summarise. Neither is a summary.
+_SUMMARY_FAILURE_PREFIXES = ("Error generating summary", "Previous conversation was too long to summarize")
 _SUMMARY_ATTEMPTS = 2
 
-# The per-task builder the harness-profile factory reads. Set around the
-# synchronous ``create_deep_agent`` assembly, so concurrent asyncio tasks never
-# see each other's value.
-_SUMMARIZER_BUILDER: contextvars.ContextVar[Callable[[], AgentMiddleware] | None] = contextvars.ContextVar(
-    "bisheng_linsight_summarizer_builder", default=None
+# Set around the synchronous ``create_deep_agent`` assembly; per asyncio task.
+_SUMMARIZER_ACTIVE: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "bisheng_linsight_summarizer_active", default=False
 )
 _REGISTERED_PROVIDERS: set[str] = set()
 
@@ -174,6 +174,47 @@ class BishengSummarizationMiddleware(SummarizationMiddleware):
                 truncate_args_settings={"trigger": ("fraction", 0.85), "keep": ("fraction", 0.10)},
             )
         self._usable_input = usable_input
+        if usable_input is not None:
+            # langchain trims with start_on="human"; a task-mode history has a
+            # human message only at its head, so the trimmed tail came back empty
+            # and every compression replaced the history with a canned sentence.
+            self._lc_helper._trim_messages_for_summary = self._trim_for_summary
+
+    def _trim_for_summary(self, messages: list) -> list:
+        """Fit the summary input into half the usable input, keeping its newest part.
+
+        Keeps the leading human message (the task instruction, or the previous
+        summary) when it fits in half the budget, then the newest messages that
+        fit, starting at an AI or human message so no tool result is orphaned.
+        If even the newest step alone is too big, its text is clipped into one
+        message so the summary model still sees the latest work.
+        """
+        budget = self._lc_helper.trim_tokens_to_summarize
+        if not messages or estimate_tokens(messages) <= budget:
+            return messages
+        head = messages[:1] if isinstance(messages[0], HumanMessage) else []
+        if head and estimate_tokens(head) > budget // 2:
+            head = []
+        rest = messages[len(head) :]
+        remaining = max(1, budget - estimate_tokens(head))
+        try:
+            tail = trim_messages(
+                rest,
+                max_tokens=remaining,
+                token_counter=estimate_tokens,
+                strategy="last",
+                start_on=("human", "ai"),
+                allow_partial=False,
+            )
+        except Exception:
+            # Same spirit as langchain's own fallback, but within budget: an
+            # unexpected message shape falls back to the clipped-text path below.
+            logger.opt(exception=True).warning("[linsight-context-window] trim_messages failed; clipping text")
+            tail = []
+        if not tail:
+            text = get_buffer_string(rest)
+            tail = [HumanMessage(content=_clip_suffix_to_tokens(text, remaining))]
+        return [*head, *tail]
 
     def _count_tokens(self, messages, system_message, tools) -> int:
         if self._usable_input is None:
@@ -182,7 +223,7 @@ class BishengSummarizationMiddleware(SummarizationMiddleware):
         return count_context_tokens(counted, tools)
 
     def _check_summary(self, summary: str, attempt: int) -> bool:
-        if not summary.startswith(_SUMMARY_ERROR_PREFIX):
+        if not summary.startswith(_SUMMARY_FAILURE_PREFIXES):
             return True
         logger.error(
             "[linsight-context-window] summary generation failed (attempt {}/{}): {}",
@@ -207,14 +248,17 @@ class BishengSummarizationMiddleware(SummarizationMiddleware):
         raise LinsightContextCompressFailedError(msg=summary)
 
 
-def _summarizer_factory() -> list[AgentMiddleware]:
-    build = _SUMMARIZER_BUILDER.get()
-    if build is None:
-        # Only reachable if something other than create_linsight_agent builds a
-        # deep agent for a provider registered here; fail loudly rather than
-        # silently assembling an agent without any summarization.
+def _summarizer_guard() -> list[AgentMiddleware]:
+    """harness-profile ``extra_middleware`` factory: adds nothing, only checks.
+
+    The profile drops the framework's summarization for this provider in every
+    process-wide build; ours is passed in ``middleware=`` by create_linsight_agent.
+    A build outside ``bisheng_summarization()`` would silently run with no
+    summarization at all, so it fails loudly instead.
+    """
+    if not _SUMMARIZER_ACTIVE.get():
         raise RuntimeError("deep agent assembled outside bisheng_summarization(); no summarizer configured")
-    return [build()]
+    return []
 
 
 def _ensure_profile(provider: str) -> None:
@@ -222,32 +266,33 @@ def _ensure_profile(provider: str) -> None:
         return
     register_harness_profile(
         provider,
-        HarnessProfile(
-            excluded_middleware=frozenset({"SummarizationMiddleware"}), extra_middleware=_summarizer_factory
-        ),
+        HarnessProfile(excluded_middleware=frozenset({"SummarizationMiddleware"}), extra_middleware=_summarizer_guard),
     )
     _REGISTERED_PROVIDERS.add(provider)
 
 
 @contextlib.contextmanager
-def bisheng_summarization(model: BaseChatModel, backend: Any, usable_input: int | None) -> Iterator[None]:
-    """Make ``create_deep_agent`` inside this block use BishengSummarizationMiddleware.
+def bisheng_summarization(model: BaseChatModel) -> Iterator[bool]:
+    """Drop deepagents' summarization from every graph ``create_deep_agent`` builds here.
 
-    Registers (once per provider) a harness profile that drops the framework's
-    summarization middleware and adds ours through a factory; the factory builds
-    one instance per graph (main and each subagent) with this task's budget.
-    A model whose provider cannot be determined keeps the framework middleware.
+    Registers (once per provider) a harness profile excluding the framework's
+    ``SummarizationMiddleware``. Yields whether it applies: the caller must then
+    put a ``BishengSummarizationMiddleware`` FIRST in the main ``middleware=`` list
+    and in each subagent's list, so it wraps the resilience middleware as the
+    framework's did (a retry inside resilience must not re-run compression).
+    A model whose provider cannot be determined keeps the framework middleware
+    (yields False).
     """
     provider = get_model_provider(model)
     if not provider:
-        yield
+        yield False
         return
     _ensure_profile(provider)
-    token = _SUMMARIZER_BUILDER.set(lambda: BishengSummarizationMiddleware(model, backend, usable_input))
+    token = _SUMMARIZER_ACTIVE.set(True)
     try:
-        yield
+        yield True
     finally:
-        _SUMMARIZER_BUILDER.reset(token)
+        _SUMMARIZER_ACTIVE.reset(token)
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +304,13 @@ def bisheng_summarization(model: BaseChatModel, backend: Any, usable_input: int 
 RESULT_SHARE = 0.10
 
 _READ_FILE = "read_file"
+# Self-truncating listing/search tools: offloading their output would only invite
+# another listing, so they are clipped with a "narrow it down" hint instead.
+_SEARCH_TOOLS = ("ls", "glob", "grep")
+_SEARCH_TRUNCATION_HINT = (
+    "\n\n[结果超过本模型单次可读的长度，已截断。请缩小路径范围或改用更具体的匹配条件后重试。]"
+    "\n[Output truncated: it exceeds what this model can read at once. Narrow the path or pattern.]"
+)
 _READ_TRUNCATION_HINT = (
     "\n\n[输出超过本模型单次可读的长度，已截断。请用 read_file 的 offset / limit 参数分页继续读取 {file_path}。]"
     "\n[Output truncated: it exceeds what this model can read at once. Page through {file_path} "
@@ -291,6 +343,18 @@ class _ResultEvictor(FilesystemMiddleware):
         return await super()._aprocess_large_message(message, resolved_backend)
 
 
+def _clip_suffix_to_tokens(text: str, limit_tokens: int) -> str:
+    """Longest suffix of ``text`` whose CJK-aware estimate fits ``limit_tokens``."""
+    low, high = 0, len(text)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if estimate_text_tokens(text[len(text) - middle :]) <= limit_tokens:
+            low = middle
+        else:
+            high = middle - 1
+    return text[len(text) - low :]
+
+
 def _clip_to_tokens(text: str, limit_tokens: int) -> str:
     """Longest prefix of ``text`` whose CJK-aware estimate fits ``limit_tokens``."""
     low, high = 0, len(text)
@@ -320,12 +384,14 @@ class ToolResultBudgetMiddleware(AgentMiddleware):
         self._evictor = _ResultEvictor(backend, self._limit_tokens)
 
     def _clip_read(self, request, result):
+        file_path = ((request.tool_call or {}).get("args") or {}).get("file_path", "")
+        return self._clip(result, _READ_TRUNCATION_HINT.format(file_path=file_path))
+
+    def _clip(self, result, hint: str):
         if not isinstance(result, ToolMessage) or not isinstance(result.content, str):
             return result
         if estimate_text_tokens(result.content) <= self._limit_tokens:
             return result
-        file_path = ((request.tool_call or {}).get("args") or {}).get("file_path", "")
-        hint = _READ_TRUNCATION_HINT.format(file_path=file_path)
         clipped = _clip_to_tokens(result.content, max(1, self._limit_tokens - estimate_text_tokens(hint)))
         return result.model_copy(update={"content": clipped + hint})
 
@@ -334,6 +400,8 @@ class ToolResultBudgetMiddleware(AgentMiddleware):
         name = (request.tool_call or {}).get("name")
         if name == _READ_FILE:
             return self._clip_read(request, result)
+        if name in _SEARCH_TOOLS:
+            return self._clip(result, _SEARCH_TRUNCATION_HINT)
         if name in TOOLS_EXCLUDED_FROM_EVICTION:
             return result
         return self._evictor._intercept_large_tool_result(result, request.runtime)
@@ -343,6 +411,8 @@ class ToolResultBudgetMiddleware(AgentMiddleware):
         name = (request.tool_call or {}).get("name")
         if name == _READ_FILE:
             return self._clip_read(request, result)
+        if name in _SEARCH_TOOLS:
+            return self._clip(result, _SEARCH_TRUNCATION_HINT)
         if name in TOOLS_EXCLUDED_FROM_EVICTION:
             return result
         return await self._evictor._aintercept_large_tool_result(result, request.runtime)

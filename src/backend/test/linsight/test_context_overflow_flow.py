@@ -26,7 +26,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from bisheng.common.services.llm_error_classifier import classify_for_event
 from bisheng.core.config.settings import LinsightConf
-from bisheng.linsight.domain.services.context_budget import bisheng_summarization
+from bisheng.linsight.domain.services.context_budget import BishengSummarizationMiddleware, bisheng_summarization
 from bisheng.linsight.domain.services.resilience_middleware import (
     _SUBAGENT_OVERFLOW_MESSAGE,
     SubagentContextOverflowMiddleware,
@@ -94,33 +94,33 @@ def _fetch_calls(n: int) -> Iterator[AIMessage]:
 
 
 def _build(model: _ScriptedModel, conf: LinsightConf, context_window: dict):
-    """The production assembly: BishengSummarizationMiddleware swapped in (P1), which
-    sits INSIDE the resilience middleware (design decision 7)."""
+    """The production assembly (agent_factory): BishengSummarizationMiddleware FIRST,
+    i.e. outside resilience, in the main graph and the researcher (design decision 7)."""
+    backend = StateBackend()
+    usable_input = model.profile["max_input_tokens"]
     researcher_resilience = build_resilience_middleware(conf, is_subagent=True)
-    with bisheng_summarization(model, StateBackend(), model.profile["max_input_tokens"]):
-        return _create(model, conf, context_window, researcher_resilience)
-
-
-def _create(model, conf, context_window, researcher_resilience):
-    return create_deep_agent(
-        model=model,
-        tools=[fetch],
-        middleware=[
-            build_resilience_middleware(conf, is_subagent=False),
-            SubagentContextOverflowMiddleware(researcher_resilience, context_window),
-        ],
-        subagents=[
-            {
-                "name": "general-purpose",
-                "description": "researcher",
-                "system_prompt": "research",
-                "tools": [fetch],
-                "middleware": [researcher_resilience],
-            }
-        ],
-        state_schema=DeepAgentState,
-        checkpointer=InMemorySaver(),
-    )
+    with bisheng_summarization(model):
+        return create_deep_agent(
+            model=model,
+            tools=[fetch],
+            middleware=[
+                BishengSummarizationMiddleware(model, backend, usable_input),
+                build_resilience_middleware(conf, is_subagent=False),
+                SubagentContextOverflowMiddleware(researcher_resilience, context_window),
+            ],
+            subagents=[
+                {
+                    "name": "general-purpose",
+                    "description": "researcher",
+                    "system_prompt": "research",
+                    "tools": [fetch],
+                    "middleware": [BishengSummarizationMiddleware(model, backend, usable_input), researcher_resilience],
+                }
+            ],
+            state_schema=DeepAgentState,
+            backend=backend,
+            checkpointer=InMemorySaver(),
+        )
 
 
 async def _run(agent):

@@ -113,16 +113,16 @@
 
 ### 决策 7：P1 接管框架压缩部件的方式（D7，T019 已验证）
 
-- **验证结论（2026-10-21，脚本见 tasks.md T019）**：用 harness profile 可以只靠框架公开机制，在每个任务里换上 BiSheng 的压缩部件。做法分三步：
-  1. 按模型的 provider（`deepagents._models.get_model_provider`，即 `_get_ls_params()["ls_provider"]`）注册一个 harness profile：`excluded_middleware={"SummarizationMiddleware"}`，`extra_middleware=<工厂函数>`。每个 provider 只注册一次，由 BiSheng 记录已注册的 key。
-  2. `create_linsight_agent` 在调用 `create_deep_agent` 之前，把"本任务的压缩部件构造函数"放进一个 ContextVar。
-  3. 框架组装主图和每个子图时都会调用工厂函数，工厂函数从 ContextVar 取出构造函数，返回一个新的 `BishengSummarizationMiddleware` 实例。
-- **验证结果**：主图和研究员子图各得到一个 BiSheng 实例；框架自带的压缩部件一次也没有被调用；每个实例带着本任务的参数（摘要输入上限等）。框架自带部件的 `name` 返回公开别名 `SummarizationMiddleware`，子类则返回自己的类名，所以 BiSheng 子类不会被同一条排除规则移除（`deepagents/middleware/summarization.py:499-515`）。
-- **为什么不用 `middleware=` 传入**：可以，但排除规则也作用于调用方传入的实例，只能靠改名幸免；而工厂函数还能按子图分别构造实例，避免主图和子图共用一个有状态的对象。
-- **位置变化**：`extra_middleware` 追加在调用方中间件之后，所以 BiSheng 压缩部件位于 resilience 的**内层**（框架自带的在外层）。超窗异常因此先被压缩部件接住、压缩后重试；仍然超窗时才到 resilience，再按 FAIL_FAST 抛出。决策 9 的子图降级路径不受影响。
+- **做法**：
+  1. 按模型的 provider（`deepagents._models.get_model_provider`，即 `_get_ls_params()["ls_provider"]`）注册一个 harness profile：`excluded_middleware={"SummarizationMiddleware"}`，`extra_middleware=_summarizer_guard`。每个 provider 只注册一次。
+  2. `create_linsight_agent` 把 `BishengSummarizationMiddleware` 放在主图 `middleware=` 列表和研究员子图 `middleware` 列表的**第一位**，每个图一个实例。
+  3. `create_deep_agent` 在 `bisheng_summarization(model)` 块内调用。块内设置一个 ContextVar；`_summarizer_guard` 不添加任何中间件，只检查这个 ContextVar，在块外组装时抛 `RuntimeError`（坑 18）。
+- **验证结果**：框架自带部件的 `name` 返回公开别名 `SummarizationMiddleware`，子类返回自己的类名，所以 BiSheng 子类不会被同一条排除规则移除（`deepagents/middleware/summarization.py:499-515`）。主图和研究员子图都只有 BiSheng 实例在工作，框架自带部件一次也没有被调用（`test_context_summarization.py`）。
+- **为什么放在列表第一位，而不是用 `extra_middleware` 工厂注入**：T019 的验证脚本最初用工厂注入，但 `extra_middleware` 追加在调用方中间件之后，压缩部件因此位于 resilience 的内层。代码审查发现这样会让 resilience 的每次重试（transient、截断 nudge、incomplete-stream）都重新执行一次压缩：多调一次摘要模型，并把同一段历史再追加到 `/conversation_history/`。放在调用方列表第一位，它就紧接在框架的 PatchToolCalls 之后、resilience 之外，和框架自带部件原来的位置一致：resilience 的重试不会重复压缩；resilience 按 FAIL_FAST 抛出的超窗异常由它接住、压缩后重试。
 - **ContextVar 的并发安全**：`create_deep_agent` 的组装是同步代码，期间不会切换到其他 asyncio 任务；ContextVar 的值也按任务隔离。
-- **拿不到上下文长度时**：框架自带部件已被排除，所以工厂函数仍返回 BiSheng 子类，但参数与框架默认完全一致（`compute_summarization_defaults`、`count_tokens_approximately`、`trim_tokens_to_summarize=None`、不启用用量基数），满足 AC-08。摘要失败的重试与报错（AC-17、AC-18）在两种情况下都生效。
-- **何时该重新考虑**：deepagents 升级后改变 harness profile 的查找方式（按 provider 回退）、`excluded_middleware` 的匹配规则、`extra_middleware` 的位置，或进程内出现第二个使用 deepagents 的模块（见 §5 坑 11）。
+- **拿不到上下文长度时**：BiSheng 子类的参数与框架默认完全一致（`compute_summarization_defaults`、`count_tokens_approximately`、`trim_tokens_to_summarize=None`、不启用用量基数），满足 AC-08。摘要失败的重试与报错（AC-17、AC-18）在两种情况下都生效。
+- **拿不到 provider 时**：不注册 profile、不放 BiSheng 子类，框架自带部件保留，P1 的计数、摘要上限、摘要失败处理都不生效。BishengLLM 总能报出内层客户端的 provider，这条路径只在测试用的假模型上出现。
+- **何时该重新考虑**：deepagents 升级后改变 harness profile 的查找方式（按 provider 回退）、`excluded_middleware` 的匹配规则或调用方中间件的位置，或进程内出现第二个使用 deepagents 的模块（坑 11、18）。
 
 ### 决策 8：失败原因走 error_type，同时登记错误码
 
@@ -193,7 +193,7 @@
 | `resilience_middleware.py` `SubagentContextOverflowMiddleware`（新增） | 决策 9：主图上只处理 `task` 工具的超窗异常，返回说明并计入研究员的降级次数 | 不处理其他工具 |
 | `llm/domain/llm/llm.py` `BishengLLM` | 识别超窗错误并改抛；构造客户端前从高级配置取出 `context_window` | 不做压缩 |
 | `llm/domain/utils.py` 四个调用装饰器 | 超窗时不把模型标为异常 | — |
-| `linsight/domain/services/agent_factory.py` | 调用 `ContextWindowService`，设置 profile，记日志；挂载决策 9 的 `task` 超窗中间件 | 不读取服务商接口 |
+| `linsight/domain/services/agent_factory.py` | 调用 `ContextWindowService`，设置 profile，记日志；挂载决策 9 的 `task` 超窗中间件；把 `BishengSummarizationMiddleware` 放在主图和研究员子图中间件列表第一位，并在 `bisheng_summarization()` 块内组装（决策 7）；已知上下文长度时挂 `ToolResultBudgetMiddleware` | 不读取服务商接口 |
 | `linsight/domain/services/resilience_middleware.py` | 超窗直接抛出；降级计数供决策 9 共用 | 不吞掉超窗 |
 | `common/services/llm_error_classifier.py` | 新增两个 `ErrorType`；`ContextOverflowError` 归 FAIL_FAST；压缩失败按类名识别（不从 common 导入 linsight） | — |
 | `common/errcode/linsight.py` | 新增 11075、11076 | — |
@@ -216,15 +216,16 @@
 | 9 | vLLM 的 `/v1/models` 里 LoRA 适配器条目的 `max_model_len` 为 null | 读不到适配器的上下文长度 | 读取器沿 `parent` 字段找基础模型 |
 | 10 | 百炼的模型信息接口在 DashScope 原生地址，不在 `/compatible-mode/v1` 下，北京区域还需要 WorkspaceId | 按兼容地址拼接口会 404 | P1 读取器；推导不出时按未知处理 |
 | 11 | harness profile 是进程级全局注册的 | P1 的注册会影响同进程内所有 deepagents agent | 决策 7，目前只有 linsight 使用 deepagents |
-| 18 | harness profile 按 provider 全进程注册；注册之后，同一 provider 的模型如果不经 `bisheng_summarization()` 就组装 deep agent，工厂函数会抛 `RuntimeError` | 以后别的模块用同一 provider 的模型直接调 `create_deep_agent` 会失败 | 有意设计成大声失败，而不是悄悄组装一个没有压缩的 agent；新增 deepagents 使用方时要走 `bisheng_summarization()` |
-| 19 | `ToolResultBudgetMiddleware` 借用了 `FilesystemMiddleware` 的私有方法 `_intercept_large_tool_result` / `_process_large_message` 来写 `/large_tool_results/` | deepagents 升级改名或改签名时转存会报错 | `pyproject.toml` 锁 `<0.7`；`test_tool_result_budget.py` 在真实图上验证，升级时会先失败 |
-| 20 | P1 之后 CJK 计数更准，原来按 4 个字符估算时不会触发的主动压缩现在会触发；而主动压缩之后再超窗不会重试（坑 15） | 测试或现场观察到"没有超窗重试"不代表退化，而是提前压缩生效了 | `test_context_overflow_flow.py` 调小了工具结果，单独覆盖超窗重试路径 |
 | 12 | 压缩时生成摘要的调用失败后，langchain 返回字符串 `Error generating summary: …` 并继续执行（`langchain/agents/middleware/summarization.py:846`） | 历史被换成一行错误文本，任务带着失忆继续跑 | P1 子类识别并重试（AC-17、AC-18） |
 | 13 | 研究员 resilience 实例的 `_degrade_count` 被同一任务的所有 `task` 调用共用，代码注释把这标为 KNOWN GAP（`resilience_middleware.py:393`） | AC-16 依赖的正是"同一任务累计"这个口径。有人按注释把计数改成按调用分桶，AC-16 会被悄悄破坏 | 改动这个计数器时同步改 AC-16 及其测试 |
 | 14 | P0 下 deepagents 按 4 个字符 1 个 token 估算，中文少算 2 倍以上 | 以为 P0 已经能在中文任务上提前压缩，实际常常是"超窗后压缩重试" | 决策 1 的 P0 局限；P1 决策 10 |
 | 15 | deepagents 只在"这次调用没有主动压缩"时才接住超窗并压缩重试；如果这次调用已经因为达到阈值而主动压缩，压缩后的请求再超窗，异常直接抛出，不会再压缩一次（`deepagents/middleware/summarization.py` 的 `awrap_model_call`，主动压缩分支里的 `handler` 调用不在 `try` 中） | 以为"超窗后一定会压缩重试"；实际上主动压缩后仍超窗时任务直接按 AC-14 失败。这与 spec"同一次请求最多压缩一次"一致 | 测试 `test_context_overflow_flow.py` 的上下文长度取 20000，使历史介于保留量和触发阈值之间，才能覆盖超窗重试路径 |
 | 16 | 压缩后保留的 10% 能装下全部历史时，框架判定"没有可压缩的内容"，超窗后只做一次原样重试 | 以为超窗后一定发生了压缩；日志里看不到摘要调用 | 无需处理；保留比例由 P1 的 AC-24 约束 |
 | 17 | `unwrap` 原本沿 `__cause__` 一直走到最底层的 SDK 异常；超窗异常是 `raise ... from 原异常`，会被越过 | 分类器拿到普通的 400，标成 unknown | `unwrap` 遇到超窗异常或压缩失败异常即停止（`llm_error_classifier.py`）；日常模式的 `label_error(unwrap(exc))` 因此也能识别 |
+| 18 | harness profile 按 provider 全进程注册；注册之后，同一 provider 的模型如果不经 `bisheng_summarization()` 就组装 deep agent，`_summarizer_guard` 会抛 `RuntimeError` | 以后别的模块用同一 provider 的模型直接调 `create_deep_agent` 会失败 | 有意设计成大声失败，而不是悄悄组装一个没有压缩的 agent；新增 deepagents 使用方时要走 `bisheng_summarization()` |
+| 19 | `ToolResultBudgetMiddleware` 借用了 `FilesystemMiddleware` 的私有方法 `_intercept_large_tool_result` / `_process_large_message` 来写 `/large_tool_results/` | deepagents 升级改名或改签名时转存会报错 | `pyproject.toml` 锁 `<0.7`；`test_tool_result_budget.py` 在真实图上验证，升级时会先失败 |
+| 20 | P1 之后 CJK 计数更准，原来按 4 个字符估算时不会触发的主动压缩现在会触发；而主动压缩之后再超窗不会重试（坑 15） | 测试或现场观察到"没有超窗重试"不代表退化，而是提前压缩生效了 | `test_context_overflow_flow.py` 调小了工具结果，单独覆盖超窗重试路径 |
+| 21 | langchain 裁剪摘要输入时用 `start_on="human"`。任务模式的历史只有开头一条用户消息，从尾部截取的片段里找不到它，裁剪结果为空，摘要变成固定句子 `Previous conversation was too long to summarize.`，而且不算失败 | 每次压缩都把全部历史换成这句话，任务失忆后继续运行 | `BishengSummarizationMiddleware._trim_for_summary`：保留开头指令和最新步骤，最新一步本身过大时截断其文本；这句固定文本也算摘要失败 |
 
 ---
 
@@ -279,6 +280,8 @@
 - 模型配置页面的"上下文长度"字段（D8 否决）：当高级配置的使用门槛成为现场问题时，再起需求。
 - MindIE、火山方舟、千帆、腾讯、讯飞的读取器：拿到真实环境或公开文档后再补。
 - 图片张数、技能清单长度的上限：另起需求。
+- `ls`、`glob`、`grep` 的输出不转存（转存只会引出又一次列举），超过单条上限时截断，并提示缩小范围。spec AC-19 已写明这一例外（用户 2026-10-21 确认，plan D12）。
+- 百炼读取器的待核实点：本地 dashscope SDK 1.25 用 `GET {base}/api/v1/models/{name}` 查询单个模型，WorkspaceId 是可选请求头；官方文档（2026-10-21）给出的 list 接口则要求北京区域 host 带 WorkspaceId。目前按官方文档实现，默认地址按未知处理。如果现场用真实 key 验证单模型接口在默认地址可用，再补一个读取路径。
 
 ---
 
@@ -289,5 +292,6 @@
 | 2026-10-21 | 初版 | spec 确认 |
 | 2026-10-21 | §5 增坑 15、16、17 | P0 实现与集成测试中发现 |
 | 2026-10-21 | 决策 4 增缓存指纹与 repr 脱敏；决策 5 增输出侧超限排除；§4.2、§4.3、§6.1 与代码对齐 | `/code-review` 第一轮 |
-| 2026-10-21 | P1 实现：决策 7 验证结论、§4.3 增 context_budget.py、§5 增坑 18、19、20；P2 删除死配置 | P1 / P2 实现 |
 | 2026-10-21 | 决策 5 输出侧判据改为"输出预留 ≥ 上下文长度"；读取器兜底异常只记类型 | `/code-review` 第二轮 |
+| 2026-10-21 | P1 实现：决策 7 验证结论、§4.3 增 context_budget.py、§5 增坑 18、19、20；P2 删除死配置 | P1 / P2 实现 |
+| 2026-10-21 | P1 代码审查：压缩部件改为放在中间件列表第一位（不再经 `extra_middleware` 注入）；摘要输入裁剪改为保留开头指令和最新步骤；`ls`/`glob`/`grep` 输出按单条上限截断；§5 增坑 21 | `/code-review`（T032）|

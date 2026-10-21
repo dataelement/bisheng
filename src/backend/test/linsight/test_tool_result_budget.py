@@ -122,3 +122,14 @@ def test_factory_mounts_the_budget_only_for_a_known_window():
     assert _result_budget(StateBackend(), {"usable_input": None}) == []
     (mounted,) = _result_budget(StateBackend(), {"usable_input": 50_000})
     assert isinstance(mounted, ToolResultBudgetMiddleware)
+
+
+def test_grep_output_is_clipped_with_a_narrowing_hint():
+    middleware = ToolResultBudgetMiddleware(StateBackend(), USABLE_INPUT)
+    hits = ToolMessage(content="匹配行" * 2000, tool_call_id="g1", name="grep")
+    request = SimpleNamespace(tool_call={"name": "grep", "args": {"pattern": "合同"}, "id": "g1"}, runtime=None)
+
+    clipped = middleware.wrap_tool_call(request, lambda r: hits)
+
+    assert estimate_text_tokens(clipped.content) <= 2000
+    assert "缩小" in clipped.content

@@ -155,13 +155,24 @@ def fetch(page: int) -> str:
 
 
 def _build(model, usable_input):
+    """Mirror agent_factory: ours first in the main and the subagent middleware lists."""
     backend = StateBackend()
-    with bisheng_summarization(model, backend, usable_input):
+    with bisheng_summarization(model):
         return create_deep_agent(
             model=model,
             tools=[fetch],
-            subagents=[{"name": "general-purpose", "description": "r", "system_prompt": "r", "tools": [fetch]}],
+            middleware=[BishengSummarizationMiddleware(model, backend, usable_input)],
+            subagents=[
+                {
+                    "name": "general-purpose",
+                    "description": "r",
+                    "system_prompt": "r",
+                    "tools": [fetch],
+                    "middleware": [BishengSummarizationMiddleware(model, backend, usable_input)],
+                }
+            ],
             state_schema=DeepAgentState,
+            backend=backend,
             checkpointer=InMemorySaver(),
         )
 
@@ -232,8 +243,114 @@ async def test_compression_with_failing_summary_fails_as_compress_failed(instanc
 
 def test_assembling_outside_the_block_fails_loudly():
     model = _model()
-    with bisheng_summarization(model, StateBackend(), None):
+    with bisheng_summarization(model):
         pass  # registers the provider
 
     with pytest.raises(RuntimeError, match="outside bisheng_summarization"):
         create_deep_agent(model=model, tools=[], checkpointer=InMemorySaver())
+
+
+# --------------------------------------------------------------------------- #
+# Review fixes: the summary input is trimmed, never emptied
+# --------------------------------------------------------------------------- #
+
+
+def _history(steps: int, chars_per_result: int) -> list:
+    messages = [HumanMessage(content="读完这批文档并写报告")]
+    for i in range(steps):
+        messages.append(AIMessage("", tool_calls=[{"name": "fetch", "args": {"page": i}, "id": f"f{i}"}]))
+        messages.append(ToolMessage(content=f"第{i}页 " + "内容" * chars_per_result, tool_call_id=f"f{i}"))
+    return messages
+
+
+def test_real_scale_history_produces_a_real_summary():
+    """40 steps, ~80K tokens, usable 100K: the summary model must actually be called."""
+    model = _model(summaries=["真实摘要"], profile={"max_input_tokens": 100_000})
+    ours = BishengSummarizationMiddleware(model, StateBackend(), usable_input=100_000)
+
+    summary = ours._create_summary(_history(40, 1000))
+
+    assert summary == "真实摘要"
+    assert model.summary_calls == 1
+
+
+def test_trimmed_summary_input_keeps_the_instruction_and_the_newest_steps():
+    ours = BishengSummarizationMiddleware(_model(profile={"max_input_tokens": 100_000}), StateBackend(), 100_000)
+    history = _history(40, 1000)
+
+    trimmed = ours._trim_for_summary(history)
+
+    assert trimmed[0] is history[0]  # the task instruction
+    assert trimmed[-1] is history[-1]  # the newest step
+    assert not isinstance(trimmed[1], ToolMessage)  # no orphaned tool result
+    assert estimate_tokens(trimmed) <= 50_000
+
+
+def test_a_single_oversized_step_is_clipped_not_dropped():
+    ours = BishengSummarizationMiddleware(_model(profile={"max_input_tokens": 10_000}), StateBackend(), 10_000)
+    history = _history(1, 20_000)  # one tool result ~20K tokens > the 5K summary budget
+
+    trimmed = ours._trim_for_summary(history)
+
+    assert trimmed and estimate_tokens(trimmed) <= 5_000 + 10
+
+
+def test_too_long_to_summarize_counts_as_a_failure():
+    class _Empty(BishengSummarizationMiddleware):
+        def _trim_for_summary(self, messages):
+            return []
+
+    model = _model(profile={"max_input_tokens": 100_000})
+    ours = _Empty(model, StateBackend(), usable_input=100_000)
+    ours._lc_helper._trim_messages_for_summary = ours._trim_for_summary
+
+    with pytest.raises(LinsightContextCompressFailedError):
+        ours._create_summary(_history(3, 100))
+
+
+async def test_subagent_summary_failure_fails_the_task_as_compress_failed():
+    """SubagentContextOverflowMiddleware only absorbs overflows; a compression failure
+    inside the researcher must still end the whole task as context_compress_failed."""
+    from bisheng.core.config.settings import LinsightConf
+    from bisheng.linsight.domain.services.resilience_middleware import (
+        SubagentContextOverflowMiddleware,
+        build_resilience_middleware,
+    )
+
+    delegate = AIMessage(
+        "", tool_calls=[{"name": "task", "args": {"description": "d", "subagent_type": "general-purpose"}, "id": "t"}]
+    )
+    sub_fetches = [AIMessage("", tool_calls=[{"name": "fetch", "args": {"page": i}, "id": f"s{i}"}]) for i in range(4)]
+    model = _model(
+        replies=[delegate, *sub_fetches, AIMessage("sub done"), AIMessage("main done")],
+        summaries=[RuntimeError("down"), RuntimeError("down")],
+        profile={"max_input_tokens": 12_000},
+    )
+    backend = StateBackend()
+    conf = LinsightConf()
+    researcher_resilience = build_resilience_middleware(conf, is_subagent=True)
+    with bisheng_summarization(model):
+        agent = create_deep_agent(
+            model=model,
+            tools=[fetch],
+            middleware=[
+                BishengSummarizationMiddleware(model, backend, 12_000),
+                build_resilience_middleware(conf, is_subagent=False),
+                SubagentContextOverflowMiddleware(researcher_resilience, {}),
+            ],
+            subagents=[
+                {
+                    "name": "general-purpose",
+                    "description": "r",
+                    "system_prompt": "r",
+                    "tools": [fetch],
+                    "middleware": [BishengSummarizationMiddleware(model, backend, 12_000), researcher_resilience],
+                }
+            ],
+            state_schema=DeepAgentState,
+            backend=backend,
+            checkpointer=InMemorySaver(),
+        )
+
+    with pytest.raises(LinsightContextCompressFailedError):
+        await agent.ainvoke({"messages": [{"role": "user", "content": "go"}]}, {"configurable": {"thread_id": "t"}})

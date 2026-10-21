@@ -109,3 +109,20 @@ async def test_window_is_logged(factory_env, caplog):
 
     line = next(r for r in records if "[linsight-context-window]" in r)
     assert "window=32768" in line and "source=deployed" in line and "usable_input=32768" in line
+
+
+async def test_summarization_wraps_resilience_in_both_graphs(factory_env):
+    """Outermost: a resilience retry must not re-run compression (design decision 7)."""
+    from bisheng.linsight.domain.services.context_budget import BishengSummarizationMiddleware
+    from bisheng.linsight.domain.services.resilience_middleware import LinsightModelResilienceMiddleware
+
+    factory_env["set_result"](ContextWindowResult(window=32768, kind="total", usable_input=32768, source="deployed"))
+
+    await agent_factory.create_linsight_agent(_session(), [])
+
+    main = factory_env["middleware"]
+    researcher = factory_env["subagents"][0]["middleware"]
+    for stack in (main, researcher):
+        assert isinstance(stack[0], BishengSummarizationMiddleware)
+        assert isinstance(stack[1], LinsightModelResilienceMiddleware)
+    assert main[0] is not researcher[0]  # one instance per graph

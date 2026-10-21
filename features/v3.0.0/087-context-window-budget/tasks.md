@@ -320,5 +320,6 @@
 - T023：P0 的 `test_context_overflow_flow.py` 改为按生产方式装配（`bisheng_summarization()`），并调小工具结果以单独覆盖超窗重试路径（design 坑 20）。
 - T026 / T027：百炼北京等区域的原生接口 host 需要 WorkspaceId；默认地址 `dashscope.aliyuncs.com` 不带它，按未知处理（官方文档 2026-10-21 核实）。新加坡、香港与已带 workspace 的 `*.maas.aliyuncs.com` 可读。
 - T030：同时更新 `docs/architecture/05-linsight-agent.md` 的配置表。
+- T032：P1/P2 代码审查 NEEDS_FIX（摘要输入被裁空、压缩部件位于 resilience 内层导致重试重复压缩、grep/ls/glob 未受单条上限约束、文档过期）→ 已修，见 design 决策 7、坑 21、§8。
 - T018 推迟：2026-10-21 用户决定在客户现场（vLLM 133120）做端到端验证，界面三项手动检查一并在现场做。
 - T017 / T035 验证：改动的 3 个文件 eslint、tsc 无错误；`pnpm lint` / `pnpm typecheck` 整体报错都在其他文件（worktree 软链了 vibe 分支的 node_modules，未与 feat/3.0.0 干净环境对比）；`check-i18n`、`locales check` 通过。手动界面验证未做。
