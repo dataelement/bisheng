@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 2026-10-21 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-21 用户确认 |
 | tasks.md | ✅ 已拆解 | 两轮 `/sdd-review tasks`，第二轮剩余 7 条已修复 |
-| 实现 | 🔄 进行中 | 31 / 35 完成（P0 已合入 feat/3.0.0 6c6a62311；P1、P2 已实现；T018、T028 端到端验证待客户现场） |
+| 实现 | 🔄 进行中 | 32 / 35 完成（P0 合入 feat/3.0.0 6c6a62311；P1、P2 合入 4cdf4ada0；剩 T018、T028 客户现场端到端验证与 T033 清理） |
 
 ---
 
@@ -265,7 +265,7 @@
   **逻辑**: `/code-review --base feat/3.0.0`，合并 P0。
   **依赖**: T018
 
-- [ ] **T032**: P1、P2 代码审查与合并
+- [x] **T032**: P1、P2 代码审查与合并
   **逻辑**: `/code-review --base feat/3.0.0`；P1、P2 在同一分支继续或另开 PR，以用户决定为准。
   **依赖**: T028, T030
 
@@ -321,5 +321,6 @@
 - T026 / T027：百炼北京等区域的原生接口 host 需要 WorkspaceId；默认地址 `dashscope.aliyuncs.com` 不带它，按未知处理（官方文档 2026-10-21 核实）。新加坡、香港与已带 workspace 的 `*.maas.aliyuncs.com` 可读。
 - T030：同时更新 `docs/architecture/05-linsight-agent.md` 的配置表。
 - T032：P1/P2 代码审查 NEEDS_FIX（摘要输入被裁空、压缩部件位于 resilience 内层导致重试重复压缩、grep/ls/glob 未受单条上限约束、文档过期）→ 已修，见 design 决策 7、坑 21、§8。
+- T032 合并：P1、P2 于 2026-10-21 合入 feat/3.0.0（4cdf4ada0）。
 - T018 推迟：2026-10-21 用户决定在客户现场（vLLM 133120）做端到端验证，界面三项手动检查一并在现场做。
 - T017 / T035 验证：改动的 3 个文件 eslint、tsc 无错误；`pnpm lint` / `pnpm typecheck` 整体报错都在其他文件（worktree 软链了 vibe 分支的 node_modules，未与 feat/3.0.0 干净环境对比）；`check-i18n`、`locales check` 通过。手动界面验证未做。
