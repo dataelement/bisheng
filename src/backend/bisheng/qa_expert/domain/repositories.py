@@ -517,6 +517,7 @@ class QuestionRepository:
         invited_expert_ids: list[int] | None = None,
         asked_from: date | None = None,
         asked_to: date | None = None,
+        question_type: str | None = None,
     ) -> tuple[list[Question], int]:
         """列表查询问题"""
         async with get_async_db_session() as session:
@@ -524,6 +525,16 @@ class QuestionRepository:
 
             if business_domain:
                 stmt = stmt.where(Question.business_domain == business_domain)
+
+            if question_type == "directed":
+                stmt = stmt.where(Question.question_type == "directed")
+            elif question_type == "public":
+                stmt = stmt.where(
+                    or_(
+                        Question.question_type == "public",
+                        Question.question_type.is_(None),
+                    )
+                )
 
             if keyword:
                 normalized = keyword.strip()
@@ -663,8 +674,8 @@ class QuestionRepository:
             elif sort_by == "unanswered":
                 stmt = stmt.where(Question.answer_count == 0)
 
-            subquery = stmt.subquery()
-            count_stmt = select(func.count()).select_from(subquery)
+            # 计数只统计问题 id, 与筛选条件相同, 避免把 attachments 等大字段套进派生表再 COUNT.
+            count_stmt = stmt.with_only_columns(func.count(Question.id)).order_by(None)
             count_result = await session.execute(count_stmt)
             total = int(count_result.scalar() or 0)
 

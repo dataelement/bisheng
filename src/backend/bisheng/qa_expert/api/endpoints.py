@@ -373,6 +373,12 @@ async def list_questions(
     if query.asked_from and query.asked_to and query.asked_from > query.asked_to:
         raise HTTPException(status_code=422, detail="开始日期不能晚于结束日期")
 
+    from bisheng.qa_expert.domain.question_query import normalize_list_question_type_filter
+
+    question_type_filter = normalize_list_question_type_filter(query.question_type)
+    if query.question_type is not None and str(query.question_type).strip() and question_type_filter is None:
+        raise HTTPException(status_code=422, detail="question_type 仅支持 public 或 directed")
+
     questions, total = await service.list_questions(
         business_domain=query.domain,
         status=query.status,
@@ -392,6 +398,7 @@ async def list_questions(
         job_category=query.job_category,
         asked_from=query.asked_from,
         asked_to=query.asked_to,
+        question_type=question_type_filter,
     )
 
     return resp_200(
