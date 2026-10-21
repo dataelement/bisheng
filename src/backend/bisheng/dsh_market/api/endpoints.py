@@ -1,4 +1,3 @@
-import os
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
@@ -16,7 +15,6 @@ from bisheng.common.errcode.dsh_market import (
 )
 from bisheng.common.schemas.api import resp_200
 from bisheng.dsh_market.domain.bundle import MAX_UPLOAD_BYTES, BundleError
-from bisheng.dsh_market.domain.lease import verification_key
 from bisheng.dsh_market.domain.repository import ConflictError
 from bisheng.dsh_market.domain.workbench_bundle import (
     MAX_WORKBENCH_UPLOAD_BYTES,
@@ -83,16 +81,13 @@ async def capabilities(
     response: Response, actor: MarketActor = Depends(market_actor), service=Depends(get_market_service)
 ):
     response.headers["Cache-Control"] = "no-store"
-    enabled = bool(os.environ.get("BISHENG_DSH_MARKET_SIGNING_KEY"))
     policy = await call(service.install_policy, actor.tenant_id)
     return resp_200(
         {
-            "enabled": enabled,
-            "public_key": verification_key() if enabled else None,
-            "contract_version": 1,
+            "enabled": True,
+            "contract_version": 2,
             "tenant_id": str(actor.tenant_id),
             "max_upload_bytes": MAX_UPLOAD_BYTES,
-            "lease_seconds": 3600,
             "sync_seconds": 60,
             "allow_third_party_plugins": policy["allow_third_party_plugins"],
             "allow_third_party_workbenches": policy["allow_third_party_workbenches"],
@@ -114,12 +109,14 @@ async def change_install_policy(
 
 @router.get("/catalog")
 async def catalog(
+    response: Response,
     q: str = Query(default="", max_length=200),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
     actor: MarketActor = Depends(market_actor),
     service=Depends(get_market_service),
 ):
+    response.headers["Cache-Control"] = "no-store"
     return resp_200(await call(service.list_plugins, actor.tenant_id, q.strip(), page=page, size=size, employee=True))
 
 
@@ -128,20 +125,29 @@ async def artifact(
     plugin_id: str, version_id: str, actor: MarketActor = Depends(market_actor), service=Depends(get_market_service)
 ):
     data, digest = await call(service.download, actor.tenant_id, plugin_id, version_id)
+    gzip_archive = data.startswith(b"\x1f\x8b")
     return Response(
         data,
-        media_type="application/zip",
+        media_type="application/gzip" if gzip_archive else "application/zip",
         headers={
             "ETag": f'"{digest}"',
             "Cache-Control": "no-store",
-            "Content-Disposition": 'attachment; filename="plugin.zip"',
+            "Content-Disposition": 'attachment; filename="plugin.tgz"'
+            if gzip_archive
+            else 'attachment; filename="plugin.zip"',
             "X-Content-Type-Options": "nosniff",
         },
     )
 
 
 @router.post("/sync")
-async def sync(report: DeviceReport, actor: MarketActor = Depends(market_actor), service=Depends(get_market_service)):
+async def sync(
+    report: DeviceReport,
+    response: Response,
+    actor: MarketActor = Depends(market_actor),
+    service=Depends(get_market_service),
+):
+    response.headers["Cache-Control"] = "no-store"
     receipt = await call(
         service.synchronize,
         actor.tenant_id,
