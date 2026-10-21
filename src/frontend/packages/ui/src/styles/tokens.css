@@ -239,6 +239,14 @@
      its own. White on it is 13.55:1, and it clears the page by ΔL* 13.5. */
   --tooltip-bg: var(--arco-gray-2);
 
+  /* Shadows, dark: the light tiers are faint blue-black washes that vanish on
+     #121212, so dark swaps in plain black at a much higher alpha. A shadow
+     alone still cannot separate a page-colored surface from the page, so
+     page-colored overlays ALSO carry a `dark:border-border-base` outline
+     (Notification, Breadcrumb menu; Modal's card border is always on). */
+  --shadow-popup: 0 2px 16px -2px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 0 16px 0 rgba(0, 0, 0, 0.4);
+
   /* Disabled button, dark: a subtle raised inert fill + muted (not invisible)
      text/border. Light used black overlays on white; dark mirrors that with a
      lightened neutral, so disabled reads as greyed-out on #121212, not gone. */
@@ -382,7 +390,7 @@
  * itself (the `grey` prop does this) or to any ancestor for a global toggle, and
  * it renders greyscale whatever the brand theme is. Declared AFTER .theme-green
  * so it wins when both land on the same element. Only the illustration greens go
- * grey — white accents stay white (they don't read --illus-*); the whole drawing
+ * grey — white accents stay page-colored (they don't read --illus-*); the whole drawing
  * dims to 80% per design. */
 .illus-grey {
   --illus-100: 229 229 229;  /* #E5E5E5 */
@@ -392,6 +400,18 @@
 .illus-grey.brand-illustration,
 .illus-grey .brand-illustration {
   opacity: 0.8;
+}
+
+/* Character faces (SystemMaintenance / SystemError). White accents follow the
+ * page color, but a face turned #121212 reads as a black void — in dark the
+ * face takes the backdrop circle's tint (illus-100) instead. Declared on the
+ * svg itself, not :root, so var(--illus-100) resolves there and picks up the
+ * green theme and `.illus-grey` overrides. */
+.brand-illustration {
+  --illus-face: 255 255 255;
+}
+.dark .brand-illustration {
+  --illus-face: var(--illus-100);
 }
 
 /* Brand primary button — GREEN theme override (组件-Button按钮.md §6.2,

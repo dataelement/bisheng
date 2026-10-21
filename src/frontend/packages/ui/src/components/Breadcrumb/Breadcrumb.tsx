@@ -254,7 +254,10 @@ export function Breadcrumb({
                 sideOffset={4}
                 className={cn(
                   'z-popover max-h-80 min-w-[120px] max-w-[240px] overflow-y-auto',
-                  'rounded-lg bg-bg-page p-1 shadow-popup',
+                  // Dark: the popup shadow vanishes on #121212 and the panel
+                  // shares the page color, so a neutral outline marks its edge
+                  // (same treatment as Notification).
+                  'rounded-lg bg-bg-page p-1 shadow-popup dark:border dark:border-border-base',
                 )}
               >
                 {hidden.map((item, index) => (

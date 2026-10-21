@@ -39,9 +39,10 @@ const SIZE_WIDTH: Record<Exclude<ModalSize, 'fullscreen'>, string> = {
     'min-[576px]:w-[min(400px,calc(100vw-32px))] lg:w-[min(600px,calc(100vw-32px))] xl:w-[min(960px,calc(100vw-32px))]',
 };
 
-/** §5 — 40% black, no blur (a blurred backdrop reads as "I left the page"). */
+/** §5 — 40% black, no blur (a blurred backdrop reads as "I left the page").
+ * Dark deepens it to 60%: 40% black over #121212 barely separates layers. */
 const OVERLAY_CLASS =
-  'fixed inset-0 z-modal bg-black/40 data-[state=open]:animate-modal-overlay-in data-[state=closed]:animate-modal-overlay-out motion-reduce:animate-none';
+  'fixed inset-0 z-modal bg-black/40 dark:bg-black/60 data-[state=open]:animate-modal-overlay-in data-[state=closed]:animate-modal-overlay-out motion-reduce:animate-none';
 
 /** Phone (< 576px) has no visible outside area — §7 says the mask is not drawn. */
 const OVERLAY_PHONE_CLASS = 'hidden min-[576px]:block';
