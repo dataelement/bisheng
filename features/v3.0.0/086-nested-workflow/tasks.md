@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 由已确认的 PRD §3、§4 转写；2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 经 `/sdd-review design` 修订后用户确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 经 `/sdd-review tasks` 修订 |
-| 实现 | 🔄 进行中 | 32 / 35 完成；2026-10-20 在 119 A 插槽完成 API E2E（11 项全过）、浏览器验证与重建后补验；T28、T34 只剩 AC-10 的浏览器部分（需普通用户登录）；T35 的 DM8 复核已做；2026-10-20 `/sdd-code-review --base feat/3.0.0` 结论 NEEDS_FIX，F086 部分已在 `fix/f086-review` 修复，待复审 |
+| 实现 | 🔄 进行中 | 34 / 35 完成；2026-10-20 在 119 A 插槽完成 API E2E（11 项全过）、浏览器验证与重建后补验；2026-10-21 以普通用户补完 AC-10 的浏览器部分与新增引用的 10566 拒绝，T28、T34 完成；T35 的 DM8 复核已做；2026-10-20 `/sdd-code-review --base feat/3.0.0` 结论 NEEDS_FIX，F086 部分已在 `fix/f086-review` 修复，待复审 |
 
 ---
 
@@ -216,7 +216,7 @@
   **手动验证**: 基础节点列表出现【子工作流】，拖入画布后显示三个分组。
   **依赖**: T23
 
-- [ ] **T28**：子工作流选择与输入参数组件
+- [x] **T28**：子工作流选择与输入参数组件
   **文件**: `P/pages/BuildPage/flow/FlowNode/component/SubflowSelectItem.tsx`、`P/pages/BuildPage/flow/FlowNode/component/SubflowInputItem.tsx`、`P/pages/BuildPage/flow/FlowNode/Parameter.tsx`
   **逻辑**: 选择组件调候选接口，参照 `KnowledgeSelectItem` 的分页下拉；选定后调接口查询，生成固定名称的输入参数行（「引用/输入」两种方式，交互同 `CodeInputItem`）与只读的输出结果列表（只显示名称）。打开已配置的节点时重新查询接口：无权限时沿用节点里的快照；子工作流已不满足条件时在节点上显示提示。在 `Parameter.tsx` 注册两个新参数类型。
   **覆盖 AC**: AC-01、AC-02、AC-03、AC-04、AC-10
@@ -256,7 +256,7 @@
   **逻辑**: 确认 T01 的登记完整；补「变更历史」一行。
   **依赖**: T01
 
-- [ ] **T34**：E2E
+- [x] **T34**：E2E
   **逻辑**: `/e2e-test features/v3.0.0/086-nested-workflow`，逐条覆盖 spec 的全部 AC。AC-07 在子工作流保存后、以及切换当前版本后各运行一次父工作流；AC-09 用对子工作流无权限的普通用户；AC-18 走开放 API；AC-08 确认未上线子工作流不出现在工作台；AC-21 确认子工作流中模型调用的记录归属父工作流。验证环境为 119 共享沙箱。
   **覆盖 AC**: AC-01、AC-02、AC-03、AC-04、AC-05、AC-06、AC-07、AC-08、AC-09、AC-10、AC-11、AC-12、AC-13、AC-14、AC-15、AC-16、AC-17、AC-18、AC-19、AC-20、AC-21
   **依赖**: T24、T32
@@ -308,3 +308,6 @@
   - `SubflowSelectItem` 接口查询成功后才切换选中的工作流，失败时保留原工作流和参数；先后发出的查询以最后一次为准；候选列表某页失败时停止翻页。
   - 删除两处死代码：`RunLog` 中与默认分支相同的 `subflow_logs` 分支；`SubflowNode` 中不会走到的 `None` 判断和与通用分支相同的 `IgnoreException` 分支。
   - 未做（与本轮根因无关，记为 LOW）：`subflow_logs` 随 WebSocket 下发给所有查看者、子工作流失败日志缺 `subflow_id`、`sub_workflow` 常驻内存、`EndReturnItem` 重复 `findNodeParam`、超 600 行文件拆分。
+- 普通用户补验（2026-10-21，119 A 插槽重新部署到含 46e1cce1f 的镜像，账号 test1020，非管理员）：
+  - 新增引用（决策 13）：对父工作流有编辑权限、对子工作流 A 有编辑权限、对子工作流 B 无权限。保存含 A 的版本成功；再加入 B 保存，返回 10566「No permission to edit workflow 嵌套子工作流_待办清单, so it cannot be used as a subflow」，版本数据未变。
+  - AC-10：管理员撤销 test1020 对 A 的权限后（撤销后连查看 A 都返回 403），重新打开父工作流编辑页，停留在编辑页、未被带离；`SubflowSelectItem` 查询 A 失败后沿用节点快照，节点显示「工作流 子工作流」；保存成功；调试运行的事件序列与撤销前一致（进入子工作流后因 A 内含【输入】节点以 10563 结束，属设计行为），没有 10566。
