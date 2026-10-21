@@ -101,7 +101,7 @@ export default function taskApps() {
                                     // window.libname = el.name;
                                 }}>
                                     {
-                                        el.chat_id && <Button asChild variant="link" className="px-0"><Link
+                                        el.chat_id && <Button asChild size="small" variant="link"><Link
                                             to={`/label/chat/${id}/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                         >{t('label.view')}</Link></Button>
                                     }

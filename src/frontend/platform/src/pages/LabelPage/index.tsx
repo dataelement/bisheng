@@ -198,7 +198,7 @@ export default function Tasks() {
                                     (task.mark_process || []).map((name, index) => <p key={index}>{name}</p>)
                                 }</TableCell>
                                 <TableCell className="text-right">
-                                    <Button asChild variant="link" className="px-0 pl-4"><Link to={`/label/${task.id}`}>{t('label.view')}</Link></Button>
+                                    <Button asChild size="small" variant="link"><Link to={`/label/${task.id}`}>{t('label.view')}</Link></Button>
                                 </TableCell>
                             </TableRow>
                         ))}

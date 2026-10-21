@@ -95,8 +95,8 @@ function QaTable({ dataList }) {
                                 <TableCell className="font-medium">
                                     {answer}
                                 </TableCell>
-                                <TableCell className="font-medium cursor-pointer text-primary">
-                                    <Button variant="link" className="px-1" onClick={() => {
+                                <TableCell className="font-medium">
+                                    <Button size="small" variant="link" onClick={() => {
                                         if (!questions.length) {
                                             return toast.show({ type: 'warning', message: String(t('noSimilarQuestions') ?? '') });
                                         }

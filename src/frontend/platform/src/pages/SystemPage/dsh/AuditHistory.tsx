@@ -164,7 +164,7 @@ export function AuditHistory({ revision = 0 }: AuditHistoryProps) {
                       </Tag>
                     </TableCell>
                     <TableCell>
-                      <Button variant="link" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}>
+                      <Button size="small" variant="link" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}>
                         {t(expanded === row.id ? "dsh.auditHistory.collapse" : "dsh.auditHistory.details")}
                       </Button>
                     </TableCell>

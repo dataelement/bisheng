@@ -203,7 +203,7 @@ export function PersonalToken() {
               <TableCell>{formatDate(item.expires_at)}</TableCell>
               <TableCell>{t(item.is_valid ? "openApiManagement.status.active" : "openApiManagement.status.revoked")}</TableCell>
               <TableCell className="whitespace-nowrap text-right">
-                <Button variant="link" disabled={!item.is_valid} onClick={() => handleRevoke(item)}>{t("openApiManagement.actions.revoke")}</Button>
+                <Button size="small" variant="link" color="danger" disabled={!item.is_valid} onClick={() => handleRevoke(item)}>{t("openApiManagement.actions.revoke")}</Button>
               </TableCell>
             </TableRow>
           ))}

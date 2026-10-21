@@ -239,21 +239,23 @@ export function ApiKeysTab({
                     {t(`openApiManagement.status.${statusKey}`)}
                   </Tag>
                 </TableCell>
-                <TableCell className="whitespace-nowrap text-right">
-                  <Button variant="link" disabled={
-                      loading ||
-                      loadingScopes ||
-                      !scopes.length ||
-                      !key.is_valid
-                    } onClick={() => {
-                      setEditingKey(key)
-                      setDialogOpen(true)
-                    }}>
-                    {t("edit")}
-                  </Button>
-                  <Button variant="link" disabled={loading || !key.is_valid} onClick={() => handleRevoke(key.id)}>
-                    {t("openApiManagement.actions.revoke")}
-                  </Button>
+                <TableCell className="whitespace-nowrap">
+                  <div className="flex justify-end gap-2">
+                    <Button size="small" variant="link" disabled={
+                        loading ||
+                        loadingScopes ||
+                        !scopes.length ||
+                        !key.is_valid
+                      } onClick={() => {
+                        setEditingKey(key)
+                        setDialogOpen(true)
+                      }}>
+                      {t("edit")}
+                    </Button>
+                    <Button size="small" variant="link" color="danger" disabled={loading || !key.is_valid} onClick={() => handleRevoke(key.id)}>
+                      {t("openApiManagement.actions.revoke")}
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             )

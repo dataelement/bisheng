@@ -256,7 +256,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
                                         {m.added_time}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button type="button" variant="link" className="h-auto p-0 text-red-500" onClick={() => removeMemberFromPick(m.user_id)}>
+                                        <Button type="button" size="small" variant="link" color="danger" onClick={() => removeMemberFromPick(m.user_id)}>
                                             {t('system.removeFromGroup')}
                                         </Button>
                                     </TableCell>

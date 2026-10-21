@@ -84,7 +84,7 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
                 {model.status === 1 && model.remark && <Tooltip content={model.remark}>
                     <Button variant="ghost" size="icon" aria-label={model.remark}><Outlined.Question className="size-3.5 text-text-3" /></Button>
                 </Tooltip>}
-                <Button variant="link" size="sm" loading={verifying} disabled={verifying} onClick={handleVerify}>
+                <Button variant="link" size="small" loading={verifying} disabled={verifying} onClick={handleVerify}>
                     {t('model.updateStatus')}
                 </Button>
             </div>
@@ -116,7 +116,7 @@ export function ModelProviderRow({ data, canManage, probing, onModel, onToggle, 
                     </Tag>}
                 </div>
                 <div className="bs-table-td h-full p-2 flex items-center justify-end first:rounded-l-md last:rounded-r-md">
-                    <Button variant="link" disabled={!canEdit} onClick={() => onModel(data.id)}>{t('model.modelConfiguration')}</Button>
+                    <Button size="small" variant="link" disabled={!canEdit} onClick={() => onModel(data.id)}>{t('model.modelConfiguration')}</Button>
                 </div>
             </div>
             {expanded && <div className="px-12 py-2">

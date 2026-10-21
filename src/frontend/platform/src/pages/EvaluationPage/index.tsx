@@ -184,11 +184,11 @@ export default function EvaluationPage() {
                       {el.create_time.replace("T", " ") || "--"}
                     </TableCell>
                     <TableCell className="flex justify-end">
-                      <div className="flex">
-                        {el.status !== EvaluationStatusEnum.failed && <Button variant="link" className="no-underline hover:underline" onClick={() => handleDownload(el)}>
+                      <div className="flex gap-2">
+                        {el.status !== EvaluationStatusEnum.failed && <Button size="small" variant="link" onClick={() => handleDownload(el)}>
                           {t("evaluation.download")}
                         </Button>}
-                        <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-1 px-0 text-red-500">
+                        <Button size="small" variant="link" color="danger" onClick={() => handleDelete(el.id)}>
                           {t("delete")}
                         </Button>
                       </div>
