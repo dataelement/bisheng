@@ -1,19 +1,24 @@
 {
   "schema": "f059-platform-evidence/v1",
-  "recorded_at": "2026-10-22T17:48:07.531221+00:00",
-  "state": "in_progress_r7_startup_stage_budget_fix",
+  "recorded_at": "2026-10-22T18:16:33.600506+00:00",
+  "state": "in_progress_r8_with_startup_and_data_cancel_fixes",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:3e0bf023a016b3f486bd5fe5cbcae85d89cc8737daaa9166f926291ec7781de5",
+    "manager_source": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
     "helper_images": "new143 helper; application runtime/preparer profile2 unchanged",
-    "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049"
+    "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049",
+    "backend_data_cancel_source": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+    "backend_data_cancel_files": [
+      "bisheng/app_runtime/domain/services/runtime_data_grant_service.py",
+      "bisheng/app_runtime/domain/services/runtime_data_session_service.py"
+    ]
   },
   "attempts": [
     {
@@ -213,7 +218,7 @@
   ],
   "boundary": "Real preparation Pod startup and same-UID cleanup proven; no full business acceptance or cross-node/arm/CI release claim.",
   "next_batch": {
-    "name": "k189r7",
+    "name": "k189r8",
     "cases": 6,
     "profile_revision": 2,
     "identities_reused": true,
@@ -224,21 +229,14 @@
     "backend_node_ready_before_start": true,
     "stage": "platform",
     "automatic_finally_cleanup": false,
-    "source_revision": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+    "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
     "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c",
-    "result": "failed_probe_readiness_timeout",
-    "app_id": "baa177a4b5fe42cbb8cf4dadc8f09299",
-    "deployment_id": "d623cbd318f04795bb6121a572ff566e",
-    "version_id": "35958375b3ff4b438f061c0cdfa6d24d",
-    "prepare_operation_id": "6be875ba6c3f48569084f6155f8c67f7",
-    "prepare_status": "completed",
-    "prepare_cleanup_status": "complete",
-    "prepared_delivery_matches": true,
-    "probe_operation_id": "0816633805bd414d828ff1bef8b6995b",
-    "probe_status": "failed",
-    "probe_cleanup_status": "complete",
-    "probe_failure_reason": "workload_readiness_timeout",
-    "probe_pod_uid": "b7a85626-a271-4c1b-9f07-f47cc83ed13a"
+    "result": "in_progress",
+    "deployment_id": "123f35de6d2b4fdf8050a44d75eebc9e",
+    "runtime": "python3.11",
+    "app_id": "6da0d71cbda643e881e02d707eac7e79",
+    "version_id": "ab8c8e9a50c84bf899c1aef0a2bf0898",
+    "mode": "bundle"
   },
   "historical_batches": [
     {
@@ -417,6 +415,36 @@
         "schema": "f059-r6-cleanup/v1"
       },
       "cleanup_proof_sha256": "110aab26f2846ed75f35a02a95e948e40e8ec5cba21528ead45acec7dfa87d77"
+    },
+    {
+      "name": "k189r7",
+      "cases": 6,
+      "profile_revision": 2,
+      "identities_reused": true,
+      "new_journal_required": true,
+      "prepared": true,
+      "business_started": true,
+      "requires_current_candidate_report_ready": true,
+      "backend_node_ready_before_start": true,
+      "stage": "platform",
+      "automatic_finally_cleanup": false,
+      "source_revision": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+      "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c",
+      "result": "failed_probe_readiness_timeout",
+      "app_id": "baa177a4b5fe42cbb8cf4dadc8f09299",
+      "deployment_id": "d623cbd318f04795bb6121a572ff566e",
+      "version_id": "35958375b3ff4b438f061c0cdfa6d24d",
+      "prepare_operation_id": "6be875ba6c3f48569084f6155f8c67f7",
+      "prepare_status": "completed",
+      "prepare_cleanup_status": "complete",
+      "prepared_delivery_matches": true,
+      "probe_operation_id": "0816633805bd414d828ff1bef8b6995b",
+      "probe_status": "failed",
+      "probe_cleanup_status": "complete",
+      "probe_failure_reason": "workload_readiness_timeout",
+      "probe_pod_uid": "b7a85626-a271-4c1b-9f07-f47cc83ed13a",
+      "public_failure_code": 16124,
+      "public_failure_stage": "precheck_probe"
     }
   ]
 }

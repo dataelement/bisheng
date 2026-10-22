@@ -34,3 +34,5 @@ Helm14以d86e66a2d固定manager镜像升级manager/egress/admission，全部Read
 
 
 2026-10-23 manager-only候选7816/Helm17：原生构建及禁网导入通过；descriptor UID/data、helper143、profile2及其16/16报告完全未变。新镜像评估ready、平台自然接管epoch11且ready；没有把保留的143探测报告改标成新运行。真实业务在独立r7继续。
+
+2026-10-23 manager-only a1de/Helm18：固定digest06bb857f…，descriptor/报告/helper/profile不变，新镜像assess ready及平台epoch13/ready成立。backend取消闸两个文件CAS更新、专用服务重启后实际私网env200；错误loopback检查单独保留并追加纠正证据。未冒认新16项完整探测或真实数据取消已通过。

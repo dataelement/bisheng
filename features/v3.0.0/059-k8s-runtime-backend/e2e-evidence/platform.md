@@ -50,3 +50,10 @@ r6原失败记录保留；正常cleanup后8精确资源逐项fresh API absent、
 ### r7准备成功、初始化总窗口失败
 
 prepare6be875…最终completed/cleanupcomplete，4阶段、8资源完整结束且prepared_delivery等于delivery；T226真实路径已通过。probe081663…的材料初始化真实成功，但data-layout/schema-init/material-fetch/env串行共用90秒；Pod调度17:47:32、环境安装17:48:51启动、17:49:03被停止，仅12秒。所有镜像已有本机缓存；tail只到pip Lookinginlinks，app仍PodInitializing。4资源normalcleanupcomplete，保留原失败，不冒认审批/上线。登记T228/T229修正既定阶段计时。
+
+
+## 当前a1de/Helm18与r8
+
+来源a1de5271f5f00cef0cba06d41f09c673a9190525，manager固定digest `06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad`；原生amd64构建/禁网导入通过。Helm18三个控制服务更新，descriptor UID/data、helper143/profile2和有效16项报告不变，平台自然接管epoch13并ready。backend两个data grant/session源文件先CAS核旧哈希一致，备份/替换/重启专用backend+worker；原loopback检查失败因端口只绑定192.168.106.189，原失败receipt保留；实际私网API HTTP200、文件新哈希再次核对通过，未追加重启或动OpenFGA。
+
+r8按原runner、身份和六场景新journal启动；首个Python app6da0d71cbda643e881e02d707eac7e79，deployment123f35de6d2b4fdf8050a44d75eebc9e，versionab8c8e9a50c84bf899c1aef0a2bf0898。当前真实业务仍进行中，不把修复部署及本地回归算成审批/上线通过。r7公开失败16124/precheck_probe和正常cleanup事实保留。

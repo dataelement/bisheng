@@ -30,3 +30,5 @@ Go公网metadata等待、首轮取消及官方材料恢复分别保留，未计�
 
 
 2026-10-23：manager-only 7816原生amd64构建/导入通过，内网固定digest3e0bf023…，Helm17部署；只更新operations.py，不重标helper/profile旧来源。ARM按用户指示暂缓，正式公开CI发行仍未执行。详见JSON latest_native_amd64_manager_only。
+
+2026-10-23：a1de manager原生amd64构建/导入通过，内网固定digest06bb857f…、Helm18；runtime两文件启动/数据取消变更，不重标helper143。ARM仍暂停，公开CI/tag/发行未执行。

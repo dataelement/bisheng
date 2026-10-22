@@ -1,6 +1,6 @@
 {
   "schema": "f059-installation-evidence/v1",
-  "state": "passed-current143-installation-and-historical-api-refusal-pairs",
+  "state": "passed-retained143-report-with-a1de-manager-current",
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "kubernetes": "v1.28.15",
@@ -1609,5 +1609,46 @@
     "reason": "Only operations.py changed; helper, profile and descriptor/report bytes unchanged; new image assess_capabilities ready verified",
     "backend_node_ready": true,
     "controller_epoch": 11
+  },
+  "candidate_a1de_manager_only": {
+    "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+    "native": {
+      "build_exit": 0,
+      "import_smoke_exit": 0,
+      "public_push": false,
+      "manager_image_id": "sha256:32e65744a296d2997f2e3395a6c8a78a035109854bb25beff05cc024a398fd6f",
+      "platform": "linux/amd64",
+      "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+      "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+      "changed_runtime_files": [
+        "runtime_manager/executors/kubernetes.py",
+        "runtime_manager/k8s_data_executor.py"
+      ],
+      "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+      "preceding_manager_source": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+      "schema": "f059-native-manager/v1"
+    },
+    "image": {
+      "manager_image_id": "sha256:32e65744a296d2997f2e3395a6c8a78a035109854bb25beff05cc024a398fd6f",
+      "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad",
+      "public_push": false,
+      "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-20"
+    },
+    "helm": {
+      "descriptor_uid_unchanged": true,
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad",
+      "helm_upgrade_completed": true,
+      "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+      "descriptor_data_unchanged": true,
+      "helper_and_profile_images_unchanged": true,
+      "app_proxy_unchanged": true
+    },
+    "helm_revision": 18,
+    "new_full_probe_run": false,
+    "retained_report_source": "143606851370d6091b120d348549329b8113c6a6",
+    "reason": "Only manager startup/data RPC code and two backend cancellation gates changed; helper/profile/descriptor/report bytes unchanged; fresh capability report accepted",
+    "backend_node_ready": true,
+    "controller_epoch": 13
   }
 }

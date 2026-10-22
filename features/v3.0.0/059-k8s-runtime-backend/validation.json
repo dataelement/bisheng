@@ -1,6 +1,6 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T17:48:07.531221+00:00",
+  "recorded_at": "2026-10-22T18:16:33.600506+00:00",
   "validated_source_commit": "a1de5271f5f00cef0cba06d41f09c673a9190525",
   "sdd": {
     "spec_confirmed": true,
@@ -787,7 +787,7 @@
       "controller_epoch": 11
     },
     "startup_stage_budget": {
-      "status": "implemented_l1_and_full_runtime_passed_live_pending",
+      "status": "deployed_a1de_r8_live_pending",
       "actual_probe_operation": "0816633805bd414d828ff1bef8b6995b",
       "reason": "workload_readiness_timeout",
       "cleanup_status": "complete",
@@ -805,7 +805,7 @@
       "adjacent_passed": 392
     },
     "data_cancel_fence": {
-      "status": "implemented_l1_and_integrated_passed_live_pending",
+      "status": "backend_and_manager_deployed_a1de_live_data_pending",
       "evidence_kind": "local_real_service_sql_and_ed25519",
       "red_log": "/private/tmp/f059-review-cancelled-data-grant-red.log",
       "red_failed": 1,
@@ -824,6 +824,75 @@
       "exit_code": 0,
       "log": "/private/tmp/f059-final-dev-backend.log",
       "scope": "app_runtime + app_publish; local tests, no real DM8 claim"
+    },
+    "a1de_live_candidate": {
+      "native": {
+        "build_exit": 0,
+        "import_smoke_exit": 0,
+        "public_push": false,
+        "manager_image_id": "sha256:32e65744a296d2997f2e3395a6c8a78a035109854bb25beff05cc024a398fd6f",
+        "platform": "linux/amd64",
+        "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+        "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+        "changed_runtime_files": [
+          "runtime_manager/executors/kubernetes.py",
+          "runtime_manager/k8s_data_executor.py"
+        ],
+        "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+        "preceding_manager_source": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+        "schema": "f059-native-manager/v1"
+      },
+      "image": {
+        "manager_image_id": "sha256:32e65744a296d2997f2e3395a6c8a78a035109854bb25beff05cc024a398fd6f",
+        "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad",
+        "public_push": false,
+        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-20"
+      },
+      "helm": {
+        "descriptor_uid_unchanged": true,
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad",
+        "helm_upgrade_completed": true,
+        "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+        "descriptor_data_unchanged": true,
+        "helper_and_profile_images_unchanged": true,
+        "app_proxy_unchanged": true
+      },
+      "helm_revision": 18,
+      "backend_update": {
+        "files": [
+          {
+            "before_sha256": "ef1e5204a1003c49b98b5b329058d616760054614a633eaf611e9639ff66258b",
+            "after_sha256": "6cff3d17ab50e864d0436bdb560613f0f64bfc1bf2ea36131659e4fb822fc68b",
+            "file": "bisheng/app_runtime/domain/services/runtime_data_grant_service.py"
+          },
+          {
+            "before_sha256": "c6216578607f1b3da79f22b1e6367070f1007db2dc5a63578dc6656b36cd9830",
+            "after_sha256": "767f522cf0db734476bf6a578d7849287a47a14ba05ea685d75b09ed93810a2a",
+            "file": "bisheng/app_runtime/domain/services/runtime_data_session_service.py"
+          }
+        ],
+        "other_services_restarted": false,
+        "containers_restarted": [
+          "e2e-f059-backend",
+          "e2e-f059-worker"
+        ],
+        "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+        "models_or_schema_changed": false,
+        "public_env_http_200": false
+      },
+      "backend_ready": {
+        "initial_check_error": "operator used loopback but port is bound to private host IP",
+        "backend_files_verified": 2,
+        "actual_bound_api": "http://192.168.106.189:17860",
+        "additional_restart": false,
+        "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+        "initial_receipt_preserved": true,
+        "public_env_http_200": true
+      },
+      "backend_node_ready": true,
+      "controller_epoch": 13,
+      "new_arm_run": false
     }
   },
   "not_executed": [
