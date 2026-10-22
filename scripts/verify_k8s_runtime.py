@@ -409,14 +409,12 @@ class Kubectl:
         )
 
     def can(self, verb, resource, namespace):
-        return (
-            self.call(
-                ["auth", "can-i", verb, resource, "-n", namespace],
-                manager=True,
-                accepted=(0, 1),
-            ).stdout.strip()
-            == "yes"
-        )
+        base, _, subresource = resource.partition("/")
+        command = ["auth", "can-i", verb, base]
+        if subresource:
+            command.append("--subresource=" + subresource)
+        command += ["-n", namespace]
+        return self.call(command, manager=True, accepted=(0, 1)).stdout.strip() == "yes"
 
 
 class InstallationVerifier:

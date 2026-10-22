@@ -35,6 +35,8 @@ execution:
   runtimeClasses: {recommended: "", hardened: ""}
   statusPolicyRevision: v1
   cniUsername: ""
+  # Explicit controller usernames for PVC binding/protection; never natural users or groups.
+  storageControllerUsernames: [system:kube-controller-manager, system:kube-scheduler]
   pullSecret: ""
   dataKeyConfigMap: runtime-data-public-keys
   dataPublicKeys: {}
