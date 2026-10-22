@@ -1774,3 +1774,283 @@ def test_nested_cleanup_diagnostics_do_not_copy_private_exception_fields():
     assert "PRIVATE_SENTINEL" not in json.dumps(details)
     assert any(row.get("step") == "probe" and row["reason"] == "probe_failed" for row in details)
     assert any(row.get("step") == "cleanup" and row["reason"] == "admission_refresh_refused" for row in details)
+
+
+class RegistryUpstreamApi:
+    """Model public K8s responses without granting the canary service credentials."""
+
+    control, execution = "runtime-system", "runtime-apps"
+
+    def __init__(self, tool, *, tcp_ok=True, publish_unready=False, observation="same"):
+        self.tool, self.tcp_ok, self.publish_unready = tool, tcp_ok, publish_unready
+        self.observation = observation
+        self.calls, self.pod = [], None
+        self.namespace_uid = str(uuid4())
+
+    def get(self, kind, name, **kwargs):
+        self.calls.append(("get", kind, name, kwargs))
+        if kind == "service":
+            assert name == "egress-proxy" and kwargs["namespace"] == self.control
+            return {"spec": {"selector": {"app": name}, "publishNotReadyAddresses": self.publish_unready}}
+        if kind == "namespace":
+            return {"metadata": {"uid": self.namespace_uid}}
+        assert kind == "pod" and kwargs["namespace"] == self.control and self.pod
+        if self.observation == "unknown":
+            raise self.tool.ProbeError("kubectl_request_failed")
+        observed = copy.deepcopy(self.pod)
+        observed["spec"]["nodeName"] = "worker-a"
+        observed["status"] = {
+            "phase": "Succeeded",
+            "containerStatuses": [{"name": "app", "state": {"terminated": {"exitCode": 0}}}],
+        }
+        if self.observation == "replaced":
+            observed["metadata"]["uid"] = str(uuid4())
+        if self.observation == "failed":
+            observed["status"]["phase"] = "Failed"
+        return observed
+
+    def call(self, args, *, document=None):
+        self.calls.append(("call", args, copy.deepcopy(document)))
+        if args[0] == "create":
+            self.pod = copy.deepcopy(document)
+            self.pod["metadata"].update(uid=str(uuid4()), resourceVersion="41")
+            return subprocess.CompletedProcess([], 0, json.dumps(self.pod), "")
+        if args[0] == "logs":
+            targets = json.loads(self.pod["spec"]["containers"][0]["env"][0]["value"])["targets"]
+            result = {
+                "checks": [
+                    {"name": row["name"], "ok": self.tcp_ok, "reason": "connected" if self.tcp_ok else "timeout"}
+                    for row in targets
+                ]
+            }
+            return subprocess.CompletedProcess([], 0, self.tool._RESULT + json.dumps(result), "")
+        assert args[:2] == ["patch", "pod"]
+        patch = json.loads(args[args.index("-p") + 1])
+        assert patch == {"metadata": {"resourceVersion": "42", "finalizers": []}}
+        return subprocess.CompletedProcess([], 0, "{}", "")
+
+    def raw(self, method, path, *, document):
+        self.calls.append(("raw", method, path, copy.deepcopy(document)))
+        assert method == "DELETE" and path.endswith("/pods/" + self.pod["metadata"]["name"])
+        assert document["preconditions"] == {"uid": self.pod["metadata"]["uid"], "resourceVersion": "41"}
+        self.pod["metadata"].update(deletionTimestamp="2026-10-23T00:00:00Z", resourceVersion="42")
+        return subprocess.CompletedProcess([], 0, "{}", "")
+
+
+def registry_upstream_verifier(tool, monkeypatch, **kwargs):
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.api = RegistryUpstreamApi(tool, **kwargs)
+    verifier.namespace, verifier.timeout = verifier.api.execution, 5
+    verifier.options = {"installation_id": "test-runtime"}
+    verifier.document = {
+        "platform": "linux/amd64",
+        "status_policy_revision": "v1",
+        "helper_image": "192.0.2.10:5443/team/helper@sha256:" + "a" * 64,
+        "assembler_image": "192.0.2.10:5443/team/assembler@sha256:" + "b" * 64,
+        "image_repository": "192.0.2.10:5443/team/apps",
+        "image_registry_endpoints": [],
+        "canary_profiles": [],
+    }
+    verifier.created, verifier.control_created, verifier.crane_calls = [], [], []
+
+    def wait(callback):
+        result = callback()
+        if not result:
+            raise tool.ProbeError("probe_deadline_exceeded")
+        return result
+
+    verifier._wait = wait
+
+    def run(command, **kwargs):
+        verifier.crane_calls.append(command)
+        return subprocess.CompletedProcess(command, 0, "sha256:" + "a" * 64 if "digest" in command else "", "")
+
+    monkeypatch.setattr(tool.subprocess, "run", run)
+    return verifier
+
+
+def test_registry_upstream_tcp_failure_blocks_external_crane_and_source_image_capability(monkeypatch):
+    """覆盖 AC: AC-13、AC-16、AC-20、AC-28、AC-54、AC-55."""
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch, tcp_ok=False)
+    report = tool.execute_checks({"registry-push": verifier._registry}, verifier.document, observed_at=1000)
+    assert report["checks"][0]["ok"] is False
+    assert verifier.crane_calls == []
+    assert verifier.control_created, "failed canary must remain registered for guarded cleanup"
+
+
+def test_registry_control_canary_uses_real_proxy_policy_without_becoming_service_ready(monkeypatch):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch)
+    result = verifier._registry()
+    pod = verifier.api.pod
+    assert pod is not None, "external registry success is insufficient without the network canary"
+    assert pod["metadata"]["labels"] == {
+        "app": "egress-proxy",
+        "runtime.bisheng.io/preflight-installation": "test-runtime",
+    }
+    assert pod["spec"]["readinessGates"] == [{"conditionType": "runtime.bisheng.io/preflight-not-serving"}]
+    assert not pod["spec"]["automountServiceAccountToken"]
+    assert all("secret" not in volume and "projected" not in volume for volume in pod["spec"]["volumes"])
+    app = pod["spec"]["containers"][0]
+    assert app["command"] == ["python", "-I", "-m", "runtime_manager.k8s_capabilities", "network"]
+    assert [row["name"] for row in app["env"]] == ["CAPABILITY_PLAN"]
+    assert result["evidence"]["uid"] == pod["metadata"]["uid"] != verifier.api.namespace_uid
+    assert len(verifier.crane_calls) == 4
+    assert [next(x for x in command if x in {"digest", "copy", "delete"}) for command in verifier.crane_calls] == [
+        "digest",
+        "copy",
+        "digest",
+        "delete",
+    ]
+    assert any(row[:3] == ("get", "service", "egress-proxy") for row in verifier.api.calls)
+
+
+def test_registry_service_publishing_unready_is_refused_before_creating_canary(monkeypatch):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch, publish_unready=True)
+    with pytest.raises(tool.ProbeError, match="control_probe_service_not_isolated"):
+        verifier._registry()
+    assert verifier.api.pod is None and verifier.crane_calls == []
+
+
+@pytest.mark.parametrize(
+    "observation,reason",
+    [
+        ("replaced", "control_probe_identity_changed"),
+        ("unknown", "kubectl_request_failed"),
+        ("failed", "control_probe_failed"),
+    ],
+)
+def test_registry_canary_unknown_or_replaced_never_reaches_external_crane(monkeypatch, observation, reason):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch, observation=observation)
+    with pytest.raises(tool.ProbeError, match=reason):
+        verifier._registry()
+    assert verifier.crane_calls == [] and verifier.control_created
+
+
+def test_registry_control_canary_cleanup_retains_uid_preconditions(monkeypatch):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch)
+    verifier._registry()
+    assert len(verifier.control_created) == 1
+    verifier.cleanup()
+    assert not verifier.control_created
+    deleted = [row for row in verifier.api.calls if row[:2] == ("raw", "DELETE")]
+    assert len(deleted) == 1 and deleted[0][3]["preconditions"]["uid"] == verifier.api.pod["metadata"]["uid"]
+
+
+def test_registry_origins_resolve_all_tcp_addresses_deduplicate_and_include_profile_bases(monkeypatch):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch)
+    verifier.document.update(
+        image_registry_endpoints=["https://cdn.example:5444", "https://cdn.example:5444"],
+        canary_profiles=[{"runtime_image": "base.example/team/python@sha256:" + "c" * 64}],
+    )
+    resolved = []
+
+    def addresses(host, port, **kwargs):
+        assert kwargs["type"] == tool.socket.SOCK_STREAM
+        resolved.append((host, port))
+        return [
+            (tool.socket.AF_INET, tool.socket.SOCK_STREAM, tool.socket.IPPROTO_TCP, "", ("192.0.2.20", port)),
+            (tool.socket.AF_INET6, tool.socket.SOCK_STREAM, tool.socket.IPPROTO_TCP, "", ("2001:db8::20", port, 0, 0)),
+            (tool.socket.AF_INET, tool.socket.SOCK_STREAM, tool.socket.IPPROTO_TCP, "", ("192.0.2.20", port)),
+        ]
+
+    monkeypatch.setattr(tool.socket, "getaddrinfo", addresses)
+    verifier._registry()
+    assert set(resolved) == {("cdn.example", 5444), ("base.example", 443)}
+    targets = json.loads(verifier.api.pod["spec"]["containers"][0]["env"][0]["value"])["targets"]
+    assert {(row["host"], row["port"]) for row in targets} == {
+        ("192.0.2.10", 5443),
+        ("192.0.2.20", 443),
+        ("2001:db8::20", 443),
+        ("192.0.2.20", 5444),
+        ("2001:db8::20", 5444),
+    }
+    assert len(targets) == 5 and all(row["expected"] == "allowed" and row["protocol"] == "tcp" for row in targets)
+
+
+@pytest.mark.parametrize("mode", ["dns-error", "dns-empty", "too-many", "origin-invalid", "profile-invalid"])
+def test_registry_resolution_or_origin_failure_refuses_without_probe_or_crane(monkeypatch, mode):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch)
+    verifier.document["image_registry_endpoints"] = ["https://cdn.example"]
+
+    def addresses(*args, **kwargs):
+        if mode == "dns-error":
+            raise tool.socket.gaierror("PRIVATE_SENTINEL")
+        return (
+            []
+            if mode == "dns-empty"
+            else [
+                (tool.socket.AF_INET, tool.socket.SOCK_STREAM, tool.socket.IPPROTO_TCP, "", (f"192.0.2.{i}", 443))
+                for i in range(1, 34)
+            ]
+        )
+
+    monkeypatch.setattr(tool.socket, "getaddrinfo", addresses)
+    if mode == "origin-invalid":
+        verifier.document["image_registry_endpoints"] = ["https://user:PRIVATE_SENTINEL@cdn.example"]
+    if mode == "profile-invalid":
+        verifier.document["canary_profiles"] = [{"runtime_image": "example/python:latest"}]
+    report = tool.execute_checks({"registry-push": verifier._registry}, verifier.document, observed_at=1000)
+    assert not report["checks"][0]["ok"] and "PRIVATE_SENTINEL" not in json.dumps(report)
+    assert verifier.api.pod is None and verifier.crane_calls == []
+
+
+def test_control_probe_rejects_unknown_role_before_creating_any_pod(monkeypatch):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch)
+    with pytest.raises(tool.ProbeError, match="control_probe_role_invalid"):
+        verifier._control_probe(
+            "egress", [{"name": "registry", "host": "192.0.2.10", "port": 5443, "expected": "allowed"}]
+        )
+    assert verifier.api.pod is None
+
+
+@pytest.mark.parametrize(
+    "observation,reason", [("replaced", "control_cleanup_identity_changed"), ("unknown", "kubectl_request_failed")]
+)
+def test_registry_control_canary_cleanup_unknown_or_replacement_keeps_the_fence(monkeypatch, observation, reason):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch)
+    verifier._registry()
+    verifier.api.observation = observation
+    with pytest.raises(tool.ProbeError, match=reason):
+        verifier.cleanup()
+    assert len(verifier.control_created) == 1
+    assert not any(row[0] == "raw" or row[:2] == ("call", ["patch", "pod"]) for row in verifier.api.calls)
+
+
+def test_registry_external_failure_after_tcp_success_retains_cleanup_and_safe_reason(monkeypatch):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch)
+
+    def fail(command, **kwargs):
+        verifier.crane_calls.append(command)
+        return subprocess.CompletedProcess(command, 1, "", "PRIVATE_SENTINEL")
+
+    monkeypatch.setattr(tool.subprocess, "run", fail)
+    report = tool.execute_checks({"registry-push": verifier._registry}, verifier.document, observed_at=1000)
+    assert report["checks"][0]["ok"] is False
+    assert report["checks"][0]["reason"] == "registry_probe_failed"
+    assert len(verifier.crane_calls) == 1 and len(verifier.control_created) == 1
+    assert "PRIVATE_SENTINEL" not in json.dumps(report)
+
+
+def test_registry_upstream_dns_timeout_fails_closed_without_raw_exception(monkeypatch):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch)
+    verifier.document["image_registry_endpoints"] = ["https://cdn.example"]
+
+    def fail(*args, **kwargs):
+        raise TimeoutError("PRIVATE_SENTINEL")
+
+    monkeypatch.setattr(tool.socket, "getaddrinfo", fail)
+    report = tool.execute_checks({"registry-push": verifier._registry}, verifier.document, observed_at=1000)
+    assert report["checks"][0]["reason"] == "registry_probe_resolution_failed"
+    assert not report["checks"][0]["ok"] and "PRIVATE_SENTINEL" not in json.dumps(report)
+    assert verifier.api.pod is None and verifier.crane_calls == []

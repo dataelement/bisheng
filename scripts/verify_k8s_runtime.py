@@ -61,6 +61,8 @@ _SAFE_PROBE_REASONS = frozenset(
         "control_probe_failed",
         "control_probe_identity_changed",
         "control_probe_result_missing",
+        "control_probe_role_invalid",
+        "control_probe_service_not_isolated",
         "cri_architecture_mismatch",
         "cri_image_identity_unconfirmed",
         "cri_requested_image_changed",
@@ -102,6 +104,9 @@ _SAFE_PROBE_REASONS = frozenset(
         "registry_probe_digest_invalid",
         "registry_probe_digest_mismatch",
         "registry_probe_failed",
+        "registry_probe_origin_invalid",
+        "registry_probe_resolution_failed",
+        "registry_probe_targets_exceeded",
         "runtime_profile_invalid",
         "runtime_profiles_not_verified",
         "status_negative_unconfirmed",
@@ -176,7 +181,9 @@ def failure_details(error):
                         "name": row["name"],
                         "step": step["phase"],
                         "reason": step_reason
-                        if step_type == "ProbeError" and isinstance(step_reason, str) and step_reason in _SAFE_PROBE_REASONS
+                        if step_type == "ProbeError"
+                        and isinstance(step_reason, str)
+                        and step_reason in _SAFE_PROBE_REASONS
                         else "probe_failed",
                         "exception_type": step_type,
                     }
@@ -837,9 +844,7 @@ class InstallationVerifier:
             # Keep the payload schema-valid so the real restricted PSA check,
             # rather than the API's contradictory-security-context validator,
             # must refuse the dry-run request.
-            pod["spec"]["containers"][0]["securityContext"].update(
-                privileged=True, allowPrivilegeEscalation=True
-            )
+            pod["spec"]["containers"][0]["securityContext"].update(privileged=True, allowPrivilegeEscalation=True)
         else:
             pod["spec"]["containers"][0]["image"] = "unauthorized.invalid/image:latest"
 
@@ -1144,6 +1149,12 @@ class InstallationVerifier:
         return check_result(group, result, pod["metadata"]["uid"])
 
     def _control_probe(self, role, targets):
+        if role not in {"app-proxy", "runtime-manager", "egress-proxy", "preflight-untrusted"}:
+            raise ProbeError("control_probe_role_invalid")
+        if role != "preflight-untrusted":
+            service = self.api.get("service", role, namespace=self.api.control)
+            if service.get("spec", {}).get("publishNotReadyAddresses", False) is not False:
+                raise ProbeError("control_probe_service_not_isolated")
         plan = PodPlan(
             namespace=self.api.control,
             app_id="preflight",
@@ -1170,6 +1181,9 @@ class InstallationVerifier:
             deadline_seconds=self.timeout + 60,
         )
         pod = pod_template(plan)
+        # Reuse the real policy label without serving traffic through its Service.
+        # No controller populates this condition; phase Succeeded is still observable.
+        pod["spec"]["readinessGates"] = [{"conditionType": "runtime.bisheng.io/preflight-not-serving"}]
         pod["metadata"]["name"] = "preflight-" + uuid4().hex[:20]
         pod["metadata"]["labels"] = {
             "app": role,
@@ -1212,7 +1226,10 @@ class InstallationVerifier:
         rows = [line[len(_RESULT) :] for line in response.stdout.splitlines() if line.startswith(_RESULT)]
         if len(rows) != 1:
             raise ProbeError("control_probe_result_missing")
-        check_result("network-ingress", json.loads(rows[0]), observed["metadata"]["uid"])
+        try:
+            check_result("network-ingress", json.loads(rows[0]), observed["metadata"]["uid"])
+        except (ValueError, TypeError, KeyError):
+            raise ProbeError("control_probe_failed") from None
         return observed
 
     def _ingress(self):
@@ -1476,10 +1493,71 @@ class InstallationVerifier:
                 self.control_created.append(pod)
         self.cleanup()
 
+    def _registry_targets(self):
+        from runtime_manager.executors.protocol import ExecutorError
+        from runtime_manager.oci_assembler import registry_origins
+
+        try:
+            profiles = self.document.get("canary_profiles", [])
+            if not isinstance(profiles, list) or len(profiles) > 32:
+                raise ValueError()
+            bases = [self.document["helper_image"], *[profile["runtime_image"] for profile in profiles]]
+            origins = set()
+            for base in bases:
+                origins.update(
+                    registry_origins(
+                        base,
+                        self.document["image_repository"],
+                        endpoints=self.document.get("image_registry_endpoints", []),
+                        insecure=self.document.get("insecure_registry") is True,
+                    )
+                )
+        except (ExecutorError, KeyError, TypeError, ValueError):
+            raise ProbeError("registry_probe_origin_invalid") from None
+        if len(origins) > 32:
+            raise ProbeError("registry_probe_targets_exceeded")
+        targets = set()
+        for origin in sorted(origins):
+            parsed = urlsplit(origin)
+            host, port = parsed.hostname, parsed.port
+            try:
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                try:
+                    resolved = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+                    if not resolved:
+                        raise ValueError()
+                    if len(resolved) > 256:
+                        raise ProbeError("registry_probe_targets_exceeded")
+                    addresses = []
+                    for family, kind, protocol, _canonical, endpoint in resolved:
+                        address = ipaddress.ip_address(endpoint[0])
+                        if (
+                            family not in {socket.AF_INET, socket.AF_INET6}
+                            or kind != socket.SOCK_STREAM
+                            or protocol not in {0, socket.IPPROTO_TCP}
+                            or address.version != (4 if family == socket.AF_INET else 6)
+                            or endpoint[1] != port
+                        ):
+                            raise ValueError()
+                        addresses.append(str(address))
+                except (OSError, ValueError, TypeError, IndexError):
+                    raise ProbeError("registry_probe_resolution_failed") from None
+            else:
+                addresses = [str(address)]
+            targets.update((address, port) for address in addresses)
+            if len(targets) > 32:
+                raise ProbeError("registry_probe_targets_exceeded")
+        return [
+            {"name": f"registry-{index}", "host": host, "port": port, "expected": "allowed", "protocol": "tcp"}
+            for index, (host, port) in enumerate(sorted(targets))
+        ]
+
     def _registry(self):
         repository = self.document.get("image_repository", "")
         if not repository or not self.document.get("assembler_image"):
             raise ProbeError("assembly_registry_not_configured")
+        canary = self._control_probe("egress-proxy", self._registry_targets())
         target = repository.rstrip("/") + "/preflight-" + uuid4().hex + ":probe"
         command = [os.environ.get("CRANE_BIN", "crane")]
         if self.document.get("insecure_registry") is True:
@@ -1500,7 +1578,7 @@ class InstallationVerifier:
             raise ProbeError("registry_probe_digest_mismatch")
         # Only a fresh, isolated preflight repository can be removed.
         run(["delete", target.split(":probe")[0] + "@" + expected])
-        return self._proof(self.api.get("namespace", self.namespace), digest=expected)
+        return self._proof(canary, digest=expected)
 
     def publish(self, report):
         cm = self.api.get("configmap", "runtime-deployment-descriptor", namespace=self.api.control)

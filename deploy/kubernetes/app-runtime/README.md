@@ -33,7 +33,7 @@ manager 的 token 由显式 projected ServiceAccountToken 投射，3600 秒轮�
 - `execution`：独立业务 namespace、逻辑 node_id、cluster_id、架构、预算、临时磁盘上限、公开 data key、冻结 CRI 检查 profile。`sandbox` 为 default/recommended/hardened；强档 RuntimeClass 映射由 `runtimeClasses` 指定。
 - `images`：manager、entry、egress、admission、helper、assembler 的 `repo@sha256:…`。egress/admission 复用同版本 manager 镜像，覆盖进程命令。helper/assembler 独立镜像。控制进程需要拉取凭据时配置 `services.pullSecret`；执行 Pod 使用独立 namespace 的 `execution.pullSecret`。
 - `storage`：经实际验证的 ext4/xfs 块文件系统；预置 PV 或指定 StorageClass，生产和 scratch 独立。默认 `sqliteCompatible: false`，核实存储前不能填 true。
-- `offline`：离线默认开启；显式配置包源、镜像端点、可选 source-image 目标仓库及 registry Secret。无公共源兜底。节点 CRI 的镜像拉取由节点配置负责，不受 Pod 的 NetworkPolicy 约束。source-image 仓库/认证/CDN 出站按完整 origin 显式登记 `imageRegistryEndpoints`；私有仓库若用 5000/5443 等端口，`network.egressPorts` 也必须包含该端口。`insecureRegistry` 仅为指定目标 origin 启用 HTTP，不降低其他 base/认证端点的 TLS；跨仓库组装需为完整 OCI tar 预留临时磁盘配额。
+- `offline`：离线默认开启；显式配置包源、镜像端点、可选 source-image 目标仓库及 registry Secret。无公共源兜底。节点 CRI 的镜像拉取由节点配置负责，不受 Pod 的 NetworkPolicy 约束。source-image 仓库/认证/CDN 出站按完整 origin 显式登记 `imageRegistryEndpoints`；私有仓库若用 5000/5443 等端口，须核对 egress Pod 的实际目的地址和端口并配置 `network.egressPorts` 或同等受限策略。仓库通过宿主端口、Service 或其他 DNAT 转发时，CNI 可能按转换后的目的端口执行策略；仅放行外显 5443 不一定允许转发到容器 5000。应在专用环境做同 selector 的 TCP 允许/拒绝配对，不扩大整个集群或应用 Pod 的出站范围。`insecureRegistry` 仅为指定目标 origin 启用 HTTP，不降低其他 base/认证端点的 TLS；跨仓库组装需为完整 OCI tar 预留临时磁盘配额。
 
 ### 平台 HTTPS 根路径与外层代理
 
@@ -163,7 +163,13 @@ HMAC 由安全环境变量 `RTM_VERIFY_PLATFORM_KEY_ID`、`RTM_VERIFY_PLATFORM_S
 
 工具逐项执行 15 个必需检查：namespace 预算、restricted PSA、允许及拒绝准入、可信 status 来源、删除后原子 binding 拒绝、跨 namespace RBAC、exec 拒绝、入口白名单、直连拒绝、proxy 端口允许、UDP DNS 拒绝、SQLite 卷、实际 CRI、材料 TLS、平台签名 API。危险 PodSpec 负例使用 API-server `dryRun=All`；正例用真实 Pod。网络负例在实际拒绝前后分别验证目标确实监听，connection refused、无路由、未知结果不算隔离成功。入口正反使用系统 namespace 的无凭据 helper Pod，分别采用 entry/manager/untrusted 标签，从实际网络身份发起。
 
-`verify_registry: true` 时，用同版本离线供应的 `crane` 在独立随机 preflight 子仓库做真实 copy/digest/delete，验证 source-image 推送条件；registry 凭据使用安装者已有 DOCKER_CONFIG，不复制给应用。强沙箱实际 canary 失败会记录 `sandbox-recommended` 或 `sandbox-hardened` 失败；只有全部默认必需基线成功才允许显式回退默认档。
+`verify_registry: true` 时，先在系统 namespace 创建无凭据的 helper canary，使用与 egress-proxy 相同的策略标签，检查冻结 helper/profile 基础镜像仓库、目标仓库及显式 `imageRegistryEndpoints` 的 TCP 通路。origin 沿用运行时的严格解析；域名由 installer 解析全部 TCP 地址，按 IP/端口去重，解析失败或超过 32 个目标时拒绝，不静默跳过端点。该 Pod 保持 `NotReady`（未填充的 readiness gate），并检查对应 Service 未启用 `publishNotReadyAddresses`，防止探测 Pod 进入业务代理端点；它仍可正常达到 `Succeeded`、读取结果并按原 UID 停止清理。
+
+此项只证明**同 selector 策略下、installer 本轮解析所得地址的 TCP 可达性**；不证明 TLS、registry 身份、代理认证、egress Pod 的域名解析或完整 assembler 路径。DNS 分区、地址轮换、CDN 重定向端点仍需按实际环境核对，新增 origin 必须显式登记。仅执行 Pod→proxy:3128 端口连通也不能替代本项。
+
+TCP 前置通过后，原外部 installer 使用同版本离线供应的 `crane`，在独立随机 preflight 子仓库做真实 copy/digest/delete。该步骤证明 installer 侧 TLS、registry 权限及读写，不把它记成 assembler Pod 的端到端推送；凭据仍使用安装者已有 DOCKER_CONFIG，不读取、输出或复制给探测 Pod。真实 source-image 发布 E2E 继续验证受限 assembler 的基础镜像配置读取、TLS、代理认证和推送。任一前置失败只阻断 source-image 路径；已满足基线的 bundle/image 路径不依赖该可选检查。
+
+强沙箱实际 canary 失败会记录 `sandbox-recommended` 或 `sandbox-hardened` 失败；只有全部默认必需基线成功才允许显式回退默认档。
 
 canary 通过受保护的 ConfigMap 声明固定模板，plan 只有 1 小时以内寿命。无业务 Secret、源码或生产卷。installer 观察实际 UID 后更新授权，删除携带 UID/resourceVersion/宽限期；只有 fresh 同 UID 的终态或受保护的未调度删除证据才移除 finalizer。404、NodeLost、超时、同名替换一律保留，不能按名字强删。
 
