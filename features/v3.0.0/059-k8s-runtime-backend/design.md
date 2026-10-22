@@ -111,13 +111,13 @@
 | `bundle_preparer.py`、`bundle_launch.py`、`container_runner.py` | Docker 本地下载、构建、venv、bind mount 和容器运行 | 抽出共享输入/启动规则；K8s 在 Pod/卷内执行，不模拟宿主路径 |
 | `appdb.py`、`data_executor.py`、`api/platform_data.py` | 一致备份/迁移与受控数据查询，Docker 单应用挂载 helper | 复用 SQL 和数据格式，增加同 Pod 数据 helper、停用数据会话及独占维护执行体 |
 | backend `runtime_delivery.py`、`runtime_operation_service.py` | v2 服务鉴权、操作/事实、归属、容量、产物传输、路由/策略 | 增加 K8s 资源账本、控制器租约、内部数据操作和材料初始化授权；不加入 K8s SDK |
-| backend `runtime_kubernetes_service.py` | 已实现控制器claim/renew、资源意图预提交、UID/停止事实和只读准入投影；34项Service合同与16项账本回归通过 | T019已接入HTTP路由；manager执行调用仍待后续任务 |
+| backend `runtime_kubernetes_service.py` | 已实现控制器claim/renew、资源意图预提交、UID/停止事实和只读准入投影；34项Service合同与16项账本回归通过 | T019及manager控制Service、资源登记与观察均已接线；189已有真实Pod创建及同UID停止/清理记录，完整业务验收待完成 |
 | app-proxy、`platform_egress.py` | backend 路由/策略投影，不依赖 manager 提供路由 | 保留授权、HTTP/WS/CONNECT；增加材料用途的范围化策略 |
 | `.github/workflows/runtime-images.yml` | tag `v*` 和 workflow_dispatch；原生双架构镜像、目录产物 | 同版本发布执行 helper/OCI 组装器；增加 K8s 清单和契约测试 |
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现。主agent与三个独立工作树按文件归属合入；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL扩展迁移、backend/Celery及四运行服务安装；仍在修复真实CREATE默认对象兼容并执行隔离探测，尚无业务部署通过结论。109已真实完成三语言离线应用包、代码升级/依赖复用、前端hook/native wheel及SQLite的Engine级回归；未代替完整平台审批/权限验收。正式双架构发行、故障升级和L2仍待完成。
+**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理误判仍在修复，尚无正式业务上线通过结论。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -203,7 +203,7 @@ flowchart LR
 
 **创建事务收尾（T203–T214实施细化）**：新Pod意图在现有 `observed_state.creation` 保存 `version=1` 及 `unattempted → started → rejected`；POST前原子 `create_begin` 固定唯一 `create_attempt_id` 和controller epoch，重复begin不重发。只有同attempt/epoch的明确HTTP403能记录rejected；timeout、transport、5xx、409、2xx解析失败等保持started/unknown。新意图准入只有started允许CREATE，旧JSON空记录不回填为unattempted。收尾先 `create_fence` 将unattempted/rejected固定为fenced并关闭CREATE，再新鲜GET404，通过独立 `not_created` 观察记录无执行体证明。该路径stop_state=confirmed但evidence_kind=not_created、UID仍NULL；普通stopped的同UID证明完全不变。任一实际对象出现必须验证范围、绑定真实UID并走停止流程；已证明未创建后又出现对象则拒绝，不删除或移除finalizer。旧r4缺少唯一尝试账本，保留操作/PVC/预占，不凭历史manager日志或当前404自动追认。锁序保持operation→node→resource，资源加锁读取使用populate_existing强制刷新预读identity map，避免并发begin/fence覆盖。无新DDL、无直接MinIO依赖、无外部deploy API变更。
 
-**延迟调度绑定收尾（T219/T220）**：Kubernetes CREATE返回时Pod可能尚无nodeName。停止前必须从API server新鲜读取并核对同namespace/name/UID及范围标签；仅首次从空节点补齐为实际节点，已有非空节点不得变化或被清空。补齐后校验平台绑定回执，再生成停止证明，保持backend对证据节点与账本节点严格相等的要求。已有confirmed证明不得补绑或改写；UID/范围变化、GET或绑定结果不确定继续保留资源。189已观察同UID材料Pod成功、facts200，但旧实现账本节点为空导致stopped409；修复后须由正常对账收尾，不能人工清理finalizer或PVC。
+**延迟调度绑定收尾（T219/T220）**：Kubernetes CREATE返回时Pod可能尚无nodeName。停止前必须从API server新鲜读取并核对同namespace/name/UID及范围标签；仅首次从空节点补齐为实际节点，已有非空节点不得变化或被清空。补齐后校验平台绑定回执，再生成停止证明，保持backend对证据节点与账本节点严格相等的要求。已有confirmed证明不得补绑或改写；UID/范围变化、GET或绑定结果不确定继续保留资源。189已观察同UID材料Pod成功、facts200，但旧实现账本节点为空导致stopped409；189 Helm15已由正常对账补齐原Pod节点，保存同UID停止证据并完成三资源清理；完整发布仍待验收，未人工清理finalizer或PVC。
 
 
 Pod的downward UID字段显式声明core/v1，避免K8s补默认值改变冻结projection；非v1、其他字段路径或额外字段仍严格拒绝。准入日志只固定8个安全原因或admission_refused，不输出请求、环境、异常正文/类型名或UID；API响应合同保持。历史189403未取到原reason，不将本地默认化复现当现场结论。
@@ -241,9 +241,9 @@ K8s 1.28 不保证未启动容器都有终止记录；其 kubelet 延迟终态�
 
 本地实现补充：K8s源码兼容模式由backend同样冻结profile；无凭据安装Pod把Python环境写到scratch的environment子目录并固定挂载为/opt/venv，Node产物在编译后裁剪开发依赖。可信组装Pod只读scratch，用crane mutate追加/app代码与/opt/venv及既有语言入口模板，不执行RUN；registry配置只挂组装器。完整镜像不复制源码或安装依赖。实际CRI/registry与双架构镜像仍须后续真实验收。
 
-### 4.7 材料授权与续期（Service已实现，尚未集群验收）
+### 4.7 材料授权与续期（已接线；准备阶段传输已实测，完整续期及正式初始化待验收）
 
-期限实现：`RuntimeMaterialDelegation.expires_at`在operation/预览中分别是操作/会话的最晚期限；正式deployment-init可为NULL，表示每次重新检查当前归属、批准版本、冻结delivery和同UID，不是永久通行。300秒传输票据仍有独立期限，不能独立续期。该新表尚未在客户环境交付；模型声明可空，不改已发布迁移或做数据回填。
+期限实现：`RuntimeMaterialDelegation.expires_at`在operation/预览中分别是操作/会话的最晚期限；正式deployment-init可为NULL，表示每次重新检查当前归属、批准版本、冻结delivery和同UID，不是永久通行。300秒传输票据仍有独立期限，不能独立续期。该表已在189专用测试平台完成扩展迁移并实际读写，尚未完成客户发行交付；模型声明可空，不改已发布迁移或做数据回填。
 
 manager 通过现有服务 HMAC 在 backend 创建材料授权；后台从已验证的操作、部署/预览和 delivery 计算范围，不接受调用方任意指定材料、租户或应用。
 
@@ -285,9 +285,9 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 
 数据helper本地实现补充：data-v1签名输入为固定域`BISHENG-RUNTIME-DATA-V1\n`加canonical JSON（key_id和claims），claims精确绑定version/operation_id/request_id/app_id/exec_ref/pod_uid/actor_ref/action/parameters_sha256/nonce/issued_at/not_after/deadline；受理窗口最长5秒，总deadline不超过签发后60秒且仍受原数据操作期限限制。独立受信helper只加载公钥。卷内跨进程flock串行，started先fsync再创建有界SQLite子进程，子进程完成但done落盘失败仍保留未知；新只读请求查询原ID，不重放写操作。导出在platform目录生成文件、校验摘要后流式返回，不把CSV塞入journal或一次性读入内存。helper本地/HTTP、backend签发与会话、Pod模板与运输已通过本地合同；真实集群尚未验收。
 
-数据会话底层互斥已接线：Repository按node→assignment顺序，对节点内跨租户会话只做聚合计数并发上限2，在同一事务建立data_operation_id和离线helper 128MiB/25m预占；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。平台存储、Pod接线及自然人授权仍由后续Service/执行器任务实现。
+数据会话底层互斥已接线：Repository按node→assignment顺序，对节点内跨租户会话只做聚合计数并发上限2，在同一事务建立data_operation_id和离线helper 128MiB/25m预占；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。上述Service、存储传输、owner签发与Pod运输均已接线并通过本地合同；K8s数据业务实测待完成。
 
-原AppDataService入口已接选择分发：Docker保持既有RPC；K8s在原owner/参数校验之后，由RuntimeDataSessionService提交内部会话、等待同UID helper就绪、调用后端签发接口并转交X-Runtime-Data-Grant。后台不跨SQL事务等待网络。在线固定原exec_ref/UID，不另起挂卷写入者；离线冷启动与调用共用60秒。manager唤醒响应丢失以已提交状态查询恢复，数据HTTP结果未知不重发。T049已接默认backend签发实现，T045已接Pod运输/清理；实际集群E2E尚未执行。
+原AppDataService入口已接选择分发：Docker保持既有RPC；K8s在原owner/参数校验之后，由RuntimeDataSessionService提交内部会话、等待同UID helper就绪、调用后端签发接口并转交X-Runtime-Data-Grant。后台不跨SQL事务等待网络。在线固定原exec_ref/UID，不另起挂卷写入者；离线冷启动与调用共用60秒。manager唤醒响应丢失以已提交状态查询恢复，数据HTTP结果未知不重发。T049已接默认backend签发实现，T045已接Pod运输/清理；K8s owner数据完整E2E尚未完成。
 
 数据Pod运输已本地接线：正式Pod的data-helper与离线purpose=data使用固定`runtime_manager.k8s_data_helper`入口，公钥只投射到helper，Pod UID来自Downward API；准入只允许安装者指定的公钥ConfigMap。在线按原UID复用，helper不可用不回退到第二挂卷Pod；离线先复用已登记PVC并确认旧写入者已停止，不为查看数据创建新卷或Service。调用目标只能是安装描述的pod_cidrs内、同一资源UID的8092端口。v2数据API转交owner票据，使用后台持久互斥和卷内flock，不再抢操作线程持有的本地app锁。
 
@@ -395,13 +395,13 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 | 反直觉事实 | 如果不知道会怎样 | 在哪处理 |
 | --- | --- | --- |
 | 原 Protocol 是 Docker API 形状，目录逻辑散落在多个模块 | 加 K8s 文件后仍然访问 manager 本机路径或 Docker | 新 `executors/`；原 operations/preparer/data API 统一依赖能力接口 |
-| RWO 是单节点挂载，不是单 Pod 或进程写锁 | 同节点新旧应用或维护并发写生产库 | `kubernetes_executor.py`、资源账本、停止确认及固定生产位置准入 |
+| RWO 是单节点挂载，不是单 Pod 或进程写锁 | 同节点新旧应用或维护并发写生产库 | `executors/kubernetes.py`、资源账本、停止确认及固定生产位置准入 |
 | ClusterIP 不能默认由集群外平台主机访问 | 平台与 Pod 均健康，发布唤醒/应用访问却超时 | 安装 values 的共享 entry/control 私网接入及端到端连通性探测 |
 | finalizer 保留对象，普通 Failed/404 不证明停止；从未启动的容器也可能没有 ID | init 镜像/材料失败后永久卡住，或节点分区后误释放 | `k8s_lifecycle.py` 分 never_scheduled/kubelet_terminal/unknown；status 来源准入，无 ID 不单独阻塞也不单独放行 |
 | Deployment/Job 控制器可以自主补 Pod | manager 停止旧实例做迁移时，旧实例又出现 | 本轮用直接管理 Pod；正式/维护共用固定名称 |
 | init 与业务容器共享 Pod 网络 | “只给 init 放行 backend”实际也给了业务容器网络通路 | 只放代理端点，容器凭据分离，backend 动作鉴权 |
 | 准入 webhook 会反向读取 backend 的资源计划 | 创建事务持锁并同步等 K8s API 时会相互等待、超时拒绝 | 先提交资源意图，后请求 K8s；webhook 只读已提交计划 |
-| workload 签名若未绑定动作、偏移、请求体与票据，无法建立可互操作的传输合同 | 实现各自验签，重试可能错位或越权 | `runtime_material_auth.py`、材料 client 使用 6.2.1 的唯一 canonical 格式和固定向量（均待实现） |
+| workload 签名若未绑定动作、偏移、请求体与票据，无法建立可互操作的传输合同 | 实现各自验签，重试可能错位或越权 | backend `runtime_material_protocol.py`、manager `material_protocol.py`/`material_client.py` 使用6.2.1唯一canonical格式；固定向量与本地互验完成，准备阶段真实传输已有证据 |
 | 操作完成会使现有材料接口拒绝下载 | 日后 Pod 重建失败，而在线版本曾经成功 | 新材料授权路径；不能延长原操作或给业务容器服务密钥 |
 | venv 固定路径与镜像 ABI 相关 | 打包开发机环境在节点无法运行 | profile＋锁/材料＋`/opt/venv` 物化，跨架构产物隔离 |
 | 离线镜像、wheelhouse 和平台能力是三个条件 | 页面健康却缺 SDK/依赖或无法调用模型 | 安装报告分项、原生离线 prepare/SDK E2E |
@@ -415,7 +415,7 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 
 ### 6.1 执行能力与现有 HTTP 合同
 
-以下 Python 能力接口已有本地实现与合同验证；data 的K8s运输层仍待后续任务接线，不从 backend import manager 包；DTO JSON 是进程间合同：
+以下Python能力接口与data的K8s运输层均已接线并通过本地合同，真实owner数据行程待验收；backend不import manager包，DTO JSON是进程间合同：
 
 ```python
 class RuntimeExecutor(Protocol):
@@ -444,11 +444,11 @@ class RuntimeExecutor(Protocol):
 
 现有服务签名保留 `X-Runtime-Key-Id/Timestamp/Nonce/Signature` 和 v2 canonical message，窗口 60 秒、nonce 120 秒；manager、platform、entry、egress 和新增 admission 角色互不冒用。工作负载材料接口使用自己的校验依赖，不落到现有 `role("manager")` 路由。
 
-### 6.2 新增内部数据与接口（提案，尚未交付）
+### 6.2 新增内部数据与接口（已实施接线，完整交付待验收）
 
 | 对象 / 扩展 | 关键字段 | 权威与风险 |
 | --- | --- | --- |
-| `RuntimeExecutionResource` | id(UUID)、tenant_id/app_id、operation_id/node_id、cluster_id、namespace/name/uid、kind/purpose、generation/owner_epoch、spec_digest、status_policy_revision、observed_state（仅Service观察IP/port）、stop_state、stop_evidence(evidence_kind/RV/digest/node/删除时间)、observed_at | backend Repository；资源身份不只靠标签/名字。exec_ref 使用 UUID，避免现有 128 字符字段容不下组合 URI |
+| `RuntimeExecutionResource` | id(UUID)、tenant_id/app_id、operation_id/node_id、cluster_id、namespace/name/uid、kind/purpose、generation/owner_epoch、spec_digest、status_policy_revision、observed_state（受限Service端点事实及版本化Pod creation receipts；不保存原始API响应）、stop_state、stop_evidence(evidence_kind/RV/digest/node/删除时间)、observed_at | backend Repository；资源身份不只靠标签/名字。exec_ref 使用 UUID，避免现有 128 字符字段容不下组合 URI |
 | `RuntimeMaterialDelegation` | id、scope_kind、tenant/app/version/delivery、operation_id、generation/owner_epoch、exec_ref/Pod UID、public_key、allowed_artifacts/actions、proxy_credential_hash、expires_at、revoked_at | 只存公钥/哈希，不保存 workload 私钥；服务根据归属计算允许材料，不能用户自填白名单 |
 | `RuntimeNode` 扩展 | executor_kind、capabilities、controller_holder、controller_epoch、lease_until、probe_report | 保留旧 Docker 字段与默认值；历史 JSON capabilities/probe_report 为 NULL 时按未验证处理，不以内联数据迁移填充；逻辑域预算不是实时全节点余额 |
 | `RuntimeTransfer` 扩展 | authorization_kind、authorization_id | 历史 authorization_id 暂可为 NULL，独立运维回填 operation/id；新旧 ORM 插入默认沿 operation_id 生成授权范围。复合唯一约束改为授权范围＋材料＋动作；deployment-init 不再强制检查 completed 操作；原 operation 分支保持终态拒绝 |
@@ -549,7 +549,7 @@ backend 先做格式/大小和公钥定位，再验签并核对实际 body 摘�
 - 每个内容响应最多 16 MiB，内容请求至多 60 秒且不超过 ticket/操作剩余期限；控制和 finalize 请求受 ticket 剩余时间及操作总 deadline 约束，不能把大材料完整校验错套成数据 helper 的 60 秒执行窗口。流式阶段最迟每 5 秒及提交前复核有效归属，失效立即结束，不允许凭请求开始时的票据无限续传。累计材料传输仍受整个阶段 deadline 约束。
 - 400 表示格式/编码/非法参数，413 表示大小限制；401 表示签名/ticket/时间失效，403 表示越界/撤销/UID 不符，409 表示 nonce 重放、内容/offset 冲突、未绑定或 finalize 不完整；429 表示并发限制，503 表示授权/nonce 服务不可确认。只返回安全 reason，业务端映射原 Owner 错误。401 可以重新 exchange，但仍须有效私钥和归属；403 不自动重试；409 查状态后决定；429/503 在原 deadline 内退避，不续长任务。
 
-**固定编码向量（T020/T021两端编码与互验已通过，材料授权/传输尚待接入）**：对下列假数据，ticket 的实际测试值为 `example-ticket`，请求体为空；canonical message 末尾没有换行。helper/backend 的契约测试必须对相同输入产生这些字节，再用测试专用 Ed25519 key 做互验。这里只发布假 token 和摘要，不发布生产密钥。
+**固定编码向量（T020/T021两端编码与互验及材料授权/传输已接入；189准备阶段已实测，完整续期、撤销及正式初始化另验）**：对下列假数据，ticket 的实际测试值为 `example-ticket`，请求体为空；canonical message 末尾没有换行。helper/backend 的契约测试必须对相同输入产生这些字节，再用测试专用 Ed25519 key 做互验。这里只发布假 token 和摘要，不发布生产密钥。
 
 ```text
 BISHENG-RUNTIME-MATERIAL-V1
@@ -571,7 +571,7 @@ ce8ed3a5d85ad3633d8ee0394e7d91600f0adc33de14d0a33622c67aceed383a
 
 ### 6.3 配置合同
 
-以下未有的配置均标为**新增提案**，不假定现代码已经读取：
+下表说明当前已接入的配置与读取者；“新增”表示相对历史基线的扩展，不表示仍未实现：
 
 | 配置入口 | 现有 / 新增 | 读取者与用途 |
 | --- | --- | --- |
@@ -580,7 +580,7 @@ ce8ed3a5d85ad3633d8ee0394e7d91600f0adc33de14d0a33622c67aceed383a
 | `RTM_K8S_NAMESPACE`、cluster_id、逻辑 node_id/平台 | 新增及既有 node_id | manager；白名单执行域，安装者静态登记，不能由发布请求覆盖 |
 | `RTM_K8S_DEPLOYMENT_DESCRIPTOR` | 新增，挂只读文件 | 经安装者管理的架构/预算/存储/沙箱与基线版本；不含平台存储账号 |
 | 集群 SA token 与 CA | 标准 Pod 注入，仅 manager | HTTP client，重新读取轮转 token，CA 校验；测试 client 可注入 mock transport |
-| `RTM_K8S_STORAGE_MODE`、scratch 池、data/scratch/preview 大小 | 新增 | manager；仅消费被授权卷；生产保留与物理清理分开 |
+| Chart `storage.className/sizeMi/scratchSizeMi/volumes` → descriptor `storage` | 新增 | manager读取冻结的存储合同；仅消费获准卷，生产保留与物理清理分开；没有`RTM_K8S_STORAGE_MODE`入口 |
 | `RTM_K8S_SANDBOX` 和 RuntimeClass 映射 | 新增 | 安装者配置，能力实测；默认档/推荐/加固实际值可查询 |
 | `RTM_*` 服务身份、超时、egress 地址、profile 镜像 | 既有或分组扩展 | manager/egress 分别读取自己的身份；K8s 不读取 Docker socket 配置作为回退 |
 | `services.entry/control.exposure` 及私网地址/来源 ACL | 新增 Chart 配置 | 安装者；平台在集群外时的共享 nginx→app-proxy、backend→manager 接入，禁止按应用开放节点端口 |
@@ -594,7 +594,7 @@ Chart values 分 `platform`、`services`、`execution`、`storage`、`network`�
 | 依赖 | 使用方式 | 变化风险 |
 | --- | --- | --- |
 | F054/F055/F086 | App 状态、审批、冻结版本、持久操作/投影及安全数据动作 | 更改状态/归属或 stage 顺序会破坏上线/续期；不能在 K8s adapter 另造业务规则 |
-| backend 材料接口 | 平台中介传输、摘要和 SQL 确认 | 当前仅 manager＋有效操作，必须实现新授权路径，不能用旧路径冒充 |
+| backend 材料接口 | 平台中介传输、摘要和 SQL 确认 | 原manager HMAC及新增workload material-v1授权路径均已实现；身份继续隔离，不能用旧路径冒充工作负载 |
 | K8s Core/Discovery API 1.28 | Pod/Service/PVC/Secret/Events、Endpoints/EndpointSlice 只读 | watch 过期 410 要 relist；429/5xx 退避；状态来源与 UID 必须保留 |
 | 独立准入与 PSA/CNI | 模板边界、status 终态来源、生产位置限制、网络允许/拒绝 | status 规则不查询 backend；缺失/失联/策略失效阻断新执行和无来源的停止确认，既有本地停止仍由 kubelet 执行 |
 | 存储 | local PV 或已验证块存储文件系统 | 锁、fsync、拓扑、回收策略不同会破坏单写或持久化 |
@@ -637,13 +637,14 @@ AC-38 保留退役。tasks 拆解时每个实现/拒绝路径引用完整 AC ID�
 7. 升级 manager/代理后确认正式 Pod UID 和 PVC 未变，应用组合未漂移；卸载运行时保留 PVC、平台材料和其它业务资源；仅明确 owner 删除用例清理测试应用资产。
 8. 留原始请求/响应脱敏记录、阶段时刻、Pod/Service/PVC UID、镜像身份、SQL操作与快照确认、数据摘要及清理结果；与初始资源集合比较。所有未测 CPU、强沙箱、DM8、跨节点/物理故障项逐项记录限制。
 
-拟实现工具命令示意，**这些脚本当前不存在，不能作为已执行证据**：
+已实现工具的调用示例；示例本身不作为执行证据。verify默认检查，真实探测需显式`--live --write-report`及预先审查的probe plan：
 
 ```sh
-python scripts/verify_k8s_runtime.py --context <test-context> --namespace e2e-f059-apps --read-only
+python scripts/verify_k8s_runtime.py --context <test-context> --control-namespace e2e-f059-system --execution-namespace e2e-f059-apps --probe-plan <probe-plan.json>
+# 实际探测及报告发布：在上述命令后添加 --live --write-report
 helm template e2e-f059 deploy/kubernetes/app-runtime -f <test-values.yaml>
 helm upgrade --install e2e-f059 deploy/kubernetes/app-runtime -f <test-values.yaml>
-python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG_TEST_BASE_URL" --app-prefix e2e-f059
+python scripts/e2e_k8s_runtime.py --stage platform --evidence <new-evidence.json>
 ```
 
 实际凭据通过安全环境变量/主机配置提供，不写脚本参数示例或报告。业务访问验证使用原 `/apps/{slug}`、CLI deploy/logs、原审批和数据接口；不能以只发 manager 内部请求代替整条平台链路。
@@ -742,3 +743,5 @@ Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。
 **可选锁与终态诊断收尾（T221–T224）**：manifest可选依赖锁序列化None等同未指定；helper传给环境变量和prepare.json时规范化为空字符串，显式路径不变，非法类型拒绝。终态操作仅重试清理时保留已有reason/failed_stage/diagnostic_tail/maintenance/data_may_have_changed，停止及cleanup结果重新取真实事实；已从保留策略中删除的tail不重新构造。不回填已经覆盖的历史failure，原fact继续作为审计证据。
 
 **异步收尾等待（T225–T227）**：Kubernetes DELETE受理与对象实际移除存在正常间隔。准备/探活等阶段结果已取得时，cleanup.pending表示等待，不能立即转成准备失败；等待仍受当前操作期限、取消及控制器围栏约束，未知写入者不释放。重启从持久阶段事实继续，避免重复安装、上传或探活实例。真实异常和到期仍按原失败/保留合同处理。r6已确认全部4准备阶段成功、8资源最终正常清理，原失败操作只保留审计，不人工复活。
+
+2026-10-23：按实现与现有脱敏证据更新材料/data接线、storage配置来源、Pod creation receipts、工具参数与实施现状。保留原历史基线及未验证项，不将16项安装探测或r6准备成功写成正式上线、故障、跨节点或发行验收。
