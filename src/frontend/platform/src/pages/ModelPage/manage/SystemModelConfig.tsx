@@ -16,7 +16,6 @@ import { KnowledgeModel } from "./tabs/KnowledgeModel";
 import WorkflowModel from "./tabs/WorkflowModel";
 import WorkbenchModel from "./tabs/WorkbenchModel";
 
-import { DshDesktopModelConfig } from "./dsh/DshDesktopModelConfig";
 
 const ROOT_TENANT_ID = 1;
 
@@ -34,7 +33,7 @@ export default function SystemModelConfig({
     const { t } = useTranslation('model')
     const { user } = useContext(userContext) as any
     const isGlobalSuper = isGlobalSuperUser(user)
-    const [activeTab, setActiveTab] = useState(defaultTab || "workbench")
+    const [activeTab, setActiveTab] = useState(defaultTab === "desktop" ? "workbench" : defaultTab || "workbench")
     // useAdminScope's GET /admin/tenant-scope returns HTTP 403 + 19701 for
     // non-super callers (INV-T14). GET /tenants is also super-only
     // (get_admin_user). Both are only needed by ScopeBanner / childTenant
@@ -45,7 +44,7 @@ export default function SystemModelConfig({
     const [tenants, setTenants] = useState<Tenant[]>([])
 
     useEffect(() => {
-        setActiveTab(defaultTab || "workbench")
+        setActiveTab(defaultTab === "desktop" ? "workbench" : defaultTab || "workbench")
     }, [defaultTab])
 
     useEffect(() => {
@@ -72,7 +71,7 @@ export default function SystemModelConfig({
         return tenants.find((row) => row.id === scope.scope_tenant_id) || null
     }, [scope.scope_tenant_id, tenants])
 
-    const { llmOptions, embeddings, asrModel, ttsModel} = useMemo(() => {
+    const { llmOptions, embeddings, asrModel} = useMemo(() => {
         const llmOptions = []
         const embeddings = []
         const asrModel = []
@@ -139,16 +138,15 @@ export default function SystemModelConfig({
                     }}
                     className="flex flex-col"
                 >
-                    <TabsList className="w-[660px] max-w-full m-auto">
-                        <TabsTrigger value="workbench" className="w-[150px]">{t('model.workModel')}</TabsTrigger>
+                    <TabsList className="w-[600px] max-w-full m-auto">
+                        <TabsTrigger value="workbench" className="w-[150px]">{t('model.userSelectableModels')}</TabsTrigger>
                         <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>
                         <TabsTrigger value="assis" className="w-[150px]">{t('model.assistantModel')}</TabsTrigger>
                         <TabsTrigger value="evaluation" className="w-[150px]">{t('model.evaluationModel')}</TabsTrigger>
                         <TabsTrigger value="workflow" className="w-[150px]">{t('model.workflowModel')}</TabsTrigger>
-                    <TabsTrigger value="desktop" className="w-[150px]">{t('model.desktop')}</TabsTrigger>
                     </TabsList>
                      <TabsContent value="workbench">
-                        <WorkbenchModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} ttsModel={ttsModel} onBack={onBack}></WorkbenchModel>
+                        <WorkbenchModel data={data} onBack={onBack} />
                     </TabsContent>
                     <TabsContent value="knowledge">
                         <KnowledgeModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} onBack={onBack}></KnowledgeModel>
@@ -158,9 +156,6 @@ export default function SystemModelConfig({
                     </TabsContent>
                     <TabsContent value="evaluation">
                         <EvaluationModel llmOptions={llmOptions} onBack={onBack}></EvaluationModel>
-                    </TabsContent>
-                    <TabsContent value="desktop">
-                        <DshDesktopModelConfig data={data} />
                     </TabsContent>
                     <TabsContent value="workflow">
                         <WorkflowModel llmOptions={llmOptions} onBack={onBack}></WorkflowModel>

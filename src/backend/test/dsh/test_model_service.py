@@ -133,6 +133,26 @@ async def test_models_empty_policy_and_immediate_offline(service_setup):
     assert llm.calls == 0
 
 
+async def test_catalog_refreshes_configured_label_without_changing_route_or_usage(service_setup):
+    from bisheng.core.context.tenant import get_current_tenant_id
+
+    service, llm, ledger, _policy, _state = service_setup
+    names = {"42": "Custom name"}
+
+    async def read_names():
+        assert get_current_tenant_id() == 2
+        return names
+
+    service.display_names_reader = read_names
+    before = (await service.list_models(principal()))["data"][0]
+    assert before["display_name"] == "OpenAI / Custom name"
+    names["42"] = "Updated name"
+    after = (await service.list_models(principal()))["data"][0]
+    assert after["display_name"] == "OpenAI / Updated name"
+    assert before["id"] == after["id"] == "bisheng:42"
+    assert llm.calls == 0 and ledger.events == []
+
+
 @pytest.mark.parametrize(
     ("provider_name", "provider_type", "model_name", "alias", "expected"),
     [
@@ -380,9 +400,7 @@ async def test_work_settlement_preserves_audit_boundary(service_setup, outcome):
     if outcome == "unavailable":
         service.settle_usage.side_effect = DshUsageUnavailableError()
     event = object()
-    execution = SimpleNamespace(
-        usage=DshTokenUsage(), provider_request_id="provider", failure_code=None, audit=Mock()
-    )
+    execution = SimpleNamespace(usage=DshTokenUsage(), provider_request_id="provider", failure_code=None, audit=Mock())
     if outcome == "unavailable":
         with pytest.raises(DshUsageUnavailableError):
             await service._settle(event, execution, "SUCCEEDED")

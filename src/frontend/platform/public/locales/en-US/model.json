@@ -116,7 +116,12 @@
     "configureDshPermission": "Visibility",
     "noOnlineDshModels": "No online models available yet",
     "visionRetry": "Load or save failed. Retry",
-    "loading": "Loading"
+    "loading": "Loading",
+    "userSelectableModels": "User-selectable models",
+    "userSelectableModelsHelp": "Configure models available in Chat and Work. Save display names to sync them to clients. Vision, credit multipliers and visibility are saved separately when changed.",
+    "otherModelSettings": "Other model settings",
+    "visibilityScope": "Visibility",
+    "configureVisibility": "Configure visibility"
   },
   "finetune": {
     "rtServiceManagement": "FT Service Management",

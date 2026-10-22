@@ -210,7 +210,7 @@ export const getLinsightModelConfig = async (): Promise<any> => {
     return unwrap(await axios.get(`/api/v1/llm/workbench`))
 }
 export const getLinsightModelEnvelope = async (): Promise<SystemModelConfigEnvelope> => {
-    return await axios.get(`/api/v1/llm/workbench`)
+    return await axios.get(`/api/v1/llm/workbench/settings`)
 }
 // 更新灵思模型配置
 export const updateLinsightModelConfig = async (data: any): Promise<any> => {

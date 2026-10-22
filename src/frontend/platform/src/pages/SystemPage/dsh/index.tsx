@@ -2,7 +2,8 @@ import { Button } from '@/components/bs-ui/button'
 import { getModelListApi } from '@/controllers/API/finetune'
 import { userContext } from '@/contexts/userContext'
 import { useDshBrowserConfig } from '@/hooks/useDshBrowserConfig'
-import { DshDesktopModelConfig } from '@/pages/ModelPage/manage/dsh/DshDesktopModelConfig'
+import WorkbenchModel from '@/pages/ModelPage/manage/tabs/WorkbenchModel'
+import type { ModelServer } from '@/pages/ModelPage/manage/userModelMetadata'
 import type { DshSection } from '@/pages/DshPage/sections'
 import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,7 +38,7 @@ export function DshManagement({ section = 'usage', usageToolbarTarget }: DshMana
 
 function DshModelsView() {
     const { t } = useTranslation()
-    const [data, setData] = useState<Parameters<typeof DshDesktopModelConfig>[0]['data'] | null>(null)
+    const [data, setData] = useState<ModelServer[] | null>(null)
     const [error, setError] = useState(false)
     const [revision, setRevision] = useState(0)
 
@@ -75,5 +76,5 @@ function DshModelsView() {
         )
     }
 
-    return <DshDesktopModelConfig data={data} />
+    return <WorkbenchModel data={data} onBack={() => window.history.back()} />
 }

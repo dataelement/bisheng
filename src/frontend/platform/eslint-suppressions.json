@@ -3326,9 +3326,6 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
-    "no-console": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
     },

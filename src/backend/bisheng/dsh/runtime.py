@@ -131,6 +131,7 @@ async def get_model_runtime(runtime) -> ModelRuntime:
     capabilities = desktop_model_capabilities
 
     from bisheng.dsh.audit_runtime import ModelAuditRuntime
+    from bisheng.dsh.domain.services.model_display import read_display_names
 
     audit = ModelAuditRuntime(config, redis)
     model = DshModelService(
@@ -142,6 +143,7 @@ async def get_model_runtime(runtime) -> ModelRuntime:
         now=lambda: datetime.now(UTC),
         billing_timezone=config.billing_timezone,
         audit_factory=audit.capture,
+        display_names_reader=read_display_names,
     )
     result = ModelRuntime(model, usage, quota, config, audit=audit)
     runtime.models = result

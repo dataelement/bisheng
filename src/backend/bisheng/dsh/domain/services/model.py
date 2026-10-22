@@ -68,6 +68,7 @@ class DshModelService:
         now,
         billing_timezone: str = "Asia/Shanghai",
         audit_factory=None,
+        display_names_reader=None,
     ):
         self.policy_reader, self.model_loader, self.llm_builder = policy_reader, model_loader, llm_builder
         self.capabilities_for, self.usage, self.now = capabilities_for, usage, now
@@ -76,10 +77,12 @@ class DshModelService:
         self.adapter = DshChatAdapter()
         self.responses_adapter = DshResponsesAdapter()
         self.audit_factory = audit_factory
+        self.display_names_reader = display_names_reader
 
     async def list_models(self, principal: DshPrincipal) -> dict:
         with principal_scope(principal):
             policy = await self.policy_reader(int(principal.user_id))
+            names = await self.display_names_reader() if self.display_names_reader else {}
             result = []
             for model_id in policy.allowed_model_ids if policy else []:
                 try:
@@ -107,7 +110,7 @@ class DshModelService:
                         "object": "model",
                         "created": created,
                         "owned_by": "bisheng",
-                        "display_name": model_display_name(model, server),
+                        "display_name": model_display_name(model, server, names.get(str(model.id))),
                         "capabilities": capabilities.client_fields(),
                         **(
                             {"reasoning": capabilities.reasoning.model_dump(exclude_none=True)}
@@ -238,7 +241,9 @@ class DshModelService:
     async def _settle(self, event, execution, status, error_code=None):
         try:
             terminal = await self.settle_usage(
-                event, execution.usage, status,
+                event,
+                execution.usage,
+                status,
                 error_code or getattr(execution, "failure_code", None),
                 provider_request_id=execution.provider_request_id,
             )
@@ -261,8 +266,7 @@ class DshModelService:
                     "ended_at": now,
                     "settled_at": now if usage.total_tokens is not None else None,
                     "provider_request_id": provider_request_id,
-                    "error_code": error_code
-                    or ("usage_missing" if usage.total_tokens is None else None),
+                    "error_code": error_code or ("usage_missing" if usage.total_tokens is None else None),
                     "latency_ms": max(0, int((now - event.started_at).total_seconds() * 1000)),
                 }
             ).model_dump()

@@ -238,6 +238,15 @@ async def get_workbench_llm(request: Request, login_user: UserPayload = Depends(
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
+@router.get("/workbench/settings", summary="Read editable user model settings", response_model=UnifiedResponseModel)
+async def get_workbench_settings(login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+    """Return stored metadata to administrators, preserving hidden and offline rows."""
+    target = _resolve_write_target(login_user)
+    await _assert_can_write_system_config(login_user, target)
+    cfg, inherited, blocked = await LLMService.aget_workbench_llm_with_meta(tenant_id=target)
+    return resp_200(data=_envelope(cfg, inherited, blocked))
+
+
 @router.post("/workbench", summary="Update workbench related model configurations", response_model=UnifiedResponseModel)
 async def update_workbench_llm(
     background_tasks: BackgroundTasks,

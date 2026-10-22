@@ -12,7 +12,7 @@ vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('rea
 vi.mock('./CreditRulesView', () => ({ CreditRulesView: () => <p>credit-content</p> }))
 vi.mock('./PolicyView', () => ({ PolicyView: () => <p>usage-content</p> }))
 vi.mock('./OperationStatus', () => ({ OperationStatus: () => null }))
-vi.mock('@/pages/ModelPage/manage/dsh/DshDesktopModelConfig', () => ({ DshDesktopModelConfig: () => <p>model-content</p> }))
+vi.mock('@/pages/ModelPage/manage/tabs/WorkbenchModel', () => ({ default: () => <p>model-content</p> }))
 
 beforeEach(() => {
     vi.resetAllMocks()
