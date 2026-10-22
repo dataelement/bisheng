@@ -507,3 +507,30 @@ def test_storage_guard_cli_never_constructs_download_identity_or_runs_source(mon
     )
     with pytest.raises(ValueError, match="volume_capacity"):
         k8s_helper.main()
+
+
+@pytest.mark.parametrize(
+    "declared", [None, ["nginx", "-g", "daemon off;", "-q"], ["/bin/sh", "-c", "exec /custom-server"]]
+)
+def test_static_upload_freezes_startup_argv_without_baking_in_runtime_wrapper(setup, declared, monkeypatch):
+    from runtime_manager.k8s_helper import prepare_download, prepare_upload
+
+    client, document, _, root = setup
+    client.data["source-a"] = package(
+        root, "static-source", {"bisheng-app.yaml": b"runtime: static\n", "index.html": b"<h1>default static</h1>"}
+    )
+    document["profile"]["language"] = "static"
+    document["delivery"]["startup"] = {} if declared is None else {"command": declared}
+    prepare_download(client, document, work=root / "work")
+    (root / "work/output/runtime.lock").write_text("")
+    monkeypatch.setattr(
+        "subprocess.run", lambda *args, **kwargs: pytest.fail("static trusted upload must never run source")
+    )
+    result = prepare_upload(client, document, work=root / "work")
+    assert result["startup"]["command"] == (declared or ["nginx", "-g", "daemon off;"])
+    assert result["profile"]["language"] == "static"
+    assert "/opt/bisheng/entrypoint.sh" not in result["startup"]["command"]
+    assert document["delivery"]["startup"] == ({} if declared is None else {"command": declared})
+    compiled = next(payload for kind, payload, _platform, _metadata in client.uploads if kind == "compiled")
+    with tarfile.open(fileobj=io.BytesIO(compiled)) as archive:
+        assert archive.extractfile("index.html").read() == b"<h1>default static</h1>"

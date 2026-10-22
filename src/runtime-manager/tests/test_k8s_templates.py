@@ -353,3 +353,54 @@ def test_ephemeral_data_without_pvc_does_not_get_scratch_guard(plan, purpose):
 
     spec = pod_template(replace(plan, purpose=purpose, pvc_name="", deadline_seconds=120))["spec"]
     assert not any(container["name"] == "storage-guard" for container in spec["initContainers"])
+
+
+@pytest.mark.parametrize("purpose", ["serve", "probe", "preview"])
+@pytest.mark.parametrize(
+    "frozen",
+    [("nginx", "-g", "daemon off;"), ("nginx", "-g", "daemon off;", "-q"), ("/bin/sh", "-c", "exec /custom-server")],
+)
+def test_static_bundle_preserves_image_entrypoint_and_frozen_arguments(plan, purpose, frozen):
+    from runtime_manager.k8s_templates import pod_template
+
+    current = replace(
+        plan,
+        runtime_language="static",
+        purpose=purpose,
+        port=8765,
+        env={"PORT": "8765", "BISHENG_APP_PORT": "8765"},
+        command=frozen,
+        pvc_name=plan.pvc_name if purpose == "serve" else "",
+        deadline_seconds=None if purpose == "serve" else 60,
+    )
+    app = next(container for container in pod_template(current)["spec"]["containers"] if container["name"] == "app")
+    assert app["command"] == ["/opt/bisheng/entrypoint.sh"]
+    assert app["args"] == list(frozen) and current.command == frozen
+    assert app["ports"] == [{"name": "http", "containerPort": 8765, "protocol": "TCP"}]
+    assert {item["name"]: item.get("value") for item in app["env"]}["PORT"] == "8765"
+    assert app["securityContext"]["readOnlyRootFilesystem"] is True
+    assert any(mount["mountPath"] == "/tmp" and not mount["readOnly"] for mount in app["volumeMounts"])
+
+
+def test_full_image_with_static_profile_does_not_get_a_bundle_entrypoint(plan):
+    from runtime_manager.k8s_templates import pod_template
+
+    spec = pod_template(
+        replace(plan, runtime_language="static", mode="image", command=("/custom/entry", "--flag"), material_secret="")
+    )["spec"]
+    app = next(container for container in spec["containers"] if container["name"] == "app")
+    assert app["command"] == ["/custom/entry", "--flag"] and "args" not in app
+    spec = pod_template(replace(plan, runtime_language="static", mode="image", command=(), material_secret=""))["spec"]
+    app = next(container for container in spec["containers"] if container["name"] == "app")
+    assert "command" not in app and "args" not in app
+
+
+def test_python_bundle_has_no_image_entrypoint_to_bypass(plan):
+    from runtime_manager.k8s_templates import pod_template
+
+    app = next(
+        container
+        for container in pod_template(replace(plan, runtime_language="python3.11"))["spec"]["containers"]
+        if container["name"] == "app"
+    )
+    assert app["command"] == ["python", "main.py"] and "args" not in app
