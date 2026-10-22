@@ -30,4 +30,6 @@ The integration follow-up mounts DesktopShellBridge in MainLayout, suppresses du
 - `git diff --check`: passed before integration commit.
 - Target locale leaf-key preservation: passed for all three languages.
 - Backend diff against target baseline: empty.
-- Frontend lint, typecheck and focused desktop Jest checks: launched; final outcomes reported in the delivery summary.
+- Full frontend lint/typecheck could not complete: the desktop pnpm runner terminated them after approximately 300 seconds without progress. Direct Node checks also remained without output and were stopped; no passing quality-gate claim is made.
+- Focused desktop Jest: desktopEmbedding test passed; multiple jsdom suites failed to initialize because the pre-existing canvas native binary (`canvas.node`) is absent. The remaining stalled run was stopped. These are incomplete checks, not accepted regressions.
+- Local alias/relative import scan of migrated application files found no missing modules (two matches in rspress demo strings are not actual imports).
