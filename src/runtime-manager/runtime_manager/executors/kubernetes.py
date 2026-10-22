@@ -229,14 +229,33 @@ class KubernetesExecutor:
             deadline = int(_seconds(operation["deadline"]) - self.clock.time())
             if purpose == "preview":
                 deadline = int(_seconds(payload.get("preview_expires_at", operation["deadline"])) - self.clock.time())
-        if purpose != "serve":
-            try:
-                recorded = self.platform.resource(reference)
-            except PlatformError as exc:
-                if exc.status != 404:
-                    raise
-            else:
-                deadline = recorded["template"].get("spec", {}).get("activeDeadlineSeconds", deadline)
+        recorded = None
+        try:
+            recorded = self.platform.resource(reference)
+        except PlatformError as exc:
+            if exc.status != 404:
+                raise
+        if recorded is not None:
+            expected = {
+                "resource_ref": reference,
+                "operation_id": operation["operation_id"],
+                "app_id": operation["app_id"],
+                "node_id": self.config.node_id,
+                "cluster_id": self.settings.cluster_id,
+                "namespace": self.settings.namespace,
+                "purpose": purpose,
+                "generation": operation["generation"],
+                "owner_epoch": operation["owner_epoch"],
+                "kind": "Pod",
+            }
+            if any(recorded.get(key) != value for key, value in expected.items()):
+                raise ExecutorError("frozen_resource_scope_mismatch")
+            frozen_spec = recorded["template"].get("spec", {})
+            if purpose != "serve":
+                deadline = frozen_spec.get("activeDeadlineSeconds", deadline)
+            runtime_class = frozen_spec.get("runtimeClassName", "")
+        else:
+            runtime_class = self.probe_report().get("sandbox", {}).get("runtime_class", "")
         return PodPlan(
             namespace=self.settings.namespace,
             app_id=operation["app_id"],
@@ -256,6 +275,7 @@ class KubernetesExecutor:
             uid=profile.get("uid", 10001),
             gid=profile.get("gid", 10001),
             mode=mode,
+            runtime_language=profile.get("language", ""),
             port=payload.get("port", 8080),
             health_path=health.get("path", "/"),
             env=defaults,
@@ -283,7 +303,7 @@ class KubernetesExecutor:
             app_secret=_name("credentials-", reference) if env else "",
             secret_env=tuple(sorted(env)),
             deadline_seconds=deadline,
-            runtime_class=self.probe_report().get("sandbox", {}).get("runtime_class", ""),
+            runtime_class=runtime_class,
             pull_secret=self.document.get("pull_secret", ""),
             data_key_configmap=self.document.get("data_public_keys_configmap", "runtime-data-public-keys"),
         )

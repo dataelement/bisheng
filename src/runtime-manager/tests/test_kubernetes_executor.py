@@ -650,3 +650,48 @@ def test_volume_guard_uses_the_actual_pvc_budget_and_installer_identity(runtime,
             "marker_required": True,
         }
         assert bool(plan.scratch_pvc) == (purpose.startswith("prepare-") or purpose == "assemble")
+
+
+@pytest.mark.parametrize("language", ["python3.11", "node20", "static"])
+def test_plan_preserves_frozen_bundle_runtime_language(runtime, language):
+    executor, _, _, operation, _, _ = runtime
+    operation["payload"]["resolved_delivery"]["profile"]["language"] = language
+    assert executor._plan(operation, "serve").runtime_language == language
+
+
+@pytest.mark.parametrize("kind", ["deploy", "probe", "preview"])
+@pytest.mark.parametrize("original,refreshed", [("", "kata-runtime"), ("kata-runtime", "")])
+def test_retry_keeps_the_admitted_sandbox_when_optional_probe_changes(runtime, monkeypatch, kind, original, refreshed):
+    executor, _, _, operation, _, _ = runtime
+    operation["kind"] = kind
+    sandbox = {"runtime_class": original}
+    monkeypatch.setattr(executor, "probe_report", lambda: {"sandbox": sandbox})
+    first = executor.launch(operation, preview=kind == "preview")
+    sandbox["runtime_class"] = refreshed
+    second = executor.launch(operation, preview=kind == "preview")
+    assert first["pod_uid"] == second["pod_uid"]
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "resource_ref",
+        "operation_id",
+        "app_id",
+        "node_id",
+        "cluster_id",
+        "namespace",
+        "purpose",
+        "generation",
+        "owner_epoch",
+        "kind",
+    ],
+)
+def test_retry_refuses_a_recorded_pod_outside_the_frozen_operation(runtime, field):
+    from runtime_manager.executors.protocol import ExecutorError
+
+    executor, platform, _, operation, _, _ = runtime
+    first = executor.launch(operation)
+    platform.rows[first["exec_ref"]][field] = "foreign"
+    with pytest.raises(ExecutorError, match="frozen_resource_scope_mismatch"):
+        executor.launch(operation)

@@ -436,6 +436,9 @@ async def test_scratch_volume_deletion_requires_all_operation_writers_confirmed(
     op.kind = "prepare"
     await repository.save(op)
     pod = document(op, purpose="prepare-download")
+    pod["template"]["spec"]["volumes"] = [
+        {"name": "scratch", "persistentVolumeClaim": {"claimName": "scratch-" + short_hash(op.id)}}
+    ]
     await svc.register_resource(MANAGER, pod)
     auth = {"holder_id": "controller-a", "controller_epoch": 1}
     await svc.observe_resource(MANAGER, REF, {**auth, "action": "bind", "uid": UID, "node_name": "worker-a"})

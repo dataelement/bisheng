@@ -92,6 +92,8 @@ local PV 节点失效时数据不能自动跟随新节点。Retain 的 scratch/p
 
 当前默认 bundle 路径不构建新 OCI 镜像：backend 分发版本化源码/依赖，helper 在 Pod 的独立卷中物化；runtime 挂载只读代码/环境运行。完整 image 路径直接启动冻结镜像；兼容 source-image 路径额外需要可推送内网仓库和 assembler，缺少只阻断这一路径。发行清单中的 config image_id、单平台 manifest digest、multiarch index 和 tag 含义不同，不互相替代。
 
+自定义 bundle 运行镜像必须实现对应的启动器合同：Python 包含冻结版本的解释器；Node 20 保留 `/usr/local/bin/docker-entrypoint.sh` 的标准参数处理；static 保留 `/opt/bisheng/entrypoint.sh`，按 `PORT` 在可写 `/tmp` 生成 nginx 配置。代码和依赖挂载只读、应用以 profile 冻结的非特权 UID/GID 运行。任意自定义镜像若不满足这些合同，应走完整 image 模式，由它自己的 ENTRYPOINT/CMD 决定启动方式。
+
 ## 5. 安装验证工具
 
 使用同版本 Python 3.11+ runtime-manager 依赖、kubectl 和既有 installer kubeconfig。默认只读；启用 `--live` 才创建本次 `preflight-*` canary。工具不改变 kube-system、节点代理、Docker daemon 或现有业务应用；安装者需可 impersonate manager ServiceAccount，以真测 namespace RBAC，而非用管理员身份假装 manager。

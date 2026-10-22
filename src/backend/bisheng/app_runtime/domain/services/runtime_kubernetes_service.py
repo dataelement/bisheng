@@ -275,7 +275,15 @@ class RuntimeKubernetesService:
         available = {
             value for value in (image, helper, assembler, profile.get("preparer_image")) if isinstance(value, str)
         }
-        trusted = {"transfer", "data-layout", "schema-init", "material-fetch", "data-helper", "maintenance"}
+        trusted = {
+            "transfer",
+            "data-layout",
+            "storage-guard",
+            "schema-init",
+            "material-fetch",
+            "data-helper",
+            "maintenance",
+        }
         claims = [
             volume.get("persistentVolumeClaim", {}).get("claimName")
             for volume in spec.get("volumes", [])

@@ -143,6 +143,7 @@ def test_descriptor_is_runtime_readable_and_report_updates_do_not_change_identit
     )
     document = json.loads(descriptor["data"]["descriptor.json"])
     assert document["namespace"] == values["execution"]["namespace"]
+    assert document["installation_id"] == values["execution"]["installationId"]
     assert document["helper_image"] == values["images"]["helper"]
     assert document["storage"]["sqlite_compatible"] is True
     assert document["probe_report"] == {}
