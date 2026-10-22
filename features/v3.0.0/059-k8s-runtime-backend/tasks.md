@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；142 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 134 / 142 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；144 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 136 / 144 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1103,6 +1103,22 @@
   **覆盖 AC:** AC-36、AC-55
   **依赖:** T137
   **配对:** T124
+
+- [x] **T143** — canary 配置投射刷新合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_installation.py`
+  **逻辑/验收**：CM成功replace后确认UID/RV，只匹配本controlNS Running admission Pod、受信整卷挂载；冲突/替换/错scope/无目标均拒绝，保留spec和其他注解。
+  **覆盖 AC:** AC-19、AC-20、AC-30、AC-54、AC-55
+  **依赖:** T064
+  **配对:** T144
+
+- [x] **T144** — canary 配置投射刷新
+  **类型**：实现
+  **文件**：`scripts/verify_k8s_runtime.py`
+  **逻辑/验收**：外部installer以UID/RV JSON Patch只写公开revision注解触发挂载刷新，不修改TTL/RBAC/readiness、不重启Deployment；仍等待真实admission消费计划。
+  **覆盖 AC:** AC-19、AC-20、AC-30、AC-54、AC-55
+  **依赖:** T143
+  **配对:** T143
 
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试

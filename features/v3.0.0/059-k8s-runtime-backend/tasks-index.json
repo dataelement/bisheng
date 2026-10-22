@@ -3698,6 +3698,54 @@
       "review": "PASS"
     },
     {
+      "id": "T143",
+      "wave": 8,
+      "kind": "测试",
+      "title": "canary 配置投射刷新合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_installation.py"
+      ],
+      "logic": "CM成功replace后确认UID/RV，只匹配本controlNS Running admission Pod、受信整卷挂载；冲突/替换/错scope/无目标均拒绝，保留spec和其他注解。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-54",
+        "AC-55"
+      ],
+      "depends": [
+        "T064"
+      ],
+      "pair": "T144",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T144",
+      "wave": 8,
+      "kind": "实现",
+      "title": "canary 配置投射刷新",
+      "files": [
+        "scripts/verify_k8s_runtime.py"
+      ],
+      "logic": "外部installer以UID/RV JSON Patch只写公开revision注解触发挂载刷新，不修改TTL/RBAC/readiness、不重启Deployment；仍等待真实admission消费计划。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-54",
+        "AC-55"
+      ],
+      "depends": [
+        "T143"
+      ],
+      "pair": "T143",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",
