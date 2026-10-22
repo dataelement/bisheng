@@ -20,6 +20,21 @@ from test.app_runtime.test_runtime_delivery_repository import operation
 from test.app_runtime.test_runtime_delivery_repository import runtime_repo as runtime_repo
 
 
+@pytest.fixture(autouse=True)
+async def material_projection_tables(runtime_repo):
+    """The unified egress read now projects K8s material grants as well.
+
+    Keep the real repository query in these lifecycle tests. Its empty material
+    projection still needs the two schema tables; do not replace it with a stub.
+    """
+    from bisheng.app_runtime.domain.models.runtime_kubernetes import KUBERNETES_TABLES
+
+    async with runtime_repo.transaction() as session:
+        connection = await session.connection()
+        for model in KUBERNETES_TABLES:
+            await connection.run_sync(lambda conn, model=model: model.__table__.create(conn, checkfirst=True))
+
+
 async def test_projection_switch_activates_candidate_handles_in_one_uow(runtime_repo):
     op = await runtime_repo.create_operation(operation())
     await runtime_repo.admit(op.id, memory_mb=128, cpu_millicores=100)
@@ -166,7 +181,7 @@ async def test_egress_retries_keep_credentials_and_cutover_fences_by_operation(r
     b = await service.issue(op, phase="runtime", declared=["example.com"])
     assert a == b
     assert egress.destination("https://user:password@mirror.example/simple", trusted=True)["host"] == "mirror.example"
-    identity = SimpleNamespace(node_id=op.node_id)
+    identity = SimpleNamespace(node_id=op.node_id, roles=("egress",))
     control = RuntimeOperationService(runtime_repo)
     assert (await control.policies(identity))["policies"]
     op.status = "completed"
@@ -209,7 +224,9 @@ async def test_egress_deadline_is_utc_under_customer_timezone(runtime_repo, monk
     try:
         os.environ["TZ"] = "Asia/Shanghai"
         time.tzset()
-        answer = await RuntimeOperationService(runtime_repo).policies(SimpleNamespace(node_id=op.node_id))
+        answer = await RuntimeOperationService(runtime_repo).policies(
+            SimpleNamespace(node_id=op.node_id, roles=("egress",))
+        )
         assert 0 < answer["not_after"] - time.time() <= 5
         assert answer["policies"][0]["destinations"][0]["host"] == "model.platform.example"
     finally:

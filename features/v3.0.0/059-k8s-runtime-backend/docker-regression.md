@@ -1,0 +1,47 @@
+# F059 Docker 与平台回归记录（C 线准备）
+
+## 1. 结论与证据边界
+
+**本地回归通过；真实 Docker 和 K8s 业务部署均未由 C 线执行。** 本文不将 fake Engine、模拟 K8s、SQLite fixture 或跳过用例写成 109/189 部署证明。T067 的真实 Docker 验收仍待主 agent 串行执行，不能因本报告将其整个任务勾选完成。
+
+共同基线 `c90927b1f4e0388a956d4e300c7951ff7745b1bf`；继承的公共租户修复来自发布线 `9d156f261cc7769fcf75f41caeb104a425308017`，本线只修测试/文档/harness，未修改任何生产权限、审批、状态或执行器业务规则。执行时的测试文件变化见 Git 提交，日志摘要见 [docker-regression.json](./docker-regression.json)。
+
+## 2. 实际执行
+
+| 选择 | 结果 | 证据类别与限制 |
+| --- | --- | --- |
+| runtime-manager 全部 tests | 767 passed / 10 skipped | 本地；共享 Docker/K8s 执行器、构建、应用包、存储、数据、egress、生命周期；相应 fixture 模拟 Engine/集群 |
+| app-proxy 全部 tests | 256 passed | 本地 ASGI/HTTP/WS/路由/身份与拒绝；不是实机 nginx/网络/连接撤权 |
+| backend app_runtime＋app_publish 全部 | 1525 passed / 18 skipped | 本地；真实 Python 生产服务逻辑与 SQLite fixture，外部中间件有mock；不证明MySQL/DM8实际迁移 |
+| 新harness安全合同＋权限登记＋live收集 | 54 passed / 11 skipped | 54为本地；11含原7项权限集成门及F059 live4项；不得计为业务E2E |
+| CLI `--help` | 通过 | 不访问网络、不写任何平台数据 |
+| CLI 无 `F059_E2E=1` | 拒绝，未产生journal | opt-in安全检查，不是运行失败掩盖 |
+| Ruff＋相对路径arch-guard＋diff --check | 通过 | 无生产代码变化；敏感字段拒绝测试为合成fixture，不包含真实凭据 |
+
+测试命令使用共享 Python3.11；backend 的 `config` 是临时专用测试配置路径，JSON不包含配置内容。原始日志位于本机 `/private/tmp/f059-e2e-*.log`；SHA-256固定内容，后续集成若测试数改变必须重新运行并更新，不能照抄此处数值。
+
+## 3. 发现并修复的过时测试合同
+
+1. 授权对象 picker 已支持 total：原fixture只mock list，遗漏 count，两个测试意外连接真实数据链路。补 count stub并断言 `data/total`，未放宽任何权限。
+2. 发布线已注册 linsight_skill：删除该资源“永远未注册”的负例假设，改为正向验证 app 完整 Catalog/registry/picker 与非owner-projection路径；未知类型拒绝用例保留。
+3. egress 策略读取必须独立 `roles=("egress",)` 身份；旧fixture无roles。补身份及真实K8s material表schema，保留真实repository投影，不mock为空绕过。
+4. 生产固定Pod名在维护多阶段复用但历史不可覆写：bddb1f986 已去掉 operation/kind/name 唯一约束，仅actualUID唯一。模型测试明确assert新合同及旧约束不存在。
+
+同一全量backend选择首次为1519 passed / 18 skipped / 3 failed；修复egress身份/fixture表与模型约束后为1525 passed / 18 skipped。通过数还增加了3个清理安全参数用例，因此不能单凭总数差推断覆盖。更早仅权限定向基线为3 failed / 41 passed / 7 skipped，修复后该组44 passed / 7 skipped。
+
+## 4. 真实 Docker 回归待执行
+
+使用 [e2e-checklist.md](./e2e-checklist.md) 同一CLI和测试数据，`F059_E2E_EXECUTOR=docker`，全部身份及应用仍使用专用 `e2e-f059-` 租户/名字，禁止连接或清理109已有非测试业务服务。
+
+- [ ] v1源码/source-image、v2 bundle、完整image；Python/Node/static真实准备与探活。
+- [ ] 平台CLI发布、预检拒绝、单独人工审批、预览隔离、正式入口、版本更新。
+- [ ] owner/nonowner/foreign允许与拒绝；日志筛选脱敏；HTTP/WS、SDK/OBO、CONNECT撤权与manager停用投影。
+- [ ] SQLite提交行、停用/恢复、容器重建、备份/迁移/恢复、owner删除；backend附件SDK0.1.1上传下载及跨应用拒绝。
+- [ ] 离线镜像＋离线依赖＋平台接口分别验证；缺wheel/坏摘要/镜像拉取失败/健康失败保留精确阶段。
+- [ ] 原有非测试容器/应用前后清单一致；只回收本次拥有的应用与临时资源。
+
+DM8按既有确认仅模型/DDL规范静态检查；通用SQLAlchemy dm分支编译不等于实际dmPython/DM8迁移测试。189 amd64单节点结果也不能补齐Docker、arm64或跨节点验收。
+
+## 5. L1
+
+架构分层 PASS；命名与AC PASS；平台envelope/CSV/WS协议 PASS；数据库 N/A（只更新fixture和约束断言）；前端 N/A；信息泄漏 PASS（安全env、私有journal、无响应体日志）；设计同步 PASS（不改生产接口）。真实验收与SDD汇总文件由主agent合流后更新。
