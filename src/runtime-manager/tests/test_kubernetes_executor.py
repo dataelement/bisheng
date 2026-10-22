@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-04、AC-05、AC-07、AC-08、AC-09、AC-11、AC-18、AC-33、AC-35、AC-43、AC-48、AC-49、AC-50、AC-52."""
+"""覆盖 AC: AC-04、AC-05、AC-07、AC-08、AC-09、AC-11、AC-18、AC-30、AC-34、AC-33、AC-35、AC-43、AC-48、AC-49、AC-50、AC-52."""
 
 import base64
 import copy
@@ -627,3 +627,26 @@ def test_backend_naive_utc_deadlines_do_not_depend_on_manager_timezone(runtime, 
         else:
             monkeypatch.setenv("TZ", original)
         time.tzset()
+
+
+@pytest.mark.parametrize(
+    "purpose", ["prepare-download", "prepare-install", "prepare-upload", "assemble", "serve", "probe", "preview"]
+)
+def test_volume_guard_uses_the_actual_pvc_budget_and_installer_identity(runtime, purpose):
+    executor, _, _, operation, _, _ = runtime
+    executor.document.update(
+        installation_id="f059-owned",
+        storage={"size_mb": 256, "scratch_size_mb": 2048, "filesystem": "xfs", "static_pool": True},
+    )
+    plan = executor._plan(operation, purpose)
+    if purpose in {"probe", "preview"}:
+        assert plan.volume_guard == {} and not plan.scratch_pvc
+    else:
+        assert plan.volume_guard == {
+            "namespace": executor.settings.namespace,
+            "installation_id": "f059-owned",
+            "filesystem": "xfs",
+            "capacity_bytes": (256 if purpose == "serve" else 2048) * 1024**2,
+            "marker_required": True,
+        }
+        assert bool(plan.scratch_pvc) == (purpose.startswith("prepare-") or purpose == "assemble")

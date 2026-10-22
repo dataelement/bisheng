@@ -280,6 +280,18 @@ def pod_template(plan: PodPlan) -> dict:
     if plan.deadline_seconds is not None:
         spec["activeDeadlineSeconds"] = plan.deadline_seconds
     volumes, containers, init = spec["volumes"], spec["containers"], spec["initContainers"]
+    if plan.purpose in PREPARATION:
+        init.append(
+            _container(
+                plan,
+                "storage-guard",
+                image=plan.helper_image,
+                command=("python", "-I", "-m", "runtime_manager.k8s_helper", "storage-guard"),
+                mounts=[_mount("scratch", "/volume", readonly=True)],
+                helper=True,
+                env={"VOLUME_GUARD": json.dumps(plan.volume_guard, sort_keys=True)},
+            )
+        )
     if plan.purpose == "assemble":
         volumes.append({"name": "scratch", "persistentVolumeClaim": {"claimName": plan.scratch_pvc}})
         mounts = [_mount("scratch", "/work", readonly=True)]
