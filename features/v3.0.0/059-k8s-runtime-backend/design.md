@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T039、T073–T080已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器已有准备/启动/观察/停止/清理/日志能力本地验证，数据能力待后续接线；Docker/K8s共同状态机、v2状态/日志/能力与路由组装已有本地验证；数据、发行与真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：T001–T041、T073–T080已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器已有准备/启动/观察/停止/清理/日志能力本地验证，数据能力待后续接线；Docker/K8s共同状态机、v2状态/日志/能力与路由组装已有本地验证；数据、发行与真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -268,6 +268,8 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 迁移/恢复必须停掉包含在线 helper 的整个生产 Pod，禁止新的数据请求。维护 Pod 占用同一生产位置，挂 PVC；备份保存在保留目录并上传 backend，收到 verified＋摘要＋关联记录确认后才 DDL。维护日志记录 plan digest 和已完成阶段，重复调用先查平台事实及卷内 `platform/` 维护记录，不重复执行结构变更。相应布局由执行 adapter 映射到现有 appdb 路径接口，业务环境变量仍是 `/data/app.db`，不能把 manager 宿主路径传入该接口。
 
 恢复先保护当前数据库并确认其快照，再下载目标快照、校验、离线替换，fsync 后提交事实。启动失败保留 data_may_have_changed 和维护状态；不自动用旧备份覆盖新数据。预检和预览只初始化独立空库。
+
+数据helper本地实现补充：data-v1签名输入为固定域`BISHENG-RUNTIME-DATA-V1\n`加canonical JSON（key_id和claims），claims精确绑定version/operation_id/request_id/app_id/exec_ref/pod_uid/actor_ref/action/parameters_sha256/nonce/issued_at/not_after/deadline；受理窗口最长5秒，总deadline不超过签发后60秒且仍受原数据操作期限限制。独立受信helper只加载公钥。卷内跨进程flock串行，started先fsync再创建有界SQLite子进程，子进程完成但done落盘失败仍保留未知；新只读请求查询原ID，不重放写操作。导出在platform目录生成文件、校验摘要后流式返回，不把CSV塞入journal或一次性读入内存。当前仅helper本地/HTTP合同完成，平台签发、数据会话、Pod内接线与真实集群尚未交付。
 
 ### 4.9 网络、准入和资源治理
 
@@ -629,3 +631,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T034–T039：Docker能力抽离、共用阶段/事实、K8s不初始化Docker、v2状态日志及能力查询、K8s不注册v1/upgrade路由 | 完整runtime689 passed/10 skipped；尚未189部署，完整隔离探测和数据维护继续后续任务 |
 
 日志窗口保持公开epoch/相对格式含义，K8s适配器转换RFC3339 sinceTime，只读业务容器且限1000行/1MiB。Core客户端拒绝同时传sinceSeconds和sinceTime；依据[Kubernetes 1.28官方PodLogOptions定义](https://github.com/kubernetes/api/blob/v0.28.15/core/v1/types.go#L5492-L5528)。能力报告包含冻结cluster/namespace及当前namespace API可达性；API不可达时心跳ready=false，不将静态安装报告作为当前API健康证据。完整网络/存储/准入允许与拒绝探测仍由T054/T055交付。
+
+| 2026-10-22 | T040/T041 公钥数据票据、持久journal、限时SQLite子进程及流式导出 | 18 passed，真实SQLite与本地HTTP；无189部署结论 |

@@ -1336,7 +1336,9 @@
         "T009"
       ],
       "pair": "T041",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T041",
@@ -1365,7 +1367,9 @@
         "T040"
       ],
       "pair": "T040",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T042",

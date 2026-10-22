@@ -724,3 +724,20 @@ L1：架构/命名/内部序列化/跨库与租户/敏感信息/设计同步 PAS
 
 **红阶段**：8 failed缺K8s状态/API组装；Core绝对窗口1 failed，执行域/可达性1 failed。针对观察/原入口24 passed；最新完整runtime689 passed/10 skipped（`/private/tmp/f059-runtime-capabilities-full.log`），Ruff通过。T007/T033原目标内补sinceTime/冻结域/API可达性，原方法不引入任意URL或日志容器名。
 **元数据**：1/2目标文件、T037依赖、配对红阶段PASS。**结果：PASS。**
+
+## Task Review: T040 / T041
+
+**任务**：owner动作票据与数据helper journal。**文件**：`tests/test_k8s_data_helper.py`；`k8s_data_helper.py`、`data_grant.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | helper只有公钥，无平台/manager/MinIO凭据；SQLite白名单复用AppDbService |
+| 2 | 命名/AC | PASS | AC-15、AC-16、AC-33、AC-34、AC-36、AC-37、AC-43、AC-48、AC-50 |
+| 3 | 序列化 | PASS | 固定域和canonical JSON；精确claim/类型/5秒/60秒/参数摘要；导出流不进入JSON结果 |
+| 4 | 数据库 | PASS | 卷内flock串行，started先持久再SQL，done后才返回成功；未知不重做；平台journal不挂业务容器 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 同UID/app/exec绑定，拒绝nonce重放/伪造/错范围；拒绝数据库symlink；受信子进程deadline；日志不打印票据/SQL/私钥 |
+| 7 | 设计同步 | PASS | 4.8补充data-v1编码、崩溃窗口与流式导出；平台签发/Pod接线仍明确待实现 |
+
+**红阶段**：缺模块8 failed/6 errors；真实HTTP补测发现Request注解解析1 failed，已修复。最终18 passed（`/private/tmp/f059-data-helper-final.log`），包括SQLite提交后done落盘失败、子进程超时、跨进程锁、HTTP授权与CSV摘要。Ruff、逐文件arch-guard通过；不将此等同集群E2E。
+**元数据**：1/2目标文件、T021/T009依赖、配对红阶段PASS。**结果：PASS。**

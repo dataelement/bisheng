@@ -407,7 +407,7 @@
 
 ### Wave 5
 
-- [ ] **T040** — 数据 helper 动作票据与 journal：契约与失败用例
+- [x] **T040** — 数据 helper 动作票据与 journal：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_data_helper.py`
   **逻辑/验收**：只持 backend 公钥；5秒受理票据绑定 app/UID/action/body/nonce，有界60秒执行和串行；platform目录持久started/done，未知不重做；owner数据白名单SQL和流式导出，结果查询新只读ID指向原ID；测试只定义输入/结果，不加入实现。
@@ -415,7 +415,7 @@
   **依赖:** T021、T009
   **配对:** T041
 
-- [ ] **T041** — 数据 helper 动作票据与 journal
+- [x] **T041** — 数据 helper 动作票据与 journal
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_data_helper.py`、`src/runtime-manager/runtime_manager/data_grant.py`
   **逻辑/验收**：只持 backend 公钥；5秒受理票据绑定 app/UID/action/body/nonce，有界60秒执行和串行；platform目录持久started/done，未知不重做；owner数据白名单SQL和流式导出，结果查询新只读ID指向原ID；通过配对测试后完成 L1 task-review。
