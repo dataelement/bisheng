@@ -634,7 +634,9 @@
         "T021"
       ],
       "pair": "T023",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T023",
@@ -642,9 +644,10 @@
       "kind": "实现",
       "title": "材料委托和续期 Service",
       "files": [
-        "src/backend/bisheng/app_runtime/domain/services/runtime_material_service.py"
+        "src/backend/bisheng/app_runtime/domain/services/runtime_material_service.py",
+        "src/backend/bisheng/app_runtime/domain/models/runtime_kubernetes.py"
       ],
-      "logic": "从操作/部署/预览推导范围并绑定 UID/公钥；operation 终态失效，deployment-init 按当前 serving/候选冻结引用续取；旧 ticket 不独立续期，撤销/跨租户/错材料/Redis未知拒绝；通过配对测试后完成 L1 task-review。",
+      "logic": "从操作/部署/预览推导范围并绑定 UID/公钥；operation 终态失效，deployment-init 按当前 serving/候选冻结引用续取；旧 ticket 不独立续期，撤销/跨租户/错材料/Redis未知拒绝；通过配对测试后完成 L1 task-review。 未发布的新委托表expires_at允许NULL表示正式部署按当前归属逐次验证；operation仍必须有deadline，预览仍受会话期限限制，不以任意固定年限代替归属。只调整新表声明，无已发布迁移父链或数据变更。",
       "acs": [
         "AC-15",
         "AC-27",
@@ -658,7 +661,9 @@
         "T022"
       ],
       "pair": "T022",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T024",
@@ -682,7 +687,9 @@
         "T023"
       ],
       "pair": "T025",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T025",
@@ -708,7 +715,54 @@
         "T024"
       ],
       "pair": "T024",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T075",
+      "wave": 3,
+      "kind": "测试",
+      "title": "材料根路径多租户中间件：合同与失败用例",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_material_middleware.py"
+      ],
+      "logic": "根材料路径独立于浏览器JWT，租户由公钥授权决定；精确前缀免浏览器租户检查，相似路径不豁免；真实CustomMiddleware验证。",
+      "acs": [
+        "AC-15",
+        "AC-47",
+        "AC-48"
+      ],
+      "depends": [
+        "T025"
+      ],
+      "pair": "T076",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T076",
+      "wave": 3,
+      "kind": "实现",
+      "title": "材料根路径多租户中间件接线",
+      "files": [
+        "src/backend/bisheng/utils/http_middleware.py"
+      ],
+      "logic": "仅新增材料根路径到可信内部请求前缀，并排除浏览器凭据解析；授权Service仍逐请求清除ambient bypass/admin后验证租户/UID，不扩大其他路径。",
+      "acs": [
+        "AC-15",
+        "AC-47",
+        "AC-48"
+      ],
+      "depends": [
+        "T025",
+        "T075"
+      ],
+      "pair": "T075",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T026",
@@ -728,10 +782,13 @@
       ],
       "depends": [
         "T025",
-        "T019"
+        "T019",
+        "T076"
       ],
       "pair": "T027",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T027",
@@ -756,7 +813,9 @@
         "T026"
       ],
       "pair": "T026",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T028",
@@ -783,7 +842,9 @@
         "T027"
       ],
       "pair": "T029",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T029",
@@ -812,7 +873,9 @@
         "T028"
       ],
       "pair": "T028",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T030",
@@ -2090,7 +2153,7 @@
         "features/v3.0.0/059-k8s-runtime-backend/code-review.md",
         "features/v3.0.0/059-k8s-runtime-backend/delivery-validation.json"
       ],
-      "logic": "按code-review技能以755d4456e5及release-line确认基准审查真实diff，修复边界/并发/权限/信息泄漏；核对所有任务L1和AC证据、Docker保留，更新design现状和交付证据；不自动合并/发tag。",
+      "logic": "按sdd-code-review技能以755d4456e5及release-line确认基准审查真实diff，修复边界/并发/权限/信息泄漏；核对所有任务L1和AC证据、Docker保留，更新design现状和交付证据；不自动合并/发tag。",
       "acs": [
         "AC-01",
         "AC-02",

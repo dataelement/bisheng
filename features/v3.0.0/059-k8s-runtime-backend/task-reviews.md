@@ -432,3 +432,136 @@ T009/T013增量L1：应用凭据支持只给app容器的Secret引用，材料Sec
 **验证**：14项实际HMAC/ASGI+SQL API用例，加34项Service与16项账本合计64 passed；生产router路径亦由测试核对。Ruff与逐文件arch-guard通过。未执行真实K8s。
 **元数据验证**：文件范围PASS；配对T018已完成；依赖T017/T018 PASS。
 **结果**：PASS。
+
+## Task Review: T022
+
+**任务**：材料委托和续期Service合同。**类型**：测试。
+**文件**：`src/backend/test/app_runtime/test_runtime_material_service.py`；覆盖 AC-15、AC-27、AC-46、AC-47、AC-48。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试子集 |
+| 2 | 命名/AC | PASS | 完整AC，真实Ed25519和SQL材料/资源；app/preview外部读模型注入 |
+| 3 | 序列化 | N/A | 测试子集 |
+| 4 | 数据库 | N/A | 复用真实SQLite账本，不模拟核心授权记录 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 仅测试假私钥；断言SQL不保存私钥/代理明文；未知nonce异常不出现在响应 |
+| 7 | 设计同步 | N/A | 已确认归属/期限和材料签名合同 |
+
+**红阶段**：31项因待实现RuntimeMaterialService模块缺失而报错（`/private/tmp/f059-material-service-red.log`）；不是接口可用证据。Ruff和逐文件arch-guard通过。
+**元数据验证**：文件范围PASS；依赖T015/T021 PASS；配对T023后续实现。
+**结果**：PASS。
+
+## Task Review: T023
+
+**任务**：材料委托与当前归属授权Service。**类型**：实现。
+**文件**：`runtime_material_service.py`、`models/runtime_kubernetes.py`；另修正T016测试夹具重新读取claim后的已持久化操作，避免旧对象覆盖running状态。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Service→Repository与公开preview/version读模型；无HTTP框架、集群SDK或MinIO |
+| 2 | 命名 | PASS | 沿用内部运行协议；固定安全拒绝原因 |
+| 3 | 序列化 | PASS | 只返回内部授权公开字段，Secret私钥不进入SQL |
+| 4 | 数据库 | PASS | 验证node后进入可信租户上下文，SQL唯一键约束公钥身份；新增未发布表的expiry可空，不改历史数据 |
+| 5 | 前端 | N/A | 无前端变更 |
+| 6 | 信息泄漏 | PASS | Ed25519验签→当前UID/代次/冻结材料→Redis nonce；SQL仅公钥及代理凭据摘要；授权存储未知拒绝 |
+| 7 | 设计同步 | PASS | 4.7同步生产init逐请求归属检查、操作/预览期限；材料传输与HTTP仍待接入 |
+
+**验证**：材料34项；组合控制Service/API、材料wire与模型共133 passed（`/private/tmp/f059-material-authority-checkpoint.log`）。额外三项先复现公共离线profile缺失及上传字段类型错误，修复后通过；Ruff、逐文件arch-guard通过。不是实际集群/MinIO部署证据。
+**元数据验证**：文件范围PASS；配对T022已完成；依赖T015/T021/T022 PASS。
+**结果**：PASS。
+
+## Task Review: T024
+
+**任务**：范围化分块材料传输合同。**类型**：测试。
+**文件**：`test_runtime_material_transfers.py`；覆盖 AC-26、AC-28、AC-29、AC-42、AC-46、AC-47、AC-51。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试子集 |
+| 2 | 命名/AC | PASS | 完整AC，真实SQL与Ed25519；仅对象存储边界内存替身 |
+| 3 | 序列化 | N/A | 测试子集 |
+| 4 | 数据库 | N/A | 持久offset/确认事实查询，不mock事务 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 假签名与票据，断言无票据明文入SQL |
+| 7 | 设计同步 | N/A | 固定material-v1合同 |
+
+**红阶段**：21项因目标Service尚未实现报ModuleNotFoundError（`/private/tmp/f059-material-transfer-red.log`）；后补5项期限/复用/跨授权边界；Ruff通过。
+**元数据验证**：文件范围PASS；依赖T023 PASS；配对T025后续实现。
+**结果**：PASS。
+
+## Task Review: T025
+
+**任务**：范围化材料传输Service。**类型**：实现。
+**文件**：`runtime_material_transfer_service.py`、`runtime_artifact_service.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Service→Repository/ObjectStore；不向manager提供存储配置或直链，无FastAPI |
+| 2 | 命名 | PASS | 固定内部协议和安全原因 |
+| 3 | 序列化 | PASS | 单材料/动作会话，status不返回票据；内容状态/范围符合6.2.1 |
+| 4 | 数据库 | PASS | 可信租户上下文；事务只含SQL，I/O后重查；锁顺序operation→assignment→授权→transfer；唯一键防重复会话 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | SQL仅票据摘要；上传元数据固定白名单/冻结引用；5秒复核、内容60秒上限、有效期内结束；错误不返回存储细节 |
+| 7 | 设计同步 | PASS | 4.7/6.2.1及修订历史同步Service状态与白名单；HTTP及真实存储仍待验收 |
+
+**验证**：26项workload传输及4项旧manager材料回归，共30 passed（`/private/tmp/f059-material-transfer-final.log`）。覆盖票据轮换、已完成部署续取、分块范围/空文件/416、同字节幂等、摘要冲突、内容去重、撤销不推进offset、对象写成但未SQL确认不verified。旧路径仅提取内部材料分配函数，原操作鉴权不放宽。
+**元数据验证**：文件范围PASS；配对T024已红阶段；依赖T023/T024 PASS。
+**结果**：PASS。
+
+## Task Review: T075 / T076
+
+**任务**：固定材料根路径的多租户中间件合同/接线。**类型**：测试/实现，分别一个文件。
+**文件**：T075 `test_runtime_material_middleware.py`；T076 `utils/http_middleware.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | middleware仅识别独立通道；权限决策仍由Service完成 |
+| 2 | 命名/AC | PASS | 覆盖 AC-15、AC-47、AC-48，精确前缀和相似路径反例 |
+| 3 | 序列化 | N/A | 无新响应合同 |
+| 4 | 数据库 | PASS | 无SQL；Service重新建立verified租户，不能继承豁免bypass |
+| 5 | 前端 | N/A | 无前端变更 |
+| 6 | 信息泄漏 | PASS | 根材料通道不解析浏览器Cookie；其他路径保持原合同 |
+| 7 | 设计同步 | PASS | 6.2明确固定根路由独立工作负载身份 |
+
+**验证**：T075先3 failed（`/private/tmp/f059-material-middleware-red.log`），T076后3 passed（`/private/tmp/f059-material-middleware-final.log`）；真实CustomMiddleware，Ruff与逐文件arch-guard通过。
+**元数据验证**：每任务一文件PASS；T076配对T075已红阶段；依赖T025 PASS。
+**结果**：PASS。
+
+## Task Review: T026 / T027
+
+**任务**：材料workload HTTP合同/接入。**类型**：测试/实现。
+**文件**：T026 `test_runtime_material_api.py`；T027 `api/endpoints/runtime_material.py`、`main.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Endpoint只做签名请求收集、Service调用、HTTP流；生产main直接注册 |
+| 2 | 命名/AC | PASS | 覆盖 AC-15、AC-28、AC-46、AC-47、AC-51；固定material-v1路径 |
+| 3 | 序列化 | PASS | 传输真实HTTP状态与Content-Range；没有SPA业务错误包装 |
+| 4 | 数据库 | PASS | Endpoint无SQL、Secret或MinIO访问 |
+| 5 | 前端 | N/A | 无前端变更 |
+| 6 | 信息泄漏 | PASS | 有界请求体/60秒；拒绝重复/混合身份；未知存储异常只返回安全503；流中失败终止，不伪造完整内容 |
+| 7 | 设计同步 | PASS | 4.7/6.2.1同步HTTP状态；仍未声称实际Pod/MinIO验收 |
+
+**红阶段**：T026 14 errors+1 failed（缺端点/main挂载，`/private/tmp/f059-material-api-red.log`）。实现后15 passed（`/private/tmp/f059-material-api-first.log`），真实Ed25519、HMAC、ASGI、中间件与SQL，Ruff/逐文件arch-guard通过。
+**元数据验证**：目标1/2文件PASS；T027配对T026已红阶段；依赖T025/T019/T076 PASS。
+**结果**：PASS。
+
+## Task Review: T028 / T029
+
+**任务**：材料client与平台控制client合同/实现。**类型**：测试/实现。
+**文件**：T028 `tests/test_material_client.py`；T029 `material_client.py`、`platform_client.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 独立runtime发行包，仅HTTP；不导入backend、不访问MinIO/DB；manager控制client与workload私钥分离 |
+| 2 | 命名/AC | PASS | 覆盖 AC-07、AC-15、AC-26、AC-28、AC-42、AC-44、AC-46、AC-47、AC-52 |
+| 3 | 序列化 | PASS | material-v1固定路径/新nonce/原始字节签名；单块范围/长度/完整摘要验证；manifest来自后台冻结材料授权 |
+| 4 | 数据库 | N/A | 无数据库访问 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | HTTPS/CA、禁redirect与环境代理；代理仅显式配置，错误无远端payload；无私钥日志；有限重试不延长deadline；半块丢弃，换票保持同会话 |
+| 7 | 设计同步 | PASS | 6.2.1客户端恢复语义已落实；helper和集群仍待接入 |
+
+**红阶段**：17项为5 failed/12 errors（缺MaterialClient与新控制方法，`/private/tmp/f059-material-client-red.log`）；补6项manifest/无效deadline/换票身份，先复现5失败后修复。最终23项新client＋3项旧client共26 passed；完整runtime623 passed、10 skipped（`/private/tmp/f059-runtime-material-client-full.log`）。材料/控制/模型/旧材料组合197 passed（`/private/tmp/f059-material-control-green.log`），Ruff与逐文件arch-guard通过。
+**元数据验证**：目标1/2文件PASS；T029配对T028已红阶段；依赖T007/T027 PASS。
+**结果**：PASS。

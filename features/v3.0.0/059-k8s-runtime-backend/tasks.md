@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；74 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 23 / 74 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；76 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 33 / 76 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -211,7 +211,7 @@
   **依赖:** T004、T020
   **配对:** T020
 
-- [ ] **T022** — 材料委托和续期 Service：契约与失败用例
+- [x] **T022** — 材料委托和续期 Service：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_material_service.py`
   **逻辑/验收**：从操作/部署/预览推导范围并绑定 UID/公钥；operation 终态失效，deployment-init 按当前 serving/候选冻结引用续取；旧 ticket 不独立续期，撤销/跨租户/错材料/Redis未知拒绝；测试只定义输入/结果，不加入实现。
@@ -219,15 +219,15 @@
   **依赖:** T015、T021
   **配对:** T023
 
-- [ ] **T023** — 材料委托和续期 Service
+- [x] **T023** — 材料委托和续期 Service
   **类型**：实现
-  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_material_service.py`
-  **逻辑/验收**：从操作/部署/预览推导范围并绑定 UID/公钥；operation 终态失效，deployment-init 按当前 serving/候选冻结引用续取；旧 ticket 不独立续期，撤销/跨租户/错材料/Redis未知拒绝；通过配对测试后完成 L1 task-review。
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_material_service.py`、`src/backend/bisheng/app_runtime/domain/models/runtime_kubernetes.py`
+  **逻辑/验收**：从操作/部署/预览推导范围并绑定 UID/公钥；operation 终态失效，deployment-init 按当前 serving/候选冻结引用续取；旧 ticket 不独立续期，撤销/跨租户/错材料/Redis未知拒绝；正式部署的expires_at允许NULL，含义为逐次检查当前归属；operation/预览分别保留操作/会话期限。仅调整未发布新表声明，无数据或已发布父链变更；通过配对测试后完成 L1 task-review。
   **覆盖 AC:** AC-15、AC-27、AC-46、AC-47、AC-48
   **依赖:** T015、T021、T022
   **配对:** T022
 
-- [ ] **T024** — 范围化分块材料传输：契约与失败用例
+- [x] **T024** — 范围化分块材料传输：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_material_transfers.py`
   **逻辑/验收**：复用对象存储和持久 offset；exchange 同范围轮换票据，单块 16MiB，重复同字节幂等/错摘要拒绝，分块下载与 finalize 内容/SQL确认；接口到期和响应丢失可查，无 MinIO 直链；测试只定义输入/结果，不加入实现。
@@ -235,7 +235,7 @@
   **依赖:** T023
   **配对:** T025
 
-- [ ] **T025** — 范围化分块材料传输
+- [x] **T025** — 范围化分块材料传输
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_material_transfer_service.py`、`src/backend/bisheng/app_runtime/domain/services/runtime_artifact_service.py`
   **逻辑/验收**：复用对象存储和持久 offset；exchange 同范围轮换票据，单块 16MiB，重复同字节幂等/错摘要拒绝，分块下载与 finalize 内容/SQL确认；接口到期和响应丢失可查，无 MinIO 直链；通过配对测试后完成 L1 task-review。
@@ -243,15 +243,31 @@
   **依赖:** T023、T024
   **配对:** T024
 
-- [ ] **T026** — 材料 workload HTTP API：契约与失败用例
+- [x] **T075** — 材料根路径多租户中间件：合同与失败用例
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_material_middleware.py`
+  **逻辑/验收**：固定材料根路径独立于浏览器JWT，租户由公钥授权决定；精确前缀免浏览器租户检查，相似路径不豁免；真实CustomMiddleware验证；测试不加入生产实现。
+  **覆盖 AC:** AC-15、AC-47、AC-48
+  **依赖:** T025
+  **配对:** T076
+
+- [x] **T076** — 材料根路径多租户中间件接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/utils/http_middleware.py`
+  **逻辑/验收**：仅新增材料根路径到可信内部请求前缀，并排除浏览器凭据解析；授权Service逐次清除ambient bypass/admin后验证租户/UID，不扩大其他路径。保持平台已有JWT/DSH语义；配对测试及L1后完成。
+  **覆盖 AC:** AC-15、AC-47、AC-48
+  **依赖:** T025、T075
+  **配对:** T075
+
+- [x] **T026** — 材料 workload HTTP API：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_material_api.py`
   **逻辑/验收**：按 design 6.2.1 完整方法/头/响应/错误注册 exchange、status、content、finalize；使用 workload 身份依赖，拒绝 manager/app/OBO 身份互换，流式阶段重新检查期限/撤销；测试只定义输入/结果，不加入实现。
   **覆盖 AC:** AC-15、AC-28、AC-46、AC-47、AC-51
-  **依赖:** T025、T019
+  **依赖:** T025、T019、T076
   **配对:** T027
 
-- [ ] **T027** — 材料 workload HTTP API
+- [x] **T027** — 材料 workload HTTP API
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/api/endpoints/runtime_material.py`、`src/backend/bisheng/main.py`
   **逻辑/验收**：material-v1固定P直接注册为main根路由，不继承/api/v1前缀；按 design 6.2.1 完整方法/头/响应/错误注册 exchange、status、content、finalize；使用 workload 身份依赖，拒绝 manager/app/OBO 身份互换，流式阶段重新检查期限/撤销；通过配对测试后完成 L1 task-review。
@@ -261,7 +277,7 @@
 
 ### Wave 4
 
-- [ ] **T028** — 材料 client 与平台控制 client：契约与失败用例
+- [x] **T028** — 材料 client 与平台控制 client：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_material_client.py`
   **逻辑/验收**：下载/上传按 frozen SHA、受限票据及新 nonce 签名；部分块丢弃、响应丢失查 offset、重交换不延长操作；控制 client 支持资源、租约、材料绑定接口且不记录私钥；测试只定义输入/结果，不加入实现。
@@ -269,7 +285,7 @@
   **依赖:** T007、T027
   **配对:** T029
 
-- [ ] **T029** — 材料 client 与平台控制 client
+- [x] **T029** — 材料 client 与平台控制 client
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/material_client.py`、`src/runtime-manager/runtime_manager/platform_client.py`
   **逻辑/验收**：下载/上传按 frozen SHA、受限票据及新 nonce 签名；部分块丢弃、响应丢失查 offset、重交换不延长操作；控制 client 支持资源、租约、材料绑定接口且不记录私钥；通过配对测试后完成 L1 task-review。

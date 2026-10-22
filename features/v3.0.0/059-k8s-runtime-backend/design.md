@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T021、T073及T074已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输、执行器/helper及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：T001–T029、T073–T076已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；执行器/helper及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -225,7 +225,9 @@ K8s 1.28 不保证未启动容器都有终止记录；其 kubelet 延迟终态�
 
 完整镜像模式不复制源码或重装依赖；只注入既有启动/健康/资源/网络/数据合同。兼容源码模式安装和编译完成后由可信 OCI 组装器构造 `/app`、依赖环境和既有 entrypoint；固定基础镜像已含用户/目录及必要运行工具，组装器不执行 RUN，不处理任意 Dockerfile。将来增加系统包必须发布新 profile 或完整镜像。Docker 旧 builder 路径保留，跨形态测试逐项证明启动语义相同。
 
-### 4.7 材料授权与续期（新增，未实现）
+### 4.7 材料授权与续期（Service已实现，尚未集群验收）
+
+期限实现：`RuntimeMaterialDelegation.expires_at`在operation/预览中分别是操作/会话的最晚期限；正式deployment-init可为NULL，表示每次重新检查当前归属、批准版本、冻结delivery和同UID，不是永久通行。300秒传输票据仍有独立期限，不能独立续期。该新表尚未在客户环境交付；模型声明可空，不改已发布迁移或做数据回填。
 
 manager 通过现有服务 HMAC 在 backend 创建材料授权；后台从已验证的操作、部署/预览和 delivery 计算范围，不接受调用方任意指定材料、租户或应用。
 
@@ -411,7 +413,7 @@ Service UID、Pod UID 及其映射同时入账；ready 前确认 selector 对应
 
 扩展迁移只改本 Feature 所需模型，保留旧表语义与跨库工具；历史 Docker transfer/operation 不被误认为 deployment-init。`RuntimeRoute.target` 的 host/port 保留，更多 K8s 字段只进入运维记录。所有新字段及租户登记、删除保留、索引上限和 DM8 约束须在任务评审逐项检查。
 
-### 6.2.1 material-v1：工作负载材料协议（新增提案，未实现）
+### 6.2.1 material-v1：工作负载材料协议（编码/Service/HTTP已本地验证）
 
 这是 backend 与可信材料 client 的唯一 wire contract；独立于 manager 的 HMAC，不接受应用/OBO 凭据或 MinIO 直链。以下 `P` 固定为 `/internal/app-runtime/v2/material-access`，所有接口仅允许 TLS，禁止客户端自动重定向；代理不得重写签名路径或请求体。实施注册在 backend main 的独立根路由，不能沿用 app_runtime 聚合路由的 `/api/v1` 前缀，否则会改变已确认签名字节；T026/T027须验证真实注册路径。
 
@@ -457,7 +459,7 @@ backend 先做格式/大小和公钥定位，再验签并核对实际 body 摘�
 | `PUT P/transfers/{id}/content` | 仅 offset query；body 为 1 至 16 MiB 原始字节 | 200 `{"transfer_id":"<id>","offset":<next>,"state":"open"}`；持久记录 offset/长度/chunk sha 后推进。旧偏移且已确认同字节返回当前 offset；不同字节或跳过偏移返回 409，不覆盖 |
 | `POST P/transfers/{id}/finalize` | 无 query；JSON `{"sha256":"<hex>","size_bytes":123}` 必须与会话声明一致 | 200 既有材料公开字段，state=verified、confirmed_at 非空；验证全量内容并持久保存后才返回。重复 finalize 返回同一已确认材料；snapshot 仍须 4.8 的 SQL 关联确认后才允许 DDL |
 
-上传 metadata 只接受原材料 Service 的白名单，不能控制对象路径、关联其它应用或扩大允许动作；每类材料总大小和安全解包规则沿用既有限制。GET content 只适用于 download 会话；PUT/finalize 只适用于 upload 会话。空材料上传不发 PUT，直接 finalize。
+上传 metadata 在workload路径采用固定白名单：compiled仅source_artifact_id/dependency_artifact_id，dependencies仅input_key/profile_id/profile_digest，snapshot仅format/integrity_result；引用必须匹配冻结操作，值为不超过512字符的字符串。原manager路径不扩展授权。不能控制对象路径、关联其它应用或扩大允许动作；每类材料总大小和安全解包规则沿用既有限制。GET content 只适用于 download 会话；PUT/finalize 只适用于 upload 会话。空材料上传不发 PUT，直接 finalize。
 
 会话 JSON 固定为 `transfer_id:UUID`、`artifact_id:str`、`action:download/upload`、`state:open/confirmed`、`offset:int`、`sha256:str`、`size_bytes:int`、`kind:str`、`platform:str`、`ticket:str`、`expires_at:int`（UTC Unix 秒）；原公开材料字段保持不变。下载 offset 的初值为 0，由 client 管理本地连续已验证块；状态接口的 offset 不被解释成 client 已收到的字节。
 
@@ -597,3 +599,9 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T016/T017控制Service合同和实现完成；34项Service及16项账本用例通过，畸形输入与bool epoch安全拒绝 | API和集群接线仍待后续任务，D1–D8不变 |
 
 | 2026-10-22 | T018/T019内部控制HTTP接入，严格请求及独立manager/admission角色；64项HTTP/Service/账本组合验证通过 | 材料接口与执行器仍待开发，无真实部署结论 |
+
+| 2026-10-22 | T023材料公钥/UID/当前归属授权及T025范围化传输Service完成本地验证；旧manager操作鉴权保持独立 | 133项授权组合、30项新旧材料传输；非集群/MinIO验收 |
+
+| 2026-10-22 | T026/T027材料HTTP根路由及T075/T076多租户中间件接入完成；manager登记公钥/UID与workload材料身份独立 | 15项HTTP、3项中间件通过；客户端/helper/集群尚待实施 |
+
+| 2026-10-22 | T029独立材料客户端与manager控制client完成：可信TLS/CA、固定签名、分块校验/丢块恢复、票据轮换与阶段deadline不变 | 26项client、完整runtime623 passed/10 skipped；材料/控制197 passed；尚未部署 |
