@@ -478,8 +478,15 @@ class AdmissionPolicy:
                 _deny("admission_resources_required")
 
     def _status(self, req, old, obj):
-        # A status subresource update must not create an alternate writer for
-        # CNI-owned metadata, including an authenticated bound-node request.
+        # Calico maintains its network annotations through pods/status. Only
+        # the installed CNI actor may do so, retaining the bound Pod's complete
+        # spec and status; _cni_metadata fences UID and all other metadata.
+        if self.cni_username and req.get("userInfo", {}).get("username") == self.cni_username:
+            if not old.get("spec", {}).get("nodeName") or old.get("spec", {}) != obj.get("spec", {}):
+                _deny("admission_cni_spec_refused")
+            self._cni_metadata(old, obj)
+            return
+        # Other status actors, including the bound kubelet, preserve CNI fields.
         if self._cni_annotations(old) != self._cni_annotations(obj):
             _deny("admission_cni_source_mutation_refused")
         if not _same_identity(old, obj) or old.get("spec", {}).get("nodeName") != obj.get("spec", {}).get("nodeName"):
