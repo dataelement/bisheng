@@ -102,7 +102,17 @@ class RuntimeOperationService:
         )
         async with self.repo.transaction():
             op = await self.repo.create_operation(op)
-            if op.kind in {"prepare", "probe", "deploy", "preview", "restore", "migrate"}:
+            if (
+                node
+                and node.executor_kind == "kubernetes"
+                and op.kind == "destroy"
+                and op.payload.get("purge_volume") is True
+            ):
+                # Purging starts a trusted maintenance Pod after the stopped app
+                # released its serving budget. Never trust a caller's app tier
+                # for this helper or borrow an unconfirmed writer's allocation.
+                await self.repo.admit(op.id, memory_mb=128, cpu_millicores=25)
+            elif op.kind in {"prepare", "probe", "deploy", "preview", "restore", "migrate"}:
                 tier = op.payload.get("tier", {})
                 sidecar = bool(node and node.executor_kind == "kubernetes" and op.kind in {"deploy", "restore"})
                 await self.repo.admit(
