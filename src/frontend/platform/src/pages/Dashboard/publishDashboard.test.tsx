@@ -7,7 +7,7 @@ vi.mock('@/controllers/API/dashboard', () => ({ publishDashboard: vi.fn(async ()
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 it.each([false, true])('publishes directly with a numeric editor cache and list present: %s', async (withList) => {
-    const { QueryClient, QueryClientProvider } = await vi.importActual<typeof import('react-query')>('react-query')
+    const { QueryClient, QueryClientProvider } = await vi.importActual<typeof import('@tanstack/react-query')>('@tanstack/react-query')
     const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
     const board = { id: '7', title: 'Board', status: 'draft' }
     client.setQueryData([DashboardQueryKey, 7], board)

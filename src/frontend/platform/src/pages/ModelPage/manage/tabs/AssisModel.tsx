@@ -19,7 +19,7 @@ import uniqBy from "lodash-es/uniqBy";
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ModelSelect } from "./KnowledgeModel";
 
 
@@ -192,7 +192,7 @@ export default function AssisModel({ llmOptions, onBack }) {
             // invalidateQueries only marks the entry stale and the workbench
             // dropdown still serves cached data on next mount. removeQueries
             // drops the cache entirely, forcing a fresh fetch on next read.
-            queryClient.removeQueries('QueryAssistantModelsKey')
+            queryClient.removeQueries({ queryKey: ['QueryAssistantModelsKey'] })
         }));
     };
 

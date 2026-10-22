@@ -21,6 +21,13 @@ def _service() -> PersonalSkillService:
     return PersonalSkillService()
 
 
+def _updated_at(skill) -> str | None:
+    stamp = skill.update_time or skill.create_time
+    if stamp is None:
+        return None
+    return stamp.isoformat() if hasattr(stamp, "isoformat") else str(stamp)
+
+
 def _card(service: PersonalSkillService, skill) -> dict:
     return {
         "id": skill.id,
@@ -31,6 +38,7 @@ def _card(service: PersonalSkillService, skill) -> dict:
         "enabled": bool(skill.enabled),
         "content_hash": skill.content_hash,
         "bundle_missing": service.is_bundle_missing(skill),
+        "update_time": _updated_at(skill),
     }
 
 

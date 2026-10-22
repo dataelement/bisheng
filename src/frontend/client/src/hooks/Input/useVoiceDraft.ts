@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { VoiceDraft } from "../../../../shared/voice/draft";
 
 export function useVoiceDraft(
@@ -14,6 +14,7 @@ export function useVoiceDraft(
   const ended = useRef(false);
   const [busy, setBusy] = useState(false);
   const [stopSignal, setStopSignal] = useState(0);
+  const caretRef = useRef<number | null>(null);
 
   const apply = (transcript: string) => {
     if (!draft.current) return;
@@ -22,9 +23,18 @@ export function useVoiceDraft(
       return;
     }
     const next = draft.current.apply(valueRef.current, transcript);
+    if (next !== value) caretRef.current = draft.current.caret();
     valueRef.current = next;
     setValue(next);
   };
+  useLayoutEffect(() => {
+    const element = ref.current;
+    const caret = caretRef.current;
+    if (!element || caret == null) return;
+    caretRef.current = null;
+    const pos = Math.max(0, Math.min(caret, element.value.length));
+    element.setSelectionRange(pos, pos);
+  }, [ref, value]);
   return {
     busy,
     handleEdit: (next: string) => {

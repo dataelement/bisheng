@@ -12,7 +12,7 @@ import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { copyText } from "@/utils"
 import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useMutation, useQuery, useQueryClient } from "react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
 import { DashboardDetail } from "./components/dashboard/DashboardDetail"
 import { DashboardSidebar } from "./components/dashboard/DashboardSidebar"
@@ -92,7 +92,7 @@ export default function DashboardPage() {
         navigator(`/dashboard/${id}`)
     }
 
-    const { data: selectedDashboard, isLoading } = useQuery({
+    const { data: selectedDashboard, isInitialLoading: isLoading } = useQuery({
         queryKey: [DashboardQueryKey, selectedId],
         queryFn: () => getDashboard(selectedId),
         enabled: !!selectedId,

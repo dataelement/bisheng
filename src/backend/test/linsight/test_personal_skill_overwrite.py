@@ -240,3 +240,66 @@ class TestPersonalSkillOverwrite:
             gate.assert_not_called()
         stored = await env.dao.get_by_id(skill.id)
         assert stored.content_hash == skill.content_hash
+
+    async def test_a_different_frontmatter_name_still_updates_this_skill(self, env):
+        skill = await _owned(env)
+        preview = await env.service.inspect_upload(
+            user_id=USER,
+            filename="demo-csv-summary.md",
+            data=_md(name="demo-csv-summary", body="csv"),
+            content_type="text/plain",
+            skill_id=skill.id,
+        )
+        assert preview.name == "pdf"
+        saved = await env.service.overwrite(
+            user_id=USER,
+            skill_id=skill.id,
+            filename="demo-csv-summary.md",
+            data=_md(name="demo-csv-summary", body="csv"),
+            expected_content_hash=skill.content_hash,
+            import_id="imp-rename",
+            content_type="text/plain",
+        )
+        assert saved.id == skill.id
+        assert saved.name == "pdf"
+        text = env.store.read_text(TENANT, "pdf", saved.content_hash, owner_user_id=USER)
+        assert "name: pdf" in text
+        assert "demo-csv-summary" not in text
+        assert "csv" in text
+        assert (await env.service.usage(USER)).count == 1
+
+    async def test_uploaded_skill_id_does_not_replace_the_shown_name(self, env):
+        skill = await _owned(env)
+        data = (
+            "---\nname: meeting-minutes1\ndisplay_name: 会议纪要整理\ndescription: demo description\n---\n\n# csv\n"
+        ).encode()
+        saved = await env.service.overwrite(
+            user_id=USER,
+            skill_id=skill.id,
+            filename="meeting-minutes1.md",
+            data=data,
+            expected_content_hash=skill.content_hash,
+            import_id="imp-shown-name",
+            content_type="text/plain",
+        )
+        assert saved.id == skill.id
+        assert saved.name == "pdf"
+        assert saved.display_name == "会议纪要整理"
+        text = env.store.read_text(TENANT, "pdf", saved.content_hash, owner_user_id=USER)
+        assert "name: pdf" in text
+        assert "meeting-minutes1" not in text
+
+    async def test_file_without_a_display_name_keeps_the_current_one(self, env):
+        skill = await _owned(env)
+        data = b"---\nname: meeting-minutes1\ndescription: demo description\n---\n\n# csv\n"
+        saved = await env.service.overwrite(
+            user_id=USER,
+            skill_id=skill.id,
+            filename="meeting-minutes1.md",
+            data=data,
+            expected_content_hash=skill.content_hash,
+            import_id="imp-keep-display",
+            content_type="text/plain",
+        )
+        assert saved.name == "pdf"
+        assert saved.display_name == "报告"
