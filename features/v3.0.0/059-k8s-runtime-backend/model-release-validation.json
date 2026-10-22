@@ -418,5 +418,12 @@
     "real_docker_layouts": 3,
     "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
     "evidence_root": "/private/tmp/f059-arm64-20261022-54b3ea2c1"
+  },
+  "followup_candidate": {
+    "source_commit": "9e7e86cab55f8b26990d2e6b6374b36418d30669",
+    "reason": "K8s parsed profile contract fix",
+    "native_validation": "in_progress",
+    "historical_native_results_source": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+    "formal_public_ci_release": "not_authorized"
   }
 }

@@ -2795,3 +2795,15 @@ T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态
 ## T068 — 189安装与报告故障配对（L1 PASS）
 
 第五轮最终控制候选54b3、Helm10实际16检查全部通过、正常清理、真实公开诊断通过；过期/身份变化/必需项失败三组真实API负例与无重启恢复通过。旧资源按真实停止/自然到期同UID闭环，最终namespace Pod/PVC和canary计划为空。没有修改kube-system或全局RBAC。分层PASS、命名PASS、序列化PASS、数据库N/A、前端N/A、信息泄漏PASS、设计同步PASS；证据installation.json/MD。业务/故障/正式CI/L2仍分列未完成。
+
+## T191–T193 L1（66e507ec8）
+
+七项复核：架构PASS（仅验收物料）、命名/AC PASS、序列化/数据库/前端N/A、信息泄漏PASS（无开发venv/自动下载/凭据输出，逐wheel SHA/SDK字节/许可）、设计同步PASS。三个目标文件与测试配对/依赖一致。先红16项后169，再针对实际scanner假阳性补红2项→最终170通过；实际裸Python禁网arm64模板构建及SDK/附件/SQLite/WS/certifi资源/TLS允许拒绝均通过。8wheel是依赖binary跳过，真实源码密钥形态仍被拒绝；保留失败材料，不计为平台验收。完整证据路径/private/tmp/f059-source-vendor-l1.md及/private/tmp/e2e-f059-source-vendor-native-0o4hsmqd/result.json。结论PASS，主树集成测试待补。
+
+## T194/T195 L1（54488cdd4 / 9e7e86cab）
+
+真实189 failed prepare类型轮廓及纯计划复算确认manifest profile字符串遮蔽已解析对象；未重跑操作或创建资源。17项schema配对先红15/2，再全部通过；OCI旧测试仅补真实prepare必有的delivery字段。主工作树全runtime **1217 passed / 13 skipped**，包含原setuid参数用例，不以子代理受限权限环境的chmod结果推断宿主全局属性。
+
+七项检查：架构PASS（manager仅消费backend冻结对象）；命名PASS；序列化PASS（稳定错误枚举，API/摘要不变）；数据库/前端N/A；信息泄漏PASS（不输出profile/env）；设计同步PASS（design.md明确prepare与运行对象路径）。范围两测试/一实现文件、依赖/先测试配对/AC均核对通过。Ruff与架构守卫通过，主树diff检查通过。T194、T195结果PASS，真实重部署不由本地结果替代。
+
+T191–T193主树真实backend conftest组合补验：170passed/7warnings，日志/private/tmp/f059-source-vendor-integrated.log；不触发新增实际部署结论。

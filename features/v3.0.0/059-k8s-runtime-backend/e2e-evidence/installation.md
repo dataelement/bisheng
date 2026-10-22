@@ -9,3 +9,7 @@
 旧失败installer仅按自然到期、同UID及真实停止/绑定拒绝证据清理；固定旧dryRun按四次404与CAS撤销。最终执行namespace无Pod/PVC，canary计划为空。专用registry启用delete经过用户明确授权，原容器及数据保留。
 
 业务发布、应用数据/SDK与故障升级仍由T069/T070单独验收。本节不是整体交付通过；DM8仅静态，单节点不能证明跨节点。
+
+## 业务验收前临时卷池增补
+
+按冻结计划新增scratch-09..40共32个4GiB独占ext4 local PV，实际预分配128GiB；精确NS/nodeUID、原19PV/marker权限及loop前后核对不变。新卷归专用operator管理，Retain，无Helm归属，不重绑旧卷；inventory摘要与新UID见JSON。原preflight卷因既有fsGroup为0:10001/0664，按精确旧UID冻结原状，不改旧权限。该结果不证明宿主重启或跨节点恢复。

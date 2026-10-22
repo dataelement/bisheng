@@ -1,12 +1,12 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22T13:17:47.900074+00:00",
-  "validated_source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+  "validated_source_commit": "9e7e86cab55f8b26990d2e6b6374b36418d30669",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 185,
+    "l1_completed": 190,
     "tasks_total": 195,
     "e2e": "in_progress",
     "l2": "not_started"
@@ -299,6 +299,26 @@
       "evidence": "e2e-evidence/fault-upgrade.json",
       "state": "passed_one_real_cancel",
       "all_fault_acceptance": false
+    },
+    "source_vendor_fixture": {
+      "source_commit": "66e507ec810100a4ae3a6245d2ab6fcac49e9718",
+      "local_contracts_passed": 170,
+      "native_bare_python_network_none": "passed_arm64",
+      "scanned_files": 10,
+      "binary_wheel_skips": 8,
+      "source_key_negative": "blocked_by_unchanged_scanner",
+      "real_platform_source_image": "pending",
+      "integrated_backend_conftest_passed": 170
+    },
+    "profile_contract_candidate": {
+      "source_commit": "9e7e86cab55f8b26990d2e6b6374b36418d30669",
+      "local_runtime_passed": 1217,
+      "local_runtime_skipped": 13,
+      "setuid_case_skipped": false,
+      "new_schema_cases": 17,
+      "log": "/private/tmp/f059-profile-integrated-runtime.log",
+      "real_189_failure": "AttributeError.get before resource creation; dict/str shape confirmed by read-only failed operation",
+      "real_new_candidate_deployment": "pending"
     }
   },
   "not_executed": [

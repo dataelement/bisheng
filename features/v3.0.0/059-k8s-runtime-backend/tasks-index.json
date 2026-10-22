@@ -4840,8 +4840,8 @@
       ],
       "pair": "T192",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T192",
@@ -4864,8 +4864,8 @@
       ],
       "pair": "T191",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T193",
@@ -4888,8 +4888,8 @@
       ],
       "pair": null,
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T194",
@@ -4897,7 +4897,8 @@
       "kind": "测试",
       "title": "真实manifest引用与冻结profile分离",
       "files": [
-        "src/runtime-manager/tests/test_kubernetes_executor.py"
+        "src/runtime-manager/tests/test_kubernetes_executor.py",
+        "src/runtime-manager/tests/test_oci_assembler.py"
       ],
       "logic": "使用真实BundleDelivery.model_dump的显式profile字符串和已解析payload.profile，覆盖prepare及运行resolved_delivery；错误类型在资源调用前明确拒绝，不被宽松桩掩盖。",
       "acs": [
@@ -4912,8 +4913,8 @@
       ],
       "pair": "T195",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T195",
@@ -4936,8 +4937,8 @@
       ],
       "pair": "T194",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

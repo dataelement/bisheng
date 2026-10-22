@@ -749,5 +749,211 @@
     ],
     "restore_without_restart_count": 3,
     "state_sha256": "00edbe11b84d64f19839096e0c45e334cd19e01873129c53a33f988778977c26"
+  },
+  "scratch_pool_extension": {
+    "private_inventory": "/opt/e2e-f059/operator-scratch-09-40/inventory.json",
+    "inventory_sha256": "c881baaa90ba9bd0eca9b88079adf11c3ba2142620bbfd41a19da29b5d1e7f1d",
+    "plan_sha256": "af8eeacc1aa8af99790ab51bd14aad6127cf9be748e1eae24f0ef41f6edcfaac",
+    "new_pv_count": 32,
+    "physical_allocation_bytes": 137438953472,
+    "original_19_unchanged": true,
+    "existing_loops_unchanged": true,
+    "new_helm_managed": false,
+    "policy": "Retain; operator inventory; no old PV rebind or data cleanup",
+    "new_uid_mounts": [
+      {
+        "name": "e2e-f059-scratch-09",
+        "uid": "f4b878c2-6e68-4508-a9f9-a72e404ef7d6",
+        "loop": "/dev/loop19",
+        "backing": "/opt/e2e-f059/volume-files/scratch-09.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-10",
+        "uid": "6e0e1733-7f1c-48e4-b7c6-ecfc23ea64f5",
+        "loop": "/dev/loop20",
+        "backing": "/opt/e2e-f059/volume-files/scratch-10.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-11",
+        "uid": "3b5e4f36-3cc4-49b6-89d6-c21a78234dce",
+        "loop": "/dev/loop21",
+        "backing": "/opt/e2e-f059/volume-files/scratch-11.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-12",
+        "uid": "50ddec49-247b-445a-a3dc-447a6535fb2e",
+        "loop": "/dev/loop22",
+        "backing": "/opt/e2e-f059/volume-files/scratch-12.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-13",
+        "uid": "ea5a67e3-20ef-4a17-9d0b-55f2cc818967",
+        "loop": "/dev/loop23",
+        "backing": "/opt/e2e-f059/volume-files/scratch-13.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-14",
+        "uid": "c134da1e-7d73-4148-a2d5-479574a21f5b",
+        "loop": "/dev/loop24",
+        "backing": "/opt/e2e-f059/volume-files/scratch-14.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-15",
+        "uid": "71d6447e-dc10-4e35-b6c2-d8ea2c2f7596",
+        "loop": "/dev/loop25",
+        "backing": "/opt/e2e-f059/volume-files/scratch-15.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-16",
+        "uid": "272b317e-36c4-424d-a769-ba2f68ca2f3c",
+        "loop": "/dev/loop26",
+        "backing": "/opt/e2e-f059/volume-files/scratch-16.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-17",
+        "uid": "13a5b23f-9788-4b5c-b60a-4dacba3a469d",
+        "loop": "/dev/loop27",
+        "backing": "/opt/e2e-f059/volume-files/scratch-17.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-18",
+        "uid": "14e5922b-6b3c-4d94-aa02-27e5e1b2746b",
+        "loop": "/dev/loop28",
+        "backing": "/opt/e2e-f059/volume-files/scratch-18.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-19",
+        "uid": "889fd3ae-66b5-4c55-b85e-e22b1eee5bbd",
+        "loop": "/dev/loop29",
+        "backing": "/opt/e2e-f059/volume-files/scratch-19.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-20",
+        "uid": "802ef23f-dba7-45d5-908a-dcd52124aadd",
+        "loop": "/dev/loop30",
+        "backing": "/opt/e2e-f059/volume-files/scratch-20.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-21",
+        "uid": "2117459b-8f46-48dd-9e07-fd4ea1c42757",
+        "loop": "/dev/loop31",
+        "backing": "/opt/e2e-f059/volume-files/scratch-21.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-22",
+        "uid": "73a8463f-9242-4e53-837f-c70c608608ec",
+        "loop": "/dev/loop32",
+        "backing": "/opt/e2e-f059/volume-files/scratch-22.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-23",
+        "uid": "df4ffc06-1334-42d1-8abc-7d39d62278b1",
+        "loop": "/dev/loop33",
+        "backing": "/opt/e2e-f059/volume-files/scratch-23.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-24",
+        "uid": "369e60f0-e7c2-48c2-a906-8879aadf6eec",
+        "loop": "/dev/loop34",
+        "backing": "/opt/e2e-f059/volume-files/scratch-24.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-25",
+        "uid": "e4628b2e-e30e-40a0-b88b-2a6de63f34a7",
+        "loop": "/dev/loop35",
+        "backing": "/opt/e2e-f059/volume-files/scratch-25.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-26",
+        "uid": "4761adc4-ed7e-46b7-a6a9-e6abfdb1e3c1",
+        "loop": "/dev/loop36",
+        "backing": "/opt/e2e-f059/volume-files/scratch-26.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-27",
+        "uid": "31e647c9-7786-406a-ad36-75e736e9deda",
+        "loop": "/dev/loop37",
+        "backing": "/opt/e2e-f059/volume-files/scratch-27.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-28",
+        "uid": "fd90d19f-2e64-479f-9d87-58dceee92be9",
+        "loop": "/dev/loop38",
+        "backing": "/opt/e2e-f059/volume-files/scratch-28.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-29",
+        "uid": "7e6fb7c3-048d-4446-a3d2-5e2ca79b22ca",
+        "loop": "/dev/loop39",
+        "backing": "/opt/e2e-f059/volume-files/scratch-29.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-30",
+        "uid": "6e7acf93-c912-4e26-a5f5-efe656b9a0b6",
+        "loop": "/dev/loop40",
+        "backing": "/opt/e2e-f059/volume-files/scratch-30.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-31",
+        "uid": "59d9afec-40d5-47a8-bc6d-e04e67089fdb",
+        "loop": "/dev/loop41",
+        "backing": "/opt/e2e-f059/volume-files/scratch-31.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-32",
+        "uid": "37149c46-0e1f-4233-aee0-2ab1ced7ed59",
+        "loop": "/dev/loop42",
+        "backing": "/opt/e2e-f059/volume-files/scratch-32.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-33",
+        "uid": "4bfa9d42-0988-42ff-abf2-7e9e3c02a56e",
+        "loop": "/dev/loop43",
+        "backing": "/opt/e2e-f059/volume-files/scratch-33.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-34",
+        "uid": "77d890d1-18c0-4fc5-a521-461f24fade74",
+        "loop": "/dev/loop44",
+        "backing": "/opt/e2e-f059/volume-files/scratch-34.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-35",
+        "uid": "32952466-5479-460f-af3c-3b4c333854de",
+        "loop": "/dev/loop45",
+        "backing": "/opt/e2e-f059/volume-files/scratch-35.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-36",
+        "uid": "3e2a46a0-c879-418e-8489-83b83e0ecb3b",
+        "loop": "/dev/loop46",
+        "backing": "/opt/e2e-f059/volume-files/scratch-36.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-37",
+        "uid": "bb2b8023-5b0c-4523-8685-4d8347375280",
+        "loop": "/dev/loop47",
+        "backing": "/opt/e2e-f059/volume-files/scratch-37.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-38",
+        "uid": "7a1ddd0a-a997-4ae2-9000-59c83aefb6a0",
+        "loop": "/dev/loop48",
+        "backing": "/opt/e2e-f059/volume-files/scratch-38.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-39",
+        "uid": "2b3a66ba-0282-4341-907b-6aa44c5ab070",
+        "loop": "/dev/loop49",
+        "backing": "/opt/e2e-f059/volume-files/scratch-39.ext4"
+      },
+      {
+        "name": "e2e-f059-scratch-40",
+        "uid": "764102e7-ef70-4d39-902f-8a0dc585e72c",
+        "loop": "/dev/loop50",
+        "backing": "/opt/e2e-f059/volume-files/scratch-40.ext4"
+      }
+    ],
+    "boundary": "actual new PV allocation; not a host-reboot or cross-node recovery proof"
   }
 }

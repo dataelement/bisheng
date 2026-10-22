@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；195 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 185 / 195 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 190 / 195 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1508,7 +1508,7 @@
   **依赖:** T189
   **配对:** T189
 
-- [ ] **T191** — 离线源码验收依赖物料合同
+- [x] **T191** — 离线源码验收依赖物料合同
   **类型**：测试
   **文件**：`scripts/fixtures/f059/test_bootstrap.py`
   **逻辑/验收**：只接收显式清单和逐wheel SHA的纯Python物料；拒绝缺依赖、篡改、native wheel、路径穿越、覆盖与pth；真实SDK断言不变。
@@ -1516,7 +1516,7 @@
   **依赖:** T184
   **配对:** T192
 
-- [ ] **T192** — 源码验收包显式离线vendor物料
+- [x] **T192** — 源码验收包显式离线vendor物料
   **类型**：实现
   **文件**：`scripts/bootstrap_f059_acceptance.py`
   **逻辑/验收**：显式source-wheelhouse从固定材料清单校验并保留真实SDK/httpx闭包及许可，只向source-image包加入_vendor与启动路径引导；不读取开发venv、不pip、不联网，不改生产模板或base。
@@ -1524,22 +1524,22 @@
   **依赖:** T191
   **配对:** T191
 
-- [ ] **T193** — 离线源码验收前置说明
+- [x] **T193** — 离线源码验收前置说明
   **类型**：基础设施
   **文件**：`scripts/fixtures/f059/README.md`
   **逻辑/验收**：区分Docker source-image裸base与K8s profile；记录离线vendor材料准备和许可，完整镜像需显式提供digest；说明本地材料烟测不代表平台验收。
   **覆盖 AC:** AC-04、AC-24、AC-36、AC-46、AC-55
   **依赖:** T192
 
-- [ ] **T194** — 真实manifest引用与冻结profile分离
+- [x] **T194** — 真实manifest引用与冻结profile分离
   **类型**：测试
-  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
+  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`、`src/runtime-manager/tests/test_oci_assembler.py`
   **逻辑/验收**：使用真实BundleDelivery.model_dump的显式profile字符串和已解析payload.profile，覆盖prepare及运行resolved_delivery；错误类型在资源调用前明确拒绝，不被宽松桩掩盖。
   **覆盖 AC:** AC-04、AC-24、AC-25、AC-36、AC-55
   **依赖:** T186
   **配对:** T195
 
-- [ ] **T195** — K8s计划仅消费已解析profile对象
+- [x] **T195** — K8s计划仅消费已解析profile对象
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
   **逻辑/验收**：prepare只取已解析payload.profile，运行取resolved_delivery.profile；manifest字符串仅作为引用，不当作dict、不默默fallback错误对象，保持平台冻结/范围校验。
@@ -1636,3 +1636,7 @@ T068完成：候选54b3ea2c1/Helm10第五实际探测16项+正常清理+真实�
 T191–T193现场夹具补登记：109第四source-image真实失败16124/precheck_probe/startup_exited；该离线路径的空requirements与顶层SDK导入不自足，补显式可校验vendor物料，不更改生产模板、base或SDK正向断言。完整镜像需显式加入场景。
 
 T194/T195：189 首个 bundle 的真实payload类型为payload.profile=dict、delivery.profile=str、resolved_delivery=None；只读复算在_plan:195重现AttributeError.get，未创建资源。修复解析对象与manifest引用混用，失败记录保留。
+
+T191–T193：66e507ec8合入，170合同及裸Python禁网原生SDK/附件/SQLite/WS/certifi/TLS配对通过。依赖保持原始8wheel字节；scanner实际10文件扫描、8wheel按binary跳过、0命中；不宣称依赖源码已扫描，原展开模式3个假阳性证据保留。109/189真实source-image仍待复验。T194补OCI旧夹具缺失delivery字段，第二文件owner明确转给A。
+
+T194/T195通过54488cdd4合入候选9e7e86cab；主树全runtime1217passed/13skipped，未跳过setuid参数；A权限上下文的04755→0755限制不代表宿主文件系统全局行为。170夹具/harness在真实backend conftest集成通过。190/195完成，5项真实交付/L2仍待；新候选原生及189真实重部署继续。

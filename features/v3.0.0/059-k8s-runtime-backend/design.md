@@ -714,3 +714,9 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 公开K8s诊断复用executor实时assess结果；installer原始报告不需要ready字段。报告年龄86400秒、描述摘要及所有必需检查继续校验，身份变更和投射刷新不依赖进程重启。
 
 Docker受信数据helper仅挂载一个应用数据库目录，该目录需允许SQLite创建和锁定WAL侧文件；业务读连接仍使用mode=ro，拒绝SQL写。只读rootfs、非root、无网络、有界资源与owner授权保留。不能用immutable忽略并发WAL，也不代替应用强制checkpoint。[SQLite官方WAL只读条件](https://sqlite.org/wal.html#read_only_databases)。189 K8s数据helper已有相同卷内侧文件需求，本次不扩大其API权限。
+
+### 现场冻结 profile 对象与验收依赖物料（2026-10-22）
+
+K8s prepare 的 `payload.delivery.profile` 是 manifest 引用字符串，实际解析对象只从 `payload.profile` 读取；后续运行只从 `payload.resolved_delivery.profile` 读取冻结对象。两阶段不能互相 fallback 掩盖错误输入；非法 delivery/profile 类型在资源访问前以固定错误拒绝。完整镜像和 purge 可以不带应用 profile，平台/范围围栏继续校验。189首个指定profile实际prepare在旧实现中提前失败，T194/T195已本地修复；新候选真实重部署待验收。
+
+Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。验收工具接受显式、固定版本和逐wheel摘要的8个纯Python依赖，SDK字节必须与仓库产物一致，保留许可，以原始wheel打入源码包并zipimport运行；不改产品模板、SDK或扫描器。实际源码扫描与依赖二进制跳过分别记录，不能将wheel跳过表述成依赖源码已扫描。完整镜像仍需两个真实digest显式加入场景。此为验收前置修正，不增加产品发布模式。

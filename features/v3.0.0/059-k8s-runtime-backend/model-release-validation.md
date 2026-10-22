@@ -9,3 +9,7 @@
 Go公网metadata等待、首轮取消及官方材料恢复分别保留，未计为源代码失败或伪造成功。amd64首次classic下载构建由操作者停止，最终使用同源已通过native脚本的镜像。未删除无关镜像或修改daemon代理。
 
 本地config ID不是仓库manifest digest；部署控制镜像另记录LAN固定digest。没有授权新的公共push/tag/DockerHub发行，正式CI未执行；单节点结果不证明跨节点恢复。
+
+## 后续候选 9e7e86cab
+
+189真实业务暴露profile引用与对象混用，已修复并完整runtime1217/13skip通过。前述双架构原生证据仍准确对应54b，不能转标为新候选；9e7同SHA原生重建及烟测正在补验，正式公共CI仍未授权。
