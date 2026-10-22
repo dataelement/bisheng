@@ -1458,3 +1458,53 @@ def test_process_flag_does_not_substitute_for_this_pod_binding_refusal(monkeypat
     with pytest.raises(tool.ProbeError, match="binding_delete_fence_unconfirmed"):
         verifier.recover_expired()
     assert not verifier.api.released
+
+
+@pytest.mark.parametrize(
+    "resource,verb,allowed",
+    [
+        ("pods/exec", "create", False),
+        ("pods/status", "patch", False),
+        ("pods/attach", "create", False),
+        ("pods/portforward", "create", False),
+        ("pods/log", "get", True),
+        ("pods", "create", True),
+        ("pods", "get", True),
+        ("deployments.apps", "create", False),
+    ],
+)
+def test_rbac_can_i_distinguishes_subresources_from_named_parent_resources(monkeypatch, resource, verb, allowed):
+    tool = load_installer()
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append((args, kwargs))
+        # `pods/exec` is TYPE/NAME to kubectl can-i, and therefore falsely
+        # observes allowed parent-pod creation rather than the exec subresource.
+        if any(value.startswith("pods/") for value in args):
+            result = True
+        elif resource == "pods/log":
+            result = "--subresource=log" in args and verb == "get"
+        else:
+            result = resource == "pods" and verb in {"create", "get"}
+        return subprocess.CompletedProcess(args, 0 if result else 1, "yes\n" if result else "no\n", "")
+
+    monkeypatch.setattr(tool.subprocess, "run", run)
+    api = tool.Kubectl(
+        context="test",
+        control_namespace="runtime-system",
+        execution_namespace="runtime-apps",
+        manager_account="runtime-manager",
+    )
+    assert api.can(verb, resource, "runtime-apps") is allowed
+    command = calls[0][0]
+    index = command.index("can-i")
+    base, _, subresource = resource.partition("/")
+    assert command[index + 1 : index + 3] == [verb, base]
+    assert (
+        ("--subresource=" + subresource in command)
+        if subresource
+        else not any(value.startswith("--subresource=") for value in command)
+    )
+    assert command[-2:] == ["-n", "runtime-apps"]
+    assert "system:serviceaccount:runtime-system:runtime-manager" in command
