@@ -5424,6 +5424,108 @@
       "review": "PASS"
     },
     {
+      "id": "T215",
+      "wave": 8,
+      "kind": "测试",
+      "title": "实际固定容器日志与诊断合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_client.py",
+        "src/runtime-manager/tests/test_k8s_diagnostic_contract.py"
+      ],
+      "logic": "真实KubernetesClient/MockTransport接_phase：固定helper日志可读，保留preparation_phase_failed与脱敏tail；UID/scope不符不读日志，未知容器仍拒绝。",
+      "acs": [
+        "AC-13",
+        "AC-15",
+        "AC-24",
+        "AC-47",
+        "AC-48",
+        "AC-55"
+      ],
+      "depends": [
+        "T214"
+      ],
+      "pair": "T216",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T216",
+      "wave": 8,
+      "kind": "实现",
+      "title": "补齐固定helper日志名单",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_client.py"
+      ],
+      "logic": "只增加模板实际使用的storage-guard/schema-init/assembler；不吞ValueError、不放任意容器或减弱UID。",
+      "acs": [
+        "AC-13",
+        "AC-15",
+        "AC-24",
+        "AC-47",
+        "AC-48",
+        "AC-55"
+      ],
+      "depends": [
+        "T215"
+      ],
+      "pair": "T215",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T217",
+      "wave": 8,
+      "kind": "测试",
+      "title": "材料根路径反向代理合同",
+      "files": [
+        "src/backend/test/app_runtime/test_k8s_material_ingress_contract.py"
+      ],
+      "logic": "精确prefix转发原始URI/query/chunk body；无凭据仍401，签名拒绝配对，禁止宽internal/workspace别名。",
+      "acs": [
+        "AC-13",
+        "AC-15",
+        "AC-24",
+        "AC-47",
+        "AC-48",
+        "AC-55"
+      ],
+      "depends": [
+        "T216"
+      ],
+      "pair": "T218",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T218",
+      "wave": 8,
+      "kind": "实现",
+      "title": "材料根路径nginx与安装说明",
+      "files": [
+        "docker/nginx/conf.d/default.conf",
+        "deploy/kubernetes/app-runtime/README.md"
+      ],
+      "logic": "仅material-access前缀到backend，16MiB、streaming/超时及原始路径保持；platform.origin必须可达此独立根路径，backend验签不变。",
+      "acs": [
+        "AC-13",
+        "AC-15",
+        "AC-24",
+        "AC-47",
+        "AC-48",
+        "AC-55"
+      ],
+      "depends": [
+        "T217"
+      ],
+      "pair": "T217",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

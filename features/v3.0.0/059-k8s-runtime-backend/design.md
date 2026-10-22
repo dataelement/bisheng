@@ -205,6 +205,8 @@ flowchart LR
 
 Pod的downward UID字段显式声明core/v1，避免K8s补默认值改变冻结projection；非v1、其他字段路径或额外字段仍严格拒绝。准入日志只固定8个安全原因或admission_refused，不输出请求、环境、异常正文/类型名或UID；API响应合同保持。历史189403未取到原reason，不将本地默认化复现当现场结论。
 
+实际受管容器诊断固定名单包含storage-guard、schema-init、assembler，拒绝任意容器名称；否则_prepare失败可能被日志读取参数ValueError遮蔽。platform.origin的反向代理必须原样转发 `/internal/app-runtime/v2/material-access/` 根前缀（与 `/api/v1/internal/app-runtime/v2` 控制面前缀不同），不rewrite path/query。材料分块16MiB、关闭请求/响应buffering、65s超时，后端继续验证workload签名/票据；不得笼统暴露所有/internal。189无凭据请求曾实得origin404/backend401，专用nginx补路由且reload生效后origin401；这仅证明入口和拒绝，不替代有效材料传输。
+
 **终态来源约束**：独立验证器新增 `UPDATE pods/status` 规则，只覆盖本安装专用执行命名空间。使用 API server 提供的 `AdmissionReview.request.userInfo` 与 old/new Object：只有 `system:nodes` 中、用户名严格等于 `system:node:<spec.nodeName>` 的绑定节点身份可引入终态或变更终态容器记录；拒绝其它控制器合成终态，拒绝终态恢复活动。普通调度条件更新不需要 backend 或资源计划查询。manager 的 Role 不含 `pods/status`，不能冒充 kubelet；创建 Pod 时拒绝预填终态，冻结 `status_policy_revision`，不领养基线启用前的 Pod。规则 `sideEffects: None`、`failurePolicy: Fail`，不写停止事实、不调用 backend，因此不形成 status→backend→删除的循环。该设计信任受认证 kubelet，不声称防御被接管的节点或集群管理员。
 
 停止事实在平台保存 `evidence_kind`、resource UID、nodeName、删除时间、API resourceVersion、status 摘要、policy revision 和 observed_at。仅当它们与当前资源/归属匹配，backend 才允许释放；finalizer 保留失败可重试，已确认停止的旧 UID 不因重复通知重新占用。对象一旦强删且没有已持久确认的证据，仍按 unknown。资源账本中的收尾计划保留到 finalizer、Service、Secret 和 scratch 清理确认，不因业务操作先进入终态就从 admission 的只读计划中消失；它只授权同 UID 的停止/删除收尾，不再授权创建或重新取得生产归属。

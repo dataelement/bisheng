@@ -101,5 +101,65 @@
     "resource_count": 0,
     "resource_refs": [],
     "evidence_sha256": "959db12479e9621a4a092105d0474275155f1d3a8695548b0dc758d5b40a103d"
+  },
+  "controller_idle_green_189": {
+    "source_commit": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a",
+    "evidence": {
+      "descriptor_uid_equal": true,
+      "descriptor_data_equal": true,
+      "after": {
+        "node": {
+          "status": "ready",
+          "lease_until": "2026-10-22T14:49:00",
+          "controller_epoch": 4,
+          "node_id": "e2e-f059-node",
+          "controller_holder": "46357afa-438b-440c-96c0-3a7004d0ed87"
+        },
+        "resource_refs": [],
+        "operation": {
+          "status": "failed",
+          "kind": "prepare",
+          "owner_epoch": 1,
+          "cleanup_status": "complete",
+          "generation": 1,
+          "fact_sequence": 1,
+          "app_id": "2bde519a30f946a091f5ae4aa5cf2248",
+          "deadline": "2026-10-22T14:34:12",
+          "operation_id": "d0b665da84014b2fab43ef60f1b282b6",
+          "stage": "failed"
+        },
+        "observed_at": 1792681277.6602888,
+        "resource_count": 0
+      },
+      "holder_same": true,
+      "epoch_after": 4,
+      "pod_and_container_unchanged": true,
+      "before": {
+        "node": {
+          "status": "ready",
+          "lease_until": "2026-10-22T14:47:34",
+          "controller_epoch": 3,
+          "node_id": "e2e-f059-node",
+          "controller_holder": "46357afa-438b-440c-96c0-3a7004d0ed87"
+        },
+        "resource_refs": [],
+        "operation": {
+          "status": "failed",
+          "kind": "prepare",
+          "owner_epoch": 1,
+          "cleanup_status": "complete",
+          "generation": 1,
+          "fact_sequence": 1,
+          "app_id": "2bde519a30f946a091f5ae4aa5cf2248",
+          "deadline": "2026-10-22T14:34:12",
+          "operation_id": "d0b665da84014b2fab43ef60f1b282b6",
+          "stage": "failed"
+        },
+        "observed_at": 1792680507.6822045,
+        "resource_count": 0
+      },
+      "epoch_before": 3
+    },
+    "boundary": "Same PID/Pod/Container controller recovery observed. Distinct from business publication success or old writer stop."
   }
 }

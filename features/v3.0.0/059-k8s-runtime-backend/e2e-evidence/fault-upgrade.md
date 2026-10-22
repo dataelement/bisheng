@@ -23,3 +23,7 @@
 v1实际发布、独立审批12 executed，generation1/deploy completed与cleanup complete后，owner两次PATCH写入随机哨兵与NULL。每次写前非owner16162、跨租户16101且rows未变；两行及其SHA/随机值SHA已冻结于私有0600证据，完整ID见JSON。旧测试工具误把终态写成approved，曾在任何数据写前拒绝；修正后只对原成功发布接续两行PATCH，没有重复发布。v2失败和恢复仍待执行，不能把准备或本地SQLite repro计为平台故障通过。
 
 189新r2先准备未到创建资源阶段，controller空闲租约已过期导致renew409与terminal fact失败；前端部署最终16227/operation_timeout，但manager op仍running/admitted/cleanup pending。未修改租约、无Pod/PVC；登记T198/T199后正常修复。旧r2 journal与失败记录保留，不原地抹去重跑。
+
+## 189 控制器自然空闲续租复验
+
+e405候选同一Pod/容器/holder经历自然租约过期，精确renew409后fresh claim/renew成功，epoch3→4，descriptor未变。旧已到期操作进入failed/cleanupcomplete且无资源；这不是Pod停止证明。真实业务之后的独立准备失败仍保留在platform证据。

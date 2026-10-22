@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；214 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 209 / 214 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；218 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 213 / 218 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1697,6 +1697,38 @@
   **依赖:** T209
   **配对:** T209
 
+- [x] **T215** — 实际固定容器日志与诊断合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_client.py`、`src/runtime-manager/tests/test_k8s_diagnostic_contract.py`
+  **逻辑/验收**：真实KubernetesClient/MockTransport接_phase：固定helper日志可读，保留preparation_phase_failed与脱敏tail；UID/scope不符不读日志，未知容器仍拒绝。
+  **覆盖 AC:** AC-13、AC-15、AC-24、AC-47、AC-48、AC-55
+  **依赖:** T214
+  **配对:** T216
+
+- [x] **T216** — 补齐固定helper日志名单
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_client.py`
+  **逻辑/验收**：只增加模板实际使用的storage-guard/schema-init/assembler；不吞ValueError、不放任意容器或减弱UID。
+  **覆盖 AC:** AC-13、AC-15、AC-24、AC-47、AC-48、AC-55
+  **依赖:** T215
+  **配对:** T215
+
+- [x] **T217** — 材料根路径反向代理合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_k8s_material_ingress_contract.py`
+  **逻辑/验收**：精确prefix转发原始URI/query/chunk body；无凭据仍401，签名拒绝配对，禁止宽internal/workspace别名。
+  **覆盖 AC:** AC-13、AC-15、AC-24、AC-47、AC-48、AC-55
+  **依赖:** T216
+  **配对:** T218
+
+- [x] **T218** — 材料根路径nginx与安装说明
+  **类型**：实现
+  **文件**：`docker/nginx/conf.d/default.conf`、`deploy/kubernetes/app-runtime/README.md`
+  **逻辑/验收**：仅material-access前缀到backend，16MiB、streaming/超时及原始路径保持；platform.origin必须可达此独立根路径，backend验签不变。
+  **覆盖 AC:** AC-13、AC-15、AC-24、AC-47、AC-48、AC-55
+  **依赖:** T217
+  **配对:** T217
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1806,3 +1838,7 @@ T200/T201/T202完成：新增37真实Service/SQLite合同先红26/11→全绿，
 2026-10-22 T203–T214现场收尾登记：用户优先K8s部署，暂停新增arm验证。真实189 r4 POST403后无UID意图永久unknown，新增单次创建事务及独立not_created路径；明确拒绝和未知响应分开，旧r4无持久receipt保持隔离/PVC，不追认或直接改SQL。模板fieldRef默认差异已本地精确复现，历史403原因未恢复；新安全枚举用于后续现场定位。
 
 T203–T214 L1合流：runtime1328passed/13skip、backend1723passed/18skip；另4个真实双Session identity-map交错主树通过（旧逻辑内存插件对照4fail）。96测试任务、214总项、209完成；仅五真实交付/审查门pending。amd64709821ecb原生构建及bundle/SQLite烟测通过，不替代K8s平台闭环；本轮不新增arm测试/公开推送/tag。旧r4无creation证明保持held，其PVC不删。
+
+2026-10-23 T215–T218：189 r5已真实创建/启动准备Pod并按同UID/kubelet终态正常清理，_diagnostic日志名单遗漏遮蔽原失败；补245相关回归。进一步无凭据对比证实TLS origin根material路径404而backend401，产品nginx也缺转发；仅限定该prefix补接线，完整签名/材料业务复验仍pending。
+
+T217/T218主树材料相关80passed/1skip（本机无nginx代理集成）；189原生amd64完整产品nginx配置语法通过，首次去除CHOWN导致tmpfs目录初始化失败记录保留，最小CHOWN复验通过。现场TLS精确根路径新连接401/APIenv200，不替代signed transfer。213/218，五交付门仍pending。

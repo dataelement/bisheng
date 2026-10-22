@@ -433,5 +433,206 @@
     "report_preserved": true,
     "no_public_release": true,
     "live_business": "blocked by expired controller lease; T198/T199 pending"
+  },
+  "interim_amd64_709_d86": {
+    "full_native": {
+      "schema": "f059-native-image-verification/v1",
+      "finished_at": "2026-10-22T15:42:56.847233+00:00",
+      "source_revision": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+      "platform": "linux/amd64",
+      "engine": {
+        "OSType": "linux",
+        "Architecture": "x86_64",
+        "ServerVersion": "24.0.9",
+        "NCPU": 8,
+        "MemTotal": 67558805504
+      },
+      "tools_image_id": "sha256:e0774ebe198a660f05b03dbafdbe7c806e1dbee8ac7dbff38f8a1b9865a0442a",
+      "build_exit": 0,
+      "isolated_smoke_exit": 0,
+      "bundle_smoke_exit": 0,
+      "images": {
+        "app-node": {
+          "image": null,
+          "image_id": "sha256:a6961a25eb82d295d39905fa8856d5f5b0ffb0642c3e057fed87a1e5c3d61f66",
+          "native_smoke": true,
+          "platform": "linux/amd64",
+          "tag": "e2e-f059/bisheng-app-node:e2e-f059-native-20261022-709821ecb-amd64",
+          "tools": {}
+        },
+        "app-node-preparer": {
+          "image": null,
+          "image_id": "sha256:acb84d03f9496b98fe666a1cd326694d2aded1f40e82b026e190c152683e8db3",
+          "native_smoke": true,
+          "platform": "linux/amd64",
+          "tag": "e2e-f059/bisheng-app-node-preparer:e2e-f059-native-20261022-709821ecb-amd64",
+          "tools": {}
+        },
+        "app-proxy": {
+          "image": null,
+          "image_id": "sha256:f2a6835d076fbdaf10a06d64bbb5eb431bffa614564c34aebe074889b22c3e1a",
+          "native_smoke": true,
+          "platform": "linux/amd64",
+          "tag": "e2e-f059/bisheng-app-proxy:e2e-f059-native-20261022-709821ecb-amd64",
+          "tools": {}
+        },
+        "app-python": {
+          "image": null,
+          "image_id": "sha256:63410cb4c796b935fb8fbc3d8f9853fd477e800dcbe910e77eb3aa7e5dca9dec",
+          "native_smoke": true,
+          "platform": "linux/amd64",
+          "tag": "e2e-f059/bisheng-app-python:e2e-f059-native-20261022-709821ecb-amd64",
+          "tools": {}
+        },
+        "app-python-preparer": {
+          "image": null,
+          "image_id": "sha256:a3111cc39b6be9e3736511fe4e9a0401528d712947791c63eb294275e5d0eeab",
+          "native_smoke": true,
+          "platform": "linux/amd64",
+          "tag": "e2e-f059/bisheng-app-python-preparer:e2e-f059-native-20261022-709821ecb-amd64",
+          "tools": {}
+        },
+        "app-static": {
+          "image": null,
+          "image_id": "sha256:04023626cb44e1d27970df8694fdde6aa1774fe4999a5a3e72ccf5430bf8c1da",
+          "native_smoke": true,
+          "platform": "linux/amd64",
+          "tag": "e2e-f059/bisheng-app-static:e2e-f059-native-20261022-709821ecb-amd64",
+          "tools": {}
+        },
+        "runtime-assembler": {
+          "image": null,
+          "image_id": "sha256:47989dfc2fec98b142e1440773bd6ce31fff5cd76832a334f3808d321492d7bd",
+          "native_smoke": true,
+          "platform": "linux/amd64",
+          "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261022-709821ecb-amd64",
+          "tools": {
+            "crane": "v0.22.1",
+            "go-builder": "1.27.3",
+            "licenses": "/usr/share/licenses/crane",
+            "python-abi": "3.11",
+            "python-packages": "/usr/share/licenses/bisheng/python-packages.json",
+            "runtime-package": "3.0.0"
+          }
+        },
+        "runtime-helper": {
+          "image": null,
+          "image_id": "sha256:eb81d65c6de6681f9a2b1f350342b40c3505543d5395838be46f9d46594d8f73",
+          "native_smoke": true,
+          "platform": "linux/amd64",
+          "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261022-709821ecb-amd64",
+          "tools": {
+            "python-abi": "3.11",
+            "python-packages": "/usr/share/licenses/bisheng/python-packages.json",
+            "runtime-package": "3.0.0"
+          }
+        },
+        "runtime-manager": {
+          "image": null,
+          "image_id": "sha256:73853b58bf9fcd33b6945b41fd6c612646d39ada57cabfacb6ce751f14ee5184",
+          "native_smoke": true,
+          "platform": "linux/amd64",
+          "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261022-709821ecb-amd64",
+          "tools": {}
+        }
+      },
+      "bundle": {
+        "platform": "linux/amd64",
+        "checks": [
+          {
+            "language": "python3.11",
+            "offline": true,
+            "code_update": true,
+            "dependency_reuse": true,
+            "runtime_only_sentinel_persisted": true,
+            "unchanged_data_bind_and_identity": {
+              "source": "/opt/e2e-f059/native-709821ecb/smoke-data/apps/e2e-f086-ff9f430b99ad-python311/db",
+              "directory_device": 2050,
+              "directory_inode": 279639577,
+              "database_device": 2050,
+              "database_inode": 279639583
+            },
+            "verified_sqlite_backups": [
+              {
+                "artifact_id": "064406a63e0970966fe5b3d812848eee3e7e599182308989a95ae3c0981e69ab",
+                "downloaded_sqlite_verified": true,
+                "sentinel_sha256": "8251e4768205f42357cea76d0d7332f1a83ff57cdacd3ddd0eedd68219f44edb"
+              },
+              {
+                "artifact_id": "064406a63e0970966fe5b3d812848eee3e7e599182308989a95ae3c0981e69ab",
+                "downloaded_sqlite_verified": true,
+                "sentinel_sha256": "8251e4768205f42357cea76d0d7332f1a83ff57cdacd3ddd0eedd68219f44edb"
+              }
+            ]
+          },
+          {
+            "language": "node20",
+            "offline": true,
+            "code_update": true,
+            "dependency_reuse": true
+          },
+          {
+            "language": "static",
+            "offline": true,
+            "code_update": true,
+            "dependency_reuse": true
+          },
+          {
+            "language": "static",
+            "offline": true,
+            "install_hook": true,
+            "frontend_build": true,
+            "source_change_invalidates_dependency": true
+          },
+          {
+            "language": "python3.11",
+            "offline": true,
+            "local_native_wheel": true,
+            "source_change_invalidates_dependency": true
+          }
+        ]
+      },
+      "non_test_container_count": 57,
+      "unrelated_containers_unchanged": true,
+      "network_inventory_unchanged": true,
+      "published": false,
+      "boundary": "Real native local images, isolated resolver checks and Docker Engine integration only; no registry manifest digests, CI public release, platform authorization/approval E2E, database snapshot restore or cross-node recovery claimed."
+    },
+    "manager_diagnostic_only": {
+      "schema": "f059-native-manager/v1",
+      "source_revision": "d86e66a2db83a26f0faca1993b914be121ef3259",
+      "platform": "linux/amd64",
+      "build_exit": 0,
+      "import_smoke_exit": 0,
+      "manager_image_id": "sha256:53106f7d94d69d1d7a9d99fd0955b5217f50197ab10bc12151cbeee04596729e",
+      "public_push": false,
+      "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+      "changed_runtime_files": [
+        "runtime_manager/k8s_client.py"
+      ],
+      "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim."
+    },
+    "private_189_runtime": {
+      "descriptor_uid_unchanged": true,
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:280722d842083948fe4a94b7aaf29e00a8806de9f7bae3e41ebdb7a5d1a864bd",
+      "helm_upgrade_completed": true,
+      "source_revision": "d86e66a2db83a26f0faca1993b914be121ef3259",
+      "descriptor_data_unchanged": true,
+      "helper_and_profile_images_unchanged": true,
+      "app_proxy_unchanged": true
+    },
+    "checksums": {
+      "native-709.json": "8e12131b119f0ccc2509cfc5c5cff8096026376919e233a2f46c5cb5d7fa1ac7",
+      "native-d86.json": "940ed5f196855ab1d551cce7a1235668869f286a8d18486b238098f4bc996c55",
+      "helm-14.json": "ad0c87c559d14d38f2e042bde7ed1f0e3285ba9651fc5c4bff3b7e8c837ca6b2"
+    },
+    "arm_new_testing": "paused_by_user",
+    "formal_ci": "not executed"
+  },
+  "arm_e405_unresolved": {
+    "source_revision": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a",
+    "nine_images_build_smoke_bundle_passed": true,
+    "additional_wal": "9 passed, committed-wal-with-shm timeout at unchanged20s; unresolved, not rerun in current priority",
+    "prior_0e_wal_green_not_reused_as_e405_result": true
   }
 }

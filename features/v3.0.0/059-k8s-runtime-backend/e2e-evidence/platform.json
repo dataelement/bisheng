@@ -1,0 +1,110 @@
+{
+  "schema": "f059-platform-evidence/v1",
+  "recorded_at": "2026-10-22T16:08:55.710933+00:00",
+  "state": "in_progress-first-real-preparation-failure-cleaned",
+  "accepted": false,
+  "host": "192.168.106.189",
+  "platform": "linux/amd64",
+  "single_node": true,
+  "components": {
+    "manager_source": "d86e66a2db83a26f0faca1993b914be121ef3259",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:280722d842083948fe4a94b7aaf29e00a8806de9f7bae3e41ebdb7a5d1a864bd",
+    "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+    "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
+    "profile_revision": 2,
+    "helper_images": "previously certified CA5 digests retained; not relabelled as new source"
+  },
+  "attempts": [
+    {
+      "batch": "k189r4",
+      "app_id": "2122578f094b4c5fb19f9669815431f2",
+      "deployment_id": "1f11c5d6d1a34505b419cb88ad74f57a",
+      "operation_id": "6031594368584d1090ba7a7a2ca8e2e4",
+      "post_pod_status": 403,
+      "historical_denial_reason": "unavailable",
+      "resource_ref": "bc542b2d-20ed-5128-b587-204897e4e484",
+      "pod_uid": null,
+      "scratch_pvc_uid": "41426a1e-9713-46d5-afa5-e520afcd186b",
+      "state": "legacy unknown create receipt; PVC/operation held, not adopted"
+    },
+    {
+      "batch": "k189r5",
+      "deployment_id": "e5f2daf2dfba4cbb80495541efa8d0bc",
+      "version_id": "6b660e896120434dbfe24f2467e718dc",
+      "pod_created_scheduled_started": true,
+      "failure_code": 16227,
+      "stage": "precheck_build",
+      "runtime_stage": "preparing",
+      "exception_class": "ValueError",
+      "diagnostic_gap": "KubernetesClient fixed container list omitted storage-guard; corrected in d86e66a2d",
+      "cleanup_proof": {
+        "status": "failed",
+        "owner_epoch": 1,
+        "cleanup_status": "complete",
+        "generation": 1,
+        "namespace": "e2e-f059-apps",
+        "app_id": "01fee1b6bc6d460aac77dfed8d05fd78",
+        "evidence_kind": "kubelet_terminal_and_cleanup_complete",
+        "original_journal_sha256": "9defe033508603b7f5d4049ba4743fdc5a13220cf31934d41dc5487b7597688b",
+        "observed_at": "2026-10-22T15:58:11.385119Z",
+        "pod_evidence_kind": "kubelet_terminal",
+        "api_resources_absent": true,
+        "operation_id": "7fb50907961e4ed491f7e9f279cebc33",
+        "namespace_uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b",
+        "operator_supplied": true,
+        "resources": [
+          {
+            "kind": "PersistentVolumeClaim",
+            "cleanup_state": "complete",
+            "name": "scratch-39002129a919e2317b185ad36c5471f0cdc3ff8a",
+            "stop_state": "requested",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "52ca3beb-2c75-57b4-9326-5c46b2ed4106",
+            "uid": "3676c752-5ffb-463b-aeaa-c4857aced8f5"
+          },
+          {
+            "kind": "Pod",
+            "cleanup_state": "complete",
+            "name": "task-e4490959fed8dd93344444d415f49a5d51a6bfb0",
+            "stop_state": "confirmed",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "bc1c2bd8-39ed-5298-a441-0f979afbf819",
+            "uid": "fc7c161c-d030-491f-b6ff-8fb8b1cddfed"
+          },
+          {
+            "kind": "Secret",
+            "cleanup_state": "complete",
+            "name": "material-e4490959fed8dd93344444d415f49a5d51a6bfb0",
+            "stop_state": "requested",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "9069f000-57ea-51a6-9248-ed0c902724d7",
+            "uid": "7f28e583-0e74-478d-a482-26690475a1fe"
+          }
+        ],
+        "schema": "f059-r5-known-cleanup/v1"
+      },
+      "original_journal_sha256": "9defe033508603b7f5d4049ba4743fdc5a13220cf31934d41dc5487b7597688b",
+      "formal_version_created": false,
+      "approval_created": false
+    }
+  ],
+  "material_ingress": {
+    "unauthenticated_origin_before": 404,
+    "unauthenticated_backend_before": 401,
+    "scoped_route_added_to_test_proxy": true,
+    "nginx_syntax": "passed",
+    "immediate_request_to_old_worker": 404,
+    "new_connection_after_reload": 401,
+    "platform_env_after_reload": 200,
+    "backend_authentication_bypass": false,
+    "actual_signed_transfer": "pending",
+    "root_cause_of_r5_failure": "not yet concluded from this ingress check alone"
+  },
+  "not_verified": [
+    "Python/Node/static full platform publish and upgrade on K8s",
+    "image and source-image platform flow on K8s",
+    "browser HTTP/WebSocket/SDK/OBO/attachments on K8s",
+    "K8s SQLite data/restore and fault/upgrade acceptance"
+  ],
+  "boundary": "Real preparation Pod startup and same-UID cleanup proven; no full business acceptance or cross-node/arm/CI release claim."
+}

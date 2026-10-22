@@ -3061,3 +3061,75 @@ T200测试先行ad8d028b7：真实BundleDelivery/SourceImageDelivery、register_
 **元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
 
 **结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T215 — 实际固定容器日志与诊断合同
+
+**文件**：`src/runtime-manager/tests/test_k8s_client.py`、`src/runtime-manager/tests/test_k8s_diagnostic_contract.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 2 | 命名规范 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 3 | 序列化约定 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 4 | 数据库约定 | N/A | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 5 | 前端约定 | N/A | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 6 | 信息泄漏 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 7 | 设计同步 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+
+**验证**：5fail/54pass→59pass；主树client/真实diagnostic/template/executor合计245pass。Ruff/架构守卫通过；元数据范围/前向依赖/配对PASS。
+
+**结果**：PASS；有效材料业务仍待现场复验。
+
+## Task Review: T216 — 补齐固定helper日志名单
+
+**文件**：`src/runtime-manager/runtime_manager/k8s_client.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 2 | 命名规范 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 3 | 序列化约定 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 4 | 数据库约定 | N/A | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 5 | 前端约定 | N/A | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 6 | 信息泄漏 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+| 7 | 设计同步 | PASS | 仅固定日志目标接线；无权限/数据/外部API扩展，设计已同步。 |
+
+**验证**：5fail/54pass→59pass；主树client/真实diagnostic/template/executor合计245pass。Ruff/架构守卫通过；元数据范围/前向依赖/配对PASS。
+
+**结果**：PASS；有效材料业务仍待现场复验。
+
+## Task Review: T217 — 材料根路径反向代理合同
+
+**文件**：`src/backend/test/app_runtime/test_k8s_material_ingress_contract.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 2 | 命名规范 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 3 | 序列化约定 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 4 | 数据库约定 | N/A | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 5 | 前端约定 | N/A | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 6 | 信息泄漏 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 7 | 设计同步 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+
+**验证**：主树80passed/1明确skip；189隔离原生nginx对完整产品配置-t通过。根入口unauth404→401、api env200；有效材料传输pending。Ruff/架构守卫/diff-check通过；文件范围/配对/前驱PASS。
+
+**结果**：PASS。
+
+## Task Review: T218 — 材料根路径nginx与安装说明
+
+**文件**：`docker/nginx/conf.d/default.conf`、`deploy/kubernetes/app-runtime/README.md`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 2 | 命名规范 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 3 | 序列化约定 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 4 | 数据库约定 | N/A | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 5 | 前端约定 | N/A | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 6 | 信息泄漏 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+| 7 | 设计同步 | PASS | 仅精确材料入口，原签名path/query及鉴权不变，无宽internal转发。 |
+
+**验证**：主树80passed/1明确skip；189隔离原生nginx对完整产品配置-t通过。根入口unauth404→401、api env200；有效材料传输pending。Ruff/架构守卫/diff-check通过；文件范围/配对/前驱PASS。
+
+**结果**：PASS。

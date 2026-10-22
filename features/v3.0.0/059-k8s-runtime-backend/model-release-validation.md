@@ -21,3 +21,7 @@ Go公网metadata等待、首轮取消及官方材料恢复分别保留，未计�
 同SHA原生amd64和arm64均完成9镜像build、isolated smoke、full bundle smoke，全部exit0；arm64实际WAL 10/0skip、三种Docker布局通过。镜像config ID、工具/许可与物料SHA见JSON。amd64非本次容器57个、arm64为2个，前后及网络均保持；不得将旧54b的87个计数移用。54b与9e7过程仍保留于Git和私有日志，9e7未单独完成原生验收。
 
 189仅向专用LAN仓库推送manager固定manifest `b17045eb…`，Helm11升级控制三服务，明确保留原实际能力报告；未发布DockerHub。四个无分配失败draft经owner API正常删除。新六场景prepare暴露空闲租约过期后永久renew409，尚未创建业务Pod，登记T198/T199，不据原生结果声明K8s业务通过。
+
+## 当前amd64验收候选与arm优先级
+
+709821ecb在189原生九镜像构建/隔离烟测及bundle/SQLite数据哨兵通过；d86e66a2d只修改K8s日志容器白名单，另原生manager构建/导入通过，未重复未改helper应用镜像或重标其来源。固定private digest/组件SHA详见JSON，非正式Docker Hub/CI发行。用户已要求先跑通K8s，暂停新的arm验证；此前e405的附加WAL 20秒超时仍未解决，不以旧0e绿色记录覆盖。

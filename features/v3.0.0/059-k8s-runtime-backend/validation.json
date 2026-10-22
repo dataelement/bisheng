@@ -1,13 +1,13 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T15:45:49.138668+00:00",
+  "recorded_at": "2026-10-22T16:08:55.710933+00:00",
   "validated_source_commit": "709821ecbe5c653aad3f90358173e0d110bee7e3",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 209,
-    "tasks_total": 214,
+    "l1_completed": 213,
+    "tasks_total": 218,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -373,6 +373,26 @@
       "new_testing": "deferred_by_user",
       "prior_unresolved_wal_timeout_preserved": true,
       "priority": "189 Kubernetes business deployment first"
+    },
+    "diagnostics": {
+      "passed": 245,
+      "source_commit": "d86e66a2db83a26f0faca1993b914be121ef3259",
+      "log": "/private/tmp/f059-diagnostics-integrated.log"
+    },
+    "k8s_business_checkpoint": {
+      "accepted": false,
+      "evidence": "e2e-evidence/platform.json",
+      "manager_source": "d86e66a2db83a26f0faca1993b914be121ef3259",
+      "helm_revision": 14,
+      "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3"
+    },
+    "material_ingress_contract": {
+      "passed": 80,
+      "skipped": 1,
+      "log": "/private/tmp/f059-material-ingress-main.log",
+      "skip": "optional local nginx process unavailable",
+      "real_189_product_nginx_syntax": "passed native amd64 with dedicated read-only config and CHOWN only on tmpfs",
+      "signed_material_transfer": "pending"
     }
   },
   "not_executed": [

@@ -1096,5 +1096,19 @@
     },
     "delete_receipt_sha256": "df530fbb693835dfa83604c4adc54b588b2e0e03858bffb34806b87567b93bf7",
     "boundary": "each public GET16101 after normal owner DELETE; no force cleanup; business acceptance blocked before resources by stale controller lease"
+  },
+  "post_install_709_d86": {
+    "helm_revision": 14,
+    "descriptor_uid_unchanged": true,
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:280722d842083948fe4a94b7aaf29e00a8806de9f7bae3e41ebdb7a5d1a864bd",
+    "helm_upgrade_completed": true,
+    "source_revision": "d86e66a2db83a26f0faca1993b914be121ef3259",
+    "descriptor_data_unchanged": true,
+    "helper_and_profile_images_unchanged": true,
+    "app_proxy_unchanged": true,
+    "backend_updated_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+    "profile_revision": 2,
+    "business_evidence": "platform.json",
+    "boundary": "Control services ready and immutable descriptor retained; business E2E still in progress."
   }
 }

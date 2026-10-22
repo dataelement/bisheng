@@ -15,3 +15,7 @@
 按冻结计划新增scratch-09..40共32个4GiB独占ext4 local PV，实际预分配128GiB；精确NS/nodeUID、原19PV/marker权限及loop前后核对不变。新卷归专用operator管理，Retain，无Helm归属，不重绑旧卷；inventory摘要与新UID见JSON。原preflight卷因既有fsGroup为0:10001/0664，按精确旧UID冻结原状，不改旧权限。该结果不证明宿主重启或跨节点恢复。
 
 后续控制候选0e/Helm11：固定LAN manager manifest b17045eb…，保留当前实际能力报告再升级；四个历史failed draft逐一只读预检后owner DELETE，后续GET16101，无force清理。收据SHA df530fbb693835dfa83604c4adc54b588b2e0e03858bffb34806b87567b93bf7。新业务尚在precheck_build，资源未创建，空闲租约续租409登记T198/T199；该状态不撤销历史T068安装探测证据，但不计T069业务完成。
+
+## 2026-10-23 开发收尾候选
+
+Helm14以d86e66a2d固定manager镜像升级manager/egress/admission，全部Ready；descriptor UID/数据相同，原能力报告/helper/profile2保留，backend四文件来自709821ecb。真实平台进度见[platform.md](./platform.md)：首Pod已创建启动并正常同UID清理，完整发布仍pending。
