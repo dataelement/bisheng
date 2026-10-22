@@ -790,3 +790,109 @@ def test_bound_kubelet_can_finish_after_calico_when_network_metadata_is_unchange
             groups=["system:nodes"],
         ),
     )
+
+
+@pytest.mark.parametrize("phase", ["Pending", "Failed"])
+@pytest.mark.parametrize("action", ["ADD", "DELETE-remove", "DELETE-empty"])
+def test_configured_calico_status_endpoint_only_updates_network_metadata(calico_history, phase, action):
+    """AC-13, AC-49: Calico ADD/DELETE may preserve status while updating its annotations."""
+    verifier, clean, annotated, cni = calico_history
+    verifier.plan_reader = lambda _: pytest.fail("CNI metadata maintenance must not read backend")
+    old = copy.deepcopy(clean if action == "ADD" else annotated)
+    if phase == "Pending":
+        old["metadata"].pop("deletionTimestamp")
+        old["status"] = {"phase": "Pending", "qosClass": "Guaranteed"}
+    new = copy.deepcopy(old)
+    if action == "ADD":
+        new["metadata"]["annotations"] = copy.deepcopy(annotated["metadata"]["annotations"])
+    else:
+        for key in ("cni.projectcalico.org/containerID", "cni.projectcalico.org/podIP", "cni.projectcalico.org/podIPs"):
+            if action == "DELETE-remove":
+                new["metadata"]["annotations"].pop(key)
+            else:
+                new["metadata"]["annotations"][key] = ""
+    new["metadata"]["resourceVersion"] = "18"
+    assert allowed(verifier, request(new, operation="UPDATE", subresource="status", old=old, username=cni))
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "terminal",
+        "container-status",
+        "init-status",
+        "conditions",
+        "image",
+        "volume",
+        "node",
+        "unbound",
+        "uid",
+        "uid-missing",
+        "namespace",
+        "finalizer",
+        "extra-annotation",
+        "label",
+        "equivalent-spec-change",
+    ],
+)
+def test_calico_status_metadata_exception_cannot_change_any_other_contract(calico_history, mutation):
+    """AC-13, AC-16, AC-49: CNI is never a source for status, spec, identity or finalizers."""
+    verifier, clean, annotated, cni = calico_history
+    old, new = copy.deepcopy(clean), copy.deepcopy(annotated)
+    old["status"] = {"phase": "Pending", "qosClass": "Guaranteed"}
+    new["status"] = copy.deepcopy(old["status"])
+    if mutation == "terminal":
+        new["status"]["phase"] = "Succeeded"
+    elif mutation == "container-status":
+        new["status"]["containerStatuses"] = [{"name": "app", "state": {"terminated": {"exitCode": 0}}}]
+    elif mutation == "init-status":
+        new["status"]["initContainerStatuses"] = [{"name": "data-layout", "state": {"terminated": {"exitCode": 0}}}]
+    elif mutation == "conditions":
+        new["status"]["conditions"] = [{"type": "Ready", "status": "True"}]
+    elif mutation == "image":
+        new["spec"]["containers"][0]["image"] = "attacker/image:latest"
+    elif mutation == "volume":
+        new["spec"]["volumes"][0] = {"name": "foreign", "persistentVolumeClaim": {"claimName": "data-foreign"}}
+    elif mutation == "node":
+        new["spec"]["nodeName"] = "worker-b"
+    elif mutation == "unbound":
+        old["spec"].pop("nodeName")
+        new["spec"].pop("nodeName")
+    elif mutation == "uid":
+        new["metadata"]["uid"] = "33333333-3333-4333-8333-333333333333"
+    elif mutation == "uid-missing":
+        old["metadata"].pop("uid")
+        new["metadata"].pop("uid")
+    elif mutation == "namespace":
+        new["metadata"]["namespace"] = "foreign"
+    elif mutation == "finalizer":
+        new["metadata"]["finalizers"] = []
+    elif mutation == "extra-annotation":
+        new["metadata"]["annotations"]["cni.projectcalico.org/arbitrary"] = "untrusted"
+    elif mutation == "label":
+        new["metadata"]["labels"]["network-role"] = "manager"
+    else:
+        new["spec"]["containers"][0]["resources"]["limits"]["cpu"] = "0.25"
+    assert not allowed(verifier, request(new, operation="UPDATE", subresource="status", old=old, username=cni))
+
+
+@pytest.mark.parametrize(
+    "username,groups,configured",
+    [
+        (MANAGER, [], True),
+        ("system:node:worker-a", ["system:nodes"], True),
+        ("system:serviceaccount:kube-system:another-cni", [], True),
+        ("system:serviceaccount:kube-system:calico-node", [], False),
+    ],
+)
+def test_calico_status_metadata_exception_requires_the_exact_configured_actor(
+    calico_history, username, groups, configured
+):
+    """AC-13, AC-49: a node, manager or unconfigured CNI cannot claim the metadata exception."""
+    verifier, old, new, _ = calico_history
+    if not configured:
+        verifier.cni_username = ""
+    assert not allowed(
+        verifier,
+        request(new, operation="UPDATE", subresource="status", old=old, username=username, groups=groups),
+    )
