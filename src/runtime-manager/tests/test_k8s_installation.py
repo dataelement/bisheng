@@ -1125,3 +1125,43 @@ def test_expired_recovery_skips_live_plan_without_mutation(monkeypatch):
     assert not verifier.api.released and not verifier.plan_writes
     assert not any(row[0] in {"POST", "patch"} for row in verifier.api.calls)
 
+
+def test_chart_cni_identity_is_admission_source_and_invalidates_only_old_report(values, tmp_path):
+    from runtime_manager.k8s_capabilities import REQUIRED_CHECKS, assess_capabilities, descriptor_digest
+
+    def descriptor_and_admission():
+        documents = render(values, tmp_path)
+        cm = next(
+            row
+            for row in documents
+            if row["kind"] == "ConfigMap" and row["metadata"]["name"] == "runtime-deployment-descriptor"
+        )
+        deployment = next(
+            row for row in documents if row["kind"] == "Deployment" and row["metadata"]["name"] == "runtime-admission"
+        )
+        env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+        cni = next(row["value"] for row in env if row["name"] == "RTM_ADMISSION_CNI_USERNAME")
+        return json.loads(cm["data"]["descriptor.json"]), cni
+
+    values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:calico-cni-plugin"
+    original, cni = descriptor_and_admission()
+    assert original["cni_username"] == cni == values["execution"]["cniUsername"]
+    identity = descriptor_digest(original)
+    report = {
+        "source": "cluster-probe",
+        "observed_at": 1000,
+        "descriptor_digest": identity,
+        "checks": [{"name": name, "ok": True, "evidence": {"uid": str(uuid4())}} for name in REQUIRED_CHECKS],
+    }
+    values["execution"]["probeReport"] = report
+    verified, _ = descriptor_and_admission()
+    assert descriptor_digest(verified) == identity
+    assert assess_capabilities(verified, now=1001)["ready"]
+    values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:another-cni"
+    changed, cni = descriptor_and_admission()
+    assert changed["cni_username"] == cni == values["execution"]["cniUsername"]
+    assert {key: value for key, value in changed.items() if key != "cni_username"} == {
+        key: value for key, value in verified.items() if key != "cni_username"
+    }
+    assert descriptor_digest(changed) != identity
+    assert not assess_capabilities(changed, now=1001)["ready"]
