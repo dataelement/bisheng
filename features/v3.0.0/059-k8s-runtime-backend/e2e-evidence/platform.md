@@ -127,3 +127,7 @@ T248–T251修复只允许归档前的目录SGID并在层内去除，继续拒�
 更正：上述继承CMD问题不成立。固定crane v0.22.1设置entrypoint时已清除Cmd，原代码已满足合同。真实189三个固定base使用**不带--cmd**的原命令，导出后Cmd均null，注册仓库未修改，日志`/private/tmp/f059-crane-entrypoint-clears-cmd-native.log`。此前仅带--cmd空参数的正例及镜像参数Mock不足以证明原缺陷，相关T252/T253与L1已撤回，编号保留。
 
 两个代码/测试文件恢复0d5字节；全部src/scripts/deploy/workflow构建输入相对0d5均无差异。真实SGID/PATH修复保留，完整runtime1610/13skip（33.51s）。d7候选的额外空flag与原CLI行为等价，未发布新应用；当前installer自然完成后恢复已验证0d5精确镜像及与其descriptor匹配的有效16报告，不制造新的构建或冒认新探测。官方依据：https://github.com/google/go-containerregistry/blob/v0.22.1/cmd/crane/cmd/mutate.go#L89-L98
+
+## 正确基线恢复与源码新attempt
+
+当前Helm26/0d5精确镜像/匹配有效16报告，三路径true、自然ready/epoch21。root重新逐项GET确认旧prepare70eb…的9资源正常cleanup/APIabsent，五Pod同UID kubelet_terminal；fresh proof SHA `efbbae5234528e89931fcf51e1bf923daa0d9cfdc712c65a2c4dfdf5dc032ac1`。新工具80d6…的check通过，O_EXCL独立source-resumed journal只一次提交同draft，accepted deployment675d259a…/versiond71f4858…，prepare07b872e0…正在preparing。前三bundle两版不重做，不复活旧操作/延长deadline/自动cleanup；当前journal未冻结，不预造成功或摘要。source及完整镜像/缺依赖后续仍待自然业务结果。

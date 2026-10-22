@@ -56,3 +56,9 @@ Helm14以d86e66a2d固定manager镜像升级manager/egress/admission，全部Read
 manager28449f9c…/helper5906c518…/assemblerCA9836c134…更新后，仅descriptor两个镜像字段变化、UID保持；旧报告descriptor摘要不匹配，实际manager三路径false/backend blocked。真实16项探测随后全部通过，报告SHA `6720eaf4938302d5ad5c7e01b8b1972627dbf5f7c4b1e92d5db83ec838e92ec6`；投射后自然ready/epoch19。三个既有应用仍Running，r4保留不动。
 
 最终入口CMD修复来源d7f7c2e10另行冻结；上述中间0d5安装通过不等于d7f已部署，需新镜像摘要及真实报告后更新。
+
+## 更正后实际部署：Helm26 / 0d5 / epoch21
+
+CMD问题已用固定CLI官方实现与三个base的实际无--cmd对照证伪，T252/T253撤回。d7中间候选16项探测自然通过且全部preflight Pod已正常清理（报告SHA35c968ac…），没有人为中止或修改其结果。当前分支全部src/scripts/deploy/workflow构建输入与0d5逐字节相同，保留SGID/PATH真实修复。
+
+正常helm upgrade恢复0d5精确manager28449f9c…/helper5906c518…/assemblerCA9836c134…；descriptor UID不变、摘要f306a49e…，使用原实际16项通过且与该摘要完全匹配的报告6720eaf4…（恢复时年龄1549秒，小于24小时），未宣称重跑探测或新构建。Helm26/自然ready/epoch21与三交付路径true已fresh验证。r4保留、app-proxy/profile/data配置不变。更正提交20175cad9，最终镜像源码基线0d5。

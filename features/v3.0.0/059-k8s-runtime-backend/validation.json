@@ -1541,8 +1541,61 @@
       ],
       "git_diff_empty": true,
       "native_and_installer_evidence": "native_oci_intermediate_0d5",
-      "restore_deployment": "pending_current_installer_natural_completion",
-      "public_release": false
+      "restore_deployment": "passed",
+      "public_release": false,
+      "helm_revision": 26,
+      "node": {
+        "implementation_source": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+        "corrective_commit": "20175cad9cb453734d42ee8a03c0be0594a6f3a0",
+        "node_id": "e2e-f059-node",
+        "status": "ready",
+        "controller_epoch": 21,
+        "paths": {
+          "bundle": true,
+          "image": true,
+          "source-image": true
+        },
+        "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456"
+      },
+      "receipt": {
+        "descriptor_uid_unchanged": true,
+        "app_proxy_profile_data_unchanged": true,
+        "new_probe_claimed": false,
+        "matched_existing_report_sha256": "6720eaf4938302d5ad5c7e01b8b1972627dbf5f7c4b1e92d5db83ec838e92ec6",
+        "new_image_build": false,
+        "report_age_seconds": 1548.6708028316498,
+        "all_code_build_inputs_equal": true,
+        "images": {
+          "manager": {
+            "image_id": "sha256:c3a5255e893973935e26c7f48adcc218f0bb14bd4b522fd8eaea75a35aabc659",
+            "image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
+            "native_smoke": true,
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-26"
+          },
+          "assembler-public-ca": {
+            "image_id": "sha256:ddc11511399ae6f3f9689a076a8cc6bb5c6b8db34bb194d892603fe20264f19e",
+            "image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9",
+            "native_smoke": true,
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "private_tag": "192.168.106.189:5443/f059/runtime-assembler-ca:20261023-26"
+          },
+          "helper": {
+            "image_id": "sha256:9cd5d3e1331f4b8c81c6335c4e3034e1eb9c63b94f1968e9dc4357180c2296a9",
+            "image": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+            "native_smoke": true,
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "private_tag": "192.168.106.189:5443/f059/runtime-helper:20261023-26"
+          }
+        },
+        "withdrawn_d7_report_sha256": "35c968ac1a297e65ff59257c05aef86bf3eaddf555f347f9eb992bacd61ae9bf",
+        "helm_upgrade_completed": true,
+        "reverted_equivalent_redundant_flag": true,
+        "withdrawn_d7_probe_passed": 16,
+        "corrective_commit": "20175cad9cb453734d42ee8a03c0be0594a6f3a0",
+        "installed_source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+        "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456"
+      }
     }
   },
   "not_executed": [

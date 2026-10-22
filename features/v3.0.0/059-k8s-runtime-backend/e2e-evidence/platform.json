@@ -7,13 +7,13 @@
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "d7f7c2e10ab9805d41120d19e32d102310b06654",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:3e37e6906e47ccc99d4e27986dc6e34c48da2d3d2f245a2bd81090ae67fbf80f",
+    "manager_source": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
     "helper_images": "new143 helper; application runtime/preparer profile2 unchanged",
-    "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:6b5bc9302d5f8a79c8d0b600f2efd30e7d9e6db7c23e84279ebc1c6cd1ce2fab",
+    "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
     "backend_data_cancel_source": "a1de5271f5f00cef0cba06d41f09c673a9190525",
     "backend_data_cancel_files": [
       "bisheng/app_runtime/domain/services/runtime_data_grant_service.py",
@@ -26,7 +26,7 @@
       "bisheng/app_runtime/domain/services/runtime_data_session_service.py",
       "bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py"
     ],
-    "assembler_image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:6844256e099103ecf18b8aebe751dfd04961a8a0a79fd6a49217bcbda2a06dbd"
+    "assembler_image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9"
   },
   "attempts": [
     {
@@ -531,6 +531,24 @@
       "normal_platform_cleanup": true,
       "failure_log": "/opt/e2e-f059/logs/platform-k189r9.log",
       "cleanup_log": "/opt/e2e-f059/logs/cleanup-k189r9.log"
+    },
+    {
+      "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-static-resumed.json",
+      "sha256": "9c953e824afb0548e8547911ca386008cc5f8e5e03da7871ea5eec95083a9415",
+      "state": "stopped_on_source_image_failure",
+      "passed": [
+        "python_bundle_v1_v2",
+        "node_bundle_v1_v2",
+        "static_bundle_v1_v2"
+      ],
+      "remaining": [
+        "source_image_v1_v2",
+        "full_image_v1_v2",
+        "missing_dependency",
+        "offline_edit_export",
+        "fault_upgrade"
+      ],
+      "auto_cleanup": false
     }
   ],
   "first_python_online": {
@@ -788,19 +806,28 @@
     "boundary": "new independent stop/resume; not rewriting original failed cycle"
   },
   "current_business_batch": {
-    "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-static-resumed.json",
-    "sha256": "9c953e824afb0548e8547911ca386008cc5f8e5e03da7871ea5eec95083a9415",
-    "state": "stopped_on_source_image_failure",
-    "passed": [
+    "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-source-resumed.json",
+    "state": "running",
+    "journal_frozen": false,
+    "source_tool_sha256": "80d6d7241cf64b92453329a62b28e6edbbd33409bea7765ec74464c90daa97cb",
+    "parent_sha256": "9c953e824afb0548e8547911ca386008cc5f8e5e03da7871ea5eec95083a9415",
+    "fresh_cleanup_proof_sha256": "efbbae5234528e89931fcf51e1bf923daa0d9cfdc712c65a2c4dfdf5dc032ac1",
+    "single_source_retry": true,
+    "app_id": "fad0b104e09c46cda59469248ab20605",
+    "deployment_id": "675d259a09dd43e8bdb9906210cd65f3",
+    "version_id": "d71f48582f404ea098f15a5e84693534",
+    "prepare_operation_id": "07b872e0d07441f7a333941560727bba",
+    "previous_positive_cases": [
       "python_bundle_v1_v2",
       "node_bundle_v1_v2",
       "static_bundle_v1_v2"
     ],
+    "current_case": "python_source_v1",
     "remaining": [
-      "source_image_v1_v2",
+      "source_v2",
       "full_image_v1_v2",
       "missing_dependency",
-      "offline_edit_export",
+      "offline_data",
       "fault_upgrade"
     ],
     "auto_cleanup": false
@@ -963,9 +990,11 @@
     "all_build_inputs_byte_equal": true,
     "withdrawn_cmd_candidate": "d7f7c2e10ab9805d41120d19e32d102310b06654",
     "reason": "Pinned crane already clears Cmd with the existing entrypoint flag",
-    "restore_deployment": "pending",
-    "source_continuation": "not_started",
-    "source_preflight_check": "passed_without_new_publication"
+    "restore_deployment": "passed",
+    "source_continuation": "running",
+    "source_preflight_check": "passed_without_new_publication",
+    "helm_revision": 26,
+    "controller_epoch": 21
   },
   "cmd_false_positive_correction": {
     "official_source": "https://github.com/google/go-containerregistry/blob/v0.22.1/cmd/crane/cmd/mutate.go#L89-L98",

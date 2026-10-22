@@ -943,8 +943,19 @@
         }
       }
     },
-    "final_code_candidate": "d7f7c2e10ab9805d41120d19e32d102310b06654",
-    "final_candidate_native": "pending",
-    "official_release": false
+    "final_code_candidate": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+    "final_candidate_native": "existing_exact_0d5_native_validated",
+    "official_release": false,
+    "corrective_commit": "20175cad9cb453734d42ee8a03c0be0594a6f3a0",
+    "all_build_inputs_equal": true,
+    "installed_helm_revision": 26
+  },
+  "withdrawn_cmd_candidate": {
+    "source_revision": "d7f7c2e10ab9805d41120d19e32d102310b06654",
+    "reason": "false positive; crane entrypoint already resets Cmd",
+    "equivalent_redundant_flag": true,
+    "probe_checks_passed": 16,
+    "report_sha256": "35c968ac1a297e65ff59257c05aef86bf3eaddf555f347f9eb992bacd61ae9bf",
+    "not_final_delivery": true
   }
 }
