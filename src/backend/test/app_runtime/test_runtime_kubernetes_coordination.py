@@ -1,5 +1,6 @@
 """覆盖 AC: AC-03、AC-07、AC-08、AC-13、AC-14、AC-30、AC-31、AC-48、AC-49、AC-52."""
 
+import hashlib
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -58,6 +59,19 @@ async def coordination(control):
     await repository.save(op)
     svc = RuntimeOperationService(repository, clock=lambda: NOW)
     return SimpleNamespace(svc=svc, control=ctrl, repo=repository, op=op)
+
+
+def prepare_document(op):
+    body = document(op, purpose="prepare-download")
+    spec = body["template"]["spec"]
+    spec["volumes"] = [
+        {
+            "name": "scratch",
+            "persistentVolumeClaim": {"claimName": "scratch-" + hashlib.sha256(op.id.encode()).hexdigest()[:40]},
+        }
+    ]
+    spec["containers"][0]["volumeMounts"] = [{"name": "scratch", "mountPath": "/scratch"}]
+    return body
 
 
 async def fact(c, *, phase="preparing", detail=None, sequence=1):
@@ -120,7 +134,7 @@ async def test_heartbeat_cannot_reassign_a_configured_execution_domain(coordinat
 @pytest.mark.parametrize("missing", ["mandatory_isolation", "status_protection", "binding_protection"])
 async def test_failed_mandatory_probe_blocks_new_work_and_invalidates_continuous_protection(coordination, missing):
     c = coordination
-    await c.control.register_resource(MANAGER, document(c.op, purpose="prepare-download"))
+    await c.control.register_resource(MANAGER, prepare_document(c.op))
     await c.control.observe_resource(
         MANAGER,
         REF,
@@ -143,7 +157,7 @@ async def test_failed_mandatory_probe_blocks_new_work_and_invalidates_continuous
 
 async def test_restoring_probe_does_not_retroactively_claim_continuous_status_protection(coordination):
     c = coordination
-    await c.control.register_resource(MANAGER, document(c.op, purpose="prepare-download"))
+    await c.control.register_resource(MANAGER, prepare_document(c.op))
     await c.control.observe_resource(
         MANAGER,
         REF,
@@ -186,7 +200,7 @@ async def test_a_current_controller_fact_is_accepted_but_expired_lease_is_not(co
 
 async def test_terminal_stopped_claim_cannot_bypass_resource_stop_evidence(coordination):
     c = coordination
-    await c.control.register_resource(MANAGER, document(c.op, purpose="prepare-download"))
+    await c.control.register_resource(MANAGER, prepare_document(c.op))
     with pytest.raises(RuntimeConflict):
         await fact(
             c,
