@@ -488,13 +488,13 @@ def service_template(plan: PodPlan) -> dict:
     }
 
 
-def pvc_template(plan: PodPlan, *, name: str, size_mb: int, storage_class: str) -> dict:
+def pvc_template(plan: PodPlan, *, name: str, size_mb: int, storage_class: str, static_pool: bool = False) -> dict:
     plan.validate()
     if not _NAME.fullmatch(name) or type(size_mb) is not int or size_mb <= 0:
         raise ValueError("k8s_pvc_invalid")
     if storage_class and (len(storage_class) > 253 or not all(_NAME.fullmatch(x) for x in storage_class.split("."))):
         raise ValueError("k8s_storage_class_invalid")
-    return {
+    result = {
         "apiVersion": "v1",
         "kind": "PersistentVolumeClaim",
         "metadata": metadata(plan, name),
@@ -505,6 +505,15 @@ def pvc_template(plan: PodPlan, *, name: str, size_mb: int, storage_class: str) 
             "resources": {"requests": {"storage": f"{size_mb}Mi"}},
         },
     }
+
+    if static_pool:
+        result["spec"]["selector"] = {
+            "matchLabels": {
+                "runtime.bisheng.io/namespace": plan.namespace,
+                "runtime.bisheng.io/volume-role": "production" if plan.pvc_name else "scratch",
+            }
+        }
+    return result
 
 
 def secret_template(plan: PodPlan, *, name: str, data: dict[str, bytes]) -> dict:
@@ -537,3 +546,34 @@ def template_digest(template: dict) -> str:
     return hashlib.sha256(
         json.dumps(template, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
     ).hexdigest()
+
+
+def capability_probe_template(plan, *, network=None, storage_claim=""):
+    """Installer-only probes, never caller application code or a production PVC."""
+    from dataclasses import replace
+
+    if plan.operation_id[:10] != "preflight-" or plan.purpose != "probe":
+        raise ValueError("k8s_preflight_scope_refused")
+    if storage_claim and (not _NAME.fullmatch(storage_claim) or not storage_claim.startswith("preflight-")):
+        raise ValueError("k8s_preflight_volume_refused")
+    if bool(storage_claim) == (network is not None):
+        raise ValueError("k8s_preflight_action_invalid")
+    action = "storage" if storage_claim else "network"
+    plan = replace(
+        plan,
+        mode="image",
+        image=plan.helper_image,
+        material_secret="",
+        app_secret="",
+        secret_env=(),
+        schema_plan=(),
+        command=("python", "-I", "-m", "runtime_manager.k8s_capabilities", action),
+        env={"CAPABILITY_PLAN": json.dumps(network, sort_keys=True, separators=(",", ":"))}
+        if network is not None
+        else {},
+    )
+    pod = pod_template(plan)
+    if storage_claim:
+        pod["spec"]["volumes"].append({"name": "probe-volume", "persistentVolumeClaim": {"claimName": storage_claim}})
+        pod["spec"]["containers"][0]["volumeMounts"].append(_mount("probe-volume", "/probe-volume"))
+    return pod

@@ -1,0 +1,29 @@
+{{- range .Values.storage.volumes }}
+{{- if or (contains ".." .path) (not (hasPrefix (printf "%s/" (trimSuffix "/" $.Values.storage.localRoot)) .path)) }}
+{{- fail "local PV paths must be descendants of storage.localRoot" }}
+{{- end }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .name }}
+  annotations: {helm.sh/resource-policy: keep}
+  labels:
+    runtime.bisheng.io/installation: {{ $.Values.execution.installationId }}
+    runtime.bisheng.io/namespace: {{ $.Values.execution.namespace }}
+    runtime.bisheng.io/volume-role: {{ .role }}
+spec:
+  capacity: {storage: {{ printf "%dMi" (int .sizeMi) | quote }}}
+  volumeMode: Filesystem
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ $.Values.storage.className | quote }}
+  local: {path: {{ .path | quote }}}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [{{ .node | quote }}]
+{{- end }}

@@ -332,7 +332,7 @@ class OperationExecutor:
             return self.runtime.heartbeat()
         descriptor = self.runtime.descriptor
         capabilities = self.runtime.capabilities()
-        probe = dict(self.runtime.document.get("probe_report", {}))
+        probe = self.runtime.probe_report()
         probe["ready"] = probe.get("ready") is True and capabilities.get("orchestration_available") is True
         self.platform.heartbeat(
             {

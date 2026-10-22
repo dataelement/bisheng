@@ -433,3 +433,77 @@ def test_even_approved_templates_cannot_mount_arbitrary_configmaps(template, pla
     )
     plan["template"] = template_projection(template)
     assert not allowed(policy(lambda _: plan), request(template))
+
+
+def test_installed_cni_can_only_change_its_own_network_annotations(template):
+    from runtime_manager.k8s_admission import AdmissionPolicy
+    from runtime_manager.k8s_templates import STOP_FINALIZER
+
+    cni = "system:serviceaccount:kube-system:calico-node"
+    verifier = AdmissionPolicy(
+        namespace=NAMESPACE,
+        manager_username=MANAGER,
+        status_policy_revision="v1",
+        plan_reader=lambda _: pytest.fail("CNI metadata must not call backend"),
+        cni_username=cni,
+    )
+    old = copy.deepcopy(template)
+    old["metadata"]["uid"] = UID
+    old["spec"]["nodeName"] = "worker-a"
+    new = copy.deepcopy(old)
+    new["metadata"]["annotations"].update(
+        {
+            "cni.projectcalico.org/containerID": "a" * 64,
+            "cni.projectcalico.org/podIP": "10.233.64.10/32",
+            "cni.projectcalico.org/podIPs": "10.233.64.10/32",
+        }
+    )
+    assert allowed(verifier, request(new, operation="UPDATE", old=old, username=cni))
+    for mutation in ("image", "finalizer", "status", "label"):
+        changed = copy.deepcopy(new)
+        if mutation == "image":
+            changed["spec"]["containers"][0]["image"] = "attacker/image:latest"
+        elif mutation == "finalizer":
+            changed["metadata"]["finalizers"].remove(STOP_FINALIZER)
+        elif mutation == "status":
+            changed["status"] = {"phase": "Succeeded"}
+        else:
+            changed["metadata"]["labels"]["attacker"] = "yes"
+        assert not allowed(verifier, request(changed, operation="UPDATE", old=old, username=cni))
+
+
+def test_pvc_binding_controller_can_only_bind_once_and_manage_protection(template):
+    old = {
+        "apiVersion": "v1",
+        "kind": "PersistentVolumeClaim",
+        "metadata": copy.deepcopy(template["metadata"]),
+        "spec": {
+            "accessModes": ["ReadWriteOnce"],
+            "storageClassName": "",
+            "volumeMode": "Filesystem",
+            "resources": {"requests": {"storage": "1Gi"}},
+        },
+    }
+    old["metadata"]["uid"] = UID
+    old["metadata"].pop("finalizers")
+    new = copy.deepcopy(old)
+    new["spec"]["volumeName"] = "installed-app-volume"
+    new["metadata"]["annotations"]["pv.kubernetes.io/bind-completed"] = "yes"
+    new["metadata"]["finalizers"] = ["kubernetes.io/pvc-protection"]
+    verifier = policy(lambda _: pytest.fail("PVC controller metadata must not call backend"))
+
+    def review(obj, previous):
+        data = request(obj, operation="UPDATE", old=previous, username="system:kube-controller-manager")
+        data["request"]["resource"]["resource"] = "persistentvolumeclaims"
+        return data
+
+    assert allowed(verifier, review(new, old))
+    changed = copy.deepcopy(new)
+    changed["spec"]["volumeName"] = "other-volume"
+    assert not allowed(verifier, review(changed, new))
+    changed = copy.deepcopy(new)
+    changed["spec"]["resources"]["requests"]["storage"] = "100Gi"
+    assert not allowed(verifier, review(changed, old))
+    changed = copy.deepcopy(new)
+    changed["metadata"]["labels"]["attacker"] = "yes"
+    assert not allowed(verifier, review(changed, old))

@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；93 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 74 / 93 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；95 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 74 / 95 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -640,12 +640,28 @@
   **依赖:** T013、T039、T053、T054
   **配对:** T054
 
+- [ ] **T094** — 活跃材料代理候选查询合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_material_policy_candidates.py`
+  **逻辑/验收**：真实SQL按node过滤已绑定、未停止/未清理、未撤销且未到期材料授权；停止/历史/其它节点不进入每秒投影，保留原历史记录而不全表循环逐条重验。
+  **覆盖 AC:** AC-15、AC-23、AC-46、AC-47、AC-48、AC-53
+  **依赖:** T055
+  **配对:** T095
+
+- [ ] **T095** — 活跃材料候选 Repository 查询
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py`
+  **逻辑/验收**：Repository联查材料与资源记录提供material_policy_candidates(node_id,now)，不在Service写SQL；跨租户仅供已验证egress角色的node范围投影，最多10000活动候选、超限拒绝，不删除历史。
+  **覆盖 AC:** AC-15、AC-23、AC-46、AC-47、AC-48、AC-53
+  **依赖:** T055、T094
+  **配对:** T094
+
 - [ ] **T056** — 材料用途的出站投影：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_material_egress.py`
   **逻辑/验收**：material代理身份由当前材料授权投影，独立于完成的prepare；只放行后台材料TLS端点和范围，撤销5秒上界，业务凭据不冒用；入口路由继续backendSQL投影不依赖manager；测试只定义输入/结果，不加入实现。
   **覆盖 AC:** AC-07、AC-12、AC-15、AC-21、AC-23、AC-46、AC-47、AC-53
-  **依赖:** T023、T055
+  **依赖:** T023、T055、T095
   **配对:** T057
 
 - [ ] **T057** — 材料用途的出站投影

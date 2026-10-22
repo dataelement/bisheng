@@ -1,0 +1,82 @@
+{{- if eq .Values.services.namespace .Values.execution.namespace }}
+{{- fail "control and execution namespaces must differ" }}
+{{- end }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.services.namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.28
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.execution.namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    runtime.bisheng.io/installation: {{ .Values.execution.installationId }}
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.28
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runtime-manager
+  namespace: {{ .Values.services.namespace }}
+spec:
+  type: {{ .Values.services.managerType }}
+  selector: {app: runtime-manager}
+  ports:
+    - {name: control, port: 8091, targetPort: 8091{{ if eq .Values.services.managerType "NodePort" }}, nodePort: {{ .Values.services.managerNodePort }}{{ end }}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-proxy
+  namespace: {{ .Values.services.namespace }}
+spec:
+  type: {{ .Values.services.entryType }}
+  selector: {app: app-proxy}
+  ports:
+    - {name: http, port: 8080, targetPort: 8080{{ if eq .Values.services.entryType "NodePort" }}, nodePort: {{ .Values.services.entryNodePort }}{{ end }}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: egress-proxy
+  namespace: {{ .Values.services.namespace }}
+spec:
+  type: ClusterIP
+  clusterIP: {{ .Values.services.egressClusterIP | quote }}
+  selector: {app: egress-proxy}
+  ports: [{name: proxy, port: 3128, targetPort: 3128}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runtime-admission
+  namespace: {{ .Values.services.namespace }}
+spec:
+  selector: {app: runtime-admission}
+  ports: [{name: https, port: 443, targetPort: 8443}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.execution.dataKeyConfigMap }}
+  namespace: {{ .Values.execution.namespace }}
+  annotations: {helm.sh/resource-policy: keep}
+data:
+  public-keys.json: {{ .Values.execution.dataPublicKeys | toJson | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-canary-plans
+  namespace: {{ .Values.services.namespace }}
+data:
+  plans.json: {{ .Values.execution.canaryPlans | toJson | quote }}

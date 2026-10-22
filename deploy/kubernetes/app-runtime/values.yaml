@@ -1,0 +1,83 @@
+# Supply immutable image references and existing credentials before installing.
+# The chart installs the runtime only; backend and platform storage are external.
+platform:
+  origin: ""
+  backendBase: ""
+  caConfigMap: runtime-platform-ca
+services:
+  namespace: bisheng-runtime-system
+  credentialsSecret: runtime-service-identities
+  materialIssuerSecret: runtime-material-issuer
+  admissionTlsSecret: runtime-admission-tls
+  managerAccount: runtime-manager
+  managerReplicas: 1
+  entryReplicas: 1
+  egressReplicas: 1
+  admissionReplicas: 2
+  managerType: ClusterIP
+  managerNodePort: 30091
+  entryType: ClusterIP
+  entryNodePort: 30080
+  egressClusterIP: ""
+execution:
+  namespace: bisheng-runtime-apps
+  clusterId: bisheng-k8s
+  nodeId: bisheng-k8s-amd64
+  installationId: bisheng-runtime
+  architecture: amd64
+  memoryBudgetMi: 4096
+  cpuBudgetMillicores: 4000
+  maxPods: 64
+  temporaryStorageMi: 4096
+  runtimeClass: ""
+  statusPolicyRevision: v1
+  cniUsername: ""
+  pullSecret: ""
+  dataKeyConfigMap: runtime-data-public-keys
+  dataPublicKeys: {}
+  # Written only by the privileged verification tool after actual cluster probes.
+  probeReport: {}
+  # Optional immutable canary approvals for the installation verification tool.
+  canaryPlans: {}
+images:
+  manager: ""
+  entry: ""
+  egress: ""
+  admission: ""
+  helper: ""
+  assembler: ""
+network:
+  podCidrs: []
+  serviceCidrs: []
+  controlAllowedCidrs: []
+  entryAllowedCidrs: []
+  kubernetesApiCidrs: []
+  dnsCidrs: []
+  backendCidrs: []
+  backendPorts: [443, 7860]
+  egressPorts: [80, 443]
+  apiServer: https://kubernetes.default.svc
+storage:
+  className: ""
+  sizeMi: 1024
+  scratchSizeMi: 4096
+  filesystem: ext4
+  sqliteCompatible: false
+  nodeLocal: true
+  # Directories must already exist on mounted, bounded filesystems.
+  localRoot: /var/lib/bisheng-runtime
+  volumes: []
+admission:
+  # Base64 public CA certificate matching the persistent TLS secret.
+  caBundle: ""
+  timeoutSeconds: 5
+offline:
+  enabled: true
+  packageIndex: ""
+  extraPackageIndex: ""
+  npmRegistry: ""
+  packageEndpoints: []
+  imageRepository: ""
+  imageRegistryEndpoints: []
+  registrySecret: ""
+  insecureRegistry: false

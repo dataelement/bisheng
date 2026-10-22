@@ -163,6 +163,8 @@ class AdmissionPolicy:
         status_policy_revision: str,
         plan_reader: Callable[[str], dict],
         data_key_configmap: str = "runtime-data-public-keys",
+        cni_username: str = "",
+        storage_controller_usernames: tuple[str, ...] = ("system:kube-controller-manager", "system:kube-scheduler"),
     ):
         self.namespace = validate_namespace(namespace)
         if not manager_username.startswith("system:serviceaccount:") or not status_policy_revision:
@@ -171,6 +173,12 @@ class AdmissionPolicy:
         self.revision = status_policy_revision
         self.plan_reader = plan_reader
         self.data_key_configmap = validate_namespace(data_key_configmap)
+        if cni_username and not cni_username.startswith("system:serviceaccount:"):
+            raise ValueError("admission_cni_identity_invalid")
+        self.cni_username = cni_username
+        if any(not isinstance(value, str) or not value.startswith("system:") for value in storage_controller_usernames):
+            raise ValueError("admission_storage_identity_invalid")
+        self.storage_controller_usernames = tuple(storage_controller_usernames)
 
     def review(self, review: dict) -> dict:
         uid = ""
@@ -216,6 +224,18 @@ class AdmissionPolicy:
             if self._terminal_delete(req, old):
                 return
             _deny("admission_kubelet_delete_unconfirmed")
+        if (
+            kind == "PersistentVolumeClaim"
+            and op == "UPDATE"
+            and req.get("userInfo", {}).get("username") in self.storage_controller_usernames
+        ):
+            self._pvc_binding(old, obj)
+            return
+        if self.cni_username and req.get("userInfo", {}).get("username") == self.cni_username:
+            if kind != "Pod" or op != "UPDATE":
+                _deny("admission_cni_operation_refused")
+            self._cni_metadata(old, obj)
+            return
         if req.get("userInfo", {}).get("username") != self.manager_username:
             _deny("admission_actor_refused")
         meta = obj.get("metadata", {})
@@ -270,11 +290,75 @@ class AdmissionPolicy:
                     expected["metadata"]["finalizers"] = [
                         x for x in expected["metadata"].get("finalizers", []) if x != STOP_FINALIZER
                     ]
+        elif kind == "PersistentVolumeClaim" and op == "CREATE":
+            if comparison.get("metadata", {}).get("finalizers") == ["kubernetes.io/pvc-protection"]:
+                comparison["metadata"].pop("finalizers")
         elif kind == "Service":
             self._service(comparison, plan)
         comparison = template_projection(comparison)
         if _normalize(comparison) != _normalize(expected):
             _deny("admission_template_mismatch")
+
+    def _pvc_binding(self, old, obj):
+        if not _same_identity(old, obj) or not _protected(old, self.revision) or not _protected(obj, self.revision):
+            _deny("admission_pvc_identity_refused")
+        previous, current = old.get("spec", {}).get("volumeName"), obj.get("spec", {}).get("volumeName")
+        if previous and previous != current:
+            _deny("admission_pvc_rebinding_refused")
+        if current and (not isinstance(current, str) or len(current) > 253):
+            _deny("admission_pvc_binding_invalid")
+        if old.get("status", {}) != obj.get("status", {}):
+            _deny("admission_pvc_status_refused")
+        before, after = copy.deepcopy(old), copy.deepcopy(obj)
+        annotations = {
+            "pv.kubernetes.io/bind-completed",
+            "pv.kubernetes.io/bound-by-controller",
+            "volume.kubernetes.io/selected-node",
+            "volume.kubernetes.io/storage-provisioner",
+            "volume.beta.kubernetes.io/storage-provisioner",
+        }
+        for claim in (before, after):
+            claim["spec"].pop("volumeName", None)
+            meta = claim["metadata"]
+            values = meta.get("annotations", {})
+            for key in annotations:
+                value = values.pop(key, "")
+                if not isinstance(value, str) or len(value) > 256 or "\n" in value:
+                    _deny("admission_pvc_annotation_invalid")
+            if not values:
+                meta.pop("annotations", None)
+            finalizers = [value for value in meta.get("finalizers", []) if value != "kubernetes.io/pvc-protection"]
+            if finalizers:
+                meta["finalizers"] = finalizers
+            else:
+                meta.pop("finalizers", None)
+        if _normalize(before) != _normalize(after):
+            _deny("admission_pvc_controller_mutation_refused")
+
+    def _cni_metadata(self, old, obj):
+        if not _same_identity(old, obj) or not _protected(old, self.revision) or not _protected(obj, self.revision):
+            _deny("admission_cni_identity_refused")
+        if old.get("status", {}) != obj.get("status", {}):
+            _deny("admission_cni_status_refused")
+        before, after = copy.deepcopy(old), copy.deepcopy(obj)
+        keys = {"cni.projectcalico.org/containerID", "cni.projectcalico.org/podIP", "cni.projectcalico.org/podIPs"}
+        for pod in (before, after):
+            annotations = pod["metadata"].get("annotations", {})
+            for key in keys:
+                value = annotations.pop(key, "")
+                if not isinstance(value, str) or len(value) > 256:
+                    _deny("admission_cni_annotation_invalid")
+                if value and key.endswith(("podIP", "podIPs")):
+                    try:
+                        if any(not ipaddress.ip_interface(part).ip.is_private for part in value.split(",")):
+                            raise ValueError()
+                    except ValueError:
+                        _deny("admission_cni_annotation_invalid")
+            if not annotations:
+                pod["metadata"].pop("annotations", None)
+        if _normalize(before) != _normalize(after):
+            _deny("admission_cni_mutation_refused")
+        self._pod_baseline(obj)
 
     def _pod_baseline(self, obj):
         spec, meta = obj.get("spec", {}), obj.get("metadata", {})
@@ -522,6 +606,15 @@ def main():
         manager_username=os.environ["RTM_ADMISSION_MANAGER_USERNAME"],
         status_policy_revision=os.environ["RTM_ADMISSION_STATUS_POLICY_REVISION"],
         plan_reader=client,
+        data_key_configmap=os.getenv("RTM_DATA_PUBLIC_KEYS_CONFIGMAP", "runtime-data-public-keys"),
+        cni_username=os.getenv("RTM_ADMISSION_CNI_USERNAME", ""),
+        storage_controller_usernames=tuple(
+            json.loads(
+                os.getenv(
+                    "RTM_STORAGE_CONTROLLER_USERNAMES", '["system:kube-controller-manager","system:kube-scheduler"]'
+                )
+            )
+        ),
     )
     try:
         uvicorn.run(

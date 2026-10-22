@@ -1,22 +1,24 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22",
-  "validated_source_commit": "81f64c9de",
+  "validated_source_commit": "09e07cd1f",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 41,
-    "tasks_total": 80,
+    "l1_completed": 53,
+    "tasks_total": 82,
     "e2e": "not_started",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 665,
+      "passed": 689,
       "skipped": 10,
       "exit_code": 0,
-      "log": "/private/tmp/f059-runtime-executor-full.log"
+      "source_commit": "340dedbf6",
+      "scope": "full runtime before adding the separate data helper",
+      "log": "/private/tmp/f059-runtime-capabilities-full.log"
     },
     "backend": {
       "passed": 213,
@@ -108,6 +110,24 @@
       "log": "/private/tmp/f059-executor-restart-final.log",
       "cluster": "simulated",
       "deployed": false
+    },
+    "data_helper": {
+      "passed": 18,
+      "source_commit": "6da792ca8",
+      "log": "/private/tmp/f059-data-helper-final.log",
+      "evidence": "real SQLite, fork worker deadlines and local HTTP; no deployed Pod"
+    },
+    "data_repository": {
+      "passed": 107,
+      "source_commit": "618bb4e56",
+      "log": "/private/tmp/f059-data-repository-final.log",
+      "evidence": "SQLite SQL transactions and node/resource regression"
+    },
+    "owner_data_sessions": {
+      "passed": 41,
+      "source_commit": "09e07cd1f",
+      "log": "/private/tmp/f059-data-sessions-final.log",
+      "evidence": "backend services and original owner/audit; issuer and transport injected; default wiring still pending T045/T049"
     }
   },
   "not_executed": [

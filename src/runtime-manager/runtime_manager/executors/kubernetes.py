@@ -99,6 +99,47 @@ class KubernetesExecutor:
             if len(self._seed) != 32:
                 raise ExecutorError("material_issuer_file_invalid")
 
+    def probe_report(self):
+        from runtime_manager.k8s_capabilities import assess_capabilities, descriptor_digest
+        from runtime_manager.k8s_config import KubernetesConfigurationError
+
+        try:
+            fresh = self.settings.descriptor().document
+            if descriptor_digest(fresh) == descriptor_digest(self.document):
+                self.document["probe_report"] = fresh.get("probe_report", {})
+            else:
+                return {
+                    "ready": False,
+                    "checks": [],
+                    "warnings": ["installation_changed_restart_required"],
+                    "paths": {},
+                }
+        except KubernetesConfigurationError:
+            return {"ready": False, "checks": [], "warnings": ["installation_descriptor_unavailable"], "paths": {}}
+        return assess_capabilities(self.document, now=self.clock.time())
+
+    def _package_sources(self):
+        sources = [
+            self.config.build_index_url or "https://pypi.org/simple",
+            self.config.build_extra_index_url,
+            self.config.build_npm_registry or "https://registry.npmjs.org",
+            *self.document.get("package_endpoints", []),
+        ]
+        if not self.config.build_index_url or urlsplit(self.config.build_index_url).hostname == "pypi.org":
+            sources.append("https://files.pythonhosted.org")
+        result = set()
+        for source in sources:
+            if not source:
+                continue
+            parsed = urlsplit(source)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                raise ExecutorError("package_source_invalid")
+            host = parsed.hostname
+            if ":" in host:
+                host = "[" + host + "]"
+            result.add(parsed.scheme + "://" + host + (":" + str(parsed.port) if parsed.port else ""))
+        return sorted(result)
+
     def capabilities(self):
         capabilities = copy.deepcopy(self.document.get("capabilities", {}))
         try:
@@ -106,8 +147,15 @@ class KubernetesExecutor:
             available = True
         except KubernetesAPIError:
             available = False
+        report = self.probe_report()
+        passed = {check["name"] for check in report.get("checks", []) if check.get("ok")}
         return {
             **capabilities,
+            "mandatory_isolation": bool(report["ready"]),
+            "status_protection": "status-provenance" in passed,
+            "binding_protection": "binding-delete-fence" in passed,
+            "paths": report.get("paths", {}),
+            "package_sources": self._package_sources(),
             "executor_kind": "kubernetes",
             "cluster_id": self.settings.cluster_id,
             "namespace": self.settings.namespace,
@@ -308,6 +356,7 @@ class KubernetesExecutor:
             name=name,
             size_mb=storage.get("size_mb" if production else "scratch_size_mb", 1024),
             storage_class=storage.get("class", ""),
+            static_pool=bool(storage.get("static_pool")),
         )
         # WaitForFirstConsumer volumes cannot bind until their Pod is scheduled.
         self._resource(operation, plan, template, reference)

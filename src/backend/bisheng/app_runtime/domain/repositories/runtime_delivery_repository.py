@@ -130,6 +130,36 @@ class RuntimeDeliveryRepository:
                 "instances": int(instances),
             }
 
+    async def material_policy_candidates(self, node_id, now):
+        from bisheng.app_runtime.domain.models.runtime_kubernetes import (
+            RuntimeExecutionResource,
+            RuntimeMaterialDelegation,
+        )
+
+        async with self.transaction() as session:
+            statement = (
+                select(RuntimeMaterialDelegation)
+                .join(RuntimeExecutionResource, RuntimeExecutionResource.id == RuntimeMaterialDelegation.exec_ref)
+                .where(
+                    RuntimeMaterialDelegation.node_id == node_id,
+                    RuntimeExecutionResource.node_id == node_id,
+                    RuntimeMaterialDelegation.revoked_at.is_(None),
+                    or_(RuntimeMaterialDelegation.expires_at.is_(None), RuntimeMaterialDelegation.expires_at > now),
+                    RuntimeMaterialDelegation.pod_uid != "",
+                    RuntimeExecutionResource.uid == RuntimeMaterialDelegation.pod_uid,
+                    RuntimeExecutionResource.stop_requested_at.is_(None),
+                    RuntimeExecutionResource.cleanup_state != "complete",
+                )
+                .order_by(RuntimeMaterialDelegation.id)
+                .limit(10001)
+            )
+            rows = list((await session.exec(statement)).all())
+            if len(rows) > 10000:
+                raise RuntimeConflict("material_policy_candidate_limit")
+            for row in rows:
+                check_scope(row)
+            return rows
+
     async def purge_diagnostics(self, node_id, now):
         async with self.transaction() as session:
             rows = (

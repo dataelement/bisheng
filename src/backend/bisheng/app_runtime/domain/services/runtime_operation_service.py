@@ -512,9 +512,9 @@ class RuntimeOperationService:
         }
 
     async def policies(self, identity):
-        if not identity.node_id:
-            raise RuntimeConflict("node_identity_required")
-        now = datetime.utcnow()
+        if not identity.node_id or set(identity.roles) != {"egress"}:
+            raise RuntimeConflict("independent_egress_identity_required")
+        now = self.clock()
         items = []
         with bypass_tenant_filter():
             for row in await self.repo.node_policies(identity.node_id, now):
@@ -549,6 +549,9 @@ class RuntimeOperationService:
                         "not_after": min(row.not_after, now + timedelta(seconds=5)).replace(tzinfo=UTC).timestamp(),
                     }
                 )
+        from bisheng.app_runtime.domain.services.runtime_material_policy_service import RuntimeMaterialPolicyService
+
+        items.extend(await RuntimeMaterialPolicyService(self.repo, clock=self.clock).policies(identity))
         return {
             "revision": content_digest(items),
             "policies": items,
