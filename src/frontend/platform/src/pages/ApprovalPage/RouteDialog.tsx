@@ -1,8 +1,8 @@
-import { Button, Input } from '@bisheng/ui';
+import { Button, Input, Select } from '@bisheng/ui';
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
-import SelectSearch from "@/components/bs-ui/select/select";
 import { type ApprovalFlowItem, type ApprovalRouteItem } from "@/controllers/API/approval";
 import { getRolesApi } from "@/controllers/API/user";
 import { useEffect, useRef, useState } from "react";
@@ -30,7 +30,6 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
   const [condField, setCondField] = useState(initial.match_config?.field ?? "");
   const [condValue, setCondValue] = useState(initial.match_config?.value ?? "");
   const [systemRoles, setSystemRoles] = useState<{ value: string; label: string }[]>([]);
-  const [roleSearch, setRoleSearch] = useState("");
 
   const dialogSnapshot = useRef({ initial });
   dialogSnapshot.current = { initial };
@@ -42,7 +41,6 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
       setFlowId(initial.flow_definition_id ? String(initial.flow_definition_id) : "");
       setCondField(initial.match_config?.field ?? "");
       setCondValue(initial.match_config?.value ?? "");
-      setRoleSearch("");
       // Load system roles for applicant_role condition values
       getRolesApi("")
         .then((res) => {
@@ -59,6 +57,7 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
   }, [open]);
 
   const { t } = useTranslation("bs");
+  const selectLabels = useSelectLabels();
   const fieldMeta = condField ? CONDITION_FIELD_META[condField] : null;
   // For applicant_role: fixed entries use i18n keys → need t(); system roles have real names → no translation
   const allRoleValues =
@@ -71,11 +70,6 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
           value: v.value,
           label: t(v.label, { defaultValue: v.value }),
         }));
-  // Apply search filter for applicant_role (search against translated label)
-  const effectiveValues =
-    condField === "applicant_role" && roleSearch
-      ? allRoleValues.filter((v) => v.label.toLowerCase().includes(roleSearch.toLowerCase()))
-      : allRoleValues;
   const hasEnumValues = allRoleValues.length > 0;
 
   const handleFieldChange = (f: string) => {
@@ -118,14 +112,15 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
                     condField === "applicant_role" ? (
                       // Searchable dropdown for applicant_role (may have many system roles)
                       <div className="flex-1">
-                        <SelectSearch
-                          value={condValue}
-                          options={effectiveValues}
-                          selectPlaceholder={t("approvalPage.pleaseSelect")}
-                          inputPlaceholder={t("approvalPage.searchRole")}
-                          onValueChange={(v) => setCondValue(v)}
-                          onChange={(e) => setRoleSearch(e.target.value)}
-                          onOpenChange={() => setRoleSearch("")}
+                        <Select
+                          {...selectLabels}
+                          showSearch
+                          className="w-full"
+                          aria-label={fieldMeta ? t(fieldMeta.label, { defaultValue: condField }) : condField}
+                          value={condValue || null}
+                          options={allRoleValues.filter((v) => v.value != null && v.value !== "")}
+                          placeholder={t("approvalPage.pleaseSelect")}
+                          onChange={(v) => setCondValue(v == null ? "" : String(v))}
                         />
                       </div>
                     ) : (
@@ -135,7 +130,7 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
                         className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none"
                       >
                         <option value="">{t("approvalPage.pleaseSelect")}</option>
-                        {effectiveValues.map((v) => (
+                        {allRoleValues.map((v) => (
                           <option key={v.value} value={v.value}>
                             {v.label}
                           </option>

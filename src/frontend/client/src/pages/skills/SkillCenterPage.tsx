@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
-import { Button, SearchInput, StateView, Tooltip } from '@bisheng/ui';
+import { Button, SearchInput, Select, StateView, Tooltip } from '@bisheng/ui';
 import { translateApiErrorMessage } from '~/api/request';
 import { NotificationSeverity } from '~/common';
-import { ActionMenuCheckboxItem, ActionMenuContent } from '~/components/ActionMenu';
 import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
 import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { SkillUploadDialog } from '~/components/Skills/SkillUploadDialog';
 import { SkillRequestError, type SkillRecord } from '~/components/Skills/types';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
-import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { useLocalize } from '~/hooks';
+import useSelectCopy from '~/hooks/useSelectCopy';
 import { useToastContext } from '~/Providers';
 import { cn } from '~/utils';
 import { SkillList, SkillListSkeleton, type SkillSort } from './SkillList';
@@ -24,6 +23,7 @@ import { SkillList, SkillListSkeleton, type SkillSort } from './SkillList';
 
 export function SkillCenterPage() {
   const localize = useLocalize();
+  const selectCopy = useSelectCopy();
   const { showToast } = useToastContext();
   const { platform, personal, mutation, personalCount, enterpriseCount } = useSkillCenter();
   const [search, setSearch] = useState('');
@@ -114,23 +114,29 @@ export function SkillCenterPage() {
   const mineTools = (
     <>
       {searchInput}
-      <DropdownMenu>
-        <Tooltip content={localize('com_skill_center_sort')}>
-          <DropdownMenuTrigger asChild>
-            <Button color="default" variant="outlined" iconOnly aria-label={localize('com_skill_center_sort')}>
-              <Outlined.Sort />
-            </Button>
-          </DropdownMenuTrigger>
-        </Tooltip>
-        <ActionMenuContent>
-          <ActionMenuCheckboxItem checked={sort === 'recent'} onCheckedChange={() => setSort('recent')}>
-            {localize('com_skill_center_sort_recent')}
-          </ActionMenuCheckboxItem>
-          <ActionMenuCheckboxItem checked={sort === 'name'} onCheckedChange={() => setSort('name')}>
-            {localize('com_skill_center_sort_name')}
-          </ActionMenuCheckboxItem>
-        </ActionMenuContent>
-      </DropdownMenu>
+      {/* Arrow-entry Select: the list order is the echo of the picked value.
+          The Tooltip sits on a wrapper because Select clones its trigger. */}
+      <Tooltip content={localize('com_skill_center_sort')}>
+        <span className="inline-flex">
+          <Select
+            {...selectCopy}
+            aria-label={localize('com_skill_center_sort')}
+            options={[
+              { value: 'recent', label: localize('com_skill_center_sort_recent') },
+              { value: 'name', label: localize('com_skill_center_sort_name') },
+            ]}
+            value={sort}
+            onChange={(next) => {
+              if (next === 'recent' || next === 'name') setSort(next);
+            }}
+            trigger={
+              <Button color="default" variant="outlined" iconOnly aria-label={localize('com_skill_center_sort')}>
+                <Outlined.Sort />
+              </Button>
+            }
+          />
+        </span>
+      </Tooltip>
       <Button disabled={personal.isError || personal.isLoading} onClick={handleStartUpload} className="max-[575px]:w-full">
         <Outlined.Plus />{localize('com_skill_center_upload')}
       </Button>

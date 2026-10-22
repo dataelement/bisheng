@@ -1,8 +1,8 @@
 // @ts-strict-ignore
-import { Button, Input } from '@bisheng/ui';
+import { Button, Input, Select } from '@bisheng/ui';
 
 
-import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { FlowTooltip as Tip } from "@/pages/BuildPage/flow/FlowTooltip";
 import { findInvalidRefItems, updateVariableNameByCode } from "@/util/flowUtils";
 import { Outlined } from "bisheng-icons";
@@ -15,6 +15,11 @@ import SelectVar from "./SelectVar";
 
 const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteItem, refInvalid = false }) => {
     const { t } = useTranslation('flow');
+    const selectLabels = useSelectLabels();
+    const typeOptions = [
+        { value: 'ref', label: t('reference') },
+        { value: 'input', label: t('input') },
+    ];
 
     const handleTypeChange = (newType) => {
         onUpdateItem(index, { ...item, type: newType, label: '', value: '' });
@@ -45,17 +50,19 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
             <Input value={item.key} placeholder={t('parameterName')} onChange={handleKeyChange} className={`${(error || sameKey === item.key) && 'border-red-500'} h-8`} />
             {/* type */}
 
-            <Select value={item.type} onValueChange={handleTypeChange}>
-                <SelectTrigger className="max-w-32 w-24 h-8">
-                    <SelectValue placeholder={t('type')} />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectItem value="ref">{t('reference')}</SelectItem>
-                        <SelectItem value="input">{t('input')}</SelectItem>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
+            <Select
+                {...selectLabels}
+                options={typeOptions}
+                value={item.type || null}
+                onChange={(v) => {
+                    // Re-picking the current type is a no-op (Radix never fired for it).
+                    const next = v == null ? '' : String(v);
+                    if (next !== item.type) handleTypeChange(next);
+                }}
+                placeholder={t('type')}
+                aria-label={t('type')}
+                className="nodrag w-24 shrink-0"
+            />
             {/* value */}
             {item.type === 'ref' ? <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => {
                 onUpdateItem(index, { ...item, label: `${E.name}/${v.label}`, value: `${E.id}.${v.value}` })

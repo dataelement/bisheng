@@ -1,15 +1,9 @@
 // @ts-strict-ignore
-import { Button, notification } from '@bisheng/ui';
+import { Button, notification, Select } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { useComponentEditorStore,useEditorDashboardStore } from "@/store/dashboardStore";
 import { Checkbox } from "@bisheng/ui";
 import { useEffect,useState } from "react";
@@ -44,6 +38,7 @@ export default function ChartSelector({
   onSave,
 }: ChartSelectorProps) {
   const { t } = useTranslation("dashboard")
+  const selectLabels = useSelectLabels()
   const [selectedCharts, setSelectedCharts] = useState<string[]>([])
   const [displayType, setDisplayType] = useState(t("chartSelector.displayTypes.timeRange"))
   const [timeGranularity, setTimeGranularity] = useState(t("chartSelector.granularities.yearMonthDay"))
@@ -372,19 +367,16 @@ export default function ChartSelector({
               <label className="text-sm">
                 {t("chartSelector.displayType")}
               </label>
-              <Select value={displayType} onValueChange={setDisplayType}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={t("chartSelector.displayTypes.timeRange")}>
-                    {t("chartSelector.displayTypes.timeRange")}
-                  </SelectItem>
-                  <SelectItem value={t("chartSelector.displayTypes.time")}>
-                    {t("chartSelector.displayTypes.time")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Select
+                {...selectLabels}
+                options={[
+                  { value: t("chartSelector.displayTypes.timeRange"), label: t("chartSelector.displayTypes.timeRange") },
+                  { value: t("chartSelector.displayTypes.time"), label: t("chartSelector.displayTypes.time") },
+                ]}
+                value={displayType || null}
+                onChange={(v) => { if (v != null) setDisplayType(String(v)) }}
+                aria-label={t("chartSelector.displayType")}
+              />
             </div>
 
             {/* 时间粒度 */}
@@ -392,22 +384,17 @@ export default function ChartSelector({
               <label className="text-sm">
                 {t("chartSelector.timeGranularity")}
               </label>
-              <Select value={timeGranularity} onValueChange={setTimeGranularity}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={t("chartSelector.granularities.yearMonth")}>
-                    {t("chartSelector.granularities.yearMonth")}
-                  </SelectItem>
-                  <SelectItem value={t("chartSelector.granularities.yearMonthDay")}>
-                    {t("chartSelector.granularities.yearMonthDay")}
-                  </SelectItem>
-                  <SelectItem value={t("chartSelector.granularities.yearMonthDayHour")}>
-                    {t("chartSelector.granularities.yearMonthDayHour")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Select
+                {...selectLabels}
+                options={[
+                  { value: t("chartSelector.granularities.yearMonth"), label: t("chartSelector.granularities.yearMonth") },
+                  { value: t("chartSelector.granularities.yearMonthDay"), label: t("chartSelector.granularities.yearMonthDay") },
+                  { value: t("chartSelector.granularities.yearMonthDayHour"), label: t("chartSelector.granularities.yearMonthDayHour") },
+                ]}
+                value={timeGranularity || null}
+                onChange={(v) => { if (v != null) setTimeGranularity(String(v)) }}
+                aria-label={t("chartSelector.timeGranularity")}
+              />
             </div>
 
             {/* 默认值 */}

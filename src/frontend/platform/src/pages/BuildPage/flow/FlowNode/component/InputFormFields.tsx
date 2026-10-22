@@ -1,8 +1,8 @@
-import { Input } from '@bisheng/ui';
+import { Input, Select } from '@bisheng/ui';
 import type { UploadFileKind } from "@/util/fileAcceptUtils";
 
 import { Label } from "@/components/bs-ui/label";
-import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
 import { Switch } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
@@ -31,6 +31,7 @@ interface InputFormFieldsProps {
 }
 export function InputFormFields({ formData, setFormData, errors, nodeId, nodeData, defaultValue, namePlaceholders, checkVarFuncRef, updateOptions, handleFileTypeChange, handleProcessingStrategyChange, getAvailableProcessingStrategies, shouldShowField }: InputFormFieldsProps) {
     const { t } = useTranslation('flow');
+    const selectLabels = useSelectLabels();
     const InputForm = <div className="space-y-4">
         <div>
             <Label className="flex items-center bisheng-label">
@@ -161,20 +162,17 @@ export function InputFormFields({ formData, setFormData, errors, nodeId, nodeDat
                 />
             </Label>
             <Select
-                value={formData.processingOption}
-                onValueChange={(v) => handleProcessingStrategyChange(v as FormOption)}
-            >
-                <SelectTrigger className="mt-2">
-                    <SelectValue placeholder={t("selectFile")} />
-                </SelectTrigger>
-                <SelectContent>
-                    {getAvailableProcessingStrategies().map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
+                {...selectLabels}
+                options={getAvailableProcessingStrategies().filter((option) => option.value)}
+                value={formData.processingOption || null}
+                onChange={(v) => {
+                    // Re-picking the current strategy is a no-op (Radix never fired for it).
+                    if (v != null && v !== formData.processingOption) handleProcessingStrategyChange(v as FormOption);
+                }}
+                placeholder={t("selectFile")}
+                aria-label={t("fileProcessingStrategy")}
+                className="mt-2 w-full"
+            />
         </div>
 
         {}

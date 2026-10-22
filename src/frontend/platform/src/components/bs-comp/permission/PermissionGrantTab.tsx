@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Alert, Button } from '@bisheng/ui';
 
 import { Checkbox } from '@bisheng/ui';
 import {
@@ -332,12 +332,12 @@ export function PermissionGrantTab({
         data-testid="legacy-permission-grant-layout"
       >
         {conflict && (
-          <p
-            className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-900"
-            role="alert"
-          >
-            {t("grant.conflict")}
-          </p>
+          <Alert
+            type="error"
+            className="mb-3"
+            description={t("grant.conflict")}
+            live
+          />
         )}
 
         <div className="min-h-0 flex-1 overflow-hidden">
@@ -403,17 +403,10 @@ export function PermissionGrantTab({
   return (
     <div className="flex min-h-0 flex-col gap-4">
       {!canEdit && (
-        <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-          {t("grant.readOnly")}
-        </p>
+        <Alert description={t("grant.readOnly")} />
       )}
       {conflict && (
-        <p
-          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-900"
-          role="alert"
-        >
-          {t("grant.conflict")}
-        </p>
+        <Alert type="error" description={t("grant.conflict")} live />
       )}
 
       {showExistingAssignees && assignees.length > 0 && (

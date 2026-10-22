@@ -1,0 +1,204 @@
+---
+status: done
+component: Cascader
+---
+
+# 级联选择 Cascader
+
+沿着父子层级逐步缩小范围，最后把完整路径作为值交给业务。组件库 `@bisheng/ui` 导出 **`Cascader`**；触发器和 Select 共用同一份实现，桌面端展开多列，手机端自动改为底部下钻面板。
+
+## 基础用法
+
+默认只选择叶子。点父项打开下一列，点叶子完成选择并关闭；回显保留完整路径，值也是完整路径数组。
+
+```tsx
+import React from 'react';
+import { Cascader } from '@bisheng/ui';
+
+const OPTIONS = [
+  {
+    value: 'headquarters',
+    label: '总部',
+    children: [
+      {
+        value: 'product',
+        label: '产品部',
+        children: [
+          { value: 'design', label: '设计组' },
+          { value: 'frontend', label: '前端组' },
+        ],
+      },
+      {
+        value: 'delivery',
+        label: '交付部',
+        children: [{ value: 'design', label: '设计组' }],
+      },
+    ],
+  },
+  {
+    value: 'east',
+    label: '华东区',
+    children: [{ value: 'shanghai', label: '上海团队' }],
+  },
+];
+
+export default () => {
+  const [value, setValue] = React.useState(['headquarters', 'product', 'design']);
+  return (
+    <Cascader
+      options={OPTIONS}
+      value={value}
+      onChange={setValue}
+      placeholder="请选择所属团队"
+      className="w-72"
+      aria-label="所属团队"
+      emptyText="暂无数据"
+      noMatchText="无匹配结果"
+      loadingText="正在加载…"
+      loadErrorText="加载失败，请重试"
+      clearLabel="清除"
+      backLabel="返回"
+      searchPlaceholder="搜索团队"
+    />
+  );
+};
+```
+
+## 多选
+
+父项复选框默认联动所有已加载叶子；只选一部分时显示半选。标签默认只显示叶子名，出现同名叶子时自动补足最短可区分路径。
+
+```tsx
+import React from 'react';
+import { Cascader } from '@bisheng/ui';
+
+const OPTIONS = [
+  {
+    value: 'space-a',
+    label: '产品知识空间',
+    children: [
+      { value: 'manual', label: '产品手册' },
+      { value: 'faq', label: '售后 FAQ' },
+    ],
+  },
+  {
+    value: 'space-b',
+    label: '企业知识空间',
+    children: [
+      { value: 'manual', label: '员工手册' },
+      { value: 'policy', label: '制度文件' },
+    ],
+  },
+];
+
+export default () => {
+  const [value, setValue] = React.useState([['space-a', 'manual']]);
+  return (
+    <Cascader
+      multiple
+      options={OPTIONS}
+      value={value}
+      onChange={setValue}
+      placeholder="请选择知识库"
+      className="w-80"
+      aria-label="知识库"
+      doneLabel="完成"
+      backLabel="返回"
+      clearLabel="清除"
+      removeLabel="移除"
+      searchPlaceholder="搜索知识库"
+    />
+  );
+};
+```
+
+## 任意层级可选
+
+每一级本身都是有效答案时才开 `checkStrictly`。单选父项左侧出现单选圆点；点圆点选择，点文字继续展开。多选时父子节点互不联动。
+
+```tsx
+import React from 'react';
+import { Cascader } from '@bisheng/ui';
+
+const OPTIONS = [
+  {
+    value: 'all',
+    label: '全部区域',
+    children: [
+      { value: 'east', label: '华东区', children: [{ value: 'shanghai', label: '上海' }] },
+      { value: 'south', label: '华南区', children: [{ value: 'shenzhen', label: '深圳' }] },
+    ],
+  },
+];
+
+export default () => (
+  <Cascader
+    checkStrictly
+    options={OPTIONS}
+    defaultValue={['all', 'east']}
+    className="w-64"
+    aria-label="区域"
+    backLabel="返回"
+    clearLabel="清除"
+    searchPlaceholder="搜索区域"
+  />
+);
+```
+
+## 搜索与懒加载
+
+可选节点超过 10 个时自动开启搜索，也可用 `showSearch` 显式控制。懒加载节点写 `isLeaf: false`，`loadData` 返回下一层；请求期间只替换当前行箭头，不冻结整张面板。未加载完整的父项不会提供“全选后代”。
+
+```tsx
+import { Cascader } from '@bisheng/ui';
+
+const OPTIONS = [
+  { value: 'north', label: '北方区域', isLeaf: false },
+  { value: 'south', label: '南方区域', isLeaf: false },
+];
+
+export default () => (
+  <Cascader
+    options={OPTIONS}
+    showSearch
+    loadData={async (option) => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      return [
+        { value: `${option.value}-1`, label: '第一团队' },
+        { value: `${option.value}-2`, label: '第二团队' },
+      ];
+    }}
+    placeholder="请选择团队"
+    className="w-64"
+    aria-label="团队"
+    emptyText="暂无数据"
+    noMatchText="无匹配结果"
+    loadingText="正在加载…"
+    loadErrorText="加载失败，请重试"
+    backLabel="返回"
+    clearLabel="清除"
+    searchPlaceholder="搜索团队"
+  />
+);
+```
+
+## API
+
+| 属性 | 说明 | 类型 | 默认 |
+|---|---|---|---|
+| `options` | 层级选项 | `CascaderOption[]` | — |
+| `multiple` | 多选，默认父子联动 | `boolean` | `false` |
+| `value` / `defaultValue` | 单选为路径，多选为路径数组 | `CascaderPath \| null` / `CascaderPath[]` | — |
+| `onChange` | 返回结构化路径和对应选项路径 | `(value, options) => void` | — |
+| `checkStrictly` | 任意层级独立可选 | `boolean` | `false` |
+| `expandTrigger` | 桌面端展开方式；手机始终轻点进入 | `'click' \| 'hover'` | `'click'` |
+| `showSearch` / `onSearch` / `filterOption` | 本地或服务端路径搜索 | — | 可选节点 > 10 时开启 |
+| `loadData` / `onLoadError` | 懒加载子节点与失败回调 | — | — |
+| `size` / `status` / `variant` | 与 Select 同义 | — | `medium` / `default` / `outlined` |
+| `radius` / `panelRadius` | 触发器与面板圆角 token | — | 随尺寸 / `xl` |
+| `allowClear` / `onClear` | 清除当前值 | `boolean` / `() => void` | `false` |
+| `open` / `defaultOpen` / `onOpenChange` | 受控展开 | — | — |
+| `placeholder` / `emptyText` / `noMatchText` / `loadingText` / `loadErrorText` | 展示文案 | `ReactNode` | 英文兜底 |
+| `backLabel` / `doneLabel` / `clearLabel` / `removeLabel` / `searchPlaceholder` | 手机和无障碍文案 | `string` | 英文兜底 |
+
+`CascaderOption`：`value`、`label`、`children`、`disabled`、`isLeaf`、`icon`。`isLeaf: false` 且没有 `children` 表示子项尚未加载。

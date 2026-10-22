@@ -132,13 +132,19 @@ export default defineConfig({
           text: '导航 Navigation',
           items: [
             { text: '面包屑 Breadcrumb', link: '/components/breadcrumb' },
+            { text: '下拉菜单 Dropdown', link: '/components/dropdown' },
             { text: '标签页 Tabs', link: '/components/tabs' },
+            { text: '分页 Pagination', link: '/components/pagination' },
           ],
         },
         {
           text: '数据录入 Data Entry',
           items: [
             { text: '输入框 Input', link: '/components/input' },
+            { text: '数字输入框 InputNumber', link: '/components/input-number' },
+            { text: '滑块 Slider', link: '/components/slider' },
+            { text: '选择器 Select', link: '/components/select' },
+            { text: '级联选择 Cascader', link: '/components/cascader' },
             { text: '复选框 Checkbox', link: '/components/checkbox' },
             { text: '单选框 Radio', link: '/components/radio' },
             { text: '开关 Switch', link: '/components/switch' },
@@ -186,6 +192,7 @@ export default defineConfig({
             { text: '图标 Icon', link: '/基础-图标规范' },
             { text: '插画 Illustration', link: '/基础-插画规范' },
             { text: '圆角与阴影 Radius & Shadow', link: '/基础-圆角与阴影规范' },
+            { text: '间距 Spacing', link: '/01-设计规范' },
           ],
         },
         {
@@ -193,6 +200,10 @@ export default defineConfig({
           items: [
             { text: '按钮 Button', link: '/组件-Button按钮' },
             { text: '输入框 Input', link: '/组件-Input输入框' },
+            { text: '数字输入框 InputNumber', link: '/组件-InputNumber数字输入框' },
+            { text: '滑块 Slider', link: '/组件-Slider滑块' },
+            { text: '选择器 Select', link: '/组件-Select选择器' },
+            { text: '级联选择 Cascader', link: '/组件-Cascader级联选择' },
             { text: '复选框 Checkbox', link: '/组件-Checkbox复选框' },
             { text: '单选框 Radio', link: '/组件-Radio单选框' },
             { text: '开关 Switch', link: '/组件-Switch开关' },
@@ -204,6 +215,8 @@ export default defineConfig({
             { text: '文字提示 Tooltip', link: '/组件-Tooltip文字提示' },
             { text: '气泡卡片 Popover', link: '/组件-Popover气泡卡片' },
             { text: '面包屑 Breadcrumb', link: '/组件-Breadcrumb面包屑' },
+            { text: '下拉菜单 Dropdown', link: '/组件-Dropdown下拉菜单' },
+            { text: '分页 Pagination', link: '/组件-Pagination分页' },
             { text: '弹窗 Modal', link: '/组件-Modal弹窗' },
             { text: '二次确认 Confirm', link: '/组件-Confirm二次确认' },
             { text: '抽屉 Drawer', link: '/组件-Drawer抽屉' },

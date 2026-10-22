@@ -3,7 +3,6 @@
   "settings": "設定",
   "noValue": "なし",
   "removeSelectedValue": "{{value}}を削除",
-
   "chartSelector": {
     "title": "関連グラフ設定",
     "selectCharts": "関連グラフを選択",
@@ -272,6 +271,14 @@
       "axis": "軸",
       "dataLabel": "データラベル",
       "gridLine": "グリッド線"
+    },
+    "textFormat": {
+      "fontSize": "フォントサイズ",
+      "color": "文字色",
+      "align": "配置",
+      "alignLeft": "左揃え",
+      "alignCenter": "中央揃え",
+      "alignRight": "右揃え"
     }
   },
   "useChartState": {

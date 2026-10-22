@@ -14,8 +14,7 @@ import LoadMore from "@/components/bs-comp/loadMore";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
-import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
-import SelectSearch from "@/components/bs-ui/select/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { userContext } from "@/contexts/userContext";
 import { changeAssistantStatusApi,createAssistantsApi,deleteAssistantApi,getAssistantDetailApi,saveAssistanttApi } from "@/controllers/API/assistant";
@@ -26,7 +25,7 @@ import { AppNumType,AppType } from "@/types/app";
 import { FlowType } from "@/types/flow";
 import { useInfiniteCursorTable } from "@/util/hook";
 import { generateUUID } from "@/utils";
-import { Tag } from "@bisheng/ui";
+import { Select, Tag } from "@bisheng/ui";
 import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -39,28 +38,37 @@ import { useCreateTemp,useQueryLabels } from "./hook";
 export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultValue?: string; onChange: (v: string) => void }) => {
     const [value, setValue] = useState(defaultValue)
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+
+    const options = [
+        { value: 'all', label: t('build.allAppStatus') },
+        { value: '2', label: t('build.online') },
+        { value: '1', label: t('build.offline') },
+    ]
 
     return (
-        <Select value={value} onValueChange={(v) => { onChange(v); setValue(v) }}>
-            <SelectTrigger className="max-w-36 min-w-[9rem]">
-                <SelectValue placeholder={t('build.allAppStatus')} />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectGroup>
-                    <SelectItem value="all">{t('build.allAppStatus')}</SelectItem>
-                    <SelectItem value="2">{t('build.online')}</SelectItem>
-                    <SelectItem value="1">{t('build.offline')}</SelectItem>
-                </SelectGroup>
-            </SelectContent>
-        </Select>
+        <Select
+            {...selectLabels}
+            aria-label={t('tenant.statusFilter')}
+            className="max-w-36 min-w-[9rem]"
+            placeholder={t('build.allAppStatus')}
+            options={options}
+            value={value}
+            onChange={(v) => {
+                if (v == null || String(v) === value) return
+                onChange(String(v))
+                setValue(String(v))
+            }}
+        />
     )
 }
 
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
     const { t } = useTranslation();
+    const selectLabels = useSelectLabels()
 
-    const options: any = [
+    const options: { label: string; value: string }[] = [
         { label: t('build.workflow'), value: AppType.FLOW },
         { label: t('build.assistant'), value: AppType.ASSISTANT },
     ];
@@ -70,18 +78,44 @@ export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     }
 
 
-    return <Select value={value} onValueChange={(v) => { onChange(v); setValue(v) }}>
-        <SelectTrigger className="max-w-32">
-            <SelectValue placeholder={t('build.allAppTypes')} />
-        </SelectTrigger>
-        <SelectContent>
-            <SelectGroup>
-                {options.map(el => (
-                    <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>
-                ))}
-            </SelectGroup>
-        </SelectContent>
-    </Select>
+    return <Select
+        {...selectLabels}
+        aria-label={t('build.appTypeFilter')}
+        className="max-w-32"
+        placeholder={t('build.allAppTypes')}
+        options={options}
+        value={value}
+        onChange={(v) => {
+            if (v == null || String(v) === value) return
+            onChange(String(v))
+            setValue(String(v))
+        }}
+    />
+}
+
+interface LabelFilterSelectProps {
+    options: { label: string; value: number | string | null }[]
+    value: number | string | null
+    onChange: (value: number | string) => void
+}
+
+/** Tag filter of the app list; -1 is the "all tags" row added by useQueryLabels. */
+function LabelFilterSelect({ options, value, onChange }: LabelFilterSelectProps) {
+    const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+
+    return <Select
+        {...selectLabels}
+        aria-label={t('chat.filterLabel')}
+        className="w-52"
+        showSearch
+        placeholder={t('chat.allLabels')}
+        options={options
+            .filter(o => o.value != null && o.value !== '')
+            .map(o => ({ value: o.value as number | string, label: o.label }))}
+        value={value || null}
+        onChange={(v) => { if (v != null) onChange(v) }}
+    />
 }
 
 const TypeNames = {
@@ -282,7 +316,7 @@ export default function apps() {
         createAppModalRef.current.open(type, tempId);
     }
 
-    const { selectLabel, setSelectLabel, setSearchKey, filteredOptions, allOptions, refetchLabels } = useQueryLabels(t)
+    const { selectLabel, setSelectLabel, filteredOptions, allOptions, refetchLabels } = useQueryLabels(t)
     const handleLabelSearch = (id) => {
         setSelectLabel(allOptions.find(l => l.value === id))
         filterData({ tag_id: id })
@@ -302,16 +336,11 @@ export default function apps() {
                         filterData({ status: v === 'all' ? undefined : Number(v) })
                     }}
                 />
-                <SelectSearch
-                    value={!selectLabel.value ? '' : selectLabel.value}
+                <LabelFilterSelect
                     options={allOptions}
-                    selectPlaceholder={t('chat.allLabels')}
-                    inputPlaceholder={t('chat.searchLabels')}
-                    selectClass="w-52"
-                    onOpenChange={() => setSearchKey('')}
-                    onChange={(e) => setSearchKey(e.target.value)}
-                    onValueChange={handleLabelSearch}>
-                </SelectSearch>
+                    value={selectLabel.value}
+                    onChange={handleLabelSearch}
+                />
                 {canCreateApp && (
                     <Button variant="text" className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto" onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)} color="default"><Outlined.MoveToFolder className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
                 )}

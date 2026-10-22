@@ -1,5 +1,4 @@
-import { notification } from '@bisheng/ui';
-import { Outlined } from "bisheng-icons";
+import { notification, Select } from '@bisheng/ui';
 // Page-level admin-scope switcher for LLM management.
 //
 // v2.5.1: scope was originally exposed as a global HeaderTenantScope
@@ -9,21 +8,11 @@ import { Outlined } from "bisheng-icons";
 // lives on this page so its visible affordance matches where it changes
 // data. Renders nothing for non-super-admin users.
 
-import { Button } from "@bisheng/ui"
-
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useQueryClient } from "react-query"
 
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/bs-ui/dropdownMenu"
-
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 import { getTenantsApi } from "@/controllers/API/tenant"
 import { useAdminScope } from "@/hooks/useAdminScope"
 import { Tenant } from "@/types/api/tenant"
@@ -51,6 +40,8 @@ function SuperAdminScopeSwitcher({
     onScopeChange?: () => void | Promise<void>
 }): JSX.Element {
     const { t } = useTranslation("bs")
+    const selectLabels = useSelectLabels()
+    const labelId = useId()
     const queryClient = useQueryClient()
     const { scope, loading: scopeLoading, setScope } = useAdminScope()
     const [tenants, setTenants] = useState<Tenant[]>([])
@@ -91,17 +82,6 @@ function SuperAdminScopeSwitcher({
         return t("tenant.adminScope.global")
     }, [rootTenant, t])
 
-    const currentLabel = useMemo(() => {
-        if (scope.scope_tenant_id === null) {
-            return rootLabel
-        }
-        const hit = tenants.find((row) => row.id === scope.scope_tenant_id)
-        if (!hit) {
-            return t("tenant.adminScope.loading")
-        }
-        return displayTenantName(hit.tenant_name) || hit.tenant_code
-    }, [scope.scope_tenant_id, tenants, t, rootLabel])
-
     const handleSelect = async (next: number | null) => {
         if (scopeLoading) return
         if (next === scope.scope_tenant_id) return
@@ -121,53 +101,46 @@ function SuperAdminScopeSwitcher({
         }
     }
 
-    const childTenants = tenants.filter((row) => row.id !== ROOT_TENANT_ID)
+    const options = useMemo(() => {
+        const list = [
+            // The "no scope" entry is the Root tenant; it stands for scope_tenant_id = null.
+            { value: ROOT_TENANT_ID, label: rootLabel, disabled: false },
+            ...tenants
+                .filter((row) => row.id !== ROOT_TENANT_ID && row.id != null)
+                .map((row) => ({
+                    value: row.id,
+                    label: displayTenantName(row.tenant_name) || row.tenant_code,
+                    disabled: false,
+                })),
+        ]
+        // The current scope may point at a tenant the list has not returned
+        // (yet): keep a readable label in the trigger instead of a bare id.
+        const current = scope.scope_tenant_id
+        if (current !== null && !list.some((option) => option.value === current)) {
+            list.push({ value: current, label: t("tenant.adminScope.loading"), disabled: true })
+        }
+        return list
+    }, [tenants, rootLabel, scope.scope_tenant_id, t])
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button
-                    type="button"
-                    variant="filled"
-                    title={t("tenant.adminScope.label") + ": " + currentLabel}
-                    disabled={scopeLoading} color="default"
-                >
-                    <span className="text-xs text-muted-foreground mr-1">
-                        {t("tenant.adminScope.label")}{": "}
-                    </span>
-                    <span className="text-sm max-w-32 truncate">{currentLabel}</span>
-                    <Outlined.Down className="ml-1 w-4 h-4" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-[180px]">
-                <DropdownMenuLabel>
-                    {t("tenant.adminScope.label")}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => handleSelect(null)}>
-                    {scope.scope_tenant_id === null ? "✓ " : ""}
-                    {rootLabel}
-                </DropdownMenuItem>
-                {tenantsLoading && (
-                    <DropdownMenuItem disabled>
-                        {t("tenant.adminScope.loading")}
-                    </DropdownMenuItem>
-                )}
-                {!tenantsLoading && childTenants.length === 0 && (
-                    <DropdownMenuItem disabled>
-                        {t("tenant.adminScope.noChild")}
-                    </DropdownMenuItem>
-                )}
-                {childTenants.map((row) => (
-                    <DropdownMenuItem
-                        key={row.id}
-                        onSelect={() => handleSelect(row.id)}
-                    >
-                        {scope.scope_tenant_id === row.id ? "✓ " : ""}
-                        {displayTenantName(row.tenant_name) || row.tenant_code}
-                    </DropdownMenuItem>
-                ))}
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+            <span id={labelId} className="shrink-0 text-sm text-text-2">
+                {t("tenant.adminScope.label")}
+            </span>
+            <Select
+                {...selectLabels}
+                aria-labelledby={labelId}
+                className="w-48"
+                options={options}
+                value={scope.scope_tenant_id ?? ROOT_TENANT_ID}
+                loading={tenantsLoading}
+                disabled={scopeLoading}
+                onChange={(value) => {
+                    if (value == null) return
+                    const next = Number(value)
+                    void handleSelect(next === ROOT_TENANT_ID ? null : next)
+                }}
+            />
+        </div>
     )
 }

@@ -1,12 +1,12 @@
 // @ts-strict-ignore
 
+import { Select } from "@bisheng/ui";
 import { useRef, useState } from "react";
 import { useRecoilValue } from "recoil";
 import { Button } from "~/components";
-import MultiSelect from "~/components/ui/MultiSelect";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/Select";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import useSelectCopy from "~/hooks/useSelectCopy";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 import { fileAcceptToInputAccept, normalizeFileAccept } from "../fileAcceptUtils";
 import { bishengConfState } from "../store/atoms";
@@ -45,8 +45,14 @@ interface WorkflowNodeParam {
     hidden?: boolean;
 }
 
+const selectOptions = (item) =>
+    (item.options || [])
+        .filter(el => el.text != null && el.text !== '')
+        .map(el => ({ value: el.text, label: String(el.text) }))
+
 const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any }) => {
     const localize = useLocalize()
+    const selectCopy = useSelectCopy()
     const bishengConfig = useRecoilValue(bishengConfState)
     const formDataRef = useRef(data.value.reduce((map, item) => {
         map[item.key] = { key: item.key, type: item.type, label: item.value, fileName: '', value: '' }
@@ -117,38 +123,25 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
                                     case FormItemType.Select:
                                         return (
                                             item.multiple ?
-                                                <MultiSelect
+                                                <Select
+                                                    {...selectCopy}
                                                     multiple
-                                                    className={''}
                                                     value={multiVal[item.key] || []}
-                                                    options={
-                                                        item.options.map(el => ({
-                                                            label: el.text,
-                                                            value: el.text
-                                                        }))
-                                                    }
+                                                    options={selectOptions(item)}
                                                     placeholder={localize('com_ui_please_select')}
+                                                    aria-label={item.value}
                                                     onChange={(v) => {
                                                         setMultiVal(prev => ({ ...prev, [item.key]: v }));
                                                         handleChange(item, v.join(','))
                                                     }}
-                                                >
-                                                    {/* {children?.(reload)} */}
-                                                </MultiSelect>
-                                                : <Select onValueChange={(val) => handleChange(item, val)}>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-white">
-                                                        <SelectGroup>
-                                                            {item.options.map(el => (
-                                                                <SelectItem key={el.text} value={el.text}>
-                                                                    {el.text}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
+                                                />
+                                                : <Select
+                                                    {...selectCopy}
+                                                    options={selectOptions(item)}
+                                                    placeholder={localize('com_ui_please_select')}
+                                                    aria-label={item.value}
+                                                    onChange={(val) => handleChange(item, val ?? '')}
+                                                />
                                         )
                                     case FormItemType.File:
                                         return (

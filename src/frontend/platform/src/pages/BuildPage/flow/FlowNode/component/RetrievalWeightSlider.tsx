@@ -1,6 +1,5 @@
 // @ts-strict-ignore
-import { Slider } from '@/components/bs-ui/slider';
-import { Tooltip as SharedTooltip,Switch } from "@bisheng/ui";
+import { Tooltip as SharedTooltip,Slider,Switch,type SliderValue } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 import { useModel } from '@/pages/ModelPage/manage';
@@ -93,8 +92,8 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
         userAuth
     ]);
 
-    const handleSliderChange = (value: number[]) => {
-        const newKeywordWeight = value[0];
+    const handleSliderChange = (value: SliderValue) => {
+        const newKeywordWeight = value as number;
         const newVectorWeight = 1.0 - newKeywordWeight;
 
         setKeywordWeight(newKeywordWeight);
@@ -145,14 +144,16 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                                 <span className="text-xs text-gray-500">{keywordWeight.toFixed(2)}</span>
                             </div>
 
-                            <div className="flex-1 px-0">
+                            {/* nodrag: keep the canvas from moving the node while the thumb is dragged */}
+                            <div className="nodrag flex-1 px-0">
                                 <Slider
-                                    value={[keywordWeight]}
+                                    value={keywordWeight}
                                     onValueChange={handleSliderChange}
                                     min={0}
                                     max={1}
                                     step={0.01}
-                                    className="w-full"
+                                    thumbLabel={t('retrieverWeightSettings')}
+                                    formatValue={(v) => v.toFixed(2)}
                                 />
                             </div>
 

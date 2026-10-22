@@ -1,12 +1,12 @@
 import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, SearchInput } from '@bisheng/ui';
-import { Segmented, Tooltip as SharedTooltip, Switch, Tag } from "@bisheng/ui";
+import { Segmented, Select, Tooltip as SharedTooltip, Switch, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 
 
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { ColumnResizeHandle } from "@/components/bs-ui/table/useResizableColumns";
@@ -60,6 +60,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
     handleEditClose,
     handleEditSaved,
   } = controller;
+  const selectLabels = useSelectLabels();
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -73,16 +74,18 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
         />
         <SearchInput placeholder={t("bs:department.searchMember")} value={keyword} onChange={(e) => setKeyword(e.target.value)} className={"w-[200px]"} />
         {memberScope === "dept" && (
-          <Select value={isPrimaryFilter} onValueChange={setIsPrimaryFilter}>
-            <SelectTrigger className="w-[120px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("bs:department.all")}</SelectItem>
-              <SelectItem value="1">{t("bs:department.primary")}</SelectItem>
-              <SelectItem value="0">{t("bs:department.secondary")}</SelectItem>
-            </SelectContent>
-          </Select>
+          <Select
+            {...selectLabels}
+            className="w-[120px]"
+            aria-label={t("bs:department.memberType")}
+            value={isPrimaryFilter}
+            onChange={(v) => setIsPrimaryFilter(v == null ? "all" : String(v))}
+            options={[
+              { value: "all", label: t("bs:department.all") },
+              { value: "1", label: t("bs:department.primary") },
+              { value: "0", label: t("bs:department.secondary") },
+            ]}
+          />
         )}
         <div className="flex-1" />
         {memberScope === "dept" && (

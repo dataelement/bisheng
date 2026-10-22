@@ -1,10 +1,9 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Button, Select } from '@bisheng/ui';
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import MultiSelect from "@/components/bs-ui/select/multi";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi } from "@/controllers/API/log";
 import { getUserGroupsApi } from "@/controllers/API/user";
@@ -81,6 +80,7 @@ const renderObjectName = (log: any, t: (key: string, opts?: any) => string): str
 
 export default function SystemLog() {
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
     const { users, loadUsers } = useUsers()
     const { groups, loadData } = useGroups()
     const { modules, loadModules } = useModules()
@@ -123,58 +123,57 @@ export default function SystemLog() {
         )}
         <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
-                <div className="w-[200px] relative">
-                    <MultiSelect contentClassName="overflow-y-auto max-w-[200px]" multiple
-                        options={users}
-                        value={keys.userIds}
-                        placeholder={t('log.selectUser')}
-                        // onLoad={loadUsers}
-                        // onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds }}
-                        onChange={(values) => setKeys({ ...keys, userIds: values })}
-                    ></MultiSelect>
-                </div>
-                <div className="w-[200px] relative">
-                    <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({ ...keys, groupId: value })}>
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.selectUserGroup')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                {groups.filter(g => g.id != null && g.id !== '').map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
+                <Select
+                    {...selectLabels}
+                    multiple
+                    showSearch
+                    allowClear
+                    className="w-[200px]"
+                    aria-label={t('log.selectUser')}
+                    placeholder={t('log.selectUser')}
+                    options={users.filter(u => u.value != null && u.value !== '')}
+                    value={keys.userIds}
+                    onChange={(values) => setKeys({ ...keys, userIds: values })}
+                />
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[200px]"
+                    aria-label={t('log.selectUserGroup')}
+                    placeholder={t('log.selectUserGroup')}
+                    onOpenChange={(open) => { if (open) loadData() }}
+                    value={keys.groupId || null}
+                    onChange={(value) => setKeys({ ...keys, groupId: value == null ? '' : value })}
+                    options={groups.filter(g => g.id != null && g.id !== '').map(g => ({ value: g.id, label: g.group_name }))}
+                />
                 <div className="w-[180px] relative">
                     <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({ ...keys, start: t })} />
                 </div>
                 <div className="w-[180px] relative">
                     <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({ ...keys, end: t })} />
                 </div>
-                <div className="w-[180px] relative">
-                    <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({ ...keys, action: '', moduleId: value })}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder={t('log.systemModule')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {modules.filter(m => m.value != null && m.value !== '').map(m => <SelectItem value={m.value} key={m.value}>{t(m.name)}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="w-[180px] relative">
-                    <Select value={keys.action} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({ ...keys, action: value })}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder={t('log.actionBehavior')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {actions.filter(a => a.value != null && a.value !== '').map(a => <SelectItem value={a.value} key={a.value}>{t(a.name)}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[180px]"
+                    aria-label={t('log.systemModule')}
+                    placeholder={t('log.systemModule')}
+                    onOpenChange={(open) => { if (open) loadModules() }}
+                    value={keys.moduleId || null}
+                    onChange={(value) => setKeys({ ...keys, action: '', moduleId: value == null ? '' : value })}
+                    options={modules.filter(m => m.value != null && m.value !== '').map(m => ({ value: m.value, label: t(m.name) }))}
+                />
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[180px]"
+                    aria-label={t('log.actionBehavior')}
+                    placeholder={t('log.actionBehavior')}
+                    onOpenChange={(open) => { if (open) handleActionOpen() }}
+                    value={keys.action || null}
+                    onChange={(value) => setKeys({ ...keys, action: value == null ? '' : value })}
+                    options={actions.filter(a => a.value != null && a.value !== '').map(a => ({ value: a.value, label: t(a.name) }))}
+                />
                 <div>
                     <Button className="mr-3" onClick={handleSearch}>
                         {t('log.searchButton')}

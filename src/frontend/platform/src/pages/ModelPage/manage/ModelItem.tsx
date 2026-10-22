@@ -1,5 +1,5 @@
 import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
-import { Button, Input, Textarea } from '@bisheng/ui';
+import { Button, Input, Select, Textarea } from '@bisheng/ui';
 import { Switch, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { asrHints, asrProviders, ttsProviders } from "./speechConfig";
@@ -8,7 +8,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { ModelFieldHint } from "./ModelFieldHint";
 import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advancedParamsTemplates";
 import { useState, type ChangeEvent } from "react";
@@ -88,6 +88,7 @@ function parseParamsObject(text: string): Record<string, unknown> | null {
 
 export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItemProps) {
     const { t } = useTranslation();
+    const selectLabels = useSelectLabels();
     const [nameError, setNameError] = useState('');
     const [dialogOpen, setDialogOpen] = useState(false);
     const [draftParams, setDraftParams] = useState('');
@@ -191,20 +192,19 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                 </div>
                 <div className="space-y-2">
                     <Label className="bisheng-label flex h-8 items-center">{t('model.modelType')}</Label>
-                    <Select value={modelType} onValueChange={(val: string) => onInput(data.model_name, val)}>
-                        <SelectTrigger className="h-8">
-                            <SelectValue placeholder="" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="llm">LLM</SelectItem>
-                                <SelectItem value="embedding">Embedding</SelectItem>
-                                <SelectItem value="rerank">Rerank</SelectItem>
-                                {asrProviders.includes(type) && <SelectItem value="asr">ASR</SelectItem>}
-                                {ttsProviders.includes(type) && <SelectItem value="tts">TTS</SelectItem>}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <Select
+                        {...selectLabels}
+                        aria-label={t('model.modelType')}
+                        options={[
+                            { value: 'llm', label: 'LLM' },
+                            { value: 'embedding', label: 'Embedding' },
+                            { value: 'rerank', label: 'Rerank' },
+                            ...(asrProviders.includes(type) ? [{ value: 'asr', label: 'ASR' }] : []),
+                            ...(ttsProviders.includes(type) ? [{ value: 'tts', label: 'TTS' }] : []),
+                        ]}
+                        value={modelType || null}
+                        onChange={(val) => { if (val != null) onInput(data.model_name, String(val)) }}
+                    />
                 </div>
             </div>
 

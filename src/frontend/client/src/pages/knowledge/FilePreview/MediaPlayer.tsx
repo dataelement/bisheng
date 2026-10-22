@@ -6,9 +6,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, SyntheticEvent } from "react";
 import { Filled, Outlined } from "bisheng-icons";
-import { DropdownMenu, DropdownMenuTrigger } from "~/components";
-import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
+import { Dropdown, DropdownItem, Select } from "@bisheng/ui";
+import type { SelectOption } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
+import useSelectCopy from "~/hooks/useSelectCopy";
 import { cn } from "~/utils";
 
 interface MediaPlayerProps {
@@ -27,6 +28,10 @@ interface MediaPlayerProps {
 }
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const PLAYBACK_RATE_OPTIONS: SelectOption[] = PLAYBACK_RATES.map((value) => ({
+    value,
+    label: `${value}x`,
+}));
 
 function formatTime(seconds: number): string {
     if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -244,6 +249,7 @@ export function MediaPlayer({
     className,
 }: MediaPlayerProps) {
     const localize = useLocalize();
+    const selectCopy = useSelectCopy();
     const isVideo = kind === "video";
     const containerRef = useRef<HTMLDivElement>(null);
     const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
@@ -369,22 +375,6 @@ export function MediaPlayer({
             setRate(event.currentTarget.playbackRate),
     };
 
-    const speedMenu = (trigger: ReactNode) => (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-            <ActionMenuContent width={96} align="end" side="top" className={menuSurfaceClass}>
-                {PLAYBACK_RATES.map((value) => (
-                    <ActionMenuItem
-                        key={value}
-                        onClick={() => changeRate(value)}
-                        className={cn(menuItemClass, value === rate && activeRateClass)}
-                        label={`${value}x`}
-                    />
-                ))}
-            </ActionMenuContent>
-        </DropdownMenu>
-    );
-
     const showMoreMenu = allowDownload || pipSupported;
     /* Video plays on a black stage with white controls over a scrim; audio has no
        picture, so it uses the design-system neutral fill with dark controls. */
@@ -394,24 +384,6 @@ export function MediaPlayer({
         "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
         hoverClass,
     );
-    /* Menus float over the media, so they stay translucent and open upward
-       rather than covering the stage below the bar. */
-    const menuSurfaceClass = onDarkStage
-        ? "border-0 bg-black/75"
-        : "bg-white/85";
-    /* The shared menu item forces a dark label while highlighted, which is
-       unreadable on the dark surface — keep it white on hover/focus too. */
-    const menuItemClass = onDarkStage
-        ? cn(
-              "text-white data-[highlighted]:bg-white/20 data-[highlighted]:text-white",
-              "focus:bg-white/20 focus:text-white",
-          )
-        : undefined;
-    const menuIconClass = onDarkStage ? "text-white/80" : undefined;
-    const activeRateClass = onDarkStage
-        ? "font-medium text-blue-400"
-        : "font-medium text-blue-500";
-
     return (
         <div
             ref={containerRef}
@@ -496,16 +468,26 @@ export function MediaPlayer({
                     onToggleMute={toggleMute}
                     tone={onDarkStage ? "dark" : "light"}
                 />
-                {speedMenu(
-                    <button
-                        type="button"
-                        aria-label={localize("com_knowledge.playback_speed")}
-                        title={localize("com_knowledge.playback_speed")}
-                        className={iconButtonClass}
-                    >
-                        <Outlined.PlaySpeed className="size-4" />
-                    </button>,
-                )}
+                <Select
+                    {...selectCopy}
+                    options={PLAYBACK_RATE_OPTIONS}
+                    value={rate}
+                    onChange={(next) => {
+                        if (next !== null) changeRate(Number(next));
+                    }}
+                    aria-label={localize("com_knowledge.playback_speed")}
+                    trigger={
+                        <button
+                            type="button"
+                            // Arrow entry: the name carries the current value too.
+                            aria-label={`${localize("com_knowledge.playback_speed")} ${rate}x`}
+                            title={localize("com_knowledge.playback_speed")}
+                            className={iconButtonClass}
+                        >
+                            <Outlined.PlaySpeed className="size-4" />
+                        </button>
+                    }
+                />
                 {/* Fullscreen and picture-in-picture only make sense for video. */}
                 {isVideo && (
                     <ControlButton
@@ -525,36 +507,33 @@ export function MediaPlayer({
                     </ControlButton>
                 )}
                 {showMoreMenu && (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                type="button"
-                                aria-label={localize("com_knowledge.more")}
-                                title={localize("com_knowledge.more")}
-                                className={iconButtonClass}
-                            >
-                                <Outlined.More className="size-4" />
-                            </button>
-                        </DropdownMenuTrigger>
-                        <ActionMenuContent align="end" side="top" className={menuSurfaceClass}>
-                            {allowDownload && (
-                                <ActionMenuItem
-                                    onClick={onDownload}
-                                    icon={<Outlined.Download className={menuIconClass} />}
-                                    label={localize("com_knowledge.download")}
-                                    className={menuItemClass}
-                                />
-                            )}
-                            {pipSupported && (
-                                <ActionMenuItem
-                                    onClick={togglePictureInPicture}
-                                    icon={<Outlined.PictureInPicture className={menuIconClass} />}
-                                    label={localize("com_knowledge.picture_in_picture")}
-                                    className={menuItemClass}
-                                />
-                            )}
-                        </ActionMenuContent>
-                    </DropdownMenu>
+                    <Dropdown
+                        align="end"
+                        side="top"
+                        menu={
+                            <>
+                                {allowDownload && (
+                                    <DropdownItem icon={<Outlined.Download />} onSelect={() => onDownload?.()}>
+                                        {localize("com_knowledge.download")}
+                                    </DropdownItem>
+                                )}
+                                {pipSupported && (
+                                    <DropdownItem icon={<Outlined.PictureInPicture />} onSelect={togglePictureInPicture}>
+                                        {localize("com_knowledge.picture_in_picture")}
+                                    </DropdownItem>
+                                )}
+                            </>
+                        }
+                    >
+                        <button
+                            type="button"
+                            aria-label={localize("com_knowledge.more")}
+                            title={localize("com_knowledge.more")}
+                            className={iconButtonClass}
+                        >
+                            <Outlined.More className="size-4" />
+                        </button>
+                    </Dropdown>
                 )}
             </div>
         </div>

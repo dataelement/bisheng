@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import { darkContext } from "@/contexts/darkContext";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
@@ -39,20 +37,6 @@ vi.mock("@/components/bs-icons/menu/dataset", () => ({
 
 vi.mock("@/components/bs-icons/menu/system", () => ({
   DashboardIcon: () => <span aria-hidden="true" />,
-}));
-
-vi.mock("@/components/bs-ui/select/hover", () => ({
-  SelectHover: ({ triagger, children }: { triagger: ReactNode; children: ReactNode }) => (
-    <div>
-      {triagger}
-      <div>{children}</div>
-    </div>
-  ),
-  SelectHoverItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>
-      {children}
-    </button>
-  ),
 }));
 
 vi.mock("@/components/bs-ui/separator", () => ({

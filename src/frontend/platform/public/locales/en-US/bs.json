@@ -1179,7 +1179,8 @@
     "autoTagGenerationTitle": "Automatic tagging",
     "autoTagGenerationDesc": "When enabled, users can choose a tag library for a knowledge space. After parsing, matching tags are selected from the library.",
     "searchTagLibrary": "Search tag libraries",
-    "tagLibraryEmpty": "No tag libraries"
+    "tagLibraryEmpty": "No tag libraries",
+    "appTypeFilter": "App type"
   },
   "bench": {
     "daily": "Daily",
@@ -3166,7 +3167,17 @@
     "maximum": "Must be at most {{max}}",
     "addItem": "Add item",
     "removeItem": "Remove item",
-    "expand": "Expand"
+    "expand": "Expand",
+    "selectEmpty": "No data",
+    "selectNoMatch": "No matches",
+    "selectLoading": "Loading…",
+    "clear": "Clear",
+    "remove": "Remove",
+    "back": "Back",
+    "done": "Done",
+    "searchModels": "Search models",
+    "increase": "Increase",
+    "decrease": "Decrease"
   },
   "tenant.mountedBadge": "Child tenant mount point",
   "tenant.mountedTag": "Child tenant",

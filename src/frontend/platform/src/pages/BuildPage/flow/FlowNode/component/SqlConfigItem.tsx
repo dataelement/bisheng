@@ -1,14 +1,15 @@
 // @ts-strict-ignore
-import { Input } from '@bisheng/ui';
+import { Input, Select } from '@bisheng/ui';
 
 import { Label } from "@/components/bs-ui/label";
-import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Switch } from "@bisheng/ui";
 import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function SqlConfigItem({ data, onChange, onValidate }) {
     const { t } = useTranslation('flow');
+    const selectLabels = useSelectLabels();
     const [values, setValues] = useState(data.value);
     const [errors, setErrors] = useState({});
 
@@ -107,20 +108,15 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
                     {/* 数据库类型下拉框 */}
                     <Label className="flex items-center bisheng-label">{t("dbType")}</Label>
                     <Select
-                        value={database_engine}
-                        onValueChange={(value) => handleChange("database_engine", value)}
-                    >
-                        <SelectTrigger className={`mt-2 mb-4 nodrag ${errors.database_engine ? "border-red-500" : ""}`}>
-                            <SelectValue placeholder={t("selectDbType")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {DATABASE_OPTIONS.map((engine) => (
-                                <SelectItem key={engine} value={engine}>
-                                    {engine}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                        {...selectLabels}
+                        options={DATABASE_OPTIONS.map((engine) => ({ value: engine, label: engine }))}
+                        value={database_engine || null}
+                        onChange={(value) => handleChange("database_engine", value == null ? "" : String(value))}
+                        placeholder={t("selectDbType")}
+                        status={errors.database_engine ? "error" : "default"}
+                        aria-label={t("dbType")}
+                        className="nodrag mt-2 mb-4 w-full"
+                    />
 
                     {/* 数据库地址 */}
                     <Label className="flex items-center bisheng-label">{t("dbAddress")}</Label> {/* 数据库地址 */}

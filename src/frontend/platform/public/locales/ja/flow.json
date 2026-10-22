@@ -601,5 +601,8 @@
       }
     }
   },
-  "rerunWorkflow": "再実行"
+  "rerunWorkflow": "再実行",
+  "type": "タイプ",
+  "valueType": "値のタイプ",
+  "selectDbType": "データベースの種類を選択"
 }

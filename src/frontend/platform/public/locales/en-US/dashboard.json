@@ -3,7 +3,6 @@
   "settings": "Settings",
   "noValue": "None",
   "removeSelectedValue": "Remove {{value}}",
-
   "chartSelector": {
     "title": "Chart Link Configuration",
     "selectCharts": "Select Linked Charts",
@@ -274,6 +273,14 @@
       "axis": "Axis",
       "dataLabel": "Data Label",
       "gridLine": "Grid Line"
+    },
+    "textFormat": {
+      "fontSize": "Font size",
+      "color": "Text color",
+      "align": "Alignment",
+      "alignLeft": "Align left",
+      "alignCenter": "Align center",
+      "alignRight": "Align right"
     }
   },
   "useChartState": {

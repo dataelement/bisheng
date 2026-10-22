@@ -601,5 +601,8 @@
       }
     }
   },
-  "rerunWorkflow": "重新运行"
+  "rerunWorkflow": "重新运行",
+  "type": "类型",
+  "valueType": "值类型",
+  "selectDbType": "请选择数据库类型"
 }

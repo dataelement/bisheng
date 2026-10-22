@@ -1,4 +1,4 @@
-import { Button } from '@bisheng/ui';
+import { Alert, Button } from '@bisheng/ui';
 
 import {
   Dialog,
@@ -201,12 +201,11 @@ export function ModeHeader({
                 </p>
               </div>
               {expired && (
-                <p
-                  className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900"
-                  role="alert"
-                >
-                  {t("mode.expired")}
-                </p>
+                <Alert
+                  type="warning"
+                  description={t("mode.expired")}
+                  live
+                />
               )}
               {conflict && (
                 <p className="text-sm font-medium text-red-700" role="alert">

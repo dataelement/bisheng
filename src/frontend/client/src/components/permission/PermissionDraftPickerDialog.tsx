@@ -185,6 +185,7 @@ export function PermissionDraftPickerDialog({
               options={selectableModels}
               disabled={selectableModels.length === 0}
               className="w-[132px]"
+              aria-label={localize("com_permission.uniform_grant")}
             />
           </div>
           <div

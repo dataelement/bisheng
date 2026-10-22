@@ -1,13 +1,7 @@
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
-import { Button } from '@bisheng/ui';
+import { Alert, Button, Select } from '@bisheng/ui';
 
-import {
-DropdownMenu,
-DropdownMenuContent,
-DropdownMenuRadioGroup,
-DropdownMenuRadioItem,
-DropdownMenuTrigger,
-} from "@/components/bs-ui/dropdownMenu";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Switch } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
@@ -49,8 +43,10 @@ function uniqueActions(
   return Array.from(unique.values())
 }
 
+const UNASSIGNED_KEY = "unassigned"
+
 function levelKey(level: ActionLevelValue): string {
-  return level === null ? "unassigned" : String(level)
+  return level === null ? UNASSIGNED_KEY : String(level)
 }
 
 export function ActionLevelBoard({
@@ -91,6 +87,11 @@ export function ActionLevelBoard({
         ? t("actionLevel.unassigned")
         : t("actionLevel.level", { level }),
     [t],
+  )
+  const selectLabels = useSelectLabels()
+  const levelOptions = useMemo(
+    () => LEVELS.map((option) => ({ value: levelKey(option), label: levelName(option) })),
+    [levelName],
   )
 
   // Derived from the diff against the published release rather than accumulated
@@ -236,12 +237,12 @@ export function ActionLevelBoard({
       )}
 
       {draftErrorMessage && (
-        <p
-          className="shrink-0 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {draftErrorMessage}
-        </p>
+        <Alert
+          type="error"
+          className="shrink-0"
+          description={draftErrorMessage}
+          live
+        />
       )}
 
       {/* The only scroll area on this tab: the level columns, header and banners stay put. */}
@@ -350,36 +351,23 @@ export function ActionLevelBoard({
                             keyboard, a touch screen, or anyone who would rather
                             pick than aim. Compact so it does not dominate the card. */}
                         <div className="mt-1.5 flex items-center gap-2 pl-[22px]">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="text" size="small" type="button" aria-label={`${t("actionLevel.change")}.${action.code}`} disabled={disabled || submitting} className="inline-flex h-6 items-center gap-1 rounded border px-1.5 text-xs text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50" color="default">
-                                {levelName(level)}
-                                <Outlined.Down aria-hidden="true" className="size-3" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              <DropdownMenuRadioGroup
-                                value={String(level ?? "UNASSIGNED")}
-                                onValueChange={(value) =>
-                                  handleLevelChange(
-                                    action.code,
-                                    value === "UNASSIGNED"
-                                      ? null
-                                      : (Number(value) as PermissionActionLevel),
-                                  )
-                                }
-                              >
-                                {LEVELS.map((option) => (
-                                  <DropdownMenuRadioItem
-                                    key={levelKey(option)}
-                                    value={String(option ?? "UNASSIGNED")}
-                                  >
-                                    {levelName(option)}
-                                  </DropdownMenuRadioItem>
-                                ))}
-                              </DropdownMenuRadioGroup>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <Select
+                            {...selectLabels}
+                            size="small"
+                            className="w-28 shrink-0"
+                            aria-label={`${t("actionLevel.change")}.${action.code}`}
+                            disabled={disabled || submitting}
+                            options={levelOptions}
+                            value={levelKey(level)}
+                            onChange={(value) =>
+                              handleLevelChange(
+                                action.code,
+                                value == null || value === UNASSIGNED_KEY
+                                  ? null
+                                  : (Number(value) as PermissionActionLevel),
+                              )
+                            }
+                          />
 
                           {!active && (
                             <span className="text-xs text-muted-foreground">

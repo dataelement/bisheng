@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Alert, Button } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 
 import {
@@ -15,7 +15,6 @@ import {
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
 import {
-  AlertTriangle,
   Building2,
   Loader2,
   LockKeyhole,
@@ -427,13 +426,12 @@ export function PermissionListTab({
       </div>
 
       {failed && (
-        <p
-          className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"
-          role="alert"
-        >
-          <AlertTriangle aria-hidden="true" className="size-4" />
-          {t("roster.loadFailed")}
-        </p>
+        <Alert
+          type="error"
+          className="mt-3"
+          description={t("roster.loadFailed")}
+          live
+        />
       )}
 
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto">

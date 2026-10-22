@@ -1,14 +1,8 @@
-import { Button, Input } from '@bisheng/ui';
+import { Alert, Button, Input, Select } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue,
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import type {
 PermissionCatalogAction,
 PermissionCatalogChange,
@@ -16,7 +10,6 @@ PermissionCatalogDraft,
 PermissionCatalogModel,
 } from "@/controllers/API/permission";
 import { Checkbox,Switch } from "@bisheng/ui";
-import { ShieldAlert } from "lucide-react";
 import { useEffect,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { actionLabel } from "./actionLabels";
@@ -65,6 +58,7 @@ export function ModelEditor({
   onReviewImpact,
 }: ModelEditorProps) {
   const { t } = useTranslation("permission")
+  const selectLabels = useSelectLabels()
   const [name, setName] = useState(model.name)
   const [active, setActive] = useState(model.active)
   const [allowSameLevel, setAllowSameLevel] = useState(
@@ -305,27 +299,20 @@ export function ModelEditor({
             <div className="text-sm font-medium text-foreground">
               <span className="mb-1 block">{t("model.preset.label")}</span>
               <Select
-                value={selectedPreset}
+                {...selectLabels}
+                className="w-full"
+                options={[
+                  { value: BLANK_PRESET_KEY, label: t("model.preset.blank") },
+                  ...presets
+                    .filter((preset) => preset.key != null && preset.key !== "")
+                    .map((preset) => ({ value: preset.key, label: preset.name })),
+                ]}
+                value={selectedPreset || null}
                 disabled={disabled}
-                onValueChange={setSelectedPreset}
-              >
-                <SelectTrigger
-                  aria-label={t("model.preset.label")}
-                  className="w-full bg-background"
-                >
-                  <SelectValue placeholder={t("model.preset.select")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={BLANK_PRESET_KEY}>
-                    {t("model.preset.blank")}
-                  </SelectItem>
-                  {presets.map((preset) => (
-                    <SelectItem key={preset.key} value={preset.key}>
-                      {preset.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setSelectedPreset(value == null ? "" : String(value))}
+                placeholder={t("model.preset.select")}
+                aria-label={t("model.preset.label")}
+              />
             </div>
             <Button type="button" variant="outlined" className="self-end" disabled={disabled || !selectedPreset} onClick={handleApplyPreset} color="default">
               {t("model.preset.apply")}
@@ -446,26 +433,18 @@ export function ModelEditor({
           nothing happen. It belongs beside the button that produced it. */}
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t p-4">
         {draft && (
-          <div
-            className="mr-auto flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-foreground"
-            role="status"
-          >
-            <ShieldAlert
-              aria-hidden="true"
-              className="size-4 shrink-0 text-primary"
-            />
-            <span className="min-w-0">
-              {t("impact.unpublished")}
-              {" · "}
-              {t("impact.pending", {
+          <Alert
+            className="mr-auto min-w-0 flex-1"
+            description={`${t("impact.unpublished")} · ${t("impact.pending", {
                 resources: draft.impact.resource_count,
                 grants: draft.impact.grant_count,
-              })}
-            </span>
-            <Button type="button" size="small" className="ml-auto shrink-0" onClick={() => onReviewImpact(draft)}>
-              {t("impact.publishChanges")}
-            </Button>
-          </div>
+              })}`}
+            actions={[{
+              label: t("impact.publishChanges"),
+              onClick: () => onReviewImpact(draft),
+            }]}
+            live
+          />
         )}
         {!isStandard && !createMode && (
           <div className="mr-auto flex min-w-0 items-center gap-2">

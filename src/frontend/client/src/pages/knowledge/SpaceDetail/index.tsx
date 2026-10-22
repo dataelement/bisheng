@@ -10,12 +10,7 @@ import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { useConfirm, useToastContext } from "~/Providers";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
+import { Dropdown, DropdownGroup, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 import {
     Dialog,
     DialogContent,
@@ -64,16 +59,6 @@ import {
     useKnowledgeSpaceActions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef, useVersionManagementEnabled } from "~/hooks";
-import {
-    knowledgeSpaceDropdownSurfaceClassName,
-    SidebarListMoreMenuContent,
-    sidebarListMoreMenuItemClassName,
-    sidebarListMoreMenuIconClassName,
-    sidebarListMoreMenuLabelClassName,
-    sidebarListMoreMenuDangerItemClassName,
-    sidebarListMoreMenuDangerIconClassName,
-    sidebarListMoreMenuDangerLabelClassName,
-} from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { useRefreshEffectiveQuota } from "~/hooks/useEffectiveQuota";
@@ -1147,90 +1132,76 @@ export function KnowledgeSpaceContent({
                             >
                                 <Outlined.Search className="size-5" />
                             </button>
-                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpaceActions(space.id); }}>
-                                <DropdownMenuTrigger asChild disabled={spaceListOpen}>
-                                    <button
-                                        type="button"
-                                        aria-label={localize("com_knowledge.sort_field")}
-                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-text-1 outline-none", spaceListOpen && "pointer-events-none text-text-4")}
-                                    >
-                                        <Outlined.Sort className="size-5" />
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                                    <div className="px-2 py-1.5 text-xs font-medium text-text-3">{localize("com_knowledge.sort_field")}</div>
-                                    {[
-                                        { value: SortType.NAME, label: localize("com_knowledge.sort_by_name_label") },
-                                        { value: SortType.TYPE, label: localize("com_knowledge.sort_by_type_label") },
-                                        { value: SortType.UPDATE_TIME, label: localize("com_knowledge.sort_by_update_time_label") },
-                                    ].map((opt) => (
-                                        <DropdownMenuItem
-                                            key={opt.value}
-                                            onClick={() => handleSort(opt.value)}
-                                            className="flex items-center justify-between gap-6"
-                                        >
-                                            <span>{opt.label}</span>
-                                            {sortBy === opt.value && (
-                                                <span className="shrink-0 text-xs text-text-3">
-                                                    {sortDirection === SortDirection.ASC ? "↑" : "↓"}
-                                                </span>
-                                            )}
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                            <Dropdown
+                                align="end"
+                                disabled={spaceListOpen}
+                                onOpenChange={(open) => { if (open) ensureSpaceActions(space.id); }}
+                                menu={
+                                    <DropdownGroup label={localize("com_knowledge.sort_field")}>
+                                        {[
+                                            { value: SortType.NAME, label: localize("com_knowledge.sort_by_name_label") },
+                                            { value: SortType.TYPE, label: localize("com_knowledge.sort_by_type_label") },
+                                            { value: SortType.UPDATE_TIME, label: localize("com_knowledge.sort_by_update_time_label") },
+                                        ].map((opt) => (
+                                            <DropdownItem
+                                                key={opt.value}
+                                                onSelect={() => handleSort(opt.value)}
+                                                // Active field shows its direction; picking it again flips it.
+                                                shortcut={sortBy === opt.value ? (sortDirection === SortDirection.ASC ? "↑" : "↓") : undefined}
+                                            >
+                                                {opt.label}
+                                            </DropdownItem>
+                                        ))}
+                                    </DropdownGroup>
+                                }
+                            >
+                                <button
+                                    type="button"
+                                    aria-label={localize("com_knowledge.sort_field")}
+                                    className={cn("inline-flex size-5 shrink-0 items-center justify-center text-text-1 outline-none", spaceListOpen && "pointer-events-none text-text-4")}
+                                >
+                                    <Outlined.Sort className="size-5" />
+                                </button>
+                            </Dropdown>
                             {/* Hide the whole "..." trigger when every item is permission-gated
                                 away — an empty menu is confusing on mobile. */}
                             {(canUploadFile || canCreateFolder || showShareInMenu || canManageMembers || canDeleteSpace) && (
-                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpaceActions(space.id); }}>
-                                <DropdownMenuTrigger asChild disabled={spaceListOpen}>
-                                    <button
-                                        type="button"
-                                        aria-label={localize("com_knowledge.more")}
-                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-text-1 outline-none", spaceListOpen && "pointer-events-none text-text-4")}
-                                    >
-                                        <Outlined.MoreCircle className="size-5" />
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <SidebarListMoreMenuContent>
+                            <Dropdown
+                                align="end"
+                                disabled={spaceListOpen}
+                                onOpenChange={(open) => { if (open) ensureSpaceActions(space.id); }}
+                                menu={<>
                                     {canUploadFile && (
-                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={triggerUpload}>
-                                            <Outlined.Upload className={sidebarListMoreMenuIconClassName} />
-                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.upload_file")}</span>
-                                        </DropdownMenuItem>
+                                        <DropdownItem icon={<Outlined.Upload />} onSelect={triggerUpload}>{localize("com_knowledge.upload_file")}</DropdownItem>
                                     )}
                                     {canUploadFile && knowledgeUploadCapabilities.webLink && (
-                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={triggerWebLink}>
-                                            <Link2 className={sidebarListMoreMenuIconClassName} />
-                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.web_link")}</span>
-                                        </DropdownMenuItem>
+                                        <DropdownItem icon={<Link2 />} onSelect={triggerWebLink}>{localize("com_knowledge.web_link")}</DropdownItem>
                                     )}
                                     {canCreateFolder && (
-                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onCreateFolder()}>
-                                            <FolderPlus className={sidebarListMoreMenuIconClassName} />
-                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.new_folder")}</span>
-                                        </DropdownMenuItem>
+                                        <DropdownItem icon={<FolderPlus />} onSelect={() => onCreateFolder()}>{localize("com_knowledge.new_folder")}</DropdownItem>
                                     )}
                                     {(canEditSpace || canManageMembers) && onEditSpace && (
-                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onEditSpace()}>
-                                            <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
-                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.space_settings")}</span>
-                                        </DropdownMenuItem>
+                                        <DropdownItem icon={<Outlined.Edit />} onSelect={() => onEditSpace()}>{localize("com_knowledge.space_settings")}</DropdownItem>
                                     )}
                                     {showShareInMenu && (
-                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={handleCopyShareLink}>
-                                            <Outlined.Share className={sidebarListMoreMenuIconClassName} />
-                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.share")}</span>
-                                        </DropdownMenuItem>
+                                        <DropdownItem icon={<Outlined.Share />} onSelect={handleCopyShareLink}>{localize("com_knowledge.share")}</DropdownItem>
                                     )}
                                     {canDeleteSpace && (
-                                        <DropdownMenuItem className={sidebarListMoreMenuDangerItemClassName} onClick={() => onDeleteSpace?.()}>
-                                            <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
-                                            <span className={sidebarListMoreMenuDangerLabelClassName}>{localize("com_knowledge.delete_space")}</span>
-                                        </DropdownMenuItem>
+                                        <>
+                                            {(canUploadFile || canCreateFolder || ((canEditSpace || canManageMembers) && onEditSpace) || showShareInMenu) && <DropdownSeparator />}
+                                            <DropdownItem danger icon={<Outlined.Delete />} onSelect={() => onDeleteSpace?.()}>{localize("com_knowledge.delete_space")}</DropdownItem>
+                                        </>
                                     )}
-                                </SidebarListMoreMenuContent>
-                            </DropdownMenu>
+                                </>}
+                            >
+                                <button
+                                    type="button"
+                                    aria-label={localize("com_knowledge.more")}
+                                    className={cn("inline-flex size-5 shrink-0 items-center justify-center text-text-1 outline-none", spaceListOpen && "pointer-events-none text-text-4")}
+                                >
+                                    <Outlined.MoreCircle className="size-5" />
+                                </button>
+                            </Dropdown>
                             )}
                         </div>
                     </div>
@@ -1300,37 +1271,29 @@ export function KnowledgeSpaceContent({
                     className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white"
                     onContextMenu={handleContentContextMenu}
                 >
-                    <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                type="button"
-                                aria-hidden="true"
-                                tabIndex={-1}
-                                className="fixed size-0 opacity-0"
-                                style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
-                            />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
+                    <Dropdown
+                        open={contextMenuOpen}
+                        onOpenChange={setContextMenuOpen}
+                        menu={<>
                             {canUploadFile && (
-                                <DropdownMenuItem onClick={triggerUpload} className="cursor-pointer">
-                                    <Outlined.Upload className="mr-2 size-4" />
-                                    {localize("com_knowledge.upload_file")}
-                                </DropdownMenuItem>
+                                <DropdownItem icon={<Outlined.Upload />} onSelect={triggerUpload}>{localize("com_knowledge.upload_file")}</DropdownItem>
                             )}
                             {canUploadFile && knowledgeUploadCapabilities.webLink && (
-                                <DropdownMenuItem onClick={triggerWebLink} className="cursor-pointer">
-                                    <Link2 className="mr-2 size-4" />
-                                    {localize("com_knowledge.web_link")}
-                                </DropdownMenuItem>
+                                <DropdownItem icon={<Link2 />} onSelect={triggerWebLink}>{localize("com_knowledge.web_link")}</DropdownItem>
                             )}
                             {canCreateFolder && (
-                                <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                                    <FolderPlus className="mr-2 size-4" />
-                                    {localize("com_knowledge.new_folder")}
-                                </DropdownMenuItem>
+                                <DropdownItem icon={<FolderPlus />} onSelect={() => onCreateFolder()}>{localize("com_knowledge.new_folder")}</DropdownItem>
                             )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                        </>}
+                    >
+                        <button
+                            type="button"
+                            aria-hidden="true"
+                            tabIndex={-1}
+                            className="fixed size-0 opacity-0"
+                            style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+                        />
+                    </Dropdown>
                     {suppressList ? (
                         // Search page before any query — intentionally empty.
                         <div className="min-h-0 flex-1" />
@@ -1514,29 +1477,24 @@ export function KnowledgeSpaceContent({
                         {overflowActions.length > 0 && (
                             <>
                                 {inlineActions.length > 0 && <span className="h-3 w-px shrink-0 bg-fill-3" aria-hidden />}
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <button
-                                            type="button"
-                                            className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm text-text-1"
-                                        >
-                                            <Outlined.More className="size-4" />
-                                            {localize("com_knowledge.more")}
-                                        </button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent side="top" align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                                        {overflowActions.map((a) => (
-                                            <DropdownMenuItem
-                                                key={a.key}
-                                                onClick={a.onClick}
-                                                className={a.danger ? sidebarListMoreMenuDangerItemClassName : sidebarListMoreMenuItemClassName}
-                                            >
-                                                <a.Icon className={a.danger ? sidebarListMoreMenuDangerIconClassName : sidebarListMoreMenuIconClassName} />
-                                                <span className={a.danger ? sidebarListMoreMenuDangerLabelClassName : sidebarListMoreMenuLabelClassName}>{a.label}</span>
-                                            </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                                <Dropdown
+                                    side="top"
+                                    align="end"
+                                    menu={overflowActions.map((a, i) => (
+                                        <Fragment key={a.key}>
+                                            {a.danger && i > 0 && <DropdownSeparator />}
+                                            <DropdownItem danger={a.danger} icon={<a.Icon />} onSelect={a.onClick}>{a.label}</DropdownItem>
+                                        </Fragment>
+                                    ))}
+                                >
+                                    <button
+                                        type="button"
+                                        className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm text-text-1"
+                                    >
+                                        <Outlined.More className="size-4" />
+                                        {localize("com_knowledge.more")}
+                                    </button>
+                                </Dropdown>
                             </>
                         )}
                     </div>

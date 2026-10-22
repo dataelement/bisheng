@@ -1,21 +1,30 @@
-import { ButtonNumber } from '@/components/bs-comp/formFields/NumberStepper';
-import { Slider } from "@/components/bs-ui/slider";
+import { Slider } from '@bisheng/ui';
+import { useTranslation } from 'react-i18next';
 
-export default function Temperature({ value, onChange }) {
+interface TemperatureProps {
+    value: number;
+    onChange: (value: number) => void;
+}
 
-    const props = { max: 2, min: 0, step: 0.1 }
+// Model temperature must be read back exactly, so the slider carries a number box (Slider spec §5.1).
+export default function Temperature({ value, onChange }: TemperatureProps) {
+    const { t } = useTranslation();
 
-    return <div className="flex gap-4 mt-2">
+    return <div className="mt-2">
         <Slider
             name="slider"
-            value={[value]}
-            onValueChange={(v) => onChange(v[0])}
-            {...props}
-        />
-        <ButtonNumber
             value={value}
-            onChange={onChange}
-            {...props}
+            min={0}
+            max={2}
+            step={0.1}
+            valueDisplay="input"
+            thumbLabel={t('build.temperature')}
+            inputProps={{
+                'aria-label': t('build.temperature'),
+                increaseLabel: t('bs:sharedUi.increase'),
+                decreaseLabel: t('bs:sharedUi.decrease'),
+            }}
+            onValueChange={(v) => onChange(v as number)}
         />
     </div>
 };

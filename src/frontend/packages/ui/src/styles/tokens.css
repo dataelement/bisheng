@@ -490,6 +490,29 @@
   }
 }
 
+/* Slider hit areas (组件-Slider滑块.md §8): the thumb stays 16px to the eye
+ * while its tappable area grows to 44×44 — 16px border-box, so the padding box
+ * is 12px and the inset is (44 - 12) / 2 = 16px. The track gets 20px strips
+ * above and below (4 + 40 = 44px); a tap on them bubbles to the slider root,
+ * which is where Radix listens. */
+@media (hover: none) and (pointer: coarse) {
+  .slider-thumb-hit::before,
+  .slider-track-hit::before {
+    content: '';
+    position: absolute;
+  }
+  .slider-thumb-hit::before {
+    inset: -16px;
+    border-radius: 9999px;
+  }
+  .slider-track-hit::before {
+    left: 0;
+    right: 0;
+    top: -20px;
+    bottom: -20px;
+  }
+}
+
 /* iOS anti-zoom (组件-Input输入框.md §6): Safari zooms the whole page when a
  * field smaller than 16px takes focus. Every size档 therefore types at 16px on
  * touch / narrow screens — the 双判定 of 多端适配原则 §4. Element+class selector

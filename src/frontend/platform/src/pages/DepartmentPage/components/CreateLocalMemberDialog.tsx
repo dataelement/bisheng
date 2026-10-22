@@ -1,7 +1,7 @@
-import { Button, Input, PasswordInput, notification } from '@bisheng/ui';
+import { Button, Input, PasswordInput, Select, notification } from '@bisheng/ui';
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import MultiSelect from "@/components/bs-ui/select/multi"
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 
 import { Label } from "@/components/bs-ui/label"
 
@@ -29,6 +29,7 @@ export function CreateLocalMemberDialog({
   onCreated,
 }: CreateLocalMemberDialogProps) {
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [userName, setUserName] = useState("")
   const [personId, setPersonId] = useState("")
   const [password, setPassword] = useState("")
@@ -129,16 +130,18 @@ export function CreateLocalMemberDialog({
                 </Button>
               </div>
             ) : (
-              <MultiSelect
+              <Select
+                {...selectLabels}
                 multiple
+                showSearch
                 className="mt-2"
-                options={roles.map((r) => ({ label: r.role_name, value: String(r.id) }))}
+                aria-label={t("bs:department.assignRoles")}
+                options={roles
+                  .filter((r) => r.id != null)
+                  .map((r) => ({ label: r.role_name, value: String(r.id) }))}
                 value={Array.from(selected).map(String)}
-                onChange={(vals) =>
-                  setSelected(new Set((vals as string[]).map((id) => Number(id))))
-                }
+                onChange={(vals) => setSelected(new Set(vals.map((id) => Number(id))))}
                 placeholder={t("bs:department.multiSelectRolesPlaceholder")}
-                searchPlaceholder={t("system.searchRoles")}
               />
             )}
           </div>
