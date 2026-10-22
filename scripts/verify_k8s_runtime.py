@@ -124,11 +124,7 @@ class ProbeRunFailure(RuntimeError):
 
     def __init__(self, probe_error, cleanup_error, report=None):
         super().__init__("probe_run_failed")
-        self.probe_error, self.cleanup_error, self.report = (
-            probe_error,
-            cleanup_error,
-            report,
-        )
+        self.probe_error, self.cleanup_error, self.report = probe_error, cleanup_error, report
 
 
 def safe_exception_type(name):
@@ -172,10 +168,7 @@ def failure_details(error):
 
 def log_failures(failures):
     print(
-        json.dumps(
-            {"event": "runtime_installation_verification_failed", "failures": failures},
-            sort_keys=True,
-        ),
+        json.dumps({"event": "runtime_installation_verification_failed", "failures": failures}, sort_keys=True),
         file=sys.stderr,
         flush=True,
     )
@@ -457,9 +450,7 @@ class InstallationVerifier:
         path = self.options.get("release_manifest")
         return (
             offline_inventory(
-                json.loads(Path(path).read_text()),
-                self.document,
-                self.options.get("dependency_files", []),
+                json.loads(Path(path).read_text()), self.document, self.options.get("dependency_files", [])
             )
             if path
             else {"verified": False, "reason": "release_manifest_not_supplied"}
@@ -568,16 +559,7 @@ class InstallationVerifier:
         # https://github.com/kubernetes/website/blob/release-1.28/content/en/docs/tasks/configure-pod-container/configure-pod-configmap.md#mounted-configmaps-are-updated-automatically
         try:
             response = self.api.call(
-                [
-                    "get",
-                    "pods",
-                    "-n",
-                    self.api.control,
-                    "-l",
-                    "app=runtime-admission",
-                    "-o",
-                    "json",
-                ]
+                ["get", "pods", "-n", self.api.control, "-l", "app=runtime-admission", "-o", "json"]
             )
             pods = json.loads(response.stdout)["items"]
         except Exception:
@@ -596,27 +578,13 @@ class InstallationVerifier:
                 raise ProbeError("admission_refresh_identity_changed")
             patch = [
                 {"op": "test", "path": "/metadata/uid", "value": metadata["uid"]},
-                {
-                    "op": "test",
-                    "path": "/metadata/resourceVersion",
-                    "value": metadata["resourceVersion"],
-                },
+                {"op": "test", "path": "/metadata/resourceVersion", "value": metadata["resourceVersion"]},
             ]
             if metadata.get("annotations") is None:
-                patch.append(
-                    {
-                        "op": "add",
-                        "path": "/metadata/annotations",
-                        "value": {annotation: revision},
-                    }
-                )
+                patch.append({"op": "add", "path": "/metadata/annotations", "value": {annotation: revision}})
             else:
                 patch.append(
-                    {
-                        "op": "add",
-                        "path": "/metadata/annotations/" + annotation.replace("/", "~1"),
-                        "value": revision,
-                    }
+                    {"op": "add", "path": "/metadata/annotations/" + annotation.replace("/", "~1"), "value": revision}
                 )
             try:
                 response = self.api.call(
@@ -680,12 +648,7 @@ class InstallationVerifier:
             return None
 
         observed = self._wait(attempt)
-        plan.update(
-            uid=observed["metadata"]["uid"],
-            allow_create=False,
-            allow_update=True,
-            allow_delete=True,
-        )
+        plan.update(uid=observed["metadata"]["uid"], allow_create=False, allow_update=True, allow_delete=True)
         self.created.append(
             {
                 "plan": plan,
@@ -697,17 +660,7 @@ class InstallationVerifier:
         self._plans(plan["resource_ref"], plan)
         return observed
 
-    def _pod(
-        self,
-        action,
-        *,
-        targets=None,
-        pvc="",
-        unschedulable=False,
-        image="",
-        command=(),
-        runtime_class="",
-    ):
+    def _pod(self, action, *, targets=None, pvc="", unschedulable=False, image="", command=(), runtime_class=""):
         helper = self.document["helper_image"]
         plan = PodPlan(
             namespace=self.namespace,
@@ -869,11 +822,7 @@ class InstallationVerifier:
 
         def denied():
             response = self.api.raw(
-                "POST",
-                self._path("pods") + "?dryRun=All",
-                document=pod,
-                manager=True,
-                accepted=(0, 1),
+                "POST", self._path("pods") + "?dryRun=All", document=pod, manager=True, accepted=(0, 1)
             )
             if not response.returncode:
                 # Do not hide a failed isolation check or delete an unexpected
@@ -998,18 +947,9 @@ class InstallationVerifier:
                 "apiVersion": "v1",
                 "kind": "DeleteOptions",
                 "gracePeriodSeconds": 5,
-                "preconditions": {
-                    "uid": expected_uid,
-                    "resourceVersion": fresh["metadata"]["resourceVersion"],
-                },
+                "preconditions": {"uid": expected_uid, "resourceVersion": fresh["metadata"]["resourceVersion"]},
             }
-            result = self.api.raw(
-                "DELETE",
-                self._path(resource, name),
-                document=body,
-                manager=True,
-                accepted=(0, 1),
-            )
+            result = self.api.raw("DELETE", self._path(resource, name), document=body, manager=True, accepted=(0, 1))
             if result.returncode and not any(
                 reason in result.stderr
                 for reason in (
@@ -1474,10 +1414,7 @@ class InstallationVerifier:
                 or not plan.get("name", "").startswith("preflight-")
             ):
                 raise ProbeError("preflight_recovery_scope_invalid")
-            resource = {
-                "Pod": "pods",
-                "PersistentVolumeClaim": "persistentvolumeclaims",
-            }.get(plan.get("kind"))
+            resource = {"Pod": "pods", "PersistentVolumeClaim": "persistentvolumeclaims"}.get(plan.get("kind"))
             if not resource or not plan.get("uid"):
                 raise ProbeError("preflight_recovery_uid_unconfirmed")
             fresh = self.api.get(resource, plan["name"], manager=True)
@@ -1488,14 +1425,7 @@ class InstallationVerifier:
                 raise ProbeError("preflight_recovery_identity_changed")
             plan["expires_at"] = int(now) + 3500
             self._plans(ref, plan)
-            self.created.append(
-                {
-                    "plan": plan,
-                    "resource": resource,
-                    "name": plan["name"],
-                    "uid": plan["uid"],
-                }
-            )
+            self.created.append({"plan": plan, "resource": resource, "name": plan["name"], "uid": plan["uid"]})
         for pod in self.api.list("pods", namespace=self.api.control):
             meta = pod["metadata"]
             expiry = meta.get("annotations", {}).get("runtime.bisheng.io/preflight-expiry", "")
