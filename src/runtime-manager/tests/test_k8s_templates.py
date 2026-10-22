@@ -449,3 +449,96 @@ def test_complete_node_image_does_not_get_the_bundle_launcher(plan, frozen):
         assert app["command"] == list(frozen)
     else:
         assert "command" not in app
+
+
+@pytest.mark.parametrize("purpose", ["migrate", "restore"])
+def test_material_maintenance_template_satisfies_the_real_identity_reader(plan, tmp_path, monkeypatch, purpose):
+    """覆盖 AC: AC-33、AC-34、AC-35、AC-48、AC-49、AC-50、AC-51、AC-55."""
+    import json
+
+    from runtime_manager.k8s_helper import client_from_identity
+    from runtime_manager.k8s_templates import pod_template
+
+    spec = pod_template(replace(plan, purpose=purpose, deadline_seconds=60))["spec"]
+    container = next(item for item in spec["containers"] if item["name"] == "maintenance")
+    mount = next(item for item in container["volumeMounts"] if item["name"] == "material-auth")
+    assert mount["mountPath"] == "/run/material" and mount["readOnly"] is True
+    assert container["command"] == ["python", "-I", "-m", "runtime_manager.k8s_data_helper", "maintenance"]
+    uid = "22222222-2222-4222-8222-222222222222"
+    monkeypatch.delenv("MATERIAL_POD_UID", raising=False)
+    # Resolve only the exact core/v1 Downward API field the real kubelet supplies.
+    for entry in container["env"]:
+        if entry["name"] == "MATERIAL_POD_UID":
+            assert entry == {
+                "name": "MATERIAL_POD_UID",
+                "valueFrom": {"fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.uid"}},
+            }
+            monkeypatch.setenv(entry["name"], uid)
+    identity = tmp_path / "identity.json"
+    identity.write_text(
+        json.dumps(
+            {
+                "base_url": "https://backend.invalid",
+                "delegation_id": plan.resource_ref,
+                "key_id": "maintenance-key",
+                "private_key": "01" * 32,
+                "scope_kind": "operation",
+                "expires_at": 100030,
+                "phase_timeout_seconds": 60,
+            }
+        )
+    )
+    client = client_from_identity(identity, clock=lambda: 100000)
+    try:
+        assert client.pod_uid == uid and client.delegation_id == plan.resource_ref
+        assert client.deadline == 100030  # A Pod UID does not extend the operation's authority.
+    finally:
+        client.close()
+
+
+@pytest.mark.parametrize("purpose", ["serve", "data", "purge"])
+def test_application_data_and_identity_free_purge_do_not_receive_material_uid(plan, purpose):
+    """覆盖 AC: AC-33、AC-35、AC-48、AC-49、AC-50、AC-51、AC-55."""
+    from runtime_manager.k8s_templates import pod_template
+
+    current = replace(
+        plan,
+        purpose=purpose,
+        material_secret=plan.material_secret if purpose == "serve" else "",
+        deadline_seconds=None if purpose == "serve" else 60,
+    )
+    spec = pod_template(current)["spec"]
+    for container in spec["containers"]:
+        assert not any(item["name"] == "MATERIAL_POD_UID" for item in container["env"])
+        assert not any(item["name"] == "material-auth" for item in container["volumeMounts"])
+    if purpose in {"data", "purge"}:
+        assert not any(item["name"] == "material-auth" for item in spec["volumes"])
+
+
+@pytest.mark.parametrize("purpose", ["migrate", "restore"])
+def test_maintenance_without_material_secret_does_not_get_material_uid(plan, purpose):
+    """覆盖 AC: AC-48、AC-49、AC-50、AC-51."""
+    from runtime_manager.k8s_templates import pod_template
+
+    spec = pod_template(replace(plan, purpose=purpose, material_secret="", deadline_seconds=60))["spec"]
+    container = next(item for item in spec["containers"] if item["name"] == "maintenance")
+    assert not any(item["name"] == "MATERIAL_POD_UID" for item in container["env"])
+    assert not any(item["name"] == "material-auth" for item in container["volumeMounts"])
+
+
+@pytest.mark.parametrize("purpose", ["migrate", "restore", "purge"])
+@pytest.mark.parametrize("name", ["MATERIAL_POD_UID", "DATA_POD_UID"])
+def test_maintenance_pod_uid_cannot_be_replaced_by_a_caller_literal(plan, purpose, name):
+    """覆盖 AC: AC-48、AC-49、AC-50、AC-51."""
+    from runtime_manager.k8s_templates import pod_template
+
+    with pytest.raises(ValueError, match="k8s_material_uid_literal_refused"):
+        pod_template(
+            replace(
+                plan,
+                purpose=purpose,
+                material_secret="" if purpose == "purge" else plan.material_secret,
+                deadline_seconds=60,
+                helper_env={name: "caller-literal"},
+            )
+        )

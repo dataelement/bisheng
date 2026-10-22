@@ -248,7 +248,7 @@ def _container(plan, name, *, image=None, command=None, mounts=(), helper=False,
     }
     if command:
         item["command"] = list(command)
-    if name in {"transfer", "material-fetch"}:
+    if name in {"transfer", "material-fetch"} or (name == "maintenance" and plan.material_secret):
         item["env"].append(
             {"name": "MATERIAL_POD_UID", "valueFrom": {"fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.uid"}}}
         )
