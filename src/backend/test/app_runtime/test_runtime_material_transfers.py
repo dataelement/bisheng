@@ -30,6 +30,19 @@ async def transfers(materials):
         artifact.size_bytes, artifact.sha256 = len(DATA), hashlib.sha256(DATA).hexdigest()
         await materials.repo.save(artifact)
         objects.data[artifact.object_key] = DATA
+
+    async def ranged(key, *, offset, length):
+        position, emitted = 0, 0
+        async for chunk in objects.iter_content(key):
+            part = chunk[max(0, offset - position) : max(0, offset - position) + length - emitted]
+            position += len(chunk)
+            if part:
+                emitted += len(part)
+                yield part
+            if emitted == length:
+                return
+
+    objects.iter_range = ranged
     service = RuntimeMaterialTransferService(materials.svc, object_store=objects)
     return SimpleNamespace(svc=service, m=materials, objects=objects)
 

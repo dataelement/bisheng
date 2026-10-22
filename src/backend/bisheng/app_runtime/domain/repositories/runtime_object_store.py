@@ -53,6 +53,20 @@ class RuntimeObjectStore:
             response.close()
             response.release_conn()
 
+    async def iter_range(self, key: str, *, offset: int, length: int):
+        if type(offset) is not int or type(length) is not int or offset < 0 or length <= 0:
+            raise ValueError("runtime_object_range_invalid")
+        storage = await self._storage()
+        response = await asyncio.to_thread(
+            storage.minio_client_sync.get_object, BUCKET, key, offset=offset, length=length
+        )
+        try:
+            while chunk := await asyncio.to_thread(response.read, min(length, 1024 * 1024)):
+                yield chunk
+        finally:
+            response.close()
+            response.release_conn()
+
     async def stat(self, key):
         storage = await self._storage()
         try:

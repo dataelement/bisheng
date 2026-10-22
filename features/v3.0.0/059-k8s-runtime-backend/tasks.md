@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；82 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 55 / 82 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；87 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 62 / 87 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -471,15 +471,54 @@
   **依赖:** T043、T033、T044
   **配对:** T044
 
-- [ ] **T046** — K8s SQLite 备份迁移恢复：契约与失败用例
+- [x] **T085** — 顺序维护资源 DDL
+  **类型**：基础设施
+  **文件**：`src/backend/bisheng/core/database/alembic/versions/f059_resource_phases.py`
+  **逻辑/验收**：实际单head f059_merge_release_heads之后追加DDL，移除operation/kind/name唯一约束；保留资源ref主键及真实UID唯一约束。降级须运维先确认历史无重名，revision不删历史、不读写业务数据；MySQL/DM8条件DDL及单head静态验证。
+  **覆盖 AC:** AC-15、AC-35、AC-48、AC-49、AC-56
+  **依赖:** T074
+
+- [x] **T083** — 固定生产名称的分阶段资源合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_phases.py`
+  **逻辑/验收**：真实SQL验证同一操作backup/migrate/serve可顺序登记不同ref/UID，前一Pod停止并清理完成后才允许下一Pod；原ref幂等不改冻结模板，旧UID历史保留，未停止/未清理拒绝，不以租约到期放行。
+  **覆盖 AC:** AC-08、AC-15、AC-33、AC-35、AC-48、AC-49、AC-50
+  **依赖:** T085、T045
+  **配对:** T084
+
+- [x] **T084** — 顺序资源意图与历史保留
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/models/runtime_kubernetes.py`、`src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py`
+  **逻辑/验收**：按资源ref幂等登记；固定生产名的新ref须先确认旧Pod stopped及cleanup complete，保留所有UID历史，非生产重名拒绝。移除模型旧唯一intent约束，保留UID唯一；事务内检查，不在锁内调用集群API。
+  **覆盖 AC:** AC-08、AC-15、AC-33、AC-35、AC-48、AC-49、AC-50
+  **依赖:** T085、T083
+  **配对:** T083
+
+- [x] **T086** — 材料分块读取的定长范围合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_material_ranges.py`、`src/backend/test/app_runtime/test_runtime_material_transfers.py`
+  **逻辑/验收**：下载后段仅从对象存储对应offset读取length字节；验证关闭/释放连接、短读拒绝、撤权与原有分块摘要合同，不以小对象整读掩盖大对象二次复杂度。
+  **覆盖 AC:** AC-26、AC-28、AC-29、AC-46、AC-47、AC-51
+  **依赖:** T025
+  **配对:** T087
+
+- [x] **T087** — 对象存储 Range 流式下载接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/repositories/runtime_object_store.py`、`src/backend/bisheng/app_runtime/domain/services/runtime_material_transfer_service.py`
+  **逻辑/验收**：使用MinIO get_object offset/length和定长流，不从头跳过；backend继续独占存储凭据，连接finally释放，原授权/offset/完整性合同保持。
+  **覆盖 AC:** AC-26、AC-28、AC-29、AC-46、AC-47、AC-51
+  **依赖:** T025、T086
+  **配对:** T086
+
+- [x] **T046** — K8s SQLite 备份迁移恢复：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_appdb.py`
   **逻辑/验收**：停整个生产Pod后维护独占卷；复用appdb plan_digest/SQLite原子迁移journal，backup/integrity/fsync，平台内容与关联确认后才DDL；保护当前数据后恢复，失败保留maintenance和data_may_have_changed，不自动数据回滚；测试只定义输入/结果，不加入实现。
   **覆盖 AC:** AC-33、AC-34、AC-35、AC-46、AC-49、AC-50、AC-51、AC-52
-  **依赖:** T045、T029
+  **依赖:** T045、T029、T084、T087
   **配对:** T047
 
-- [ ] **T047** — K8s SQLite 备份迁移恢复
+- [x] **T047** — K8s SQLite 备份迁移恢复
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_appdb.py`、`src/runtime-manager/runtime_manager/k8s_data_helper.py`
   **逻辑/验收**：停整个生产Pod后维护独占卷；复用appdb plan_digest/SQLite原子迁移journal，backup/integrity/fsync，平台内容与关联确认后才DDL；保护当前数据后恢复，失败保留maintenance和data_may_have_changed，不自动数据回滚；通过配对测试后完成 L1 task-review。

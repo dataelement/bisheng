@@ -137,18 +137,26 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
             await self._acting_operation(row, row.operation_id, now)
             if (row.generation, row.owner_epoch) != (op.generation, op.owner_epoch):
                 raise RuntimeConflict("resource_fence_mismatch")
-            matches = await self.find(
-                RuntimeExecutionResource, operation_id=row.operation_id, kind=row.kind, name=row.name, lock=True
-            )
-            if matches:
-                current = matches[0]
+            current = await self.get(RuntimeExecutionResource, row.id, lock=True)
+            if current is not None:
                 if any(getattr(current, k) != getattr(row, k) for k in _INTENT_FIELDS):
                     raise RuntimeConflict("resource_intent_conflict")
                 if current.uid is None and current.stop_requested_at is None:
-                    # Identical pending intent, freshly fenced controller, same owner.
                     current.controller_epoch = controller_epoch
                     await session.flush()
                 return current
+            production = row.kind == "Pod" and row.purpose in _PRODUCTION
+            matches = await self.find(
+                RuntimeExecutionResource, operation_id=row.operation_id, kind=row.kind, name=row.name, lock=True
+            )
+            for current in matches:
+                if current.cleanup_state == "complete" and production:
+                    continue
+                if all(getattr(current, k) == getattr(row, k) for k in _INTENT_FIELDS):
+                    # Legacy callers without a resource-ref in the projection.
+                    return current
+                if not production or current.purpose == row.purpose:
+                    raise RuntimeConflict("resource_intent_conflict")
             if row.kind == "Pod":
                 reservations = await self.find(RuntimeCapacityReservation, operation_id=row.operation_id, lock=True)
                 if not reservations or reservations[0].state == "released":
@@ -160,7 +168,8 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
                         RuntimeExecutionResource.app_id == row.app_id,
                         RuntimeExecutionResource.kind == "Pod",
                         RuntimeExecutionResource.purpose.in_(_PRODUCTION),
-                        RuntimeExecutionResource.stop_state != "confirmed",
+                        (RuntimeExecutionResource.stop_state != "confirmed")
+                        | (RuntimeExecutionResource.cleanup_state != "complete"),
                     )
                     .with_for_update()
                 )

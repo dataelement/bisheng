@@ -169,6 +169,10 @@ class KubernetesDataExecutor:
                 self.runtime.clock.sleep(0.5)
 
     def request(self, operation, action, parameters):
+        if operation["kind"] != "data":
+            from runtime_manager.k8s_appdb import KubernetesMaintenance
+
+            return KubernetesMaintenance(self.runtime).request(operation, action, parameters)
         if action == "prepare-session":
             return self.prepare_session(operation)
         if action == "finish-session":

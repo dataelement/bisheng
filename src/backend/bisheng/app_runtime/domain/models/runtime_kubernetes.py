@@ -17,10 +17,7 @@ from bisheng.core.database.dialect_helpers import JsonType
 
 class RuntimeExecutionResource(ScopedRuntimeRecord, table=True):
     __tablename__ = "runtime_execution_resource"
-    __table_args__ = (
-        UniqueConstraint("operation_id", "kind", "name", name="uq_rt_resource_intent"),
-        UniqueConstraint("cluster_id", "namespace", "kind", "uid", name="uq_rt_resource_uid"),
-    )
+    __table_args__ = (UniqueConstraint("cluster_id", "namespace", "kind", "uid", name="uq_rt_resource_uid"),)
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, max_length=36)
     operation_id: str = Field(index=True, max_length=36)
     node_id: str = Field(index=True, max_length=64)

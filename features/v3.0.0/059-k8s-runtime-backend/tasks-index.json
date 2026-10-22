@@ -55,7 +55,7 @@
         "src/backend/bisheng/core/database/alembic/versions/f059_runtime_kubernetes.py",
         "src/backend/bisheng/app_runtime/domain/models/__init__.py"
       ],
-      "logic": "在真实单 head 后追加扩展 DDL；在已经被 tenant_filter 注册的 models 包导入新表，确保自动租户发现；不误改 ContextVar 模块。旧数据回填另列运维前置，不在 revision 做读写变换。降级前由独立运维前置检查停用 K8s/无新引用，未满足则拒绝；revision 只撤列等 DDL，不执行数据回填/清理；保留原 Docker 字段。",
+      "logic": "在真实单 head 后追加扩展 DDL；在已注册的 models 包导入新表以进入租户发现。旧数据回填另列运维前置，不在 revision 做读写变换。降级前由独立运维前置检查停用 K8s/无新引用，未满足则拒绝；revision 只撤列等 DDL，不执行数据回填/清理；保留原 Docker 字段。",
       "acs": [
         "AC-15",
         "AC-39",
@@ -102,7 +102,7 @@
         "src/backend/bisheng/core/database/alembic/versions/f059_merge_f086_heads.py",
         "src/backend/test/app_runtime/test_runtime_model_contracts.py"
       ],
-      "logic": "继承 F086 667546bb77 的 Vibe专有 BIGINT 修复（通用发布线没有该模型）；新增显式 merge revision保留两个原parent，恢复单head；静态守卫覆盖新表、授权历史NULL和UID未绑定NULL的限定语义，其他约束不放宽；DM8不做真实连接。",
+      "logic": "继承F086 667546bb77的Vibe专有BIGINT修复；模型在通用发布线上不存在。显式merge revision保留两个原parent，恢复单head；静态守卫明确历史授权NULL/待绑定UID NULL，其他约束不放宽；DM8仅静态。",
       "acs": [
         "AC-15",
         "AC-39",
@@ -125,7 +125,7 @@
       "files": [
         "src/backend/bisheng/core/database/alembic/versions/f059_merge_release_heads.py"
       ],
-      "logic": "合并已授权发布线 9d156f261c 后，真实 Alembic heads 为 f059_merge_f086_heads、asr_rt_model_type、merge_skill_center_heads。新增空 merge revision 保留三条原父链，不改表、不改数据、不重写已发布 revision；用已有单 head 门禁及模型/账本回归验证，降级只回到原分叉。",
+      "logic": "合并已授权发布线9d156f261c后，实际出现f059_merge_f086_heads、asr_rt_model_type、merge_skill_center_heads三条head；新增空merge revision保留三条原父链，不改表/数据、不重写历史；以已有单head门禁和模型/账本回归验证。降级只回到原分叉。",
       "acs": [
         "AC-39",
         "AC-48",
@@ -647,7 +647,7 @@
         "src/backend/bisheng/app_runtime/domain/services/runtime_material_service.py",
         "src/backend/bisheng/app_runtime/domain/models/runtime_kubernetes.py"
       ],
-      "logic": "从操作/部署/预览推导范围并绑定 UID/公钥；operation 终态失效，deployment-init 按当前 serving/候选冻结引用续取；旧 ticket 不独立续期，撤销/跨租户/错材料/Redis未知拒绝；通过配对测试后完成 L1 task-review。 未发布的新委托表expires_at允许NULL表示正式部署按当前归属逐次验证；operation仍必须有deadline，预览仍受会话期限限制，不以任意固定年限代替归属。只调整新表声明，无已发布迁移父链或数据变更。",
+      "logic": "从操作/部署/预览推导范围并绑定 UID/公钥；operation 终态失效，deployment-init 按当前 serving/候选冻结引用续取；旧 ticket 不独立续期，撤销/跨租户/错材料/Redis未知拒绝；正式部署的expires_at允许NULL，含义为逐次检查当前归属；operation/预览分别保留操作/会话期限。仅调整未发布新表声明，无数据或已发布父链变更；通过配对测试后完成 L1 task-review。",
       "acs": [
         "AC-15",
         "AC-27",
@@ -727,7 +727,7 @@
       "files": [
         "src/backend/test/app_runtime/test_runtime_material_middleware.py"
       ],
-      "logic": "根材料路径独立于浏览器JWT，租户由公钥授权决定；精确前缀免浏览器租户检查，相似路径不豁免；真实CustomMiddleware验证。",
+      "logic": "固定材料根路径独立于浏览器JWT，租户由公钥授权决定；精确前缀免浏览器租户检查，相似路径不豁免；真实CustomMiddleware验证；测试不加入生产实现。",
       "acs": [
         "AC-15",
         "AC-47",
@@ -749,7 +749,7 @@
       "files": [
         "src/backend/bisheng/utils/http_middleware.py"
       ],
-      "logic": "仅新增材料根路径到可信内部请求前缀，并排除浏览器凭据解析；授权Service仍逐请求清除ambient bypass/admin后验证租户/UID，不扩大其他路径。",
+      "logic": "仅新增材料根路径到可信内部请求前缀，并排除浏览器凭据解析；授权Service逐次清除ambient bypass/admin后验证租户/UID，不扩大其他路径。保持平台已有JWT/DSH语义；配对测试及L1后完成。",
       "acs": [
         "AC-15",
         "AC-47",
@@ -799,7 +799,7 @@
         "src/backend/bisheng/app_runtime/api/endpoints/runtime_material.py",
         "src/backend/bisheng/main.py"
       ],
-      "logic": "独立material-v1根路由注册到main，保持design 6.2.1固定P，不继承/api/v1前缀；按 design 6.2.1 完整方法/头/响应/错误注册 exchange、status、content、finalize；使用 workload 身份依赖，拒绝 manager/app/OBO 身份互换，流式阶段重新检查期限/撤销；通过配对测试后完成 L1 task-review。",
+      "logic": "material-v1固定P直接注册为main根路由，不继承/api/v1前缀；按 design 6.2.1 完整方法/头/响应/错误注册 exchange、status、content、finalize；使用 workload 身份依赖，拒绝 manager/app/OBO 身份互换，流式阶段重新检查期限/撤销；通过配对测试后完成 L1 task-review。",
       "acs": [
         "AC-15",
         "AC-28",
@@ -885,7 +885,7 @@
       "files": [
         "src/backend/test/app_runtime/test_runtime_dependency_materials.py"
       ],
-      "logic": "选中依赖缓存须持久化在当前准备操作，校验同应用/profile/platform/verified，输入键不可变化；新材料授权从选择与真实计划推导，不接受伪造引用。",
+      "logic": "缓存选择须持久化当前准备操作；同应用/profile/platform/verified、输入键不可变；材料授权从真实选择/SQL计划推导，伪造引用不扩权；测试不混入实现。",
       "acs": [
         "AC-15",
         "AC-25",
@@ -912,7 +912,7 @@
         "src/backend/bisheng/app_runtime/domain/services/runtime_profile_service.py",
         "src/backend/bisheng/app_runtime/domain/services/runtime_material_service.py"
       ],
-      "logic": "依赖resolve/confirm在操作行锁下持久选中结果；材料授权复查SQL计划和缓存范围，不把任意调用方artifact变为允许材料；不改变旧Docker内容确认合同。",
+      "logic": "resolve/confirm在操作行锁下持久选中结果，授权复查同范围SQL计划和材料；禁止任意引用扩大授权、终态写入或更换输入键。保持旧Docker内容确认合同。配对测试及L1后完成。",
       "acs": [
         "AC-15",
         "AC-25",
@@ -1008,7 +1008,7 @@
       "files": [
         "src/backend/test/app_runtime/test_runtime_kubernetes_coordination.py"
       ],
-      "logic": "心跳持久执行形态/探测，失败阻断新建但可清理；事实必须当前租约/代次，停止声明须资源证据，ready指向已绑定Service/Pod；未知异常不落入全局错误泄漏。",
+      "logic": "心跳持久执行形态/探测，失败阻断新建但可清理；事实必须当前租约/代次，停止声明须资源证据，ready须已绑定Service/Pod；未知异常不被全局错误处理泄漏。测试只定义合同。",
       "acs": [
         "AC-03",
         "AC-07",
@@ -1039,7 +1039,7 @@
         "src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py",
         "src/backend/bisheng/app_runtime/api/endpoints/runtime_delivery.py"
       ],
-      "logic": "扩展兼容心跳/node plan、K8s控制器事实闸口、停止与ready事实校验；保留Docker合同，阻断探测失败的新建且清理不被同一状态锁死；内部未知异常安全503。",
+      "logic": "扩展兼容心跳/node plan、K8s控制器事实闸口、停止与ready事实校验；保留Docker合同。探测失效阻断新建，清理不被同一状态锁死；内部未知异常安全503。配对测试和L1后完成。",
       "acs": [
         "AC-03",
         "AC-07",
@@ -1379,7 +1379,7 @@
       "files": [
         "src/backend/test/app_runtime/test_runtime_data_repository.py"
       ],
-      "logic": "真实SQL验证数据会话与生命周期提交/claim互斥，不改变serving代次；超时/unknown不释放；清理确认后释放；K8s sidecar计入预占，Docker保持。",
+      "logic": "真实SQL验证data_operation_id不改变serving代次/归属，数据会话与生命周期提交/claim互斥；期限到期或未知结果不释放，只有终态且清理完成释放；K8s正式Pod的128MiB/25m sidecar计入预占，Docker原额度不变。先验证SQL原子性，再接Service；不加入实现。",
       "acs": [
         "AC-04",
         "AC-05",
@@ -1411,7 +1411,7 @@
         "src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py",
         "src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py"
       ],
-      "logic": "Repository原子登记data归属/额度，生命周期与data双向互斥，terminal+cleanup后释放；K8s实际sidecar开销加计，Docker预算不变，无集群I/O。",
+      "logic": "Repository在node/assignment锁下登记内部数据操作及helper预占，不改active_operation_id/generation；生命周期新提交及claim检查未清理data归属，数据claim校验原范围；unknown保留互斥。终态且清理确认后释放。OperationService按K8s实际sidecar计入正式Pod资源、保留Docker预算；不做集群I/O。",
       "acs": [
         "AC-04",
         "AC-05",
@@ -1557,6 +1557,138 @@
       "review": "PASS_WITH_NOTES"
     },
     {
+      "id": "T085",
+      "wave": 5,
+      "kind": "基础设施",
+      "title": "顺序维护资源 DDL",
+      "files": [
+        "src/backend/bisheng/core/database/alembic/versions/f059_resource_phases.py"
+      ],
+      "logic": "实际单head f059_merge_release_heads之后追加DDL，移除operation/kind/name唯一约束；保留资源ref主键及真实UID唯一约束。降级须运维先确认历史无重名，revision不删历史、不读写业务数据；MySQL/DM8条件DDL及单head静态验证。",
+      "acs": [
+        "AC-15",
+        "AC-35",
+        "AC-48",
+        "AC-49",
+        "AC-56"
+      ],
+      "depends": [
+        "T074"
+      ],
+      "pair": null,
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T083",
+      "wave": 5,
+      "kind": "测试",
+      "title": "固定生产名称的分阶段资源合同",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_kubernetes_phases.py"
+      ],
+      "logic": "真实SQL验证同一操作backup/migrate/serve可顺序登记不同ref/UID，前一Pod停止并清理完成后才允许下一Pod；原ref幂等不改冻结模板，旧UID历史保留，未停止/未清理拒绝，不以租约到期放行。",
+      "acs": [
+        "AC-08",
+        "AC-15",
+        "AC-33",
+        "AC-35",
+        "AC-48",
+        "AC-49",
+        "AC-50"
+      ],
+      "depends": [
+        "T085",
+        "T045"
+      ],
+      "pair": "T084",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T084",
+      "wave": 5,
+      "kind": "实现",
+      "title": "顺序资源意图与历史保留",
+      "files": [
+        "src/backend/bisheng/app_runtime/domain/models/runtime_kubernetes.py",
+        "src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py"
+      ],
+      "logic": "按资源ref幂等登记；固定生产名的新ref须先确认旧Pod stopped及cleanup complete，保留所有UID历史，非生产重名拒绝。移除模型旧唯一intent约束，保留UID唯一；事务内检查，不在锁内调用集群API。",
+      "acs": [
+        "AC-08",
+        "AC-15",
+        "AC-33",
+        "AC-35",
+        "AC-48",
+        "AC-49",
+        "AC-50"
+      ],
+      "depends": [
+        "T085",
+        "T083"
+      ],
+      "pair": "T083",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T086",
+      "wave": 5,
+      "kind": "测试",
+      "title": "材料分块读取的定长范围合同",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_material_ranges.py",
+        "src/backend/test/app_runtime/test_runtime_material_transfers.py"
+      ],
+      "logic": "下载后段仅从对象存储对应offset读取length字节；验证关闭/释放连接、短读拒绝、撤权与原有分块摘要合同，不以小对象整读掩盖大对象二次复杂度。",
+      "acs": [
+        "AC-26",
+        "AC-28",
+        "AC-29",
+        "AC-46",
+        "AC-47",
+        "AC-51"
+      ],
+      "depends": [
+        "T025"
+      ],
+      "pair": "T087",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T087",
+      "wave": 5,
+      "kind": "实现",
+      "title": "对象存储 Range 流式下载接线",
+      "files": [
+        "src/backend/bisheng/app_runtime/domain/repositories/runtime_object_store.py",
+        "src/backend/bisheng/app_runtime/domain/services/runtime_material_transfer_service.py"
+      ],
+      "logic": "使用MinIO get_object offset/length和定长流，不从头跳过；backend继续独占存储凭据，连接finally释放，原授权/offset/完整性合同保持。",
+      "acs": [
+        "AC-26",
+        "AC-28",
+        "AC-29",
+        "AC-46",
+        "AC-47",
+        "AC-51"
+      ],
+      "depends": [
+        "T025",
+        "T086"
+      ],
+      "pair": "T086",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T046",
       "wave": 5,
       "kind": "测试",
@@ -1577,10 +1709,14 @@
       ],
       "depends": [
         "T045",
-        "T029"
+        "T029",
+        "T084",
+        "T087"
       ],
       "pair": "T047",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T047",
@@ -1608,7 +1744,9 @@
         "T046"
       ],
       "pair": "T046",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T048",
@@ -1631,7 +1769,9 @@
         "T047"
       ],
       "pair": "T049",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T049",
@@ -1656,7 +1796,9 @@
         "T048"
       ],
       "pair": "T048",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T050",
@@ -1687,7 +1829,9 @@
         "T047"
       ],
       "pair": "T051",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T051",
@@ -1720,7 +1864,9 @@
         "T050"
       ],
       "pair": "T050",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T052",
@@ -1744,7 +1890,9 @@
         "T051"
       ],
       "pair": "T053",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T053",
@@ -1770,7 +1918,9 @@
         "T052"
       ],
       "pair": "T052",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T054",
@@ -1804,7 +1954,9 @@
         "T053"
       ],
       "pair": "T055",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T055",
@@ -1840,7 +1992,9 @@
         "T054"
       ],
       "pair": "T054",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T056",
@@ -1866,7 +2020,9 @@
         "T055"
       ],
       "pair": "T057",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T057",
@@ -1894,7 +2050,9 @@
         "T056"
       ],
       "pair": "T056",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T058",
@@ -1915,7 +2073,9 @@
         "T057"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T059",
@@ -1936,7 +2096,9 @@
         "T058"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T060",
@@ -1964,7 +2126,9 @@
         "T013"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T061",
@@ -1992,7 +2156,9 @@
         "T060"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T062",
@@ -2017,7 +2183,9 @@
         "T061"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T063",
@@ -2041,7 +2209,9 @@
         "T062"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T064",
@@ -2077,7 +2247,9 @@
         "T055"
       ],
       "pair": "T065",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T065",
@@ -2115,7 +2287,9 @@
         "T064"
       ],
       "pair": "T064",
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T066",
@@ -2190,7 +2364,9 @@
         "T005"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T067",
@@ -2218,7 +2394,9 @@
         "T066"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T068",
@@ -2255,7 +2433,9 @@
         "T067"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T069",
@@ -2298,7 +2478,9 @@
         "T068"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T070",
@@ -2332,7 +2514,9 @@
         "T069"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T071",
@@ -2357,7 +2541,9 @@
         "T070"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     },
     {
       "id": "T072",
@@ -2430,7 +2616,9 @@
         "T071"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "pending",
+      "review": "pending"
     }
   ]
 }

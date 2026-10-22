@@ -328,17 +328,15 @@ class RuntimeMaterialTransferService:
         async def stream():
             if not size:
                 return
-            source = self.objects.iter_content(artifact.object_key)
-            position, emitted, end = 0, 0, time.monotonic() + 60
+            source = self.objects.iter_range(artifact.object_key, offset=offset, length=size)
+            emitted, end = 0, time.monotonic() + 60
             try:
                 while emitted < size:
                     try:
                         chunk = await self._io(scope, ticket, transfer_id, anext(source), end=end)
                     except StopAsyncIteration:
                         _reject("material_object_truncated", 503)
-                    start = max(0, offset - position)
-                    part = chunk[start : start + size - emitted]
-                    position += len(chunk)
+                    part = chunk[: size - emitted]
                     if part:
                         emitted += len(part)
                         yield part

@@ -389,7 +389,12 @@ def pod_template(plan: PodPlan) -> dict:
             name = "data-helper" if plan.purpose in {"serve", "data"} else "maintenance"
             mounts = [_mount("data", "/volume")]
             environment = plan.helper_env
-            command = ("python", "-I", "-m", "runtime_manager.k8s_helper", plan.purpose)
+            command = ("python", "-I", "-m", "runtime_manager.k8s_data_helper", "maintenance")
+            if name == "maintenance" and plan.material_secret:
+                volumes.append(
+                    {"name": "material-auth", "secret": {"secretName": plan.material_secret, "defaultMode": 256}}
+                )
+                mounts.append(_mount("material-auth", "/run/material", readonly=True))
             if name == "data-helper":
                 volumes.append(
                     {

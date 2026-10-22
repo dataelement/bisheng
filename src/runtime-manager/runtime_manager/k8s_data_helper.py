@@ -347,6 +347,21 @@ def create_app(helper):
 
 
 def main():
+    import sys
+
+    if sys.argv[1:] == ["maintenance"]:
+        from runtime_manager.k8s_appdb import run_maintenance
+        from runtime_manager.k8s_helper import client_from_identity
+
+        client = client_from_identity()
+        try:
+            result = run_maintenance(json.loads(os.environ["MATERIAL_PLAN"]), client)
+            print("BISHENG_RUNTIME_RESULT " + json.dumps(result, sort_keys=True, separators=(",", ":")), flush=True)
+        finally:
+            client.close()
+        return
+    if sys.argv[1:]:
+        raise ValueError("data_helper_command_invalid")
     import uvicorn
 
     context = json.loads(os.environ["DATA_CONTEXT"])

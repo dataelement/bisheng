@@ -802,3 +802,19 @@ L1：架构/命名/内部序列化/跨库与租户/敏感信息/设计同步 PAS
 ## T081/T082 跨租户并发补充复审
 
 新增实际双租户SQL用例先复现第三个数据会话仍可进入（`/private/tmp/f059-data-concurrency-red.log`）。在已锁节点下只聚合assignment.data_operation_id非空的数量，上限2；不加载其他租户对象，不用TTL释放未知归属。数据Repository/会话24 passed（`/private/tmp/f059-data-concurrency-final.log`），Ruff/架构守卫通过。L1架构、命名、SQL/租户、序列化、信息安全与设计同步PASS，前端N/A。原任务目标范围保持。**结果：PASS。**
+
+## T085 / T083 / T084 / T086 / T087 / T046 / T047
+
+按 task-review 的7项逐项核对。测试先行红日志：resource-phases-red（4 failed）、material-range-red（3 failed）、k8s-appdb-red（缺模块7 failed）、k8s-appdb-integration-red（未接线1 failed）。最终：resource-range-final 97 passed；k8s-maintenance-final 90 passed。
+
+| 任务 | 类型 | 架构 | 命名 | 序列化 | 数据库 | 前端 | 信息泄漏 | 设计同步 | 元数据/配对/依赖 | 结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T085 | 基础设施 | PASS | N/A | N/A | PASS | N/A | PASS | PASS | PASS/N/A/PASS | PASS |
+| T083 | 测试 | N/A | PASS | N/A | N/A | N/A | N/A | N/A | PASS/N/A/PASS | PASS |
+| T084 | 实现 | PASS | PASS | PASS | PASS | N/A | PASS | PASS | PASS/PASS/PASS | PASS |
+| T086 | 测试 | N/A | PASS | N/A | N/A | N/A | N/A | N/A | PASS/N/A/PASS | PASS |
+| T087 | 实现 | PASS | PASS | PASS | PASS | N/A | PASS | PASS | PASS/PASS/PASS | PASS |
+| T046 | 测试 | N/A | PASS | N/A | N/A | N/A | N/A | N/A | PASS/N/A/PASS | PASS |
+| T047 | 实现 | PASS | PASS | PASS | PASS | N/A | PASS | PASS | PASS/PASS/PASS | PASS_WITH_NOTES |
+
+T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态。T084在Repository事务内锁，不带集群I/O；新阶段必须旧writer停止并清理。T087存储凭据仍仅backend持有。T047仅复用appdb SQLite importer，helper无平台HMAC/MinIO权限；无新数据库业务Owner。配对范围与新增基础任务已复审。T009维护模板、T045非数据维护dispatch为原任务增量接线，补充检查7项PASS，分别仍为1/2文件；无通用SQL入口。T047备注：仅本地SQLite和模拟集群，实际189/默认签发/镜像发行尚未验证，保持后续任务未完成。

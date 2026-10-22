@@ -206,6 +206,8 @@ flowchart LR
 
 K8s 1.28 不保证未启动容器都有终止记录；其 kubelet 延迟终态转换直到不再可能运行容器。本设计据此组合来源约束与 UID/删除事实，而非只看 phase。[TerminatePod](https://github.com/kubernetes/kubernetes/blob/v1.28.15/pkg/kubelet/status/status_manager.go#L380-L486)、[mergePodStatus](https://github.com/kubernetes/kubernetes/blob/v1.28.15/pkg/kubelet/status/status_manager.go#L965-L1029)、[删除中 Pod 的绑定校验](https://github.com/kubernetes/kubernetes/blob/v1.28.15/pkg/registry/core/pod/storage/storage.go#L221-L232)、[AdmissionReview 与子资源规则](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#request)；这些是静态依据，未替代 189 实测。
 
+固定生产名称可在一个操作中顺序经历备份、迁移和运行。每阶段使用独立resource_ref及UID行；原operation/kind/name唯一约束由f059_resource_phases移除。新阶段须所有历史生产Pod停止确认且cleanup complete，旧证据不覆盖。ref主键及真实UID唯一约束保留；降级前运维确认无历史重名，DDL不清历史。
+
 ### 4.6 准备、初始化及依赖复用
 
 **准备阶段**：scratch PVC 按操作唯一分配，可信传输 → download → resolve/install/build → 可信上传是独立的临时 Pod；每阶段网络身份不同。临时准备/预检/维护 Pod 用 `restartPolicy: Never`、`activeDeadlineSeconds`，manager 决定重试，不使用 Job 控制器自动补 Pod。预览 Pod 从创建起设置由会话 expires_at 推导的总期限，启动/物化仍各有 90 秒阶段限制；不把短启动期限事后调大为 7 天。正式 Pod 无整生命周期 deadline，初始化进程使用自身固定阶段期限，manager 对账负责停止超时未上线候选。K8s 1.28 只允许减少已设 Pod activeDeadlineSeconds，不能设计成 ready 后延长或清空。[1.28 更新校验](https://github.com/kubernetes/kubernetes/blob/v1.28.15/pkg/apis/core/validation/validation.go#L4391-L4409)无动态供应器时使用安装者预置的 scratch 池；池容量不足返回准备资源不足，不借生产卷。
@@ -278,6 +280,8 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 数据Pod运输已本地接线：正式Pod的data-helper与离线purpose=data使用固定`runtime_manager.k8s_data_helper`入口，公钥只投射到helper，Pod UID来自Downward API；准入只允许安装者指定的公钥ConfigMap。在线按原UID复用，helper不可用不回退到第二挂卷Pod；离线先复用已登记PVC并确认旧写入者已停止，不为查看数据创建新卷或Service。调用目标只能是安装描述的pod_cidrs内、同一资源UID的8092端口。v2数据API转交owner票据，使用后台持久互斥和卷内flock，不再抢操作线程持有的本地app锁。
 
 管理面`/execution-state`只返回空闲位，不返回SQLite或journal结果；未知/取消动作须等旧票据受理窗口结束并确认helper空闲，再释放在线会话。无法确认则保留互斥；离线仍需整个同UID Pod停止证据。业务数据结果查询始终需要新的backend owner票据。导出经理端只存短缓存并验证长度/摘要，丢失回调的过期缓存按既有清理周期回收，不清业务PVC。
+
+维护实现补充：受信maintenance Pod只持该阶段材料私钥，使用k8s_appdb适配既有PlatformAppDb到business/app.db与platform私有备份。卷内maintenance记录按操作/动作及参数摘要持久缓存结果，SQLite迁移journal保持DDL幂等。manager先将maintenance_progress提交平台，再按同UID停止、清理Pod与临时Secret，正式PVC保留；重启从确认结果续办。备份平台内容和SQL关联未确认则不进入DDL；恢复先保护当前库，不自动回滚。当前通过真实本地SQLite与模拟集群交互验证，未宣称189实测。
 
 ### 4.9 网络、准入和资源治理
 
@@ -508,6 +512,8 @@ ce8ed3a5d85ad3633d8ee0394e7d91600f0adc33de14d0a33622c67aceed383a
 
 该输入共 **414 bytes**，其 SHA-256 为 `206cf7e08bc12e23245980c45989fe8165233183e18bed03b99a8c17c6050167`。这只是核对 canonical 编码的金样，不把该摘要替代 Ed25519 的原始签名输入。反例至少覆盖：改 method/path、偏移/length、原始 body、ticket、Pod UID、nonce，重复认证头、query 重排/重复键、过期和 Redis 失联，均须拒绝或按规定重新规范化后由 client 重签；服务端不默默接受非规范线格式。
 
+材料下载使用backend存储适配器的MinIO get_object offset/length原生Range，并始终关闭/释放连接；不从对象开头扫描跳读。分块期间继续检查当前授权，内容最终摘要合同不变。
+
 ### 6.3 配置合同
 
 以下未有的配置均标为**新增提案**，不假定现代码已经读取：
@@ -649,3 +655,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T044/T045数据运输/固定数据位置/owner票据转交，以及T009/T011/T033/T037/T041接线复审；UTC期限及短缓存回收 | data执行14项、helper控制20项、模板准入74项；完整runtime结果见validation；仍无默认签票与189部署结论 |
 
 | 2026-10-22 | T081/T082补充跨租户/多manager数据并发上限，不能仅靠进程内锁 | 新增用例先失败；数据Repository＋会话24 passed，无跨租户明细加载 |
+
+| 2026-10-22 | T083–T087顺序资源历史及原生Range，T046/T047独占SQLite维护接线 | 账本/Range/迁移图97 passed；维护及数据/模板90 passed；未部署 |
