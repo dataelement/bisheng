@@ -619,5 +619,25 @@
       "outcome": "passed",
       "entry_status": 200
     }
-  ]
+  ],
+  "r10_stop_expired_pending": {
+    "operation_id": "9f57c38992f2428f8fbc4bd3fa037ca4",
+    "deadline_utc": "2026-10-22T19:27:30Z",
+    "status_observed": "running",
+    "cleanup_status": "pending",
+    "app_api_state": "stopped",
+    "physical_serve_uid": "a27db53e-6f47-4ff3-b455-35ec038ca578",
+    "physical_writer_stopped": false,
+    "cause": "Closed historical same-name maintenance Pod resource UID was re-read; expired stop cleanup then incorrectly used its own empty resources as proof for all app writers; backend correctly refused terminal stopped fact",
+    "fix_tasks": [
+      "T238",
+      "T239",
+      "T240",
+      "T241"
+    ],
+    "original_resumed_journal_sha256": "1cbdb6186bbf211ce9eded309620fae2b57181e571e69a0d37011cbb5370e32a",
+    "original_resumed_exit": "AssertionError from stop response; no retry",
+    "deadline_extended": false,
+    "raw_local_evidence": "/private/tmp/f059-r10-stop-expired-before.json"
+  }
 }

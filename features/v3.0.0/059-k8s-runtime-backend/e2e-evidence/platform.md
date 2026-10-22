@@ -83,3 +83,7 @@ r10已真实通过preview-and-approval（审批人访问、其他角色拒绝、
 同一已批准v1的明确新deploy20d42a22…已completed/cleanupcomplete；公开fresh核对online、同版本/审批，无新增版本或审批。正式Pod a27db53e…Running/Ready，生产PVC仍4c5b459c…；证据k189r10-first-online.json，manual receipt SHA `299c8b4816a248611c4ae114cb414eaf528324eb362106bafef312a1678f8a55`。首次维护错误修复的真实上线闭环已成立。
 
 原r10套件按900秒自然退出，日志/parent journal不改（SHA `3a2961d24f6428cc4ee268e166372c7cc404237079441985f837ea4788f773f5`）。薄续办脚本fresh确认已批准v1在线和其余5slug尚无应用，以O_EXCL新journal关联原journal/manual校验和，复用原suite方法，未重发首版。首次原observe真实通过：HTTP200/未登录拒绝、/sdk/identity与/sdk/storage-roundtrip、WebSocket允许/拒绝、owner与非owner/跨租户管理边界、SQLite表/结构/行查询/PATCH/CSV导出及拒绝配对。首版停用恢复和v2、其他语言/交付方式及故障仍在执行，不宣称T069/T070全部完成。
+
+## r10停用真实失败与清理修复
+
+首版observe已通过，原续办在POST stop失败后退出；原journal冻结SHA `1cbdb6186bbf211ce9eded309620fae2b57181e571e69a0d37011cbb5370e32a`，失败事件保持。9f57c389…原deadline19:27:30Z已过，app公开状态stopped但旧serve UID a27db53e…仍运行，不能视为物理停用通过。T238/T239修正已闭合历史UID重复停用，本地全runtime1541/13skip；T240/T241补过期stop先终态pending、再精确旧terminal自身cleanup的闭环，后端全app停止guard保持。当前PVC及writer均持有，无手工delete/finalizer/SQL/期限延长。新真实结果另记；旧cycle未完成不补写成功。
