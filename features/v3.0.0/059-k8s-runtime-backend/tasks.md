@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；202 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 197 / 202 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；214 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 197 / 214 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1602,6 +1602,101 @@
   **依赖:** T200、T202
   **配对:** T200
 
+- [ ] **T203** — K8s自动补全的UID字段合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_templates.py`、`src/runtime-manager/tests/test_k8s_admission.py`
+  **逻辑/验收**：真实PodPlan默认化后通过；两个helper的非v1、字段路径变化、额外字段仍拒绝。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T201
+  **配对:** T204
+
+- [ ] **T204** — 冻结显式core/v1 UID选择器
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`
+  **逻辑/验收**：仅两处显式apiVersion:v1，未知字段比较不放宽，旧冻结intent不改写。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T203
+  **配对:** T203
+
+- [ ] **T207** — 持久创建事务与签名HTTP合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_creation.py`、`src/backend/test/app_runtime/test_runtime_kubernetes_api.py`
+  **逻辑/验收**：仅唯一403拒绝可独立not_created收尾；未知、旧记录、重复、跨epoch和无UID普通停止拒绝；含真实SQL、签名API、role配对和混合unknown阻塞。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T204
+  **配对:** T208
+
+- [ ] **T214** — 锁读后刷新资源identity map
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_creation_concurrency.py`
+  **逻辑/验收**：真实双Session交错预读与提交，锁读必须刷新旧缓存；begin/fence双向互斥，非MySQL锁性能实测。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T207
+  **配对:** T208
+
+- [ ] **T208** — 资源账本单次创建与未创建围栏
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py`、`src/backend/bisheng/app_runtime/domain/models/runtime_kubernetes.py`
+  **逻辑/验收**：现有observed_state存versioned creation，CAS begin/rejected/fence/not_created；明确403且fence后fresh404才确认无执行体，不伪造UID；未知持久阻塞；锁读populate_existing，无新DDL。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T207、T214
+  **配对:** T207
+
+- [ ] **T211** — 既有资源Service夹具接入创建事务
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_service.py`
+  **逻辑/验收**：注册后尚不允许CREATE；真实begin后才允许，原只读不写、UID停止和权限拒绝保持。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T208
+
+- [ ] **T212** — 创建收尾Service与只读准入接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`
+  **逻辑/验收**：动作按字段范围校验，新增四个内部观察；not_created和stopped各自校验，所有Pod确认后才能释放预占；准入只给started新意图CREATE。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T207、T208、T211
+  **配对:** T207
+
+- [ ] **T213** — 签名观察API创建动作输入
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/api/endpoints/runtime_kubernetes.py`
+  **逻辑/验收**：严格schema声明创建动作/attempt/status，exclude_unset避免默认字段进入其它动作；独立manager鉴权不变，无外部deploy API变更。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T207、T212
+  **配对:** T207
+
+- [ ] **T205** — manager明确拒绝与未知创建恢复合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
+  **逻辑/验收**：403可持久收尾、未知不重发、回执丢失重启续办、发现实际Pod正常UID停止、同名异物拒绝，不DELETE未创建Pod。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T204、T213
+  **配对:** T206
+
+- [ ] **T206** — manager单次创建与独立无执行体收尾
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+  **逻辑/验收**：POST前取得唯一begin回执，只有403持久rejected；cleanup先fence再fresh404，不确定保留旧资源；重拉账本绑定UID，证明后再次出现对象拒绝。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T205
+  **配对:** T205
+
+- [ ] **T209** — 准入拒绝安全诊断合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_admission_diagnostics.py`
+  **逻辑/验收**：真实review拒绝日志只固定reason白名单，恶意异常文本/类名/凭据/UID不得泄漏；成功无拒绝日志。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T206
+  **配对:** T210
+
+- [ ] **T210** — 准入拒绝固定枚举诊断
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`
+  **逻辑/验收**：仅8固定原因或admission_refused；原API响应及拒绝策略不变，不追认历史403。
+  **覆盖 AC:** AC-13、AC-14、AC-48、AC-49、AC-52
+  **依赖:** T209
+  **配对:** T209
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1707,3 +1802,5 @@ T198/T199完成于00fbdce05/合流候选e4052d1c2：16新安全配对先红绿�
 T200/T201现场登记：189 e405/Helm12同Pod a7bc860e/restart0，旧过期op正常failed/cleanupcomplete；空闲后同holder epoch3→4并提交preparing fact成功，证明租约恢复。新r3资源注册503/AttributeError，backend校验仍混用manifest.profile字符串与解析对象；尚无Pod/PVC、失败正常cleanup。37条真实Service/SQLite配对先红26/11，独立测试提交ad8d028b7；补同样阶段对象边界，未扩大规格或放宽审批/镜像校验。
 
 T200/T201/T202完成：新增37真实Service/SQLite合同先红26/11→全绿，完整backend首轮11旧fixture缺协议字段/1670passed/18skip；仅补真实kind/mode/prepare对象后完整1681passed/18skip，拒绝断言不动。新37与旧两模块Ruff/架构守卫通过。197/202完成，189按独立backend新源码复验；manager仍固定e405/f004镜像，不转标新backend SHA为该镜像来源。
+
+2026-10-22 T203–T214现场收尾登记：用户优先K8s部署，暂停新增arm验证。真实189 r4 POST403后无UID意图永久unknown，新增单次创建事务及独立not_created路径；明确拒绝和未知响应分开，旧r4无持久receipt保持隔离/PVC，不追认或直接改SQL。模板fieldRef默认差异已本地精确复现，历史403原因未恢复；新安全枚举用于后续现场定位。

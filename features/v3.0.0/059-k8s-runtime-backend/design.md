@@ -194,11 +194,16 @@ flowchart LR
 
 | 分类 | 必须具备的证据 | 结果 |
 | --- | --- | --- |
+| `not_created`（独立意图收尾） | 新版资源账本持久记录从未尝试，或唯一创建尝试收到明确403；先原子关闭CREATE，再fresh GET404，当前controller范围与模板/归属保持 | 无UID意图未成为执行体；单独观察路径保存证明，不能冒充never_scheduled；普通stopped仍要求真实UID |
 | `never_scheduled` | 同一 UID 已进入删除，最新对象的 `spec.nodeName` 仍为空；模板禁止用户指定节点，绑定 API 不允许给删除中的 Pod 新增节点归属；没有同名异 UID 或早期已绑定事实 | 从未交给 kubelet，无容器终止记录也可确认该 UID 不会成为写入者 |
 | `kubelet_terminal` | 同一 UID 已进入删除；Pod 从创建起受当前 status 基线保护；`Succeeded/Failed` 是该绑定节点 kubelet 通过受控 status 更新写入的终态，且无仍运行的容器记录；终态不可回到活动态 | 接受 kubelet 对整个 Pod 已结束的确认；Waiting、缺失 ID 或从未启动的 init 后缀作为诊断保留，不因此永久阻塞 |
 | `unknown` | 只有 DELETE 已受理、404、NodeLost/Unknown、租约超时、来源未受保护的 Failed、过期缓存、对象消失或同名替换等事实 | 保持 held/cleanup_pending；不释放卷或创建第二生产写入者 |
 
 `never_scheduled` 不是仅凭“查不到状态”：必须保留带删除时间和空 nodeName 的同 UID API 对象。绑定和终态来源的允许/拒绝测试属于安装硬门；不满足时不能启用该证明类型。已绑定但 init 拉取失败/材料拒绝时，先 DELETE，再等待 `kubelet_terminal`；不能根据 PodInitializing 或状态缺失直接释放。
+
+**创建事务收尾（T203–T214实施细化）**：新Pod意图在现有 `observed_state.creation` 保存 `version=1` 及 `unattempted → started → rejected`；POST前原子 `create_begin` 固定唯一 `create_attempt_id` 和controller epoch，重复begin不重发。只有同attempt/epoch的明确HTTP403能记录rejected；timeout、transport、5xx、409、2xx解析失败等保持started/unknown。新意图准入只有started允许CREATE，旧JSON空记录不回填为unattempted。收尾先 `create_fence` 将unattempted/rejected固定为fenced并关闭CREATE，再新鲜GET404，通过独立 `not_created` 观察记录无执行体证明。该路径stop_state=confirmed但evidence_kind=not_created、UID仍NULL；普通stopped的同UID证明完全不变。任一实际对象出现必须验证范围、绑定真实UID并走停止流程；已证明未创建后又出现对象则拒绝，不删除或移除finalizer。旧r4缺少唯一尝试账本，保留操作/PVC/预占，不凭历史manager日志或当前404自动追认。锁序保持operation→node→resource，资源加锁读取使用populate_existing强制刷新预读identity map，避免并发begin/fence覆盖。无新DDL、无直接MinIO依赖、无外部deploy API变更。
+
+Pod的downward UID字段显式声明core/v1，避免K8s补默认值改变冻结projection；非v1、其他字段路径或额外字段仍严格拒绝。准入日志只固定8个安全原因或admission_refused，不输出请求、环境、异常正文/类型名或UID；API响应合同保持。历史189403未取到原reason，不将本地默认化复现当现场结论。
 
 **终态来源约束**：独立验证器新增 `UPDATE pods/status` 规则，只覆盖本安装专用执行命名空间。使用 API server 提供的 `AdmissionReview.request.userInfo` 与 old/new Object：只有 `system:nodes` 中、用户名严格等于 `system:node:<spec.nodeName>` 的绑定节点身份可引入终态或变更终态容器记录；拒绝其它控制器合成终态，拒绝终态恢复活动。普通调度条件更新不需要 backend 或资源计划查询。manager 的 Role 不含 `pods/status`，不能冒充 kubelet；创建 Pod 时拒绝预填终态，冻结 `status_policy_revision`，不领养基线启用前的 Pod。规则 `sideEffects: None`、`failurePolicy: Fail`，不写停止事实、不调用 backend，因此不形成 status→backend→删除的循环。该设计信任受认证 kubelet，不声称防御被接管的节点或集群管理员。
 

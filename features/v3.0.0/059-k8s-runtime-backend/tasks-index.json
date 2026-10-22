@@ -5128,6 +5128,302 @@
       "review": "PASS"
     },
     {
+      "id": "T203",
+      "wave": 8,
+      "kind": "测试",
+      "title": "K8s自动补全的UID字段合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_templates.py",
+        "src/runtime-manager/tests/test_k8s_admission.py"
+      ],
+      "logic": "真实PodPlan默认化后通过；两个helper的非v1、字段路径变化、额外字段仍拒绝。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T201"
+      ],
+      "pair": "T204",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T204",
+      "wave": 8,
+      "kind": "实现",
+      "title": "冻结显式core/v1 UID选择器",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_templates.py"
+      ],
+      "logic": "仅两处显式apiVersion:v1，未知字段比较不放宽，旧冻结intent不改写。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T203"
+      ],
+      "pair": "T203",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T207",
+      "wave": 8,
+      "kind": "测试",
+      "title": "持久创建事务与签名HTTP合同",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_kubernetes_creation.py",
+        "src/backend/test/app_runtime/test_runtime_kubernetes_api.py"
+      ],
+      "logic": "仅唯一403拒绝可独立not_created收尾；未知、旧记录、重复、跨epoch和无UID普通停止拒绝；含真实SQL、签名API、role配对和混合unknown阻塞。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T204"
+      ],
+      "pair": "T208",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T214",
+      "wave": 8,
+      "kind": "测试",
+      "title": "锁读后刷新资源identity map",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_kubernetes_creation_concurrency.py"
+      ],
+      "logic": "真实双Session交错预读与提交，锁读必须刷新旧缓存；begin/fence双向互斥，非MySQL锁性能实测。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T207"
+      ],
+      "pair": "T208",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T208",
+      "wave": 8,
+      "kind": "实现",
+      "title": "资源账本单次创建与未创建围栏",
+      "files": [
+        "src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py",
+        "src/backend/bisheng/app_runtime/domain/models/runtime_kubernetes.py"
+      ],
+      "logic": "现有observed_state存versioned creation，CAS begin/rejected/fence/not_created；明确403且fence后fresh404才确认无执行体，不伪造UID；未知持久阻塞；锁读populate_existing，无新DDL。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T207",
+        "T214"
+      ],
+      "pair": "T207",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T211",
+      "wave": 8,
+      "kind": "测试",
+      "title": "既有资源Service夹具接入创建事务",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_kubernetes_service.py"
+      ],
+      "logic": "注册后尚不允许CREATE；真实begin后才允许，原只读不写、UID停止和权限拒绝保持。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T208"
+      ],
+      "pair": null,
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T212",
+      "wave": 8,
+      "kind": "实现",
+      "title": "创建收尾Service与只读准入接线",
+      "files": [
+        "src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py"
+      ],
+      "logic": "动作按字段范围校验，新增四个内部观察；not_created和stopped各自校验，所有Pod确认后才能释放预占；准入只给started新意图CREATE。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T207",
+        "T208",
+        "T211"
+      ],
+      "pair": "T207",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T213",
+      "wave": 8,
+      "kind": "实现",
+      "title": "签名观察API创建动作输入",
+      "files": [
+        "src/backend/bisheng/app_runtime/api/endpoints/runtime_kubernetes.py"
+      ],
+      "logic": "严格schema声明创建动作/attempt/status，exclude_unset避免默认字段进入其它动作；独立manager鉴权不变，无外部deploy API变更。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T207",
+        "T212"
+      ],
+      "pair": "T207",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T205",
+      "wave": 8,
+      "kind": "测试",
+      "title": "manager明确拒绝与未知创建恢复合同",
+      "files": [
+        "src/runtime-manager/tests/test_kubernetes_executor.py"
+      ],
+      "logic": "403可持久收尾、未知不重发、回执丢失重启续办、发现实际Pod正常UID停止、同名异物拒绝，不DELETE未创建Pod。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T204",
+        "T213"
+      ],
+      "pair": "T206",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T206",
+      "wave": 8,
+      "kind": "实现",
+      "title": "manager单次创建与独立无执行体收尾",
+      "files": [
+        "src/runtime-manager/runtime_manager/executors/kubernetes.py"
+      ],
+      "logic": "POST前取得唯一begin回执，只有403持久rejected；cleanup先fence再fresh404，不确定保留旧资源；重拉账本绑定UID，证明后再次出现对象拒绝。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T205"
+      ],
+      "pair": "T205",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T209",
+      "wave": 8,
+      "kind": "测试",
+      "title": "准入拒绝安全诊断合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_admission_diagnostics.py"
+      ],
+      "logic": "真实review拒绝日志只固定reason白名单，恶意异常文本/类名/凭据/UID不得泄漏；成功无拒绝日志。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T206"
+      ],
+      "pair": "T210",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T210",
+      "wave": 8,
+      "kind": "实现",
+      "title": "准入拒绝固定枚举诊断",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_admission.py"
+      ],
+      "logic": "仅8固定原因或admission_refused；原API响应及拒绝策略不变，不追认历史403。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-48",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T209"
+      ],
+      "pair": "T209",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

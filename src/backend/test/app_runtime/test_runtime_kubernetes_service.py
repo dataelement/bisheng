@@ -100,7 +100,18 @@ async def test_registration_commits_before_a_separate_admission_read(control):
     assert row.spec_digest == content_digest(row.approved_template)
     plan = await svc.admission_plan(ADMISSION, REF)
     assert plan["template"] == row.approved_template
-    assert plan["allow_create"] is True and plan["uid"] is None
+    assert plan["allow_create"] is False and plan["uid"] is None
+    await svc.observe_resource(
+        MANAGER,
+        REF,
+        {
+            "action": "create_begin",
+            "holder_id": "controller-a",
+            "controller_epoch": 1,
+            "create_attempt_id": "44444444-4444-4444-8444-444444444444",
+        },
+    )
+    assert (await svc.admission_plan(ADMISSION, REF))["allow_create"] is True
     assert "tenant_id" not in plan and "holder_id" not in plan
 
 

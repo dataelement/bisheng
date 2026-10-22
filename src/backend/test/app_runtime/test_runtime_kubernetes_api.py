@@ -99,9 +99,22 @@ async def test_resource_intent_is_visible_to_the_separate_readonly_principal(api
     before = (await api_client.repo.get(RuntimeExecutionResource, REF)).model_dump()
     response = await api_client.send("GET", f"/admission/plans/{REF}", role="admission")
     assert response.status_code == 200, response.text
+    assert response.json()["allow_create"] is False
+    assert (await api_client.repo.get(RuntimeExecutionResource, REF)).model_dump() == before
+    begun = await api_client.send(
+        "POST",
+        f"/resources/{REF}/observations",
+        {
+            "action": "create_begin",
+            "holder_id": "controller-a",
+            "controller_epoch": 1,
+            "create_attempt_id": "44444444-4444-4444-8444-444444444444",
+        },
+    )
+    assert begun.status_code == 200
+    response = await api_client.send("GET", f"/admission/plans/{REF}", role="admission")
     assert response.json()["allow_create"] is True
     assert "tenant_id" not in response.json()
-    assert (await api_client.repo.get(RuntimeExecutionResource, REF)).model_dump() == before
 
 
 @pytest.mark.parametrize("role", ["admission", "entry", "mixed"])
@@ -182,3 +195,30 @@ async def test_resource_observation_dto_accepts_only_bound_service_endpoint_fiel
     }
     response = await api_client.send("POST", f"/resources/{service_ref}/observations", body)
     assert response.status_code == 200 and response.json()["observed_state"] == body["runtime_state"]
+
+
+@pytest.mark.parametrize("role", ["admission", "entry", "mixed"])
+@pytest.mark.parametrize("action", ["create_begin", "create_rejected", "create_fence", "not_created"])
+async def test_creation_receipts_require_the_independent_manager_principal(api_client, role, action):
+    await create(api_client)
+    response = await api_client.send(
+        "POST",
+        f"/resources/{REF}/observations",
+        {"action": action, "holder_id": "controller-a", "controller_epoch": 1},
+        role=role,
+    )
+    assert response.status_code == 403
+    assert (await api_client.repo.get(RuntimeExecutionResource, REF)).stop_state == "held"
+
+
+async def test_signed_api_fences_never_attempted_intent_without_fake_uid(api_client):
+    from test.app_runtime.test_runtime_kubernetes_creation import evidence
+
+    await create(api_client)
+    auth = {"holder_id": "controller-a", "controller_epoch": 1}
+    for action, detail in [("create_fence", {}), ("not_created", {"evidence": evidence()}), ("cleanup", {"uid": None})]:
+        response = await api_client.send("POST", f"/resources/{REF}/observations", {"action": action, **auth, **detail})
+        assert response.status_code == 200
+    row = await api_client.repo.get(RuntimeExecutionResource, REF)
+    assert row.uid is None and row.stop_state == "confirmed" and row.cleanup_state == "complete"
+    assert row.stop_evidence["evidence_kind"] == "not_created"

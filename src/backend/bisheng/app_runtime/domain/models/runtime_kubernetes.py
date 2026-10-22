@@ -42,7 +42,7 @@ class RuntimeExecutionResource(ScopedRuntimeRecord, table=True):
     stop_evidence: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     cleanup_state: str = Field(default="pending", max_length=24)
     observed_at: datetime | None = None
-    # Narrow observed endpoint facts, never a raw Pod/Secret/API response.
+    # Narrow endpoint facts and versioned Pod creation receipts; never raw API responses.
     observed_state: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
 
 

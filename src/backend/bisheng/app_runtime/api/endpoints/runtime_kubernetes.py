@@ -52,12 +52,16 @@ class ResourceInput(ControllerRenew):
 
 
 class ResourceObservation(ControllerRenew):
-    action: Literal["bind", "stop", "stopped", "cleanup"]
+    action: Literal[
+        "bind", "stop", "stopped", "cleanup", "create_begin", "create_rejected", "create_fence", "not_created"
+    ]
     uid: str | None = Field(default=None, pattern=_UUID)
     node_name: str = Field(default="", max_length=253)
     operation_id: str | None = Field(default=None, min_length=1, max_length=36)
     evidence: dict | None = None
     runtime_state: dict | None = None
+    create_attempt_id: str | None = Field(default=None, pattern=_UUID)
+    http_status: int | None = None
 
 
 @router.post("/controllers/claim")
@@ -100,7 +104,7 @@ async def observe(
     identity=Depends(independent_role("manager")),
     svc=Depends(service),
 ):
-    return await svc.observe_resource(identity, resource_ref, body.model_dump(exclude_none=True))
+    return await svc.observe_resource(identity, resource_ref, body.model_dump(exclude_none=True, exclude_unset=True))
 
 
 @router.get("/admission/plans/{resource_ref}")

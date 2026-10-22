@@ -448,14 +448,49 @@ class RuntimeKubernetesService:
         _fields(
             body,
             {"action", "holder_id", "controller_epoch"},
-            {"uid", "node_name", "operation_id", "evidence", "runtime_state"},
+            {"uid", "node_name", "operation_id", "evidence", "runtime_state", "create_attempt_id", "http_status"},
         )
         _epoch(body["controller_epoch"])
+        legacy_fields = {"uid", "node_name", "operation_id", "evidence", "runtime_state"}
+        extra = {
+            "bind": legacy_fields,
+            "stop": legacy_fields,
+            "stopped": legacy_fields,
+            "cleanup": legacy_fields,
+            "create_begin": {"create_attempt_id"},
+            "create_rejected": {"create_attempt_id", "http_status"},
+            "create_fence": set(),
+            "not_created": {"evidence"},
+        }
+        if (
+            body["action"] not in extra
+            or set(body) - {"action", "holder_id", "controller_epoch"} - extra[body["action"]]
+        ):
+            raise RuntimeConflict("resource_observation_action_refused")
         async with self._scope(identity, RuntimeExecutionResource, resource_ref) as resource:
             auth = {"holder_id": body["holder_id"], "controller_epoch": body["controller_epoch"], "now": self.clock()}
             if body.get("runtime_state") is not None and body["action"] != "bind":
                 raise RuntimeConflict("resource_observed_state_refused")
-            if body["action"] == "bind":
+            if body["action"] in {"create_begin", "create_rejected", "create_fence", "not_created"}:
+                row = await self.repo.observe_resource_creation(
+                    resource_ref,
+                    action=body["action"],
+                    create_attempt_id=body.get("create_attempt_id"),
+                    http_status=body.get("http_status"),
+                    evidence=body.get("evidence"),
+                    **auth,
+                )
+                if body["action"] == "not_created":
+                    pods = await self.repo.find(RuntimeExecutionResource, operation_id=row.operation_id, kind="Pod")
+                    operation = await self.repo.get(RuntimeOperation, row.operation_id)
+                    if (
+                        operation
+                        and operation.status in TERMINAL
+                        and pods
+                        and all(pod.stop_state == "confirmed" for pod in pods)
+                    ):
+                        await self.repo.release_resources(row.operation_id)
+            elif body["action"] == "bind":
                 _ref(body.get("uid"))
                 state = await self._observed_state(resource, body.get("runtime_state"))
                 row = await self.repo.bind_resource(
@@ -547,6 +582,11 @@ class RuntimeKubernetesService:
                     and node.status == "ready"
                     and row.uid is None
                     and row.stop_requested_at is None
+                    and (
+                        row.kind != "Pod"
+                        or "creation" not in row.observed_state
+                        or row.observed_state["creation"].get("state") == "started"
+                    )
                 ),
                 "allow_update": bool(pending and controller and row.uid and (live or stopped)),
                 "allow_delete": bool(pending and controller and row.uid and row.stop_requested_at and deletable),

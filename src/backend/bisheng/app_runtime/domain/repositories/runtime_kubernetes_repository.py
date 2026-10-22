@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
+from uuid import UUID
 
 from sqlmodel import select
 
@@ -175,6 +176,8 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
                 )
                 if (await session.exec(statement)).first() is not None:
                     raise RuntimeConflict("production_writer_stop_unconfirmed")
+            if row.kind == "Pod":
+                row.observed_state = {"creation": {"version": 1, "state": "unattempted"}}
             row.controller_epoch = controller_epoch
             session.add(row)
             await session.flush()
@@ -187,8 +190,99 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
             raise RuntimeConflict("resource_not_found")
         await self.get(RuntimeOperation, current.operation_id, lock=True)
         node = await self._controller(current.node_id, holder_id, controller_epoch, now)
-        row = await self.get(RuntimeExecutionResource, resource_id, lock=True)
+        async with self.transaction() as session:
+            # A prior scope read can populate the identity map before lock acquisition.
+            # Refresh after taking the lock so a concurrent begin/fence cannot be lost.
+            statement = select(RuntimeExecutionResource).where(RuntimeExecutionResource.id == resource_id)
+            row = (await session.exec(statement.with_for_update().execution_options(populate_existing=True))).first()
+            if row is None:
+                raise RuntimeConflict("resource_not_found")
+            check_scope(row)
         return row, node
+
+    async def observe_resource_creation(
+        self,
+        resource_id,
+        *,
+        action,
+        holder_id,
+        controller_epoch,
+        create_attempt_id=None,
+        http_status=None,
+        evidence=None,
+        now=None,
+    ):
+        now = now or datetime.utcnow()
+        if action in {"create_begin", "create_rejected"}:
+            try:
+                if not isinstance(create_attempt_id, str) or str(UUID(create_attempt_id)) != create_attempt_id:
+                    raise ValueError()
+            except (ValueError, TypeError, AttributeError):
+                raise RuntimeConflict("resource_creation_attempt_invalid") from None
+        async with self.transaction() as session:
+            row, _ = await self._resource_control(resource_id, holder_id, controller_epoch, now)
+            await self._acting_operation(row, row.operation_id, now, allow_own_cleanup=action != "create_begin")
+            creation = dict((row.observed_state or {}).get("creation", {}))
+            if (
+                row.kind != "Pod"
+                or row.uid is not None
+                or type(creation.get("version")) is not int
+                or creation.get("version") != 1
+            ):
+                raise RuntimeConflict("resource_creation_unconfirmed")
+            state = creation.get("state")
+            if action == "create_begin":
+                if state != "unattempted" or row.stop_requested_at is not None:
+                    raise RuntimeConflict("resource_creation_already_attempted")
+                creation.update(state="started", create_attempt_id=create_attempt_id, controller_epoch=controller_epoch)
+            elif action == "create_rejected":
+                if (
+                    state != "started"
+                    or creation.get("create_attempt_id") != create_attempt_id
+                    or creation.get("controller_epoch") != controller_epoch
+                    or type(http_status) is not int
+                    or http_status != 403
+                ):
+                    raise RuntimeConflict("resource_creation_rejection_unconfirmed")
+                creation.update(state="rejected", http_status=403)
+            elif action == "create_fence":
+                if state not in {"unattempted", "rejected", "fenced", "not_created"}:
+                    raise RuntimeConflict("resource_creation_unconfirmed")
+                if state in {"unattempted", "rejected"}:
+                    creation.update(state="fenced", outcome=state)
+                if row.stop_requested_at is None:
+                    row.stop_requested_at = now
+                if row.stop_state != "confirmed":
+                    row.stop_state = "requested"
+            elif action == "not_created":
+                fields = {"evidence_kind", "namespace", "name", "observed_at", "api_status"}
+                if (
+                    state not in {"fenced", "not_created"}
+                    or creation.get("outcome") not in {"unattempted", "rejected"}
+                    or not isinstance(evidence, dict)
+                    or set(evidence) != fields
+                    or (evidence["evidence_kind"], evidence["namespace"], evidence["name"])
+                    != ("not_created", row.namespace, row.name)
+                    or type(evidence["api_status"]) is not int
+                    or evidence["api_status"] != 404
+                    or row.stop_requested_at is None
+                ):
+                    raise RuntimeConflict("resource_not_created_unconfirmed")
+                observed = _time(evidence["observed_at"])
+                if (
+                    observed < row.stop_requested_at - timedelta(seconds=1)
+                    or observed > now + timedelta(seconds=5)
+                    or now - observed > timedelta(seconds=60)
+                ):
+                    raise RuntimeConflict("resource_not_created_observation_stale")
+                creation["state"] = "not_created"
+                row.stop_state, row.stop_evidence, row.observed_at = "confirmed", dict(evidence), observed
+            else:
+                raise RuntimeConflict("resource_creation_action_refused")
+            row.controller_epoch = controller_epoch
+            row.observed_state = {"creation": creation}
+            await session.flush()
+            return row
 
     async def bind_resource(
         self, resource_id, *, uid, node_name, holder_id, controller_epoch, now=None, observed_state=None
@@ -200,6 +294,8 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
             raise RuntimeConflict("resource_node_name_invalid")
         async with self.transaction() as session:
             row, node = await self._resource_control(resource_id, holder_id, controller_epoch, now)
+            if row.stop_evidence.get("evidence_kind") == "not_created":
+                raise RuntimeConflict("resource_creation_fenced")
             if row.uid is not None and row.uid != uid:
                 raise RuntimeConflict("resource_uid_changed")
             if row.node_name and row.node_name != node_name:
@@ -325,7 +421,15 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
         now = now or datetime.utcnow()
         async with self.transaction() as session:
             row, _ = await self._resource_control(resource_id, holder_id, controller_epoch, now)
-            if not uid or row.uid != uid:
+            absent = bool(
+                row.kind == "Pod"
+                and row.uid is None
+                and uid is None
+                and row.stop_state == "confirmed"
+                and row.stop_evidence.get("evidence_kind") == "not_created"
+                and row.observed_state.get("creation", {}).get("state") == "not_created"
+            )
+            if not absent and (not uid or row.uid != uid):
                 raise RuntimeConflict("resource_cleanup_uid_refused")
             if row.kind == "Pod" and row.stop_state != "confirmed":
                 raise RuntimeConflict("execution_not_confirmed_stopped")
