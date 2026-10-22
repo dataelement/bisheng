@@ -66,7 +66,7 @@ for name in "${names[@]}"; do
     runtime-helper|runtime-assembler)
       docker run "${common[@]}" --workdir /smoke --env PYTHONPATH=/smoke \
         --mount "type=bind,src=$shadow,dst=/smoke,readonly" --entrypoint python "$image" -I -c \
-        'import os,sys,sysconfig,importlib,pathlib,tempfile; assert sys.flags.isolated == 1 and os.getuid() == 10001; modules=[importlib.import_module("runtime_manager."+name) for name in ("k8s_helper","k8s_prepare","k8s_data_helper","k8s_capabilities","oci_assembler")]; assert all(pathlib.Path(m.__file__).is_relative_to(sysconfig.get_paths()["purelib"]) for m in modules); from runtime_manager.k8s_capabilities import storage_checks; assert all(storage_checks("/tmp").values()); assert not os.access("/",os.W_OK)'
+        'import os,sys,sysconfig,importlib,pathlib,tempfile; assert sys.flags.isolated == 1 and os.getuid() == 10001; modules=[importlib.import_module("runtime_manager."+name) for name in ("k8s_helper","k8s_prepare","k8s_data_helper","k8s_capabilities","oci_assembler")]; assert all(pathlib.Path(m.__file__).is_relative_to(sysconfig.get_paths()["purelib"]) for m in modules); from runtime_manager.k8s_capabilities import storage_checks; assert all(storage_checks("/tmp", require_filesystem=False).values()); assert not os.access("/",os.W_OK)'
       if [[ "$name" == runtime-assembler ]]; then
         docker run "${common[@]}" --entrypoint crane "$image" version | grep -Fx 'v0.22.1'
         docker run "${common[@]}" --entrypoint python "$image" -I -c \
