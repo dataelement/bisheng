@@ -154,22 +154,16 @@ class ToolExecutor(BaseTool):
         )
 
     @staticmethod
-    def parse_preset_tool_params(tool: GptsTools, tool_type: GptsToolsType) -> dict:
-        """parse tool init params"""
-        # get tool config from tool.extra first
-        params = {}
-        if tool.extra:
-            if isinstance(tool.extra, str):
-                params = json.loads(tool.extra)
-            elif isinstance(tool.extra, dict):
-                params = tool.extra
-        elif tool_type.extra:
-            if isinstance(tool_type.extra, str):
-                params = json.loads(tool_type.extra)
-            elif isinstance(tool_type.extra, dict):
-                params = tool_type.extra
+    def parse_preset_extra(tool: GptsTools, tool_type: GptsToolsType | None) -> dict:
+        """Resolve the tool override or category configuration into a fresh object."""
+        extra = tool.extra or (tool_type.extra if tool_type else None)
+        if isinstance(extra, str):
+            return json.loads(extra)
+        return json.loads(json.dumps(extra or {}))
 
-        # special handling for bisheng_code_interpreter, because it needs minio config
+    @staticmethod
+    def parse_preset_tool_params(tool: GptsTools, tool_type: GptsToolsType) -> dict:
+        params = ToolExecutor.parse_preset_extra(tool, tool_type)
         if tool.tool_key == "bisheng_code_interpreter":
             return {"minio": settings.get_minio_conf().model_dump(), **params}
         return params
@@ -195,7 +189,24 @@ class ToolExecutor(BaseTool):
 
     @classmethod
     def _init_preset_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
-        tool_name_param = {tool.tool_key: cls.parse_preset_tool_params(tool, tool_type)}
+        params = cls.parse_preset_tool_params(tool, tool_type)
+        if tool.tool_key == "bisheng_code_interpreter" and params.get("type") == "container":
+            from bisheng.tool.infrastructure.container_executor import ContainerExecutor
+            from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
+
+            config = params.get("config", {}).get("container", {})
+            # Runner addresses and credentials come exclusively from host settings.
+            executor = ContainerExecutor(
+                minio=params.get("minio"),
+                sandbox_conf=settings.sandbox_conf,
+                **{
+                    key: config[key]
+                    for key in ("local_sync_path", "workspace_prefix", "keep_session", "timeout")
+                    if key in config
+                },
+            )
+            return CodeInterpreterTool(executor=executor, description=executor.description)
+        tool_name_param = {tool.tool_key: params}
         tool_langchain = load_tools(tool_params=tool_name_param, **kwargs)
         if not tool_langchain:
             raise ValueError(f"Failed to load preset tool: {tool.tool_key}")

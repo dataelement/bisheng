@@ -85,8 +85,10 @@ def observe(execution, result):
 
 async def finish(state, succeeded: bool):
     service, event, execution = state
-    await service._settle(
-        event, execution, "SUCCEEDED" if succeeded else "FAILED", None if succeeded else "chat_call_interrupted"
+    await service.settle_usage(
+        event, execution.usage, "SUCCEEDED" if succeeded else "FAILED",
+        None if succeeded else "chat_call_interrupted",
+        provider_request_id=execution.provider_request_id,
     )
 
 

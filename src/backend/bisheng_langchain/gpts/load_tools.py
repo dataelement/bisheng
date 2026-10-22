@@ -107,8 +107,10 @@ def _get_native_code_interpreter(**kwargs: Any) -> BaseTool:
     kwargs.update(config)
     if executor_type == 'local':
         executor = LocalExecutor(**kwargs)
-    else:
+    elif executor_type == 'e2b':
         executor = E2bCodeExecutor(**kwargs)
+    else:
+        raise ValueError(f'Unsupported standalone code executor type: {executor_type}')
     return CodeInterpreterTool(executor=executor, description=executor.description)
 
 
