@@ -11,6 +11,7 @@ existence is not leaked (design §7.5).
 
 from __future__ import annotations
 
+import asyncio
 from typing import NamedTuple, Protocol
 
 from loguru import logger
@@ -35,6 +36,7 @@ from bisheng.linsight.domain.schemas.skill_schema import (
     SkillDetail,
     SkillFileContent,
     SkillFileEntry,
+    SkillRuntimeEntry,
     SkillSelectable,
 )
 from bisheng.linsight.domain.services.github_skill_fetcher import fetch_skill_files, parse_github_url
@@ -48,11 +50,12 @@ from bisheng.linsight.domain.services.skill_store import (
     BundleTooLargeError,
     SkillStore,
     compose_skill_md,
+    pack_bundle_zip,
     parse_skill_md,
     render_skill_md,
-    slugify_pinyin,
     resolve_skill_unpacked_limit,
     resolve_skill_upload_limit,
+    slugify_pinyin,
     unpack_zip_bytes,
     validate_skill_name,
 )
@@ -149,6 +152,43 @@ class SkillService:
             )
             for s in skills
         ]
+
+    async def get_runtime_catalog(self) -> list[SkillRuntimeEntry]:
+        # Shared with Chat provisioning: enabled skills in the current tenant.
+        return [
+            SkillRuntimeEntry(
+                id=skill.id,
+                name=skill.name,
+                display_name=skill.display_name or skill.name,
+                description=skill.description,
+                default_checked=bool(skill.default_checked),
+                content_hash=skill.content_hash,
+            )
+            for skill in await LinsightSkillDao.list_enabled()
+        ]
+
+    async def get_runtime_bundle(self, tenant_id: int, skill_id: int, version: str) -> bytes:
+        async def authorized():
+            skill = next(
+                (
+                    row
+                    for row in await LinsightSkillDao.list_enabled()
+                    if row.id == skill_id and row.tenant_id == tenant_id
+                ),
+                None,
+            )
+            if skill is None:
+                raise SkillNotFoundError()
+            if skill.content_hash != version:
+                raise SkillValidationError(msg="Skill version changed. Refresh the skill catalog.")
+            return skill
+
+        skill = await authorized()
+        bundle = await asyncio.to_thread(
+            lambda: pack_bundle_zip(self._load_existing_bundle(tenant_id, skill.name, version))
+        )
+        await authorized()
+        return bundle
 
     async def get_detail(self, tenant_id: int, name: str) -> SkillDetail:
         skill = await self._get_or_404(name)

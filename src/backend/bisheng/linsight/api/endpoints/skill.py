@@ -7,7 +7,10 @@ here — unknown names answer 11053 without leaking existence (design §7.5).
 
 from __future__ import annotations
 
+import hashlib
+
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import Response
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.linsight import SkillFileTooLargeError, SkillValidationError
@@ -75,6 +78,30 @@ async def selectable_skills(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     return resp_200(await SkillService().get_selectable())
+
+
+@router.get("/runtime/catalog", summary="Skills available to the current user's runtime")
+async def runtime_skill_catalog(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    return resp_200(await SkillService().get_runtime_catalog())
+
+
+@router.get("/runtime/{skill_id}/bundle", summary="Authorized versioned skill bundle")
+async def runtime_skill_bundle(
+    skill_id: int,
+    version: str = Query(..., pattern=r"^[a-f0-9]{64}$"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Response:
+    bundle = await SkillService().get_runtime_bundle(_current_tenant_id(), skill_id, version)
+    return Response(
+        bundle,
+        media_type="application/zip",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Skill-Archive-Sha256": hashlib.sha256(bundle).hexdigest(),
+        },
+    )
 
 
 @router.get("/slugify", summary="Suggest a skill ID from a display name (pypinyin)")
