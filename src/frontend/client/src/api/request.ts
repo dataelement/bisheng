@@ -113,23 +113,13 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
   failedQueue = [];
 };
 
-function errorText(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value.map(errorText).filter(Boolean).join('; ');
-  if (value && typeof value === 'object') {
-    const item = value as Record<string, unknown>;
-    return errorText(item.msg ?? item.message ?? item.detail ?? item.status_message);
-  }
-  return '';
-}
-
 export const translateApiErrorMessage = (data: any) => {
   const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : '';
-  const statusMessage = errorText(data?.status_message);
+  const statusMessage = typeof data?.status_message === 'string' ? data.status_message : '';
   const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : '';
-  const message = statusCodeKey && i18next.exists(statusCodeKey) ? String(i18next.t(statusCodeKey, data?.data))
-    : statusMessageKey && i18next.exists(statusMessageKey) ? String(i18next.t(statusMessageKey, data?.data))
-    : statusMessage;
+  const message = statusCodeKey && i18next.exists(statusCodeKey) ? String(i18next.t(statusCodeKey))
+    : statusMessageKey && i18next.exists(statusMessageKey) ? String(i18next.t(statusMessageKey))
+    : '';
   const fallback = String(i18next.t('api_errors.fallback', { defaultValue: 'Request failed. Please try again.' }));
   return resolveErrorMessageTemplate(message || '', data?.data, fallback === 'api_errors.fallback' ? 'Request failed. Please try again.' : fallback);
 };
@@ -219,7 +209,7 @@ customAxios.interceptors.response.use(
     // issue rather than a transient glitch. See feature 037.
     if (envelope?.status_code === 11001) {
       responsePresentation.set(response, 'global');
-      const message = translateApiErrorMessage(envelope) || envelope.status_message || '';
+      const message = translateApiErrorMessage(envelope);
       if (message && shouldToastLicenseExpired()) {
         window.showToast?.({ message, status: 'warning' });
       }
@@ -268,7 +258,7 @@ customAxios.interceptors.response.use(
       && envelope.status_code !== 200
     ) {
       const message = translateApiErrorMessage(envelope);
-      const display = message || envelope.status_message || "";
+      const display = message;
       if (display && response.config.showError !== false) {
         if (window.showToast) responsePresentation.set(response, 'toast');
         window.showToast?.({ message: display, status: 'warning' });
@@ -397,8 +387,15 @@ customAxios.interceptors.response.use(
 );
 
 /** Keep the existing auth/refresh interceptor intact; normalize its outgoing result. */
+function userErrorMessage(error: ReturnType<typeof normalizeApiError>): string {
+  if (error.kind === 'network') return String(i18next.t('api_errors.networkFailure'));
+  if (error.kind === 'timeout') return String(i18next.t('api_errors.requestTimeout'));
+  return translateApiErrorMessage(error);
+}
+
 export function showApiError(cause: unknown) {
-  const error = normalizeApiError(cause, { message: cause instanceof Error ? cause.message : translateApiErrorMessage(cause) || String(i18next.t('api_errors.fallback')) });
+  const error = normalizeApiError(cause, { message: translateApiErrorMessage(cause) });
+  error.message = userErrorMessage(error);
   if (error.kind !== 'canceled' && error.presentation === 'none' && window.showToast) {
     window.showToast({ message: error.message, status: 'warning' });
     error.presentation = 'toast';
@@ -407,15 +404,18 @@ export function showApiError(cause: unknown) {
 }
 
 async function normalizeRequestFailure(cause, response?) {
-  if (isApiError(cause)) return cause;
+  if (isApiError(cause)) {
+    cause.message = userErrorMessage(cause);
+    return cause;
+  }
   const original = response ?? cause?.response;
   const envelope = await decodeErrorEnvelope(original?.data, { httpFailure: original?.status >= 400 }) ?? original?.data;
   const error = normalizeApiError(cause, {
     response: original,
     envelope,
-    message: (isErrorEnvelope(envelope) ? translateApiErrorMessage(envelope) : cause?.message)
-      || String(i18next.t('api_errors.fallback')),
+    message: translateApiErrorMessage(envelope),
   });
+  error.message = userErrorMessage(error);
   if (original && responsePresentation.has(original)) error.presentation = responsePresentation.get(original)!;
   return error;
 }

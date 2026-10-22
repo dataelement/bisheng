@@ -51,11 +51,11 @@ describe("createApiStatusError", () => {
         );
     });
 
-    it("falls back to the placeholder only when nothing can be resolved", () => {
+    it("uses readable fallback copy when nothing can be resolved", () => {
         translate.mockReturnValue("");
 
-        expect(createApiStatusError({ status_code: 18080 }).message).toBe("API request failed (18080)");
-        expect(createApiStatusError({}).message).toBe("API request failed");
+        expect(createApiStatusError({ status_code: 18080 }).message).toBe("Request failed. Please try again.");
+        expect(createApiStatusError({}).message).toBe("Request failed. Please try again.");
     });
 
     it("reads a code out of an axios-shaped error too", () => {
@@ -78,10 +78,10 @@ describe("extractApiErrorMessage", () => {
         expect(extractApiErrorMessage(thrown)).toBe("<granted space copy>");
     });
 
-    it("keeps the Error message when the catalogue has nothing", () => {
+    it("does not expose the raw Error when the catalogue has nothing", () => {
         translate.mockReturnValue("");
 
-        expect(extractApiErrorMessage(new Error("boom"))).toBe("boom");
+        expect(extractApiErrorMessage(new Error("boom"))).toBe("Request failed. Please try again.");
     });
 });
 

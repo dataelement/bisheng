@@ -77,3 +77,9 @@ it('renders available error parameters and never exposes unresolved placeholders
   expect(resolveErrorMessageTemplate('Validation failed: {field}', { field: 'name' }, 'Request failed')).toBe('Validation failed: name');
   expect(resolveErrorMessageTemplate('Validation failed: {missing}', {}, 'Request failed')).toBe('Request failed');
 });
+
+it('never interpolates technical evidence or object values into user copy', () => {
+  expect(resolveErrorMessageTemplate('Failed: {{exception}}', { exception: 'SQL secret' }, 'Request failed')).toBe('Request failed');
+  expect(resolveErrorMessageTemplate('Failed: {{reason}}', { reason: 'stack' }, 'Request failed')).toBe('Request failed');
+  expect(resolveErrorMessageTemplate('File {{file}}', { file: { secret: true } }, 'Request failed')).toBe('Request failed');
+});

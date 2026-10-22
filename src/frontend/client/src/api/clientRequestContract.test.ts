@@ -48,9 +48,9 @@ it('does not wrap successful response bodies or change full-response downloads',
   expect(response.headers).toHaveProperty('content-disposition', 'test');
 });
 
-it('decodes validation arrays and unresolved templates into readable text', () => {
-  expect(translateApiErrorMessage({ status_code: 49999, status_message: [{ msg: 'required' }, { message: 'invalid' }] })).toBe('required; invalid');
-  expect(translateApiErrorMessage({ status_code: 49999, status_message: '{message}', data: { message: 'clear reason' } })).toBe('clear reason');
+it('uses a local fallback for unregistered validation arrays and server templates', () => {
+  expect(translateApiErrorMessage({ status_code: 49999, status_message: [{ msg: 'required' }, { message: 'invalid' }] })).toBe('Request failed. Please try again.');
+  expect(translateApiErrorMessage({ status_code: 49999, status_message: '{message}', data: { message: 'clear reason' } })).toBe('Request failed. Please try again.');
 });
 
 it('runs maintenance handling for a binary business error before marking it handled', async () => {

@@ -72,44 +72,12 @@ customAxios.interceptors.request.use(function (config) {
     return Promise.reject(error);
 });
 
-// Best-effort flatten of any value into a user-readable string for a toast.
-// Required because the backend's status_message can be an array of pydantic
-// errors (e.g. validation failures), and `String([{...}])` renders as
-// "[object Object]". Picks .msg/.message/.detail/.status_message on objects,
-// recurses arrays, and JSON.stringify is the last resort.
-function coerceErrorMessage(value: any): string {
-    if (value === null || value === undefined) return ""
-    if (typeof value === "string") return value
-    if (typeof value === "number" || typeof value === "boolean") return String(value)
-    if (value instanceof Error) return value.message || String(value)
-    if (Array.isArray(value)) {
-        return value
-            .map((item) => coerceErrorMessage(item))
-            .filter(Boolean)
-            .join("; ")
-    }
-    if (typeof value === "object") {
-        const pick = value.msg ?? value.message ?? value.detail ?? value.status_message
-        if (pick !== undefined) return coerceErrorMessage(pick)
-        try {
-            return JSON.stringify(value)
-        } catch {
-            return String(value)
-        }
-    }
-    return String(value)
-}
-
-// Backend unified envelope: { status_code, status_message, data }.
-// Picks the friendliest available message: i18n by status_code, then
-// status_message → i18n key map, finally the raw status_message.
+// Only registered local copy is eligible for user-facing errors.
 function decodeEnvelopeMessage(envelope: any) {
     const statusCode = envelope?.status_code
-    const statusMessage = coerceErrorMessage(envelope?.status_message)
-    // Without defaultValue, an unregistered status_code renders as the literal
-    // key string "api_errors:<num>". Fall back to status_message so the user at
-    // least sees the backend's raw text instead of a debug-looking key.
-    const i18Msg = i18next.t(`api_errors:${statusCode}`, { ...(envelope?.data || {}), defaultValue: statusMessage })
+    const statusMessage = typeof envelope?.status_message === 'string' ? envelope.status_message : '';
+    const codeKey = `api_errors:${statusCode}`;
+    const i18Msg = i18next.exists(codeKey) ? i18next.t(codeKey) : '';
 
     const statusMessageKeyMap: Record<string, string> = {
         "person id is required": "api_errors:21013",
@@ -135,14 +103,14 @@ function decodeEnvelopeMessage(envelope: any) {
     }
 
     const normalizedStatusMessage = statusMessage.trim().toLowerCase()
-    const mappedStatusMessageKey = statusMessageKeyMap[normalizedStatusMessage]
+    const mappedStatusMessageKey = Object.hasOwn(statusMessageKeyMap, normalizedStatusMessage) ? statusMessageKeyMap[normalizedStatusMessage] : undefined
     const i18MsgFromStatus = mappedStatusMessageKey
-        ? i18next.t(mappedStatusMessageKey, envelope?.data)
+        ? i18next.t(mappedStatusMessageKey)
         : null
 
     const finalMsg = i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
         ? i18MsgFromStatus
-        : (i18Msg !== `api_errors:${statusCode}` ? i18Msg : statusMessage)
+        : i18Msg
 
     const fallback = String(i18next.t('api_errors:fallback', { defaultValue: 'Request failed. Please try again.' }));
     return resolveErrorMessageTemplate(String(finalMsg || ''), envelope?.data,
@@ -161,10 +129,15 @@ function shouldToastLicenseExpired(): boolean {
     return false;
 }
 
+function userErrorMessage(error: ReturnType<typeof normalizeApiError>): string {
+    if (error.kind === 'network') return String(i18next.t('api_errors:networkFailure'));
+    if (error.kind === 'timeout') return String(i18next.t('api_errors:requestTimeout'));
+    return decodeEnvelopeMessage(error);
+}
+
 export function showApiError(cause: unknown) {
-    const error = normalizeApiError(cause, {
-        message: cause instanceof Error ? cause.message : coerceErrorMessage(cause) || String(i18next.t('api_errors:fallback')),
-    });
+    const error = normalizeApiError(cause, { message: String(i18next.t('api_errors:fallback')) });
+    error.message = userErrorMessage(error);
     if (error.kind !== 'canceled' && error.presentation === 'none') {
         notification.open({ type: 'error', title: String(i18next.t('prompt')), description: error.message });
         error.presentation = 'toast';
@@ -173,17 +146,19 @@ export function showApiError(cause: unknown) {
 }
 
 async function responseError(cause, response?) {
-    if (isApiError(cause)) return cause;
+    if (isApiError(cause)) {
+    cause.message = userErrorMessage(cause);
+    return cause;
+  }
     const original = response ?? cause?.response;
     const envelope = await decodeErrorEnvelope(original?.data, { httpFailure: original?.status >= 400 }) ?? original?.data;
-    const message = isErrorEnvelope(envelope)
-        ? decodeEnvelopeMessage(envelope)
-        : coerceErrorMessage(cause?.message ?? cause);
-    return normalizeApiError(cause, {
+    const error = normalizeApiError(cause, {
         response: original,
         envelope,
-        message: message || String(i18next.t('api_errors:fallback')),
+        message: String(i18next.t('api_errors:fallback')),
     });
+    error.message = userErrorMessage(error);
+    return error;
 }
 
 customAxios.interceptors.response.use(async function (response) {
@@ -202,7 +177,7 @@ customAxios.interceptors.response.use(async function (response) {
     const statusCode = envelope.status_code;
     if (statusCode === 11001) {
         if (shouldToastLicenseExpired()) {
-            notification.open({ type: 'error', title: String(i18next.t('prompt')), description: String(coerceErrorMessage(envelope.status_message) || i18next.t('license.businessExpired.gateway')) });
+            notification.open({ type: 'error', title: String(i18next.t('prompt')), description: error.message });
         }
         error.presentation = 'global';
         return Promise.reject(error);
