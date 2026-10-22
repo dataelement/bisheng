@@ -3276,3 +3276,28 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 **元数据验证**：文件范围PASS；依赖T220完成；无实现配对要求。声明AC已按实际测试收敛到AC-33、AC-49、AC-52。
 **验证**：4新合同通过；executor/observe/data-executor 211通过；Ruff/format/arch/diff通过。原fake即时删除的4红仅证明fixture覆盖缺口，未冒称生产红；首轮相关命令模块名错误未运行，保留日志。
 **结果：PASS**。本地提交04e73b6fba3be24984209d5d057b91dc38471de3；原L1 `/private/tmp/f059-t227-l1.md`。无生产修改、远端操作、ARM或公开发行。
+
+
+## Task Review: T225 — 异步收尾等待、持久结果与重启
+
+**类型**：测试。**文件**：`tests/test_operations_v2.py`、`tests/test_executor_selection.py`（均在src/runtime-manager）。
+**命名/AC：PASS**，完整F059 AC-04、AC-33、AC-35、AC-49、AC-52、AC-55、AC-56；前端N/A，其余按测试子集N/A。
+**元数据**：前置T224完成；声明范围已包含受新事实序列和等待语义影响的旧selection fixture；配对T226。24新operations合同加既有31为55通过；6模块284通过；根树selection＋operations 65通过。红阶段12fail/31pass，保留 `/private/tmp/f059-t225-red.log`。独立agent对固定1f788fc3只读复核及55测试通过。
+**结果：PASS**。主树首次全量在旧selection两处预期停留，212通过/7跳过/1旧序列失败后主动中断；一次修正命令相对目录错误未修改文件而误启旧测试，已中断并保留日志，非产品错误。根树修正后使用虚拟时钟验证pending到期仍held，不降低真实等待约束。
+
+## Task Review: T226 — 编排异步清理有界等待
+
+**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/operations.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅消费执行能力和现有平台操作/事实接口 |
+| 2 | 命名 | PASS | `_wait_cleanup`、`_prepared_delivery` 表达行为 |
+| 3 | 序列化 | PASS | 现有fact.detail新增内部持久字段，无外部API/DTO变更 |
+| 4 | 数据库 | N/A | 不加模型/DDL，不在manager直接操作平台DB |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 结果为现有delivery；无凭据日志或新明文错误 |
+| 7 | 设计同步 | PASS | 4.6结果与等待合同、5已知坑和修订历史同步 |
+
+**元数据**：范围PASS；配对T225先通过；依赖PASS。prepare/probe/data及旧实例清理使用原checkpoint/期限并守K8s租约；不把异常、unknown或超时当complete。prepare结果先SQL确认才清理，PlatformError响应丢失仅同结果fresh确认可续；不重放安装/上传/probe/已结束data。Docker同路55测试内配对，本轮不代替真实Docker复跑。Ruff/format/逐文件arch/diff通过；主树完整runtime回归1438passed/13skipped（33.66s），日志/private/tmp/f059-async-cleanup-main-runtime-fixed.log。
+**结果：PASS**。来源1f788fc3519a3984c63ed87e567666b3dbd4aa13；本地配对不宣称189业务或真实响应丢失已通过。当前222/227、103测试任务，余五项为验收/交付门。

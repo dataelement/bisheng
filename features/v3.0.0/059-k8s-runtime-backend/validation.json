@@ -6,19 +6,18 @@
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 220,
+    "l1_completed": 222,
     "tasks_total": 227,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 1410,
+      "passed": 1438,
       "skipped": 13,
-      "exit_code": 0,
-      "source_commit": "143606851370d6091b120d348549329b8113c6a6",
-      "log": "/private/tmp/f059-optional-lock-main-runtime.log",
-      "scope": "full runtime with optional lock and terminal diagnostic retention"
+      "seconds": 33.66,
+      "log": "/private/tmp/f059-async-cleanup-main-runtime-fixed.log",
+      "boundary": "Local integrated runtime regression; no live Kubernetes business or ARM/public release claim"
     },
     "backend": {
       "passed": 1723,
@@ -730,7 +729,7 @@
       "result": "in_progress"
     },
     "async_cleanup_completion": {
-      "status": "fix_in_progress",
+      "status": "implemented_l1_and_full_runtime_passed_live_pending",
       "actual_operation_id": "8fb6b53a167e4ce28718336a4840a43d",
       "prepare_stages_succeeded": [
         "inputs",
@@ -742,7 +741,13 @@
       "resources_finally_cleaned": 8,
       "public_failure_code": 16227,
       "reason": "preparation_cleanup_pending",
-      "failure_stage_preserved": "preparing"
+      "failure_stage_preserved": "preparing",
+      "fix_commit": "1f788fc3519a3984c63ed87e567666b3dbd4aa13",
+      "operations_tests": 55,
+      "related_regression_passed": 284,
+      "selection_and_operations_passed": 65,
+      "independent_readonly_review": "no actionable findings",
+      "r6_cleanup_proof_sha256": "110aab26f2846ed75f35a02a95e948e40e8ec5cba21528ead45acec7dfa87d77"
     }
   },
   "not_executed": [

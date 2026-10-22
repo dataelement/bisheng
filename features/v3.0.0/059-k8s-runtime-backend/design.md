@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理误判仍在修复，尚无正式业务上线通过结论。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
+**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理等待已完成L1修复、集成与实测续办中，尚无正式业务上线通过结论。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -238,6 +238,9 @@ K8s 1.28 不保证未启动容器都有终止记录；其 kubelet 延迟终态�
 完整镜像模式不复制源码或重装依赖；只注入既有启动/健康/资源/网络/数据合同。兼容源码模式安装和编译完成后由可信 OCI 组装器构造 `/app`、依赖环境和既有 entrypoint；固定基础镜像已含用户/目录及必要运行工具，组装器不执行 RUN，不处理任意 Dockerfile。将来增加系统包必须发布新 profile 或完整镜像。Docker 旧 builder 路径保留，跨形态测试逐项证明启动语义相同。
 
 准备阶段结果写入既有 preparing 事实的 detail.prepare_progress，按 inputs/resolve/install/upload 保存资源引用和结果，写入确认后才停止并清理该阶段 Pod。响应丢失先查询已提交事实，不盲目重跑安装。重试沿用资源账本中首次批准的 activeDeadlineSeconds，阶段总截止仍由冻结操作和材料授权限制。scratch PVC 复用首次绑定的 UID；清理需全部相关 Pod 已确认停止，正式数据 PVC 不随普通清理删除。新控制器申请清理时更新资源的 controller_epoch，仅更新清理权限，不改变 UID、停止证据或连续保护标记。
+
+T225/T226实现：准备全部输出确认后，先在既有`preparing`事实的`detail.prepared_delivery`保存最终delivery，且每次事实继续携带`prepare_progress`和该结果；backend查询仅投影最新事实，故不能只写一次后被后续阶段覆盖。清理开始前必须确认提交，响应丢失仅在fresh重读得到相同结果时接续。重启有该结果直接续清理，不再安装/上传；probe已ready只续清理；data已有`data_action_finished`时不重新prepare-session，unknown仍按data_result_unknown失败。cleanup.complete=false在原操作期限内0.5s重查；每轮检查取消、归属/代次和K8s控制器租约，成功后再检查期限，异常不吞。旧实例清理受当前操作而非旧操作期限约束；未知停止仍保留。
+
 
 本地实现补充：K8s源码兼容模式由backend同样冻结profile；无凭据安装Pod把Python环境写到scratch的environment子目录并固定挂载为/opt/venv，Node产物在编译后裁剪开发依赖。可信组装Pod只读scratch，用crane mutate追加/app代码与/opt/venv及既有语言入口模板，不执行RUN；registry配置只挂组装器。完整镜像不复制源码或安装依赖。实际CRI/registry与双架构镜像仍须后续真实验收。
 
@@ -406,6 +409,7 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 | venv 固定路径与镜像 ABI 相关 | 打包开发机环境在节点无法运行 | profile＋锁/材料＋`/opt/venv` 物化，跨架构产物隔离 |
 | 离线镜像、wheelhouse 和平台能力是三个条件 | 页面健康却缺 SDK/依赖或无法调用模型 | 安装报告分项、原生离线 prepare/SDK E2E |
 | Node/Python 安装脚本可执行用户代码 | 准备任务盗用上传/管理凭据 | 传输与安装 Pod 分开，安装/编译无传输身份、无生产卷 |
+| DELETE受理后对象仍存在是正常异步过程，prepare的最终结果也必须单独持久化 | 一次cleanup.pending被误作发布失败，或重启重复准备且覆盖已上传结果 | `operations.py`有界等待与`prepared_delivery`；`executors/kubernetes.py`仍以同UID停止证明和fresh404完成收尾 |
 | Pod activeDeadlineSeconds 不能从短启动期限调大或清空 | 预览 ready 后延长期限被 API 拒绝或正式实例到期被杀 | `k8s_templates.py` 区分任务、预览与正式期限；初始化自带阶段限制 |
 | RWOP 不允许再开第二个在线数据 helper Pod；停用后又没有在线 sidecar | 在线挂卷一直 Pending，或停用后保留库无法查改导出 | 在线 helper 同 Pod；停用 data 会话先取得空生产位置，确认停止后释放 |
 | Helm 卸载或 ownerReference 能级联删除 PVC | 不经 owner 删除就丢业务数据 | 保留命名空间/PVC，禁止生产卷依附短命执行体 |

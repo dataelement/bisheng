@@ -5669,23 +5669,26 @@
       "kind": "测试",
       "title": "异步收尾等待与重启配对",
       "files": [
-        "src/runtime-manager/tests/test_operations_v2.py"
+        "src/runtime-manager/tests/test_operations_v2.py",
+        "src/runtime-manager/tests/test_executor_selection.py"
       ],
       "logic": "准备或探活完成后清理暂未结束保持非终态，结果不重做；取消/期限/失租保持围栏，确认清理后才完成。",
       "acs": [
-        "AC-24",
-        "AC-48",
+        "AC-04",
+        "AC-33",
+        "AC-35",
         "AC-49",
         "AC-52",
-        "AC-55"
+        "AC-55",
+        "AC-56"
       ],
       "depends": [
         "T224"
       ],
       "pair": "T226",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "operations 55 passed; related 284 passed; selection + operations 65 passed; Ruff/format/arch/diff passed",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T226",
@@ -5697,19 +5700,21 @@
       ],
       "logic": "修正K8s正常异步删除被当作准备失败的语义；同根收尾路径按原操作检查点/期限等待，不吞真实异常、不伪造清理完成。",
       "acs": [
-        "AC-24",
-        "AC-48",
+        "AC-04",
+        "AC-33",
+        "AC-35",
         "AC-49",
         "AC-52",
-        "AC-55"
+        "AC-55",
+        "AC-56"
       ],
       "depends": [
         "T225"
       ],
       "pair": "T225",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "operations 55 passed; related 284 passed; selection + operations 65 passed; Ruff/format/arch/diff passed",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T227",

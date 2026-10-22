@@ -1,6 +1,7 @@
 """覆盖 AC: AC-01、AC-02、AC-04、AC-05、AC-07、AC-08、AC-09、AC-36、AC-37、AC-39、AC-48、AC-56."""
 
 import copy
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -8,7 +9,7 @@ import pytest
 from runtime_manager.config import Config
 from runtime_manager.executors.protocol import ExecutorError
 from runtime_manager.operations import OperationExecutor
-from tests.test_operations_v2 import Platform
+from tests.test_operations_v2 import CleanupClock, Platform
 
 
 class Backend(Platform):
@@ -99,18 +100,33 @@ def test_kubernetes_prepare_uses_capabilities_and_controller_facts(runtime):
     platform.op["result"] = {"prepare_progress": {"inputs": {"result": {"input_key": "a" * 64}}}}
     executor.execute("operation-a")
     assert driver.calls == ["prepare", "cleanup"]
-    assert [phase for phase, _ in platform.facts] == ["preparing", "completed"]
+    assert [phase for phase, _ in platform.facts] == ["preparing", "preparing", "completed"]
+    assert platform.facts[1][1]["prepared_delivery"]["compiled_artifact_id"] == "compiled-a"
+    assert all(detail["prepare_progress"] == platform.facts[0][1]["prepare_progress"] for _, detail in platform.facts)
     assert platform.facts[0][1]["prepare_progress"]["inputs"]["result"]["input_key"] == "a" * 64
     assert all(detail["controller"] == driver._controller() for _, detail in platform.facts)
     assert platform.facts[-1][1]["delivery"]["compiled_artifact_id"] == "compiled-a"
 
 
 def test_unknown_cleanup_keeps_the_reservation_held(runtime):
+    """F059 覆盖 AC: AC-49、AC-52、AC-55. Pending cleanup never releases unknown writers."""
     executor, platform, driver = runtime
+    clock = CleanupClock()
+    executor.clock = clock
+    platform.op["deadline"] = datetime.fromtimestamp(clock.time() + 1, UTC).isoformat()
     driver.cleanup_complete = False
+
+    def waiting():
+        assert platform.op["status"] == "running"
+        assert platform.op["cleanup_status"] == "pending"
+        assert platform.facts[-1][1]["prepared_delivery"]["compiled_artifact_id"] == "compiled-a"
+
+    clock.on_sleep = waiting
     executor.execute("operation-a")
     phase, detail = platform.facts[-1]
-    assert phase == "failed" and detail["stopped"] is False and detail["cleanup_complete"] is False
+    assert phase == "timed_out" and detail["stopped"] is False and detail["cleanup_complete"] is False
+    assert detail["reason"] == "operation_timeout" and clock.sleeps == [0.5, 0.5]
+    assert driver.calls.count("prepare") == 1
 
 
 @pytest.mark.parametrize("kind,preview", [("probe", False), ("preview", True)])
