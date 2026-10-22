@@ -45,6 +45,7 @@ from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
+from bisheng.knowledge.domain.services.work_retrieval import retrieve_workspace_chunks
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
@@ -61,26 +62,7 @@ async def retrieve_workspace_context(
 ) -> Any:
     """Return permission-filtered context to an authenticated workspace task."""
     svc.version_repo = version_repo
-    results = await svc.aretrieve_chunks(
-        query=req.query,
-        knowledge_base_ids=list(dict.fromkeys(req.space_ids)),
-        top_k=10,
-        max_content=12000,
-    )
-    return resp_200(
-        {
-            "chunks": [
-                {
-                    "content": doc.page_content,
-                    "space_id": space_id,
-                    "document_id": doc.metadata.get("document_id"),
-                    "document_name": doc.metadata.get("document_name", ""),
-                    "chunk_index": doc.metadata.get("chunk_index"),
-                }
-                for space_id, doc in results
-            ]
-        }
-    )
+    return resp_200(await retrieve_workspace_chunks(svc, req))
 
 
 # ──────────────────────────── Space CRUD ──────────────────────────────────────

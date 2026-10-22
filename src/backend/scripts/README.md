@@ -2,6 +2,28 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Built-in knowledge retrieval tool
+
+`register_work_knowledge_tool.py` registers `bisheng_knowledge_search` in an existing
+database. Fresh installations use the seed catalog. Run from `src/backend` using
+the live service `config`, with one registration process during release maintenance:
+
+```bash
+python scripts/register_work_knowledge_tool.py
+python scripts/register_work_knowledge_tool.py --apply
+python scripts/reconcile_f048_system_owned_resources.py
+python scripts/reconcile_f048_system_owned_resources.py --apply --confirm-store-id <store-id> --operator-id <user-id>
+```
+
+The first command previews changes; apply creates missing catalog rows with database
+assigned IDs in one transaction. Existing entries and administrator configuration
+are preserved; conflicting ownership, duplicate keys or deleted entries require
+operator resolution. The F048 reconciler separately provisions the tool permission
+projection through the existing permission facade. Verify its preview before apply.
+Deploy the backend code before registration; then verify discovery and execution
+with an ordinary user. Cloud callers supply the actual execution user and tenant,
+and selected knowledge IDs; the tool returns permission-filtered passages and sources.
+
 ## Diagnostic Scripts
 
 ### `measure_dsh_model_audit.py`

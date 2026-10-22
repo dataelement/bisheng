@@ -259,5 +259,20 @@
     "is_delete": 0,
     "extra": "{\"model_id\": \"\"}",
     "openapi_schema": null
+  },
+  {
+    "id": 18,
+    "name": "知识库检索",
+    "logo": "",
+    "description": "按当前用户权限检索文档知识库和知识空间，返回相关片段及来源。",
+    "server_host": "",
+    "auth_method": 0,
+    "api_key": "",
+    "auth_type": "basic",
+    "is_preset": 1,
+    "user_id": null,
+    "is_delete": 0,
+    "extra": "{}",
+    "openapi_schema": null
   }
 ]

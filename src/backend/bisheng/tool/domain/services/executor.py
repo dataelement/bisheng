@@ -13,6 +13,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ToolInvocationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
@@ -248,7 +249,15 @@ class ToolExecutor(BaseTool):
         **kwargs,
     ) -> BaseTool:
         if tool.is_preset == ToolPresetType.PRESET.value:
-            tool_instance = cls._init_preset_tool(tool, tool_type, **kwargs)
+            if tool.tool_key == "bisheng_knowledge_search":
+                from bisheng.tool.domain.langchain.work_knowledge import WorkKnowledgeSearch
+
+                tenant_id = get_current_tenant_id()
+                if tenant_id is None:
+                    raise PermissionError("Knowledge retrieval requires a tenant context.")
+                tool_instance = WorkKnowledgeSearch(user_id=user_id, tenant_id=tenant_id)
+            else:
+                tool_instance = cls._init_preset_tool(tool, tool_type, **kwargs)
         elif tool.is_preset == ToolPresetType.API.value:
             tool_instance = cls._init_api_tool(tool, tool_type, **kwargs)
         elif tool.is_preset == ToolPresetType.MCP.value:
