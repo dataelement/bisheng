@@ -187,10 +187,28 @@ class KubernetesExecutor:
                 self.renew_at = self.clock.time() + 10
             return {"holder_id": self.holder_id, "controller_epoch": self.controller_epoch}
 
+    @staticmethod
+    def _delivery_profile(operation, *, purge=False):
+        payload = operation["payload"]
+        preparing = operation["kind"] == "prepare"
+        delivery = payload.get("delivery") if preparing else payload.get("resolved_delivery")
+        if delivery is None and purge:
+            delivery = {}
+        if not isinstance(delivery, dict):
+            raise ExecutorError("frozen_delivery_invalid")
+        # Manifest delivery.profile is only a reference string. The backend
+        # resolves it before prepare and freezes the resulting object on output.
+        profile = payload.get("profile") if preparing else delivery.get("profile")
+        optional = purge or delivery.get("mode") == "image"
+        if profile is None and optional:
+            profile = {}
+        if not isinstance(profile, dict) or (not profile and not optional):
+            raise ExecutorError("frozen_profile_invalid")
+        return delivery, profile
+
     def _plan(self, operation, purpose, *, reference=None, image=None, deadline=None):
         payload = operation["payload"]
-        delivery = payload.get("resolved_delivery") or payload.get("delivery") or {}
-        profile = delivery.get("profile") or payload.get("profile") or {}
+        delivery, profile = self._delivery_profile(operation, purge=purpose == "purge")
         platform = (
             self.descriptor.platform if purpose == "purge" else (delivery.get("platform") or profile.get("platform"))
         )
@@ -774,7 +792,7 @@ class KubernetesExecutor:
                 raise ExecutorError("preparation_writer_stop_unconfirmed")
             return previous["result"]
         if plan is None:
-            profile = operation["payload"]["profile"]
+            _, profile = self._delivery_profile(operation)
             plan = self._plan(
                 operation,
                 purpose,
@@ -840,7 +858,8 @@ class KubernetesExecutor:
         if operation["kind"] != "prepare":
             raise ExecutorError("preparation_mode_unavailable")
         payload = operation["payload"]
-        mode = payload.get("delivery", {}).get("mode", "bundle")
+        delivery, _ = self._delivery_profile(operation)
+        mode = delivery.get("mode", "bundle")
         if mode == "image":
             reference = payload["delivery"].get("image", "")
             if not isinstance(reference, str) or not re.fullmatch(

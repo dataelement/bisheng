@@ -111,6 +111,7 @@ def test_registry_secret_is_only_on_the_trusted_assembler(runtime):
 
     executor, _platform, _cluster, operation, _, _ = runtime
     operation.update(kind="prepare", stage="preparing")
+    operation["payload"]["delivery"] = {"mode": "source-image"}
     operation["payload"]["profile"] = operation["payload"]["resolved_delivery"]["profile"]
     executor.document.update(
         assembler_image=IMAGE, image_repository="registry.example/apps", registry_secret="runtime-registry-auth"
