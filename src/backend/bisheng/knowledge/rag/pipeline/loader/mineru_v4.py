@@ -253,7 +253,7 @@ class MineruV4Loader(BaseBishengLoader):
             return {}
 
     @staticmethod
-    def _bbox(value, dimensions: tuple[float, float] | None) -> list[float]:
+    def _bbox(value, dimensions: tuple[float, float] | None) -> list[int]:
         if not dimensions or not isinstance(value, list) or len(value) != 4:
             return []
         if not all(isinstance(item, (int, float)) and 0 <= item <= 1 for item in value):
@@ -262,7 +262,8 @@ class MineruV4Loader(BaseBishengLoader):
         if x1 <= x0 or y1 <= y0:
             return []
         width, height = dimensions
-        return [x0 * width, y0 * height, x1 * width, y1 * height]
+        # Keep chunk coordinates aligned with the integer keys used by preview labels.
+        return [int(x0 * width), int(y0 * height), int(x1 * width), int(y1 * height)]
 
     def load(self) -> list[Document]:
         ocr_mode = "ocr" if self.force_ocr else self.config.ocr_mode
