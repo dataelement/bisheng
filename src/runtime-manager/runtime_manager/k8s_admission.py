@@ -128,6 +128,10 @@ def _normalize(value, path=()):
             ("ipFamilyPolicy", "SingleStack"),
         }:
             continue
+        if key == "env" and child == [] and path in {("spec", "containers", "[]"), ("spec", "initContainers", "[]")}:
+            # Core/v1 Container.Env has json:"env,omitempty"; only this empty
+            # list may disappear when the API serializes a defaulted Pod.
+            continue
         if key == "terminationMessagePath" and child == "/dev/termination-log":
             continue
         if key == "terminationMessagePolicy" and child == "File":

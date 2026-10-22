@@ -288,17 +288,58 @@ def test_even_an_unsafe_approved_spec_cannot_disable_baseline(template, plan):
 
 
 def test_api_server_defaults_are_normalized_but_unknown_fields_are_refused(template, plan):
+    """AC-13, AC-30: reproduce the v1.28.15 server-dryRun defaults observed for the 189 canary."""
     obj = copy.deepcopy(template)
+    obj["metadata"].update(uid=UID, creationTimestamp="2026-10-22T10:42:03Z")
+    obj["status"] = {"phase": "Pending", "qosClass": "Guaranteed"}
     obj["spec"].update(
         serviceAccountName="default",
+        serviceAccount="default",
         schedulerName="default-scheduler",
         priority=0,
         preemptionPolicy="PreemptLowerPriority",
     )
     for c in obj["spec"]["containers"] + obj["spec"]["initContainers"]:
         c.update(terminationMessagePath="/dev/termination-log", terminationMessagePolicy="File")
+        if c.get("env") == []:
+            c.pop("env")
     assert allowed(policy(lambda _: plan), request(obj))
     obj["spec"]["serviceAccountName"] = "privileged"
+    assert not allowed(policy(lambda _: plan), request(obj))
+
+
+@pytest.mark.parametrize("group", ["containers", "initContainers"])
+@pytest.mark.parametrize("change", ["added", "changed", "removed", "null", "mapping"])
+def test_empty_env_default_does_not_ignore_nonempty_or_malformed_environment(template, plan, group, change):
+    """AC-13, AC-49: only an absent versus empty container env list is equivalent."""
+    from runtime_manager.k8s_admission import template_projection
+
+    container = template["spec"][group][0]
+    container["env"] = [] if change == "added" else [{"name": "APP_SETTING", "value": "frozen"}]
+    plan["template"] = template_projection(template)
+    obj = copy.deepcopy(template)
+    container = obj["spec"][group][0]
+    if change == "added":
+        container["env"] = [{"name": "APP_SETTING", "value": "added"}]
+    elif change == "changed":
+        container["env"][0]["value"] = "changed"
+    elif change == "removed":
+        container.pop("env")
+    elif change == "null":
+        container["env"] = None
+    else:
+        container["env"] = {}
+    assert not allowed(policy(lambda _: plan), request(obj))
+
+
+@pytest.mark.parametrize("location", ["spec", "container"])
+def test_empty_env_default_does_not_ignore_other_empty_lists(template, plan, location):
+    """AC-13: omitempty handling is scoped to container env, never arbitrary empty fields."""
+    obj = copy.deepcopy(template)
+    if location == "spec":
+        obj["spec"]["imagePullSecrets"] = []
+    else:
+        obj["spec"]["containers"][0]["args"] = []
     assert not allowed(policy(lambda _: plan), request(obj))
 
 
