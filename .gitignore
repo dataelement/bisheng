@@ -303,7 +303,9 @@ scripts/dev-stack.sh
 
 # Tag-library migration JSON snapshots (local / production ops)
 src/backend/scripts/backups/
-.cursor/
+# Cursor 本地规则不入库. 团队钩子 hooks.json 入库.
+.cursor/*
+!.cursor/hooks.json
 src/backend/migration_reports
 
 # A/B 2.2→2.5.0-sg 升级包：本地密钥、执行账本、含用户清单的盘点导出

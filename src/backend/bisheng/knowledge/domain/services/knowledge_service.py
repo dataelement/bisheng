@@ -1848,6 +1848,8 @@ class KnowledgeService(KnowledgeUtils):
         page_size: int = 10,
         file_ids: list[int] = None,
         file_type: int = None,
+        *,
+        include_titles: bool = True,
     ) -> (list[KnowledgeFileResp], int, bool):
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -1897,7 +1899,7 @@ class KnowledgeService(KnowledgeUtils):
             cls.get_knowledge_files_title,
             db_knowledge,
             res,
-        )
+        ) if include_titles else {}
         file_tags_map = (
             await asyncio.to_thread(
                 TagDao.get_tags_by_resource,

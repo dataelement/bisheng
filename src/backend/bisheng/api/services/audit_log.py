@@ -19,6 +19,7 @@ def _db_dialect() -> str:
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
+from bisheng.chat_session.domain.services.chat_feedback_service import ChatFeedbackService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import (
@@ -900,6 +901,8 @@ class AuditLogService:
         if not res:
             return [], total
 
+        feedback_comments = await ChatFeedbackService.comments_for_chats([session.chat_id for session in res])
+
         target_user_ids = set()
         target_flow_ids = set()  # Flow/Workflow
         target_assistant_ids = set()  # Assistant
@@ -954,6 +957,8 @@ class AuditLogService:
                 like_count=session.like,
                 dislike_count=session.dislike,
                 copied_count=session.copied,
+                comment_count=len(feedback_comments.get(session.chat_id, [])),
+                feedback_comments=feedback_comments.get(session.chat_id, []),
                 user_name=user_map.get(session.user_id, ""),
                 user_external_id=user_external_id_map.get(session.user_id),
                 user_groups=user_groups_map.get(session.user_id, [])

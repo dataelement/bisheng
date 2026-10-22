@@ -25,7 +25,7 @@ def _empty_page():
     return PageInfiniteCursorData(data=[], page_size=10, has_more=False, next_cursor=None)
 
 
-@pytest.mark.parametrize("query", ["type=3", "knowledge_type=3"])
+@pytest.mark.parametrize("query", ["", "type=3", "knowledge_type=3"])
 def test_space_type_parameters_select_space_listing(monkeypatch, query) -> None:
     """标准和兼容参数都必须进入知识空间列表, 不能回退到默认 type=0。"""
     login_user = type("RequestUser", (), {"user_id": 7})()
@@ -68,16 +68,15 @@ def test_conflicting_type_parameters_return_422(monkeypatch) -> None:
 @pytest.mark.parametrize(
     ("query", "expected_type"),
     [
-        ("", KnowledgeTypeEnum.NORMAL),
         ("type=0", KnowledgeTypeEnum.NORMAL),
         ("type=1", KnowledgeTypeEnum.QA),
         ("type=2", KnowledgeTypeEnum.PRIVATE),
     ],
 )
-def test_non_space_types_keep_legacy_knowledge_list(monkeypatch, query, expected_type) -> None:
+def test_non_space_types_are_rejected_without_legacy_lookup(monkeypatch, query, expected_type) -> None:
     login_user = SimpleNamespace(user_id=7)
     get_knowledge = AsyncMock(return_value=_empty_page())
-    monkeypatch.setattr(filelib_endpoint.KnowledgeService, "get_knowledge", get_knowledge)
+    monkeypatch.setattr(KnowledgeService, "get_knowledge", get_knowledge)
     app = FastAPI()
     app.include_router(filelib_endpoint.router, prefix="/api/v2")
     app.dependency_overrides[get_filelib_request_user] = lambda: login_user
@@ -85,8 +84,8 @@ def test_non_space_types_keep_legacy_knowledge_list(monkeypatch, query, expected
     with TestClient(app) as client:
         response = client.get(f"/api/v2/filelib/?{query}")
 
-    assert response.status_code == 200
-    assert get_knowledge.await_args.args[2] is expected_type
+    assert response.status_code == 422
+    get_knowledge.assert_not_awaited()
 
 
 async def test_visible_space_levels_match_portal_groups_without_creating_personal_spaces() -> None:

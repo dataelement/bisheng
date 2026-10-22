@@ -17,10 +17,19 @@ repos:
         files: \.(py|pyd|ts|tsx|js|jsx)$
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.8
+    rev: v0.15.14
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
         types_or: [python, pyi]
       - id: ruff-format
         types_or: [python, pyi]
+
+  - repo: local
+    hooks:
+      - id: arch-guard
+        name: arch-guard
+        entry: bash scripts/arch-guard.sh
+        language: system
+        files: \.(py|pyi|ts|tsx)$
+        pass_filenames: true

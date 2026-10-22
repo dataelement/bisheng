@@ -157,7 +157,7 @@ function RecommendationCard({ entry, disabled, onLink, onView }: RecommendationC
                     <Eye className="mr-1.5 size-4" />
                     {localize("com_knowledge.version.btn_view")}
                 </Button>
-                <Button
+                {entry.can_associate !== false && <Button
                     type="button"
                     size="sm"
                     disabled={disabled}
@@ -168,7 +168,7 @@ function RecommendationCard({ entry, disabled, onLink, onView }: RecommendationC
                 >
                     <Link2 className="mr-1.5 size-4" />
                     {localize("com_knowledge.version.btn_link_as_new_version")}
-                </Button>
+                </Button>}
             </div>
         </div>
     );
@@ -271,7 +271,7 @@ function RightPanel({
     const { data: searchResults = [], isLoading: searchLoading } = useQuery({
         queryKey: ["document-search", spaceId, activeKeyword],
         queryFn: () => searchDocumentsApi(spaceId, activeKeyword, selectedFile.knowledge_file_id),
-        enabled: activeKeyword.length >= 1,
+        enabled: activeKeyword.length >= 1 && selectedFile.can_associate !== false,
     });
 
     const linkMutation = useMutation({
@@ -293,6 +293,7 @@ function RightPanel({
     });
 
     const handleLink = async (targetDoc: { document_id: number; title: string }) => {
+        if (selectedFile.can_associate === false) return;
         const ok = await confirm({
             title: localize("com_knowledge.version.confirm_link_title"),
             description: localize("com_knowledge.version.confirm_link_description", {
@@ -381,7 +382,7 @@ function RightPanel({
                                 <RecommendationCard
                                     key={entry.target_document_id}
                                     entry={entry}
-                                    disabled={isLinking || dismissPending}
+                                    disabled={isLinking || dismissPending || selectedFile.can_associate === false}
                                     onLink={handleLink}
                                     onView={handleView}
                                 />
@@ -402,6 +403,7 @@ function RightPanel({
                     <div className="mb-3 flex gap-2">
                         <Input
                             type="text"
+                            disabled={selectedFile.can_associate === false}
                             value={keyword}
                             onChange={(e) => setKeyword(e.target.value)}
                             onKeyDown={handleKeyDown}
@@ -444,7 +446,7 @@ function RightPanel({
                                         <SearchResultRow
                                             key={entry.document_id}
                                             entry={entry}
-                                            disabled={isLinking || dismissPending}
+                                            disabled={isLinking || dismissPending || selectedFile.can_associate === false}
                                             onLink={handleLink}
                                             onView={handleView}
                                         />

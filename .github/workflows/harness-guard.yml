@@ -1,0 +1,47 @@
+name: harness-guard
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: arch-guard on added lines
+        env:
+          ARCH_GUARD_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -eu
+          base="${ARCH_GUARD_BASE}"
+          git cat-file -e "${base}^{commit}"
+          fail=0
+          while IFS= read -r file; do
+            [ -z "${file}" ] && continue
+            [ -f "${file}" ] || continue
+            bash scripts/arch-guard.sh "${file}" || fail=1
+          done < <(git diff --name-only "${base}...HEAD")
+          exit "${fail}"
+
+      - name: ruff on changed Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: ruff check
+        run: |
+          set -eu
+          python -m pip install "ruff==0.15.14"
+          base="${{ github.event.pull_request.base.sha }}"
+          mapfile -t files < <(git diff --name-only "${base}...HEAD" -- '*.py' '*.pyi')
+          if [ "${#files[@]}" -eq 0 ]; then
+            exit 0
+          fi
+          ruff check --config src/backend/pyproject.toml "${files[@]}"

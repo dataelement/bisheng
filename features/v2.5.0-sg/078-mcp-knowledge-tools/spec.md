@@ -1,5 +1,8 @@
 # Feature: MCP 知识空间九工具
 
+> 2026-10-22 身份契约更新：[F081](../081-mcp-external-user-identity/spec.md) 已获用户确认。十工具顶层必填 `external_id`，以目标用户及其当前有效租户执行；Token 保留接入、绑定有效性、IP/路由/限流校验。本文首期的绑定用户、禁止身份参数或原样兼容描述如与 F081 冲突，以 F081 为准；历史验证记录不代表新身份契约验收。
+
+
 - Feature ID: `078-mcp-knowledge-tools`
 - Status: `IMPLEMENTED_LOCAL`
 - Confirmed: `2026-10-16`，用户：“确认，按调整后的限制开始实施图片中的九个 MCP 工具。”
@@ -19,17 +22,17 @@
 
 ## 2. 认证和协议
 
-继续使用 `X-Developer-Token`，2026-10-16 用户确认与通用 Token 路由语义统一：未配置或空白名单不启用路由过滤，非空时必须匹配 `/mcp` 及当前方法。绑定用户决定所有资源权限和租户。所有新工具禁止 `external_id`、`user_id`、`tenant_id`、`skip_approval`、`file_path` 等未声明参数。
+继续使用 `X-Developer-Token`，2026-10-16 用户确认与通用 Token 路由语义统一：未配置或空白名单不启用路由过滤，非空时必须匹配 `/mcp` 及当前方法。F081 指定的目标账号决定资源权限和当前租户，external_id 必填；所有工具仍禁止 `user_id`、`tenant_id`、`skip_approval`、`file_path` 等未声明参数。
 
 `tools/list` 最终返回十个名称。读工具标记 `readOnlyHint=true`；`create_document`、`upload_file` 为 `readOnlyHint=false`，且不提供覆盖行为。工具注解只向客户端描述行为，不能替代服务端授权。
 
-现有 Token 白名单只区分 HTTP 路由，不区分工具。发布本功能后，已有 `/mcp` Token 的绑定用户若有上传权，即可写入有权位置。此能力扩展是本次规格确认的一部分，不额外引入默认必填配置。
+现有 Token 白名单只区分 HTTP 路由，不区分工具。发布本功能后，已有 `/mcp` Token 传入的目标用户若有上传权，即可写入其有权位置。此能力扩展是本次规格确认的一部分，不额外引入默认必填配置。
 
 使用 MCP 原生 `CallToolResult` 和结构化业务结果，不套 REST 的 `UnifiedResponseModel`。空结果为正常成功；参数、资源拒绝和下游失败为 `isError=true`，不返回原始异常、无权资源信息或签名链接到日志。
 
 ## 3. 公共参数与结果
 
-- 新工具统一使用 `knowledge_id` 表示空间 ID，`folder_id=null` 表示根目录；资源 ID 均为严格正整数，拒绝布尔值。
+- 新工具统一使用 `knowledge_id` 表示空间 ID。`folder_id` 兼容正整数和纯 ASCII 数字的正数字符串，进入业务逻辑前转为整数；允许前导零。顶层 `folder_id=null` 或省略表示根目录，嵌套 `folder_scope.folder_id` 必填且非空。其他资源 ID 仍为严格正整数；拒绝布尔值、空字符串、非数字和非正数。
 - 列表与搜索：`page_size` 默认 20、范围 1～100；使用 `cursor`。结果含 `data`、`page_size`、`has_more`、`next_cursor`，不返回未经权限过滤的总数。
 - 游标绑定用户、租户、工具、空间/目录、过滤和排序；条件不匹配或失效明确报错。
 - 文件列表排序限定 `file_name`、`update_time`，`order` 为 `asc` / `desc`，默认 `update_time desc`；同值以 ID 保持稳定。

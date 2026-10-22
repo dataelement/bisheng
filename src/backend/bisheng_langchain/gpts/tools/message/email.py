@@ -1,3 +1,4 @@
+import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -5,8 +6,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
-                                                         MultArgsSchemaTool)
+from bisheng_langchain.gpts.tools.api_tools.base import MultArgsSchemaTool
+
+logger = logging.getLogger(__name__)
+SMTP_TIMEOUT_SECONDS = 30
 
 
 class InputArgs(BaseModel):
@@ -44,6 +47,7 @@ class EmailMessageTool(BaseModel):
         port : int - 端口号（SSL一般465，TLS用587）
         """
 
+        server = None
         try:
             content_type = "plain"
             # 创建邮件对象
@@ -71,10 +75,14 @@ class EmailMessageTool(BaseModel):
                 # 创建SMTP连接
             if self.smtp_port == 465:
                 # SSL连接
-                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
+                server = smtplib.SMTP_SSL(
+                    self.smtp_server, self.smtp_port, timeout=SMTP_TIMEOUT_SECONDS
+                )
             else:
                 # TLS连接
-                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+                server = smtplib.SMTP(
+                    self.smtp_server, self.smtp_port, timeout=SMTP_TIMEOUT_SECONDS
+                )
                 server.starttls()
 
             # 登录邮箱
@@ -83,7 +91,14 @@ class EmailMessageTool(BaseModel):
             # 发送邮件
             server.sendmail(self.email_account, receiver.split(","), msg.as_string())
         except Exception as e:
-            raise Exception(f"邮件发送失败：{e}")
+            raise Exception(f"邮件发送失败：{e}") from e
+        finally:
+            if server is not None:
+                try:
+                    server.close()
+                except OSError:
+                    # Cleanup must not hide the send result or original failure.
+                    logger.warning("Failed to close SMTP connection", exc_info=True)
 
         return "发送成功"
 

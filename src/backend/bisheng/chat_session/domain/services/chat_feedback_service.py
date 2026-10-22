@@ -13,6 +13,23 @@ from bisheng.core.database import get_async_db_session
 
 class ChatFeedbackService:
     @staticmethod
+    async def comments_for_chats(chat_ids: list[str]) -> dict[str, list[dict]]:
+        """Read opinions only for the caller's already authorized audit rows."""
+        if not chat_ids:
+            return {}
+        async with get_async_db_session() as session:
+            rows = await ChatFeedbackRepositoryImpl(session).list_comments(chat_ids)
+        result: dict[str, list[dict]] = {}
+        for row in rows:
+            comment = row["comment"].strip()
+            if not comment or comment in {"break_answer", "inaction"}:
+                continue
+            result.setdefault(row["chat_id"], []).append({
+                "message_id": row["message_id"], "comment": comment, "liked": row["liked"],
+            })
+        return result
+
+    @staticmethod
     async def update(
         message_id: int, user: UserPayload, *, liked: int | None = None, comment: str | None = None
     ) -> dict:

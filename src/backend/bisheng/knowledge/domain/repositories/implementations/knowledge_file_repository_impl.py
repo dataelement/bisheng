@@ -10,7 +10,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink
-from bisheng.knowledge.domain.models.knowledge_tag_library_link import KnowledgeTagLibraryLink
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
     KnowledgeDocumentLifecycleStatus,
@@ -26,7 +25,9 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileProjectionStatus,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.models.knowledge_tag_library_link import KnowledgeTagLibraryLink
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
+from bisheng.knowledge.domain.schemas.knowledge_similarity_context import KnowledgeSimilarityContext
 from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
     commit_tracked_fulltext_changes,
     track_fulltext_file_changes,
@@ -762,6 +763,14 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             )
         )
         await self.session.flush()
+        if int(result.rowcount or 0) == 1:
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import (
+                KnowledgeBackgroundRepositoryImpl,
+            )
+
+            entry = (await self.session.exec(select(KnowledgeFile).where(KnowledgeFile.id == entry_id).execution_options(populate_existing=True))).first()
+            if entry is not None:
+                await self.session.run_sync(lambda sync: KnowledgeBackgroundRepositoryImpl(sync).request_similarity_refresh(entry))
         return int(result.rowcount or 0) == 1
 
     async def defer_projection_lease(
@@ -917,6 +926,69 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             ).limit(1)
         )
         return result.first() is not None
+
+    async def find_similarity_files_in_space(
+        self, knowledge_id: int, exclude_file_id: int | None = None
+    ) -> list[KnowledgeFile]:
+        primary = await self.find_main_version_files_in_space(knowledge_id, exclude_file_id)
+        stmt = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.entry_type == KnowledgeFileEntryType.PUBLISH.value,
+            KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+            KnowledgeFile.deleted_at.is_(None),
+        )
+        if exclude_file_id is not None:
+            stmt = stmt.where(KnowledgeFile.id != exclude_file_id)
+        published = (await self.session.exec(stmt)).all()
+        return sorted({row.id: row for row in [*primary, *published]}.values(), key=lambda row: row.id)
+
+    async def store_similarity_state(self, file_id: int, snapshot: dict | None, has_candidates: bool) -> None:
+        current = await self.find_by_id_for_update(file_id)
+        if current is None:
+            return
+        if snapshot is not None:
+            current.user_metadata = {**(current.user_metadata or {}), "_similarity_snapshot": snapshot}
+        if current.similar_status != 2:
+            current.similar_status = 1 if has_candidates else 0
+        self.session.add(current)
+        await self.session.commit()
+
+    async def resolve_similarity_file(self, file_id: int) -> KnowledgeSimilarityContext | None:
+        return (await self.resolve_similarity_files([file_id])).get(file_id)
+
+    async def resolve_similarity_files(self, file_ids: list[int]) -> dict[int, KnowledgeSimilarityContext]:
+        if not file_ids:
+            return {}
+        own_version = aliased(KnowledgeDocumentVersion)
+        primary_version = aliased(KnowledgeDocumentVersion)
+        content = aliased(KnowledgeFile)
+        stmt = (
+            select(KnowledgeFile, KnowledgeDocument, primary_version, content)
+            .outerjoin(own_version, own_version.knowledge_file_id == KnowledgeFile.id)
+            .outerjoin(
+                KnowledgeDocument,
+                KnowledgeDocument.id
+                == case(
+                    (KnowledgeFile.reference_document_id.is_not(None), KnowledgeFile.reference_document_id),
+                    else_=own_version.document_id,
+                ),
+            )
+            .outerjoin(primary_version, primary_version.id == KnowledgeDocument.primary_version_id)
+            .outerjoin(content, content.id == primary_version.knowledge_file_id)
+            .where(KnowledgeFile.id.in_(file_ids))
+            .execution_options(populate_existing=True)
+        )
+        contexts = {}
+        for entry, document, version, body in (await self.session.execute(stmt)).all():
+            if document is None and entry.reference_document_id is None and entry.entry_type is None:
+                body = entry
+            contexts[entry.id] = KnowledgeSimilarityContext(
+                *(
+                    type(item)(**item.model_dump()) if item is not None else None
+                    for item in (entry, document, version, body)
+                )
+            )
+        return contexts
 
     async def find_main_version_files_in_space(
         self,

@@ -62,3 +62,11 @@
 - 输出：只映射来源 DTO，不透传 Owner 的原件、管理入口、capabilities 或网页元数据；相对 URL 只补回分享域名，不重签名或修改查询参数。
 - 验证：红灯 10 failed；修复后定向 20 passed、MCP/入口解析 100 passed。扩大回归 109 passed、7 failed，未修改 HEAD 同样七个失败；三文件 Ruff、生产架构守卫及 diff 检查通过。详见 verification §7。
 - 结论：`PASS_WITH_BASELINE_FAILURES`，无新增 HIGH 问题；实际五个运行环境文件、真实存储和预览链接可达性必须部署后复验。本次未提交或部署。
+
+## 6. 2026-10-22 目录 ID 字符串兼容增量自审
+
+- 范围：T021～T022，四个 MCP schema/注册文件、一个 SDK 测试及相关文档；无领域/仓储/权限或响应改动。
+- 输入：单独 FolderId 接受整数及正数字符串，归一化为 int；空串、符号/小数、非 ASCII 数字、非正数、布尔继续拒绝。顶层 null/省略根目录与嵌套目录必填分别验证，避免错误上传到根目录。
+- 一致性：模型和所有工具注册签名复用同一别名，真实 tools/list 同时声明 string/integer；保留严格 ResourceId 和整数响应，不只修改说明或表面类型。
+- 证据：先 3 failed，修复后 SDK 33 passed、最终相关回归 115 passed；Ruff/架构/diff/文档检查通过，见 verification §8。
+- 结论：`LOCAL_PASS`，未发现新增阻塞问题。外部客户端的实际工具定义及部署状态未验证；未提交或部署。

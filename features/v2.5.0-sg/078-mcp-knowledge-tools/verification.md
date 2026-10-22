@@ -1,6 +1,6 @@
 # MCP 九工具实施验证
 
-最新 `get_file_source` 缺陷修复及其证据见 §7。§1～6 保留最初九工具实施记录。
+最新目录 ID 字符串兼容证据见 §8；`get_file_source` 缺陷修复见 §7。§1～6 保留最初九工具实施记录。
 
 - 日期：2026-10-16。
 - 基线：`feat/2.5.0-sg-main` / `06bc21e27`。
@@ -176,3 +176,32 @@ test/test_knowledge_space_service.py::TestTupleLifecycle::test_get_file_preview_
 七个基线失败为：部门管理预览测试的两个过期异步 mock/断言、部门文件预览测试的两个数据库/KnowledgeRag 替身缺口，以及旧知识空间预览的两个完整响应等值断言和一个未隔离数据库调用。本次未修改这些 Owner 方法或旧测试，也未隐藏失败。日志分别保存在 `/tmp/bisheng-mcp-source-fix-core-20261016.log`、`/tmp/bisheng-mcp-source-fix-regression-20261016.log`、`/tmp/bisheng-mcp-source-fix-baseline-20261016.log`。
 
 AC-09-FIX、AC-09、AC-17、AC-18 的本地回归为 PASS（E15～E18）。本次未提交、推送或部署，未新增运行环境探测，未调用两个远程写工具。部署后需以同一 Token 复测上述文件的 auto/preview、显式 original 拒绝及预览链接可达性；真实 MinIO/FGA、MySQL/DM8 和五个文件的实际产物仍为 MANUAL_REQUIRED。若 Owner 自身没有可用预览，工具继续安全失败，不通过强制生成产物或签发 Office 原件掩盖问题。
+
+## 8. 目录 ID 字符串兼容（2026-10-22）
+
+- 基线：`feat/2.5.0-sg` / `3e7dd9049`；T021～T022，本节状态 `LOCAL_PASS / DEPLOYMENT_NOT_VERIFIED`。
+- 复现：本地原 tools/list 及请求模型使用严格正整数。客户端传 `folder_id="305"` 或 `"000305"` 时，真实 SDK 在进入领域服务前拒绝；客户端所述外部字符型定义/缓存未读取。
+- 修复：独立 `FolderId` 同时接受严格正整数和格式为 `^0*[1-9][0-9]*$` 的字符串，再用 `AfterValidator(int)` 归一化。四个顶层参数和嵌套 FolderScope 与请求模型统一采用此别名；工具 schema 展示 integer/string，顶层另外允许 null。响应与其他资源 ID 保持原类型。
+
+| Evidence | Command / Scope | Result |
+|---|---|---|
+| E19 红灯 | `pytest test/mcp_server/test_mcp_tools.py -k 'folder_id_is_normalized or schemas_and_annotations' -q --tb=short`，生产修改前 | 3 failed、2 passed，9.01 秒；工具 schema 缺 string，两种数字字符串被拒绝，整数和根目录通过 |
+| E20 绿灯 | `.venv/bin/python -m pytest test/mcp_server/test_mcp_tools.py -q --tb=short` | 初次 32 passed，5.51 秒；补充嵌套 null 拒绝/省略根目录并整理等价测试写法后，最终 33 passed、40 warnings，4.53 秒 |
+| E21 最终相关回归 | 下列完整命令；最终 Python 代码状态 | 115 passed、64 warnings，14.14 秒；含真实 SDK/ASGI/TCP、SQLite、现有目录归属及上传权限路径，外部业务端口受控 |
+| E22 静态与自审 | 五个变更 Python 文件 Ruff check/format；四个生产文件架构守卫；AST、文档引用/示例及 `git diff --check` | PASS；无新依赖/配置/表结构，无新增权限或目录策略 |
+
+命令在 `src/backend` 执行，使用已有 `.venv` / Python 3.10.19：
+
+```bash
+.venv/bin/python -m pytest test/mcp_server \
+  test/knowledge/test_mcp_knowledge_query_service.py \
+  test/knowledge/test_mcp_knowledge_repository.py \
+  test/knowledge/test_mcp_knowledge_content_service.py \
+  test/knowledge/test_mcp_knowledge_ingestion_service.py -q --tb=short
+```
+
+AC-FOLDER-ID、AC-04/05/06/11/12/17/18 在本次相关范围为 PASS。SDK 覆盖五工具参数在进入服务前成为 int、普通及前导零字符串、旧整数调用、顶层 null/省略根目录、嵌套 null 拒绝；非法输入不打开业务服务，其他资源 ID 的字符串仍拒绝。领域回归保留跨空间目录和上传拒绝；没有修改权限检查来适配输入。
+
+日志：`/tmp/bisheng-mcp-folder-id-red-20261022.log`、`/tmp/bisheng-mcp-folder-id-final-targeted-20261022.log`、`/tmp/bisheng-mcp-folder-id-final-regression-20261022.log`。本次初始 Ruff 提示测试字典构造和全角测试字符已修正，最终五文件静态检查通过。
+
+未提交、推送、部署或远程创建/上传业务文件。真实数据库/权限/存储及外部客户端缓存仍未验收；部署后需刷新工具清单，以 `folder_id="305"` 在有权测试目录验证。旧工具清单若被手工配置或缓存，不会因本地代码修改而自动刷新。回退本次局部改动即可；历史扩大回归的存量失败保留于前文，本次 115 项不代表全仓全量测试。

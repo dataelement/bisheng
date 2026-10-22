@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -6,6 +7,8 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.context.tenant import is_tenant_filter_bypassed
+from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.mcp_server.domain.services import factory
 
 
@@ -41,6 +44,49 @@ async def test_production_factory_binds_and_closes_one_session(monkeypatch, fail
     except RuntimeError:
         assert fail
     assert closed == [session]
+
+
+@pytest.mark.parametrize("failure", [None, RuntimeError, asyncio.CancelledError, ValueError])
+async def test_identity_factory_closes_lookup_session_before_business(monkeypatch, failure):
+    """F081 AC-04, AC-05, AC-08: 目标身份完成加载后关闭跨范围会话。"""
+    closed = []
+
+    @asynccontextmanager
+    async def scope():
+        try:
+            yield object()
+        finally:
+            closed.append(True)
+
+    monkeypatch.setattr(factory, "get_async_db_session", scope)
+    monkeypatch.setattr(
+        factory.settings, "multi_tenant", SimpleNamespace(enabled="invalid" if failure is ValueError else True)
+    )
+    users = SimpleNamespace(
+        list_active_by_external_id=AsyncMock(
+            return_value=[SimpleNamespace(user_id=8, external_id="0008", delete=0, user_name="target", token_version=0)]
+        )
+    )
+    if failure in {RuntimeError, asyncio.CancelledError}:
+        users.list_active_by_external_id.side_effect = failure()
+    tenants = SimpleNamespace(
+        list_current_by_user=AsyncMock(return_value=[SimpleNamespace(tenant_id=8, status="active")]),
+        find_tenant=AsyncMock(return_value=SimpleNamespace(id=8, status="active")),
+    )
+    monkeypatch.setattr(factory, "UserRepositoryImpl", lambda session: users)
+    monkeypatch.setattr(factory, "TenantMembershipRepositoryImpl", lambda session: tenants)
+    target = UserPayload(user_id=8, user_name="target", user_role=[2], tenant_id=8)
+    monkeypatch.setattr(UserPayload, "init_login_user", AsyncMock(return_value=target))
+    token_user = UserPayload(user_id=7, user_name="token", user_role=[1], tenant_id=7)
+    principal = DeveloperTokenPrincipal(token_id=10, tenant_id=7, user=token_user)
+    if failure:
+        with pytest.raises(failure):
+            await factory.resolve_execution_identity(principal, "0008")
+    else:
+        identity = await factory.resolve_execution_identity(principal, "0008")
+        assert identity.user is target
+    assert closed == [True]
+    assert not is_tenant_filter_bypassed()
 
 
 async def test_tool_factory_uses_one_request_session_for_all_domain_services(monkeypatch):

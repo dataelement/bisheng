@@ -1,4 +1,4 @@
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.chat_session.domain.repositories.interfaces.chat_feedback_repository import ChatFeedbackRepository
@@ -10,6 +10,24 @@ from bisheng.database.models.session import MessageSession
 class ChatFeedbackRepositoryImpl(BaseRepositoryImpl[ChatMessage, int], ChatFeedbackRepository):
     def __init__(self, session: AsyncSession):
         super().__init__(session, ChatMessage)
+
+    async def list_comments(self, chat_ids: list[str]) -> list[dict]:
+        if not chat_ids:
+            return []
+        rows = await self.session.exec(
+            select(ChatMessage.id, ChatMessage.chat_id, ChatMessage.remark, ChatMessage.liked)
+            .where(
+                col(ChatMessage.chat_id).in_(chat_ids),
+                col(ChatMessage.is_bot).is_(True),
+                col(ChatMessage.remark).is_not(None),
+                ChatMessage.remark != "",
+            )
+            .order_by(ChatMessage.id)
+        )
+        return [
+            {"message_id": message_id, "chat_id": chat_id, "comment": remark, "liked": liked or 0}
+            for message_id, chat_id, remark, liked in rows.all()
+        ]
 
     async def lock_message(self, message_id: int) -> ChatMessage | None:
         result = await self.session.exec(select(ChatMessage).where(ChatMessage.id == message_id).with_for_update())

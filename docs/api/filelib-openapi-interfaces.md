@@ -71,6 +71,48 @@ Token 校验优先于外部用户解析。Token 校验失败时返回既有 Deve
 | `403` | `external_id` 未匹配到唯一有效用户。响应不区分不存在、禁用或重复。 |
 | `422` | `external_id` 为空、纯空白、超过 255 个字符或其他参数校验失败。 |
 
+### 1.6 SPACE 共享存储约定（F112）
+
+文件业务统一接受知识空间 `SPACE(type=3)`，不再读取或写入逐库旧 ES/Milvus。
+显式非 SPACE 的文件请求、非 SPACE/SPACE 混合检索、类型别名冲突在业务副作用前拒绝。
+资源列表及创建的默认类型从 `0` 改为 `3`；这属于调用兼容性变化，调用方需同步调整。
+6 个 QA 接口（`add_qa`、`add_relative_qa`、`qa/{qa_id}`、`update_qa`、`detail_qa`、`query_qa`）
+和 `download_statistic` 保持原行为，其他入口的 NORMAL/PRIVATE/QA 存储不受影响。
+
+| 接口 | 共享存储行为 |
+|---|---|
+| `POST /filelib/` | 默认创建操作者拥有的团队库；可指定现有公共/部门/科室空间类型，资格校验沿用知识空间服务 |
+| `PUT /filelib/` | 修改 SPACE 名称、描述，保持已有发布状态 |
+| `DELETE /filelib/{knowledge_id}` | 走空间退役与分发规则，不删除租户共享索引/collection |
+| `DELETE /filelib/clear/{knowledge_id}` | 清空当前空间入口并保留空间及授权；有效引用使用的正文、原对象保留 |
+| `POST /filelib/file/{knowledge_id}`、`POST /filelib/chunks` | 分别异步/同步解析，直接写共享存储；配额、解析参数、回调保持 |
+| `POST /filelib/chunks_string` | 文档切片直接写共享存储；空 documents 返回参数错误，不修改输入 metadata |
+| `DELETE /filelib/file/{file_id}`、`POST /filelib/delete_file` | 沿用入口生命周期；批量文件须属于同一个 SPACE，跨空间批次返回业务码 10950 |
+| `GET /filelib/`、`GET /filelib/file/list` | 保留既有分页；文件摘要从共享文档及版本读取 |
+| `GET /filelib/file/detail` | 先解析实际内容文件，再读文本产物或完整共享分块；不回退旧存储 |
+| `GET /filelib/file/source_url`、`POST /filelib/retrieve` | 仅接受已授权 SPACE；签名仍遵守现有 view_file 与原文件地址规则 |
+
+写接口沿用配置的 `default_operator`，查询接口沿用 Token 绑定用户或 `external_id`；
+本次不把业务用户切换扩展到写接口。共享路由须提前初始化，接口不会自动建库或迁移旧数据。
+
+创建最小请求：
+
+```json
+{"name":"政研资料","type":3,"space_level":"team"}
+```
+
+`space_level` 缺省为 `team`；`department_id`、`is_clinic` 按已有空间规则使用；不能主动创建个人库。
+`model`、`index_name`、`collection_name` 可以省略；显式提供时必须与租户共享目标一致，否则返回参数错误。
+全局 KnowledgeCreate 的默认值保持不变，仅此 Filelib 创建接口使用新默认值。
+
+| HTTP / 业务码 | 场景 |
+|---|---|
+| HTTP 503，`status_code=10973` | 共享目标未初始化、初始化字段不完整或共享后端不可用 |
+| HTTP 409，`status_code=10974` | 已解析成功文件的共享投影未就绪或共享正文缺失 |
+| 沿用业务错误包装，`status_code=18098` | 读取期间版本/代次变化、历史非主版本正文请求或写冻结等状态冲突 |
+
+共享错误不会伪装为空正文成功。写冻结阻止写入，不阻止合法读取；资源和文件权限仍由服务端领域规则检查。
+
 ---
 
 ## 2. 查询知识资源列表
@@ -85,7 +127,7 @@ GET /api/v2/filelib/
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |---|---|---:|---|---|
-| `type` | integer | 否 | `0` | 知识资源类型。 |
+| `type` | integer | 否 | `3` | 仅支持知识空间 SPACE。 |
 | `knowledge_type` | integer | 否 | `null` | `type` 的兼容参数；两者同时传入时值必须一致，否则返回 HTTP `422`。 |
 | `name` | string | 否 | `null` | 知识资源名称，模糊匹配。 |
 | `page_size` | integer | 否 | `10` | 每页数量。 |
@@ -96,10 +138,8 @@ GET /api/v2/filelib/
 
 | 值 | 说明 |
 |---:|---|
-| `0` | 文档知识库 |
-| `1` | QA 知识库 |
-| `2` | 个人知识库 |
-| `3` | 知识空间 |
+| `0` / `1` / `2` | 本文件接口不再支持，返回参数错误；不影响独立 QA 接口及其他业务入口 |
+| `3` | 知识空间，默认值 |
 
 当类型为 `3` 时，接口返回指定业务用户在门户知识库侧栏可见的知识空间并集：
 
@@ -378,7 +418,11 @@ curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/file/detail?file_encoding=SGGF
 |---|---|---|
 | `data.file` | object / null | 文件信息。 |
 | `data.content` | string | 文件完整正文。 |
-| `data.chunk_count` | integer | 正文拼接使用的分段数量。 |
+| `data.chunk_count` | integer | 共享分块路径为实际分块数；文本产物路径保持既有语义，非空为 1、空为 0。 |
+
+正文始终完整返回，不套用 MCP 的单页字符上限。发布/分享文件返回访问入口的元数据，
+正文来自解析后的实际内容文件。历史非主版本请求返回状态冲突，避免旧元数据配上新版本正文。
+读取前后检查版本、代次和路由，并通过独立只读会话再次复核，避免数据库快照掩盖并发变化。
 
 `data.file`：
 

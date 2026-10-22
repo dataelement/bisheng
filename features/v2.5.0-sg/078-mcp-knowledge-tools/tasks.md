@@ -11,6 +11,7 @@
 | tasks.md | ✅ 已拆解 | 依项目 21 项清单自审，LGTM；无独立 agent |
 | 实现 | ✅ 本地完成 | T001～T018；73 项本功能测试通过，相关回归 308 通过、6 项 HEAD 已有失败 |
 | 来源缺陷修复 | ✅ 本地完成 | T019～T020；MCP/入口解析 100 项通过；扩大预览回归 109 通过、7 项 HEAD 同样失败，见 verification §7 |
+| 目录 ID 字符串兼容 | ✅ 本地完成 | T021～T022；SDK 定向 33 项、相关回归 115 项通过，见 verification §8 |
 | 真实环境验收 | 🔲 待执行 | FGA/MinIO/ES/Milvus/Worker、MySQL/DM8、代理与压测；见 verification |
 
 完成证据见 [verification.md](verification.md)，L1/L2 自审见 [code-review.md](code-review.md)。本地完成不代表已提交、合并、部署或生产验收。
@@ -145,6 +146,21 @@
 
 ## 任务评审
 
+### 2026-10-22 目录 ID 字符串兼容
+
+- [x] **T021** 补真实 SDK 的工具定义/目录 ID 归一化与拒绝用例，复现后新增独立 FolderId，在 browse/ingestion 模型和 query/write 注册签名统一使用，保持其他 ID 和领域权限不变。
+  _Requirements: REQ-003, REQ-004, REQ-005, REQ-009, REQ-010, REQ-012_
+  _Acceptance: AC-FOLDER-ID, AC-04, AC-05, AC-06, AC-11, AC-12, AC-17, AC-18_
+  _Verification: SDK 红/绿灯；MCP 与已有查询/上传权限回归；工具 schema 与运行时一致_
+  _Depends: T020_
+  _Boundary: 仅兼容目录 ID，不放宽其他参数、目录归属或权限；不操作真实业务数据_
+
+- [x] **T022** 同步使用说明和验证记录，完成静态检查与增量自审。
+  _Requirements: REQ-012_
+  _Acceptance: AC-FOLDER-ID, AC-18_
+  _Verification: Ruff、架构守卫、diff、文档检查及 T021 证据复用_
+  _Depends: T021_
+
 ### 2026-10-16 来源工具缺陷修复
 
 - [x] **T019** 补充来源预览兼容、逻辑入口及拒绝路径回归；观察现有实现失败，再以现有 Owner 预览替代路径拼接，更新 SDK Owner 替身。
@@ -163,6 +179,8 @@
 LGTM。已对照项目 tasks 清单检查完整 AC 追溯、前置依赖、测试先行、每任务最多两个主要文件、原有 Owner 边界及无新数据迁移。测试文件可先存在失败用例，批次成功后更新最终完成状态。T015 的测试先于 T013/T014 配对实现执行，展示顺序按交付模块分组。
 
 ## 实际偏差记录
+
+- 2026-10-22：用户要求兼容字符串目录 ID，统一别名同时覆盖四个顶层参数和搜索的嵌套范围，作为一个行为批次；不修改通用 ResourceId、领域服务、响应 ID 或数据库。本地 tools/list 原声明为整数，此次新增字符串类型及约束；外部客户端手工定义/缓存状态未读取，不将其作为已证实的服务端定义。回退局部代码即可，无数据迁移。
 
 - 计划中的候选分页采用数据库稳定键扫描，正文只对有界候选批次查询，避免依赖 10000 桶聚合；沿用 design 的预算耗尽显式续页规则。
 - 工作分支使用 `codex/078-mcp-knowledge-tools`，避免已有 `feat/2.5.0-sg` 引用与层级分支冲突。
