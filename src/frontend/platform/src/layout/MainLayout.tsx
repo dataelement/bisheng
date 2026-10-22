@@ -1,12 +1,12 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Button, Dropdown, DropdownChevron, DropdownItem, DropdownSeparator, Select } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 import { GithubIcon } from "@/components/bs-icons";
 import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
 import { GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
@@ -31,7 +31,9 @@ export default function MainLayout() {
     const { appConfig } = useContext(locationContext);
 
     const { user, setUser } = useContext(userContext);
-    const { language, languageNames, options, changLanguage, t } = useLanguage(user);
+    const { language, options, changLanguage, t } = useLanguage(user);
+    const selectLabels = useSelectLabels();
+    const languageOptions = Object.entries(options).map(([value, label]) => ({ value, label }));
 
     const handleLogout = () => {
         bsConfirm({
@@ -159,24 +161,17 @@ export default function MainLayout() {
                                 </Tooltip>
                             </TooltipProvider>
                             <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-                            <SelectHover
-                                className={"-top-4"}
-                                triagger={
-                                    <div className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center">
-                                        <span className="text-sm leading-8">{languageNames[language]}</span>
-                                        <Outlined.Down className="ml-1 w-4 h-4" />
-                                    </div>
-                                }
-                            >
-                                {Object.entries(options).map(([key, value]) => (
-                                    <SelectHoverItem key={key} onClick={() => changLanguage(key)}>
-                                        <span>{value}</span>
-                                        {language === key && (
-                                            <Outlined.Check className="w-4 h-4 absolute top-1/2 right-0 transform -translate-y-1/2" />
-                                        )}
-                                    </SelectHoverItem>
-                                ))}
-                            </SelectHover>
+                            <Select
+                                {...selectLabels}
+                                variant="ghost"
+                                className="my-4 w-auto"
+                                aria-label={t("system.language")}
+                                options={languageOptions}
+                                value={language}
+                                onChange={(value) => {
+                                    if (value != null) changLanguage(String(value));
+                                }}
+                            />
                             <Separator
                                 className="mx-[23px] h-6 border-l my-5 border-[#dddddd]"
                                 orientation="vertical"
@@ -189,31 +184,31 @@ export default function MainLayout() {
                                 src={__APP_ENV__.BASE_URL + (user.avatar || "/assets/user.png")}
                                 alt=""
                             />
-                            <SelectHover
-                                triagger={
-                                    <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
-                                        {user.user_name} <Outlined.Down className="inline-block mt-[-2px]" />
-                                    </span>
+                            <Dropdown
+                                trigger="hover"
+                                align="end"
+                                menu={
+                                    <>
+                                        {hasWorkbenchEntry && (
+                                            <DropdownItem icon={<GanttChartIcon />} onSelect={() => window.open("/workspace/")}>
+                                                {t("menu.workspace")}
+                                            </DropdownItem>
+                                        )}
+                                        <DropdownItem icon={<Lock />} onSelect={JumpResetPage}>
+                                            {t("menu.changePwd")}
+                                        </DropdownItem>
+                                        <DropdownSeparator />
+                                        <DropdownItem danger icon={<Outlined.LogOut />} onSelect={handleLogout}>
+                                            {t("menu.logout")}
+                                        </DropdownItem>
+                                    </>
                                 }
                             >
-                                {hasWorkbenchEntry && (
-                                    <SelectHoverItem onClick={() => window.open("/workspace/")}>
-                                        <GanttChartIcon className="w-4 h-4 mr-1" />
-                                        <span>{t("menu.workspace")}</span>
-                                    </SelectHoverItem>
-                                )}
-                                <SelectHoverItem onClick={JumpResetPage}>
-                                    <Lock className="w-4 h-4 mr-1" />
-                                    <span>{t("menu.changePwd")}</span>
-                                </SelectHoverItem>
-                                <SelectHoverItem
-                                    onClick={handleLogout}
-                                    className="text-[#f53f3f] hover:bg-red-50 dark:hover:bg-red-950/30 dark:text-[#f53f3f]"
-                                >
-                                    <Outlined.LogOut className="w-4 h-4 mr-1" />
-                                    <span>{t("menu.logout")}</span>
-                                </SelectHoverItem>
-                            </SelectHover>
+                                <Button type="button" variant="text" color="default" className="mr-8 max-w-40">
+                                    <span className="truncate">{user.user_name}</span>
+                                    <DropdownChevron />
+                                </Button>
+                            </Dropdown>
                         </div>
                     </div>
                 </div>
@@ -502,7 +497,6 @@ const useLanguage = (user: User) => {
     };
     return {
         language,
-        languageNames: options,
         options,
         changLanguage,
         t,

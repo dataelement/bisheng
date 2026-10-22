@@ -1,17 +1,11 @@
 // @ts-strict-ignore
-import { Button, Input, notification } from '@bisheng/ui';
+import { Button, Input, Select, notification } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import BuiltinLoadingIcon from "@/components/bs-icons/loading/Loading.svg?react";
 
 
 import { Label } from "@/components/bs-ui/label";
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue,
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { darkContext } from "@/contexts/darkContext";
 import type { BrandAsset,BrandAssetOption,BrandConfig,BrandText } from "@/controllers/API";
@@ -193,6 +187,7 @@ function BrandTextField({
 
 export default function BrandCustomization() {
     const { t } = useTranslation();
+    const selectLabels = useSelectLabels();
 
     const { dark } = useContext(darkContext);
     const [config, setConfig] = useState<BrandConfig>(() => cloneBrandConfig(DEFAULT_BRAND_CONFIG));
@@ -518,17 +513,21 @@ export default function BrandCustomization() {
                         />
                         <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[140px_minmax(0,240px)_auto]">
                             <Label>{t("theme.brandLoadingAnimation")}</Label>
-                            <Select value={config.loading.animation || "none"} onValueChange={(value) => handleAnimationChange(value === "none" ? "" : value as BrandConfig["loading"]["animation"])}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">{t("theme.brandAnimationNone")}</SelectItem>
-                                    <SelectItem value="animate-spin">{t("theme.brandAnimationSpin")}</SelectItem>
-                                    <SelectItem value="animate-pulse">{t("theme.brandAnimationPulse")}</SelectItem>
-                                    <SelectItem value="animate-bounce">{t("theme.brandAnimationBounce")}</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <Select
+                                {...selectLabels}
+                                options={[
+                                    { value: "none", label: t("theme.brandAnimationNone") },
+                                    { value: "animate-spin", label: t("theme.brandAnimationSpin") },
+                                    { value: "animate-pulse", label: t("theme.brandAnimationPulse") },
+                                    { value: "animate-bounce", label: t("theme.brandAnimationBounce") },
+                                ]}
+                                value={config.loading.animation || "none"}
+                                onChange={(value) => {
+                                    if (value == null) return;
+                                    handleAnimationChange(value === "none" ? "" : value as BrandConfig["loading"]["animation"]);
+                                }}
+                                aria-label={t("theme.brandLoadingAnimation")}
+                            />
                             <Button type="button" size="small" variant={previewTarget === "loadingAnimation" ? "default" : "outline"} className="w-fit" onClick={() => setPreviewTarget("loadingAnimation")}>
                                 <Outlined.Eye className="mr-1 size-4" />
                                 {t("theme.brandPreviewButton")}

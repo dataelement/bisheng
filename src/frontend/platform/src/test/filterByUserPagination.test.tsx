@@ -1,13 +1,12 @@
 import FilterByUser from '@/components/bs-comp/filterTableDataComponent/FilterByUser';
 import { getUsersApi } from '@/controllers/API/user';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/controllers/API/user', () => ({ getUsersApi: vi.fn() }));
 
 const api = vi.mocked(getUsersApi);
-let intersect: () => void;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -15,13 +14,6 @@ beforeEach(() => {
   vi.stubGlobal('PointerEvent', class extends MouseEvent {
     readonly pointerType = 'mouse';
     readonly pointerId = 1;
-  });
-  vi.stubGlobal('IntersectionObserver', class {
-    constructor(callback: IntersectionObserverCallback) {
-      intersect = () => callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-    }
-    observe() {}
-    disconnect() {}
   });
 });
 
@@ -37,7 +29,8 @@ describe('application usage user filter pagination', () => {
     await userEvent.setup().click(screen.getByRole('combobox'));
     const first = await screen.findByText('First user');
 
-    act(() => intersect());
+    // Shared Select requests another page when its popup scrolls to the end.
+    fireEvent.scroll(screen.getByRole('listbox').parentElement!);
     await waitFor(() => expect(api).toHaveBeenLastCalledWith(
       { name: '', page: 2, pageSize: 20 }, { signal: expect.any(AbortSignal) },
     ));

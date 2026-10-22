@@ -59,6 +59,12 @@ beforeEach(() => {
   for (const key of Object.keys(lastSectionPaths)) delete lastSectionPaths[key];
 });
 
+it('places Skill Center below Apps', async () => {
+  mockPlugins = ['home', 'knowledge_space', 'subscription', 'apps'];
+  openRoute('/c/new');
+  const names = (await screen.findAllByRole('link')).map((link) => link.textContent ?? '');
+  expect(names.indexOf('com_skill_center_title')).toBeGreaterThan(names.indexOf('Apps'));
+});
 it('adds Skill Center to the release sidebar while preserving the last chat destination', async () => {
   lastSectionPaths.home = '/c/existing-chat';
   openRoute();

@@ -271,6 +271,14 @@
       "axis": "坐标轴",
       "dataLabel": "数据标签",
       "gridLine": "网格线"
+    },
+    "textFormat": {
+      "fontSize": "字号",
+      "color": "文字颜色",
+      "align": "对齐方式",
+      "alignLeft": "左对齐",
+      "alignCenter": "居中",
+      "alignRight": "右对齐"
     }
   },
   "useChartState": {

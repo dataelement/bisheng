@@ -2596,5 +2596,12 @@
   "com_skill_center_description": "Description",
   "com_skill_center_menu": "Skills",
   "com_skill_center_manage": "Manage skills",
-  "com_skill_center_menu_available": "Available skills"
+  "com_skill_center_menu_available": "Available skills",
+  "com_select": {
+    "empty": "No data",
+    "no_match": "No matches",
+    "loading": "Loading…",
+    "clear": "Clear",
+    "remove": "Remove"
+  }
 }

@@ -1,22 +1,11 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Button, Dropdown, DropdownItem, DropdownSeparator, DropdownSub } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 
 import { useEffect,useState } from "react";
 import { MetricFormatDialog } from "./MetricFormatDialog";
 
-import {
-DropdownMenu,
-DropdownMenuContent,
-DropdownMenuItem,
-DropdownMenuPortal,
-DropdownMenuSeparator,
-DropdownMenuSub,
-DropdownMenuSubContent,
-DropdownMenuSubTrigger,
-DropdownMenuTrigger,
-} from "@/components/bs-ui/dropdownMenu";
 import { useTranslation } from "react-i18next";
 
 export interface DimensionItem {
@@ -165,11 +154,22 @@ export function DimensionBlock({
     { label: t('dimensionBlock.aggregation.distinctCount'), value: 'distinct_count' },
   ]
 
-  const sortOptions = [
+  const sortOptions: { label: string; value: DimensionItem['sort'] }[] = [
     { label: t('dimensionBlock.sort.none'), value: null },
     { label: t('dimensionBlock.sort.asc'), value: 'asc' },
     { label: t('dimensionBlock.sort.desc'), value: 'desc' }
   ]
+
+  // Sort choices of one field; the current one carries the check.
+  const sortItems = (dimension: DimensionItem) => sortOptions.map((option) => (
+    <DropdownItem
+      key={option.value || 'null'}
+      checked={dimension.sort === option.value}
+      onSelect={() => onSortChange?.(dimension.id, option.value)}
+    >
+      {option.label}
+    </DropdownItem>
+  ))
 
   return (
     <div className="space-y-3"
@@ -235,128 +235,64 @@ export function DimensionBlock({
                 </div>
 
                 {/* 操作按钮区域 */}
-                <div className={`flex items-center gap-1 ${hoveredDimension === dimension.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}>
+                {/* Menu clicks bubble through the portal; keep them off the row's selection. */}
+                <div className={`flex items-center gap-1 ${hoveredDimension === dimension.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`} onClick={(e) => e.stopPropagation()}>
 
-                  <DropdownMenu modal={false}>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="text" size="medium" className="h-6 w-6 p-0 hover:bg-transparent data-[state=open]:opacity-100" aria-label={t("settings")} onMouseEnter={() => setHoveredIcon(dimension.id)} onMouseLeave={() => setHoveredIcon(null)} onClick={(e) => e.stopPropagation()} color="default" iconOnly>
-                        <Outlined.Setting size={14} />
-                      </Button>
-                    </DropdownMenuTrigger>
-
-                    <DropdownMenuContent
-                      className="w-40"
-                      align="start"
-                      side="left"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {/* --- 维度菜单 --- */}
-                      {dimension.fieldType === 'dimension' && (
-                        <>
-                          {/* 排序级联菜单 */}
-                          {isStack !== "stack" && (
-                            <DropdownMenuSub>
-                              <DropdownMenuSubTrigger>
-                                <span>{t('dimensionBlock.menu.sort')}</span>
-                              </DropdownMenuSubTrigger>
-                              <DropdownMenuPortal>
-                                <DropdownMenuSubContent>
-                                  {sortOptions.map((option) => (
-                                    <DropdownMenuItem
-                                      key={option.value || 'null'}
-                                      onClick={() => onSortChange?.(dimension.id, option.value as any)}
-                                      className="justify-between"
-                                    >
-                                      {option.label}
-                                      {dimension.sort === option.value && <Outlined.Check className="h-4 w-4" />}
-                                    </DropdownMenuItem>
-                                  ))}
-                                </DropdownMenuSubContent>
-                              </DropdownMenuPortal>
-                            </DropdownMenuSub>
-                          )}
-
-                          {isStack !== "stack" && <DropdownMenuSeparator />}
-
-                          <DropdownMenuItem
-                            onClick={() => onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)}
-                          >
-                            {t('componentConfigDrawer.dialog.editDisplayName')}
-                          </DropdownMenuItem>
-                        </>
-                      )}
-
-                      {/* --- 指标菜单 --- */}
-                      {dimension.fieldType === 'metric' && (
-                        <>
-                          {/* 聚合方式级联菜单 */}
-                          {!isVirtualMetric(dimension) && (
-                            <DropdownMenuSub>
-                              <DropdownMenuSubTrigger>
-                                <span>{t('dimensionBlock.menu.aggregation')}</span>
-                              </DropdownMenuSubTrigger>
-                              <DropdownMenuPortal>
-                                <DropdownMenuSubContent>
-                                  {aggregationOptions.map((option) => (
-                                    <DropdownMenuItem
-                                      key={option.value}
-                                      onClick={() => onAggregationChange?.(dimension.id, option.value)}
-                                      className="justify-between"
-                                    >
-                                      {option.label}
-                                      {dimension.aggregation === option.value && <Outlined.Check className="h-4 w-4" />}
-                                    </DropdownMenuItem>
-                                  ))}
-                                </DropdownMenuSubContent>
-                              </DropdownMenuPortal>
-                            </DropdownMenuSub>
-                          )}
-
-                          {/* 指标排序级联菜单 */}
-                          {isMetricCard && (
-                            <DropdownMenuSub>
-                              <DropdownMenuSubTrigger>
-                                <span>{t('dimensionBlock.menu.sort')}</span>
-                              </DropdownMenuSubTrigger>
-                              <DropdownMenuPortal>
-                                <DropdownMenuSubContent>
-                                  {sortOptions.map((option) => (
-                                    <DropdownMenuItem
-                                      key={option.value || 'null'}
-                                      onClick={() => onSortChange?.(dimension.id, option.value as any)}
-                                      className="justify-between"
-                                    >
-                                      {option.label}
-                                      {dimension.sort === option.value && <Outlined.Check className="h-4 w-4" />}
-                                    </DropdownMenuItem>
-                                  ))}
-                                </DropdownMenuSubContent>
-                              </DropdownMenuPortal>
-                            </DropdownMenuSub>
-                          )}
-
-                          {/* 数值格式 */}
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditingMetric(dimension)
-                              setFormatDialogOpen(true)
-                            }}
-                          >
-                            {t('dimensionBlock.menu.format')}
-                          </DropdownMenuItem>
-
-                          <DropdownMenuSeparator />
-
-                          {/* 编辑显示名称 */}
-                          <DropdownMenuItem
-                            onClick={() => onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)}
-                          >
-                            {t('componentConfigDrawer.dialog.editDisplayName')}
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <Dropdown
+                    align="end"
+                    menu={dimension.fieldType === 'dimension' ? (
+                      <>
+                        {isStack !== "stack" && (
+                          <>
+                            <DropdownSub label={t('dimensionBlock.menu.sort')}>
+                              {sortItems(dimension)}
+                            </DropdownSub>
+                            <DropdownSeparator />
+                          </>
+                        )}
+                        <DropdownItem onSelect={() => onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)}>
+                          {t('componentConfigDrawer.dialog.editDisplayName')}
+                        </DropdownItem>
+                      </>
+                    ) : dimension.fieldType === 'metric' ? (
+                      <>
+                        {!isVirtualMetric(dimension) && (
+                          <DropdownSub label={t('dimensionBlock.menu.aggregation')}>
+                            {aggregationOptions.map((option) => (
+                              <DropdownItem
+                                key={option.value}
+                                checked={dimension.aggregation === option.value}
+                                onSelect={() => onAggregationChange?.(dimension.id, option.value)}
+                              >
+                                {option.label}
+                              </DropdownItem>
+                            ))}
+                          </DropdownSub>
+                        )}
+                        {isMetricCard && (
+                          <DropdownSub label={t('dimensionBlock.menu.sort')}>
+                            {sortItems(dimension)}
+                          </DropdownSub>
+                        )}
+                        <DropdownItem
+                          onSelect={() => {
+                            setEditingMetric(dimension)
+                            setFormatDialogOpen(true)
+                          }}
+                        >
+                          {t('dimensionBlock.menu.format')}
+                        </DropdownItem>
+                        <DropdownSeparator />
+                        <DropdownItem onSelect={() => onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)}>
+                          {t('componentConfigDrawer.dialog.editDisplayName')}
+                        </DropdownItem>
+                      </>
+                    ) : null}
+                  >
+                    <Button variant="text" size="medium" className="h-6 w-6 p-0 hover:bg-transparent data-[state=open]:opacity-100" aria-label={t("settings")} onMouseEnter={() => setHoveredIcon(dimension.id)} onMouseLeave={() => setHoveredIcon(null)} color="default" iconOnly>
+                      <Outlined.Setting size={14} />
+                    </Button>
+                  </Dropdown>
 
                   {/* 删除按钮 */}
                   <Button variant="text" size="medium" className="h-6 w-6 p-0 hover:bg-red-200" onClick={(e) => {

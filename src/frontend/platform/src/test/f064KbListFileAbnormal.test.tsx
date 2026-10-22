@@ -51,14 +51,6 @@ vi.mock("@/components/bs-icons/loading", () => ({
 
 
 
-vi.mock("@/components/bs-ui/select/filter", () => ({
-  TableHeadEnumFilter: ({ onChange }: { onChange: (value: string) => void }) => (
-    <button type="button" data-testid="file-status-filter" onClick={() => onChange("abnormal")}>
-      filter
-    </button>
-  ),
-}))
-
 vi.mock("@/util/hook", () => ({
   useInfiniteCursorTable: () => ({
     data: [{
@@ -124,7 +116,8 @@ describe("F064 document KB list file abnormal status", () => {
 
   it("filters the list to abnormal libraries from the column header", () => {
     renderPage(<KnowledgeFile />)
-    fireEvent.click(screen.getByTestId("file-status-filter"))
+    fireEvent.click(screen.getByRole("combobox", { name: "fileStatusFilterLabel" }))
+    fireEvent.click(screen.getByRole("option", { name: "fileStatusAbnormal" }))
     expect(filterData).toHaveBeenCalledWith({ has_abnormal: true })
   })
 

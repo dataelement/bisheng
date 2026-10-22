@@ -10,7 +10,7 @@
 //                                when the GET envelope returns
 //                                inherited_from_root=true.
 
-import { Tag } from "@bisheng/ui";
+import { Alert, Tag } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import { Tenant } from "@/types/api/tenant";
 import { User } from "@/types/api/user";
@@ -45,17 +45,20 @@ export function ScopeBanner({
 
     if (isGlobalSuper && isRootScope) {
         return (
-            <div className="mb-4 p-3 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-sm text-blue-900 dark:text-blue-100">
-                {t('model.systemConfigRootBanner', { tenantName: rootName })}
-            </div>
+            <Alert
+                className="mb-4"
+                description={t('model.systemConfigRootBanner', { tenantName: rootName })}
+            />
         );
     }
     if (!isRootScope) {
         const tenantName = childTenant?.tenant_name || childTenant?.tenant_code || '';
         return (
-            <div className="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
-                {t('model.systemConfigTenantBanner', { tenantName, rootName })}
-            </div>
+            <Alert
+                type="warning"
+                className="mb-4"
+                description={t('model.systemConfigTenantBanner', { tenantName, rootName })}
+            />
         );
     }
     // !isGlobalSuper: Child Admin (or dept admin) on their own tenant. They
@@ -66,9 +69,11 @@ export function ScopeBanner({
     // that super sees in the !isRootScope branch above; do not tell them
     // to "switch view" since that UI does not exist for them.
     return (
-        <div className="mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
-            {t('model.systemConfigChildOwnBanner', { rootName })}
-        </div>
+        <Alert
+            type="warning"
+            className="mb-4"
+            description={t('model.systemConfigChildOwnBanner', { rootName })}
+        />
     );
 }
 
@@ -81,9 +86,11 @@ export function FallbackBlockedBanner({ visible }: { visible: boolean }): JSX.El
     const { t } = useTranslation('model');
     if (!visible) return null;
     return (
-        <div className="mb-3 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 text-sm text-yellow-900 dark:text-yellow-100">
-            {t('model.systemConfigFallbackBlockedBanner')}
-        </div>
+        <Alert
+            type="warning"
+            className="mb-3"
+            description={t('model.systemConfigFallbackBlockedBanner')}
+        />
     );
 }
 

@@ -1,12 +1,6 @@
-import { Button } from '@bisheng/ui';
+import { Button, Select } from '@bisheng/ui';
 
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/bs-ui/select'
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels'
 import { useTranslation } from 'react-i18next'
 
 interface ChoiceProps {
@@ -23,19 +17,18 @@ export function DshChoice({
     onChange,
     disabled,
 }: ChoiceProps) {
+    const selectLabels = useSelectLabels()
     return (
-        <Select value={value} onValueChange={onChange} disabled={disabled}>
-            <SelectTrigger aria-label={label} className="w-auto min-w-40">
-                <SelectValue placeholder={label} />
-            </SelectTrigger>
-            <SelectContent>
-                {options.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                    </SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
+        <Select
+            {...selectLabels}
+            className="w-auto min-w-40"
+            options={options.filter((option) => option.value != null && option.value !== '')}
+            value={value || null}
+            onChange={(v) => { if (v != null) onChange(String(v)) }}
+            disabled={disabled}
+            placeholder={label}
+            aria-label={label}
+        />
     )
 }
 interface PagerProps {

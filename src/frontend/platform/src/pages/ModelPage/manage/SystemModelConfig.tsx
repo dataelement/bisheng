@@ -130,7 +130,7 @@ export default function SystemModelConfig({
                     rootTenant={rootTenant}
                     childTenant={childTenant}
                 />
-                <Tabs activeKey={activeTab} onChange={(tab) => {
+                <Tabs className="[&_[role=tablist]]:px-4" activeKey={activeTab} onChange={(tab) => {
                     setActiveTab(tab)
                     onTabChange?.(tab)
                 }} items={[

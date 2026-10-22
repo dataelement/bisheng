@@ -179,17 +179,12 @@ class ContainerExecutor(LocalExecutor):
                 continue
             with open(abs_path, "rb") as fh:
                 members[rel] = fh.read()
-        payload = _tar_gz(members)
+        payload = _pack_copy_in(manifest, _tar_gz(members))
         self.copy_in_bytes = sum(len(blob) for blob in members.values())
         resp = self._request(
             "PUT",
             self._session_url("/files"),
-            headers={
-                **self._lease_headers(),
-                # HTTP headers are ASCII: keep \uXXXX escapes so Chinese paths
-                # (output/<中文>) cannot trip h11's ascii encode.
-                "X-File-Manifest": json.dumps(manifest, separators=(",", ":"), ensure_ascii=True),
-            },
+            headers=self._lease_headers(),
             content=payload,
             timeout=self.pool_acquire_timeout_s,
             op="files",
@@ -359,6 +354,16 @@ def _md5_file(path: str) -> str:
 
 def _open_tar(fileobj, mode: str):
     return tarfile.open(fileobj=fileobj, mode=mode, encoding="utf-8", format=tarfile.PAX_FORMAT)
+
+
+def _pack_copy_in(manifest: dict, tar_bytes: bytes) -> bytes:
+    """4-byte big-endian length, UTF-8 JSON manifest, then tar.gz.
+
+    ``ensure_ascii`` keeps Chinese paths as ``\\uXXXX`` so the length prefix
+    counts the bytes the runner will decode. Must match ``split_copy_in_body``.
+    """
+    raw = json.dumps(manifest, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return len(raw).to_bytes(4, "big") + raw + tar_bytes
 
 
 def _tar_gz(members: dict[str, bytes]) -> bytes:

@@ -1,21 +1,12 @@
-// @ts-strict-ignore
-import {
-  GlobeIcon,
-  Hammer,
-  KeyRound,
-  Pencil,
-  Settings2Icon
-} from "lucide-react";
-import { useEffect, useMemo } from "react";
-import { useRecoilValue } from "recoil";
-import { Switch } from '@bisheng/ui';
-import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
-import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { Button, Select } from '@bisheng/ui';
+import { GlobeIcon, Settings2Icon } from "lucide-react";
 import { useLocalize } from "~/hooks";
-import store from "~/store";
+import useSelectCopy from "~/hooks/useSelectCopy";
 
 import { BsConfig } from "~/types/chat";
 import { cn } from "~/utils";
+
+const NET_SEARCH = "netSearch";
 
 /**
  * @deprecated v2.5 — use `AgentToolSelector` instead.
@@ -39,132 +30,51 @@ export const ChatToolDown = ({
   compact?: boolean;
 }) => {
   const localize = useLocalize();
+  const selectCopy = useSelectCopy();
 
   if (!config?.webSearch.enabled) return null;
 
+  const active = searchType === NET_SEARCH;
+
+  // The tools are a multiple Select whose value is shown by the pill itself
+  // (the "arrow entry" trigger): the pill turns brand-tinted while a tool is on.
   return (
-    <Select disabled={disabled}>
-      <SelectTrigger
-        className={cn(
-          "h-7 rounded-full px-2 data-[state=open]:border-blue-500",
-          compact && "px-1.5",
-          searchType === "netSearch" && "bg-blue-100"
-        )}
-      >
-        <div
+    <Select
+      {...selectCopy}
+      multiple
+      disabled={disabled}
+      options={[
+        {
+          value: NET_SEARCH,
+          label: localize("com_tools_web_search"),
+          icon: <GlobeIcon className="text-text-3" />,
+        },
+      ]}
+      value={active ? [NET_SEARCH] : []}
+      onChange={(next) => setSearchType(next.includes(NET_SEARCH) ? NET_SEARCH : "")}
+      aria-label={localize("com_tools_title")}
+      trigger={
+        <Button
+          color="default"
+          variant="text"
+          disabled={disabled}
+          aria-label={localize("com_tools_title")}
           className={cn(
-            "flex items-center",
-            compact ? "gap-1" : "gap-2",
-            searchType === "netSearch" && "text-blue-600"
+            "rounded-full",
+            compact ? "gap-1 px-1.5" : "gap-2 px-2",
+            // Business on-state of the web-search switch, not a Select state.
+            active && "bg-blue-100 text-blue-600 hover:bg-blue-100 data-[menu-open]:bg-blue-100"
           )}
         >
-          <Settings2Icon size="16" />
-          {/* Compact: collapse to icon + chevron only to save horizontal space. */}
+          <Settings2Icon />
+          {/* Compact: collapse to icon only to save horizontal space. */}
           {!compact && (
-            <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)]">
+            <span className="truncate min-w-0 max-w-[min(36vw,140px)]">
               {localize("com_tools_title")}
             </span>
           )}
-        </div>
-      </SelectTrigger>
-      <SelectContent className="bg-white rounded-lg w-52">
-        {config?.webSearch.enabled && (
-          <div className="flex justify-between items-center px-2 py-[5px]">
-            <div className="flex gap-2 items-center">
-              <GlobeIcon className="text-text-3" size="16" />
-              <span className="text-sm font-normal">
-                {localize("com_tools_web_search")}
-              </span>
-            </div>
-            <Switch className="peer"
-
-              disabled={disabled}
-              checked={searchType === "netSearch"}
-              onCheckedChange={(val) => {
-                if (searchType === "netSearch") {
-                  setSearchType("");
-                } else {
-                  setSearchType("netSearch");
-                }
-              }}
-            ></Switch>
-          </div>
-        )}
-      </SelectContent>
-    </Select>
-  );
-};
-
-export const LinsiTools = ({ tools, setTools }) => {
-  const { data: bsConfig } = useGetBsConfig();
-  const localize = useLocalize();
-  const lang = useRecoilValue(store.lang);
-
-  useEffect(() => {
-    const defaultTools = [
-      {
-        id: "pro_knowledge",
-        name: localize("com_tools_org_knowledge"),
-        icon: <KeyRound size="16" />,
-        checked: true,
-      },
-      // {
-      //   id: "knowledge",
-      //   name: localize("com_tools_personal_knowledge"),
-      //   icon: <Pencil size="16" />,
-      //   checked: true,
-      // },
-    ];
-    if (bsConfig) {
-      const tools = bsConfig.linsightConfig?.tools || [];
-      const newTools = tools.map((tool) => ({
-        id: tool.id,
-        name: tool.name,
-        icon: <Hammer size="16" />,
-        checked: true,
-        data: tool,
-      }));
-      setTools((tools) => [...defaultTools, ...newTools]);
-    }
-  }, [bsConfig, lang]);
-
-  const active = useMemo(() => tools.some((tool) => tool.checked), [tools]);
-
-  return (
-    <Select>
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500 max-md:px-1.5">
-        <div className={cn("flex gap-2 max-md:gap-1", active && "text-blue-600")}>
-          <Settings2Icon size="16" />
-          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)] max-md:max-w-[min(18vw,56px)]">
-            {localize("com_tools_title")}
-          </span>
-        </div>
-      </SelectTrigger>
-      <SelectContent className="bg-white rounded-xl p-2 w-64">
-        {tools.map((tool) => {
-          return (
-            <div key={tool.name} className="flex justify-between mb-3.5">
-              <div className="flex gap-2 items-center">
-                {tool.icon}
-                <span className="max-w-36 text-xs font-normal line-clamp-1 flex-1 grow overflow-hidden">
-                  {tool.name}
-                </span>
-              </div>
-              <Switch
-                className="peer data-[state=checked]:bg-blue-600"
-                checked={tool.checked}
-                onCheckedChange={(val) =>
-                  setTools(
-                    tools.map((t) =>
-                      t.id === tool.id ? { ...t, checked: val } : t
-                    )
-                  )
-                }
-              ></Switch>
-            </div>
-          );
-        })}
-      </SelectContent>
-    </Select>
+        </Button>
+      }
+    />
   );
 };

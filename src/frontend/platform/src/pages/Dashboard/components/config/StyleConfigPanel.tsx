@@ -1,11 +1,14 @@
 // @ts-strict-ignore
-import { Button, Input } from '@bisheng/ui';
+import { Button, Input, Select } from '@bisheng/ui';
 
 
 
 import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+// The theme-color picker renders color swatches as its options, which the
+// shared Select (plain-text labels) cannot show, so it stays on the old one.
 import {
-Select,
+Select as LegacySelect,
 SelectContent,
 SelectItem,
 SelectTrigger,
@@ -40,8 +43,7 @@ function StyleTextFormat(props: TextFormatProps) { return <TextFormat {...props}
 export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CONFIG }: StyleConfigPanelProps) {
 
   const { t } = useTranslation("dashboard")
-
-
+  const selectLabels = useSelectLabels()
 
   const editingComponent = useComponentEditorStore(state => state.editingComponent)
 
@@ -146,7 +148,7 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
       >
         {type !== 'metric' &&
           <FormBlock label={t('styleConfigPanel.labels.themeColor')}>
-            <Select
+            <LegacySelect
               value={localConfig.themeColor || ""}
               onValueChange={(id) => {
                 handleChange("themeColor", id); // 直接存 id
@@ -189,7 +191,7 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </LegacySelect>
           </FormBlock>
         }
 
@@ -413,21 +415,20 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
             >
               <FormBlock label={t('styleConfigPanel.labels.legendPosition')}>
                 <Select
-                  value={localConfig.legendPosition}
-                  onValueChange={(v) =>
-                    handleChange("legendPosition", v as "top" | "bottom" | "left" | "right")
-                  }
-                >
-                  <SelectTrigger className="w-full h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="top">{t('styleConfigPanel.positions.top')}</SelectItem>
-                    <SelectItem value="bottom">{t('styleConfigPanel.positions.bottom')}</SelectItem>
-                    <SelectItem value="left">{t('styleConfigPanel.positions.left')}</SelectItem>
-                    <SelectItem value="right">{t('styleConfigPanel.positions.right')}</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {...selectLabels}
+                  className="w-full"
+                  options={[
+                    { value: "top", label: t('styleConfigPanel.positions.top') },
+                    { value: "bottom", label: t('styleConfigPanel.positions.bottom') },
+                    { value: "left", label: t('styleConfigPanel.positions.left') },
+                    { value: "right", label: t('styleConfigPanel.positions.right') },
+                  ]}
+                  value={localConfig.legendPosition || null}
+                  onChange={(v) => {
+                    if (v != null) handleChange("legendPosition", v as "top" | "bottom" | "left" | "right")
+                  }}
+                  aria-label={t('styleConfigPanel.labels.legendPosition')}
+                />
               </FormBlock>
 
               <FormBlock label={t('styleConfigPanel.labels.legendTextFormat')}>

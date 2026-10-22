@@ -10,9 +10,8 @@ import { useTranslation } from "react-i18next";
 
 
 
-import { Switch } from "@bisheng/ui";
+import { Dropdown, DropdownItem, DropdownSeparator, Switch } from "@bisheng/ui";
 import { Card,CardContent,CardDescription,CardFooter,CardHeader,CardTitle } from "../../bs-ui/card";
-import { DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger } from "../../bs-ui/dropdownMenu";
 
 interface IProps<T> {
   data: T,
@@ -115,12 +114,11 @@ export default function CardComponent<T>({
     if (res === false) return
     setChecked(bln)
   }
-  const showActionBar = Boolean(
-    onPermission ||
-    (edit && isAdmin && type !== 'assistant' && onAddTemp) ||
-    (showCopy && onCopy) ||
-    (!checked && onDelete)
-  )
+  const showAddTemp = Boolean(edit && isAdmin && type !== 'assistant' && onAddTemp)
+  const showCopyItem = Boolean(showCopy && onCopy)
+  const showDelete = Boolean(!checked && onDelete)
+  const hasPlainActions = Boolean(onPermission) || showAddTemp || showCopyItem
+  const showActionBar = hasPlainActions || showDelete
 
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
@@ -205,44 +203,46 @@ export default function CardComponent<T>({
           <span className="text-sm font-medium overflow-hidden text-ellipsis max-w-32 ">{user}</span>
         </div>
         {showActionBar && (
-          <div className={`${menuOpen ? 'flex' : 'hidden group-hover:flex'} gap-1 items-center`}>
-            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1 inline-flex items-center justify-center"
-                  aria-label={t('more')}
-                >
-                  <Outlined.Setting className="w-4 h-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+          // Menu clicks bubble through the portal; keep them off the card's onClick.
+          <div className={`${menuOpen ? 'flex' : 'hidden group-hover:flex'} gap-1 items-center`} onClick={(e) => e.stopPropagation()}>
+            <Dropdown
+              open={menuOpen}
+              onOpenChange={setMenuOpen}
+              align="end"
+              menu={<>
                 {onPermission && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPermission(data); }}>
-                    <Shield className="w-4 h-4" />
+                  <DropdownItem icon={<Shield />} onSelect={() => onPermission(data)}>
                     {t('system.managePermission')}
-                  </DropdownMenuItem>
+                  </DropdownItem>
                 )}
-                {edit && isAdmin && type !== 'assistant' && onAddTemp && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAddTemp(data); }}>
-                    <Outlined.FileAddition className="w-4 h-4" />
+                {showAddTemp && (
+                  <DropdownItem icon={<Outlined.FileAddition />} onSelect={() => onAddTemp(data)}>
                     {t('skills.createTemplate')}
-                  </DropdownMenuItem>
+                  </DropdownItem>
                 )}
-                {showCopy && onCopy && (
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onCopy(data); }}>
-                    <Outlined.Copy className="w-4 h-4" />
+                {showCopyItem && (
+                  <DropdownItem icon={<Outlined.Copy />} onSelect={() => onCopy(data)}>
                     {i18n.t('copy', { ns: 'flow' })}
-                  </DropdownMenuItem>
+                  </DropdownItem>
                 )}
-                {!checked && onDelete && (
-                  <DropdownMenuItem variant="destructive" onClick={(e) => { e.stopPropagation(); onDelete(data); }}>
-                    <Outlined.Delete className="w-4 h-4 text-destructive" />
-                    {i18n.t('delete', { ns: 'flow' })}
-                  </DropdownMenuItem>
+                {showDelete && (
+                  <>
+                    {hasPlainActions && <DropdownSeparator />}
+                    <DropdownItem danger icon={<Outlined.Delete />} onSelect={() => onDelete(data)}>
+                      {i18n.t('delete', { ns: 'flow' })}
+                    </DropdownItem>
+                  </>
                 )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </>}
+            >
+              <button
+                type="button"
+                className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1 inline-flex items-center justify-center"
+                aria-label={t('more')}
+              >
+                <Outlined.Setting className="w-4 h-4" />
+              </button>
+            </Dropdown>
           </div>
         )}
       </div>

@@ -4,16 +4,45 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import tarfile
 
 from leases import Lease
 
 _BLOCK = 64 * 1024
+# 4-byte length can claim up to 4 GiB. Cap the JSON before parsing it.
+_MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 
 
 class ZipSlipError(ValueError):
     pass
+
+
+class ManifestError(ValueError):
+    pass
+
+
+def split_copy_in_body(body: bytes) -> tuple[dict, bytes]:
+    """Split a copy-in body into the manifest and the tar.gz that follows it.
+
+    Layout: 4-byte big-endian byte length, UTF-8 JSON ``{rel_path: md5}``, then tar.gz.
+    The manifest used to ride in ``X-File-Manifest``. That header is buffered by the
+    HTTP parser only until it exceeds 16 KiB, so a workspace of a few hundred files
+    was rejected before the tar was read.
+    """
+    if len(body) < 4:
+        raise ManifestError("manifest length missing")
+    size = int.from_bytes(body[:4], "big")
+    if size > _MAX_MANIFEST_BYTES or 4 + size > len(body):
+        raise ManifestError("manifest length invalid")
+    try:
+        manifest = json.loads(body[4 : 4 + size].decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ManifestError("invalid manifest") from exc
+    if not isinstance(manifest, dict):
+        raise ManifestError("invalid manifest")
+    return manifest, body[4 + size :]
 
 
 def _rel_from_member(name: str) -> str:

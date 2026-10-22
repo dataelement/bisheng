@@ -1,4 +1,4 @@
-import { Button } from '@bisheng/ui';
+import { Alert, Button } from '@bisheng/ui';
 
 import {
 Dialog,
@@ -293,12 +293,11 @@ export function ImpactDialog({
         )}
 
         {expired && (
-          <p
-            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900"
-            role="alert"
-          >
-            {t("impact.expired")}
-          </p>
+          <Alert
+            type="warning"
+            description={t("impact.expired")}
+            live
+          />
         )}
 
         {publishFailed && (

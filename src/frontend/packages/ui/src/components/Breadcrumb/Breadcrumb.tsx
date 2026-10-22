@@ -3,6 +3,7 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Outlined } from 'bisheng-icons';
 import cn from '../../utils/cn';
 import { Tooltip } from '../Tooltip/Tooltip';
+import { PHONE_QUERY, useMediaQuery } from '../../utils/useMediaQuery';
 
 /**
  * Breadcrumb — where the current page sits in the structure (组件-Breadcrumb面包屑.md v1).
@@ -59,26 +60,6 @@ const DEFAULT_ITEMS_AFTER_COLLAPSE = 2;
 /** §6 — narrow: collapse past 3 levels, leaving `root · … · current`. */
 const NARROW_MAX_ITEMS = 3;
 const NARROW_ITEMS_AFTER_COLLAPSE = 1;
-
-/** §6 — the shared 576px breakpoint (基础-多端适配原则.md), not one of our own. */
-const NARROW_QUERY = '(max-width: 575.98px)';
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = React.useState(false);
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return;
-    }
-    const list = window.matchMedia(query);
-    const sync = () => setMatches(list.matches);
-    sync();
-    list.addEventListener('change', sync);
-    return () => list.removeEventListener('change', sync);
-  }, [query]);
-
-  return matches;
-}
 
 /** §3 — an icon, never a text `>`: `>` is a maths glyph that sits low next to CJK. */
 function Separator() {
@@ -162,7 +143,7 @@ export function Breadcrumb({
   ariaLabel = 'breadcrumb',
   className,
 }: BreadcrumbProps) {
-  const narrow = useMediaQuery(NARROW_QUERY);
+  const narrow = useMediaQuery(PHONE_QUERY);
   const [menuOpen, setMenuOpen] = React.useState(false);
   // The ellipsis tooltip is driven entirely by pointer enter/leave: Radix would
   // otherwise re-open it from the focus it hands back to the trigger when the

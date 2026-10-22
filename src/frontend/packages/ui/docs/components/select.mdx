@@ -1,0 +1,239 @@
+---
+status: draft
+component: Select
+statusNote: 桌面端已落地；手机档底部面板（§9）待做，业务未迁移
+---
+
+# 选择器 Select
+
+从一组给定的选项里挑出一个或几个值，挑完把结果显示在框里。组件库 `@bisheng/ui` 导出 **`Select`**，用 `options` 传选项。规范全文见「文档 → 组件规范 → 选择器 Select」。
+
+**壳把规范写死的部分**：描边形态的触发器就是输入框的外壳——24 / 32 / 40 三档、灰描边 + 灰阴影环聚焦、错误 / 警告 / 只读 / 禁用照搬输入框；展开画法同聚焦、下箭头翻转。面板与下拉菜单共用一套：页面底色 + 浮层投影、12px 圆角、6px 内边距、选项行固定 32px（small 触发器点开也是 32px）、最高 8 行后滚动、深色下补 1px 描边；面板在下方左对齐、放不下翻到上方、**不盖住触发器**。单选选中项右侧品牌色 ✓ + 字重 500、**不铺底色**（底色只给悬停）；多选左侧复选框、选了不关面板。这些没有 prop。
+
+点了是**执行动作**（重命名、删除）的，用[下拉菜单](/components/dropdown)；判别方法：点完之后框里要不要显示「选了什么」。
+
+## 基础用法
+
+能给默认值就给，挑大多数人会选的那一项；没有合理默认值才写占位文字「请选择 + 对象」。宽度跟随布局，`className` 落在触发器外壳上。
+
+```tsx
+import React from 'react';
+import { Select } from '@bisheng/ui';
+
+const OPTIONS = [
+  { value: 'latest', label: '最新' },
+  { value: 'hot', label: '最热' },
+  { value: 'name', label: '名称' },
+];
+
+export default () => {
+  const [sort, setSort] = React.useState<string | number | null>('latest');
+  return (
+    <div style={{ display: 'grid', gap: 12, maxWidth: 320 }}>
+      <Select options={OPTIONS} value={sort} onChange={setSort} aria-label="排序" />
+      <Select options={OPTIONS} placeholder="请选择排序方式" aria-label="排序" />
+    </div>
+  );
+};
+```
+
+## 三档尺寸
+
+与输入框同一套阶梯，同一行的输入框和选择器用同一档，天然对齐。面板不随触发器分档。
+
+```tsx
+import React from 'react';
+import { Input, Select } from '@bisheng/ui';
+
+const OPTIONS = [
+  { value: 'day', label: '按天' },
+  { value: 'week', label: '按周' },
+  { value: 'month', label: '按月' },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, maxWidth: 420 }}>
+    {['small', 'medium', 'large'].map((size) => (
+      <div key={size} style={{ display: 'flex', gap: 8 }}>
+        <Input size={size} placeholder={size} />
+        <Select size={size} options={OPTIONS} defaultValue="week" className="w-40" aria-label="统计粒度" />
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 图标、说明与分组
+
+选项可带 16px 前缀图标和一行说明；**同一组要么都有图标、要么都没有**。选项超过 8 个且能自然归类时用 `group` 分组。长文字单行截断，悬停出完整文字。
+
+```tsx
+import React from 'react';
+import { Outlined } from 'bisheng-icons';
+import { Select } from '@bisheng/ui';
+
+const OPTIONS = [
+  { value: 'gpt', label: 'GPT-4o', description: '通用对话，响应快', group: '云端模型', icon: <Outlined.Application /> },
+  { value: 'claude', label: 'Claude', description: '长文本与代码', group: '云端模型', icon: <Outlined.Application /> },
+  { value: 'qwen', label: 'Qwen2.5-72B-Instruct-GPTQ-Int4-私有化部署版本', description: '内网部署', group: '私有模型', icon: <Outlined.Application /> },
+  { value: 'glm', label: 'GLM-4', group: '私有模型', icon: <Outlined.Application />, disabled: true },
+];
+
+export default () => (
+  <Select options={OPTIONS} defaultValue="gpt" className="w-72" aria-label="模型" />
+);
+```
+
+## 多选
+
+已选项是 small 可关闭标签，**触发器高度固定不长高**：放不下的折成「+N」，悬停「+N」看被折叠的项。多选选完不关面板，点外部或按 ESC 才关。
+
+```tsx
+import React from 'react';
+import { Select } from '@bisheng/ui';
+
+const OPTIONS = ['产品手册', '售后 FAQ', '合同模板', '员工手册', '技术白皮书', '竞品分析'].map((label, i) => ({
+  value: i,
+  label,
+}));
+
+export default () => {
+  const [value, setValue] = React.useState<(string | number)[]>([0, 1, 2, 3]);
+  return (
+    <div style={{ display: 'grid', gap: 12, maxWidth: 320 }}>
+      <Select
+        multiple
+        options={OPTIONS}
+        value={value}
+        onChange={setValue}
+        placeholder="请选择知识库"
+        removeLabel="移除"
+        aria-label="知识库"
+      />
+    </div>
+  );
+};
+```
+
+## 搜索与一键清除
+
+**选项超过 10 个自动开搜索**，在触发器里直接打字，原值变成浅色提示留在框里；`showSearch` 可显式覆盖。`allowClear` 有值且悬停时，清除图标替换下箭头——搜索、筛选类开，正式表单不开。
+
+```tsx
+import React from 'react';
+import { Select } from '@bisheng/ui';
+
+const CITIES = ['北京', '上海', '广州', '深圳', '杭州', '南京', '成都', '武汉', '西安', '苏州', '重庆', '天津'].map(
+  (label) => ({ value: label, label }),
+);
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, maxWidth: 320 }}>
+    <Select options={CITIES} defaultValue="杭州" allowClear clearLabel="清除" noMatchText="无匹配结果" aria-label="城市" />
+    <Select multiple options={CITIES} placeholder="请选择城市" allowClear clearLabel="清除" noMatchText="无匹配结果" aria-label="城市" />
+  </div>
+);
+```
+
+## 空、加载
+
+面板里只放一行文字，不放插画。文案全部由调用方传入（`emptyText` / `noMatchText` / `loadingText`）。服务端搜索用 `onSearch`（防抖 300ms）+ `loading`；滚到底加载更多用 `onLoadMore` + `loadingMore`。
+
+```tsx
+import React from 'react';
+import { Select } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+    <Select options={[]} placeholder="暂无选项" emptyText="暂无数据" className="w-48" aria-label="空" />
+    <Select options={[]} placeholder="加载中" loading loadingText="正在加载…" className="w-48" aria-label="加载" />
+  </div>
+);
+```
+
+## 状态
+
+触发器七态照搬输入框。只读不显示下箭头、不展开；无边框与图标形态不承载校验。
+
+```tsx
+import React from 'react';
+import { Select } from '@bisheng/ui';
+
+const OPTIONS = [{ value: 'a', label: '默认模型' }, { value: 'b', label: '备用模型' }];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, maxWidth: 320 }}>
+    <Select options={OPTIONS} status="error" placeholder="错误" aria-label="错误" />
+    <Select options={OPTIONS} status="warning" placeholder="警告" aria-label="警告" />
+    <Select options={OPTIONS} defaultValue="a" readOnly aria-label="只读" />
+    <Select options={OPTIONS} defaultValue="a" disabled aria-label="禁用" />
+  </div>
+);
+```
+
+## 触发器形态
+
+先按位置挑形态，**表单里一律用描边**。`ghost`（无边框）给工具栏、对话输入区、标题行里的切换，画法同文字按钮、展开只铺浅灰底；`icon` 给空间极紧且每项都有认得出的图标的场景，悬停提示当前值，`aria-label` 必传。
+
+```tsx
+import React from 'react';
+import { Outlined } from 'bisheng-icons';
+import { Select } from '@bisheng/ui';
+
+const MODELS = [
+  { value: 'default', label: '默认模型' },
+  { value: 'reasoning', label: '深度思考模型' },
+];
+const VIEWS = [
+  { value: 'list', label: '列表视图', icon: <Outlined.List /> },
+  { value: 'grid', label: '卡片视图', icon: <Outlined.ViewGridCard /> },
+];
+
+export default () => (
+  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+    <Select variant="ghost" options={MODELS} defaultValue="default" aria-label="切换模型" />
+    <Select variant="ghost" radius="full" options={MODELS} defaultValue="reasoning" aria-label="切换模型" />
+    <Select variant="icon" options={VIEWS} defaultValue="list" aria-label="切换视图" />
+  </div>
+);
+```
+
+## 圆角配置
+
+只有一个理由换圆角：和所在区域的同级元素对齐。用 `radius`（触发器，含 `full`）/ `panelRadius`（面板，不含 `full`）换档，**不要用 `className="rounded-*"` 覆盖**；选项行圆角随面板自动同心。
+
+```tsx
+import React from 'react';
+import { Select } from '@bisheng/ui';
+
+const OPTIONS = [{ value: 'a', label: '全部空间' }, { value: 'b', label: '我创建的' }, { value: 'c', label: '我加入的' }];
+
+export default () => (
+  <div style={{ display: 'flex', gap: 12 }}>
+    <Select options={OPTIONS} defaultValue="a" radius="full" className="w-40" aria-label="空间" />
+    <Select options={OPTIONS} defaultValue="a" panelRadius="2xl" className="w-40" aria-label="空间" />
+  </div>
+);
+```
+
+## API
+
+| 属性 | 说明 | 类型 | 默认 |
+|---|---|---|---|
+| `options` | 选项列表 | `SelectOption[]` | — |
+| `multiple` | 多选 | `boolean` | `false` |
+| `value` / `defaultValue` | 单选为一个值或 `null`，多选为数组 | `SelectValue \| null` / `SelectValue[]` | — |
+| `onChange` | 值变化 | `(value, option) => void` | — |
+| `size` | 三档 | `'small' \| 'medium' \| 'large'` | `'medium'` |
+| `variant` | 触发器形态 | `'outlined' \| 'ghost' \| 'icon'` | `'outlined'` |
+| `status` | 校验状态，仅描边形态 | `'default' \| 'error' \| 'warning'` | `'default'` |
+| `radius` / `panelRadius` | 圆角档 | 圆角 token 名 | 随尺寸 / `'xl'` |
+| `showSearch` | 触发器内搜索 | `boolean` | 选项 > 10 时开 |
+| `onSearch` / `filterOption` | 服务端搜索 / 本地过滤 | — | — |
+| `allowClear` / `onClear` | 一键清除 | `boolean` | `false` |
+| `loading` / `onLoadMore` / `loadingMore` | 加载、滚到底加载更多 | — | — |
+| `open` / `defaultOpen` / `onOpenChange` | 受控展开 | — | — |
+| `trigger` | 「箭头入口」：值显示在旁边元素上时的自定义触发元素，必须带 `aria-label` | `ReactElement` | — |
+| `placeholder` / `emptyText` / `noMatchText` / `loadingText` / `clearLabel` / `removeLabel` | 文案，组件库不自带中文 | `string` | 英文兜底 |
+
+`SelectOption`：`value`、`label`（纯文本，搜索按它匹配）、`icon`、`description`、`disabled`、`group`。

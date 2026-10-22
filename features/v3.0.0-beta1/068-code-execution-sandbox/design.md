@@ -270,7 +270,7 @@ flowchart TB
 | 方法 | 路径 | 鉴权 | 语义 |
 |---|---|---|---|
 | `POST` | `/v1/sessions` | 全局 `token`（只给 worker） | 领租约 → `{session_id, lease_token, lease_expires_at}` |
-| `PUT` | `/v1/sessions/{id}/files` | 该会话 `lease_token` | tar.gz 流式 copy-in，随带 `{rel_path: md5}` 清单做 delta |
+| `PUT` | `/v1/sessions/{id}/files` | 该会话 `lease_token` | body：4 字节大端长度 + UTF-8 JSON `{rel_path: md5}` + tar.gz |
 | `POST` | `/v1/sessions/{id}/exec` | 该会话 `lease_token` | `{code, lang, timeout_s}` → `{exitcode, stdout, stderr, duration_ms}` |
 | `GET` | `/v1/sessions/{id}/files` | 该会话 `lease_token` | tar.gz 拉回本轮新增/修改文件 |
 | `DELETE` | `/v1/sessions/{id}` | 该会话 `lease_token` | 擦除运行目录、释放租约 |
@@ -287,7 +287,7 @@ copy-in：
 2. 只收普通文件和目录；跳过 socket / 设备；相对路径与 tar 成员都拒绝 `..` 和绝对路径（zip-slip）。
 3. 单文件超过 `max_copy_in_bytes`：跳过并在日志点名（AC-10），不拆整租约。
 4. 按相对路径算 md5，对比 runner 内存表 `md5_index`：相同则本轮不进 tar。
-5. `PUT .../files`，body 为流式 tar.gz，清单走请求头 `X-File-Manifest`（JSON `{rel_path: md5}`）。不要按文件拆多次 HTTP。
+5. `PUT .../files`。body 依次是 4 字节大端长度、UTF-8 JSON 清单 `{rel_path: md5}`、tar.gz。清单不放请求头：请求头在没收齐时只缓冲 16 KiB，几百个文件就会被 HTTP 解析器直接丢掉。不要按文件拆多次 HTTP。
 6. runner 校验租约 → 跳过已命中路径 → 解到本 UUID 目录 → 更新 `md5_index`。独立 uid 模式：root 写入再 `chown -R`。
 7. copy-in 是按相对路径 **upsert**。worker 侧已删除的文件本期不从 runner 删（整租约 DELETE 才清空）。sticky 第二轮因此只补增量。
 

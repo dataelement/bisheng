@@ -344,3 +344,23 @@ class TestPersonalSkillCreate:
             assert caught.value.code == 11053
             gate.assert_not_called()
             assert env.service._owner_projection.authorize_created.await_count == calls
+
+    async def test_inspect_upload_checks_the_file_and_does_not_save_it(self, env):
+        with pytest.raises(SkillEmptyFileError):
+            await env.service.inspect_upload(user_id=USER, filename="empty.md", data=b"", content_type="text/plain")
+        preview = await env.service.inspect_upload(
+            user_id=USER, filename="pdf.md", data=_md("pdf"), content_type="text/plain"
+        )
+        assert preview.name == "pdf"
+        assert preview.display_name == "报告"
+        assert "SKILL.md" in preview.files
+        assert await env.dao.get_by_name("pdf", owner_user_id=USER) is None
+        assert list(env.unpack.iterdir()) == []
+
+        await env.service.create(
+            user_id=USER, filename="pdf.md", data=_md("pdf"), import_id="imp-check", content_type="text/plain"
+        )
+        with pytest.raises(SkillNameDuplicateError):
+            await env.service.inspect_upload(
+                user_id=USER, filename="pdf.md", data=_md("pdf"), content_type="text/plain"
+            )
