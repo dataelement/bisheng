@@ -1101,12 +1101,14 @@ class KubernetesExecutor:
         return result
 
     def _phase(self, operation, stage, purpose, document, *, plan=None, result_container=None):
+        self._startup_checkpoint(operation)
         current = self.platform.operation(operation["operation_id"])
         previous = current.get("result", {}).get("prepare_progress", {}).get(stage)
         if previous:
             self.request_stop(previous["exec_ref"], operation)
             if not self.confirm_stopped(previous["exec_ref"])["stopped"]:
                 raise ExecutorError("preparation_writer_stop_unconfirmed")
+            self._startup_checkpoint(operation)
             return previous["result"]
         if plan is None:
             _, profile = self._delivery_profile(operation)
@@ -1134,11 +1136,13 @@ class KubernetesExecutor:
         row = self._intent(operation, plan, template, plan.resource_ref)
         self._volume(operation, plan)
         grant = self._material(operation, plan) if plan.material_secret else None
+        self._startup_checkpoint(operation)
         pod = self._create(row, template)
         if grant:
             self.platform.bind_material_delegation(grant["delegation_id"], pod["metadata"]["uid"])
         deadline = min(_seconds(operation["deadline"]), self.clock.time() + plan.deadline_seconds)
         while True:
+            deadline = min(deadline, self._startup_checkpoint(operation))
             self._controller()
             pod = self._fresh(self.platform.resource(plan.resource_ref))
             status = pod.get("status", {})
@@ -1165,6 +1169,7 @@ class KubernetesExecutor:
             if self.clock.time() >= deadline:
                 raise ExecutorError("preparation_phase_timeout", tail=self._diagnostic(operation, plan.resource_ref))
             self.clock.sleep(min(1, deadline - self.clock.time()))
+        self._startup_checkpoint(operation)
         self._save_progress(operation, stage, plan.resource_ref, result)
         self.request_stop(plan.resource_ref, operation)
         if not self.confirm_stopped(plan.resource_ref)["stopped"]:
