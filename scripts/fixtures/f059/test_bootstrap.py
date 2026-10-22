@@ -252,6 +252,8 @@ class FixtureApi:
     non_test_user = False
     invalid_routes = False
     wrong_tenant = False
+    approver_already_admin = False
+    admin_list_error = False
     values = {}
 
     def __init__(self, base, client):
@@ -299,6 +301,10 @@ class FixtureApi:
             return user
         if (method, path) == ("GET", "/user/current-tenant"):
             return {"leaf_tenant_id": 1 if self.wrong_tenant else (3 if role == "FOREIGN" else 2)}
+        if method == "GET" and path == "/tenants/2/admins":
+            if self.admin_list_error:
+                raise bootstrap.BootstrapError("api_refused_admin_list")
+            return {"user_ids": [5] if self.approver_already_admin else []}
         if method == "POST" and path == "/tenants/2/admins":
             assert body == {"user_id": 5}
             return {}
@@ -333,7 +339,7 @@ async def run_setup(tmp_path, monkeypatch, **flags):
     suite, output, values = environment(tmp_path)
     FixtureApi.calls = []
     FixtureApi.values = values
-    for name in ("non_test_user", "invalid_routes", "wrong_tenant"):
+    for name in ("non_test_user", "invalid_routes", "wrong_tenant", "approver_already_admin", "admin_list_error"):
         monkeypatch.setattr(FixtureApi, name, flags.get(name, False))
     monkeypatch.setattr(bootstrap, "Api", FixtureApi)
 
@@ -558,3 +564,23 @@ def test_profile_immutable_conflict_is_not_retried_as_override(tmp_path, monkeyp
     assert not any(
         method == "PUT" and path == "/runtime/profiles/default" for method, path, role, kwargs in FixtureApi.calls
     )
+
+
+@pytest.mark.parametrize("already_granted", [False, True])
+def test_bootstrap_queries_admin_grants_and_only_adds_missing_approver(tmp_path, monkeypatch, already_granted):
+    state, _suite = asyncio.run(run_setup(tmp_path, monkeypatch, approver_already_admin=already_granted))
+    calls = [
+        (method, kwargs.get("json")) for method, path, role, kwargs in FixtureApi.calls if path == "/tenants/2/admins"
+    ]
+    expected = [("GET", None)] if already_granted else [("GET", None), ("POST", {"user_id": 5})]
+    assert calls == expected
+    assert state["complete"] is True
+    assert len(state["profiles"]) == 3 and state["approval"]["manual"] is True
+
+
+def test_admin_list_failure_is_not_ignored_or_followed_by_grant(tmp_path, monkeypatch):
+    with pytest.raises(bootstrap.BootstrapError, match="api_refused_admin_list"):
+        asyncio.run(run_setup(tmp_path, monkeypatch, admin_list_error=True))
+    assert any(method == "GET" and path == "/tenants/2/admins" for method, path, role, kwargs in FixtureApi.calls)
+    assert not any(method == "POST" and path == "/tenants/2/admins" for method, path, role, kwargs in FixtureApi.calls)
+    assert not any(path.startswith("/approval/") for method, path, role, kwargs in FixtureApi.calls)
