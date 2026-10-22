@@ -26,7 +26,9 @@ class TestE2EVibeKubernetesRuntime:
         settings = SuiteSettings.from_env()
         evidence = Path(os.environ.get("F059_E2E_EVIDENCE", str(tmp_path_factory.mktemp("f059") / "api-evidence.json")))
         journal = EvidenceJournal(evidence, tenant_code=settings.tenant_code)
-        async with httpx.AsyncClient(timeout=75, trust_env=False, follow_redirects=False) as client:
+        async with httpx.AsyncClient(
+            timeout=75, trust_env=False, follow_redirects=False, verify=settings.ssl_context
+        ) as client:
             live = LiveVibeSuite(settings, journal, client)
             await live.authenticate()
             await live.installation()

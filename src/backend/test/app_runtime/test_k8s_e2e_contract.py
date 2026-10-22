@@ -587,3 +587,48 @@ def test_entry_evidence_never_sends_identity_to_an_unexpected_origin(monkeypatch
     monkeypatch.setenv("F059_E2E_ENTRY_BASE", "https://entry.invalid")
     with pytest.raises(AssertionError):
         LiveVibeSuite.entry_url(entry)
+
+
+async def test_pytest_live_fixture_uses_same_verified_tls_context_as_cli(tmp_path, monkeypatch):
+    """AC-36, AC-55: pytest and CLI use the same explicit CA without disabling verification."""
+    from test.e2e import test_e2e_vibe_k8s_runtime as live
+
+    settings = SuiteSettings("e2e-f059-tenant", ())
+    monkeypatch.setattr(live.SuiteSettings, "from_env", lambda: settings)
+    monkeypatch.setenv("F059_E2E_EVIDENCE", str(tmp_path / "evidence.json"))
+    observed, cleanup = [], []
+
+    class Client:
+        def __init__(self, **kwargs):
+            observed.append(kwargs)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class Suite:
+        def __init__(self, actual_settings, journal, client):
+            assert actual_settings is settings
+
+        async def authenticate(self):
+            return None
+
+        async def installation(self):
+            return None
+
+        async def cleanup(self):
+            cleanup.append(True)
+
+    monkeypatch.setattr(live.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(live, "LiveVibeSuite", Suite)
+    from types import SimpleNamespace
+
+    fixture = live.TestE2EVibeKubernetesRuntime.suite.__wrapped__(None, SimpleNamespace(mktemp=lambda name: tmp_path))
+    assert isinstance(await anext(fixture), Suite)
+    with pytest.raises(StopAsyncIteration):
+        await anext(fixture)
+    assert observed[0]["verify"] is settings.ssl_context
+    assert observed[0]["trust_env"] is False
+    assert cleanup == [True, True]
