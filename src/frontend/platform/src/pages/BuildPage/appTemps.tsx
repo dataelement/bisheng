@@ -3,7 +3,7 @@ import { Button } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { AppType } from "@/types/app";
 import { useEffect, useState } from "react";
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -117,6 +117,7 @@ export default function Templates() {
                                         )}
                                     </Draggable>
                                 )}
+                                {provided.placeholder}
                             </TableBody>
                         )}
                     </Droppable>
