@@ -1699,6 +1699,7 @@ direct member、department member 和无权限用户；文档/日志不保存固
 | 旧事实 | 新事实 | 规则 |
 |---|---|---|
 | 直接 owner/manager/editor/viewer tuple，无 binding | standard model Grant assignee | 只迁直接 tuple，不迁 computed/parent 蕴含 |
+| `user_group:{id}#admin` 的旧 `manager/can_manage` | `LEGACY_USER_GROUP_ADMIN_MANAGER_RETIRED` INFO 审计项 | 新用户组不再按管理员身份单独授予资源管理权限；无论是否匹配 binding 均不创建 Grant/visible contribution，不改授 `#member`，旧 tuple 仍进入核对后的退役计划；成员授权和创建者 owner 保留 |
 | tuple 唯一匹配 binding | binding 映射后的 model Grant assignee | 不额外创建 standard Grant |
 | 编辑过的旧 system model | `legacy-system-<relation>-<hash>` historical custom | 不污染新标准模型 |
 | Config custom model | custom model snapshot | 仅含 `view_*` 时保留 active visibility-only 模型，action 为空但 Grant 仍可见；不得映射到带 level-1 动作的 Viewer 标准模型 |
@@ -1819,6 +1820,12 @@ migration run。使用 `scripts/reconcile_f048_visible_projection.py` 执行独�
    fingerprint 和 tuple key 前向续跑；成功后重启服务，由稳定 Store name 自动发现新 model。
 
 ### 8.3 正式迁移命令与启服门禁
+
+仍使用旧 RBAC、尚未完成 F006 的环境，必须先升级到包含 F006 的 2.5.x 版本，按该版本
+说明完成权限数据迁移与验证（regression=0，并核对非管理员账号的资源访问），再升级到
+后续目标版本并执行 F048。F048 的输入是已迁移的旧 ReBAC tuple 与 Config，不承担旧
+`roleaccess` 的首次转换；当前版本不恢复 F006，也不得在 F048 环境运行它。已完成 F006
+的旧 ReBAC 环境无需重复中间阶段，升级时保留原数据库和 OpenFGA Store。
 
 Schema 命令只有 `alembic upgrade head`，revision 只做 DDL。F048 数据迁移入口固定为
 `src/backend/scripts/migrate_f048_permission_data.py`；它提供 `migrate` 和 `verify`，
@@ -1971,6 +1978,8 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-10-22 | 明确纯 RBAC 老环境先在 2.5.x 完成 F006 及验证，再升级到后续版本执行 F048；当前分支不恢复 F006 | 用户选择分阶段升级路径 |
+| 2026-10-22 | F048 迁移退役旧用户组管理员默认 manager 授权；旧 F006 入口已删除，不恢复；成员授权和创建者权限继续保留 | 用户明确新用户组只有成员与创建人，不再为管理员分别授予资源管理权限 |
 | 2026-10-08 | 父子资源按类型与 ID 判定自关联；上传失败逐文件按创建 ledger 撤权并清理镜像、存储对象及业务记录，保留补偿审计和失败恢复边界 | beta3 根目录上传 ID 碰撞及整批权限清理中断 |
 | 2026-09-14 | 修正指定文件夹列表/搜索的容器鉴权，补充服务账号多级继承、编辑者/所有者动作、CUSTOM 隔断、撤权与历史标记修复回归 | v2 服务账号访问知识空间与独立授权文件夹的排查 |
 | 2026-08-13 | 对单槽浅层 visible、inactive 既有授权保持、删除零引用门禁、旧系统单次迁移、列表路径、契约/依赖/测试/可观测执行 24 项 Design 接手测试与 Constitution Check；复审 LGTM，停在 Design ★ | `/sdd-review ... design` |
