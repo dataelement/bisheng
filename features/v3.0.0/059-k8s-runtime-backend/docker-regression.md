@@ -62,3 +62,14 @@ DM8按既有确认仅模型/DDL规范静态检查；通用SQLAlchemy dm分支编
 ## 5. L1
 
 架构分层 PASS；命名与AC PASS；平台envelope/CSV/WS协议 PASS；数据库 N/A（只更新fixture和约束断言）；前端 N/A；信息泄漏 PASS（安全env、私有journal、无响应体日志）；设计同步 PASS（不改生产接口）。真实验收与SDD汇总文件由主agent合流后更新。
+
+## 109 平台业务增量（54b runtime / 7b 验收同步）
+
+专用 `/opt/e2e-f059-docker-platform`，真实 MySQL/Redis/MinIO/OpenFGA/backend/Celery 与三代理，固定 manager manifest digest `26f61e7b…`；profile revision=1。
+
+- Python、Node、static 的 bundle 均通过两版真实发布、预检、独立审批、预览、入口和停用恢复。Python/Node 的 WebSocket 允许/拒绝配对通过；Python 的 SDK 身份/OBO、真实附件往返、SQLite 查改导出与跨停启保留通过。三组 owner/nonowner/foreign 边界由实际接口校验。
+- 运行数据 helper 的 WAL 读问题已修复并在以上 Python 平台路径复验。停止/恢复工具等待精确操作终态后再检查数据，不吞临时维护错误。
+- 第四个 source-image 构建完成，但以 `16124 / precheck_probe / startup_exited` 失败；该旧版 Docker 路径是裸 Python 基础镜像，空 requirements 的夹具缺 SDK 物料。T191–T193 补可校验离线 vendor，失败记录保留。
+- 完整镜像已另起固定两 digest 的专用批次，尚未计通过。source-image、缺依赖、故障/恢复/删除及最终非测试清单仍待闭合，T067 保持 pending。
+
+固定日志摘要、应用 ID 与步骤见同名 JSON。此处不将成功的代理请求当作宿主防火墙实际阻断证据，也不宣称真实模型正向调用已验证。

@@ -7,7 +7,7 @@
     "design_confirmed": true,
     "tasks_review": "LGTM",
     "l1_completed": 185,
-    "tasks_total": 190,
+    "tasks_total": 195,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -289,15 +289,23 @@
       "registry_check": true,
       "real_api_negative_pairs": 3,
       "without_manager_restart": true
+    },
+    "docker_platform_partial": {
+      "evidence": "docker-regression.json",
+      "state": "three_bundle_languages_two_revisions_passed",
+      "all_platform_acceptance": false
+    },
+    "docker_cancel": {
+      "evidence": "e2e-evidence/fault-upgrade.json",
+      "state": "passed_one_real_cancel",
+      "all_fault_acceptance": false
     }
   },
   "not_executed": [
-    "real Kubernetes deployment on 189",
-    "F059 full platform E2E",
-    "new revisions on real MySQL or DM8",
-    "DM8 driver-specific DDL (generic compiler only)",
-    "new image multi-architecture CI build",
-    "offline installation"
+    "F059 complete platform and fault acceptance on 189 and 109",
+    "DM8 driver-specific migration/DDL (static-only by user instruction)",
+    "formal multi-architecture public CI image release",
+    "full distribution air-gapped installation and cross-node recovery"
   ],
   "blocking_integration_prerequisite": null,
   "release_parent": "9d156f261cc7769fcf75f41caeb104a425308017",

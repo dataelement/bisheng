@@ -1,0 +1,58 @@
+{
+  "schema": "f059-fault-upgrade-evidence/v1",
+  "state": "in_progress",
+  "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+  "host": "192.168.106.109",
+  "actual_cancel": {
+    "accepted": {
+      "app_id": "6808639e9f3d403a9c0b6c5390e2c558",
+      "deployment_id": "6ae3fc39eb474682b48570b494fde720",
+      "version_id": "a77ee78b33f64a999edadb1feeecb4c7"
+    },
+    "operation_id": "f26cb75f06864bb4906bce5d1521511f",
+    "events": [
+      {
+        "name": "owner-cancel-prepare",
+        "operation_id": "f26cb75f06864bb4906bce5d1521511f",
+        "status": "cancelled",
+        "reason": "operation_cancelled",
+        "cleanup_status": "complete",
+        "nonowner_code": 16105,
+        "foreign_code": 16105,
+        "observed_at": 1792675705.1564524,
+        "infrastructure_cleanup_requires_operator_uid_evidence": true
+      }
+    ],
+    "hook_begin_verified": true,
+    "exact_container_id": "66cc7e04717f0ae0e3f9132927ca0a5e7a99a1b67a512258bac5db7dc4fd710e",
+    "cleanup": {
+      "operation_id": "f26cb75f06864bb4906bce5d1521511f",
+      "container_id": "66cc7e04717f0ae0e3f9132927ca0a5e7a99a1b67a512258bac5db7dc4fd710e",
+      "absent_twice": true,
+      "remaining_operation_containers": 0,
+      "operator_force_cleanup": false
+    },
+    "evidence_sha256": {
+      "fault-cancel-d109c2-hook.log": "964209dd9f3c54cb38c768b7a80601e466859012b0e7fdc6718f913aaacbb083",
+      "fault-cancel-d109c2-container.txt": "cd6ef7b8a34db4b426b949495bff910e37c74f008ccab531d6960a83706855b0",
+      "fault-cancel-d109c2.json": "2eb71ee50ba89f14982e6963dde89204ceb646787008a3960edc17e0e6d6726c",
+      "fault-cancel-d109c2-cleanup.json": "21414a7f7e192899e92f087053f1d827dc61897674d5d2664f6ea74617411f7a"
+    },
+    "private_dir": "/opt/e2e-f059-docker-platform/evidence",
+    "scope": "real slow npm root postinstall; owner public cancel; nonowner/foreign rejected; natural cleanup, no force deletion"
+  },
+  "rejected_setup_attempt": {
+    "slug": "e2e-f059-cancel-d109c1",
+    "reason": "operator chose profile revision 2 but Docker environment uses revision 1",
+    "cancel_verified": false,
+    "record_retained": true
+  },
+  "not_executed": [
+    "189 cancel/init fault and unknown writer",
+    "manager restart or response loss in flight",
+    "migration failure and protected snapshot restoration",
+    "runtime upgrade/uninstall retention",
+    "NodeLost or cross-node fencing"
+  ],
+  "boundary": "local fixture/HTTP proxy preparations do not count as deployed fault proof; T070 remains pending"
+}

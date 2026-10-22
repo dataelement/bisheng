@@ -4892,6 +4892,54 @@
       "review": "pending"
     },
     {
+      "id": "T194",
+      "wave": 7,
+      "kind": "测试",
+      "title": "真实manifest引用与冻结profile分离",
+      "files": [
+        "src/runtime-manager/tests/test_kubernetes_executor.py"
+      ],
+      "logic": "使用真实BundleDelivery.model_dump的显式profile字符串和已解析payload.profile，覆盖prepare及运行resolved_delivery；错误类型在资源调用前明确拒绝，不被宽松桩掩盖。",
+      "acs": [
+        "AC-04",
+        "AC-24",
+        "AC-25",
+        "AC-36",
+        "AC-55"
+      ],
+      "depends": [
+        "T186"
+      ],
+      "pair": "T195",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T195",
+      "wave": 7,
+      "kind": "实现",
+      "title": "K8s计划仅消费已解析profile对象",
+      "files": [
+        "src/runtime-manager/runtime_manager/executors/kubernetes.py"
+      ],
+      "logic": "prepare只取已解析payload.profile，运行取resolved_delivery.profile；manifest字符串仅作为引用，不当作dict、不默默fallback错误对象，保持平台冻结/范围校验。",
+      "acs": [
+        "AC-04",
+        "AC-24",
+        "AC-25",
+        "AC-36",
+        "AC-55"
+      ],
+      "depends": [
+        "T194"
+      ],
+      "pair": "T194",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

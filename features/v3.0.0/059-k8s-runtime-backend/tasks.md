@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；193 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 185 / 193 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；195 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 185 / 195 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1531,6 +1531,22 @@
   **覆盖 AC:** AC-04、AC-24、AC-36、AC-46、AC-55
   **依赖:** T192
 
+- [ ] **T194** — 真实manifest引用与冻结profile分离
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
+  **逻辑/验收**：使用真实BundleDelivery.model_dump的显式profile字符串和已解析payload.profile，覆盖prepare及运行resolved_delivery；错误类型在资源调用前明确拒绝，不被宽松桩掩盖。
+  **覆盖 AC:** AC-04、AC-24、AC-25、AC-36、AC-55
+  **依赖:** T186
+  **配对:** T195
+
+- [ ] **T195** — K8s计划仅消费已解析profile对象
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+  **逻辑/验收**：prepare只取已解析payload.profile，运行取resolved_delivery.profile；manifest字符串仅作为引用，不当作dict、不默默fallback错误对象，保持平台冻结/范围校验。
+  **覆盖 AC:** AC-04、AC-24、AC-25、AC-36、AC-55
+  **依赖:** T194
+  **配对:** T194
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1618,3 +1634,5 @@ T189/T190经7b728fcb6配对15项先红后绿、完整93合同通过；同runtime
 T068完成：候选54b3ea2c1/Helm10第五实际探测16项+正常清理+真实公开诊断通过；三组报告负例实际发布16121/precheck_build/无审批操作并原样恢复、无manager重启。旧canary按自然到期同UID清理完毕，namespace Pod/PVC与计划均空。T067/T069/T070/T071/T072仍待完成。
 
 T191–T193现场夹具补登记：109第四source-image真实失败16124/precheck_probe/startup_exited；该离线路径的空requirements与顶层SDK导入不自足，补显式可校验vendor物料，不更改生产模板、base或SDK正向断言。完整镜像需显式加入场景。
+
+T194/T195：189 首个 bundle 的真实payload类型为payload.profile=dict、delivery.profile=str、resolved_delivery=None；只读复算在_plan:195重现AttributeError.get，未创建资源。修复解析对象与manifest引用混用，失败记录保留。
