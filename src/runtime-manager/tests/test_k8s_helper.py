@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-15、AC-16、AC-24、AC-25、AC-26、AC-28、AC-30、AC-34、AC-29、AC-42、AC-43、AC-44、AC-45、AC-46、AC-54."""
+"""覆盖 AC: AC-15、AC-16、AC-24、AC-25、AC-26、AC-28、AC-30、AC-34、AC-29、AC-42、AC-43、AC-44、AC-45、AC-46、AC-54、AC-47、AC-55."""
 
 import hashlib
 import importlib.util

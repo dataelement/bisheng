@@ -1765,7 +1765,7 @@
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_operations_v2.py`
   **逻辑/验收**：首次失败阶段、tail、维护/数据变化标记在真实cleanup重试后保留；停止/清理按本轮真实结果，保留期清空的tail不复活。
-  **覆盖 AC:** AC-18、AC-35、AC-48、AC-55
+  **覆盖 AC:** AC-48、AC-49、AC-52、AC-55
   **依赖:** T220
   **配对:** T224
 
@@ -1773,7 +1773,7 @@
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/operations.py`
   **逻辑/验收**：终态重试携带当前持久failure诊断字段，缺失tail不重建；phase不变、停止和cleanup仅使用实际结果，不复活操作。
-  **覆盖 AC:** AC-18、AC-35、AC-48、AC-55
+  **覆盖 AC:** AC-48、AC-49、AC-52、AC-55
   **依赖:** T223
   **配对:** T223
 
@@ -1898,3 +1898,5 @@ T219/T220真实恢复通过：189 Helm15/source706b；原失败op同UID首次nod
 2026-10-23 T221–T224登记：r5第三次prepare inputs通过，resolve失败后正常cleanupcomplete。原fact3保留TypeError诊断，后续terminal cleanup重试fact4覆盖为failed_stage=failed/空tail。189隔离native helper A/B确认dependencies={}成功，仅lock:null触发os.environ赋值TypeError，非缺少wheel。修复可选字段合同及首次诊断保留，不补写历史事实。
 
 T221–T224 L1合流：源143606851370d6091b120d348549329b8113c6a6，helper新增24配对/相关318通过；操作新增15配对/31操作及246相邻通过。主树runtime1410passed/13skip；219/224、101测试任务。helper相关首轮2个本机监听sandbox拒绝后原样授权复跑通过，未改用例跳过。189原生None/省略A/B根因已确认，新manager/helper及真实安装报告刷新进行中，无新ARM/公开发行。
+
+集成追溯复核修正：仅T223新增测试曾沿用F086 AC-63，现按F059标注AC-48、AC-49、AC-52、AC-55；保留既有F086旧测试注释。T221模块覆盖补AC-47、AC-55；功能代码及143镜像冻结不变。

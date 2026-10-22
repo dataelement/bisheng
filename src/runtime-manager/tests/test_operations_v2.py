@@ -362,7 +362,7 @@ def test_preflight_records_starting_before_readiness_failure(tmp_path, monkeypat
 def test_cleanup_retries_preserve_first_failure_but_refresh_stop_result(
     tmp_path, kind, stage, reason, expected_status, maintenance, changed
 ):
-    """覆盖 AC: AC-49、AC-52、AC-63."""
+    """F059 覆盖 AC: AC-48、AC-49、AC-52、AC-55."""
     platform = Platform(kind)
     platform.op.update(status="running", stage=stage)
     if kind == "deploy":
@@ -396,7 +396,7 @@ def test_cleanup_retries_preserve_first_failure_but_refresh_stop_result(
 @pytest.mark.parametrize("complete", [False, True])
 @pytest.mark.parametrize("tail", ["", "original bounded diagnostic"])
 def test_terminal_cleanup_preserves_false_flags_and_empty_diagnostic(tmp_path, complete, tail):
-    """覆盖 AC: AC-49、AC-52、AC-63."""
+    """F059 覆盖 AC: AC-48、AC-49、AC-52、AC-55."""
     platform = Platform("prepare")
     failure = {
         "reason": "first_failure",
@@ -418,7 +418,7 @@ def test_terminal_cleanup_preserves_false_flags_and_empty_diagnostic(tmp_path, c
 
 
 def test_expired_diagnostic_is_not_resurrected_during_cleanup_retry(tmp_path):
-    """覆盖 AC: AC-49、AC-52、AC-63."""
+    """F059 覆盖 AC: AC-48、AC-49、AC-52、AC-55."""
     platform = Platform("prepare")
     failure = {
         "reason": "original_failure",
@@ -439,7 +439,7 @@ def test_expired_diagnostic_is_not_resurrected_during_cleanup_retry(tmp_path):
 
 
 def test_cleanup_exception_keeps_original_maintenance_failure_and_pending_state(tmp_path):
-    """覆盖 AC: AC-49、AC-52、AC-63."""
+    """F059 覆盖 AC: AC-48、AC-49、AC-52、AC-55."""
     platform = Platform("deploy")
     failure = {
         "reason": "migration_failed",
@@ -466,7 +466,7 @@ def test_cleanup_exception_keeps_original_maintenance_failure_and_pending_state(
 
 
 def test_reconcile_terminal_cleanup_keeps_diagnostic_without_resubmitting(tmp_path, monkeypatch):
-    """覆盖 AC: AC-49、AC-52、AC-63."""
+    """F059 覆盖 AC: AC-48、AC-49、AC-52、AC-55."""
     platform = Platform("prepare")
     failure = {
         "reason": "preparation_phase_failed",
@@ -495,7 +495,7 @@ def test_reconcile_terminal_cleanup_keeps_diagnostic_without_resubmitting(tmp_pa
 
 
 def test_unknown_terminal_legacy_build_remains_held_without_cleanup(tmp_path):
-    """覆盖 AC: AC-49、AC-52、AC-63."""
+    """F059 覆盖 AC: AC-48、AC-49、AC-52、AC-55."""
     platform = Platform("prepare")
     failure = {
         "reason": "legacy_build_stop_unconfirmed",
@@ -520,7 +520,7 @@ def test_unknown_terminal_legacy_build_remains_held_without_cleanup(tmp_path):
 
 
 def test_completed_cleanup_does_not_create_failure_or_restart_operation(tmp_path):
-    """覆盖 AC: AC-49、AC-52、AC-63."""
+    """F059 覆盖 AC: AC-48、AC-49、AC-52、AC-55."""
     platform = Platform("preview")
     platform.op.update(status="completed", stage="completed", cleanup_status="pending", failure={})
     executor = OperationExecutor(
@@ -535,7 +535,7 @@ def test_completed_cleanup_does_not_create_failure_or_restart_operation(tmp_path
 
 
 def test_cleanup_retry_never_reuses_stale_stop_or_cleanup_flags(tmp_path):
-    """覆盖 AC: AC-49、AC-52、AC-63."""
+    """F059 覆盖 AC: AC-48、AC-49、AC-52、AC-55."""
     platform = Platform("prepare")
     platform.op.update(
         status="failed",
