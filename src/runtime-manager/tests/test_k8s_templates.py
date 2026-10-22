@@ -617,3 +617,29 @@ def test_offline_data_cpu_tier_does_not_change_other_helper_budgets(plan, purpos
     primary = [container for container in spec["containers"] if container not in helpers]
     for container in primary:
         assert container["resources"]["requests"]["cpu"] == "100m"
+
+
+@pytest.mark.parametrize("runtime", ["python3.11", "node20", "static"])
+@pytest.mark.parametrize("purpose", ["serve", "probe", "preview"])
+def test_bundle_path_keeps_profile_system_binaries_and_dependency_precedence(plan, runtime, purpose):
+    """AC-24, AC-25, AC-27: nginx is installed in /usr/sbin by the frozen static profile."""
+    from runtime_manager.k8s_templates import pod_template
+
+    current = replace(
+        plan,
+        runtime_language=runtime,
+        purpose=purpose,
+        pvc_name=plan.pvc_name if purpose == "serve" else "",
+        deadline_seconds=None if purpose == "serve" else 120,
+    )
+    app = next(c for c in pod_template(current)["spec"]["containers"] if c["name"] == "app")
+    path = next(v["value"] for v in app["env"] if v["name"] == "PATH").split(":")
+    assert path[:2] == ["/opt/venv/bin", "/workspace/app/node_modules/.bin"]
+    assert {"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin"} <= set(path)
+    assert not {"", "."} & set(path)
+    image = next(
+        c
+        for c in pod_template(replace(current, mode="image", material_secret=""))["spec"]["containers"]
+        if c["name"] == "app"
+    )
+    assert not any(v["name"] == "PATH" for v in image["env"])

@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；245 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 240 / 245 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；247 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 242 / 247 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1944,6 +1944,22 @@
   **依赖:** T244
   **配对:** T244
 
+- [x] **T246** — 应用包可执行文件路径配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_templates.py`
+  **逻辑/验收**：真实static镜像nginx位于/usr/sbin；rendered PATH在probe/preview/serve保留依赖bin优先及标准系统sbin/bin，image模式不覆盖镜像PATH；既有PATH注入拒绝保持。
+  **覆盖 AC:** AC-24、AC-25、AC-27、AC-54、AC-55
+  **依赖:** T245
+  **配对:** T247
+
+- [x] **T247** — 应用包保留标准系统可执行路径
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`
+  **逻辑/验收**：仅bundle受控PATH补/usr/local/sbin、/usr/sbin、/sbin；不改冻结command/entrypoint/args/profile，不改image模式及用户PATH拒绝。
+  **覆盖 AC:** AC-24、AC-25、AC-27、AC-54、AC-55
+  **依赖:** T246
+  **配对:** T246
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -2099,3 +2115,7 @@ T240/T241复审闭合：0bd6aa173合入d7c0cc4fd；503恢复精确到期清理�
 T242–T245：Helm21/source d7已使原stop真实timed_out/cleanupcomplete，同UID停止/APIabsent/PVC原UID保留。首个停用rows数据动作done但ready55秒、清理69秒超原60秒；offline data4b25…失败保留。189同8a helper非root/禁网/128MiB导入25m耗31.699s/0.7926CPU，100m耗6.9965s/0.6971CPU。仅把离线Pod CPU参数与真实预占调100m（所有容器串行init同预算），不改60秒/同步响应/单writer/sidecar。此为实现资源参数修正，不推翻D1–D8或AC。236/245、112测试任务。
 
 T242–T245 L1闭合：992905292与f84415f25同源合流6f254f337；backend两行+runtime单行。backend初红4/31绿，95相关通过；模板初红2/95绿，598相关通过。主树完整runtime1586passed/13skip（34.14s）、backend1764passed/19skip（50.14s），Ruff/format/逐文件guard/diff通过。240/245，五真实验收/发行/L2门保持；189实际100m新数据会话待复验。
+
+T246/T247现场登记：r10 static probe UID2d74bfe5…全部init成功、app exit127；同固定2f0311镜像在bundle受控PATH无法找到nginx，补全标准sbin后/usr/sbin/nginx与实际entrypoint nginx -t成功。根因为模板PATH遗漏而非缺镜像/源码。240/247、113测试任务；原失败和期限保持，不手工改Pod。
+
+T246/T247 L1闭合：9项bundle运行时/阶段配对先红，模板106、完整runtime1595passed/13skip（33.42s），独立292相关合同及PATH/secret拒绝补核通过；Ruff/format/逐文件guard/diff通过。真实同镜像sbin A/B及entrypoint nginx -t通过不替代K8s复验。242/247、113测试；r10原static失败终态和四资源同UID正常cleanup已冻结，恢复使用独立新attempt，不延长或复活旧操作。

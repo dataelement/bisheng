@@ -3397,3 +3397,12 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 七项：架构PASS（原PodPlan与模板，无新输入），命名PASS，序列化PASS（K8s quantity原格式），数据库/租户N/A，前端N/A，信息泄漏PASS，设计同步PASS。单CPU表达式，仅helper且purpose=data读取可信plan.cpu_millicores；其他helper25m/旧冻结data25m兼容，requests=limits且内存128Mi、60秒/非root/无材料身份保持。依赖/配对T244与范围PASS；同源backend新会话100m/真实预占100m同步集成。
 **结果：PASS**。f84415f2540b1b762dcfba2b7e8e521ca170f3bd，合流6f254f337dd6e8a36733501a2266bf08a04a56e9，完整两套与静态门通过。真实新Pod性能单列。
+
+## Task Review: T246 / T247
+
+**结果：PASS。** 真实189 static probe全部init完成、app exit127；固定静态镜像中nginx在/usr/sbin，受控PATH缺该目录。仅bundle PATH加入标准系统sbin，依赖bin优先、镜像启动参数及image模式保持。
+
+- 测试先行：9 failed / 97 deselected；实现后模板106 passed，完整runtime1595 passed / 13 skipped（33.42s）。
+- 独立L1：292相邻合同，bundle/helper PATH注入拒绝与image自定义PATH保留，Ruff/format/arch/diff通过；报告`/private/tmp/f059-t246-t247-l1-review.md`，SHA cfa95d41f0715e5de23806666808bfe0b6e2543fea259e4b726eb91323e07300。
+- 189同固定2f0311镜像原PATH command-v退出127；补sbin后/usr/sbin/nginx与真实entrypoint nginx -t成功。日志`/private/tmp/f059-static-path-native-red.log`、`/private/tmp/f059-static-path-native-green.log`。无镜像/Pod原地修改，不将该原生对照计为业务发布通过。
+- 全runtime日志`/private/tmp/f059-static-path-full-runtime.log`；backend生产与6f逐字节保持，既有1764/19skip记录不重标新SHA。

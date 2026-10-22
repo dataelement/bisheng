@@ -411,6 +411,7 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 | 准入 webhook 会反向读取 backend 的资源计划 | 创建事务持锁并同步等 K8s API 时会相互等待、超时拒绝 | 先提交资源意图，后请求 K8s；webhook 只读已提交计划 |
 | workload 签名若未绑定动作、偏移、请求体与票据，无法建立可互操作的传输合同 | 实现各自验签，重试可能错位或越权 | backend `runtime_material_protocol.py`、manager `material_protocol.py`/`material_client.py` 使用6.2.1唯一canonical格式；固定向量与本地互验完成，准备阶段真实传输已有证据 |
 | 操作完成会使现有材料接口拒绝下载 | 日后 Pod 重建失败，而在线版本曾经成功 | 新材料授权路径；不能延长原操作或给业务容器服务密钥 |
+| K8s覆盖bundle PATH也覆盖了镜像系统目录；nginx位于/usr/sbin | Python/Node可运行但static entrypoint找不到nginx，app exit127 | `k8s_templates.py`在依赖bin之后保留标准sbin/bin；image模式不覆盖，用户PATH注入拒绝 |
 | venv 固定路径与镜像 ABI 相关 | 打包开发机环境在节点无法运行 | profile＋锁/材料＋`/opt/venv` 物化，跨架构产物隔离 |
 | 离线镜像、wheelhouse 和平台能力是三个条件 | 页面健康却缺 SDK/依赖或无法调用模型 | 安装报告分项、原生离线 prepare/SDK E2E |
 | Node/Python 安装脚本可执行用户代码 | 准备任务盗用上传/管理凭据 | 传输与安装 Pod 分开，安装/编译无传输身份、无生产卷 |
@@ -785,3 +786,5 @@ T240/T241最终实现d7c0cc4fd：首轮独立复算发现503过早failed会阻�
 2026-10-23 T242–T245资源参数修正：离线data Pod的data-layout/init与data-helper沿用平台可信tier CPU，新会话tier和真实预占均100m/128MiB；旧冻结tier25m仍生成旧模板，在线serve sidecar及其他helper保持25m。189同一8a镜像25m导入31.699秒、100m导入6.9965秒；实际离线helper运行到ready约35秒与该量级一致。原60秒冷启动/动作/响应、同步cleanup后返回、并发2、UID停止证据及互斥释放均不改变，无新API/网络/镜像依赖；更改资源参数而非延时请求或提前释放数据会话。真实新Pod时间另验。
 
 T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtime f84415f25）；原生100m对照仅解释导入成本，完整runtime1586/13skip与backend1764/19skip均通过。实际新Pod完整60秒链路另验，旧4b25失败不改成功；本轮无新ARM/公开发行。
+
+2026-10-23 T246/T247：r10 static真实probe全部init成功、app nginx:notfound/exit127，模板bundle PATH遗漏/usr/sbin。仅补标准系统目录，保留/opt/venv/bin与node_modules/.bin优先、冻结entrypoint/args、image环境及PATH注入限制。9配对先红→模板106/完整runtime1595/13skip及独立292通过；同2f0311镜像原生A/B与entrypoint配置测试确认量级和因果，真实新attempt另验。242/247任务L1完成。

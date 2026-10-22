@@ -6204,6 +6204,54 @@
       "review": "PASS"
     },
     {
+      "id": "T246",
+      "wave": 7,
+      "kind": "测试",
+      "title": "应用包可执行文件路径配对",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_templates.py"
+      ],
+      "logic": "真实static镜像nginx位于/usr/sbin；rendered PATH在probe/preview/serve保留依赖bin优先及标准系统sbin/bin，image模式不覆盖镜像PATH；既有PATH注入拒绝保持。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-27",
+        "AC-54",
+        "AC-55"
+      ],
+      "depends": [
+        "T245"
+      ],
+      "pair": "T247",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T247",
+      "wave": 7,
+      "kind": "实现",
+      "title": "应用包保留标准系统可执行路径",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_templates.py"
+      ],
+      "logic": "仅bundle受控PATH补/usr/local/sbin、/usr/sbin、/sbin；不改冻结command/entrypoint/args/profile，不改image模式及用户PATH拒绝。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-27",
+        "AC-54",
+        "AC-55"
+      ],
+      "depends": [
+        "T246"
+      ],
+      "pair": "T246",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

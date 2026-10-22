@@ -447,7 +447,7 @@ def pod_template(plan: PodPlan) -> dict:
                 app["env"].append(
                     {
                         "name": "PATH",
-                        "value": "/opt/venv/bin:/workspace/app/node_modules/.bin:/usr/local/bin:/usr/bin:/bin",
+                        "value": "/opt/venv/bin:/workspace/app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                     }
                 )
             app["ports"] = [{"name": "http", "containerPort": plan.port, "protocol": "TCP"}]
