@@ -547,6 +547,36 @@ def test_prepare_separates_download_install_upload_and_persists_phase_results(ru
     assert len([event for event in events if event[:2] == ("create", "pods")]) == 4
 
 
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"compressed": 75 * 1024**2, "unpacked": 300 * 1024**2, "entries": 30000},
+        {"compressed": 1024, "unpacked": 4096, "entries": 10},
+    ],
+)
+def test_prepare_preserves_frozen_source_limits_in_each_phase(runtime, monkeypatch, limits):
+    """AC-24, AC-44, AC-56: K8s passes the platform's exact source admission bounds."""
+    executor, _, _, op, _, _ = runtime
+    op["kind"] = "prepare"
+    op["payload"]["profile"] = op["payload"].pop("resolved_delivery")["profile"]
+    op["payload"].update(
+        source_artifact_id="source-a", delivery={"mode": "bundle", "dependencies": {}}, source_limits=limits
+    )
+    seen = []
+    run_phase = executor._phase
+
+    def capture(operation, stage, purpose, document, **kwargs):
+        seen.append((stage, copy.deepcopy(document)))
+        assert document.get("source_limits") is not limits
+        return run_phase(operation, stage, purpose, document, **kwargs)
+
+    monkeypatch.setattr(executor, "_phase", capture)
+    assert executor.prepare(op)["compiled_artifact_id"] == "compiled-result"
+    assert [stage for stage, _ in seen] == ["inputs", "resolve", "install", "upload"]
+    assert all(document.get("source_limits") == limits for _, document in seen)
+    assert op["payload"]["source_limits"] == limits
+
+
 def test_data_capability_is_explicit_and_has_no_docker_fallback(runtime):
     from runtime_manager.executors.protocol import ExecutorError
 
