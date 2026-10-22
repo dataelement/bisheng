@@ -24,7 +24,7 @@
 | client 构建 | 本次复用现场构建，源码/共享包/依赖锁与 b37d227db 一致 |
 | 登录用户完整上传删除流程、原生 Desktop UI、DM8、断外网设备 | NOT_RUN |
 
-后端在独立 Python 3.11 环境执行；跨仓库联调显式替换身份和对象存储。实际 3006 的迁移、MySQL/MinIO/签名和容器健康见 deployment.md。Desktop 运行代码与安装包保持原版本；企业 HTTPS/网关绑定按用户决定留待后续。
+后端在独立 Python 3.11 环境执行；跨仓库联调显式替换身份和对象存储。实际 3006 的迁移、MySQL/MinIO 和容器健康见 deployment.md。上表记录的是首版交付证据。后续契约改为在线会话与未签名发布快照，不再部署 `BISHENG_DSH_MARKET_SIGNING_KEY`。Desktop 运行代码与安装包保持原版本；企业 HTTPS/网关绑定按用户决定留待后续。
 
 复跑：仓库根 PYTHONPATH=src/backend python -m pytest --confcutdir=src/backend/test/dsh_market src/backend/test/dsh_market src/backend/test/database/test_alembic_single_head.py -q；前端 pnpm --filter bisheng exec vitest run src/test/dshMarket.test.tsx src/test/headerMenuChildAdmin.test.tsx；pnpm --filter bisheng lint、pnpm check-i18n、pnpm build:platform、pnpm typecheck。Desktop 运行 scripts/test-enterprise-market-integration.mjs 并传入 BISHENG 路径与 Python。
 
@@ -35,3 +35,14 @@
 - [x] 企业插件管理页新增工作台区域，三语言文案及 26205–26208 错误码由 locales 源生成。
 - [x] 两个用户样包本地静态校验分别得到 `repository` 和 `legacy`；后端市场相关测试 60 项通过；平台页面测试 12 项通过；平台 typecheck、目标文件 ESLint、locales check、check-i18n 通过。
 - [ ] 真实 MinIO、MySQL/DM8、管理员浏览器完整上传及 Desktop 下载/运行联调；当前工作分支未部署。
+
+
+## 2026-10-21 PR #2502 移植至 work-110
+
+- [x] 从 PR #2502 的单个业务提交 `29ab7fd1318b21466e3a05d9ace7a8dcc360516c` 移植取消市场签名密钥、无签名快照、npm ZIP/tgz 导入和三语言提示；未合并 `feat/bisheng-work-120` 分支历史。
+- [x] 保留 work-110 的原生无席位会话、既有平台登录入口、第三方安装开关和工作台路由；没有引入上游 `market_employee` 席位门禁。
+- [x] 后端 72 项、管理端页面/导航 16 项、现有客户端市场/社区包/工作台 45 项通过；Ruff、修改文件 ESLint、platform typecheck、i18n 和架构检查通过；服务端与当前客户端完成 ZIP/tgz 制品及无签名快照协议检查。
+- [x] 全仓前端 lint 93 个错误、client 类型检查 1 个错误与改动前 HEAD 基线逐项相同，均在本次范围之外。旧市场测试将本地会话撤销误判为席位撤销 403，已对齐为原生会话失效 401。
+- [ ] 本轮代码的 109 环境部署、真实 npm 依赖安装和原生客户端市场完整操作未执行；本轮验证是本地 ASGI/SQLite/存储适配器与客户端解析器的协议联调。
+
+完整来源、分支差异和复跑证据见 [PR #2502 移植说明](pr-2502-work110-port.md)。

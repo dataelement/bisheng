@@ -6,13 +6,10 @@ import type {
     DshAuthorization,
     DshDenial,
     DshConfig,
-    DshLicense,
     DshOperation,
     DshPage,
     DshPolicy,
     DshPolicyInput,
-    DshSeat,
-    DshSeatQuery,
     DshUsageMetrics,
     DshUsageOverviewPage,
     DshUsageTimeSummary,
@@ -389,39 +386,6 @@ export function validatePage<T>(page: DshPage<T>): DshPage<T> {
         throw malformed()
     return page
 }
-export async function getDshSeats(
-    params: DshSeatQuery,
-    signal?: AbortSignal,
-): Promise<DshPage<DshSeat>> {
-    const page: DshPage<DshSeat> = validatePage(
-        await request.get(`${admin}/users`, { params, signal }),
-    )
-    if (
-        page.items.some(
-            (item) =>
-                !item.seat_id ||
-                !/^[1-9]\d*$/.test(item.user_id) ||
-                !/^[1-9]\d*$/.test(item.tenant_id) ||
-                !Number.isSafeInteger(item.grant_version) ||
-                item.grant_version < 1 ||
-                !['ASSIGNED', 'REVOKED'].includes(item.state),
-        )
-    )
-        throw malformed()
-    return page
-}
-export async function getDshLicense(signal?: AbortSignal): Promise<DshLicense> {
-    const data: DshLicense = await request.get(`${admin}/license`, { signal })
-    if (
-        !data ||
-        !Number.isSafeInteger(data.seat_limit) ||
-        !Number.isSafeInteger(data.assigned) ||
-        !Number.isSafeInteger(data.available) ||
-        !data.as_of
-    )
-        throw malformed()
-    return data
-}
 export async function getDshPolicy(
     userId: string,
     tenantId?: string,
@@ -670,20 +634,6 @@ export async function saveDshPolicy(
         config,
     )
 }
-export async function commandDshSeat(
-    userId: string,
-    tenantId: string,
-    action: 'revoke' | 'reassign',
-    operationId: string,
-    grantVersion: number,
-): Promise<DshOperation> {
-    const config = { params: { tenant_id: tenantId }, preserveError: true }
-    return await request.post(
-        `${admin}/users/${encodeURIComponent(userId)}/${action}`,
-        { operation_id: operationId, expected_grant_version: grantVersion },
-        config,
-    )
-}
 export async function getDshOperation(
     operationId: string,
     tenantId: string,
@@ -703,7 +653,6 @@ export async function getDshOperation(
 }
 
 export function isDshRequestRejected(error: unknown): boolean {
-    if (isDshSeatLimitReached(error)) return true
     if (!error || typeof error !== 'object' || !('response' in error))
         return false
     const response = error.response
@@ -723,22 +672,6 @@ export function isDshRequestRejected(error: unknown): boolean {
         return [26101, 26129, 26130].includes(Number(response.data.status_code))
     }
     return false
-}
-
-export function isDshSeatLimitReached(error: unknown): boolean {
-    if (!error || typeof error !== 'object') return false
-    // Silent requests reject HTTP 200 business envelopes directly; HTTP errors
-    // retain the Axios response. Decode the business payload in either case.
-    const response = 'response' in error ? error.response : undefined
-    const data = response && typeof response === 'object' && 'data' in response
-        ? response.data : error
-    if (!data || typeof data !== 'object') return false
-    if ('status_code' in data && Number(data.status_code) === 26112) return true
-    if ('status' in data && data.status === 'FAILED' && 'result_code' in data)
-        return data.result_code === 'seat_limit_reached'
-    const failure = 'error' in data ? data.error : data
-    return !!failure && typeof failure === 'object'
-        && 'code' in failure && failure.code === 'seat_limit_reached'
 }
 
 export async function getDshModelPolicy(

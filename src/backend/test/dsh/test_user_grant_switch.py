@@ -46,9 +46,10 @@ def test_zero_quota_is_excluded_from_model_listing_and_recovery():
         (True, 0, False, 0),
         (False, 500, False, 0),
         (True, 500, False, 500),
-        (True, 0, True, 300),
-        (False, 500, True, 300),
+        (True, 0, True, 0),
+        (False, 500, True, 100),
         (True, 500, True, 500),
+        (True, 30, True, 30),
     ],
 )
 def test_effective_permissions_use_positive_enabled_sources(subject_store, enabled, limit, inherited, expected):  # noqa: F811
@@ -78,7 +79,6 @@ def test_effective_permissions_use_positive_enabled_sources(subject_store, enabl
         effective = repository.effective(20)
         assert effective.allowed_model_ids == ([7] if expected > 0 else [])
         assert effective.monthly_token_limit == expected
-        assert repository.entitled_user_ids() == ([20] if expected > 0 else [])
 
 
 async def test_operation_persists_switch_and_quota_across_enable_disable(service_factory):  # noqa: F811

@@ -44,10 +44,7 @@ async def test_user_update_version_and_outbox_commit_together(user_store, monkey
         row = session.get(User, 20)
         operations = session.exec(select(DshAdminOperation)).all()
         assert row.dsh_profile_version == 1
-        assert len(operations) == 1
-        assert operations[0].payload["username"] == "After"
-        assert operations[0].payload["profile_version"] == 1
-        assert operations[0].action == "SYNC_PROFILE"
+        assert operations == []
 
 
 async def test_rollback_leaves_neither_profile_version_nor_intent(user_store, monkeypatch):
@@ -70,35 +67,6 @@ async def test_rollback_leaves_neither_profile_version_nor_intent(user_store, mo
         assert session.get(User, 20).user_name == "Before"
         assert session.get(User, 20).dsh_profile_version == 0
         assert session.exec(select(DshAdminOperation)).all() == []
-
-
-async def test_same_snapshot_is_idempotent_and_disabled_dsh_has_no_outbox(user_store, monkeypatch):
-    from bisheng.dsh.domain.services.profile import DshProfileService
-    from bisheng.user.domain.models.user import User
-    from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
-    from bisheng.user.domain.services.user import UserService
-
-    with Session(user_store) as session, session.begin():
-        snapshot = UserDshProfileRepository.batch_snapshot(session, [20])[20]
-        first = DshProfileService.record_change(session, snapshot)
-        repeated = DshProfileService.record_change(session, snapshot)
-        assert first.operation_id == repeated.operation_id
-        assert len(session.exec(select(DshAdminOperation)).all()) == 1
-
-    @contextmanager
-    def scope():
-        with Session(user_store) as session, session.begin():
-            yield session
-
-    monkeypatch.setattr(UserService, "_dsh_enabled", staticmethod(lambda: False))
-    with Session(user_store) as session:
-        user = session.get(User, 20)
-    user.delete = 1
-    UserService.persist_profile_update(user, session_scope=scope)
-    with Session(user_store) as session:
-        assert session.get(User, 20).delete == 1
-        assert session.get(User, 20).dsh_profile_version == 0
-        assert len(session.exec(select(DshAdminOperation)).all()) == 1
 
 
 async def test_profile_sweep_uses_bounded_cursor_without_incrementing_versions(user_store, monkeypatch):
@@ -178,6 +146,4 @@ async def test_membership_jwt_version_and_profile_intent_are_atomic(user_store, 
         assert membership.tenant_id == (2 if rollback else 3)
         with profile_scope(3):
             operations = session.exec(select(DshAdminOperation)).all()
-            assert len(operations) == (0 if rollback else 1)
-            if operations:
-                assert operations[0].payload["tenant_id"] == "3"
+            assert operations == []

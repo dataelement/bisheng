@@ -102,9 +102,9 @@ describe("DSH market administration", () => {
         await waitFor(() => expect(listMarketPlugins).toHaveBeenLastCalledWith({ page: 1 }, 3, expect.any(AbortSignal)));
         expect(screen.queryByText("Company Demo")).not.toBeInTheDocument();
     });
-    it("uploads the selected bundle bound to the login tenant", async () => {
+    it.each(["plugin.zip", "plugin.tgz", "plugin.tar.gz"])("uploads %s bound to the login tenant", async (name) => {
         render(view()); await screen.findByText("Company Demo"); fireEvent.click(screen.getByRole("button", { name: "import" }));
-        const file = new File(["bundle"], "plugin.zip", { type: "application/zip" });
+        const file = new File(["bundle"], name, { type: name.endsWith(".zip") ? "application/zip" : "application/gzip" });
         fireEvent.change(screen.getByLabelText("import", { selector: "input" }), { target: { files: [file] } });
         await screen.findByText("1.0.0 → 1.1.0");
         fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "import" }));

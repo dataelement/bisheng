@@ -84,7 +84,7 @@ function TenantPluginMarket() {
     useEffect(() => {
         setPreview(null); setPreviewError(false);
         if (!uploadOpen || !file || tenant === null) { setChecking(false); return; }
-        if (!file.name.toLowerCase().endsWith('.zip') || file.size > MAX_UPLOAD) {
+        if (!/\.(?:zip|tgz|tar\.gz)$/i.test(file.name) || file.size > MAX_UPLOAD) {
             setPreviewError(true); setChecking(false); return;
         }
         const controller = new AbortController();
@@ -121,7 +121,7 @@ function TenantPluginMarket() {
 
     async function uploadFile() {
         if (!file || tenant === null || !preview?.allowed || checking) return;
-        if (!file.name.toLowerCase().endsWith(".zip") || file.size > MAX_UPLOAD) {
+        if (!/\.(?:zip|tgz|tar\.gz)$/i.test(file.name) || file.size > MAX_UPLOAD) {
             toast({ title: t("invalidFile"), description: "", variant: "error" }); return;
         }
         const controller = new AbortController(); upload.current = controller;
@@ -171,7 +171,7 @@ function TenantPluginMarket() {
                 }}>{t("resume")}</Button>}</div>)}</section>}
         <Dialog open={uploadOpen} onOpenChange={open => { if (!busy) setUploadOpen(open); }}><DialogContent><DialogHeader>
             <DialogTitle>{t("import")}</DialogTitle><DialogDescription>{t("uploadHint")}</DialogDescription></DialogHeader>
-            <Input type="file" accept=".zip,application/zip" disabled={busy} aria-label={t("import")} onChange={e => { setPreview(null); setFile(e.target.files?.[0] || null); }} />
+            <Input type="file" accept=".zip,.tgz,.tar.gz,application/zip,application/gzip" disabled={busy} aria-label={t("import")} onChange={e => { setPreview(null); setFile(e.target.files?.[0] || null); }} />
             <p className="text-xs leading-5 text-muted-foreground">{t("bundleHelp")}</p>
             {checking && <p role="status">{t("previewing")}</p>}
             {previewError && <p role="alert" className="text-sm text-red-600">{t("previewFailed")}</p>}

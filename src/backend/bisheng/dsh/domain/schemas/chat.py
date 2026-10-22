@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bisheng.dsh.domain.schemas.contracts import DshContract
 from bisheng.dsh.domain.schemas.image import ContentPart
+from bisheng.dsh.domain.schemas.reasoning import EffortId, ReasoningDeclaration
 
 PositiveInt = Annotated[int, Field(strict=True, gt=0)]
 
@@ -22,16 +23,25 @@ class ChatCapabilities(BaseModel):
         default=False, description="Whether assistant reasoning content is supported by the provider."
     )
     max_completion_tokens: bool = Field(
-        default=False, description="Whether the provider accepts max_completion_tokens instead of max_tokens."
+        default=False,
+        description="Whether the provider adapter accepts max_completion_tokens natively or through parameter compatibility.",
     )
     stop: bool = Field(default=True, description="Whether the provider accepts stop sequences.")
     temperature: bool = Field(
         default=True, description="Whether the provider accepts a temperature sampling parameter."
     )
     top_p: bool = Field(default=True, description="Whether the provider accepts a top_p sampling parameter.")
+    reasoning: ReasoningDeclaration | None = None
+    responses: bool = False
+    prompt_cache_key: bool = Field(
+        default=False, description="Whether the provider accepts OpenAI's prompt_cache_key request field."
+    )
 
     def client_fields(self) -> dict[str, bool]:
-        return self.model_dump(include={"streaming", "tools", "reasoning_content", "vision"})
+        result = self.model_dump(include={"streaming", "tools", "reasoning_content", "vision"})
+        if self.responses:
+            result["responses"] = True
+        return result
 
 
 class ToolFunction(DshContract):
@@ -113,6 +123,7 @@ class DshChatRequest(DshContract):
     top_p: Annotated[float, Field(strict=True, ge=0, le=1)] | None = None
     stop: str | Annotated[list[str], Field(min_length=1, max_length=4)] | None = None
     n: Annotated[int, Field(strict=True, ge=1, le=1)] = 1
+    reasoning_effort: EffortId | None = None
 
     @property
     def model_id(self) -> int:
