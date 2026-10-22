@@ -1,9 +1,12 @@
-"""覆盖 AC: AC-04、AC-05、AC-07、AC-08、AC-09、AC-11、AC-18、AC-30、AC-34、AC-33、AC-35、AC-43、AC-48、AC-49、AC-50、AC-52."""
+"""覆盖 AC: AC-04、AC-05、AC-07、AC-08、AC-09、AC-11、AC-18、AC-30、AC-34、AC-33、AC-35、AC-43、AC-48、AC-49、AC-50、AC-52、AC-24、AC-25、AC-36、AC-55."""
 
 import base64
 import copy
+import importlib.util
 import json
+import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
@@ -522,6 +525,113 @@ def test_cleanup_checks_same_uid_and_keeps_production_volume(runtime):
     assert not any(kind == "pods" for kind, _ in cluster.objects)
     assert any(kind == "persistentvolumeclaims" for kind, _ in cluster.objects)
     assert all(r["cleanup_state"] == "complete" for r in platform.rows.values() if r["kind"] != "PersistentVolumeClaim")
+
+
+@pytest.fixture
+def bundle_delivery_contract():
+    # Load the real, standalone manifest schema without installing backend services.
+    source = Path(__file__).resolve().parents[2] / "backend/bisheng/app_publish/domain/schemas/app_manifest.py"
+    name = "f059_test_bundle_delivery_contract"
+    spec = importlib.util.spec_from_file_location(name, source)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+        yield module.BundleDelivery
+    finally:
+        del sys.modules[name]
+
+
+@pytest.mark.parametrize("reference", ["python-test@1", None])
+def test_prepare_consumes_resolved_profile_not_manifest_reference(runtime, bundle_delivery_contract, reference):
+    """覆盖 AC: AC-04、AC-24、AC-25、AC-36、AC-55."""
+    executor, platform, _cluster, operation, events, _ = runtime
+    operation["kind"] = "prepare"
+    profile = copy.deepcopy(operation["payload"].pop("resolved_delivery")["profile"])
+    operation["payload"].update(
+        profile=profile,
+        source_artifact_id="source-a",
+        delivery=bundle_delivery_contract(profile=reference).model_dump(mode="json"),
+    )
+    result = executor.prepare(operation)
+    assert operation["payload"]["delivery"]["profile"] == reference
+    assert result["profile"] == profile
+    pods = [row for row in platform.rows.values() if row["kind"] == "Pod"]
+    assert len(pods) == 4
+    assert all(row["template"]["spec"]["securityContext"]["runAsUser"] == profile["uid"] for row in pods)
+    assert all(row["stop_state"] == "confirmed" for row in pods)
+    assert len([event for event in events if event[:2] == ("create", "pods")]) == 4
+
+
+def test_runtime_plan_uses_frozen_delivery_profile_instead_of_prepare_input(runtime, bundle_delivery_contract):
+    """覆盖 AC: AC-04、AC-24、AC-25、AC-36、AC-55."""
+    executor, _, _, operation, _, _ = runtime
+    operation["payload"].update(
+        delivery=bundle_delivery_contract(profile="unrelated-reference@9").model_dump(mode="json"),
+        profile={"platform": "linux/arm64", "runtime_image": "wrong:tag", "uid": 20002, "gid": 20002},
+    )
+    frozen = operation["payload"]["resolved_delivery"]["profile"]
+    plan = executor._plan(operation, "serve")
+    assert (plan.image, plan.platform, plan.uid, plan.gid) == (
+        frozen["runtime_image"],
+        frozen["platform"],
+        frozen["uid"],
+        frozen["gid"],
+    )
+
+
+@pytest.mark.parametrize("kind", ["prepare", "deploy"])
+@pytest.mark.parametrize("invalid", ["python-test@1", ["profile"], None, {}])
+def test_invalid_frozen_profile_is_refused_before_resource_reads(
+    runtime, monkeypatch, bundle_delivery_contract, kind, invalid
+):
+    """覆盖 AC: AC-04、AC-24、AC-25、AC-36、AC-55."""
+    from runtime_manager.executors.protocol import ExecutorError
+
+    executor, platform, cluster, operation, events, _ = runtime
+    operation["kind"] = kind
+    if kind == "prepare":
+        # Even a valid stale resolved_delivery must not mask invalid prepare input.
+        operation["payload"]["profile"] = invalid
+        operation["payload"]["delivery"] = bundle_delivery_contract(profile="python-test@1").model_dump(mode="json")
+    else:
+        # A valid top-level prepare profile must not repair invalid frozen output.
+        operation["payload"]["profile"] = copy.deepcopy(operation["payload"]["resolved_delivery"]["profile"])
+        operation["payload"]["resolved_delivery"]["profile"] = invalid
+    monkeypatch.setattr(
+        platform, "resource", lambda _reference: pytest.fail("invalid profile must not query a resource")
+    )
+    with pytest.raises(ExecutorError, match="frozen_profile_invalid"):
+        if kind == "prepare":
+            executor.prepare(operation)
+        else:
+            executor._plan(operation, "serve")
+    assert not cluster.objects and not platform.rows and not events
+
+
+@pytest.mark.parametrize("kind", ["prepare", "deploy"])
+@pytest.mark.parametrize("invalid", ["bundle", ["bundle"], None])
+def test_invalid_delivery_container_is_refused_before_resource_reads(runtime, monkeypatch, kind, invalid):
+    """覆盖 AC: AC-04、AC-24、AC-25、AC-36、AC-55."""
+    from runtime_manager.executors.protocol import ExecutorError
+
+    executor, platform, cluster, operation, events, _ = runtime
+    operation["kind"] = kind
+    operation["payload"]["profile"] = copy.deepcopy(operation["payload"]["resolved_delivery"]["profile"])
+    if kind == "prepare":
+        operation["payload"]["delivery"] = invalid
+    else:
+        operation["payload"]["delivery"] = {"mode": "bundle"}
+        operation["payload"]["resolved_delivery"] = invalid
+    monkeypatch.setattr(
+        platform, "resource", lambda _reference: pytest.fail("invalid delivery must not query a resource")
+    )
+    with pytest.raises(ExecutorError, match="frozen_delivery_invalid"):
+        if kind == "prepare":
+            executor.prepare(operation)
+        else:
+            executor._plan(operation, "serve")
+    assert not cluster.objects and not platform.rows and not events
 
 
 def test_prepare_separates_download_install_upload_and_persists_phase_results(runtime):
