@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-15、AC-35、AC-36、AC-37、AC-43、AC-48、AC-49、AC-50."""
+"""覆盖 AC: AC-15、AC-18、AC-33、AC-35、AC-36、AC-37、AC-43、AC-48、AC-49、AC-50、AC-55."""
 
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -9,6 +9,7 @@ import pytest
 
 from bisheng.app_runtime.domain.models.runtime_delivery import (
     RuntimeAssignment,
+    RuntimeCapacityReservation,
     RuntimeExecutionFact,
     RuntimeNode,
     RuntimeOperation,
@@ -153,6 +154,33 @@ async def test_owner_data_session_commits_before_io_without_changing_serving_sta
     assert c.events[2][2]["page"] == 1 and c.events[2][2]["size"] == 50
 
 
+async def test_offline_data_freezes_one_hundred_millicores_with_the_original_deadline(session):
+    """覆盖 AC: AC-18、AC-33、AC-43、AC-48、AC-49、AC-55."""
+    c = session
+    now = datetime.utcnow()
+    c.svc.clock = lambda: now
+    op = await c.svc._start(c.app, c.actor, "tables", {})
+    assert op.payload["online"] is False
+    assert op.payload["tier"] == {"memory_mb": 128, "cpu_millicores": 100}
+    assert op.deadline == now + timedelta(seconds=60)
+    assert op.payload["resolved_delivery"]["profile"] == {
+        "uid": 10001,
+        "gid": 10001,
+        "platform": "linux/amd64",
+    }
+    assert op.payload["target_exec_ref"] == op.payload["target_pod_uid"] == ""
+    reservation = (await c.repo.find(RuntimeCapacityReservation, operation_id=op.id))[0]
+    assert (reservation.memory_mb, reservation.cpu_millicores, reservation.state) == (128, 100, "held")
+    owner = await c.repo.get(RuntimeAssignment, c.owner.id)
+    assert (owner.active_operation_id, owner.generation, owner.owner_epoch, owner.data_operation_id) == (
+        c.serving.id,
+        3,
+        1,
+        op.id,
+    )
+    assert not c.events
+
+
 async def test_non_owner_and_super_admin_do_not_create_a_data_operation(session):
     c = session
     for actor in (SimpleNamespace(user_id=2), SimpleNamespace(user_id=3, is_global_super=True)):
@@ -196,7 +224,8 @@ async def test_expiry_including_cold_start_prevents_ticket_issuance(session, mon
     assert (await c.repo.get(RuntimeAssignment, c.owner.id)).data_operation_id
 
 
-async def test_online_data_uses_existing_execution_instead_of_a_second_volume_writer(session):
+@pytest.mark.parametrize("target_state", ["confirmed", "missing_uid", "stopping"])
+async def test_online_data_uses_existing_execution_instead_of_a_second_volume_writer(session, target_state):
     c = session
     c.app.state = "online"
     pod = await c.repo.save(
@@ -215,7 +244,8 @@ async def test_online_data_uses_existing_execution_instead_of_a_second_volume_wr
             controller_epoch=1,
             spec_digest="c" * 64,
             status_policy_revision="v1",
-            uid=UID,
+            uid="" if target_state == "missing_uid" else UID,
+            stop_requested_at=datetime.utcnow() if target_state == "stopping" else None,
         )
     )
     await c.repo.save(
@@ -233,10 +263,19 @@ async def test_online_data_uses_existing_execution_instead_of_a_second_volume_wr
             target={"host": "10.96.0.10", "port": 8080},
         )
     )
+    if target_state != "confirmed":
+        with pytest.raises(AppDataBusyError) as refused:
+            await c.svc.execute(c.app, c.actor, "tables", {})
+        assert refused.value.kwargs["reason"] == "data_helper_execution_unconfirmed"
+        assert not c.events and not await c.repo.find(RuntimeOperation, kind="data")
+        assert not await c.repo.find(RuntimeCapacityReservation)
+        return
     await c.svc.execute(c.app, c.actor, "tables", {})
     op = (await c.repo.find(RuntimeOperation, kind="data"))[0]
     assert op.payload["target_exec_ref"] == pod.id and op.payload["target_pod_uid"] == UID
     assert op.payload["online"] is True
+    assert op.payload["tier"] == {"memory_mb": 128, "cpu_millicores": 25}
+    assert not await c.repo.find(RuntimeCapacityReservation, operation_id=op.id)
 
 
 async def test_docker_detection_preserves_legacy_dispatch(session):

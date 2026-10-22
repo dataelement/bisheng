@@ -240,7 +240,7 @@ class RuntimeDataSessionService:
             "online": online,
             "target_exec_ref": target.id if target else "",
             "target_pod_uid": target.uid if target else "",
-            "tier": {"memory_mb": 128, "cpu_millicores": 25},
+            "tier": {"memory_mb": 128, "cpu_millicores": 25 if online else 100},
             "resolved_delivery": {
                 "mode": "image",
                 "image_ref": helper,
