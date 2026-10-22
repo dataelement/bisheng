@@ -2,7 +2,7 @@
 
 **结论：LGTM。** 2026-10-21，用户已确认设计；按 sdd-review tasks-checklist 21 项由同一代理检查，没有独立代理审查。
 
-- 任务清单：[tasks.md](./tasks.md)，80 项、36 个测试任务，55 条有效 AC。
+- 任务清单：[tasks.md](./tasks.md)，82 项、37 个测试任务，55 条有效 AC。
 - 设计确认 SHA-256：`b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4`；该摘要记录批准时快照，实施中现状按L1更新，D1–D8不变。
 - 索引：[tasks-index.json](./tasks-index.json)；严格结果：[tasks-review.txt](./tasks-review.txt)。
 
@@ -11,7 +11,7 @@
 | 1 | AC追溯 | 55 条有效 AC 均有测试任务覆盖；AC-38 退役 | PASS |
 | 2 | 测试AC标注 | 33 个测试任务全部明确标注 AC | PASS |
 | 3 | Test-First | 所有实现任务依赖排在前面的配对测试；配置/模型/锁与安装清单走基础设施规则 | PASS |
-| 4 | 依赖 | 80 个唯一 ID，全部依赖存在并指向前序，无环 | PASS |
+| 4 | 依赖 | 82 个唯一 ID，全部依赖存在并指向前序，无环 | PASS |
 | 5 | 原子文件范围 | 每任务 1–2 个文件；真实验收按安装、平台、故障及发行分离 | PASS |
 | 6 | 自包含 | 每任务明确类型、文件、逻辑/失败验收、AC、依赖与配对 | PASS |
 | 7 | 粒度 | 不跨前后端，没有新UI任务；执行器和跨进程服务分别实现 | PASS |
@@ -61,3 +61,7 @@ K8s helper不能持manager HMAC查询缓存；由manager读取受信下载阶段
 ## T079/T080节点协调接线补充复审
 
 现有Heartbeat只写Docker字段，原facts没有controller租约闸口，无法用作已批准K8s执行器。增补1文件测试与2文件后端接线，放在T032之前；stop/ready资源证据使用既有账本，不增加业务Owner或新产品行为。80任务、36测试任务，最多两文件、前向依赖/配对/55有效AC追溯复查；21项清单结论LGTM。资源Service/Repository的恢复细化仍在各原任务文件内单独L1。
+
+## T081/T082 数据会话账本补充复审
+
+原assignment已有data_operation_id字段，现有Repository的create/claim/release未建立数据会话双向互斥，正式Pod的sidecar开销亦未计入预占。按已确认D1/D5和4.8补1文件真实SQL合同、2文件Repository/OperationService接线，放在T042之前；不让Service直接SQL，不改变Docker预算或serving代次。82任务、37测试任务、每任务最多两文件、配对测试先行、前向依赖无环、55有效AC追溯已复查；其余21项检查沿用有效，无规格/设计决策变化。结论：LGTM。

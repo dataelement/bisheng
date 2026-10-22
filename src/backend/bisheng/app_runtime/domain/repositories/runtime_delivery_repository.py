@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
@@ -196,6 +196,51 @@ class RuntimeDeliveryRepository:
             await session.refresh(result)
             return result
 
+    async def acquire_data_operation(self, operation: RuntimeOperation, *, offline=True):
+        check_scope(operation)
+        now = datetime.utcnow()
+        if operation.kind != "data" or not now < operation.deadline <= now + timedelta(seconds=60):
+            raise RuntimeConflict("data_operation_deadline_invalid")
+        async with self.transaction():
+            node = await self.get(RuntimeNode, operation.node_id, lock=True)
+            if (
+                node is None
+                or node.executor_kind != "kubernetes"
+                or node.status != "ready"
+                or (now - node.heartbeat_at).total_seconds() > 15
+            ):
+                raise RuntimeConflict("data_node_unavailable")
+            matches = await self.find(
+                RuntimeOperation, scope_key=operation.scope_key, idempotency_key=operation.idempotency_key
+            )
+            if matches:
+                if matches[0].request_digest != operation.request_digest:
+                    raise RuntimeConflict("idempotency_content_conflict")
+                return matches[0]
+            owners = await self.find(RuntimeAssignment, app_id=operation.app_id, lock=True)
+            if not owners:
+                raise RuntimeConflict("data_owner_missing")
+            owner = owners[0]
+            if (owner.node_id, owner.generation, owner.owner_epoch) != (
+                operation.node_id,
+                operation.generation,
+                operation.owner_epoch,
+            ):
+                raise RuntimeConflict("data_owner_fence_stale")
+            if owner.data_operation_id:
+                raise RuntimeConflict("data_operation_in_progress")
+            for previous in await self.find(RuntimeOperation, app_id=operation.app_id):
+                if previous.kind in MUTATING and (
+                    previous.status not in TERMINAL or previous.cleanup_status != "complete"
+                ):
+                    raise RuntimeConflict("owner_operation_in_progress")
+            result = await self.create_operation(operation)
+            if offline:
+                await self.admit(result.id, memory_mb=128, cpu_millicores=25)
+            owner.data_operation_id = result.id
+            await self.save(owner)
+            return result
+
     async def create_operation(self, operation: RuntimeOperation):
         check_scope(operation)
         async with self.transaction() as session:
@@ -206,6 +251,12 @@ class RuntimeDeliveryRepository:
                 if matches[0].request_digest != operation.request_digest:
                     raise RuntimeConflict("idempotency_content_conflict")
                 return matches[0]
+            if operation.kind in MUTATING:
+                # Same node -> assignment ordering as claim/data acquisition.
+                await self.get(RuntimeNode, operation.node_id, lock=True)
+                owners = await self.find(RuntimeAssignment, app_id=operation.app_id, lock=True)
+                if owners and owners[0].data_operation_id:
+                    raise RuntimeConflict("data_operation_in_progress")
             try:
                 # The savepoint preserves an enclosing admission UoW after a concurrent insert.
                 async with session.begin_nested():
@@ -282,6 +333,14 @@ class RuntimeDeliveryRepository:
         if not stopped:
             raise RuntimeConflict("execution_not_confirmed_stopped")
         async with self.transaction():
+            operation = await self.get(RuntimeOperation, operation_id, lock=True)
+            if operation and operation.kind == "data":
+                if operation.status not in TERMINAL or operation.cleanup_status != "complete":
+                    raise RuntimeConflict("data_cleanup_unconfirmed")
+                owners = await self.find(RuntimeAssignment, app_id=operation.app_id, lock=True)
+                if owners and owners[0].data_operation_id == operation.id:
+                    owners[0].data_operation_id = ""
+                    await self.save(owners[0])
             rows = await self.find(RuntimeCapacityReservation, operation_id=operation_id, lock=True)
             for row in rows:
                 row.state = "released"
@@ -302,6 +361,8 @@ class RuntimeDeliveryRepository:
                 assignments = await self.find(RuntimeAssignment, app_id=op.app_id, lock=True)
                 if assignments:
                     assignment = assignments[0]
+                    if assignment.data_operation_id:
+                        raise RuntimeConflict("data_operation_in_progress")
                     if op.generation < assignment.generation or op.owner_epoch != assignment.owner_epoch:
                         raise RuntimeConflict("execution_fence_stale")
                     if assignment.node_id != node_id:
@@ -323,6 +384,16 @@ class RuntimeDeliveryRepository:
                         active_operation_id=op.id,
                     )
                     session.add(assignment)
+            elif op.kind == "data":
+                await self.get(RuntimeNode, node_id, lock=True)
+                owners = await self.find(RuntimeAssignment, app_id=op.app_id, lock=True)
+                if not owners or (
+                    owners[0].node_id,
+                    owners[0].generation,
+                    owners[0].owner_epoch,
+                    owners[0].data_operation_id,
+                ) != (node_id, generation, owner_epoch, op.id):
+                    raise RuntimeConflict("data_execution_fence_stale")
             op.status = "running"
             await session.flush()
             return op
@@ -360,6 +431,8 @@ class RuntimeDeliveryRepository:
                 assignments = await self.find(RuntimeAssignment, app_id=op.app_id)
                 if op.kind in MUTATING and assignments and assignments[0].active_operation_id != op.id:
                     raise RuntimeConflict("execution_fence_stale")
+                if op.kind == "data" and (not assignments or assignments[0].data_operation_id != op.id):
+                    raise RuntimeConflict("data_execution_fence_stale")
             else:
                 op = await self.claim(operation_id, node_id=node_id, generation=generation, owner_epoch=owner_epoch)
             previous = await self.find(RuntimeExecutionFact, operation_id=op.id, sequence=sequence)

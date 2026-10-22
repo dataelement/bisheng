@@ -104,10 +104,11 @@ class RuntimeOperationService:
             op = await self.repo.create_operation(op)
             if op.kind in {"prepare", "probe", "deploy", "preview", "restore", "migrate"}:
                 tier = op.payload.get("tier", {})
+                sidecar = bool(node and node.executor_kind == "kubernetes" and op.kind in {"deploy", "restore"})
                 await self.repo.admit(
                     op.id,
-                    memory_mb=int(tier.get("memory_mb", 1024)),
-                    cpu_millicores=int(tier.get("cpu_millicores", 1000)),
+                    memory_mb=int(tier.get("memory_mb", 1024)) + (128 if sidecar else 0),
+                    cpu_millicores=int(tier.get("cpu_millicores", 1000)) + (25 if sidecar else 0),
                 )
         return await self.describe(op)
 

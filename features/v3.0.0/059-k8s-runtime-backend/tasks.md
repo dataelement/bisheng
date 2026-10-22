@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；80 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 39 / 80 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；82 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 51 / 82 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -423,12 +423,28 @@
   **依赖:** T021、T009、T040
   **配对:** T040
 
+- [x] **T081** — 数据会话互斥与开销预占合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_data_repository.py`
+  **逻辑/验收**：真实SQL验证data_operation_id不改变serving代次/归属，数据会话与生命周期提交/claim互斥；期限到期或未知结果不释放，只有终态且清理完成释放；K8s正式Pod的128MiB/25m sidecar计入预占，Docker原额度不变。先验证SQL原子性，再接Service；不加入实现。
+  **覆盖 AC:** AC-04、AC-05、AC-33、AC-34、AC-35、AC-36、AC-43、AC-48、AC-49、AC-50、AC-52
+  **依赖:** T041、T080
+  **配对:** T082
+
+- [x] **T082** — 数据会话账本及部署资源开销接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py`、`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`
+  **逻辑/验收**：Repository在node/assignment锁下登记内部数据操作及helper预占，不改active_operation_id/generation；生命周期新提交及claim检查未清理data归属，数据claim校验原范围；unknown保留互斥。终态且清理确认后释放。OperationService按K8s实际sidecar计入正式Pod资源、保留Docker预算；不做集群I/O。
+  **覆盖 AC:** AC-04、AC-05、AC-33、AC-34、AC-35、AC-36、AC-43、AC-48、AC-49、AC-50、AC-52
+  **依赖:** T041、T080、T081
+  **配对:** T081
+
 - [ ] **T042** — owner 数据会话业务协调：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_data_sessions.py`
   **逻辑/验收**：在原权限/确认/审计后创建内部 kind=data；不改 serving代次/App态，数据/迁移/停用/部署互斥；事务先提交再唤醒，在线复用helper，停用冷启动也计入60秒，超时不等于cleanup；测试只定义输入/结果，不加入实现。
   **覆盖 AC:** AC-15、AC-35、AC-36、AC-37、AC-43、AC-48、AC-49、AC-50
-  **依赖:** T017、T041
+  **依赖:** T017、T041、T082
   **配对:** T043
 
 - [ ] **T043** — owner 数据会话业务协调

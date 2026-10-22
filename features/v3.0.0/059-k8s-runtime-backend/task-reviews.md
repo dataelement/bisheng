@@ -741,3 +741,20 @@ L1：架构/命名/内部序列化/跨库与租户/敏感信息/设计同步 PAS
 
 **红阶段**：缺模块8 failed/6 errors；真实HTTP补测发现Request注解解析1 failed，已修复。最终18 passed（`/private/tmp/f059-data-helper-final.log`），包括SQLite提交后done落盘失败、子进程超时、跨进程锁、HTTP授权与CSV摘要。Ruff、逐文件arch-guard通过；不将此等同集群E2E。
 **元数据**：1/2目标文件、T021/T009依赖、配对红阶段PASS。**结果：PASS。**
+
+## Task Review: T081 / T082
+
+**任务**：数据会话Repository互斥与正式Pod资源预算。**文件**：`test_runtime_data_repository.py`；`runtime_delivery_repository.py`、`runtime_operation_service.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | SQL均在既有Repository；OperationService只计算资源请求，无集群或MinIO访问 |
+| 2 | 命名/AC | PASS | 完整标注 AC-04、AC-05、AC-33、AC-34、AC-35、AC-36、AC-43、AC-48、AC-49、AC-50、AC-52 |
+| 3 | 序列化 | PASS | data仅内部ORM路径，公共OperationInput仍不能构造任意data操作 |
+| 4 | 数据库 | PASS | 沿用tenant过滤与JsonType模型；node→assignment锁保护提交，claim校验data归属；不改serving代次；terminal+cleanup完成后释放，过期/unknown不自动放行 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 仅内部actor/请求摘要，无签票API、无凭据；跨node/generation拒绝 |
+| 7 | 设计同步 | PASS | 4.8同步互斥与真实sidecar开销；Docker原预算不变 |
+
+**红阶段**：12 failed/2 passed（`/private/tmp/f059-data-repository-red.log`）；新增14项＋旧账本24 passed，再与节点/资源合计107 passed（`/private/tmp/f059-data-repository-final.log`）。真实SQLite事务；尚未MySQL/DM8或集群证明。Ruff与逐文件arch-guard通过。
+**元数据**：目标1/2文件、T041/T080依赖及配对先行PASS。**结果：PASS。**
