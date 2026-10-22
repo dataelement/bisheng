@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；241 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 234 / 241 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 236 / 241 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1896,7 +1896,7 @@
   **依赖:** T238
   **配对:** T238
 
-- [ ] **T240** — 过期停用清理闭环配对
+- [x] **T240** — 过期停用清理闭环配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_operations_v2.py`
   **逻辑/验收**：expired stop不得以自身空资源报app已停止；先timed_out/pending持久回执，再仅同归属旧terminal操作own cleanup；响应未知、换代、换UID、未知writer拒绝，重启可续且首因保留。
@@ -1904,7 +1904,7 @@
   **依赖:** T239
   **配对:** T241
 
-- [ ] **T241** — 过期停用的有界安全收尾
+- [x] **T241** — 过期停用的有界安全收尾
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/operations.py`
   **逻辑/验收**：精确operation_expired且fresh deadline已过才记timeout；终态pending保留active fence，以旧terminal操作原有自身cleanup逐轮收尾，最终全app停止guard仍由backend验证。无新业务动作/期限延长/跨op过期授权。
@@ -2061,3 +2061,5 @@ T236/T237已通过79a15870f合入249d5fc85：模板→实际身份reader先红2/
 2026-10-23 T240/T241：原停用过期claim被拒，_failure只清自身空资源却误报全app已停，被正确的backend全writer guard409拒绝，造成running循环。先登记测试/实现；先真实终态pending回执再原有own cleanup，不延时期限、不放宽后端。234/241、110测试任务。
 
 T240/T241首轮独立复核发现503恢复阻断，NEEDS_FIX，仍pending。d489全runtime1570/13skip及原生构建通过只对应该中间候选，尚未push/部署；修订后重新冻结最终镜像，不能覆盖首轮失败与证据。
+
+T240/T241复审闭合：0bd6aa173合入d7c0cc4fd；503恢复精确到期清理与期限内正常stop两配对先红2/1绿，96操作及511相邻通过，独立96/静态复审PASS。主树全runtime1573passed/13skip（32.88s）。非精确expiry的不确定stop保留active非终态，不制造failed死锁；原terminal非timeout首因保持。236/241，剩五项真实验收/发行/L2门，不能由本地通过代替。

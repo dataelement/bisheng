@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理等待缺陷已完成L1修复；r7完整prepare成功并进入probe，但探活总预算将多段init与健康检查混算，启动阶段期限及数据取消新动作闸已通过L1与完整本地集成。r8四init96秒后Ready，终态finalizer移除后删除误拒导致原操作超时；a06/Helm19已正常对账完成4资源清理，失败记录及停止证明保留。开发L1现为234/241，独立r9通过完整prepare/probe及预览启动后，工具漏配公共CA导致入口连接失败，原套件正常cleanup完成；r10通过预览/拒绝/审批后发现维护材料PodUID漏配；249/Helm20修复后owner显式manual-publish同批准版本已正式online，原PVC保留，HTTP/SDK身份与附件/WebSocket正反/SQLite查改导出及owner跨租户边界均经原suite.observe真实通过。原900秒等待自然截止，旧journal保留并以hash关联新journal继续首版停用恢复/更新及其余5场景；完整业务/故障/L2尚未通过，最新状态见[platform.json](./e2e-evidence/platform.json)。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
+**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理等待缺陷已完成L1修复；r7完整prepare成功并进入probe，但探活总预算将多段init与健康检查混算，启动阶段期限及数据取消新动作闸已通过L1与完整本地集成。r8四init96秒后Ready，终态finalizer移除后删除误拒导致原操作超时；a06/Helm19已正常对账完成4资源清理，失败记录及停止证明保留。开发L1现为236/241，独立r9通过完整prepare/probe及预览启动后，工具漏配公共CA导致入口连接失败，原套件正常cleanup完成；r10通过预览/拒绝/审批后发现维护材料PodUID漏配；249/Helm20修复后owner显式manual-publish同批准版本已正式online，原PVC保留，HTTP/SDK身份与附件/WebSocket正反/SQLite查改导出及owner跨租户边界均经原suite.observe真实通过。原900秒等待自然截止，旧journal保留并以hash关联新journal继续首版停用恢复/更新及其余5场景；完整业务/故障/L2尚未通过，最新状态见[platform.json](./e2e-evidence/platform.json)。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -779,3 +779,5 @@ T236/T237已实现：单行可信maintenance+material_secret条件，实际reade
 2026-10-23 T238/T239：固定生产Pod名称跨维护与服务复用时，stop_instances仅跳过资源账本中stop_state=confirmed且cleanup_state=complete的历史Pod；不能仅凭其中一个标记或名称相同跳过，旧操作整体cleanup仍执行。r10停用期限自然到期，原失败和运行writer保留，另核超时清理安全闭环，不延时期限。
 
 2026-10-23 T240/T241实施要求：过期stop的终态与物理清理解耦。不能以当前stop空资源推出app无writer；先持久timed_out/pending/stoppedFalse保留active围栏，再fresh同scope，以精确旧terminal操作自身cleanup逐轮停止旧UID。全部资源停止/清理后仍由原backend全app guard验证终态更新；未知回执/换代/换UID持有，不延长期限或执行新迁移/purge/启动。
+
+T240/T241最终实现d7c0cc4fd：首轮独立复算发现503过早failed会阻断恢复，已修订为非终态、不确定且未精确到期的stop保留active fence，后续正常执行重试。只有精确operation_expired/409或checkpoint timeout且fresh deadline到期才进入timed_out收尾；已terminal非timeout首因不改。先pending ACK、fresh同scope、旧terminal owncleanup逐轮、backend最终全writer guard均保留；511相关/1573整套及独立96复审通过，真实189清理另记。

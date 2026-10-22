@@ -3367,3 +3367,13 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 候选de653a8d/合流d48937c10，508相邻与主树1570/13skip通过。独立只读复算发现P2：claim短暂503会被写成failed/pending，而特殊收尾仅接受timed_out/operation_timeout，恢复后旧writer持续held且不再claim。复现 `/private/tmp/f059-t241-transient-503-stuck.json`，3轮cleanup0/claim1/4次failed事实。
 **结果：NEEDS_FIX**。T240/T241保持未完成；非精确expiry/不确定stop须保留非终态以待重试，补503恢复及精确expiry配对后复审。原期限、backend guard及PVC保护不动。该候选仅原生amd64构建/禁网导入通过，未push或部署，不能当最终交付。
+
+## Task Review: T240 — 过期停用清理闭环配对（修订复审）
+
+测试单文件范围、完整AC-35、AC-36、AC-48、AC-49、AC-52、AC-55及依赖T239/配对T241 PASS，前端N/A，其余测试子集N/A。初红19/65、复审红2/1绿均保留；新503恢复/期限内完成、ACK丢失、全资源scope/换UID/未知writer/永久PVC/重启/最终backend guard及Docker兼容共96操作通过。
+**结果：PASS**；相邻511、主树1573/13skip，独立96结果不混用，报告 `/private/tmp/f059-t240-t241-independent-l1.md`。
+
+## Task Review: T241 — 过期停用的有界安全收尾（修订复审）
+
+架构PASS（原OperationExecutor/平台与K8s协议），命名PASS，序列化PASS（无API变更），数据库/租户N/A（不改backend/SQL/DDL），前端N/A，信息泄漏PASS（固定reason/既有脱敏tail），设计同步PASS（4.5及5原合同补漏）。依赖/配对T240及单文件范围PASS。必须先真实timed_out pending回执，再fresh归属，仅旧terminal自身cleanup单轮；不确定API保持hold，最终仍backend全app停止guard；非精确到期stop保留active可重试，已终态非timeout首因不改，原deadline和PVC保持。
+**结果：PASS**。de653+0bd6aa173，合流d7c0cc4fd，完整1573/13skip及静态门；独立首次P2已按同scope复审闭合。无新ARM/公开push/tag/发行或真实部署通过冒认。

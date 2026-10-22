@@ -1,25 +1,25 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T19:19:33.945726+00:00",
-  "validated_source_commit": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
+  "recorded_at": "2026-10-22T19:46:50.003045+00:00",
+  "validated_source_commit": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 234,
+    "l1_completed": 236,
     "tasks_total": 241,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "source_commit": "33a57c179ec393ae652d4f4330a886b47bc01472",
-      "passed": 1541,
+      "source_commit": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
+      "passed": 1573,
       "skipped": 13,
-      "seconds": 34.5,
+      "seconds": 32.88,
       "exit_code": 0,
-      "log": "/private/tmp/f059-closed-history-full-runtime.log",
-      "scope": "Full runtime after closed historical Pod stop guard; expired stop cleanup fix pending"
+      "log": "/private/tmp/f059-stop-final-full-runtime.log",
+      "scope": "Full integrated runtime after independent review correction; backend/helper unchanged"
     },
     "backend": {
       "source_commit": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
@@ -1200,6 +1200,16 @@
       "deployed": false,
       "l1_independent": "NEEDS_FIX: transient non-expiry 503 prematurely terminal failed and not retryable",
       "proof": "/private/tmp/f059-t241-transient-503-stuck.json"
+    },
+    "expired_stop_final_l1": {
+      "fix_commits": [
+        "de653a8d4894ffe2b4eee2e8fa7b7d5f6da74162",
+        "0bd6aa173f4d4d60bb6748a3678daa628667d4d3"
+      ],
+      "related_passed": 511,
+      "independent_operations_passed": 96,
+      "independent_result": "PASS",
+      "report": "/private/tmp/f059-t240-t241-independent-l1.md"
     }
   },
   "not_executed": [
