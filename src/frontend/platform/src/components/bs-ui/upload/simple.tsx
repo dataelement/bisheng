@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 
 import { cname } from "../utils";
 import axios, { showApiError } from "@/controllers/request";
-import { isApiError } from '@bisheng/api-client';
 import type { ReactNode } from 'react';
 
 interface SimpleUploadProps {
@@ -41,12 +40,11 @@ export default function SimpleUpload({ filekey, uploadUrl, accept, className = '
                 const checkResult = await preCheck(files[0]);
                 if (checkResult && typeof checkResult === 'object' && 'valid' in checkResult && checkResult.valid === false) {
                     const message = 'message' in checkResult ? checkResult.message : undefined;
-                    notification.open({ title: String(t('prompt') ?? ''), description: String(message || t('code.preCheckFailed')) });
+                    notification.open({ title: String(t('prompt') ?? ''), description: typeof message === 'string' && message.trim() ? message : String(t('code.preCheckFailed')) });
                     return;
                 }
             } catch (error) {
-                if (isApiError(error)) showApiError(error);
-                else notification.open({ title: String(t('prompt') ?? ''), description: String(error.message || t('code.preCheckError')) });
+                showApiError(error);
                 return;
             }
         }

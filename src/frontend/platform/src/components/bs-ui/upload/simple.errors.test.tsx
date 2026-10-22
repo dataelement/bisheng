@@ -35,6 +35,18 @@ it.each([true, false])('keeps API and local pre-check failures distinct (API=%s)
     if (api) {
         expect(mock.report).toHaveBeenCalledWith(error);
         expect(mock.notice).not.toHaveBeenCalled();
-    } else expect(mock.notice).toHaveBeenCalledWith(expect.objectContaining({ description: 'Invalid spreadsheet' }));
+    } else { expect(mock.report).toHaveBeenCalledWith(error); expect(mock.notice).not.toHaveBeenCalled(); }
     expect(mock.post).not.toHaveBeenCalled();
+});
+
+it('uses the request error outlet for an unexpected pre-check exception', async () => {
+ const cause = new Error('SQL secret');
+ render(<SimpleUpload filekey="file" uploadUrl="/upload" accept={['xlsx']} onSuccess={vi.fn()} preCheck={vi.fn().mockRejectedValue(cause)} />);
+ await act(() => mock.drop!([new File(['x'], 'file.xlsx')]));
+ expect(mock.report).toHaveBeenCalledWith(cause); expect(mock.notice).not.toHaveBeenCalled();
+});
+it('does not stringify an invalid pre-check message, but retains local validation copy', async () => {
+ render(<SimpleUpload filekey="file" uploadUrl="/upload" accept={['xlsx']} onSuccess={vi.fn()} preCheck={vi.fn().mockResolvedValue({ valid: false, message: { private: true } })} />);
+ await act(() => mock.drop!([new File(['x'], 'file.xlsx')]));
+ expect(mock.notice).toHaveBeenCalledWith(expect.objectContaining({ description: 'code.preCheckFailed' }));
 });

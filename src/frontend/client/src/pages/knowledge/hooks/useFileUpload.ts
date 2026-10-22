@@ -1,4 +1,4 @@
-import { isApiError, shouldRetryApiError } from "@bisheng/api-client";
+import { isApiError, shouldRetryApiError, resolveErrorMessageTemplate } from "@bisheng/api-client";
 import { showApiError } from "~/api/request";
 import { useState, useCallback, useRef } from "react";
 import i18next, { type TOptions } from "i18next";
@@ -51,13 +51,13 @@ interface UploadErrorLike {
 /**
  * Resolve a human-friendly reason from an upload error.
  * Prefers the localized api_errors.{code} template (so 19403 renders as
- * "当前企业存储配额已耗尽（X/Y GB）..." with backend-provided used_gb/quota_gb)
- * and only falls back to the raw status_message when no template exists.
+ * the storage quota message with backend-provided used_gb/quota_gb)
+ * and never includes raw transport diagnostics in the summary.
  * Returns "" when the error carries no actionable info — caller may then
  * append the generic browser-upload hint as a last-resort fallback.
  */
 function resolveUploadErrorReason(err: UploadErrorLike): string {
-    const { statusCode, errorData, message } = readUploadError(err);
+    const { statusCode, errorData } = readUploadError(err);
     if (statusCode != null) {
         // Typed i18next keys reject a runtime-built string; TranslationKeys is
         // the codebase's escape hatch for exactly this (same as useLocalize).
@@ -66,11 +66,8 @@ function resolveUploadErrorReason(err: UploadErrorLike): string {
             // The api_errors.{code} key is assembled at runtime, so it is not in
             // i18next's generated key union; exists() above is the real guard.
             const runtimeKey = codeKey as Parameters<typeof i18next.t>[0];
-            return String(i18next.t(runtimeKey, errorData ?? {}));
+            return resolveErrorMessageTemplate(String(i18next.t(runtimeKey)), errorData, String(i18next.t("api_errors.fallback")));
         }
-    }
-    if (message && message !== "upload file failed") {
-        return message;
     }
     return "";
 }
@@ -86,7 +83,6 @@ function readUploadError(err: unknown): {
     statusCode?: number;
     /** Interpolation values for the api_errors template — scalars only. */
     errorData?: Record<string, string | number>;
-    message?: string;
 } {
     if (typeof err !== "object" || err === null) return {};
     const source = err as {
@@ -101,7 +97,6 @@ function readUploadError(err: unknown): {
     return {
         statusCode: typeof rawCode === "number" ? rawCode : undefined,
         errorData: toInterpolationValues(source.data ?? source.errorData ?? source.response?.data?.data),
-        message: typeof source.message === "string" ? source.message : undefined,
     };
 }
 

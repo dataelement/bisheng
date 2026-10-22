@@ -9,7 +9,7 @@ jest.mock('~/hooks/usePersonalStorageQuota', () => ({ useStorageQuotaGuard: jest
 jest.mock('~/Providers', () => ({ useToastContext: jest.fn() }));
 jest.mock('i18next', () => ({ __esModule: true, default: {
   exists: (key: string) => key === 'api_errors.19403',
-  t: (_key: string, data: { used_gb?: number; quota_gb?: number }) => `${data.used_gb}/${data.quota_gb} GB`,
+  t: (key: string) => key === "api_errors.19403" ? "{{used_gb}}/{{quota_gb}} GB" : "Request failed",
 } }));
 it('stops a failed quota batch and retains interpolation values from the canonical error', async () => {
   const error = normalizeApiError({ status_code: 19403, data: { used_gb: 10, quota_gb: 10 } }, { message: 'storage exhausted' });
@@ -20,4 +20,10 @@ it('stops a failed quota batch and retains interpolation values from the canonic
   expect(uploadFileToServerApi).toHaveBeenCalledTimes(1);
   expect(success).not.toHaveBeenCalled();
   expect(result.earlyStop).toEqual({ reason: '10/10 GB', statusCode: 19403, skippedCount: 1 });
+});
+
+it('does not append a raw transport message to the upload summary', async () => {
+ (uploadFileToServerApi as jest.Mock).mockRejectedValueOnce(new Error('PRIVATE SQL'));
+ const result = await uploadFilesSequential('1', [new File(['a'], 'one.txt')], jest.fn());
+ expect(result.failures[0].reason).not.toContain('PRIVATE');
 });
