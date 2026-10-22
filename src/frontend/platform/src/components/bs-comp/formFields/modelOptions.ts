@@ -1,4 +1,4 @@
-import type { CascaderOption, CascaderPath } from '@bisheng/ui';
+import type { CascaderOption, CascaderPath, SelectOption } from '@bisheng/ui';
 
 /** Provider → models tree as `useModel()` builds it. */
 export interface ModelProviderNode {
@@ -48,4 +48,33 @@ export function toModelCascaderValue(
 export function fromModelCascaderValue(path: CascaderPath | null): string | null {
     if (!path?.length) return null;
     return String(path[path.length - 1]);
+}
+
+/** Flatten a provider tree into Select rows. The provider name is the group title. */
+export function toGroupedModelOptions(tree: ModelProviderNode[] | undefined): SelectOption[] {
+    return (tree ?? []).flatMap((provider) =>
+        (provider.children ?? [])
+            .filter((model) => model.value != null && model.value !== '')
+            .map((model) => ({
+                value: String(model.value),
+                label: model.label,
+                group: provider.label,
+            })),
+    );
+}
+
+/** Select values are strings. Empty stored ids stay unselected. */
+export function toModelSelectValue(value: unknown): string | null {
+    if (value == null || value === '') return null;
+    return String(value);
+}
+
+/** Match the model name or its provider, so a provider search still lists its models. */
+export function filterModelOption(keyword: string, option: SelectOption): boolean {
+    const query = keyword.trim().toLowerCase();
+    if (!query) return true;
+    return (
+        option.label.toLowerCase().includes(query) ||
+        (option.group ?? '').toLowerCase().includes(query)
+    );
 }
