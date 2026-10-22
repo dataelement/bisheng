@@ -24,6 +24,8 @@ import WorkbenchAccessGuard from './WorkbenchAccessGuard';
 import { lastSectionPaths } from './appModuleNavPaths';
 import { useWorkbenchNavLinks } from './useWorkbenchNavLinks';
 import { WorkbenchSidebar } from './WorkbenchSidebar';
+import { DesktopShellBridge } from './DesktopShellBridge';
+import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
 
 interface SidebarItemProps {
   icon: React.ReactNode;
@@ -354,6 +356,7 @@ export default function MainLayout() {
         isMobile ? 'min-h-[100dvh] overflow-x-clip bg-fill-1' : 'h-[100dvh] overflow-hidden bg-white',
       )}
     >
+      <DesktopShellBridge />
       <WorkbenchAccessGuard />
       {shouldHideSidebarOnMobileAppsArea ? (
         systemMenuRevealing ? (
@@ -372,7 +375,7 @@ export default function MainLayout() {
       ) : (
         // On 设置 the page's own nav takes this slot (same width and chrome); its back
         // button brings the workbench sidebar back.
-        <WorkbenchSidebar hidden={isSettingsRoute} />
+        <WorkbenchSidebar hidden={isSettingsRoute || isDesktopEmbedded()} />
       )}
       {isMobile && isAppsArea && !isAppChatRoute && mobileSidebarOpen ? (
         <div

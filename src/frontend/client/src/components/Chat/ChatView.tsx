@@ -33,6 +33,7 @@ import {
   type ChatModelOption,
 } from '~/hooks/useChatModelResolution';
 import { useChatAskHandoff } from './chatAskHandoff';
+import { useDesktopConversation } from './useDesktopConversation';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
@@ -421,6 +422,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
+  useDesktopConversation(conversationId, !hasMessages);
   const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel, closeCitationPanel } = useCitationReferencePanel({ hasMessages });
 
   // F035: the task checklist is pinned above the input (Figma 12221-39902 /
