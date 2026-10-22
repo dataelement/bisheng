@@ -1,8 +1,10 @@
 """覆盖 AC: AC-15、AC-16、AC-24、AC-25、AC-26、AC-28、AC-30、AC-34、AC-29、AC-42、AC-43、AC-44、AC-45、AC-46、AC-54."""
 
 import hashlib
+import importlib.util
 import io
 import json
+import os
 import shutil
 import tarfile
 from pathlib import Path
@@ -211,6 +213,149 @@ def test_new_inputs_resolve_only_in_trusted_download_phase(setup):
     result = prepare_download(client, document, work=root / "work", resolver=resolver)
     assert not result["cached"] and len(calls) == 1
     assert (root / "work/materials/runtime.lock").is_file()
+
+
+def image_prepare_tool():
+    path = Path(__file__).parents[2] / "app-runtime/common/prepare.py"
+    spec = importlib.util.spec_from_file_location("optional_lock_image_preparer", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize(
+    "dependencies, expected",
+    [({}, ""), ({"lock": None}, ""), ({"lock": "locks/runtime.txt"}, "locks/runtime.txt")],
+    ids=["omitted", "null", "declared-path"],
+)
+def test_optional_lock_runs_real_image_resolver_and_writes_normalized_install_config(
+    setup, monkeypatch, dependencies, expected, cached
+):
+    from runtime_manager import k8s_helper as helper
+
+    client, document, _, root = setup
+    client.data["source-a"] = package(
+        root,
+        "optional-lock-source",
+        {
+            "bisheng-app.yaml": b"runtime: python3.11\n",
+            "main.py": b"print('application')\n",
+            "requirements.txt": b"",
+            "locks/runtime.txt": b"",
+        },
+    )
+    document["delivery"]["dependencies"] = {"install_inputs": [], "offline_artifacts": [], **dependencies}
+    document["offline"] = True
+    monkeypatch.setenv("BISHENG_DEPENDENCY_LOCK", "previous-lock")
+    tool = image_prepare_tool()
+    monkeypatch.setattr(helper, "_load_download_tool", lambda: tool)
+    calls = []
+
+    def pip_download(args, **kwargs):
+        assert args[:5] == ["python", "-I", "-m", "pip", "download"]
+        assert "--only-binary=:all:" in args
+        assert os.environ["BISHENG_DEPENDENCY_LOCK"] == expected
+        assert os.environ["PIP_NO_INDEX"] == "1"
+        assert tool.requirements() == root / "work/source" / (expected or "requirements.txt")
+        calls.append(args)
+
+    monkeypatch.setattr(helper.subprocess, "run", pip_download)
+    first = helper.prepare_download(client, document, work=root / "work")
+    document.update(
+        phase="resolve",
+        dependency_resolution={
+            "input_key": first["input_key"],
+            "artifact_id": "dependencies-a" if cached else None,
+            "state": "verified" if cached else "claimed",
+        },
+    )
+    result = helper.prepare_download(client, document, work=root / "work")
+    assert result["cached"] is cached
+    config = json.loads((root / "work/tools/prepare.json").read_text())
+    assert config["lock"] == expected and config["cached"] is cached
+    assert os.environ["BISHENG_DEPENDENCY_LOCK"] == "previous-lock"
+    if cached:
+        assert calls == []
+    else:
+        assert len(calls) == 1
+        assert (root / "work/materials/wheels").is_dir()
+
+
+@pytest.mark.parametrize("value", [False, 0, 1, [], {}, ["requirements.txt"]])
+def test_invalid_optional_lock_is_rejected_before_material_download_or_tool_loading(setup, monkeypatch, value):
+    from runtime_manager import k8s_helper as helper
+
+    client, document, _, root = setup
+    document["delivery"]["dependencies"] = {"lock": value}
+    monkeypatch.setenv("BISHENG_DEPENDENCY_LOCK", "previous-lock")
+    monkeypatch.setattr(helper, "_load_download_tool", lambda: pytest.fail("invalid lock must not load image tools"))
+    with pytest.raises(ValueError, match="helper_dependency_lock_invalid"):
+        helper.resolve_download(document, root / "source", root / "offline", root / "output")
+    with pytest.raises(ValueError, match="helper_dependency_lock_invalid"):
+        helper.prepare_download(client, document, work=root / "work")
+    assert client.downloads == [] and not (root / "work").exists()
+    assert os.environ["BISHENG_DEPENDENCY_LOCK"] == "previous-lock"
+
+
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize(
+    "extra, expected",
+    [({}, ""), ({"lock": None}, ""), ({"lock": "locks/runtime.txt"}, "locks/runtime.txt")],
+    ids=["omitted", "null", "declared-path"],
+)
+def test_standalone_prepare_optional_lock_runs_real_offline_image_tool(tmp_path, monkeypatch, extra, expected, cached):
+    from runtime_manager.k8s_prepare import prepare
+
+    source, original, materials, output = [tmp_path / name for name in ("source", "original", "materials", "output")]
+    for directory in (source, original, materials, output):
+        directory.mkdir()
+    (source / "requirements.txt").write_text("")
+    (source / "locks").mkdir()
+    (source / "locks/runtime.txt").write_text("")
+    tool = image_prepare_tool()
+    calls = []
+
+    def offline_resolution(*args, **kwargs):
+        assert args[:4] == ("python", "-m", "pip", "install")
+        assert "--no-index" in args and "--dry-run" in args
+        assert os.environ["BISHENG_DEPENDENCY_LOCK"] == expected
+        assert os.environ["PIP_NO_INDEX"] == "1"
+        Path(args[args.index("--report") + 1]).write_text('{"install": []}')
+        calls.append(args)
+
+    tool.run = offline_resolution
+    original_build = tool.build
+
+    def build(language):
+        assert os.environ["BISHENG_DEPENDENCY_LOCK"] == expected
+        original_build(language)
+
+    tool.build = build
+    monkeypatch.setenv("BISHENG_DEPENDENCY_LOCK", "previous-lock")
+    prepare(
+        {"language": "python3.11", "cached": cached, **extra},
+        source=source,
+        original=original,
+        materials=materials,
+        output=output,
+        common=tool,
+    )
+    assert len(calls) == (0 if cached else 1)
+    assert os.environ["BISHENG_DEPENDENCY_LOCK"] == "previous-lock"
+    if not cached:
+        assert (output / "runtime.lock").read_text() == "\n"
+
+
+@pytest.mark.parametrize("value", [False, 0, 1, [], {}, ["requirements.txt"]])
+def test_standalone_prepare_refuses_nonstring_optional_lock_before_loading_tools(monkeypatch, value):
+    from runtime_manager import k8s_prepare as installer
+
+    monkeypatch.setenv("BISHENG_DEPENDENCY_LOCK", "previous-lock")
+    monkeypatch.setattr(installer, "_common", lambda: pytest.fail("invalid lock must not load image tools"))
+    with pytest.raises(ValueError, match="prepare_dependency_lock_invalid"):
+        installer.prepare({"language": "python3.11", "cached": False, "lock": value})
+    assert os.environ["BISHENG_DEPENDENCY_LOCK"] == "previous-lock"
 
 
 def test_environment_input_key_includes_profile_abi_architecture_and_application(setup):
