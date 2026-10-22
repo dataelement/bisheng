@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
@@ -30,6 +33,10 @@ class RuntimeRoute(APIRoute):
                 return JSONResponse(
                     status_code=404 if str(exc).endswith("not_found") else 409, content={"error": {"reason": str(exc)}}
                 )
+            except Exception as exc:
+                # Global SPA error handlers may serialize exception details.
+                logger.warning("runtime control unavailable ({})", type(exc).__name__)
+                return JSONResponse(status_code=503, content={"error": {"reason": "runtime_control_unavailable"}})
 
         return handler
 
@@ -67,6 +74,9 @@ class Heartbeat(BaseModel):
     platform: str = Field(pattern=r"^linux/(amd64|arm64)$")
     memory_budget_mb: int = Field(ge=1)
     cpu_budget_millicores: int = Field(ge=1)
+    executor_kind: Literal["docker", "kubernetes"] = "docker"
+    capabilities: dict = Field(default_factory=dict)
+    probe_report: dict = Field(default_factory=dict)
 
 
 @router.post("/nodes/heartbeat")

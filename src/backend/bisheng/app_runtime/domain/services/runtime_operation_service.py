@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import copy
 import ipaddress
+import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
@@ -16,15 +18,16 @@ from bisheng.app_runtime.domain.models.runtime_delivery import (
     RuntimeRoute,
     RuntimeTransfer,
 )
+from bisheng.app_runtime.domain.models.runtime_kubernetes import RuntimeExecutionResource
 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import (
     TERMINAL,
     RuntimeConflict,
     RuntimeDeliveryRepository,
 )
 from bisheng.app_runtime.domain.services.runtime_artifact_service import RuntimeArtifactService
-from bisheng.app_runtime.domain.services.runtime_protocol import content_digest
+from bisheng.app_runtime.domain.services.runtime_protocol import canonical_json, content_digest
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id
+from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 
 
 async def consume_runtime_nonce(key, ttl):
@@ -36,7 +39,15 @@ async def consume_runtime_nonce(key, ttl):
 
 
 class RuntimeOperationService:
-    def __init__(self, repository=None, artifacts=None, *, nonce_store=consume_runtime_nonce, app_loader=None):
+    def __init__(
+        self,
+        repository=None,
+        artifacts=None,
+        *,
+        nonce_store=consume_runtime_nonce,
+        app_loader=None,
+        clock=datetime.utcnow,
+    ):
         self.repo = repository or RuntimeDeliveryRepository()
         self.artifacts = artifacts or RuntimeArtifactService(
             self.repo,
@@ -45,6 +56,7 @@ class RuntimeOperationService:
         )
         self.nonce_store = nonce_store
         self.app_loader = app_loader or self.repo.get_application
+        self.clock = clock
 
     async def create(self, request):
         if {"sealed_env", "runtime_env", "build_env"} & request.payload.keys():
@@ -60,6 +72,16 @@ class RuntimeOperationService:
             if existing[0].request_digest != digest:
                 raise RuntimeConflict("idempotency_content_conflict")
             return await self.describe(existing[0])
+        node = await self.repo.get(RuntimeNode, request.node_id)
+        if (
+            node
+            and node.executor_kind == "kubernetes"
+            and node.status != "ready"
+            and request.kind not in {"stop", "destroy"}
+        ):
+            from bisheng.common.errcode.app_factory import AppOrchestratorUnavailableError
+
+            raise AppOrchestratorUnavailableError(reason="runtime_prerequisites_blocked")
         assignments = await self.repo.find(RuntimeAssignment, app_id=app.id)
         generation = max(request.generation, assignments[0].generation + 1 if assignments else 1)
         op = RuntimeOperation(
@@ -89,12 +111,97 @@ class RuntimeOperationService:
                 )
         return await self.describe(op)
 
+    @staticmethod
+    def _node_document(node):
+        return {
+            "node_id": node.id,
+            "engine_id": node.engine_id,
+            "executor_kind": node.executor_kind,
+            "platform": node.platform,
+            "status": node.status,
+            "controller_holder": node.controller_holder,
+            "controller_epoch": node.controller_epoch,
+            "lease_until": node.lease_until.isoformat() if node.lease_until else None,
+            "capabilities": copy.deepcopy(node.capabilities or {}),
+            "probe_report": copy.deepcopy(node.probe_report or {}),
+        }
+
+    @staticmethod
+    def _node_report(body):
+        capabilities, report = body.capabilities, body.probe_report
+        try:
+            if len(canonical_json({"capabilities": capabilities, "probe_report": report})) > 65536:
+                raise ValueError()
+        except (ValueError, TypeError, RecursionError):
+            raise RuntimeConflict("node_report_invalid") from None
+        pending = [capabilities, report]
+        while pending:
+            value = pending.pop()
+            if isinstance(value, dict):
+                if {str(key).lower() for key in value} & {
+                    "token",
+                    "password",
+                    "private_key",
+                    "kubeconfig",
+                    "credentials",
+                    "docker_config",
+                }:
+                    raise RuntimeConflict("node_report_credentials_refused")
+                pending.extend(value.values())
+            elif isinstance(value, list):
+                pending.extend(value)
+        if body.executor_kind != "kubernetes":
+            return True
+        parts = body.engine_id.split("/")
+        if (
+            len(parts) != 2
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", parts[0])
+            or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", parts[1])
+            or parts[1] in {"default", "kubekey-system"}
+            or parts[1].startswith("kube-")
+        ):
+            raise RuntimeConflict("node_execution_domain_invalid")
+        if (capabilities.get("cluster_id"), capabilities.get("namespace")) != tuple(parts):
+            raise RuntimeConflict("node_execution_domain_invalid")
+        cidrs = capabilities.get("service_cidrs", [])
+        if not isinstance(cidrs, list) or len(cidrs) > 32:
+            raise RuntimeConflict("node_service_cidrs_invalid")
+        try:
+            for raw in cidrs:
+                network = ipaddress.ip_network(raw)
+                if (
+                    not network.is_private
+                    or network.network_address.is_loopback
+                    or network.network_address.is_link_local
+                    or network.is_multicast
+                ):
+                    raise ValueError()
+        except (TypeError, ValueError):
+            raise RuntimeConflict("node_service_cidrs_invalid") from None
+        return bool(
+            report.get("ready") is True
+            and cidrs
+            and all(
+                capabilities.get(key) is True
+                for key in ("status_protection", "binding_protection", "mandatory_isolation")
+            )
+            and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", str(capabilities.get("status_policy_revision", "")))
+            and re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}", str(capabilities.get("helper_image", ""))
+            )
+        )
+
     async def heartbeat(self, identity, body):
-        if not identity.node_id:
+        if not identity.node_id or (body.executor_kind == "kubernetes" and set(identity.roles) != {"manager"}):
             raise RuntimeConflict("node_identity_required")
+        ready = self._node_report(body)
         async with self.repo.transaction():
             node = await self.repo.get(RuntimeNode, identity.node_id, lock=True)
-            if node and node.engine_id != body.engine_id:
+            if node and (
+                node.engine_id != body.engine_id
+                or node.executor_kind != body.executor_kind
+                or (body.executor_kind == "kubernetes" and node.platform != body.platform)
+            ):
                 raise RuntimeConflict("engine_replacement_requires_operator")
             node = node or RuntimeNode(
                 id=identity.node_id,
@@ -102,14 +209,29 @@ class RuntimeOperationService:
                 platform=body.platform,
                 memory_budget_mb=body.memory_budget_mb,
                 cpu_budget_millicores=body.cpu_budget_millicores,
-                heartbeat_at=datetime.utcnow(),
+                heartbeat_at=self.clock(),
+                executor_kind=body.executor_kind,
             )
             node.platform = body.platform
-            node.memory_budget_mb = body.memory_budget_mb
-            node.cpu_budget_millicores = body.cpu_budget_millicores
-            node.heartbeat_at = datetime.utcnow()
+            node.memory_budget_mb, node.cpu_budget_millicores = body.memory_budget_mb, body.cpu_budget_millicores
+            node.heartbeat_at = self.clock()
+            if body.executor_kind == "kubernetes":
+                node.status = "ready" if ready else "blocked"
+                status_gap = body.capabilities.get("status_protection") is not True
+                binding_gap = body.capabilities.get("binding_protection") is not True
+                if status_gap or binding_gap:
+                    with bypass_tenant_filter():
+                        for resource in await self.repo.find(
+                            RuntimeExecutionResource, node_id=node.id, kind="Pod", lock=True
+                        ):
+                            if status_gap:
+                                resource.protected_since_creation = False
+                            if binding_gap:
+                                resource.binding_policy_verified = False
+                            await self.repo.save(resource)
+            node.capabilities, node.probe_report = copy.deepcopy(body.capabilities), copy.deepcopy(body.probe_report)
             await self.repo.save(node)
-        return {"node_id": node.id, "platform": node.platform}
+        return self._node_document(node)
 
     @asynccontextmanager
     async def scope(self, identity, *, operation_id=None, transfer_id=None):
@@ -118,11 +240,8 @@ class RuntimeOperationService:
             row = await self.repo.get(model, operation_id or transfer_id)
         if row is None or not identity.node_id or row.node_id != identity.node_id:
             raise RuntimeConflict("operation_not_found")
-        token = current_tenant_id.set(row.tenant_id)
-        try:
+        with tenant_execution_scope(row.tenant_id):
             yield row
-        finally:
-            current_tenant_id.reset(token)
 
     async def describe(self, op):
         facts = await self.repo.find(RuntimeExecutionFact, operation_id=op.id)
@@ -172,6 +291,59 @@ class RuntimeOperationService:
             await self.repo.claim(op.id, node_id=identity.node_id, generation=op.generation, owner_epoch=op.owner_epoch)
         )
 
+    async def _guard_kubernetes_fact(self, operation, identity, body):
+        operation = await self.repo.get(RuntimeOperation, operation.id, lock=True)
+        if operation is None:
+            raise RuntimeConflict("operation_not_found")
+        node = await self.repo.get(RuntimeNode, operation.node_id, lock=True)
+        if node is None or node.executor_kind != "kubernetes":
+            return
+        receipt = body.detail.get("controller")
+        if (
+            set(identity.roles) != {"manager"}
+            or not isinstance(receipt, dict)
+            or set(receipt) != {"holder_id", "controller_epoch"}
+            or type(receipt["controller_epoch"]) is not int
+            or (receipt["holder_id"], receipt["controller_epoch"]) != (node.controller_holder, node.controller_epoch)
+            or node.lease_until is None
+            or node.lease_until <= self.clock()
+        ):
+            raise RuntimeConflict("controller_fact_fence_stale")
+        if node.status != "ready" and body.phase in {"preparing", "starting", "ready", "serving"}:
+            raise RuntimeConflict("runtime_prerequisites_blocked")
+        if body.detail.get("stopped"):
+            fields = {"operation_id": operation.id}
+            if operation.kind in {"stop", "destroy"}:
+                fields = {"app_id": operation.app_id}
+            pods = await self.repo.find(RuntimeExecutionResource, kind="Pod", lock=True, **fields)
+            if operation.kind == "stop":
+                pods = [pod for pod in pods if pod.purpose in {"serve", "migrate", "restore", "data"}]
+            if any(pod.stop_state != "confirmed" for pod in pods):
+                raise RuntimeConflict("execution_not_confirmed_stopped")
+        if body.phase == "ready" and operation.kind in {"deploy", "restore", "preview", "probe"}:
+            pod = await self.repo.get(RuntimeExecutionResource, body.exec_ref)
+            service = await self.repo.get(RuntimeExecutionResource, body.detail.get("service_ref", ""))
+            expected = (operation.app_id, operation.id, operation.node_id, operation.generation, operation.owner_epoch)
+            if any(
+                row is None
+                or (row.app_id, row.operation_id, row.node_id, row.generation, row.owner_epoch) != expected
+                or not row.uid
+                or row.stop_requested_at is not None
+                for row in (pod, service)
+            ):
+                raise RuntimeConflict("runtime_ready_resource_unconfirmed")
+            state = getattr(service, "observed_state", {}) or {}
+            if (
+                pod.kind != "Pod"
+                or service.kind != "Service"
+                or body.detail.get("pod_uid") != pod.uid
+                or body.detail.get("service_uid") != service.uid
+                or service.approved_template.get("spec", {}).get("selector", {}).get("runtime.bisheng.io/resource")
+                != pod.id
+                or body.detail.get("target") != {"host": state.get("cluster_ip"), "port": state.get("port")}
+            ):
+                raise RuntimeConflict("runtime_ready_target_unconfirmed")
+
     async def fact(self, op, identity, body):
         if body.node_id != identity.node_id:
             raise RuntimeConflict("node_identity_mismatch")
@@ -195,6 +367,7 @@ class RuntimeOperationService:
         if "diagnostic_tail" in body.detail:
             body.detail["diagnostic_tail"] = str(body.detail["diagnostic_tail"])[-16384:]
         async with self.repo.transaction():
+            await self._guard_kubernetes_fact(op, identity, body)
             fact = await self.repo.record_fact(op.id, **body.model_dump())
             if body.detail.get("legacy_build_state"):
                 if (
@@ -247,29 +420,30 @@ class RuntimeOperationService:
                     ),
                 )
 
-        if body.phase in TERMINAL:
-            op = await self.repo.get(RuntimeOperation, op.id, lock=True)
-            op.status = body.phase
-            op.cleanup_status = (
-                ("storage_pending" if op.kind in {"preview", "destroy"} else "complete")
-                if body.detail.get("cleanup_complete")
-                else "pending"
-            )
-            op.failure = (
-                {
-                    key: value
-                    for key, value in body.detail.items()
-                    if key in {"reason", "failed_stage", "maintenance", "data_may_have_changed", "diagnostic_tail"}
-                }
-                if body.phase != "completed"
-                else {}
-            )
-            await self.repo.save(op)
-            if body.detail.get("stopped"):
-                await self.repo.release(op.id, stopped=True)
-                from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
+            if body.phase in TERMINAL:
+                op = await self.repo.get(RuntimeOperation, op.id, lock=True)
+                op.status = body.phase
+                op.cleanup_status = (
+                    ("storage_pending" if op.kind in {"preview", "destroy"} else "complete")
+                    if body.detail.get("cleanup_complete")
+                    else "pending"
+                )
+                op.failure = (
+                    {
+                        key: value
+                        for key, value in body.detail.items()
+                        if key in {"reason", "failed_stage", "maintenance", "data_may_have_changed", "diagnostic_tail"}
+                    }
+                    if body.phase != "completed"
+                    else {}
+                )
+                await self.repo.save(op)
+                if body.detail.get("stopped"):
+                    await self.repo.release(op.id, stopped=True)
+                    from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
 
-                await RuntimeProjectionService(self.repo).terminal(op, body.detail)
+                    await RuntimeProjectionService(self.repo).terminal(op, body.detail)
+
         if (
             body.phase in TERMINAL
             and body.detail.get("stopped")
@@ -307,7 +481,12 @@ class RuntimeOperationService:
                     continue
                 if op.status not in TERMINAL or op.id in active or op.cleanup_status != "complete":
                     result.append(await self.describe(op))
-            return {"operations": result, "capacity": await self.repo.capacity_snapshot(identity.node_id)}
+            node = await self.repo.get(RuntimeNode, identity.node_id)
+            return {
+                "operations": result,
+                "capacity": await self.repo.capacity_snapshot(identity.node_id),
+                "node": self._node_document(node) if node else None,
+            }
 
     async def route(self, route_key):
         with bypass_tenant_filter():
@@ -315,6 +494,10 @@ class RuntimeOperationService:
         if not rows:
             return {"decision": "transition", "phase": "not_ready"}
         route = rows[0]
+        with bypass_tenant_filter():
+            node = await self.repo.get(RuntimeNode, route.node_id)
+        if node and node.executor_kind == "kubernetes" and node.status != "ready":
+            return {"decision": "transition", "phase": "unhealthy"}
         if route.status != "serving":
             return {"decision": "transition", "phase": route.status}
         return {
@@ -412,8 +595,7 @@ class RuntimeOperationService:
             body.route_epoch,
         ):
             raise RuntimeConflict("observation_fence_mismatch")
-        token = current_tenant_id.set(route.tenant_id)
-        try:
+        with tenant_execution_scope(route.tenant_id):
             if body.ready or route.status != "serving":
                 return {"accepted": True}
             app = await self.app_loader(route.app_id)
@@ -423,5 +605,3 @@ class RuntimeOperationService:
 
             await RuntimeDeliveryCoordinator(self.repo).recover(app, route, running=body.running)
             return {"accepted": True}
-        finally:
-            current_tenant_id.reset(token)

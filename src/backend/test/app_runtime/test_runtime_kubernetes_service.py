@@ -340,3 +340,71 @@ async def test_intermediate_phase_stop_does_not_release_the_whole_operation_rese
     await svc.observe_resource(MANAGER, REF, {**auth, "action": "stopped", "evidence": proof})
     held = (await repository.find(RuntimeCapacityReservation, operation_id=op.id))[0]
     assert held.state != "released"
+
+
+async def service_intent(control):
+    svc, repository, op = control
+    op.kind = "probe"
+    await repository.save(op)
+    await svc.register_resource(MANAGER, document(op, purpose="probe"))
+    service_ref = "44444444-4444-4444-8444-444444444444"
+    body = document(op, kind="Service", purpose="probe")
+    body["resource_ref"] = service_ref
+    body["template"]["metadata"]["labels"]["runtime.bisheng.io/resource"] = service_ref
+    body["template"]["metadata"]["name"] = "svc-app-a"
+    body["template"]["metadata"].pop("finalizers", None)
+    body["template"]["spec"] = {
+        "type": "ClusterIP",
+        "selector": {"runtime.bisheng.io/resource": REF},
+        "ports": [{"port": 8080, "targetPort": 8080, "protocol": "TCP"}],
+    }
+    await svc.register_resource(MANAGER, body)
+    node = await repository.get(RuntimeNode, "node-a")
+    node.capabilities = {**node.capabilities, "service_cidrs": ["10.96.0.0/12"]}
+    await repository.save(node)
+    return service_ref
+
+
+async def test_service_observed_address_is_bound_once_for_the_route_proof(control):
+    svc, repository, _ = control
+    service_ref = await service_intent(control)
+    auth = {
+        "action": "bind",
+        "holder_id": "controller-a",
+        "controller_epoch": 1,
+        "uid": "55555555-5555-4555-8555-555555555555",
+        "runtime_state": {"cluster_ip": "10.96.0.10", "port": 8080},
+    }
+    result = await svc.observe_resource(MANAGER, service_ref, auth)
+    assert result["observed_state"] == auth["runtime_state"]
+    assert (await repository.get(RuntimeExecutionResource, service_ref)).observed_state == auth["runtime_state"]
+    with pytest.raises(RuntimeConflict):
+        await svc.observe_resource(
+            MANAGER, service_ref, {**auth, "runtime_state": {"cluster_ip": "10.96.0.11", "port": 8080}}
+        )
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        {"cluster_ip": "192.168.1.10", "port": 8080},
+        {"cluster_ip": "10.96.0.10", "port": 8081},
+        {"cluster_ip": "10.96.0.10", "port": True},
+        {"cluster_ip": "10.96.0.10", "port": 8080, "token": "private"},
+    ],
+)
+async def test_observed_service_state_cannot_select_an_unregistered_address_or_port(control, state):
+    svc, _, _ = control
+    service_ref = await service_intent(control)
+    with pytest.raises(RuntimeConflict):
+        await svc.observe_resource(
+            MANAGER,
+            service_ref,
+            {
+                "action": "bind",
+                "holder_id": "controller-a",
+                "controller_epoch": 1,
+                "uid": "55555555-5555-4555-8555-555555555555",
+                "runtime_state": state,
+            },
+        )

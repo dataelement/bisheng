@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import ipaddress
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -119,9 +120,13 @@ class RuntimeKubernetesService:
         self.repo = repository or RuntimeKubernetesRepository()
         self.clock = clock
 
-    async def _node(self, node_id):
+    async def _node(self, node_id, *, allow_blocked=False):
         node = await self.repo.get(RuntimeNode, node_id)
-        if node is None or node.executor_kind != "kubernetes" or node.status != "ready":
+        if (
+            node is None
+            or node.executor_kind != "kubernetes"
+            or node.status not in ({"ready", "blocked"} if allow_blocked else {"ready"})
+        ):
             raise RuntimeConflict("controller_node_unavailable")
         parts = node.engine_id.split("/")
         if (
@@ -154,7 +159,7 @@ class RuntimeKubernetesService:
 
     async def claim_controller(self, identity, *, holder_id, expected_epoch):
         node_id = _identity(identity, "manager")
-        await self._node(node_id)
+        await self._node(node_id, allow_blocked=True)
         node = await self.repo.claim_controller(
             node_id, holder_id=holder_id, expected_epoch=expected_epoch, now=self.clock()
         )
@@ -163,7 +168,7 @@ class RuntimeKubernetesService:
     async def renew_controller(self, identity, *, holder_id, controller_epoch):
         _epoch(controller_epoch)
         node_id = _identity(identity, "manager")
-        await self._node(node_id)
+        await self._node(node_id, allow_blocked=True)
         node = await self.repo.renew_controller(
             node_id, holder_id=holder_id, controller_epoch=controller_epoch, now=self.clock()
         )
@@ -332,6 +337,7 @@ class RuntimeKubernetesService:
             "binding_policy_verified": row.binding_policy_verified,
             "stop_requested_at": row.stop_requested_at.isoformat() if row.stop_requested_at else None,
             "stop_evidence": copy.deepcopy(row.stop_evidence),
+            "observed_state": copy.deepcopy(row.observed_state),
             "template": copy.deepcopy(row.approved_template),
             "namespace": row.namespace,
             "name": row.name,
@@ -358,17 +364,50 @@ class RuntimeKubernetesService:
                 raise RuntimeConflict("resource_recovery_scope_invalid")
             return {"resources": [self._resource_document(row) for row in rows]}
 
+    async def _observed_state(self, resource, raw):
+        if raw is None:
+            return None
+        if (
+            resource.kind != "Service"
+            or not isinstance(raw, dict)
+            or set(raw) != {"cluster_ip", "port"}
+            or type(raw["port"]) is not int
+        ):
+            raise RuntimeConflict("resource_observed_state_refused")
+        node = await self.repo.get(RuntimeNode, resource.node_id)
+        ports = resource.approved_template.get("spec", {}).get("ports", [])
+        try:
+            address = ipaddress.ip_address(raw["cluster_ip"])
+            cidrs = (node.capabilities or {}).get("service_cidrs", []) if node else []
+            valid = (
+                address.is_private
+                and not (address.is_loopback or address.is_link_local or address.is_multicast or address.is_unspecified)
+                and any(address in ipaddress.ip_network(cidr) for cidr in cidrs)
+            )
+        except (ValueError, TypeError):
+            valid = False
+        if not valid or len(ports) != 1 or raw["port"] != ports[0].get("port"):
+            raise RuntimeConflict("resource_observed_endpoint_refused")
+        return {"cluster_ip": str(address), "port": raw["port"]}
+
     async def observe_resource(self, identity, resource_ref, body):
         _identity(identity, "manager")
         _ref(resource_ref)
-        _fields(body, {"action", "holder_id", "controller_epoch"}, {"uid", "node_name", "operation_id", "evidence"})
+        _fields(
+            body,
+            {"action", "holder_id", "controller_epoch"},
+            {"uid", "node_name", "operation_id", "evidence", "runtime_state"},
+        )
         _epoch(body["controller_epoch"])
         async with self._scope(identity, RuntimeExecutionResource, resource_ref) as resource:
             auth = {"holder_id": body["holder_id"], "controller_epoch": body["controller_epoch"], "now": self.clock()}
+            if body.get("runtime_state") is not None and body["action"] != "bind":
+                raise RuntimeConflict("resource_observed_state_refused")
             if body["action"] == "bind":
                 _ref(body.get("uid"))
+                state = await self._observed_state(resource, body.get("runtime_state"))
                 row = await self.repo.bind_resource(
-                    resource_ref, uid=body["uid"], node_name=body.get("node_name", ""), **auth
+                    resource_ref, uid=body["uid"], node_name=body.get("node_name", ""), observed_state=state, **auth
                 )
             elif body["action"] == "stop":
                 if body.get("uid") and body["uid"] != resource.uid:
@@ -397,7 +436,7 @@ class RuntimeKubernetesService:
         _identity(identity, "admission")
         _ref(resource_ref)
         async with self._scope(identity, RuntimeExecutionResource, resource_ref) as row:
-            node, domain = await self._node(identity.node_id)
+            node, domain = await self._node(identity.node_id, allow_blocked=True)
             if (row.cluster_id, row.namespace) != tuple(domain):
                 raise RuntimeConflict("resource_execution_domain_refused")
             op = await self.repo.get(RuntimeOperation, row.operation_id)
@@ -421,7 +460,12 @@ class RuntimeKubernetesService:
                 "cleanup_only": not live,
                 "service_cidrs": (node.capabilities or {}).get("service_cidrs", []),
                 "allow_create": bool(
-                    pending and controller and live and row.uid is None and row.stop_requested_at is None
+                    pending
+                    and controller
+                    and live
+                    and node.status == "ready"
+                    and row.uid is None
+                    and row.stop_requested_at is None
                 ),
                 "allow_update": bool(pending and controller and row.uid and (live or stopped)),
                 "allow_delete": bool(

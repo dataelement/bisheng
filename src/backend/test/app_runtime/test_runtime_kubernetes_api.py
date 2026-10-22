@@ -167,3 +167,18 @@ async def test_manager_recovery_reads_are_node_bound_and_do_not_require_a_live_o
     assert (
         await api_client.send("GET", f"/resources?operation_id={api_client.op.id}", role="entry")
     ).status_code == 403
+
+
+async def test_resource_observation_dto_accepts_only_bound_service_endpoint_fields(api_client):
+    from test.app_runtime.test_runtime_kubernetes_service import service_intent
+
+    service_ref = await service_intent((api_client.svc, api_client.repo, api_client.op))
+    body = {
+        "action": "bind",
+        "holder_id": "controller-a",
+        "controller_epoch": 1,
+        "uid": "55555555-5555-4555-8555-555555555555",
+        "runtime_state": {"cluster_ip": "10.96.0.10", "port": 8080},
+    }
+    response = await api_client.send("POST", f"/resources/{service_ref}/observations", body)
+    assert response.status_code == 200 and response.json()["observed_state"] == body["runtime_state"]

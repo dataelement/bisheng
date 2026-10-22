@@ -57,6 +57,7 @@ class ResourceObservation(ControllerRenew):
     node_name: str = Field(default="", max_length=253)
     operation_id: str | None = Field(default=None, min_length=1, max_length=36)
     evidence: dict | None = None
+    runtime_state: dict | None = None
 
 
 @router.post("/controllers/claim")

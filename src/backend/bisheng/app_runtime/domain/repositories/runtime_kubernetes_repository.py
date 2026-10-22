@@ -62,7 +62,7 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
             raise RuntimeConflict("controller_epoch_invalid")
         async with self.transaction() as session:
             node = await self.get(RuntimeNode, node_id, lock=True)
-            if node is None or node.executor_kind != "kubernetes" or node.status != "ready":
+            if node is None or node.executor_kind != "kubernetes" or node.status not in {"ready", "blocked"}:
                 raise RuntimeConflict("controller_node_unavailable")
             if node.controller_epoch != expected_epoch:
                 raise RuntimeConflict("controller_epoch_conflict")
@@ -80,7 +80,7 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
         if (
             node is None
             or node.executor_kind != "kubernetes"
-            or node.status != "ready"
+            or node.status not in {"ready", "blocked"}
             or (node.controller_holder, node.controller_epoch) != (holder_id, epoch)
             or node.lease_until is None
             or node.lease_until <= now
@@ -131,7 +131,9 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
             op = await self.get(RuntimeOperation, row.operation_id, lock=True)
             if op is None:
                 raise RuntimeConflict("resource_operation_missing")
-            await self._controller(row.node_id, holder_id, controller_epoch, now)
+            node = await self._controller(row.node_id, holder_id, controller_epoch, now)
+            if node.status != "ready":
+                raise RuntimeConflict("runtime_prerequisites_blocked")
             await self._acting_operation(row, row.operation_id, now)
             if (row.generation, row.owner_epoch) != (op.generation, op.owner_epoch):
                 raise RuntimeConflict("resource_fence_mismatch")
@@ -179,7 +181,9 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
         row = await self.get(RuntimeExecutionResource, resource_id, lock=True)
         return row, node
 
-    async def bind_resource(self, resource_id, *, uid, node_name, holder_id, controller_epoch, now=None):
+    async def bind_resource(
+        self, resource_id, *, uid, node_name, holder_id, controller_epoch, now=None, observed_state=None
+    ):
         now = now or datetime.utcnow()
         if not isinstance(uid, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,64}", uid):
             raise RuntimeConflict("resource_uid_invalid")
@@ -191,6 +195,12 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
                 raise RuntimeConflict("resource_uid_changed")
             if row.node_name and row.node_name != node_name:
                 raise RuntimeConflict("resource_binding_changed")
+            if observed_state is not None:
+                if not isinstance(observed_state, dict) or row.kind != "Service":
+                    raise RuntimeConflict("resource_observed_state_refused")
+                if row.observed_state and row.observed_state != observed_state:
+                    raise RuntimeConflict("resource_observed_state_changed")
+                row.observed_state = dict(observed_state)
             first = row.uid is None
             row.uid, row.node_name, row.observed_at = uid, node_name, now
             row.controller_epoch = controller_epoch
