@@ -43,10 +43,126 @@ from runtime_manager.platform_protocol import signed_headers  # noqa: E402
 _NAME = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _IMAGE = re.compile(r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}")
 _RESULT = "BISHENG_RUNTIME_RESULT "
+# A pattern match is insufficient: arbitrary secret text can look like a code.
+_SAFE_PROBE_REASONS = frozenset(
+    {
+        "admission_negative_unconfirmed",
+        "admission_negative_was_accepted",
+        "assembly_registry_not_configured",
+        "binding_canary_already_scheduled",
+        "binding_delete_fence_unconfirmed",
+        "binding_deletion_observation_invalid",
+        "control_cleanup_identity_changed",
+        "control_probe_failed",
+        "control_probe_identity_changed",
+        "control_probe_result_missing",
+        "cri_architecture_mismatch",
+        "cri_image_identity_unconfirmed",
+        "cri_requested_image_changed",
+        "descriptor_changed_during_probe",
+        "direct_denial_targets_incomplete",
+        "dns_control_unconfirmed",
+        "dns_denial_target_invalid",
+        "egress_proxy_target_invalid",
+        "ingress_pod_ip_missing",
+        "kubectl_request_failed",
+        "namespace_budget_unconfirmed",
+        "namespace_ownership_unconfirmed",
+        "optional_runtime_class_not_configured",
+        "platform_authenticated_probe_refused",
+        "platform_node_scope_mismatch",
+        "platform_origin_invalid",
+        "platform_unsigned_probe_accepted",
+        "preflight_absence_unconfirmed",
+        "preflight_cleanup_identity_changed",
+        "preflight_create_refused",
+        "preflight_delete_identity_changed",
+        "preflight_delete_refused",
+        "preflight_finalizer_release_refused",
+        "preflight_log_identity_changed",
+        "preflight_plans_invalid",
+        "preflight_pod_failed",
+        "preflight_pod_replaced",
+        "preflight_pvc_writer_unconfirmed",
+        "preflight_recovery_identity_changed",
+        "preflight_recovery_scope_invalid",
+        "preflight_recovery_uid_unconfirmed",
+        "preflight_result_missing",
+        "probe_deadline_exceeded",
+        "probe_driver_set_incomplete",
+        "rbac_exec_allowed",
+        "rbac_exec_api_not_refused",
+        "rbac_scope_unconfirmed",
+        "registry_probe_digest_invalid",
+        "registry_probe_digest_mismatch",
+        "registry_probe_failed",
+        "runtime_profile_invalid",
+        "runtime_profiles_not_verified",
+        "status_negative_unconfirmed",
+        "storage_capacity_not_bounded",
+        "storage_not_qualified",
+    }
+)
+_SAFE_CHECK_NAMES = REQUIRED_CHECKS | {"registry-push", "sandbox-recommended", "sandbox-hardened"}
 
 
 class ProbeError(RuntimeError):
     """Only a safe reason is exposed; command output can contain private data."""
+
+
+class ProbeRunFailure(RuntimeError):
+    """Keep probe and cleanup failures without relying on traceback rendering."""
+
+    def __init__(self, probe_error, cleanup_error, report=None):
+        super().__init__("probe_run_failed")
+        self.probe_error, self.cleanup_error, self.report = probe_error, cleanup_error, report
+
+
+def safe_exception_type(name):
+    return name if isinstance(name, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", name) else "Exception"
+
+
+def safe_failure(error):
+    # Inspect only the exact constant argument; never invoke an exception's
+    # __str__ or copy command output, response bodies, headers, or objects.
+    reason = error.args[0] if isinstance(error, ProbeError) and len(error.args) == 1 else None
+    return {
+        "reason": reason if isinstance(reason, str) and reason in _SAFE_PROBE_REASONS else "probe_failed",
+        "exception_type": safe_exception_type(type(error).__name__),
+    }
+
+
+def failure_details(error):
+    if not isinstance(error, ProbeRunFailure):
+        return [{"phase": "probe", **safe_failure(error)}]
+    failures = []
+    if error.probe_error is not None:
+        failures.append({"phase": "probe", **safe_failure(error.probe_error)})
+    for row in (error.report or {}).get("checks", []):
+        if row.get("ok") is not False or row.get("name") not in _SAFE_CHECK_NAMES:
+            continue
+        exception_type = safe_exception_type(row.get("exception_type"))
+        reason = row.get("reason")
+        failures.append(
+            {
+                "phase": "check",
+                "name": row["name"],
+                "reason": reason
+                if exception_type == "ProbeError" and reason in _SAFE_PROBE_REASONS
+                else "probe_failed",
+                "exception_type": exception_type,
+            }
+        )
+    failures.append({"phase": "cleanup", **safe_failure(error.cleanup_error)})
+    return failures
+
+
+def log_failures(failures):
+    print(
+        json.dumps({"event": "runtime_installation_verification_failed", "failures": failures}, sort_keys=True),
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def network_plan(targets):
@@ -135,12 +251,7 @@ def execute_checks(drivers, document, *, observed_at):
             if result.get("observations"):
                 artifacts[name] = result["observations"]
         except Exception as error:
-            reason = (
-                str(error)
-                if isinstance(error, ProbeError) and re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", str(error))
-                else "probe_failed"
-            )
-            row = {"name": name, "ok": False, "reason": reason, "evidence": {}}
+            row = {"name": name, "ok": False, **safe_failure(error), "evidence": {}}
         rows.append({**row, "observed_at": observed_at})
     return {
         "artifacts": artifacts,
@@ -960,11 +1071,19 @@ class InstallationVerifier:
         requested = self.document.get("sandbox", {}).get("requested", "default")
         if requested in {"recommended", "hardened"}:
             drivers["sandbox-" + requested] = lambda: self._sandbox(requested)
+        report, probe_error = None, None
         try:
             self.idle = self._observe(self._pod("idle"), running=True)
-            return execute_checks(drivers, self.document, observed_at=time.time())
+            report = execute_checks(drivers, self.document, observed_at=time.time())
+            return report
+        except BaseException as error:
+            probe_error = error
+            raise
         finally:
-            self.cleanup()
+            try:
+                self.cleanup()
+            except Exception as cleanup_error:
+                raise ProbeRunFailure(probe_error, cleanup_error, report) from None
 
     def _cleanup_one(self, record):
         current = self.api.get(record["resource"], record["name"], manager=True)
@@ -1204,18 +1323,22 @@ def main(argv=None):
             return 0
         try:
             report = verifier.live()
-        except Exception:
+        except Exception as error:
+            failures = failure_details(error)
+            summary = {key: failures[0][key] for key in ("reason", "exception_type")}
             report = {
                 "source": "cluster-probe",
+                "failures": failures,
                 "observed_at": time.time(),
                 "descriptor_digest": descriptor_digest(verifier.document),
-                "checks": [
-                    {"name": name, "ok": False, "reason": "probe_or_cleanup_failed", "evidence": {}}
-                    for name in sorted(REQUIRED_CHECKS)
-                ],
+                "checks": [{"name": name, "ok": False, **summary, "evidence": {}} for name in sorted(REQUIRED_CHECKS)],
             }
             if args.write_report:
-                verifier.publish(report)
+                try:
+                    verifier.publish(report)
+                except Exception as publish_error:
+                    report["failures"].append({"phase": "publish", **safe_failure(publish_error)})
+            log_failures(report["failures"])
             print(json.dumps(report, sort_keys=True), flush=True)
             return 1
         if args.write_report:
@@ -1232,8 +1355,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as error:
-        print(
-            "Runtime installation verification failed (" + type(error).__name__ + ")",
-            file=sys.stderr,
-        )
+        log_failures(failure_details(error))
         raise SystemExit(1) from None
