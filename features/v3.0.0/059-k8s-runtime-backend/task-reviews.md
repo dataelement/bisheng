@@ -835,3 +835,1017 @@ T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态
 逐项读源核对：签名私钥只由backend持有、只读内部公钥API、5秒票据受理期先提交；Service仅通过Repository访问SQL，owner不因管理员身份放宽。结果查询走新只读会话，原unknown互斥不提前释放；导出Endpoint委托Service，原Docker bytes响应不变。T051接线文件为执行器/k8s_prepare；T009的schema/组装/环境卷模板、T031材料下载进程环境、T047隔离schema初始化、T045结果RPC/CSV摘要、T017固定assembler镜像允许集合均为原任务增量，分别仍为1–2目标文件，7项补充审查PASS。临时镜像组装凭据不进入应用/无凭据安装阶段，不执行用户Dockerfile。
 
 备注：T051/T053只完成本地接线及模拟集群/命令合同；源码兼容逐语言实际行为、registry/CRI、189部署与CI双架构发行继续由后续任务验收，不能从本组通过推断已部署。无新增人审暂停点。
+
+## 并行交付及真实启动兼容收尾
+
+用户已明确授权并行。共同快照c90927b1f，安装、发行、验收三个独立worktree分工；主agent串行合流并独占189/109远端操作。所有新增任务最多两个目标文件。T109以后部分任务登记晚于实际修复；先失败后通过历史以各日志和agent报告为准，未倒填执行时间。没有规格/设计决策变更；本地通过不代表集群/业务/双架构发行通过。
+
+本批检查：Service仅委托Repository，内部HMAC/材料私钥/owner票据各司其职，无新数据库写路径/前端/Worker；安装工具不持平台存储密钥，公开CA与私密key拒绝混用，日志仅安全常量。Chart不授manager修改控制面/RBAC/基线权限；helper无宿主socket。设计§4.1、§4.8、§4.9、§4.10同步执行落点，D1–D8不变。
+
+| 任务组 | 核实的配对与证据 | 边界 |
+| --- | --- | --- |
+| T054–T061、T064/T065、T101/T102、T120/T134 | canary/能力/installer先红绿；安装工具51项及当前runtime全量967 passed/10 skipped；真实CREATE误拒绝由T139/T140独立修补 | 只有tool/本地合同，189完整基线未通过 |
+| T062/T063/T103/T104、T121–T123 | 镜像合同70项组合，单独发行合同27 passed；189原生构建并禁网执行helper/assembler四种真实resolve；CI仅本地代码检查 | 未触发F059公开tag/CI；没有arm64原生证明 |
+| T094–T100、T109/T110、T129 | purge维护、stop证据、原子轻量预占与PVC作用域，定向65项及backend全量1564 passed/18 skipped | 模拟集群/SQLite不替代189真实删除 |
+| T111–T119、T130/T131 | CNI/guard/launcher/冻结与源码限制，各线红绿；snapshot刷新6失败后58通过、source_limits161通过，当前runtime967通过 | 已有Pod作用域先校验；未实测业务Pod |
+| T066/T105–T108、T124–T128、T135–T138、T141/T142 | harness、bootstrap、真实loopback HTTPS/WSS正反；工具合同20+bootstrap37，coordination88，最终backend1564通过 | bootstrap只准备身份/审批，不算业务发布；平台E2E仍待 |
+| T132/T133 | committed SDK0.1.1 wheel真实读环境；正式/预览/伪造值8个红阶段，coordinator及相关34通过 | 只验证变量合同，不代替SDK平台实际调用 |
+| T139/T140 | 固定K8s v1.28.15源码+两份实际canary JSON；CREATE默认状态先9失败、空env先1失败，最终准入/模板171通过；实际JSON本地准入正反验证 | 189下一次真实创建与停止仍需继续验证 |
+
+以下各任务均按skill七项逐条核查；测试任务不适用项记N/A，基础设施不强造数据库/前端结论。所有范围、前置和配对已由索引交叉核实。各项验证日志位于/private/tmp/f059-*.log；交付中仅保存摘要和脱敏证据。
+
+## Task Review: T096
+
+**任务**：owner 删除与安全清理合同。**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_appdb.py`、`src/backend/test/app_runtime/test_runtime_kubernetes_purge.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T097；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T097
+
+**任务**：backend purge 范围和删除授权。**类型**：实现。**文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`、`src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T096；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T098
+
+**任务**：受信 helper 清理与持久重入。**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_appdb.py`、`src/runtime-manager/runtime_manager/k8s_data_helper.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T096；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T099
+
+**任务**：生产 purge 模板及状态机接线。**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`、`src/runtime-manager/runtime_manager/operations.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T096；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T100
+
+**任务**：执行器条件回收生产卷。**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`、`src/runtime-manager/runtime_manager/k8s_data_executor.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T096；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T101
+
+**任务**：受限 canary 启动合同。**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_canary.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T102；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T102
+
+**任务**：只读 canary 准入和网络探测。**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`、`src/runtime-manager/runtime_manager/k8s_capabilities.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T101；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T054
+
+**任务**：隔离和安装前置的实际能力探测：契约与失败用例。**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_capabilities.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T055；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T055
+
+**任务**：隔离和安装前置的实际能力探测。**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_capabilities.py`、`src/runtime-manager/runtime_manager/k8s_templates.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T054；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T094
+
+**任务**：活跃材料代理候选查询合同。**类型**：测试。**文件**：`src/backend/test/app_runtime/test_runtime_material_policy_candidates.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T095；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T095
+
+**任务**：活跃材料候选 Repository 查询。**类型**：实现。**文件**：`src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T094；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T056
+
+**任务**：材料用途的出站投影：契约与失败用例。**类型**：测试。**文件**：`src/backend/test/app_runtime/test_runtime_material_egress.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T057；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T057
+
+**任务**：材料用途的出站投影。**类型**：实现。**文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_material_policy_service.py`、`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T056；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T058
+
+**任务**：Chart 入口与 values schema。**类型**：基础设施。**文件**：`deploy/kubernetes/app-runtime/Chart.yaml`、`deploy/kubernetes/app-runtime/values.yaml`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T059
+
+**任务**：部署参数及共享入口校验。**类型**：基础设施。**文件**：`deploy/kubernetes/app-runtime/values.schema.json`、`deploy/kubernetes/app-runtime/templates/services.yaml`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T060
+
+**任务**：RBAC 与准入安装模板。**类型**：基础设施。**文件**：`deploy/kubernetes/app-runtime/templates/rbac.yaml`、`deploy/kubernetes/app-runtime/templates/admission.yaml`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T061
+
+**任务**：网络和保留卷安装模板。**类型**：基础设施。**文件**：`deploy/kubernetes/app-runtime/templates/network.yaml`、`deploy/kubernetes/app-runtime/templates/storage.yaml`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T104
+
+**任务**：镜像发行和清单合同。**类型**：测试。**文件**：`src/runtime-manager/tests/test_image_release.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T063；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T062
+
+**任务**：运行服务与 helper 镜像。**类型**：基础设施。**文件**：`deploy/kubernetes/app-runtime/templates/workloads.yaml`、`src/runtime-manager/Dockerfile.helper`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T103
+
+**任务**：原生镜像构建脚本扩展。**类型**：基础设施。**文件**：`scripts/build_runtime_images.sh`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T063
+
+**任务**：同版本双架构 CI/CD 发行。**类型**：基础设施。**文件**：`.github/workflows/runtime-images.yml`、`src/runtime-manager/runtime_manager/image_catalog.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T104；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T064
+
+**任务**：部署/离线清单验证：契约与失败用例。**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_installation.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T065；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T065
+
+**任务**：部署/离线清单验证。**类型**：实现。**文件**：`scripts/verify_k8s_runtime.py`、`deploy/kubernetes/app-runtime/README.md`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T064；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T105
+
+**任务**：E2E harness 边界合同。**类型**：测试。**文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T106；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T106
+
+**任务**：真实 API 业务验收共享行程。**类型**：实现。**文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`、`src/backend/test/e2e/test_e2e_vibe_k8s_runtime.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T105；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T066
+
+**任务**：真实平台 K8s E2E 执行器。**类型**：测试。**文件**：`scripts/e2e_k8s_runtime.py`、`features/v3.0.0/059-k8s-runtime-backend/e2e-checklist.md`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T107
+
+**任务**：继承发布线的权限/egress测试适配。**类型**：测试。**文件**：`src/backend/test/app_runtime/test_app_permission_registration.py`、`src/backend/test/app_runtime/test_runtime_lifecycle_v2.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T108
+
+**任务**：资源历史约束静态合同同步。**类型**：测试。**文件**：`src/backend/test/app_runtime/test_runtime_model_contracts.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T109
+
+**任务**：删除维护轻量容量预占合同。**类型**：测试。**文件**：`src/backend/test/app_runtime/test_runtime_purge_capacity.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T110
+
+**任务**：删除维护轻量容量预占。**类型**：实现。**文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T109；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T111
+
+**任务**：Calico 元数据来源及收尾合同。**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_admission.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T112
+
+**任务**：Calico 元数据来源隔离。**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T111；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T113
+
+**任务**：scratch 写入前卷校验合同。**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_helper.py`、`src/runtime-manager/tests/test_k8s_templates.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T114
+
+**任务**：scratch 写入前卷校验。**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_helper.py`、`src/runtime-manager/runtime_manager/k8s_templates.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T113；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T115
+
+**任务**：scratch 预算与安装标识接线。**类型**：实现。**文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`、`src/runtime-manager/runtime_manager/executors/kubernetes.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T032；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T116
+
+**任务**：static launcher 兼容合同。**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_helper.py`、`src/runtime-manager/tests/test_k8s_templates.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T117
+
+**任务**：static launcher 保留。**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T116；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T118
+
+**任务**：Node launcher 兼容收尾。**类型**：实现。**文件**：`src/runtime-manager/tests/test_k8s_templates.py`、`src/runtime-manager/runtime_manager/k8s_templates.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T008；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T119
+
+**任务**：探测刷新后的 sandbox 冻结。**类型**：实现。**文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`、`src/runtime-manager/runtime_manager/executors/kubernetes.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T032；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T120
+
+**任务**：Chart 安装标识传递。**类型**：实现。**文件**：`deploy/kubernetes/app-runtime/templates/workloads.yaml`、`src/runtime-manager/tests/test_k8s_installation.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T064；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T121
+
+**任务**：helper 可信解析工具链合同。**类型**：测试。**文件**：`src/runtime-manager/tests/test_image_release.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T122
+
+**任务**：helper 可信解析工具链。**类型**：基础设施。**文件**：`src/runtime-manager/Dockerfile.helper`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T123
+
+**任务**：镜像实际离线解析烟测。**类型**：基础设施。**文件**：`scripts/build_runtime_images.sh`、`src/runtime-manager/tests/test_image_release.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T124
+
+**任务**：隔离平台 bootstrap 合同。**类型**：测试。**文件**：`scripts/fixtures/f059/test_bootstrap.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T125
+
+**任务**：隔离平台 API bootstrap。**类型**：实现。**文件**：`scripts/bootstrap_f059_acceptance.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T124；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T126
+
+**任务**：真实应用协议夹具。**类型**：实现。**文件**：`scripts/fixtures/f059/python_demo.py`、`scripts/fixtures/f059/node_demo.js`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T124；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T127
+
+**任务**：完整镜像及离线材料夹具。**类型**：基础设施。**文件**：`scripts/fixtures/f059/Dockerfile.demo`、`scripts/fixtures/f059/offline-manifest.example.json`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T128
+
+**任务**：平台验收夹具说明。**类型**：基础设施。**文件**：`scripts/fixtures/f059/README.md`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T129
+
+**任务**：helper 及 PVC 作用域校验接线。**类型**：实现。**文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`、`src/backend/test/app_runtime/test_runtime_kubernetes_service.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T016；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T130
+
+**任务**：自定义 bundle launcher 合同说明。**类型**：基础设施。**文件**：`deploy/kubernetes/app-runtime/README.md`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T131
+
+**任务**：源码大小限制冻结接线。**类型**：实现。**文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`、`src/runtime-manager/runtime_manager/executors/kubernetes.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T032；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T132
+
+**任务**：SDK 既有平台地址变量合同。**类型**：测试。**文件**：`src/backend/test/app_runtime/test_runtime_k8s_delivery_coordinator.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T133
+
+**任务**：SDK 平台地址变量接线。**类型**：实现。**文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_delivery_coordinator.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T132；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T134
+
+**任务**：安装探测安全失败分类。**类型**：实现。**文件**：`scripts/verify_k8s_runtime.py`、`src/runtime-manager/tests/test_k8s_installation.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T064；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T135
+
+**任务**：显式公开 CA 的 HTTP/WS 合同。**类型**：测试。**文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T136
+
+**任务**：真实业务 E2E 公开 CA 接线。**类型**：实现。**文件**：`scripts/e2e_k8s_runtime.py`、`src/backend/test/e2e/helpers/vibe_runtime.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T135；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T137
+
+**任务**：固定镜像 profile 新修订合同。**类型**：测试。**文件**：`scripts/fixtures/f059/test_bootstrap.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T138
+
+**任务**：验收 profile 修订参数。**类型**：实现。**文件**：`scripts/bootstrap_f059_acceptance.py`、`scripts/fixtures/f059/README.md`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T137；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T139
+
+**任务**：Kubernetes CREATE 默认对象合同。**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_admission.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T140
+
+**任务**：Kubernetes CREATE 默认对象兼容。**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对T139；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T141
+
+**任务**：协调器旧 scratch 夹具适配。**类型**：测试。**文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_coordination.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | N/A | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | N/A | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | N/A | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围1文件PASS；配对N/A；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## Task Review: T142
+
+**任务**：验收管理员授权可重复执行。**类型**：实现。**文件**：`scripts/bootstrap_f059_acceptance.py`、`scripts/fixtures/f059/test_bootstrap.py`。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 沿用原Owner/身份分离，见本批具体检查 |
+| 2 | 命名/AC | PASS | 逐条完整AC及现有命名；无新增UI |
+| 3 | 序列化 | PASS | 既有wire/envelope；内部对象严格比对 |
+| 4 | 数据库 | N/A | 无新增模型/DDL；原SQL锁在Repository |
+| 5 | 前端 | N/A | 无UI改动 |
+| 6 | 信息泄漏 | PASS | 安全文件/固定错误原因；无真实凭据入仓库 |
+| 7 | 设计同步 | PASS | 已同步§4.1/§4.8–§4.10；D1–D8不变 |
+
+**元数据**：范围2文件PASS；配对T124；依赖已完成PASS。**结果：PASS_WITH_NOTES**：仅本批说明范围内证据，真实业务及正式发行继续由T067–T072验收。
+
+## T111/T112 实测复审重开
+
+189首个canary已通过CREATE并被scheduler绑定；Calico实际通过pods/status维护三个保留注解，原_status无条件拒绝导致sandbox未启动。保留事件及UID，不强删/移除finalizer；该配对重开NEEDS_FIX，只补认证CNI、同UID/节点且status/spec不变的metadata路径，终态与其他字段仍拒绝。新实现/配对通过后再更新结果，当前不作为安装成功。

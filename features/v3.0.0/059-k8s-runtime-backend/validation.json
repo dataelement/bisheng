@@ -1,30 +1,31 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22",
-  "validated_source_commit": "09e07cd1f",
+  "recorded_at": "2026-10-22T10:49:09.248453+00:00",
+  "validated_source_commit": "4bd3351be66aa5b92f291f9425d1a6cbfc40a881",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 53,
-    "tasks_total": 82,
-    "e2e": "not_started",
+    "l1_completed": 134,
+    "tasks_total": 142,
+    "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 689,
+      "passed": 967,
       "skipped": 10,
       "exit_code": 0,
-      "source_commit": "340dedbf6",
-      "scope": "full runtime before adding the separate data helper",
-      "log": "/private/tmp/f059-runtime-capabilities-full.log"
+      "source_commit": "ce2e25076",
+      "scope": "full runtime before final CREATE-default compatibility; final admission patch separately 171 passed",
+      "log": "/private/tmp/f059-integration-runtime-latest.log"
     },
     "backend": {
-      "passed": 213,
+      "passed": 1564,
       "exit_code": 0,
-      "scope": "material/control/model and legacy material paths",
-      "log": "/private/tmp/f059-dependency-material-final.log"
+      "scope": "full app_runtime and app_publish including scratch fixture repair",
+      "log": "/private/tmp/f059-backend-full-final.log",
+      "skipped": 18
     },
     "public_tenant_fix": {
       "passed": 17,
@@ -33,7 +34,7 @@
       "log": "/private/tmp/f059-public-prereq-tests.log",
       "release_commit": "9d156f261cc7769fcf75f41caeb104a425308017"
     },
-    "alembic_head": "f059_merge_release_heads",
+    "alembic_head": "f059_resource_phases",
     "uv_lock_frozen_offline": "passed",
     "ruff": "changed material, control client, main/middleware source and tests passed",
     "arch_guard": "passed per changed Python file",
@@ -128,6 +129,100 @@
       "source_commit": "09e07cd1f",
       "log": "/private/tmp/f059-data-sessions-final.log",
       "evidence": "backend services and original owner/audit; issuer and transport injected; default wiring still pending T045/T049"
+    },
+    "real_mysql_migration": {
+      "host": "192.168.106.189",
+      "database_scope": "dedicated-e2e-f059",
+      "target_head": "f059_resource_phases",
+      "exit_code": 0,
+      "private_log": "/opt/e2e-f059/logs/migration.log"
+    },
+    "docker_native_engine": {
+      "host": "192.168.106.109",
+      "scope": "dedicated-e2e-f059-docker",
+      "manager_image_id": "sha256:4e1be0d30cde2a755b1bcfaa7d0b9b743df33ebc3ec05f37a383a0f0dc1f36c1",
+      "platform": "linux/amd64",
+      "result": {
+        "platform": "linux/amd64",
+        "checks": [
+          {
+            "language": "python3.11",
+            "offline": true,
+            "code_update": true,
+            "dependency_reuse": true
+          },
+          {
+            "language": "node20",
+            "offline": true,
+            "code_update": true,
+            "dependency_reuse": true
+          },
+          {
+            "language": "static",
+            "offline": true,
+            "code_update": true,
+            "dependency_reuse": true
+          },
+          {
+            "language": "static",
+            "offline": true,
+            "install_hook": true,
+            "frontend_build": true,
+            "source_change_invalidates_dependency": true
+          },
+          {
+            "language": "python3.11",
+            "offline": true,
+            "local_native_wheel": true,
+            "source_change_invalidates_dependency": true
+          }
+        ]
+      },
+      "result_sha256": "0f8f802bbbcca0e0374f376e8a8a3216c4bfbf032b0ae640ab1e4d3e4f185e5a",
+      "non_test_containers_before_after_sha256": "a01118b42cd860d661a9062be5227ede560b3e872ef828216e9031ce3d881154",
+      "script_sha256": "a8b6ddd97fdc9eb88f7728819390f74df4a3b111179cf42aaa2c398ba8d1f3c0",
+      "code_critical_hashes": {
+        "bundle_preparer.py": "13a8e75152f5c3c13bb376166074f1f2f51fdb43cfc84ef89d6a7017d724a9fb",
+        "bundle_launch.py": "b1c4b9bf686a6def9d9910130ee07f7e90958e2217bac3f6931778a91cf74ee7"
+      },
+      "no_new_oci_images_asserted": true,
+      "temporary_containers_and_network_cleaned": true,
+      "artifact_port": "in-memory; not real backend/MinIO/approval",
+      "private_evidence_dir": "/opt/e2e-f059-docker/evidence"
+    },
+    "kubernetes_live": {
+      "host": "192.168.106.189",
+      "version": "v1.28.15",
+      "architecture": "amd64",
+      "single_node": true,
+      "control_namespace": "e2e-f059-system",
+      "execution_namespace": "e2e-f059-apps",
+      "four_control_services_installed": true,
+      "bounded_ext4_volumes_prepared": 19,
+      "mandatory_probe_status": "in_progress",
+      "platform_business_e2e": "not_started",
+      "fault_upgrade_e2e": "not_started",
+      "not_arm64_or_cross_node_evidence": true
+    },
+    "real_helper_resolve": {
+      "host": "192.168.106.189",
+      "platform": "linux/amd64",
+      "network": "none",
+      "rootfs": "read-only",
+      "uid": 10001,
+      "images": [
+        "runtime-helper:20261022-4",
+        "runtime-assembler-ca:20261022-4"
+      ],
+      "cases": [
+        "SDK requirements closure",
+        "uv.lock frozen offline export",
+        "Node ignore-scripts",
+        "static frontend ignore-scripts"
+      ],
+      "exit_code": 0,
+      "scope": "native Docker containers, not CRI acceptance",
+      "extra_ca_warning": "assembler extra CA file initially inherited 0600; rebuilt test CA images with 0444 and new profile revision2; no TLS verification disabled"
     }
   },
   "not_executed": [

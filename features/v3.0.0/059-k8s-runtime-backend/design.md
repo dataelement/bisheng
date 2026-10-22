@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T045、T073–T082已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器已有准备/启动/观察/停止/清理/日志能力本地验证，数据能力待后续接线；Docker/K8s共同状态机、v2状态/日志/能力与路由组装已有本地验证；数据、发行与真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现。主agent与三个独立工作树按文件归属合入；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL扩展迁移、backend/Celery及四运行服务安装；仍在修复真实CREATE默认对象兼容并执行隔离探测，尚无业务部署通过结论。109已真实完成三语言离线应用包、代码升级/依赖复用、前端hook/native wheel及SQLite的Engine级回归；未代替完整平台审批/权限验收。正式双架构发行、故障升级和L2仍待完成。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -291,6 +291,10 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 
 启动接线：PORT、BISHENG_APP_PORT、SQLite路径、base path等由平台覆盖，业务令牌与runtime egress变量只进应用Secret；helper使用自己的材料身份。预检/预览schema-init仅接独立空库。启动失败先抓有界脱敏日志再清理，同UID应用重启日志可读previous+current；实际启动验收仍未执行。
 
+实施补充：owner显式删除时，先确认全部旧writer停止并清理，再在同一固定生产位置启动purpose=purge的无应用/材料凭据helper，独占擦除business和platform备份；SQL先持久化purge结果，再停止helper并以UID/RV删除原PVC。只为128MiB/25m helper原子预占，不借用应用档位或在结果未知时释放。重启从维护进度续办；Retain PV由安装者在确认写入停止后处理。
+
+准备/启动参数继续从operation冻结：source_limits逐phase深拷贝；v2环境同时保留兼容变量与SDK0.1.1实际读取的BISHENG_PLATFORM_API_BASE。Node/static bundle保留固定launcher语义，完整image仍用其入口。已有Pod intent的RuntimeClass（含缺省）和deadline从同操作/应用/执行域资源记录恢复，不随可选sandbox探测刷新改变；其余模板仍严格比对。
+
 ### 4.9 网络、准入和资源治理
 
 **网络**：运行命名空间预置默认 deny ingress/egress；应用只接收 app-proxy 到应用端口、manager 的健康/受控数据端口流量。Pod 不开放 NodePort、LoadBalancer、hostPort 或单应用 Ingress；每执行位置的 ClusterIP Service 按执行标签选择，未批准前不进入正式路由。
@@ -302,6 +306,8 @@ NetworkPolicy 检查含同节点、跨命名空间、IP/UDP、平台内网及跨
 **准入**：安装独立验证服务，命名空间选择器只覆盖本安装专用命名空间，`failurePolicy: Fail`。资源模板规则与 4.5 的 `pods/status` 来源规则分开；后者仅检查 AdmissionReview，不回读 backend，也不把 kube-system 纳入作用域。PSA 固定 `restricted:v1.28`，manager 不可改标签/配置。验证服务自身无集群 token，通过独立只读 admission 身份读取 backend 的已批准执行模板/资源计划；失联拒绝新的创建，已有 Pod 不被重建。
 
 验证 CREATE/UPDATE/DELETE 的 namespace、申请者、资源所有者、模板摘要、UID、代次；拒绝 privileged、提权、hostPath/host namespaces/hostPort、额外 capabilities、SA token/projected token、越界 Secret/PVC、资源缺限、错误 RuntimeClass、任意镜像/命令替换、生产卷挂到非固定生产位置及不安全强删/移除保护 finalizer。读取不到当前计划时不信任可伪造标签。manager 不能更改该验证器、PSA、网络基线、ServiceAccount 或 RBAC。删除保护允许 manager 在 stopped 已持久确认后移除 finalizer；允许绑定 kubelet 对已具有效终态且带删除时间的同 UID 收紧删除宽限期，但不移除 finalizer。status 规则不可用会暂缓本执行命名空间的 API 状态更新与清理确认，不代替或阻止 kubelet 本地停止进程；恢复后重试。安装必须实测调度、init 失败清理和正常终止，不能只用 webhook dry-run 判通过。
+
+CREATE兼容仅接受API正常默认的Pending及按正常/init容器资源计算的QoS，不接受任何附加终态/容器状态；PVC空status、Service空loadBalancer和Pod空env的omitempty与缺省等价。来源依据固定[Kubernetes v1.28.15 Pod strategy](https://github.com/kubernetes/kubernetes/blob/v1.28.15/pkg/registry/core/pod/strategy.go#L82)，保持UPDATE/status来源与冻结模板边界。Calico指定注解只由配置的认证CNI身份写入；manager同UID更新仅可保留旧值，不能伪造或删改。
 
 **容量**：每个 K8s 逻辑执行域固定一个架构及部署预算，复用 RuntimeNode/Reservation。混合架构集群按预配置架构域注册不同逻辑 node_id，共用集群但每应用冻结一个域；manager 启动选择一次，不在运行期自动迁移 profile。budget 来自安装者配置的可用工场预算/namespace quota/只读集群描述，不声称能无权限读取全节点实时剩余；scheduler 的真实结果必须有界验证。
 
@@ -323,7 +329,11 @@ NetworkPolicy 检查含同节点、跨命名空间、IP/UDP、平台内网及跨
 
 ### 4.10 安装、离线、升级与卸载
 
-拟交付 `deploy/kubernetes/app-runtime/` Helm Chart、受限基础清单、values.schema、安装前探测和验收工具。此路径尚不存在。Chart 不安装整个平台或默认修改现有 kube-system；安装过程分安装者权限与常驻 manager 权限。
+已实现 `deploy/kubernetes/app-runtime/` Helm Chart、受限基础清单、values.schema，以及 `scripts/verify_k8s_runtime.py` 安装探测工具；代码交付不代表现场探测已通过。Chart 不安装整个平台或默认修改现有 kube-system；安装过程分安装者权限与常驻 manager 权限。
+
+安装引导使用只读installer canary ConfigMap，计划最长1小时、固定helper/命令/镜像、无业务凭据或生产卷，避免节点未ready不能执行自身探测的循环。外部安装者真实验证15项基线、可选registry/沙箱后，CAS发布绑定descriptor摘要的24小时报告；每6小时刷新。失败/过期拒绝新工作；manager不能签发ready。
+
+生产与scratch写入前，可信init只读验证ext4/xfs、实际有界容量及namespace/installation marker；普通目录或loop未挂载不能通过。预检真实验证SQLite锁/fsync。helper由同版本manager、Node与Python preparer产物组合，固定prepare.py、原生Node库、SDK及wheelhouse/许可证；在禁网最终镜像中实际执行Python/uv/Node/static解析，不能以import或runtime已装包替代完整材料。离线新增依赖仍须匹配架构/ABI并提前供应。
 
 | 身份 / 资源 | 权限与职责 |
 | --- | --- |
@@ -579,7 +589,7 @@ Chart values 分 `platform`、`services`、`execution`、`storage`、`network`�
 
 AC-38 保留退役。tasks 拆解时每个实现/拒绝路径引用完整 AC ID，不能只依赖此汇总表宣称已测试。
 
-### 7.2 189 验收步骤（待实施，当前未执行）
+### 7.2 189 验收步骤（实施中，尚未完成）
 
 1. 保存只读盘点资源 UID；使用 `e2e-f059-*` 专用命名空间、卷目录、测试账号和应用前缀。准备专用 local PV/PVC、镜像和必要的独立平台测试实例；不升级或改动现有 kube-system。
 2. 安装者运行新交付的预检工具，分别验证入/出站拒绝、PSA/webhook、权限、材料 URL/CA、存储锁/fsync、镜像引用、包源和资源。危险 PodSpec 使用 API server dry-run 取得实际拒绝结果，允许路径用无特权探测 Pod 真实执行；不能在验证失败时留下实际特权 Pod。探测失败只运行诊断，不部署业务应用。
@@ -667,3 +677,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T083–T087顺序资源历史及原生Range，T046/T047独占SQLite维护接线 | 账本/Range/迁移图97 passed；维护及数据/模板90 passed；未部署 |
 
 | 2026-10-22 | T048–T053与T088–T093：签发/数据恢复/CSV流、交付接线与OCI组装 | backend64 passed；runtime744 passed/10 skipped（OCI加入前）；OCI及交付129 passed，解释器链接10 passed；真实部署/CI待验收 |
+
+| 2026-10-22 | 并行合入安装/发行/验收工具、安全purge、canary引导/刷新、scratch写入前guard、OCI端点与准入、launcher/SDK/源码限制及重试冻结；记录189真实安装和109原生回归 | D1–D8未变；隔离探测仍在修复，业务E2E/双架构发行/L2未完成，不将本地或镜像烟测记为完整交付 |

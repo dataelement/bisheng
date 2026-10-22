@@ -9,13 +9,13 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；95 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 74 / 95 完成；详见 task-reviews.md |
-| E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；142 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 134 / 142 完成；详见 task-reviews.md |
+| E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
 
-沿用已附加工作树 `codex/059-k8s-runtime@755d4456e5`。顺序执行，各任务最多两个目标文件；测试先于对应实现，infra 配置/模型/锁/安装清单无需强行编写镜像实现的测试。独立验证已有批准的拒绝/故障合同。
+沿用已附加工作树 `codex/059-k8s-runtime@755d4456e5`。主 agent 与三个独立工作树并行开发，文件单一 owner、集成和189部署串行；各任务最多两个目标文件；测试先于对应实现，infra 配置/模型/锁/安装清单无需强行编写镜像实现的测试。独立验证已有批准的拒绝/故障合同。
 
 任务编号用于追溯，不与 AC 编号混用。所有测试任务明确覆盖 AC，基础设施先于业务；新增 backend 测试位于 `src/backend/test/app_runtime/`。本次没有前端页面和 Celery 业务改动；若实际需新增 Worker，必须在任务登记 tenant_id headers→ContextVar 并遵守原 Owner。
 
@@ -624,7 +624,64 @@
   **依赖:** T051、T052
   **配对:** T052
 
-- [ ] **T054** — 隔离和安装前置的实际能力探测：契约与失败用例
+
+- [x] **T096** — owner 删除与安全清理合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_appdb.py`、`src/backend/test/app_runtime/test_runtime_kubernetes_purge.py`
+  **逻辑/验收**：先验证purge缺失红阶段；错误owner意图/跨应用卷拒绝，停止和结果事实先于PVC删除，不跟随链接，重启不重复创建。
+  **覆盖 AC:** AC-35、AC-48、AC-49、AC-50、AC-52
+  **依赖:** T053
+  **配对:** T097
+
+- [x] **T097** — backend purge 范围和删除授权
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`、`src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py`
+  **逻辑/验收**：只接受显式destroy+purge_volume的固定生产位置；由执行事实证明purge完成及全部writer停止清理后，授予原PVC条件删除。
+  **覆盖 AC:** AC-35、AC-48、AC-49、AC-50、AC-52
+  **依赖:** T053、T096
+  **配对:** T096
+
+- [x] **T098** — 受信 helper 清理与持久重入
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_appdb.py`、`src/runtime-manager/runtime_manager/k8s_data_helper.py`
+  **逻辑/验收**：不持应用/材料身份，擦除business及受保护备份，不跟随链接；维护journal和SQL事实避免已完成purge重复执行。
+  **覆盖 AC:** AC-35、AC-48、AC-49、AC-50、AC-52
+  **依赖:** T096、T097
+  **配对:** T096
+
+- [x] **T099** — 生产 purge 模板及状态机接线
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`、`src/runtime-manager/runtime_manager/operations.py`
+  **逻辑/验收**：purge共用固定生产位置；恢复destroy不停止自己的当前清理Pod；生产purpose集合同步；取消重复egress注入。
+  **覆盖 AC:** AC-04、AC-35、AC-48、AC-49、AC-50、AC-52
+  **依赖:** T098
+  **配对:** T096
+
+- [x] **T100** — 执行器条件回收生产卷
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`、`src/runtime-manager/runtime_manager/k8s_data_executor.py`
+  **逻辑/验收**：缺少应用profile的destroy只使用固定helper；PVC删除用UID/RV，确认缺失才提交cleanup；未知拒绝，不授予平台存储凭据。
+  **覆盖 AC:** AC-04、AC-35、AC-48、AC-49、AC-50、AC-52
+  **依赖:** T099
+  **配对:** T096
+
+- [x] **T101** — 受限 canary 启动合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_canary.py`
+  **逻辑/验收**：安装计划仅preflight名称/固定镜像命令/短期范围；拒绝应用源码、生产PVC、Secret、无限授权和未绑定UID更新。
+  **覆盖 AC:** AC-13、AC-14、AC-16、AC-21、AC-23、AC-49
+  **依赖:** T013、T053
+  **配对:** T102
+
+- [x] **T102** — 只读 canary 准入和网络探测
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`、`src/runtime-manager/runtime_manager/k8s_capabilities.py`
+  **逻辑/验收**：只读installer CM提供至多一小时预检计划，其它资源仍backend；可信idle监听、TCP/UDP DNS真探测；报告24h由外部installer每6h刷新。
+  **覆盖 AC:** AC-13、AC-14、AC-16、AC-21、AC-23、AC-49
+  **依赖:** T101
+  **配对:** T101
+
+- [x] **T054** — 隔离和安装前置的实际能力探测：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_capabilities.py`
   **逻辑/验收**：分项验证namespace预算、PSA/准入、status认证、存储锁/fsync、精确CRI镜像、网络允许/拒绝、材料/能力接口；必需隔离失败/未知拒绝，沙箱仅回退满足基线档；无SC但预置卷可用；测试只定义输入/结果，不加入实现。
@@ -632,7 +689,7 @@
   **依赖:** T013、T039、T053
   **配对:** T055
 
-- [ ] **T055** — 隔离和安装前置的实际能力探测
+- [x] **T055** — 隔离和安装前置的实际能力探测
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_capabilities.py`、`src/runtime-manager/runtime_manager/k8s_templates.py`
   **逻辑/验收**：分项验证namespace预算、PSA/准入、status认证、存储锁/fsync、精确CRI镜像、网络允许/拒绝、材料/能力接口；必需隔离失败/未知拒绝，沙箱仅回退满足基线档；无SC但预置卷可用；通过配对测试后完成 L1 task-review。
@@ -640,7 +697,7 @@
   **依赖:** T013、T039、T053、T054
   **配对:** T054
 
-- [ ] **T094** — 活跃材料代理候选查询合同
+- [x] **T094** — 活跃材料代理候选查询合同
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_material_policy_candidates.py`
   **逻辑/验收**：真实SQL按node过滤已绑定、未停止/未清理、未撤销且未到期材料授权；停止/历史/其它节点不进入每秒投影，保留原历史记录而不全表循环逐条重验。
@@ -648,7 +705,7 @@
   **依赖:** T055
   **配对:** T095
 
-- [ ] **T095** — 活跃材料候选 Repository 查询
+- [x] **T095** — 活跃材料候选 Repository 查询
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py`
   **逻辑/验收**：Repository联查材料与资源记录提供material_policy_candidates(node_id,now)，不在Service写SQL；跨租户仅供已验证egress角色的node范围投影，最多10000活动候选、超限拒绝，不删除历史。
@@ -656,7 +713,7 @@
   **依赖:** T055、T094
   **配对:** T094
 
-- [ ] **T056** — 材料用途的出站投影：契约与失败用例
+- [x] **T056** — 材料用途的出站投影：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_material_egress.py`
   **逻辑/验收**：material代理身份由当前材料授权投影，独立于完成的prepare；只放行后台材料TLS端点和范围，撤销5秒上界，业务凭据不冒用；入口路由继续backendSQL投影不依赖manager；测试只定义输入/结果，不加入实现。
@@ -664,7 +721,7 @@
   **依赖:** T023、T055、T095
   **配对:** T057
 
-- [ ] **T057** — 材料用途的出站投影
+- [x] **T057** — 材料用途的出站投影
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_material_policy_service.py`、`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`
   **逻辑/验收**：material代理身份由当前材料授权投影，独立于完成的prepare；只放行后台材料TLS端点和范围，撤销5秒上界，业务凭据不冒用；入口路由继续backendSQL投影不依赖manager；通过配对测试后完成 L1 task-review。
@@ -674,49 +731,67 @@
 
 ### Wave 7
 
-- [ ] **T058** — Chart 入口与 values schema
+- [x] **T058** — Chart 入口与 values schema
   **类型**：基础设施
   **文件**：`deploy/kubernetes/app-runtime/Chart.yaml`、`deploy/kubernetes/app-runtime/values.yaml`
   **逻辑/验收**：按design固定platform/services/execution/storage/network/admission/images/offline分组，所有镜像精确引用、禁默认公网兜底与自动平台核心部署。
   **覆盖 AC:** AC-39、AC-42、AC-54
   **依赖:** T057
 
-- [ ] **T059** — 部署参数及共享入口校验
+- [x] **T059** — 部署参数及共享入口校验
   **类型**：基础设施
   **文件**：`deploy/kubernetes/app-runtime/values.schema.json`、`deploy/kubernetes/app-runtime/templates/services.yaml`
   **逻辑/验收**：校验必需字段与形态，私网共享entry/control由安装者供应，禁止按应用外放端口；控制端点ACL及HMAC，外部backend可达性独立验证。
   **覆盖 AC:** AC-12、AC-31、AC-39
   **依赖:** T058
 
-- [ ] **T060** — RBAC 与准入安装模板
+- [x] **T060** — RBAC 与准入安装模板
   **类型**：基础设施
   **文件**：`deploy/kubernetes/app-runtime/templates/rbac.yaml`、`deploy/kubernetes/app-runtime/templates/admission.yaml`
   **逻辑/验收**：namespace manager最小权限，系统服务不可被manager改，验证器无集群token；status/template规则分别Fail/None，PSA restricted1.28；卸载不删除保护namespace/PV。
   **覆盖 AC:** AC-03、AC-13、AC-14、AC-15、AC-16、AC-23、AC-39、AC-41、AC-49
   **依赖:** T059、T013
 
-- [ ] **T061** — 网络和保留卷安装模板
+- [x] **T061** — 网络和保留卷安装模板
   **类型**：基础设施
   **文件**：`deploy/kubernetes/app-runtime/templates/network.yaml`、`deploy/kubernetes/app-runtime/templates/storage.yaml`
   **逻辑/验收**：默认deny，允许entry/manager受控端口、只经egress出站、无业务DNS直连；localPV节点绑定或验证CSI，独占卷不带Pod/Helm级联删除owner，预置scratch池和限制。
   **覆盖 AC:** AC-12、AC-21、AC-22、AC-23、AC-33、AC-34、AC-35、AC-39、AC-41、AC-42
   **依赖:** T060
 
-- [ ] **T062** — 运行服务与 helper 镜像
+
+- [x] **T104** — 镜像发行和清单合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_image_release.py`
+  **逻辑/验收**：本地构建默认不推送，双架构同版本digest合并及不可覆盖index；helper/assembler工具和离线清单，mock不记作原生验收。
+  **覆盖 AC:** AC-24、AC-27、AC-39、AC-42、AC-54、AC-56
+  **依赖:** T061
+  **配对:** T063
+
+- [x] **T062** — 运行服务与 helper 镜像
   **类型**：基础设施
   **文件**：`deploy/kubernetes/app-runtime/templates/workloads.yaml`、`src/runtime-manager/Dockerfile.helper`
   **逻辑/验收**：独立manager/app-proxy/egress/admission进程，只有manager投射限定token，helper固定受信命令非root/只读；控制面重启不连带删除应用Pod或改变冻结profile。
   **覆盖 AC:** AC-03、AC-15、AC-16、AC-39、AC-40、AC-42、AC-54
   **依赖:** T061
 
-- [ ] **T063** — 同版本双架构 CI/CD 发行
+
+- [x] **T103** — 原生镜像构建脚本扩展
+  **类型**：基础设施
+  **文件**：`scripts/build_runtime_images.sh`
+  **逻辑/验收**：扩展现有脚本，同版本helper与assembler，默认local-only，显式发行开关才push；原生smoke/许可与冻结digest清单。
+  **覆盖 AC:** AC-24、AC-27、AC-39、AC-42、AC-54、AC-56
+  **依赖:** T062、T104
+
+- [x] **T063** — 同版本双架构 CI/CD 发行
   **类型**：基础设施
   **文件**：`.github/workflows/runtime-images.yml`、`src/runtime-manager/runtime_manager/image_catalog.py`
   **逻辑/验收**：扩展已有tag v*/手工入口，发布helper/admission/assembler及runtime镜像清单与licenses；amd64/arm64原生构建，compose已发行镜像引用合同不退化；不改用户tag/自动推送。
   **覆盖 AC:** AC-24、AC-27、AC-39、AC-42、AC-54、AC-56
-  **依赖:** T062
+  **依赖:** T062、T103、T104
+  **配对:** T104
 
-- [ ] **T064** — 部署/离线清单验证：契约与失败用例
+- [x] **T064** — 部署/离线清单验证：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_installation.py`
   **逻辑/验收**：可重复read-only预检及专用namespace允许/拒绝探测；离线镜像/依赖/平台接口分别核对，CRI按冻结引用真启动；说明本地卷限制、升级兼容、原卷保留和安全卸载，不输出kubeconfig/token；测试只定义输入/结果，不加入实现。
@@ -724,7 +799,7 @@
   **依赖:** T063、T055
   **配对:** T065
 
-- [ ] **T065** — 部署/离线清单验证
+- [x] **T065** — 部署/离线清单验证
   **类型**：实现
   **文件**：`scripts/verify_k8s_runtime.py`、`deploy/kubernetes/app-runtime/README.md`
   **逻辑/验收**：可重复read-only预检及专用namespace允许/拒绝探测；离线镜像/依赖/平台接口分别核对，CRI按冻结引用真启动；说明本地卷限制、升级兼容、原卷保留和安全卸载，不输出kubeconfig/token；通过配对测试后完成 L1 task-review。
@@ -734,12 +809,300 @@
 
 ### Wave 8
 
-- [ ] **T066** — 真实平台 K8s E2E 执行器
+
+- [x] **T105** — E2E harness 边界合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+  **逻辑/验收**：测试配置、严格tenant/owner/prefix cleanup和55AC映射；只验证harness，不冒充真实平台通过。
+  **覆盖 AC:** AC-36、AC-37、AC-55
+  **依赖:** T049、T005
+  **配对:** T106
+
+- [x] **T106** — 真实 API 业务验收共享行程
+  **类型**：实现
+  **文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`、`src/backend/test/e2e/test_e2e_vibe_k8s_runtime.py`
+  **逻辑/验收**：复用既有认证helper，真实发布/审批/数据/入口和最终GET，精确MMMEE，独立测试租户/自然owner，不用manager直接API替代。
+  **覆盖 AC:** AC-36、AC-37、AC-55
+  **依赖:** T105
+  **配对:** T105
+
+- [x] **T066** — 真实平台 K8s E2E 执行器
   **类型**：测试
   **文件**：`scripts/e2e_k8s_runtime.py`、`features/v3.0.0/059-k8s-runtime-backend/e2e-checklist.md`
   **逻辑/验收**：按e2e-test skill复用平台认证/CLI/审批/SDK/数据业务入口，生成55条AC用例映射、危险前置和cleanup；不是只调manager API，不把mock记为真实成功；凭据从安全环境/主机既有配置读取。
   **覆盖 AC:** AC-01、AC-02、AC-03、AC-04、AC-05、AC-06、AC-07、AC-08、AC-09、AC-10、AC-11、AC-12、AC-13、AC-14、AC-15、AC-16、AC-17、AC-18、AC-19、AC-20、AC-21、AC-22、AC-23、AC-24、AC-25、AC-26、AC-27、AC-28、AC-29、AC-30、AC-31、AC-32、AC-33、AC-34、AC-35、AC-36、AC-37、AC-39、AC-40、AC-41、AC-42、AC-43、AC-44、AC-45、AC-46、AC-47、AC-48、AC-49、AC-50、AC-51、AC-52、AC-53、AC-54、AC-55、AC-56
   **依赖:** T065、T049、T005
+
+
+- [x] **T107** — 继承发布线的权限/egress测试适配
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_app_permission_registration.py`、`src/backend/test/app_runtime/test_runtime_lifecycle_v2.py`
+  **逻辑/验收**：候选count stub与已交付linsight注册保持当前Owner；policy fixture显式egress角色，不放宽生产身份。
+  **覆盖 AC:** AC-03、AC-36、AC-53、AC-56
+  **依赖:** T066
+
+- [x] **T108** — 资源历史约束静态合同同步
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_model_contracts.py`
+  **逻辑/验收**：明确资源历史按实际UID唯一；已移除operation/kind/name约束不得恢复，保留固定位置多phase历史；DM8静态边界。
+  **覆盖 AC:** AC-15、AC-48、AC-56
+  **依赖:** T107
+
+- [x] **T109** — 删除维护轻量容量预占合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_purge_capacity.py`
+  **逻辑/验收**：删除以固定helper预算预占，不因原应用档位误拒绝；额度不足与成功配对。
+  **覆盖 AC:** AC-11、AC-18、AC-48
+  **依赖:** T097
+
+- [x] **T110** — 删除维护轻量容量预占
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`
+  **逻辑/验收**：保持原子节点锁，purge只为受限helper预占；不免除容量控制。
+  **覆盖 AC:** AC-11、AC-18、AC-48
+  **依赖:** T109
+  **配对:** T109
+
+- [ ] **T111** — Calico 元数据来源及收尾合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_admission.py`
+  **逻辑/验收**：可信CNI可维护指定注解，manager仅原样保留同UID旧值；拒绝伪造、增改删、status和spec越权。
+  **覆盖 AC:** AC-03、AC-14、AC-48、AC-52
+  **依赖:** T011
+
+- [ ] **T112** — Calico 元数据来源隔离
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`
+  **逻辑/验收**：精确保留已认证CNI字段以允许fenced finalizer收尾，不放行通用注解前缀。
+  **覆盖 AC:** AC-03、AC-14、AC-48、AC-52
+  **依赖:** T111
+  **配对:** T111
+
+- [x] **T113** — scratch 写入前卷校验合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_helper.py`、`src/runtime-manager/tests/test_k8s_templates.py`
+  **逻辑/验收**：prepare和assemble在任何写入/材料投射前执行只读guard，校验真实文件系统/容量/安装标识，负例拒绝。
+  **覆盖 AC:** AC-33、AC-34、AC-42、AC-44
+  **依赖:** T009
+
+- [x] **T114** — scratch 写入前卷校验
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_helper.py`、`src/runtime-manager/runtime_manager/k8s_templates.py`
+  **逻辑/验收**：可信guard固定命令、无业务身份，缺挂载/错误marker/无界容量拒绝。
+  **覆盖 AC:** AC-33、AC-34、AC-42、AC-44
+  **依赖:** T113
+  **配对:** T113
+
+- [x] **T115** — scratch 预算与安装标识接线
+  **类型**：实现
+  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`、`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+  **逻辑/验收**：逐purpose区分production与scratch预算，preview/probe不碰生产卷；测试先复现预算丢失。
+  **覆盖 AC:** AC-33、AC-34、AC-42、AC-44
+  **依赖:** T114、T100
+  **配对:** T032
+
+- [x] **T116** — static launcher 兼容合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_helper.py`、`src/runtime-manager/tests/test_k8s_templates.py`
+  **逻辑/验收**：标准bundle的冻结nginx argv与PORT经受信entrypoint消费，完整image保持自身入口。
+  **覆盖 AC:** AC-04、AC-24、AC-44、AC-56
+  **依赖:** T008
+
+- [x] **T117** — static launcher 保留
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`
+  **逻辑/验收**：标准static bundle使用固定launcher生成/tmp配置，避免K8s command绕过镜像ENTRYPOINT。
+  **覆盖 AC:** AC-04、AC-24、AC-44、AC-56
+  **依赖:** T116
+  **配对:** T116
+
+- [x] **T118** — Node launcher 兼容收尾
+  **类型**：实现
+  **文件**：`src/runtime-manager/tests/test_k8s_templates.py`、`src/runtime-manager/runtime_manager/k8s_templates.py`
+  **逻辑/验收**：先测试node/npm/脚本名/--eval，再保留绝对路径Node launcher；完整image不包装。
+  **覆盖 AC:** AC-04、AC-24、AC-44、AC-56
+  **依赖:** T117
+  **配对:** T008
+
+- [x] **T119** — 探测刷新后的 sandbox 冻结
+  **类型**：实现
+  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`、`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+  **逻辑/验收**：同resource_ref重试按原Pod记录冻结RuntimeClass和deadline；先核对完整操作作用域，保留intent模板比对。
+  **覆盖 AC:** AC-07、AC-19、AC-20、AC-40、AC-48
+  **依赖:** T100
+  **配对:** T032
+
+- [x] **T120** — Chart 安装标识传递
+  **类型**：实现
+  **文件**：`deploy/kubernetes/app-runtime/templates/workloads.yaml`、`src/runtime-manager/tests/test_k8s_installation.py`
+  **逻辑/验收**：descriptor包含installation_id，与静态PV marker一致；先测试明确缺字段。
+  **覆盖 AC:** AC-34、AC-39、AC-42
+  **依赖:** T064
+  **配对:** T064
+
+- [x] **T121** — helper 可信解析工具链合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_image_release.py`
+  **逻辑/验收**：验证prepare.py、Node/npm、本架构库、同版本wheelhouse、构建顺序与禁网真实resolve，不能只检查import。
+  **覆盖 AC:** AC-24、AC-42、AC-44、AC-45、AC-54
+  **依赖:** T104
+
+- [x] **T122** — helper 可信解析工具链
+  **类型**：基础设施
+  **文件**：`src/runtime-manager/Dockerfile.helper`
+  **逻辑/验收**：同版本manager/Node/Python preparer为唯一工具来源；离线构建自身wheel，复制SDK轮子闭包与许可证，不复制宿主/glibc。
+  **覆盖 AC:** AC-24、AC-42、AC-44、AC-45、AC-54
+  **依赖:** T121
+
+- [x] **T123** — 镜像实际离线解析烟测
+  **类型**：基础设施
+  **文件**：`scripts/build_runtime_images.sh`、`src/runtime-manager/tests/test_image_release.py`
+  **逻辑/验收**：原生image内禁网执行requirements/uv.lock/Node/static解析，ignore-scripts不得运行应用hook；任一失败禁止推送。
+  **覆盖 AC:** AC-24、AC-42、AC-44、AC-45、AC-54
+  **依赖:** T122、T103
+
+- [x] **T124** — 隔离平台 bootstrap 合同
+  **类型**：测试
+  **文件**：`scripts/fixtures/f059/test_bootstrap.py`
+  **逻辑/验收**：覆盖真实API形状、env私密权限/混合Docker配置/作用域、人工审批、服务账号及本地HTTP/SQLite/SDK/WS。
+  **覆盖 AC:** AC-36、AC-37、AC-46、AC-55
+  **依赖:** T105
+
+- [x] **T125** — 隔离平台 API bootstrap
+  **类型**：实现
+  **文件**：`scripts/bootstrap_f059_acceptance.py`
+  **逻辑/验收**：仅专用全新测试实例；真实部门挂租户、自然人/人工审批、owner mode-S、固定自定义profile；不直接SQL，不泄露凭据。
+  **覆盖 AC:** AC-36、AC-37、AC-46、AC-55
+  **依赖:** T124
+  **配对:** T124
+
+- [x] **T126** — 真实应用协议夹具
+  **类型**：实现
+  **文件**：`scripts/fixtures/f059/python_demo.py`、`scripts/fixtures/f059/node_demo.js`
+  **逻辑/验收**：真实HTTP/SQLite/WS和SDK附件往返；模型/检索未配置明确不可测，禁止返回固定成功。
+  **覆盖 AC:** AC-04、AC-11、AC-36、AC-46、AC-55
+  **依赖:** T125
+  **配对:** T124
+
+- [x] **T127** — 完整镜像及离线材料夹具
+  **类型**：基础设施
+  **文件**：`scripts/fixtures/f059/Dockerfile.demo`、`scripts/fixtures/f059/offline-manifest.example.json`
+  **逻辑/验收**：完整应用镜像实际包含代码；物料模板只说明格式，不伪造digest。
+  **覆盖 AC:** AC-24、AC-27、AC-42、AC-45
+  **依赖:** T125
+
+- [x] **T128** — 平台验收夹具说明
+  **类型**：基础设施
+  **文件**：`scripts/fixtures/f059/README.md`
+  **逻辑/验收**：提供准备/真实API/阶段验收/安全清理指令，区分本地协议烟测与真实集群证据。
+  **覆盖 AC:** AC-42、AC-54、AC-55
+  **依赖:** T125
+
+- [x] **T129** — helper 及 PVC 作用域校验接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`、`src/backend/test/app_runtime/test_runtime_kubernetes_service.py`
+  **逻辑/验收**：允许固定storage-guard；所有production/scratch按app/op冻结PVC，跨app同namespace卷仍拒绝；更新旧最小fixture。
+  **覆盖 AC:** AC-03、AC-33、AC-34、AC-48
+  **依赖:** T097
+  **配对:** T016
+
+- [x] **T130** — 自定义 bundle launcher 合同说明
+  **类型**：基础设施
+  **文件**：`deploy/kubernetes/app-runtime/README.md`
+  **逻辑/验收**：明确Python解释器、固定Node/static launcher、只读挂载和非root要求；不适配该合同的完整image走既有入口。
+  **覆盖 AC:** AC-04、AC-42、AC-44、AC-56
+  **依赖:** T118
+
+- [x] **T131** — 源码大小限制冻结接线
+  **类型**：实现
+  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`、`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+  **逻辑/验收**：先捕获prepare各phase丢失source_limits，再深拷贝payload冻结值；无旧字段保持兼容默认，不读现场新配置。
+  **覆盖 AC:** AC-24、AC-44、AC-56
+  **依赖:** T100
+  **配对:** T032
+
+- [x] **T132** — SDK 既有平台地址变量合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_k8s_delivery_coordinator.py`
+  **逻辑/验收**：核对committed SDK wheel实际变量名及coordinator密封环境，Docker/K8s均能消费。
+  **覆盖 AC:** AC-36、AC-46、AC-56
+  **依赖:** T049
+
+- [x] **T133** — SDK 平台地址变量接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_delivery_coordinator.py`
+  **逻辑/验收**：v2增加BISHENG_PLATFORM_API_BASE并保留旧key；不改变模型/附件身份，不以测试mock代替SDK实际调用。
+  **覆盖 AC:** AC-36、AC-46、AC-56
+  **依赖:** T132
+  **配对:** T132
+
+- [x] **T134** — 安装探测安全失败分类
+  **类型**：实现
+  **文件**：`scripts/verify_k8s_runtime.py`、`src/runtime-manager/tests/test_k8s_installation.py`
+  **逻辑/验收**：先测试常量reason与异常分类，再保留probe/cleanup/publish失败；不打印任意异常文本/对象/凭据，不放宽ready。
+  **覆盖 AC:** AC-19、AC-20、AC-54、AC-55
+  **依赖:** T065
+  **配对:** T064
+
+- [x] **T135** — 显式公开 CA 的 HTTP/WS 合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+  **逻辑/验收**：本地真实HTTPS/WSS正确CA允许、错误CA拒绝，路径/私钥/符号链接拒绝，无verify=False。
+  **覆盖 AC:** AC-36、AC-46、AC-55
+  **依赖:** T105
+
+- [x] **T136** — 真实业务 E2E 公开 CA 接线
+  **类型**：实现
+  **文件**：`scripts/e2e_k8s_runtime.py`、`src/backend/test/e2e/helpers/vibe_runtime.py`
+  **逻辑/验收**：F059_E2E_CA_FILE构造保留系统根的严格SSLContext，HTTP和WSS统一使用，未配置时默认信任不变。
+  **覆盖 AC:** AC-36、AC-46、AC-55
+  **依赖:** T135
+  **配对:** T135
+
+- [x] **T137** — 固定镜像 profile 新修订合同
+  **类型**：测试
+  **文件**：`scripts/fixtures/f059/test_bootstrap.py`
+  **逻辑/验收**：N=1兼容、N=2包内引用/default/API导入一致，不覆写相同修订的变更镜像。
+  **覆盖 AC:** AC-39、AC-42、AC-44、AC-55
+  **依赖:** T124
+
+- [x] **T138** — 验收 profile 修订参数
+  **类型**：实现
+  **文件**：`scripts/bootstrap_f059_acceptance.py`、`scripts/fixtures/f059/README.md`
+  **逻辑/验收**：正整数--profile-revision控制导入、bundle固定引用；source-image遵守现行schema使用语言默认，实际解析后冻结。
+  **覆盖 AC:** AC-39、AC-42、AC-44、AC-55
+  **依赖:** T137
+  **配对:** T137
+
+- [x] **T139** — Kubernetes CREATE 默认对象合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_admission.py`
+  **逻辑/验收**：依据固定v1.28.15真实策略校验Pending/QoS与精确空status、omitempty空env；终态/额外状态/非空env/伪造来源仍拒绝。
+  **覆盖 AC:** AC-13、AC-30、AC-49、AC-55
+  **依赖:** T011
+
+- [x] **T140** — Kubernetes CREATE 默认对象兼容
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`
+  **逻辑/验收**：只容许API正常默认值与空env缺省等价，不放松status来源、CNI身份或模板冻结。
+  **覆盖 AC:** AC-13、AC-30、AC-49、AC-55
+  **依赖:** T139
+  **配对:** T139
+
+- [x] **T141** — 协调器旧 scratch 夹具适配
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_coordination.py`
+  **逻辑/验收**：增加当前op的独占scratch PVC，不改变原探测失效、连续保护和停止证据断言。
+  **覆盖 AC:** AC-19、AC-20、AC-48、AC-56
+  **依赖:** T129
+
+- [x] **T142** — 验收管理员授权可重复执行
+  **类型**：实现
+  **文件**：`scripts/bootstrap_f059_acceptance.py`、`scripts/fixtures/f059/test_bootstrap.py`
+  **逻辑/验收**：先GET现存tenant admins，已存在跳过重复FGA授权；查询失败/格式错停止，不改业务授权API。
+  **覆盖 AC:** AC-36、AC-55
+  **依赖:** T137
+  **配对:** T124
 
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
@@ -753,7 +1116,7 @@
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/e2e-evidence/installation.json`、`features/v3.0.0/059-k8s-runtime-backend/e2e-evidence/installation.md`
   **逻辑/验收**：在192.168.106.189重新只读核对UID，再安装专用e2e-f059资源、合格local PV/PVC和镜像；验证真实拒绝与允许、包源/材料/SDK连通，保留原资源清单，不修改既有kube-system。
   **覆盖 AC:** AC-03、AC-12、AC-13、AC-14、AC-16、AC-19、AC-20、AC-21、AC-22、AC-23、AC-30、AC-31、AC-32、AC-33、AC-34、AC-39、AC-42、AC-54、AC-55
-  **依赖:** T067
+  **依赖:** T065
 
 - [ ] **T069** — 真实平台发布审批及数据验收
   **类型**：测试
@@ -774,7 +1137,7 @@
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/model-release-validation.md`、`features/v3.0.0/059-k8s-runtime-backend/model-release-validation.json`
   **逻辑/验收**：按已确认口径只检查DM8/MySQL模型、类型/约束/登记和单Alembic head；另收CI双架构镜像/锁/离线物料证据，未执行架构和跨节点项明确限制，不算已测。
   **覆盖 AC:** AC-15、AC-39、AC-42、AC-48、AC-54、AC-55、AC-56
-  **依赖:** T070
+  **依赖:** T070、T067
 
 ### Wave 9
 
@@ -796,3 +1159,9 @@
 - 2026-10-21：T001 配置实现/验证通过；T006 客户端测试先行，红阶段为缺少待实现模块（12 passed / 17 errors），不把该阶段记为接口实现成功。
 
 - 2026-10-22：公共修复已授权并进入发布线9d156f261c；继承产生的真实三head新增T074登记，保留原revision父链；为继承最新共享组件逐文件适配Vibe调用，未改变产品合同。
+
+2026-10-22并行计划实施：用户明确授权主agent+三开发子agent；共同快照c90927b1f，独立工作树/文件owner，主agent唯一189写入者。新增清理/canary/发行脚本/harness任务补齐批准范围，未推翻D1–D8。
+
+2026-10-22补充登记T109–T134：来自并行代码审查与实际环境准备发现的既有合同遗漏；任务登记晚于部分修复，红绿历史按各日志/agent报告原样记录，不倒填任务时间。正式双架构发行、109/189业务及故障验收保持未完成。
+
+189实际CNI更新走pods/status维护其保留注解，暴露T111/T112原测试遗漏；重开该配对，补同UID/status不变的可信CNI metadata合法路径与伪造终态负例。原拒绝不会改为通配放行。

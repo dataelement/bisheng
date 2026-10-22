@@ -1,24 +1,24 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-10-22T09:54:09.873774+00:00",
+  "observed_at": "2026-10-22T10:49:09.248453+00:00",
   "source_base": "c90927b1f4e0388a956d4e300c7951ff7745b1bf",
   "release_inheritance": "9d156f261cc7769fcf75f41caeb104a425308017",
-  "evidence_kind": "local-tests",
+  "evidence_kind": "local-tests-and-native-engine",
   "runtime_deployment_verified": false,
   "kubernetes_deployment_verified": false,
-  "docker_live_status": "not_run",
-  "kubernetes_live_status": "not_run",
+  "docker_live_status": "native-engine-passed-platform-business-pending",
+  "kubernetes_live_status": "services-installed-mandatory-probes-in-progress",
   "dm8_driver_status": "not_run_static_only",
   "suites": [
     {
       "name": "runtime",
       "command": "src/runtime-manager: PYTHONPATH=/private/tmp/f059-crypto50 python -m pytest -q tests",
-      "passed": 767,
+      "passed": 967,
       "skipped": 10,
       "failed": 0,
       "kind": "local-tests",
-      "log_sha256": "658a2e885637e347a4eea3939e2a23768a5133ec7ed6a81c9c16a8f63d5c9bfd",
-      "private_log": "/private/tmp/f059-e2e-runtime-full.log"
+      "log_sha256": "2390efd9de70822c872f8bc6d5ba991c0fa0feb794b3acd5a2700524f448225d",
+      "private_log": "/private/tmp/f059-integration-runtime-latest.log"
     },
     {
       "name": "app-proxy",
@@ -33,12 +33,12 @@
     {
       "name": "backend",
       "command": "config=/private/tmp/f059-test-config-auth.yaml python -m pytest -q src/backend/test/app_runtime src/backend/test/app_publish",
-      "passed": 1525,
+      "passed": 1564,
       "skipped": 18,
       "failed": 0,
       "kind": "local-tests",
-      "log_sha256": "27f48ebbc56fb44cfd8d6186341cd160777cba6d395ac9d05f2a606e995be82a",
-      "private_log": "/private/tmp/f059-e2e-backend-green.log"
+      "log_sha256": "e9654c4908a8d820f97fa3dce9f4b7aeedabb20879ceb6c5a2c1034ce8e52ef5",
+      "private_log": "/private/tmp/f059-backend-full-final.log"
     },
     {
       "name": "harness-permission",
@@ -52,9 +52,63 @@
     }
   ],
   "limitations": [
-    "Local runtime tests use fake Engine/Kubernetes transports where their fixtures specify; no Docker service or real cluster is exercised by this report.",
-    "The opt-in F059 live suite was not enabled; its 4 skipped tests are not real acceptance results.",
-    "18 backend and 10 runtime skips retain their original environment gates; skipped tests do not prove passed behavior.",
-    "Shared runtime and backend production source is unchanged by the C line; remaining parent work requires a final integrated rerun."
-  ]
+    "Native Engine regression ran real containers on 109 with a suite-owned network/data root; the artifact port remains in-memory and does not prove platform approval, MinIO, OBO or permission business E2E.",
+    "189 control services and dedicated MySQL migration are real, but mandatory isolation probes and full platform/fault acceptance remain incomplete.",
+    "18 backend and 10 runtime skips retain their environment gates. No skipped test is counted as passed.",
+    "Current full runtime snapshot precedes the final CREATE-default compatibility patch; that patch separately passed 171 targeted cases including observed API objects.",
+    "No F059 public image release, native arm64 or cross-node verification has been executed."
+  ],
+  "native_engine": {
+    "host": "192.168.106.109",
+    "scope": "dedicated-e2e-f059-docker",
+    "manager_image_id": "sha256:4e1be0d30cde2a755b1bcfaa7d0b9b743df33ebc3ec05f37a383a0f0dc1f36c1",
+    "platform": "linux/amd64",
+    "result": {
+      "platform": "linux/amd64",
+      "checks": [
+        {
+          "language": "python3.11",
+          "offline": true,
+          "code_update": true,
+          "dependency_reuse": true
+        },
+        {
+          "language": "node20",
+          "offline": true,
+          "code_update": true,
+          "dependency_reuse": true
+        },
+        {
+          "language": "static",
+          "offline": true,
+          "code_update": true,
+          "dependency_reuse": true
+        },
+        {
+          "language": "static",
+          "offline": true,
+          "install_hook": true,
+          "frontend_build": true,
+          "source_change_invalidates_dependency": true
+        },
+        {
+          "language": "python3.11",
+          "offline": true,
+          "local_native_wheel": true,
+          "source_change_invalidates_dependency": true
+        }
+      ]
+    },
+    "result_sha256": "0f8f802bbbcca0e0374f376e8a8a3216c4bfbf032b0ae640ab1e4d3e4f185e5a",
+    "non_test_containers_before_after_sha256": "a01118b42cd860d661a9062be5227ede560b3e872ef828216e9031ce3d881154",
+    "script_sha256": "a8b6ddd97fdc9eb88f7728819390f74df4a3b111179cf42aaa2c398ba8d1f3c0",
+    "code_critical_hashes": {
+      "bundle_preparer.py": "13a8e75152f5c3c13bb376166074f1f2f51fdb43cfc84ef89d6a7017d724a9fb",
+      "bundle_launch.py": "b1c4b9bf686a6def9d9910130ee07f7e90958e2217bac3f6931778a91cf74ee7"
+    },
+    "no_new_oci_images_asserted": true,
+    "temporary_containers_and_network_cleaned": true,
+    "artifact_port": "in-memory; not real backend/MinIO/approval",
+    "private_evidence_dir": "/opt/e2e-f059-docker/evidence"
+  }
 }

@@ -2,7 +2,7 @@
 
 ## 1. 结论与证据边界
 
-**本地回归通过；真实 Docker 和 K8s 业务部署均未由 C 线执行。** 本文不将 fake Engine、模拟 K8s、SQLite fixture 或跳过用例写成 109/189 部署证明。T067 的真实 Docker 验收仍待主 agent 串行执行，不能因本报告将其整个任务勾选完成。
+**本地回归与109真实Engine级应用包回归通过；完整平台业务验收仍未完成。** 主agent已在109运行同版原生容器回归，C线自身只提供本地准备。 本文不将 fake Engine、模拟 K8s、SQLite fixture 或跳过用例写成 109/189 部署证明。T067 的完整平台/权限/SDK验收仍待主 agent 串行完成，不能因本报告将其整个任务勾选完成。
 
 共同基线 `c90927b1f4e0388a956d4e300c7951ff7745b1bf`；继承的公共租户修复来自发布线 `9d156f261cc7769fcf75f41caeb104a425308017`，本线只修测试/文档/harness，未修改任何生产权限、审批、状态或执行器业务规则。执行时的测试文件变化见 Git 提交，日志摘要见 [docker-regression.json](./docker-regression.json)。
 
@@ -10,9 +10,9 @@
 
 | 选择 | 结果 | 证据类别与限制 |
 | --- | --- | --- |
-| runtime-manager 全部 tests | 767 passed / 10 skipped | 本地；共享 Docker/K8s 执行器、构建、应用包、存储、数据、egress、生命周期；相应 fixture 模拟 Engine/集群 |
+| runtime-manager 全部 tests | 967 passed / 10 skipped | 本地；共享 Docker/K8s 执行器、构建、应用包、存储、数据、egress、生命周期；相应 fixture 模拟 Engine/集群 |
 | app-proxy 全部 tests | 256 passed | 本地 ASGI/HTTP/WS/路由/身份与拒绝；不是实机 nginx/网络/连接撤权 |
-| backend app_runtime＋app_publish 全部 | 1525 passed / 18 skipped | 本地；真实 Python 生产服务逻辑与 SQLite fixture，外部中间件有mock；不证明MySQL/DM8实际迁移 |
+| backend app_runtime＋app_publish 全部 | 1564 passed / 18 skipped | 本地；真实 Python 生产服务逻辑与 SQLite fixture，外部中间件有mock；不证明MySQL/DM8实际迁移 |
 | 新harness安全合同＋权限登记＋live收集 | 54 passed / 11 skipped | 54为本地；11含原7项权限集成门及F059 live4项；不得计为业务E2E |
 | CLI `--help` | 通过 | 不访问网络、不写任何平台数据 |
 | CLI 无 `F059_E2E=1` | 拒绝，未产生journal | opt-in安全检查，不是运行失败掩盖 |
@@ -41,6 +41,23 @@
 - [ ] 原有非测试容器/应用前后清单一致；只回收本次拥有的应用与临时资源。
 
 DM8按既有确认仅模型/DDL规范静态检查；通用SQLAlchemy dm分支编译不等于实际dmPython/DM8迁移测试。189 amd64单节点结果也不能补齐Docker、arm64或跨节点验收。
+
+
+## 109 真实 Engine 级回归（2026-10-22）
+
+使用专用 `/opt/e2e-f059-docker`、随机测试node/network、原生amd64镜像与真实Docker Engine，运行 `scripts/smoke_runtime_delivery.py`，退出0。Docker Engine测试身份只在本次测试容器挂载socket，不代表运行服务必须拥有该权限；未重启daemon或任何既有服务。
+
+| 实际检查 | 结果 |
+| --- | --- |
+| Python/Node/static离线准备、真实HTTP、代码v1→v2 | PASS |
+| 三语言依赖产物复用 | PASS |
+| static前端构建/install hook及源码变更使依赖缓存失效 | PASS |
+| CPython原生扩展离线构建、相同包版本改源码仍生成新产物 | PASS |
+| SQLite数据保留、容器停启/数据读写 | PASS |
+| bundle发布前后镜像集合无新增OCI构建 | PASS |
+| 临时容器/网络清理、非测试容器清单前后SHA一致 | PASS |
+
+原始证据在109专用目录，镜像config digest、关键脚本摘要及完整结果收在同名JSON。该工具的artifact port是内存实现，**不覆盖真实backend/MinIO/发布审批/自然人权限/SDK/OBO**，T067保持未完成；不得将其改写为平台全链路通过。
 
 ## 5. L1
 
