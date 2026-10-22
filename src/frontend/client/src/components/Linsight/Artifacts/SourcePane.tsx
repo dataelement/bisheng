@@ -19,7 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip
 import { useLocalize } from '~/hooks';
 
 const iconBtn =
-    'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-3 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-text-4';
+    'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-3 transition-colors hover:bg-fill-2 disabled:cursor-not-allowed disabled:text-text-4';
 
 export interface SourceOccurrence {
     /** 1-based position among the distinct passages of this file the report cites. */
@@ -88,7 +88,7 @@ export function SourcePane({ preview, occurrence, onStep, onClose, onBackToRepor
     const showNavRow = showStepper || !!onBackToReport;
 
     return (
-        <div className="flex h-full min-h-0 min-w-0 flex-col bg-white">
+        <div className="flex h-full min-h-0 min-w-0 flex-col bg-bg-page">
             <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border-base px-4">
                 <Outlined.File className="size-4 shrink-0 text-blue-500" />
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-1" title={fileName}>
@@ -109,7 +109,7 @@ export function SourcePane({ preview, occurrence, onStep, onClose, onBackToRepor
                     {onBackToReport && (
                         <button
                             type="button"
-                            className="flex h-7 items-center gap-1 rounded-lg px-2 hover:bg-gray-100"
+                            className="flex h-7 items-center gap-1 rounded-lg px-2 hover:bg-fill-2"
                             onClick={onBackToReport}
                         >
                             <Outlined.ArrowLeft className="size-4" />

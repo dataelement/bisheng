@@ -183,8 +183,8 @@ export default function FilePreviewPage() {
     // Loading state while fetching preview URL
     if (loading) {
         return (
-            <div className="h-screen flex items-center justify-center bg-white">
-                <div className="text-[#86909c]">{localize("com_knowledge.loading")}</div>
+            <div className="h-screen flex items-center justify-center bg-bg-page">
+                <div className="text-text-3">{localize("com_knowledge.loading")}</div>
             </div>
         );
     }
@@ -192,8 +192,8 @@ export default function FilePreviewPage() {
     // No URL available (skip this guard for pptx conversion failure — handled by FilePreview)
     if (!fileUrl && !conversionFailed && !isRichPreviewData(previewData)) {
         return (
-            <div className="h-screen flex items-center justify-center bg-white">
-                <div className="text-[#86909c]">{localize("com_knowledge.fetch_preview_link_failed")}</div>
+            <div className="h-screen flex items-center justify-center bg-bg-page">
+                <div className="text-text-3">{localize("com_knowledge.fetch_preview_link_failed")}</div>
             </div>
         );
     }
@@ -203,7 +203,7 @@ export default function FilePreviewPage() {
     // the screen, controls float, and the file-chat dock pins to the bottom.
     if (isMobile) {
         return (
-            <div className="relative h-screen w-screen overflow-hidden bg-white">
+            <div className="relative h-screen w-screen overflow-hidden bg-bg-page">
                 {/* Bare preview — header hidden, viewer fills the container. */}
                 <div className="absolute inset-0">
                     {renderPreview(true)}
@@ -215,7 +215,7 @@ export default function FilePreviewPage() {
                         type="button"
                         onClick={handleDownloadFile}
                         aria-label={localize("com_knowledge.download_file")}
-                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
+                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-bg-page/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-bg-page/85"
                     >
                         <Outlined.Download className="size-5" />
                     </button>
@@ -229,7 +229,7 @@ export default function FilePreviewPage() {
 
     // ─── Desktop layout: TopBar + viewer with a bottom-anchored AI dock overlay.
     return (
-        <div className="relative h-screen flex flex-col bg-white overflow-hidden">
+        <div className="relative h-screen flex flex-col bg-bg-page overflow-hidden">
             <div className="min-h-0 flex-1">
                 {renderPreview(false)}
             </div>

@@ -186,7 +186,7 @@ export default function FilePreview({
         return (
             <div className="w-full h-full flex flex-col">
                 {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
-                <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
+                <div className="flex-1 flex items-center justify-center bg-fill-1">
                     <div className="flex flex-col items-center gap-4 text-text-3">
                         <div className="text-5xl">📄</div>
                         <p className="text-lg">{localize("com_knowledge.unsupported_format_prefix")}{fileType}{localize("com_knowledge.unsupported_format_suffix")}</p>
@@ -218,7 +218,7 @@ export default function FilePreview({
                         actions={actions}
                     />
                 )}
-                <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
+                <div className="flex-1 flex items-center justify-center bg-fill-1">
                     <div className="flex flex-col items-center gap-3 text-text-3">
                         <div className="text-5xl">📄</div>
                         <p className="text-base">{localize("com_knowledge.load_doc_failed")}</p>
@@ -233,7 +233,7 @@ export default function FilePreview({
         return (
             <div className="w-full h-full flex flex-col">
                 {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
-                <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
+                <div className="flex-1 flex items-center justify-center bg-fill-1">
                     <div className="flex flex-col items-center gap-3 text-text-3">
                         <div className="text-4xl">📄</div>
                         <p>{error}</p>
@@ -275,7 +275,7 @@ export default function FilePreview({
                 // it. Stacked rather than split: this preview lives in a narrow
                 // citation panel, where two columns leave both halves cramped.
                 return (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fbfbfb]">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-fill-1">
                         <div className={cn("shrink-0 p-4", transcriptUrl ? "" : "flex-1")}>
                             <MediaPlayer
                                 kind={viewerType}
@@ -286,7 +286,7 @@ export default function FilePreview({
                         </div>
                         {transcriptUrl ? (
                             <>
-                                <div className="h-px shrink-0 bg-[#e5e6eb]" />
+                                <div className="h-px shrink-0 bg-border-base" />
                                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                     <MediaTranscriptTabs fileUrl={transcriptUrl} />
                                 </div>

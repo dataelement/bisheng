@@ -98,7 +98,7 @@ export function TopBar({
     );
 
     return (
-        <div className="border-b border-border-base bg-white shrink-0 select-none z-50">
+        <div className="border-b border-border-base bg-bg-page shrink-0 select-none z-50">
             {/* ===== PC-narrow top row: filename only (PC <768px; hidden on mobile devices) ===== */}
             {!isMobileDevice && (
                 <div className="flex md:hidden items-center justify-center px-4 py-3 pb-0">
@@ -123,7 +123,7 @@ export function TopBar({
                                     "group h-8 w-8 rounded-md border p-1.5",
                                     sidebarOpen
                                         ? "border-primary bg-primary/10"
-                                        : "border-border-base bg-white hover:bg-fill-1"
+                                        : "border-border-base bg-bg-page hover:bg-fill-1"
                                 )}
                                 onClick={onToggleSidebar}
                             >
@@ -154,10 +154,10 @@ export function TopBar({
                         <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
                             <Button onClick={onZoomOut} disabled={zoomLevel <= 25}
                                 variant="ghost" className="w-8 h-8 p-2">
-                                <ZoomOutIcon className="text-[#64698b]" />
+                                <ZoomOutIcon className="text-text-2" />
                             </Button>
 
-                            <div className="bg-white border hover:border-blue-500 cursor-pointer transition-colors border-border-base border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-md shrink-0 w-[88px] h-[32px]">
+                            <div className="bg-bg-page border hover:border-blue-500 cursor-pointer transition-colors border-border-base border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-md shrink-0 w-[88px] h-[32px]">
                                 <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
                                     <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] not-italic relative shrink-0 text-text-1 text-[14px] whitespace-nowrap">
                                         {zoomLevel}%
@@ -167,14 +167,14 @@ export function TopBar({
 
                             <Button onClick={onZoomIn} disabled={zoomLevel >= 500}
                                 variant="ghost" className="w-8 h-8 p-2">
-                                <ZoomInIcon className="text-[#64698b]" />
+                                <ZoomInIcon className="text-text-2" />
                             </Button>
                         </div>
                     )}
 
                     {showPagination && totalPages > 0 && (
                         <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
-                            <div className="bg-[#fbfbfb] content-stretch flex items-center overflow-clip px-[8px] py-[3px] relative rounded-md shrink-0 w-[40px] h-[28px]">
+                            <div className="bg-fill-1 content-stretch flex items-center overflow-clip px-[8px] py-[3px] relative rounded-md shrink-0 w-[40px] h-[28px]">
                                 <input
                                     ref={inputRef}
                                     type="text"

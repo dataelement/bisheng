@@ -56,16 +56,16 @@ export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
     const scale = zoomLevel / 100;
 
     return (
-        <div className="scrollbar-os flex-1 overflow-auto bg-[#fbfbfb] max-[767px]:[scrollbar-width:none] max-[767px]:[&::-webkit-scrollbar]:hidden">
+        <div className="scrollbar-os flex-1 overflow-auto bg-fill-1 max-[767px]:[scrollbar-width:none] max-[767px]:[&::-webkit-scrollbar]:hidden">
             <div className="flex justify-center py-6 px-4 max-[767px]:p-0">
                 <div
-                    className="bg-white shadow-md max-w-[800px] w-full rounded-sm"
+                    className="bg-bg-page shadow-md max-w-[800px] w-full rounded-sm"
                     style={{
                         transform: `scale(${scale})`,
                         transformOrigin: "top center",
                     }}
                 >
-                    <div className="prose prose-sm max-w-none break-words p-10 text-text-1 max-[767px]:p-4 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_img]:h-auto [&_img]:max-w-full [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
+                    <div className="preview-prose prose prose-sm max-w-none break-words p-10 text-text-1 max-[767px]:p-4 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_img]:h-auto [&_img]:max-w-full [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
                         <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}

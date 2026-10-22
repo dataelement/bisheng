@@ -122,7 +122,7 @@ function TranscriptCueList({ cues }: { cues: TranscriptCue[] }) {
 
 function MarkdownBody({ content, className }: { content: string; className?: string }) {
     return (
-        <div className={cn("prose prose-sm max-w-none text-text-1", className)}>
+        <div className={cn("preview-prose prose prose-sm max-w-none text-text-1", className)}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
@@ -135,9 +135,9 @@ function MarkdownBody({ content, className }: { content: string; className?: str
 
 function MarkdownBlock({ content }: { content: string }) {
     return (
-        <div className="flex-1 overflow-auto bg-[#fbfbfb]">
+        <div className="flex-1 overflow-auto bg-fill-1">
             <div className="flex justify-center px-4 py-6">
-                <div className="w-full max-w-[800px] rounded-sm bg-white shadow-md">
+                <div className="w-full max-w-[800px] rounded-sm bg-bg-page shadow-md">
                     <div className="p-8">
                         <MarkdownBody content={content} />
                     </div>
@@ -190,14 +190,14 @@ function MarkdownFromUrl({ fileUrl }: { fileUrl: string }) {
 
     if (loading) {
         return (
-            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-text-3">
+            <div className="flex flex-1 items-center justify-center bg-fill-1 text-sm text-text-3">
                 {localize("com_knowledge.loading")}
             </div>
         );
     }
     if (error) {
         return (
-            <div className="flex flex-1 items-center justify-center bg-[#fbfbfb] text-sm text-text-3">
+            <div className="flex flex-1 items-center justify-center bg-fill-1 text-sm text-text-3">
                 {error}
             </div>
         );
@@ -250,7 +250,7 @@ export function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
     const { preamble, cues } = parseTranscriptCues(activeContent);
 
     return (
-        <section className="flex h-full min-h-0 flex-col bg-white">
+        <section className="flex h-full min-h-0 flex-col bg-bg-page">
             {/* 12px inset: the segmented control's own 3px padding lines its label
                 up with the 16px-inset transcript text below. */}
             <div className="flex shrink-0 items-center px-3 pt-4">
@@ -319,7 +319,7 @@ export function RichKnowledgePreview({
 
     if (isMedia) {
         return (
-            <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+            <div className="flex h-full w-full flex-col overflow-hidden bg-bg-page">
                 {!compactMode && (
                     <TopBar
                         fileName={fileName}
@@ -353,7 +353,7 @@ export function RichKnowledgePreview({
     }
 
     return (
-        <div className="flex h-full w-full flex-col overflow-hidden bg-[#f5f7fb]">
+        <div className="flex h-full w-full flex-col overflow-hidden bg-fill-1">
             {!compactMode && (
                 <TopBar
                     fileName={fileName}

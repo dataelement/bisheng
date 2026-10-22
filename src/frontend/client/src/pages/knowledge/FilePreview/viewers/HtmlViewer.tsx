@@ -53,15 +53,16 @@ export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
     const scale = zoomLevel / 100;
 
     return (
-        <div className="scrollbar-os flex-1 overflow-auto bg-[#fbfbfb]">
+        <div className="scrollbar-os flex-1 overflow-auto bg-fill-1">
             <div className="w-full h-full">
                 <iframe
+                    data-document-canvas
                     srcDoc={buildSandboxedSrcDoc(htmlContent || "")}
                     title={localize("com_knowledge.html_preview")}
                     // Was `allow-same-origin` with no `allow-scripts`: exactly inverted —
                     // the page's own scripts never ran, yet it inherited this app's origin.
                     sandbox={ARTIFACT_SANDBOX}
-                    className="w-full h-full border-none bg-white"
+                    className="w-full h-full border-none document-canvas"
                     style={{
                         transform: `scale(${scale})`,
                         transformOrigin: "top left",

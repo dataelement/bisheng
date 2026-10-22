@@ -76,14 +76,14 @@ const TRIGGER_VARIANT: Record<SaveAsVariant, string> = {
     // from a resting grey to near-black, so the button never stacks a second
     // fill on top of the row's own hover grey.
     labeled:
-        'gap-1 rounded-lg px-2 py-0.5 text-xs leading-5 text-[#8C8C8C] hover:text-[#212121] ' +
-        'data-[state=open]:text-[#212121]',
+        'gap-1 rounded-lg px-2 py-0.5 text-xs leading-5 text-text-3 hover:text-text-1 ' +
+        'data-[state=open]:text-text-1',
     // A quiet grey glyph that turns brand on its own hover — color only, no
     // hover fill (same rule as 'labeled').
-    inline: 'size-6 rounded-md text-[#8C8C8C] hover:text-blue-500 data-[state=open]:text-blue-500',
+    inline: 'size-6 rounded-md text-text-3 hover:text-blue-500 data-[state=open]:text-blue-500',
     toolbar:
-        'size-7 rounded-lg text-[#8C8C8C] hover:bg-gray-100 hover:text-blue-500 ' +
-        'data-[state=open]:bg-gray-100 data-[state=open]:text-blue-500',
+        'size-7 rounded-lg text-text-3 hover:bg-fill-2 hover:text-blue-500 ' +
+        'data-[state=open]:bg-fill-2 data-[state=open]:text-blue-500',
 };
 
 // Glyph size per placement: 14px beside the "另存为" label and for the bare

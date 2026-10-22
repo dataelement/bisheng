@@ -216,7 +216,7 @@ function VolumeControl({
                         "flex h-[88px] w-7 items-center justify-center rounded-full py-3",
                         dark
                             ? "bg-black/80"
-                            : "bg-white shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]",
+                            : "bg-bg-page shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]",
                     )}
                 >
                     <TrackBar
@@ -372,7 +372,7 @@ export function MediaPlayer({
     const speedMenu = (trigger: ReactNode) => (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-            <ActionMenuContent width={96} align="end" side="top" className={menuSurfaceClass}>
+            <ActionMenuContent data-document-canvas={onDarkStage ? "" : undefined} width={96} align="end" side="top" className={menuSurfaceClass}>
                 {PLAYBACK_RATES.map((value) => (
                     <ActionMenuItem
                         key={value}
@@ -398,7 +398,7 @@ export function MediaPlayer({
        rather than covering the stage below the bar. */
     const menuSurfaceClass = onDarkStage
         ? "border-0 bg-black/75"
-        : "bg-white/85";
+        : "bg-bg-page/85";
     /* The shared menu item forces a dark label while highlighted, which is
        unreadable on the dark surface — keep it white on hover/focus too. */
     const menuItemClass = onDarkStage
@@ -415,6 +415,7 @@ export function MediaPlayer({
     return (
         <div
             ref={containerRef}
+            data-document-canvas={onDarkStage ? "" : undefined}
             className={cn(
                 "relative overflow-hidden",
                 onDarkStage ? "bg-black" : "bg-fill-2",
@@ -536,7 +537,7 @@ export function MediaPlayer({
                                 <Outlined.More className="size-4" />
                             </button>
                         </DropdownMenuTrigger>
-                        <ActionMenuContent align="end" side="top" className={menuSurfaceClass}>
+                        <ActionMenuContent data-document-canvas={onDarkStage ? "" : undefined} align="end" side="top" className={menuSurfaceClass}>
                             {allowDownload && (
                                 <ActionMenuItem
                                     onClick={onDownload}
