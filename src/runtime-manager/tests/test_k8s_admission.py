@@ -1158,3 +1158,189 @@ def test_kubelet_terminal_delete_preserves_identity_status_and_protection_fences
     verifier = policy(lambda ref: calls.append(ref) or pytest.fail("kubelet DELETE must not call backend"))
     assert not allowed(verifier, review)
     assert not calls
+
+
+@pytest.mark.parametrize("phase", ["Succeeded", "Failed"])
+@pytest.mark.parametrize("omit_finalizers", [False, True])
+def test_kubelet_zero_grace_after_finalizer_removal_requires_fresh_persisted_stop(
+    template, plan, phase, omit_finalizers
+):
+    """F059 覆盖 AC: AC-13、AC-20、AC-31、AC-49、AC-52."""
+    old = finished_pod(template, phase=phase, deleting=True)
+    old["metadata"]["finalizers"] = []
+    if omit_finalizers:
+        old["metadata"].pop("finalizers")
+    old["metadata"]["deletionGracePeriodSeconds"] = 30
+    plan.update(stop_state="confirmed", stop_confirmed=True, cleanup_only=True)
+    options = {"preconditions": {"uid": UID}, "gracePeriodSeconds": 0}
+    review = request(
+        old, operation="DELETE", old=old, options=options, username="system:node:worker-a", groups=["system:nodes"]
+    )
+    calls = []
+    verifier = policy(lambda ref: calls.append(ref) or copy.deepcopy(plan))
+    before = copy.deepcopy(old)
+    assert allowed(verifier, review)
+    assert calls == ["resource-a"] and old == before
+    plan["allow_delete"] = False
+    assert not allowed(verifier, review)
+    assert calls == ["resource-a", "resource-a"]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing-proof",
+        "unconfirmed",
+        "truthy-proof",
+        "delete-refused",
+        "truthy-delete",
+        "wrong-ref",
+        "wrong-namespace",
+        "wrong-name",
+        "wrong-kind",
+        "wrong-plan-uid",
+        "replacement-uid",
+        "missing-ref",
+        "missing-delete-time",
+        "wrong-node",
+        "missing-node-group",
+        "missing-policy",
+        "running",
+        "unknown",
+        "node-lost",
+        "app-running",
+        "unknown-termination",
+        "waiting-id",
+        "missing-rv",
+        "stale-rv",
+        "wrong-delete-uid",
+        "missing-delete-uid",
+        "nonzero-grace",
+        "boolean-grace",
+    ],
+)
+def test_finalizer_free_kubelet_delete_denies_unproven_or_changed_resources(template, plan, mutation):
+    """F059 覆盖 AC: AC-13、AC-20、AC-31、AC-49、AC-52."""
+    old = finished_pod(template, deleting=True)
+    old["metadata"].pop("finalizers")
+    plan.update(stop_state="confirmed", stop_confirmed=True, cleanup_only=True)
+    options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 0}
+    username, groups = "system:node:worker-a", ["system:nodes"]
+    if mutation == "missing-proof":
+        plan.pop("stop_confirmed")
+    elif mutation == "unconfirmed":
+        plan["stop_state"] = "requested"
+    elif mutation == "truthy-proof":
+        plan["stop_confirmed"] = "true"
+    elif mutation in {"delete-refused", "truthy-delete"}:
+        plan["allow_delete"] = False if mutation == "delete-refused" else "true"
+    elif mutation.startswith("wrong-") and mutation.removeprefix("wrong-") in {
+        "ref",
+        "namespace",
+        "name",
+        "kind",
+        "plan-uid",
+    }:
+        key = {"ref": "resource_ref", "plan-uid": "uid"}.get(mutation[6:], mutation[6:])
+        plan[key] = "foreign"
+    elif mutation == "replacement-uid":
+        old["metadata"]["uid"] = "33333333-3333-4333-8333-333333333333"
+        options["preconditions"]["uid"] = old["metadata"]["uid"]
+    elif mutation == "missing-ref":
+        old["metadata"]["labels"].pop(RESOURCE_LABEL)
+    elif mutation == "missing-delete-time":
+        old["metadata"].pop("deletionTimestamp")
+    elif mutation == "wrong-node":
+        username = "system:node:worker-b"
+    elif mutation == "missing-node-group":
+        groups = []
+    elif mutation == "missing-policy":
+        old["metadata"]["annotations"].pop(POLICY_ANNOTATION)
+    elif mutation in {"running", "unknown"}:
+        old["status"]["phase"] = mutation.title()
+    elif mutation == "node-lost":
+        old["status"]["reason"] = "NodeLost"
+    elif mutation == "app-running":
+        old["status"]["containerStatuses"][0]["state"] = {"running": {}}
+    elif mutation == "unknown-termination":
+        old["status"]["containerStatuses"][0]["state"]["terminated"]["reason"] = "ContainerStatusUnknown"
+    elif mutation == "waiting-id":
+        old["status"]["containerStatuses"][0]["state"] = {"waiting": {"reason": "PodInitializing"}}
+    elif mutation == "missing-rv":
+        old["metadata"].pop("resourceVersion")
+        options["preconditions"].pop("resourceVersion")
+    elif mutation == "stale-rv":
+        options["preconditions"]["resourceVersion"] = "old"
+    elif mutation == "wrong-delete-uid":
+        options["preconditions"]["uid"] = "foreign"
+    elif mutation == "missing-delete-uid":
+        options["preconditions"].pop("uid")
+    else:
+        options["gracePeriodSeconds"] = 1 if mutation == "nonzero-grace" else False
+    review = request(old, operation="DELETE", old=old, options=options, username=username, groups=groups)
+    assert not allowed(policy(lambda _: plan), review)
+
+
+@pytest.mark.parametrize("backend", ["unavailable", "invalid"])
+def test_finalizer_free_kubelet_delete_fails_closed_when_backend_is_uncertain(template, backend):
+    """F059 覆盖 AC: AC-13、AC-20、AC-31、AC-49、AC-52."""
+    old = finished_pod(template, deleting=True)
+    old["metadata"].pop("finalizers")
+    options = {"preconditions": {"uid": UID}, "gracePeriodSeconds": 0}
+
+    def reader(_):
+        if backend == "unavailable":
+            raise RuntimeError("sensitive-backend-detail")
+        return None
+
+    review = request(
+        old, operation="DELETE", old=old, options=options, username="system:node:worker-a", groups=["system:nodes"]
+    )
+    result = policy(reader).review(review)
+    assert not result["response"]["allowed"] and "sensitive-backend-detail" not in str(result)
+
+
+def test_persisted_stop_does_not_relax_manager_zero_grace_or_status_authority(template, plan):
+    """F059 覆盖 AC: AC-13、AC-20、AC-31、AC-49、AC-52."""
+    old = finished_pod(template, deleting=True)
+    old["metadata"].pop("finalizers")
+    plan.update(stop_state="confirmed", stop_confirmed=True, cleanup_only=True)
+    options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 0}
+    assert not allowed(policy(lambda _: plan), request(old, operation="DELETE", old=old, options=options))
+    before = copy.deepcopy(old)
+    before["status"]["phase"] = "Running"
+    assert not allowed(policy(lambda _: plan), request(old, operation="UPDATE", subresource="status", old=before))
+
+
+def test_finalizer_free_cleanup_uses_a_new_backend_http_plan_for_every_review(template, plan, tmp_path):
+    """F059 覆盖 AC: AC-13、AC-20、AC-31、AC-49、AC-52."""
+    import httpx
+
+    from runtime_manager.k8s_admission import AdmissionPlanClient
+
+    old = finished_pod(template, deleting=True)
+    old["metadata"].pop("finalizers")
+    plan.update(stop_state="confirmed", stop_confirmed=True, cleanup_only=True)
+    options = {"preconditions": {"uid": UID}, "gracePeriodSeconds": 0}
+    review = request(
+        old, operation="DELETE", old=old, options=options, username="system:node:worker-a", groups=["system:nodes"]
+    )
+    calls = []
+
+    def handler(incoming):
+        calls.append((incoming.method, incoming.url.path))
+        return httpx.Response(200, json=copy.deepcopy(plan))
+
+    key_file = tmp_path / "test-admission-key"
+    key_file.write_text("x" * 32)
+    client = AdmissionPlanClient(
+        "https://backend.invalid", key_id="test", secret_file=key_file, transport=httpx.MockTransport(handler)
+    )
+    try:
+        verifier = policy(client)
+        assert allowed(verifier, review)
+        plan["stop_confirmed"] = False
+        assert not allowed(verifier, review)
+        assert calls == [("GET", "/api/v1/internal/app-runtime/v2/admission/plans/resource-a")] * 2
+    finally:
+        client.close()
