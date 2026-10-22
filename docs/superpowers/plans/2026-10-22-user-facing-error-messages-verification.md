@@ -1,6 +1,6 @@
 # 错误提示文案修复：验证与验收
 
-2026-10-22；基线 `2844b274b`；隔离开发分支 `codex/user-facing-error-messages`。已实现并完成技术验证，未合并、未推送。实施计划见 [plan](2026-10-22-user-facing-error-messages.md)。
+2026-10-22；基线 `2844b274b`；隔离开发分支 `codex/user-facing-error-messages`。已实现并完成技术验证；尚未合并到 3.0 分支。实施计划见 [plan](2026-10-22-user-facing-error-messages.md)。
 
 ## 改动结果
 
@@ -44,6 +44,8 @@
 ![真实审批弹窗在模拟未知异常后保留选择并显示兜底](assets/2026-10-22-user-errors-approval.png)
 
 ## 真实业务验收（待执行）
+
+可直接使用 [业务测试 case](2026-10-22-user-facing-error-messages-test-cases.md)，按 U01–U08 与 M01–M06 分别记录结果。
 
 - [ ] 审批新增/编辑失败：只提示一次，保留输入，不误关闭或显示成功；配额/冲突等具体业务原因仍可读。
 - [ ] 完整知识库段落页：删除/编辑失败后回滚与重载正常，未知异常不展示对象或技术串。
