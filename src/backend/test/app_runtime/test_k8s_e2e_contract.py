@@ -146,3 +146,212 @@ async def test_cleanup_revalidates_scope_before_mutation(tmp_path, mismatch):
     with pytest.raises(AssertionError):
         await suite.cleanup()
     assert not mutations
+
+
+@pytest.fixture
+def tls_material(tmp_path):
+    """Ephemeral loopback PKI only; no environment credential is read."""
+    import datetime
+    import ipaddress
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    now = datetime.datetime.now(datetime.UTC)
+
+    def authority(name):
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(subject)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - datetime.timedelta(minutes=1))
+            .not_valid_after(now + datetime.timedelta(days=1))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+            .sign(key, hashes.SHA256())
+        )
+        return key, cert
+
+    key, ca = authority("F059 local test CA")
+    _, wrong = authority("F059 unrelated CA")
+    leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    leaf_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+    leaf = (
+        x509.CertificateBuilder()
+        .subject_name(leaf_name)
+        .issuer_name(ca.subject)
+        .public_key(leaf_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(minutes=1))
+        .not_valid_after(now + datetime.timedelta(days=1))
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+    paths = {}
+    for name, certificate in (("ca", ca), ("wrong-ca", wrong), ("server", leaf)):
+        path = tmp_path / (name + ".pem")
+        path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+        paths[name] = path
+    private = tmp_path / "server-key.pem"
+    private.write_bytes(
+        leaf_key.private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+        )
+    )
+    private.chmod(0o600)
+    paths["key"] = private
+    return paths
+
+
+def test_explicit_public_ca_builds_verified_context_and_default_keeps_system_trust(tls_material):
+    import ssl
+
+    from test.e2e.helpers.vibe_runtime import build_tls_context
+
+    default, custom = build_tls_context(), build_tls_context(tls_material["ca"])
+    assert default.verify_mode == custom.verify_mode == ssl.CERT_REQUIRED
+    assert default.check_hostname is True and custom.check_hostname is True
+    assert len(custom.get_ca_certs()) == len(default.get_ca_certs()) + 1
+
+
+@pytest.mark.parametrize(
+    "invalid", ["missing", "directory", "symlink", "invalid-pem", "private-key", "certificate-and-key"]
+)
+def test_explicit_ca_rejects_non_public_regular_certificate_files(tmp_path, tls_material, invalid):
+    from test.e2e.helpers.vibe_runtime import build_tls_context
+
+    path = tmp_path / "input.pem"
+    if invalid == "directory":
+        path.mkdir()
+    elif invalid == "symlink":
+        path.symlink_to(tls_material["ca"])
+    elif invalid == "invalid-pem":
+        path.write_text("not-a-certificate PRIVATE_MATERIAL_SENTINEL")
+    elif invalid == "private-key":
+        path.write_bytes(tls_material["key"].read_bytes())
+    elif invalid == "certificate-and-key":
+        path.write_bytes(tls_material["ca"].read_bytes() + tls_material["key"].read_bytes())
+    with pytest.raises(ValueError, match="F059_E2E_CA_FILE") as stopped:
+        build_tls_context(path)
+    assert "PRIVATE_MATERIAL_SENTINEL" not in str(stopped.value)
+    assert "BEGIN" not in str(stopped.value) and str(path) not in str(stopped.value)
+
+
+def test_settings_read_explicit_ca_file_before_any_http_request(tmp_path, tls_material, monkeypatch):
+    import ssl
+
+    from test.e2e.helpers import vibe_runtime
+
+    app = package(
+        tmp_path / "app.tar.gz",
+        {"name": "e2e-f059-smoke", "slug": "e2e-f059-smoke", "runtime": "python3.11", "delivery": {"mode": "bundle"}},
+    )
+    scenarios = tmp_path / "scenarios.json"
+    scenarios.write_text(json.dumps([{"slug": "e2e-f059-smoke", "package": str(app)}]))
+    monkeypatch.setenv("F059_E2E", "1")
+    monkeypatch.setenv("F059_E2E_TENANT_CODE", "e2e-f059-tenant")
+    monkeypatch.setenv("F059_E2E_SCENARIOS", str(scenarios))
+    monkeypatch.setenv("F059_E2E_CA_FILE", str(tls_material["ca"]))
+    monkeypatch.setattr(vibe_runtime, "API_BASE", "https://127.0.0.1:9443/api/v1")
+    settings = SuiteSettings.from_env()
+    assert settings.ssl_context.verify_mode == ssl.CERT_REQUIRED and settings.ssl_context.check_hostname
+    assert str(tls_material["ca"]) not in repr(settings)
+    monkeypatch.setenv("F059_E2E_CA_FILE", str(tmp_path / "missing.pem"))
+    with pytest.raises(ValueError, match="F059_E2E_CA_FILE"):
+        SuiteSettings.from_env()
+
+
+async def test_cli_uses_settings_context_for_http_even_with_trust_env_false(tmp_path, tls_material, monkeypatch):
+    import importlib.util
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    import httpx
+
+    from test.e2e.helpers import vibe_runtime
+
+    path = Path(__file__).resolve().parents[4] / "scripts/e2e_k8s_runtime.py"
+    spec = importlib.util.spec_from_file_location("f059_e2e_tls_cli", path)
+    command = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(command)
+    settings = SuiteSettings("e2e-f059-tenant", (), ssl_context=vibe_runtime.build_tls_context(tls_material["ca"]))
+    observed = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            observed.append(kwargs)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class Suite:
+        def __init__(self, actual_settings, journal, client):
+            assert actual_settings is settings
+
+        async def authenticate(self):
+            return None
+
+        async def installation(self):
+            return None
+
+    monkeypatch.setattr(vibe_runtime.SuiteSettings, "from_env", lambda: settings)
+    monkeypatch.setattr(vibe_runtime, "LiveVibeSuite", Suite)
+    monkeypatch.setattr(httpx, "AsyncClient", Client)
+    await command.run(SimpleNamespace(stage="installation", evidence=tmp_path / "evidence.json"))
+    assert observed[0]["verify"] is settings.ssl_context and observed[0]["trust_env"] is False
+
+
+async def test_same_explicit_ca_authenticates_loopback_https_and_websocket_and_wrong_ca_refuses(tmp_path, tls_material):
+    """Real TLS/protocol smoke on loopback; not a deployed authorization claim."""
+    import ssl
+    from types import SimpleNamespace
+
+    import httpx
+    from websockets.asyncio.server import serve
+
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite, build_tls_context
+
+    server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    server_context.load_cert_chain(tls_material["server"], tls_material["key"])
+
+    async def request(connection, handshake):
+        if handshake.path == "/health":
+            return connection.respond(200, '{"status":"ok"}')
+        if handshake.headers.get("Cookie") != "access_token_cookie=local-owner":
+            return connection.respond(403, "refused")
+        return None
+
+    async def echo(connection):
+        await connection.send(await connection.recv())
+
+    async with serve(echo, "127.0.0.1", 0, ssl=server_context, process_request=request) as server:
+        port = server.sockets[0].getsockname()[1]
+        origin = f"https://127.0.0.1:{port}"
+        context = build_tls_context(tls_material["ca"])
+        settings = SuiteSettings("e2e-f059-tenant", (), ssl_context=context)
+        journal = EvidenceJournal(tmp_path / "evidence.json", tenant_code=settings.tenant_code)
+        async with httpx.AsyncClient(verify=context, trust_env=False) as client:
+            assert (await client.get(origin + "/health")).json() == {"status": "ok"}
+            suite = LiveVibeSuite(settings, journal, client)
+            suite.tokens = {"OWNER": "local-owner", "NONOWNER": "local-nonowner"}
+            scenario = SimpleNamespace(slug="e2e-f059-smoke", websocket_path="/ws")
+            await suite.websocket(scenario, origin + "/apps/smoke")
+        wrong = build_tls_context(tls_material["wrong-ca"])
+        async with httpx.AsyncClient(verify=wrong, trust_env=False) as client:
+            with pytest.raises(httpx.ConnectError):
+                await client.get(origin + "/health")
+            suite = LiveVibeSuite(SuiteSettings("e2e-f059-tenant", (), ssl_context=wrong), journal, client)
+            suite.tokens = {"OWNER": "local-owner", "NONOWNER": "local-nonowner"}
+            with pytest.raises(ssl.SSLCertVerificationError):
+                await suite.websocket(scenario, origin + "/apps/smoke")
+    assert "PRIVATE KEY" not in (tmp_path / "evidence.json").read_text()
+    assert str(tls_material["key"]) not in (tmp_path / "evidence.json").read_text()
