@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；231 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 222 / 231 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 226 / 231 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1800,7 +1800,7 @@
   **覆盖 AC:** AC-33、AC-49、AC-52
   **依赖:** T220
 
-- [ ] **T228** — 初始化与健康阶段期限配对
+- [x] **T228** — 初始化与健康阶段期限配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
   **逻辑/验收**：多init正常累计超过90秒可在各自阶段期限内就绪；单阶段/健康/原操作期限仍有界；重启重试不重新计时，时间或状态不确定不延长，同UID限制保持。
@@ -1808,7 +1808,7 @@
   **依赖:** T226、T227
   **配对:** T229
 
-- [ ] **T229** — 修正初始化与应用就绪期限
+- [x] **T229** — 修正初始化与应用就绪期限
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
   **逻辑/验收**：按既定阶段有界初始化与健康检查，修正全部init与健康共用一次90秒误判；不扩大原操作总期限、不改变资源围栏/API/DDL。
@@ -1816,19 +1816,19 @@
   **依赖:** T228
   **配对:** T228
 
-- [ ] **T230** — 已取消数据操作拒绝新动作配对
+- [x] **T230** — 已取消数据操作拒绝新动作配对
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_data_grants.py`、`src/backend/test/app_runtime/test_runtime_data_sessions.py`、`src/runtime-manager/tests/test_k8s_data_executor.py`
   **逻辑/验收**：真实owner取消提交后不能新签数据票据/继续等待ready或开始新RPC；active=False清理、已开始写入unknown与互斥仍保留。
-  **覆盖 AC:** AC-33、AC-36、AC-43、AC-48、AC-49、AC-54、AC-55
+  **覆盖 AC:** AC-33、AC-36、AC-43、AC-48、AC-49、AC-55
   **依赖:** T226
   **配对:** T231
 
-- [ ] **T231** — 取消数据会话的签发与RPC围栏
+- [x] **T231** — 取消数据会话的签发与RPC围栏
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_data_grant_service.py`、`src/backend/bisheng/app_runtime/domain/services/runtime_data_session_service.py`、`src/runtime-manager/runtime_manager/k8s_data_executor.py`
   **逻辑/验收**：后端签发事务与ready读取核取消；manager当前操作校验拒绝取消后的新动作，不伪造回滚/停止或释放未知写入者。
-  **覆盖 AC:** AC-33、AC-36、AC-43、AC-48、AC-49、AC-54、AC-55
+  **覆盖 AC:** AC-33、AC-36、AC-43、AC-48、AC-49、AC-55
   **依赖:** T230
   **配对:** T230
 
@@ -1963,3 +1963,5 @@ T225–T227开发收尾：当前222/227完成（103测试任务）；主树runti
 2026-10-23 T228/T229：r7完整prepare已completed/cleanupcomplete，prepared_delivery与delivery一致；probe081663…在90秒内经历data-layout/schema-init/material-fetch，环境安装仅12秒即被统一readiness截止停止。cached镜像事件17:47:32→17:48:51→17:49:03证实串行阶段共用90秒，不把它误判为拉镜像/源码传输失败。按既定4.6阶段约束修复并保留原失败现场。
 
 2026-10-23 T230/T231：只读交叉审查以真实cancel Service＋SQL＋Ed25519红例复现：owner已提交payload.cancel_requested，仍running/ready的数据会话可新签票据；manager RPC也未拒绝该标志。收紧当前授权而非增加取消业务或假装回滚，和T228/T229按独占文件并行。
+
+T228–T231合流：来源a1de5271f5f00cef0cba06d41f09c673a9190525，runtime1483passed/13skip（32.30s），backend app_runtime/app_publish1734passed/19skip（48.25s）；两个模块Ruff/format及逐文件架构守卫通过。当前226/231、105测试任务，余五项保持验收/发行/L2门，不声明业务上线已通过。ARM暂缓。

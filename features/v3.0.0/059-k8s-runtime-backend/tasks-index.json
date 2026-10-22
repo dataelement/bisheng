@@ -5762,9 +5762,9 @@
         "T227"
       ],
       "pair": "T229",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "175 executor tests; 392 adjacent; full runtime 1483 passed/13 skipped; Ruff/format/arch/diff passed",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T229",
@@ -5789,9 +5789,9 @@
         "T228"
       ],
       "pair": "T228",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "175 executor tests; 392 adjacent; full runtime 1483 passed/13 skipped; Ruff/format/arch/diff passed",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T230",
@@ -5810,16 +5810,15 @@
         "AC-43",
         "AC-48",
         "AC-49",
-        "AC-54",
         "AC-55"
       ],
       "depends": [
         "T226"
       ],
       "pair": "T231",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "12 new paired; backend 170 and manager 176 related passed; full backend 1734/19 skipped and runtime 1483/13 skipped; static checks passed",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T231",
@@ -5838,16 +5837,15 @@
         "AC-43",
         "AC-48",
         "AC-49",
-        "AC-54",
         "AC-55"
       ],
       "depends": [
         "T230"
       ],
       "pair": "T230",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "12 new paired; backend 170 and manager 176 related passed; full backend 1734/19 skipped and runtime 1483/13 skipped; static checks passed",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

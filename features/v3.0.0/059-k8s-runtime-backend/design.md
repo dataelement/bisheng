@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理等待缺陷已完成L1修复；r7完整prepare成功并进入probe，但探活总预算将多段init与健康检查混算，启动阶段期限仍在收尾。r6/r7失败journal和资源清理证据保留，后续用独立r8复验，尚无正式业务上线通过结论。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
+**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理等待缺陷已完成L1修复；r7完整prepare成功并进入probe，但探活总预算将多段init与健康检查混算，启动阶段期限及数据取消新动作闸已通过L1与完整本地集成，待r8实测。r6/r7失败journal和资源清理证据保留，后续用独立r8复验，尚无正式业务上线通过结论。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -244,6 +244,8 @@ T225/T226实现：准备全部输出确认后，先在既有`preparing`事实的
 
 本地实现补充：K8s源码兼容模式由backend同样冻结profile；无凭据安装Pod把Python环境写到scratch的environment子目录并固定挂载为/opt/venv，Node产物在编译后裁剪开发依赖。可信组装Pod只读scratch，用crane mutate追加/app代码与/opt/venv及既有语言入口模板，不执行RUN；registry配置只挂组装器。完整镜像不复制源码或安装依赖。实际CRI/registry与双架构镜像仍须后续真实验收。
 
+**初始化阶段期限（T228/T229）**：launch使用fresh同UID Pod及同一状态快照计算阶段和Ready/Service端点。固定init顺序来自冻结template；首阶段锚点为Pod.creationTimestamp，后续为前一成功init的finishedAt，最后init完成后进入独立健康90秒窗口。无init的完整镜像仅有创建起的健康窗口。已完成阶段也不得超过90秒；至多5秒API/kubelet时钟偏差不使锚点后退。缺失/异常/越序状态不授予Ready，缺失时间拒绝，不以now或running.startedAt续期。每轮及Ready返回前fresh核原操作范围、取消和期限，min原冻结deadline/当前deadline；manager重启、同名新UID、控制器失租不能刷新期限或绕过围栏。observe公开形状不变。最后sleep有界且非负，保留阶段失败诊断。
+
 ### 4.7 材料授权与续期（已接线；准备阶段传输已实测，完整续期及正式初始化待验收）
 
 期限实现：`RuntimeMaterialDelegation.expires_at`在operation/预览中分别是操作/会话的最晚期限；正式deployment-init可为NULL，表示每次重新检查当前归属、批准版本、冻结delivery和同UID，不是永久通行。300秒传输票据仍有独立期限，不能独立续期。该表已在189专用测试平台完成扩展迁移并实际读写，尚未完成客户发行交付；模型声明可空，不改已发布迁移或做数据回填。
@@ -307,6 +309,8 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 实施补充：owner显式删除时，先确认全部旧writer停止并清理，再在同一固定生产位置启动purpose=purge的无应用/材料凭据helper，独占擦除business和platform备份；SQL先持久化purge结果，再停止helper并以UID/RV删除原PVC。只为128MiB/25m helper原子预占，不借用应用档位或在结果未知时释放。重启从维护进度续办；Retain PV由安装者在确认写入停止后处理。
 
 准备/启动参数继续从operation冻结：source_limits逐phase深拷贝；v2环境同时保留兼容变量与SDK0.1.1实际读取的BISHENG_PLATFORM_API_BASE。Node/static bundle保留固定launcher语义，完整image仍用其入口。已有Pod intent的RuntimeClass（含缺省）和deadline从同操作/应用/执行域资源记录恢复，不随可选sandbox探测刷新改变；其余模板仍严格比对。
+
+**数据取消的新动作闸（T230/T231）**：owner取消已提交payload.cancel_requested时，签发事务读取锁定当前操作并拒绝新数据票据；等待ready也立即拒绝。manager active校验同时识别公开兼容顶层与payload标志，在Pod/UID观察完成后、实际转发前再次fresh检查，减少观察I/O期间的竞态。已在途动作不声称回滚；原unknown、5秒票据受理窗口、helper idle和会话互斥/同UID停止证明保留。active=False停止与清理不被新动作闸阻断。无新endpoint、字段、授权Owner或helper协议。
 
 ### 4.9 网络、准入和资源治理
 
@@ -409,6 +413,8 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 | venv 固定路径与镜像 ABI 相关 | 打包开发机环境在节点无法运行 | profile＋锁/材料＋`/opt/venv` 物化，跨架构产物隔离 |
 | 离线镜像、wheelhouse 和平台能力是三个条件 | 页面健康却缺 SDK/依赖或无法调用模型 | 安装报告分项、原生离线 prepare/SDK E2E |
 | Node/Python 安装脚本可执行用户代码 | 准备任务盗用上传/管理凭据 | 传输与安装 Pod 分开，安装/编译无传输身份、无生产卷 |
+| 多个init与业务健康共用创建起90秒 | cached镜像也可能在环境安装刚开始就误判失败，重启若从now重计又可无限延长 | `executors/kubernetes.py`以同UID创建/前阶段finishedAt锚定，且不超过原操作期限 |
+| owner取消只是持久请求，操作线程尚未退出 | 仍ready的数据会话可新签票据或在观察I/O后发送新写入 | grant签发/ready当前状态检查；`k8s_data_executor.py`在RPC入口及转发前复查，既有动作按unknown保留 |
 | DELETE受理后对象仍存在是正常异步过程，prepare的最终结果也必须单独持久化 | 一次cleanup.pending被误作发布失败，或重启重复准备且覆盖已上传结果 | `operations.py`有界等待与`prepared_delivery`；`executors/kubernetes.py`仍以同UID停止证明和fresh404完成收尾 |
 | Pod activeDeadlineSeconds 不能从短启动期限调大或清空 | 预览 ready 后延长期限被 API 拒绝或正式实例到期被杀 | `k8s_templates.py` 区分任务、预览与正式期限；初始化自带阶段限制 |
 | RWOP 不允许再开第二个在线数据 helper Pod；停用后又没有在线 sidecar | 在线挂卷一直 Pending，或停用后保留库无法查改导出 | 在线 helper 同 Pod；停用 data 会话先取得空生产位置，确认停止后释放 |

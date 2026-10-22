@@ -1,25 +1,25 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22T17:48:07.531221+00:00",
-  "validated_source_commit": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+  "validated_source_commit": "a1de5271f5f00cef0cba06d41f09c673a9190525",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 222,
+    "l1_completed": 226,
     "tasks_total": 231,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 1438,
+      "source_commit": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+      "passed": 1483,
       "skipped": 13,
-      "seconds": 33.66,
-      "log": "/private/tmp/f059-async-cleanup-main-runtime-fixed.log",
-      "boundary": "Local integrated runtime regression; no live Kubernetes business or ARM/public release claim",
+      "seconds": 32.3,
       "exit_code": 0,
-      "source_commit": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13"
+      "log": "/private/tmp/f059-final-dev-runtime.log",
+      "scope": "Full integrated runtime suite; no remote or ARM claim"
     },
     "backend": {
       "passed": 1723,
@@ -787,7 +787,7 @@
       "controller_epoch": 11
     },
     "startup_stage_budget": {
-      "status": "fix_in_progress",
+      "status": "implemented_l1_and_full_runtime_passed_live_pending",
       "actual_probe_operation": "0816633805bd414d828ff1bef8b6995b",
       "reason": "workload_readiness_timeout",
       "cleanup_status": "complete",
@@ -799,15 +799,31 @@
       "all_images_cached": true,
       "materialized": true,
       "application_started": false,
-      "environment_only_seconds": 12
+      "environment_only_seconds": 12,
+      "fix_commit": "a3b50f9d6740a8f6654454fa5e701252c867d3cb",
+      "executor_passed": 175,
+      "adjacent_passed": 392
     },
     "data_cancel_fence": {
-      "status": "fix_in_progress",
+      "status": "implemented_l1_and_integrated_passed_live_pending",
       "evidence_kind": "local_real_service_sql_and_ed25519",
       "red_log": "/private/tmp/f059-review-cancelled-data-grant-red.log",
       "red_failed": 1,
       "existing_related_passed": 159,
-      "boundary": "No remote or K8s data acceptance claim"
+      "boundary": "No remote or K8s data acceptance claim",
+      "fix_commit": "469175f19857bbd8021814da7164f21bc97f49ec",
+      "new_paired": 12,
+      "backend_related_passed": 170,
+      "manager_related_passed": 176
+    },
+    "final_dev_backend": {
+      "passed": 1734,
+      "skipped": 19,
+      "seconds": 48.25,
+      "warnings": 146,
+      "exit_code": 0,
+      "log": "/private/tmp/f059-final-dev-backend.log",
+      "scope": "app_runtime + app_publish; local tests, no real DM8 claim"
     }
   },
   "not_executed": [

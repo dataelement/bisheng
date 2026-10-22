@@ -3301,3 +3301,24 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 **元数据**：范围PASS；配对T225先通过；依赖PASS。prepare/probe/data及旧实例清理使用原checkpoint/期限并守K8s租约；不把异常、unknown或超时当complete。prepare结果先SQL确认才清理，PlatformError响应丢失仅同结果fresh确认可续；不重放安装/上传/probe/已结束data。Docker同路55测试内配对，本轮不代替真实Docker复跑。Ruff/format/逐文件arch/diff通过；主树完整runtime回归1438passed/13skipped（33.66s），日志/private/tmp/f059-async-cleanup-main-runtime-fixed.log。
 **结果：PASS**。来源1f788fc3519a3984c63ed87e567666b3dbd4aa13；本地配对不宣称189业务或真实响应丢失已通过。当前222/227、103测试任务，余五项为验收/交付门。
+
+
+## Task Review: T228 — 初始化与健康阶段期限配对
+
+**类型**：测试。**文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`。命名/完整AC-24、AC-25、AC-28、AC-43、AC-48、AC-49、AC-52、AC-55 PASS；前端N/A，测试子集其余N/A。依赖T226/T227完成，配对T229；文件范围PASS。原红29fail/139pass；最终175 executor、392相邻全部通过。实际4init累计130秒、阶段超时、总期限、取消/归属、同UID替换、时钟异常、重启、公开observe形状及负sleep先红后绿均有断言。
+**结果：PASS**；本地Mock/控制时钟不代替189真实启动。
+
+## Task Review: T229 — 固定初始化阶段窗口
+
+**类型**：实现。**文件**：`runtime_manager/executors/kubernetes.py`。七项：架构PASS（已有平台/K8s API），命名PASS，序列化PASS（公开observe不变），数据库/前端N/A，信息泄漏PASS（固定reason与既有安全tail），设计同步PASS（4.6、5）。范围/依赖/配对T228先完成PASS。原operation deadline为上限；同UID创建/前init完成锚点不因重启或startedAt变化刷新，ready前后再守时限/取消与归属，失租和未知状态拒绝。主树runtime1483/13skip通过，Ruff/format/arch/diff通过。
+**结果：PASS**。源a3b50f9d6740a8f6654454fa5e701252c867d3cb；原L1 `/private/tmp/f059-t229-l1-review.md`。
+
+## Task Review: T230 — 取消数据会话的新动作配对
+
+**类型**：测试。**文件**：两backend data grant/session测试及manager `test_k8s_data_executor.py`，和任务索引一致。命名/完整AC-33、AC-36、AC-43、AC-48、AC-49、AC-55 PASS；前端N/A，其余按测试子集N/A；依赖T226完成，配对T231。12新配对，backend170、manager176相关通过；真实Service+SQL+Ed25519红3及manager红7/观察期红1均保留。没有使用无关的AC-54作追溯。
+**结果：PASS**；无远端数据取消验收冒认。
+
+## Task Review: T231 — 取消数据签发与RPC围栏
+
+**类型**：实现。**文件**：backend两data grant/session服务、manager `k8s_data_executor.py`。七项：架构PASS（Service/Repository及原数据执行边界），命名PASS，序列化PASS（既有响应/票据无改动），数据库/租户PASS（无新模型/DDL/SQL，原锁定操作），前端N/A，信息泄漏PASS，设计同步PASS（4.8、5）。三文件共6行生产增量，属同一跨进程取消闸，按文件独占并作原子修复；依赖/配对T230先通过、范围PASS。未把取消请求当停止证明；active=False清理仍可执行，已在途unknown/原窗口及互斥保留。完整backend1734/19skip和runtime1483/13skip通过，静态检查通过。
+**结果：PASS**。源469175f19857bbd8021814da7164f21bc97f49ec；原L1 `/private/tmp/f059-t230-t231-l1.md`。当前226/231、105测试任务；仍待189业务、故障升级、正式发行和L2。
