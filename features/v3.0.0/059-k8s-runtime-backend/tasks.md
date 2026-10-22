@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；255 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 248 / 255 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 249 / 255 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2008,7 +2008,7 @@
   **依赖:** T254
   **配对:** T254
 
-- [ ] **T256** — 准备阶段取消、围栏与截止时间配对
+- [x] **T256** — 准备阶段取消、围栏与截止时间配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_prepare_cancellation.py`、`src/runtime-manager/tests/test_k8s_diagnostic_contract.py`
   **逻辑/验收**：使用实际_phase与_startup_checkpoint，覆盖进入/复用前取消、Running时取消、UID/归属围栏变化、原期限与缩短期限、读取失败、成功前取消；正常完成仍按同UID停止和确认，不以Mock调用次数代替业务结果。

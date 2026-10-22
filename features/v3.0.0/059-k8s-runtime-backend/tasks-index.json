@@ -6424,8 +6424,8 @@
       ],
       "pair": "T257",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T257",

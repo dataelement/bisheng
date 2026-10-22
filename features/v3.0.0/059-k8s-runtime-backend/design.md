@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成248/253，T254/T255安装探测补强已合流。运行镜像保持0d5固定digest，完整runtime1628/13skip；backend保持6f，既有1764/19skip。189现为Helm27/epoch21，Python、Node、static应用包均完成v1/v2及停用恢复，Python另通过SDK/OBO、附件与SQLite。第二source-image真实失败已定位为仓库Docker5443→5000的Calico DNAT出站配置缺口，配对确认并修正；源码首版已通过真实推送、预览审批、HTTP/WS及停用恢复，第二版执行中；完整镜像、离线编辑导出及故障升级仍待续办。旧r4保持安全围栏，不能卸载主安装域。新ARM、109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
+**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；新增T256/T257收尾准备循环取消检查，当前本地完整runtime1649/13skip，backend保持6f且既有1764/19skip。189安装仍为Helm27/epoch21、0d5运行镜像；Python、Node、static应用包与source-image均完成v1/v2及停用恢复，Python另通过SDK/OBO、附件与SQLite。完整镜像v1与停用恢复通过，v2审批11执行后因16226容量不足失败，旧v1仍online、pendingv2保留；不能将该失败改写为更新成功。仓库DNAT5000配置缺口已修正，dedc安装器的新真实探测执行中。取消修复仅本地通过，尚未部署或证明189取消。离线编辑导出及故障升级仍待续办。旧r4保持安全围栏，不能卸载主安装域。新ARM、109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -244,6 +244,8 @@ T225/T226实现：准备全部输出确认后，先在既有`preparing`事实的
 
 
 本地实现补充：K8s源码兼容模式由backend同样冻结profile；无凭据安装Pod把Python环境写到scratch的environment子目录并固定挂载为/opt/venv，Node产物在编译后裁剪开发依赖。可信组装Pod只读scratch，用crane mutate追加/app代码与/opt/venv及既有语言入口模板，不执行RUN；registry配置只挂组装器。完整镜像不复制源码或安装依赖。实际CRI/registry与双架构镜像仍须后续真实验收。
+
+**准备循环操作检查（T256/T257）**：每阶段进入、复用已确认结果返回、创建Pod前、Running轮询和提交阶段结果前，复用同一操作范围/取消/持久期限检查。原冻结与fresh当前期限取最小值，后续延长不得续活原操作；读取不确定时拒绝继续产出。取消交给既有正常清理，同UID停止证据成立前不释放资源/容量。backend resource GET仍可供终态清理读取，不将其变成仅活跃操作可读。此补漏不增加取消接口或新的响应时限。
 
 **初始化阶段期限（T228/T229）**：launch使用fresh同UID Pod及同一状态快照计算阶段和Ready/Service端点。固定init顺序来自冻结template；首阶段锚点为Pod.creationTimestamp，后续为前一成功init的finishedAt，最后init完成后进入独立健康90秒窗口。无init的完整镜像仅有创建起的健康窗口。已完成阶段也不得超过90秒；至多5秒API/kubelet时钟偏差不使锚点后退。缺失/异常/越序状态不授予Ready，缺失时间拒绝，不以now或running.startedAt续期。每轮及Ready返回前fresh核原操作范围、取消和期限，min原冻结deadline/当前deadline；manager重启、同名新UID、控制器失租不能刷新期限或绕过围栏。observe公开形状不变。最后sleep有界且非负，保留阶段失败诊断。
 
@@ -799,3 +801,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 T252/T253更正：此前继承CMD问题为误判，撤回相关设计说明和冗余实现。固定crane v0.22.1在设置entrypoint时已按Docker语义清除Cmd；原组装器已满足既定启动合同。原记录保留用于追溯，本行优先。源码/测试恢复0d5字节，SGID与PATH修正不变。
 
 2026-10-23 T254/T255：安装registry探测补egress-proxy实际网络策略下的上游TCP检查，控制canary保持NotReady避免被业务Service选入；原外部crane权限/TLS检查和真实assembler业务验证分别保留。189 Docker仓库5443映射5000，Calico按DNAT后端口匹配，现场配置另增5000且已真实配对确认；不改变部署API、helper命令、镜像或descriptor摘要协议。
+
+2026-10-23 T256/T257：本地真实方法链确认prepare Running循环未观察已受理cancel，复用已有操作检查补齐；26配对与201相邻、主树1649/13skip通过。既定取消/围栏/期限合同内修正，不变API、helper/assembler/profile和停止证明。189真实取消与容量释放单列待验。
