@@ -1186,6 +1186,20 @@
       "original_resumed_exit": "AssertionError from stop response; no retry",
       "deadline_extended": false,
       "raw_local_evidence": "/private/tmp/f059-r10-stop-expired-before.json"
+    },
+    "expired_stop_candidate_d489": {
+      "source_commit": "d48937c1081866e4022c135a7033c6d6a35872b7",
+      "runtime_passed": 1570,
+      "runtime_skipped": 13,
+      "seconds": 33.18,
+      "runtime_log": "/private/tmp/f059-expired-stop-full-runtime.log",
+      "native_manager_build_exit": 0,
+      "native_manager_import_exit": 0,
+      "native_manager_image_id": "sha256:ae8731f462ecbf79682a42c84867ee62b73962cca4ec8fd2a76553893f6f7d3f",
+      "pushed": false,
+      "deployed": false,
+      "l1_independent": "NEEDS_FIX: transient non-expiry 503 prematurely terminal failed and not retryable",
+      "proof": "/private/tmp/f059-t241-transient-503-stuck.json"
     }
   },
   "not_executed": [

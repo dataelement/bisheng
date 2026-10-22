@@ -3362,3 +3362,8 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 实现仅operations.py两行，架构/命名/序列化/信息泄漏/设计同步PASS，数据库与前端N/A；依赖/配对T238与范围PASS。仅精确confirmed且complete跳过历史Pod，全操作cleanup、live UID、deadline/controller/checkpoint不变。Ruff/format/guard/diff及479相关通过。
 **结果：PASS**。源464bf9027ad3398029c46495e696538c33e11313；实际过期操作仍待安全闭合。
+
+## Task Review: T240/T241 — 首轮独立复核
+
+候选de653a8d/合流d48937c10，508相邻与主树1570/13skip通过。独立只读复算发现P2：claim短暂503会被写成failed/pending，而特殊收尾仅接受timed_out/operation_timeout，恢复后旧writer持续held且不再claim。复现 `/private/tmp/f059-t241-transient-503-stuck.json`，3轮cleanup0/claim1/4次failed事实。
+**结果：NEEDS_FIX**。T240/T241保持未完成；非精确expiry/不确定stop须保留非终态以待重试，补503恢复及精确expiry配对后复审。原期限、backend guard及PVC保护不动。该候选仅原生amd64构建/禁网导入通过，未push或部署，不能当最终交付。
