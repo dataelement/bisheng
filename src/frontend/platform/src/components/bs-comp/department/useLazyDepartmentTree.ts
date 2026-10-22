@@ -7,7 +7,7 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { useCallback, useEffect, useRef, useState, type InputHTMLAttributes } from "react"
-import { useQueryClient } from "react-query"
+import { useQueryClient } from "@tanstack/react-query"
 
 /**
  * F038: per-layer lazy department tree (browse / server search / locate), shared

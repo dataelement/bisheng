@@ -10,7 +10,7 @@ import { getDatasets,MetricConfig } from "@/controllers/API/dashboard";
 import { Hash,Type } from "lucide-react";
 import { useEffect,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "react-query";
+import { useQuery } from "@tanstack/react-query";
 
 export interface DatasetField {
     fieldCode: string          // 真正用来过滤 / SQL

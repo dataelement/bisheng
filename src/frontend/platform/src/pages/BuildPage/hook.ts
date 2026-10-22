@@ -4,11 +4,11 @@ import { getAllLabelsApi } from "@/controllers/API/label";
 import { AppType } from "@/types/app";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 
 export const useQueryLabels = (t) => {
     const { data: options, refetch } = useQuery({
-        queryKey: "QueryLabelsKey",
+        queryKey: ["QueryLabelsKey"],
         queryFn: () => getAllLabelsApi().then(res =>
             res.data.map(d => ({ label: d.name, value: d.id, edit: false, selected: false }))
         )

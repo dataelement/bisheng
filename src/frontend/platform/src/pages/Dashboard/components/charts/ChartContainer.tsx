@@ -6,7 +6,7 @@ import { ChartDataResponse, MetricDataResponse } from '@/pages/Dashboard/types/c
 import { ChartType, DashboardComponent } from '@/pages/Dashboard/types/dataConfig'
 import { useEditorDashboardStore } from '@/store/dashboardStore'
 import { useEffect } from 'react'
-import { useQuery } from 'react-query'
+import { useQuery } from '@tanstack/react-query'
 import { BaseChart } from './BaseChart'
 import { MetricCard } from './MetricCard'
 import { useTranslation } from 'react-i18next'
@@ -27,7 +27,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   const queryParams = refreshInfo?.queryParams || []
 
   // Query chart data
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isInitialLoading: isLoading, error, refetch } = useQuery({
     queryKey: ['chartData', component.id, refreshTrigger],
     queryFn: () => queryChartData({
       useId: isPreviewMode,

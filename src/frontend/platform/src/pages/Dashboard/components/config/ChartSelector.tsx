@@ -12,7 +12,7 @@ import { AdvancedDatePicker } from "../AdvancedDatePicker";
 
 import { getDatasets } from "@/controllers/API/dashboard";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "react-query";
+import { useQuery } from "@tanstack/react-query";
 
 /* ================== 类型 ================== */
 export interface ChartLinkConfig {
