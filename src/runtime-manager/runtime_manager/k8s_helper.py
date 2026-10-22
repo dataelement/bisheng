@@ -199,8 +199,18 @@ def _load_download_tool():
     return module
 
 
+def _dependency_lock(document):
+    lock = document.get("delivery", {}).get("dependencies", {}).get("lock")
+    if lock is None:
+        return ""
+    if not isinstance(lock, str):
+        raise ValueError("helper_dependency_lock_invalid")
+    return lock
+
+
 def resolve_download(document, source, offline, output):
     """Only wheel/metadata and ignore-scripts npm resolution runs with identity."""
+    lock = _dependency_lock(document)
     module = _load_download_tool()
     module.SOURCE, module.MATERIALS, module.OUTPUT, module.WHEELS = source, offline, output, output / "wheels"
 
@@ -212,7 +222,6 @@ def resolve_download(document, source, offline, output):
         subprocess.run(args, cwd=cwd or source, env=env, check=True)
 
     module.run = run
-    lock = document.get("delivery", {}).get("dependencies", {}).get("lock", "")
     previous = os.environ.get("BISHENG_DEPENDENCY_LOCK")
     os.environ["BISHENG_DEPENDENCY_LOCK"] = lock
     try:
@@ -225,6 +234,7 @@ def resolve_download(document, source, offline, output):
 
 
 def prepare_download(client, document, *, work=Path("/work"), resolver=resolve_download):
+    lock = _dependency_lock(document)
     work = _directory(work)
     profile = document["profile"]
     if profile.get("language") not in _LANGUAGES or document.get("phase") not in {"inputs", "resolve"}:
@@ -309,7 +319,7 @@ def prepare_download(client, document, *, work=Path("/work"), resolver=resolve_d
         "language": profile["language"],
         "cached": cached,
         "source_image": document.get("delivery", {}).get("mode") == "source-image",
-        "lock": document.get("delivery", {}).get("dependencies", {}).get("lock", ""),
+        "lock": lock,
     }
     (tools / "prepare.json").write_text(json.dumps(config, sort_keys=True))
     return {"input_key": key, "cached": cached, "phase": "resolve"}

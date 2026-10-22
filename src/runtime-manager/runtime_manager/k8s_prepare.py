@@ -76,6 +76,11 @@ def prepare(
     language = config.get("language")
     if language not in {"python3.11", "node20", "static"} or type(config.get("cached")) is not bool:
         raise ValueError("prepare_contract_invalid")
+    lock = config.get("lock")
+    if lock is None:
+        lock = ""
+    elif not isinstance(lock, str):
+        raise ValueError("prepare_dependency_lock_invalid")
     source, original, materials, output = map(Path, (source, original, materials, output))
     module = common or _common()
     module.SOURCE, module.OUTPUT, module.MATERIALS, module.WHEELS = source, output, materials, output / "wheels"
@@ -87,7 +92,7 @@ def prepare(
                 "PIP_DISABLE_PIP_VERSION_CHECK": "1",
                 "PIP_NO_CACHE_DIR": "1",
                 "npm_config_offline": "true",
-                "BISHENG_DEPENDENCY_LOCK": config.get("lock", ""),
+                "BISHENG_DEPENDENCY_LOCK": lock,
             }
         )
         if config["cached"]:
