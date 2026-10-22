@@ -18,7 +18,15 @@ const classGroups = {
     { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
   ],
 };
-const twMerge = extendTailwindMerge({ extend: { classGroups } });
+// The transformer API works with both v1 and v2. The v2-only `extend` object
+// is silently ignored by v1, causing text-body to remove text-white in Tooltip.
+const twMerge = extendTailwindMerge((config) => ({
+  ...config,
+  classGroups: {
+    ...config.classGroups,
+    'font-size': [...config.classGroups['font-size'], ...classGroups['font-size']],
+  },
+}));
 
 /**
  * Merges the tailwind classes (using twMerge). Conditionally removes false values
