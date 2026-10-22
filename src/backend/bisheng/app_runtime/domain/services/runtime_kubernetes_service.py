@@ -282,9 +282,15 @@ class RuntimeKubernetesService:
             if "persistentVolumeClaim" in volume
         ]
         expected_claim = "data-" + _hash(op.app_id)
-        if purpose == "purge" and (
-            claims != [expected_claim] or any("secret" in volume for volume in spec.get("volumes", []))
-        ):
+        if purpose in _PRODUCTION and claims != [expected_claim]:
+            raise RuntimeConflict("production_volume_scope_refused")
+        if purpose in {"probe", "preview"} and claims:
+            raise RuntimeConflict("isolated_volume_scope_refused")
+        if purpose in {"prepare-download", "prepare-install", "prepare-upload", "assemble"} and claims != [
+            "scratch-" + _hash(op.id)
+        ]:
+            raise RuntimeConflict("scratch_volume_scope_refused")
+        if purpose == "purge" and any("secret" in volume for volume in spec.get("volumes", [])):
             raise RuntimeConflict("purge_volume_scope_refused")
         containers = [*spec.get("containers", []), *spec.get("initContainers", [])]
         if not containers:

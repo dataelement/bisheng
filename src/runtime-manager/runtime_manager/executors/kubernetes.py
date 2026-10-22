@@ -158,6 +158,7 @@ class KubernetesExecutor:
             "status_protection": "status-provenance" in passed,
             "binding_protection": "binding-delete-fence" in passed,
             "paths": report.get("paths", {}),
+            "sandbox": report.get("sandbox", {}),
             "package_sources": self._package_sources(),
             "executor_kind": "kubernetes",
             "cluster_id": self.settings.cluster_id,
@@ -258,6 +259,15 @@ class KubernetesExecutor:
             env=defaults,
             schema_plan=tuple(payload.get("migration_plan", [])) if purpose in {"probe", "preview"} else (),
             temporary_mb=self.document.get("temporary_storage_mb", 4096),
+            volume_guard={
+                "namespace": self.settings.namespace,
+                "installation_id": self.document.get("installation_id", self.settings.cluster_id),
+                "filesystem": self.document.get("storage", {}).get("filesystem", "ext4"),
+                "capacity_bytes": self.document.get("storage", {}).get("size_mb", 1024) * 1024**2,
+                "marker_required": self.document.get("storage", {}).get("static_pool") is True,
+            }
+            if purpose in {"serve", "data", "migrate", "restore", "purge"}
+            else {},
             pvc_name=pvc,
             scratch_pvc=_name("scratch-", operation["operation_id"])
             if purpose.startswith("prepare-") or purpose == "assemble"
@@ -268,7 +278,7 @@ class KubernetesExecutor:
             app_secret=_name("credentials-", reference) if env else "",
             secret_env=tuple(sorted(env)),
             deadline_seconds=deadline,
-            runtime_class=self.document.get("runtime_class", ""),
+            runtime_class=self.probe_report().get("sandbox", {}).get("runtime_class", ""),
             pull_secret=self.document.get("pull_secret", ""),
             data_key_configmap=self.document.get("data_public_keys_configmap", "runtime-data-public-keys"),
         )

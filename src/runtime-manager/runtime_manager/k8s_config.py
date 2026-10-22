@@ -65,9 +65,12 @@ class KubernetesConfig:
     request_timeout: float = 10.0
     retry_attempts: int = 3
     page_size: int = 200
+    sandbox: str = ""
 
     def __post_init__(self):
         validate_namespace(self.namespace)
+        if self.sandbox not in {"", "default", "recommended", "hardened"}:
+            raise KubernetesConfigurationError("k8s_sandbox_invalid")
         if not _IDENTIFIER.fullmatch(self.cluster_id):
             raise KubernetesConfigurationError("k8s_cluster_id_invalid")
         try:
@@ -111,6 +114,7 @@ class KubernetesConfig:
             api_server=env.get("RTM_K8S_API_SERVER", "https://kubernetes.default.svc").strip(),
             token_file=Path(env.get("RTM_K8S_TOKEN_FILE", str(_SERVICE_ACCOUNT / "token"))),
             ca_file=Path(env.get("RTM_K8S_CA_FILE", str(_SERVICE_ACCOUNT / "ca.crt"))),
+            sandbox=env.get("RTM_K8S_SANDBOX", ""),
             request_timeout=timeout,
             retry_attempts=attempts,
         )
@@ -140,6 +144,8 @@ class KubernetesConfig:
             raise KubernetesConfigurationError("k8s_descriptor_version_unsupported")
         if (document.get("cluster_id"), document.get("namespace")) != (self.cluster_id, self.namespace):
             raise KubernetesConfigurationError("k8s_descriptor_scope_mismatch")
+        if self.sandbox and self.sandbox != document.get("sandbox", {}).get("requested", "default"):
+            raise KubernetesConfigurationError("k8s_sandbox_descriptor_mismatch")
         platform = document.get("platform")
         policy = document.get("status_policy_revision")
         if platform not in {"linux/amd64", "linux/arm64"}:

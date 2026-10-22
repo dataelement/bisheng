@@ -110,10 +110,38 @@ def assess_capabilities(document, *, now):
         and bool(document.get("image_repository"))
         and bool(document.get("assembler_image")),
     }
+    choice = document.get("sandbox", {})
+    requested = choice.get("requested", "default")
+    if requested not in {"default", "recommended", "hardened"}:
+        ready = False
+        requested = "default"
+    selected = choice.get("runtime_classes", {}).get(requested, "")
+    verified = (
+        requested != "default"
+        and bool(selected)
+        and _check(known.get("sandbox-" + requested), "sandbox-" + requested)["ok"]
+    )
+    fallback = requested != "default" and not verified
+    sandbox = {
+        "requested": requested,
+        "effective": requested if verified else "default",
+        "runtime_class": selected if verified else "",
+        "fallback": fallback,
+        "reason": "sandbox_unavailable" if fallback else "verified",
+    }
     warnings = ["node_local_storage"] if storage.get("node_local") else []
+    if fallback:
+        warnings.append("sandbox_fallback_default")
     if not valid:
         warnings.append("live_probe_report_missing_stale_or_changed")
-    return {"ready": ready, "observed_at": observed, "checks": checks, "paths": paths, "warnings": warnings}
+    return {
+        "ready": ready,
+        "observed_at": observed,
+        "checks": checks,
+        "paths": paths,
+        "warnings": warnings,
+        "sandbox": sandbox,
+    }
 
 
 def run_checks(drivers, *, observed_at):
@@ -184,7 +212,38 @@ def network_checks(plan):
     return {"checks": results}
 
 
-def storage_checks(volume):
+def mounted_filesystem(path):
+    import os
+    from pathlib import Path
+
+    selected, length = "", -1
+    for line in Path("/proc/self/mountinfo").read_text().splitlines():
+        left, separator, right = line.partition(" - ")
+        if not separator:
+            continue
+        parts = left.split()
+        if len(parts) < 5:
+            continue
+        mount = parts[4]
+        for escaped, actual in (("\\040", " "), ("\\011", "\t"), ("\\134", "\\")):
+            mount = mount.replace(escaped, actual)
+        try:
+            matches = os.path.commonpath((str(Path(path).resolve()), mount)) == mount
+        except ValueError:
+            continue
+        if matches and len(mount) > length:
+            selected, length = right.split()[0], len(mount)
+    return selected
+
+
+def volume_capacity(path):
+    import os
+
+    stats = os.statvfs(path)
+    return stats.f_blocks * stats.f_frsize
+
+
+def storage_checks(volume, *, require_filesystem=True):
     import fcntl
     import os
     from pathlib import Path
@@ -196,6 +255,9 @@ def storage_checks(volume):
     root = Path(volume)
     if root.is_symlink() or not root.is_dir():
         raise ValueError("probe_storage_unavailable")
+    filesystem = mounted_filesystem(root) if Path("/proc/self/mountinfo").is_file() else "unverified"
+    if require_filesystem and filesystem not in {"ext4", "xfs"}:
+        raise ValueError("probe_storage_filesystem_incompatible")
     with TemporaryDirectory(prefix="preflight-", dir=root) as temporary:
         temporary = Path(temporary)
         descriptor = os.open(temporary / "lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -235,7 +297,13 @@ def storage_checks(volume):
             os.fsync(directory)
         finally:
             os.close(directory)
-    return {"locking": True, "fsync": True, "sqlite_integrity": True}
+    return {
+        "locking": True,
+        "fsync": True,
+        "sqlite_integrity": True,
+        "filesystem": filesystem,
+        "capacity_bytes": volume_capacity(root),
+    }
 
 
 def main():

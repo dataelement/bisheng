@@ -58,6 +58,9 @@ def document(op, *, kind="Pod", purpose="serve"):
             },
             "spec": {
                 "nodeSelector": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64"},
+                "volumes": [{"name": "data", "persistentVolumeClaim": {"claimName": "data-" + short_hash(op.app_id)}}]
+                if purpose == "serve" and kind == "Pod"
+                else [],
                 "containers": [{"name": "app", "image": IMAGE, "command": ["python", "app.py"]}],
             },
         },
@@ -461,3 +464,19 @@ async def test_normal_cleanup_never_authorizes_production_volume_deletion(contro
     await svc.observe_resource(MANAGER, REF, {**auth, "action": "bind", "uid": UID})
     await svc.observe_resource(MANAGER, REF, {**auth, "action": "stop", "operation_id": op.id})
     assert (await svc.admission_plan(ADMISSION, REF))["allow_delete"] is False
+
+
+@pytest.mark.parametrize("purpose", ["serve", "data", "migrate", "restore", "purge"])
+def test_every_production_purpose_refuses_cross_application_volume(purpose):
+    from types import SimpleNamespace
+
+    from bisheng.app_runtime.domain.services.runtime_kubernetes_service import RuntimeKubernetesService
+
+    operation = SimpleNamespace(app_id="app-a", id="operation-a", payload={"resolved_delivery": {"image_ref": IMAGE}})
+    node = SimpleNamespace(platform="linux/amd64", capabilities={"helper_image": HELPER})
+    pod = document(SimpleNamespace(app_id="app-a", id="operation-a", generation=1, owner_epoch=1, node_id="node-a"))[
+        "template"
+    ]
+    pod["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"] = "data-" + short_hash("app-b")
+    with pytest.raises(RuntimeConflict, match="volume_scope"):
+        RuntimeKubernetesService._validate_pod(pod, operation, node, purpose, REF)
