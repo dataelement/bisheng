@@ -33,3 +33,9 @@
 - [卷访问模式](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes)中RWO仍允许同节点多Pod，不能作为单写证明；RWOP有CSI前置，本环境没有CSI。
 - [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/)用于核对工作负载准入；RBAC单独不能表达所有Pod字段限制。
 - [BuildKit rootless前置](https://github.com/moby/buildkit/blob/master/docs/rootless.md)用于后续兼容构建器选型，本次没有执行构建器。
+
+## 2026-10-22 只读刷新
+
+通过专用临时known_hosts和交互认证连接，未写入凭据。client/server均为v1.28.15，binfeng-k8s-node189为Ready，amd64、Docker24.0.9；命名空间仍只有default、kube-node-lease、kube-public、kube-system、kubekey-system。StorageClass/PV仍为空。`/var/lib/kubelet`和`/opt`所在文件系统约有494GiB可用。
+
+本次仅执行version/get nodes/get namespaces/get storageclass/get pv/df，未安装资源、未修改kube-system或节点配置，不能作为应用部署和网络/存储能力验收。

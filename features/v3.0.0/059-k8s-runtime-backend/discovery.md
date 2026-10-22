@@ -10,7 +10,7 @@
 
 - 工作树：/Users/zhangguoqing/.codex/worktrees/vibe-k8s-runtime/bisheng。
 - 分支：codex/059-k8s-runtime；基线755d4456e50c015a3fa88da0c0c35ab53bbd1650（已发行v3.0.0-test-vibe的F086代码）。
-- 原F086工作树的多租户启动、BIGINT模型/迁移及验收记录仍有未提交修改；本工作树没有复制它们，也没有假定已包含修复。后续真实平台验收前必须按发布线归属继承必要修复，不能形成第二套权限逻辑。
+- 初始发现时原F086修复尚未继承；2026-10-22已完成T005公共租户修复发布线继承与Vibe专有BIGINT来源核对，见prerequisites.md。真实平台验收仍待执行，不形成第二套权限逻辑。
 - 当前只找到Docker执行器及本机路径准备/挂载逻辑；K8s没有可用的执行器、部署清单或运行验收。不能将DockerBackend协议注释中的“只换一个文件”当成完整工作量。
 
 ## 3. 继承与修订

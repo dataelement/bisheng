@@ -136,7 +136,8 @@
       ],
       "pair": null,
       "command": "python -m pytest test/database/test_alembic_single_head.py",
-      "status": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T005",
@@ -157,7 +158,9 @@
         "T074"
       ],
       "pair": null,
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T006",
@@ -464,7 +467,7 @@
       "files": [
         "src/backend/test/app_runtime/test_runtime_kubernetes_service.py"
       ],
-      "logic": "claim/renew holder/expected_epoch，验证固定执行域与有效操作、提交资源意图后调用 K8s；错 UID、过期控制器、越界、提前释放拒绝，终态后的只读收尾计划可续办；测试只定义输入/结果，不加入实现。",
+      "logic": "claim/renew holder/expected_epoch，验证固定执行域与有效操作、Service提交资源意图并结束SQL事务，manager随后调用 K8s；错 UID、过期控制器、越界、提前释放拒绝，终态后的只读收尾计划可续办；测试只定义输入/结果，不加入实现。",
       "acs": [
         "AC-03",
         "AC-07",
@@ -479,7 +482,9 @@
         "T015"
       ],
       "pair": "T017",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T017",
@@ -489,7 +494,7 @@
       "files": [
         "src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py"
       ],
-      "logic": "claim/renew holder/expected_epoch，验证固定执行域与有效操作、提交资源意图后调用 K8s；错 UID、过期控制器、越界、提前释放拒绝，终态后的只读收尾计划可续办；通过配对测试后完成 L1 task-review。",
+      "logic": "claim/renew holder/expected_epoch，验证固定执行域与有效操作、Service提交资源意图并结束SQL事务，manager随后调用 K8s；错 UID、过期控制器、越界、提前释放拒绝，终态后的只读收尾计划可续办；通过配对测试后完成 L1 task-review。",
       "acs": [
         "AC-03",
         "AC-07",
@@ -505,7 +510,9 @@
         "T016"
       ],
       "pair": "T016",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T018",
@@ -528,7 +535,9 @@
         "T017"
       ],
       "pair": "T019",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T019",
@@ -553,7 +562,9 @@
         "T018"
       ],
       "pair": "T018",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T020",

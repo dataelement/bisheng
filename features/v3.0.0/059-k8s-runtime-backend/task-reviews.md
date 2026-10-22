@@ -318,3 +318,117 @@ T002/T021后续核对：材料 key_id 存储宽度修正为64，与已确认wire
 T009/T013增量L1：应用凭据支持只给app容器的Secret引用，材料Secret不混用；backend审批投影仅接收/存放Secret内容与Pod环境值摘要。补测红阶段已记录，绿阶段模板+准入68 passed；禁止原始workload私钥进入backend，manager登记须先投影，准入对实际K8s请求独立投影比较。
 
 最终本地检查点（源提交`ea3b1f6afb68da2b52ba4fd1fcf0bb5e060510ba`）：runtime **600 passed、10 skipped**；backend **82 passed**；公共启动补丁 **17 passed**。真实K8s/平台、镜像CI及新revision数据库升级均未执行。完整边界与本地日志见[validation.json](./validation.json)。公共发布线授权仍待用户答复。
+
+## Task Review: T074
+
+**任务**：发布线继承的迁移图汇合。**类型**：基础设施。
+**文件**：`src/backend/bisheng/core/database/alembic/versions/f059_merge_release_heads.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅Alembic历史汇合，不引入领域依赖 |
+| 2 | 命名 | PASS | f059明确可读revision |
+| 3 | 序列化 | N/A | 无API |
+| 4 | 数据库 | PASS | 实测三head的显式merge，无DDL/DML；保留原父链，降级只分叉 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 无凭据和运行数据 |
+| 7 | 设计同步 | PASS | 维持现有单head和继承合同；当前进展回写，不改D1–D8 |
+
+**验证**：合并提交98fbba032；`alembic heads`唯一f059_merge_release_heads；82项模型/协议/资源回归通过（`/private/tmp/f059-backend-inheritance-final.log`）；Ruff和逐文件arch-guard通过。
+**元数据验证**：文件范围PASS；配对测试N/A（基础设施，使用既有单head门禁）；依赖T073 PASS。
+**结果**：PASS。
+
+## Task Review: T005
+
+**任务**：F086公共修复继承核对。**类型**：基础设施。
+**文件**：`prerequisites.md`、`prerequisites.json`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 公共启动修复先发布线9d156f261c，再由F059普通合并98fbba032继承 |
+| 2 | 命名 | PASS | 来源SHA、发布分支、继承提交明确 |
+| 3 | 序列化 | PASS | JSON收据与Markdown一致 |
+| 4 | 数据库 | PASS | BIGINT沿用单一来源；迁移单head；DM8仅静态 |
+| 5 | 前端 | PASS | 继承适配保留审批与应用状态合同；98项交互通过，质量错误与发布线逐条比较无新增 |
+| 6 | 信息泄漏 | PASS | 收据仅提交/验证事实，无集群或对象存储凭据 |
+| 7 | 设计同步 | PASS | 记录已继承与尚未部署边界，不宣称E2E完成 |
+
+**验证**：发布远端SHA一致；三个生产公共修复文件与发布线diff为空。公共修复17项通过，权限/审计197 passed、3 xfailed；运行层600 passed、10 skipped；资源/材料/模型82 passed。自动审批拒绝批量修改后采用逐文件验证。主工作区未改动。
+**元数据验证**：文件范围PASS；配对测试N/A（继承核对）；依赖T074 PASS。
+**结果**：PASS。
+
+## Task Review: T016
+
+**任务**：控制器/资源 Service 契约与失败用例。**类型**：测试。
+**文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_service.py`；覆盖 AC-03、AC-07、AC-08、AC-13、AC-14、AC-48、AC-49、AC-52。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试子集 |
+| 2 | 命名/AC | PASS | 完整AC编号；输入/输出与拒绝行为，不模拟核心账本事务 |
+| 3 | 序列化 | N/A | 测试子集 |
+| 4 | 数据库 | N/A | 复用真实SQLite资源账本fixture |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 假镜像/UID；验证无明文Secret/环境值进入账本 |
+| 7 | 设计同步 | N/A | 既有6.2控制合同 |
+
+**红阶段**：27项因目标RuntimeKubernetesService尚未实现而报ModuleNotFoundError（`/private/tmp/f059-control-service-red.log`）；不是接口可用证据。Ruff与逐文件arch-guard通过。
+**元数据验证**：文件范围PASS；配对T017后续实现；依赖T015 PASS。
+**结果**：PASS。
+
+## Task Review: T017
+
+**任务**：控制器租约和资源事实Service。**类型**：实现。
+**文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Service→事务Repository；无FastAPI、集群SDK、MinIO或直接SQL |
+| 2 | 命名 | PASS | 类/安全拒绝原因沿用运行层约定 |
+| 3 | 序列化 | PASS | 既有内部运行协议的固定字段；只读准入不输出租户/holder/私钥 |
+| 4 | 数据库 | PASS | 先验证可信node绑定，再tenant_execution_scope；Repository提交资源意图后才返回，不持SQL事务等待webhook |
+| 5 | 前端 | N/A | 无新增前端 |
+| 6 | 信息泄漏 | PASS | Secret仅摘要，env原值拒绝，错误只用稳定原因；投影深复制 |
+| 7 | 设计同步 | PASS | design 4.3/6.2及修订历史已同步当前实现；HTTP及集群仍未交付 |
+
+**验证**：27项首轮Service通过；新增边界测试先复现6项失败后修复；最终34项Service与16项真实SQLite账本共同通过（`/private/tmp/f059-control-service-final.log`），Ruff与逐文件arch-guard通过。操作终态仅保留同UID收尾，删除必须已记录stop；未知停止证据不释放。
+**元数据验证**：文件范围PASS；配对T016已完成；依赖T015/T016 PASS。
+**结果**：PASS。
+
+## Task Review: T018
+
+**任务**：内部控制API契约与失败用例。**类型**：测试。
+**文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_api.py`；覆盖 AC-03、AC-04、AC-13、AC-14、AC-15、AC-48。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试子集 |
+| 2 | 命名/AC | PASS | 完整AC；真实HMAC和ASGI，核心Service/SQLite账本不mock |
+| 3 | 序列化 | N/A | 测试子集 |
+| 4 | 数据库 | N/A | 复用已验证事务fixture |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 假服务密钥；未知nonce存储错误不应出现在HTTP响应 |
+| 7 | 设计同步 | N/A | 既有控制/只读准入合同 |
+
+**红阶段**：新端点模块未实现导致13 errors，生产聚合路由缺少目标路径导致1 failed（`/private/tmp/f059-control-api-red.log`）；非交付证据。Ruff与逐文件arch-guard通过。
+**元数据验证**：文件范围PASS；依赖T017 PASS；配对T019后续实现。
+**结果**：PASS。
+
+## Task Review: T019
+
+**任务**：内部控制API接入。**类型**：实现。
+**文件**：`api/endpoints/runtime_kubernetes.py`、`api/router.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Endpoint仅严格请求/鉴权/Service调用；生产聚合router已注册，无SQL或集群SDK |
+| 2 | 命名 | PASS | controllers/resources/observations/admission plans对应既有合同 |
+| 3 | 序列化 | PASS | 复用内部RuntimeRoute安全错误及扁平运行协议；不是前端业务响应 |
+| 4 | 数据库 | PASS | 操作由Service/Repository执行；读取准入不修改资源记录 |
+| 5 | 前端 | N/A | 无前端变更 |
+| 6 | 信息泄漏 | PASS | HMAC/nonce沿用独立服务签名；混合角色配置拒绝；未知nonce存储失败关闭且不泄漏错误内容 |
+| 7 | 设计同步 | PASS | design当前模块职责和修订记录已同步；材料根路径未改 |
+
+**验证**：14项实际HMAC/ASGI+SQL API用例，加34项Service与16项账本合计64 passed；生产router路径亦由测试核对。Ruff与逐文件arch-guard通过。未执行真实K8s。
+**元数据验证**：文件范围PASS；配对T018已完成；依赖T017/T018 PASS。
+**结果**：PASS。

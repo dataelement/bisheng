@@ -1,13 +1,13 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-21T13:50:33.283799+00:00",
-  "validated_source_commit": "ea3b1f6afb68da2b52ba4fd1fcf0bb5e060510ba",
+  "recorded_at": "2026-10-22",
+  "validated_source_commit": "122aee9bae4dcf6df99471a4ded98149b206a000",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 17,
-    "tasks_total": 73,
+    "l1_completed": 23,
+    "tasks_total": 74,
     "e2e": "not_started",
     "l2": "not_started"
   },
@@ -16,23 +16,55 @@
       "passed": 600,
       "skipped": 10,
       "exit_code": 0,
-      "log": "/private/tmp/f059-runtime-final-checkpoint.log"
+      "log": "/private/tmp/f059-runtime-after-release.log"
     },
     "backend": {
-      "passed": 82,
+      "passed": 133,
       "exit_code": 0,
-      "log": "/private/tmp/f059-backend-final-checkpoint.log"
+      "log": "/private/tmp/f059-control-backend-checkpoint.log"
     },
     "public_tenant_fix": {
       "passed": 17,
       "source_commit": "0e3c156e5",
-      "pushed": false,
-      "log": "/private/tmp/f059-public-prereq-tests.log"
+      "pushed": true,
+      "log": "/private/tmp/f059-public-prereq-tests.log",
+      "release_commit": "9d156f261cc7769fcf75f41caeb104a425308017"
     },
-    "alembic_head": "f059_merge_f086_heads",
+    "alembic_head": "f059_merge_release_heads",
     "uv_lock_frozen_offline": "passed",
-    "ruff": "passed for changed files",
-    "arch_guard": "passed per changed Python file"
+    "ruff": "new F059 control files passed; not a full legacy backend lint gate",
+    "arch_guard": "passed per changed Python file",
+    "frontend": {
+      "passed": 98,
+      "log": "/private/tmp/f059-release-inheritance-frontend-final.log"
+    },
+    "release_permission_audit": {
+      "passed": 197,
+      "xfailed": 3,
+      "log": "/private/tmp/f059-release-inheritance-backend.log"
+    },
+    "frontend_quality": {
+      "full_gate": "fails with identical release baseline",
+      "platform_lint": 85,
+      "platform_type_errors": 1,
+      "client_lint_errors": 89,
+      "client_lint_warnings": 1,
+      "client_type_errors": 4,
+      "new_findings": 0
+    },
+    "control_http_service_repository": {
+      "passed": 64,
+      "log": "/private/tmp/f059-control-http-green.log"
+    },
+    "cluster_preflight": {
+      "host": "192.168.106.189",
+      "refreshed": "2026-10-22",
+      "node_ready": true,
+      "kubernetes": "v1.28.15",
+      "storageclass_count": 0,
+      "pv_count": 0,
+      "installed_application_resources": false
+    }
   },
   "not_executed": [
     "real Kubernetes deployment on 189",
@@ -42,5 +74,6 @@
     "new image multi-architecture CI build",
     "offline installation"
   ],
-  "blocking_integration_prerequisite": "Public tenant bootstrap must first enter feat/3.0.0; shared-branch push authorization requested asynchronously and still pending."
+  "blocking_integration_prerequisite": null,
+  "release_parent": "9d156f261cc7769fcf75f41caeb104a425308017"
 }

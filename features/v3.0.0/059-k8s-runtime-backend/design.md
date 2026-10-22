@@ -111,12 +111,13 @@
 | `bundle_preparer.py`、`bundle_launch.py`、`container_runner.py` | Docker 本地下载、构建、venv、bind mount 和容器运行 | 抽出共享输入/启动规则；K8s 在 Pod/卷内执行，不模拟宿主路径 |
 | `appdb.py`、`data_executor.py`、`api/platform_data.py` | 一致备份/迁移与受控数据查询，Docker 单应用挂载 helper | 复用 SQL 和数据格式，增加同 Pod 数据 helper、停用数据会话及独占维护执行体 |
 | backend `runtime_delivery.py`、`runtime_operation_service.py` | v2 服务鉴权、操作/事实、归属、容量、产物传输、路由/策略 | 增加 K8s 资源账本、控制器租约、内部数据操作和材料初始化授权；不加入 K8s SDK |
+| backend `runtime_kubernetes_service.py` | 已实现控制器claim/renew、资源意图预提交、UID/停止事实和只读准入投影；34项Service合同与16项账本回归通过 | T019已接入HTTP路由；manager执行调用仍待后续任务 |
 | app-proxy、`platform_egress.py` | backend 路由/策略投影，不依赖 manager 提供路由 | 保留授权、HTTP/WS/CONNECT；增加材料用途的范围化策略 |
 | `.github/workflows/runtime-images.yml` | tag `v*` 和 workflow_dispatch；原生双架构镜像、目录产物 | 同版本发布执行 helper/OCI 组装器；增加 K8s 清单和契约测试 |
 
-本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已在发布线基线上准备，待授权先进入发布线后继承，不能复制权限分叉。详见 [prerequisites.md](./prerequisites.md)。
+本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T004、T006–T015、T020/T021及T073已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。F086公共前置T005、业务控制API、材料委托/传输、执行器/helper及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：T001–T021、T073及T074已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输、执行器/helper及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -378,6 +379,8 @@ class RuntimeExecutor(Protocol):
 | `RuntimeOperation` 内部扩展 | kind=data、request_id、action/parameters_digest、actor_ref、target_exec_ref/UID、deadline、result/cleanup 状态 | 原业务 Service 授权创建；每应用数据/维护互斥，不改 serving 代次，不向 CLI 暴露新业务动作 |
 | 操作事实 detail 扩展 | resource_ref、UID/namespace、镜像身份、stopped 证据、failure stage | 通过已鉴权 manager 提交；不接收业务容器自报成功 |
 
+控制Service只提交SQL资源意图，返回时事务已结束；manager随后才调用K8s API。Node.engine_id固定为`cluster_id/namespace`，注册时校验冻结域、镜像和profile、资源标签/代次、摘要与租约；Secret和env仅接受脱敏投影。控制路由经现有外层`/api/v1`挂载；材料内容接口仍严格使用6.2.1冻结的根路径，不增加该前缀。
+
 新增路由位于 backend app_runtime API → Service → Repository：
 
 | 新合同 | 认证 / 参数 | 输出及拒绝条件 |
@@ -588,3 +591,9 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-21 | T013准入HTTPS入口及T015事务账本完成本地验证；收尾计划不依赖业务操作终态，模板补齐默认NoExecute容忍 | 记录实施和API默认值兼容，部署尚待验收 |
 | 2026-10-21 | T021两端material-v1编码/验签及真实互验完成；固定wire不变，授权/传输层仍待实现 | 本地阶段进展 |
 | 2026-10-21 | 继承F086专有BIGINT并显式merge迁移；T009/T013补业务Secret引用和无明文资源投影；公共启动修复仍等发布线授权 | 保留源迁移历史与凭据边界，未改变D1–D8 |
+
+| 2026-10-22 | T005继承已推送发布线9d156f261c；T074显式汇合迁移；逐文件保留审批/审计业务并适配共享组件，回归无新增质量错误 | 用户明确授权；D1–D8与spec不变，189仍未部署 |
+
+| 2026-10-22 | T016/T017控制Service合同和实现完成；34项Service及16项账本用例通过，畸形输入与bool epoch安全拒绝 | API和集群接线仍待后续任务，D1–D8不变 |
+
+| 2026-10-22 | T018/T019内部控制HTTP接入，严格请求及独立manager/admission角色；64项HTTP/Service/账本组合验证通过 | 材料接口与执行器仍待开发，无真实部署结论 |

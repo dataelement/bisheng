@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；74 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 17 / 74 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 23 / 74 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -65,14 +65,14 @@
   **覆盖 AC:** AC-15、AC-39、AC-48、AC-56
   **依赖:** T003
 
-- [ ] **T074** — 发布线继承的迁移图汇合
+- [x] **T074** — 发布线继承的迁移图汇合
   **类型**：基础设施
   **文件**：`src/backend/bisheng/core/database/alembic/versions/f059_merge_release_heads.py`
   **逻辑/验收**：合并已授权发布线9d156f261c后，实际出现f059_merge_f086_heads、asr_rt_model_type、merge_skill_center_heads三条head；新增空merge revision保留三条原父链，不改表/数据、不重写历史；以已有单head门禁和模型/账本回归验证。降级只回到原分叉。
   **覆盖 AC:** AC-39、AC-48、AC-56
   **依赖:** T073
 
-- [ ] **T005** — F086 公共修复继承核对
+- [x] **T005** — F086 公共修复继承核对
   **类型**：基础设施
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/prerequisites.md`、`features/v3.0.0/059-k8s-runtime-backend/prerequisites.json`
   **逻辑/验收**：逐文件比对原 F086 的多租户启动、BIGINT 和测试修复与 release-line；记录已有同内容提交或发布线继承方式。禁止直接复制权限分叉；真实平台验收以前必须有来源 SHA/内容证据。
@@ -163,23 +163,23 @@
   **依赖:** T002、T003、T014
   **配对:** T014
 
-- [ ] **T016** — 控制器租约和资源事实 Service：契约与失败用例
+- [x] **T016** — 控制器租约和资源事实 Service：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_service.py`
-  **逻辑/验收**：claim/renew holder/expected_epoch，验证固定执行域与有效操作、提交资源意图后调用 K8s；错 UID、过期控制器、越界、提前释放拒绝，终态后的只读收尾计划可续办；测试只定义输入/结果，不加入实现。
+  **逻辑/验收**：claim/renew holder/expected_epoch，验证固定执行域与有效操作、Service提交资源意图并结束SQL事务，manager随后调用 K8s；错 UID、过期控制器、越界、提前释放拒绝，终态后的只读收尾计划可续办；测试只定义输入/结果，不加入实现。
   **覆盖 AC:** AC-03、AC-07、AC-08、AC-13、AC-14、AC-48、AC-49、AC-52
   **依赖:** T015
   **配对:** T017
 
-- [ ] **T017** — 控制器租约和资源事实 Service
+- [x] **T017** — 控制器租约和资源事实 Service
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`
-  **逻辑/验收**：claim/renew holder/expected_epoch，验证固定执行域与有效操作、提交资源意图后调用 K8s；错 UID、过期控制器、越界、提前释放拒绝，终态后的只读收尾计划可续办；通过配对测试后完成 L1 task-review。
+  **逻辑/验收**：claim/renew holder/expected_epoch，验证固定执行域与有效操作、Service提交资源意图并结束SQL事务，manager随后调用 K8s；错 UID、过期控制器、越界、提前释放拒绝，终态后的只读收尾计划可续办；通过配对测试后完成 L1 task-review。
   **覆盖 AC:** AC-03、AC-07、AC-08、AC-13、AC-14、AC-48、AC-49、AC-52
   **依赖:** T015、T016
   **配对:** T016
 
-- [ ] **T018** — 内部控制 API 接入：契约与失败用例
+- [x] **T018** — 内部控制 API 接入：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_api.py`
   **逻辑/验收**：注册 controllers/resources/observations/admission plans；沿用独立服务 HMAC/角色和序列化，API→Service→Repository；admission 只读，非角色/重放/跨域拒绝；测试只定义输入/结果，不加入实现。
@@ -187,7 +187,7 @@
   **依赖:** T017
   **配对:** T019
 
-- [ ] **T019** — 内部控制 API 接入
+- [x] **T019** — 内部控制 API 接入
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/api/endpoints/runtime_kubernetes.py`、`src/backend/bisheng/app_runtime/api/router.py`
   **逻辑/验收**：注册 controllers/resources/observations/admission plans；沿用独立服务 HMAC/角色和序列化，API→Service→Repository；admission 只读，非角色/重放/跨域拒绝；通过配对测试后完成 L1 task-review。
