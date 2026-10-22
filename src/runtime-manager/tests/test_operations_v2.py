@@ -1,13 +1,15 @@
-"""覆盖 AC: AC-31、AC-32、AC-34、AC-37、AC-40、AC-63。"""
+"""覆盖 AC: AC-31、AC-32、AC-34、AC-37、AC-40、AC-48、AC-50、AC-63。"""
 
 from copy import deepcopy
 from datetime import datetime, timedelta
 
+import httpx
 import pytest
 
 from runtime_manager.config import Config
 from runtime_manager.container_runner import ExecutionError
 from runtime_manager.operations import OperationExecutor
+from runtime_manager.platform_client import PREFIX, PlatformClient
 
 
 class Platform:
@@ -99,29 +101,100 @@ def test_shutdown_preserves_operation_for_restart(tmp_path):
     assert not platform.facts
 
 
-def test_runtime_status_uses_platform_capacity_and_retains_public_shape(tmp_path, monkeypatch):
-    """AC-48, AC-50: management status does not fall back to legacy desired-state capacity."""
+def _docker_runtime_status(tmp_path, monkeypatch, response):
     from types import SimpleNamespace
 
     from runtime_manager.api import platform_observe as api
 
-    config = Config(data_root=tmp_path)
+    config = Config(
+        data_root=tmp_path,
+        node_id="docker-node",
+        platform_base_url="http://backend",
+        platform_key_id="node",
+        platform_secret="test",
+    )
+    requests = []
 
     class Engine:
         def info(self):
             return {"MemTotal": 4 * 1024**3, "NCPU": 4}
 
-    class Platform:
-        def node_plan(self):
-            return {"capacity": {"memory_budget_mb": 2048, "committed_mb": 512, "committed_cpu": 0.5, "instances": 1}}
+    def reply(request):
+        requests.append((request.method, request.url.path))
+        if isinstance(response, Exception):
+            raise response
+        return response
 
-    monkeypatch.setattr(api, "executor", lambda: SimpleNamespace(config=config, docker=Engine(), platform=Platform()))
-    document = api.runtime_snapshot()
+    # Use the actual client so a fabricated method cannot hide a broken contract.
+    client = PlatformClient(config, transport=httpx.MockTransport(reply))
+    monkeypatch.setattr(api, "executor", lambda: SimpleNamespace(config=config, docker=Engine(), platform=client))
+    try:
+        return api.runtime_snapshot(), requests
+    finally:
+        client.close()
+
+
+def test_runtime_status_uses_platform_capacity_and_retains_public_shape(tmp_path, monkeypatch):
+    """AC-48, AC-50: Docker status reads the real signed platform-client contract."""
+    response = httpx.Response(
+        200,
+        json={"capacity": {"memory_budget_mb": 2048, "committed_mb": 512, "committed_cpu": 0.5, "instances": 1}},
+    )
+    document, requests = _docker_runtime_status(tmp_path, monkeypatch, response)
+    assert requests == [("GET", PREFIX + "/nodes/plan")]
+    assert set(document) == {
+        "backend_available",
+        "supported_runtimes",
+        "capacity",
+        "preflight",
+        "protocol_version",
+        "node_id",
+    }
     assert document["backend_available"]
+    assert document["protocol_version"] == 2 and document["node_id"] == "docker-node"
+    assert document["capacity"]["readable"]
     assert document["capacity"]["mem_available_mb"] == 1536
+    assert document["capacity"]["total_mb"] == 4096
+    assert document["capacity"]["cpu"] == 4
     assert document["capacity"]["committed_mb"] == 512
+    assert document["capacity"]["committed_cpu"] == 0.5
     assert document["capacity"]["instances"] == 1
     assert document["supported_runtimes"] and isinstance(document["preflight"], list)
+    assert next(check for check in document["preflight"] if check["name"] == "platform_ledger")["ok"]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(503, json={"error": {"reason": "private-platform-error"}}),
+        httpx.Response(200, json={"capacity": {"memory_budget_mb": 2048}}),
+        httpx.Response(200, content=b"invalid json"),
+        httpx.ConnectError("private-platform-address"),
+    ],
+    ids=["platform-unavailable", "incomplete-ledger", "invalid-json", "connection-failure"],
+)
+def test_runtime_status_never_falls_back_to_docker_capacity(tmp_path, monkeypatch, response):
+    """AC-48, AC-50: failed authoritative reads remain unreadable despite a reachable Engine."""
+    document, requests = _docker_runtime_status(tmp_path, monkeypatch, response)
+    assert requests == [("GET", PREFIX + "/nodes/plan")]
+    assert document["backend_available"]
+    assert document["capacity"] == {
+        "readable": False,
+        "mem_available_mb": 0,
+        "committed_mb": 0,
+        "total_mb": 0,
+        "cpu": 0,
+        "committed_cpu": 0,
+        "instances": 0,
+        "reserve_mb": Config().reserve_mb,
+        "overcommit_ratio": Config().overcommit_ratio,
+    }
+    assert next(check for check in document["preflight"] if check["name"] == "platform_ledger") == {
+        "name": "platform_ledger",
+        "ok": False,
+        "detail": "platform API unavailable; no local capacity fallback",
+    }
+    assert "private-platform" not in str(document)
 
 
 def test_unconfirmed_legacy_build_does_not_release_resources(tmp_path):
