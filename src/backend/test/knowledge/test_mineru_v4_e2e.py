@@ -1,4 +1,4 @@
-"""Offline protocol-to-document coverage for the MinerU V1 integration.
+"""Offline protocol-to-document coverage for the MinerU V4 integration.
 
 The target MinerU service and BiSheng middleware are not available in this
 checkout. Live API and UI acceptance steps are recorded in e2e-checklist.md.

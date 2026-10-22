@@ -1,4 +1,4 @@
-"""Adapt MinerU 4.0 V1 ZIP and Middle JSON to the BiSheng loader contract."""
+"""Adapt MinerU V4 ZIP and Middle JSON to the BiSheng loader contract."""
 
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ class MineruV4Loader(BaseBishengLoader):
     def _read_limited(source, limit: int) -> bytes:
         data = source.read(limit + 1)
         if len(data) > limit:
-            raise MineruV4Error("MinerU V1 ZIP member exceeds size limit")
+            raise MineruV4Error("MinerU V4 ZIP member exceeds size limit")
         return data
 
     def _read_zip(self, archive_path: str) -> tuple[dict, dict[str, str]]:
@@ -68,23 +68,23 @@ class MineruV4Loader(BaseBishengLoader):
             with zipfile.ZipFile(archive_path) as archive:
                 infos = archive.infolist()
                 if len(infos) > self.MAX_MEMBERS:
-                    raise MineruV4Error("MinerU V1 ZIP has too many members")
+                    raise MineruV4Error("MinerU V4 ZIP has too many members")
                 names = set()
                 total = 0
                 for info in infos:
                     if not self._valid_member(info.filename) or info.filename in names:
-                        raise MineruV4Error("MinerU V1 ZIP has unsafe or duplicate members")
+                        raise MineruV4Error("MinerU V4 ZIP has unsafe or duplicate members")
                     names.add(info.filename)
                     mode = info.external_attr >> 16
                     if stat.S_ISLNK(mode):
-                        raise MineruV4Error("MinerU V1 ZIP contains a symbolic link")
+                        raise MineruV4Error("MinerU V4 ZIP contains a symbolic link")
                     if info.file_size > self.MAX_MEMBER_BYTES:
-                        raise MineruV4Error("MinerU V1 ZIP member exceeds size limit")
+                        raise MineruV4Error("MinerU V4 ZIP member exceeds size limit")
                     total += info.file_size
                     if total > self.MAX_UNCOMPRESSED_BYTES:
-                        raise MineruV4Error("MinerU V1 ZIP exceeds uncompressed size limit")
+                        raise MineruV4Error("MinerU V4 ZIP exceeds uncompressed size limit")
                 if "middle_json.json" not in names:
-                    raise MineruV4Error("MinerU V1 ZIP has no Middle JSON")
+                    raise MineruV4Error("MinerU V4 ZIP has no Middle JSON")
                 with archive.open("middle_json.json") as source:
                     middle = json.loads(self._read_limited(source, self.MAX_MEMBER_BYTES))
                 if (
@@ -92,21 +92,21 @@ class MineruV4Loader(BaseBishengLoader):
                     or middle.get("schema") != "docvortex.middle"
                     or middle.get("schema_version") != "2.0"
                 ):
-                    raise MineruV4Error("MinerU V1 Middle JSON schema is unsupported")
+                    raise MineruV4Error("MinerU V4 Middle JSON schema is unsupported")
                 if not isinstance(middle.get("pages"), list) or not middle["pages"]:
-                    raise MineruV4Error("MinerU V1 Middle JSON has no pages")
+                    raise MineruV4Error("MinerU V4 Middle JSON has no pages")
                 images: dict[str, str] = {}
                 used: set[str] = set()
                 actual_total = 0
                 for info in infos:
                     if info.filename.startswith("images/") and not info.is_dir():
                         if Path(info.filename).suffix.lower() not in self.IMAGE_SUFFIXES:
-                            raise MineruV4Error("MinerU V1 ZIP contains an unsupported image type")
+                            raise MineruV4Error("MinerU V4 ZIP contains an unsupported image type")
                         if not self.retain_images:
                             continue
                         filename = PurePosixPath(info.filename).name
                         if not re.fullmatch(r"[A-Za-z0-9_.-]+", filename) or filename in used:
-                            raise MineruV4Error("MinerU V1 ZIP image name is unsafe or duplicated")
+                            raise MineruV4Error("MinerU V4 ZIP image name is unsafe or duplicated")
                         used.add(filename)
                         target = Path(self.ensure_local_image_dir()) / filename
                         member_size = 0
@@ -115,11 +115,11 @@ class MineruV4Loader(BaseBishengLoader):
                                 member_size += len(chunk)
                                 actual_total += len(chunk)
                                 if member_size > self.MAX_MEMBER_BYTES or actual_total > self.MAX_UNCOMPRESSED_BYTES:
-                                    raise MineruV4Error("MinerU V1 ZIP image exceeds size limit")
+                                    raise MineruV4Error("MinerU V4 ZIP image exceeds size limit")
                                 output.write(chunk)
                         images[info.filename] = self.build_image_url(filename)
         except (zipfile.BadZipFile, json.JSONDecodeError, RuntimeError) as exc:
-            raise MineruV4Error("MinerU V1 ZIP is invalid") from exc
+            raise MineruV4Error("MinerU V4 ZIP is invalid") from exc
         return middle, images
 
     @staticmethod
@@ -131,7 +131,7 @@ class MineruV4Loader(BaseBishengLoader):
         pieces = []
         for item in value:
             if not isinstance(item, dict):
-                raise MineruV4Error("MinerU V1 span is invalid")
+                raise MineruV4Error("MinerU V4 span is invalid")
             kind = item.get("type")
             content = item.get("content")
             if kind == "equation_inline":
@@ -143,7 +143,7 @@ class MineruV4Loader(BaseBishengLoader):
             elif kind == "text":
                 pieces.append(MineruV4Loader._spans(content))
             else:
-                raise MineruV4Error(f"MinerU V1 span type {kind} is unsupported")
+                raise MineruV4Error(f"MinerU V4 span type {kind} is unsupported")
         return "".join(pieces)
 
     @staticmethod
@@ -199,16 +199,16 @@ class MineruV4Loader(BaseBishengLoader):
             return body
         if kind in {"image", "table", "chart", "code", "list", "index"}:
             if not isinstance(content, list):
-                raise MineruV4Error(f"MinerU V1 {kind} block has invalid content")
+                raise MineruV4Error(f"MinerU V4 {kind} block has invalid content")
             parts = [self._render_block(item) for item in content if isinstance(item, dict)]
             if len(parts) != len(content):
-                raise MineruV4Error(f"MinerU V1 {kind} block has invalid children")
+                raise MineruV4Error(f"MinerU V4 {kind} block has invalid children")
             if not any(parts):
                 path = self._image_path(block)
                 if path and self.retain_images:
                     parts = [f"![image]({path})"]
             return "\n".join(part for part in parts if part)
-        raise MineruV4Error(f"MinerU V1 block type {kind} is unsupported")
+        raise MineruV4Error(f"MinerU V4 block type {kind} is unsupported")
 
     def _rewrite_image_refs(self, text: str, image_urls: dict[str, str]) -> str:
         if not self.retain_images:
@@ -218,7 +218,7 @@ class MineruV4Loader(BaseBishengLoader):
         def replace(match: re.Match) -> str:
             reference = match.group(1)
             if reference not in image_urls:
-                raise MineruV4Error(f"MinerU V1 image asset is missing: {reference}")
+                raise MineruV4Error(f"MinerU V4 image asset is missing: {reference}")
             return image_urls[reference]
 
         return self.IMAGE_REF.sub(replace, text)
@@ -277,14 +277,14 @@ class MineruV4Loader(BaseBishengLoader):
                 or not isinstance(page.get("page_idx"), int)
                 or not isinstance(page.get("blocks"), list)
             ):
-                raise MineruV4Error("MinerU V1 Middle JSON page is invalid")
+                raise MineruV4Error("MinerU V4 Middle JSON page is invalid")
             page_idx = page["page_idx"]
             if page_idx <= last_page:
-                raise MineruV4Error("MinerU V1 Middle JSON pages are out of order")
+                raise MineruV4Error("MinerU V4 Middle JSON pages are out of order")
             last_page = page_idx
             for block in page["blocks"]:
                 if not isinstance(block, dict):
-                    raise MineruV4Error("MinerU V1 Middle JSON block is invalid")
+                    raise MineruV4Error("MinerU V4 Middle JSON block is invalid")
                 text = self._rewrite_image_refs(self._render_block(block), image_urls).strip()
                 if not text:
                     continue
@@ -299,7 +299,7 @@ class MineruV4Loader(BaseBishengLoader):
         if self.filter_page_header_footer:
             blocks = filter_repeated_header_footer_blocks(blocks)
         if not blocks:
-            raise MineruV4Error("MinerU V1 parse result has no readable content")
+            raise MineruV4Error("MinerU V4 parse result has no readable content")
         content_parts = []
         metadata = {"bboxes": [], "pages": [], "indexes": [], "types": []}
         self.bbox_list = []
