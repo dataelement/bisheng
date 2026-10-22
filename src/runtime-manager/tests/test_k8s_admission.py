@@ -507,3 +507,133 @@ def test_pvc_binding_controller_can_only_bind_once_and_manage_protection(templat
     changed = copy.deepcopy(new)
     changed["metadata"]["labels"]["attacker"] = "yes"
     assert not allowed(verifier, review(changed, old))
+
+
+@pytest.fixture
+def calico_history(template, plan):
+    from runtime_manager.k8s_admission import AdmissionPolicy
+
+    cni = "system:serviceaccount:kube-system:calico-node"
+    verifier = AdmissionPolicy(
+        namespace=NAMESPACE,
+        manager_username=MANAGER,
+        status_policy_revision="v1",
+        plan_reader=lambda _: plan,
+        cni_username=cni,
+    )
+    old = terminal(template)
+    annotated = copy.deepcopy(old)
+    annotated["metadata"]["annotations"].update(
+        {
+            "cni.projectcalico.org/containerID": "a" * 64,
+            "cni.projectcalico.org/podIP": "10.233.64.10/32",
+            "cni.projectcalico.org/podIPs": "10.233.64.10/32",
+        }
+    )
+    assert allowed(verifier, request(annotated, operation="UPDATE", old=old, username=cni))
+    return verifier, old, annotated, cni
+
+
+def test_manager_preserves_authenticated_calico_annotations_during_normal_metadata_update(calico_history):
+    """AC-13, AC-49: accepted CNI fields survive a same-UID manager update unchanged."""
+    verifier, _, old, _ = calico_history
+    new = copy.deepcopy(old)
+    new["metadata"]["resourceVersion"] = "18"
+    assert allowed(verifier, request(new, operation="UPDATE", old=old))
+
+
+def test_manager_can_remove_only_confirmed_stop_finalizer_after_calico_update(calico_history, plan):
+    """AC-13, AC-49: CNI annotations must not deadlock confirmed terminal Pod cleanup."""
+    verifier, _, old, _ = calico_history
+    new = copy.deepcopy(old)
+    new["metadata"]["finalizers"] = []
+    assert not allowed(verifier, request(new, operation="UPDATE", old=old))
+    plan["stop_state"] = "confirmed"
+    assert allowed(verifier, request(new, operation="UPDATE", old=old))
+
+
+@pytest.mark.parametrize("mutation", ["add", "change", "remove", "all-remove", "uid"])
+def test_manager_cannot_forge_change_or_remove_calico_source_fields(calico_history, mutation):
+    """AC-13, AC-49: manager metadata never creates or alters CNI-owned values."""
+    verifier, clean, annotated, _ = calico_history
+    old = copy.deepcopy(clean if mutation == "add" else annotated)
+    new = copy.deepcopy(annotated)
+    if mutation == "change":
+        new["metadata"]["annotations"]["cni.projectcalico.org/podIP"] = "10.233.64.11/32"
+    elif mutation == "remove":
+        new["metadata"]["annotations"].pop("cni.projectcalico.org/containerID")
+    elif mutation == "all-remove":
+        new = copy.deepcopy(clean)
+    elif mutation == "uid":
+        old["metadata"]["uid"] = "33333333-3333-4333-8333-333333333333"
+    assert not allowed(verifier, request(new, operation="UPDATE", old=old))
+
+
+def test_manager_create_cannot_prefill_calico_even_in_an_approved_template(template, plan, calico_history):
+    """AC-13: a manager-supplied frozen template is not CNI provenance."""
+    from runtime_manager.k8s_admission import template_projection
+
+    verifier, _, annotated, _ = calico_history
+    obj = copy.deepcopy(template)
+    obj["metadata"]["annotations"] = copy.deepcopy(annotated["metadata"]["annotations"])
+    plan["template"] = template_projection(obj)
+    assert not allowed(verifier, request(obj))
+
+
+def test_cni_metadata_exemption_requires_a_configured_cni_identity(calico_history, plan):
+    """AC-13: disabling the trusted CNI actor does not grant a generic annotation exemption."""
+    _, _, old, _ = calico_history
+    assert not allowed(policy(lambda _: plan), request(copy.deepcopy(old), operation="UPDATE", old=old))
+
+
+@pytest.mark.parametrize("mutation", ["image", "finalizer", "volume", "node", "extra-annotation"])
+def test_authenticated_cni_update_cannot_change_any_other_pod_contract(calico_history, mutation):
+    """AC-13, AC-16, AC-49: only three network annotations may be changed by CNI."""
+    verifier, old, annotated, cni = calico_history
+    new = copy.deepcopy(annotated)
+    if mutation == "image":
+        new["spec"]["containers"][0]["image"] = "evil/image:latest"
+    elif mutation == "finalizer":
+        new["metadata"]["finalizers"] = []
+    elif mutation == "volume":
+        new["spec"]["volumes"][0] = {"name": "foreign", "persistentVolumeClaim": {"claimName": "data-other"}}
+    elif mutation == "node":
+        new["spec"]["nodeName"] = "worker-b"
+    else:
+        new["metadata"]["annotations"]["cni.projectcalico.org/arbitrary"] = "untrusted"
+    assert not allowed(verifier, request(new, operation="UPDATE", old=old, username=cni))
+
+
+def test_status_update_cannot_be_used_to_forge_calico_annotation_provenance(calico_history):
+    """AC-13, AC-49: even the authenticated bound node cannot write CNI fields via /status."""
+    verifier, clean, annotated, _ = calico_history
+    assert not allowed(
+        verifier,
+        request(
+            annotated,
+            operation="UPDATE",
+            subresource="status",
+            old=clean,
+            username="system:node:worker-a",
+            groups=["system:nodes"],
+        ),
+    )
+
+
+def test_bound_kubelet_can_finish_after_calico_when_network_metadata_is_unchanged(calico_history):
+    """AC-13, AC-49: preserving CNI fields leaves authenticated terminal status handling independent."""
+    verifier, _, terminal_pod, _ = calico_history
+    verifier.plan_reader = lambda _: pytest.fail("status must not read backend")
+    running = copy.deepcopy(terminal_pod)
+    running["status"] = {"phase": "Running", "containerStatuses": [{"name": "app", "state": {"running": {}}}]}
+    assert allowed(
+        verifier,
+        request(
+            terminal_pod,
+            operation="UPDATE",
+            subresource="status",
+            old=running,
+            username="system:node:worker-a",
+            groups=["system:nodes"],
+        ),
+    )
