@@ -1,6 +1,6 @@
 """WAL readers need sidecar writes while business SQL remains read-only.
 
-覆盖 AC: AC-10、AC-16、AC-34、AC-36、AC-46、AC-55。
+Covers AC-10, AC-16, AC-34, AC-36, AC-46, AC-55.
 Real Docker cases require an explicit opt-in and an already loaded helper image.
 """
 

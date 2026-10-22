@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；184 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 178 / 184 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；188 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 182 / 188 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1460,6 +1460,38 @@
   **配对:** T183
 
 
+- [x] **T185** — 真实报告的公开诊断合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_observe.py`
+  **逻辑/验收**：使用真实executor与descriptor投射，无raw ready字段的有效报告通过；过期、身份变化、mandatory失败和API不可达拒绝，刷新后恢复。
+  **覆盖 AC:** AC-01、AC-30、AC-31、AC-32、AC-55
+  **依赖:** T179
+  **配对:** T186
+
+- [x] **T186** — 公开诊断复用实时评估
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/api/platform_observe.py`
+  **逻辑/验收**：公开诊断调用既有probe_report评估，不修改报告TTL、摘要、公开形状或能力准入。
+  **覆盖 AC:** AC-01、AC-30、AC-31、AC-32、AC-55
+  **依赖:** T185
+  **配对:** T185
+
+- [x] **T187** — WAL侧文件与SQL只读配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_data_executor.py`、`src/runtime-manager/tests/test_data_executor_wal.py`
+  **逻辑/验收**：真实SQLite验证无侧文件及已提交WAL；单应用helper可创建侧文件，读SQL仍拒绝写入、读取最新已提交值；实际Docker权限和隔离配对。
+  **覆盖 AC:** AC-10、AC-16、AC-34、AC-36、AC-46、AC-55
+  **依赖:** T066
+  **配对:** T188
+
+- [x] **T188** — 单应用数据helper的WAL目录访问
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/data_executor.py`
+  **逻辑/验收**：单应用数据库目录允许SQLite创建/锁定WAL侧文件，rootfs仍只读、无网络、非root；读连接继续mode=ro，不使用immutable忽略WAL或强制checkpoint。
+  **覆盖 AC:** AC-10、AC-16、AC-34、AC-36、AC-46、AC-55
+  **依赖:** T187
+  **配对:** T187
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1535,3 +1567,7 @@ T179–T182来自109真实诊断：真实PlatformClient没有node_plan，旧桩�
 T179/T180经真实PlatformClient签名GET配对（红5→绿37）完成；最终候选7e720073b完整runtime1184passed/10skipped。109真实平台安装诊断通过，业务仍在运行；T067–T072不提前完成。
 
 T183/T184配对与主线组合135passed；109 r2 prepare/bootstrap真实API通过并启动独立journal平台回归。旧默认批次slug、审计和journal保留，未改产品删除语义。最终候选189四轮基线完成、原生amd64串行烟测中；T067–T072保持未完成。
+
+T185/T186：189报告尚在86400秒有效期内，原公开诊断错误读取不存在的raw ready字段；配对红3/绿92后本地合入。T187/T188：109真实WAL读取失败，最小Docker复现确认只读挂载不能创建侧文件；禁止immutable忽略已提交WAL。发布线a77accb43没有runtime-manager模块，修复属于尚未合入发布线的托管特性，不能向发布线放孤立文件。
+
+T187/T188：0af6eda1b已合入；相关离线52通过/3真实默认跳过，实际Docker三种WAL布局3通过；SQL拒写和事务一致性配对均通过，原有容器/网络不变。下一候选完整集成/原生及109业务复验仍待执行。

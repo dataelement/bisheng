@@ -708,3 +708,9 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | 并行合入安装/发行/验收工具、安全purge、canary引导/刷新、scratch写入前guard、OCI端点与准入、launcher/SDK/源码限制及重试冻结；记录189真实安装和109原生回归 | D1–D8未变；隔离探测仍在修复，业务E2E/双架构发行/L2未完成，不将本地或镜像烟测记为完整交付 |
 
 | 2026-10-22 | T158–T174：故障CLI与真实安装兼容修复完成本地L1；runtime1129/10skip、安装组合263、业务harness69/4skip；新增原生权限合同31项 | 189私有镜像a5f3f259、正式15项重测中；109专用平台初始化中，业务/故障/正式CI/L2仍未完成 |
+
+### 现场诊断与SQLite WAL读取修正（2026-10-22）
+
+公开K8s诊断复用executor实时assess结果；installer原始报告不需要ready字段。报告年龄86400秒、描述摘要及所有必需检查继续校验，身份变更和投射刷新不依赖进程重启。
+
+Docker受信数据helper仅挂载一个应用数据库目录，该目录需允许SQLite创建和锁定WAL侧文件；业务读连接仍使用mode=ro，拒绝SQL写。只读rootfs、非root、无网络、有界资源与owner授权保留。不能用immutable忽略并发WAL，也不代替应用强制checkpoint。[SQLite官方WAL只读条件](https://sqlite.org/wal.html#read_only_databases)。189 K8s数据helper已有相同卷内侧文件需求，本次不扩大其API权限。

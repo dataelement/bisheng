@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-02、AC-07、AC-10、AC-13、AC-19、AC-20、AC-30、AC-31、AC-32、AC-36、AC-37、AC-40、AC-53."""
+"""Covers AC-01, AC-02, AC-07, AC-10, AC-13, AC-19, AC-20, AC-30, AC-31, AC-32, AC-36, AC-37, AC-40, AC-53, AC-55."""
 
 import json
 from types import SimpleNamespace

@@ -1,13 +1,13 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T12:20:47.349707+00:00",
+  "recorded_at": "2026-10-22T13:08:54.398715+00:00",
   "validated_source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 178,
-    "tasks_total": 184,
+    "l1_completed": 182,
+    "tasks_total": 188,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -253,6 +253,27 @@
       "source_commit": "6747bd33821a7bcbfa5573a918a6b2742315b9d5",
       "scope": "fixture suffix + offline harness contracts, not live acceptance",
       "log": "/private/tmp/f059-batch-harness-integrated.log"
+    },
+    "public_k8s_diagnostics": {
+      "passed": 92,
+      "source_commit": "78521edd4fc198203e7199f72fd3321c2684c6bc",
+      "log": "/private/tmp/f059-k8s-observe-green.log",
+      "scope": "assessed report, projected refresh, identity changes, expiry, mandatory failure, API unavailable; real deployment pending"
+    },
+    "native_final_candidate": {
+      "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
+      "amd64": "nine native build, isolated/full Engine bundle smoke passed",
+      "arm64": "nine native build, isolated/full Engine bundle smoke passed",
+      "evidence": "model-release-validation.json",
+      "boundary": "Current local code adds readiness/WAL fix; native result for7e preserved, new candidate must revalidate"
+    },
+    "sqlite_wal_helper": {
+      "source_commit": "0af6eda1b097c2cb4dcff78d77a3930e9ed2982e",
+      "local_passed": 52,
+      "opt_in_skipped": 3,
+      "real_docker_passed": 3,
+      "real_log": "/private/tmp/f059-wal-fix-1792674511/result.json",
+      "scope": "native local one-app actual Docker payload; 109 platform revalidation pending"
     }
   },
   "not_executed": [

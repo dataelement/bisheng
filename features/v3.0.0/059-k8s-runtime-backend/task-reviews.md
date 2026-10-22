@@ -2779,3 +2779,11 @@ T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态
 **元数据验证**：目标范围、配对测试与前置依赖PASS。
 
 **结果**：PASS。
+
+## T185 / T186 — 真实报告与公开诊断（L1 PASS）
+
+提交78521edd4，配对原实现3失败/14通过，修复后92通过；真实executor、投射文件和可控时钟，覆盖有效无ready、raw提示真假无权覆盖、报告过期、CNI/存储身份变化、mandatory失败、API不可达、刷新恢复。证据/private/tmp/f059-k8s-observe-{red,green}.log。逐项：分层PASS，命名PASS，序列化PASS（既有形状），数据库N/A，前端N/A，信息泄漏PASS，设计同步PASS。Ruff/架构守卫/diff通过；远端复验未完成。
+
+## T187 / T188 — SQLite WAL侧文件（L1 PASS）
+
+实现0af6eda1b，仅DataExecutor单应用数据bind恒rw，业务读SQL仍mode=ro；不使用immutable或强制checkpoint。测试原挂载断言4红；真实原payload两失败/一对照通过，修复后三种布局3通过（64.26s），离线52通过/3真实默认跳过。实际非root、networknone、rootfsRO，最新随机WAL提交可见且主DB字节不变；SQLITE_READONLY明确拒写，并发读事务保持一致。证据/private/tmp/f059-wal-fix-1792674511/result.json及/private/tmp/f059-wal-fix-review.md。分层PASS，命名PASS，序列化N/A，数据库模型N/A，前端N/A，信息泄漏PASS，设计同步PASS；Ruff/架构守卫/diff通过。发布线未含此模块，适用范围记录于tasks现状；109平台未复验，不代替T067。

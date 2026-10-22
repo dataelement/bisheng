@@ -4673,6 +4673,105 @@
       "review": "PASS"
     },
     {
+      "id": "T185",
+      "wave": 9,
+      "kind": "测试",
+      "title": "真实报告的公开诊断合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_observe.py"
+      ],
+      "logic": "使用真实executor与descriptor投射，无raw ready字段的有效报告通过；过期、身份变化、mandatory失败和API不可达拒绝，刷新后恢复。",
+      "acs": [
+        "AC-01",
+        "AC-30",
+        "AC-31",
+        "AC-32",
+        "AC-55"
+      ],
+      "depends": [
+        "T179"
+      ],
+      "pair": "T186",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T186",
+      "wave": 9,
+      "kind": "实现",
+      "title": "公开诊断复用实时评估",
+      "files": [
+        "src/runtime-manager/runtime_manager/api/platform_observe.py"
+      ],
+      "logic": "公开诊断调用既有probe_report评估，不修改报告TTL、摘要、公开形状或能力准入。",
+      "acs": [
+        "AC-01",
+        "AC-30",
+        "AC-31",
+        "AC-32",
+        "AC-55"
+      ],
+      "depends": [
+        "T185"
+      ],
+      "pair": "T185",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T187",
+      "wave": 9,
+      "kind": "测试",
+      "title": "WAL侧文件与SQL只读配对",
+      "files": [
+        "src/runtime-manager/tests/test_data_executor.py",
+        "src/runtime-manager/tests/test_data_executor_wal.py"
+      ],
+      "logic": "真实SQLite验证无侧文件及已提交WAL；单应用helper可创建侧文件，读SQL仍拒绝写入、读取最新已提交值；实际Docker权限和隔离配对。",
+      "acs": [
+        "AC-10",
+        "AC-16",
+        "AC-34",
+        "AC-36",
+        "AC-46",
+        "AC-55"
+      ],
+      "depends": [
+        "T066"
+      ],
+      "pair": "T188",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T188",
+      "wave": 9,
+      "kind": "实现",
+      "title": "单应用数据helper的WAL目录访问",
+      "files": [
+        "src/runtime-manager/runtime_manager/data_executor.py"
+      ],
+      "logic": "单应用数据库目录允许SQLite创建/锁定WAL侧文件，rootfs仍只读、无网络、非root；读连接继续mode=ro，不使用immutable忽略WAL或强制checkpoint。",
+      "acs": [
+        "AC-10",
+        "AC-16",
+        "AC-34",
+        "AC-36",
+        "AC-46",
+        "AC-55"
+      ],
+      "depends": [
+        "T187"
+      ],
+      "pair": "T187",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",
