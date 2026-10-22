@@ -108,7 +108,11 @@ _SAFE_PROBE_REASONS = frozenset(
         "storage_not_qualified",
     }
 )
-_SAFE_CHECK_NAMES = REQUIRED_CHECKS | {"registry-push", "sandbox-recommended", "sandbox-hardened"}
+_SAFE_CHECK_NAMES = REQUIRED_CHECKS | {
+    "registry-push",
+    "sandbox-recommended",
+    "sandbox-hardened",
+}
 
 
 class ProbeError(RuntimeError):
@@ -215,7 +219,7 @@ def check_result(name, raw, uid):
     return {"ok": True, "evidence": {"uid": uid}}
 
 
-def stop_confirmed(pod, *, binding_verified=False):
+def stop_confirmed(pod, *, binding_evidence=None):
     meta, spec, status = (
         pod.get("metadata", {}),
         pod.get("spec", {}),
@@ -234,8 +238,12 @@ def stop_confirmed(pod, *, binding_verified=False):
         )
         for row in status.get(key, [])
     ]
+    bound_evidence = isinstance(binding_evidence, dict) and all(
+        meta.get(key) and binding_evidence.get(key) == meta[key]
+        for key in ("namespace", "name", "uid", "deletionTimestamp")
+    )
     return not any("running" in state for state in states) and (
-        (not spec.get("nodeName") and not states and binding_verified) or status.get("phase") in {"Succeeded", "Failed"}
+        (not spec.get("nodeName") and not states and bound_evidence) or status.get("phase") in {"Succeeded", "Failed"}
     )
 
 
@@ -421,7 +429,6 @@ class InstallationVerifier:
         ):
             raise ValueError("descriptor_scope_or_digest_invalid")
         self.created, self.control_created, self.idle = [], [], None
-        self.binding_verified = False
 
     def baseline(self):
         namespace = self.api.get("namespace", self.namespace)
@@ -846,19 +853,37 @@ class InstallationVerifier:
             raise ProbeError("status_negative_unconfirmed")
         return self._proof(current, policy_revision=self.document["status_policy_revision"])
 
-    def _binding_fence(self):
-        pod = self._pod("idle", unschedulable=True)
-        current = self.api.get("pod", pod["metadata"]["name"], manager=True)
-        if current["spec"].get("nodeName"):
-            raise ProbeError("binding_canary_already_scheduled")
-        self._delete_request(current, "pods")
-        fresh = self.api.get("pod", current["metadata"]["name"], manager=True)
-        if not fresh["metadata"].get("deletionTimestamp") or fresh["spec"].get("nodeName"):
+    @staticmethod
+    def _unbound_deleting(pod):
+        metadata, status = pod.get("metadata", {}), pod.get("status", {})
+        return (
+            metadata.get("name", "").startswith("preflight-")
+            and bool(metadata.get("uid"))
+            and bool(metadata.get("deletionTimestamp"))
+            and not pod.get("spec", {}).get("nodeName")
+            and status.get("phase") != "Unknown"
+            and status.get("reason") not in {"Unknown", "NodeLost"}
+            and not any(
+                status.get(key)
+                for key in (
+                    "containerStatuses",
+                    "initContainerStatuses",
+                    "ephemeralContainerStatuses",
+                )
+            )
+        )
+
+    def _binding_stop_evidence(self, pod, *, namespace, manager):
+        metadata = pod["metadata"]
+        name, uid = metadata["name"], metadata["uid"]
+        fresh = self.api.get("pod", name, namespace=namespace, manager=manager)
+        before = fresh["metadata"]
+        if before.get("uid") != uid or before.get("namespace") != namespace or not self._unbound_deleting(fresh):
             raise ProbeError("binding_deletion_observation_invalid")
         binding = {
             "apiVersion": "v1",
             "kind": "Binding",
-            "metadata": {key: fresh["metadata"][key] for key in ("name", "namespace", "uid", "resourceVersion")},
+            "metadata": {key: before[key] for key in ("name", "namespace", "uid", "resourceVersion")},
             "target": {
                 "apiVersion": "v1",
                 "kind": "Node",
@@ -867,14 +892,47 @@ class InstallationVerifier:
         }
         response = self.api.raw(
             "POST",
-            self._path("pods", fresh["metadata"]["name"]) + "/binding",
+            "/api/v1/namespaces/" + namespace + "/pods/" + name + "/binding",
             document=binding,
+            # Only the external installer may attempt a binding. The manager
+            # intentionally has no pods/binding permission.
+            manager=False,
             accepted=(0, 1),
         )
         if not response.returncode or "being deleted" not in response.stderr:
             raise ProbeError("binding_delete_fence_unconfirmed")
-        self.binding_verified = True
-        return self._proof(fresh)
+        observed = self.api.get("pod", name, namespace=namespace, manager=manager)
+        after = observed["metadata"]
+        if any(
+            after.get(key) != before[key] for key in ("namespace", "name", "uid", "deletionTimestamp")
+        ) or not self._unbound_deleting(observed):
+            raise ProbeError("binding_deletion_observation_invalid")
+        return {key: after[key] for key in ("namespace", "name", "uid", "deletionTimestamp")}
+
+    def _binding_fence(self):
+        pod = self._pod("idle", unschedulable=True)
+        current = self.api.get("pod", pod["metadata"]["name"], manager=True)
+        if current["metadata"]["uid"] != pod["metadata"]["uid"]:
+            raise ProbeError("binding_deletion_observation_invalid")
+        if current["spec"].get("nodeName"):
+            raise ProbeError("binding_canary_already_scheduled")
+        self._delete_request(current, "pods")
+        evidence = self._binding_stop_evidence(current, namespace=self.namespace, manager=True)
+        record = next(row for row in self.created if row["resource"] == "pods" and row["uid"] == evidence["uid"])
+        record["binding_stop_evidence"] = evidence
+        return self._proof(self.api.get("pod", evidence["name"], manager=True))
+
+    def _stop_observation(self, record, *, namespace, manager):
+        fresh = self.api.get("pod", record["name"], namespace=namespace, manager=manager)
+        if fresh["metadata"]["uid"] != record["uid"]:
+            raise ProbeError("preflight_cleanup_identity_changed")
+        evidence = record.get("binding_stop_evidence")
+        if not stop_confirmed(fresh, binding_evidence=evidence) and self._unbound_deleting(fresh):
+            record["binding_stop_evidence"] = self._binding_stop_evidence(fresh, namespace=namespace, manager=manager)
+            fresh = self.api.get("pod", record["name"], namespace=namespace, manager=manager)
+            if fresh["metadata"]["uid"] != record["uid"]:
+                raise ProbeError("preflight_cleanup_identity_changed")
+        return fresh if stop_confirmed(fresh, binding_evidence=record.get("binding_stop_evidence")) else None
 
     def _delete_request(self, current, resource):
         expected_uid, name = current["metadata"]["uid"], current["metadata"]["name"]
@@ -1227,14 +1285,7 @@ class InstallationVerifier:
         if not current["metadata"].get("deletionTimestamp"):
             self._delete_request(current, record["resource"])
         if record["resource"] == "pods":
-
-            def stopped():
-                fresh = self.api.get("pod", record["name"], manager=True)
-                if fresh["metadata"]["uid"] != record["uid"]:
-                    raise ProbeError("preflight_cleanup_identity_changed")
-                return fresh if stop_confirmed(fresh, binding_verified=self.binding_verified) else None
-
-            self._wait(stopped)
+            self._wait(lambda: self._stop_observation(record, namespace=self.namespace, manager=True))
             record["plan"]["stop_state"] = "confirmed"
             self._plans(record["plan"]["resource_ref"], record["plan"])
 
@@ -1264,7 +1315,11 @@ class InstallationVerifier:
                 )
                 if result.returncode and not any(
                     reason in result.stderr
-                    for reason in ("admission_stop_unconfirmed", "Conflict", "object has been modified")
+                    for reason in (
+                        "admission_stop_unconfirmed",
+                        "Conflict",
+                        "object has been modified",
+                    )
                 ):
                     raise ProbeError("preflight_finalizer_release_refused")
                 return not result.returncode
@@ -1273,7 +1328,10 @@ class InstallationVerifier:
 
         def absent():
             response = self.api.raw(
-                "GET", self._path(record["resource"], record["name"]), manager=True, accepted=(0, 1)
+                "GET",
+                self._path(record["resource"], record["name"]),
+                manager=True,
+                accepted=(0, 1),
             )
             if response.returncode:
                 if "NotFound" in response.stderr:
@@ -1305,13 +1363,8 @@ class InstallationVerifier:
         path = "/api/v1/namespaces/" + self.api.control + "/pods/" + name
         self.api.raw("DELETE", path, document=body)
 
-        def stopped():
-            fresh = self.api.get("pod", name, namespace=self.api.control)
-            if fresh["metadata"]["uid"] != uid:
-                raise ProbeError("control_cleanup_identity_changed")
-            return fresh if stop_confirmed(fresh, binding_verified=self.binding_verified) else None
-
-        fresh = self._wait(stopped)
+        record = {"name": name, "uid": uid}
+        fresh = self._wait(lambda: self._stop_observation(record, namespace=self.api.control, manager=False))
         patch = {
             "metadata": {
                 "resourceVersion": fresh["metadata"]["resourceVersion"],

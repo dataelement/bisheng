@@ -596,12 +596,21 @@ def test_create_has_only_create_authority_until_observed_uid_is_persisted(monkey
 def test_unscheduled_canary_needs_verified_atomic_binding_fence():
     tool = load_installer()
     pod = {
-        "metadata": {"name": "preflight-unassigned", "uid": str(uuid4()), "deletionTimestamp": "2026-10-22T00:00:00Z"},
+        "metadata": {
+            "name": "preflight-unassigned",
+            "namespace": "runtime-apps",
+            "uid": str(uuid4()),
+            "deletionTimestamp": "2026-10-22T00:00:00Z",
+        },
         "spec": {},
         "status": {},
     }
     assert not tool.stop_confirmed(pod)
-    assert tool.stop_confirmed(pod, binding_verified=True)
+    evidence = {key: pod["metadata"][key] for key in ("namespace", "name", "uid", "deletionTimestamp")}
+    assert tool.stop_confirmed(pod, binding_evidence=evidence)
+    for field in evidence:
+        other = {**evidence, field: "different-resource"}
+        assert not tool.stop_confirmed(pod, binding_evidence=other)
 
 
 def diagnostic_cli(tool, tmp_path, monkeypatch, error, *, publish_error=None):
@@ -963,3 +972,196 @@ def test_plan_refresh_refuses_invalid_cm_scope_before_any_write():
     with pytest.raises(tool.ProbeError, match="admission_refresh_revision_unconfirmed"):
         verifier._plans(str(uuid4()), {})
     assert not any(row[:1] == ("call",) for row in verifier.api.calls)
+
+
+class ExpiredCanaryApi:
+    def __init__(self, tool, *, outcome="deleted", active=False, status=None, bound=False):
+        self.control, self.execution = "runtime-system", "runtime-apps"
+        self.tool, self.outcome, self.calls, self.released = tool, outcome, [], False
+        reference, uid = str(uuid4()), str(uuid4())
+        self.pod = {
+            "metadata": {
+                "name": "preflight-expired",
+                "namespace": self.execution,
+                "uid": uid,
+                "resourceVersion": "19",
+                "labels": {tool.RESOURCE_LABEL: reference},
+                "deletionTimestamp": "2026-10-22T00:00:00Z",
+                "finalizers": [tool.STOP_FINALIZER, "example/retain"],
+            },
+            "spec": {"nodeName": "worker-a"} if bound else {},
+            "status": status or {"phase": "Pending"},
+        }
+        self.plan = {
+            "resource_ref": reference,
+            "namespace": self.execution,
+            "name": self.pod["metadata"]["name"],
+            "kind": "Pod",
+            "uid": uid,
+            "stop_state": "held",
+            "expires_at": 2000 if active else 999,
+        }
+
+    def get(self, resource, name, **kwargs):
+        self.calls.append(("get", resource, name))
+        if resource == "configmap":
+            return {
+                "data": {
+                    "plans.json": json.dumps({"schema_version": 1, "plans": {self.plan["resource_ref"]: self.plan}})
+                }
+            }
+        return copy.deepcopy(self.pod)
+
+    def list(self, resource, **kwargs):
+        return []
+
+    def raw(self, method, path, **kwargs):
+        self.calls.append((method, path, copy.deepcopy(kwargs.get("document"))))
+        if path.endswith("/binding"):
+            assert kwargs["manager"] is False
+            assert kwargs["document"]["metadata"]["uid"] == self.plan["uid"]
+            if self.outcome == "api-unknown":
+                raise self.tool.ProbeError("kubectl_request_failed")
+            if self.outcome == "uid-replaced":
+                self.pod["metadata"]["uid"] = str(uuid4())
+            elif self.outcome == "bound-after":
+                self.pod["spec"]["nodeName"] = "worker-a"
+            elif self.outcome == "running-after":
+                self.pod["status"]["containerStatuses"] = [{"state": {"running": {}}}]
+            elif self.outcome == "not-deleting-after":
+                self.pod["metadata"].pop("deletionTimestamp")
+            if self.outcome == "accepted":
+                self.pod["spec"]["nodeName"] = "worker-a"
+                return subprocess.CompletedProcess([], 0, "{}", "")
+            reason = "being deleted" if self.outcome != "wrong-rejection" else "Forbidden"
+            return subprocess.CompletedProcess([], 1, "", reason)
+        assert method == "GET" and self.released
+        return subprocess.CompletedProcess([], 1, "", "NotFound")
+
+    def call(self, args, **kwargs):
+        assert args[:2] == ["patch", "pod"]
+        self.calls.append(("patch", args[2], kwargs))
+        patch = json.loads(args[args.index("-p") + 1])
+        assert patch["metadata"]["finalizers"] == ["example/retain"]
+        self.released = True
+        return subprocess.CompletedProcess([], 0, "", "")
+
+
+def expired_canary_verifier(tool, **kwargs):
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.api = ExpiredCanaryApi(tool, **kwargs)
+    verifier.namespace, verifier.options = verifier.api.execution, {"node_name": "worker-a", "installation_id": "test"}
+    verifier.created, verifier.control_created = [], []
+    verifier.plan_writes = []
+    verifier._plans = lambda ref, plan=None, **kw: verifier.plan_writes.append((ref, copy.deepcopy(plan), kw))
+
+    def wait(callback):
+        result = callback()
+        if not result:
+            raise tool.ProbeError("probe_deadline_exceeded")
+        return result
+
+    verifier._wait = wait
+    return verifier
+
+
+def test_expired_unscheduled_recovery_reproves_binding_for_its_uid_before_release(monkeypatch):
+    tool = load_installer()
+    monkeypatch.setattr(tool.time, "time", lambda: 1000)
+    verifier = expired_canary_verifier(tool)
+    verifier.recover_expired()
+    binding = next(i for i, row in enumerate(verifier.api.calls) if row[0] == "POST")
+    release = next(i for i, row in enumerate(verifier.api.calls) if row[0] == "patch")
+    assert any(row[0] == "get" and row[1] == "pod" for row in verifier.api.calls[binding + 1 : release])
+    assert verifier.api.released and not verifier.created
+    assert any(plan and plan.get("stop_state") == "confirmed" for _, plan, _ in verifier.plan_writes)
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "accepted",
+        "wrong-rejection",
+        "api-unknown",
+        "uid-replaced",
+        "bound-after",
+        "running-after",
+        "not-deleting-after",
+    ],
+)
+def test_expired_unscheduled_recovery_retains_uncertain_or_changed_writers(monkeypatch, outcome):
+    tool = load_installer()
+    monkeypatch.setattr(tool.time, "time", lambda: 1000)
+    verifier = expired_canary_verifier(tool, outcome=outcome)
+    with pytest.raises(tool.ProbeError):
+        verifier.recover_expired()
+    assert not verifier.api.released
+    assert not any(plan and plan.get("stop_state") == "confirmed" for _, plan, _ in verifier.plan_writes)
+
+
+@pytest.mark.parametrize("state", ["bound-pending", "unknown", "node-lost", "running"])
+def test_expired_recovery_never_probes_or_releases_possible_existing_writers(monkeypatch, state):
+    tool = load_installer()
+    monkeypatch.setattr(tool.time, "time", lambda: 1000)
+    status = {"phase": "Pending"}
+    if state == "unknown":
+        status["phase"] = "Unknown"
+    elif state == "node-lost":
+        status.update(phase="Failed", reason="NodeLost")
+    elif state == "running":
+        status["containerStatuses"] = [{"state": {"running": {}}}]
+    verifier = expired_canary_verifier(tool, status=status, bound=state == "bound-pending")
+    with pytest.raises(tool.ProbeError):
+        verifier.recover_expired()
+    assert not verifier.api.released
+    assert not any(row[0] == "POST" for row in verifier.api.calls)
+
+
+def test_expired_recovery_skips_live_plan_without_mutation(monkeypatch):
+    tool = load_installer()
+    monkeypatch.setattr(tool.time, "time", lambda: 1000)
+    verifier = expired_canary_verifier(tool, active=True)
+    verifier.recover_expired()
+    assert not verifier.api.released and not verifier.plan_writes
+    assert not any(row[0] in {"POST", "patch"} for row in verifier.api.calls)
+
+
+def test_chart_cni_identity_is_admission_source_and_invalidates_only_old_report(values, tmp_path):
+    from runtime_manager.k8s_capabilities import REQUIRED_CHECKS, assess_capabilities, descriptor_digest
+
+    def descriptor_and_admission():
+        documents = render(values, tmp_path)
+        cm = next(
+            row
+            for row in documents
+            if row["kind"] == "ConfigMap" and row["metadata"]["name"] == "runtime-deployment-descriptor"
+        )
+        deployment = next(
+            row for row in documents if row["kind"] == "Deployment" and row["metadata"]["name"] == "runtime-admission"
+        )
+        env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+        cni = next(row["value"] for row in env if row["name"] == "RTM_ADMISSION_CNI_USERNAME")
+        return json.loads(cm["data"]["descriptor.json"]), cni
+
+    values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:calico-cni-plugin"
+    original, cni = descriptor_and_admission()
+    assert original["cni_username"] == cni == values["execution"]["cniUsername"]
+    identity = descriptor_digest(original)
+    report = {
+        "source": "cluster-probe",
+        "observed_at": 1000,
+        "descriptor_digest": identity,
+        "checks": [{"name": name, "ok": True, "evidence": {"uid": str(uuid4())}} for name in REQUIRED_CHECKS],
+    }
+    values["execution"]["probeReport"] = report
+    verified, _ = descriptor_and_admission()
+    assert descriptor_digest(verified) == identity
+    assert assess_capabilities(verified, now=1001)["ready"]
+    values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:another-cni"
+    changed, cni = descriptor_and_admission()
+    assert changed["cni_username"] == cni == values["execution"]["cniUsername"]
+    assert {key: value for key, value in changed.items() if key != "cni_username"} == {
+        key: value for key, value in verified.items() if key != "cni_username"
+    }
+    assert descriptor_digest(changed) != identity
+    assert not assess_capabilities(changed, now=1001)["ready"]
