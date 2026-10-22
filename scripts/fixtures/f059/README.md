@@ -45,6 +45,16 @@ python scripts/bootstrap_f059_acceptance.py \
   --prepare-only
 ```
 
+`--profile-revision` 只接受正整数，默认 `1`。镜像 digest、CA 层、toolchain 或其它 profile 内容变化时必须使用新修订号，例如：
+
+```bash
+python scripts/bootstrap_f059_acceptance.py \
+  --api-base "$API_BASE" --suite-dir "$SUITE_DIR" --env-file "$PLATFORM_ENV" \
+  --profile-inventory "$UPDATED_INVENTORY_FILE" --profile-revision 2 --bootstrap
+```
+
+同一 code/revision 的内容不可覆盖；脚本不自动重试覆盖或偷偷增加 revision。重复相同修订和相同内容可复用。三个 profile 均以指定 revision 导入并设为默认；bundle manifest 显式引用 `e2e-f059-<language>@2`。**source-image 当前 schema 不允许 `delivery.profile` 字段**：K8s 兼容链路从当前语言默认 profile 解析并冻结，因此必须先完成新修订的 bootstrap/default 设置，再重新发布 source-image；不能向 manifest 添加非法字段。已冻结的旧版本不会因默认值变更而原地改镜像。
+
 输出 `e2e.env`、marker、三个 profile 定义、五组源码包（完整镜像场景暂不生成）、`scenarios.json`，以及 `demo-image-v1/`、`demo-image-v2/` 构建上下文。源码和 npm 初始场景没有新增依赖；Python 直接使用预制 runtime 中的标准库和 SDK/httpx，Node 只用内置模块。不会为此访问公网包源。
 
 ### 完整应用镜像
@@ -123,7 +133,7 @@ python scripts/e2e_k8s_runtime.py --stage fault-upgrade --event manager-restart 
 
 `offline-manifest.example.json` 只是占位模板，必须填入平台实际 resolve 的 `profile_id`、`profile_digest`、`platform`、`abi`，以及所有 wheel 的真实大小/哈希后命名为 `offline.json`。归档应包含 `offline.json` 和 `wheels/*.whl`，禁止凭据配置/符号链接/路径穿越。整个归档也要计算真实 SHA256。
 
-用 owner JWT 将原始归档流上传 `/api/v1/apps/{app_id}/runtime/materials?profile=e2e-f059-python311%401&platform=linux%2Famd64&sha256=<archive SHA256>`（不是 multipart），将返回 `artifact_id` 填到应用 manifest 的 `delivery.dependencies.offline_artifacts` 中。需在首次应用创建后上传私有物料；公共物料由超管显式上传 `/api/v1/runtime/materials/public`，两种 scope 不能混淆。
+下例 `%401` 表示 `@1`；使用 revision 2 时应改为 `%402`，并重新 resolve 对应 profile 后制作物料，不能复用旧修订的 profile_digest。用 owner JWT 将原始归档流上传 `/api/v1/apps/{app_id}/runtime/materials?profile=e2e-f059-python311%401&platform=linux%2Famd64&sha256=<archive SHA256>`（不是 multipart），将返回 `artifact_id` 填到应用 manifest 的 `delivery.dependencies.offline_artifacts` 中。需在首次应用创建后上传私有物料；公共物料由超管显式上传 `/api/v1/runtime/materials/public`，两种 scope 不能混淆。
 
 requirements/显式 lock 中使用真实 `package==version --hash=sha256:<wheel SHA256>`。`delivery.dependencies.lock` 指向包内锁文件。物料完成格式与哈希校验只是可供准备，依赖闭包仍须在目标 preparer 内实际离线解析、安装和验证。
 

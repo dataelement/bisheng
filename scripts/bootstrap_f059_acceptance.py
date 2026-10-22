@@ -169,7 +169,14 @@ def save_env(path, values):
     )
 
 
-def profile_definitions(inventory):
+def validate_profile_revision(value):
+    if type(value) is not int or value < 1:
+        raise BootstrapError("profile_revision_invalid")
+    return value
+
+
+def profile_definitions(inventory, *, revision=1):
+    revision = validate_profile_revision(revision)
     if inventory.get("platform") != "linux/amd64":
         raise BootstrapError("native_amd64_inventory_required")
     images = inventory["images"]
@@ -190,7 +197,7 @@ def profile_definitions(inventory):
         rows.append(
             {
                 "code": code,
-                "revision": 1,
+                "revision": revision,
                 "language": language,
                 "official": False,
                 "platforms": {
@@ -224,7 +231,7 @@ def archive(path, files):
 
 
 def application_manifest(
-    slug, runtime, mode, *, profile=None, image=None, version=1, model_name=None, knowledge_ids=()
+    slug, runtime, mode, *, profile=None, profile_revision=1, image=None, version=1, model_name=None, knowledge_ids=()
 ):
     document = {
         "manifest_version": 2,
@@ -236,7 +243,7 @@ def application_manifest(
         "delivery": {"mode": mode},
     }
     if mode == "bundle":
-        document["delivery"]["profile"] = profile + "@1"
+        document["delivery"]["profile"] = profile + "@" + str(validate_profile_revision(profile_revision))
     if mode == "image":
         if not image or not IMAGE.fullmatch(image):
             raise BootstrapError("pinned_demo_image_required")
@@ -265,8 +272,18 @@ def application_manifest(
     return document
 
 
-def build_packages(suite, values, *, inventory, demo_image=None, demo_image_v2=None, model_name=None, knowledge_ids=()):
-    profiles = profile_definitions(inventory)
+def build_packages(
+    suite,
+    values,
+    *,
+    inventory,
+    profile_revision=1,
+    demo_image=None,
+    demo_image_v2=None,
+    model_name=None,
+    knowledge_ids=(),
+):
+    profiles = profile_definitions(inventory, revision=profile_revision)
     (suite / "profiles.json").write_text(json.dumps(profiles, indent=2))
     scenarios = []
     for suffix, runtime, mode, code in (
@@ -287,6 +304,7 @@ def build_packages(suite, values, *, inventory, demo_image=None, demo_image_v2=N
                 runtime,
                 mode,
                 profile=code,
+                profile_revision=profile_revision,
                 image=(demo_image_v2 or demo_image) if version == 2 else demo_image,
                 version=version,
                 model_name=model_name,
@@ -630,7 +648,13 @@ async def bootstrap(base, suite, output, values, *, profiles, register_first=Fal
                 },
             )
         state["profiles"].append(
-            {"id": imported["id"], "code": profile["code"], "official": False, "platform": "linux/amd64"}
+            {
+                "id": imported["id"],
+                "code": profile["code"],
+                "revision": profile["revision"],
+                "official": False,
+                "platform": "linux/amd64",
+            }
         )
         save()
     state["complete"] = True
@@ -653,6 +677,7 @@ def main(argv=None):
     parser.add_argument("--output-env-file", type=Path)
     parser.add_argument("--entry-base")
     parser.add_argument("--profile-inventory", type=Path)
+    parser.add_argument("--profile-revision", type=int, default=1)
     parser.add_argument("--demo-image")
     parser.add_argument("--demo-image-v2")
     parser.add_argument("--model-name")
@@ -661,6 +686,7 @@ def main(argv=None):
     parser.add_argument("--bootstrap", action="store_true")
     parser.add_argument("--register-first-admin", action="store_true")
     args = parser.parse_args(argv)
+    validate_profile_revision(args.profile_revision)
     if (args.prepare_only and args.bootstrap) or (args.register_first_admin and not args.bootstrap):
         raise BootstrapError("mode_invalid")
     base = api_base(args.api_base)
@@ -674,6 +700,7 @@ def main(argv=None):
             suite,
             values,
             inventory=inventory,
+            profile_revision=args.profile_revision,
             demo_image=args.demo_image,
             demo_image_v2=args.demo_image_v2,
             model_name=args.model_name,
