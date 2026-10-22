@@ -29,7 +29,7 @@
 
 ## 3. 公共参数与结果
 
-- 新工具统一使用 `knowledge_id` 表示空间 ID，`folder_id=null` 表示根目录；资源 ID 均为严格正整数，拒绝布尔值。
+- 新工具统一使用 `knowledge_id` 表示空间 ID。`folder_id` 兼容正整数和纯 ASCII 数字的正数字符串，进入业务逻辑前转为整数；允许前导零。顶层 `folder_id=null` 或省略表示根目录，嵌套 `folder_scope.folder_id` 必填且非空。其他资源 ID 仍为严格正整数；拒绝布尔值、空字符串、非数字和非正数。
 - 列表与搜索：`page_size` 默认 20、范围 1～100；使用 `cursor`。结果含 `data`、`page_size`、`has_more`、`next_cursor`，不返回未经权限过滤的总数。
 - 游标绑定用户、租户、工具、空间/目录、过滤和排序；条件不匹配或失效明确报错。
 - 文件列表排序限定 `file_name`、`update_time`，`order` 为 `asc` / `desc`，默认 `update_time desc`；同值以 ID 保持稳定。

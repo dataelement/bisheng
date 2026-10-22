@@ -97,7 +97,9 @@ X-Developer-Token: <完整Token>
 
 ### 3.1 资源 ID 与参数
 
-`knowledge_id`、`folder_id`、`file_id` 均使用正整数，不能传字符串或布尔值。`folder_id` 省略或为 `null` 表示根目录；指定目录时，目录必须属于目标空间且有相应权限。
+`knowledge_id`、`file_id` 等其他资源 ID 使用严格正整数，不能传字符串或布尔值。`folder_id` 同时接受正整数和纯 ASCII 数字的正数字符串，例如 `305`、`"305"`、`"000305"` 均表示目录 305；服务端统一转为整数后进行目录归属和权限校验，响应中的 ID 仍为整数。
+
+顶层 `folder_id` 省略或为 `null` 表示根目录。`folder_scope.folder_id` 同样兼容数字字符串，但必填且不能为 `null`。空字符串、空白、非数字、带符号/小数、布尔值及非正数均拒绝，不会自动落入根目录。
 
 新工具拒绝未声明字段，包括 `external_id`、`user_id`、`tenant_id`、`skip_approval`、`file_path` 等。Token 只放在请求头，不能作为工具参数传入。
 
@@ -183,7 +185,7 @@ X-Developer-Token: <完整Token>
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `knowledge_id` | integer | 是 | 空间 ID |
-| `folder_id` | integer / null | 否 | 父目录 ID；省略表示空间根目录 |
+| `folder_id` | integer / string / null | 否 | 父目录 ID；数字字符串可用；省略表示空间根目录 |
 
 另支持公共分页参数。列根目录示例：
 
@@ -215,7 +217,7 @@ X-Developer-Token: <完整Token>
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `knowledge_id` | integer | 必填 | 空间 ID |
-| `folder_id` | integer / null | `null` | 目录 ID |
+| `folder_id` | integer / string / null | `null` | 目录 ID，兼容纯数字的正数字符串 |
 | `statuses` | integer[] / null | `null` | 最多 7 项，每项为 1～7；不传表示不额外筛选状态 |
 | `sort_by` | string | `update_time` | `file_name` 或 `update_time` |
 | `order` | string | `desc` | `asc` 或 `desc` |
@@ -223,7 +225,7 @@ X-Developer-Token: <完整Token>
 另支持公共分页参数。
 
 ```json
-{"name":"list_files","arguments":{"knowledge_id":118,"folder_id":305,"statuses":[2],"sort_by":"update_time","order":"desc","page_size":20}}
+{"name":"list_files","arguments":{"knowledge_id":118,"folder_id":"305","statuses":[2],"sort_by":"update_time","order":"desc","page_size":20}}
 ```
 
 每项包含 `id`、`knowledge_id`、`name`、`size`（字节）、`status`、`update_time`、`parent_id`。只返回当前目录的直接子文件，不混入文件夹或递归子目录文件，默认排除回收、失效入口及历史非主版本。该操作不修正文件解析状态。
@@ -234,7 +236,7 @@ X-Developer-Token: <完整Token>
 |---|---|---|---|
 | `keyword` | string | 必填 | 去除首尾空白后为 1～200 字符 |
 | `knowledge_ids` | integer[] / null | `null` | 指定 1～20 个空间；不传则使用当前可读空间范围 |
-| `folder_scope` | object / null | `null` | `{knowledge_id,folder_id}`，限定该目录及子目录 |
+| `folder_scope` | object / null | `null` | `{knowledge_id,folder_id}`；目录 ID 为正整数或数字字符串，限定该目录及子目录 |
 | `search_mode` | string | `all` | `name` 文件名、`content` 正文、`all` 两者并集 |
 
 另支持公共分页参数。
@@ -366,7 +368,7 @@ X-Developer-Token: <完整Token>
 | `file_name` | string | 必填 | 1～200 字符的文件基名 |
 | `content` | string | 必填 | 非空正文，UTF-8 编码后不超过 10 MiB |
 | `content_format` | string | `markdown` | `markdown` 对应 `.md`，`text` 对应 `.txt` |
-| `folder_id` | integer / null | `null` | 指定已有目录；省略表示根目录 |
+| `folder_id` | integer / string / null | `null` | 指定已有目录，兼容数字字符串；省略表示根目录 |
 
 另支持 §5 的分类与标签参数。
 
@@ -383,12 +385,12 @@ X-Developer-Token: <完整Token>
 | `knowledge_id` | integer | 必填 | 目标空间 ID |
 | `file_name` | string | 必填 | 1～200 字符的文件基名，保留真实扩展名 |
 | `content_base64` | string | 必填 | 严格 Base64，解码后非空且不超过 50 MiB |
-| `folder_id` | integer / null | `null` | 指定已有目录；省略表示根目录 |
+| `folder_id` | integer / string / null | `null` | 指定已有目录，兼容数字字符串；省略表示根目录 |
 
 另支持 §5 的分类与标签参数。
 
 ```json
-{"name":"upload_file","arguments":{"knowledge_id":118,"folder_id":305,"file_name":"hello.txt","content_base64":"aGVsbG8="}}
+{"name":"upload_file","arguments":{"knowledge_id":118,"folder_id":"305","file_name":"hello.txt","content_base64":"aGVsbG8="}}
 ```
 
 示例上传的是五字节的 `hello` 文本。真实文件需由客户端读取原始字节后做标准 Base64 编码，传入不带换行和 `data:` 前缀的字符串。不能传文件 URL、客户端路径或服务器路径代替 Base64。

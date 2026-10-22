@@ -3,7 +3,7 @@ from typing import Literal
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
-from bisheng.mcp_server.domain.schemas.browse import ResourceId
+from bisheng.mcp_server.domain.schemas.browse import FolderId, ResourceId
 from bisheng.mcp_server.domain.schemas.ingestion import (
     ClassificationCode,
     CreateDocumentRequest,
@@ -31,7 +31,7 @@ def register_write_tools(server: FastMCP, runtime: McpToolRuntime) -> None:
         content: DocumentText,
         ctx: Context,
         content_format: Literal["text", "markdown"] = "markdown",
-        folder_id: ResourceId | None = None,
+        folder_id: FolderId | None = None,
         file_category_code: ClassificationCode | None = None,
         file_subcategory_code: ClassificationCode | None = None,
         business_domain_code: ClassificationCode | None = None,
@@ -61,7 +61,7 @@ def register_write_tools(server: FastMCP, runtime: McpToolRuntime) -> None:
         file_name: FileName,
         content_base64: FileBase64,
         ctx: Context,
-        folder_id: ResourceId | None = None,
+        folder_id: FolderId | None = None,
         file_category_code: ClassificationCode | None = None,
         file_subcategory_code: ClassificationCode | None = None,
         business_domain_code: ClassificationCode | None = None,

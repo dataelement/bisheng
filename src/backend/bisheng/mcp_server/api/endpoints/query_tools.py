@@ -8,6 +8,7 @@ from bisheng.mcp_server.domain.schemas.browse import (
     Cursor,
     FileListRequest,
     FileSearchRequest,
+    FolderId,
     FolderListRequest,
     FolderScope,
     Keyword,
@@ -41,7 +42,7 @@ def register_query_tools(server: FastMCP, runtime: McpToolRuntime) -> None:
     async def list_folders(
         knowledge_id: ResourceId,
         ctx: Context,
-        folder_id: ResourceId | None = None,
+        folder_id: FolderId | None = None,
         cursor: Cursor | None = None,
         page_size: PageSize = 20,
     ) -> McpPage:
@@ -54,7 +55,7 @@ def register_query_tools(server: FastMCP, runtime: McpToolRuntime) -> None:
     async def list_files(
         knowledge_id: ResourceId,
         ctx: Context,
-        folder_id: ResourceId | None = None,
+        folder_id: FolderId | None = None,
         statuses: Statuses | None = None,
         sort_by: Literal["file_name", "update_time"] = "update_time",
         order: Literal["asc", "desc"] = "desc",

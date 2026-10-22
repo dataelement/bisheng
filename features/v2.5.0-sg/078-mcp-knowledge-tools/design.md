@@ -53,6 +53,8 @@ Allowed dependencies: 现有依赖；不新增第三方包。
 
 ### 3.2 空间、目录、文件与搜索
 
+2026-10-22 目录 ID 兼容：在 browse schema 新增独立 `FolderId`，以严格正整数或受格式约束的数字字符串作为输入，验证后归一化为 int。列表、嵌套搜索范围及写工具的请求模型和注册签名统一使用该别名；不修改通用 `ResourceId`，避免放宽空间/文件/标签 ID。响应仍为整数；不把空字符串视为根目录。实现落点为 browse/ingestion schema、query/write 工具及 SDK 回归，回退局部代码即可，无数据或配置变更。
+
 知识模块增加 `KnowledgeMcpQueryService`，复用现有可见空间与权限能力。新增 `KnowledgeMcpRepository` 接口和实现，继承项目 BaseRepository，将查询封装在知识模块内。空间查询不调用会补建默认个人库的入口。
 
 `writable_only` 需要完整的可写候选过滤，再分页；不能只对当前页算上传权。参考 F066 的批量 `PermissionReadContext`、并发上限与最近一级目录绑定规则，但不继承同步场景候选类型限制。可写子目录必须在当前用户可访问范围内；仅有上传权但无法定位的隐藏目录不能造成路径泄漏。

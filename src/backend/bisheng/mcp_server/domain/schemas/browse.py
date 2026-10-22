@@ -1,8 +1,12 @@
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 ResourceId = Annotated[int, Field(strict=True, gt=0)]
+FolderId = Annotated[
+    ResourceId | Annotated[str, StringConstraints(pattern=r"^0*[1-9][0-9]*$")],
+    AfterValidator(int),
+]
 PageSize = Annotated[int, Field(strict=True, ge=1, le=100)]
 Cursor = Annotated[str, StringConstraints(max_length=8192)]
 Keyword = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
@@ -27,7 +31,7 @@ class KnowledgeListRequest(PageRequest):
 
 class FolderListRequest(PageRequest):
     knowledge_id: ResourceId
-    folder_id: ResourceId | None = None
+    folder_id: FolderId | None = None
 
 
 class FileListRequest(FolderListRequest):
@@ -38,7 +42,7 @@ class FileListRequest(FolderListRequest):
 
 class FolderScope(StrictRequest):
     knowledge_id: ResourceId
-    folder_id: ResourceId
+    folder_id: FolderId
 
 
 class FileSearchRequest(PageRequest):
