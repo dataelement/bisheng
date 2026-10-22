@@ -12,7 +12,7 @@ from runtime_manager.container_runner import OP_LABEL, PHASE_LABEL, ExecutionErr
 from runtime_manager.docker_backend import get_docker_backend
 from runtime_manager.executors.docker import DockerExecutor
 from runtime_manager.executors.protocol import ExecutorError
-from runtime_manager.platform_client import PlatformClient
+from runtime_manager.platform_client import PlatformClient, PlatformError
 
 logger = logging.getLogger(__name__)
 TERMINAL = {"completed", "failed", "cancelled", "timed_out"}
@@ -90,7 +90,7 @@ class OperationExecutor:
         # Retries query the committed sequence, never guess whether a fact was accepted.
         current = self.platform.operation(operation["operation_id"])
         detail = dict(detail or {})
-        for key in ("prepare_progress", "maintenance_progress"):
+        for key in ("prepare_progress", "maintenance_progress", "prepared_delivery"):
             if key not in detail and key in current.get("result", {}):
                 detail[key] = current["result"][key]
         if self.config.executor_kind == "kubernetes":
@@ -98,6 +98,39 @@ class OperationExecutor:
         return self.platform.fact(
             operation, int(current.get("fact_sequence", 0)) + 1, phase, exec_ref=exec_ref, detail=detail
         )
+
+    def _wait_cleanup(self, operation, cleanup):
+        while True:
+            self.checkpoint(operation)
+            if self.config.executor_kind == "kubernetes":
+                self.runtime._controller()
+            if cleanup().get("complete"):
+                self.checkpoint(operation)
+                return
+            self.clock.sleep(0.5)
+
+    def _prepared_delivery(self, operation):
+        current = self.checkpoint(operation)
+        saved = current.get("result", {})
+        if "prepared_delivery" in saved:
+            delivery = saved["prepared_delivery"]
+            if not isinstance(delivery, dict) or not delivery:
+                raise ExecutorError("prepared_delivery_invalid")
+            return delivery
+        self.report(operation, "preparing")
+        delivery = self.runtime.prepare(operation)
+        if not isinstance(delivery, dict) or not delivery:
+            raise ExecutorError("prepared_delivery_invalid")
+        self.checkpoint(operation)
+        try:
+            self.report(operation, "preparing", detail={"prepared_delivery": delivery})
+        except PlatformError:
+            # An acknowledged SQL result is required before cleanup may remove its producers.
+            saved = self.platform.operation(operation["operation_id"]).get("result", {})
+            if saved.get("prepared_delivery") != delivery:
+                raise
+            self.checkpoint(operation)
+        return delivery
 
     def executions(self, app_id=None, operation_id=None):
         return self.runtime.executions(app_id=app_id, operation_id=operation_id)
@@ -126,14 +159,19 @@ class OperationExecutor:
             if not pods:
                 continue
             for row in pods:
+                self.checkpoint(operation)
+                self.runtime._controller()
                 self.runtime.request_stop(row["resource_ref"], operation)
                 deadline = self.clock.time() + 60
-                while not self.runtime.confirm_stopped(row["resource_ref"])["stopped"]:
+                while True:
+                    self.checkpoint(operation)
+                    self.runtime._controller()
+                    if self.runtime.confirm_stopped(row["resource_ref"])["stopped"]:
+                        break
                     if self.clock.time() >= deadline:
                         raise ExecutorError("writer_stop_unconfirmed")
                     self.clock.sleep(0.5)
-            if not self.runtime.cleanup(old).get("complete"):
-                raise ExecutorError("resource_cleanup_pending")
+            self._wait_cleanup(operation, lambda old=old: self.runtime.cleanup(old))
 
     def _launch(self, operation, runner=None, *, preview=False):
         if self.config.executor_kind == "docker":
@@ -157,10 +195,8 @@ class OperationExecutor:
                 self.platform.claim(operation_id)
                 kind, body = operation["kind"], operation["payload"]
                 if kind == "prepare":
-                    self.report(operation, "preparing")
-                    delivery = self.runtime.prepare(operation)
-                    if not self.runtime.cleanup(operation).get("complete"):
-                        raise ExecutorError("preparation_cleanup_pending")
+                    delivery = self._prepared_delivery(operation)
+                    self._wait_cleanup(operation, lambda: self.runtime.cleanup(operation))
                     self.report(
                         operation, "completed", detail={"delivery": delivery, "stopped": True, "cleanup_complete": True}
                     )
@@ -173,27 +209,30 @@ class OperationExecutor:
                         ):
                             raise ExecutorError("preview_execution_missing")
                         return
-                    self.report(operation, "starting")
-                    outcome = self._launch(operation, preview=(kind == "preview"))
-                    self.report(operation, "ready", exec_ref=outcome["exec_ref"], detail=outcome)
+                    current = self.checkpoint(operation)
+                    if kind != "probe" or current["stage"] != "ready":
+                        self.report(operation, "starting")
+                        outcome = self._launch(operation, preview=(kind == "preview"))
+                        self.report(operation, "ready", exec_ref=outcome["exec_ref"], detail=outcome)
                     if kind == "probe":
-                        if not self.runtime.cleanup(operation).get("complete"):
-                            raise ExecutorError("probe_cleanup_pending")
+                        self._wait_cleanup(operation, lambda: self.runtime.cleanup(operation))
                         self.report(
                             operation, "completed", detail={"ready": True, "stopped": True, "cleanup_complete": True}
                         )
                 elif kind == "data":
-                    self.report(operation, "starting")
-                    target = self.runtime.data(operation, "prepare-session", {})
-                    self.report(operation, "ready", exec_ref=target["exec_ref"], detail={"data_target": target})
-                    while True:
-                        current = self.checkpoint(operation)
-                        state = current["payload"].get("data_action_finished")
-                        if state:
-                            break
-                        self.clock.sleep(0.1)
-                    if not self.runtime.data(current, "finish-session", {}).get("complete"):
-                        raise ExecutorError("data_action_cleanup_pending")
+                    current = self.checkpoint(operation)
+                    state = current["payload"].get("data_action_finished")
+                    if not state:
+                        self.report(operation, "starting")
+                        target = self.runtime.data(operation, "prepare-session", {})
+                        self.report(operation, "ready", exec_ref=target["exec_ref"], detail={"data_target": target})
+                        while True:
+                            current = self.checkpoint(operation)
+                            state = current["payload"].get("data_action_finished")
+                            if state:
+                                break
+                            self.clock.sleep(0.1)
+                    self._wait_cleanup(operation, lambda: self.runtime.data(current, "finish-session", {}))
                     self.report(
                         operation,
                         "completed" if state == "done" else "failed",
@@ -217,8 +256,7 @@ class OperationExecutor:
                         for item in self.runtime.executions(app_id=operation["app_id"]):
                             if item.get("Labels", {}).get(PHASE_LABEL) == "serve":
                                 previous = self.platform.operation(item["Labels"][OP_LABEL])
-                                if not self.runtime.cleanup(previous).get("complete"):
-                                    raise ExecutorError("resource_cleanup_pending")
+                                self._wait_cleanup(operation, lambda previous=previous: self.runtime.cleanup(previous))
                     if kind == "destroy" and body.get("purge_volume"):
                         self.checkpoint(operation)
                         self.runtime.data(operation, "purge", {})
