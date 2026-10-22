@@ -1,24 +1,24 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22T13:17:47.900074+00:00",
-  "validated_source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
+  "validated_source_commit": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 192,
+    "l1_completed": 194,
     "tasks_total": 199,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 1200,
+      "passed": 1275,
       "skipped": 13,
       "exit_code": 0,
-      "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
-      "scope": "full runtime including actual assessed diagnostics and WAL readonly SQL helper fixes",
-      "log": "/private/tmp/f059-runtime-wal-readiness-integrated.log"
+      "source_commit": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a",
+      "log": "/private/tmp/f059-controller-integrated-runtime.log",
+      "scope": "full runtime including precise lost lease/fresh CAS recovery; optional opt-in skips retained, setuid executed"
     },
     "backend": {
       "passed": 1629,
@@ -27,7 +27,7 @@
       "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
       "scope": "full app_runtime and app_publish with isolated model hooks and final diagnostics harness",
       "log": "/private/tmp/f059-backend-current-integration.log",
-      "same_production_source_through": "54b3ea2c15836529cc24667d9a58be49e35bf710"
+      "same_production_source_through": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a"
     },
     "public_tenant_fix": {
       "passed": 17,
@@ -132,7 +132,7 @@
       "passed": 41,
       "source_commit": "09e07cd1f",
       "log": "/private/tmp/f059-data-sessions-final.log",
-      "evidence": "backend services and original owner/audit; issuer and transport injected; default wiring still pending T045/T049"
+      "evidence": "historical isolated services at 09e07cd1f; T045/T049 default wiring since completed, actual109 business evidence recorded separately"
     },
     "real_mysql_migration": {
       "host": "192.168.106.189",
@@ -202,10 +202,10 @@
       "control_namespace": "e2e-f059-system",
       "execution_namespace": "e2e-f059-apps",
       "four_control_services_installed": true,
-      "bounded_ext4_volumes_prepared": 19,
-      "mandatory_probe_status": "in_progress",
-      "platform_business_e2e": "not_started",
-      "fault_upgrade_e2e": "not_started",
+      "bounded_ext4_volumes_prepared": 51,
+      "mandatory_probe_status": "passed_15_required_plus_registry_at_54b",
+      "platform_business_e2e": "r2_failed_precheck_timeout_no_resources_idle_lease_fix_pending_live",
+      "fault_upgrade_e2e": "installation_report_negative_pairs_passed_business_faults_pending",
       "not_arm64_or_cross_node_evidence": true
     },
     "real_helper_resolve": {
@@ -338,7 +338,7 @@
       "boundary": "local native nine-image/Engine; public CI not authorized"
     },
     "controller_idle_expiry": {
-      "state": "real_189_reproduced_fix_pending",
+      "state": "local_fix_and_L1_passed_live_pending",
       "operation_id": "d0b665da84014b2fab43ef60f1b282b6",
       "controller_epoch": 2,
       "lease_until": "2026-10-22T14:21:06",
@@ -347,7 +347,8 @@
       "tasks": [
         "T198",
         "T199"
-      ]
+      ],
+      "source_commit": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a"
     }
   },
   "not_executed": [

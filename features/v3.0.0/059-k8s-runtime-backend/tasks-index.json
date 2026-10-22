@@ -5004,6 +5004,7 @@
         "AC-33",
         "AC-35",
         "AC-36",
+        "AC-43",
         "AC-48",
         "AC-55"
       ],
@@ -5012,8 +5013,8 @@
       ],
       "pair": "T199",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T199",
@@ -5031,6 +5032,7 @@
         "AC-33",
         "AC-35",
         "AC-36",
+        "AC-43",
         "AC-48",
         "AC-55"
       ],
@@ -5039,8 +5041,8 @@
       ],
       "pair": "T198",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

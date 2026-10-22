@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；199 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 192 / 199 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 194 / 199 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1563,19 +1563,19 @@
   **依赖:** T196
   **配对:** T196
 
-- [ ] **T198** — 控制器空闲过期与失租恢复围栏
+- [x] **T198** — 控制器空闲过期与失租恢复围栏
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
   **逻辑/验收**：真实30秒租约和PlatformClient错误配对：空闲过期重新CAS领取；活跃异holder、未知响应和503不放行，既有UID恢复与新epoch事实及并发锁不生成虚假停止证据。
-  **覆盖 AC:** AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-48、AC-55
+  **覆盖 AC:** AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55
   **依赖:** T197
   **配对:** T199
 
-- [ ] **T199** — 过期控制器租约按精确失租恢复
+- [x] **T199** — 过期控制器租约按精确失租恢复
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
   **逻辑/验收**：精确409/controller_lease_lost使缓存失效，fresh node快照后CAS领取；其他失败不吞，当前不确定动作拒绝；按真实到期限制缓存，不改平台API及停止围栏。
-  **覆盖 AC:** AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-48、AC-55
+  **覆盖 AC:** AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55
   **依赖:** T198
   **配对:** T198
 
@@ -1678,3 +1678,5 @@ T196/T197：189四个失败draft的只读清理预检在GET instance收到16121�
 T196/T197经0a8f5a252合入候选0e493c07a，真实client/HMAC/ASGI先红4/38、相关75全绿，主树完整runtime1259passed/13skipped。四个真实draft均只读确认application_not_found/404；新镜像清理链路待验，不修改工具绕过16121。192/197完成，正式CI/真实交付/L2仍pending。
 
 T198/T199现场红例：189新prepare d0b665da84014b2fab43ef60f1b282b6、app2bde519a30f946a091f5ae4aa5cf2248，14:20:36领取epoch2/lease_until14:21:06；14:24:11开始永久renew409，尚无Pod/PVC且terminal fact也被拒绝。未修改租约，保留运行记录；修复与配对L1待合流。
+
+T198/T199完成于00fbdce05/合流候选e4052d1c2：16新安全配对先红绿、相关173passed；主树完整runtime1275passed/13skipped（setuid未跳过），Ruff/架构守卫通过。明确保留首轮缺Helm的51工具失败记录。空闲失租仅精确lost fresh CAS恢复，未知响应当前动作拒绝；既有UID停止/新epoch事实与expired prepare只清理终结均覆盖。194/199完成；同PID真实空闲恢复与最新双架构验收进行中，不提前标业务交付。

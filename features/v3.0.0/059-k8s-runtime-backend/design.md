@@ -722,3 +722,5 @@ K8s prepare 的 `payload.delivery.profile` 是 manifest 引用字符串，实际
 Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。验收工具接受显式、固定版本和逐wheel摘要的8个纯Python依赖，SDK字节必须与仓库产物一致，保留许可，以原始wheel打入源码包并zipimport运行；不改产品模板、SDK或扫描器。实际源码扫描与依赖二进制跳过分别记录，不能将wheel跳过表述成依赖源码已扫描。完整镜像仍需两个真实digest显式加入场景。此为验收前置修正，不增加产品发布模式。
 
 未创建运行分配的应用：manager查询platform.application得到精确`404/application_not_found`时返回既有`not_found`，backend可投影无实例；不能把资源查询404、权限错误或平台故障当无实例或停止证据。该修复恢复原有16101/16121区分，不弱化销毁与UID围栏。
+
+控制器租约恢复（T198/T199，候选e4052d1c2）：空闲期可以自然过期；下一动作仅在精确renew `409/controller_lease_lost` 后清缓存、重读node并以fresh epoch CAS领取。活跃异holder、403、503、其他冲突或响应不确定均重读且拒绝当前动作，不凭重读直接执行未知动作。领取后显式renew，避免同holder幂等claim返回接近过期的旧租约；从renew请求前monotonic计10秒续期，响应耗时达到20秒拒绝，不依赖客户与server壁钟一致。所有资源意图/观察/cleanup/fact仍取当前receipt，旧UID/creator epoch不凭过期改成停止；过期operation由现有平台claim拒绝，只清理并正常终结，不复活prepare。189红例已留存，同进程真实复验待执行。

@@ -2811,3 +2811,7 @@ T191–T193主树真实backend conftest组合补验：170passed/7warnings，日�
 ## T196/T197 L1（0a8f5a252 / 0e493c07a）
 
 七项复核：架构/命名/序列化/信息泄漏/设计同步PASS，数据库/前端N/A。精确application调用的404/application_not_found转既有NotFoundError；资源404、403/503/timeout与错误reason/status仍是故障。42项真实PlatformClient+HMAC/nonce+ASGI配对先红4/38，相关75绿；主树完整runtime1259passed/13skipped。两文件范围/前向依赖/T196先测试配对与AC验证通过。Ruff/arch/diff通过；结论PASS，实际189新镜像四个draft查询/owner清理仍待复验。只读现场四个精确控制响应证据/private/tmp/f059-unassigned-scope-evidence.jsonl，不包含凭据或payload。
+
+## T198/T199 L1（00fbdce05 / e4052d1c2）
+
+七项：架构PASS（manager消费既有API）、命名PASS、序列化PASS（无API/摘要变更）、数据库/前端N/A、信息泄漏PASS（只固定错误与公开围栏字段）、设计同步PASS。范围两文件、前向依赖/测试先行配对/完整AC通过。16新安全配对先红10/2，最后相关173绿；主树完整runtime1275passed/13skipped，33.40s，含setuid。首次子树完整执行因Helm工具缺失1224/13/51失败，摘要明确全文被截断；配置已核工具后重新1275/13绿，未倒填失败。主树Ruff/arch/diff PASS。已有UID在新epoch的停止/观察/cleanup/fact、8线程单claim、未知响应拒绝及expired prepare不创建资源均有断言；失租不是停止证明。结论PASS，189同PID实际空闲恢复及交付五门保持pending。日志/private/tmp/f059-controller-integrated-runtime.log；子树L1/private/tmp/f059-t198-t199-l1.md。
