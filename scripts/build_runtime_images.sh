@@ -65,7 +65,10 @@ build_one runtime-assembler src/runtime-manager/Dockerfile.assembler . --build-a
 
 shadow="$(mktemp -d)"
 trap 'rm -rf "$shadow"' EXIT
+# UID 10001 must be able to traverse and read the hostile CWD even with umask 077.
+chmod 0755 "$shadow"
 printf 'raise RuntimeError("application shadow must not be imported")\n' >"$shadow/runtime_manager.py"
+chmod 0644 "$shadow/runtime_manager.py"
 for name in "${names[@]}"; do
   image="$(image_for "$name")"
   machine="$(docker run --rm --network none --read-only --tmpfs /tmp --entrypoint uname "$image" -m)"
@@ -76,7 +79,7 @@ for name in "${names[@]}"; do
     runtime-helper|runtime-assembler)
       docker run "${common[@]}" --workdir /smoke --env PYTHONPATH=/smoke \
         --mount "type=bind,src=$shadow,dst=/smoke,readonly" --entrypoint python "$image" -I -c \
-        'import os,sys,sysconfig,importlib,pathlib,tempfile; assert sys.flags.isolated == 1 and os.getuid() == 10001; modules=[importlib.import_module("runtime_manager."+name) for name in ("k8s_helper","k8s_prepare","k8s_data_helper","k8s_capabilities","oci_assembler")]; assert all(pathlib.Path(m.__file__).is_relative_to(sysconfig.get_paths()["purelib"]) for m in modules); from runtime_manager.k8s_capabilities import storage_checks; assert all(storage_checks("/tmp", require_filesystem=False).values()); assert not os.access("/",os.W_OK)'
+        'import os,sys,sysconfig,importlib,pathlib,tempfile; assert sys.flags.isolated == 1 and os.getuid() == 10001; assert pathlib.Path("/smoke/runtime_manager.py").read_text().startswith("raise RuntimeError"); modules=[importlib.import_module("runtime_manager."+name) for name in ("k8s_helper","k8s_prepare","k8s_data_helper","k8s_capabilities","oci_assembler")]; assert all(pathlib.Path(m.__file__).is_relative_to(sysconfig.get_paths()["purelib"]) for m in modules); from runtime_manager.k8s_capabilities import storage_checks; assert all(storage_checks("/tmp", require_filesystem=False).values()); assert not os.access("/",os.W_OK)'
       # Exercise the production fixed-path resolver, not just import/version checks.
       # No credential, application execution or network is allowed in this smoke.
       docker run "${common[@]}" -i --entrypoint python "$image" -I - <<'PY_RESOLVE'
