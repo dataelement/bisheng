@@ -142,10 +142,11 @@ Model equality does not establish that historical service-account resource
 markers exist. This is an explicit deployment operation: container startup,
 `alembic upgrade head`, and `docker/deploy.sh update` do not run data repairs.
 
-For a first migration from legacy RBAC, use `migrate_f048_permission_data.py`;
+For a first migration from pre-F048 ReBAC, use `migrate_f048_permission_data.py`;
 its resource projection already writes both `user:*` and `service_account:*`
 markers at every hierarchy level. Do not repeat the first migration to repair
-an existing F048 installation.
+an existing F048 installation. Legacy RBAC environments must first complete
+the 2.5.x upgrade stage described below.
 
 ### `cleanup_f048_user_group_admin_grants.py`
 
@@ -538,10 +539,32 @@ finalized operation only verifies and skips it.
 
 ### `migrate_f048_permission_data.py`
 
+Legacy `user_group:<id>#admin` resource `manager`/`can_manage` tuples are
+retired with an INFO audit item instead of becoming F048 Grants or visible
+contributions. User groups no longer grant resource management separately to
+administrators. These tuples are not reassigned to `#member`; existing member
+Grants and protected resource creators still migrate normally. The retired
+F006 RBAC-to-ReBAC scripts are no longer shipped on this release line.
+
 Formal, forward-only migration from the legacy relation-model Config and
 resource tuples to the F048 Catalog / Model / Grant control plane. This is the
 only F048 business-data migration entry point. Alembic remains DDL-only, and
 the service never invokes this script from API startup, Celery, or Linsight.
+
+Upgrade prerequisite for legacy RBAC environments:
+
+1. Upgrade to a 2.5.x release that ships F006. Follow that release's schema
+   and data-upgrade instructions, then run its F006 RBAC-to-ReBAC migration
+   and verification. Require zero permission regressions and verify resource
+   access with a non-admin account before continuing.
+2. Upgrade from the verified 2.5.x environment to the target release while
+   retaining its database and OpenFGA Store, then run the F048 migration and
+   verification below. F048 consumes the existing ReBAC tuples; it does not
+   replace F006's conversion of legacy `roleaccess` rows.
+
+Do not skip the 2.5.x stage for a pure RBAC environment or restore/run F006
+inside an F048 deployment. Existing pre-F048 ReBAC environments that have
+already completed F006 do not need to repeat that stage.
 
 Run every command from `src/backend/` with the same `config` value as the live
 deployment.
