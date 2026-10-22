@@ -252,14 +252,14 @@ def assemble_image(document, source, environment, target, *, work, run=subproces
             target,
         ]
         startup = document.get("startup", {}).get("command") or []
-        if not isinstance(startup, list) or any(
-            not isinstance(part, str) or not part or "\x00" in part for part in startup
-        ):
-            raise ExecutorError("oci_startup_invalid")
-        # Empty CMD lets the platform entrypoint resolve the application's startup.
-        encoded = io.StringIO()
-        csv.writer(encoded, lineterminator="").writerow(startup)
-        arguments += ["--cmd", encoded.getvalue()]
+        if startup:
+            if not isinstance(startup, list) or any(
+                not isinstance(part, str) or not part or "\x00" in part for part in startup
+            ):
+                raise ExecutorError("oci_startup_invalid")
+            encoded = io.StringIO()
+            csv.writer(encoded, lineterminator="").writerow(startup)
+            arguments += ["--cmd", encoded.getvalue()]
         if insecure and base_registry != target_registry:
             # crane's global --insecure affects every remote access. Keep the
             # foreign base HTTPS-only, then push the local result to this target.

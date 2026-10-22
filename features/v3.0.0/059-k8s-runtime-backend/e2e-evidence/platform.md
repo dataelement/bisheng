@@ -118,8 +118,12 @@ source prepare70eb72db…依赖安装及产物上传完成，OCI组装失败`oci
 
 T248–T251修复只允许归档前的目录SGID并在层内去除，继续拒绝SUID目录和非目录SGID；另补OCI固定PATH标准sbin，保持D7受限布局/冻结基础镜像/凭据及启动合同。source0d5ef7b2b，完整runtime1610/13skip、独立L1通过，新amd64三镜像及descriptor/能力探测刷新后方可新attempt；当前尚未source/fullimage上线，不冒认T069/T070完成。
 
-## 最终代码入口修复冻结
+## 入口CMD误判撤回（替代此前修复结论）
 
 独立链路检查确认source-image的空startup有意交给兼容平台入口解析，但crane此前继承profile默认CMD，先执行基础命令，可能绕过Procfile/包start/static生成配置。T252/T253仅显式写空CMD，显式参数仍CSV无损，实际非rootcrane v0.22.1对三个固定base导出Cmd=null、正确入口，未改仓库manifest。来源d7f7c2e10，完整runtime1622/13skip、独立L1通过，代码248/253闭合。
 
 0d5中间候选已真实Helm24/16项探测/ready；源码续办check已通过，但尚未execute/生成新业务journal，最终d7f镜像与报告待完成后再提交。旧失败/9资源精确正常cleanup和backend原包校验保持。
+
+更正：上述继承CMD问题不成立。固定crane v0.22.1设置entrypoint时已清除Cmd，原代码已满足合同。真实189三个固定base使用**不带--cmd**的原命令，导出后Cmd均null，注册仓库未修改，日志`/private/tmp/f059-crane-entrypoint-clears-cmd-native.log`。此前仅带--cmd空参数的正例及镜像参数Mock不足以证明原缺陷，相关T252/T253与L1已撤回，编号保留。
+
+两个代码/测试文件恢复0d5字节；全部src/scripts/deploy/workflow构建输入相对0d5均无差异。真实SGID/PATH修复保留，完整runtime1610/13skip（33.51s）。d7候选的额外空flag与原CLI行为等价，未发布新应用；当前installer自然完成后恢复已验证0d5精确镜像及与其descriptor匹配的有效16报告，不制造新的构建或冒认新探测。官方依据：https://github.com/google/go-containerregistry/blob/v0.22.1/cmd/crane/cmd/mutate.go#L89-L98

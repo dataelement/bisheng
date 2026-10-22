@@ -6352,54 +6352,6 @@
       "review": "PASS"
     },
     {
-      "id": "T252",
-      "wave": 7,
-      "kind": "测试",
-      "title": "OCI 默认启动命令继承配对",
-      "files": [
-        "src/runtime-manager/tests/test_oci_assembler.py"
-      ],
-      "logic": "三运行时startup缺省/空list均显式清除base CMD，使平台入口解析Procfile/包start/静态配置；显式命令含逗号等参数按CSV无损编码，base/入口/用户不变。",
-      "acs": [
-        "AC-24",
-        "AC-25",
-        "AC-27",
-        "AC-28",
-        "AC-54"
-      ],
-      "depends": [
-        "T251"
-      ],
-      "pair": "T253",
-      "command": "",
-      "status": "complete",
-      "review": "PASS"
-    },
-    {
-      "id": "T253",
-      "wave": 7,
-      "kind": "实现",
-      "title": "OCI 显式清除未指定的继承CMD",
-      "files": [
-        "src/runtime-manager/runtime_manager/oci_assembler.py"
-      ],
-      "logic": "已有startup列表验证和CSV编码对空列表同样执行，固定--cmd空参数清除基础镜像默认命令；不改入口解析优先级、用户完整镜像模式、helper或backend外部合同。",
-      "acs": [
-        "AC-24",
-        "AC-25",
-        "AC-27",
-        "AC-28",
-        "AC-54"
-      ],
-      "depends": [
-        "T252"
-      ],
-      "pair": "T252",
-      "command": "",
-      "status": "complete",
-      "review": "PASS"
-    },
-    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

@@ -1,6 +1,5 @@
 """覆盖 AC: AC-15、AC-16、AC-24、AC-25、AC-27、AC-28、AC-42、AC-54."""
 
-import csv
 import json
 import os
 import tarfile
@@ -495,41 +494,5 @@ def test_assembled_image_preserves_dependency_and_system_binary_paths(tree, lang
     assert (
         path == "PATH=/opt/venv/bin:/app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     )
-    assert mutation[mutation.index("--entrypoint") + 1] == "/usr/local/bin/bisheng-app-entrypoint"
-    assert mutation[mutation.index("--user") + 1] == "10001:10001"
-
-
-@pytest.mark.parametrize("language", ["python3.11", "node20", "static"])
-@pytest.mark.parametrize("command", [None, [], ["python", "main.py"], ["python", "-c", "print('a,b')"]])
-def test_oci_command_is_explicit_even_when_platform_entrypoint_must_resolve_it(tree, language, command):
-    from runtime_manager.oci_assembler import assemble_image
-
-    source, environment, root = tree
-    (source / "public").mkdir()
-    (source / "public/index.html").write_text("<h1>Static application</h1>")
-    plan = document()
-    plan["runtime"] = language
-    if command is None:
-        plan.pop("startup")
-    else:
-        plan["startup"] = {"command": command}
-    seen = []
-
-    def run(args, **kwargs):
-        seen.append(args)
-        if "config" in args:
-            return SimpleNamespace(
-                stdout=json.dumps(
-                    {"os": "linux", "architecture": "amd64", "config": {"Cmd": ["inherited-base-command"]}}
-                ),
-                returncode=0,
-            )
-        return SimpleNamespace(stdout="registry.example/apps@sha256:" + "b" * 64 + "\n", returncode=0)
-
-    assemble_image(plan, source, environment, "registry.example/apps:operation", work=root, run=run)
-    mutation = next(arguments for arguments in seen if "mutate" in arguments)
-    assert mutation.count("--cmd") == 1
-    encoded = mutation[mutation.index("--cmd") + 1]
-    assert next(csv.reader([encoded])) == (command or [])
     assert mutation[mutation.index("--entrypoint") + 1] == "/usr/local/bin/bisheng-app-entrypoint"
     assert mutation[mutation.index("--user") + 1] == "10001:10001"

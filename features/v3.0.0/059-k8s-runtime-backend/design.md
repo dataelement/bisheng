@@ -88,7 +88,7 @@
 ### D7：兼容源码模式使用受限 OCI 组装
 
 - **备选**：节点 Docker socket/DinD；容器内通用 rootless BuildKit；准备好应用内容后追加 OCI 层。
-- **选定**：第三种，保持 `source-image` 交付模式及实际应用镜像输出。复用平台的语言准备规则、入口模板与冻结环境，在受限 Pod 完成安装和编译后，可信组装 Pod 把代码、venv/Node 产物和入口文件加入冻结基础镜像，配置既有启动语义并推送；startup未显式指定时必须将OCI CMD清空，交给平台entrypoint解析应用入口，不能继承profile默认命令。不能执行用户 Dockerfile。组装器只接受固定路径布局，拒绝路径逃逸、设备、setuid、带setgid的非目录、外部硬链接和用户 whiteout；卷目录继承的setgid只在归档时按普通权限去除，不修改只读输入；仅允许受信工具链定义的镜像内符号链接，不能把用户 tar 直接追加到镜像根。
+- **选定**：第三种，保持 `source-image` 交付模式及实际应用镜像输出。复用平台的语言准备规则、入口模板与冻结环境，在受限 Pod 完成安装和编译后，可信组装 Pod 把代码、venv/Node 产物和入口文件加入冻结基础镜像，配置既有启动语义并推送；不能执行用户 Dockerfile。组装器只接受固定路径布局，拒绝路径逃逸、设备、setuid、带setgid的非目录、外部硬链接和用户 whiteout；卷目录继承的setgid只在归档时按普通权限去除，不修改只读输入；仅允许受信工具链定义的镜像内符号链接，不能把用户 tar 直接追加到镜像根。
 - **原因**：平台现有 Dockerfile 是固定 Python/Node/static 模板，不开放任意 Dockerfile。OCI 层追加本身不需运行容器守护进程；普通代码发布仍走 bundle，不调用此组件。[crane append](https://github.com/google/go-containerregistry/blob/main/cmd/crane/doc/crane_append.md)、[crane mutate](https://github.com/google/go-containerregistry/blob/main/cmd/crane/doc/crane_mutate.md)。BuildKit 的官方 rootless 容器示例需要额外系统调用/进程沙箱条件，不能假定在 189 或 Restricted 基线下直接成立。[rootless 前置](https://github.com/moby/buildkit/blob/master/docs/rootless.md)
 - **重新考虑条件**：产品将来批准任意 Dockerfile 或系统包安装时，重新设计构建沙箱；不通过临时放开 privileged、提权、宿主挂载或内核配置实现。
 - **兼容验收门**：Python 的 Procfile/默认入口、Node install/build/prune、static 输出选择和 SDK 必须与 Docker 原兼容路径逐项比较；不能只验证“镜像能启动”。依赖或系统库超出冻结 profile 时，审批前明确拒绝并指向新环境或完整镜像。
@@ -793,4 +793,6 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 
 2026-10-23 T250/T251：源码镜像的受控PATH同样补齐标准sbin目录，与T247的bundle保持相同依赖bin优先及系统工具可达性；静态基础镜像实际nginx位于/usr/sbin。固定OCI启动语义不新增配置口，完整用户镜像不变。
 
-2026-10-23 T252/T253：源码镜像空startup显式清除profile继承CMD；显式列表继续CSV无损编码。保留Python/Node Procfile、包入口及static模板配置解析优先级，不改用户完整镜像模式或外部API。
+2026-10-23 T252/T253原修复判断已撤回：固定crane的entrypoint行为已清除Cmd，无需额外空参数；未保留该冗余设计或实现。
+
+2026-10-23 T252/T253更正：此前继承CMD问题为误判，撤回相关设计说明和冗余实现。固定crane v0.22.1在设置entrypoint时已按Docker语义清除Cmd；原组装器已满足既定启动合同。原记录保留用于追溯，本行优先。源码/测试恢复0d5字节，SGID与PATH修正不变。

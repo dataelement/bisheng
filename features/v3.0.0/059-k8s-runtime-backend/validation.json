@@ -1,24 +1,25 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22T21:47:45.225086+00:00",
-  "validated_source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
+  "validated_source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 248,
-    "tasks_total": 253,
+    "l1_completed": 246,
+    "tasks_total": 251,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
-      "passed": 1622,
+      "source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "passed": 1610,
       "skipped": 13,
-      "seconds": 33.09,
+      "seconds": 33.51,
       "exit_code": 0,
-      "log": "/private/tmp/f059-oci-cmd-final-runtime.log"
+      "log": "/private/tmp/f059-oci-correction-full-runtime.log",
+      "current_build_inputs_byte_equal": true
     },
     "backend": {
       "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
@@ -1352,17 +1353,16 @@
       "arm": "paused_by_user"
     },
     "oci_empty_cmd_l1": {
-      "source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
-      "tasks": [
-        "T252",
-        "T253"
-      ],
-      "result": "PASS",
-      "independent_report": "/private/tmp/f059-t252-t253-independent-l1.md",
-      "independent_sha256": "a54d859bccb8329aef025f0ca6314e937fb01e64058289987266f1e2a060ae8a",
-      "native_crane_semantics": "v0.22.1 actual three profile bases, --cmd empty -> Cmd null, no registry mutation",
-      "native_log": "/private/tmp/f059-crane-empty-cmd-native.log",
-      "final_image_revalidation": "pending"
+      "result": "WITHDRAWN_FALSE_POSITIVE",
+      "prior_acceptance_superseded": true,
+      "official_source": "https://github.com/google/go-containerregistry/blob/v0.22.1/cmd/crane/cmd/mutate.go#L89-L98",
+      "reason": "Setting nonempty entrypoint in pinned crane already resets Cmd; original code always does this",
+      "counterexample": "/private/tmp/f059-crane-entrypoint-clears-cmd-native.log",
+      "three_bases_passed_without_cmd_flag": true,
+      "registry_mutated": false,
+      "implementation_restored_to": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "independent_correction": "/private/tmp/f059-t252-t253-correction-withdrawn.md",
+      "independent_sha256": "f49617e5c3037067f5067b8d76b21a3c703fb5a6e771d7da2bb25811022e356e"
     },
     "native_oci_intermediate_0d5": {
       "source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
@@ -1530,6 +1530,19 @@
       "status": "passed_intermediate_installation",
       "final_cmd_source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
       "final_cmd_deployed": false
+    },
+    "corrected_build_baseline": {
+      "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "scope": [
+        "src",
+        "scripts",
+        "deploy",
+        ".github/workflows"
+      ],
+      "git_diff_empty": true,
+      "native_and_installer_evidence": "native_oci_intermediate_0d5",
+      "restore_deployment": "pending_current_installer_natural_completion",
+      "public_release": false
     }
   },
   "not_executed": [
@@ -1558,6 +1571,18 @@
       "seconds": 33.01,
       "exit_code": 0,
       "log": "/private/tmp/f059-oci-final-full-runtime.log"
+    }
+  ],
+  "historical_runtime_validations": [
+    {
+      "source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
+      "passed": 1622,
+      "skipped": 13,
+      "seconds": 33.09,
+      "exit_code": 0,
+      "log": "/private/tmp/f059-oci-cmd-final-runtime.log",
+      "status": "passed_but_redundant_cmd_tests_withdrawn",
+      "not_current_delivery": true
     }
   ]
 }

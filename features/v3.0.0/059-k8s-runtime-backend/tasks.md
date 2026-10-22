@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；253 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 248 / 253 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；251 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 246 / 251 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1992,22 +1992,6 @@
   **依赖:** T250
   **配对:** T250
 
-- [x] **T252** — OCI 默认启动命令继承配对
-  **类型**：测试
-  **文件**：`src/runtime-manager/tests/test_oci_assembler.py`
-  **逻辑/验收**：三运行时startup缺省/空list均显式清除base CMD，使平台入口解析Procfile/包start/静态配置；显式命令含逗号等参数按CSV无损编码，base/入口/用户不变。
-  **覆盖 AC:** AC-24、AC-25、AC-27、AC-28、AC-54
-  **依赖:** T251
-  **配对:** T253
-
-- [x] **T253** — OCI 显式清除未指定的继承CMD
-  **类型**：实现
-  **文件**：`src/runtime-manager/runtime_manager/oci_assembler.py`
-  **逻辑/验收**：已有startup列表验证和CSV编码对空列表同样执行，固定--cmd空参数清除基础镜像默认命令；不改入口解析优先级、用户完整镜像模式、helper或backend外部合同。
-  **覆盖 AC:** AC-24、AC-25、AC-27、AC-28、AC-54
-  **依赖:** T252
-  **配对:** T252
-
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -2177,3 +2161,9 @@ T248–T251 L1闭合：SGID真实目录2正例先红/10危险位拒绝已绿；O
 T252/T253登记：独立源码链审查确认source-image的空startup有意交给平台兼容entrypoint解析，但crane mutate未显式清除profile base CMD；与Dockerfile新ENTRYPOINT不同，运行时有参分支会先执行基础镜像默认python/main或node/server，static也会绕过生成配置。最小修复只明确空CMD并保留CSV显式命令，不改D7路线。246/253、116测试任务；实际crane空参数语义另核，不先冒认通过。
 
 T252/T253 L1闭合：缺省/空CMD六项先红、显式参数六项保持绿；完整runtime1622passed/13skip（33.09s）。189实际v0.22.1 crane非root/TLS校验，三个固定profile base分别默认python/main、node/server、nginx，--cmd空参数导出后Cmd=null且正确入口，临时tar删除、无registry mutation。代码仅原startup验证/CSV编码取消非空条件，D7/入口/凭据/用户镜像边界保持。独立差异复核无阻断；其特殊位不可保留的沙箱失败未算真实产品回归。248/253、116测试；最终源码镜像/16探测/业务仍待真实重验。
+
+### T252/T253误判撤回（编号保留，不复用）
+
+前述“crane继承CMD导致绕过入口”的判断撤回。固定v0.22.1官方实现设置非空entrypoint时已经Config.Cmd=nil，原assemble_image始终传该参数；--cmd空参数只是冗余。先前12个Mock用例仅证明新参数存在，未模拟真实CLI，不能作为原产品故障证据。源代码与测试两个文件已逐字节恢复0d5ef7b2b，实际SGID/PATH修复保留。T252/T253从活跃任务正文/索引撤出，不计完成或测试任务；活跃246/251、115测试。原提交、红绿日志、审查与已部署中间镜像历史不改写，新增纠正记录。官方依据：https://raw.githubusercontent.com/google/go-containerregistry/v0.22.1/cmd/crane/cmd/mutate.go （89–98行）。实际不带--cmd的三基础镜像对照另存，最终交付不保留此冗余变更。
+
+撤回复核完成：189真实crane v0.22.1对三个固定base不带--cmd仍导出Cmd=null，确认误报；仓库manifest不变。src/scripts/deploy/workflow相对0d5构建输入全相同，完整runtime1610/13skip（33.51s），Ruff/format/逐文件guard/diff复核。活跃246/251、115测试；已部署冗余d7保持等价，待其installer自然结束后回到0d5匹配有效报告，源代码发布尚未开始。

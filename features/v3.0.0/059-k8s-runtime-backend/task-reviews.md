@@ -3417,10 +3417,18 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 最终完整runtime1610 passed /13 skipped（33.01s），日志`/private/tmp/f059-oci-final-full-runtime.log`；原SGID完整1607/13skip及两份红例日志保留。Ruff/format/逐文件archguard/diff通过。backend与6f逐字节不变，未重标backend测试SHA。真实新镜像及K8s复验不能由本地通过代替。
 
-## Task Review: T252/T253 — OCI继承CMD与兼容入口
+## Task Review: T252/T253 — OCI继承CMD与兼容入口（原PASS已撤回，见更正）
 
 **结果：PASS。** 测试单文件/完整AC-24、AC-25、AC-27、AC-28、AC-54、配对及T251前向依赖PASS；三运行时缺省/空list先红6、显式列表/逗号参数6保持绿。实现沿用原列表验证及CSV编码，仅取消非空分支，显式写空CMD，保持Procfile/包start/static模板的既有入口解析优先级。无helper/backend/外部API或用户完整镜像变化。
 
 七项：架构/命名/信息泄漏/设计同步PASS，ORM/对外响应序列化/数据库/前端N/A；目标单文件与配对依赖PASS。独立链路和diff复核无阻断；审查者沙箱剥除SGID的旧相邻13失败未计产品缺陷，root的真实位完整测试与原生Linux证据单列。
 
 完整runtime1622 passed /13 skipped，33.09s，`/private/tmp/f059-oci-cmd-final-runtime.log`；Ruff/format/逐文件guard/diff通过。189非root真实crane v0.22.1在三个固定CA基础镜像上验证默认Cmd→空Cmd(null)，入口正确、临时tar删除，无仓库manifest更改：`/private/tmp/f059-crane-empty-cmd-native.log`。代码镜像需最终新SHA构建/探测/业务复验，不把0d5中间镜像或本地测试写作最终交付通过。
+
+## T252/T253审查更正：WITHDRAWN_FALSE_POSITIVE
+
+原“真实继承CMD缺陷”结论与L1 PASS撤回。遗漏核对固定第三方CLI实现：crane v0.22.1设置entrypoint时已清空Cmd。原代码始终传entrypoint，不需要新增空--cmd；Mock强制新参数不能证明原实现有缺陷。原生--cmd空正例也不构成无该参数的反例。两个产品/测试文件逐字节恢复0d5，不保留冗余实现；251个活跃任务/246完成/115测试。原提交及原审查不改写，新增纠正和独立对照证据。
+
+官方源码：[mutate.go v0.22.1](https://raw.githubusercontent.com/google/go-containerregistry/v0.22.1/cmd/crane/cmd/mutate.go)。不将此误报列作产品缺陷或有效测试增量。
+
+撤回复核：真实无--cmd三base Cmd=null；完整runtime1610/13skip（33.51s）与src/scripts/deploy/workflow对0d5空diff确认。最终交付代码及有效L1仍为T248–T251，不把T252/T253镜像实现型断言计产品回归。
