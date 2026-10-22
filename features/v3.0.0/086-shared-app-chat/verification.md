@@ -358,3 +358,20 @@ legacy fields keep their existing unrestricted behavior.
   /tmp/f086-close-types.log. These gates are not reported as passing.
 - Independent final acceptance review found no actionable P1/P2 issues; see
   code-review.md. No remote push or deployment requested/performed.
+
+## Production HighlightJS initialization hotfix (2026-10-22)
+
+- Reproduced deployment error with the exact vendor-WRzjMHBJ.js production
+  artifact in a static browser: lowlight in vendor eagerly registered languages
+  against HighlightJS exported from vendor-editor, which imports vendor itself.
+  Build-only checks had not detected this runtime initialization cycle.
+- Kept both lowlight versions beside highlight.js in the existing editor chunk.
+  No library/version or development-server change.
+- RED: actual Vite-config regression put lowlight in vendor, unlike the core.
+  GREEN: 12 configuration tests and config strict types pass; platform production
+  build passes. /tmp/f086-highlight-red.log,
+  /tmp/f086-highlight-config-tests.log, /tmp/f086-highlight-config-types.log,
+  /tmp/f086-highlight-build.log.
+- Real browser loaded rebuilt static assets, displayed the login form and had
+  no JavaScript error logs. Static-only API 404s are expected, no backend used.
+- Focused independent review of the two-file fix returned no P1/P2 findings.
