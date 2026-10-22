@@ -549,6 +549,40 @@
         "fault_upgrade"
       ],
       "auto_cleanup": false
+    },
+    {
+      "reason": "source_registry_failure_preserved",
+      "batch": {
+        "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-source-resumed.json",
+        "state": "failed",
+        "journal_frozen": true,
+        "source_tool_sha256": "80d6d7241cf64b92453329a62b28e6edbbd33409bea7765ec74464c90daa97cb",
+        "parent_sha256": "9c953e824afb0548e8547911ca386008cc5f8e5e03da7871ea5eec95083a9415",
+        "fresh_cleanup_proof_sha256": "efbbae5234528e89931fcf51e1bf923daa0d9cfdc712c65a2c4dfdf5dc032ac1",
+        "single_source_retry": true,
+        "app_id": "fad0b104e09c46cda59469248ab20605",
+        "deployment_id": "675d259a09dd43e8bdb9906210cd65f3",
+        "version_id": "d71f48582f404ea098f15a5e84693534",
+        "prepare_operation_id": "07b872e0d07441f7a333941560727bba",
+        "previous_positive_cases": [
+          "python_bundle_v1_v2",
+          "node_bundle_v1_v2",
+          "static_bundle_v1_v2"
+        ],
+        "current_case": "python_source_v1",
+        "remaining": [
+          "source_v2",
+          "full_image_v1_v2",
+          "missing_dependency",
+          "offline_data",
+          "fault_upgrade"
+        ],
+        "auto_cleanup": false,
+        "journal_sha256": "12231d57220e4f5343f2db67c0fa988382f34a33d62ba14f28c7739ac692e100",
+        "failure_reason": "oci_registry_operation_failed",
+        "failure_stage": "precheck_build",
+        "normal_cleanup_proof_sha256": "55db28c0b554c8e4c0dfeca61fff76f996471f87cd5f5cfc1f1dca6484f6b7f8"
+      }
     }
   ],
   "first_python_online": {
@@ -806,23 +840,22 @@
     "boundary": "new independent stop/resume; not rewriting original failed cycle"
   },
   "current_business_batch": {
-    "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-source-resumed.json",
-    "state": "failed",
-    "journal_frozen": true,
-    "source_tool_sha256": "80d6d7241cf64b92453329a62b28e6edbbd33409bea7765ec74464c90daa97cb",
-    "parent_sha256": "9c953e824afb0548e8547911ca386008cc5f8e5e03da7871ea5eec95083a9415",
-    "fresh_cleanup_proof_sha256": "efbbae5234528e89931fcf51e1bf923daa0d9cfdc712c65a2c4dfdf5dc032ac1",
-    "single_source_retry": true,
+    "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-source-registry-resumed.json",
+    "state": "running",
+    "journal_frozen": false,
+    "tool_sha256": "3e8b0728030eb0e6f5509c77ad1f116b7198c862960765d205b8d0635b4fdef4",
+    "parent_sha256": "12231d57220e4f5343f2db67c0fa988382f34a33d62ba14f28c7739ac692e100",
     "app_id": "fad0b104e09c46cda59469248ab20605",
-    "deployment_id": "675d259a09dd43e8bdb9906210cd65f3",
-    "version_id": "d71f48582f404ea098f15a5e84693534",
-    "prepare_operation_id": "07b872e0d07441f7a333941560727bba",
+    "deployment_id": "afaaff456f46430a95659bd7de7e2ceb",
+    "version_id": "818d435bba5c4902be4c16ff879c87fb",
+    "prepare_operation_id": "13c9c01e925f4c42947b49e18be35802",
+    "current_case": "source_v2",
     "previous_positive_cases": [
       "python_bundle_v1_v2",
       "node_bundle_v1_v2",
-      "static_bundle_v1_v2"
+      "static_bundle_v1_v2",
+      "source_v1_and_stop_resume"
     ],
-    "current_case": "python_source_v1",
     "remaining": [
       "source_v2",
       "full_image_v1_v2",
@@ -830,11 +863,7 @@
       "offline_data",
       "fault_upgrade"
     ],
-    "auto_cleanup": false,
-    "journal_sha256": "12231d57220e4f5343f2db67c0fa988382f34a33d62ba14f28c7739ac692e100",
-    "failure_reason": "oci_registry_operation_failed",
-    "failure_stage": "precheck_build",
-    "normal_cleanup_proof_sha256": "55db28c0b554c8e4c0dfeca61fff76f996471f87cd5f5cfc1f1dca6484f6b7f8"
+    "auto_cleanup": false
   },
   "python_node_v2_passed": {
     "runtime_source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
@@ -1080,5 +1109,59 @@
       "tool_sha256": "3e8b0728030eb0e6f5509c77ad1f116b7198c862960765d205b8d0635b4fdef4"
     },
     "installation_probe_gap": "registry-push previously ran crane externally; same-selector upstream TCP check added in T254/T255"
+  },
+  "source_v1_passed": {
+    "app_id": "fad0b104e09c46cda59469248ab20605",
+    "deployment_id": "dd3d5b5533aa459eb9cff9d7d3685fd8",
+    "version_id": "60ebc5e1230942cb975be94de9fab954",
+    "prepare_operation_id": "f278274b3e924d808ec6f3903a3fa7a9",
+    "prepare_result": "completed/cleanupcomplete",
+    "preview_and_approval": "passed",
+    "publish": "passed",
+    "http_and_websocket": "passed",
+    "owner_boundaries": "passed",
+    "stop_resume": "passed",
+    "oci_lineage": {
+      "application_layer_digest": "sha256:05f2352facb96062c46a6b24d49013f88de79076fb208c6837e4fc483e7524f0",
+      "base_image": "192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
+      "base_layer_count": 10,
+      "cmd": [
+        "python",
+        "main.py"
+      ],
+      "cmd_matches_frozen_startup": true,
+      "config_digest": "sha256:b0a5df71c119c602e4c551413524af2b437785b49da0b4cbe120442e49924279",
+      "entrypoint": [
+        "/usr/local/bin/bisheng-app-entrypoint"
+      ],
+      "exact_base_layer_prefix": true,
+      "observed_at": 1792708539.2156847,
+      "profile_revision": 2,
+      "proof_scope": "immutable-registry-manifest-and-config; workload identity separate",
+      "schema": "f059-source-oci-lineage/v1",
+      "source_image": "192.168.106.189:5443/f059/apps@sha256:d95ed14789fbb261fa479c1a4c2c06b8d9d47ea113fdcc88d1183e65f0d45074",
+      "tls_and_hostname_verification": true,
+      "user": "10001:10001",
+      "workdir": "/app"
+    },
+    "oci_lineage_sha256": "b55761d153e65350cf5e0b9e8c44d66717b90177cefb12d957026663355b7695",
+    "running_identity": {
+      "app_id": "fad0b104e09c46cda59469248ab20605",
+      "container_id": "docker://c7cd51e2344d2d3d950395766d09e336c1fcc10a5d0b1b502105c42701d6c451",
+      "cri_image_id": "docker-pullable://192.168.106.189:5443/f059/apps@sha256:d95ed14789fbb261fa479c1a4c2c06b8d9d47ea113fdcc88d1183e65f0d45074",
+      "deleting": false,
+      "docker_config_id": "sha256:b0a5df71c119c602e4c551413524af2b437785b49da0b4cbe120442e49924279",
+      "immutable_oci_lineage_sha256": "b55761d153e65350cf5e0b9e8c44d66717b90177cefb12d957026663355b7695",
+      "namespace": "e2e-f059-apps",
+      "observed_at": 1792708800.093023,
+      "phase": "Running",
+      "pod_name": "app-1eaef29a6764649b429a9f2a90aea27e4afd7752",
+      "pod_uid": "058c99b2-cf64-4227-94ad-111e450f06dc",
+      "ready": true,
+      "schema": "f059-source-running-image/v1",
+      "source_image": "192.168.106.189:5443/f059/apps@sha256:d95ed14789fbb261fa479c1a4c2c06b8d9d47ea113fdcc88d1183e65f0d45074",
+      "version_id": "60ebc5e1230942cb975be94de9fab954"
+    },
+    "running_identity_sha256": "74a246285a7f1c82545479fcb8e60787cb9970503386bf22cb76f59ffd0c42bd"
   }
 }

@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成248/253，T254/T255安装探测补强已合流。运行镜像保持0d5固定digest，完整runtime1628/13skip；backend保持6f，既有1764/19skip。189现为Helm27/epoch21，Python、Node、static应用包均完成v1/v2及停用恢复，Python另通过SDK/OBO、附件与SQLite。第二source-image真实失败已定位为仓库Docker5443→5000的Calico DNAT出站配置缺口，配对确认并修正；源码/完整镜像、离线编辑导出及故障升级仍待续办。旧r4保持安全围栏，不能卸载主安装域。新ARM、109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
+**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成248/253，T254/T255安装探测补强已合流。运行镜像保持0d5固定digest，完整runtime1628/13skip；backend保持6f，既有1764/19skip。189现为Helm27/epoch21，Python、Node、static应用包均完成v1/v2及停用恢复，Python另通过SDK/OBO、附件与SQLite。第二source-image真实失败已定位为仓库Docker5443→5000的Calico DNAT出站配置缺口，配对确认并修正；源码首版已通过真实推送、预览审批、HTTP/WS及停用恢复，第二版执行中；完整镜像、离线编辑导出及故障升级仍待续办。旧r4保持安全围栏，不能卸载主安装域。新ARM、109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
 
 ### 4.2 拟实施拓扑与流程
 

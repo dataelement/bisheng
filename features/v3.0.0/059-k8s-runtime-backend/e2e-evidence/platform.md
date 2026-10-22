@@ -139,3 +139,11 @@ prepare `07b872e0d07441f7a333941560727bba` 的inputs/resolve/install/upload全�
 真实egress Pod到189:5443原超时3.008秒；临时仅对egress selector及专用仓库IP放行DNAT后5000端口，0.008秒连接；撤销该策略又超时3.011秒。诊断SHA `5c0f8b1033b223b7a6c75e762f9bbdc3d21a3d063b8c5ff9f37679e34f63b52f`。Helm27仅在network.egressPorts增加5000；既有镜像、profile、descriptor及报告不变，不声称重新完成能力探测。修复receipt SHA `bdf01d29a962f0ed0733ef1d275ccb2be9e9883b511fe4025a736419f0ca4a3b`；真实egress公共CA及主机名校验开启，仓库/v2/返回200，TLS证据SHA `873961a7cd15539963d839e981edb17ee8d9cc719c22493569ea9df1d46ff288`。
 
 安装探测原registry-push由外部installer执行crane，网络项仅验证Pod能到proxy3128；T254/T255补同策略canary上游TCP，控制canary保持NotReady避免进入业务Service。TCP、外部TLS/权限和实际assembler推送分别记证据。ARM、109、公开发行继续暂缓；下一次源码发布必须新独立journal/一次POST，原两次失败保持。
+
+## source-image首版真实闭环与版本更新
+
+第三次独立明确提交 `dd3d5b5533aa459eb9cff9d7d3685fd8` / v1 `60ebc5e1230942cb975be94de9fab954`：prepare `f278274b3e924d808ec6f3903a3fa7a9` completed/cleanupcomplete，随后预检、预览审批、正式上线、HTTP/WebSocket允许及拒绝、owner管理边界、独立停用恢复全部真实通过。原两失败及其journal保持；只对新一次POST记通过。
+
+实际产物`f059/apps@sha256:d95ed14789fbb261fa479c1a4c2c06b8d9d47ea113fdcc88d1183e65f0d45074`经CA/主机名校验只读读取manifest/config：保留冻结b632基础10层，仅追加一层；入口、User10001:10001、workdir及显式Cmd[python,main.py]均符合本次冻结startup。lineage SHA `b55761d153e65350cf5e0b9e8c44d66717b90177cefb12d957026663355b7695`。恢复后生产Pod UID `058c99b2-cf64-4227-94ad-111e450f06dc`实际Running/Ready且无删除标记，CRI manifest与Docker config b0a5df71…均一致；identity SHA `74a246285a7f1c82545479fcb8e60787cb9970503386bf22cb76f59ffd0c42bd`。不将显式startup误作缺省Cmd。
+
+第二版已受理`afaaff456f46430a95659bd7de7e2ceb` / `818d435bba5c4902be4c16ff879c87fb`，prepare13c9c01e…进行中。完整镜像/缺依赖/离线数据/故障门未完成，当前成功父journal尚未冻结；不执行依赖成功父的工具。安装器dedc新真实探测等该业务自然结束后串行执行。
