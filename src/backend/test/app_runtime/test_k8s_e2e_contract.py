@@ -1,6 +1,6 @@
 """Offline harness contracts only; no assertion here proves a live deployment.
 
-覆盖 AC: AC-01, AC-30, AC-32, AC-35, AC-36, AC-55, AC-56
+覆盖 AC: AC-01, AC-24, AC-25, AC-28, AC-30, AC-32, AC-33, AC-35, AC-36, AC-49, AC-55, AC-56
 """
 
 from __future__ import annotations
@@ -1062,7 +1062,9 @@ def test_fault_cli_restore_partial_evidence_is_not_printed_as_full_pass(monkeypa
     assert "PARTIAL" in output and "PASS" not in output
 
 
-@pytest.mark.parametrize("failure", [None, "unreadable", "backend", "ledger", "empty-checks", "executor", "runtimes", "protocol"])
+@pytest.mark.parametrize(
+    "failure", [None, "unreadable", "backend", "ledger", "empty-checks", "executor", "runtimes", "protocol"]
+)
 async def test_docker_installation_checks_real_legacy_diagnostics_without_k8s_fields(tmp_path, failure):
     """AC-01, AC-30, AC-32, AC-55: Docker keeps its existing response; no readiness bypass."""
     from test.e2e.helpers.vibe_runtime import LiveVibeSuite
@@ -1272,3 +1274,124 @@ async def test_cycle_rejects_changed_resume_identity_or_serving_version(cycle_su
         await suite.cycle(scenario)
     assert state.row_reads == [("online", 0)]
     assert not suite.journal.document["events"]
+
+
+@pytest.fixture
+def request_budget_suite(tmp_path):
+    """Exercise the shared HTTPX caller without reaching a live platform."""
+    import httpx
+
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    def create(handler, *, budget=600):
+        settings = SuiteSettings("e2e-f059-tenant", (), timeout=budget)
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler), timeout=75, trust_env=False)
+        suite = LiveVibeSuite(
+            settings, EvidenceJournal(tmp_path / "budget.json", tenant_code=settings.tenant_code), client
+        )
+        suite.tokens = dict.fromkeys(("OWNER", "NONOWNER", "FOREIGN", "APPROVER", "ADMIN"), "fixture")
+        return suite
+
+    return create
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "role"),
+    [
+        ("POST", "/apps/app-1/versions/version-1/preview", "APPROVER"),
+        ("POST", "/apps/app-1/actions/stop", "OWNER"),
+        ("POST", "/apps/app-1/actions/resume", "OWNER"),
+        ("DELETE", "/apps/app-1", "OWNER"),
+    ],
+)
+async def test_synchronous_runtime_requests_use_bounded_suite_budget(request_budget_suite, method, path, role):
+    """AC-24, AC-25, AC-28, AC-33, AC-36, AC-49, AC-55: sync work can outlive the generic 75-second read limit."""
+    import httpx
+
+    seen = []
+
+    async def handler(request):
+        seen.append(request.extensions["timeout"])
+        return httpx.Response(200, json={"status_code": 200, "status_message": "success", "data": {"ok": True}})
+
+    suite = request_budget_suite(handler)
+    async with suite.client:
+        assert await suite.request(method, path, role=role) == {"ok": True}
+    assert seen == [{"connect": 15, "read": 600, "write": 15, "pool": 15}]
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "role", "expected_code", "http_status"),
+    [
+        ("GET", "/apps/app-1", "OWNER", None, 200),
+        ("POST", "/apps/app-1/runtime/restore", "OWNER", None, 202),
+        ("DELETE", "/apps/app-1/versions/version-1/preview/session-1", "APPROVER", None, 200),
+        ("POST", "/apps/app-1/versions/version-1/preview", "NONOWNER", 16264, 200),
+        ("POST", "/apps/app-1/actions/stop", "NONOWNER", 16106, 200),
+        ("POST", "/apps/app-1/actions/resume", "NONOWNER", 16106, 200),
+        ("DELETE", "/apps/app-1", "FOREIGN", 16105, 200),
+        ("POST", "/apps/app-1/actions/resume/extra", "OWNER", None, 200),
+        ("POST", "/apps/app-1/versions/version-1/preview/extra", "APPROVER", None, 200),
+        ("DELETE", "/apps/app-1/runtime", "OWNER", None, 200),
+        ("POST", "/apps/app-1/actions/resume?extra=1", "OWNER", None, 200),
+        ("POST", "/apps/app-1/actions/resume", "ADMIN", None, 200),
+        ("POST", "/apps/app-1/actions/resume", "NONOWNER", None, 200),
+    ],
+)
+async def test_other_requests_and_denial_pairs_keep_short_client_timeout(
+    request_budget_suite, method, path, role, expected_code, http_status
+):
+    """AC-28, AC-33, AC-35, AC-55: asynchronous work and exact denials keep their original budget."""
+    import httpx
+
+    seen = []
+    body = {"status_code": expected_code or 200, "status_message": "fixture", "data": {"operation_id": "op-1"}}
+
+    async def handler(request):
+        seen.append(request.extensions["timeout"])
+        return httpx.Response(http_status, json=body)
+
+    suite = request_budget_suite(handler)
+    async with suite.client:
+        result = await suite.request(method, path, role=role, expected_code=expected_code)
+    assert result == (body if expected_code is not None else body["data"])
+    assert seen == [{"connect": 75, "read": 75, "write": 75, "pool": 75}]
+
+
+async def test_synchronous_request_total_budget_cancels_once_without_retry(request_budget_suite):
+    """AC-24, AC-25, AC-28, AC-33, AC-36, AC-49, AC-55: total budget bounds a stuck request; an unknown POST is never replayed."""
+    import asyncio
+
+    calls, cancelled = [], []
+
+    async def handler(request):
+        calls.append((request.method, request.url.path))
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.append(True)
+
+    # Direct construction scales the clock only; live from_env still enforces 30..1800 seconds.
+    suite = request_budget_suite(handler, budget=0.02)
+    async with suite.client, asyncio.timeout(0.3):
+        with pytest.raises(TimeoutError):
+            await suite.request("POST", "/apps/app-1/actions/resume")
+    assert calls == [("POST", "/api/v1/apps/app-1/actions/resume")]
+    assert cancelled == [True]
+
+
+async def test_synchronous_request_budget_preserves_exact_business_failure(request_budget_suite):
+    """AC-28, AC-55: a larger read budget never converts a business refusal into success or a retry."""
+    import httpx
+
+    calls = []
+
+    async def handler(request):
+        calls.append(request.method)
+        return httpx.Response(200, json={"status_code": 16228, "status_message": "fixture", "data": None})
+
+    suite = request_budget_suite(handler)
+    async with suite.client:
+        with pytest.raises(AssertionError, match="Business error 16228"):
+            await suite.request("POST", "/apps/app-1/versions/version-1/preview", role="APPROVER")
+    assert calls == ["POST"]

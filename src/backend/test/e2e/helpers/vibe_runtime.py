@@ -243,7 +243,26 @@ class LiveVibeSuite:
 
     async def request(self, method, path, *, role="OWNER", expected_code=None, **kwargs):
         url = API_BASE.rstrip("/") + path
-        response = await self.client.request(method, url, headers=auth_headers(self.tokens[role]), **kwargs)
+        synchronous_runtime = (
+            expected_code is None
+            and role in {"OWNER", "APPROVER"}
+            and (
+                (
+                    method == "POST"
+                    and re.fullmatch(r"/apps/[^/?#]+/(?:versions/[^/?#]+/preview|actions/(?:stop|resume))", path)
+                )
+                or (method == "DELETE" and re.fullmatch(r"/apps/[^/?#]+", path))
+            )
+        )
+        if synchronous_runtime:
+            # These APIs wait for runtime work; keep both request phases and the whole call bounded.
+            budget = self.settings.timeout
+            short = min(15.0, budget)
+            kwargs["timeout"] = httpx.Timeout(connect=short, read=budget, write=short, pool=short)
+            async with asyncio.timeout(budget):
+                response = await self.client.request(method, url, headers=auth_headers(self.tokens[role]), **kwargs)
+        else:
+            response = await self.client.request(method, url, headers=auth_headers(self.tokens[role]), **kwargs)
         body = response.json()
         assert {"status_code", "status_message", "data"} <= body.keys(), "missing platform response envelope"
         if expected_code is not None:
