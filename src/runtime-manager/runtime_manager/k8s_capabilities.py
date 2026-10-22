@@ -140,7 +140,8 @@ def network_checks(plan):
     results = []
     for target in plan["targets"]:
         if (
-            set(target) != {"name", "host", "port", "expected"}
+            set(target) - {"name", "host", "port", "expected", "protocol"}
+            or not {"name", "host", "port", "expected"} <= set(target)
             or not _REASON.fullmatch(target["name"])
             or target["expected"] not in {"allowed", "denied"}
         ):
@@ -148,8 +149,31 @@ def network_checks(plan):
         if type(target["port"]) is not int or not 1 <= target["port"] <= 65535:
             raise ValueError("probe_network_port_invalid")
         try:
-            with socket.create_connection((target["host"], target["port"]), timeout=1):
-                reason, reached = "connected", True
+            if target.get("protocol", "tcp") == "udp-dns":
+                import os
+                import struct
+
+                ident = os.urandom(2)
+                query = (
+                    ident
+                    + struct.pack("!HHHHH", 0x0100, 1, 0, 0, 0)
+                    + b"\x0akubernetes\x07default\x03svc\x00"
+                    + struct.pack("!HH", 1, 1)
+                )
+                family = socket.AF_INET6 if ":" in target["host"] else socket.AF_INET
+                with socket.socket(family, socket.SOCK_DGRAM) as dns:
+                    dns.settimeout(1)
+                    dns.connect((target["host"], target["port"]))
+                    dns.send(query)
+                    response = dns.recv(4096)
+                    if len(response) < 12 or response[:2] != ident or not response[2] & 0x80:
+                        raise OSError("probe_dns_response_invalid")
+                reason, reached = "dns_response", True
+            elif target.get("protocol", "tcp") == "tcp":
+                with socket.create_connection((target["host"], target["port"]), timeout=1):
+                    reason, reached = "connected", True
+            else:
+                raise ValueError("probe_network_protocol_invalid")
         except TimeoutError:
             reason, reached = "timeout", False
         except OSError:
@@ -223,6 +247,25 @@ def main():
         result = network_checks(json.loads(os.environ["CAPABILITY_PLAN"]))
     elif action == "storage":
         result = storage_checks("/probe-volume")
+    elif action == "idle":
+        import signal
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from threading import Thread
+
+        class Health(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200 if self.path == "/healthz" else 404)
+                self.end_headers()
+                self.wfile.write(b'{"status":"ok"}')
+
+            def log_message(self, *_args):
+                return
+
+        servers = [ThreadingHTTPServer(("0.0.0.0", port), Health) for port in (8080, 8092)]
+        for server in servers:
+            Thread(target=server.serve_forever, daemon=True).start()
+        signal.pause()
+        return
     else:
         raise ValueError("probe_action_invalid")
     print("BISHENG_RUNTIME_RESULT " + json.dumps(result, sort_keys=True, separators=(",", ":")), flush=True)

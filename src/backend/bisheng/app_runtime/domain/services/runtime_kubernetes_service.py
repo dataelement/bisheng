@@ -14,7 +14,12 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from uuid import UUID
 
-from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeAssignment, RuntimeNode, RuntimeOperation
+from bisheng.app_runtime.domain.models.runtime_delivery import (
+    RuntimeAssignment,
+    RuntimeExecutionFact,
+    RuntimeNode,
+    RuntimeOperation,
+)
 from bisheng.app_runtime.domain.models.runtime_kubernetes import RuntimeExecutionResource
 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import MUTATING, TERMINAL, RuntimeConflict
 from bisheng.app_runtime.domain.repositories.runtime_kubernetes_repository import RuntimeKubernetesRepository
@@ -23,7 +28,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_s
 
 _PREFIX = "runtime.bisheng.io/"
 _FINALIZER = _PREFIX + "stop-confirmed"
-_PRODUCTION = {"serve", "migrate", "restore", "data"}
+_PRODUCTION = {"serve", "migrate", "restore", "data", "purge"}
 _KINDS = {"Pod", "Service", "PersistentVolumeClaim", "Secret"}
 _PURPOSES = {
     "prepare": {"prepare-download", "prepare-install", "prepare-upload", "assemble"},
@@ -33,6 +38,7 @@ _PURPOSES = {
     "migrate": {"migrate"},
     "restore": {"restore"},
     "data": {"data"},
+    "destroy": {"purge"},
 }
 _NAME = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _DIGEST = re.compile(r"[a-f0-9]{64}")
@@ -213,6 +219,8 @@ class RuntimeKubernetesService:
             raise RuntimeConflict("resource_kind_or_purpose_refused")
         if (body["cluster_id"], body["namespace"]) != tuple(domain):
             raise RuntimeConflict("resource_execution_domain_refused")
+        if purpose == "purge" and op.payload.get("purge_volume") is not True:
+            raise RuntimeConflict("purge_operation_refused")
         meta = template.get("metadata", {})
         if (
             not isinstance(meta, dict)
@@ -264,8 +272,20 @@ class RuntimeKubernetesService:
         image = delivery.get("image_ref") or delivery.get("image") or profile.get("runtime_image")
         helper = (node.capabilities or {}).get("helper_image")
         assembler = (node.capabilities or {}).get("assembler_image") if purpose == "assemble" else None
-        available = {value for value in (image, helper, assembler, profile.get("preparer_image")) if isinstance(value, str)}
+        available = {
+            value for value in (image, helper, assembler, profile.get("preparer_image")) if isinstance(value, str)
+        }
         trusted = {"transfer", "data-layout", "schema-init", "material-fetch", "data-helper", "maintenance"}
+        claims = [
+            volume.get("persistentVolumeClaim", {}).get("claimName")
+            for volume in spec.get("volumes", [])
+            if "persistentVolumeClaim" in volume
+        ]
+        expected_claim = "data-" + _hash(op.app_id)
+        if purpose == "purge" and (
+            claims != [expected_claim] or any("secret" in volume for volume in spec.get("volumes", []))
+        ):
+            raise RuntimeConflict("purge_volume_scope_refused")
         containers = [*spec.get("containers", []), *spec.get("initContainers", [])]
         if not containers:
             raise RuntimeConflict("resource_pod_containers_required")
@@ -457,6 +477,26 @@ class RuntimeKubernetesService:
             ):
                 writers = await self.repo.find(RuntimeExecutionResource, operation_id=op.id, kind="Pod")
                 deletable = bool(writers) and all(writer.stop_state == "confirmed" for writer in writers)
+            if row.kind == "PersistentVolumeClaim" and row.stop_evidence.get("cleanup_operation_id"):
+                cleanup_op = await self.repo.get(RuntimeOperation, row.stop_evidence["cleanup_operation_id"])
+                if cleanup_op and (cleanup_op.app_id, cleanup_op.node_id) == (row.app_id, row.node_id):
+                    facts = await self.repo.find(RuntimeExecutionFact, operation_id=cleanup_op.id)
+                    result = max(facts, key=lambda item: item.sequence).detail if facts else {}
+                    proof = result.get("maintenance_progress", {}).get("purge", {}).get("result", {})
+                    writers = await self.repo.find(RuntimeExecutionResource, app_id=row.app_id, kind="Pod")
+                    deletable = bool(
+                        cleanup_op.kind == "destroy"
+                        and cleanup_op.payload.get("purge_volume") is True
+                        and await self._active(cleanup_op, now)
+                        and proof.get("purged") is True
+                        and any(
+                            writer.purpose == "purge" and writer.operation_id == cleanup_op.id for writer in writers
+                        )
+                        and all(
+                            writer.stop_state == "confirmed" and writer.cleanup_state == "complete"
+                            for writer in writers
+                        )
+                    )
             return {
                 "resource_ref": row.id,
                 "namespace": row.namespace,

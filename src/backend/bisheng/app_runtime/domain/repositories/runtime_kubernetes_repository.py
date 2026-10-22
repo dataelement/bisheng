@@ -22,7 +22,7 @@ from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import 
     check_scope,
 )
 
-_PRODUCTION = {"serve", "migrate", "restore", "data"}
+_PRODUCTION = {"serve", "migrate", "restore", "data", "purge"}
 _INTENT_FIELDS = (
     "tenant_id",
     "app_id",
@@ -229,7 +229,13 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
             # Lock the acting operation before the node to avoid an inversion with admission.
             await self.get(RuntimeOperation, operation_id, lock=True)
             row, _ = await self._resource_control(resource_id, holder_id, controller_epoch, now)
-            await self._acting_operation(row, operation_id, now, allow_own_cleanup=True)
+            acting = await self._acting_operation(row, operation_id, now, allow_own_cleanup=True)
+            if (
+                row.kind == "PersistentVolumeClaim"
+                and acting.kind == "destroy"
+                and acting.payload.get("purge_volume") is True
+            ):
+                row.stop_evidence = {**row.stop_evidence, "cleanup_operation_id": acting.id}
             # Refresh only the cleanup authority, never the writer's stop evidence.
             row.controller_epoch = controller_epoch
             if row.stop_requested_at is None:
