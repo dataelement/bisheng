@@ -7,19 +7,19 @@
     "design_confirmed": true,
     "tasks_review": "LGTM",
     "l1_completed": 234,
-    "tasks_total": 239,
+    "tasks_total": 241,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "source_commit": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
-      "passed": 1532,
+      "source_commit": "33a57c179ec393ae652d4f4330a886b47bc01472",
+      "passed": 1541,
       "skipped": 13,
-      "seconds": 32.72,
+      "seconds": 34.5,
       "exit_code": 0,
-      "log": "/private/tmp/f059-maintenance-uid-full-runtime.log",
-      "scope": "Full integrated runtime; no new backend/helper/ARM claim"
+      "log": "/private/tmp/f059-closed-history-full-runtime.log",
+      "scope": "Full runtime after closed historical Pod stop guard; expired stop cleanup fix pending"
     },
     "backend": {
       "source_commit": "d13e9ee91a1014d576d11def1eff9cba21f4c927",

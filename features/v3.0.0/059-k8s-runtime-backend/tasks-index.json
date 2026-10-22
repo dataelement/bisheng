@@ -6052,6 +6052,56 @@
       "review": "PASS"
     },
     {
+      "id": "T240",
+      "wave": 9,
+      "kind": "测试",
+      "title": "过期停用清理闭环配对",
+      "files": [
+        "src/runtime-manager/tests/test_operations_v2.py"
+      ],
+      "logic": "expired stop不得以自身空资源报app已停止；先timed_out/pending持久回执，再仅同归属旧terminal操作own cleanup；响应未知、换代、换UID、未知writer拒绝，重启可续且首因保留。",
+      "acs": [
+        "AC-35",
+        "AC-36",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T239"
+      ],
+      "pair": "T241",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T241",
+      "wave": 9,
+      "kind": "实现",
+      "title": "过期停用的有界安全收尾",
+      "files": [
+        "src/runtime-manager/runtime_manager/operations.py"
+      ],
+      "logic": "精确operation_expired且fresh deadline已过才记timeout；终态pending保留active fence，以旧terminal操作原有自身cleanup逐轮收尾，最终全app停止guard仍由backend验证。无新业务动作/期限延长/跨op过期授权。",
+      "acs": [
+        "AC-35",
+        "AC-36",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T240"
+      ],
+      "pair": "T240",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",
