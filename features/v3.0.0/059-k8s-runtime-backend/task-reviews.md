@@ -3322,3 +3322,13 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 **类型**：实现。**文件**：backend两data grant/session服务、manager `k8s_data_executor.py`。七项：架构PASS（Service/Repository及原数据执行边界），命名PASS，序列化PASS（既有响应/票据无改动），数据库/租户PASS（无新模型/DDL/SQL，原锁定操作），前端N/A，信息泄漏PASS，设计同步PASS（4.8、5）。三文件共6行生产增量，属同一跨进程取消闸，按文件独占并作原子修复；依赖/配对T230先通过、范围PASS。未把取消请求当停止证明；active=False清理仍可执行，已在途unknown/原窗口及互斥保留。完整backend1734/19skip和runtime1483/13skip通过，静态检查通过。
 **结果：PASS**。源469175f19857bbd8021814da7164f21bc97f49ec；原L1 `/private/tmp/f059-t230-t231-l1.md`。当前226/231、105测试任务；仍待189业务、故障升级、正式发行和L2。
+
+## Task Review: T232 — 终态finalizer移除后kubelet删除配对
+
+**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_admission.py`。命名与完整AC-35、AC-48、AC-49、AC-52、AC-55标注PASS；前端N/A，其余按测试子集N/A；依赖T229已完成，范围与配对T233 PASS。有效终态Succeeded/Failed×finalizers省略/空列表先红4；原203通过。修复后准入208、邻接585通过；同policy与真实AdmissionPlanClient连续二次fresh读取、撤权即拒绝配对已覆盖。
+**结果：PASS**。原红绿与L1 `/private/tmp/f059-t233-l1-review.md`；无真实集群成功结论。
+
+## Task Review: T233 — 终态Pod正常删除准入收尾
+
+**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`。架构PASS（原AdmissionPolicy与现有后端计划Owner），命名PASS，序列化PASS（原plan字段/API形状），数据库/租户PASS（无DDL、SQL或租户边界变更），前端N/A，信息泄漏PASS，设计同步PASS（终态清理及修订记录）。依赖/配对T232与单文件范围PASS。无finalizer分支仅绑定kubelet严格DELETE0、同UID保护终态、fresh精确plan stop_state=confirmed/stop_confirmed is True/allow_delete is True；API不确定拒绝，无缓存或进程级通行位。原STOP路径不读后端，manager强删限制不变。合流全runtime1519/13skip通过，Ruff/format/guard通过。
+**结果：PASS**。源1bd926bb2a37bc3d95a31920c2ae38be08e9ea6f；不手工删Pod/改finalizer/改SQL/复活终态。r8自然清理复验另记T069/T070。

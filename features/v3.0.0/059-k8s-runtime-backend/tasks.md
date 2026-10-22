@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；233 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 226 / 233 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；235 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 228 / 235 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1832,7 +1832,7 @@
   **依赖:** T230
   **配对:** T230
 
-- [ ] **T232** — 终态finalizer移除后kubelet删除配对
+- [x] **T232** — 终态finalizer移除后kubelet删除配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_admission.py`
   **逻辑/验收**：原带finalizer路径保持；无finalizer仅fresh同scope/UID已持久停止证明允许绑定kubelet DELETE0；缺失/伪造/过期/换UID拒绝。
@@ -1840,13 +1840,29 @@
   **依赖:** T229
   **配对:** T233
 
-- [ ] **T233** — 终态Pod正常删除准入收尾
+- [x] **T233** — 终态Pod正常删除准入收尾
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`
   **逻辑/验收**：修正SQL停止已确认且平台finalizer已移除后kubelet收尾被误拒；不放宽manager force-delete或未知写入者释放。
   **覆盖 AC:** AC-35、AC-48、AC-49、AC-52、AC-55
   **依赖:** T232
   **配对:** T232
+
+- [ ] **T234** — 同步业务E2E请求预算配对
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+  **逻辑/验收**：成功授权的精确同步preview/stop/resume/delete使用settings预算，其他请求仍短截止；总预算取消且POST仅一次，不重试未知结果。
+  **覆盖 AC:** AC-24、AC-25、AC-28、AC-33、AC-36、AC-49、AC-55
+  **依赖:** T233
+  **配对:** T235
+
+- [ ] **T235** — 共享E2E同步请求期限适配
+  **类型**：实现
+  **文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`
+  **逻辑/验收**：共享helper只为精确同步成功调用覆盖read预算并限制总耗时，连接/写入/pool短而有界；不改产品操作期限、拒绝断言、普通GET或restore202合同。
+  **覆盖 AC:** AC-24、AC-25、AC-28、AC-33、AC-36、AC-49、AC-55
+  **依赖:** T234
+  **配对:** T234
 
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
@@ -1983,3 +1999,5 @@ T225–T227开发收尾：当前222/227完成（103测试任务）；主树runti
 T228–T231合流：来源a1de5271f5f00cef0cba06d41f09c673a9190525，runtime1483passed/13skip（32.30s），backend app_runtime/app_publish1734passed/19skip（48.25s）；两个模块Ruff/format及逐文件架构守卫通过。当前226/231、105测试任务，余五项保持验收/发行/L2门，不声明业务上线已通过。ARM暂缓。
 
 2026-10-23 T232/T233：r8的4init合计96秒后probe appReady真实通过。当前同UID8c83f28c…已kubelet_terminal/stopconfirmed，finalizers缺省但deletionGracePeriodSeconds仍30，Pod仍存在。现有kubelet终态DELETE准入要求STOP finalizer尚在，形成移除finalizer后误拒。按同UID持久停止证明补窄分支，原操作未终态，期望修复后自然对账，不人工清理或复活。
+
+T232/T233本地L1完成：1bd926bb2两文件先红4/203绿后准入208与邻接585通过；合流b5d243f0a全runtime1519passed/13skip（32.78s）。首次默认沙箱30fail/11error均为localhost绑定、setuid权限受限，授权重跑通过，原日志保留。r8原操作随后timed_out，未复活；清理修复后只让终态正常对账。新增T234/T235校正E2E75秒请求预算，产品持久期限不变。当前228/235、107测试任务；ARM暂停。

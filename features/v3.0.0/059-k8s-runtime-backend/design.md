@@ -761,3 +761,7 @@ Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。
 2026-10-23 T230/T231：真实owner取消服务已写payload标志，但签发事务/ready等待/manager数据RPC未拒绝仍active的取消会话；本地真实SQL与Ed25519红例已复现。按原取消合同拒绝新票及新动作，已开始动作仍保留unknown与互斥/停止证明，active=False收尾不受此新动作闸阻断。无新增API/模型。
 
 2026-10-23 T232/T233：r8启动阶段真实通过（4init96秒+Ready）；终态SQL证据确认后finalizer已移除，而grace30残留需kubelet DELETE0完成。原准入终态helper要求finalizer尚在，导致收尾重试拒绝。仅为已去finalizer分支增加fresh backend同UID/scope stopconfirmed+allowdelete证明；原本地带finalizer路径与manager删除闸不变。K8s1.28.15 store.go ShouldDeleteDuringUpdate仅grace0/nil随finalizer移除删除，status_manager.go的kubelet最终DELETE使用grace0和UID前置；对应官方固定源码作为静态依据，不代替189恢复实测。
+
+T232/T233已实现并通过本地L1。固定版本官方依据：[Kubernetes v1.28.15 store.go](https://github.com/kubernetes/kubernetes/blob/v1.28.15/staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go#L443) 的ShouldDeleteDuringUpdate要求旧grace为0/nil才在finalizer清空时直接删除；[status_manager.go](https://github.com/kubernetes/kubernetes/blob/v1.28.15/pkg/kubelet/status/status_manager.go#L828) 的kubelet终态删除使用grace0及UID前置。r8随后原期限timed_out，保留失败并正常清理，不复活原操作。
+
+T234/T235工具适配：preview/resume等待ready、stop/delete等待completed是现有同步产品接口；共享E2E75秒read会早于实测96秒init结束。只对成功授权的精确同步调用采用settings.timeout总预算与read上限，连接/写入/pool短有界；拒绝配对、GET、preview DELETE、restore202不扩大。无重试POST，不改产品operation deadline或nginx/UI。

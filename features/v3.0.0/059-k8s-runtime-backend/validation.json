@@ -1,33 +1,34 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T18:16:33.600506+00:00",
-  "validated_source_commit": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+  "recorded_at": "2026-10-22T18:32:58.117991+00:00",
+  "validated_source_commit": "b5d243f0a757810198789c616eb58d7efd582a2e",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 226,
-    "tasks_total": 233,
+    "l1_completed": 228,
+    "tasks_total": 235,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "source_commit": "a1de5271f5f00cef0cba06d41f09c673a9190525",
-      "passed": 1483,
+      "source_commit": "b5d243f0a757810198789c616eb58d7efd582a2e",
+      "passed": 1519,
       "skipped": 13,
-      "seconds": 32.3,
+      "seconds": 32.78,
       "exit_code": 0,
-      "log": "/private/tmp/f059-final-dev-runtime.log",
-      "scope": "Full integrated runtime suite; no remote or ARM claim"
+      "log": "/private/tmp/f059-terminal-cleanup-full-runtime-authorized.log",
+      "scope": "Full runtime with localhost/temporary-file test permissions; initial sandbox permission failures retained separately. No remote/ARM acceptance claim."
     },
     "backend": {
-      "passed": 1723,
-      "skipped": 18,
+      "passed": 1734,
+      "skipped": 19,
+      "seconds": 48.25,
       "exit_code": 0,
-      "source_commit": "709821ecbe5c653aad3f90358173e0d110bee7e3",
-      "log": "/private/tmp/f059-creation-integrated-backend.log",
-      "scope": "full app_runtime/app_publish including signed creation protocol and lock refresh"
+      "source_commit": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+      "log": "/private/tmp/f059-final-dev-backend.log",
+      "scope": "Full app_runtime/app_publish integrated data cancellation; no subsequent production backend change"
     },
     "public_tenant_fix": {
       "passed": 17,
@@ -895,7 +896,7 @@
       "new_arm_run": false
     },
     "after_finalizer_delete": {
-      "status": "fix_in_progress",
+      "status": "local_fix_passed_remote_pending",
       "operation_id": "cd1ad0fe93584373b9f81d1a7b8f51d7",
       "pod_uid": "8c83f28c-3a6e-460e-8631-fc0242d49c92",
       "probe_ready": true,
@@ -904,7 +905,19 @@
       "evidence_kind": "kubelet_terminal",
       "finalizers": null,
       "deletion_grace_seconds": 30,
-      "manual_delete_or_sql_override": false
+      "manual_delete_or_sql_override": false,
+      "operation_stage": "timed_out",
+      "operation_status": "timed_out",
+      "cleanup_status": "pending",
+      "source_revision": "1bd926bb2a37bc3d95a31920c2ae38be08e9ea6f"
+    },
+    "backend_before_data_cancel": {
+      "passed": 1723,
+      "skipped": 18,
+      "exit_code": 0,
+      "source_commit": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+      "log": "/private/tmp/f059-creation-integrated-backend.log",
+      "scope": "full app_runtime/app_publish including signed creation protocol and lock refresh"
     }
   },
   "not_executed": [

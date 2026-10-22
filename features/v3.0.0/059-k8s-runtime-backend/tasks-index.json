@@ -5868,8 +5868,8 @@
       ],
       "pair": "T233",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T233",
@@ -5891,6 +5891,58 @@
         "T232"
       ],
       "pair": "T232",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T234",
+      "wave": 8,
+      "kind": "测试",
+      "title": "同步业务E2E请求预算配对",
+      "files": [
+        "src/backend/test/app_runtime/test_k8s_e2e_contract.py"
+      ],
+      "logic": "成功授权的精确同步preview/stop/resume/delete使用settings预算，其他请求仍短截止；总预算取消且POST仅一次，不重试未知结果。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-28",
+        "AC-33",
+        "AC-36",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T233"
+      ],
+      "pair": "T235",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T235",
+      "wave": 8,
+      "kind": "实现",
+      "title": "共享E2E同步请求期限适配",
+      "files": [
+        "src/backend/test/e2e/helpers/vibe_runtime.py"
+      ],
+      "logic": "共享helper只为精确同步成功调用覆盖read预算并限制总耗时，连接/写入/pool短而有界；不改产品操作期限、拒绝断言、普通GET或restore202合同。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-28",
+        "AC-33",
+        "AC-36",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T234"
+      ],
+      "pair": "T234",
       "command": "",
       "status": "pending",
       "review": "pending"
