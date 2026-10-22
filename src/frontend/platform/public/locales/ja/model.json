@@ -119,7 +119,8 @@
     "userSelectableModelsHelp": "Chat と Work で選択できるモデルを設定します。表示名は保存後にクライアントへ同期されます。画像対応、クレジット倍率、表示範囲は変更時に個別保存されます。",
     "otherModelSettings": "その他のモデル設定",
     "visibilityScope": "表示範囲",
-    "configureVisibility": "表示範囲を設定"
+    "configureVisibility": "表示範囲を設定",
+    "displayName": "表示名"
   },
   "finetune": {
     "rtServiceManagement": "FTサービス管理",

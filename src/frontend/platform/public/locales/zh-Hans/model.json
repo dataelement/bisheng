@@ -119,7 +119,8 @@
     "userSelectableModelsHelp": "配置用户在 Chat 和 Work 中可选择的模型。显示名称保存后同步到客户端；视觉、积分倍率和可见范围分别即时保存。",
     "otherModelSettings": "其他模型配置",
     "visibilityScope": "可见范围",
-    "configureVisibility": "配置可见范围"
+    "configureVisibility": "配置可见范围",
+    "displayName": "显示名称"
   },
   "finetune": {
     "rtServiceManagement": "FT服务管理",

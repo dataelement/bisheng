@@ -121,7 +121,8 @@
     "userSelectableModelsHelp": "Configure models available in Chat and Work. Save display names to sync them to clients. Vision, credit multipliers and visibility are saved separately when changed.",
     "otherModelSettings": "Other model settings",
     "visibilityScope": "Visibility",
-    "configureVisibility": "Configure visibility"
+    "configureVisibility": "Configure visibility",
+    "displayName": "Display name"
   },
   "finetune": {
     "rtServiceManagement": "FT Service Management",
