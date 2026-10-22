@@ -548,7 +548,14 @@ async def bootstrap(base, suite, output, values, *, profiles, register_first=Fal
         if info.get("is_global_super") or int(current["leaf_tenant_id"]) != tenant["id"]:
             raise BootstrapError("natural_person_tenant_scope_mismatch")
     tenant_id, approver_id = state["tenants"]["OWNER"]["id"], state["users"]["APPROVER"]["id"]
-    await api.request("POST", f"/tenants/{tenant_id}/admins", json={"user_id": approver_id})
+    administrators = await api.request("GET", f"/tenants/{tenant_id}/admins")
+    administrator_ids = administrators.get("user_ids") if isinstance(administrators, dict) else None
+    if not isinstance(administrator_ids, list) or any(
+        type(value) is not int or value < 1 for value in administrator_ids
+    ):
+        raise BootstrapError("tenant_admin_list_invalid")
+    if approver_id not in administrator_ids:
+        await api.request("POST", f"/tenants/{tenant_id}/admins", json={"user_id": approver_id})
     # Refresh login so child-admin status and permission context are fresh.
     await api.login("APPROVER", values["F059_E2E_APPROVER_USERNAME"], values["F059_E2E_APPROVER_PASSWORD"])
     scenario = next(
