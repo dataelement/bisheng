@@ -542,3 +542,78 @@ def test_maintenance_pod_uid_cannot_be_replaced_by_a_caller_literal(plan, purpos
                 helper_env={name: "caller-literal"},
             )
         )
+
+
+@pytest.mark.parametrize("cpu", [25, 100, 250])
+def test_offline_data_helper_and_layout_use_the_frozen_cpu_tier(plan, cpu):
+    """F059 覆盖 AC: AC-33、AC-35、AC-44、AC-48、AC-55."""
+    from runtime_manager.k8s_templates import pod_template
+
+    spec = pod_template(replace(plan, purpose="data", cpu_millicores=cpu, deadline_seconds=60))["spec"]
+    assert [container["name"] for container in spec["initContainers"]] == ["data-layout"]
+    assert [container["name"] for container in spec["containers"]] == ["data-helper"]
+    for container in spec["initContainers"] + spec["containers"]:
+        assert container["resources"]["requests"] == container["resources"]["limits"]
+        assert container["resources"]["limits"]["cpu"] == f"{cpu}m"
+        assert container["resources"]["limits"]["memory"] == "128Mi"
+        assert container["securityContext"]["runAsNonRoot"]
+        assert container["securityContext"]["readOnlyRootFilesystem"]
+        assert not container["securityContext"]["allowPrivilegeEscalation"]
+    # Init and application containers run sequentially: the Pod CPU envelope is
+    # max(init requests, running-container sum), matching the single tier claim.
+    budget = max(
+        int(spec["initContainers"][0]["resources"]["requests"]["cpu"][:-1]),
+        sum(int(container["resources"]["requests"]["cpu"][:-1]) for container in spec["containers"]),
+    )
+    assert budget == cpu and spec["activeDeadlineSeconds"] == 60
+    assert spec["restartPolicy"] == "Never" and spec["automountServiceAccountToken"] is False
+    assert not any(volume["name"] == "material-auth" for volume in spec["volumes"])
+
+
+@pytest.mark.parametrize(
+    "purpose",
+    [
+        "serve",
+        "probe",
+        "preview",
+        "migrate",
+        "restore",
+        "purge",
+        "prepare-download",
+        "prepare-install",
+        "prepare-upload",
+        "assemble",
+    ],
+)
+def test_offline_data_cpu_tier_does_not_change_other_helper_budgets(plan, purpose):
+    """F059 覆盖 AC: AC-33、AC-35、AC-44、AC-48、AC-55."""
+    from runtime_manager.k8s_templates import PREPARATION, PRODUCTION, pod_template
+
+    spec = pod_template(
+        replace(
+            plan,
+            purpose=purpose,
+            cpu_millicores=100,
+            deadline_seconds=None if purpose == "serve" else 60,
+            pvc_name=plan.pvc_name if purpose in PRODUCTION else "",
+            scratch_pvc="scratch-a" if purpose in PREPARATION else "",
+            material_secret="" if purpose == "purge" else plan.material_secret,
+            schema_plan=({"op": "create_table", "table": "items", "columns": []},)
+            if purpose in {"probe", "preview"}
+            else (),
+        )
+    )["spec"]
+    helpers = [
+        container
+        for container in spec["initContainers"] + spec["containers"]
+        if container["name"]
+        in {"data-layout", "schema-init", "material-fetch", "storage-guard", "maintenance", "data-helper"}
+    ]
+    assert helpers
+    for container in helpers:
+        assert container["resources"]["requests"] == container["resources"]["limits"]
+        assert container["resources"]["limits"]["cpu"] == "25m"
+        assert container["resources"]["limits"]["memory"] == "128Mi"
+    primary = [container for container in spec["containers"] if container not in helpers]
+    for container in primary:
+        assert container["resources"]["requests"]["cpu"] == "100m"

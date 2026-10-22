@@ -225,7 +225,7 @@ def _mount(name, path, *, readonly=False, subpath=None):
 
 def _container(plan, name, *, image=None, command=None, mounts=(), helper=False, env=None):
     budget = {
-        "cpu": "25m" if helper else f"{plan.cpu_millicores}m",
+        "cpu": "25m" if helper and plan.purpose != "data" else f"{plan.cpu_millicores}m",
         "memory": "128Mi" if helper else f"{plan.memory_mb}Mi",
         "ephemeral-storage": f"{plan.temporary_mb}Mi",
     }
