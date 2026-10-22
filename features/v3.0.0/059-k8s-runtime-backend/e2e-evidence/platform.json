@@ -987,18 +987,20 @@
   },
   "final_code_candidate": {
     "source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
-    "tasks_complete": 246,
+    "tasks_complete": 248,
     "tasks_total": 253,
-    "runtime_passed": 1610,
+    "runtime_passed": 1628,
     "runtime_skipped": 13,
-    "all_build_inputs_byte_equal": true,
+    "all_build_inputs_byte_equal": false,
     "withdrawn_cmd_candidate": "d7f7c2e10ab9805d41120d19e32d102310b06654",
     "reason": "Pinned crane already clears Cmd with the existing entrypoint flag",
     "restore_deployment": "passed",
     "source_continuation": "failed_registry_network_configuration",
     "source_preflight_check": "passed_without_new_publication",
     "helm_revision": 27,
-    "controller_epoch": 21
+    "controller_epoch": 21,
+    "runtime_image_build_inputs_byte_equal": true,
+    "installer_commit": "dedc4831bb462f832877940901201061b1e027cf"
   },
   "cmd_false_positive_correction": {
     "official_source": "https://github.com/google/go-containerregistry/blob/v0.22.1/cmd/crane/cmd/mutate.go#L89-L98",
@@ -1068,7 +1070,15 @@
     },
     "cleanup_resources": 9,
     "same_uid_terminal_pods": 5,
-    "new_source_publication": "not yet submitted",
+    "new_source_publication": {
+      "state": "accepted",
+      "deployment_id": "dd3d5b5533aa459eb9cff9d7d3685fd8",
+      "version_id": "60ebc5e1230942cb975be94de9fab954",
+      "prepare_operation_id": "f278274b3e924d808ec6f3903a3fa7a9",
+      "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-source-registry-resumed.json",
+      "journal_frozen": false,
+      "tool_sha256": "3e8b0728030eb0e6f5509c77ad1f116b7198c862960765d205b8d0635b4fdef4"
+    },
     "installation_probe_gap": "registry-push previously ran crane externally; same-selector upstream TCP check added in T254/T255"
   }
 }

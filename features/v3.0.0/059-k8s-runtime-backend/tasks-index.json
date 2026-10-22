@@ -6372,9 +6372,9 @@
         "T251"
       ],
       "pair": "T255",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "1628 passed / 13 skipped; independent 18; Ruff/format/arch-guard",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T255",
@@ -6398,9 +6398,9 @@
         "T254"
       ],
       "pair": "T254",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "1628 passed / 13 skipped; independent 18; Ruff/format/arch-guard",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

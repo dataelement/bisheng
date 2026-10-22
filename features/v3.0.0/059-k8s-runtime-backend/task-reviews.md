@@ -3432,3 +3432,13 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 官方源码：[mutate.go v0.22.1](https://raw.githubusercontent.com/google/go-containerregistry/v0.22.1/cmd/crane/cmd/mutate.go)。不将此误报列作产品缺陷或有效测试增量。
 
 撤回复核：真实无--cmd三base Cmd=null；完整runtime1610/13skip（33.51s）与src/scripts/deploy/workflow对0d5空diff确认。最终交付代码及有效L1仍为T248–T251，不把T252/T253镜像实现型断言计产品回归。
+
+## Task Review: T254 — 仓库实际策略与服务隔离配对
+
+**结果：PASS。** 测试单文件、完整AC-13、AC-16、AC-20、AC-28、AC-54、AC-55、依赖T251/配对T255与owner范围通过。14用例先红后绿，新18项覆盖TCP不通不得执行crane、精确egress身份/NotReady/不发布未Ready Service、UID变化/未知拒绝清理、域名全TCP地址去重/上限/失败及外部push晚失败。作者213相邻通过；受限沙箱179/34失败的回环EPERM/特殊位丢失原样保留，授权相同回归通过而未弱化断言。
+
+## Task Review: T255 — 安装器仓库上游检查
+
+**结果：PASS。** 来源dedc4831bb462f832877940901201061b1e027cf；范围仅安装脚本和README。七项：架构/命名/序列化/信息泄漏/设计同步PASS，DB/前端N/A；无manager/helper镜像、API、descriptor摘要或凭据分发变化。安装器先由无凭据/无SA的NotReady control canary按真实egress-proxy selector检查TCP，对应Service启用publishNotReadyAddresses拒绝；原外部crane四步仍在后续。域名由installer解析，不冒称egress DNS/TLS/auth或完整assembler路径。原UID/RV停止及unknown保护保持。
+
+独立报告`/private/tmp/f059-t254-t255-independent-l1.md`，SHA `ff400d5ab04ed928070b6a7fa07cc49be412ca48f5fede620cc5b252bf0ecc99`；独立18绿/静态门，作者213绿；root合流完整runtime1628 passed/13 skipped（33.76秒），日志`/private/tmp/f059-registry-upstream-full-runtime.log`。backend源未变，沿既有1764/19skip记录。189真实新canary/EndpointSlice及源码业务仍待实际证据，不以L1代替。
