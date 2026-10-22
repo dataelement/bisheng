@@ -1,24 +1,24 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22T12:20:47.349707+00:00",
-  "validated_source_commit": "b8f0988513779542b882ff49cb44a3d63616dd82",
+  "validated_source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 168,
-    "tasks_total": 174,
+    "l1_completed": 176,
+    "tasks_total": 182,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 1129,
+      "passed": 1184,
       "skipped": 10,
       "exit_code": 0,
-      "source_commit": "a5f3f259b56109816b7a4ebaf2ac9e72d0915217",
-      "scope": "full runtime before builder-only shadow permission fix; image release separate31passed",
-      "log": "/private/tmp/f059-runtime-resume-integrated.log"
+      "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
+      "scope": "full runtime including terminal API normalization, true Docker client and SQLite sentinel contracts",
+      "log": "/private/tmp/f059-runtime-diagnostics-integrated.log"
     },
     "backend": {
       "passed": 1587,
@@ -233,10 +233,18 @@
       "log": "/private/tmp/f059-189-fixes-local-final.log"
     },
     "fault_harness": {
-      "passed": 69,
+      "passed": 78,
       "skipped": 4,
-      "scope": "synthetic contract; live opt-in disabled",
-      "log": "/private/tmp/f059-harness-resume-integrated.log"
+      "scope": "synthetic contract incl Docker legacy schema; live opt-in disabled",
+      "log": "/private/tmp/f059-docker-diagnostic-harness-green.log"
+    },
+    "docker_109_platform_installation": {
+      "state": "passed",
+      "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:f2ae12243a5004000b8ff997ddccbaabea00816e29905e1e263f477e6a9aeb7b",
+      "scope": "actual backend API diagnostics with real service identities; business/fault acceptance still running",
+      "host_firewall_rules_changed": false,
+      "firewall_fallback_applied": false
     }
   },
   "not_executed": [

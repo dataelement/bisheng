@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；174 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 168 / 174 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；182 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 176 / 182 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1370,6 +1370,78 @@
   **配对:** T173
 
 
+- [x] **T175** — 终态Pod删除规范化合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_admission.py`
+  **逻辑/验收**：同UID/RV可信终态0允许；伪造对象、active/Unknown/NodeLost、缺少终止证明和策略/finalizer错误拒绝。
+  **覆盖 AC:** AC-13、AC-20、AC-49、AC-55
+  **依赖:** T169
+  **配对:** T176
+
+
+- [x] **T176** — 终态Pod删除选项兼容
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`
+  **逻辑/验收**：仅manager授权后验证API oldObject的停止事实，兼容Core规范化0；不代替停止确认或释放finalizer。
+  **覆盖 AC:** AC-13、AC-20、AC-49、AC-55
+  **依赖:** T175
+  **配对:** T175
+
+
+- [x] **T177** — SQLite随机哨兵升级合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_image_release.py`
+  **逻辑/验收**：升级前由测试写随机数据，升级后核对值和备份，避免两版默认初始化相同造成假阳性。
+  **覆盖 AC:** AC-24、AC-25、AC-26、AC-55
+  **依赖:** T173
+  **配对:** T178
+
+
+- [x] **T178** — 真实SQLite哨兵烟测
+  **类型**：实现
+  **文件**：`scripts/smoke_runtime_delivery.py`
+  **逻辑/验收**：真实Engine写入升级前独有随机值，v2保留并在确认备份中查询同值；不以默认初始化行代替持久化。
+  **覆盖 AC:** AC-24、AC-25、AC-26、AC-55
+  **依赖:** T177
+  **配对:** T177
+
+
+- [x] **T179** — Docker诊断真实客户端合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_operations_v2.py`
+  **逻辑/验收**：真实PlatformClient仅提供node_snapshot；验证真实签名plan请求和平台错误拒绝本地容量回退。
+  **覆盖 AC:** AC-01、AC-10、AC-30、AC-48、AC-50、AC-55
+  **依赖:** T175
+  **配对:** T180
+
+
+- [x] **T180** — Docker诊断平台账本接线
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/api/platform_observe.py`
+  **逻辑/验收**：修正不存在的node_plan调用为node_snapshot；保留Docker公开字段形状，不添加K8s专属字段。
+  **覆盖 AC:** AC-01、AC-10、AC-30、AC-48、AC-50、AC-55
+  **依赖:** T179
+  **配对:** T179
+
+
+- [x] **T181** — Docker既有诊断E2E合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+  **逻辑/验收**：Docker无K8s专属ready/executor_kind允许；账本不可读、错误协议/类型/运行时、缺失或失败预检拒绝；K8s保持严格ready。
+  **覆盖 AC:** AC-01、AC-30、AC-32、AC-55
+  **依赖:** T163
+  **配对:** T182
+
+
+- [x] **T182** — Docker诊断E2E兼容
+  **类型**：实现
+  **文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`
+  **逻辑/验收**：按已知执行器核验现有公开形状；Docker必须v2、后端可用、容量可读、三运行时与全部预检成功；不放松K8s。
+  **覆盖 AC:** AC-01、AC-30、AC-32、AC-55
+  **依赖:** T181
+  **配对:** T181
+
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1437,3 +1509,9 @@
 2026-10-22续办L1：T111/T112、T143–T157及T161/T162代码合同已复核；runtime整套1058/10skip（最终Chart与finalizer另216/198定向），backend1587/18skip、模型组合44与跨库静态64通过。真实189旧canary已终态，Helm计划遗失后按精确UID自然到期恢复仍在复验；不据局部通过勾选T067–T072。
 
 2026-10-22现场修复登记T164–T174：API subresource语法、真实存储控制器身份、未绑定Pod删除宽限规范化、PSA有效负例与dryRun计划撤销、native smoke目录可读权限。代码先后与红绿记录按实际提交及日志保留；本地runtime1129/10skip和集成安装263通过，真实15项探测、业务与故障仍由T067–T072验收，不以代码合同替代。
+
+现场继续登记T175–T178：真实终态Pod也发生Core零宽限规范化；native SQLite固定初始化值不足以证明跨升级保留，补随机哨兵。修复与重新冻结候选镜像后再闭合L1。
+
+T179–T182来自109真实诊断：真实PlatformClient没有node_plan，旧桩掩盖接线错误；Docker现有公开响应无K8s专属字段。采用真实客户端合同及明确形状分别修复，不以降低预检通过门槛替代。
+
+T179/T180经真实PlatformClient签名GET配对（红5→绿37）完成；最终候选7e720073b完整runtime1184passed/10skipped。109真实平台安装诊断通过，业务仍在运行；T067–T072不提前完成。

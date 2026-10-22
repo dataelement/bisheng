@@ -2559,3 +2559,179 @@ T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态
 **元数据验证**：文件范围 PASS；配对测试 PASS；依赖 PASS（按任务索引顺序及完成状态核对）。
 
 **结果**：PASS。
+
+## Task Review: T175 — 终态与Docker真实回归补充
+
+**任务**：终态Pod删除规范化合同
+
+**文件**：`src/runtime-manager/tests/test_k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅现有准入或测试工具，Owner边界不变。 |
+| 2 | 命名规范 | PASS | 遵循模块命名，完整AC标注。 |
+| 3 | 序列化约定 | N/A | 仅已知API行为；Docker公开形状保持。 |
+| 4 | 数据库约定 | N/A | 无模型变更；测试仅本suiteSQLite。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无真实秘密；诊断拒绝输出凭据和响应体。 |
+| 7 | 设计同步 | N/A | design §4.10同步oldObject信任、诊断及随机哨兵。 |
+
+**验证**：终态准入组合325passed，主线runtime1171/10skip（后续SQLite测试工具另验）。
+
+**元数据验证**：目标文件存在、范围PASS；配对/前置完成状态PASS。
+
+**结果**：PASS。
+
+## Task Review: T176 — 终态与Docker真实回归补充
+
+**任务**：终态Pod删除选项兼容
+
+**文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅现有准入或测试工具，Owner边界不变。 |
+| 2 | 命名规范 | PASS | 遵循模块命名，完整AC标注。 |
+| 3 | 序列化约定 | PASS | 仅已知API行为；Docker公开形状保持。 |
+| 4 | 数据库约定 | N/A | 无模型变更；测试仅本suiteSQLite。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无真实秘密；诊断拒绝输出凭据和响应体。 |
+| 7 | 设计同步 | PASS | design §4.10同步oldObject信任、诊断及随机哨兵。 |
+
+**验证**：终态准入组合325passed，主线runtime1171/10skip（后续SQLite测试工具另验）。
+
+**元数据验证**：目标文件存在、范围PASS；配对/前置完成状态PASS。
+
+**结果**：PASS。
+
+## Task Review: T177 — 终态与Docker真实回归补充
+
+**任务**：SQLite随机哨兵升级合同
+
+**文件**：`src/runtime-manager/tests/test_image_release.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅现有准入或测试工具，Owner边界不变。 |
+| 2 | 命名规范 | PASS | 遵循模块命名，完整AC标注。 |
+| 3 | 序列化约定 | N/A | 仅已知API行为；Docker公开形状保持。 |
+| 4 | 数据库约定 | N/A | 无模型变更；测试仅本suiteSQLite。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无真实秘密；诊断拒绝输出凭据和响应体。 |
+| 7 | 设计同步 | N/A | design §4.10同步oldObject信任、诊断及随机哨兵。 |
+
+**验证**：镜像合同40passed；C实际native arm64 sqlite-only随机值升级/备份通过，非平台E2E。
+
+**元数据验证**：目标文件存在、范围PASS；配对/前置完成状态PASS。
+
+**结果**：PASS。
+
+## Task Review: T178 — 终态与Docker真实回归补充
+
+**任务**：真实SQLite哨兵烟测
+
+**文件**：`scripts/smoke_runtime_delivery.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅现有准入或测试工具，Owner边界不变。 |
+| 2 | 命名规范 | PASS | 遵循模块命名，完整AC标注。 |
+| 3 | 序列化约定 | PASS | 仅已知API行为；Docker公开形状保持。 |
+| 4 | 数据库约定 | N/A | 无模型变更；测试仅本suiteSQLite。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无真实秘密；诊断拒绝输出凭据和响应体。 |
+| 7 | 设计同步 | PASS | design §4.10同步oldObject信任、诊断及随机哨兵。 |
+
+**验证**：镜像合同40passed；C实际native arm64 sqlite-only随机值升级/备份通过，非平台E2E。
+
+**元数据验证**：目标文件存在、范围PASS；配对/前置完成状态PASS。
+
+**结果**：PASS。
+
+## Task Review: T181 — 终态与Docker真实回归补充
+
+**任务**：Docker既有诊断E2E合同
+
+**文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅现有准入或测试工具，Owner边界不变。 |
+| 2 | 命名规范 | PASS | 遵循模块命名，完整AC标注。 |
+| 3 | 序列化约定 | N/A | 仅已知API行为；Docker公开形状保持。 |
+| 4 | 数据库约定 | N/A | 无模型变更；测试仅本suiteSQLite。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无真实秘密；诊断拒绝输出凭据和响应体。 |
+| 7 | 设计同步 | N/A | design §4.10同步oldObject信任、诊断及随机哨兵。 |
+
+**验证**：红7failed/2passed→绿78passed/4live-skipped；未放松任何K8s ready断言。
+
+**元数据验证**：目标文件存在、范围PASS；配对/前置完成状态PASS。
+
+**结果**：PASS。
+
+## Task Review: T182 — 终态与Docker真实回归补充
+
+**任务**：Docker诊断E2E兼容
+
+**文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅现有准入或测试工具，Owner边界不变。 |
+| 2 | 命名规范 | PASS | 遵循模块命名，完整AC标注。 |
+| 3 | 序列化约定 | PASS | 仅已知API行为；Docker公开形状保持。 |
+| 4 | 数据库约定 | N/A | 无模型变更；测试仅本suiteSQLite。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无真实秘密；诊断拒绝输出凭据和响应体。 |
+| 7 | 设计同步 | PASS | design §4.10同步oldObject信任、诊断及随机哨兵。 |
+
+**验证**：红7failed/2passed→绿78passed/4live-skipped；未放松任何K8s ready断言。
+
+**元数据验证**：目标文件存在、范围PASS；配对/前置完成状态PASS。
+
+**结果**：PASS。
+
+## Task Review: T179 — Docker账本真实客户端
+
+**任务**：Docker诊断真实客户端合同
+
+**文件**：`src/runtime-manager/tests/test_operations_v2.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 2 | 命名规范 | PASS | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 3 | 序列化约定 | N/A | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 4 | 数据库约定 | N/A | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 5 | 前端约定 | N/A | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 6 | 信息泄漏 | PASS | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 7 | 设计同步 | N/A | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+
+**验证**：真实客户端MockTransport五场景先红后绿；相关37passed。主线runtime1184passed/10skipped。
+
+**元数据验证**：目标范围/配对/依赖PASS。
+
+**结果**：PASS。
+
+## Task Review: T180 — Docker账本真实客户端
+
+**任务**：Docker诊断平台账本接线
+
+**文件**：`src/runtime-manager/runtime_manager/api/platform_observe.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 2 | 命名规范 | PASS | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 3 | 序列化约定 | PASS | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 4 | 数据库约定 | N/A | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 5 | 前端约定 | N/A | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 6 | 信息泄漏 | PASS | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+| 7 | 设计同步 | PASS | 既有PlatformClient/诊断边界；安全失败不回退；design §4.10同步。 |
+
+**验证**：真实客户端MockTransport五场景先红后绿；相关37passed。主线runtime1184passed/10skipped。
+
+**元数据验证**：目标范围/配对/依赖PASS。
+
+**结果**：PASS。

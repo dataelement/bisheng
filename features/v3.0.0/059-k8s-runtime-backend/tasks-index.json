@@ -4441,6 +4441,194 @@
       "review": "PASS"
     },
     {
+      "id": "T175",
+      "wave": 8,
+      "kind": "测试",
+      "title": "终态Pod删除规范化合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_admission.py"
+      ],
+      "logic": "同UID/RV可信终态0允许；伪造对象、active/Unknown/NodeLost、缺少终止证明和策略/finalizer错误拒绝。",
+      "acs": [
+        "AC-13",
+        "AC-20",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T169"
+      ],
+      "pair": "T176",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T176",
+      "wave": 8,
+      "kind": "实现",
+      "title": "终态Pod删除选项兼容",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_admission.py"
+      ],
+      "logic": "仅manager授权后验证API oldObject的停止事实，兼容Core规范化0；不代替停止确认或释放finalizer。",
+      "acs": [
+        "AC-13",
+        "AC-20",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T175"
+      ],
+      "pair": "T175",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T177",
+      "wave": 8,
+      "kind": "测试",
+      "title": "SQLite随机哨兵升级合同",
+      "files": [
+        "src/runtime-manager/tests/test_image_release.py"
+      ],
+      "logic": "升级前由测试写随机数据，升级后核对值和备份，避免两版默认初始化相同造成假阳性。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-26",
+        "AC-55"
+      ],
+      "depends": [
+        "T173"
+      ],
+      "pair": "T178",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T178",
+      "wave": 8,
+      "kind": "实现",
+      "title": "真实SQLite哨兵烟测",
+      "files": [
+        "scripts/smoke_runtime_delivery.py"
+      ],
+      "logic": "真实Engine写入升级前独有随机值，v2保留并在确认备份中查询同值；不以默认初始化行代替持久化。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-26",
+        "AC-55"
+      ],
+      "depends": [
+        "T177"
+      ],
+      "pair": "T177",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T179",
+      "wave": 8,
+      "kind": "测试",
+      "title": "Docker诊断真实客户端合同",
+      "files": [
+        "src/runtime-manager/tests/test_operations_v2.py"
+      ],
+      "logic": "真实PlatformClient仅提供node_snapshot；验证真实签名plan请求和平台错误拒绝本地容量回退。",
+      "acs": [
+        "AC-01",
+        "AC-10",
+        "AC-30",
+        "AC-48",
+        "AC-50",
+        "AC-55"
+      ],
+      "depends": [
+        "T175"
+      ],
+      "pair": "T180",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T180",
+      "wave": 8,
+      "kind": "实现",
+      "title": "Docker诊断平台账本接线",
+      "files": [
+        "src/runtime-manager/runtime_manager/api/platform_observe.py"
+      ],
+      "logic": "修正不存在的node_plan调用为node_snapshot；保留Docker公开字段形状，不添加K8s专属字段。",
+      "acs": [
+        "AC-01",
+        "AC-10",
+        "AC-30",
+        "AC-48",
+        "AC-50",
+        "AC-55"
+      ],
+      "depends": [
+        "T179"
+      ],
+      "pair": "T179",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T181",
+      "wave": 8,
+      "kind": "测试",
+      "title": "Docker既有诊断E2E合同",
+      "files": [
+        "src/backend/test/app_runtime/test_k8s_e2e_contract.py"
+      ],
+      "logic": "Docker无K8s专属ready/executor_kind允许；账本不可读、错误协议/类型/运行时、缺失或失败预检拒绝；K8s保持严格ready。",
+      "acs": [
+        "AC-01",
+        "AC-30",
+        "AC-32",
+        "AC-55"
+      ],
+      "depends": [
+        "T163"
+      ],
+      "pair": "T182",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T182",
+      "wave": 8,
+      "kind": "实现",
+      "title": "Docker诊断E2E兼容",
+      "files": [
+        "src/backend/test/e2e/helpers/vibe_runtime.py"
+      ],
+      "logic": "按已知执行器核验现有公开形状；Docker必须v2、后端可用、容量可读、三运行时与全部预检成功；不放松K8s。",
+      "acs": [
+        "AC-01",
+        "AC-30",
+        "AC-32",
+        "AC-55"
+      ],
+      "depends": [
+        "T181"
+      ],
+      "pair": "T181",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

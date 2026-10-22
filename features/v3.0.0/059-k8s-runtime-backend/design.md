@@ -368,6 +368,11 @@ manager 的 token 自动轮转文件按请求刷新，TLS 使用集群 CA，不�
 - 网络白名单须覆盖平台实际数据路径。189 平台经 Docker published port 转发，Calico 看到的目标端口为 DNAT 后 443/7860；只放行宿主入口 5444/17860 会阻断 manager heartbeat。部署值修正不能替代应用出站隔离测试。
 - 原生发行 smoke 的 hostile CWD 显式0755、poison 文件0644，UID10001先实际读取候选再验证 `-I` 只导入可信包，避免因不可读目录导致假阳性。该修复只影响验收脚本。
 
+
+终态删除与Docker回归补充：Core也会将已结束Pod删除宽限归0。manager仍先核对计划/actor/scope/UID及非空RV，再以API oldObject确认受保护、已绑定、Succeeded/Failed及所有容器停止；现存containerID无terminated、畸形状态或Unknown/NodeLost均拒绝。该兼容不写停止事实或释放finalizer，kubelet仍需双向节点身份。
+
+Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity，平台失败不可使用本地值。Docker保持原公开字段（无K8s专属ready/executor_kind）；E2E按已知Docker合同要求v2、可读账本、运行时和全部预检成功，K8s继续检查显式executor_kind/ready。native SQLite验收在v1后经HTTP写随机nonce，v2不携带该值；同时核对/data bind与目录/DB inode、真实helper rows及下载备份的nonce，拒绝重建或换卷假阳性。
+
 ## 5. 已知坑与处理位置
 
 - Kubernetes ObjectMeta.finalizers 使用omitempty；API移除最后一个finalizer时可省略字段。准入仅将该空数组与省略等价，仍先核对停止已确认和同UID；额外非空finalizer不放宽。189真实dry-run复现，配对测试先红2后绿198。

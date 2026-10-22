@@ -1,0 +1,193 @@
+{
+  "schema": "f059-installation-evidence/v1",
+  "state": "partial-final-candidate-revalidation-running",
+  "host": "192.168.106.189",
+  "platform": "linux/amd64",
+  "kubernetes": "v1.28.15",
+  "single_node": true,
+  "third_run": {
+    "checks": [
+      {
+        "evidence": {
+          "uid": "e8a15943-3bd1-476f-b609-3e3ca244a19a"
+        },
+        "name": "admission-create",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "71eae7b8-35f9-4602-b0dc-e8c75181a5cc"
+        },
+        "name": "binding-delete-fence",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "digest": "sha256:4e748b3e140af06d32987d0ec9f711d01886aeb3ddc80feb2172de63093b95f4",
+          "uid": "e8a15943-3bd1-476f-b609-3e3ca244a19a"
+        },
+        "name": "image-cri",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "code": "control_side_tls",
+          "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+        },
+        "name": "material-tls",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+        },
+        "name": "namespace-budget",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "362cbe83-eda7-48d9-91d4-95955263cb07"
+        },
+        "name": "network-direct-denied",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "36cd8394-5b88-4106-9531-4887628a2f91"
+        },
+        "name": "network-dns-denied",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "0165c1a5-11fe-41af-b96e-8eb2b4668d1a"
+        },
+        "name": "network-egress-allowed",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "e8a15943-3bd1-476f-b609-3e3ca244a19a"
+        },
+        "name": "network-ingress",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
+        },
+        "name": "no-exec",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "code": "control_side_authenticated_api",
+          "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+        },
+        "name": "platform-capabilities",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
+        },
+        "name": "rbac-namespace",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "digest": "sha256:4e748b3e140af06d32987d0ec9f711d01886aeb3ddc80feb2172de63093b95f4",
+          "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+        },
+        "name": "registry-push",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "e8a15943-3bd1-476f-b609-3e3ca244a19a"
+        },
+        "name": "restricted-psa",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "policy_revision": "v1",
+          "uid": "e8a15943-3bd1-476f-b609-3e3ca244a19a"
+        },
+        "name": "status-provenance",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "94ed86d9-d1c5-4fb8-8e4e-bff11cbaf80e"
+        },
+        "name": "storage-sqlite",
+        "observed_at": 1792672296.5338628,
+        "ok": true,
+        "reason": "verified"
+      }
+    ],
+    "observed_at": 1792672296.5338628,
+    "descriptor_digest": "9b279b9dc0abe6b338beb4ca76a2feecb033ca3b60009fe3329c8a8446b950e7",
+    "report_sha256": "4a1c181186392783caa38b2eb06e1eec3c1e96d2559f07d138a067952256af14",
+    "exit_code": 0,
+    "cleanup_completed": true,
+    "admission_source_commit": "2512ae77eda1af45fd8d1d8c10dce7760abcb82a",
+    "admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:75f3433618e3e8df33248f76a4cd2ff56185b82c4ce8e13b8c90ed9427f9b440"
+  },
+  "helm_retention": {
+    "same_uid": true,
+    "same_plans_bytes": true,
+    "uid": "feccd344-02c7-4c04-b772-c0ed3b7a079d",
+    "plans_sha256": "9e7ec0ea64f0d822146dd9463877396e67ceabca7fea2e791bb6b4778f0c66ae"
+  },
+  "current_candidate": {
+    "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
+    "manager_egress_admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:f2ae12243a5004000b8ff997ddccbaabea00816e29905e1e263f477e6a9aeb7b",
+    "helm_revision": 9,
+    "probe_report_after_upgrade": "reset; new actual probe running; new deployments refused until report valid"
+  },
+  "remaining": [
+    "Earlier failed-run canaries require natural-expiry same-UID recovery; active plans not adopted",
+    "Final candidate fourth full probe",
+    "projection refresh, report expiration/identity-change/failure deployment refusal pairing",
+    "business and fault/upgrade acceptance",
+    "final amd64 native serial smoke and formal CI release"
+  ],
+  "limitations": [
+    "DM8 static only",
+    "No cross-node recovery claim",
+    "native b8 amd64 smoke succeeded but summary refused non-test inventory changes during K8s probe; not final native acceptance",
+    "registry delete enabled only on dedicated test registry after explicit user authorization; prior container/data retained"
+  ]
+}
