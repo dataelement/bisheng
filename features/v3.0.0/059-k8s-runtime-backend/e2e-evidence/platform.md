@@ -33,3 +33,7 @@
 prepare `e36537609ef047748674e5172885dddd` 的inputs成功，resolve失败；两个Pod都按真实UID完成kubelet_terminal及正常清理，5条资源账本cleanupcomplete/APIabsent，proof SHA `aa2d35fff5a9c63a46542dff75c1497d564ea30db6846687a4fae66598488cee`。首个failed fact3明确保留preparing/transfer TypeError；清理重试fact4将投影覆盖为failed/空tail，原fact仍在。
 
 189无网络、无凭据原生helper复现：相同已知源码包省略lock成功，仅改lock:null即在k8s_helper.resolve_download写os.environ处TypeError。T221–T224规范化可选锁并保留首次诊断，已本地回归通过；未回填历史。后续采用独立k189r6完整场景batch，r4/r5原journal和追加链保持，完整业务仍未通过。
+
+## k189r6独立完整批次
+
+新helper完整16项安装探测通过，backend节点正常恢复ready后启动原platform六场景。原runner SHA ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c，固定源码143606851，profile2；新journal隔离，旧r4/r5及追加链不变。当前进行中，platform失败保留现场，未执行all的finally cleanup。

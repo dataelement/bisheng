@@ -634,5 +634,30 @@
     "nine_images_build_smoke_bundle_passed": true,
     "additional_wal": "9 passed, committed-wal-with-shm timeout at unchanged20s; unresolved, not rerun in current priority",
     "prior_0e_wal_green_not_reused_as_e405_result": true
-  }
+  },
+  "latest_native_amd64_manager_helper": {
+    "schema": "f059-native-manager-helper/v1",
+    "source_revision": "143606851370d6091b120d348549329b8113c6a6",
+    "platform": "linux/amd64",
+    "build_exit": 0,
+    "import_smoke_exit": 0,
+    "helper_null_lock_smoke_exit": 0,
+    "images": {
+      "manager": {
+        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261023-143606851-amd64",
+        "image_id": "sha256:727a725ed148acede43aaf4052f923eda229498d5e4a83db2cd6946562140b18",
+        "native_smoke": true
+      },
+      "helper": {
+        "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261023-143606851-amd64",
+        "image_id": "sha256:63c1243998c8ca303e59f2bed080ca70b4e7938914849dc77c7b0cef85d6ff35",
+        "native_smoke": true
+      }
+    },
+    "public_push": false,
+    "profile_images_unchanged": true,
+    "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+    "boundary": "Native manager/helper build and real empty-dependency resolution only. No new ARM, CI public release or full business claim."
+  },
+  "arm_current_instruction": "deferred by user; no new ARM run; historical results kept separately"
 }

@@ -1,6 +1,6 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T16:55:17.950438+00:00",
+  "recorded_at": "2026-10-22T17:20:59.670679+00:00",
   "validated_source_commit": "143606851370d6091b120d348549329b8113c6a6",
   "sdd": {
     "spec_confirmed": true,
@@ -463,6 +463,271 @@
       ],
       "operations_passed": 31,
       "related_passed": 246
+    },
+    "native_manager_helper_143": {
+      "schema": "f059-native-manager-helper/v1",
+      "source_revision": "143606851370d6091b120d348549329b8113c6a6",
+      "platform": "linux/amd64",
+      "build_exit": 0,
+      "import_smoke_exit": 0,
+      "helper_null_lock_smoke_exit": 0,
+      "images": {
+        "manager": {
+          "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261023-143606851-amd64",
+          "image_id": "sha256:727a725ed148acede43aaf4052f923eda229498d5e4a83db2cd6946562140b18",
+          "native_smoke": true
+        },
+        "helper": {
+          "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261023-143606851-amd64",
+          "image_id": "sha256:63c1243998c8ca303e59f2bed080ca70b4e7938914849dc77c7b0cef85d6ff35",
+          "native_smoke": true
+        }
+      },
+      "public_push": false,
+      "profile_images_unchanged": true,
+      "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+      "boundary": "Native manager/helper build and real empty-dependency resolution only. No new ARM, CI public release or full business claim."
+    },
+    "helm_revision16": {
+      "helm_upgrade_completed": true,
+      "source_revision": "143606851370d6091b120d348549329b8113c6a6",
+      "app_proxy_profile_assembler_unchanged": true,
+      "probe_report_requires_real_refresh": true,
+      "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049",
+      "descriptor_only_helper_changed": true,
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:a537fc0b647d6213c63d30142c502bbc0befe993eec0965c9a735dd7d204cd61",
+      "descriptor_uid_unchanged": true
+    },
+    "current_candidate_installation": {
+      "state": "passed",
+      "first_probe_result": "15 of16 pass; storage-sqlite deadline due all existing preflight PVs Released; canaries cleaned normally",
+      "preflight_pool_added": {
+        "count": 4,
+        "capacity_each": "1Gi",
+        "names": [
+          "e2e-f059-preflight-04",
+          "e2e-f059-preflight-05",
+          "e2e-f059-preflight-06",
+          "e2e-f059-preflight-07"
+        ],
+        "inventory_sha256": "35f57e5fb4e4a49df8b12862c9e66da90bcab0e88e797a988e7ef9aa473dddf2",
+        "original19_unchanged_during_apply": true,
+        "existing_loop_mappings_unchanged": true,
+        "retention": "Retain; no old-volume rebind or wipe",
+        "initial_plan_refusal": "scratch06 marker stat changed from uid0/gid0/0444 to actual uid0/gid10001/0664; new exact observed snapshot made, old snapshot/volume unchanged"
+      },
+      "second_probe": {
+        "artifacts": {
+          "image-cri": [
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/runtime-helper@sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049",
+              "image_ref": "192.168.106.189:5443/f059/runtime-helper@sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049",
+              "platform": "linux/amd64",
+              "resource_version": "3184803",
+              "uid": "77a25d8b-9cad-459a-a889-f964c9efbde4"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
+              "image_ref": "192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
+              "platform": "linux/amd64",
+              "resource_version": "3184885",
+              "uid": "0959acdd-5f2c-450b-a1ea-e25fcfb9aab5"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9",
+              "image_ref": "192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9",
+              "platform": "linux/amd64",
+              "resource_version": "3184943",
+              "uid": "0c58309a-8f71-4d90-8a85-9dc3a63c58e7"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
+              "image_ref": "192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
+              "platform": "linux/amd64",
+              "resource_version": "3185002",
+              "uid": "5f17375e-5987-439c-a81f-9fd2686a4c33"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-node-preparer-ca@sha256:27b13ce9a57c59f9724001d5a69ede5029a6c6709a702a55fba435a77f77e666",
+              "image_ref": "192.168.106.189:5443/f059/app-node-preparer-ca@sha256:27b13ce9a57c59f9724001d5a69ede5029a6c6709a702a55fba435a77f77e666",
+              "platform": "linux/amd64",
+              "resource_version": "3185059",
+              "uid": "5d0740c2-47e9-41ee-b23e-c4b4cd9d6643"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-static-ca@sha256:2f0311da8b281f35437fcf26b47c8249f8d86f98227a28bb231cd472071ee218",
+              "image_ref": "192.168.106.189:5443/f059/app-static-ca@sha256:2f0311da8b281f35437fcf26b47c8249f8d86f98227a28bb231cd472071ee218",
+              "platform": "linux/amd64",
+              "resource_version": "3185112",
+              "uid": "ad2059f6-a69b-417e-9d09-d6b6b440ae4d"
+            }
+          ]
+        },
+        "checks": [
+          {
+            "evidence": {
+              "uid": "77a25d8b-9cad-459a-a889-f964c9efbde4"
+            },
+            "name": "admission-create",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "e86a13de-4dba-4630-8d34-b7bde1fa95ce"
+            },
+            "name": "binding-delete-fence",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "digest": "sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049",
+              "uid": "77a25d8b-9cad-459a-a889-f964c9efbde4"
+            },
+            "name": "image-cri",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "code": "control_side_tls",
+              "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+            },
+            "name": "material-tls",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+            },
+            "name": "namespace-budget",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "efde81a0-2f56-4623-9cf6-4965be508a50"
+            },
+            "name": "network-direct-denied",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "672faea6-38c7-4267-a5d2-0df8b9007f84"
+            },
+            "name": "network-dns-denied",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "9ef1a390-4bf4-4f40-9dfe-58c2ce22b68f"
+            },
+            "name": "network-egress-allowed",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "77a25d8b-9cad-459a-a889-f964c9efbde4"
+            },
+            "name": "network-ingress",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
+            },
+            "name": "no-exec",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "code": "control_side_authenticated_api",
+              "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+            },
+            "name": "platform-capabilities",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
+            },
+            "name": "rbac-namespace",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "digest": "sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049",
+              "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+            },
+            "name": "registry-push",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "77a25d8b-9cad-459a-a889-f964c9efbde4"
+            },
+            "name": "restricted-psa",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "policy_revision": "v1",
+              "uid": "77a25d8b-9cad-459a-a889-f964c9efbde4"
+            },
+            "name": "status-provenance",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "12e4f5eb-e512-4549-8395-eb9620c281d8"
+            },
+            "name": "storage-sqlite",
+            "observed_at": 1792689184.1286888,
+            "ok": true,
+            "reason": "verified"
+          }
+        ],
+        "descriptor_digest": "d7e831157cd56ff2a941118b9deafb2c2f62b572c633428efb4412839a337afd",
+        "observed_at": 1792689184.1286888,
+        "source": "cluster-probe"
+      }
+    },
+    "r6_start_guard": {
+      "initial_private_wrapper_exit": 1,
+      "reason": "missing required now keyword in assess_capabilities; before runner/API/journal",
+      "fixed_wrapper": "f059-run-platform-r6-v2.sh",
+      "fixed_descriptor_ready_guard_passed": true,
+      "backend_node_ready_before_start": true,
+      "business_started": true,
+      "stage": "platform",
+      "result": "in_progress"
     }
   },
   "not_executed": [

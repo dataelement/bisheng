@@ -19,3 +19,15 @@
 ## 2026-10-23 开发收尾候选
 
 Helm14以d86e66a2d固定manager镜像升级manager/egress/admission，全部Ready；descriptor UID/数据相同，原能力报告/helper/profile2保留，backend四文件来自709821ecb。真实平台进度见[platform.md](./platform.md)：首Pod已创建启动并正常同UID清理，完整发布仍pending。
+
+## 当前143候选：新helper重验
+
+源码143606851、Helm16使用新manager/helper固定digest，profile2运行/预备镜像和assembler/app-proxy保持原值。原生amd64构建及lock:null实际resolve烟测通过。首轮新helper探测15/16通过，只有storage-sqlite因原preflight01–03全部Retain/Released而超时；本轮canary已按正常停止确认清理，失败报告完整保留。
+
+新增preflight04–07四个1Gi独占有界ext4 local PV，物理预分配4Gi，inventory SHA 35f57e5fb4e4a49df8b12862c9e66da90bcab0e88e797a988e7ef9aa473dddf2。固定NS/node UID、原19卷和全部既有loop在本次供应中不变。首个只读计划因旧快照scratch06 marker模式不符拒绝；只读确认现为0:10001/0664且内容/UID不变，将该实测状态单独冻结到新快照，旧快照和旧卷不修改。
+
+同源码/镜像第二轮完整探测进行中；未把旧报告当作新helper通过。r6完整6场景已在新目录准备，无API bootstrap；新报告ready前不启动业务。
+
+第二轮同143源码/镜像完整探测exit0，16/16真实通过；SQLite证据UID 12e4f5eb-e512-4549-8395-eb9620c281d8，descriptor digest d7e831157cd56ff2a941118b9deafb2c2f62b572c633428efb4412839a337afd。canary Pod/PVC均正常清理，仅旧r4隔离PVC仍保留。报告发布后平台Node初次读仍blocked，业务需等正常配置投射/心跳ready再启动，未跳过准入。
+
+新报告投射及正常心跳后node ready=true/controller_epoch10，未重启或改状态；独立r6 platform套件已启动。私有启动守卫首轮缺now关键字在业务/API/journal前退出，修正v2后固定helper/报告检查通过；该记录不算产品失败或重放。

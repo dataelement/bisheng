@@ -1,18 +1,19 @@
 {
   "schema": "f059-platform-evidence/v1",
   "recorded_at": "2026-10-22T16:38:15.286537+00:00",
-  "state": "in_progress_optional_lock_fixed_new_delivery_pending",
+  "state": "in_progress_r6_full_platform_started",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "706b138614f029c52d7be49bbc50453e847f0fd4",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:ae93f837a58529eee86f85bbd79f46801a9e068ab7c84babe35292209c97ad41",
+    "manager_source": "143606851370d6091b120d348549329b8113c6a6",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:a537fc0b647d6213c63d30142c502bbc0befe993eec0965c9a735dd7d204cd61",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
-    "helper_images": "previously certified CA5 digests retained; not relabelled as new source"
+    "helper_images": "new143 helper; application runtime/preparer profile2 unchanged",
+    "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049"
   },
   "attempts": [
     {
@@ -210,5 +211,20 @@
     "browser HTTP/WebSocket/SDK/OBO/attachments on K8s",
     "K8s SQLite data/restore and fault/upgrade acceptance"
   ],
-  "boundary": "Real preparation Pod startup and same-UID cleanup proven; no full business acceptance or cross-node/arm/CI release claim."
+  "boundary": "Real preparation Pod startup and same-UID cleanup proven; no full business acceptance or cross-node/arm/CI release claim.",
+  "next_batch": {
+    "name": "k189r6",
+    "cases": 6,
+    "profile_revision": 2,
+    "identities_reused": true,
+    "new_journal_required": true,
+    "prepared": true,
+    "business_started": true,
+    "requires_current_candidate_report_ready": true,
+    "backend_node_ready_before_start": true,
+    "stage": "platform",
+    "automatic_finally_cleanup": false,
+    "source_revision": "143606851370d6091b120d348549329b8113c6a6",
+    "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c"
+  }
 }
