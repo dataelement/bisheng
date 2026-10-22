@@ -276,7 +276,7 @@ class Cluster:
         self.events.append(("create", resource, ref))
         self.rv += 1
         body = copy.deepcopy(document)
-        body["metadata"].update(uid=str(uuid4()), resourceVersion=str(self.rv))
+        body["metadata"].update(uid=str(uuid4()), resourceVersion=str(self.rv), creationTimestamp=self.clock.iso())
         if resource == "pods":
             body["spec"]["nodeName"] = "worker-a"
             body["status"] = {
@@ -285,6 +285,10 @@ class Cluster:
                 else "Running",
                 "podIP": "10.233.0.10",
                 "conditions": [{"type": "Ready", "status": "True"}],
+                "initContainerStatuses": [
+                    {"name": c["name"], "state": {"terminated": {"exitCode": 0, "finishedAt": self.clock.iso()}}}
+                    for c in body["spec"]["initContainers"]
+                ],
                 "containerStatuses": [
                     {"name": c["name"], "ready": True, "imageID": c["image"], "state": {"running": {}}}
                     for c in body["spec"]["containers"]
@@ -1792,3 +1796,416 @@ def test_never_scheduled_stop_does_not_invent_a_node_binding(runtime):
     saved = platform.resource(row["resource_ref"])
     assert saved["node_name"] == saved["stop_evidence"]["node_name"] == ""
     assert not any(e[0] == "bind" for e in events[marker:])
+
+
+# T228/T229: stage windows use immutable Pod/successful-init timestamps.
+def _startup_timeline(runtime, monkeypatch, *, duration=30, ready_delay=10):
+    _, _, cluster, operation, _, clock = runtime
+    operation["kind"] = "probe"
+    operation["payload"]["migration_plan"] = [{"op": "create_table", "table": "items", "columns": []}]
+    started = clock.value
+    original = cluster.get
+
+    def get(resource, name):
+        pod = cluster.objects.get((resource, name))
+        if resource == "pods" and pod is not None:
+            age = clock.value - started
+            names = [c["name"] for c in pod["spec"]["initContainers"]]
+            statuses = []
+            for index, container in enumerate(names):
+                end = (index + 1) * duration
+                if age >= end:
+                    state = {"terminated": {"exitCode": 0, "finishedAt": clock.iso(end - age)}}
+                elif age >= index * duration:
+                    state = {"running": {"startedAt": clock.iso(-1)}}
+                else:
+                    state = {"waiting": {"reason": "PodInitializing"}}
+                statuses.append({"name": container, "state": state})
+            ready = age >= len(names) * duration + ready_delay
+            pod["status"].update(
+                phase="Running" if age >= len(names) * duration else "Pending",
+                initContainerStatuses=statuses,
+                conditions=[{"type": "Ready", "status": "True" if ready else "False"}],
+            )
+        return original(resource, name)
+
+    monkeypatch.setattr(cluster, "get", get)
+    return started
+
+
+def test_ordered_init_stages_and_health_get_separate_fixed_windows(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-24、AC-25、AC-28、AC-43、AC-48、AC-55."""
+    executor, _, _, operation, _, clock = runtime
+    started = _startup_timeline(runtime, monkeypatch)
+    assert executor.launch(operation)["ready"]
+    assert clock.value == started + 130 and clock.value > started + 90
+
+
+def test_running_init_retries_do_not_refresh_the_stage_deadline(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-24、AC-43、AC-48、AC-52、AC-55."""
+    executor, _, _, operation, _, clock = runtime
+    started = _startup_timeline(runtime, monkeypatch, duration=200)
+    with pytest.raises(ExecutorError, match="workload_readiness_timeout"):
+        executor.launch(operation)
+    assert clock.value == started + 90
+
+
+def test_restart_recovers_creation_timestamp_instead_of_new_timeout(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-24、AC-43、AC-48、AC-52、AC-55."""
+    from runtime_manager.executors.kubernetes import KubernetesExecutor
+
+    executor, platform, cluster, operation, _, clock = runtime
+    started = _startup_timeline(runtime, monkeypatch, duration=200)
+
+    def shutdown():
+        if clock.value >= started + 60:
+            raise ExecutorError("manager_stopping")
+
+    executor.checkpoint = shutdown
+    with pytest.raises(ExecutorError, match="manager_stopping"):
+        executor.launch(operation)
+    clock.sleep(31)
+    restarted = KubernetesExecutor(executor.config, executor.settings, platform=platform, client=cluster, clock=clock)
+    with pytest.raises(ExecutorError, match="workload_readiness_timeout"):
+        restarted.launch(operation)
+    assert clock.value == started + 91
+
+
+def test_stage_windows_never_extend_original_operation_deadline(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-24、AC-43、AC-48、AC-52、AC-55."""
+    executor, platform, _, operation, _, clock = runtime
+    started = _startup_timeline(runtime, monkeypatch)
+    operation["deadline"] = clock.iso(50)
+    original = clock.sleep
+
+    def extend(seconds):
+        original(seconds)
+        if clock.value >= started + 10:
+            current = copy.deepcopy(platform.operations[operation["operation_id"]])
+            current["deadline"] = clock.iso(1000)
+            platform.operations[operation["operation_id"]] = current
+
+    monkeypatch.setattr(clock, "sleep", extend)
+    with pytest.raises(ExecutorError, match="operation_timeout"):
+        executor.launch(operation)
+    assert clock.value == started + 50
+
+
+@pytest.mark.parametrize(
+    "change", ["cancel", "payload_cancel", "status", "owner_epoch", "generation", "app_id", "node_id", "operation_id"]
+)
+def test_long_startup_rechecks_operation_scope_and_cancellation(runtime, monkeypatch, change):
+    """F059 覆盖 AC: AC-43、AC-48、AC-49、AC-52、AC-55."""
+    executor, platform, _, operation, _, clock = runtime
+    started = _startup_timeline(runtime, monkeypatch)
+    original = clock.sleep
+
+    def changed(seconds):
+        original(seconds)
+        if clock.value >= started + 5:
+            current = copy.deepcopy(platform.operations[operation["operation_id"]])
+            if change == "cancel":
+                current["cancel_requested"] = True
+            elif change == "payload_cancel":
+                current["payload"]["cancel_requested"] = True
+            elif change == "status":
+                current["status"] = "failed"
+            elif change in {"owner_epoch", "generation"}:
+                current[change] += 1
+            else:
+                current[change] = "changed"
+            platform.operations[operation["operation_id"]] = current
+
+    monkeypatch.setattr(clock, "sleep", changed)
+    reason = "operation_cancelled" if change in {"cancel", "payload_cancel", "status"} else "execution_fence_mismatch"
+    with pytest.raises(ExecutorError, match=reason):
+        executor.launch(operation)
+    assert clock.value == started + 5
+
+
+def test_ready_result_cannot_bypass_a_fresh_cancel(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-43、AC-48、AC-49、AC-52、AC-55."""
+    executor, platform, cluster, operation, _, _ = runtime
+    original = cluster.list
+
+    def cancelled(resource, **kwargs):
+        answer = original(resource, **kwargs)
+        if resource == "endpointslices":
+            current = copy.deepcopy(platform.operations[operation["operation_id"]])
+            current["cancel_requested"] = True
+            platform.operations[operation["operation_id"]] = current
+        return answer
+
+    monkeypatch.setattr(cluster, "list", cancelled)
+    with pytest.raises(ExecutorError, match="operation_cancelled"):
+        executor.launch(operation)
+
+
+def test_startup_operation_read_failure_is_not_swallowed(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-43、AC-48、AC-52、AC-55."""
+    executor, platform, _, operation, _, clock = runtime
+    started = _startup_timeline(runtime, monkeypatch)
+    original = platform.operation
+
+    def unavailable(reference):
+        if clock.value >= started + 5:
+            raise PlatformError("platform_unreachable", 503)
+        return original(reference)
+
+    monkeypatch.setattr(platform, "operation", unavailable)
+    with pytest.raises(PlatformError, match="platform_unreachable"):
+        executor.launch(operation)
+    assert clock.value == started + 5
+
+
+def _startup_snapshot(runtime):
+    executor, platform, cluster, operation, _, clock = runtime
+    result = executor.launch(operation)
+    row = platform.resource(result["exec_ref"])
+    return executor, operation, row, cluster.get("pods", row["name"]), clock
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "missing_created",
+        "naive_created",
+        "future_created",
+        "missing_finished",
+        "naive_finished",
+        "future_finished",
+        "backward_finished",
+        "duplicate",
+        "foreign_status",
+        "out_of_order",
+        "mixed_state",
+        "bool_exit",
+        "unprotected",
+    ],
+)
+def test_invalid_stage_history_cannot_grant_a_fresh_window(runtime, change):
+    """F059 覆盖 AC: AC-24、AC-25、AC-43、AC-48、AC-52、AC-55."""
+    executor, operation, row, pod, clock = _startup_snapshot(runtime)
+    statuses = pod["status"]["initContainerStatuses"]
+    if change == "missing_created":
+        pod["metadata"].pop("creationTimestamp")
+    elif change == "naive_created":
+        pod["metadata"]["creationTimestamp"] = clock.iso().removesuffix("+00:00")
+    elif change == "future_created":
+        pod["metadata"]["creationTimestamp"] = clock.iso(6)
+    elif change == "missing_finished":
+        statuses[0]["state"]["terminated"].pop("finishedAt")
+    elif change == "naive_finished":
+        statuses[0]["state"]["terminated"]["finishedAt"] = clock.iso().removesuffix("+00:00")
+    elif change == "future_finished":
+        statuses[0]["state"]["terminated"]["finishedAt"] = clock.iso(6)
+    elif change == "backward_finished":
+        statuses[0]["state"]["terminated"]["finishedAt"] = clock.iso(-6)
+    elif change == "duplicate":
+        statuses.append(copy.deepcopy(statuses[0]))
+    elif change == "foreign_status":
+        statuses[0]["name"] = "unknown-init"
+    elif change == "out_of_order":
+        statuses[0]["state"] = {"running": {"startedAt": clock.iso()}}
+    elif change == "mixed_state":
+        statuses[0]["state"]["running"] = {"startedAt": clock.iso()}
+    elif change == "bool_exit":
+        statuses[0]["state"]["terminated"]["exitCode"] = False
+    else:
+        row["protected_since_creation"] = False
+    with pytest.raises(ExecutorError, match=r"workload_stage_(time|state)_invalid"):
+        executor._startup_window(operation, row, pod)
+
+
+def test_clock_tolerance_uses_fixed_monotonic_anchors_without_now_refresh(runtime):
+    """F059 覆盖 AC: AC-24、AC-43、AC-48、AC-52、AC-55."""
+    executor, operation, row, pod, clock = _startup_snapshot(runtime)
+    pod["metadata"]["creationTimestamp"] = clock.iso(4)
+    for status in pod["status"]["initContainerStatuses"]:
+        status["state"]["terminated"]["finishedAt"] = clock.iso()
+    first, initialized = executor._startup_window(operation, row, pod)
+    assert initialized and first == clock.value + 94
+    clock.sleep(2)
+    again, initialized = executor._startup_window(operation, row, pod)
+    assert initialized and again == first
+
+
+def test_completed_stage_over_budget_is_rejected_even_when_pod_is_ready(runtime):
+    """F059 覆盖 AC: AC-24、AC-43、AC-48、AC-52、AC-55."""
+    executor, operation, row, pod, clock = _startup_snapshot(runtime)
+    created = clock.value
+    for status in pod["status"]["initContainerStatuses"]:
+        status["state"]["terminated"]["finishedAt"] = clock.iso(91)
+    clock.sleep(92)
+    assert pod["status"]["conditions"][0]["status"] == "True"
+    with pytest.raises(ExecutorError, match="workload_readiness_timeout"):
+        executor._startup_window(operation, row, pod)
+    assert clock.value == created + 92
+
+
+def test_no_init_full_image_has_one_fixed_health_window(runtime):
+    """F059 覆盖 AC: AC-24、AC-28、AC-43、AC-48、AC-55."""
+    executor, operation, row, pod, clock = _startup_snapshot(runtime)
+    row["template"]["spec"]["initContainers"] = []
+    pod["spec"]["initContainers"] = []
+    pod["status"]["initContainerStatuses"] = []
+    first, initialized = executor._startup_window(operation, row, pod)
+    clock.sleep(20)
+    again, _ = executor._startup_window(operation, row, pod)
+    assert initialized and first == again == clock.value + 70
+
+
+def test_ready_check_http_latency_cannot_cross_fixed_stage_deadline(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-24、AC-43、AC-48、AC-52、AC-55."""
+    executor, platform, _, operation, _, clock = runtime
+    started = clock.value
+    original = platform.operation
+    reads = 0
+
+    def slow(reference):
+        nonlocal reads
+        reads += 1
+        if reads == 3:
+            clock.value = started + 91
+        return original(reference)
+
+    monkeypatch.setattr(platform, "operation", slow)
+    with pytest.raises(ExecutorError, match="workload_readiness_timeout"):
+        executor.launch(operation)
+
+
+def test_missing_current_init_status_never_accepts_ready_or_refreshes_time(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-24、AC-25、AC-43、AC-48、AC-52、AC-55."""
+    executor, _, cluster, operation, _, clock = runtime
+    started = clock.value
+    original = cluster.get
+
+    def missing(resource, name):
+        answer = original(resource, name)
+        if resource == "pods":
+            answer["status"]["initContainerStatuses"] = [
+                {"name": c["name"], "state": {"waiting": {"reason": "PodInitializing"}}}
+                for c in answer["spec"]["initContainers"][1:]
+            ]
+        return answer
+
+    monkeypatch.setattr(cluster, "get", missing)
+    with pytest.raises(ExecutorError, match="workload_readiness_timeout"):
+        executor.launch(operation)
+    assert clock.value == started + 90
+
+
+def test_full_image_without_materialization_keeps_single_health_window(runtime):
+    """F059 覆盖 AC: AC-24、AC-28、AC-43、AC-48、AC-55."""
+    executor, _, cluster, operation, _, clock = runtime
+    started = clock.value
+    operation["payload"]["resolved_delivery"] = {
+        "mode": "image",
+        "image_ref": IMAGE,
+        "platform": "linux/amd64",
+        "startup": {},
+    }
+    cluster.endpoints_ready = False
+    with pytest.raises(ExecutorError, match="workload_readiness_timeout"):
+        executor.launch(operation)
+    assert clock.value == started + 90
+
+
+def test_startup_keeps_controller_lease_fence_during_long_initialization(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-43、AC-48、AC-49、AC-52、AC-55."""
+    executor, platform, _, operation, _, clock = runtime
+    started = _startup_timeline(runtime, monkeypatch)
+    original = clock.sleep
+    replaced = False
+
+    def lost(seconds):
+        nonlocal replaced
+        original(seconds)
+        if clock.value >= started + 5 and not replaced:
+            replaced = True
+            platform.holder = "other-controller"
+            platform.epoch += 1
+            platform.lease_until = clock.value + 30
+
+    monkeypatch.setattr(clock, "sleep", lost)
+    with pytest.raises(PlatformError, match="controller_lease_held"):
+        executor.launch(operation)
+    assert clock.value <= started + 10
+
+
+def test_startup_rejects_same_name_uid_replacement_during_wait(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-43、AC-48、AC-49、AC-52、AC-55."""
+    executor, _, cluster, operation, _, clock = runtime
+    started = _startup_timeline(runtime, monkeypatch)
+    original = clock.sleep
+
+    def replace_uid(seconds):
+        original(seconds)
+        if clock.value >= started + 5:
+            for (kind, _), body in cluster.objects.items():
+                if kind == "pods":
+                    body["metadata"]["uid"] = "replaced-pod-uid"
+
+    monkeypatch.setattr(clock, "sleep", replace_uid)
+    with pytest.raises(ExecutorError, match="resource_uid_or_scope_mismatch"):
+        executor.launch(operation)
+    assert clock.value == started + 5
+
+
+def test_completed_stage_at_exact_limit_advances_once_and_observe_shape_stays_same(runtime):
+    """F059 覆盖 AC: AC-24、AC-25、AC-43、AC-48、AC-55."""
+    executor, operation, row, pod, clock = _startup_snapshot(runtime)
+    created = clock.value
+    for status in pod["status"]["initContainerStatuses"]:
+        status["state"]["terminated"]["finishedAt"] = clock.iso(90)
+    clock.sleep(90)
+    deadline, initialized = executor._startup_window(operation, row, pod)
+    assert initialized and deadline == created + 180
+    assert set(executor.observe(row["resource_ref"])) == {
+        "exec_ref",
+        "pod_uid",
+        "ready",
+        "target",
+        "phase",
+        "running",
+        "restart_count",
+    }
+
+
+def test_stage_deadline_crossing_before_sleep_keeps_timeout_diagnostic(runtime, monkeypatch):
+    """F059 覆盖 AC: AC-24、AC-43、AC-48、AC-52、AC-55."""
+    executor, _, cluster, operation, _, clock = runtime
+    started = clock.value
+    cluster.endpoints_ready = False
+    original_observed = executor._observed
+    original_time, original_sleep = clock.time, clock.sleep
+    reads = None
+    sleeps = []
+
+    def observed(row, pod):
+        nonlocal reads
+        answer = original_observed(row, pod)
+        if clock.value >= started + 89:
+            reads = 0
+        return answer
+
+    def advancing_time():
+        nonlocal reads
+        if reads is not None:
+            reads += 1
+            if reads >= 2:
+                clock.value = started + 90.1
+        return original_time()
+
+    def checked_sleep(seconds):
+        sleeps.append(seconds)
+        if seconds < 0:
+            raise ValueError("sleep length must be non-negative")
+        original_sleep(seconds)
+
+    monkeypatch.setattr(executor, "_observed", observed)
+    monkeypatch.setattr(clock, "time", advancing_time)
+    monkeypatch.setattr(clock, "sleep", checked_sleep)
+    with pytest.raises(ExecutorError, match="workload_readiness_timeout"):
+        executor.launch(operation)
+    assert sleeps[-1] == 0

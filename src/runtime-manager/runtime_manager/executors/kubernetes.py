@@ -28,6 +28,7 @@ from runtime_manager.k8s_admission import template_projection
 from runtime_manager.k8s_client import KubernetesAPIError, KubernetesClient
 from runtime_manager.k8s_lifecycle import StopIdentity, finish_stop, request_stop
 from runtime_manager.k8s_templates import (
+    POLICY_ANNOTATION,
     PREPARATION,
     PRODUCTION,
     RESOURCE_LABEL,
@@ -590,7 +591,88 @@ class KubernetesExecutor:
         self._secret(operation, plan, plan.material_secret, data, "material-secret")
         return grant
 
+    def _startup_checkpoint(self, expected):
+        current = self.platform.operation(expected["operation_id"])
+        if any(
+            current.get(key) != expected.get(key)
+            for key in ("operation_id", "app_id", "node_id", "generation", "owner_epoch")
+        ):
+            raise ExecutorError("execution_fence_mismatch")
+        if (
+            current.get("status") not in {"pending", "running"}
+            or current.get("cancel_requested")
+            or current.get("payload", {}).get("cancel_requested")
+        ):
+            raise ExecutorError("operation_cancelled")
+        deadline = min(_seconds(expected["deadline"]), _seconds(current["deadline"]))
+        if self.clock.time() >= deadline:
+            raise ExecutorError("operation_timeout")
+        return deadline
+
+    def _startup_window(self, operation, row, pod):
+        now = self.clock.time()
+
+        def timestamp(raw):
+            try:
+                parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    raise ValueError()
+                value = parsed.timestamp()
+                if value > now + 5:
+                    raise ValueError()
+                return value
+            except (ValueError, TypeError, AttributeError, OverflowError, OSError):
+                raise ExecutorError("workload_stage_time_invalid") from None
+
+        anchor = timestamp(pod.get("metadata", {}).get("creationTimestamp"))
+        expected = [c["name"] for c in row["template"]["spec"].get("initContainers", [])]
+        actual = [c["name"] for c in pod.get("spec", {}).get("initContainers", [])]
+        if (
+            expected != actual
+            or not row.get("protected_since_creation")
+            or pod.get("metadata", {}).get("annotations", {}).get(POLICY_ANNOTATION) != row["status_policy_revision"]
+        ):
+            raise ExecutorError("workload_stage_state_invalid")
+        statuses = pod.get("status", {}).get("initContainerStatuses", [])
+        if not isinstance(statuses, list):
+            raise ExecutorError("workload_stage_state_invalid")
+        states = {}
+        for item in statuses:
+            if not isinstance(item, dict) or item.get("name") not in expected or item["name"] in states:
+                raise ExecutorError("workload_stage_state_invalid")
+            state = item.get("state", {})
+            if (
+                not isinstance(state, dict)
+                or len(state) > 1
+                or set(state) - {"terminated", "waiting", "running"}
+                or any(not isinstance(value, dict) for value in state.values())
+                or ("terminated" in state and type(state["terminated"].get("exitCode")) is not int)
+            ):
+                raise ExecutorError("workload_stage_state_invalid")
+            states[item["name"]] = state
+        for index, name in enumerate(expected):
+            state = states.get(name, {})
+            terminated = state.get("terminated")
+            if terminated is not None and terminated["exitCode"] == 0:
+                finished = timestamp(terminated.get("finishedAt"))
+                if finished < anchor - 5:
+                    raise ExecutorError("workload_stage_time_invalid")
+                if finished > anchor + 90:
+                    raise ExecutorError("workload_readiness_timeout")
+                # A bounded API-server/kubelet clock skew cannot move an anchor backwards.
+                anchor = max(anchor, finished)
+                continue
+            if any(set(states.get(later, {})) & {"running", "terminated"} for later in expected[index + 1 :]):
+                raise ExecutorError("workload_stage_state_invalid")
+            return min(_seconds(operation["deadline"]), anchor + 90), False
+        return min(_seconds(operation["deadline"]), anchor + 90), True
+
     def launch(self, operation, *, preview=False):
+        expected = {
+            key: operation[key]
+            for key in ("operation_id", "app_id", "node_id", "generation", "owner_epoch", "deadline")
+        }
+        self._startup_checkpoint(expected)
         if self.config.egress_enabled:
             from runtime_manager.egress import egress_env
 
@@ -622,19 +704,36 @@ class KubernetesExecutor:
         service = service_template(plan)
         service["metadata"]["labels"][RESOURCE_LABEL] = service_ref
         service_row, _ = self._resource(operation, plan, service, service_ref)
-        deadline = min(_seconds(operation["deadline"]), self.clock.time() + 90)
         while True:
             self._controller()
-            result = self.observe(plan.resource_ref)
-            if result["ready"]:
-                return {**result, "service_ref": service_ref, "service_uid": service_row["uid"]}
+            operation_deadline = self._startup_checkpoint(expected)
+            row = self.platform.resource(plan.resource_ref)
+            pod = self._fresh(row)
+            try:
+                deadline, initialized = self._startup_window(expected, row, pod)
+            except ExecutorError as exc:
+                raise ExecutorError(str(exc), tail=self._diagnostic(operation, plan.resource_ref)) from None
+            deadline = min(deadline, operation_deadline)
             if self.clock.time() >= deadline:
                 raise ExecutorError("workload_readiness_timeout", tail=self._diagnostic(operation, plan.resource_ref))
-            self.clock.sleep(min(1, deadline - self.clock.time()))
+            result = self._observed(row, pod)
+            if self.clock.time() >= deadline:
+                raise ExecutorError("workload_readiness_timeout", tail=self._diagnostic(operation, plan.resource_ref))
+            if result["ready"] and initialized:
+                deadline = min(deadline, self._startup_checkpoint(expected))
+                if self.clock.time() >= deadline:
+                    raise ExecutorError(
+                        "workload_readiness_timeout", tail=self._diagnostic(operation, plan.resource_ref)
+                    )
+                return {**result, "service_ref": service_ref, "service_uid": service_row["uid"]}
+            self.clock.sleep(max(0, min(1, deadline - self.clock.time())))
 
     def observe(self, exec_ref):
         row = self.platform.resource(exec_ref)
-        pod = self._fresh(row)
+        return self._observed(row, self._fresh(row))
+
+    def _observed(self, row, pod):
+        exec_ref = row["resource_ref"]
         status = pod.get("status", {})
         ready = (
             not pod["metadata"].get("deletionTimestamp")
