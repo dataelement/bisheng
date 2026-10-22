@@ -261,7 +261,7 @@ class BaseFilePipeline(BasePipeline):
             )
         elif knowledge_conf.loader_provider == ParseType.MINERU_V4.value:
             if not knowledge_conf.mineru_v4.api_url:
-                raise MineruV4Error("MinerU V1 API root URL is missing")
+                raise MineruV4Error("MinerU V4 API root URL is missing")
             if hasattr(self, "db_file") and self.db_file:
                 self.db_file.parse_type = ParseType.MINERU_V4.value
             return MineruV4Loader(

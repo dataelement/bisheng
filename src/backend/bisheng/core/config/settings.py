@@ -632,7 +632,7 @@ class MineruConf(BaseModel):
 
 
 class MineruV4Conf(BaseModel):
-    api_url: str = Field(default="", description="MinerU V1 API root URL")
+    api_url: str = Field(default="", description="MinerU V4 API root URL")
     api_key_env: str = Field(default="", description="Environment variable containing the API key")
     tier: str = Field(default="standard", min_length=1, description="Requested parse tier")
     ocr_mode: str = Field(default="auto", description="auto, txt, or ocr")
@@ -647,22 +647,22 @@ class MineruV4Conf(BaseModel):
     @classmethod
     def validate_ocr_mode(cls, value: str) -> str:
         if value not in {"auto", "txt", "ocr"}:
-            raise ValueError("MinerU V1 ocr_mode must be auto, txt, or ocr")
+            raise ValueError("MinerU V4 ocr_mode must be auto, txt, or ocr")
         return value
 
     @field_validator("request_kwargs")
     @classmethod
     def validate_request_kwargs(cls, value: dict) -> dict:
         if not all(isinstance(key, str) for key in value):
-            raise ValueError("MinerU V1 request_kwargs keys must be strings")
+            raise ValueError("MinerU V4 request_kwargs keys must be strings")
         reserved = {"files", "tier", "ocr_mode", "output_formats"}
         conflicts = reserved.intersection(value)
         if conflicts:
-            raise ValueError(f"MinerU V1 request_kwargs contains managed fields: {', '.join(sorted(conflicts))}")
+            raise ValueError(f"MinerU V4 request_kwargs contains managed fields: {', '.join(sorted(conflicts))}")
         try:
             json.dumps(value, allow_nan=False)
         except (TypeError, ValueError) as exc:
-            raise ValueError("MinerU V1 request_kwargs must be JSON serializable") from exc
+            raise ValueError("MinerU V4 request_kwargs must be JSON serializable") from exc
         return value
 
 
@@ -696,7 +696,7 @@ class KnowledgeConf(BaseModel):
     loader_provider: str = Field(default="etl4lm", description="Knowledge Config Provide Settings")
     etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description="Etl4lm Configure")
     mineru: MineruConf = Field(default_factory=MineruConf, description="Mineru Configure")
-    mineru_v4: MineruV4Conf = Field(default_factory=MineruV4Conf, description="MinerU V1 API Configure")
+    mineru_v4: MineruV4Conf = Field(default_factory=MineruV4Conf, description="MinerU V4 configuration")
     paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description="PaddleOcr Config")
     version_management: VersionManagementConf = Field(
         default_factory=VersionManagementConf,
