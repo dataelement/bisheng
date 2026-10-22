@@ -7,7 +7,7 @@
     "design_confirmed": true,
     "tasks_review": "LGTM",
     "l1_completed": 222,
-    "tasks_total": 229,
+    "tasks_total": 231,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -800,6 +800,14 @@
       "materialized": true,
       "application_started": false,
       "environment_only_seconds": 12
+    },
+    "data_cancel_fence": {
+      "status": "fix_in_progress",
+      "evidence_kind": "local_real_service_sql_and_ed25519",
+      "red_log": "/private/tmp/f059-review-cancelled-data-grant-red.log",
+      "red_failed": 1,
+      "existing_related_passed": 159,
+      "boundary": "No remote or K8s data acceptance claim"
     }
   },
   "not_executed": [
