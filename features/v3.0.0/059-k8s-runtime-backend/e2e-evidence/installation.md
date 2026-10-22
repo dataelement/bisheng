@@ -44,3 +44,7 @@ Helm14以d86e66a2d固定manager镜像升级manager/egress/admission，全部Read
 ## 当前6f候选与离线数据CPU修正
 
 固定source6f254f337，LAN digest59692b82…、Helm22三控制服务正常滚动，node ready/epoch17。descriptor UID/data、有效143能力报告、helper8a/profile2/app-proxy不变；只更新backend两源文件并重启专用backend/worker，原文件SHA已先核对且备份保留，OpenFGA不变。未把此次滚动冒认为新的16项完整探测。
+
+## 当前控制镜像995与Helm23
+
+995c80f2a原生amd64构建/import通过，内网固定digest7cef8910…，Helm23三控制服务ready、epoch18。descriptor UID/全部data、143 helper、profile2、现有16项有效报告和app-proxy保持；仅bundle PATH补系统sbin，backend仍保持6f参数源码。原生烟测不是新完整能力报告/业务通过。

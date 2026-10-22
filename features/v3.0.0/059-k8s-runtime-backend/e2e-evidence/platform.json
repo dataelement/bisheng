@@ -218,12 +218,11 @@
     "root_cause_of_r5_failure": "not yet concluded from this ingress check alone"
   },
   "not_verified": [
-    "Python/Node/static full platform publish and upgrade on K8s",
-    "image and source-image platform flow on K8s",
-    "browser HTTP/WebSocket/SDK/OBO/attachments on K8s",
-    "K8s SQLite data/restore and fault/upgrade acceptance"
+    "Complete static bundle, source-image and full image platform flows on K8s",
+    "Stopped SQLite edit/export and complete fault/upgrade/restore acceptance",
+    "Capacity stages, deletion and uninstall full acceptance"
   ],
-  "boundary": "Real preparation Pod startup and same-UID cleanup proven; no full business acceptance or cross-node/arm/CI release claim.",
+  "boundary": "Python and Node v1/v2 access and stop/resume passed; the complete business suite remains in progress. No cross-node/ARM/formal CI/public release claim.",
   "next_batch": {
     "name": "k189r10",
     "cases": 6,
@@ -788,12 +787,120 @@
     "boundary": "new independent stop/resume; not rewriting original failed cycle"
   },
   "current_business_batch": {
-    "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-cycle-resumed.json",
-    "log": "/opt/e2e-f059/logs/platform-k189r10-cycle-cpu100.log",
+    "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-static-resumed.json",
+    "log": "/opt/e2e-f059/logs/platform-k189r10-static-path-r2.log",
     "state": "in_progress",
-    "python_v2_version": "a1c22f4e6de448dab2783ffd499568ef",
-    "python_v2_stage_observed": "deploy starting after precheck and approval",
-    "python_v2_operation_id": "462c127e015248ab9b9cd512be8f1dc8",
-    "remaining": "complete v2 access; Node/static/source-image/full-image/expected dependency failure; stopped edit/export and fault acceptance"
+    "source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
+    "helm_revision": 23,
+    "previous_failed_journal_sha256": "94ca8e8590845ab2e4bb10edacaee7198de6eca176141dc9c904fc20bdf46f0f",
+    "new_static_attempt": {
+      "app_id": "46ed080f7a6d4e24a94a2e0d6d499650",
+      "deployment_id": "50292d68334142bfb67db2f5d01cd846",
+      "version_id": "1672b4a7e9a2413cac591cfcd6fd7453",
+      "tool_sha256": "dcf8acba38b2aa57a2339bde1ad23c7ffcf983c286f14574a7c8e5ee25d83196",
+      "same_source_package": true,
+      "prior_passed_python_node_not_republished": true
+    },
+    "remaining": "static/source-image/full-image v1+v2; expected missing dependency; stopped edit/export; faults and delivery gates"
+  },
+  "python_node_v2_passed": {
+    "runtime_source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+    "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-cycle-resumed.json",
+    "journal_sha256": "94ca8e8590845ab2e4bb10edacaee7198de6eca176141dc9c904fc20bdf46f0f",
+    "python_app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+    "python_v2_version_id": "a1c22f4e6de448dab2783ffd499568ef",
+    "node_app_id": "4316627161aa458a950d14497d2f21e9",
+    "node_v2_version_id": "c92730bca2384077900e24be1f7d88a2",
+    "both_v1_v2_publish_preview_approval_http_websocket_permissions": true,
+    "both_stop_resume_passed": true,
+    "not_full_suite_success": true
+  },
+  "static_bundle_path_failure": {
+    "runtime_source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+    "app_id": "46ed080f7a6d4e24a94a2e0d6d499650",
+    "deployment_id": "21acae653eb242159456a6df4b63d0de",
+    "version_id": "28185232a18747829d03db881c449f8e",
+    "operation_id": "486ca50cd9404ccba1afce4ad64a7cdd",
+    "failure_code": 16124,
+    "failure_stage": "precheck_probe",
+    "operation_reason": "workload_readiness_timeout",
+    "operation_failed_stage": "starting",
+    "all_init_completed": true,
+    "app_exit_code": 127,
+    "app_log_nginx_not_found": true,
+    "source_artifact_id": "7ef77b6b1fe0487f84e262335afd683f",
+    "source_package_sha256": "ef034a25c23e896d20ecda05b7b2f314b8abeece33f4d6568b9fa4faa2c081ea",
+    "source_object_size_bytes": 492,
+    "source_object_bytes_compared": true,
+    "cause": "Bundle PATH replaced image PATH but omitted /usr/sbin where the frozen static image installs nginx",
+    "native_same_image_red_exit": 127,
+    "native_same_image_green_exit": 0,
+    "native_entrypoint_nginx_config_test_passed": true,
+    "cleanup_proof": {
+      "app_id": "46ed080f7a6d4e24a94a2e0d6d499650",
+      "cleanup_status": "complete",
+      "deployment_id": "21acae653eb242159456a6df4b63d0de",
+      "namespace": "e2e-f059-apps",
+      "observed_at": "2026-10-22T20:53:48.086274Z",
+      "operator_supplied": true,
+      "parent_journal_sha256": "94ca8e8590845ab2e4bb10edacaee7198de6eca176141dc9c904fc20bdf46f0f",
+      "probe_operation_id": "486ca50cd9404ccba1afce4ad64a7cdd",
+      "resources": [
+        {
+          "api_absent": true,
+          "cleanup_state": "complete",
+          "kind": "Secret",
+          "name": "credentials-006cb1de7368221e207161f8f9d4f0ee5515b102",
+          "namespace": "e2e-f059-apps",
+          "resource_ref": "2986d076-290e-5bfb-a502-1c363a8319f6",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "13588d07-4828-42db-90b6-0de341af4888"
+        },
+        {
+          "api_absent": true,
+          "cleanup_state": "complete",
+          "kind": "Pod",
+          "name": "task-006cb1de7368221e207161f8f9d4f0ee5515b102",
+          "namespace": "e2e-f059-apps",
+          "resource_ref": "63daf83a-8bec-5d9a-a617-0096edd4355f",
+          "stop_evidence_kind": "kubelet_terminal",
+          "stop_state": "confirmed",
+          "uid": "2d74bfe5-b2d0-45f5-98d1-c536cf974287"
+        },
+        {
+          "api_absent": true,
+          "cleanup_state": "complete",
+          "kind": "Service",
+          "name": "svc-006cb1de7368221e207161f8f9d4f0ee5515b102",
+          "namespace": "e2e-f059-apps",
+          "resource_ref": "6a68720b-6409-53fd-a3ad-e90aa0c09d5c",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "33f69237-786d-49ac-83f2-286b93ed75d8"
+        },
+        {
+          "api_absent": true,
+          "cleanup_state": "complete",
+          "kind": "Secret",
+          "name": "material-006cb1de7368221e207161f8f9d4f0ee5515b102",
+          "namespace": "e2e-f059-apps",
+          "resource_ref": "cdac2ba2-a442-5aa4-8869-5fbe3a768767",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "e32126d0-4233-47fd-88c9-b3acf21f7f86"
+        }
+      ],
+      "schema": "f059-r10-static-probe-cleanup/v1",
+      "source_artifact_id": "7ef77b6b1fe0487f84e262335afd683f",
+      "source_object_bytes_verified_by_backend": true,
+      "source_object_size_bytes": 492,
+      "source_package_sha256": "ef034a25c23e896d20ecda05b7b2f314b8abeece33f4d6568b9fa4faa2c081ea",
+      "status": "failed",
+      "version_id": "28185232a18747829d03db881c449f8e"
+    },
+    "cleanup_proof_sha256": "ad356e6994253f034d6f6f5d10c4091c56519e20f8367939becad6098cc4da5a",
+    "new_source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
+    "old_failure_retained": true
   }
 }

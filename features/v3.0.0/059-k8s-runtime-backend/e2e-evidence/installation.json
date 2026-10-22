@@ -172,15 +172,15 @@
     "plans_sha256": "9e7ec0ea64f0d822146dd9463877396e67ceabca7fea2e791bb6b4778f0c66ae"
   },
   "current_candidate": {
-    "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
-    "manager_egress_admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:59692b82ae7bd1d806e741a4c86f165bd472301feec31b06d3dc66306d00eb3b",
-    "helm_revision": 22,
+    "source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
+    "manager_egress_admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:7cef8910e89e566059b1fd04cf3bde26fdd9b2f70d61185b0ae621f7b40409e7",
+    "helm_revision": 23,
     "probe_report_after_upgrade": "143 sixteen-check report retained with unchanged descriptor/helper/profile; no new full report claim",
-    "upgrade_receipt": "/opt/e2e-f059/evidence/runtime-twenty-fourth/receipt.json",
+    "upgrade_receipt": "/opt/e2e-f059/evidence/runtime-twenty-fifth/receipt.json",
     "descriptor_uid_unchanged": true,
     "descriptor_data_unchanged": true,
     "backend_node_ready": true,
-    "controller_epoch": 17,
+    "controller_epoch": 18,
     "backend_data_cpu_update": {
       "files": {
         "bisheng/app_runtime/domain/services/runtime_data_session_service.py": "ca6eb28964b717f0744ae2db4d5ab11ec2541563b40e49035be50e49fb471626",
@@ -1703,6 +1703,27 @@
       "descriptor_data_unchanged": true,
       "backend_node_ready": true,
       "controller_epoch": 16
+    },
+    {
+      "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+      "manager_egress_admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:59692b82ae7bd1d806e741a4c86f165bd472301feec31b06d3dc66306d00eb3b",
+      "helm_revision": 22,
+      "probe_report_after_upgrade": "143 sixteen-check report retained with unchanged descriptor/helper/profile; no new full report claim",
+      "upgrade_receipt": "/opt/e2e-f059/evidence/runtime-twenty-fourth/receipt.json",
+      "descriptor_uid_unchanged": true,
+      "descriptor_data_unchanged": true,
+      "backend_node_ready": true,
+      "controller_epoch": 17,
+      "backend_data_cpu_update": {
+        "files": {
+          "bisheng/app_runtime/domain/services/runtime_data_session_service.py": "ca6eb28964b717f0744ae2db4d5ab11ec2541563b40e49035be50e49fb471626",
+          "bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py": "e74775a5837014f0c608a1efd306b19d021d2a11de54d2e95a7b944c9df6b0ef"
+        },
+        "backend_and_worker_restarted": true,
+        "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+        "openfga_unchanged": true,
+        "public_env_http_status": 200
+      }
     }
   ]
 }

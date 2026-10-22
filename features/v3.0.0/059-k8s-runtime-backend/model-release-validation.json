@@ -665,27 +665,27 @@
       "build_exit": 0,
       "import_smoke_exit": 0,
       "public_push": false,
-      "manager_image_id": "sha256:604747e7fb7d833859305bd093bc5dc42c5cfb9feb84a1b1dee1c53af30fa634",
+      "manager_image_id": "sha256:5b2be2b9df8522651de96143a8b48d3026759917a36990dbdbf65749c0b592a0",
       "platform": "linux/amd64",
-      "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+      "source_revision": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
       "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
       "changed_runtime_files": [
         "runtime_manager/k8s_templates.py"
       ],
       "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
-      "preceding_manager_source": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
+      "preceding_manager_source": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
       "schema": "f059-native-manager/v1"
     },
     "image": {
-      "manager_image_id": "sha256:604747e7fb7d833859305bd093bc5dc42c5cfb9feb84a1b1dee1c53af30fa634",
-      "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
-      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:59692b82ae7bd1d806e741a4c86f165bd472301feec31b06d3dc66306d00eb3b",
+      "manager_image_id": "sha256:5b2be2b9df8522651de96143a8b48d3026759917a36990dbdbf65749c0b592a0",
+      "source_revision": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:7cef8910e89e566059b1fd04cf3bde26fdd9b2f70d61185b0ae621f7b40409e7",
       "public_push": false,
-      "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-24"
+      "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-25"
     },
-    "deployed_helm_revision": 22,
-    "source_pack_sha256": "ada03fa0b5aae0f6ac91170dfeaaa9070a57a7224448875142564c90d6c00664",
-    "source_pack_bytes": 57964032,
+    "deployed_helm_revision": 23,
+    "source_pack_sha256": "17075e198989851cf6403b06d6db3e9318f60d3a117257dcb49d6ca92744df0d",
+    "source_pack_bytes": 57971045,
     "helper_unchanged_source": "143606851370d6091b120d348549329b8113c6a6",
     "new_arm_run": false,
     "public_release": false
@@ -781,6 +781,36 @@
       "deployed_helm_revision": 21,
       "source_pack_sha256": "88bbcc772bcf14cb5f1e85c8cd42de2f27a9efd57c49463f58c5153e6247b00c",
       "source_pack_bytes": 57958362,
+      "helper_unchanged_source": "143606851370d6091b120d348549329b8113c6a6",
+      "new_arm_run": false,
+      "public_release": false
+    },
+    {
+      "native": {
+        "build_exit": 0,
+        "import_smoke_exit": 0,
+        "public_push": false,
+        "manager_image_id": "sha256:604747e7fb7d833859305bd093bc5dc42c5cfb9feb84a1b1dee1c53af30fa634",
+        "platform": "linux/amd64",
+        "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+        "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+        "changed_runtime_files": [
+          "runtime_manager/k8s_templates.py"
+        ],
+        "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+        "preceding_manager_source": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
+        "schema": "f059-native-manager/v1"
+      },
+      "image": {
+        "manager_image_id": "sha256:604747e7fb7d833859305bd093bc5dc42c5cfb9feb84a1b1dee1c53af30fa634",
+        "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:59692b82ae7bd1d806e741a4c86f165bd472301feec31b06d3dc66306d00eb3b",
+        "public_push": false,
+        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-24"
+      },
+      "deployed_helm_revision": 22,
+      "source_pack_sha256": "ada03fa0b5aae0f6ac91170dfeaaa9070a57a7224448875142564c90d6c00664",
+      "source_pack_bytes": 57964032,
       "helper_unchanged_source": "143606851370d6091b120d348549329b8113c6a6",
       "new_arm_run": false,
       "public_release": false

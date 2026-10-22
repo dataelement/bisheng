@@ -99,3 +99,13 @@ r10已真实通过preview-and-approval（审批人访问、其他角色拒绝、
 当前6f/Helm22，私有digest59692b82…，controller epoch17；同源backend两资源参数文件已更新。实际data Pod776ae57a…的data-layout和data-helper均requests=limits=100m/128MiB，原8a镜像不变。内部op241db50c…20:06:59创建，20:07:12 ready、20:07:16 completed/cleanupcomplete；**13秒就绪、17秒全链路**，原deadline20:07:59（60秒）保持。真实MySQL预占128Mi/100m，停止清理后才released；同UID kubelet_terminal/cleanupcomplete，public API check通过。旧4b25超时原样保留。
 
 同已批准v1新恢复d5c5e311…真实completed/cleanupcomplete，冻结停用数据逐值相等；独立下一趟原suite.cycle亦通过，恢复opa89bbe4d…，不把原9f57失败改成功。v2 a1c22f4e…已完成预检/审批，正式deploy462c127e…starting，当前还不能宣称v2访问/其余五场景全部通过。
+
+## Python/Node两版通过与static PATH修复
+
+原cycle续办的Python v2 a1c22f4e…与Node v2 c92730bc…均完成真实预检/预览/审批/正式上线、HTTP/WebSocket和owner边界；两者独立停用恢复通过。Python另有SDK/OBO、附件与SQLite表/行/编辑/CSV配对。不能把这两类通过视作五类完成。
+
+static原probe486ca50c…的所有init成功，但app exit127/nginx:notfound；公开失败16124/precheck_probe来自resolved_delivery→RuntimeDeliveryCoordinator分支，原操作reason为workload_readiness_timeout/failed_stage=starting。源码artifact7ef77b6b…verified，原MinIO代码对象与原492byte包SHA均ef034a25c23e896d20ecda05b7b2f314b8abeece33f4d6568b9fa4faa2c081ea；只读核对，未改源码/旧失败。原probe同Pod UID kubelet_terminal、四资源cleanupcomplete/APIabsent的fresh proof SHAad356e69…已保存；Service/Secret的absence不独立充当Pod停止证明。
+
+T246/T247修复bundle PATH补系统sbin；同固定2f0311镜像原生A/B及entrypoint nginx -t成功，完整runtime1595/13skip和独立292合同通过。995c80f2a/Helm23/digest7cef8910…/epoch18已部署，backend/helper/profile/report保持。
+
+原cycle journal自然失败退出，SHA94ca8e8590845ab2e4bb10edacaee7198de6eca176141dc9c904fc20bdf46f0f冻结。新薄工具fresh核draft/零正式版本/无审批/assignment和同源摘要后，O_EXCL新static-resumed journal，仅一次同app新attempt50292d68…/version1672b4a7…；前两个已通过场景不重做。static/source/image及缺依赖仍在运行，未知请求不重发，无自动cleanup/延时/改旧终态。

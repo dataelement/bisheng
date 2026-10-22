@@ -34,3 +34,7 @@ Go公网metadata等待、首轮取消及官方材料恢复分别保留，未计�
 2026-10-23：a1de manager原生amd64构建/导入通过，内网固定digest06bb857f…、Helm18；runtime两文件启动/数据取消变更，不重标helper143。ARM仍暂停，公开CI/tag/发行未执行。
 
 2026-10-23：当前6f254f337仅manager原生amd64重建/禁网导入通过，私有digest59692b82…/Helm22；helper143/8a及profile2镜像不变。实际离线CPU100数据请求在原60秒内17秒完成、预算真实预占/清理后释放；不等同新完整bundle烟测或ARM/正式CI发行。
+
+## 最新manager-only 995候选
+
+源码995c80f2a、真实浅Git/fsck/import，源码包SHA17075e198989851cf6403b06d6db3e9318f60d3a117257dcb49d6ca92744df0d（57,971,045 bytes）。原生amd64构建和导入0，imageID5b2be2b9…；仅推189专用仓库digest7cef8910…并部署Helm23。143 helper/profile保持，未新增ARM、公开push/tag、Docker Hub或正式CI发行；原先完整bundle/SQLite烟测来源分别保留。

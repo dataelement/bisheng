@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、purge、能力探测、Chart、helper/assembler及验收工具已实现，L1为242/247；剩真实业务、故障升级、109收尾、正式发行和L2门。候选995c80f2a完整runtime1595/13skip；backend生产保持6f，既有1764/19skip通过。189仍Helm22/digest59692b82…/epoch17，helper143/profile2与实际16项报告保持；Python和Node已完成v1/v2、HTTP/WebSocket、权限配对及停用恢复，Python另通过SDK/OBO、附件、SQLite。static旧probe全部init完成后nginx找不到/exit127，根因为bundle PATH缺系统sbin；同镜像原生对照与本地修复通过，原failed及同UID正常清理已冻结，待新镜像和独立新attempt复验。source-image、完整镜像、离线编辑导出及故障仍在验证。主安装域因旧r4未确认创建保持围栏，不卸载或手工释放。新ARM和109验证按用户优先级暂缓，DM8仅静态，未执行正式CI/公开发行。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)，不据本地或局部通过宣称完整交付/跨节点恢复。
+**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、purge、能力探测、Chart、helper/assembler及验收工具已实现，L1为242/247；剩真实业务、故障升级、109收尾、正式发行和L2门。候选995c80f2a完整runtime1595/13skip；backend生产保持6f，既有1764/19skip通过。189已Helm23/digest7cef8910…/epoch18，helper143/profile2与实际16项报告保持；Python和Node已完成v1/v2、HTTP/WebSocket、权限配对及停用恢复，Python另通过SDK/OBO、附件、SQLite。static旧probe全部init完成后nginx找不到/exit127，根因为bundle PATH缺系统sbin；同镜像原生对照与本地修复通过，原failed及同UID正常清理已冻结，新镜像已部署，独立新attempt复验中。source-image、完整镜像、离线编辑导出及故障仍在验证。主安装域因旧r4未确认创建保持围栏，不卸载或手工释放。新ARM和109验证按用户优先级暂缓，DM8仅静态，未执行正式CI/公开发行。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)，不据本地或局部通过宣称完整交付/跨节点恢复。
 
 ### 4.2 拟实施拓扑与流程
 
