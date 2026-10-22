@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import json
 import socket
 from pathlib import Path
 
@@ -44,11 +43,13 @@ def test_fake_respects_path_params_across_sessions():
     headers = {"Authorization": "Bearer test-token"}
     a = fake.request("POST", "http://runner-a:8080/v1/sessions", headers=headers).json()
     b = fake.request("POST", "http://runner-a:8080/v1/sessions", headers=headers).json()
+    tar = _tar_gz({"only-a.txt": b"secret-a", "output/sub/nested.txt": b"deep"})
+    manifest = b"{}"
     fake.request(
         "PUT",
         f"http://runner-a:8080/v1/sessions/{a['session_id']}/files",
         headers={"X-Lease-Token": a["lease_token"]},
-        content=_tar_gz({"only-a.txt": b"secret-a", "output/sub/nested.txt": b"deep"}),
+        content=len(manifest).to_bytes(4, "big") + manifest + tar,
     )
     files_a = fake.session_files(a["session_id"])
     files_b = fake.session_files(b["session_id"])
@@ -230,9 +231,11 @@ def test_copy_in_keeps_chinese_paths_and_ascii_manifest(tmp_path):
     result = exe.run("print('ok')")
     assert result["exitcode"] == 0
     assert rel in fake.last_put_members
-    header = json.dumps({rel: "deadbeef"}, ensure_ascii=True)
-    header.encode("ascii")
-    assert "\\u" in header
+    size = int.from_bytes(fake.last_put_body[:4], "big")
+    raw = fake.last_put_body[4 : 4 + size]
+    text = raw.decode("ascii")
+    assert "\\u" in text
+    assert "工作台" not in text
 
 
 def test_execute_code_without_work_dir_does_not_copy_cwd(tmp_path, monkeypatch):

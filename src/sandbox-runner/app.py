@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 
 from execute import handle_exec
-from files import ZipSlipError, handle_get_files, handle_put_files
+from files import (
+    ManifestError,
+    ZipSlipError,
+    handle_get_files,
+    handle_put_files,
+    split_copy_in_body,
+)
 from leases import CapacityError, ForbiddenLeaseError, LeaseStore, UnknownLeaseError
 from logutil import configure, get_logger
 from starlette.applications import Starlette
@@ -108,22 +113,19 @@ def create_app(
             log.warning("lease forbidden action=copy-in session_id=%s", session_id)
             return JSONResponse({"error": "forbidden"}, status_code=403)
         body = await request.body()
-        raw_manifest = request.headers.get("x-file-manifest") or "{}"
         try:
-            manifest = json.loads(raw_manifest)
-        except json.JSONDecodeError:
-            return JSONResponse({"error": "invalid manifest"}, status_code=400)
-        if not isinstance(manifest, dict):
+            manifest, tar_body = split_copy_in_body(body)
+        except ManifestError:
             return JSONResponse({"error": "invalid manifest"}, status_code=400)
         try:
-            result = handle_put_files(lease, body, manifest, max_copy_in_bytes)
+            result = handle_put_files(lease, tar_body, manifest, max_copy_in_bytes)
         except ZipSlipError as exc:
             log.warning("copy-in rejected session_id=%s error=%s", session_id, exc)
             return JSONResponse({"error": str(exc)}, status_code=400)
         log.info(
             "copy-in session_id=%s bytes=%s written=%s skipped=%s",
             session_id,
-            len(body),
+            len(tar_body),
             len(result.get("written") or []),
             len(result.get("skipped") or []),
         )

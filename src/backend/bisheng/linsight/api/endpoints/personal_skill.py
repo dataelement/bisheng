@@ -97,6 +97,30 @@ async def personal_skill_by_import(
     return resp_200(_card(service, skill))
 
 
+@router.post("/personal/check", summary="Validate a personal skill upload without saving")
+async def check_personal_skill(
+    file: UploadFile = File(...),
+    skill_id: int | None = Form(default=None),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    preview = await _service().inspect_upload(
+        user_id=login_user.user_id,
+        filename=file.filename or "",
+        data=await file.read(),
+        content_type=file.content_type,
+        skill_id=skill_id,
+    )
+    return resp_200(
+        {
+            "name": preview.name,
+            "display_name": preview.display_name,
+            "description": preview.description,
+            "size": preview.size,
+            "files": [{"path": path} for path in preview.files],
+        }
+    )
+
+
 @router.post("/personal", summary="Create a personal skill")
 async def create_personal_skill(
     file: UploadFile = File(...),
