@@ -328,3 +328,131 @@ def test_lost_export_response_cleanup_reclaims_only_old_short_caches(runtime, tm
     driver.cleanup_exports()
     assert not old.exists() and recent.exists()
     assert database.read_bytes() == b"database"
+
+
+@pytest.mark.parametrize("online", [False, True])
+@pytest.mark.parametrize("cancel_field", ["payload", "top_level"])
+async def test_cancelled_data_rpc_does_not_start_an_already_granted_action(runtime, monkeypatch, online, cancel_field):
+    """覆盖 AC: AC-33、AC-36、AC-43、AC-48、AC-49、AC-55."""
+    from runtime_manager.api import platform_data as api
+
+    _, executor, platform, cluster, op, _, requests, _ = ready_session(runtime, online=online)
+    parameters = {"table": "items", "key": "1", "values": {"name": "new"}}
+    digest = hashlib.sha256(json.dumps(parameters, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    op["payload"].update(action="update", parameters_digest=digest)
+    platform.operations[op["operation_id"]]["payload"].update(action="update", parameters_digest=digest)
+    op["data_grant"]["claims"].update(action="update", parameters_sha256=digest)
+    service = SimpleNamespace(config=executor.config, platform=platform, runtime=executor)
+    monkeypatch.setattr(api, "executor", lambda: service)
+
+    async def authorized(request):
+        return None
+
+    monkeypatch.setattr(api, "authorized", authorized)
+    header = base64.urlsafe_b64encode(json.dumps(op["data_grant"]).encode())
+    context = api.scoped_data(
+        Request(
+            {
+                "type": "http",
+                "method": "PATCH",
+                "path": "/v2/apps/app-a/db/tables/items/rows/1",
+                "path_params": {"app_id": "app-a", "table": "items", "key": "1"},
+                "headers": [(b"x-runtime-data-grant", header)],
+            }
+        )
+    )
+    worker = await anext(context)
+    before_objects, count = copy.deepcopy(cluster.objects), len(requests)
+    current = platform.operations[op["operation_id"]]
+    (current["payload"] if cancel_field == "payload" else current)["cancel_requested"] = True
+    try:
+        with pytest.raises(DataBusyError):
+            worker.call(op["app_id"], "update", parameters)
+        assert len(requests) == count and cluster.objects == before_objects
+        assert "data_action_finished" not in current["payload"] and current["status"] == "running"
+    finally:
+        await context.aclose()
+
+
+@pytest.mark.parametrize("online", [False, True])
+def test_cancelled_data_session_does_not_prepare_another_helper(runtime, online):
+    """覆盖 AC: AC-33、AC-43、AC-48、AC-49."""
+    from runtime_manager.k8s_data_executor import KubernetesDataExecutor
+
+    executor, platform, cluster, serving, _, _ = runtime
+    previous = executor.launch(serving)
+    if not online:
+        executor.request_stop(previous["exec_ref"], serving)
+        assert executor.confirm_stopped(previous["exec_ref"])["stopped"]
+        assert executor.cleanup(serving)["complete"]
+    op = data_operation(runtime, online=online, original=previous)
+    platform.operations[op["operation_id"]]["payload"]["cancel_requested"] = True
+    requests = []
+    driver = KubernetesDataExecutor(
+        executor,
+        transport=httpx.MockTransport(
+            lambda request: (
+                requests.append(request) or httpx.Response(200, json={"status": "ok", "key_ids": ["data-key"]})
+            )
+        ),
+    )
+    before = copy.deepcopy(cluster.objects)
+    try:
+        with pytest.raises(DataBusyError):
+            driver.prepare_session(op)
+        assert not requests and cluster.objects == before
+        assert not platform.resources(op["operation_id"])
+    finally:
+        driver.close()
+
+
+def test_cancellation_after_action_start_keeps_unknown_and_requires_idle_confirmation(runtime):
+    """覆盖 AC: AC-33、AC-36、AC-43、AC-48、AC-49、AC-55."""
+    driver, _, platform, cluster, op, target, _, _ = ready_session(runtime, online=True)
+    requests, busy = [], {"value": True}
+    current, clock = platform.operations[op["operation_id"]], driver.runtime.clock
+
+    def reply(request):
+        requests.append(request.url.path)
+        if request.url.path == "/actions":
+            current["payload"]["cancel_requested"] = True
+            raise httpx.ReadTimeout("lost action response", request=request)
+        assert request.url.path == "/execution-state"
+        return httpx.Response(200, json={"idle": not busy["value"]})
+
+    driver.http.close()
+    driver.http = httpx.Client(transport=httpx.MockTransport(reply), trust_env=False)
+    with pytest.raises(DataBusyError) as unknown:
+        driver.request(op, "tables", {})
+    assert unknown.value.detail["reason"] == "data_result_unknown"
+    current["payload"].update(data_action_finished="unknown", data_grant_not_after=clock.time() + 5)
+    with pytest.raises(DataBusyError):
+        driver.request(op, "tables", {})
+    assert requests == ["/actions"]
+    assert driver.cleanup_session(op)["complete"] is False
+    assert requests == ["/actions"]  # A granted, not-yet-accepted request can still arrive.
+    clock.sleep(6)
+    assert driver.cleanup_session(op)["complete"] is False
+    assert current["payload"]["data_action_finished"] == "unknown"
+    assert platform.resource(target["exec_ref"])["stop_state"] != "confirmed"
+    busy["value"] = False
+    assert driver.cleanup_session(op)["complete"] is True
+    assert requests.count("/actions") == 1
+    assert len([1 for kind, _ in cluster.objects if kind == "pods"]) == 1
+
+
+def test_cancellation_during_pod_observation_refuses_the_action_before_forwarding(runtime, monkeypatch):
+    """覆盖 AC: AC-33、AC-36、AC-43、AC-48、AC-49."""
+    driver, executor, platform, _, op, _, requests, _ = ready_session(runtime, online=True)
+    observe = executor._fresh
+    count = len(requests)
+
+    def cancel_during_observation(row):
+        pod = observe(row)
+        platform.operations[op["operation_id"]]["payload"]["cancel_requested"] = True
+        return pod
+
+    monkeypatch.setattr(executor, "_fresh", cancel_during_observation)
+    with pytest.raises(DataBusyError):
+        driver.request(op, "tables", {})
+    assert len(requests) == count

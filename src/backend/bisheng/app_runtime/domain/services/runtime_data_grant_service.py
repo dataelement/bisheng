@@ -102,6 +102,7 @@ class RuntimeDataGrantService:
                 or current.app_id != app.id
                 or current.tenant_id != app.tenant_id
                 or current.payload.get("data_action_finished")
+                or current.payload.get("cancel_requested")
                 or owner is None
                 or owner.data_operation_id != current.id
                 or (owner.tenant_id, owner.app_id, owner.node_id, owner.generation, owner.owner_epoch) != expected
