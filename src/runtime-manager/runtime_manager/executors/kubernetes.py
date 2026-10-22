@@ -417,8 +417,48 @@ class KubernetesExecutor:
             raise ExecutorError("resource_observation_incomplete")
         return obj
 
+    @staticmethod
+    def _creation(row):
+        state = row.get("observed_state", {}).get("creation", {})
+        if not isinstance(state, dict) or type(state.get("version")) is not int or state["version"] != 1:
+            return {}
+        return state
+
+    @staticmethod
+    def _creation_receipt(before, after, state, *, attempt_id=None, controller_epoch=None):
+        keys = (
+            "resource_ref",
+            "operation_id",
+            "app_id",
+            "node_id",
+            "cluster_id",
+            "namespace",
+            "name",
+            "kind",
+            "generation",
+            "owner_epoch",
+            "spec_digest",
+            "uid",
+        )
+        creation = KubernetesExecutor._creation(after)
+        if (
+            any(after.get(key) != before.get(key) for key in keys)
+            or after.get("uid") is not None
+            or creation.get("state") != state
+            or (attempt_id is not None and creation.get("create_attempt_id") != attempt_id)
+            or (
+                controller_epoch is not None
+                and (creation.get("controller_epoch"), after.get("controller_epoch"))
+                != (controller_epoch, controller_epoch)
+            )
+        ):
+            raise ExecutorError("pod_creation_receipt_refused")
+        return after
+
     def _create(self, row, template):
         self._controller()
+        if row["kind"] == "Pod" and self._creation(row).get("state") == "not_created":
+            raise ExecutorError("pod_creation_already_closed")
         try:
             obj = self._fresh(row)
         except KubernetesAPIError as exc:
@@ -426,9 +466,29 @@ class KubernetesExecutor:
                 raise
             if row.get("uid"):
                 raise ExecutorError("bound_resource_missing") from None
+            attempt_id = None
+            if row["kind"] == "Pod":
+                if self._creation(row).get("state") != "unattempted":
+                    raise ExecutorError("pod_creation_unconfirmed") from None
+                attempt_id = str(uuid4())
+                row = self._creation_receipt(
+                    row,
+                    self._observation(row, "create_begin", create_attempt_id=attempt_id),
+                    "started",
+                    attempt_id=attempt_id,
+                    controller_epoch=self.controller_epoch,
+                )
             try:
                 self.client.create(_RESOURCES[row["kind"]], template)
             except KubernetesAPIError as conflict:
+                if attempt_id is not None and conflict.status_code == 403:
+                    self._creation_receipt(
+                        row,
+                        self._observation(row, "create_rejected", create_attempt_id=attempt_id, http_status=403),
+                        "rejected",
+                        attempt_id=attempt_id,
+                        controller_epoch=self.controller_epoch,
+                    )
                 if conflict.status_code != 409:
                     raise
             obj = self._fresh(row)
@@ -632,10 +692,48 @@ class KubernetesExecutor:
             row.get("node_name", ""),
         )
 
+    def _unbound_stop(self, row):
+        self._controller()
+        creation = self._creation(row)
+        if creation.get("state") == "not_created":
+            self.confirm_stopped(row["resource_ref"])
+            return row
+        try:
+            pod = self._fresh(row)
+        except KubernetesAPIError as exc:
+            if exc.status_code != 404:
+                raise
+            if creation.get("state") not in {"unattempted", "rejected", "fenced"}:
+                return row
+            if creation["state"] != "fenced":
+                row = self._creation_receipt(row, self._observation(row, "create_fence"), "fenced")
+            # Read again only after the SQL fence closes admission to creation.
+            try:
+                pod = self._fresh(row)
+            except KubernetesAPIError as absent:
+                if absent.status_code != 404:
+                    raise
+                evidence = {
+                    "evidence_kind": "not_created",
+                    "namespace": row["namespace"],
+                    "name": row["name"],
+                    "observed_at": datetime.fromtimestamp(self.clock.time(), UTC).isoformat(),
+                    "api_status": 404,
+                }
+                return self._creation_receipt(
+                    row, self._observation(row, "not_created", evidence=evidence), "not_created"
+                )
+        meta = pod["metadata"]
+        return self._observation(row, "bind", uid=meta["uid"], node_name=pod.get("spec", {}).get("nodeName", ""))
+
     def request_stop(self, exec_ref, operation):
         row = self.platform.resource(exec_ref)
         if row["kind"] != "Pod" or row["app_id"] != operation["app_id"]:
             raise ExecutorError("stop_resource_scope_refused")
+        if row.get("uid") is None:
+            row = self._unbound_stop(row)
+            if self._creation(row).get("state") == "not_created":
+                return {"stopped": True, "reason": "not_created"}
         row = self._observation(row, "stop", operation_id=operation["operation_id"])
         observation = request_stop(self.client, self._identity(row))
         return {"stopped": False, "reason": observation.reason}
@@ -644,6 +742,24 @@ class KubernetesExecutor:
         row = self.platform.resource(exec_ref)
         if row["kind"] != "Pod":
             raise ExecutorError("stop_resource_kind_refused")
+        evidence = row.get("stop_evidence", {})
+        if self._creation(row).get("state") == "not_created" or evidence.get("evidence_kind") == "not_created":
+            if (
+                row.get("uid") is not None
+                or row["stop_state"] != "confirmed"
+                or self._creation(row).get("state") != "not_created"
+                or evidence.get("evidence_kind") != "not_created"
+            ):
+                raise ExecutorError("pod_noncreation_proof_refused")
+            self._controller()
+            try:
+                self._fresh(row)
+            except KubernetesAPIError as exc:
+                if exc.status_code != 404:
+                    raise
+            else:
+                raise ExecutorError("pod_noncreation_object_present")
+            return {"stopped": True, "evidence_kind": "not_created", "exec_ref": exec_ref}
         if row["stop_state"] == "confirmed":
             self._controller()
             try:
@@ -738,10 +854,15 @@ class KubernetesExecutor:
             return self.data_transport.cleanup_session(operation)
         rows = self.platform.resources(operation["operation_id"])
         for row in rows:
-            if row["kind"] == "Pod" and row["stop_state"] != "confirmed":
-                self.request_stop(row["resource_ref"], operation)
-                if not self.confirm_stopped(row["resource_ref"])["stopped"]:
-                    return {"complete": False, "reason": "writer_stop_unconfirmed"}
+            if row["kind"] == "Pod":
+                if row["stop_state"] != "confirmed":
+                    self.request_stop(row["resource_ref"], operation)
+                    if not self.confirm_stopped(row["resource_ref"])["stopped"]:
+                        return {"complete": False, "reason": "writer_stop_unconfirmed"}
+                elif self._creation(row).get("state") == "not_created":
+                    self.confirm_stopped(row["resource_ref"])
+        # An initially unbound Pod may have acquired its real UID while stopping.
+        rows = self.platform.resources(operation["operation_id"])
         for row in rows:
             if row["kind"] == "PersistentVolumeClaim" and row["purpose"] in {
                 "serve",
