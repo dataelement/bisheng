@@ -266,11 +266,13 @@ class PersonalSkillService:
             files = await accept_skill_upload(filename, data, owner_user_id=user_id, content_type=content_type)
             _stage_unpack(work, files)
             meta = object.__new__(SkillService)._extract_meta(files)
-            size = sum(len(content) for content in files.values())
             if skill_id is not None:
                 skill = await self._load_own_skill(user_id, skill_id)
-                if meta.name != skill.name:
-                    raise SkillValidationError(msg="skill ID cannot be changed when editing")
+                meta = SkillService._keep_skill_id(
+                    files, meta, skill.name, current_display_name=skill.display_name or ""
+                )
+            size = sum(len(content) for content in files.values())
+            if skill_id is not None:
                 _, total = await LinsightSkillDao.personal_usage(user_id)
                 if total - int(skill.size or 0) + size > PERSONAL_SKILL_BYTES_LIMIT:
                     raise SkillStorageLimitError()
@@ -392,8 +394,7 @@ class PersonalSkillService:
             files = await accept_skill_upload(filename, data, owner_user_id=user_id, content_type=content_type)
             _stage_unpack(work, files)
             meta = object.__new__(SkillService)._extract_meta(files)
-            if meta.name != skill.name:
-                raise SkillValidationError(msg="skill ID cannot be changed when editing")
+            meta = SkillService._keep_skill_id(files, meta, skill.name, current_display_name=skill.display_name or "")
             new_hash = bundle_content_hash(files)
             new_size = sum(len(content) for content in files.values())
             _, total = await LinsightSkillDao.personal_usage(user_id)

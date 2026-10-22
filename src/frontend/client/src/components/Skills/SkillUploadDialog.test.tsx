@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { checkPersonalSkill } from '~/api/skillCenter';
+import { checkPersonalSkill, getPersonalSkillUsage } from '~/api/skillCenter';
 import { SkillRequestError } from './types';
 import { SkillUploadDialog } from './SkillUploadDialog';
 
@@ -13,7 +13,11 @@ const copy: Record<string, string> = {
   com_skill_center_add: '添加到我的技能',
   com_skill_center_parsing: '正在校验技能文件…',
   com_skill_center_error_multiple: '每次上传一个技能文件。',
+  com_skill_center_error_size: '请选择非空文件，大小控制在 50 MiB 以内。',
+  com_skill_center_error_format: '请选择 .md、.zip 或 .skill 文件。',
+  com_skill_center_formats: '支持 SKILL.md、.zip、.skill；文件最大 50 MiB，压缩包解压后最大 200 MiB。',
   com_skill_center_usage: '用量',
+  com_skill_center_quota_full: '已达到个人技能个数或容量上限，不能再添加。',
 };
 
 jest.mock('~/hooks', () => ({
@@ -63,6 +67,16 @@ it('accepts one skill file dropped on the upload area', () => {
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
+it('keeps a skill package drop inside the upload dialog', () => {
+  const onWindowDrop = jest.fn();
+  window.addEventListener('drop', onWindowDrop);
+  openDialog();
+  dropOnZone([new File(['PK'], 'fresh-glossary-builder.skill')]);
+  expect(screen.getByText('fresh-glossary-builder.skill')).toBeVisible();
+  expect(onWindowDrop).not.toHaveBeenCalled();
+  window.removeEventListener('drop', onWindowDrop);
+});
+
 it('rejects a drop that contains more than one file', () => {
   (checkPersonalSkill as jest.Mock).mockClear();
   openDialog();
@@ -100,6 +114,52 @@ it('validates a file chosen from the picker the same way', async () => {
   fireEvent.change(picker, { target: { files: list } });
   expect(await screen.findByText('正在校验技能文件…')).toBeVisible();
   expect(screen.getByRole('button', { name: '添加到我的技能' })).toBeDisabled();
+});
+
+it('rejects a file over 50 MiB before sending it', () => {
+  (checkPersonalSkill as jest.Mock).mockClear();
+  openDialog();
+  expect(screen.getByText('支持 SKILL.md、.zip、.skill；文件最大 50 MiB，压缩包解压后最大 200 MiB。')).toBeVisible();
+  const oversized = new File(['x'], 'skill-199MiB.md', { type: 'text/markdown' });
+  Object.defineProperty(oversized, 'size', { value: 50 * 1024 * 1024 + 1 });
+  dropOnZone([oversized]);
+  expect(screen.getByRole('alert')).toHaveTextContent('请选择非空文件，大小控制在 50 MiB 以内。');
+  expect(checkPersonalSkill).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '添加到我的技能' })).toBeDisabled();
+});
+
+it('shows a single message when the skill count is already full', async () => {
+  const usage = getPersonalSkillUsage as jest.Mock;
+  usage.mockResolvedValueOnce({ count: 20, usedBytes: 0, countLimit: 20, bytesLimit: 209715200 });
+  (checkPersonalSkill as jest.Mock).mockClear();
+  openDialog();
+  expect(await screen.findByText('已达到个人技能个数或容量上限，不能再添加。')).toBeVisible();
+  dropOnZone([new File(['# skill'], '20-待办优先级整理.md', { type: 'text/markdown' })]);
+  expect(screen.getByText('20-待办优先级整理.md')).toBeVisible();
+  expect(checkPersonalSkill).not.toHaveBeenCalled();
+  expect(screen.getAllByRole('alert')).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: '重新选择' })).toHaveLength(1);
+  expect(screen.queryByText('个人技能数量已达上限，请删除后再上传')).not.toBeInTheDocument();
+});
+
+it('replaces the server quota error with the dialog message once usage is known', async () => {
+  const usage = getPersonalSkillUsage as jest.Mock;
+  const restore = usage.getMockImplementation();
+  let release: (value: unknown) => void = () => undefined;
+  usage.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+  (checkPersonalSkill as jest.Mock).mockRejectedValueOnce(
+    new SkillRequestError(11061, undefined, '个人技能数量已达上限，请删除后再上传'),
+  );
+  openDialog();
+  dropOnZone([new File(['# skill'], '20-待办优先级整理.md', { type: 'text/markdown' })]);
+  expect(await screen.findByText('个人技能数量已达上限，请删除后再上传')).toBeVisible();
+  await act(async () => {
+    release({ count: 20, usedBytes: 0, countLimit: 20, bytesLimit: 209715200 });
+  });
+  expect(await screen.findByText('已达到个人技能个数或容量上限，不能再添加。')).toBeVisible();
+  expect(screen.queryByText('个人技能数量已达上限，请删除后再上传')).not.toBeInTheDocument();
+  expect(screen.getAllByRole('alert')).toHaveLength(1);
+  usage.mockImplementation(restore);
 });
 
 it('keeps add disabled when the file fails validation', async () => {

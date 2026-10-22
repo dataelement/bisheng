@@ -289,8 +289,12 @@ async def test_factory_and_capability_match(provider, model, config, cls):
     else:
         built = await BishengASR.init_asr_client(unknown, server)
         assert built.model == "unsupported"
+    legacy = await BishengASR.init_asr_client(SimpleNamespace(model_name=model, model_type="asr", config=None), server)
+    assert isinstance(legacy, cls)
     with pytest.raises(ValueError, match="no file ASR client"):
-        await BishengASR.init_asr_client(SimpleNamespace(model_name=model, model_type="asr", config=None), server)
+        await BishengASR.init_asr_client(
+            SimpleNamespace(model_name="unsupported", model_type="asr", config=None), server
+        )
     assert realtime_protocol(provider, "unsupported") is None
 
 

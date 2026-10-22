@@ -37,8 +37,7 @@ export function SkillCenterPage() {
   const skills = useMemo<SkillRecord[]>(() => [
     ...(platform.data ?? []),
     ...(personal.data ?? []),
-  ].map((skill) => (skill.id in enabledOverride ? { ...skill, enabled: enabledOverride[skill.id] } : skill))
-    .sort((left, right) => left.displayName.localeCompare(right.displayName)), [platform.data, personal.data, enabledOverride]);
+  ].map((skill) => (skill.id in enabledOverride ? { ...skill, enabled: enabledOverride[skill.id] } : skill)), [platform.data, personal.data, enabledOverride]);
   const requestedId = Number(params.get('skill'));
   const selected = Number.isInteger(requestedId) ? skills.find((skill) => skill.id === requestedId) : undefined;
   const keyword = search.trim().toLocaleLowerCase();

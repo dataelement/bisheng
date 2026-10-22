@@ -7,11 +7,11 @@ import { SkillRequestError, type SkillRecord } from '~/components/Skills/types';
 
 const personalSkill: SkillRecord = {
   id: 7, name: 'pdf', displayName: '我的合同', description: '个人说明', source: 'personal',
-  enabled: true, contentHash: 'abc', bundleMissing: false, preview: '步骤', files: ['SKILL.md'],
+  enabled: true, contentHash: 'abc', bundleMissing: false, updatedAt: '2026-01-02T00:00:00', preview: '步骤', files: ['SKILL.md'],
 };
 const enterpriseSkill: SkillRecord = {
   id: 9, name: 'pdf', displayName: '企业合同', description: '企业说明', source: 'platform',
-  enabled: true, contentHash: 'def', bundleMissing: false, preview: '', files: [],
+  enabled: true, contentHash: 'def', bundleMissing: false, updatedAt: '2026-01-01T00:00:00', preview: '', files: [],
 };
 const missingSkill: SkillRecord = { ...personalSkill, id: 8, displayName: '缺文件', bundleMissing: true, preview: '' };
 const mutateAsync = jest.fn();

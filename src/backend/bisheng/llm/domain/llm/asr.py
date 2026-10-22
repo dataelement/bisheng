@@ -97,8 +97,22 @@ class BishengASR(BishengBase):
         return cls(model_id=model_id, asr=asr_client, model_info=model_info, server_info=server_info, **kwargs)
 
     @classmethod
-    async def init_asr_client(cls, model_info: LLMModel, server_info: LLMServer) -> BaseASRClient:
+    def uses_realtime(cls, model_info: LLMModel | None, server_info: LLMServer | None) -> bool:
+        """Realtime when the row says so, or when it is a legacy file row for a streaming engine.
+
+        Volcengine, Baidu, and Tencent rows saved before ``asr_rt`` still have
+        ``model_type=asr``. They have no file client, so the workbench must
+        open the streaming session instead of posting the recording.
+        """
+        if model_info is None or server_info is None:
+            return False
         if model_info.model_type == LLMModelType.ASR_RT.value:
+            return True
+        return realtime_protocol(server_info.type, model_info.model_name) is not None
+
+    @classmethod
+    async def init_asr_client(cls, model_info: LLMModel, server_info: LLMServer) -> BaseASRClient:
+        if cls.uses_realtime(model_info, server_info):
             return cls._realtime_client(model_info, server_info)
         if model_info.model_type == LLMModelType.ASR.value:
             return await cls._file_client(model_info, server_info)
