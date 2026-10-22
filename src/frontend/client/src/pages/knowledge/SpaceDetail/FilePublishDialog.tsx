@@ -362,6 +362,7 @@ export function FilePublishDialog({
     };
 
     const candidateVersionOptions: VersionOption[] = candidates.flatMap((item) => {
+        if (item.can_associate === false) return [];
         const id = item.target_document_id ?? item.document_id;
         if (id == null) return [];
         return [{
@@ -458,6 +459,16 @@ export function FilePublishDialog({
                             />
                         </div>
                     </div>
+                    {candidates.some((item) => item.can_associate === false) && (
+                        <div className="space-y-1.5 rounded-md border border-[#ffcf8b] bg-[#fff7e8] p-3 text-sm" role="status">
+                            <p className="font-medium">目标库已有相似文档（仅供参考）</p>
+                            {candidates.filter((item) => item.can_associate === false).map((item) => (
+                                <p key={item.primary_knowledge_file_id ?? item.target_document_id}>
+                                    {item.title} · 相似度 {((item.similarity * 0.8 + (item.refined_similarity ?? item.similarity) * 0.2) * 100).toFixed(0)}%
+                                </p>
+                            ))}
+                        </div>
+                    )}
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-[#1d2129]" htmlFor="file-publish-version-document">版本管理</label>
                         <select

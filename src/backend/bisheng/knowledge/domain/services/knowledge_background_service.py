@@ -67,6 +67,15 @@ class KnowledgeBackgroundService:
         if not await self.repository_call("settle", job.id, owner, status="processing", payload=payload):
             raise RuntimeError("background operation lease lost")
 
+    async def _refresh_similarity(self, job, owner, payload):
+        from bisheng.common.services.config_service import settings
+        from bisheng.knowledge.domain.services.knowledge_similarity_entry_service import refresh_published_similarity
+
+        if not (await settings.async_get_knowledge()).version_management.enabled:
+            return "skipped"
+        async with get_async_db_session() as session:
+            return await refresh_published_similarity(session, payload)
+
     @staticmethod
     def _wait(payload):
         deadline = payload.setdefault("wait_deadline", (datetime.now() + timedelta(hours=2)).isoformat())
