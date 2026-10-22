@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；182 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 176 / 182 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；184 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 178 / 184 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1442,6 +1442,24 @@
   **配对:** T181
 
 
+- [x] **T183** — 验收批次应用标识合同
+  **类型**：测试
+  **文件**：`scripts/fixtures/f059/test_bootstrap.py`
+  **逻辑/验收**：删除保留slug，显式批次后缀正反、长度约束、包manifest/scenario一致、准备和bootstrap一致；不重建身份。
+  **覆盖 AC:** AC-35、AC-55、AC-56
+  **依赖:** T181
+  **配对:** T184
+
+
+- [x] **T184** — 唯一应用验收批次后缀
+  **类型**：实现
+  **文件**：`scripts/bootstrap_f059_acceptance.py`
+  **逻辑/验收**：增加可选显式application-suffix，严格范围并冻结本批后缀；新批用独立journal，旧应用按原账本清理，不删审计行。
+  **覆盖 AC:** AC-35、AC-55、AC-56
+  **依赖:** T183
+  **配对:** T183
+
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1515,3 +1533,5 @@
 T179–T182来自109真实诊断：真实PlatformClient没有node_plan，旧桩掩盖接线错误；Docker现有公开响应无K8s专属字段。采用真实客户端合同及明确形状分别修复，不以降低预检通过门槛替代。
 
 T179/T180经真实PlatformClient签名GET配对（红5→绿37）完成；最终候选7e720073b完整runtime1184passed/10skipped。109真实平台安装诊断通过，业务仍在运行；T067–T072不提前完成。
+
+T183/T184配对与主线组合135passed；109 r2 prepare/bootstrap真实API通过并启动独立journal平台回归。旧默认批次slug、审计和journal保留，未改产品删除语义。最终候选189四轮基线完成、原生amd64串行烟测中；T067–T072保持未完成。

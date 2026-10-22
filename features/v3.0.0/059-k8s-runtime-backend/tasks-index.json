@@ -4629,6 +4629,50 @@
       "review": "PASS"
     },
     {
+      "id": "T183",
+      "wave": 8,
+      "kind": "测试",
+      "title": "验收批次应用标识合同",
+      "files": [
+        "scripts/fixtures/f059/test_bootstrap.py"
+      ],
+      "logic": "删除保留slug，显式批次后缀正反、长度约束、包manifest/scenario一致、准备和bootstrap一致；不重建身份。",
+      "acs": [
+        "AC-35",
+        "AC-55",
+        "AC-56"
+      ],
+      "depends": [
+        "T181"
+      ],
+      "pair": "T184",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T184",
+      "wave": 8,
+      "kind": "实现",
+      "title": "唯一应用验收批次后缀",
+      "files": [
+        "scripts/bootstrap_f059_acceptance.py"
+      ],
+      "logic": "增加可选显式application-suffix，严格范围并冻结本批后缀；新批用独立journal，旧应用按原账本清理，不删审计行。",
+      "acs": [
+        "AC-35",
+        "AC-55",
+        "AC-56"
+      ],
+      "depends": [
+        "T183"
+      ],
+      "pair": "T183",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

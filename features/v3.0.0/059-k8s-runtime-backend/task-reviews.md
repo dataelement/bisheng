@@ -2735,3 +2735,47 @@ T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态
 **元数据验证**：目标范围/配对/依赖PASS。
 
 **结果**：PASS。
+
+## Task Review: T183 — 验收批次重跑
+
+**任务**：验收批次应用标识合同
+
+**文件**：`scripts/fixtures/f059/test_bootstrap.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅验收bootstrap；无生产API/DAO改动。 |
+| 2 | 命名规范 | PASS | 参数与fixture一致；完整AC编号。 |
+| 3 | 序列化约定 | N/A | marker/env强校验；旧默认格式兼容且不能原地换批。 |
+| 4 | 数据库约定 | N/A | 无SQL或模型改动；经真实平台API复用身份。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 私有env0600、不打印凭据；未知身份/路径拒绝。 |
+| 7 | 设计同步 | N/A | design §4.10已同步显式批次及不可重用slug事实。 |
+
+**验证**：18新合同先红后绿，fixture57passed；主线fixture+harness组合135passed。109新r2批次真实prepare/bootstrap成功，业务行程仍在运行。
+
+**元数据验证**：目标范围、配对测试与前置依赖PASS。
+
+**结果**：PASS。
+
+## Task Review: T184 — 验收批次重跑
+
+**任务**：唯一应用验收批次后缀
+
+**文件**：`scripts/bootstrap_f059_acceptance.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅验收bootstrap；无生产API/DAO改动。 |
+| 2 | 命名规范 | PASS | 参数与fixture一致；完整AC编号。 |
+| 3 | 序列化约定 | PASS | marker/env强校验；旧默认格式兼容且不能原地换批。 |
+| 4 | 数据库约定 | N/A | 无SQL或模型改动；经真实平台API复用身份。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 私有env0600、不打印凭据；未知身份/路径拒绝。 |
+| 7 | 设计同步 | PASS | design §4.10已同步显式批次及不可重用slug事实。 |
+
+**验证**：18新合同先红后绿，fixture57passed；主线fixture+harness组合135passed。109新r2批次真实prepare/bootstrap成功，业务行程仍在运行。
+
+**元数据验证**：目标范围、配对测试与前置依赖PASS。
+
+**结果**：PASS。

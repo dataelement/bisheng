@@ -1,0 +1,312 @@
+{
+  "schema": "f059-model-release-validation/v1",
+  "state": "partial-native-dual-architecture-passed-formal-ci-pending",
+  "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
+  "models": {
+    "method": "static model/tenant hooks/dual-DB dialect tests; no real DM8 connection",
+    "tenant_context_cases_passed": 17,
+    "tenant_and_dm_dialect_static_cases_passed": 64,
+    "model_hook_isolation_with_approval_passed": 44,
+    "alembic_heads": [
+      "f059_resource_phases"
+    ],
+    "tenant_defaults": "None, context fills; DB non-null and index retained; explicit tenant preserved; missing required context rejected",
+    "logs": [
+      "/private/tmp/f059-model-isolation.log",
+      "/private/tmp/f059-model-static-discovery.log"
+    ]
+  },
+  "native_arm64": {
+    "source_revision": "7e720073b8a57492b7befbbb7155ffe30331af01",
+    "platform": "linux/arm64",
+    "build_exit": 0,
+    "isolated_smoke_exit": 0,
+    "bundle_smoke_exit": 0,
+    "unrelated_containers_unchanged": true,
+    "images": {
+      "app-node": {
+        "image": null,
+        "image_id": "sha256:8bd48c7c3ad156bb2533bc3544544f62e0c8c06ba71975c284f6d04b0197e450",
+        "native_smoke": true,
+        "platform": "linux/arm64",
+        "tag": "e2e-f059/bisheng-app-node:e2e-f059-native-20261022-7e720073b-arm64",
+        "tools": {}
+      },
+      "app-node-preparer": {
+        "image": null,
+        "image_id": "sha256:d8c9d514f7f3ec3703cef5964afe0ebe320ccc250a526f2156d67e04778c1c2c",
+        "native_smoke": true,
+        "platform": "linux/arm64",
+        "tag": "e2e-f059/bisheng-app-node-preparer:e2e-f059-native-20261022-7e720073b-arm64",
+        "tools": {}
+      },
+      "app-proxy": {
+        "image": null,
+        "image_id": "sha256:eb460079b69f62695e2bc8ce445ae7cb68498aca3fca9af46614b8fe575e8488",
+        "native_smoke": true,
+        "platform": "linux/arm64",
+        "tag": "e2e-f059/bisheng-app-proxy:e2e-f059-native-20261022-7e720073b-arm64",
+        "tools": {}
+      },
+      "app-python": {
+        "image": null,
+        "image_id": "sha256:475ca05908777e032392a534cfb5542f928cfc8a68f801f92f347c50f0823080",
+        "native_smoke": true,
+        "platform": "linux/arm64",
+        "tag": "e2e-f059/bisheng-app-python:e2e-f059-native-20261022-7e720073b-arm64",
+        "tools": {}
+      },
+      "app-python-preparer": {
+        "image": null,
+        "image_id": "sha256:d0119cffb4511cbb95143661ee54ef45282b6fb4d902430ec972679e584cd33d",
+        "native_smoke": true,
+        "platform": "linux/arm64",
+        "tag": "e2e-f059/bisheng-app-python-preparer:e2e-f059-native-20261022-7e720073b-arm64",
+        "tools": {}
+      },
+      "app-static": {
+        "image": null,
+        "image_id": "sha256:b827ff5467e07d752064bc2f346cc447b2f7db9755731ebb57bd0d922763fbe3",
+        "native_smoke": true,
+        "platform": "linux/arm64",
+        "tag": "e2e-f059/bisheng-app-static:e2e-f059-native-20261022-7e720073b-arm64",
+        "tools": {}
+      },
+      "runtime-assembler": {
+        "image": null,
+        "image_id": "sha256:78887db59a480e51a1dd2acd7316e9537c7f133e1d7c6ddef2055e892ed58108",
+        "native_smoke": true,
+        "platform": "linux/arm64",
+        "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261022-7e720073b-arm64",
+        "tools": {
+          "crane": "v0.22.1",
+          "go-builder": "1.27.3",
+          "licenses": "/usr/share/licenses/crane",
+          "python-abi": "3.11",
+          "python-packages": "/usr/share/licenses/bisheng/python-packages.json",
+          "runtime-package": "3.0.0"
+        }
+      },
+      "runtime-helper": {
+        "image": null,
+        "image_id": "sha256:ee1c24a9567ed63d89843b09199e8a42e696276de2502c6f310f3313c699dd62",
+        "native_smoke": true,
+        "platform": "linux/arm64",
+        "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261022-7e720073b-arm64",
+        "tools": {
+          "python-abi": "3.11",
+          "python-packages": "/usr/share/licenses/bisheng/python-packages.json",
+          "runtime-package": "3.0.0"
+        }
+      },
+      "runtime-manager": {
+        "image": null,
+        "image_id": "sha256:6593dd501269028364c914ceeeda47ec90d7297ee7e645bc43a50ad42677aeaa",
+        "native_smoke": true,
+        "platform": "linux/arm64",
+        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261022-7e720073b-arm64",
+        "tools": {}
+      }
+    },
+    "unrelated_network_inventory_unchanged": true,
+    "before_after_non_suite_container_count": 2,
+    "full_smoke": true,
+    "preloaded_wheel_count": 23,
+    "license_file_count": 28
+  },
+  "artifact_sha256": {
+    "native-result.json": "c6b0b46284ed6bc95c460517dbd0c7fc400b835a172628e7c8dd86ed5f7e3dec",
+    "offline-materials.json": "bbda4d82c49bb71a25423089ae562cbee1235889601be06432def9f117c50c3a",
+    "toolchain-materials.json": "121a627c5e1adfe9af7aef27d95bc726464120b3e2d7e72f279bdc8ac4355e4e",
+    "checksums.json": "11486e99bb74b0d3ea8e4ad09f39eb7f6c3494a7ca58a2fcebae2c5b31d577a8"
+  },
+  "native_arm64_scope": "Real native nine images, isolated resolver checks, complete Engine bundle/upgrade; random SQLite nonce and two downloaded backups; platform/approval/MinIO excluded",
+  "native_amd64": {
+    "schema": "f059-native-image-verification/v1",
+    "finished_at": "2026-10-22T12:55:49.994191+00:00",
+    "source_revision": "7e720073b8a57492b7befbbb7155ffe30331af01",
+    "platform": "linux/amd64",
+    "engine": {
+      "OSType": "linux",
+      "Architecture": "x86_64",
+      "ServerVersion": "24.0.9",
+      "NCPU": 8,
+      "MemTotal": 67558805504
+    },
+    "tools_image_id": "sha256:e0774ebe198a660f05b03dbafdbe7c806e1dbee8ac7dbff38f8a1b9865a0442a",
+    "build_exit": 0,
+    "isolated_smoke_exit": 0,
+    "bundle_smoke_exit": 0,
+    "images": {
+      "app-node": {
+        "image": null,
+        "image_id": "sha256:81fa70cc67947c579ca607ae4c424b5f27d0cfb62d84bafd887e7281b7fdc982",
+        "native_smoke": true,
+        "platform": "linux/amd64",
+        "tag": "e2e-f059/bisheng-app-node:e2e-f059-native-20261022-7e720073b-amd64",
+        "tools": {}
+      },
+      "app-node-preparer": {
+        "image": null,
+        "image_id": "sha256:37ca459308bfd6bea46110ea2c844c93ad119434ab58173fc2f7f683050a6890",
+        "native_smoke": true,
+        "platform": "linux/amd64",
+        "tag": "e2e-f059/bisheng-app-node-preparer:e2e-f059-native-20261022-7e720073b-amd64",
+        "tools": {}
+      },
+      "app-proxy": {
+        "image": null,
+        "image_id": "sha256:0c1aa25f613a4c439bc7a232d203d311fdb7ae73d8cd4b82e835439eede32d39",
+        "native_smoke": true,
+        "platform": "linux/amd64",
+        "tag": "e2e-f059/bisheng-app-proxy:e2e-f059-native-20261022-7e720073b-amd64",
+        "tools": {}
+      },
+      "app-python": {
+        "image": null,
+        "image_id": "sha256:f37ca75e81d21c67bf59f8bafb91ba4bbd27e4e660a6de343807aa26d258f817",
+        "native_smoke": true,
+        "platform": "linux/amd64",
+        "tag": "e2e-f059/bisheng-app-python:e2e-f059-native-20261022-7e720073b-amd64",
+        "tools": {}
+      },
+      "app-python-preparer": {
+        "image": null,
+        "image_id": "sha256:f67316a0629bffee65461d65713c11147c6f503e95fc2c28a433c93e545291ee",
+        "native_smoke": true,
+        "platform": "linux/amd64",
+        "tag": "e2e-f059/bisheng-app-python-preparer:e2e-f059-native-20261022-7e720073b-amd64",
+        "tools": {}
+      },
+      "app-static": {
+        "image": null,
+        "image_id": "sha256:f36c8e7dcbd8b1ea76926f65dcf606abdea3a3825481aaf9db7b4f80b5e46262",
+        "native_smoke": true,
+        "platform": "linux/amd64",
+        "tag": "e2e-f059/bisheng-app-static:e2e-f059-native-20261022-7e720073b-amd64",
+        "tools": {}
+      },
+      "runtime-assembler": {
+        "image": null,
+        "image_id": "sha256:03e0ae6d3cc06bbf3ecda1f5708095b4edb847e2ee0fb655067bd3b001191251",
+        "native_smoke": true,
+        "platform": "linux/amd64",
+        "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261022-7e720073b-amd64",
+        "tools": {
+          "crane": "v0.22.1",
+          "go-builder": "1.27.3",
+          "licenses": "/usr/share/licenses/crane",
+          "python-abi": "3.11",
+          "python-packages": "/usr/share/licenses/bisheng/python-packages.json",
+          "runtime-package": "3.0.0"
+        }
+      },
+      "runtime-helper": {
+        "image": null,
+        "image_id": "sha256:cc14178739af7bbffa508193a0f32e71c3e625ae123798ba625427bc355a0d86",
+        "native_smoke": true,
+        "platform": "linux/amd64",
+        "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261022-7e720073b-amd64",
+        "tools": {
+          "python-abi": "3.11",
+          "python-packages": "/usr/share/licenses/bisheng/python-packages.json",
+          "runtime-package": "3.0.0"
+        }
+      },
+      "runtime-manager": {
+        "image": null,
+        "image_id": "sha256:62330a03397611c8e514940f1741eefa4efc8b45dc77fa8d1374acd23e8826b4",
+        "native_smoke": true,
+        "platform": "linux/amd64",
+        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261022-7e720073b-amd64",
+        "tools": {}
+      }
+    },
+    "bundle": {
+      "platform": "linux/amd64",
+      "checks": [
+        {
+          "language": "python3.11",
+          "offline": true,
+          "code_update": true,
+          "dependency_reuse": true,
+          "runtime_only_sentinel_persisted": true,
+          "unchanged_data_bind_and_identity": {
+            "source": "/opt/e2e-f059/native-7e720073b/smoke-data/apps/e2e-f086-34f493a2dc2e-python311/db",
+            "directory_device": 2050,
+            "directory_inode": 9740998,
+            "database_device": 2050,
+            "database_inode": 9741002
+          },
+          "verified_sqlite_backups": [
+            {
+              "artifact_id": "7838e954c4f643770cb33c0baa6866cbcd4d11f9a1a41ab6da8a84d7d06dec3b",
+              "downloaded_sqlite_verified": true,
+              "sentinel_sha256": "c195ae78a55f1eaea548630be12c460c91628a5b266951c5c8b7dd86aae54499"
+            },
+            {
+              "artifact_id": "7838e954c4f643770cb33c0baa6866cbcd4d11f9a1a41ab6da8a84d7d06dec3b",
+              "downloaded_sqlite_verified": true,
+              "sentinel_sha256": "c195ae78a55f1eaea548630be12c460c91628a5b266951c5c8b7dd86aae54499"
+            }
+          ]
+        },
+        {
+          "language": "node20",
+          "offline": true,
+          "code_update": true,
+          "dependency_reuse": true
+        },
+        {
+          "language": "static",
+          "offline": true,
+          "code_update": true,
+          "dependency_reuse": true
+        },
+        {
+          "language": "static",
+          "offline": true,
+          "install_hook": true,
+          "frontend_build": true,
+          "source_change_invalidates_dependency": true
+        },
+        {
+          "language": "python3.11",
+          "offline": true,
+          "local_native_wheel": true,
+          "source_change_invalidates_dependency": true
+        }
+      ]
+    },
+    "non_test_container_count": 116,
+    "unrelated_containers_unchanged": true,
+    "network_inventory_unchanged": true,
+    "published": false,
+    "boundary": "Real native local images, isolated resolver checks and Docker Engine integration only; no registry manifest digests, CI public release, platform authorization/approval E2E, database snapshot restore or cross-node recovery claimed."
+  },
+  "formal_ci": {
+    "state": "not executed; no new public push/tag/DockerHub release authorized",
+    "manifest_digest_claimed": false,
+    "local_config_ids_are_not_manifest_digests": true
+  },
+  "limitations": [
+    "DM8 real validation explicitly excluded by user",
+    "single-node189 does not prove cross-node recovery",
+    "T071 remains incomplete; local dual-architecture evidence cannot substitute public CI release"
+  ],
+  "native_amd64_artifact_sha256": {
+    "bundle-smoke.log": "9c37db6b3c625c9db885be7b29c86a982c84bf11cd7ba9ce50f467a49b36e2da",
+    "capacity-preflight.json": "2d1d6c68cc3533feebce609838a2c08e00ebfb06fa73c221bf3e9504d60f9394",
+    "containers-after-smoke.jsonl": "2a34176ac3c84cd7500f352f059c9df11a1d652deb7924abe63732c63db67929",
+    "containers-before-smoke.jsonl": "fdbee732cdcdc166f999c18b0af40b59a2758939d1d4cd1bdbc8dde93a148056",
+    "git-fsck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "import-pack.log": "05f8fc8c2e81cdd17b2b6a99fca315285e887ea5b20f4ea22025aba7c61167e8",
+    "native-build.log": "1c1166fee2f6ddbbce5cf460125f05186427c686c81bb9877dbbae55d9d651d8",
+    "native-result.json": "78e3df68e1b092e68cdb3885ab713245e30aa89272c4ef2d292f25bc30dd1206",
+    "native-smoke.json": "31956701756ffb94df05fae93e1c0bc79e29cfa4eab6fe82f73f004c4c73b2bc",
+    "networks-after-smoke.jsonl": "3c55749835aadedf603c854438c81bd65b15dfb5ccbde21416918bd53db9faa7",
+    "networks-before-smoke.jsonl": "3c55749835aadedf603c854438c81bd65b15dfb5ccbde21416918bd53db9faa7",
+    "runtime-images-amd64.json": "36b5e898ea25c430dce27ac04c7eaed132e48792c36fb5613d910e29194b8e0e"
+  },
+  "native_amd64_scope": "Real native local images, isolated resolver checks and Docker Engine integration only; no registry manifest digests, CI public release, platform authorization/approval E2E, database snapshot restore or cross-node recovery claimed."
+}

@@ -6,8 +6,8 @@
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 176,
-    "tasks_total": 182,
+    "l1_completed": 178,
+    "tasks_total": 184,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -21,11 +21,12 @@
       "log": "/private/tmp/f059-runtime-diagnostics-integrated.log"
     },
     "backend": {
-      "passed": 1587,
+      "passed": 1629,
       "skipped": 18,
       "exit_code": 0,
-      "scope": "app_runtime/app_publish before latest fault harness; fault harness separately69passed4live-skipped",
-      "log": "/private/tmp/f059-backend-resume-fixed.log"
+      "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
+      "scope": "full app_runtime and app_publish with isolated model hooks and final diagnostics harness",
+      "log": "/private/tmp/f059-backend-current-integration.log"
     },
     "public_tenant_fix": {
       "passed": 17,
@@ -245,6 +246,13 @@
       "scope": "actual backend API diagnostics with real service identities; business/fault acceptance still running",
       "host_firewall_rules_changed": false,
       "firewall_fallback_applied": false
+    },
+    "batch_and_harness": {
+      "passed": 135,
+      "exit_code": 0,
+      "source_commit": "6747bd33821a7bcbfa5573a918a6b2742315b9d5",
+      "scope": "fixture suffix + offline harness contracts, not live acceptance",
+      "log": "/private/tmp/f059-batch-harness-integrated.log"
     }
   },
   "not_executed": [

@@ -373,6 +373,9 @@ manager 的 token 自动轮转文件按请求刷新，TLS 使用集群 CA，不�
 
 Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity，平台失败不可使用本地值。Docker保持原公开字段（无K8s专属ready/executor_kind）；E2E按已知Docker合同要求v2、可读账本、运行时和全部预检成功，K8s继续检查显式executor_kind/ready。native SQLite验收在v1后经HTTP写随机nonce，v2不携带该值；同时核对/data bind与目录/DB inode、真实helper rows及下载备份的nonce，拒绝重建或换卷假阳性。
 
+
+验收批次与产品审计分离：删除后的全局slug继续保留。bootstrap增加显式可选`--application-suffix`（1–16小写字母/数字及单连字符分段，最终slug≤64），manifest/name/scenarios一致；suite marker与私有env冻结同一后缀，改后缀或漏参不重写旧批。重跑使用新suite-dir与新journal，仅复用已核对的自然身份/租户/key，旧批按其精确账本清理，不清SQL/FGA。Docker --env-file须从可信解析器读取shell格式env并写私有字面值文件，防止引号进入真实密码。
+
 ## 5. 已知坑与处理位置
 
 - Kubernetes ObjectMeta.finalizers 使用omitempty；API移除最后一个finalizer时可省略字段。准入仅将该空数组与省略等价，仍先核对停止已确认和同UID；额外非空finalizer不放宽。189真实dry-run复现，配对测试先红2后绿198。

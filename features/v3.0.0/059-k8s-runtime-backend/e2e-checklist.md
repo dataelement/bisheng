@@ -186,3 +186,9 @@ python -m pytest -q src/backend/test/e2e/test_e2e_vibe_k8s_runtime.py
 | 7 设计同步 | PASS | 测试既有对外合同，无新增生产API/决策；实际验收与汇总由主agent完成 |
 
 任务文件归属：T066两个原目标；新增pytest/helper/安全合同测试由主agent独立登记任务。T067文档完整记录本地/真实边界，真实Docker尚未执行，不能因此将整个验收任务标完成。
+
+## 8. 重跑与Docker环境文件
+
+应用删除保留审计及唯一slug。需要重新首发整批应用时，使用新的suite-dir、`--application-suffix r2`和新的journal；prepare-only与bootstrap都携带同后缀，不能直接改旧suite的marker。复制已核对的私有身份env时仅移除旧instance/scenarios/suffix，新批继续通过真实API复核自然身份、租户和publisher key。旧批证据和审计保留，不清数据库或FGA。
+
+bootstrap输出env是shell scalar格式；Docker的`--env-file`不会去掉shell引号。通过bootstrap.read_env可信解析后，把无换行/NUL的值写入独立0600 Docker字面值文件；不能source输出凭据，也不能直接把带引号密码交给Docker。
