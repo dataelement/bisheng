@@ -860,6 +860,8 @@ class KubernetesExecutor:
         document = {
             key: copy.deepcopy(payload[key]) for key in ("tenant_id", "source_artifact_id", "profile", "delivery")
         }
+        if "source_limits" in payload:
+            document["source_limits"] = copy.deepcopy(payload["source_limits"])
         document["app_id"] = operation["app_id"]
         document["offline"] = bool(payload.get("offline"))
         document["package_environment"] = {
