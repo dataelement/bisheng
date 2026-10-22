@@ -1,0 +1,420 @@
+{{- $storage := dict "class" .Values.storage.className "size_mb" .Values.storage.sizeMi "scratch_size_mb" .Values.storage.scratchSizeMi "filesystem" .Values.storage.filesystem "sqlite_compatible" .Values.storage.sqliteCompatible "node_local" .Values.storage.nodeLocal "static_pool" (not (empty .Values.storage.volumes)) }}
+{{- $capabilities := dict "pod_cidrs" .Values.network.podCidrs "service_cidrs" .Values.network.serviceCidrs }}
+{{- $descriptor := dict "schema_version" 1 "cluster_id" .Values.execution.clusterId "namespace" .Values.execution.namespace "platform" (printf "linux/%s" .Values.execution.architecture) "memory_budget_mb" .Values.execution.memoryBudgetMi "cpu_budget_millicores" .Values.execution.cpuBudgetMillicores "temporary_storage_mb" .Values.execution.temporaryStorageMi "status_policy_revision" .Values.execution.statusPolicyRevision "helper_image" .Values.images.helper "assembler_image" .Values.images.assembler "storage" $storage "capabilities" $capabilities "pod_cidrs" .Values.network.podCidrs "service_cidrs" .Values.network.serviceCidrs "runtime_class" .Values.execution.runtimeClass "pull_secret" .Values.execution.pullSecret "data_public_keys_configmap" .Values.execution.dataKeyConfigMap "package_endpoints" .Values.offline.packageEndpoints "image_repository" .Values.offline.imageRepository "image_registry_endpoints" .Values.offline.imageRegistryEndpoints "registry_secret" .Values.offline.registrySecret "insecure_registry" .Values.offline.insecureRegistry "offline" .Values.offline.enabled "sandbox" (dict "requested" .Values.execution.sandbox "runtime_classes" .Values.execution.runtimeClasses) "canary_profiles" .Values.execution.canaryProfiles "probe_report" .Values.execution.probeReport }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runtime-deployment-descriptor
+  namespace: {{ .Values.services.namespace }}
+data:
+  descriptor.json: {{ $descriptor | toJson | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-manager
+  namespace: {{ .Values.services.namespace }}
+spec:
+  replicas: {{ .Values.services.managerReplicas }}
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: runtime-manager}}
+  template:
+    metadata:
+      labels: {app: runtime-manager}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/os: linux
+        kubernetes.io/arch: {{ .Values.execution.architecture }}
+{{- if .Values.services.pullSecret }}
+      imagePullSecrets: [{name: {{ .Values.services.pullSecret }}}]
+{{- end }}
+      serviceAccountName: {{ .Values.services.managerAccount }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: runtime-manager
+          image: {{ .Values.images.manager | quote }}
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, uvicorn, "runtime_manager.main:app", --host, 0.0.0.0, --port, "8091", --no-access-log]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          ports: [{name: service, containerPort: 8091}]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi}
+            limits: {cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi}
+          env:
+            - name: RTM_HOST
+              value: 0.0.0.0
+            - name: RTM_PORT
+              value: "8091"
+            - name: RTM_EXECUTOR
+              value: kubernetes
+            - name: RTM_DATA_ROOT
+              value: /tmp/runtime
+            - name: RTM_PLATFORM_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: manager-key-id}
+            - name: RTM_PLATFORM_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: manager-secret}
+            - name: RTM_INBOUND_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: control-key-id}
+            - name: RTM_INBOUND_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: control-secret}
+            - name: RTM_MATERIAL_ISSUER_KEY_FILE
+              value: /run/material-issuer/seed
+            - name: RTM_K8S_SANDBOX
+              value: {{ .Values.execution.sandbox | quote }}
+            - name: RTM_K8S_NAMESPACE
+              value: {{ .Values.execution.namespace | quote }}
+            - name: RTM_K8S_CLUSTER_ID
+              value: {{ .Values.execution.clusterId | quote }}
+            - name: RTM_K8S_DEPLOYMENT_DESCRIPTOR
+              value: /run/deployment/descriptor.json
+            - name: RTM_K8S_API_SERVER
+              value: {{ .Values.network.apiServer | quote }}
+            - name: RTM_K8S_TOKEN_FILE
+              value: /run/kubernetes/token
+            - name: RTM_K8S_CA_FILE
+              value: /run/kubernetes/ca.crt
+            - name: RTM_EGRESS_PROXY
+              value: {{ printf "%s:3128" .Values.services.egressClusterIP | quote }}
+            - name: RTM_BUILD_INDEX_URL
+              value: {{ .Values.offline.packageIndex | quote }}
+            - name: RTM_BUILD_EXTRA_INDEX_URL
+              value: {{ .Values.offline.extraPackageIndex | quote }}
+            - name: RTM_BUILD_NPM_REGISTRY
+              value: {{ .Values.offline.npmRegistry | quote }}
+            - name: RTM_PROTOCOL_VERSION
+              value: "2"
+            - name: RTM_NODE_ID
+              value: {{ .Values.execution.nodeId | quote }}
+            - name: RTM_PLATFORM_BASE_URL
+              value: {{ .Values.platform.origin | quote }}
+            - name: RTM_PLATFORM_CA_FILE
+              value: /run/platform-ca/ca.crt
+          readinessProbe:
+            httpGet: {path: /healthz, port: service}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: {path: /healthz, port: service}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: platform-ca, mountPath: /run/platform-ca, readOnly: true}
+            - {name: kubernetes, mountPath: /run/kubernetes, readOnly: true}
+            - {name: descriptor, mountPath: /run/deployment, readOnly: true}
+            - {name: material-issuer, mountPath: /run/material-issuer, readOnly: true}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 512Mi}
+        - name: platform-ca
+          configMap:
+            name: {{ .Values.platform.caConfigMap }}
+            defaultMode: 0444
+            items: [{key: ca.crt, path: ca.crt}]
+        - name: kubernetes
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken: {path: token, expirationSeconds: 3600}
+              - configMap:
+                  name: kube-root-ca.crt
+                  items: [{key: ca.crt, path: ca.crt}]
+        - name: descriptor
+          configMap:
+            name: runtime-deployment-descriptor
+            defaultMode: 0444
+        - name: material-issuer
+          secret:
+            secretName: {{ .Values.services.materialIssuerSecret }}
+            defaultMode: 0440
+            items: [{key: seed, path: seed}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-proxy
+  namespace: {{ .Values.services.namespace }}
+spec:
+  replicas: {{ .Values.services.entryReplicas }}
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: app-proxy}}
+  template:
+    metadata:
+      labels: {app: app-proxy}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/os: linux
+        kubernetes.io/arch: {{ .Values.execution.architecture }}
+{{- if .Values.services.pullSecret }}
+      imagePullSecrets: [{name: {{ .Values.services.pullSecret }}}]
+{{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: app-proxy
+          image: {{ .Values.images.entry | quote }}
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, uvicorn, "app_proxy.main:app", --host, 0.0.0.0, --port, "8080", --no-access-log]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          ports: [{name: service, containerPort: 8080}]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi}
+            limits: {cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi}
+          env:
+            - name: APP_PROXY_HOST
+              value: 0.0.0.0
+            - name: APP_PROXY_PORT
+              value: "8080"
+            - name: APP_PROXY_PROTOCOL_VERSION
+              value: "2"
+            - name: APP_PROXY_BACKEND_BASE
+              value: {{ .Values.platform.backendBase | quote }}
+            - name: APP_PROXY_MANAGER_BASE
+              value: {{ printf "http://runtime-manager.%s.svc:8091" .Values.services.namespace | quote }}
+            - name: APP_PROXY_BACKEND_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: authz-secret}
+            - name: APP_PROXY_MANAGER_SECRET
+              value: ""
+            - name: APP_PROXY_ROUTE_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: entry-key-id}
+            - name: APP_PROXY_ROUTE_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: entry-secret}
+          readinessProbe:
+            httpGet: {path: /healthz, port: service}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: {path: /healthz, port: service}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 512Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: egress-proxy
+  namespace: {{ .Values.services.namespace }}
+spec:
+  replicas: {{ .Values.services.egressReplicas }}
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: egress-proxy}}
+  template:
+    metadata:
+      labels: {app: egress-proxy}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/os: linux
+        kubernetes.io/arch: {{ .Values.execution.architecture }}
+{{- if .Values.services.pullSecret }}
+      imagePullSecrets: [{name: {{ .Values.services.pullSecret }}}]
+{{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: egress-proxy
+          image: {{ .Values.images.egress | quote }}
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, runtime_manager.egress_proxy]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          ports: [{name: service, containerPort: 3128}]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi}
+            limits: {cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi}
+          env:
+            - name: RTM_EXECUTOR
+              value: docker
+            - name: RTM_DATA_ROOT
+              value: /tmp/runtime
+            - name: RTM_EGRESS_LISTEN
+              value: 0.0.0.0:3128
+            - name: RTM_EGRESS_PROXY
+              value: {{ printf "%s:3128" .Values.services.egressClusterIP | quote }}
+            - name: RTM_PLATFORM_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: egress-key-id}
+            - name: RTM_PLATFORM_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: egress-secret}
+            - name: RTM_PROTOCOL_VERSION
+              value: "2"
+            - name: RTM_NODE_ID
+              value: {{ .Values.execution.nodeId | quote }}
+            - name: RTM_PLATFORM_BASE_URL
+              value: {{ .Values.platform.origin | quote }}
+            - name: RTM_PLATFORM_CA_FILE
+              value: /run/platform-ca/ca.crt
+          readinessProbe:
+            tcpSocket: {port: service}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: {port: service}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: platform-ca, mountPath: /run/platform-ca, readOnly: true}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 512Mi}
+        - name: platform-ca
+          configMap:
+            name: {{ .Values.platform.caConfigMap }}
+            defaultMode: 0444
+            items: [{key: ca.crt, path: ca.crt}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-admission
+  namespace: {{ .Values.services.namespace }}
+spec:
+  replicas: {{ .Values.services.admissionReplicas }}
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: runtime-admission}}
+  template:
+    metadata:
+      labels: {app: runtime-admission}
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/os: linux
+        kubernetes.io/arch: {{ .Values.execution.architecture }}
+{{- if .Values.services.pullSecret }}
+      imagePullSecrets: [{name: {{ .Values.services.pullSecret }}}]
+{{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: runtime-admission
+          image: {{ .Values.images.admission | quote }}
+          imagePullPolicy: IfNotPresent
+          command: [python, -m, runtime_manager.k8s_admission]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          ports: [{name: service, containerPort: 8443}]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi}
+            limits: {cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi}
+          env:
+            - name: RTM_ADMISSION_PLATFORM_URL
+              value: {{ .Values.platform.origin | quote }}
+            - name: RTM_ADMISSION_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: admission-key-id}
+            - name: RTM_ADMISSION_SECRET_FILE
+              value: /run/admission-identity/secret
+            - name: RTM_ADMISSION_PLATFORM_CA_FILE
+              value: /run/platform-ca/ca.crt
+            - name: RTM_K8S_NAMESPACE
+              value: {{ .Values.execution.namespace | quote }}
+            - name: RTM_ADMISSION_MANAGER_USERNAME
+              value: {{ printf "system:serviceaccount:%s:%s" .Values.services.namespace .Values.services.managerAccount | quote }}
+            - name: RTM_ADMISSION_STATUS_POLICY_REVISION
+              value: {{ .Values.execution.statusPolicyRevision | quote }}
+            - name: RTM_ADMISSION_CNI_USERNAME
+              value: {{ .Values.execution.cniUsername | quote }}
+            - name: RTM_DATA_PUBLIC_KEYS_CONFIGMAP
+              value: {{ .Values.execution.dataKeyConfigMap | quote }}
+            - name: RTM_ADMISSION_TLS_CERT_FILE
+              value: /run/admission-tls/tls.crt
+            - name: RTM_ADMISSION_TLS_KEY_FILE
+              value: /run/admission-tls/tls.key
+            - name: RTM_ADMISSION_HELPER_IMAGE
+              value: {{ .Values.images.helper | quote }}
+            - name: RTM_ADMISSION_CANARY_PLANS_FILE
+              value: /run/preflight/plans.json
+          readinessProbe:
+            httpGet: {path: /health, port: service, scheme: HTTPS}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: {path: /health, port: service, scheme: HTTPS}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: platform-ca, mountPath: /run/platform-ca, readOnly: true}
+            - {name: admission-identity, mountPath: /run/admission-identity, readOnly: true}
+            - {name: admission-tls, mountPath: /run/admission-tls, readOnly: true}
+            - {name: canary-plans, mountPath: /run/preflight, readOnly: true}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 512Mi}
+        - name: platform-ca
+          configMap:
+            name: {{ .Values.platform.caConfigMap }}
+            defaultMode: 0444
+            items: [{key: ca.crt, path: ca.crt}]
+        - name: admission-identity
+          secret:
+            secretName: {{ .Values.services.credentialsSecret }}
+            defaultMode: 0440
+            items: [{key: admission-secret, path: secret}]
+        - name: admission-tls
+          secret:
+            secretName: {{ .Values.services.admissionTlsSecret }}
+            defaultMode: 0440
+            items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]
+        - name: canary-plans
+          configMap:
+            name: runtime-canary-plans
+            defaultMode: 0444

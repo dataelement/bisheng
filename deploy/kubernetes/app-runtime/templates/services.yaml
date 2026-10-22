@@ -1,3 +1,7 @@
+{{- $profileImages := list }}
+{{- range .Values.execution.canaryProfiles }}
+{{- $profileImages = append $profileImages .runtime_image }}
+{{- end }}
 {{- if eq .Values.services.namespace .Values.execution.namespace }}
 {{- fail "control and execution namespaces must differ" }}
 {{- end }}
@@ -79,4 +83,4 @@ metadata:
   name: runtime-canary-plans
   namespace: {{ .Values.services.namespace }}
 data:
-  plans.json: {{ .Values.execution.canaryPlans | toJson | quote }}
+  plans.json: {{ dict "schema_version" 1 "plans" .Values.execution.canaryPlans "profile_images" $profileImages | toJson | quote }}

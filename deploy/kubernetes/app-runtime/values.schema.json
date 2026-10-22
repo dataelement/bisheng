@@ -54,7 +54,8 @@
         "entryType",
         "managerNodePort",
         "entryNodePort",
-        "egressClusterIP"
+        "egressClusterIP",
+        "pullSecret"
       ],
       "properties": {
         "namespace": {
@@ -148,6 +149,11 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^[0-9a-fA-F.:]+$"
+        },
+        "pullSecret": {
+          "type": "string",
+          "maxLength": 63,
+          "pattern": "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
         }
       }
     },
@@ -171,7 +177,10 @@
         "dataKeyConfigMap",
         "dataPublicKeys",
         "probeReport",
-        "canaryPlans"
+        "canaryPlans",
+        "canaryProfiles",
+        "sandbox",
+        "runtimeClasses"
       ],
       "properties": {
         "namespace": {
@@ -266,6 +275,72 @@
         },
         "canaryPlans": {
           "type": "object"
+        },
+        "canaryProfiles": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "runtime_image",
+              "command"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+              },
+              "runtime_image": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}$"
+              },
+              "command": {
+                "enum": [
+                  [
+                    "python",
+                    "--version"
+                  ],
+                  [
+                    "node",
+                    "--version"
+                  ],
+                  [
+                    "nginx",
+                    "-v"
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        "sandbox": {
+          "enum": [
+            "default",
+            "recommended",
+            "hardened"
+          ]
+        },
+        "runtimeClasses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "recommended",
+            "hardened"
+          ],
+          "properties": {
+            "recommended": {
+              "type": "string",
+              "maxLength": 63,
+              "pattern": "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+            },
+            "hardened": {
+              "type": "string",
+              "maxLength": 63,
+              "pattern": "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+            }
+          }
         }
       }
     },

@@ -1,4 +1,11 @@
+{{- $names := dict }}
+{{- $paths := dict }}
 {{- range .Values.storage.volumes }}
+{{- if or (hasKey $names .name) (hasKey $paths .path) }}
+{{- fail "local PV names and paths must be unique" }}
+{{- end }}
+{{- $_ := set $names .name true }}
+{{- $_ := set $paths .path true }}
 {{- if or (contains ".." .path) (not (hasPrefix (printf "%s/" (trimSuffix "/" $.Values.storage.localRoot)) .path)) }}
 {{- fail "local PV paths must be descendants of storage.localRoot" }}
 {{- end }}
