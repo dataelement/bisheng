@@ -36,7 +36,14 @@ def test_runtime_tables_follow_discovery_scope_and_constraints():
         else:
             assert "tenant_id" not in table.c
         unique = [item for item in table.constraints if isinstance(item, UniqueConstraint)]
-        assert len(unique) == (2 if model is RuntimeExecutionResource else 1)
+        assert len(unique) == 1
+        if model is RuntimeExecutionResource:
+            # Reusing the fixed production Pod name in another maintenance
+            # phase must retain both resource histories. Actual UID remains
+            # unique; operation/kind/name is deliberately no longer unique.
+            assert {item.name for item in unique} == {"uq_rt_resource_uid"}
+            assert tuple(unique[0].columns.keys()) == ("cluster_id", "namespace", "kind", "uid")
+            assert not any(tuple(item.columns.keys()) == ("operation_id", "kind", "name") for item in unique)
         for item in unique:
             assert item.name and item.name not in constraint_names
             nullable = {column.name for column in item.columns if column.nullable}

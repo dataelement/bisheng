@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-10-22T09:54:09.873774+00:00",
+  "source_base": "c90927b1f4e0388a956d4e300c7951ff7745b1bf",
+  "release_inheritance": "9d156f261cc7769fcf75f41caeb104a425308017",
+  "evidence_kind": "local-tests",
+  "runtime_deployment_verified": false,
+  "kubernetes_deployment_verified": false,
+  "docker_live_status": "not_run",
+  "kubernetes_live_status": "not_run",
+  "dm8_driver_status": "not_run_static_only",
+  "suites": [
+    {
+      "name": "runtime",
+      "command": "src/runtime-manager: PYTHONPATH=/private/tmp/f059-crypto50 python -m pytest -q tests",
+      "passed": 767,
+      "skipped": 10,
+      "failed": 0,
+      "kind": "local-tests",
+      "log_sha256": "658a2e885637e347a4eea3939e2a23768a5133ec7ed6a81c9c16a8f63d5c9bfd",
+      "private_log": "/private/tmp/f059-e2e-runtime-full.log"
+    },
+    {
+      "name": "app-proxy",
+      "command": "src/app-proxy: python -m pytest -q tests",
+      "passed": 256,
+      "skipped": 0,
+      "failed": 0,
+      "kind": "local-tests",
+      "log_sha256": "185366c197e87c2376cc7dfa10fa6d0e089dcb09bd7efb8f8f87b30ad93ffc79",
+      "private_log": "/private/tmp/f059-e2e-app-proxy-full.log"
+    },
+    {
+      "name": "backend",
+      "command": "config=/private/tmp/f059-test-config-auth.yaml python -m pytest -q src/backend/test/app_runtime src/backend/test/app_publish",
+      "passed": 1525,
+      "skipped": 18,
+      "failed": 0,
+      "kind": "local-tests",
+      "log_sha256": "27f48ebbc56fb44cfd8d6186341cd160777cba6d395ac9d05f2a606e995be82a",
+      "private_log": "/private/tmp/f059-e2e-backend-green.log"
+    },
+    {
+      "name": "harness-permission",
+      "command": "config=/private/tmp/f059-test-config-auth.yaml python -m pytest -q src/backend/test/app_runtime/test_k8s_e2e_contract.py src/backend/test/app_runtime/test_app_permission_registration.py src/backend/test/e2e/test_e2e_vibe_k8s_runtime.py",
+      "passed": 54,
+      "skipped": 11,
+      "failed": 0,
+      "kind": "local-tests",
+      "log_sha256": "53085a2bca1e1b0b75f887a8b8009eeaf63deaa0516a771d150427ddc8467989",
+      "private_log": "/private/tmp/f059-e2e-harness-final.log"
+    }
+  ],
+  "limitations": [
+    "Local runtime tests use fake Engine/Kubernetes transports where their fixtures specify; no Docker service or real cluster is exercised by this report.",
+    "The opt-in F059 live suite was not enabled; its 4 skipped tests are not real acceptance results.",
+    "18 backend and 10 runtime skips retain their original environment gates; skipped tests do not prove passed behavior.",
+    "Shared runtime and backend production source is unchanged by the C line; remaining parent work requires a final integrated rerun."
+  ]
+}
