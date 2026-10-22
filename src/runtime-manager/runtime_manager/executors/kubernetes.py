@@ -89,6 +89,7 @@ class KubernetesExecutor:
         self.data_transport = data_transport
         self.holder_id, self.controller_epoch, self.renew_at = str(uuid4()), 0, 0.0
         self._lease_lock = RLock()
+        self._lease_time = getattr(clock, "monotonic", time.monotonic)
         self._seed = None
         path = config.material_issuer_key_file
         if path:
@@ -174,18 +175,79 @@ class KubernetesExecutor:
             "data_transport_ready": self.data_transport is not None,
         }
 
+    def _controller_node(self):
+        node = self.platform.node_snapshot().get("node")
+        if (
+            not isinstance(node, dict)
+            or node.get("node_id") != self.config.node_id
+            or type(node.get("controller_epoch")) is not int
+            or node["controller_epoch"] < 0
+        ):
+            raise ExecutorError("controller_node_receipt_invalid")
+        return node
+
+    def _controller_receipt(self, receipt, expected_epoch, *, claiming=False):
+        allowed = {expected_epoch, expected_epoch + 1} if claiming else {expected_epoch}
+        if (
+            not isinstance(receipt, dict)
+            or receipt.get("node_id") != self.config.node_id
+            or receipt.get("holder_id") != self.holder_id
+            or type(receipt.get("controller_epoch")) is not int
+            or receipt["controller_epoch"] <= 0
+            or receipt["controller_epoch"] not in allowed
+        ):
+            raise ExecutorError("controller_lease_receipt_invalid")
+        try:
+            _seconds(receipt.get("lease_until"))
+        except ExecutorError:
+            raise ExecutorError("controller_lease_receipt_invalid") from None
+        return receipt["controller_epoch"]
+
+    def _controller_failed(self, error):
+        self.controller_epoch, self.renew_at = 0, 0.0
+        try:
+            return self._controller_node()
+        except (PlatformError, ExecutorError) as recheck:
+            raise error from recheck
+
+    def _renew_controller(self, epoch):
+        started = self._lease_time()
+        receipt = self.platform.renew_controller(self.holder_id, epoch)
+        self._controller_receipt(receipt, epoch)
+        # The server grants 30s from its own clock. Starting our conservative
+        # budget before the request avoids wall-clock skew and slow replies.
+        if self._lease_time() - started >= 20:
+            raise ExecutorError("controller_lease_receipt_expired")
+        self.controller_epoch, self.renew_at = epoch, started + 10
+        return {"holder_id": self.holder_id, "controller_epoch": epoch}
+
+    def _claim_controller(self, node=None):
+        node = node if node is not None else self._controller_node()
+        try:
+            receipt = self.platform.claim_controller(self.holder_id, node["controller_epoch"])
+            epoch = self._controller_receipt(receipt, node["controller_epoch"], claiming=True)
+            # A same-holder claim can return an almost-expired lease unchanged.
+            # Renew it explicitly before caching any permission to act.
+            return self._renew_controller(epoch)
+        except (PlatformError, ExecutorError) as exc:
+            self._controller_failed(exc)
+            raise
+
     def _controller(self):
         with self._lease_lock:
             self.checkpoint()
             if not self.controller_epoch:
-                snapshot = self.platform.node_snapshot()["node"]
-                receipt = self.platform.claim_controller(self.holder_id, snapshot.get("controller_epoch", 0))
-                self.controller_epoch = receipt["controller_epoch"]
-                self.renew_at = self.clock.time() + 10
-            elif self.clock.time() >= self.renew_at:
-                self.platform.renew_controller(self.holder_id, self.controller_epoch)
-                self.renew_at = self.clock.time() + 10
-            return {"holder_id": self.holder_id, "controller_epoch": self.controller_epoch}
+                return self._claim_controller()
+            if self._lease_time() < self.renew_at:
+                return {"holder_id": self.holder_id, "controller_epoch": self.controller_epoch}
+            try:
+                return self._renew_controller(self.controller_epoch)
+            except (PlatformError, ExecutorError) as exc:
+                node = self._controller_failed(exc)
+                if isinstance(exc, PlatformError) and exc.status == 409 and str(exc) == "controller_lease_lost":
+                    return self._claim_controller(node)
+                # Unknown writes are re-read, but never permit this action.
+                raise
 
     @staticmethod
     def _delivery_profile(operation, *, purge=False):
