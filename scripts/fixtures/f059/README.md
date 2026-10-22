@@ -55,7 +55,68 @@ python scripts/bootstrap_f059_acceptance.py \
 
 同一 code/revision 的内容不可覆盖；脚本不自动重试覆盖或偷偷增加 revision。重复相同修订和相同内容可复用。三个 profile 均以指定 revision 导入并设为默认；bundle manifest 显式引用 `e2e-f059-<language>@2`。**source-image 当前 schema 不允许 `delivery.profile` 字段**：K8s 兼容链路从当前语言默认 profile 解析并冻结，因此必须先完成新修订的 bootstrap/default 设置，再重新发布 source-image；不能向 manifest 添加非法字段。已冻结的旧版本不会因默认值变更而原地改镜像。
 
-输出 `e2e.env`、marker、三个 profile 定义、五组源码包（完整镜像场景暂不生成）、`scenarios.json`，以及 `demo-image-v1/`、`demo-image-v2/` 构建上下文。源码和 npm 初始场景没有新增依赖；Python 直接使用预制 runtime 中的标准库和 SDK/httpx，Node 只用内置模块。不会为此访问公网包源。
+输出 `e2e.env`、marker、三个 profile 定义、五组源码包（完整镜像场景暂不生成）、`scenarios.json`，以及 `demo-image-v1/`、`demo-image-v2/` 构建上下文。bundle 和 npm 初始场景没有新增依赖；Python bundle 使用预制 runtime 中的标准库和 SDK/httpx，Node 只用内置模块。Docker source-image 使用裸 Python 基础镜像，必须另外提供下面的离线 vendor 材料；不能假定 bundle 的依赖会自动进入源码镜像。
+
+### Docker source-image 的显式离线材料
+
+Docker 兼容构建与 K8s 兼容组装的前置不同：
+
+- Docker 通过 Engine Build API 按平台模板构建，固定基础镜像为本机 `python:3.11-slim`，不使用运行 profile 的 `app-python` 镜像。离线模式下构建网络为 `none`。必须先准备这个精确基础引用；导入另一个标签不代表已经满足。
+- K8s source-image 从当前语言默认 profile 冻结运行环境并经受限 OCI 组装推送，仍须满足 profile、离线依赖、仓库及安装报告条件。`delivery.profile` 不是 source-image 的合法 manifest 字段。
+- Python fixture 顶层导入真实 `bisheng_sdk`，并实际调用 SDK/附件接口。空 `requirements.txt` 加裸 Python 不能运行它；仅设置平台 simple index 地址也不能补齐禁网构建的依赖。
+
+为此新增显式 `--source-wheelhouse DIR`。它只读取操作者提供的本地材料，不执行 wheel 代码、不调用 pip、不访问网络，也不读取或复制开发机 venv。脚本校验每个 wheel 的 SHA-256、纯 Python 标签、固定版本、完整集合、常规文件和许可证，拒绝 native wheel、`.pth`、软链接、路径穿越、文件覆盖及超限内容。SDK wheel 必须与本仓库 `bisheng_sdk-0.1.1-py3-none-any.whl` 完全一致。
+
+本轮夹具只支持下列已准备的材料组合，不是通用依赖解析器；不能据此保证其他版本组合兼容：
+
+| 分发包 | 固定版本 |
+|---|---|
+| bisheng-sdk | 0.1.1 |
+| httpx | 0.28.1 |
+| httpcore | 1.0.9 |
+| h11 | 0.16.0 |
+| anyio | 4.15.1 |
+| idna | 3.20 |
+| certifi | 2026.10.19 |
+| typing_extensions | 4.16.0 |
+
+在已验收、固定镜像身份的 Python preparer 中，从 `/opt/bisheng/wheelhouse` 只读提取这些原始 `py3-none-any.whl` 到操作者的专用材料目录。可以由操作者创建一个不启动的临时容器并 `docker cp`，随后仅删除记录的那个容器 ID；不要从任意 `site-packages`、开发 venv 或公网补包。保留来源镜像 digest/config ID、原生平台和材料 SHA 作为证据。
+
+目录格式如下；哈希必须从实际文件计算，占位符不能使用：
+
+```text
+source-wheelhouse/
+├── source-vendor.json
+└── wheels/
+    ├── bisheng_sdk-0.1.1-py3-none-any.whl
+    └── ...其余七个固定 wheel
+```
+
+```json
+{
+  "format": "f059-source-wheelhouse-v1",
+  "python": "3.11",
+  "wheels": {
+    "wheels/bisheng_sdk-0.1.1-py3-none-any.whl": "sha256:<actual file digest>",
+    "wheels/httpx-0.28.1-py3-none-any.whl": "sha256:<actual file digest>"
+  }
+}
+```
+
+上面的 JSON 仅展示两项写法，实际必须列齐八项。wheel 内的 `.dist-info`、证书和许可证原样保留；SDK wheel 未携带许可证文件，脚本补入仓库的 Apache-2.0 `LICENSE`，不修改 wheel 本身。目录和文件不得经过软链接。
+
+```bash
+python scripts/bootstrap_f059_acceptance.py \
+  --api-base "$API_BASE" --suite-dir "$SUITE_DIR" --env-file "$PLATFORM_ENV" \
+  --profile-inventory "$INVENTORY_FILE" --profile-revision "$PROFILE_REVISION" \
+  --source-wheelhouse "$SOURCE_WHEELHOUSE" \
+  --demo-image "$DEMO_IMAGE_V1_DIGEST_REF" --demo-image-v2 "$DEMO_IMAGE_V2_DIGEST_REF" \
+  --prepare-only
+```
+
+只有 source-image 的 v1/v2 包增加 `_vendor/`、经过校验的材料清单和 `main.py` 的加载路径引导；其 `requirements.txt` 保持为空，平台模板仍从裸基础镜像构建。bundle、完整镜像和 SDK 正向断言不变。未传材料时仍生成兼容现有 K8s profile 的 source-image 场景，但 `scenarios.json` 明确标注 `docker-vendor-unprovided-kubernetes-profile-required`，不表示 Docker 前置已满足。
+
+在发布前，用实际打包的源码和材料在**裸 Python 基础镜像、禁网、非 root、只读根文件系统**条件下执行真实 SDK import、HTTP/SQLite/本地附件及 WebSocket 烟测。该结果只证明这组材料可以运行；平台 OBO、附件存储、权限和审批仍由真实平台 E2E 验证。若已有发布尝试，不要原地改旧包/旧 journal，使用新的应用 suffix 和独立证据批次，保留原失败记录。
 
 ### 完整应用镜像
 

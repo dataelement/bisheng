@@ -756,3 +756,207 @@ def test_bootstrap_rejects_env_marker_batch_disagreement_before_api(tmp_path, mo
                 client=object(),
             )
         )
+
+
+# T191 — 覆盖 AC: AC-04、AC-24、AC-36、AC-46、AC-55
+VENDOR_VERSIONS = {
+    "bisheng-sdk": "0.1.1",
+    "httpx": "0.28.1",
+    "httpcore": "1.0.9",
+    "h11": "0.16.0",
+    "anyio": "4.15.1",
+    "idna": "3.20",
+    "certifi": "2026.10.19",
+    "typing-extensions": "4.16.0",
+}
+
+
+def vendor_wheelhouse(tmp_path):
+    import hashlib
+    import zipfile
+
+    directory = tmp_path / "source-wheelhouse"
+    (directory / "wheels").mkdir(parents=True)
+    wheels = {}
+    for name, version in VENDOR_VERSIONS.items():
+        normalized = name.replace("-", "_")
+        filename = normalized + "-" + version + "-py3-none-any.whl"
+        path = directory / "wheels" / filename
+        if name == "bisheng-sdk":
+            path.write_bytes((ROOT / "src/backend/bisheng/dev_toolkit/artifacts" / filename).read_bytes())
+        else:
+            metadata = normalized + "-" + version + ".dist-info/"
+            with zipfile.ZipFile(path, "w") as wheel:
+                wheel.writestr(normalized + "/__init__.py", "# Contract fixture, not runtime dependency evidence.\n")
+                wheel.writestr(metadata + "METADATA", f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n")
+                wheel.writestr(metadata + "WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
+                wheel.writestr(metadata + "licenses/LICENSE", "Dedicated contract license fixture\n")
+        wheels["wheels/" + filename] = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+    (directory / "source-vendor.json").write_text(
+        json.dumps({"format": "f059-source-wheelhouse-v1", "python": "3.11", "wheels": wheels})
+    )
+    return directory
+
+
+def mutate_vendor_wheel(directory, member, *, symlink=False):
+    import hashlib
+    import zipfile
+
+    path = directory / "wheels/httpx-0.28.1-py3-none-any.whl"
+    with zipfile.ZipFile(path, "a") as wheel:
+        information = zipfile.ZipInfo(member)
+        information.external_attr = (0o120777 if symlink else 0o100644) << 16
+        wheel.writestr(information, "outside" if symlink else "unexpected material")
+    manifest_path = directory / "source-vendor.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["wheels"]["wheels/" + path.name] = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+
+
+def test_source_image_explicit_vendor_preserves_sdk_checks_licenses_and_other_modes(tmp_path, monkeypatch):
+    import zipfile
+
+    materials = vendor_wheelhouse(tmp_path)
+    suite, _output, values = environment(tmp_path)
+    # Packaging untrusted input must never import dependency code, install, or call APIs.
+    monkeypatch.setattr(httpx, "request", lambda *a, **kw: pytest.fail("network during local packaging"))
+    _profiles, scenarios = bootstrap.build_packages(suite, values, inventory=inventory(), source_wheelhouse=materials)
+    source = next(item for item in scenarios if item["mode"] == "source-image")
+    assert source["source_dependencies"] == "explicit-vendored-wheelhouse"
+    assert {item["path"] for item in source["application_checks"]} >= {"/sdk/identity", "/sdk/storage-roundtrip"}
+    manifests = []
+    for key in ("package", "update"):
+        with tarfile.open(source[key]) as package:
+            main = package.extractfile("main.py").read().decode()
+            compile(main, "main.py", "exec")
+            assert main.index("sys.path.insert") < main.index("from bisheng_sdk import")
+            assert package.extractfile("requirements.txt").read() == b""
+            assert (
+                package.extractfile("_vendor/bisheng_sdk-0.1.1.dist-info/licenses/LICENSE").read()
+                == (ROOT / "LICENSE").read_bytes()
+            )
+            manifests.append(package.extractfile("f059-source-vendor.json").read())
+            with zipfile.ZipFile(
+                ROOT / "src/backend/bisheng/dev_toolkit/artifacts/bisheng_sdk-0.1.1-py3-none-any.whl"
+            ) as sdk:
+                assert package.extractfile("_vendor/bisheng_sdk/auth.py").read() == sdk.read("bisheng_sdk/auth.py")
+    assert manifests[0] == manifests[1]
+    for scenario in scenarios:
+        if scenario["mode"] != "source-image":
+            with tarfile.open(scenario["package"]) as package:
+                assert not any(item.name.startswith("_vendor/") for item in package)
+                if scenario["runtime"] == "python3.11":
+                    assert "sys.path.insert" not in package.extractfile("main.py").read().decode()
+
+
+def test_source_image_without_materials_exposes_docker_precondition(tmp_path):
+    suite, _output, values = environment(tmp_path)
+    _profiles, scenarios = bootstrap.build_packages(suite, values, inventory=inventory())
+    source = next(item for item in scenarios if item["mode"] == "source-image")
+    assert source["source_dependencies"] == "docker-vendor-unprovided-kubernetes-profile-required"
+    with tarfile.open(source["package"]) as package:
+        assert not any(member.name.startswith("_vendor/") for member in package)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "hash", "sdk", "native", "version", "license", "manifest-path"])
+def test_source_vendor_rejects_incomplete_tampered_or_unsupported_materials(tmp_path, mutation):
+    import hashlib
+    import zipfile
+
+    materials = vendor_wheelhouse(tmp_path)
+    path = materials / "source-vendor.json"
+    manifest = json.loads(path.read_text())
+    if mutation == "missing":
+        del manifest["wheels"]["wheels/httpcore-1.0.9-py3-none-any.whl"]
+    elif mutation == "hash":
+        manifest["wheels"]["wheels/httpx-0.28.1-py3-none-any.whl"] = "sha256:" + "0" * 64
+    elif mutation == "manifest-path":
+        manifest["wheels"]["../outside.whl"] = "sha256:" + "0" * 64
+    else:
+        original = "bisheng_sdk-0.1.1-py3-none-any.whl" if mutation == "sdk" else "httpx-0.28.1-py3-none-any.whl"
+        target = materials / "wheels" / original
+        with zipfile.ZipFile(target) as wheel:
+            content = {item.filename: wheel.read(item) for item in wheel.infolist()}
+        if mutation == "sdk":
+            content["bisheng_sdk/auth.py"] += b"\n# modified SDK\n"
+        if mutation == "license":
+            del content["httpx-0.28.1.dist-info/licenses/LICENSE"]
+        if mutation == "native":
+            content["httpx-0.28.1.dist-info/WHEEL"] = (
+                b"Root-Is-Purelib: false\nTag: cp311-cp311-manylinux_2_17_x86_64\n"
+            )
+        if mutation == "version":
+            content["httpx-0.28.1.dist-info/METADATA"] = b"Name: httpx\nVersion: 0.27.0\n"
+        with zipfile.ZipFile(target, "w") as wheel:
+            for name, data in content.items():
+                wheel.writestr(name, data)
+        manifest["wheels"]["wheels/" + original] = "sha256:" + hashlib.sha256(target.read_bytes()).hexdigest()
+    path.write_text(json.dumps(manifest))
+    suite, _output, values = environment(tmp_path)
+    with pytest.raises(bootstrap.BootstrapError, match="source_vendor_"):
+        bootstrap.build_packages(suite, values, inventory=inventory(), source_wheelhouse=materials)
+    assert not list(suite.glob("*.tar.gz"))
+
+
+@pytest.mark.parametrize(
+    "member", ["../outside", "/absolute", "bad\\path", "inject.pth", "extra.so", "shared/__init__.py"]
+)
+def test_source_vendor_rejects_unsafe_paths_native_code_and_file_overwrite(tmp_path, member):
+    materials = vendor_wheelhouse(tmp_path)
+    if member == "shared/__init__.py":
+        mutate_vendor_wheel(materials, "h11/__init__.py")
+    else:
+        mutate_vendor_wheel(materials, member)
+    with pytest.raises(bootstrap.BootstrapError, match="source_vendor_"):
+        bootstrap.source_vendor_files(materials)
+
+
+def test_source_vendor_rejects_symlink_wheel_and_member(tmp_path):
+    materials = vendor_wheelhouse(tmp_path)
+    mutate_vendor_wheel(materials, "linked.py", symlink=True)
+    with pytest.raises(bootstrap.BootstrapError, match="source_vendor_"):
+        bootstrap.source_vendor_files(materials)
+    materials = vendor_wheelhouse(tmp_path / "second")
+    target = materials / "wheels/httpcore-1.0.9-py3-none-any.whl"
+    original = target.read_bytes()
+    target.unlink()
+    outside = tmp_path / "outside.whl"
+    outside.write_bytes(original)
+    target.symlink_to(outside)
+    with pytest.raises(bootstrap.BootstrapError, match="source_vendor_"):
+        bootstrap.source_vendor_files(materials)
+
+
+@pytest.mark.parametrize("document", ["[]", '{"format":"f059-source-wheelhouse-v1","format":"other"}'])
+def test_source_vendor_rejects_malformed_or_ambiguous_manifest(tmp_path, document):
+    materials = vendor_wheelhouse(tmp_path)
+    (materials / "source-vendor.json").write_text(document)
+    with pytest.raises(bootstrap.BootstrapError, match="source_vendor_"):
+        bootstrap.source_vendor_files(materials)
+
+
+def test_source_wheelhouse_cli_is_explicit_local_only(tmp_path, capsys):
+    materials = vendor_wheelhouse(tmp_path)
+    profile_inventory = tmp_path / "inventory.json"
+    profile_inventory.write_text(json.dumps(inventory()))
+    suite = tmp_path / "e2e-f059-vendored-cli"
+    assert (
+        bootstrap.main(
+            [
+                "--api-base",
+                "http://127.0.0.1:7860",
+                "--suite-dir",
+                str(suite),
+                "--profile-inventory",
+                str(profile_inventory),
+                "--source-wheelhouse",
+                str(materials),
+                "--prepare-only",
+            ]
+        )
+        == 0
+    )
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["api_bootstrap_executed"] is False
+    source = next(item for item in json.loads((suite / "scenarios.json").read_text()) if item["mode"] == "source-image")
+    assert source["source_dependencies"] == "explicit-vendored-wheelhouse"

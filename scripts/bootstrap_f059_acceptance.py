@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import io
 import ipaddress
 import json
@@ -22,6 +23,8 @@ import shlex
 import stat
 import tarfile
 import tempfile
+import zipfile
+from email.parser import BytesParser
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 from uuid import UUID, uuid4
@@ -35,6 +38,18 @@ PREFIX = "e2e-f059-"
 IMAGE = re.compile(r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}")
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}")
 ROLES = ("OWNER", "NONOWNER", "FOREIGN", "APPROVER")
+
+
+SOURCE_VENDOR_VERSIONS = {
+    "bisheng-sdk": "0.1.1",
+    "httpx": "0.28.1",
+    "httpcore": "1.0.9",
+    "h11": "0.16.0",
+    "anyio": "4.15.1",
+    "idna": "3.20",
+    "certifi": "2026.10.19",
+    "typing-extensions": "4.16.0",
+}
 
 
 class BootstrapError(RuntimeError):
@@ -129,9 +144,7 @@ def application_slug(case, application_suffix=None):
     return slug
 
 
-def prepare_environment(
-    suite_dir, *, base, input_env=None, output_env=None, entry_base=None, application_suffix=None
-):
+def prepare_environment(suite_dir, *, base, input_env=None, output_env=None, entry_base=None, application_suffix=None):
     suffix = validate_application_suffix(application_suffix)
     suite = Path(suite_dir).resolve()
     if not any(part.startswith(PREFIX) or part == "e2e-f059" for part in suite.parts):
@@ -265,6 +278,128 @@ def archive(path, files):
     path.chmod(0o600)
 
 
+def source_vendor_files(directory):
+    """Read an explicit, frozen pure-Python fixture closure without executing it.
+
+    This is the tested F059 material set, not a general dependency resolver.
+    SDK/HTTP compatibility still requires a bare-Python, network-disabled smoke.
+    """
+    directory = Path(directory)
+    if directory.is_symlink() or not directory.is_dir():
+        raise BootstrapError("source_vendor_directory_invalid")
+
+    def read_regular(path, maximum):
+        if any(parent.is_symlink() for parent in (path, *path.parents)):
+            raise BootstrapError("source_vendor_link_refused")
+        information = path.lstat()
+        if not stat.S_ISREG(information.st_mode) or information.st_size > maximum:
+            raise BootstrapError("source_vendor_file_invalid")
+        return path.read_bytes()
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise BootstrapError("source_vendor_duplicate_key")
+            result[key] = value
+        return result
+
+    try:
+        manifest = json.loads(read_regular(directory / "source-vendor.json", 65536), object_pairs_hook=unique_object)
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("format") != "f059-source-wheelhouse-v1"
+            or manifest.get("python") != "3.11"
+        ):
+            raise BootstrapError("source_vendor_manifest_invalid")
+        wheels = manifest.get("wheels")
+        if not isinstance(wheels, dict) or len(wheels) != len(SOURCE_VENDOR_VERSIONS):
+            raise BootstrapError("source_vendor_closure_incomplete")
+        files, seen, unpacked = {}, set(), 0
+        for relative, digest in sorted(wheels.items()):
+            if not re.fullmatch(r"wheels/[A-Za-z0-9_.-]+\.whl", relative) or not DIGEST.fullmatch(str(digest)):
+                raise BootstrapError("source_vendor_wheel_reference_invalid")
+            data = read_regular(directory / relative, 15 * 1024 * 1024)
+            if "sha256:" + hashlib.sha256(data).hexdigest() != digest:
+                raise BootstrapError("source_vendor_hash_mismatch")
+            with zipfile.ZipFile(io.BytesIO(data)) as wheel:
+                entries = wheel.infolist()
+                if len(entries) > 10000:
+                    raise BootstrapError("source_vendor_entries_exceeded")
+                if sum(item.file_size for item in entries) + unpacked > 50 * 1024 * 1024 or any(
+                    item.file_size > 15 * 1024 * 1024 or item.flag_bits & 1 for item in entries
+                ):
+                    raise BootstrapError("source_vendor_size_exceeded")
+                metadata_names = [
+                    item.filename for item in entries if re.fullmatch(r"[^/]+\.dist-info/METADATA", item.filename)
+                ]
+                if len(metadata_names) != 1:
+                    raise BootstrapError("source_vendor_metadata_invalid")
+                metadata_path = metadata_names[0]
+                metadata = BytesParser().parsebytes(wheel.read(metadata_path))
+                name = re.sub(r"[-_.]+", "-", metadata.get("Name", "")).lower()
+                version = metadata.get("Version", "")
+                if name in seen or SOURCE_VENDOR_VERSIONS.get(name) != version:
+                    raise BootstrapError("source_vendor_version_unsupported")
+                prefix = name.replace("-", "_") + "-" + version + ".dist-info/"
+                if metadata_path != prefix + "METADATA":
+                    raise BootstrapError("source_vendor_metadata_invalid")
+                properties = BytesParser().parsebytes(wheel.read(prefix + "WHEEL"))
+                if properties.get("Root-Is-Purelib", "").lower() != "true" or set(properties.get_all("Tag", [])) != {
+                    "py3-none-any"
+                }:
+                    raise BootstrapError("source_vendor_native_wheel_refused")
+                if Path(relative).name != name.replace("-", "_") + "-" + version + "-py3-none-any.whl":
+                    raise BootstrapError("source_vendor_filename_invalid")
+                if name == "bisheng-sdk":
+                    sdk = ROOT / "src/backend/bisheng/dev_toolkit/artifacts/bisheng_sdk-0.1.1-py3-none-any.whl"
+                    if data != sdk.read_bytes():
+                        raise BootstrapError("source_vendor_sdk_mismatch")
+                licensed = False
+                for member in entries:
+                    path = member.filename
+                    parts = path.rstrip("/").split("/")
+                    mode = stat.S_IFMT(member.external_attr >> 16)
+                    if (
+                        not path
+                        or path.startswith("/")
+                        or "\\" in path
+                        or any(part in {"", ".", ".."} or part.endswith(".data") for part in parts)
+                        or Path(path).suffix.lower() in {".pth", ".so", ".pyd", ".dll", ".dylib", ".exe", ".pyc"}
+                        or mode not in {0, stat.S_IFREG, stat.S_IFDIR}
+                    ):
+                        raise BootstrapError("source_vendor_member_refused")
+                    if member.is_dir():
+                        continue
+                    target = "_vendor/" + path
+                    if target in files:
+                        raise BootstrapError("source_vendor_file_collision")
+                    unpacked += member.file_size
+                    if unpacked > 50 * 1024 * 1024 or member.file_size > 15 * 1024 * 1024:
+                        raise BootstrapError("source_vendor_size_exceeded")
+                    files[target] = wheel.read(member)
+                    licensed = licensed or (
+                        path.startswith(prefix)
+                        and Path(path).name.upper().startswith(("LICENSE", "LICENCE", "COPYING"))
+                        and bool(files[target])
+                    )
+                if name == "bisheng-sdk":
+                    files["_vendor/" + prefix + "licenses/LICENSE"] = (ROOT / "LICENSE").read_bytes()
+                elif not licensed:
+                    raise BootstrapError("source_vendor_license_missing")
+                seen.add(name)
+        if seen != set(SOURCE_VENDOR_VERSIONS):
+            raise BootstrapError("source_vendor_closure_incomplete")
+        files["f059-source-vendor.json"] = json.dumps(
+            {"format": manifest["format"], "python": "3.11", "wheels": wheels}, sort_keys=True, indent=2
+        ).encode()
+        return files
+    except BootstrapError:
+        raise
+    except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile):
+        raise BootstrapError("source_vendor_material_invalid") from None
+
+
 def application_manifest(
     slug, runtime, mode, *, profile=None, profile_revision=1, image=None, version=1, model_name=None, knowledge_ids=()
 ):
@@ -315,9 +450,11 @@ def build_packages(
     profile_revision=1,
     demo_image=None,
     demo_image_v2=None,
+    source_wheelhouse=None,
     model_name=None,
     knowledge_ids=(),
 ):
+    vendor = source_vendor_files(source_wheelhouse) if source_wheelhouse is not None else {}
     profiles = profile_definitions(inventory, revision=profile_revision)
     (suite / "profiles.json").write_text(json.dumps(profiles, indent=2))
     scenarios = []
@@ -353,6 +490,14 @@ def build_packages(
             if runtime == "python3.11":
                 files["main.py"] = (FIXTURES / "python_demo.py").read_text()
                 files["requirements.txt"] = ""
+                if mode == "source-image" and vendor:
+                    files.update(vendor)
+                    files["main.py"] = files["main.py"].replace(
+                        "from __future__ import annotations\n",
+                        "from __future__ import annotations\n\nimport sys\nfrom pathlib import Path\n"
+                        "sys.path.insert(0, str(Path(__file__).resolve().parent / '_vendor'))\n",
+                        1,
+                    )
                 if suffix == "missing-dependency":
                     files["requirements.txt"] = "e2e-f059-missing-dependency==0.0.1 --hash=sha256:" + "0" * 64 + "\n"
             elif runtime == "node20":
@@ -394,6 +539,10 @@ def build_packages(
             "entry_path": "/",
             "expected_text": "e2e-f059",
         }
+        if mode == "source-image":
+            scenario["source_dependencies"] = (
+                "explicit-vendored-wheelhouse" if vendor else "docker-vendor-unprovided-kubernetes-profile-required"
+            )
         if suffix == "missing-dependency":
             scenario.pop("update")
             scenario.update(expected_failure_code=16227, expected_failure_stage="precheck_build")
@@ -730,6 +879,11 @@ def main(argv=None):
     parser.add_argument("--profile-revision", type=int, default=1)
     parser.add_argument("--demo-image")
     parser.add_argument("--demo-image-v2")
+    parser.add_argument(
+        "--source-wheelhouse",
+        type=Path,
+        help="Explicit frozen pure-Python wheels and source-vendor.json for offline Docker source-image fixtures.",
+    )
     parser.add_argument("--model-name")
     parser.add_argument("--knowledge-id", type=int, action="append", default=[])
     parser.add_argument("--prepare-only", action="store_true")
@@ -758,6 +912,7 @@ def main(argv=None):
             profile_revision=args.profile_revision,
             demo_image=args.demo_image,
             demo_image_v2=args.demo_image_v2,
+            source_wheelhouse=args.source_wheelhouse,
             model_name=args.model_name,
             knowledge_ids=args.knowledge_id,
         )
