@@ -6,8 +6,8 @@
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 232,
-    "tasks_total": 237,
+    "l1_completed": 234,
+    "tasks_total": 239,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -1160,6 +1160,12 @@
         }
       ],
       "scope": "Official suite.observe: management/HTTP/session denial/SDK identity+storage/WebSocket allow-deny/SQLite schema read+patch+CSV and owner/foreign refusals. Remaining modes/faults not claimed."
+    },
+    "historical_pod_stop": {
+      "source_commit": "464bf9027ad3398029c46495e696538c33e11313",
+      "local_related_passed": 479,
+      "remote_status": "pending; original stop deadline elapsed; no extension",
+      "l1": "/private/tmp/f059-t239-l1-review.md"
     }
   },
   "not_executed": [

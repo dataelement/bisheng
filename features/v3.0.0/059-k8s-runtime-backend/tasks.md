@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；237 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 232 / 237 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；239 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 234 / 239 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1880,6 +1880,22 @@
   **依赖:** T236
   **配对:** T236
 
+- [x] **T238** — 同名已闭合历史Pod停用配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_operations_v2.py`
+  **逻辑/验收**：两条已停止且清理完成的历史维护UID不得重新fresh/request_stop；当前服务UID照常停止并等待全操作清理，单一完成标记/未知状态/换UID拒绝。
+  **覆盖 AC:** AC-35、AC-36、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T237
+  **配对:** T239
+
+- [x] **T239** — 停用跳过已闭合历史Pod
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/operations.py`
+  **逻辑/验收**：仅stop_state=confirmed且cleanup_state=complete的Pod跳过重复停止；保留旧操作全资源cleanup等待及当前deadline/controller/UID围栏。
+  **覆盖 AC:** AC-35、AC-36、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T238
+  **配对:** T238
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -2023,3 +2039,5 @@ T234/T235通过21250d329合入d13e9ee91：新预算合同先红5/12绿，112合�
 T236/T237来自r10真实上线维护失败：probe、预览访问/拒绝、审批均真实通过；deploy d9729fe5…maintenance_phase_failed后正常cleanupcomplete，生产PVC保留。原Pod日志已清理，未声称取得现场KeyError；固定8a helper、非root/禁网/合成身份/空临时卷A/B证明缺MATERIAL_POD_UID报KeyError，只注入UID则backup(None)通过。模板确实漏配maintenance UID，按原材料身份合同补配对，不放宽权限。
 
 T236/T237已通过79a15870f合入249d5fc85：模板→实际身份reader先红2/11正反绿，534相邻全绿；主树完整runtime1532passed/13skip（32.72s）及静态门通过。原生amd64构建/导入后私有digest42c6c3c5…、Helm20同源三个控制服务更新，descriptor/helper143/profile2和有效报告不变，平台ready/controller_epoch15。owner fresh核旧failed/cleanupcomplete、同已批准version/approval后，仅一次manual-publish新attempt已提交；结果pending不重发，原r10套件期限900秒不延长。当前232/237，真实业务/故障/发行/L2门保留。
+
+2026-10-23 T238/T239：r10首版observe真实通过，停用9f57c389…被两个同名但已闭合维护UID拦住。464bf9027两行精确合取条件跳过历史Pod；红2/62→479相关通过，当前服务UID及未知状态围栏不变，全操作cleanup等待保留。登记与L1按实际先后记录。原停用deadline19:27:30已自然过期、仍running/pending，续办suite正常失败退出；不能延时或复活，另核过期清理闭环。234/239，109测试任务。

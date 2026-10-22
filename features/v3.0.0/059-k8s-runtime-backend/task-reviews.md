@@ -3352,3 +3352,13 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 **类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`。架构PASS（原可信helper渲染器），命名PASS，序列化PASS（core/v1 metadata.uid），数据库/租户N/A，前端N/A，信息泄漏PASS，设计同步PASS（4.8及5已知坑、修订历史）。依赖/配对T236已完成，单文件范围PASS。仅name=maintenance且material_secret存在时增加与transfer相同的Downward字段；原Secret/签名/期限/非root只读保护不变，purge没有材料身份、普通app/data-helper不获材料UID，保留literal注入拒绝。没有helper/API/模型/DDL改动。主树1532/13skip、Ruff/format/逐文件guard/diffcheck通过。
 **结果：PASS**。原agent L1 `/private/tmp/f059-t236-t237-l1.md` 的parent文档备注已闭合；原生helperA/B另证缺字段失败/补字段空库backup(None)通过，真实新attempt仍单列，不冒认上线完成。
+
+## Task Review: T238 — 同名已闭合历史Pod停用配对
+
+测试文件、完整AC-35、AC-36、AC-48、AC-49、AC-52、AC-55、依赖/配对及单owner范围PASS。先红2/62绿，最终479相关通过；同名两历史UID跳过，live停止且异步清理二次完成，单一标记/未知/非法状态及换UID仍拒绝。
+**结果：PASS**。原L1 `/private/tmp/f059-t239-l1-review.md`；不作为189实测。
+
+## Task Review: T239 — 停用跳过已闭合历史Pod
+
+实现仅operations.py两行，架构/命名/序列化/信息泄漏/设计同步PASS，数据库与前端N/A；依赖/配对T238与范围PASS。仅精确confirmed且complete跳过历史Pod，全操作cleanup、live UID、deadline/controller/checkpoint不变。Ruff/format/guard/diff及479相关通过。
+**结果：PASS**。源464bf9027ad3398029c46495e696538c33e11313；实际过期操作仍待安全闭合。
