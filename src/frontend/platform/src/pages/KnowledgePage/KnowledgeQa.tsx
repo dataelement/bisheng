@@ -1,4 +1,4 @@
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Button, Dropdown, DropdownItem, DropdownSeparator, SearchInput, notification } from '@bisheng/ui';
 import { QaLibraryDialog } from "./components/QaLibraryDialog";
 // @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
@@ -12,7 +12,6 @@ import { useLazyResourceActions } from "@/components/bs-comp/permission/useResou
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
-import { Select,SelectContent,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 
 
@@ -188,6 +187,46 @@ export default function KnowledgeQa(params) {
         }
     };
 
+    const renderRowMenu = (el: KnowledgeListRow) => {
+        const resourceId = String(el.id);
+        if (rowActionsLoading[resourceId]) {
+            return <DropdownItem disabled icon={<Outlined.Loading className="animate-spin" />}>
+                {t('knowledgeRowActions.loading', { ns: 'permission' })}
+            </DropdownItem>;
+        }
+        if (!hasRowActions(el)) {
+            return <DropdownItem disabled>{t('knowledgeRowActions.empty', { ns: 'permission' })}</DropdownItem>;
+        }
+        const hasLeadingItems = canManageKb(el) || canCopy(el) || canEdit(el);
+        return <>
+            {canManageKb(el) && (
+                <DropdownItem icon={<Shield />} onSelect={() => {
+                    setPermTarget({ id: resourceId, name: el.name });
+                    setPermDialogOpen(true);
+                    setModalKey(prev => prev + 1);
+                }}>
+                    {t('managePermission', { ns: 'permission' })}
+                </DropdownItem>
+            )}
+            {canCopy(el) && (
+                <DropdownItem icon={<Outlined.Copy />} disabled={copyLoadingId === resourceId} onSelect={() => handleCopy(el)}>
+                    {t('lib.copy', { ns: 'bs' })}
+                </DropdownItem>
+            )}
+            {canEdit(el) && (
+                <DropdownItem icon={<Outlined.Setting />} onSelect={() => handleOpenSettings(el)}>
+                    {t('setting')}
+                </DropdownItem>
+            )}
+            {canDelete(el) && <>
+                {hasLeadingItems && <DropdownSeparator />}
+                <DropdownItem danger icon={<Outlined.Delete />} onSelect={() => handleDelete(el.id)}>
+                    {t('delete')}
+                </DropdownItem>
+            </>}
+        </>;
+    };
+
     return (
         <div className="relative">
             {loading && (
@@ -249,108 +288,39 @@ export default function KnowledgeQa(params) {
                                 </TableCell>
                                 {showOperationsColumn && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        {(isLibraryBusy(el) || canReadRow(el)) && <Select
-                                            key={`${el.id}-${modalKey}`}
-                                            open={selectOpenId === String(el.id)}
-                                            onOpenChange={(isOpen) => void handleRowMenuOpenChange(el, isOpen)}
-                                            onValueChange={(selectedValue) => {
-                                                setSelectOpenId(null);
-                                                switch (selectedValue) {
-                                                    case 'permission':
-                                                        setPermTarget({ id: String(el.id), name: el.name });
-                                                        setPermDialogOpen(true);
-                                                        setModalKey(prev => prev + 1);
-                                                        break;
-                                                    case 'copy':
-                                                        canCopy(el) && handleCopy(el);
-                                                        break;
-                                                    case 'set':
-                                                        canEdit(el) && handleOpenSettings(el);
-                                                        break;
-                                                    case 'delete':
-                                                        canDelete(el) && handleDelete(el.id);
-                                                        break;
-                                                }
-                                            }}
-                                        >
-                                            <SelectTrigger
-                                                showIcon={false}
-                                                disabled={copyLoadingId === String(el.id)}
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="size-10 px-2 bg-transparent border-none shadow-none hover:bg-gray-300 flex items-center justify-center duration-200 relative"
-                                            >
-                                                {[KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state) ? (
-                                                    <>
-                                                        <Outlined.Loading className="animate-spin animate-spin" />
-                                                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
-                                                            {t('copying')}
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <Outlined.More size={24} color="#a69ba2" strokeWidth={1.75} />
-                                                )}
-                                            </SelectTrigger>
-                                            <SelectContent
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="z-50 overflow-visible"
-                                            >
-                                                {rowActionsLoading[String(el.id)] && (
-                                                    <SelectItem showIcon={false} value="loading" disabled>
-                                                        <div className="flex gap-2 items-center">
-                                                            <Outlined.Loading className="animate-spin w-4 h-4 animate-spin" />
-                                                            {t('knowledgeRowActions.loading', { ns: 'permission' })}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && canManageKb(el) && (
-                                                    <SelectItem showIcon={false} value="permission">
-                                                        <div className="flex gap-2 items-center">
-                                                            <Shield className="w-4 h-4" />
-                                                            {t('managePermission', { ns: 'permission' })}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && canCopy(el) && (
-                                                    <SelectItem
-                                                        showIcon={false}
-                                                        value="copy"
-                                                        disabled={copyLoadingId === String(el.id)}
+                                        {(isLibraryBusy(el) || canReadRow(el)) && (
+                                            // Menu clicks bubble through the portal; keep them off the row's onClick.
+                                            <span className="contents" onClick={(e) => e.stopPropagation()}>
+                                                <Dropdown
+                                                    key={`${el.id}-${modalKey}`}
+                                                    align="end"
+                                                    disabled={copyLoadingId === String(el.id)}
+                                                    open={selectOpenId === String(el.id)}
+                                                    onOpenChange={(isOpen) => void handleRowMenuOpenChange(el, isOpen)}
+                                                    menu={renderRowMenu(el)}
+                                                >
+                                                    <Button
+                                                        variant="text"
+                                                        color="default"
+                                                        size="large"
+                                                        iconOnly
+                                                        aria-label={t('more', { ns: 'bs' })}
+                                                        className="relative"
                                                     >
-                                                        <div className="flex gap-2 items-center">
-                                                            <Outlined.Copy className="w-4 h-4" />
-                                                            {t('lib.copy', { ns: 'bs' })}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && canEdit(el) && (
-                                                    <SelectItem
-                                                        value="set"
-                                                        showIcon={false}
-                                                    >
-                                                        <div className="flex gap-2 items-center">
-                                                            <Outlined.Setting className="w-4 h-4" />
-                                                            {t('setting')}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && canDelete(el) && (
-                                                    <SelectItem
-                                                        value="delete"
-                                                        showIcon={false}
-                                                    >
-                                                        <div className="flex gap-2 items-center">
-                                                            <Outlined.Delete className="w-4 h-4" />
-                                                            {t('delete')}
-                                                        </div>
-                                                    </SelectItem>
-                                                )}
-                                                {!rowActionsLoading[String(el.id)] && !hasRowActions(el) && (
-                                                    <SelectItem showIcon={false} value="empty" disabled>
-                                                        {t('knowledgeRowActions.empty', { ns: 'permission' })}
-                                                    </SelectItem>
-                                                )}
-                                            </SelectContent>
-                                        </Select>}
+                                                        {[KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state) ? (
+                                                            <>
+                                                                <Outlined.Loading className="animate-spin" />
+                                                                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
+                                                                    {t('copying')}
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <Outlined.More />
+                                                        )}
+                                                    </Button>
+                                                </Dropdown>
+                                            </span>
+                                        )}
                                     </div>
                                 </TableCell>}
                             </TableRow>

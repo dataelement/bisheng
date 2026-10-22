@@ -1,8 +1,8 @@
-import { Button } from '@bisheng/ui';
+import { Button, Select } from '@bisheng/ui';
 
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { getLinsightModelConfig } from "@/controllers/API/finetune";
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,6 +23,7 @@ export function ImageViewForm({ formData = {}, onSubmit }: ImageViewFormProps) {
     const { t } = useTranslation("tool");
     const [modelId, setModelId] = useState(formData.model_id || "");
     const [models, setModels] = useState<VisualModel[]>([]);
+    const selectLabels = useSelectLabels();
 
     useEffect(() => {
         let cancelled = false;
@@ -54,21 +55,19 @@ export function ImageViewForm({ formData = {}, onSubmit }: ImageViewFormProps) {
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             <div className="flex flex-col gap-2">
                 <Label>{t("imageViewModelLabel")}</Label>
-                <Select value={selected} onValueChange={(value) => {
-                    // Radix's native form select can emit an empty value while async options load.
-                    if (value) setModelId(value);
-                }}>
-                    <SelectTrigger>
-                        <SelectValue placeholder={t("pleaseSelect")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {models.map((model) => (
-                            <SelectItem key={String(model.id)} value={String(model.id)}>
-                                {model.displayName || model.name || String(model.id)}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <Select
+                    {...selectLabels}
+                    aria-label={t("imageViewModelLabel")}
+                    placeholder={t("pleaseSelect")}
+                    options={models.map((model) => ({
+                        value: String(model.id),
+                        label: model.displayName || model.name || String(model.id),
+                    }))}
+                    value={selected || null}
+                    onChange={(value) => {
+                        if (value != null) setModelId(String(value));
+                    }}
+                />
                 {models.length === 0 ? (
                     <p className="text-xs text-muted-foreground">{t("imageViewNoVisualModel")}</p>
                 ) : null}

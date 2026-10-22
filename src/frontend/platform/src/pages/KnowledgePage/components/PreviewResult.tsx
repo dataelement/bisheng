@@ -1,12 +1,7 @@
 // @ts-strict-ignore
 import { FileIcon } from "@/components/bs-icons/file";
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Select } from "@bisheng/ui";
 import { delChunkInPreviewApi,previewFileSplitApi,updatePreviewChunkApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { cn } from "@/util/utils";
@@ -40,6 +35,7 @@ export default function PreviewResult({
 }: IProps) {
   const { id } = useParams()
   const { t } = useTranslation(['knowledge', 'bs']);
+  const selectLabels = useSelectLabels();
 
   const [chunks, setChunks] = useState([]) // 当前文件分块
   const [partitions, setPartitions] = useState<Partition>(null) // 当前文件分区
@@ -228,21 +224,21 @@ export default function PreviewResult({
       {/* 下拉框 - 右上角 */}
       {(step === 3 || (step === 2 && showPreview)) && (
         <div className="flex justify-end">
-          <Select value={selectId} onValueChange={setSelectId}>
-            <SelectTrigger className="w-72">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {rules.fileList.map((file, index) => (
-                <SelectItem key={file.id} value={file.id}>
-                  <div className="flex items-center gap-2">
-                    <FileIcon type={file.suffix} className="size-4 min-w-4" />
-                    {file.fileName}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Select
+            {...selectLabels}
+            className="w-72"
+            aria-label={t('selectFile')}
+            options={rules.fileList
+              .filter(file => file.id != null && file.id !== '')
+              .map(file => ({
+                value: file.id,
+                label: String(file.fileName ?? ''),
+                icon: <FileIcon type={file.suffix} className="size-4 min-w-4" />,
+              }))}
+            value={selectId || null}
+            // Keep the raw id: currentFile is found by strict equality.
+            onChange={(value) => setSelectId(value == null ? '' : value as string)}
+          />
         </div>)
       }
       {/* 其他内容 */}

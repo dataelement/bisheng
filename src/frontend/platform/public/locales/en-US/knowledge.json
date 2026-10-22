@@ -443,5 +443,6 @@
     "start": "Start recording",
     "pause": "Pause recording",
     "failed": "Voice input failed. Please try again."
-  }
+  },
+  "fileStatusFilterLabel": "Filter by file status: {{value}}"
 }

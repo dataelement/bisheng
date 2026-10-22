@@ -1,11 +1,16 @@
 // @ts-strict-ignore
-import { Button, toast } from '@bisheng/ui';
+import { Button, Cascader, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Label } from "@/components/bs-ui/label";
-import Cascader from "@/components/bs-ui/select/cascader";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import {
+    fromModelCascaderValue,
+    toModelCascaderOptions,
+    toModelCascaderValue,
+} from "@/components/bs-comp/formFields/modelOptions";
 
 import { ModelFieldHint } from "../ModelFieldHint";
 import { getLinsightModelEnvelope, updateLinsightModelConfig } from "@/controllers/API/finetune";
@@ -20,38 +25,30 @@ import { ModelManagement } from "@/pages/BuildPage/bench/ModelManagement";
 import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
 
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, placeholder = '' }) => {
-    const defaultValue = useMemo(() => {
-        let _defaultValue = []
-        if (!value || !options || options.length === 0) return _defaultValue
-
-        options.forEach(option => {
-            const model = option.children?.find(el => el.value == value)
-            if (model) {
-                _defaultValue = [
-                    { value: option.value, label: option.label },
-                    { value: model.value, label: model.label }
-                ]
-                return true
-            }
-            return false
-        })
-        return _defaultValue
-    }, [value, options])
+    const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+    const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options])
+    const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value])
 
     return (
-        <div>
+        <div className="min-w-0">
             <Label className="bisheng-label">
                 <span>{label}</span>
                 {required && <span className="text-red-500 text-xs">*</span>}
                 {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText}></ModelFieldHint>}
             </Label>
             <Cascader
-                key={`model-select-${value}-${options.length}`}
-                defaultValue={defaultValue}
-                options={options}
-                close={close}
-                onChange={(val) => onChange(val?.[1])}
-                placeholder={placeholder}
+                {...selectLabels}
+                className="w-full"
+                options={cascaderOptions}
+                value={cascaderValue}
+                allowClear={close}
+                onChange={(path) => onChange(fromModelCascaderValue(path))}
+                placeholder={placeholder || t('build.selectModel')}
+                aria-label={typeof label === 'string' && label ? label : t('build.selectModel')}
+                backLabel={t('sharedUi.back')}
+                doneLabel={t('sharedUi.done')}
+                searchPlaceholder={t('sharedUi.searchModels')}
             />
         </div>
     )
@@ -237,7 +234,7 @@ export default function WorkbenchModel({ onBack }) {
     const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
     const fallbackBlocked = !!linsightConfig?.fallback_blocked;
     return (
-        <div className="max-w-[880px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+        <div className="max-w-[1120px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <FallbackBlockedBanner visible={fallbackBlocked} />
             {inheritedFromRoot && (
                 <div className="-mb-2 text-xs text-muted-foreground flex items-center">

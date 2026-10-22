@@ -3,15 +3,7 @@ import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { CircleHelp, FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
-import {
-    ActionMenuContent,
-    ActionMenuItem,
-    actionMenuLabelClassName,
-} from "~/components/ActionMenu";
+import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
@@ -103,95 +95,76 @@ export function KnowledgeSpaceHeader({
     // Filter / sort / search / view-toggle all moved into FileListToolbar.
     const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
 
+    const showProcessSimilar = Boolean(versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar);
+    // The danger row gets its own group only when something sits above it.
+    const hasBatchActionsAboveDelete = showProcessSimilar || canBatchDownload
+        || (isAdmin && (!hasFoldersSelected || hasFailedFiles)) || Boolean(onBatchMove);
+
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
             {selectedCount > selectedThreshold && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <button
-                            type="button"
-                            className="inline-flex h-8 shrink-0 items-center justify-center gap-0.5 rounded-md border border-border-base bg-white px-3 text-sm font-normal text-text-2 transition-colors hover:bg-fill-1"
-                        >
-                            {localize("com_knowledge.batch_operation")}
-                            <Outlined.Down className="size-4" />
-                        </button>
-                    </DropdownMenuTrigger>
-                    <ActionMenuContent align="end" width={140}>
-                        {versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar && (
-                            <ActionMenuItem
-                                onClick={onProcessSimilar}
-                                icon={<Outlined.FileSearch />}
-                                label={localize("com_knowledge.version.header_process_similar_label")}
-                            />
+                <Dropdown
+                    align="end"
+                    menu={<>
+                        {showProcessSimilar && (
+                            <DropdownItem onSelect={onProcessSimilar} icon={<Outlined.FileSearch />}>
+                                {localize("com_knowledge.version.header_process_similar_label")}
+                            </DropdownItem>
                         )}
                         {canBatchDownload && (
-                            <ActionMenuItem
-                                onClick={onBatchDownload}
-                                icon={<Outlined.Download />}
-                                label={localize("com_knowledge.batch_download")}
-                            />
+                            <DropdownItem onSelect={onBatchDownload} icon={<Outlined.Download />}>
+                                {localize("com_knowledge.batch_download")}
+                            </DropdownItem>
                         )}
                         {isAdmin && !hasFoldersSelected && (
-                            <ActionMenuItem
-                                onClick={onBatchTag}
-                                icon={<Outlined.Tag />}
-                                label={localize("com_knowledge.batch_add_tags")}
-                            />
+                            <DropdownItem onSelect={onBatchTag} icon={<Outlined.Tag />}>
+                                {localize("com_knowledge.batch_add_tags")}
+                            </DropdownItem>
                         )}
                         {isAdmin && hasFailedFiles && (
-                            <ActionMenuItem
-                                onClick={onBatchRetry}
-                                icon={<Outlined.Refresh />}
-                                label={localize("com_knowledge.batch_retry")}
-                            />
+                            <DropdownItem onSelect={onBatchRetry} icon={<Outlined.Refresh />}>
+                                {localize("com_knowledge.batch_retry")}
+                            </DropdownItem>
                         )}
                         {onBatchMove && (
-                            <ActionMenuItem
-                                disabled={!canBatchMove}
-                                onClick={onBatchMove}
-                                icon={<Outlined.MoveToFolder />}
-                                label={localize("com_knowledge.move")}
-                            />
+                            <DropdownItem disabled={!canBatchMove} onSelect={onBatchMove} icon={<Outlined.MoveToFolder />}>
+                                {localize("com_knowledge.move")}
+                            </DropdownItem>
                         )}
                         {canBatchDelete && (
-                            <ActionMenuItem
-                                danger
-                                onClick={onBatchDelete}
-                                icon={<Outlined.Delete />}
-                                label={localize("com_knowledge.batch_delete")}
-                            />
+                            <>
+                                {hasBatchActionsAboveDelete && <DropdownSeparator />}
+                                <DropdownItem danger onSelect={onBatchDelete} icon={<Outlined.Delete />}>
+                                    {localize("com_knowledge.batch_delete")}
+                                </DropdownItem>
+                            </>
                         )}
-                    </ActionMenuContent>
-                </DropdownMenu>
+                    </>}
+                >
+                    <button
+                        type="button"
+                        className="inline-flex h-8 shrink-0 items-center justify-center gap-0.5 rounded-md border border-border-base bg-white px-3 text-sm font-normal text-text-2 transition-colors hover:bg-fill-1"
+                    >
+                        {localize("com_knowledge.batch_operation")}
+                        <Outlined.Down className="size-4" />
+                    </button>
+                </Dropdown>
             )}
             {showAddMenu && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <button
-                            type="button"
-                            disabled={isSearching}
-                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-border-base bg-white px-4 text-sm text-text-1 transition-colors hover:bg-fill-1 disabled:cursor-not-allowed disabled:text-text-4 disabled:hover:bg-transparent"
-                        >
-                            {localize("com_knowledge.add_new")}
-                            <Outlined.Down className="size-4" />
-                        </button>
-                    </DropdownMenuTrigger>
-                    <ActionMenuContent align="end">
+                <Dropdown
+                    align="end"
+                    disabled={isSearching}
+                    menu={<>
                         {canCreateFolder && (
-                            <ActionMenuItem
-                                onClick={onCreateFolder}
-                                icon={<FolderPlus />}
-                                label={localize("com_knowledge.new_folder")}
-                            />
+                            <DropdownItem onSelect={onCreateFolder} icon={<FolderPlus />}>
+                                {localize("com_knowledge.new_folder")}
+                            </DropdownItem>
                         )}
                         {canUploadFile && (
                             <>
-                                <ActionMenuItem
-                                    onClick={onTriggerUpload}
-                                    icon={<Outlined.Upload />}
-                                >
-                                    <div className="flex min-w-0 flex-1 items-center">
-                                        <span className={actionMenuLabelClassName}>
+                                <DropdownItem onSelect={onTriggerUpload} icon={<Outlined.Upload />}>
+                                    <span className="flex min-w-0 items-center">
+                                        <span className="min-w-0 truncate">
                                             {localize("com_knowledge.upload_file")}
                                         </span>
                                         <SharedTooltip  content={localize(
@@ -205,24 +178,29 @@ export function KnowledgeSpaceHeader({
                                                 >
                                                     <CircleHelp className="size-3.5" />
                                                 </span></SharedTooltip>
-                                    </div>
-                                </ActionMenuItem>
-                                <ActionMenuItem
-                                    onClick={onTriggerUploadFolder}
-                                    icon={<FolderUp />}
-                                    label={localize("com_knowledge.upload_folder")}
-                                />
+                                    </span>
+                                </DropdownItem>
+                                <DropdownItem onSelect={onTriggerUploadFolder} icon={<FolderUp />}>
+                                    {localize("com_knowledge.upload_folder")}
+                                </DropdownItem>
                                 {knowledgeUploadCapabilities.webLink && (
-                                    <ActionMenuItem
-                                        onClick={onTriggerWebLink}
-                                        icon={<Link2 />}
-                                        label={localize("com_knowledge.web_link")}
-                                    />
+                                    <DropdownItem onSelect={onTriggerWebLink} icon={<Link2 />}>
+                                        {localize("com_knowledge.web_link")}
+                                    </DropdownItem>
                                 )}
                             </>
                         )}
-                    </ActionMenuContent>
-                </DropdownMenu>
+                    </>}
+                >
+                    <button
+                        type="button"
+                        disabled={isSearching}
+                        className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-border-base bg-white px-4 text-sm text-text-1 transition-colors hover:bg-fill-1 disabled:cursor-not-allowed disabled:text-text-4 disabled:hover:bg-transparent"
+                    >
+                        {localize("com_knowledge.add_new")}
+                        <Outlined.Down className="size-4" />
+                    </button>
+                </Dropdown>
             )}
         </div>
     );

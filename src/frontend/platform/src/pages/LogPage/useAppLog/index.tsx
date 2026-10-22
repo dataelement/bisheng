@@ -1,16 +1,16 @@
 // @ts-strict-ignore
-import { Button, toast } from '@bisheng/ui';
+import { Button, Select, toast } from '@bisheng/ui';
 
 import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
 import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
 import FilterByUser from "@/components/bs-comp/filterTableDataComponent/FilterByUser";
 import FilterByUsergroup from "@/components/bs-comp/filterTableDataComponent/FilterByUsergroup";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { locationContext } from "@/contexts/locationContext";
@@ -61,6 +61,7 @@ const filterReducer = (state: FilterState, action: Action): FilterState => {
 
 export default function AppUseLog() {
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
     const { appConfig } = useContext(locationContext)
 
     // 20 items per page
@@ -269,33 +270,33 @@ export default function AppUseLog() {
                 <FilterByUser value={filters.userName} placeholder={t('log.userName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userName']: value } })} />
                 <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
                 <FilterByDate value={filters.dateRange} placeholders={[`${t('log.startDate')}`, `${t('log.endDate')}`]} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['dateRange']: value } })} />
-                <div className="w-[200px] relative">
-                    <Select value={filters.feedback} onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['feedback']: value } })}>
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.userFeedbackPlaceholder')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                <SelectItem value={'like'}>{t('log.likeFeedback')}</SelectItem>
-                                <SelectItem value={'dislike'}>{t('log.dislikeFeedback')}</SelectItem>
-                                <SelectItem value={'copied'}>{t('log.copyFeedback')}</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                {appConfig.isPro && <div className="w-[200px] relative">
-                    <Select value={filters.sensitive_status} onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['sensitive_status']: value } })} >
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.sensitiveReviewResult')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                <SelectItem value={'2'}>{t('log.sensitiveViolation')}</SelectItem>
-                                <SelectItem value={'1'}>{t('log.sensitivePass')}</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>}
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[200px]"
+                    aria-label={t('log.userFeedbackPlaceholder')}
+                    placeholder={t('log.userFeedbackPlaceholder')}
+                    value={filters.feedback || null}
+                    onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['feedback']: value == null ? '' : String(value) } })}
+                    options={[
+                        { value: 'like', label: t('log.likeFeedback') },
+                        { value: 'dislike', label: t('log.dislikeFeedback') },
+                        { value: 'copied', label: t('log.copyFeedback') },
+                    ]}
+                />
+                {appConfig.isPro && <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[200px]"
+                    aria-label={t('log.sensitiveReviewResult')}
+                    placeholder={t('log.sensitiveReviewResult')}
+                    value={filters.sensitive_status || null}
+                    onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['sensitive_status']: value == null ? '' : String(value) } })}
+                    options={[
+                        { value: '2', label: t('log.sensitiveViolation') },
+                        { value: '1', label: t('log.sensitivePass') },
+                    ]}
+                />}
                 <Button onClick={() => {
                     const dateRange = filters.dateRange || [];
                     const originalStart = dateRange[0];

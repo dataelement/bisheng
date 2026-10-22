@@ -1,14 +1,7 @@
 // @ts-strict-ignore
-import { Input } from '@bisheng/ui';
+import { Input, Select } from '@bisheng/ui';
 
-import {
-Select,
-SelectContent,
-SelectGroup,
-SelectItem,
-SelectTrigger,
-SelectValue
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { useTranslation } from "react-i18next";
 import { AppHint } from "../../components/AppHint";
 
@@ -60,6 +53,7 @@ export const SelectField = ({
     tooltip = ''
 }) => {
     const { t } = useTranslation('tool');
+    const selectLabels = useSelectLabels();
 
     return (
         <div key={id}>
@@ -69,20 +63,20 @@ export const SelectField = ({
                 {required && <span className="bisheng-tip">*</span>}
             </label>
 
-            <Select value={value} onValueChange={onChange}>
-                <SelectTrigger className="h-8 mt-2">
-                    <SelectValue placeholder={t("pleaseSelect")} />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        {options.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                            </SelectItem>
-                        ))}
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
+            <Select
+                {...selectLabels}
+                id={id}
+                aria-label={typeof label === "string" ? label : undefined}
+                className="mt-2"
+                placeholder={t("pleaseSelect")}
+                options={options
+                    .filter((option) => option?.value != null && option.value !== "")
+                    .map((option) => ({ value: option.value, label: option.label }))}
+                value={value === "" || value == null ? null : value}
+                onChange={(v) => {
+                    if (v != null) onChange(v);
+                }}
+            />
 
             {error && (
                 <p className="bisheng-tip mt-1">

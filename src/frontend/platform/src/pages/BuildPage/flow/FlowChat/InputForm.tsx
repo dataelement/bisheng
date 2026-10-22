@@ -1,8 +1,7 @@
 // @ts-strict-ignore
-import { Button, toast } from '@bisheng/ui';
+import { Button, Select, toast } from '@bisheng/ui';
 
-import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
-import MultiSelect from "@/components/bs-ui/select/multi";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import InputComponent from "@/components/inputComponent";
 import InputFileComponent from "@/components/inputFileComponent";
@@ -21,6 +20,7 @@ const enum FormItemType {
 const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
+    const selectLabels = useSelectLabels()
 
     const formDataRef = useRef(data.value.reduce((map, item) => {
         map[item.key] = { key: item.key, type: item.type, label: item.value, fileName: '', value: '' }
@@ -90,42 +90,32 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
                                                     onChange={(val) => handleChange(item, val)}
                                                 />
                                             )
-                                        case FormItemType.Select:
-                                            return (
-                                                item.multiple ?
-                                                    <MultiSelect
+                                        case FormItemType.Select: {
+                                                const options = (item.options || [])
+                                                    .filter(el => el.text != null && el.text !== '')
+                                                    .map(el => ({ label: String(el.text), value: String(el.text) }))
+                                                return item.multiple ?
+                                                    <Select
+                                                        {...selectLabels}
                                                         multiple
-                                                        className={''}
+                                                        options={options}
                                                         value={multiVal[item.key] || []}
-                                                        options={
-                                                            item.options.map(el => ({
-                                                                label: el.text,
-                                                                value: el.text
-                                                            }))
-                                                        }
                                                         placeholder={t('selectOption', { ns: 'flow' })}
+                                                        aria-label={item.value}
                                                         onChange={(v) => {
-                                                            setMultiVal(prev => ({ ...prev, [item.key]: v }));
-                                                            handleChange(item, v.join(','))
+                                                            const vals = v.map(String)
+                                                            setMultiVal(prev => ({ ...prev, [item.key]: vals }));
+                                                            handleChange(item, vals.join(','))
                                                         }}
-                                                    >
-                                                        {/* {children?.(reload)} */}
-                                                    </MultiSelect>
-                                                    : <Select onValueChange={(val) => handleChange(item, val)}>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectGroup>
-                                                                {item.options.map(el => (
-                                                                    <SelectItem key={el.text} value={el.text}>
-                                                                        {el.text}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectGroup>
-                                                        </SelectContent>
-                                                    </Select>
-                                            )
+                                                    />
+                                                    : <Select
+                                                        {...selectLabels}
+                                                        options={options}
+                                                        placeholder={t('selectOption', { ns: 'flow' })}
+                                                        aria-label={item.value}
+                                                        onChange={(v) => handleChange(item, v == null ? '' : String(v))}
+                                                    />
+                                        }
                                         case FormItemType.File:
                                             return (
                                                 <InputFileComponent

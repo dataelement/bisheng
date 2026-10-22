@@ -601,5 +601,8 @@
       }
     }
   },
-  "rerunWorkflow": "Run again"
+  "rerunWorkflow": "Run again",
+  "type": "Type",
+  "valueType": "Value type",
+  "selectDbType": "Select a database type"
 }

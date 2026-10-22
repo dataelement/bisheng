@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, Textarea, toast } from '@bisheng/ui';
+import { Alert, Button, Cascader, Textarea, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -7,7 +7,12 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
-import Cascader from "@/components/bs-ui/select/cascader";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import {
+    fromModelCascaderValue,
+    toModelCascaderOptions,
+    toModelCascaderValue,
+} from "@/components/bs-comp/formFields/modelOptions";
 import { Switch } from "@bisheng/ui";
 
 import { ModelFieldHint } from "../ModelFieldHint";
@@ -25,34 +30,31 @@ import {
     normalizeKnowledgeModelIds,
 } from "./knowledgeModelValidation";
 
-export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, footer = null }) => {
-
-    const defaultValue = useMemo(() => {
-        let _defaultValue = []
-        if (!value) return _defaultValue
-        options.some(option => {
-            const model = option.children.find(el => el.value === value)
-            if (model) {
-                _defaultValue = [{ value: option.value, label: option.label }, { value: model.value, label: model.label }]
-                return true
-            }
-        })
-        return _defaultValue
-    }, [value, options])
+export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, placeholder = '' }) => {
+    const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+    const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options])
+    const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value])
 
     return (
-        <div>
+        <div className="min-w-0">
             <Label className="bisheng-label">
                 <span>{label}</span>
                 {required && <span className="text-red-500 text-xs">*</span>}
                 {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText} />}
             </Label>
             <Cascader
-                defaultValue={defaultValue}
-                options={options}
-                close={close}
-                onChange={(val) => onChange(val[1])}
-                footer={footer}
+                {...selectLabels}
+                className="w-full"
+                options={cascaderOptions}
+                value={cascaderValue}
+                allowClear={close}
+                onChange={(path) => onChange(fromModelCascaderValue(path))}
+                placeholder={placeholder || t('build.selectModel')}
+                aria-label={typeof label === 'string' && label ? label : t('build.selectModel')}
+                backLabel={t('sharedUi.back')}
+                doneLabel={t('sharedUi.done')}
+                searchPlaceholder={t('sharedUi.searchModels')}
             />
         </div>
     );
@@ -262,9 +264,11 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <FallbackBlockedBanner visible={fallbackBlocked} />
             {unavailableModelFields.length > 0 && (
-                <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
-                    {t('model.unavailableSelectionsCleared')}
-                </div>
+                <Alert
+                    type="warning"
+                    description={t('model.unavailableSelectionsCleared')}
+                    live
+                />
             )}
             {inheritedFromRoot && (
                 <div className="-mb-2 text-xs text-muted-foreground flex items-center">

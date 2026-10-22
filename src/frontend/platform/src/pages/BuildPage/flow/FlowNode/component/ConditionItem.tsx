@@ -1,8 +1,8 @@
 // @ts-strict-ignore
-import { Button, Input } from '@bisheng/ui';
+import { Button, Input, Select } from '@bisheng/ui';
 
 
-import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { FlowTooltip as Tip } from "@/pages/BuildPage/flow/FlowTooltip";
 import { isVarInFlow,updateVariableNameByCondition } from "@/util/flowUtils";
@@ -29,6 +29,28 @@ interface Item {
 
 const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onDeleteItem }) => {
     const { t } = useTranslation('flow');
+    const selectLabels = useSelectLabels();
+
+    const compOptions = useMemo(() => [
+        { value: 'equals', label: t('equals') },
+        { value: 'not_equals', label: t('notEquals') },
+        { value: 'contains', label: t('contains') },
+        { value: 'not_contains', label: t('notContains') },
+        { value: 'is_empty', label: t('isEmpty') },
+        { value: 'is_not_empty', label: t('isNotEmpty') },
+        { value: 'starts_with', label: t('startsWith') },
+        { value: 'ends_with', label: t('endsWith') },
+        { value: 'greater_than', label: '>' },
+        { value: 'less_than', label: '<' },
+        { value: 'greater_than_or_equal', label: '≥' },
+        { value: 'less_than_or_equal', label: '≤' },
+        { value: 'regex', label: t('regex') },
+    ], [t]);
+
+    const typeOptions = useMemo(() => [
+        { value: 'ref', label: t('reference') },
+        { value: 'input', label: t('input') },
+    ], [t]);
 
     const handleCompTypeChange = (newType) => {
         const valuetype = newType === 'regex' ? 'input' : item.right_value_type;
@@ -74,43 +96,29 @@ const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onD
                 </Tip>
             </SelectVar>
             {/* condition */}
-            <Select value={item.comparison_operation} onValueChange={handleCompTypeChange}>
-                <SelectTrigger className={`max-w-32 w-24 h-8 ${required && !item.comparison_operation && 'border-red-500'}`}>
-                    <SelectValue placeholder={t('selectCondition')} />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectItem value="equals">{t('equals')}</SelectItem>
-                        <SelectItem value="not_equals">{t('notEquals')}</SelectItem>
-                        <SelectItem value="contains">{t('contains')}</SelectItem>
-                        <SelectItem value="not_contains">{t('notContains')}</SelectItem>
-                        <SelectItem value="is_empty">{t('isEmpty')}</SelectItem>
-                        <SelectItem value="is_not_empty">{t('isNotEmpty')}</SelectItem>
-                        <SelectItem value="starts_with">{t('startsWith')}</SelectItem>
-                        <SelectItem value="ends_with">{t('endsWith')}</SelectItem>
-                        <SelectItem value="greater_than">&gt;</SelectItem>
-                        <SelectItem value="less_than">&lt;</SelectItem>
-                        <SelectItem value="greater_than_or_equal">&ge;</SelectItem>
-                        <SelectItem value="less_than_or_equal">&le;</SelectItem>
-                        <SelectItem value="regex">{t('regex')}</SelectItem>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
+            <Select
+                {...selectLabels}
+                options={compOptions}
+                value={item.comparison_operation || null}
+                onChange={(v) => handleCompTypeChange(v == null ? '' : String(v))}
+                placeholder={t('selectCondition')}
+                aria-label={t('selectCondition')}
+                status={required && !item.comparison_operation ? 'error' : 'default'}
+                className="nodrag max-w-32 w-24"
+            />
             {/* type */}
             {!['is_not_empty', 'is_empty'].includes(item.comparison_operation) && (
                 <>
                     {'regex' !== item.comparison_operation && (
-                        <Select value={item.right_value_type} onValueChange={handleTypeChange}>
-                            <SelectTrigger className="max-w-32 w-24 h-8">
-                                <SelectValue placeholder={t('selectType')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectItem value="ref">{t('reference')}</SelectItem>
-                                    <SelectItem value="input">{t('input')}</SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+                        <Select
+                            {...selectLabels}
+                            options={typeOptions}
+                            value={item.right_value_type || null}
+                            onChange={(v) => handleTypeChange(v == null ? '' : String(v))}
+                            placeholder={t('selectType')}
+                            aria-label={t('valueType')}
+                            className="nodrag max-w-32 w-24"
+                        />
                     )}
                     {/* value */}
                     {item.right_value_type === 'ref' ? (
