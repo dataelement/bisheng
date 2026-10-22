@@ -50,7 +50,7 @@ function ChatMarkdownContent({ content, webContent, citations, messageId, onOpen
   const { transformedContent, citationMap } = useMemo(() => {
     let value = services.latexParsing === false ? content : preprocessLaTeX(content);
     if (!/```mermaid[\s\S]*?```/.test(value)) value = value.replace(/```mermaid[\s\S]*$/, '');
-    return transformPrivateCitations(value.replace(/(?<![\n|])\n(?!\n)/g, '\n\n'));
+    return transformPrivateCitations(value);
   }, [content, services.latexParsing]);
   const { details, forbidden, expired, load } = useCitationDetails(citations, citationMap);
   const handleOpen = useCallback((detail: ChatCitation, itemId?: string, locateChunk = true) => {
