@@ -8,6 +8,7 @@ import jwt
 import pytest
 
 from bisheng.common.errcode.dsh import DshInvalidAccessTokenError
+from bisheng.core.config.dsh import DshSettings
 from bisheng.dsh.domain.services import web_session
 from bisheng.dsh.domain.services.access import DshPrincipal
 
@@ -34,7 +35,9 @@ async def test_exchange_binds_short_cookie_and_keeps_access_token_server_side(mo
     )
     runtime = SimpleNamespace(
         access=SimpleNamespace(authenticate=AsyncMock(return_value=principal())),
-        settings=SimpleNamespace(web_session_cookie_name=cookie_name),
+        settings=DshSettings()
+        if cookie_name == "access_token_cookie"
+        else DshSettings(web_session_cookie_name=cookie_name),
     )
     user = SimpleNamespace(user_name="Alice", token_version=3, delete=0)
     with (
@@ -200,7 +203,7 @@ async def test_exchange_uses_real_jwt_signer_with_bounded_lifetime(monkeypatch):
     monkeypatch.setattr(web_session, "session_store", AsyncMock(return_value=redis))
     runtime = SimpleNamespace(
         access=SimpleNamespace(authenticate=AsyncMock(return_value=principal())),
-        settings=SimpleNamespace(web_session_cookie_name="access_token_cookie"),
+        settings=DshSettings(),
     )
     user = SimpleNamespace(user_name="Alice", token_version=3, delete=0)
     with (

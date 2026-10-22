@@ -30,6 +30,11 @@ class DshSettings(BaseModel):
     platform_public_url: str | None = Field(
         default=None, description="Public HTTP(S) origin of Bisheng used by the Desktop authorization flow; no path."
     )
+    web_session_cookie_name: str = Field(
+        default="access_token_cookie",
+        pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+        description="Public ingress cookie name used by the isolated Desktop browser session.",
+    )
     gateway_internal_url: str | None = Field(
         default=None,
         description="Deprecated compatibility field; native DSH never connects to this address.",

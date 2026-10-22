@@ -1,5 +1,7 @@
 # DSH 企业后台交付状态
 
+- 2026-10-22：修复主线迁移后 Desktop Chat 网页会话交换 500：恢复经过校验的 `web_session_cookie_name` 配置，默认使用 `access_token_cookie`；会话测试改用实际 `DshSettings`，覆盖默认配置和自定义入口 Cookie。27 项会话及配置回归与 Ruff 通过；独立容量工厂测试因本地缺少 docstring_parser 待复验。3006 部署复验执行中。
+
 ## 2026-10-22：Work 120 main 积分与 Chat 集成候选
 
 - 基线：`upstream/feat/bisheng-work-120-main@7c701e86bcdfbafd53a99997f3146097a1497c41`；集成分支：`codex/work120-main-integration`。
