@@ -260,6 +260,8 @@ class Cluster:
         self.endpoints_ready = True
         self.fail_prepare = False
         self.delay_binding = False
+        self.deferred_deletions = set()
+        self.pending_deletions = {}
 
     def get(self, resource, name):
         if (resource, name) not in self.objects:
@@ -328,9 +330,26 @@ class Cluster:
                     if body["spec"].get("nodeName")
                     else {"phase": "Pending"}
                 )
+        elif (resource, name) in self.deferred_deletions:
+            assert resource in {"persistentvolumeclaims", "secrets"}
+            key = (resource, name)
+            if key not in self.pending_deletions:
+                self.rv += 1
+                body["metadata"].update(deletionTimestamp=self.clock.iso(), resourceVersion=str(self.rv))
+                self.pending_deletions[key] = body["metadata"]["uid"]
+            assert self.pending_deletions[key] == preconditions["uid"]
         else:
             del self.objects[resource, name]
         return {}
+
+    def complete_deletion(self, resource, name, *, uid):
+        key = (resource, name)
+        body = self.objects.get(key)
+        if self.pending_deletions.get(key) != uid or body is None or body["metadata"]["uid"] != uid:
+            return False
+        del self.objects[key]
+        del self.pending_deletions[key]
+        return True
 
     def list(self, resource, *, label_selector=""):
         if resource == "endpointslices":
@@ -620,6 +639,84 @@ def test_cleanup_checks_same_uid_and_keeps_production_volume(runtime):
     assert not any(kind == "pods" for kind, _ in cluster.objects)
     assert any(kind == "persistentvolumeclaims" for kind, _ in cluster.objects)
     assert all(r["cleanup_state"] == "complete" for r in platform.rows.values() if r["kind"] != "PersistentVolumeClaim")
+
+
+def prepared_cleanup_resource(runtime, resource):
+    executor, platform, cluster, operation, _, _ = runtime
+    operation["kind"] = "prepare"
+    profile = operation["payload"].pop("resolved_delivery")["profile"]
+    operation["payload"].update(delivery={"mode": "bundle"}, profile=profile, source_artifact_id="source-a")
+    result = executor.prepare(operation)
+    assert result["compiled_artifact_id"] == "compiled-result"
+    assert set(operation["result"]["prepare_progress"]) == {"inputs", "resolve", "install", "upload"}
+    assert all(row["stop_state"] == "confirmed" for row in platform.rows.values() if row["kind"] == "Pod")
+    key = next(key for key in cluster.objects if key[0] == resource)
+    cluster.deferred_deletions = {key}
+    row = next(row for row in platform.rows.values() if row["name"] == key[1])
+    return row, key
+
+
+@pytest.mark.parametrize("resource", ["persistentvolumeclaims", "secrets"])
+def test_prepared_cleanup_waits_for_actual_async_resource_absence(runtime, monkeypatch, resource):
+    """覆盖 AC: AC-33、AC-49、AC-52. Accepted DELETE is not a completed cleanup."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, key = prepared_cleanup_resource(runtime, resource)
+    output = copy.deepcopy(operation["result"])
+    created = [event for event in events if event[0] == "create"]
+    uids = {ref: item["uid"] for ref, item in platform.rows.items()}
+    observations = []
+    original_get = cluster.get
+
+    def fresh(resource_name, name):
+        try:
+            obj = original_get(resource_name, name)
+        except KubernetesAPIError as exc:
+            if (resource_name, name) == key:
+                observations.append(("absent", exc.status_code))
+            raise
+        if (resource_name, name) == key:
+            observations.append(("present", obj["metadata"].get("deletionTimestamp")))
+        return obj
+
+    monkeypatch.setattr(cluster, "get", fresh)
+    for _ in range(2):
+        assert executor.cleanup(operation) == {"complete": False, "reason": "resource_cleanup_pending"}
+        assert observations[-1] == ("present", cluster.clock.iso())
+        assert platform.resource(row["resource_ref"])["cleanup_state"] == "pending"
+        assert operation["result"] == output
+    assert cluster.complete_deletion(*key, uid=str(uuid4())) is False
+    assert cluster.get(*key)["metadata"]["uid"] == row["uid"]
+    assert cluster.complete_deletion(*key, uid=row["uid"]) is True
+    assert executor.cleanup(operation) == {"complete": True}
+    assert observations[-1] == ("absent", 404)
+    assert all(item["cleanup_state"] == "complete" for item in platform.rows.values())
+    assert {ref: item["uid"] for ref, item in platform.rows.items()} == uids
+    assert [event for event in events if event[0] == "create"] == created
+    assert [event for event in events if event == ("delete", *key)] == [("delete", *key)] * 2
+    assert cluster.objects == {}
+
+
+@pytest.mark.parametrize("resource", ["persistentvolumeclaims", "secrets"])
+def test_async_cleanup_never_deletes_same_name_replacement_uid(runtime, resource):
+    """覆盖 AC: AC-33、AC-49、AC-52. An old DELETE receipt does not authorize a new UID."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, key = prepared_cleanup_resource(runtime, resource)
+    assert executor.cleanup(operation)["complete"] is False
+    replacement = cluster.get(*key)
+    assert cluster.complete_deletion(*key, uid=row["uid"]) is True
+    replacement["metadata"].update(uid=str(uuid4()), resourceVersion="999")
+    replacement["metadata"].pop("deletionTimestamp")
+    cluster.objects[key] = replacement
+    marker = len(events)
+    with pytest.raises(ExecutorError, match="resource_uid_or_scope_mismatch"):
+        executor.cleanup(operation)
+    assert cluster.get(*key)["metadata"]["uid"] == replacement["metadata"]["uid"]
+    assert platform.resource(row["resource_ref"])["uid"] == row["uid"]
+    assert platform.resource(row["resource_ref"])["cleanup_state"] == "pending"
+    assert not any(
+        event[0] == "create" or event == ("delete", *key) or event == ("cleanup", row["resource_ref"])
+        for event in events[marker:]
+    )
 
 
 @pytest.fixture
