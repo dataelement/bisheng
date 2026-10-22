@@ -375,3 +375,26 @@ legacy fields keep their existing unrestricted behavior.
 - Real browser loaded rebuilt static assets, displayed the login form and had
   no JavaScript error logs. Static-only API 404s are expected, no backend used.
 - Focused independent review of the two-file fix returned no P1/P2 findings.
+
+## Uniform conversation code-line preservation (2026-10-22)
+
+- Removed raw single-newline-to-double-newline replacement from shared chat,
+  original client Markdown (daily/task) and legacy platform Markdown used by
+  audit/message/previews. Standard Markdown parsing now preserves code fences,
+  streaming incomplete fences and indented blocks without manufactured blank
+  lines. Paragraphs use the existing client whitespace-pre-wrap presentation;
+  legacy platform now uses that same paragraph rule.
+- RED: all five new regressions failed before the change. GREEN: 50 shared tests
+  pass, checking exact code DOM text and copied content for backtick/tilde fences,
+  intended blank lines, incomplete stream and indented code; prose/list/table
+  rendering remains correct. /tmp/f086-newlines-red.log,
+  /tmp/f086-newlines-tests.log.
+- Shared strict types/lint and both legacy changed-file lint checks pass
+  (existing stale-suppression notices only). /tmp/f086-newlines-types.log,
+  /tmp/f086-newlines-lint.log, /tmp/f086-newlines-client-lint.log,
+  /tmp/f086-newlines-platform-lint.log.
+- Focused independent review found no actionable P1/P2 defects. No new parser,
+  helper library, dependency or Vite server introduced.
+- Both production builds pass with the uniform newline fix:
+  /tmp/f086-newlines-platform-build.log,
+  /tmp/f086-newlines-client-build.log. No backend contract changed.

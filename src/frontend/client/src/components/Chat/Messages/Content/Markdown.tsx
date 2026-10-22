@@ -996,9 +996,7 @@ const Markdown = memo(({
     //     return `\`\`\`echarts
     //     {"xAxis":{"type":"category","data":["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]},"yAxis":{"type":"value"},"series":[{"data":[120,200,150,80,70,110,130],"type":"bar"}]}
     // \`\`\``
-    const normalizedContent = filterMermaidBlocks(message)
-      // .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
-      .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符 处理不换行情况，例如：`Hello | There\nFriend
+    const normalizedContent = filterMermaidBlocks(message);
     const { transformedContent, citationMap } = transformPrivateCitations(normalizedContent);
 
     return {
