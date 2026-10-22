@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import i18next from "i18next";
 import request from "./request";
 import { resolveKnowledgeParseFailureMessage } from "./knowledgeParseFailureMessage";
 import { mapInitialPermissionResult } from "./permission";
@@ -214,6 +215,8 @@ export interface KnowledgeFile {
      * reads its fields, so it travels as the raw shape it arrived in.
      */
     _raw?: RawSpaceChild;
+    /** Diagnostic evidence only; never use it as display copy or retry payload. */
+    failureEvidence?: { remark?: unknown; errorMessage?: unknown };
 }
 
 // ─────────────────────────────────────────────
@@ -483,79 +486,41 @@ function deriveFileType(raw: any): FileType {
 
 function formatSensitiveViolationMessage(hits: any[]): string {
     const words = hits
-        .map((item) => String(item?.word ?? "").trim())
+        .map((item) => typeof item?.word === "string" ? item.word.trim() : "")
         .filter(Boolean)
         .filter((word, index, arr) => arr.indexOf(word) === index);
 
     if (!words.length) {
-        return "您上传的文件包含违规内容，请修改后重试";
+        return String(i18next.t("com_knowledge.sensitive_violation_message"));
     }
 
-    return `您上传的文件包含违规内容：{${words.join(",")}}，请修改后重试`;
+    return String(i18next.t("com_knowledge.sensitive_violation_words", { words: `{${words.join(",")}}` }));
 }
 
 function formatMediaParseFailureMessage(parsed: any): string | undefined {
     return resolveKnowledgeParseFailureMessage(parsed);
 }
 
+function extractFileFailureEvidence(raw: { remark?: unknown; error_message?: unknown }): KnowledgeFile['failureEvidence'] {
+    if (raw.remark == null && raw.error_message == null) return undefined;
+    return { remark: raw.remark, errorMessage: raw.error_message };
+}
+
 export function extractKnowledgeFileError(raw: any): string | undefined {
-    const directMessage = raw?.error_message;
-    if (typeof directMessage === "string" && directMessage.trim()) {
-        return directMessage.trim();
-    }
-
     const remark = raw?.remark;
-    if (typeof remark !== "string" || !remark.trim()) {
-        return undefined;
-    }
-
-    const trimmedRemark = remark.trim();
+    if (!remark && !raw?.error_message) return undefined;
     try {
-        const parsed = JSON.parse(trimmedRemark);
-        if (parsed?.reason === "sensitive_check") {
-            return formatSensitiveViolationMessage(Array.isArray(parsed?.hits) ? parsed.hits : []);
+        const parsed = typeof remark === 'string' ? JSON.parse(remark) : remark;
+        if (parsed?.reason === 'sensitive_check') {
+            return formatSensitiveViolationMessage(Array.isArray(parsed.hits) ? parsed.hits : []);
         }
-        const mediaMessage = formatMediaParseFailureMessage(parsed);
-        if (mediaMessage) {
-            return mediaMessage;
-        }
-
-        const statusMessage = parsed?.status_message;
-        if (typeof statusMessage === "string" && statusMessage.trim()) {
-            const replacedMessage = statusMessage.replace(/\{([^{}]+)\}/g, (placeholder, key) => {
-                const value = parsed?.data?.data?.[key];
-                if (value === undefined || value === null) {
-                    return placeholder;
-                }
-                return String(value);
-            }).trim();
-
-            if (replacedMessage && replacedMessage !== statusMessage.trim()) {
-                return replacedMessage;
-            }
-        }
-
-        const nestedMessage =
-            parsed?.data?.exception ??
-            parsed?.exception ??
-            parsed?.message;
-
-        if (typeof nestedMessage === "string" && nestedMessage.trim()) {
-            return nestedMessage.trim();
-        }
-
-        if (typeof statusMessage === "string" && statusMessage.trim()) {
-            return statusMessage.trim();
-        }
-
-        if (typeof parsed?.old_name === "string" || typeof parsed?.new_name === "string") {
-            return undefined;
-        }
+        const registered = formatMediaParseFailureMessage(parsed ?? {});
+        if (registered) return registered;
+        if (typeof parsed?.old_name === 'string' || typeof parsed?.new_name === 'string') return undefined;
+        return String(i18next.t('api_errors.fallback'));
     } catch {
-        return trimmedRemark;
+        return String(i18next.t('api_errors.fallback'));
     }
-
-    return undefined;
 }
 
 export function extractKnowledgeFileSensitiveCheck(raw: any): KnowledgeFileSensitiveCheck | undefined {
@@ -658,6 +623,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         updatedAt: raw?.update_time ?? "",
         thumbnail: raw?.thumbnail ?? raw?.thumbnails,
         errorMessage: extractKnowledgeFileError(raw),
+        failureEvidence: extractFileFailureEvidence(raw),
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         hasFailedFiles: raw?.has_failed_files !== undefined ? Boolean(raw.has_failed_files) : undefined,
         hasAbnormalFiles: raw?.has_abnormal_files !== undefined ? Boolean(raw.has_abnormal_files) : undefined,
@@ -759,6 +725,7 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
         updatedAt: raw.update_time || "",
         thumbnail: raw.thumbnails || undefined,
         errorMessage: extractKnowledgeFileError(raw),
+        failureEvidence: extractFileFailureEvidence(raw),
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
     };
 }

@@ -764,7 +764,7 @@
   },
   "src/controllers/request.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     }
   },
   "src/i18n.js": {
@@ -2075,7 +2075,7 @@
       "count": 2
     },
     "no-console": {
-      "count": 5
+      "count": 4
     },
     "no-restricted-syntax": {
       "count": 10

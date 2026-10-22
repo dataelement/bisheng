@@ -109,3 +109,9 @@ describe('readable transport failures', () => {
     expect(error).toMatchObject({ status_code: 26130, data: { version: 3 }, message: 'The version changed. Refresh before saving.' });
   });
 });
+
+it('never interpolates technical evidence or object values into user copy', () => {
+  expect(resolveErrorMessageTemplate('Failed: {{exception}}', { exception: 'SQL secret' }, 'Request failed')).toBe('Request failed');
+  expect(resolveErrorMessageTemplate('Failed: {{reason}}', { reason: 'stack' }, 'Request failed')).toBe('Request failed');
+  expect(resolveErrorMessageTemplate('File {{file}}', { file: { secret: true } }, 'Request failed')).toBe('Request failed');
+});

@@ -1,3 +1,13 @@
+import i18next from 'i18next';
+import catalog from '../../../locales/zh-Hans/api_errors.gen.json';
+import locale from '../../../locales/zh-Hans/translation.json';
+jest.mock('~/api/request', () => ({ __esModule: true, default: {}, showApiError: jest.fn() }));
+jest.mock('./useFileManager', () => ({ dispatchKnowledgeSpaceFilesRefresh: jest.fn() }));
+jest.mock('~/hooks', () => ({ useLocalize: jest.fn() }));
+jest.mock('~/hooks/useEffectiveQuota', () => ({ useRefreshEffectiveQuota: jest.fn() }));
+jest.mock('~/hooks/usePersonalStorageQuota', () => ({ useStorageQuotaGuard: jest.fn() }));
+jest.mock('~/Providers', () => ({ useToastContext: jest.fn() }));
+beforeAll(async () => { await i18next.init({ lng: 'zh-Hans', resources: { 'zh-Hans': { translation: { ...locale, api_errors: catalog } } } }); });
 import { extractKnowledgeFileError, FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import {
   extractDuplicateFileEntries,
@@ -71,7 +81,7 @@ describe("useFileUpload helpers", () => {
     });
   });
 
-  test("extractKnowledgeFileError replaces status_message placeholders from nested data", () => {
+  test("extractKnowledgeFileError uses registered copy instead of server exception placeholders", () => {
     const remark = JSON.stringify({
       status_code: 10953,
       status_message: "File parsing failed: {exception}",
@@ -83,7 +93,7 @@ describe("useFileUpload helpers", () => {
       },
     });
 
-    expect(extractKnowledgeFileError({ remark })).toBe("File parsing failed: rebuild error");
+    expect(extractKnowledgeFileError({ remark })).toBe(catalog["10953"]);
   });
 
   test("extractKnowledgeFileError formats no recognizable audio failures", () => {
@@ -124,7 +134,7 @@ describe("useFileUpload helpers", () => {
     });
 
     expect(extractKnowledgeFileError({ remark })).toBe(
-      "未配置知识库语音转文字（ASR）模型，请在「系统模型设置 → 知识库模型」中配置后再上传音视频。",
+      catalog["10014"],
     );
   });
 

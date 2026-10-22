@@ -17,7 +17,7 @@ jest.mock('~/hooks', () => ({ useLocalize: () => localize }));
 jest.mock('~/hooks/useEffectiveQuota', () => ({ useRefreshEffectiveQuota: () => mockRefresh }));
 jest.mock('~/hooks/usePersonalStorageQuota', () => ({ useStorageQuotaGuard: () => () => false }));
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: mockToast }) }));
-jest.mock('i18next', () => ({ __esModule: true, default: { exists: (key: string) => key === 'api_errors.19403', t: (_key: string, data: { used_gb?: number; quota_gb?: number }) => `${data.used_gb}/${data.quota_gb} GB` } }));
+jest.mock('i18next', () => ({ __esModule: true, default: { exists: (key: string) => key === 'api_errors.19403', t: (key: string) => key === "api_errors.19403" ? "{{used_gb}}/{{quota_gb}} GB" : "Request failed" } }));
 const files = [new File(['a'], 'one.txt'), new File(['b'], 'two.txt')];
 const folderFiles = files.map(file => { Object.defineProperty(file, 'webkitRelativePath', { value: `Docs/${file.name}`, configurable: true }); return file; });
 const makeError = (kind: string) => {
@@ -137,6 +137,6 @@ it('retains ordinary per-file evidence and continues to the next body upload', a
   const uploaded: string[] = [];
   const result = await uploadFilesSequential('1', files, (_response, file) => uploaded.push(file.name));
   expect(result.failures[0].error).toBe(error);
-  expect(result.failures[0].reason).toBe('parse unavailable');
+  expect(result.failures[0].reason).toBe('');
   expect(uploaded).toEqual(['two.txt']);
 });

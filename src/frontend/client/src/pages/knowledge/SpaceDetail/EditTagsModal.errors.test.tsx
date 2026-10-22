@@ -1,3 +1,5 @@
+import i18next from 'i18next';
+import messages from '../../../locales/en/api_errors.gen.json';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { normalizeApiError } from '@bisheng/api-client';
@@ -11,8 +13,9 @@ jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: mockNotif
 jest.mock('~/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' '), getFullWidthLength: (value: string) => value.length }));
 jest.mock('~/components/ui', () => ({ ...jest.requireActual('~/components/ui/dialog'), ...jest.requireActual('~/components/ui/button') }));
 
-const reason = 'The tag limit was reached. Remove unused tags and try again.';
-const failure = () => normalizeApiError({ status_code: 49999, status_message: reason }, { message: reason });
+const reason = messages['10987'];
+beforeAll(async () => { await i18next.init({ lng: 'en', resources: { en: { translation: { api_errors: messages } } } }); });
+const failure = () => normalizeApiError({ status_code: 10987, status_message: 'PRIVATE server details' }, { message: 'PRIVATE server details' });
 const onClose = jest.fn();
 function mount(batch = false) {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -81,4 +84,12 @@ it('keeps overlong tag names from being submitted', async () => {
   fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
   await waitFor(() => expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({ message: 'com_knowledge.tags_char_limit_exceeded' })));
   expect(addSpaceTagApi).not.toHaveBeenCalled();
+});
+
+it('uses a local fallback for an unregistered tag failure while retaining the dialog', async () => {
+  jest.mocked(getSpaceTagsApi).mockRejectedValueOnce(normalizeApiError({ status_code: 49999, status_message: 'PRIVATE' }, { message: 'PRIVATE' }));
+  mount();
+  await waitFor(() => expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({ message: messages.fallback })));
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  expect(onClose).not.toHaveBeenCalled();
 });

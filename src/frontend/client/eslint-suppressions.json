@@ -79,14 +79,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "src/api/knowledgeParseFailureMessage.ts": {
-    "no-restricted-syntax": {
-      "count": 7
     }
   },
   "src/api/linsight.ts": {
@@ -2946,7 +2938,7 @@
   },
   "src/pages/knowledge/hooks/useFileUpload.test.ts": {
     "no-restricted-syntax": {
-      "count": 8
+      "count": 7
     }
   },
   "src/pages/knowledge/hooks/useFileUpload.ts": {

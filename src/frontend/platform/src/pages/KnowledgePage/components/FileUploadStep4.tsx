@@ -23,9 +23,7 @@ function resolveParseFailureReason(remark: unknown, t: TranslateFn) {
     const resolved = resolveKnowledgeParseFailure(remark, t);
     if (resolved) return resolved;
 
-    const trimmedRemark = typeof remark === "string" ? remark.trim() : "";
-    if (!trimmedRemark) return t("parseFailed");
-    return trimmedRemark;
+    return t("parseFailed");
 }
 
 export default function FileUploadStep4({ data, kId, hasRepeat }) {
@@ -121,7 +119,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
                                 notifiedFailedFileIdsRef.current.add(file.id);
                                 toast.show({ type: 'error', message: String(reason ?? '') });
                             }
-                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason };
+                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason, failureEvidence: resItem };
                         }
                     });
 
@@ -180,7 +178,6 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
         }
     }, [files]); // Depend on file status changes
 
-    console.log('files :>> ', files);
 
     let finalId = kid;
     if (kId) {

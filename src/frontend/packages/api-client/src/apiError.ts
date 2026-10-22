@@ -104,6 +104,8 @@ export async function decodeErrorEnvelope(value: unknown, options: { httpFailure
 
 /** Format backend parameters without leaking an unresolved server template. */
 export function resolveErrorMessageTemplate(message: string, data: unknown, fallback: string): string {
+  // Diagnostic parameters remain in the error evidence, never in user copy.
+  if (/\{\{?(?:exception|reason|error|error_msg|message|detail|stack|traceback)\}?\}/i.test(message)) return fallback;
   const values = record(data);
   const rendered = message.replace(/\{\{?(\w+)\}?\}/g, (placeholder, key: string) => {
     const value = values[key];

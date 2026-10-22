@@ -1,3 +1,5 @@
+import i18next from 'i18next';
+import messages from '../../../locales/en/api_errors.gen.json';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { normalizeApiError } from '@bisheng/api-client';
 import { getSpaceTagsApi } from '~/api/knowledge';
@@ -7,6 +9,7 @@ jest.mock('~/api/knowledge', () => ({ getSpaceTagsApi: jest.fn() }));
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
 jest.mock('~/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }));
 
+beforeAll(async () => { await i18next.init({ lng: 'en', resources: { en: { translation: { api_errors: messages } } } }); });
 const getTags = jest.mocked(getSpaceTagsApi);
 const notify = jest.fn();
 
@@ -18,7 +21,7 @@ beforeEach(() => {
 it('reports a failed tag request and can load tags on the next interaction', async () => {
     getTags.mockRejectedValueOnce(normalizeApiError({ code: 'ERR_NETWORK' }, { message: 'Tags unavailable' }));
     render(<CompoundSearchInput spaceId="one" isRoot pageMode />);
-    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: 'Tags unavailable' })));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: messages.network_error })));
 
     getTags.mockResolvedValueOnce([{ id: 1, name: 'Reports' }]);
     fireEvent.focus(screen.getByRole('textbox'));

@@ -1708,7 +1708,8 @@
     "filter_file_status": "Filter by status",
     "sort_by_size_label": "Sort by size",
     "select_all": "Select all",
-    "folder_abnormal": "Has issues"
+    "folder_abnormal": "Has issues",
+    "sensitive_violation_words": "Your uploaded file contains prohibited content: {{words}}. Please revise it and try again."
   },
   "com_subscription": {
     "tab_channel": "Channels",
