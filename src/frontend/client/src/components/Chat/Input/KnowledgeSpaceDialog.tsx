@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { BookOpen } from 'lucide-react';
 import { Button, Checkbox, Modal, SearchInput } from '@bisheng/ui';
 import { useCategorizedKnowledgeSpaces, useLocalize } from '~/hooks';
@@ -15,6 +15,11 @@ const MAX_SPACES = 50;
 /** Each opening owns a draft. Only confirmation changes the conversation context. */
 export function KnowledgeSpaceDialog({ value, onConfirm, onClose }: KnowledgeSpaceDialogProps) {
   const localize = useLocalize();
+  useLayoutEffect(() => {
+    const presentation = window.dshChatPresentation;
+    presentation?.reportKnowledgeDialog?.(true);
+    return () => presentation?.reportKnowledgeDialog?.(false);
+  }, []);
   const [draft, setDraft] = useState(() => value.filter((item) => item.type === 'space'));
   const [keyword, setKeyword] = useState('');
   const { groups, isFetching, isError, retry } = useCategorizedKnowledgeSpaces({ keyword });
@@ -34,7 +39,7 @@ export function KnowledgeSpaceDialog({ value, onConfirm, onClose }: KnowledgeSpa
   return (
     <Modal open onOpenChange={(open) => { if (!open) onClose(); }}
       title={localize('dshChat.selectKnowledge')} closeLabel={localize('com_ui_close')}
-      className="dsh-knowledge-dialog" bodyClassName="flex flex-col"
+      className="dsh-knowledge-dialog" overlayClassName="dsh-knowledge-overlay" bodyClassName="flex flex-col"
       footer={<>
         <span className="mr-auto self-center text-body-sm text-text-3" aria-live="polite">
           {localize('dshChat.selectedKnowledge', { count: draft.length })}
