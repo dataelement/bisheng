@@ -404,3 +404,46 @@ def test_python_bundle_has_no_image_entrypoint_to_bypass(plan):
         if container["name"] == "app"
     )
     assert app["command"] == ["python", "main.py"] and "args" not in app
+
+
+@pytest.mark.parametrize("purpose", ["serve", "probe", "preview"])
+@pytest.mark.parametrize(
+    "frozen", [("node", "server.js"), ("npm", "start"), ("server.js",), ("--eval", "console.log('started')")]
+)
+def test_node_bundle_preserves_standard_image_entrypoint_semantics(plan, purpose, frozen):
+    from runtime_manager.k8s_templates import pod_template
+
+    current = replace(
+        plan,
+        runtime_language="node20",
+        purpose=purpose,
+        command=frozen,
+        port=8765,
+        env={"PORT": "8765"},
+        pvc_name=plan.pvc_name if purpose == "serve" else "",
+        deadline_seconds=None if purpose == "serve" else 60,
+    )
+    app = next(container for container in pod_template(current)["spec"]["containers"] if container["name"] == "app")
+    assert app["command"] == ["/usr/local/bin/docker-entrypoint.sh"]
+    assert app["args"] == list(frozen) and current.command == frozen
+    assert app["workingDir"] == "/workspace/app"
+    assert {item["name"]: item.get("value") for item in app["env"]}["PORT"] == "8765"
+    assert app["command"][0].startswith("/")  # Application PATH cannot replace the image launcher.
+
+
+@pytest.mark.parametrize("frozen", [(), ("/custom/launcher", "--flag")])
+def test_complete_node_image_does_not_get_the_bundle_launcher(plan, frozen):
+    from runtime_manager.k8s_templates import pod_template
+
+    app = next(
+        container
+        for container in pod_template(
+            replace(plan, runtime_language="node20", mode="image", command=frozen, material_secret="")
+        )["spec"]["containers"]
+        if container["name"] == "app"
+    )
+    assert "args" not in app
+    if frozen:
+        assert app["command"] == list(frozen)
+    else:
+        assert "command" not in app

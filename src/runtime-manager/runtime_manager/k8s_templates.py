@@ -25,6 +25,10 @@ _NAME = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _IMAGE = re.compile(r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}")
 _ENV = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
 _BLOCKED_ENV = {"LD_PRELOAD", "LD_LIBRARY_PATH", "PYTHONHOME", "PYTHONPATH", "NODE_OPTIONS"}
+_BUNDLE_ENTRYPOINTS = {
+    "static": "/opt/bisheng/entrypoint.sh",
+    "node20": "/usr/local/bin/docker-entrypoint.sh",
+}
 
 
 def _hash(value: str) -> str:
@@ -424,10 +428,11 @@ def pod_template(plan: PodPlan) -> dict:
                     _mount("environment", "/opt/venv", readonly=True),
                 ]
             app = _container(plan, "app", command=plan.command, mounts=mounts, env=plan.env)
-            if plan.mode == "bundle" and plan.runtime_language == "static":
+            entrypoint = _BUNDLE_ENTRYPOINTS.get(plan.runtime_language)
+            if plan.mode == "bundle" and entrypoint:
+                # Registered bundle profiles implement these fixed launcher paths.
                 # Pod command replaces OCI ENTRYPOINT, unlike Docker's Cmd.
-                # Retain the fixed runtime wrapper and pass the frozen argv as args.
-                app["command"] = ["/opt/bisheng/entrypoint.sh"]
+                app["command"] = [entrypoint]
                 app["args"] = list(plan.command)
             app["env"].extend(
                 {"name": key, "valueFrom": {"secretKeyRef": {"name": plan.app_secret, "key": key}}}
