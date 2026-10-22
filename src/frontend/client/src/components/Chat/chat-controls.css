@@ -69,8 +69,8 @@ body[data-dsh-chat-theme] .dsh-add-menu [role^="menuitem"]:not(.dsh-command-skil
 .dsh-attachment-arrow-left { left:4px; }
 .dsh-attachment-arrow-right { right:4px; }
 .dsh-composer-writing { position:relative; width:100%; min-width:0; overflow:hidden; }
-.dsh-composer-editor { width:100%; min-height:52px; max-height:240px; overflow-y:auto; white-space:pre-wrap; overflow-wrap:anywhere; outline:none; background:transparent; color:rgb(var(--text-1)); font:inherit; }
-.dsh-composer-editor[data-empty=true]::before { content:attr(data-placeholder); color:rgb(var(--text-3)); pointer-events:none; }
+.dsh-composer-editor { position:relative; width:100%; min-height:52px; max-height:240px; overflow-y:auto; white-space:pre-wrap; overflow-wrap:anywhere; outline:none; background:transparent; color:rgb(var(--text-1)); font:inherit; }
+.dsh-composer-editor[data-empty=true]::before { content:attr(data-placeholder); position:absolute; inset:0; padding:inherit; color:rgb(var(--text-3)); pointer-events:none; }
 .dsh-inline-reference { display:inline; color:rgb(var(--brand-500)); font:inherit; cursor:text; }
 @media (pointer:coarse) { .dsh-resource-remove { opacity:1; } }
 /* Radix portals inherit the Chat palette explicitly, outside the embedded root. */
@@ -147,7 +147,7 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
 .dsh-command-panel [role="menuitemcheckbox"]:not(.dsh-command-skill-row) > span:last-child { margin-left:auto; flex:none; }
 
 .dsh-knowledge-columns { display:flex; justify-content:space-between; margin-top:20px; padding:0 8px 10px; color:rgb(var(--text-3)); font-size:12px; border-bottom:1px solid rgb(var(--border-base)); }
-.dsh-knowledge-list { max-height: min(440px, 48vh); margin-top:8px; }
+.dsh-knowledge-list { height: min(440px, 48vh); flex:none; margin-top:8px; }
 .dsh-knowledge-row { min-height:60px; border-bottom:1px solid rgb(var(--border-base)); }
 .dsh-knowledge-row[data-selected=true] { background:rgb(var(--fill-2)); }
 .dsh-knowledge-icon { display:grid; place-items:center; flex:none; width:32px; height:36px; border:1px solid rgb(var(--border-base)); border-radius:8px; color:rgb(var(--text-2)); background:rgb(var(--bg-page)); }

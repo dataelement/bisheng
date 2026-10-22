@@ -135,7 +135,18 @@ export const ComposerEditor = forwardRef<HTMLDivElement, ComposerEditorProps>(fu
         contentEditable={!disabled}
         suppressContentEditableWarning
         className={`dsh-composer-editor ${className || ''}`}
-        onInput={() => { if (!composing.current) publish(); }}
+        onInput={() => {
+            if (composing.current) {
+                // IME draft text controls placeholder visibility before it is committed.
+                const root = rootRef.current;
+                if (root) {
+                    const draft = readComposerDocument(root);
+                    root.dataset.empty = String(!draft.text && !draft.keys.length);
+                }
+            } else {
+                publish();
+            }
+        }}
         onBlur={saveSelection}
         onKeyUp={saveSelection}
         onMouseUp={saveSelection}

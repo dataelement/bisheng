@@ -70,6 +70,13 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
     ? availableTools.filter((group) => isChecked(group.id))
     : [];
   const trigger = useRef<HTMLButtonElement>(null);
+  const pointerOpened = useRef(false);
+  const returnFocus = () => {
+    const target = pointerOpened.current
+      ? trigger.current?.closest('.dsh-chat-composer')?.querySelector<HTMLElement>('[contenteditable="true"]')
+      : trigger.current;
+    target?.focus({ preventScroll: true });
+  };
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -78,7 +85,9 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
     <DropdownMenu open={open} onOpenChange={(next) => { setOpen(next); if (!next) setPage(null); }}>
       <DropdownMenuTrigger asChild disabled={disabled}>
         <button ref={trigger} type="button" className="dsh-composer-add" disabled={disabled}
-          title={localize('dshChat.addContext')} aria-label={localize('dshChat.addContext')}>
+          title={localize('dshChat.addContext')} aria-label={localize('dshChat.addContext')}
+          onPointerDown={() => { pointerOpened.current = true; }}
+          onKeyDown={() => { pointerOpened.current = false; }}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true" strokeWidth="1.3">
             <path d="M8 2V14M2 8H14" stroke="currentColor" />
           </svg>
@@ -86,7 +95,10 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" sideOffset={anchor.sideOffset} alignOffset={anchor.alignOffset} collisionPadding={12}
         style={{ width: anchor.width }}
-        className="dsh-chat-menu dsh-add-menu dsh-command-panel" onCloseAutoFocus={(event) => { if (selecting) event.preventDefault(); }}>
+        className="dsh-chat-menu dsh-add-menu dsh-command-panel" onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (!selecting) returnFocus();
+        }}>
         <ComposerMenuScroll>
         <ComposerMenuContext.Provider value={{ page, setPage }}>
         {!page && <>
@@ -142,7 +154,7 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
     </div>
     {selecting && <KnowledgeSpaceDialog value={value} onConfirm={onChange} onClose={() => {
       setSelecting(false);
-      requestAnimationFrame(() => trigger.current?.focus());
+      requestAnimationFrame(returnFocus);
     }} />}
   </>;
 }

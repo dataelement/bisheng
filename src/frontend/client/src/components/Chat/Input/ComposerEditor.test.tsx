@@ -102,3 +102,29 @@ test('browser paragraph and trailing caret markers serialize to prompt newlines'
     editor.innerHTML = '<br>';
     expect(readComposerDocument(editor).text).toBe('');
 });
+
+
+test('empty focused editor keeps its hint until IME draft text arrives and restores it when cleared', () => {
+    render(<Harness />);
+    const editor = screen.getByRole('textbox');
+    editor.replaceChildren();
+    fireEvent.input(editor);
+    fireEvent.focus(editor);
+    expect(editor).toHaveAttribute('data-empty', 'true');
+
+    fireEvent.compositionStart(editor);
+    editor.textContent = "ni'hao";
+    fireEvent.input(editor);
+    expect(editor).toHaveAttribute('data-empty', 'false');
+    expect(screen.getByTestId('text')).toBeEmptyDOMElement();
+
+    editor.textContent = '你好';
+    fireEvent.compositionEnd(editor);
+    expect(screen.getByTestId('text')).toHaveTextContent('你好');
+    expect(editor).toHaveAttribute('data-empty', 'false');
+
+    editor.replaceChildren();
+    fireEvent.input(editor);
+    expect(editor).toHaveAttribute('data-empty', 'true');
+    expect(screen.getByTestId('text')).toBeEmptyDOMElement();
+});
