@@ -111,7 +111,8 @@ export default defineConfig(({ command, mode }) => {
               if (/[\\/](xlsx|mammoth|xmlbuilder|@xmldom|bluebird|lop|underscore)[\\/]/.test(id)) {
                 return 'vendor-xlsx';
               }
-              if (/[\\/](react-ace|ace-builds|react-syntax-highlighter|vditor|refractor|highlight\.js|prismjs)[\\/]/.test(id)) {
+              // lowlight registers languages eagerly; keep it beside highlight.js to avoid a chunk initialization cycle.
+              if (/[\\/](react-ace|ace-builds|react-syntax-highlighter|vditor|refractor|lowlight|highlight\.js|prismjs)[\\/]/.test(id)) {
                 return 'vendor-editor';
               }
               if (
