@@ -48,3 +48,11 @@ Helm14以d86e66a2d固定manager镜像升级manager/egress/admission，全部Read
 ## 当前控制镜像995与Helm23
 
 995c80f2a原生amd64构建/import通过，内网固定digest7cef8910…，Helm23三控制服务ready、epoch18。descriptor UID/全部data、143 helper、profile2、现有16项有效报告和app-proxy保持；仅bundle PATH补系统sbin，backend仍保持6f参数源码。原生烟测不是新完整能力报告/业务通过。
+
+## 0d5中间候选真实16项通过（Helm24）
+
+原生amd64 manager/helper/assembler及公共CA组装器变体完成构建和隔离非root烟测；helper/assembler实际SGID目录两允许、危险位10拒绝，OCI源码字节和9种PATH组合通过。仅推送189专用测试仓库20261023-26；没有ARM、官方九镜像inventory或正式CI发行冒认。
+
+manager28449f9c…/helper5906c518…/assemblerCA9836c134…更新后，仅descriptor两个镜像字段变化、UID保持；旧报告descriptor摘要不匹配，实际manager三路径false/backend blocked。真实16项探测随后全部通过，报告SHA `6720eaf4938302d5ad5c7e01b8b1972627dbf5f7c4b1e92d5db83ec838e92ec6`；投射后自然ready/epoch19。三个既有应用仍Running，r4保留不动。
+
+最终入口CMD修复来源d7f7c2e10另行冻结；上述中间0d5安装通过不等于d7f已部署，需新镜像摘要及真实报告后更新。

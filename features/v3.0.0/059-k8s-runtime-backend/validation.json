@@ -1,24 +1,24 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T21:28:54.818155+00:00",
-  "validated_source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+  "recorded_at": "2026-10-22T21:47:45.225086+00:00",
+  "validated_source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 246,
-    "tasks_total": 251,
+    "l1_completed": 248,
+    "tasks_total": 253,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
-      "passed": 1610,
+      "source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
+      "passed": 1622,
       "skipped": 13,
-      "seconds": 33.01,
+      "seconds": 33.09,
       "exit_code": 0,
-      "log": "/private/tmp/f059-oci-final-full-runtime.log"
+      "log": "/private/tmp/f059-oci-cmd-final-runtime.log"
     },
     "backend": {
       "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
@@ -1350,6 +1350,186 @@
       "native_189_revalidation": "pending",
       "public_push": false,
       "arm": "paused_by_user"
+    },
+    "oci_empty_cmd_l1": {
+      "source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
+      "tasks": [
+        "T252",
+        "T253"
+      ],
+      "result": "PASS",
+      "independent_report": "/private/tmp/f059-t252-t253-independent-l1.md",
+      "independent_sha256": "a54d859bccb8329aef025f0ca6314e937fb01e64058289987266f1e2a060ae8a",
+      "native_crane_semantics": "v0.22.1 actual three profile bases, --cmd empty -> Cmd null, no registry mutation",
+      "native_log": "/private/tmp/f059-crane-empty-cmd-native.log",
+      "final_image_revalidation": "pending"
+    },
+    "native_oci_intermediate_0d5": {
+      "source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "native": {
+        "schema": "f059-native-three-services-and-public-ca/v1",
+        "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+        "platform": "linux/amd64",
+        "images": {
+          "manager": {
+            "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261023-0d5ef7b2b-amd64",
+            "image_id": "sha256:c3a5255e893973935e26c7f48adcc218f0bb14bd4b522fd8eaea75a35aabc659",
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "variant": null
+          },
+          "helper": {
+            "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261023-0d5ef7b2b-amd64",
+            "image_id": "sha256:9cd5d3e1331f4b8c81c6335c4e3034e1eb9c63b94f1968e9dc4357180c2296a9",
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "variant": null
+          },
+          "assembler": {
+            "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261023-0d5ef7b2b-amd64",
+            "image_id": "sha256:ccd89b540e02611fe1b7b24e7b7b991197b8f29d3462e1bb47962c2aca58f2d9",
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "variant": null
+          },
+          "assembler-public-ca": {
+            "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261023-0d5ef7b2b-public-ca-amd64",
+            "image_id": "sha256:ddc11511399ae6f3f9689a076a8cc6bb5c6b8db34bb194d892603fe20264f19e",
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "variant": "registry-public-ca"
+          }
+        },
+        "native_smoke": {
+          "manager": {
+            "application_executed": false,
+            "dangerous_bits_negative": 0,
+            "isolated": true,
+            "oci_source_sha256": "976a216bc882d8331866fba6cd4dc1cd9ec1f06f89d1074267453893b26d18a2",
+            "path_profiles_checked": 9,
+            "platform": "linux/amd64",
+            "registry_accessed": false,
+            "role": "manager",
+            "sgid_directory_positive": 0,
+            "uid": 10001
+          },
+          "helper": {
+            "application_executed": false,
+            "dangerous_bits_negative": 10,
+            "isolated": true,
+            "oci_source_sha256": "976a216bc882d8331866fba6cd4dc1cd9ec1f06f89d1074267453893b26d18a2",
+            "path_profiles_checked": 9,
+            "platform": "linux/amd64",
+            "registry_accessed": false,
+            "role": "helper",
+            "sgid_directory_positive": 2,
+            "uid": 10001
+          },
+          "assembler": {
+            "application_executed": false,
+            "dangerous_bits_negative": 10,
+            "isolated": true,
+            "oci_source_sha256": "976a216bc882d8331866fba6cd4dc1cd9ec1f06f89d1074267453893b26d18a2",
+            "path_profiles_checked": 9,
+            "platform": "linux/amd64",
+            "registry_accessed": false,
+            "role": "assembler",
+            "sgid_directory_positive": 2,
+            "uid": 10001
+          },
+          "assembler-public-ca": {
+            "application_executed": false,
+            "dangerous_bits_negative": 10,
+            "isolated": true,
+            "oci_source_sha256": "976a216bc882d8331866fba6cd4dc1cd9ec1f06f89d1074267453893b26d18a2",
+            "path_profiles_checked": 9,
+            "platform": "linux/amd64",
+            "registry_accessed": false,
+            "role": "assembler",
+            "sgid_directory_positive": 2,
+            "uid": 10001
+          }
+        },
+        "profile_inputs": {
+          "node": "192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
+          "python_preparer": "192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9"
+        },
+        "public_certificate_sha256": "9c3baa7fd2fb34a61b48d8d6537deb45036b8653ed81b86e049e5dd29c1ab895",
+        "tools_image_id": "sha256:e0774ebe198a660f05b03dbafdbe7c806e1dbee8ac7dbff38f8a1b9865a0442a",
+        "unrelated_containers_unchanged": true,
+        "network_inventory_unchanged": true,
+        "public_push": false,
+        "registry_push_smoke": false,
+        "official_nine_image_inventory_created": false,
+        "profile_images_rebuilt": false,
+        "boundary": "Native service images plus private CA derivative only. SGID layer and negative privilege checks ran in actual native nonroot isolated image containers; no registry manifest mutation/push smoke, ARM, full bundle regression, installer readiness or business E2E claimed."
+      },
+      "private_images": {
+        "public_push": false,
+        "profile_images_unchanged": true,
+        "assembler_public_ca_sha256": "9c3baa7fd2fb34a61b48d8d6537deb45036b8653ed81b86e049e5dd29c1ab895",
+        "assembler_contains_current_helper": true,
+        "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+        "official_ci_release": false,
+        "images": {
+          "manager": {
+            "image_id": "sha256:c3a5255e893973935e26c7f48adcc218f0bb14bd4b522fd8eaea75a35aabc659",
+            "image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
+            "native_smoke": true,
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-26"
+          },
+          "assembler-public-ca": {
+            "image_id": "sha256:ddc11511399ae6f3f9689a076a8cc6bb5c6b8db34bb194d892603fe20264f19e",
+            "image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9",
+            "native_smoke": true,
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "private_tag": "192.168.106.189:5443/f059/runtime-assembler-ca:20261023-26"
+          },
+          "helper": {
+            "image_id": "sha256:9cd5d3e1331f4b8c81c6335c4e3034e1eb9c63b94f1968e9dc4357180c2296a9",
+            "image": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+            "native_smoke": true,
+            "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+            "private_tag": "192.168.106.189:5443/f059/runtime-helper:20261023-26"
+          }
+        }
+      },
+      "helm_revision": 24,
+      "helm": {
+        "descriptor_uid_unchanged": true,
+        "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+        "app_proxy_and_profiles_unchanged": true,
+        "real_report_refresh": "pending",
+        "helm_upgrade_completed": true,
+        "old_report_must_not_admit": true,
+        "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+        "descriptor_changes": [
+          "helper_image",
+          "assembler_image"
+        ],
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
+        "assembler_image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9"
+      },
+      "old_report_negative": {
+        "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+        "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
+        "old_report_digest": "d7e831157cd56ff2a941118b9deafb2c2f62b572c633428efb4412839a337afd",
+        "ready": false,
+        "paths": {
+          "bundle": false,
+          "image": false,
+          "source-image": false
+        },
+        "warnings": [
+          "node_local_storage",
+          "live_probe_report_missing_stale_or_changed"
+        ],
+        "backend_node_status": "blocked",
+        "controller_epoch": 19,
+        "old_report_rejected": true
+      },
+      "install_16_passed": true,
+      "report_sha256": "6720eaf4938302d5ad5c7e01b8b1972627dbf5f7c4b1e92d5db83ec838e92ec6",
+      "status": "passed_intermediate_installation",
+      "final_cmd_source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
+      "final_cmd_deployed": false
     }
   },
   "not_executed": [
@@ -1370,6 +1550,14 @@
       "seconds": 33.42,
       "exit_code": 0,
       "log": "/private/tmp/f059-static-path-full-runtime.log"
+    },
+    {
+      "source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "passed": 1610,
+      "skipped": 13,
+      "seconds": 33.01,
+      "exit_code": 0,
+      "log": "/private/tmp/f059-oci-final-full-runtime.log"
     }
   ]
 }

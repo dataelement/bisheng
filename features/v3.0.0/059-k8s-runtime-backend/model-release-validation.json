@@ -815,5 +815,136 @@
       "new_arm_run": false,
       "public_release": false
     }
-  ]
+  ],
+  "latest_native_three_services": {
+    "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+    "native": {
+      "schema": "f059-native-three-services-and-public-ca/v1",
+      "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "platform": "linux/amd64",
+      "images": {
+        "manager": {
+          "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261023-0d5ef7b2b-amd64",
+          "image_id": "sha256:c3a5255e893973935e26c7f48adcc218f0bb14bd4b522fd8eaea75a35aabc659",
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "variant": null
+        },
+        "helper": {
+          "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261023-0d5ef7b2b-amd64",
+          "image_id": "sha256:9cd5d3e1331f4b8c81c6335c4e3034e1eb9c63b94f1968e9dc4357180c2296a9",
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "variant": null
+        },
+        "assembler": {
+          "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261023-0d5ef7b2b-amd64",
+          "image_id": "sha256:ccd89b540e02611fe1b7b24e7b7b991197b8f29d3462e1bb47962c2aca58f2d9",
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "variant": null
+        },
+        "assembler-public-ca": {
+          "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261023-0d5ef7b2b-public-ca-amd64",
+          "image_id": "sha256:ddc11511399ae6f3f9689a076a8cc6bb5c6b8db34bb194d892603fe20264f19e",
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "variant": "registry-public-ca"
+        }
+      },
+      "native_smoke": {
+        "manager": {
+          "application_executed": false,
+          "dangerous_bits_negative": 0,
+          "isolated": true,
+          "oci_source_sha256": "976a216bc882d8331866fba6cd4dc1cd9ec1f06f89d1074267453893b26d18a2",
+          "path_profiles_checked": 9,
+          "platform": "linux/amd64",
+          "registry_accessed": false,
+          "role": "manager",
+          "sgid_directory_positive": 0,
+          "uid": 10001
+        },
+        "helper": {
+          "application_executed": false,
+          "dangerous_bits_negative": 10,
+          "isolated": true,
+          "oci_source_sha256": "976a216bc882d8331866fba6cd4dc1cd9ec1f06f89d1074267453893b26d18a2",
+          "path_profiles_checked": 9,
+          "platform": "linux/amd64",
+          "registry_accessed": false,
+          "role": "helper",
+          "sgid_directory_positive": 2,
+          "uid": 10001
+        },
+        "assembler": {
+          "application_executed": false,
+          "dangerous_bits_negative": 10,
+          "isolated": true,
+          "oci_source_sha256": "976a216bc882d8331866fba6cd4dc1cd9ec1f06f89d1074267453893b26d18a2",
+          "path_profiles_checked": 9,
+          "platform": "linux/amd64",
+          "registry_accessed": false,
+          "role": "assembler",
+          "sgid_directory_positive": 2,
+          "uid": 10001
+        },
+        "assembler-public-ca": {
+          "application_executed": false,
+          "dangerous_bits_negative": 10,
+          "isolated": true,
+          "oci_source_sha256": "976a216bc882d8331866fba6cd4dc1cd9ec1f06f89d1074267453893b26d18a2",
+          "path_profiles_checked": 9,
+          "platform": "linux/amd64",
+          "registry_accessed": false,
+          "role": "assembler",
+          "sgid_directory_positive": 2,
+          "uid": 10001
+        }
+      },
+      "profile_inputs": {
+        "node": "192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
+        "python_preparer": "192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9"
+      },
+      "public_certificate_sha256": "9c3baa7fd2fb34a61b48d8d6537deb45036b8653ed81b86e049e5dd29c1ab895",
+      "tools_image_id": "sha256:e0774ebe198a660f05b03dbafdbe7c806e1dbee8ac7dbff38f8a1b9865a0442a",
+      "unrelated_containers_unchanged": true,
+      "network_inventory_unchanged": true,
+      "public_push": false,
+      "registry_push_smoke": false,
+      "official_nine_image_inventory_created": false,
+      "profile_images_rebuilt": false,
+      "boundary": "Native service images plus private CA derivative only. SGID layer and negative privilege checks ran in actual native nonroot isolated image containers; no registry manifest mutation/push smoke, ARM, full bundle regression, installer readiness or business E2E claimed."
+    },
+    "private_images": {
+      "public_push": false,
+      "profile_images_unchanged": true,
+      "assembler_public_ca_sha256": "9c3baa7fd2fb34a61b48d8d6537deb45036b8653ed81b86e049e5dd29c1ab895",
+      "assembler_contains_current_helper": true,
+      "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "official_ci_release": false,
+      "images": {
+        "manager": {
+          "image_id": "sha256:c3a5255e893973935e26c7f48adcc218f0bb14bd4b522fd8eaea75a35aabc659",
+          "image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
+          "native_smoke": true,
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-26"
+        },
+        "assembler-public-ca": {
+          "image_id": "sha256:ddc11511399ae6f3f9689a076a8cc6bb5c6b8db34bb194d892603fe20264f19e",
+          "image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9",
+          "native_smoke": true,
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "private_tag": "192.168.106.189:5443/f059/runtime-assembler-ca:20261023-26"
+        },
+        "helper": {
+          "image_id": "sha256:9cd5d3e1331f4b8c81c6335c4e3034e1eb9c63b94f1968e9dc4357180c2296a9",
+          "image": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+          "native_smoke": true,
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "private_tag": "192.168.106.189:5443/f059/runtime-helper:20261023-26"
+        }
+      }
+    },
+    "final_code_candidate": "d7f7c2e10ab9805d41120d19e32d102310b06654",
+    "final_candidate_native": "pending",
+    "official_release": false
+  }
 }

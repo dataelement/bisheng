@@ -172,25 +172,263 @@
     "plans_sha256": "9e7ec0ea64f0d822146dd9463877396e67ceabca7fea2e791bb6b4778f0c66ae"
   },
   "current_candidate": {
-    "source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
-    "manager_egress_admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:7cef8910e89e566059b1fd04cf3bde26fdd9b2f70d61185b0ae621f7b40409e7",
-    "helm_revision": 23,
-    "probe_report_after_upgrade": "143 sixteen-check report retained with unchanged descriptor/helper/profile; no new full report claim",
-    "upgrade_receipt": "/opt/e2e-f059/evidence/runtime-twenty-fifth/receipt.json",
-    "descriptor_uid_unchanged": true,
-    "descriptor_data_unchanged": true,
-    "backend_node_ready": true,
-    "controller_epoch": 18,
-    "backend_data_cpu_update": {
-      "files": {
-        "bisheng/app_runtime/domain/services/runtime_data_session_service.py": "ca6eb28964b717f0744ae2db4d5ab11ec2541563b40e49035be50e49fb471626",
-        "bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py": "e74775a5837014f0c608a1efd306b19d021d2a11de54d2e95a7b944c9df6b0ef"
+    "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+    "helm_revision": 24,
+    "images": {
+      "manager": {
+        "image_id": "sha256:c3a5255e893973935e26c7f48adcc218f0bb14bd4b522fd8eaea75a35aabc659",
+        "image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
+        "native_smoke": true,
+        "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-26"
       },
-      "backend_and_worker_restarted": true,
-      "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
-      "openfga_unchanged": true,
-      "public_env_http_status": 200
-    }
+      "assembler-public-ca": {
+        "image_id": "sha256:ddc11511399ae6f3f9689a076a8cc6bb5c6b8db34bb194d892603fe20264f19e",
+        "image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9",
+        "native_smoke": true,
+        "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+        "private_tag": "192.168.106.189:5443/f059/runtime-assembler-ca:20261023-26"
+      },
+      "helper": {
+        "image_id": "sha256:9cd5d3e1331f4b8c81c6335c4e3034e1eb9c63b94f1968e9dc4357180c2296a9",
+        "image": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+        "native_smoke": true,
+        "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+        "private_tag": "192.168.106.189:5443/f059/runtime-helper:20261023-26"
+      }
+    },
+    "native_three_services": true,
+    "descriptor_changes": [
+      "helper_image",
+      "assembler_image"
+    ],
+    "descriptor_uid_unchanged": true,
+    "old_report_negative": {
+      "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
+      "old_report_digest": "d7e831157cd56ff2a941118b9deafb2c2f62b572c633428efb4412839a337afd",
+      "ready": false,
+      "paths": {
+        "bundle": false,
+        "image": false,
+        "source-image": false
+      },
+      "warnings": [
+        "node_local_storage",
+        "live_probe_report_missing_stale_or_changed"
+      ],
+      "backend_node_status": "blocked",
+      "controller_epoch": 19,
+      "old_report_rejected": true
+    },
+    "report": {
+      "artifacts": {
+        "image-cri": [
+          {
+            "image_id": "docker-pullable://192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+            "image_ref": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+            "platform": "linux/amd64",
+            "resource_version": "3210500",
+            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+          },
+          {
+            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
+            "image_ref": "192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
+            "platform": "linux/amd64",
+            "resource_version": "3210580",
+            "uid": "59700080-23f0-4f62-b936-1eb55c204619"
+          },
+          {
+            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9",
+            "image_ref": "192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9",
+            "platform": "linux/amd64",
+            "resource_version": "3210640",
+            "uid": "13e7a9bd-e028-4d41-92d3-85f9ac10231c"
+          },
+          {
+            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
+            "image_ref": "192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
+            "platform": "linux/amd64",
+            "resource_version": "3210699",
+            "uid": "17cb59e9-853c-4fde-a836-b3b68ffdb78b"
+          },
+          {
+            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-node-preparer-ca@sha256:27b13ce9a57c59f9724001d5a69ede5029a6c6709a702a55fba435a77f77e666",
+            "image_ref": "192.168.106.189:5443/f059/app-node-preparer-ca@sha256:27b13ce9a57c59f9724001d5a69ede5029a6c6709a702a55fba435a77f77e666",
+            "platform": "linux/amd64",
+            "resource_version": "3210762",
+            "uid": "f7c5cd7e-aa0a-4d6d-a376-056cc3d75760"
+          },
+          {
+            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-static-ca@sha256:2f0311da8b281f35437fcf26b47c8249f8d86f98227a28bb231cd472071ee218",
+            "image_ref": "192.168.106.189:5443/f059/app-static-ca@sha256:2f0311da8b281f35437fcf26b47c8249f8d86f98227a28bb231cd472071ee218",
+            "platform": "linux/amd64",
+            "resource_version": "3210823",
+            "uid": "5c70978a-c45c-491e-94a6-a7c00df3ffe0"
+          }
+        ]
+      },
+      "checks": [
+        {
+          "evidence": {
+            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+          },
+          "name": "admission-create",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "69ee7246-6a93-4b57-8d1d-85dc28d6f9a2"
+          },
+          "name": "binding-delete-fence",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "digest": "sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+          },
+          "name": "image-cri",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "code": "control_side_tls",
+            "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+          },
+          "name": "material-tls",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+          },
+          "name": "namespace-budget",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "fa3704cd-5fab-4599-9544-a01c2df6894c"
+          },
+          "name": "network-direct-denied",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "96eee51b-be86-4850-a5a4-0cf4e1e4e413"
+          },
+          "name": "network-dns-denied",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "65176307-19f1-4fc9-9a84-c36062d6fbc7"
+          },
+          "name": "network-egress-allowed",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+          },
+          "name": "network-ingress",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
+          },
+          "name": "no-exec",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "code": "control_side_authenticated_api",
+            "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+          },
+          "name": "platform-capabilities",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
+          },
+          "name": "rbac-namespace",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "digest": "sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+            "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+          },
+          "name": "registry-push",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+          },
+          "name": "restricted-psa",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "policy_revision": "v1",
+            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+          },
+          "name": "status-provenance",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        },
+        {
+          "evidence": {
+            "uid": "e12512c5-ecf2-4bec-a703-7204eebcc37e"
+          },
+          "name": "storage-sqlite",
+          "observed_at": 1792705007.306199,
+          "ok": true,
+          "reason": "verified"
+        }
+      ],
+      "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
+      "observed_at": 1792705007.306199,
+      "source": "cluster-probe"
+    },
+    "report_sha256": "6720eaf4938302d5ad5c7e01b8b1972627dbf5f7c4b1e92d5db83ec838e92ec6",
+    "state": "passed",
+    "backend_node_state": "ready",
+    "controller_epoch": 19,
+    "next_candidate": "d7f7c2e10ab9805d41120d19e32d102310b06654",
+    "next_candidate_installation": "pending"
   },
   "remaining": [
     "Business and fault/upgrade acceptance are separate T069/T070; no cross-node claim",
@@ -1714,6 +1952,27 @@
       "descriptor_data_unchanged": true,
       "backend_node_ready": true,
       "controller_epoch": 17,
+      "backend_data_cpu_update": {
+        "files": {
+          "bisheng/app_runtime/domain/services/runtime_data_session_service.py": "ca6eb28964b717f0744ae2db4d5ab11ec2541563b40e49035be50e49fb471626",
+          "bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py": "e74775a5837014f0c608a1efd306b19d021d2a11de54d2e95a7b944c9df6b0ef"
+        },
+        "backend_and_worker_restarted": true,
+        "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+        "openfga_unchanged": true,
+        "public_env_http_status": 200
+      }
+    },
+    {
+      "source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
+      "manager_egress_admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:7cef8910e89e566059b1fd04cf3bde26fdd9b2f70d61185b0ae621f7b40409e7",
+      "helm_revision": 23,
+      "probe_report_after_upgrade": "143 sixteen-check report retained with unchanged descriptor/helper/profile; no new full report claim",
+      "upgrade_receipt": "/opt/e2e-f059/evidence/runtime-twenty-fifth/receipt.json",
+      "descriptor_uid_unchanged": true,
+      "descriptor_data_unchanged": true,
+      "backend_node_ready": true,
+      "controller_epoch": 18,
       "backend_data_cpu_update": {
         "files": {
           "bisheng/app_runtime/domain/services/runtime_data_session_service.py": "ca6eb28964b717f0744ae2db4d5ab11ec2541563b40e49035be50e49fb471626",

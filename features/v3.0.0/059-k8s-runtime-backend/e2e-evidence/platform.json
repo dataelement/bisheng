@@ -7,13 +7,13 @@
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:59692b82ae7bd1d806e741a4c86f165bd472301feec31b06d3dc66306d00eb3b",
+    "manager_source": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
     "helper_images": "new143 helper; application runtime/preparer profile2 unchanged",
-    "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049",
+    "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
     "backend_data_cancel_source": "a1de5271f5f00cef0cba06d41f09c673a9190525",
     "backend_data_cancel_files": [
       "bisheng/app_runtime/domain/services/runtime_data_grant_service.py",
@@ -25,7 +25,8 @@
     "backend_data_cpu_files": [
       "bisheng/app_runtime/domain/services/runtime_data_session_service.py",
       "bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py"
-    ]
+    ],
+    "assembler_image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9"
   },
   "attempts": [
     {
@@ -952,5 +953,16 @@
     },
     "fix_source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
     "new_business_attempt": "not_started"
+  },
+  "final_code_candidate": {
+    "source_commit": "d7f7c2e10ab9805d41120d19e32d102310b06654",
+    "tasks_complete": 248,
+    "tasks_total": 253,
+    "runtime_passed": 1622,
+    "runtime_skipped": 13,
+    "image_deployment": "pending",
+    "source_continuation": "not_started",
+    "source_preflight_check": "passed_without_new_publication",
+    "cleanup_proof_sha256": "b76ad4ba19d65bb3a6011812148b1bb7a15558a8963c857df1d08397af9b3988"
   }
 }

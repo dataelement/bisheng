@@ -117,3 +117,9 @@ static v1 1672b4a7…与v2 4fb07dc0…均真实完成发布、审批预览、访
 source prepare70eb72db…依赖安装及产物上传完成，OCI组装失败`oci_privilege_bits_refused`，公开16227/precheck_build；failed/cleanupcomplete，5Pod均有同UID kubelet_terminal，9注册资源正常cleanup，fresh逐项absence另取。只读保留scratch34统计267个SGID目录、零特殊位普通文件，确认fsGroup目录继承；backend存储端口返回的sourceartifact0bce…与原598757byte包SHA538dae69…完全一致。
 
 T248–T251修复只允许归档前的目录SGID并在层内去除，继续拒绝SUID目录和非目录SGID；另补OCI固定PATH标准sbin，保持D7受限布局/冻结基础镜像/凭据及启动合同。source0d5ef7b2b，完整runtime1610/13skip、独立L1通过，新amd64三镜像及descriptor/能力探测刷新后方可新attempt；当前尚未source/fullimage上线，不冒认T069/T070完成。
+
+## 最终代码入口修复冻结
+
+独立链路检查确认source-image的空startup有意交给兼容平台入口解析，但crane此前继承profile默认CMD，先执行基础命令，可能绕过Procfile/包start/static生成配置。T252/T253仅显式写空CMD，显式参数仍CSV无损，实际非rootcrane v0.22.1对三个固定base导出Cmd=null、正确入口，未改仓库manifest。来源d7f7c2e10，完整runtime1622/13skip、独立L1通过，代码248/253闭合。
+
+0d5中间候选已真实Helm24/16项探测/ready；源码续办check已通过，但尚未execute/生成新业务journal，最终d7f镜像与报告待完成后再提交。旧失败/9资源精确正常cleanup和backend原包校验保持。
