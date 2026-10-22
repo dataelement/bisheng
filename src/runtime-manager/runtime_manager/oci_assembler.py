@@ -13,14 +13,111 @@ import tarfile
 import time
 from dataclasses import replace
 from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, uuid5
 
 from runtime_manager.builder import render_build_context
 from runtime_manager.executors.protocol import ExecutorError
+from runtime_manager.source_facts import STATIC_ROOT_CANDIDATES
 
 _IMAGE = re.compile(r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}")
-_REPOSITORY = re.compile(r"[A-Za-z0-9][A-Za-z0-9.:-]*/[a-z0-9][a-z0-9/_.-]*")
+_REPOSITORY_PART = re.compile(r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*")
+_TAG = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
+_HOST = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?")
+_DOCKER_HUB = {"docker.io", "index.docker.io", "registry-1.docker.io"}
 _PYTHON_LINKS = {"/usr/local/bin/python", "/usr/local/bin/python3", "/usr/local/bin/python3.11"}
+
+
+def _origin(value):
+    try:
+        if not isinstance(value, str) or any(character in value for character in "\\\r\n\t %"):
+            raise ValueError()
+        parsed = urlsplit(value)
+        host = parsed.hostname or ""
+        port = parsed.port if parsed.port is not None else (80 if parsed.scheme == "http" else 443)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not _HOST.fullmatch(host)
+            or ".." in host
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or parsed.netloc.endswith(":")
+            or not 1 <= port <= 65535
+        ):
+            raise ValueError()
+        return f"{parsed.scheme}://{host.lower()}:{port}"
+    except (ValueError, TypeError):
+        raise ExecutorError("oci_registry_endpoint_invalid") from None
+
+
+def _repository(value):
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > 255
+        or any(character in value for character in "@?#\\\r\n\t %")
+    ):
+        raise ExecutorError("oci_registry_invalid")
+    parts = value.split("/")
+    explicit = len(parts) > 1 and ("." in parts[0] or ":" in parts[0] or parts[0] == "localhost")
+    authority, names = (parts[0], parts[1:]) if explicit else ("index.docker.io", parts)
+    try:
+        parsed = urlsplit("https://" + authority)
+        if not parsed.hostname or parsed.path or parsed.username is not None or parsed.password is not None:
+            raise ValueError()
+        port = parsed.port
+        if port is not None and not 1 <= port <= 65535:
+            raise ValueError()
+        if not _HOST.fullmatch(parsed.hostname) or ".." in parsed.hostname:
+            raise ValueError()
+    except ValueError:
+        raise ExecutorError("oci_registry_invalid") from None
+    if not names or any(not _REPOSITORY_PART.fullmatch(part) for part in names):
+        raise ExecutorError("oci_registry_invalid")
+    host = parsed.hostname.lower()
+    if host in _DOCKER_HUB and port is None:
+        authority = "index.docker.io"
+        if len(names) == 1:
+            names.insert(0, "library")
+    else:
+        authority = host + (f":{port}" if port is not None else "")
+    return authority + "/" + "/".join(names), authority
+
+
+def _frozen_image(value):
+    if not isinstance(value, str) or not _IMAGE.fullmatch(value):
+        raise ExecutorError("oci_frozen_base_invalid")
+    name, digest = value.rsplit("@", 1)
+    last = name.rsplit("/", 1)[-1]
+    if ":" in last:
+        name, tag = name.rsplit(":", 1)
+        if not _TAG.fullmatch(tag):
+            raise ExecutorError("oci_frozen_base_invalid")
+    try:
+        repository, authority = _repository(name)
+    except ExecutorError:
+        raise ExecutorError("oci_frozen_base_invalid") from None
+    return repository + "@" + digest, authority
+
+
+def registry_origins(base, repository, *, endpoints=(), insecure=False):
+    """Only exact registry, required Hub auth, and installer-declared origins."""
+    _canonical_target, target = _repository(repository)
+    _canonical_base, source = _frozen_image(base)
+    if not isinstance(endpoints, (list, tuple)) or len(endpoints) > 32:
+        raise ExecutorError("oci_registry_endpoint_invalid")
+    origins = {_origin(value) for value in endpoints}
+    for authority in {target, source}:
+        scheme = "http" if insecure and authority == target else "https"
+        if authority == "index.docker.io":
+            origins.add(_origin(scheme + "://registry-1.docker.io"))
+            origins.add("https://auth.docker.io:443")
+        else:
+            origins.add(_origin(scheme + "://" + authority))
+    return sorted(origins)
 
 
 def write_layer(document, source, environment, destination):
@@ -38,7 +135,7 @@ def write_layer(document, source, environment, destination):
     prefix = "app"
     if language == "static":
         code = next(
-            (source / part for part in (".", "dist", "build", "public") if (source / part / "index.html").is_file()),
+            (source / part for part in STATIC_ROOT_CANDIDATES if (source / part / "index.html").is_file()),
             None,
         )
         if code is None or code.is_symlink():
@@ -102,17 +199,21 @@ def write_layer(document, source, environment, destination):
 def assemble_image(document, source, environment, target, *, work, run=subprocess.run, timeout=1800):
     if not isinstance(target, str) or ":" not in target.rsplit("/", 1)[-1]:
         raise ExecutorError("oci_registry_required")
-    repository = target.rsplit(":", 1)[0]
-    if not _REPOSITORY.fullmatch(repository):
+    raw_repository, tag = target.rsplit(":", 1)
+    repository, target_registry = _repository(raw_repository)
+    if not _TAG.fullmatch(tag):
         raise ExecutorError("oci_registry_invalid")
     base = document["profile"].get("runtime_image", "")
+    _canonical_base, base_registry = _frozen_image(base)
     platform = document["platform"]
-    if not _IMAGE.fullmatch(base) or platform not in {"linux/amd64", "linux/arm64"}:
+    if platform not in {"linux/amd64", "linux/arm64"}:
         raise ExecutorError("oci_frozen_base_invalid")
     layer = write_layer(document, source, environment, Path(work) / "application-layer.tar")
     command = ["crane", "--platform", platform]
-    if document.get("insecure_registry"):
+    insecure = document.get("insecure_registry") is True
+    if insecure and base_registry == target_registry:
         command.append("--insecure")
+    output = Path(work) / "assembled-image.tar"
     deadline = time.monotonic() + timeout
 
     def execute(arguments):
@@ -156,8 +257,19 @@ def assemble_image(document, source, environment, target, *, work, run=subproces
             encoded = io.StringIO()
             csv.writer(encoded, lineterminator="").writerow(startup)
             arguments += ["--cmd", encoded.getvalue()]
-        reference = execute(arguments).strip()
-        if not _IMAGE.fullmatch(reference) or reference.split("@")[0] != repository:
+        if insecure and base_registry != target_registry:
+            # crane's global --insecure affects every remote access. Keep the
+            # foreign base HTTPS-only, then push the local result to this target.
+            arguments += ["--output", str(output)]
+            execute(arguments)
+            reference = execute(["crane", "--platform", platform, "--insecure", "push", str(output), target]).strip()
+        else:
+            reference = execute(arguments).strip()
+        try:
+            canonical_result, _registry = _frozen_image(reference)
+        except ExecutorError:
+            raise ExecutorError("oci_push_digest_unconfirmed") from None
+        if canonical_result.split("@")[0] != repository:
             raise ExecutorError("oci_push_digest_unconfirmed")
         return {
             "mode": "source-image",
@@ -169,6 +281,7 @@ def assemble_image(document, source, environment, target, *, work, run=subproces
         }
     finally:
         layer.unlink(missing_ok=True)
+        output.unlink(missing_ok=True)
 
 
 class KubernetesAssembler:
@@ -177,12 +290,22 @@ class KubernetesAssembler:
 
     def prepare(self, operation, delivery):
         runtime = self.runtime
+        report = runtime.probe_report()
+        if report.get("ready") is not True or report.get("paths", {}).get("source-image") is not True:
+            raise ExecutorError("oci_source_image_unavailable")
         repository = runtime.document.get("image_repository", "")
-        if not _REPOSITORY.fullmatch(repository):
-            raise ExecutorError("oci_registry_required")
+        _repository(repository)
         image = runtime.document.get("assembler_image", "")
-        if not _IMAGE.fullmatch(image):
-            raise ExecutorError("oci_assembler_image_required")
+        try:
+            _frozen_image(image)
+        except ExecutorError:
+            raise ExecutorError("oci_assembler_image_required") from None
+        sources = registry_origins(
+            operation["payload"]["profile"].get("runtime_image", ""),
+            repository,
+            endpoints=runtime.document.get("image_registry_endpoints", []),
+            insecure=runtime.document.get("insecure_registry") is True,
+        )
         reference = str(uuid5(NAMESPACE_URL, "bisheng-assemble:" + operation["operation_id"]))
         document = {
             "profile": operation["payload"]["profile"],
@@ -204,7 +327,7 @@ class KubernetesAssembler:
             credentials = runtime.platform.egress(
                 operation["operation_id"],
                 "build",
-                package_sources=[repository.split("/")[0], document["profile"]["runtime_image"].split("/")[0]],
+                package_sources=sources,
             )
             environment.update(egress_env(runtime.config, **credentials))
         plan = replace(
