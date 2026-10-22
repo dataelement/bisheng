@@ -1,4 +1,4 @@
-"""AC-06, AC-35, AC-61: static model contracts, without a DM8 connection."""
+"""覆盖 AC: AC-15、AC-48、AC-54、AC-56。Static models and SQLite only; no DM8 connection."""
 
 from importlib import import_module
 
@@ -11,6 +11,7 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 from bisheng.app_runtime.domain.models.runtime_delivery import (
     RUNTIME_TABLES,
     RuntimeArtifact,
+    RuntimeAssignment,
     RuntimeTransfer,
     ScopedRuntimeRecord,
 )
@@ -122,3 +123,66 @@ def test_upgrade_rejects_an_unexpected_column_type(monkeypatch):
     with pytest.raises(RuntimeError, match="Unexpected byte-counter"):
         module.upgrade()
     assert not calls
+
+
+def test_scoped_runtime_tenant_default_waits_for_context_without_nullable_storage():
+    for model in (*RUNTIME_TABLES, *KUBERNETES_TABLES):
+        if issubclass(model, ScopedRuntimeRecord):
+            assert model.model_fields["tenant_id"].default is None
+            assert not model.__table__.c.tenant_id.nullable
+            assert model.__table__.c.tenant_id.index
+            assert model.__table__.c.tenant_id.server_default is None
+
+
+@pytest.fixture
+def runtime_tenant_engine(mock_settings):
+    from sqlalchemy import create_engine
+
+    from bisheng.core.database import tenant_filter
+
+    tenant_filter.register_tenant_filter_events()
+    engine = create_engine("sqlite://")
+    RuntimeAssignment.__table__.create(engine)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "declaration,expected",
+    [({}, 37), ({"tenant_id": None}, 37), ({"tenant_id": 0}, 37), ({"tenant_id": 37}, 37), ({"tenant_id": 91}, 91)],
+)
+def test_runtime_tenant_autofill_and_explicit_identity_are_preserved(runtime_tenant_engine, declaration, expected):
+    from sqlmodel import Session
+
+    from bisheng.core.context.tenant import current_tenant_id
+
+    token = current_tenant_id.set(37)
+    try:
+        with Session(runtime_tenant_engine) as session:
+            row = RuntimeAssignment(app_id="tenant-default-app", node_id="node-a", **declaration)
+            session.add(row)
+            session.flush()
+            assert row.tenant_id == expected
+            session.commit()
+    finally:
+        current_tenant_id.reset(token)
+
+
+def test_unscoped_runtime_insert_without_context_fails_closed(runtime_tenant_engine, mock_settings):
+    from sqlalchemy.exc import IntegrityError
+    from sqlmodel import Session
+
+    from bisheng.core.context.tenant import current_tenant_id
+
+    mock_settings.multi_tenant.enabled = True
+    token = current_tenant_id.set(None)
+    try:
+        with Session(runtime_tenant_engine) as session:
+            session.add(RuntimeAssignment(app_id="unscoped-app", node_id="node-a"))
+            with pytest.raises(IntegrityError):
+                session.flush()
+            session.rollback()
+    finally:
+        current_tenant_id.reset(token)

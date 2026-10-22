@@ -23,7 +23,7 @@ class RuntimeRecord(SQLModelSerializable):
 
 
 class ScopedRuntimeRecord(RuntimeRecord):
-    tenant_id: int = Field(default=0, index=True)
+    tenant_id: int | None = Field(default=None, nullable=False, index=True)
     app_id: str = Field(index=True, max_length=36)
 
 
