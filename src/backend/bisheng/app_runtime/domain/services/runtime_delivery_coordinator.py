@@ -307,7 +307,7 @@ class RuntimeDeliveryCoordinator:
             storage = await AppStorageService(
                 self.repo, max_file_bytes=settings.app_runtime.storage_max_file_mb * 1024 * 1024
             ).issue(op, base_url=base, preview_session=op.id if preview else None)
-            env = {**(environment or {}), **storage["env"]}
+            env = {**(environment or {}), **storage["env"], "BISHENG_PLATFORM_API_BASE": base}
             # Preflight gets isolated data and no production application identity.
             if not preview:
                 declaration = parse_declaration(capabilities or {})
