@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-03、AC-13、AC-14、AC-15、AC-16、AC-21、AC-23、AC-30、AC-31、AC-32、AC-49."""
+"""覆盖 AC: AC-03、AC-13、AC-14、AC-15、AC-16、AC-20、AC-21、AC-23、AC-30、AC-31、AC-32、AC-49."""
 
 import copy
 
@@ -433,7 +433,10 @@ def test_delete_and_finalizer_removal_require_uid_and_committed_stop(template, p
     old = terminal(template)
     options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 30}
     assert allowed(policy(lambda _: plan), request(old, operation="DELETE", old=old, options=options))
-    for change in ({"gracePeriodSeconds": 0}, {"preconditions": {"uid": "other", "resourceVersion": "17"}}):
+    assert allowed(
+        policy(lambda _: plan), request(old, operation="DELETE", old=old, options={**options, "gracePeriodSeconds": 0})
+    )
+    for change in ({"preconditions": {"uid": "other", "resourceVersion": "17"}},):
         assert not allowed(
             policy(lambda _: plan), request(old, operation="DELETE", old=old, options={**options, **change})
         )
@@ -935,3 +938,195 @@ def test_zero_grace_keeps_bound_uncertain_or_changed_pods_protected(template, pl
     else:
         options["preconditions"]["resourceVersion"] = "old"
     assert not allowed(policy(lambda _: plan), request(old, operation="DELETE", old=old, options=options))
+
+
+def finished_pod(template, *, phase="Succeeded", deleting=False):
+    old = copy.deepcopy(template)
+    old["metadata"].update(uid=UID, resourceVersion="17")
+    if deleting:
+        old["metadata"]["deletionTimestamp"] = "2026-10-22T00:00:00Z"
+    old["spec"]["nodeName"] = "worker-a"
+    old["status"] = {"phase": phase}
+    for spec_key, status_key in (("containers", "containerStatuses"), ("initContainers", "initContainerStatuses")):
+        old["status"][status_key] = [
+            {
+                "name": container["name"],
+                "containerID": "containerd://finished-" + container["name"],
+                "state": {
+                    "terminated": {
+                        "exitCode": 0 if phase == "Succeeded" else 1,
+                        "reason": "Completed" if phase == "Succeeded" else "Error",
+                    }
+                },
+            }
+            for container in old["spec"].get(spec_key, [])
+        ]
+    return old
+
+
+@pytest.mark.parametrize("phase", ["Succeeded", "Failed"])
+@pytest.mark.parametrize("deleting", [False, True])
+def test_manager_delete_accepts_api_zero_grace_for_protected_bound_terminal_pod(template, plan, phase, deleting):
+    """覆盖 AC: AC-13、AC-20、AC-49。API normalization never removes the stop finalizer."""
+    from runtime_manager.k8s_templates import STOP_FINALIZER
+
+    old = finished_pod(template, phase=phase, deleting=deleting)
+    before = copy.deepcopy(old)
+    options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 0}
+    assert allowed(policy(lambda _: plan), request(old, operation="DELETE", old=old, options=options))
+    assert old == before and STOP_FINALIZER in old["metadata"]["finalizers"]
+    assert plan["stop_state"] == "held"
+
+
+def test_manager_zero_grace_allows_trusted_init_failure_with_never_started_app(template, plan):
+    old = finished_pod(template, phase="Failed")
+    old["status"]["containerStatuses"] = [
+        {"name": container["name"], "state": {"waiting": {"reason": "PodInitializing"}}}
+        for container in old["spec"]["containers"]
+    ]
+    options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 0}
+    assert allowed(policy(lambda _: plan), request(old, operation="DELETE", old=old, options=options))
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "running-phase",
+        "unknown-phase",
+        "node-lost",
+        "unknown-reason",
+        "unbound",
+        "app-running",
+        "init-running",
+        "ephemeral-running",
+        "waiting-container-id",
+        "empty-state-container-id",
+        "unknown-termination",
+        "malformed-status-array",
+        "malformed-state",
+        "missing-policy",
+        "wrong-policy",
+        "missing-finalizer",
+        "stale-rv",
+        "missing-rv",
+        "wrong-uid",
+        "wrong-plan-uid",
+        "wrong-plan-name",
+        "wrong-actor",
+        "delete-unapproved",
+        "wrong-kind",
+        "boolean-grace",
+    ],
+)
+def test_manager_normalized_zero_grace_preserves_uncertain_writers_and_identity_fences(template, plan, mutation):
+    from runtime_manager.k8s_templates import STOP_FINALIZER
+
+    old = finished_pod(template)
+    options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 0}
+    username = MANAGER
+    if mutation == "running-phase":
+        old["status"]["phase"] = "Running"
+    elif mutation == "unknown-phase":
+        old["status"]["phase"] = "Unknown"
+    elif mutation == "node-lost":
+        old["status"]["reason"] = "NodeLost"
+    elif mutation == "unknown-reason":
+        old["status"]["reason"] = "Unknown"
+    elif mutation == "unbound":
+        old["spec"].pop("nodeName")
+    elif mutation in {"app-running", "init-running", "ephemeral-running"}:
+        group = {
+            "app-running": "containerStatuses",
+            "init-running": "initContainerStatuses",
+            "ephemeral-running": "ephemeralContainerStatuses",
+        }[mutation]
+        old["status"][group] = [{"name": "possible-writer", "state": {"running": {}}}]
+    elif mutation == "waiting-container-id":
+        old["status"]["containerStatuses"][0]["state"] = {"waiting": {"reason": "Unknown"}}
+    elif mutation == "empty-state-container-id":
+        old["status"]["containerStatuses"][0]["state"] = {}
+    elif mutation == "unknown-termination":
+        old["status"]["containerStatuses"][0]["state"]["terminated"]["reason"] = "ContainerStatusUnknown"
+    elif mutation == "malformed-status-array":
+        old["status"]["initContainerStatuses"] = {"state": {"terminated": {"exitCode": 0}}}
+    elif mutation == "malformed-state":
+        old["status"]["containerStatuses"][0]["state"] = None
+    elif mutation == "missing-policy":
+        old["metadata"]["annotations"].pop(POLICY_ANNOTATION)
+    elif mutation == "wrong-policy":
+        old["metadata"]["annotations"][POLICY_ANNOTATION] = "foreign"
+    elif mutation == "missing-finalizer":
+        old["metadata"]["finalizers"].remove(STOP_FINALIZER)
+    elif mutation == "stale-rv":
+        options["preconditions"]["resourceVersion"] = "old"
+    elif mutation == "missing-rv":
+        old["metadata"].pop("resourceVersion")
+        options["preconditions"].pop("resourceVersion")
+    elif mutation == "wrong-uid":
+        options["preconditions"]["uid"] = "foreign"
+    elif mutation == "wrong-plan-uid":
+        plan["uid"] = "foreign"
+    elif mutation == "wrong-plan-name":
+        plan["name"] = "foreign"
+    elif mutation == "wrong-actor":
+        username = "system:serviceaccount:foreign:runtime-manager"
+    elif mutation == "delete-unapproved":
+        plan["allow_delete"] = False
+    elif mutation == "wrong-kind":
+        old["kind"] = "Service"
+    else:
+        options["gracePeriodSeconds"] = False
+    assert not allowed(
+        policy(lambda _: plan), request(old, operation="DELETE", old=old, options=options, username=username)
+    )
+
+
+def test_delete_never_uses_manager_supplied_terminal_object_as_stop_evidence(template, plan):
+    old = finished_pod(template)
+    old["status"]["phase"] = "Running"
+    forged = finished_pod(template)
+    options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 0}
+    assert not allowed(policy(lambda _: plan), request(forged, operation="DELETE", old=old, options=options))
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "stale-rv",
+        "wrong-uid",
+        "wrong-node",
+        "missing-node-group",
+        "missing-delete-time",
+        "wrong-namespace",
+        "wrong-request-name",
+        "node-lost",
+        "unknown-waiting",
+    ],
+)
+def test_kubelet_terminal_delete_preserves_identity_status_and_protection_fences(template, mutation):
+    old = finished_pod(template, deleting=True)
+    options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 0}
+    username, groups = "system:node:worker-a", ["system:nodes"]
+    if mutation == "stale-rv":
+        options["preconditions"]["resourceVersion"] = "old"
+    elif mutation == "wrong-uid":
+        options["preconditions"]["uid"] = "foreign"
+    elif mutation == "wrong-node":
+        username = "system:node:worker-b"
+    elif mutation == "missing-node-group":
+        groups = []
+    elif mutation == "missing-delete-time":
+        old["metadata"].pop("deletionTimestamp")
+    elif mutation == "wrong-namespace":
+        old["metadata"]["namespace"] = "foreign"
+    elif mutation == "node-lost":
+        old["status"]["reason"] = "NodeLost"
+    elif mutation == "unknown-waiting":
+        old["status"]["containerStatuses"] = [{"name": "app", "state": {"waiting": {"reason": "Unknown"}}}]
+    review = request(old, operation="DELETE", old=old, options=options, username=username, groups=groups)
+    if mutation == "wrong-request-name":
+        review["request"]["name"] = "foreign"
+    calls = []
+    verifier = policy(lambda ref: calls.append(ref) or pytest.fail("kubelet DELETE must not call backend"))
+    assert not allowed(verifier, review)
+    assert not calls
