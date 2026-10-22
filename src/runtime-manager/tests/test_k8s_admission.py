@@ -106,6 +106,118 @@ def test_create_requires_a_committed_backend_plan(template, plan):
     assert "sensitive-backend-detail" not in str(result)
 
 
+@pytest.mark.parametrize("changed", ["none", "equivalent-quantity", "app-request", "init-request"])
+def test_create_accepts_only_api_computed_pending_qos_status(template, plan, changed):
+    """AC-13, AC-30, AC-49: v1.28.15 PrepareForCreate runs before validating admission."""
+    from runtime_manager.k8s_admission import template_projection
+
+    if changed == "equivalent-quantity":
+        template["spec"]["containers"][0]["resources"]["requests"]["cpu"] = "0.25"
+        template["spec"]["containers"][0]["resources"]["limits"]["cpu"] = "250m"
+    elif changed == "app-request":
+        template["spec"]["containers"][0]["resources"]["requests"]["cpu"] = "100m"
+    elif changed == "init-request":
+        template["spec"]["initContainers"][0]["resources"]["requests"]["memory"] = "64Mi"
+    plan["template"] = template_projection(template)
+    qos = "Burstable" if changed in {"app-request", "init-request"} else "Guaranteed"
+    template["status"] = {"phase": "Pending", "qosClass": qos}
+    assert allowed(policy(lambda _: plan), request(template))
+    template["status"]["qosClass"] = "Guaranteed" if qos == "Burstable" else "Burstable"
+    assert not allowed(policy(lambda _: plan), request(template))
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        {"phase": "Succeeded", "qosClass": "Guaranteed"},
+        {"phase": "Failed", "qosClass": "Guaranteed"},
+        {"phase": "Running", "qosClass": "Guaranteed"},
+        {"phase": "Pending", "qosClass": "BestEffort"},
+        {"phase": "Pending"},
+        {"qosClass": "Guaranteed"},
+        {"phase": "Pending", "qosClass": "Guaranteed", "containerStatuses": []},
+        {
+            "phase": "Pending",
+            "qosClass": "Guaranteed",
+            "containerStatuses": [{"name": "app", "state": {"terminated": {"exitCode": 0}}}],
+        },
+        {"phase": "Pending", "qosClass": "Guaranteed", "initContainerStatuses": []},
+        {
+            "phase": "Pending",
+            "qosClass": "Guaranteed",
+            "initContainerStatuses": [{"name": "material-fetch", "state": {"terminated": {"exitCode": 0}}}],
+        },
+        {"phase": "Pending", "qosClass": "Guaranteed", "ephemeralContainerStatuses": []},
+        {"phase": "Pending", "qosClass": "Guaranteed", "conditions": [{"type": "Ready", "status": "True"}]},
+        {"phase": "Pending", "qosClass": "Guaranteed", "podIP": "10.233.64.10"},
+        {"phase": "Pending", "qosClass": "Guaranteed", "startTime": "2026-10-22T00:00:00Z"},
+        [],
+        None,
+    ],
+)
+def test_create_rejects_status_evidence_not_generated_by_pod_create_strategy(template, plan, status):
+    """AC-13, AC-49: initial Pending is never a waiver for runtime or malformed status."""
+    template["status"] = status
+    assert not allowed(policy(lambda _: plan), request(template))
+
+
+def test_approved_template_does_not_allow_manager_prefilled_terminal_status(template, plan):
+    """AC-13, AC-49: a committed plan cannot grant the manager kubelet status authority."""
+    from runtime_manager.k8s_admission import template_projection
+
+    template["status"] = {"phase": "Succeeded", "qosClass": "Guaranteed"}
+    plan["template"] = template_projection(template)
+    assert not allowed(policy(lambda _: plan), request(template))
+
+
+@pytest.mark.parametrize(
+    "username,groups",
+    [
+        ("system:node:worker-a", ["system:nodes"]),
+        ("system:kube-scheduler", []),
+        ("system:serviceaccount:other:attacker", []),
+    ],
+)
+def test_default_pending_status_does_not_authorize_another_creator(template, plan, username, groups):
+    """AC-13, AC-49: status defaults do not substitute for the manager's verified actor."""
+    template["status"] = {"phase": "Pending", "qosClass": "Guaranteed"}
+    assert not allowed(policy(lambda _: plan), request(template, username=username, groups=groups))
+
+
+@pytest.mark.parametrize(
+    "kind,resource,initial,forged",
+    [
+        ("PersistentVolumeClaim", "persistentvolumeclaims", {}, {"phase": "Bound"}),
+        ("Service", "services", {"loadBalancer": {}}, {"loadBalancer": {"ingress": [{"ip": "10.0.0.1"}]}}),
+        ("Secret", "secrets", None, {"phase": "Pending"}),
+    ],
+)
+def test_other_create_resources_accept_only_their_api_default_status(template, plan, kind, resource, initial, forged):
+    """AC-13, AC-49: PVC and Service create strategies clear status; Secret has none."""
+    from runtime_manager.k8s_admission import template_projection
+
+    obj = {"apiVersion": "v1", "kind": kind, "metadata": copy.deepcopy(template["metadata"])}
+    obj["metadata"].pop("finalizers")
+    if kind == "PersistentVolumeClaim":
+        obj["spec"] = {
+            "accessModes": ["ReadWriteOnce"],
+            "volumeMode": "Filesystem",
+            "resources": {"requests": {"storage": "1Gi"}},
+        }
+    elif kind == "Service":
+        obj["spec"] = {"type": "ClusterIP", "selector": {RESOURCE_LABEL: "pod-a"}, "ports": [{"port": 8080}]}
+    else:
+        obj.update(type="Opaque", immutable=True, data={"identity.json": "e30="})
+    plan.update(kind=kind, template=template_projection(obj))
+    if initial is not None:
+        obj["status"] = initial
+    review = request(obj)
+    review["request"]["resource"]["resource"] = resource
+    assert allowed(policy(lambda _: plan), review)
+    obj["status"] = forged
+    assert not allowed(policy(lambda _: plan), review)
+
+
 def test_scope_and_request_identity_cannot_be_supplied_in_labels(template, plan):
     assert not allowed(policy(lambda _: plan), request(template, username="system:serviceaccount:other:attacker"))
     obj = copy.deepcopy(template)

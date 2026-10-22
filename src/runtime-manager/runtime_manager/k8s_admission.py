@@ -277,8 +277,8 @@ class AdmissionPolicy:
             _deny("admission_template_required")
         comparison = copy.deepcopy(obj)
         expected = copy.deepcopy(expected)
-        if op == "CREATE" and kind == "Pod" and obj.get("status"):
-            _deny("admission_prefilled_status_refused")
+        if op == "CREATE":
+            self._create_status(kind, obj)
         if kind == "Pod":
             # The frozen plan predates CNI attachment. Never treat manager input
             # as CNI provenance, even when it also appears in that frozen plan.
@@ -315,6 +315,39 @@ class AdmissionPolicy:
         comparison = template_projection(comparison)
         if _normalize(comparison) != _normalize(expected):
             _deny("admission_template_mismatch")
+
+    @staticmethod
+    def _create_status(kind, obj):
+        # Kubernetes v1.28.15 Store.Create calls BeforeCreate before validators.
+        # Pod strategy resets status to Pending/GetPodQOS; PVC clears it, while
+        # empty ServiceStatus serializes its loadBalancer struct as {}.
+        # https://github.com/kubernetes/kubernetes/blob/v1.28.15/pkg/registry/core/pod/strategy.go
+        if "status" not in obj:
+            return
+        status = obj["status"]
+        if not isinstance(status, dict) or kind == "Secret":
+            _deny("admission_prefilled_status_refused")
+        if not status:
+            return
+        if kind == "Service" and status == {"loadBalancer": {}}:
+            return
+        if kind != "Pod":
+            _deny("admission_prefilled_status_refused")
+        spec = obj.get("spec", {})
+        containers = [*spec.get("containers", []), *spec.get("initContainers", [])]
+        # The mandatory baseline requires positive CPU/memory requests/limits
+        # for every container, so BestEffort is impossible. GetPodQOS sums both
+        # normal and init-container resources and compares equivalent quantities.
+        qos = "Guaranteed"
+        for resource in ("cpu", "memory"):
+            totals = [
+                sum(Decimal(_quantity(container["resources"][side][resource])) for container in containers)
+                for side in ("requests", "limits")
+            ]
+            if totals[0] != totals[1]:
+                qos = "Burstable"
+        if status != {"phase": "Pending", "qosClass": qos}:
+            _deny("admission_prefilled_status_refused")
 
     def _pvc_binding(self, old, obj):
         if not _same_identity(old, obj) or not _protected(old, self.revision) or not _protected(obj, self.revision):
