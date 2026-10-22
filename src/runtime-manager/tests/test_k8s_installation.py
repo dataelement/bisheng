@@ -443,6 +443,7 @@ def test_sandbox_probe_failure_is_actionable_without_making_up_success():
         "name": "sandbox-recommended",
         "ok": False,
         "reason": "optional_runtime_class_not_configured",
+        "exception_type": "ProbeError",
         "evidence": {},
         "observed_at": 123,
     }
@@ -601,3 +602,189 @@ def test_unscheduled_canary_needs_verified_atomic_binding_fence():
     }
     assert not tool.stop_confirmed(pod)
     assert tool.stop_confirmed(pod, binding_verified=True)
+
+
+def diagnostic_cli(tool, tmp_path, monkeypatch, error, *, publish_error=None):
+    path = tmp_path / "probe.json"
+    path.write_text("{}")
+    published = []
+
+    class Verifier:
+        document = {"platform": "linux/amd64"}
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def live(self):
+            raise error
+
+        def publish(self, report):
+            if publish_error:
+                raise publish_error
+            published.append(report)
+
+    monkeypatch.setattr(tool, "InstallationVerifier", Verifier)
+    monkeypatch.setattr(tool, "Kubectl", lambda **_kwargs: None)
+    code = tool.main(
+        [
+            "--context",
+            "test",
+            "--control-namespace",
+            "runtime-system",
+            "--execution-namespace",
+            "runtime-apps",
+            "--probe-plan",
+            str(path),
+            "--live",
+            "--write-report",
+        ]
+    )
+    return code, published
+
+
+@pytest.mark.parametrize(
+    "kind,expected_reason,expected_type",
+    [
+        ("safe", "preflight_create_refused", "ProbeError"),
+        ("unknown", "probe_failed", "ProbeError"),
+        ("generic", "probe_failed", "RuntimeError"),
+    ],
+)
+def test_live_failure_reports_safe_reason_and_type_without_exception_content(
+    tmp_path, monkeypatch, capsys, kind, expected_reason, expected_type
+):
+    tool = load_installer()
+    private = "PRIVATE_HMAC_SENTINEL"
+    error = (
+        tool.ProbeError("preflight_create_refused")
+        if kind == "safe"
+        else (
+            tool.ProbeError(private) if kind == "unknown" else RuntimeError("kubectl stderr Authorization=" + private)
+        )
+    )
+    code, published = diagnostic_cli(tool, tmp_path, monkeypatch, error)
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert code == 1 and published == [report]
+    assert report["failures"] == [{"phase": "probe", "reason": expected_reason, "exception_type": expected_type}]
+    assert all(
+        not row["ok"] and row["reason"] == expected_reason and row["exception_type"] == expected_type
+        for row in report["checks"]
+    )
+    assert json.loads(captured.err)["failures"] == report["failures"]
+    assert private not in captured.out + captured.err
+    assert "Authorization" not in captured.out + captured.err
+
+
+def test_per_check_diagnostics_reject_unknown_constant_shaped_probe_text():
+    tool = load_installer()
+
+    def refuse():
+        raise tool.ProbeError("PRIVATE_ENV_SENTINEL")
+
+    report = tool.execute_checks({"storage-sqlite": refuse}, {"platform": "linux/amd64"}, observed_at=123)
+    assert report["checks"][0]["reason"] == "probe_failed"
+    assert report["checks"][0]["exception_type"] == "ProbeError"
+    assert "PRIVATE_ENV_SENTINEL" not in json.dumps(report)
+
+
+def live_with_failures(tool, *, probe_error=None, cleanup_error=None, report=None):
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.options, verifier.document = {}, {"platform": "linux/amd64"}
+    for name in (
+        "_namespace_budget",
+        "_admission_negative",
+        "_status",
+        "_binding_fence",
+        "_rbac",
+        "_no_exec",
+        "_storage",
+        "_image",
+        "_ingress",
+        "_platform",
+        "_network",
+    ):
+        setattr(verifier, name, lambda *_args, **_kwargs: None)
+
+    def pod(*_args, **_kwargs):
+        if probe_error:
+            raise probe_error
+        return {"metadata": {"uid": str(uuid4())}}
+
+    def cleanup():
+        if cleanup_error:
+            raise cleanup_error
+
+    verifier._pod, verifier._observe, verifier.cleanup = pod, lambda value, **_kwargs: value, cleanup
+    if report is not None:
+        tool.execute_checks = lambda *_args, **_kwargs: report
+    return verifier
+
+
+def test_cleanup_failure_preserves_initial_safe_classification(tmp_path, monkeypatch, capsys):
+    tool = load_installer()
+    verifier = live_with_failures(
+        tool,
+        probe_error=tool.ProbeError("preflight_pod_failed"),
+        cleanup_error=tool.ProbeError("preflight_cleanup_identity_changed"),
+    )
+    with pytest.raises(tool.ProbeRunFailure) as stopped:
+        verifier.live()
+    code, _ = diagnostic_cli(tool, tmp_path, monkeypatch, stopped.value)
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert code == 1
+    assert report["failures"] == [
+        {"phase": "probe", "reason": "preflight_pod_failed", "exception_type": "ProbeError"},
+        {"phase": "cleanup", "reason": "preflight_cleanup_identity_changed", "exception_type": "ProbeError"},
+    ]
+
+
+def test_cleanup_failure_retains_earlier_failed_check_classification(tmp_path, monkeypatch, capsys):
+    tool = load_installer()
+    previous = {
+        "checks": [
+            {
+                "name": "storage-sqlite",
+                "ok": False,
+                "reason": "storage_capacity_not_bounded",
+                "exception_type": "ProbeError",
+                "evidence": {},
+            }
+        ]
+    }
+    verifier = live_with_failures(tool, cleanup_error=RuntimeError("SECRET_STDERR"), report=previous)
+    with pytest.raises(tool.ProbeRunFailure) as stopped:
+        verifier.live()
+    code, _ = diagnostic_cli(tool, tmp_path, monkeypatch, stopped.value)
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert code == 1
+    assert {
+        "phase": "check",
+        "name": "storage-sqlite",
+        "reason": "storage_capacity_not_bounded",
+        "exception_type": "ProbeError",
+    } in report["failures"]
+    assert {"phase": "cleanup", "reason": "probe_failed", "exception_type": "RuntimeError"} in report["failures"]
+    assert "SECRET_STDERR" not in captured.out + captured.err
+    assert all(not row["ok"] for row in report["checks"])
+
+
+def test_failure_report_publication_error_keeps_initial_failure(tmp_path, monkeypatch, capsys):
+    tool = load_installer()
+    code, _ = diagnostic_cli(
+        tool,
+        tmp_path,
+        monkeypatch,
+        tool.ProbeError("probe_deadline_exceeded"),
+        publish_error=RuntimeError("SECRET_PUBLISH_RESPONSE"),
+    )
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert code == 1
+    assert report["failures"] == [
+        {"phase": "probe", "reason": "probe_deadline_exceeded", "exception_type": "ProbeError"},
+        {"phase": "publish", "reason": "probe_failed", "exception_type": "RuntimeError"},
+    ]
+    assert "SECRET_PUBLISH_RESPONSE" not in captured.out + captured.err
