@@ -5848,6 +5848,54 @@
       "review": "PASS"
     },
     {
+      "id": "T232",
+      "wave": 9,
+      "kind": "测试",
+      "title": "终态finalizer移除后kubelet删除配对",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_admission.py"
+      ],
+      "logic": "有STOP原路保持，无STOP仅fresh同scope/UID已持久停止确认允许绑定kubelet DELETE0；不确定拒绝。",
+      "acs": [
+        "AC-35",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T229"
+      ],
+      "pair": "T233",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T233",
+      "wave": 9,
+      "kind": "实现",
+      "title": "终态Pod正常删除准入收尾",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_admission.py"
+      ],
+      "logic": "补SQL已停止且finalizer已移除的kubelet正常收尾分支；manager force-delete不放宽。",
+      "acs": [
+        "AC-35",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T232"
+      ],
+      "pair": "T232",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

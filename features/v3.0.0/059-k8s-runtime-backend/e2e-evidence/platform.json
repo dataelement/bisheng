@@ -1,7 +1,7 @@
 {
   "schema": "f059-platform-evidence/v1",
   "recorded_at": "2026-10-22T18:16:33.600506+00:00",
-  "state": "in_progress_r8_with_startup_and_data_cancel_fixes",
+  "state": "in_progress_r8_ready_after_finalizer_delete_fix",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
@@ -231,12 +231,19 @@
     "automatic_finally_cleanup": false,
     "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
     "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c",
-    "result": "in_progress",
+    "result": "probe_ready_waiting_normal_terminal_deletion",
     "deployment_id": "123f35de6d2b4fdf8050a44d75eebc9e",
     "runtime": "python3.11",
     "app_id": "6da0d71cbda643e881e02d707eac7e79",
     "version_id": "ab8c8e9a50c84bf899c1aef0a2bf0898",
-    "mode": "bundle"
+    "mode": "bundle",
+    "probe_operation_id": "cd1ad0fe93584373b9f81d1a7b8f51d7",
+    "probe_status": "running",
+    "probe_stage": "ready",
+    "probe_cleanup_status": "pending",
+    "probe_pod_uid": "8c83f28c-3a6e-460e-8631-fc0242d49c92",
+    "init_total_seconds": 96,
+    "stop_state": "confirmed"
   },
   "historical_batches": [
     {

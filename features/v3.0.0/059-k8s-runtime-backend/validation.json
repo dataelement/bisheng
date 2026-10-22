@@ -7,7 +7,7 @@
     "design_confirmed": true,
     "tasks_review": "LGTM",
     "l1_completed": 226,
-    "tasks_total": 231,
+    "tasks_total": 233,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -893,6 +893,18 @@
       "backend_node_ready": true,
       "controller_epoch": 13,
       "new_arm_run": false
+    },
+    "after_finalizer_delete": {
+      "status": "fix_in_progress",
+      "operation_id": "cd1ad0fe93584373b9f81d1a7b8f51d7",
+      "pod_uid": "8c83f28c-3a6e-460e-8631-fc0242d49c92",
+      "probe_ready": true,
+      "init_total_seconds": 96,
+      "stop_state": "confirmed",
+      "evidence_kind": "kubelet_terminal",
+      "finalizers": null,
+      "deletion_grace_seconds": 30,
+      "manual_delete_or_sql_override": false
     }
   },
   "not_executed": [

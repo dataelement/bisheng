@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；231 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 226 / 231 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；233 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 226 / 233 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1832,6 +1832,22 @@
   **依赖:** T230
   **配对:** T230
 
+- [ ] **T232** — 终态finalizer移除后kubelet删除配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_admission.py`
+  **逻辑/验收**：原带finalizer路径保持；无finalizer仅fresh同scope/UID已持久停止证明允许绑定kubelet DELETE0；缺失/伪造/过期/换UID拒绝。
+  **覆盖 AC:** AC-35、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T229
+  **配对:** T233
+
+- [ ] **T233** — 终态Pod正常删除准入收尾
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`
+  **逻辑/验收**：修正SQL停止已确认且平台finalizer已移除后kubelet收尾被误拒；不放宽manager force-delete或未知写入者释放。
+  **覆盖 AC:** AC-35、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T232
+  **配对:** T232
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1965,3 +1981,5 @@ T225–T227开发收尾：当前222/227完成（103测试任务）；主树runti
 2026-10-23 T230/T231：只读交叉审查以真实cancel Service＋SQL＋Ed25519红例复现：owner已提交payload.cancel_requested，仍running/ready的数据会话可新签票据；manager RPC也未拒绝该标志。收紧当前授权而非增加取消业务或假装回滚，和T228/T229按独占文件并行。
 
 T228–T231合流：来源a1de5271f5f00cef0cba06d41f09c673a9190525，runtime1483passed/13skip（32.30s），backend app_runtime/app_publish1734passed/19skip（48.25s）；两个模块Ruff/format及逐文件架构守卫通过。当前226/231、105测试任务，余五项保持验收/发行/L2门，不声明业务上线已通过。ARM暂缓。
+
+2026-10-23 T232/T233：r8的4init合计96秒后probe appReady真实通过。当前同UID8c83f28c…已kubelet_terminal/stopconfirmed，finalizers缺省但deletionGracePeriodSeconds仍30，Pod仍存在。现有kubelet终态DELETE准入要求STOP finalizer尚在，形成移除finalizer后误拒。按同UID持久停止证明补窄分支，原操作未终态，期望修复后自然对账，不人工清理或复活。

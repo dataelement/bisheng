@@ -57,3 +57,7 @@ prepare6be875…最终completed/cleanupcomplete，4阶段、8资源完整结束�
 来源a1de5271f5f00cef0cba06d41f09c673a9190525，manager固定digest `06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad`；原生amd64构建/禁网导入通过。Helm18三个控制服务更新，descriptor UID/data、helper143/profile2和有效16项报告不变，平台自然接管epoch13并ready。backend两个data grant/session源文件先CAS核旧哈希一致，备份/替换/重启专用backend+worker；原loopback检查失败因端口只绑定192.168.106.189，原失败receipt保留；实际私网API HTTP200、文件新哈希再次核对通过，未追加重启或动OpenFGA。
 
 r8按原runner、身份和六场景新journal启动；首个Python app6da0d71cbda643e881e02d707eac7e79，deployment123f35de6d2b4fdf8050a44d75eebc9e，versionab8c8e9a50c84bf899c1aef0a2bf0898。当前真实业务仍进行中，不把修复部署及本地回归算成审批/上线通过。r7公开失败16124/precheck_probe和正常cleanup事实保留。
+
+### r8真实启动通过，终态删除收尾
+
+同UID8c83f28c…创建18:16:57，data-layout/schema/material/environment分别完成18:17:13、18:17:52、18:18:17、18:18:33，4init96秒后appRunning/Ready。probe cd1ad0fe…已ready；随后SQL停止证明kubelet_terminal于18:19:10入库，Pod Failed/app137且finalizers缺省，但grace30和对象仍在。登记T232/T233修复已移除finalizer后的kubelet最终删除误拒；原操作仍active，未人工delete/释放预占或修改证据。正式审批上线未通过。

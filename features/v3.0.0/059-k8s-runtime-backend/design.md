@@ -759,3 +759,5 @@ Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。
 2026-10-23 T228/T229：r7准备四阶段及持久最终结果真实通过；probe总90秒在environment仅运行12秒后结束。按4.6原定的阶段期限修正launch，不简单拉大统一等待或重启计时；保留r7失败及完整资源清理事实，不计为正式上线通过。
 
 2026-10-23 T230/T231：真实owner取消服务已写payload标志，但签发事务/ready等待/manager数据RPC未拒绝仍active的取消会话；本地真实SQL与Ed25519红例已复现。按原取消合同拒绝新票及新动作，已开始动作仍保留unknown与互斥/停止证明，active=False收尾不受此新动作闸阻断。无新增API/模型。
+
+2026-10-23 T232/T233：r8启动阶段真实通过（4init96秒+Ready）；终态SQL证据确认后finalizer已移除，而grace30残留需kubelet DELETE0完成。原准入终态helper要求finalizer尚在，导致收尾重试拒绝。仅为已去finalizer分支增加fresh backend同UID/scope stopconfirmed+allowdelete证明；原本地带finalizer路径与manager删除闸不变。K8s1.28.15 store.go ShouldDeleteDuringUpdate仅grace0/nil随finalizer移除删除，status_manager.go的kubelet最终DELETE使用grace0和UID前置；对应官方固定源码作为静态依据，不代替189恢复实测。
