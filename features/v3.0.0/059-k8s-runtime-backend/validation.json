@@ -1,22 +1,22 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22",
-  "validated_source_commit": "36deca535ba120aef790376f26137c555d3e3437",
+  "validated_source_commit": "81f64c9de",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 39,
+    "l1_completed": 41,
     "tasks_total": 80,
     "e2e": "not_started",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 645,
+      "passed": 665,
       "skipped": 10,
       "exit_code": 0,
-      "log": "/private/tmp/f059-runtime-helper-full.log"
+      "log": "/private/tmp/f059-runtime-executor-full.log"
     },
     "backend": {
       "passed": 213,
@@ -97,6 +97,17 @@
     "client_core_lifecycle": {
       "passed": 82,
       "log": "/private/tmp/f059-control-client-recovery-final.log"
+    },
+    "material_executor_control": {
+      "passed": 150,
+      "exit_code": 0,
+      "log": "/private/tmp/f059-material-executor-control-final.log"
+    },
+    "kubernetes_executor": {
+      "passed": 16,
+      "log": "/private/tmp/f059-executor-restart-final.log",
+      "cluster": "simulated",
+      "deployed": false
     }
   },
   "not_executed": [

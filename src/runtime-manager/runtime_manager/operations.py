@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from threading import Event, Lock, Thread
 
-from runtime_manager.bundle_launch import BundleLauncher
-from runtime_manager.bundle_preparer import BundlePreparer
-from runtime_manager.container_runner import OP_LABEL, PHASE_LABEL, ContainerRunner, ExecutionError
+from runtime_manager.container_runner import OP_LABEL, PHASE_LABEL, ExecutionError
 from runtime_manager.docker_backend import get_docker_backend
-from runtime_manager.platform_appdb import PlatformAppDb
+from runtime_manager.executors.docker import DockerExecutor
+from runtime_manager.executors.protocol import ExecutorError
 from runtime_manager.platform_client import PlatformClient
 
 logger = logging.getLogger(__name__)
@@ -21,10 +19,10 @@ TERMINAL = {"completed", "failed", "cancelled", "timed_out"}
 
 
 class OperationExecutor:
-    def __init__(self, config, platform=None, docker=None, *, clock=time):
+    def __init__(self, config, platform=None, docker=None, *, clock=time, runtime=None):
         self.config = config
         self.platform = platform or PlatformClient(config)
-        self.docker = docker or get_docker_backend()
+        self.docker = None
         self.clock = clock
         self._closing = Event()
         self._guard = Lock()
@@ -33,6 +31,29 @@ class OperationExecutor:
         self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="runtime-v2")
         self._observers = ThreadPoolExecutor(max_workers=2, thread_name_prefix="runtime-observe")
         self._observing = {}
+        if runtime is not None:
+            self.runtime = runtime
+            self.docker = getattr(runtime, "docker", None)
+        elif config.executor_kind == "kubernetes":
+            from runtime_manager.executors.kubernetes import KubernetesExecutor
+            from runtime_manager.k8s_config import KubernetesConfig
+
+            self.runtime = KubernetesExecutor(
+                config,
+                KubernetesConfig.from_env(),
+                platform=self.platform,
+                clock=clock,
+                checkpoint=self.process_checkpoint,
+            )
+        else:
+            self.docker = docker or get_docker_backend()
+            self.runtime = DockerExecutor(
+                config, self.platform, self.docker, clock=clock, checkpoint=self.checkpoint, report=self.report
+            )
+
+    def process_checkpoint(self):
+        if self._closing.is_set():
+            raise ExecutorError("manager_stopping")
 
     def submit(self, operation_id):
         operation = self.platform.operation(operation_id)
@@ -59,86 +80,74 @@ class OperationExecutor:
         deadline = datetime.fromisoformat(current["deadline"].replace("Z", "+00:00"))
         if deadline.tzinfo is None:
             deadline = deadline.replace(tzinfo=UTC)
-        if datetime.now(UTC) >= deadline:
+        if datetime.fromtimestamp(self.clock.time(), UTC) >= deadline:
             raise ExecutionError("operation_timeout")
         return current
 
     def report(self, operation, phase, *, exec_ref="", detail=None):
         # Retries query the committed sequence, never guess whether a fact was accepted.
         current = self.platform.operation(operation["operation_id"])
+        detail = dict(detail or {})
+        for key in ("prepare_progress", "maintenance_progress"):
+            if key not in detail and key in current.get("result", {}):
+                detail[key] = current["result"][key]
+        if self.config.executor_kind == "kubernetes":
+            detail["controller"] = self.runtime._controller()
         return self.platform.fact(
             operation, int(current.get("fact_sequence", 0)) + 1, phase, exec_ref=exec_ref, detail=detail
         )
 
     def executions(self, app_id=None, operation_id=None):
-        labels = ["bisheng.managed=v2", f"bisheng.runtime.node={self.config.node_id}"]
-        if app_id:
-            labels.append(f"bisheng.app.id={app_id}")
-        if operation_id:
-            labels.append(f"{OP_LABEL}={operation_id}")
-        return self.docker.list_containers(all_states=True, filters={"label": labels})
+        return self.runtime.executions(app_id=app_id, operation_id=operation_id)
 
     def stop_instances(self, operation, *, include_current=True):
-        items = self.executions(app_id=operation["app_id"])
+        if self.config.executor_kind == "docker":
+            return self.runtime.stop_instances(operation, include_current=include_current)
+        operations = self.platform.node_snapshot()["operations"]
         scope = self.platform.application(operation["app_id"])
-        if scope.get("exec_ref"):
-            try:
-                legacy = self.docker.inspect_container(scope["exec_ref"])
-                labels = legacy.get("Config", {}).get("Labels", {})
-                if labels.get("bisheng.managed") == "true":
-                    if labels.get("bisheng.app.id") != operation["app_id"]:
-                        raise ExecutionError("legacy_execution_scope_mismatch")
-                    items.append(
-                        {"Id": scope["exec_ref"], "Labels": {PHASE_LABEL: "serve", OP_LABEL: scope["operation_id"]}}
-                    )
-            except Exception as exc:
-                if getattr(exc, "status_code", None) != 404:
-                    raise
-        for item in items:
-            labels = item.get("Labels", {})
-            if labels.get(PHASE_LABEL) != "serve":
+        if scope.get("operation_id") and not any(op["operation_id"] == scope["operation_id"] for op in operations):
+            operations.append(self.platform.operation(scope["operation_id"]))
+        for old in operations:
+            if old["app_id"] != operation["app_id"] or (
+                not include_current and old["operation_id"] == operation["operation_id"]
+            ):
                 continue
-            if not include_current and labels.get(OP_LABEL) == operation["operation_id"]:
+            resources = self.platform.resources(old["operation_id"])
+            pods = [
+                row
+                for row in resources
+                if row["kind"] == "Pod"
+                and (operation["kind"] == "destroy" or row["purpose"] in {"serve", "migrate", "restore", "data"})
+            ]
+            if not pods:
                 continue
-            self.checkpoint(operation)
-            ident = item["Id"]
-            if self.docker.inspect_container(ident).get("State", {}).get("Running"):
-                self.docker.stop_container(ident, timeout=self.config.stop_timeout_seconds)
-            if self.docker.inspect_container(ident).get("State", {}).get("Running"):
-                raise ExecutionError("writer_stop_unconfirmed")
+            for row in pods:
+                self.runtime.request_stop(row["resource_ref"], operation)
+                deadline = self.clock.time() + 60
+                while not self.runtime.confirm_stopped(row["resource_ref"])["stopped"]:
+                    if self.clock.time() >= deadline:
+                        raise ExecutorError("writer_stop_unconfirmed")
+                    self.clock.sleep(0.5)
+            if not self.runtime.cleanup(old).get("complete"):
+                raise ExecutorError("resource_cleanup_pending")
 
-    def _launch(self, operation, runner, *, preview=False):
+    def _launch(self, operation, runner=None, *, preview=False):
+        if self.config.executor_kind == "docker":
+            return self.runtime.launch(operation, runner=runner, preview=preview)
         body = operation["payload"]
         if self.config.egress_enabled:
             from runtime_manager.egress import egress_env
 
             credentials = self.platform.egress(operation["operation_id"], "runtime")
             body["runtime_env"] = {**body.get("runtime_env", {}), **egress_env(self.config, **credentials)}
-        delivery = body["resolved_delivery"]
-        paths = (
-            BundlePreparer(self.config, self.platform, runner=runner).restore(operation, delivery)
-            if delivery["mode"] == "bundle"
-            else {}
-        )
-        if preview:
-            from runtime_manager.appdb import AppDbSchemaService
-
-            isolated = self.config.with_overrides(
-                data_root=self.config.data_root / "previews" / operation["operation_id"]
-            )
-            AppDbSchemaService(isolated).migrate(operation["app_id"], body.get("migration_plan", []))
-            paths["data_dir"] = isolated.app_data_dir(operation["app_id"])
-            paths["preview"] = True
-        return BundleLauncher(self.config, runner=runner, checkpoint=runner.checkpoint).start(
-            operation, delivery, **paths
-        )
+        return self.runtime.launch(operation, preview=preview)
 
     def execute(self, operation_id):
         operation = self.platform.operation(operation_id)
         with self._guard:
             lock = self._apps.setdefault(
                 operation["app_id"]
-                if operation["kind"] in {"deploy", "stop", "destroy", "restore", "migrate"}
+                if operation["kind"] in {"deploy", "stop", "destroy", "restore", "migrate", "data"}
                 else operation_id,
                 Lock(),
             )
@@ -146,142 +155,95 @@ class OperationExecutor:
             operation = self.platform.operation(operation_id)
             if operation["status"] in TERMINAL:
                 return operation
-            runner = ContainerRunner(
-                self.config, self.docker, checkpoint=lambda: self.checkpoint(operation), clock=self.clock
-            )
             try:
                 self.platform.claim(operation_id)
-                kind = operation["kind"]
-                body = operation["payload"]
+                kind, body = operation["kind"], operation["payload"]
                 if kind == "prepare":
                     self.report(operation, "preparing")
-                    if body.get("delivery", {}).get("mode") == "image":
-                        delivery = {
-                            "mode": "image",
-                            "image_ref": body["delivery"]["image"],
-                            "platform": body["platform"],
-                            "startup": body["delivery"].get("startup", {}),
-                        }
-                        reference = delivery["image_ref"]
-                        delivery["image_id"] = runner.ensure_image(
-                            reference,
-                            platform=delivery["platform"],
-                            expected_id=reference if reference.startswith("sha256:") else None,
-                        )
-                    elif body.get("delivery", {}).get("mode") == "source-image":
-                        from runtime_manager.legacy_prepare import prepare_image
-
-                        delivery = prepare_image(
-                            self.config,
-                            self.platform,
-                            self.docker,
-                            operation,
-                            checkpoint=runner.checkpoint,
-                            report=lambda phase, **kwargs: self.report(operation, phase, **kwargs),
-                        )
-                    else:
-                        delivery = BundlePreparer(self.config, self.platform, runner=runner).prepare(operation)
-                    runner.cleanup(operation_id)
+                    delivery = self.runtime.prepare(operation)
+                    if not self.runtime.cleanup(operation).get("complete"):
+                        raise ExecutorError("preparation_cleanup_pending")
                     self.report(
                         operation, "completed", detail={"delivery": delivery, "stopped": True, "cleanup_complete": True}
                     )
                 elif kind in {"probe", "preview"}:
                     if kind == "preview" and operation["stage"] == "serving":
                         self.checkpoint(operation)
-                        bodies = self.executions(operation_id=operation_id)
-                        if len(bodies) != 1 or not self.docker.inspect_container(bodies[0]["Id"]).get("State", {}).get(
-                            "Running"
+                        execution = operation.get("execution") or {}
+                        if not execution.get("exec_ref") or not self.runtime.observe(execution["exec_ref"]).get(
+                            "running", True
                         ):
-                            raise ExecutionError("preview_execution_missing")
+                            raise ExecutorError("preview_execution_missing")
                         return
                     self.report(operation, "starting")
-                    outcome = self._launch(operation, runner, preview=True)
+                    outcome = self._launch(operation, preview=(kind == "preview"))
                     self.report(operation, "ready", exec_ref=outcome["exec_ref"], detail=outcome)
                     if kind == "probe":
-                        runner.cleanup(operation_id)
+                        if not self.runtime.cleanup(operation).get("complete"):
+                            raise ExecutorError("probe_cleanup_pending")
                         self.report(
                             operation, "completed", detail={"ready": True, "stopped": True, "cleanup_complete": True}
                         )
-                    else:
-                        return
                 elif kind in {"deploy", "restore", "migrate"}:
-                    self._deploy(operation, runner)
+                    self._deploy(operation)
                 elif kind in {"stop", "destroy"}:
                     self.stop_instances(operation)
-                    for item in self.executions(app_id=operation["app_id"]):
-                        if item.get("Labels", {}).get(PHASE_LABEL) == "serve":
-                            self.docker.remove_container(item["Id"], force=False)
+                    if self.config.executor_kind == "docker":
+                        # The adapter owns container and filesystem deletion.
+                        for item in self.runtime.executions(app_id=operation["app_id"]):
+                            if item.get("Labels", {}).get(PHASE_LABEL) == "serve":
+                                previous = self.platform.operation(item["Labels"][OP_LABEL])
+                                if not self.runtime.cleanup(previous).get("complete"):
+                                    raise ExecutorError("resource_cleanup_pending")
                     if kind == "destroy" and body.get("purge_volume"):
                         self.checkpoint(operation)
-                        shutil.rmtree(
-                            self.config.app_data_dir(operation["app_id"]), ignore_errors=False
-                        ) if self.config.app_data_dir(operation["app_id"]).exists() else None
-                        protected = self.config.data_root / "protected-backups" / operation["app_id"]
-                        if protected.exists():
-                            shutil.rmtree(protected)
+                        self.runtime.data(operation, "purge", {})
                     self.report(operation, "completed", detail={"stopped": True, "cleanup_complete": True})
                 else:
                     raise ExecutionError("operation_kind_unsupported")
             except Exception as exc:
-                logger.exception("operation failed: %s (%s)", operation_id, type(exc).__name__)
-                self._failure(operation, runner, exc)
+                logger.error("operation failed: %s (%s)", operation_id, type(exc).__name__)
+                self._failure(operation, None, exc)
             finally:
-                try:
-                    final = self.platform.operation(operation_id)
-                    if final["status"] in TERMINAL and final.get("cleanup_status") == "complete":
-                        scratch = self.config.data_root / "tasks" / operation_id
-                        if scratch.exists():
-                            shutil.rmtree(scratch)
-                        preview = self.config.data_root / "previews" / operation_id
-                        if preview.exists():
-                            shutil.rmtree(preview)
-                except Exception:
-                    logger.exception("task scratch cleanup pending: %s", operation_id)
+                if self.config.executor_kind == "docker":
+                    self.runtime.cleanup_local_scratch(operation)
 
-    def _deploy(self, operation, runner):
-        body = operation["payload"]
-        kind = operation["kind"]
-        # The platform acknowledges maintenance before any writer is stopped.
+    def _deploy(self, operation, runner=None):
+        body, kind = operation["payload"], operation["kind"]
         current = self.checkpoint(operation)
         if current["stage"] not in {"ready", "serving", "retiring"} and (
             body.get("uses_sqlite", True) or kind in {"restore", "migrate"}
         ):
             self.report(operation, "maintenance")
             self.stop_instances(operation, include_current=False)
-            db = PlatformAppDb(self.config, self.platform, operation, checkpoint=runner.checkpoint)
             if kind == "restore":
-                db.restore_confirmed(body["snapshot_id"])
+                self.runtime.data(operation, "restore", {"snapshot_id": body["snapshot_id"]})
             elif body.get("migration_plan"):
-                snapshot = db.backup()
+                snapshot = self.runtime.data(operation, "backup", {})
                 self.report(operation, "snapshot_confirmed", detail={"snapshot": snapshot})
                 self.report(operation, "migrating")
-                db.migrate_confirmed(body["migration_plan"], snapshot=snapshot)
+                self.runtime.data(operation, "migrate", {"plan": body["migration_plan"], "snapshot": snapshot})
         if kind == "migrate" or (kind == "restore" and not body.get("resume_after_restore", True)):
             self.report(operation, "completed", detail={"stopped": True, "cleanup_complete": True})
             return
         current = self.checkpoint(operation)
-        # A ready candidate survives an API reply loss and is adopted by its deterministic name.
         if current["stage"] not in {"serving", "retiring"}:
             if current["stage"] != "ready":
                 self.report(operation, "starting")
             self.stop_instances(operation, include_current=False)
             outcome = self._launch(operation, runner)
-            outcome["writers_stopped"] = bool(body.get("uses_sqlite", True))
+            outcome["writers_stopped"] = True
             self.report(operation, "ready", exec_ref=outcome["exec_ref"], detail=outcome)
             while self.checkpoint(operation)["stage"] != "serving":
                 self.clock.sleep(0.5)
         self.stop_instances(operation, include_current=False)
-        for item in self.executions(app_id=operation["app_id"]):
-            if (
-                item.get("Labels", {}).get(PHASE_LABEL) == "serve"
-                and item.get("Labels", {}).get(OP_LABEL) != operation["operation_id"]
-            ):
-                self.docker.remove_container(item["Id"], force=False)
-        runner.cleanup(operation["operation_id"])
+        if self.config.executor_kind == "docker":
+            self.runtime.retire_others(operation)
+            self.runtime.cleanup_preparation(operation)
         self.report(operation, "completed", detail={"serving": True, "cleanup_complete": True})
 
     def _failure(self, operation, runner, exc):
-        if isinstance(exc, ExecutionError) and str(exc) == "manager_stopping":
+        if isinstance(exc, (ExecutionError, ExecutorError)) and str(exc) == "manager_stopping":
             return
         current = self.platform.operation(operation["operation_id"])
         if operation["kind"] in {"deploy", "restore"} and (
@@ -293,25 +255,16 @@ class OperationExecutor:
         unknown_build = current.get("payload", {}).get("legacy_build_state") == "started"
         if unknown_build and current["status"] in TERMINAL:
             return
-        stopped = False
-        complete = False
+        stopped = complete = False
         try:
-            # Only this operation's candidate is reclaimed; production data and old instances remain.
-            for item in self.executions(operation_id=operation["operation_id"]):
-                ident = item["Id"]
-                if self.docker.inspect_container(ident).get("State", {}).get("Running"):
-                    self.docker.stop_container(ident, timeout=self.config.stop_timeout_seconds)
-                if self.docker.inspect_container(ident).get("State", {}).get("Running"):
-                    raise ExecutionError("cleanup_pending")
-                self.docker.remove_container(ident, force=False)
-            stopped = not unknown_build
-            complete = not unknown_build
-        except Exception:
-            logger.exception("operation cleanup pending: %s", operation["operation_id"])
+            complete = bool(self.runtime.cleanup(operation).get("complete")) and not unknown_build
+            stopped = complete
+        except Exception as cleanup_error:
+            logger.error("operation cleanup pending: %s (%s)", operation["operation_id"], type(cleanup_error).__name__)
         reason = (
             "legacy_build_stop_unconfirmed"
             if unknown_build
-            else (str(exc) if isinstance(exc, ExecutionError) else "execution_failed")
+            else (str(exc) if isinstance(exc, (ExecutionError, ExecutorError)) else "execution_failed")
         )
         phase = (
             current["status"]
@@ -340,93 +293,34 @@ class OperationExecutor:
                     and bool(operation["payload"].get("migration_plan") or operation["kind"] == "restore"),
                 },
             )
-        except Exception:
-            logger.exception("cannot persist terminal operation fact: %s", operation["operation_id"])
+        except Exception as report_error:
+            logger.error(
+                "cannot persist terminal fact: %s (%s)", operation["operation_id"], type(report_error).__name__
+            )
 
     def heartbeat(self):
-        info = self.docker.info()
-        arch = {"aarch64": "arm64", "x86_64": "amd64"}.get(info.get("Architecture"), info.get("Architecture"))
-        if info.get("OSType", "linux") != "linux":
-            raise ExecutionError("unsupported_engine_os")
-
-        def external_usage(item):
-            details = self.docker.inspect_container(item["Id"])
-            limits = details.get("HostConfig", {})
-            committed = int(limits.get("Memory", 0))
-            if not committed:
-                memory_stats = self.docker.container_stats(item["Id"]).get("memory_stats", {})
-                committed = max(
-                    0, int(memory_stats.get("usage", 0)) - int(memory_stats.get("stats", {}).get("cache", 0))
-                )
-            return committed, int(limits.get("NanoCpus", 0)) // 1000000
-
-        external = [
-            item
-            for item in self.docker.list_containers(all_states=False)
-            if not (
-                item.get("Labels", {}).get("bisheng.managed") == "v2"
-                and item.get("Labels", {}).get("bisheng.runtime.node") == self.config.node_id
-            )
-            and item["Id"] not in getattr(self, "_legacy_owned", set())
-        ]
-        # Even one-shot Engine stats may wait for one sample. Bound concurrency
-        # so a shared host's container count does not multiply heartbeat latency.
-        with ThreadPoolExecutor(max_workers=8, thread_name_prefix="runtime-capacity") as samples:
-            usage = list(samples.map(external_usage, external))
-        external_memory = sum(memory for memory, _cpu in usage)
-        external_cpu = sum(cpu for _memory, cpu in usage)
-        memory = max(
-            1,
-            int(info["MemTotal"] // 1024 // 1024 * self.config.overcommit_ratio)
-            - self.config.reserve_mb
-            - (external_memory + 1024 * 1024 - 1) // (1024 * 1024),
-        )
-        cpu = max(1, int(info["NCPU"] * 1000 * self.config.overcommit_ratio) - external_cpu)
+        if self.config.executor_kind == "docker":
+            self.runtime._legacy_owned = getattr(self, "_legacy_owned", set())
+            return self.runtime.heartbeat()
+        descriptor = self.runtime.descriptor
+        capabilities = self.runtime.capabilities()
+        probe = dict(self.runtime.document.get("probe_report", {}))
+        probe["ready"] = probe.get("ready") is True and capabilities.get("orchestration_available") is True
         self.platform.heartbeat(
             {
-                "engine_id": info["ID"],
-                "platform": "linux/" + arch,
-                "memory_budget_mb": memory,
-                "cpu_budget_millicores": cpu,
+                "engine_id": descriptor.cluster_id + "/" + descriptor.namespace,
+                "platform": descriptor.platform,
+                "memory_budget_mb": descriptor.memory_budget_mb,
+                "cpu_budget_millicores": descriptor.cpu_budget_millicores,
+                "executor_kind": "kubernetes",
+                "capabilities": capabilities,
+                "probe_report": probe,
             }
         )
 
     def cleanup_data_workers(self):
-        workers = self.docker.list_containers(
-            all_states=True,
-            filters={"label": ["bisheng.managed=data-helper", f"bisheng.runtime.node={self.config.node_id}"]},
-        )
-        protected = {item.get("Labels", {}).get("bisheng.runtime.operation") for item in workers}
-        for item in workers:
-            labels = item.get("Labels", {})
-            deadline = int(labels.get("bisheng.runtime.deadline", "0"))
-            if deadline > self.clock.time():
-                continue
-            ref = item["Id"]
-            if self.docker.inspect_container(ref).get("State", {}).get("Running"):
-                self.docker.stop_container(ref, timeout=5)
-            if self.docker.inspect_container(ref).get("State", {}).get("Running"):
-                continue
-            self.docker.remove_container(ref, force=False)
-            ident = labels.get("bisheng.runtime.operation", "")
-            if len(ident) == 32 and all(c in "0123456789abcdef" for c in ident):
-                output = self.config.data_root / "data-jobs" / ident
-                if output.exists():
-                    shutil.rmtree(output)
-
-        root = self.config.data_root / "data-jobs"
-        if root.exists():
-            for output in root.iterdir():
-                ident = output.name
-                if (
-                    len(ident) == 32
-                    and all(c in "0123456789abcdef" for c in ident)
-                    and ident not in protected
-                    and output.is_dir()
-                    and not output.is_symlink()
-                    and output.stat().st_mtime < self.clock.time() - self.config.cleanup_seconds
-                ):
-                    shutil.rmtree(output)
+        if self.config.executor_kind == "docker":
+            return self.runtime.cleanup_data_workers()
 
     def reconcile(self):
         self.cleanup_data_workers()
@@ -456,48 +350,27 @@ class OperationExecutor:
             elif op.get("cleanup_status") != "complete":
                 self._failure(
                     op,
-                    ContainerRunner(self.config, self.docker),
+                    None,
                     ExecutionError(op.get("failure", {}).get("reason", "execution_failed")),
                 )
 
     def observe(self, op):
-        import httpx
-
         execution = op["execution"]
-        ref = execution["exec_ref"]
-        running = False
-        ready = False
         try:
-            record = self.docker.inspect_container(ref)
-            running = bool(record.get("State", {}).get("Running"))
-            labels = record.get("Config", {}).get("Labels", {})
-            if labels.get(OP_LABEL) != op["operation_id"] or labels.get("bisheng.runtime.node") != self.config.node_id:
-                raise ExecutionError("execution_label_mismatch")
-            if running:
-                target = execution["target"]
-                host = target["host"]
-                host = f"[{host}]" if ":" in host else host
-                response = httpx.get(
-                    f"http://{host}:{target['port']}{op['payload'].get('health', {}).get('path', '/')}",
-                    timeout=2,
-                    trust_env=False,
-                    follow_redirects=False,
-                )
-                ready = response.status_code < 500
-        except httpx.HTTPError:
-            logger.info("application readiness unavailable: %s", op["app_id"])
+            result = self.runtime.observe(execution["exec_ref"])
         except Exception as exc:
             if getattr(exc, "status_code", None) != 404:
                 raise
+            result = {"running": False, "ready": False}
         self.platform.observation(
             {
                 "app_id": op["app_id"],
                 "operation_id": op["operation_id"],
-                "exec_ref": ref,
+                "exec_ref": execution["exec_ref"],
                 "generation": op["generation"],
                 "route_epoch": execution["route_epoch"],
-                "running": running,
-                "ready": ready,
+                "running": result.get("running", result.get("phase") == "Running"),
+                "ready": result["ready"],
             }
         )
 

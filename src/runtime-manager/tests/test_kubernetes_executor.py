@@ -591,3 +591,16 @@ def test_restart_retries_finalizer_removal_after_committed_stop(runtime, monkeyp
     clock.sleep(31)
     assert restarted.confirm_stopped(first["exec_ref"])["stopped"] is True
     assert not any(kind == "pods" for kind, _ in cluster.objects)
+
+
+def test_capabilities_report_the_frozen_domain_and_current_api_reachability(runtime, monkeypatch):
+    executor, _, cluster, _, _, _ = runtime
+    report = executor.capabilities()
+    assert report["cluster_id"] == "cluster-a" and report["namespace"] == "runtime-apps"
+    assert report["orchestration_available"] is True
+
+    def unavailable(*args, **kwargs):
+        raise KubernetesAPIError("unavailable", 503)
+
+    monkeypatch.setattr(cluster, "list", unavailable)
+    assert executor.capabilities()["orchestration_available"] is False

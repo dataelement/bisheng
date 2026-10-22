@@ -672,3 +672,55 @@ L1：架构/命名/内部序列化/跨库与租户/敏感信息/设计同步 PAS
 **红阶段**：最初1 failed/9 errors缺模块；补准备、清理、日志出现3 failed；时间推进复现预览deadline模板冲突1 failed。最终16项通过（`/private/tmp/f059-executor-restart-final.log`），完整runtime665 passed/10 skipped（`/private/tmp/f059-runtime-executor-full.log`）；Ruff、逐文件arch-guard通过。测试为模拟集群＋真实密码实现，**不是189部署验证**。共同状态机和helper数据动作尚未接线，不宣称端到端已交付。
 **元数据验证**：目标1/2文件PASS；T032依赖T031/T011/T019/T080均完成，T033配对红阶段先行；L1七项复审通过。
 **结果：PASS。**
+
+
+## Task Review: T034 / T035
+
+**任务**：Docker能力合同与既有逻辑抽离。**文件**：`tests/test_docker_executor.py`；`executors/docker.py`、`operations.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Docker启动/本机路径/容量采样/SQLite维护归适配器；平台checkpoint和facts保留 |
+| 2 | 命名/AC | PASS | 覆盖 AC-01、AC-04、AC-10、AC-36、AC-37、AC-56 |
+| 3 | 序列化 | PASS | 保留原BundlePreparer、BundleLauncher及Engine输入输出 |
+| 4 | 数据库 | N/A | 无平台SQL；SQLite仍通过既有维护类 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 按node/app标签限制停止/日志，404不充当停止证据，无K8s路径模拟Docker |
+| 7 | 设计同步 | PASS | D1既定能力抽象落实，共同操作状态机仍为后续任务 |
+
+**红阶段**：缺适配器模块5 failed（`/private/tmp/f059-docker-executor-red.log`）。新合同＋原操作17 passed，完整runtime670 passed/10 skipped（`/private/tmp/f059-runtime-docker-adapter-full.log`）。后续共同状态机接线后需再跑完整回归。逐文件arch-guard通过。
+**元数据**：1/2目标文件、T033依赖、配对红阶段PASS。**结果：PASS。**
+
+## Task Review: T036 / T037
+
+**任务**：共同状态机、唯一执行器选择与唤醒合同。**文件**：`tests/test_executor_selection.py`；`operations.py`、`api/operations.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | K8s分支不初始化Docker、不读写宿主应用目录；平台阶段/事实统一，适配器持有执行/数据能力 |
+| 2 | 命名/AC | PASS | 完整标注 AC-01、AC-02、AC-04、AC-05、AC-07、AC-08、AC-09、AC-36、AC-37、AC-39、AC-48、AC-56 |
+| 3 | 序列化 | PASS | 唤醒仅operation_id且extra forbid；K8s facts带当前controller；准备进度跨阶段保留 |
+| 4 | 数据库 | N/A | 无平台SQL或新增本地事实源；停止确认通过adapter与平台账本 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 错误记录类型及操作ID，未知清理保留容量，已提交serving不会误清候选；快照失败不迁移或启动 |
+| 7 | 设计同步 | PASS | D1统一能力编排落实；data/OCI等后续能力未配置则明确失败，不构造Docker回退 |
+
+**红阶段**：选择合同1 failed/7 errors；额外字段合同1 failed。最终选择＋Docker＋原操作26 passed（`/private/tmp/f059-executor-selection-final.log`），完整runtime679 passed/10 skipped（`/private/tmp/f059-runtime-common-state-full.log`）。无真实集群结论。T035追加清理方法为原任务文件内移动既有算法。
+**元数据**：目标1/2文件、T035依赖、配对红阶段PASS；语义门禁由后续真实E2E复核。**结果：PASS。**
+
+## Task Review: T038 / T039
+
+**任务**：状态/日志/能力与服务路由。**文件**：`tests/test_k8s_observe.py`；`api/platform_observe.py`、`main.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | K8s仅通过能力接口访问集群；平台assignment/resource验证范围，不依赖Docker或宿主目录 |
+| 2 | 命名/AC | PASS | AC-02、AC-07、AC-10、AC-30、AC-31、AC-32、AC-36、AC-37、AC-40、AC-53 |
+| 3 | 序列化 | PASS | 原status/logs字段保留；capabilities独立认证路由；K8s不注册v1与Docker升级入口 |
+| 4 | 数据库 | N/A | 容量只读平台账本，不使用descriptor预算伪造可用余额 |
+| 5 | 前端 | N/A | 复用既有运行环境页面 |
+| 6 | 信息泄漏 | PASS | 跨app/node/operation拒绝，日志仅业务容器、1000行/1MiB、平台注入密钥脱敏；健康存活与就绪分开，错误不回传远端细节 |
+| 7 | 设计同步 | PASS | 6.1同步已实现能力及since epoch；当前API探测区别于后续完整隔离验证 |
+
+**红阶段**：8 failed缺K8s状态/API组装；Core绝对窗口1 failed，执行域/可达性1 failed。针对观察/原入口24 passed；最新完整runtime689 passed/10 skipped（`/private/tmp/f059-runtime-capabilities-full.log`），Ruff通过。T007/T033原目标内补sinceTime/冻结域/API可达性，原方法不引入任意URL或日志容器名。
+**元数据**：1/2目标文件、T037依赖、配对红阶段PASS。**结果：PASS。**

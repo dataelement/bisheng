@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T031、T073–T080已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器已有准备/启动/观察/停止/清理/日志能力本地验证，数据能力待后续接线；共同状态机、发行与真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：T001–T039、T073–T080已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器已有准备/启动/观察/停止/清理/日志能力本地验证，数据能力待后续接线；Docker/K8s共同状态机、v2状态/日志/能力与路由组装已有本地验证；数据、发行与真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -346,7 +346,7 @@ manager 的 token 自动轮转文件按请求刷新，TLS 使用集群 CA，不�
 
 ### 6.1 执行能力与现有 HTTP 合同
 
-以下 Python 接口为**拟新增**，不从 backend import manager 包；DTO JSON 是进程间合同：
+以下 Python 能力接口已有本地实现与合同验证；data 的K8s运输层仍待后续任务接线，不从 backend import manager 包；DTO JSON 是进程间合同：
 
 ```python
 class RuntimeExecutor(Protocol):
@@ -357,7 +357,7 @@ class RuntimeExecutor(Protocol):
     def request_stop(self, exec_ref: str, operation: dict) -> dict: ...
     def confirm_stopped(self, exec_ref: str) -> dict: ...
     def cleanup(self, operation: dict) -> dict: ...
-    def logs(self, exec_ref: str, *, since: str | None, tail: int) -> str: ...
+    def logs(self, exec_ref: str, *, since: int | None, tail: int) -> str: ...
     def data(self, operation: dict, action: str, parameters: dict) -> object: ...
 ```
 
@@ -625,3 +625,7 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | 材料去重来源、独立根种子及 TLS CA 接线细化；未改变 D1–D8 | 材料组合99 passed，runtime配置完整648 passed/10 skipped，模板准入91 passed；尚未集群验收 |
 
 | 2026-10-22 | Kubernetes 执行器能力接线：持久准备进度、UID 恢复、Service 端点、停止及清理闸口 | 执行器16项，完整runtime665 passed/10 skipped；平台资源61 passed；共同状态机/数据能力与189仍待完成 |
+
+| 2026-10-22 | T034–T039：Docker能力抽离、共用阶段/事实、K8s不初始化Docker、v2状态日志及能力查询、K8s不注册v1/upgrade路由 | 完整runtime689 passed/10 skipped；尚未189部署，完整隔离探测和数据维护继续后续任务 |
+
+日志窗口保持公开epoch/相对格式含义，K8s适配器转换RFC3339 sinceTime，只读业务容器且限1000行/1MiB。Core客户端拒绝同时传sinceSeconds和sinceTime；依据[Kubernetes 1.28官方PodLogOptions定义](https://github.com/kubernetes/api/blob/v0.28.15/core/v1/types.go#L5492-L5528)。能力报告包含冻结cluster/namespace及当前namespace API可达性；API不可达时心跳ready=false，不将静态安装报告作为当前API健康证据。完整网络/存储/准入允许与拒绝探测仍由T054/T055交付。

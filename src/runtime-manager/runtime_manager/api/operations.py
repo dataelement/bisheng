@@ -6,7 +6,7 @@ import asyncio
 from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from runtime_manager.config import get_config
 from runtime_manager.operations import OperationExecutor
@@ -42,6 +42,8 @@ async def authorized(request: Request):
 
 
 class Wakeup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     operation_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,36}$")
 
 

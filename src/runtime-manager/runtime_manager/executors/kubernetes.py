@@ -99,9 +99,17 @@ class KubernetesExecutor:
 
     def capabilities(self):
         capabilities = copy.deepcopy(self.document.get("capabilities", {}))
+        try:
+            self.client.list("pods", label_selector="bisheng.managed=v2")
+            available = True
+        except KubernetesAPIError:
+            available = False
         return {
             **capabilities,
             "executor_kind": "kubernetes",
+            "cluster_id": self.settings.cluster_id,
+            "namespace": self.settings.namespace,
+            "orchestration_available": available,
             "protocol_version": 2,
             "platform": self.descriptor.platform,
             "helper_image": self.document.get("helper_image", ""),
@@ -402,6 +410,10 @@ class KubernetesExecutor:
             "ready": bool(ready),
             "target": {"host": target.get("cluster_ip", ""), "port": target.get("port", 0)},
             "phase": status.get("phase", "Unknown"),
+            "running": status.get("phase") == "Running" and not pod["metadata"].get("deletionTimestamp"),
+            "restart_count": sum(
+                int(c.get("restartCount", 0)) for c in status.get("containerStatuses", []) if c.get("name") == "app"
+            ),
         }
 
     @staticmethod
@@ -464,7 +476,10 @@ class KubernetesExecutor:
     def logs(self, exec_ref, *, since=None, tail=200):
         row = self.platform.resource(exec_ref)
         self._fresh(row)
-        return self.client.logs(row["name"], since_seconds=since, tail=tail, container="app")
+        since_time = (
+            datetime.fromtimestamp(since, UTC).isoformat().replace("+00:00", "Z") if since is not None else None
+        )
+        return self.client.logs(row["name"], since_time=since_time, tail=tail, container="app")
 
     def cleanup(self, operation):
         rows = self.platform.resources(operation["operation_id"])

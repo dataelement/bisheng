@@ -340,3 +340,13 @@ def test_platform_ca_and_material_issuer_are_independent_file_settings(monkeypat
     assert str(issuer) not in repr(config)
     with pytest.raises(ValueError):
         Config(material_issuer_key_file=Path("relative-key"))
+
+
+def test_absolute_log_window_uses_since_time_without_changing_its_meaning(client_factory):
+    calls = []
+    client = client_factory(lambda request: calls.append(request) or httpx.Response(200, text="app log"))
+    client.logs("app-a", since_time="2026-10-01T00:00:00Z")
+    assert calls[0].url.params["sinceTime"] == "2026-10-01T00:00:00Z"
+    assert "sinceSeconds" not in calls[0].url.params
+    with pytest.raises(ValueError):
+        client.logs("app-a", since_time="2026-10-01T00:00:00Z", since_seconds=30)

@@ -45,9 +45,9 @@ def get_reconcile_loop() -> ReconcileLoop | None:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(_: FastAPI, config=None):
     global _reconcile_loop
-    config = get_config()
+    config = config or get_config()
     if config.reconcile_enabled:
         if config.protocol_version == 2:
             from runtime_manager.api.operations import executor
@@ -70,26 +70,34 @@ async def lifespan(_: FastAPI):
             _reconcile_loop = None
 
 
-app = FastAPI(
-    title="BiSheng runtime manager",
-    version=__version__,
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
-    lifespan=lifespan,
-)
+def create_app(config=None):
+    settings = config or get_config()
 
-app.include_router(operations.router)
-app.include_router(platform_data.router)
-app.include_router(platform_observe.router)
-app.include_router(upgrade.router)
-app.include_router(intents.router)
-app.include_router(routes.router)
-app.include_router(readonly.router)
-app.include_router(storage.router)
-app.include_router(appdb.router)
+    @asynccontextmanager
+    async def configured_lifespan(application):
+        async with lifespan(application, config=config):
+            yield
+
+    application = FastAPI(
+        title="BiSheng runtime manager",
+        version=__version__,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        lifespan=configured_lifespan,
+    )
+    application.include_router(operations.router)
+    application.include_router(platform_data.router)
+    application.include_router(platform_observe.router)
+    if settings.executor_kind == "docker":
+        for router in (upgrade.router, intents.router, routes.router, readonly.router, storage.router, appdb.router):
+            application.include_router(router)
+
+    @application.get("/healthz")
+    async def healthz():
+        return {"status": "ok", "version": __version__}
+
+    return application
 
 
-@app.get("/healthz")
-async def healthz() -> dict[str, str]:
-    return {"status": "ok", "version": __version__}
+app = create_app()

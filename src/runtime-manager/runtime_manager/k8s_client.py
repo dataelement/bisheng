@@ -12,6 +12,7 @@ import re
 import ssl
 import time
 from collections.abc import Callable, Iterator
+from datetime import datetime
 
 import httpx
 
@@ -248,6 +249,7 @@ class KubernetesClient:
         tail: int = 100,
         previous: bool = False,
         since_seconds: int | None = None,
+        since_time: str | None = None,
         container: str = "app",
     ) -> str:
         if container not in {
@@ -270,6 +272,14 @@ class KubernetesClient:
             "previous": str(bool(previous)).lower(),
             "limitBytes": "1048576",
         }
+        if since_time is not None:
+            try:
+                parsed = datetime.fromisoformat(since_time.replace("Z", "+00:00"))
+                if parsed.tzinfo is None or len(since_time) > 40 or since_seconds is not None:
+                    raise ValueError()
+            except (ValueError, TypeError, AttributeError):
+                raise ValueError("k8s_log_since_invalid") from None
+            params["sinceTime"] = since_time
         if since_seconds is not None:
             if type(since_seconds) is not int or not 1 <= since_seconds <= 86400:
                 raise ValueError("k8s_log_since_invalid")

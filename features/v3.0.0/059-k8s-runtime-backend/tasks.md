@@ -357,7 +357,7 @@
   **依赖:** T031、T011、T019、T032
   **配对:** T032
 
-- [ ] **T034** — Docker 能力适配且保留旧合同：契约与失败用例
+- [x] **T034** — Docker 能力适配且保留旧合同：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_docker_executor.py`
   **逻辑/验收**：抽离既有 Docker/本机路径算法到适配器，通用 checkpoint/facts/操作归属保留；基于现有三路径/生命周期测试比较原输入输出，不用假 K8s API 模拟 Docker；测试只定义输入/结果，不加入实现。
@@ -365,7 +365,7 @@
   **依赖:** T033
   **配对:** T035
 
-- [ ] **T035** — Docker 能力适配且保留旧合同
+- [x] **T035** — Docker 能力适配且保留旧合同
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/executors/docker.py`、`src/runtime-manager/runtime_manager/operations.py`
   **逻辑/验收**：抽离既有 Docker/本机路径算法到适配器，通用 checkpoint/facts/操作归属保留；基于现有三路径/生命周期测试比较原输入输出，不用假 K8s API 模拟 Docker；通过配对测试后完成 L1 task-review。
@@ -373,7 +373,7 @@
   **依赖:** T033、T034
   **配对:** T034
 
-- [ ] **T036** — 通用操作状态机和 composition root：契约与失败用例
+- [x] **T036** — 通用操作状态机和 composition root：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_executor_selection.py`
   **逻辑/验收**：按配置选唯一执行器并共用操作状态/事实编排；K8s 不初始化 Docker 或 v1本地循环；不接受调用方执行路径/PodSpec，重复唤醒、manager关闭/恢复、待上线前后容量语义保持；测试只定义输入/结果，不加入实现。
@@ -381,7 +381,7 @@
   **依赖:** T035
   **配对:** T037
 
-- [ ] **T037** — 通用操作状态机和 composition root
+- [x] **T037** — 通用操作状态机和 composition root
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/operations.py`、`src/runtime-manager/runtime_manager/api/operations.py`
   **逻辑/验收**：按配置选唯一执行器并共用操作状态/事实编排；K8s 不初始化 Docker 或 v1本地循环；不接受调用方执行路径/PodSpec，重复唤醒、manager关闭/恢复、待上线前后容量语义保持；通过配对测试后完成 L1 task-review。
@@ -389,7 +389,7 @@
   **依赖:** T035、T036
   **配对:** T036
 
-- [ ] **T038** — 状态、日志和能力 API：契约与失败用例
+- [x] **T038** — 状态、日志和能力 API：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_observe.py`
   **逻辑/验收**：保留业务 API 范围、since/tail/脱敏，仅读取 app/previous 和删除前有界诊断；新增认证 capabilities，前置 blocked 原因清楚；健康存活不冒充已就绪，K8s禁用v1编排注册；测试只定义输入/结果，不加入实现。
@@ -397,7 +397,7 @@
   **依赖:** T037
   **配对:** T039
 
-- [ ] **T039** — 状态、日志和能力 API
+- [x] **T039** — 状态、日志和能力 API
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/api/platform_observe.py`、`src/runtime-manager/runtime_manager/main.py`
   **逻辑/验收**：保留业务 API 范围、since/tail/脱敏，仅读取 app/previous 和删除前有界诊断；新增认证 capabilities，前置 blocked 原因清楚；健康存活不冒充已就绪，K8s禁用v1编排注册；通过配对测试后完成 L1 task-review。

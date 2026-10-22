@@ -1156,7 +1156,9 @@
         "T033"
       ],
       "pair": "T035",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T035",
@@ -1181,7 +1183,9 @@
         "T034"
       ],
       "pair": "T034",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T036",
@@ -1210,7 +1214,9 @@
         "T035"
       ],
       "pair": "T037",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T037",
@@ -1241,7 +1247,9 @@
         "T036"
       ],
       "pair": "T036",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T038",
@@ -1268,7 +1276,9 @@
         "T037"
       ],
       "pair": "T039",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T039",
@@ -1297,7 +1307,9 @@
         "T038"
       ],
       "pair": "T038",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T040",
