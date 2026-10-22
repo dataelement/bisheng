@@ -5545,8 +5545,8 @@
       ],
       "pair": "T220",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T220",
@@ -5567,8 +5567,8 @@
       ],
       "pair": "T219",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

@@ -1,14 +1,14 @@
 {
   "schema": "f059-platform-evidence/v1",
-  "recorded_at": "2026-10-22T16:08:55.710933+00:00",
-  "state": "in_progress-first-real-preparation-failure-cleaned",
+  "recorded_at": "2026-10-22T16:38:15.286537+00:00",
+  "state": "in_progress-third-normal-publish-accepted",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "d86e66a2db83a26f0faca1993b914be121ef3259",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:280722d842083948fe4a94b7aaf29e00a8806de9f7bae3e41ebdb7a5d1a864bd",
+    "manager_source": "706b138614f029c52d7be49bbc50453e847f0fd4",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:ae93f837a58529eee86f85bbd79f46801a9e068ab7c84babe35292209c97ad41",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
@@ -86,6 +86,85 @@
       "original_journal_sha256": "9defe033508603b7f5d4049ba4743fdc5a13220cf31934d41dc5487b7597688b",
       "formal_version_created": false,
       "approval_created": false
+    },
+    {
+      "batch": "k189r5",
+      "attempt": 2,
+      "app_id": "01fee1b6bc6d460aac77dfed8d05fd78",
+      "deployment_id": "87a95018bda240b695a392fb156f8cd4",
+      "version_id": "463f8160c85c4ad08e0935424c2041c9",
+      "operation_id": "01a6500a2a7b46578e677abb07320e1c",
+      "pod_uid": "81be1259-85ac-44df-8a6c-9a43ab4fc332",
+      "resource_ref": "7565f68a-5892-58d1-bcf6-3e973e572282",
+      "phase": "Succeeded",
+      "material_transfer_succeeded": true,
+      "prepare_progress_fact_http_status": 200,
+      "stopped_observation_http_status": 409,
+      "ledger_node_name": "",
+      "observed_node_name": "binfeng-k8s-node189",
+      "cleanup_status": "complete",
+      "failure_code": 16227,
+      "stage": "precheck_build",
+      "normal_reconciliation_required": true,
+      "manual_finalizer_or_pvc_cleanup": false,
+      "cleanup_proof": {
+        "status": "failed",
+        "owner_epoch": 1,
+        "cleanup_status": "complete",
+        "generation": 1,
+        "namespace": "e2e-f059-apps",
+        "app_id": "01fee1b6bc6d460aac77dfed8d05fd78",
+        "evidence_kind": "kubelet_terminal_and_cleanup_complete",
+        "original_journal_sha256": "9defe033508603b7f5d4049ba4743fdc5a13220cf31934d41dc5487b7597688b",
+        "observed_at": "2026-10-22T16:36:07.678249Z",
+        "pod_evidence_kind": "kubelet_terminal",
+        "api_resources_absent": true,
+        "operation_id": "01a6500a2a7b46578e677abb07320e1c",
+        "namespace_uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b",
+        "operator_supplied": true,
+        "resources": [
+          {
+            "kind": "Secret",
+            "cleanup_state": "complete",
+            "name": "material-d4a28f4a9b241db958e752ee50421001d9dd783c",
+            "stop_state": "requested",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "17a32468-1eac-50b1-aa3d-38ceebdd8e08",
+            "uid": "55df7043-fbad-4814-a848-930689f97acf"
+          },
+          {
+            "kind": "PersistentVolumeClaim",
+            "cleanup_state": "complete",
+            "name": "scratch-9a3ba98b2a725095db17a785c4db9c25460264e8",
+            "stop_state": "requested",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "425ffec2-0fc7-57ab-8f10-e99a24e61699",
+            "uid": "ef468c18-f1de-43be-a0fd-82546cd28670"
+          },
+          {
+            "kind": "Pod",
+            "cleanup_state": "complete",
+            "name": "task-d4a28f4a9b241db958e752ee50421001d9dd783c",
+            "stop_state": "confirmed",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "7565f68a-5892-58d1-bcf6-3e973e572282",
+            "uid": "81be1259-85ac-44df-8a6c-9a43ab4fc332"
+          }
+        ],
+        "schema": "f059-r5-known-cleanup/v1"
+      },
+      "cleanup_proof_sha256": "dc8150cce9cf728a02e90d8b09673a1b025a57fb450389e088a14900fbecb733",
+      "recovered_ledger_node_name": "binfeng-k8s-node189",
+      "recovery": "normal reconciliation after manager upgrade; no manual finalizer/DB edits"
+    },
+    {
+      "batch": "k189r5",
+      "attempt": 3,
+      "app_id": "01fee1b6bc6d460aac77dfed8d05fd78",
+      "deployment_id": "8070bb448ebe4f0182142ed25bf16038",
+      "version_id": "7e064c50b23348e59666a158404ef229",
+      "accepted": true,
+      "business_acceptance": "pending"
     }
   ],
   "material_ingress": {

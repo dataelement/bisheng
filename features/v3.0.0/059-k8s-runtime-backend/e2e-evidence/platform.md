@@ -17,3 +17,13 @@
 - `709821ecb`完整amd64九镜像及bundle/SQLite烟测通过；`d86e66a2d`只更改K8s日志目标白名单，原生manager构建/导入烟测及245相关回归通过，不重标helper来源。
 
 待完成：同app明确新attempt、Python完整发布、审批预览、HTTP/WebSocket/SDK/OBO/附件/SQLite，再扩展Node/static/image/source-image及故障升级；不将本地/原生Docker烟测算作K8s业务通过。
+
+## r5 同应用第二次尝试：材料成功，停止确认待修复
+
+`87a95018bda240b695a392fb156f8cd4` 已明确接受；prepare `01a6500a2a7b46578e677abb07320e1c` 的同UID Pod `81be1259-85ac-44df-8a6c-9a43ab4fc332` 成功下载材料并终态Succeeded，准备进度事实200。随后停止确认409：CREATE时节点为空，实际调度到binfeng-k8s-node189后未回写账本。保留删除中的Pod/finalizer/PVC，等待T219/T220正常对账；没有手动清理或重写数据库状态。完整发布未通过，材料入口的有效传输已得到真实验证。
+
+### 延迟绑定修复的现场恢复
+
+706b13861固定源码的amd64镜像原生构建/导入烟测通过，内网digest `ae93f837a58529eee86f85bbd79f46801a9e068ab7c84babe35292209c97ad41`，Helm15三个控制服务升级完成，descriptor UID/data及helper/profile/app-proxy不变。正常对账将原Pod节点补齐，保存同UID的kubelet_terminal停止证明，三条资源账本cleanupcomplete且逐项APIabsent；证据SHA `dc8150cce9cf728a02e90d8b09673a1b025a57fb450389e088a14900fbecb733`。没有直接清理finalizer/PVC或SQL改状态。
+
+同应用第三次正常发布已明确接受，deployment `8070bb448ebe4f0182142ed25bf16038`，version `7e064c50b23348e59666a158404ef229`；旧journal/header保持，续办记录追加，不重放unknown。完整业务验收继续中。

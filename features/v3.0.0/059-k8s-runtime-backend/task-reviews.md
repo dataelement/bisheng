@@ -3133,3 +3133,45 @@ T200测试先行ad8d028b7：真实BundleDelivery/SourceImageDelivery、register_
 **验证**：主树80passed/1明确skip；189隔离原生nginx对完整产品配置-t通过。根入口unauth404→401、api env200；有效材料传输pending。Ruff/架构守卫/diff-check通过；文件范围/配对/前驱PASS。
 
 **结果**：PASS。
+
+## Task Review: T219 — 延迟调度节点绑定与停止证明配对
+
+**文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 2 | 命名规范 | PASS | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 3 | 序列化约定 | N/A | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 4 | 数据库约定 | N/A | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 5 | 前端约定 | N/A | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 6 | 信息泄漏 | PASS | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 7 | 设计同步 | N/A | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+
+**元数据验证**：文件范围PASS；配对/前向依赖PASS；测试AC-33、AC-49、AC-52完整标注。
+
+**验证**：3关键旧逻辑红例→新134 executor通过；相邻302通过；主树全runtime1371passed/13skip，Ruff/逐文件架构守卫/diff-check通过。GET/绑定回执未知保持held；confirmed旧证明不重写。
+
+**结果**：PASS；真实189停止确认和发布闭环待验证。
+
+## Task Review: T220 — 同UID首次节点绑定刷新
+
+**文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 2 | 命名规范 | PASS | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 3 | 序列化约定 | PASS | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 4 | 数据库约定 | N/A | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 5 | 前端约定 | N/A | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 6 | 信息泄漏 | PASS | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+| 7 | 设计同步 | PASS | 同UID新鲜绑定；不改backend证明约束、数据模型、外部API或权限。 |
+
+**元数据验证**：文件范围PASS；配对/前向依赖PASS；测试AC-33、AC-49、AC-52完整标注。
+
+**验证**：3关键旧逻辑红例→新134 executor通过；相邻302通过；主树全runtime1371passed/13skip，Ruff/逐文件架构守卫/diff-check通过。GET/绑定回执未知保持held；confirmed旧证明不重写。
+
+**结果**：PASS；真实189停止确认和发布闭环待验证。
+
+T219/T220真实闭环补证：189的原UID停止确认、账本node首次补齐及三资源正常清理已通过；新manager镜像706b/Helm15，fresh proof SHA dc8150cc…；不替代整体平台发布、升级或故障验收。

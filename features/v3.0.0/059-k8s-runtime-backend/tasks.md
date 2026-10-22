@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；220 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 213 / 220 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 215 / 220 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1729,7 +1729,7 @@
   **依赖:** T217
   **配对:** T217
 
-- [ ] **T219** — 延迟调度节点绑定与停止证明配对
+- [x] **T219** — 延迟调度节点绑定与停止证明配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
   **逻辑/验收**：创建时Pending且nodeName为空，后续同UID调度完成再停止；覆盖节点变化/清空、UID替换、API不确定、绑定回执不确定、已有confirmed证明不得改绑。严格mock验证停止证明节点必须等于账本，不伪造节点。
@@ -1737,7 +1737,7 @@
   **依赖:** T214、T216
   **配对:** T220
 
-- [ ] **T220** — 同UID首次节点绑定刷新
+- [x] **T220** — 同UID首次节点绑定刷新
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
   **逻辑/验收**：request_stop/confirm_stopped前新鲜读取同UID Pod，只允许空节点补齐为实际nodeName；不改变已确认停止证明，不放宽backend stop scope，未知结果保持资源占用。
@@ -1858,3 +1858,7 @@ T203–T214 L1合流：runtime1328passed/13skip、backend1723passed/18skip；另
 2026-10-23 T215–T218：189 r5已真实创建/启动准备Pod并按同UID/kubelet终态正常清理，_diagnostic日志名单遗漏遮蔽原失败；补245相关回归。进一步无凭据对比证实TLS origin根material路径404而backend401，产品nginx也缺转发；仅限定该prefix补接线，完整签名/材料业务复验仍pending。
 
 T217/T218主树材料相关80passed/1skip（本机无nginx代理集成）；189原生amd64完整产品nginx配置语法通过，首次去除CHOWN导致tmpfs目录初始化失败记录保留，最小CHOWN复验通过。现场TLS精确根路径新连接401/APIenv200，不替代signed transfer。213/218，五交付门仍pending。
+
+T219/T220 L1合流：固定源码706b138614f029c52d7be49bbc50453e847f0fd4；旧实现3个关键配对红测明确因账本节点不一致失败，新executor134通过、相邻302通过；主树runtime1371passed/13skipped。仅executor35行增量，无backend/API/DDL变化。215/220、99测试任务；现场正常对账与业务验收进行中。
+
+T219/T220真实恢复通过：189 Helm15/source706b；原失败op同UID首次node绑定→kubelet_terminal→三资源cleanupcomplete/APIabsent，全由正常对账执行。第三次正常发布8070bb…已接受，完整T069仍pending。

@@ -1,24 +1,24 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T16:08:55.710933+00:00",
-  "validated_source_commit": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+  "recorded_at": "2026-10-22T16:38:15.287192+00:00",
+  "validated_source_commit": "706b138614f029c52d7be49bbc50453e847f0fd4",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 213,
+    "l1_completed": 215,
     "tasks_total": 220,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 1328,
+      "passed": 1371,
       "skipped": 13,
       "exit_code": 0,
-      "source_commit": "709821ecbe5c653aad3f90358173e0d110bee7e3",
-      "log": "/private/tmp/f059-creation-integrated-runtime.log",
-      "scope": "full runtime with durable rejection, unknown create and strict UID stop; no new arm run"
+      "source_commit": "706b138614f029c52d7be49bbc50453e847f0fd4",
+      "log": "/private/tmp/f059-delayed-binding-main-runtime.log",
+      "scope": "full runtime including delayed scheduling binding and strict stopped proof; no new ARM run"
     },
     "backend": {
       "passed": 1723,
@@ -395,13 +395,49 @@
       "signed_material_transfer": "pending"
     },
     "late_scheduling_binding": {
-      "status": "in_progress",
+      "status": "local_and_real_cleanup_passed",
       "tasks": [
         "T219",
         "T220"
       ],
       "observed": "same UID Pod Succeeded; facts200; ledger node empty vs observed real node; stopped409",
-      "runtime_scope_unchanged": true
+      "runtime_scope_unchanged": true,
+      "executor_passed": 134,
+      "adjacent_passed": 302,
+      "baseline_three_semantic_failures": true,
+      "real_operation_id": "01a6500a2a7b46578e677abb07320e1c",
+      "real_uid": "81be1259-85ac-44df-8a6c-9a43ab4fc332",
+      "real_cleanup_proof_sha256": "dc8150cce9cf728a02e90d8b09673a1b025a57fb450389e088a14900fbecb733"
+    },
+    "native_amd64_manager_706": {
+      "schema": "f059-native-manager/v1",
+      "source_revision": "706b138614f029c52d7be49bbc50453e847f0fd4",
+      "platform": "linux/amd64",
+      "build_exit": 0,
+      "import_smoke_exit": 0,
+      "manager_image_id": "sha256:81d6a9537d82bef2703884fb4052dc2e9f814d0b88e50a9a8f572e0f272137cc",
+      "public_push": false,
+      "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+      "preceding_manager_source": "d86e66a2db83a26f0faca1993b914be121ef3259",
+      "changed_runtime_files": [
+        "runtime_manager/executors/kubernetes.py"
+      ],
+      "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+      "prior_orchestration_attempt": {
+        "exit_code": 127,
+        "stage": "before build script upload completed",
+        "image_build_performed": false,
+        "subsequent_ordered_import_build_passed": true
+      }
+    },
+    "helm_revision15": {
+      "descriptor_uid_unchanged": true,
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:ae93f837a58529eee86f85bbd79f46801a9e068ab7c84babe35292209c97ad41",
+      "helm_upgrade_completed": true,
+      "source_revision": "706b138614f029c52d7be49bbc50453e847f0fd4",
+      "descriptor_data_unchanged": true,
+      "helper_and_profile_images_unchanged": true,
+      "app_proxy_unchanged": true
     }
   },
   "not_executed": [
