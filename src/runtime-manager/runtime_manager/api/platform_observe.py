@@ -112,7 +112,7 @@ def _docker_snapshot():
         }
     )
     try:
-        ledger = service.platform.node_plan()["capacity"]
+        ledger = service.platform.node_snapshot()["capacity"]
         capacity.update(
             readable=True,
             mem_available_mb=max(0, ledger["memory_budget_mb"] - ledger["committed_mb"]),
