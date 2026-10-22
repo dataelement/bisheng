@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；253 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 248 / 253 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；255 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 248 / 255 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2008,6 +2008,22 @@
   **依赖:** T254
   **配对:** T254
 
+- [ ] **T256** — 准备阶段取消、围栏与截止时间配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_prepare_cancellation.py`、`src/runtime-manager/tests/test_k8s_diagnostic_contract.py`
+  **逻辑/验收**：使用实际_phase与_startup_checkpoint，覆盖进入/复用前取消、Running时取消、UID/归属围栏变化、原期限与缩短期限、读取失败、成功前取消；正常完成仍按同UID停止和确认，不以Mock调用次数代替业务结果。
+  **覆盖 AC:** AC-43、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T255
+  **配对:** T257
+
+- [ ] **T257** — 准备阶段持续核对持久操作状态
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+  **逻辑/验收**：复用已有操作围栏/取消/持久期限检查，在阶段进入、运行轮询及提交结果前检查；失败交由原清理路径，不扩大backend GET拒绝、不放宽停止证明或延长原期限。
+  **覆盖 AC:** AC-43、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T256
+  **配对:** T256
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -2187,3 +2203,5 @@ T252/T253 L1闭合：缺省/空CMD六项先红、显式参数六项保持绿；�
 T254/T255登记：189第二source prepare07b872e0d07441f7a333941560727bba在OCI仓库阶段失败；真实egress Pod5443超时，精确DNAT目的5000临时放行后0.008秒连通，撤回再次超时。原安装registry测试来自外部installer，仅Pod→proxy TCP检查不足。追加实际同策略上游TCP检查，不将其称为TLS或完整assembler链路。活跃246/253、116测试；两次旧失败保持，T252/T253编号撤回不复用。
 
 T254/T255 L1闭合：14先红后绿，作者213相关/独立18通过；合流后完整runtime1628passed/13skip（33.76s）。仅installer上游同策略TCP、NotReady探测隔离和README，不变manager/helper镜像、摘要算法或API。独立L1 SHA ff400d5ab04ed928070b6a7fa07cc49be412ca48f5fede620cc5b252bf0ecc99。活跃248/253、116测试，189新canary及业务全链路仍单列。
+
+T256/T257登记：本地真实方法与间接调用链复现Running准备循环仅初读operation，随后仅续controller/resource；owner cancel不参与循环判定，直至自然结束或原期限。复用已有_startup_checkpoint修正，保留同UID正常清理与不确定结果围栏。机制证据SHA7fbeb6b796f32940b6c1b7fcd8736d1893e11fb2c832a4207f6405c6dab21fce，仅本地模拟/静态，尚非189取消实测。活跃248/255、117测试任务；ARM继续暂缓。

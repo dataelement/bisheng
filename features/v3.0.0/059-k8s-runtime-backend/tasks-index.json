@@ -6403,6 +6403,55 @@
       "review": "PASS"
     },
     {
+      "id": "T256",
+      "wave": 8,
+      "kind": "测试",
+      "title": "准备阶段取消、围栏与截止时间配对",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_prepare_cancellation.py",
+        "src/runtime-manager/tests/test_k8s_diagnostic_contract.py"
+      ],
+      "logic": "实际阶段循环覆盖取消/围栏/期限与失败关闭及正常同UID停止，不以调用次数替代业务结果。",
+      "acs": [
+        "AC-43",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T255"
+      ],
+      "pair": "T257",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T257",
+      "wave": 8,
+      "kind": "实现",
+      "title": "准备阶段持续核对持久操作状态",
+      "files": [
+        "src/runtime-manager/runtime_manager/executors/kubernetes.py"
+      ],
+      "logic": "复用已有操作状态检查，进入、轮询、提交结果前核对；保留原期限、清理与停止证明。",
+      "acs": [
+        "AC-43",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T256"
+      ],
+      "pair": "T256",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",
