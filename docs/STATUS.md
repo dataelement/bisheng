@@ -1,5 +1,7 @@
 # DSH 企业后台交付状态
 
+- 2026-10-22：统一 Chat 消息操作为复制、点赞、点踩、导出，采用 DSH Work 0.2.0-rc.2 的原始图标及 28px 按钮、15px 图标、8px 间距；桌面内嵌 Chat 与网页共用此实现，Work 保留新建分支。参考桌面分支 V1.2.0 b510182。复制回归 2 项、前端类型检查、改动文件 ESLint 与客户端构建通过；前端全量 ESLint 在平台既有文件报 95 项错误。本次源码待部署后的视觉验收。
+
 - 2026-10-22：修复主线迁移后 Desktop Chat 网页会话交换 500：恢复经过校验的 `web_session_cookie_name` 配置，默认使用 `access_token_cookie`；会话测试改用实际 `DshSettings`，覆盖默认配置和自定义入口 Cookie。27 项会话及配置回归与 Ruff 通过；独立容量工厂测试因本地缺少 docstring_parser 待复验。3006 部署复验执行中。
 
 ## 2026-10-22：Work 120 main 积分与 Chat 集成候选
