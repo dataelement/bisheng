@@ -511,13 +511,19 @@ class AdmissionPolicy:
     def _delete(self, req, obj):
         opts, meta = req.get("options") or {}, obj.get("metadata", {})
         cond = opts.get("preconditions", {})
-        if cond.get("uid") != meta.get("uid") or cond.get("resourceVersion") != meta.get("resourceVersion"):
+        if (
+            not meta.get("uid")
+            or not isinstance(meta.get("resourceVersion"), str)
+            or not meta["resourceVersion"]
+            or cond.get("uid") != meta["uid"]
+            or cond.get("resourceVersion") != meta["resourceVersion"]
+        ):
             _deny("admission_delete_precondition_required")
         grace = opts.get("gracePeriodSeconds")
         status = obj.get("status", {})
         # Core/v1 forces zero grace before admission for a never-bound Pod.
         # Exact UID/RV checks above still fence a concurrent scheduler binding;
-        # zero grace is never accepted for a possible current or former writer.
+        # zero grace does not prove that an active or uncertain writer stopped.
         normalized_unbound = (
             obj.get("kind") == "Pod"
             and type(grace) is int
@@ -533,25 +539,68 @@ class AdmissionPolicy:
                 for item in status.get("conditions", [])
             )
         )
-        if not normalized_unbound and (type(grace) is not int or not 1 <= grace <= 120):
+        # Core/v1 also normalizes grace for an already-terminal Pod. The
+        # authenticated API oldObject is the only status source here: CREATE
+        # cannot prefill terminal state, and _status only accepts its transition
+        # from the bound kubelet. A manager-supplied request.object is ignored.
+        normalized_terminal = type(grace) is int and grace == 0 and self._terminal_stopped(obj)
+        if not (normalized_unbound or normalized_terminal) and (type(grace) is not int or not 1 <= grace <= 120):
             _deny("admission_force_delete_refused")
 
+    def _terminal_stopped(self, obj):
+        meta, spec, status = obj.get("metadata", {}), obj.get("spec", {}), obj.get("status", {})
+        if (
+            obj.get("kind") != "Pod"
+            or not meta.get("uid")
+            or not isinstance(meta.get("resourceVersion"), str)
+            or not meta["resourceVersion"]
+            or meta.get("namespace") != self.namespace
+            or not spec.get("nodeName")
+            or STOP_FINALIZER not in meta.get("finalizers", [])
+            or not _protected(obj, self.revision)
+            or status.get("phase") not in _TERMINAL
+            or status.get("reason") in {"NodeLost", "Unknown"}
+        ):
+            return False
+        for key in ("containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses"):
+            rows = status.get(key, [])
+            if not isinstance(rows, list):
+                return False
+            for row in rows:
+                if not isinstance(row, dict) or not isinstance(row.get("state", {}), dict):
+                    return False
+                state = row.get("state", {})
+                if set(state) - {"terminated", "waiting"} or len(state) > 1:
+                    return False
+                if "terminated" in state:
+                    terminated = state["terminated"]
+                    if (
+                        not isinstance(terminated, dict)
+                        or type(terminated.get("exitCode")) is not int
+                        or terminated.get("reason") in {"Unknown", "NodeLost", "ContainerStatusUnknown"}
+                    ):
+                        return False
+                elif (
+                    row.get("containerID")
+                    or ("waiting" in state and not isinstance(state["waiting"], dict))
+                    or state.get("waiting", {}).get("reason") in {"Unknown", "NodeLost", "ContainerStatusUnknown"}
+                ):
+                    # Failed init may leave application containers that never
+                    # started. A current ID without a termination is uncertain.
+                    return False
+        return True
+
     def _terminal_delete(self, req, obj):
-        meta, status, opts = obj.get("metadata", {}), obj.get("status", {}), req.get("options") or {}
+        meta, opts = obj.get("metadata", {}), req.get("options") or {}
+        cond = opts.get("preconditions", {})
         return bool(
             meta.get("deletionTimestamp")
-            and STOP_FINALIZER in meta.get("finalizers", [])
-            and _protected(obj, self.revision)
-            and status.get("phase") in _TERMINAL
-            and status.get("reason") not in {"NodeLost", "Unknown"}
-            and opts.get("preconditions", {}).get("uid") == meta.get("uid")
+            and meta.get("name") == req.get("name")
+            and self._terminal_stopped(obj)
+            and cond.get("uid") == meta.get("uid")
+            and ("resourceVersion" not in cond or cond["resourceVersion"] == meta["resourceVersion"])
             and type(opts.get("gracePeriodSeconds")) is int
             and 0 <= opts["gracePeriodSeconds"] <= 30
-            and not any(
-                "running" in x.get("state", {})
-                for key in ("containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses")
-                for x in status.get(key, [])
-            )
         )
 
     def _service(self, obj, plan):
