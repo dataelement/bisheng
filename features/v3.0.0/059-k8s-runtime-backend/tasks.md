@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；235 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 228 / 235 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 230 / 235 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1848,7 +1848,7 @@
   **依赖:** T232
   **配对:** T232
 
-- [ ] **T234** — 同步业务E2E请求预算配对
+- [x] **T234** — 同步业务E2E请求预算配对
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
   **逻辑/验收**：成功授权的精确同步preview/stop/resume/delete使用settings预算，其他请求仍短截止；总预算取消且POST仅一次，不重试未知结果。
@@ -1856,7 +1856,7 @@
   **依赖:** T233
   **配对:** T235
 
-- [ ] **T235** — 共享E2E同步请求期限适配
+- [x] **T235** — 共享E2E同步请求期限适配
   **类型**：实现
   **文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`
   **逻辑/验收**：共享helper只为精确同步成功调用覆盖read预算并限制总耗时，连接/写入/pool短而有界；不改产品操作期限、拒绝断言、普通GET或restore202合同。
@@ -2001,3 +2001,5 @@ T228–T231合流：来源a1de5271f5f00cef0cba06d41f09c673a9190525，runtime1483
 2026-10-23 T232/T233：r8的4init合计96秒后probe appReady真实通过。当前同UID8c83f28c…已kubelet_terminal/stopconfirmed，finalizers缺省但deletionGracePeriodSeconds仍30，Pod仍存在。现有kubelet终态DELETE准入要求STOP finalizer尚在，形成移除finalizer后误拒。按同UID持久停止证明补窄分支，原操作未终态，期望修复后自然对账，不人工清理或复活。
 
 T232/T233本地L1完成：1bd926bb2两文件先红4/203绿后准入208与邻接585通过；合流b5d243f0a全runtime1519passed/13skip（32.78s）。首次默认沙箱30fail/11error均为localhost绑定、setuid权限受限，授权重跑通过，原日志保留。r8原操作随后timed_out，未复活；清理修复后只让终态正常对账。新增T234/T235校正E2E75秒请求预算，产品持久期限不变。当前228/235、107测试任务；ARM暂停。
+
+T234/T235通过21250d329合入d13e9ee91：新预算合同先红5/12绿，112合同全绿；主树完整backend1753passed/19skip（48.48s），runtime生产与已通过1519/13skip版本一致。开发修复已闭合，当前230/235；五项实际交付/发行/L2继续保留。189 Helm19已固定a06镜像4666d753…，r8原timed_out保持且4资源fresh API absent/cleanupcomplete；proof SHAa37f1bab…。r9新六场景仅采用d13验收工具源码，生产runtime与a06逐字节相同；不重标镜像来源。

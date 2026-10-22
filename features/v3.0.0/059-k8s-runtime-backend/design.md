@@ -189,6 +189,7 @@ flowchart LR
 - 所有需要停止确认的受管执行 Pod（生产、data、准备、预检、维护及预览）均带 `runtime.bisheng.io/stop-confirmed` finalizer；临时 Pod 也不能在 manager 断连时丢失唯一终止证据。停止请求先记账，再发有宽限期的 DELETE；finalizer 保留可查对象，便于 manager 观察并持久化该 UID 的终止证据。
 - **停止证明**按下表分类，检查从 API server 新鲜读取的同一 UID、删除事实、准入基线版本和容器诊断；不把“从未启动”强行转换成“必须有 container ID”。Watch 缓存仅用于唤醒，不能作为释放依据。
 - 证据成立后先上报 stopped，由 backend 解除写入归属/预占，再移除 finalizer。若无法证明，保持 `cleanup_pending/writer_stop_unconfirmed`，保留卷和预占；没有强删超时后自动接管路径。
+- finalizer移除不保证grace仍为正的Pod立即从API消失。仅已进入删除的同UID可信终态允许绑定kubelet收尾DELETE0；无STOP分支逐次读取后端精确资源计划，stop_state=confirmed、stop_confirmed=true及allow_delete=true同时成立才允许。原带STOP路径仍不依赖backend，manager强删限制不变；不确定继续拒绝。
 - 外部管理员强删或同名替换后，旧 UID 在账本中仍未确认；新资源不获准启动为生产写入者。遇永久节点故障，默认阻塞至恢复或客户提供经评审的物理 fencing 方案；本轮不内置此证明适配器。
 - manager 多进程使用平台 SQL 控制器租约，失去租约即停止提交变更。租约只限制控制器行为，**不**用它证明数据库写入者死亡。固定名称、准入检查与 UID 账本共同处理陈旧请求的竞争窗口。
 
@@ -415,6 +416,8 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 | Node/Python 安装脚本可执行用户代码 | 准备任务盗用上传/管理凭据 | 传输与安装 Pod 分开，安装/编译无传输身份、无生产卷 |
 | 多个init与业务健康共用创建起90秒 | cached镜像也可能在环境安装刚开始就误判失败，重启若从now重计又可无限延长 | `executors/kubernetes.py`以同UID创建/前阶段finishedAt锚定，且不超过原操作期限 |
 | owner取消只是持久请求，操作线程尚未退出 | 仍ready的数据会话可新签票据或在观察I/O后发送新写入 | grant签发/ready当前状态检查；`k8s_data_executor.py`在RPC入口及转发前复查，既有动作按unknown保留 |
+| finalizer清空时旧删除grace仍可能为正，kubelet会再次DELETE0 | 只允许带STOP的终态删除会在已持久停止后永久卡清理 | `k8s_admission.py`为无STOP的绑定kubelet逐次核对精确同UID停止授权；不放宽manager强删 |
+| 同步preview/resume/stop/delete的HTTP可等待超过75秒 | E2E客户端先超时，不能证明操作实际失败；重发可能造成重复意图 | `test/e2e/helpers/vibe_runtime.py`精确成功路径使用settings总预算且无POST重试；产品操作期限不变 |
 | DELETE受理后对象仍存在是正常异步过程，prepare的最终结果也必须单独持久化 | 一次cleanup.pending被误作发布失败，或重启重复准备且覆盖已上传结果 | `operations.py`有界等待与`prepared_delivery`；`executors/kubernetes.py`仍以同UID停止证明和fresh404完成收尾 |
 | Pod activeDeadlineSeconds 不能从短启动期限调大或清空 | 预览 ready 后延长期限被 API 拒绝或正式实例到期被杀 | `k8s_templates.py` 区分任务、预览与正式期限；初始化自带阶段限制 |
 | RWOP 不允许再开第二个在线数据 helper Pod；停用后又没有在线 sidecar | 在线挂卷一直 Pending，或停用后保留库无法查改导出 | 在线 helper 同 Pod；停用 data 会话先取得空生产位置，确认停止后释放 |
@@ -765,3 +768,5 @@ Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。
 T232/T233已实现并通过本地L1。固定版本官方依据：[Kubernetes v1.28.15 store.go](https://github.com/kubernetes/kubernetes/blob/v1.28.15/staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go#L443) 的ShouldDeleteDuringUpdate要求旧grace为0/nil才在finalizer清空时直接删除；[status_manager.go](https://github.com/kubernetes/kubernetes/blob/v1.28.15/pkg/kubelet/status/status_manager.go#L828) 的kubelet终态删除使用grace0及UID前置。r8随后原期限timed_out，保留失败并正常清理，不复活原操作。
 
 T234/T235工具适配：preview/resume等待ready、stop/delete等待completed是现有同步产品接口；共享E2E75秒read会早于实测96秒init结束。只对成功授权的精确同步调用采用settings.timeout总预算与read上限，连接/写入/pool短有界；拒绝配对、GET、preview DELETE、restore202不扩大。无重试POST，不改产品operation deadline或nginx/UI。
+
+T234/T235已本地L1通过；d13e9ee91整合1753 backend与1519 runtime通过。189 Helm19的a06原生镜像已使r8失败操作正常cleanupcomplete/4精确资源fresh404，历史failure与停止证明保留；r9新批次真实业务继续，不宣称正式上线验收通过。

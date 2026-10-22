@@ -3332,3 +3332,13 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 **类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`。架构PASS（原AdmissionPolicy与现有后端计划Owner），命名PASS，序列化PASS（原plan字段/API形状），数据库/租户PASS（无DDL、SQL或租户边界变更），前端N/A，信息泄漏PASS，设计同步PASS（终态清理及修订记录）。依赖/配对T232与单文件范围PASS。无finalizer分支仅绑定kubelet严格DELETE0、同UID保护终态、fresh精确plan stop_state=confirmed/stop_confirmed is True/allow_delete is True；API不确定拒绝，无缓存或进程级通行位。原STOP路径不读后端，manager强删限制不变。合流全runtime1519/13skip通过，Ruff/format/guard通过。
 **结果：PASS**。源1bd926bb2a37bc3d95a31920c2ae38be08e9ea6f；不手工删Pod/改finalizer/改SQL/复活终态。r8自然清理复验另记T069/T070。
+
+## Task Review: T234 — 同步业务E2E请求预算配对
+
+**类型**：测试。**文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`。命名与完整AC-24、AC-25、AC-28、AC-33、AC-36、AC-49、AC-55标注PASS；前端N/A，其余测试子集N/A；依赖T233及单文件/配对范围PASS。直接HTTPX transport校验精确同步成功路径扩大read、connect/write/pool短有界；普通GET、restore202、preview DELETE、相似路径、拒绝配对及非owner保持原短期限。模拟总预算超时与仅一次POST，原TLS/响应断言保留。红5/12、最终112passed；默认沙箱唯一旧loopback bind失败保留，授权完整重跑通过。
+**结果：PASS**。源21250d32900c4c4ba893248aa5b8cc1d8d65182b；日志 `/private/tmp/f059-request-budget-red.log`、`/private/tmp/f059-request-budget-green-authorized.log`。
+
+## Task Review: T235 — 共享E2E同步请求期限适配
+
+**类型**：实现。**文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`。架构PASS（共享测试helper，无产品状态Owner变更），命名PASS，序列化PASS（既有响应断言不变），数据库/租户N/A，前端N/A，信息泄漏PASS，设计同步PASS（工具期限及已知坑）。依赖/配对T234与文件范围PASS。仅精确同步成功路径使用settings.timeout read与asyncio总预算，连接/写入/pool不超过15秒或总预算；超时直接停止、未知POST不重发，不修改平台operation deadline/API或脚本重复配置。Ruff/format/逐文件架构守卫及diff通过；主树完整backend1753/19skip、48.48s。
+**结果：PASS**。开发闭合230/235；真实平台、故障升级、109剩余、正式发行与L2不能由工具合同替代。

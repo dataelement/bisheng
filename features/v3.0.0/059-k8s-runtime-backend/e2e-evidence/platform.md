@@ -61,3 +61,9 @@ r8按原runner、身份和六场景新journal启动；首个Python app6da0d71cbd
 ### r8真实启动通过，终态删除收尾
 
 同UID8c83f28c…创建18:16:57，data-layout/schema/material/environment分别完成18:17:13、18:17:52、18:18:17、18:18:33，4init96秒后appRunning/Ready。probe cd1ad0fe…已ready；随后SQL停止证明kubelet_terminal于18:19:10入库，Pod Failed/app137且finalizers缺省，但grace30和对象仍在。登记T232/T233修复已移除finalizer后的kubelet最终删除误拒；原操作仍active，未人工delete/释放预占或修改证据。正式审批上线未通过。
+
+## 开发闭合与r9新批次
+
+T232/T233原生amd64候选a06b281b2，内网固定digest `4666d75388bde2ae7c1b0b73916442451b4119a7384852cf373633e8489dfe32`，Helm19三个控制服务滚动完成；descriptor UID/data、有效报告、helper143/profile2/app-proxy均不变。r8原probe最终timed_out保留，修复后正常对账cleanupcomplete；4条精确资源fresh API absent，原同UID停止证明不变，proof SHA `a37f1bab1216ab6029b5b7a24cf52f12db04ac375208d95b9a1e5de490855f1b`。无手工delete/finalizer/SQL或操作复活。
+
+T234/T235修正共享E2E75秒HTTP截止，仅精确同步成功preview/resume/stop/delete采用settings总预算且不重试POST。合流d13e9ee91，112新旧合同、完整backend1753/19skip通过；runtime1519/13skip通过的生产字节保持。r9仅测试源码更新，a06生产镜像来源不重标；新六场景原套件、原身份和独立journal启动，旧批次不变。当前开发修复闭合230/235，完整业务/故障/发行/L2仍在门内；ARM和109按用户优先级暂缓。

@@ -1,12 +1,12 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T18:32:58.117991+00:00",
-  "validated_source_commit": "b5d243f0a757810198789c616eb58d7efd582a2e",
+  "recorded_at": "2026-10-22T18:40:41.334856+00:00",
+  "validated_source_commit": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 228,
+    "l1_completed": 230,
     "tasks_total": 235,
     "e2e": "in_progress",
     "l2": "not_started"
@@ -22,13 +22,13 @@
       "scope": "Full runtime with localhost/temporary-file test permissions; initial sandbox permission failures retained separately. No remote/ARM acceptance claim."
     },
     "backend": {
-      "passed": 1734,
+      "source_commit": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
+      "passed": 1753,
       "skipped": 19,
-      "seconds": 48.25,
+      "seconds": 48.48,
       "exit_code": 0,
-      "source_commit": "a1de5271f5f00cef0cba06d41f09c673a9190525",
-      "log": "/private/tmp/f059-final-dev-backend.log",
-      "scope": "Full app_runtime/app_publish integrated data cancellation; no subsequent production backend change"
+      "log": "/private/tmp/f059-final-dev-budget-backend.log",
+      "scope": "Full app_runtime/app_publish including request-budget helper contracts; localhost tests authorized"
     },
     "public_tenant_fix": {
       "passed": 17,
@@ -896,7 +896,7 @@
       "new_arm_run": false
     },
     "after_finalizer_delete": {
-      "status": "local_fix_passed_remote_pending",
+      "status": "real_cleanup_passed_original_failure_preserved",
       "operation_id": "cd1ad0fe93584373b9f81d1a7b8f51d7",
       "pod_uid": "8c83f28c-3a6e-460e-8631-fc0242d49c92",
       "probe_ready": true,
@@ -908,8 +908,11 @@
       "manual_delete_or_sql_override": false,
       "operation_stage": "timed_out",
       "operation_status": "timed_out",
-      "cleanup_status": "pending",
-      "source_revision": "1bd926bb2a37bc3d95a31920c2ae38be08e9ea6f"
+      "cleanup_status": "complete",
+      "source_revision": "1bd926bb2a37bc3d95a31920c2ae38be08e9ea6f",
+      "resources_fresh_api_absent": 4,
+      "proof_sha256": "a37f1bab1216ab6029b5b7a24cf52f12db04ac375208d95b9a1e5de490855f1b",
+      "proof_path": "/opt/e2e-f059/evidence/k189r8-cleanup-verified.json"
     },
     "backend_before_data_cancel": {
       "passed": 1723,
@@ -918,6 +921,57 @@
       "source_commit": "709821ecbe5c653aad3f90358173e0d110bee7e3",
       "log": "/private/tmp/f059-creation-integrated-backend.log",
       "scope": "full app_runtime/app_publish including signed creation protocol and lock refresh"
+    },
+    "terminal_admission_live_candidate": {
+      "native": {
+        "build_exit": 0,
+        "import_smoke_exit": 0,
+        "public_push": false,
+        "manager_image_id": "sha256:3c97d58aada64fb4193ec1b3e3c9638fbf26d68094fa43297fec7d5ddd127624",
+        "platform": "linux/amd64",
+        "source_revision": "a06b281b2ada8cfa15cb79c29fad0044408e4db9",
+        "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+        "changed_runtime_files": [
+          "runtime_manager/k8s_admission.py"
+        ],
+        "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+        "preceding_manager_source": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+        "schema": "f059-native-manager/v1"
+      },
+      "image": {
+        "manager_image_id": "sha256:3c97d58aada64fb4193ec1b3e3c9638fbf26d68094fa43297fec7d5ddd127624",
+        "source_revision": "a06b281b2ada8cfa15cb79c29fad0044408e4db9",
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:4666d75388bde2ae7c1b0b73916442451b4119a7384852cf373633e8489dfe32",
+        "public_push": false,
+        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-21"
+      },
+      "helm": {
+        "descriptor_uid_unchanged": true,
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:4666d75388bde2ae7c1b0b73916442451b4119a7384852cf373633e8489dfe32",
+        "helm_upgrade_completed": true,
+        "source_revision": "a06b281b2ada8cfa15cb79c29fad0044408e4db9",
+        "descriptor_data_unchanged": true,
+        "helper_and_profile_images_unchanged": true,
+        "app_proxy_unchanged": true
+      }
+    },
+    "request_budget": {
+      "source_revision": "21250d32900c4c4ba893248aa5b8cc1d8d65182b",
+      "passed": 112,
+      "red_failed": 5,
+      "red_passed": 12,
+      "new_public_api": false,
+      "post_retries": false
+    },
+    "current_business_batch": {
+      "batch": "k189r9",
+      "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
+      "production_runtime_identical_to_image_source": "a06b281b2ada8cfa15cb79c29fad0044408e4db9",
+      "profile_revision": 2,
+      "stage": "platform",
+      "scenarios": 6,
+      "result": "in_progress",
+      "new_arm_run": false
     }
   },
   "not_executed": [
