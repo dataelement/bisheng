@@ -618,3 +618,28 @@ T009/T013增量L1：应用凭据支持只给app容器的Secret引用，材料Sec
 - Core logs仅允许明确容器白名单与1MiB上限；公开应用日志仍默认为app。
 
 **验证**：控制Service/API/账本68 passed（`/private/tmp/f059-control-recovery-final.log`）；新旧client/Core/lifecycle82 passed（`/private/tmp/f059-control-client-recovery-final.log`）。红阶段日志对应`control-recovery-red`、`control-recovery-api-red`、`control-resume-red`、`phase-logs-red`、`control-client-recovery-red`。实际执行器及集群仍未交付。**结果：PASS。**
+
+## T002/T015/T017/T019 观察端点与阻断清理补充复审
+
+新表尚未作为F059发布，模型增加JsonType observed_state，记录受限Service ClusterIP/port，不保存原始Pod/Secret响应；实际部署前仍须盘点存量列，不能假定未知环境无表。新5项Service测试先复现未接线，补真实HMAC DTO成功例与ready正反例。端点须在配置Service CIDR内且匹配批准端口，同UID事实不可改写。
+
+探测失败的节点可续清理租约；Repository/Service/准入同时拒绝新资源。状态/绑定保护发生断档时持久清除既有资源连续保护标记，恢复探测不能把历史断档抹除。原任务文件范围保持，七项L1中架构/命名/内部序列化/跨库与租户/信息安全/设计同步PASS，前端N/A。与节点协调共106 passed，逐文件arch-guard通过。**结果：PASS。**
+
+## Task Review: T079 / T080
+
+**任务**：节点报告与控制事实合同/接线。**类型**：测试/实现。
+**文件**：T079 `test_runtime_kubernetes_coordination.py`；T080 `runtime_operation_service.py`、`api/endpoints/runtime_delivery.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 既有API→Service→Repository；backend无集群SDK、MinIO或直接SQL |
+| 2 | 命名/AC | PASS | 覆盖 AC-03、AC-07、AC-08、AC-13、AC-14、AC-30、AC-31、AC-48、AC-49、AC-52 |
+| 3 | 序列化 | PASS | 心跳兼容旧Docker，增加executor/probe/node控制快照；K8s facts的detail.controller持有者/代次必须匹配当前租约 |
+| 4 | 数据库 | PASS | 操作→节点锁；事实、终态和容量释放同一事务；stopped须全相关Pod证据；ready须同范围Pod/Service UID和观察IP；verified租户上下文清除ambient bypass |
+| 5 | 前端 | N/A | 复用16121运行时不可用错误，无新页面或文案 |
+| 6 | 信息泄漏 | PASS | 探测报告限64KiB、拒绝凭据字段；内部未知错误安全503，测试加入会泄漏异常的全局handler仍不泄漏；硬前置失败入口不再allow |
+| 7 | 设计同步 | PASS | 6.2同步心跳/事实和观察端点；控制租约不被当作旧进程停止证据 |
+
+**红阶段**：18 errors+1 failed（缺clock/节点/事实合同及全局错误泄漏，`/private/tmp/f059-k8s-coordination-red.log`）。新增ready正例、错误地址及硬阻断/入口反例后，22项协调；与资源/模型共106 passed（`/private/tmp/f059-k8s-coordination-final.log`）。全app_runtime/原中间件785 passed、18 skipped，仍仅3项已记录旧权限夹具失败（`/private/tmp/f059-coordination-backend-full.log`）；Ruff与逐文件arch-guard通过。无真实集群结论。
+**元数据验证**：目标1/2文件PASS；配对T079已红阶段；依赖T019/T031 PASS。
+**结果**：PASS。

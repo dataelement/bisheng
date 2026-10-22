@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T031、T073–T078已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：T001–T031、T073–T080已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -375,13 +375,15 @@ class RuntimeExecutor(Protocol):
 
 | 对象 / 扩展 | 关键字段 | 权威与风险 |
 | --- | --- | --- |
-| `RuntimeExecutionResource` | id(UUID)、tenant_id/app_id、operation_id/node_id、cluster_id、namespace/name/uid、kind/purpose、generation/owner_epoch、spec_digest、status_policy_revision、stop_state、stop_evidence(evidence_kind/RV/digest/node/删除时间)、observed_at | backend Repository；资源身份不只靠标签/名字。exec_ref 使用 UUID，避免现有 128 字符字段容不下组合 URI |
+| `RuntimeExecutionResource` | id(UUID)、tenant_id/app_id、operation_id/node_id、cluster_id、namespace/name/uid、kind/purpose、generation/owner_epoch、spec_digest、status_policy_revision、observed_state（仅Service观察IP/port）、stop_state、stop_evidence(evidence_kind/RV/digest/node/删除时间)、observed_at | backend Repository；资源身份不只靠标签/名字。exec_ref 使用 UUID，避免现有 128 字符字段容不下组合 URI |
 | `RuntimeMaterialDelegation` | id、scope_kind、tenant/app/version/delivery、operation_id、generation/owner_epoch、exec_ref/Pod UID、public_key、allowed_artifacts/actions、proxy_credential_hash、expires_at、revoked_at | 只存公钥/哈希，不保存 workload 私钥；服务根据归属计算允许材料，不能用户自填白名单 |
 | `RuntimeNode` 扩展 | executor_kind、capabilities、controller_holder、controller_epoch、lease_until、probe_report | 保留旧 Docker 字段与默认值；历史 JSON capabilities/probe_report 为 NULL 时按未验证处理，不以内联数据迁移填充；逻辑域预算不是实时全节点余额 |
 | `RuntimeTransfer` 扩展 | authorization_kind、authorization_id | 历史 authorization_id 暂可为 NULL，独立运维回填 operation/id；新旧 ORM 插入默认沿 operation_id 生成授权范围。复合唯一约束改为授权范围＋材料＋动作；deployment-init 不再强制检查 completed 操作；原 operation 分支保持终态拒绝 |
 | `RuntimeAssignment` 扩展 | data_operation_id | 在同一应用行锁下持久互斥；数据会话不占用 serving active_operation_id、generation 和路由 |
 | `RuntimeOperation` 内部扩展 | kind=data、request_id、action/parameters_digest、actor_ref、target_exec_ref/UID、deadline、result/cleanup 状态 | 原业务 Service 授权创建；每应用数据/维护互斥，不改 serving 代次，不向 CLI 暴露新业务动作 |
 | 操作事实 detail 扩展 | resource_ref、UID/namespace、镜像身份、stopped 证据、failure stage | 通过已鉴权 manager 提交；不接收业务容器自报成功 |
+
+节点心跳兼容扩展executor_kind/capabilities/probe_report，node plan返回控制器快照；K8s facts的detail.controller必须匹配当前holder/epoch及未过期租约。ready引用同操作/代次的Pod/Service UID，目标等于受限observed_state；stopped必须账本停止证据，事实/终态/容量释放在同一SQL事务。硬前置失效阻断入口和新建，仍可取清理租约；状态/绑定保护断档不可事后抹除。
 
 manager可GET资源脱敏读模型及按操作列举资源，重启不依赖本地记录；相同未创建意图可由新租约恢复controller_epoch。活跃操作中间阶段停止不释放整笔容量，终态仍要求所有相关Pod的同UID停止证据。
 
@@ -613,3 +615,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T077/T078持久缓存选择、T030/T031材料helper与隔离install、T009模板接线完成；固定输入/材料与进程身份边界保持 | runtime645 passed/10 skipped，backend定向213 passed；无真实镜像/集群结论 |
 
 | 2026-10-22 | 补齐资源恢复GET、相同待创建意图的控制器接续、阶段日志容器白名单；修正中间stop容量释放时机 | 控制68项、client/Core/lifecycle82项；执行器仍待接入 |
+
+| 2026-10-22 | T079/T080心跳/控制事实接线、受限Service观察端点与保护断档记录完成；硬前置失败复用16121而非容量等待 | 定向106项；全模块785通过、18跳过、3项旧夹具待修；未部署 |

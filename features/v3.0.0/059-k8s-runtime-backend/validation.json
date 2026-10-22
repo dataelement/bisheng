@@ -1,13 +1,13 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22",
-  "validated_source_commit": "0cf8cb53fdebebb9da9aa52d7c75ff2ea79953c9",
+  "validated_source_commit": "36deca535ba120aef790376f26137c555d3e3437",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 37,
-    "tasks_total": 78,
+    "l1_completed": 39,
+    "tasks_total": 80,
     "e2e": "not_started",
     "l2": "not_started"
   },
@@ -67,11 +67,11 @@
       "installed_application_resources": false
     },
     "full_app_runtime_with_middleware": {
-      "passed": 753,
+      "passed": 785,
       "failed": 3,
       "skipped": 18,
       "exit_code": 1,
-      "log": "/private/tmp/f059-helper-backend-full.log",
+      "log": "/private/tmp/f059-coordination-backend-full.log",
       "test_config": "explicit fixture-only JWT signing key; no production credentials",
       "remaining": "Vibe permission-registration fixtures lack new candidate count stubs; old linsight_skill non-registration assertion contradicts inherited release implementation. Retain as pending test maintenance, not a full green gate."
     },
@@ -84,6 +84,19 @@
       "template_admission_passed": 71,
       "runtime_full_log": "/private/tmp/f059-runtime-helper-full.log",
       "real_image_validation": false
+    },
+    "node_coordination": {
+      "passed": 106,
+      "log": "/private/tmp/f059-k8s-coordination-final.log",
+      "scope": "node/controller facts, resource service/address, real HMAC API, repository and model contracts"
+    },
+    "control_recovery": {
+      "passed": 68,
+      "log": "/private/tmp/f059-control-recovery-final.log"
+    },
+    "client_core_lifecycle": {
+      "passed": 82,
+      "log": "/private/tmp/f059-control-client-recovery-final.log"
     }
   },
   "not_executed": [

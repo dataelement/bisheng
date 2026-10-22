@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；78 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 37 / 78 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；80 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 39 / 80 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -325,12 +325,28 @@
   **依赖:** T009、T029、T030
   **配对:** T030
 
+- [x] **T079** — K8s节点报告和控制事实：合同与失败用例
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_coordination.py`
+  **逻辑/验收**：心跳持久执行形态/探测，失败阻断新建但可清理；事实必须当前租约/代次，停止声明须资源证据，ready须已绑定Service/Pod；未知异常不被全局错误处理泄漏。测试只定义合同。
+  **覆盖 AC:** AC-03、AC-07、AC-08、AC-13、AC-14、AC-30、AC-31、AC-48、AC-49、AC-52
+  **依赖:** T019、T031
+  **配对:** T080
+
+- [x] **T080** — K8s节点与控制事实接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`、`src/backend/bisheng/app_runtime/api/endpoints/runtime_delivery.py`
+  **逻辑/验收**：扩展兼容心跳/node plan、K8s控制器事实闸口、停止与ready事实校验；保留Docker合同。探测失效阻断新建，清理不被同一状态锁死；内部未知异常安全503。配对测试和L1后完成。
+  **覆盖 AC:** AC-03、AC-07、AC-08、AC-13、AC-14、AC-30、AC-31、AC-48、AC-49、AC-52
+  **依赖:** T019、T031、T079
+  **配对:** T079
+
 - [ ] **T032** — K8s 执行能力与资源操作：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
   **逻辑/验收**：实现 prepare/launch/observe/request_stop/confirm_stopped/cleanup/logs/data 能力，只有 adapter 拼 Core API；固定名称/UID 账本、Service就绪端点、bounded wait、平台资源事实及数据/维护前后 stop 闸口；测试只定义输入/结果，不加入实现。
   **覆盖 AC:** AC-04、AC-05、AC-07、AC-08、AC-09、AC-11、AC-18、AC-33、AC-35、AC-43、AC-48、AC-49、AC-50、AC-52
-  **依赖:** T031、T011、T019
+  **依赖:** T031、T011、T019、T080
   **配对:** T033
 
 - [ ] **T033** — K8s 执行能力与资源操作
