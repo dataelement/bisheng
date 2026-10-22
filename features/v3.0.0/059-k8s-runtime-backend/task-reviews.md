@@ -3406,3 +3406,13 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 - 独立L1：292相邻合同，bundle/helper PATH注入拒绝与image自定义PATH保留，Ruff/format/arch/diff通过；报告`/private/tmp/f059-t246-t247-l1-review.md`，SHA cfa95d41f0715e5de23806666808bfe0b6e2543fea259e4b726eb91323e07300。
 - 189同固定2f0311镜像原PATH command-v退出127；补sbin后/usr/sbin/nginx与真实entrypoint nginx -t成功。日志`/private/tmp/f059-static-path-native-red.log`、`/private/tmp/f059-static-path-native-green.log`。无镜像/Pod原地修改，不将该原生对照计为业务发布通过。
 - 全runtime日志`/private/tmp/f059-static-path-full-runtime.log`；backend生产与6f逐字节保持，既有1764/19skip记录不重标新SHA。
+
+## Task Review: T248/T249 — OCI目录继承权限
+
+**结果：PASS。** 测试单文件先红2/拒绝10绿；修复使用同一lstat结果仅放行SGID目录，再由既有mode&0777剥除，输入不chmod。SUID目录、所有非目录SUID/SGID及链接/硬链接/特殊文件/whiteout边界保持。架构/命名/信息泄漏/设计同步PASS，数据库/序列化API/前端N/A；单文件owner、完整AC、配对依赖PASS。独立只读差异复核确认边界成立；本机沙箱可能去掉SGID的额外实验未算证据。真实189只读统计267个SGID目录、零特殊位普通文件及原失败完整保留。
+
+## Task Review: T250/T251 — OCI系统可执行路径
+
+**结果：PASS。** 三运行时受控crane参数3项先红，再补标准sbin；与T247已真实原生A/B的PATH一致，依赖bin优先不变。无用户可覆写PATH口、base/entrypoint/uid/command/registry不变。七项中架构/命名/信息泄漏/设计同步PASS，数据库/对外序列化/前端N/A；单文件/完整AC/配对依赖PASS。
+
+最终完整runtime1610 passed /13 skipped（33.01s），日志`/private/tmp/f059-oci-final-full-runtime.log`；原SGID完整1607/13skip及两份红例日志保留。Ruff/format/逐文件archguard/diff通过。backend与6f逐字节不变，未重标backend测试SHA。真实新镜像及K8s复验不能由本地通过代替。

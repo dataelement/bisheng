@@ -155,7 +155,10 @@ def write_layer(document, source, environment, destination):
                 if any(part.startswith(".wh.") for part in relative.parts):
                     raise ExecutorError("oci_whiteout_refused")
                 metadata = path.lstat()
-                if metadata.st_mode & (stat.S_ISUID | stat.S_ISGID):
+                # fsGroup makes volume directories inherit SGID; the layer drops it.
+                if metadata.st_mode & stat.S_ISUID or (
+                    metadata.st_mode & stat.S_ISGID and not stat.S_ISDIR(metadata.st_mode)
+                ):
                     raise ExecutorError("oci_privilege_bits_refused")
                 count += 1
                 total += metadata.st_size if stat.S_ISREG(metadata.st_mode) else 0
@@ -244,7 +247,7 @@ def assemble_image(document, source, environment, target, *, work, run=subproces
             "--workdir",
             "/app",
             "--env",
-            "PATH=/opt/venv/bin:/app/node_modules/.bin:/usr/local/bin:/usr/bin:/bin",
+            "PATH=/opt/venv/bin:/app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "--tag",
             target,
         ]

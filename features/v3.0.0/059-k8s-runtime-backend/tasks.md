@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；247 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 242 / 247 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；251 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 246 / 251 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1960,6 +1960,38 @@
   **依赖:** T246
   **配对:** T246
 
+- [x] **T248** — OCI 目录继承权限与危险位配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_oci_assembler.py`
+  **逻辑/验收**：source/environment继承fsGroup的SGID目录可归档且不携带特殊位；SUID目录、SUID/SGID普通文件仍拒绝，既有链接/硬链接/whiteout与特殊文件拒绝保持。
+  **覆盖 AC:** AC-15、AC-16、AC-25、AC-27、AC-28、AC-42、AC-54
+  **依赖:** T247
+  **配对:** T249
+
+- [x] **T249** — OCI 归档移除目录继承的SGID位
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/oci_assembler.py`
+  **逻辑/验收**：仅允许目录的继承SGID，由已有mode &0777去除；目录SUID及所有非目录SUID/SGID继续拒绝，不改OCI根布局、凭据挂载、冻结基础镜像和镜像推送合同。
+  **覆盖 AC:** AC-15、AC-16、AC-25、AC-27、AC-28、AC-42、AC-54
+  **依赖:** T248
+  **配对:** T248
+
+- [x] **T250** — OCI 镜像可执行路径配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_oci_assembler.py`
+  **逻辑/验收**：固定crane配置在三个运行时保留依赖bin优先与标准sbin/bin，static入口可找到/usr/sbin/nginx；不接受用户PATH替换，不改变冻结镜像或command。
+  **覆盖 AC:** AC-24、AC-25、AC-27、AC-28、AC-54
+  **依赖:** T249
+  **配对:** T251
+
+- [x] **T251** — OCI 镜像保留标准系统可执行路径
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/oci_assembler.py`
+  **逻辑/验收**：源码镜像固定PATH补标准sbin，与已实测T247的bundle合同一致；不改base/entrypoint/command/registry/凭据和用户可配置项。
+  **覆盖 AC:** AC-24、AC-25、AC-27、AC-28、AC-54
+  **依赖:** T250
+  **配对:** T250
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -2119,3 +2151,9 @@ T242–T245 L1闭合：992905292与f84415f25同源合流6f254f337；backend两�
 T246/T247现场登记：r10 static probe UID2d74bfe5…全部init成功、app exit127；同固定2f0311镜像在bundle受控PATH无法找到nginx，补全标准sbin后/usr/sbin/nginx与实际entrypoint nginx -t成功。根因为模板PATH遗漏而非缺镜像/源码。240/247、113测试任务；原失败和期限保持，不手工改Pod。
 
 T246/T247 L1闭合：9项bundle运行时/阶段配对先红，模板106、完整runtime1595passed/13skip（33.42s），独立292相关合同及PATH/secret拒绝补核通过；Ruff/format/逐文件guard/diff通过。真实同镜像sbin A/B及entrypoint nginx -t通过不替代K8s复验。242/247、113测试；r10原static失败终态和四资源同UID正常cleanup已冻结，恢复使用独立新attempt，不延长或复活旧操作。
+
+T248/T249现场登记：源码准备70eb72dbbbf44e00a7c536507bfcca35安装及上传完成，组装器oci_privilege_bits_refused；操作failed/cleanupcomplete。只读stat保留scratch34/claimUID47a1e29e-b55f-46ec-955f-759ef174e2b1：267个SGID目录、零带特殊位普通文件，fsGroup继承与固定OCI归档拒绝冲突。仅归档去掉目录SGID，不放行SUID目录或带特殊位文件；D7既定安全合同内实现补漏。242/249、114测试任务。
+
+T250/T251登记：独立审查发现OCI固定PATH与T247修复前完全相同且缺sbin；同固定2f0311静态镜像的原生red127/green nginx -t已证明该路径需求。补齐源码交付相同启动合同，独立配对测试，不改用户镜像模式。242/251、115测试任务。
+
+T248–T251 L1闭合：SGID真实目录2正例先红/10危险位拒绝已绿；OCI PATH三运行时3项先红；最终完整runtime1610passed/13skip（33.01s），Ruff/format/逐文件guard/diff通过。产品改动仅oci_assembler一处权限分类和一条PATH；既有来源/凭据/固定布局不变。246/251、115测试，真实源码新attempt和能力报告刷新仍待执行。

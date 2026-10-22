@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-15、AC-16、AC-25、AC-27、AC-28、AC-42、AC-54."""
+"""覆盖 AC: AC-15、AC-16、AC-24、AC-25、AC-27、AC-28、AC-42、AC-54."""
 
 import json
 import os
@@ -422,3 +422,77 @@ def test_docker_hub_result_normalization_keeps_the_exact_repository(tree):
     values[0] = "index.docker.io/other/apps@sha256:" + "b" * 64
     with pytest.raises(ExecutorError, match="push_digest_unconfirmed"):
         assemble_image(document(), source, environment, "dataelement/apps:operation", work=root, run=run)
+
+
+@pytest.mark.parametrize("tree_name", ["source", "environment"])
+def test_inherited_fsgroup_directory_bit_is_removed_from_oci_layer(tree, tree_name):
+    from runtime_manager.oci_assembler import write_layer
+
+    source, environment, root = tree
+    base = source if tree_name == "source" else environment
+    inherited = base / "group-owned"
+    inherited.mkdir()
+    (inherited / "module.py").write_text("value = 1\n")
+    (inherited / "run").write_text("#!/bin/sh\nexit 0\n")
+    (inherited / "module.py").chmod(0o644)
+    (inherited / "run").chmod(0o755)
+    inherited.chmod(0o2775)
+    assert inherited.stat().st_mode & 0o2000
+
+    target = root / "layer.tar"
+    write_layer(document(), source, environment, target)
+
+    prefix = "app" if tree_name == "source" else "opt/venv"
+    with tarfile.open(target) as archive:
+        assert archive.getmember(prefix + "/group-owned").mode == 0o775
+        assert archive.getmember(prefix + "/group-owned/module.py").mode == 0o644
+        assert archive.getmember(prefix + "/group-owned/run").mode == 0o755
+        assert all(item.mode & 0o6000 == 0 for item in archive.getmembers())
+    assert inherited.stat().st_mode & 0o2000  # Do not change the readonly input tree.
+
+
+@pytest.mark.parametrize("tree_name", ["source", "environment"])
+@pytest.mark.parametrize(
+    "kind,mode", [("file", 0o4755), ("file", 0o2755), ("file", 0o6755), ("directory", 0o4755), ("directory", 0o6755)]
+)
+def test_oci_special_permission_bits_remain_refused(tree, tree_name, kind, mode):
+    from runtime_manager.oci_assembler import write_layer
+
+    source, environment, root = tree
+    base = source if tree_name == "source" else environment
+    dangerous = base / "dangerous"
+    if kind == "directory":
+        dangerous.mkdir()
+    else:
+        dangerous.write_text("not executable during assembly\n")
+    dangerous.chmod(mode)
+    assert dangerous.stat().st_mode & 0o6000 == mode & 0o6000
+    with pytest.raises(ExecutorError, match="oci_privilege_bits_refused"):
+        write_layer(document(), source, environment, root / "layer.tar")
+
+
+@pytest.mark.parametrize("language", ["python3.11", "node20", "static"])
+def test_assembled_image_preserves_dependency_and_system_binary_paths(tree, language):
+    from runtime_manager.oci_assembler import assemble_image
+
+    source, environment, root = tree
+    (source / "public").mkdir()
+    (source / "public/index.html").write_text("<h1>Static application</h1>")
+    plan = document()
+    plan["runtime"] = language
+    seen = []
+
+    def run(args, **kwargs):
+        seen.append(args)
+        if "config" in args:
+            return SimpleNamespace(stdout=json.dumps({"os": "linux", "architecture": "amd64"}), returncode=0)
+        return SimpleNamespace(stdout="registry.example/apps@sha256:" + "b" * 64 + "\n", returncode=0)
+
+    assemble_image(plan, source, environment, "registry.example/apps:operation", work=root, run=run)
+    mutation = next(command for command in seen if "mutate" in command)
+    path = mutation[mutation.index("--env") + 1]
+    assert (
+        path == "PATH=/opt/venv/bin:/app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    )
+    assert mutation[mutation.index("--entrypoint") + 1] == "/usr/local/bin/bisheng-app-entrypoint"
+    assert mutation[mutation.index("--user") + 1] == "10001:10001"

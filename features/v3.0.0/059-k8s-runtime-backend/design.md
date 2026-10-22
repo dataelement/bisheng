@@ -88,7 +88,7 @@
 ### D7：兼容源码模式使用受限 OCI 组装
 
 - **备选**：节点 Docker socket/DinD；容器内通用 rootless BuildKit；准备好应用内容后追加 OCI 层。
-- **选定**：第三种，保持 `source-image` 交付模式及实际应用镜像输出。复用平台的语言准备规则、入口模板与冻结环境，在受限 Pod 完成安装和编译后，可信组装 Pod 把代码、venv/Node 产物和入口文件加入冻结基础镜像，配置既有启动语义并推送；不能执行用户 Dockerfile。组装器只接受固定路径布局，拒绝路径逃逸、设备、setuid、外部硬链接和用户 whiteout；仅允许受信工具链定义的镜像内符号链接，不能把用户 tar 直接追加到镜像根。
+- **选定**：第三种，保持 `source-image` 交付模式及实际应用镜像输出。复用平台的语言准备规则、入口模板与冻结环境，在受限 Pod 完成安装和编译后，可信组装 Pod 把代码、venv/Node 产物和入口文件加入冻结基础镜像，配置既有启动语义并推送；不能执行用户 Dockerfile。组装器只接受固定路径布局，拒绝路径逃逸、设备、setuid、带setgid的非目录、外部硬链接和用户 whiteout；卷目录继承的setgid只在归档时按普通权限去除，不修改只读输入；仅允许受信工具链定义的镜像内符号链接，不能把用户 tar 直接追加到镜像根。
 - **原因**：平台现有 Dockerfile 是固定 Python/Node/static 模板，不开放任意 Dockerfile。OCI 层追加本身不需运行容器守护进程；普通代码发布仍走 bundle，不调用此组件。[crane append](https://github.com/google/go-containerregistry/blob/main/cmd/crane/doc/crane_append.md)、[crane mutate](https://github.com/google/go-containerregistry/blob/main/cmd/crane/doc/crane_mutate.md)。BuildKit 的官方 rootless 容器示例需要额外系统调用/进程沙箱条件，不能假定在 189 或 Restricted 基线下直接成立。[rootless 前置](https://github.com/moby/buildkit/blob/master/docs/rootless.md)
 - **重新考虑条件**：产品将来批准任意 Dockerfile 或系统包安装时，重新设计构建沙箱；不通过临时放开 privileged、提权、宿主挂载或内核配置实现。
 - **兼容验收门**：Python 的 Procfile/默认入口、Node install/build/prune、static 输出选择和 SDK 必须与 Docker 原兼容路径逐项比较；不能只验证“镜像能启动”。依赖或系统库超出冻结 profile 时，审批前明确拒绝并指向新环境或完整镜像。
@@ -788,3 +788,7 @@ T240/T241最终实现d7c0cc4fd：首轮独立复算发现503过早failed会阻�
 T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtime f84415f25）；原生100m对照仅解释导入成本，完整runtime1586/13skip与backend1764/19skip均通过。实际新Pod完整60秒链路另验，旧4b25失败不改成功；本轮无新ARM/公开发行。
 
 2026-10-23 T246/T247：r10 static真实probe全部init成功、app nginx:notfound/exit127，模板bundle PATH遗漏/usr/sbin。仅补标准系统目录，保留/opt/venv/bin与node_modules/.bin优先、冻结entrypoint/args、image环境及PATH注入限制。9配对先红→模板106/完整runtime1595/13skip及独立292通过；同2f0311镜像原生A/B与entrypoint配置测试确认量级和因果，真实新attempt另验。242/247任务L1完成。
+
+2026-10-23 T248/T249：实际source-image安装/上传成功，组装拒绝fsGroup继承的SGID目录。只允许目录SGID在归档时去除，SUID目录与特殊位文件继续拒绝；固定布局/冻结基础镜像/凭据边界保持。属于D7实现修正，真实新attempt复验单列。
+
+2026-10-23 T250/T251：源码镜像的受控PATH同样补齐标准sbin目录，与T247的bundle保持相同依赖bin优先及系统工具可达性；静态基础镜像实际nginx位于/usr/sbin。固定OCI启动语义不新增配置口，完整用户镜像不变。

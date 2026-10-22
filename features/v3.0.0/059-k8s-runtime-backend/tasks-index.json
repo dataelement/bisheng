@@ -6252,6 +6252,106 @@
       "review": "PASS"
     },
     {
+      "id": "T248",
+      "wave": 7,
+      "kind": "测试",
+      "title": "OCI 目录继承权限与危险位配对",
+      "files": [
+        "src/runtime-manager/tests/test_oci_assembler.py"
+      ],
+      "logic": "source/environment继承fsGroup的SGID目录可归档且不携带特殊位；SUID目录、SUID/SGID普通文件仍拒绝，既有链接/硬链接/whiteout与特殊文件拒绝保持。",
+      "acs": [
+        "AC-15",
+        "AC-16",
+        "AC-25",
+        "AC-27",
+        "AC-28",
+        "AC-42",
+        "AC-54"
+      ],
+      "depends": [
+        "T247"
+      ],
+      "pair": "T249",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T249",
+      "wave": 7,
+      "kind": "实现",
+      "title": "OCI 归档移除目录继承的SGID位",
+      "files": [
+        "src/runtime-manager/runtime_manager/oci_assembler.py"
+      ],
+      "logic": "仅允许目录的继承SGID，由已有mode &0777去除；目录SUID及所有非目录SUID/SGID继续拒绝，不改OCI根布局、凭据挂载、冻结基础镜像和镜像推送合同。",
+      "acs": [
+        "AC-15",
+        "AC-16",
+        "AC-25",
+        "AC-27",
+        "AC-28",
+        "AC-42",
+        "AC-54"
+      ],
+      "depends": [
+        "T248"
+      ],
+      "pair": "T248",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T250",
+      "wave": 7,
+      "kind": "测试",
+      "title": "OCI 镜像可执行路径配对",
+      "files": [
+        "src/runtime-manager/tests/test_oci_assembler.py"
+      ],
+      "logic": "固定crane配置在三个运行时保留依赖bin优先与标准sbin/bin，static入口可找到/usr/sbin/nginx；不接受用户PATH替换，不改变冻结镜像或command。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-27",
+        "AC-28",
+        "AC-54"
+      ],
+      "depends": [
+        "T249"
+      ],
+      "pair": "T251",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T251",
+      "wave": 7,
+      "kind": "实现",
+      "title": "OCI 镜像保留标准系统可执行路径",
+      "files": [
+        "src/runtime-manager/runtime_manager/oci_assembler.py"
+      ],
+      "logic": "源码镜像固定PATH补标准sbin，与已实测T247的bundle合同一致；不改base/entrypoint/command/registry/凭据和用户可配置项。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-27",
+        "AC-28",
+        "AC-54"
+      ],
+      "depends": [
+        "T250"
+      ],
+      "pair": "T250",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",
