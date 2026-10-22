@@ -170,7 +170,7 @@ def runtime_snapshot():
         "overcommit_ratio": 1.0,
     }
     capabilities = service.runtime.capabilities()
-    probe = service.runtime.document.get("probe_report", {})
+    probe = service.runtime.probe_report()
     available = capabilities.get("orchestration_available") is True
     checks.append(
         {
