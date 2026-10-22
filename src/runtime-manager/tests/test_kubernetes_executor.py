@@ -1,21 +1,24 @@
-"""覆盖 AC: AC-04、AC-05、AC-07、AC-08、AC-09、AC-11、AC-18、AC-30、AC-34、AC-33、AC-35、AC-43、AC-48、AC-49、AC-50、AC-52、AC-24、AC-25、AC-36、AC-55."""
+"""覆盖 AC: AC-04、AC-05、AC-07、AC-08、AC-09、AC-11、AC-18、AC-30、AC-34、AC-33、AC-35、AC-43、AC-48、AC-49、AC-50、AC-52、AC-24、AC-25、AC-36、AC-55、AC-01、AC-13、AC-15."""
 
 import base64
 import copy
 import importlib.util
 import json
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+import httpx
 import pytest
 
 from runtime_manager.config import Config
 from runtime_manager.k8s_client import KubernetesAPIError
 from runtime_manager.k8s_config import KubernetesConfig
 from runtime_manager.k8s_templates import RESOURCE_LABEL, STOP_FINALIZER, production_name
-from runtime_manager.platform_client import PlatformError
+from runtime_manager.platform_client import PREFIX, PlatformClient, PlatformError
 
 IMAGE = "example.invalid/python@sha256:" + "a" * 64
 HELPER = "example.invalid/helper@sha256:" + "b" * 64
@@ -27,6 +30,9 @@ class Clock:
         self.value = 1792555200.0
 
     def time(self):
+        return self.value
+
+    def monotonic(self):
         return self.value
 
     def sleep(self, seconds):
@@ -41,31 +47,63 @@ class Platform:
         self.clock, self.events = clock, events
         self.epoch = 0
         self.holder = ""
+        self.lease_until = 0.0
+        self.fences = []
         self.rows = {}
         self.operations = {}
         self.delegations = []
 
     def node_snapshot(self):
         return {
-            "node": {"controller_epoch": self.epoch, "controller_holder": self.holder},
+            "node": {
+                "node_id": "node-a",
+                "controller_epoch": self.epoch,
+                "controller_holder": self.holder,
+                "lease_until": self.clock.iso(self.lease_until - self.clock.value) if self.lease_until else None,
+            },
             "operations": list(self.operations.values()),
         }
 
+    def _receipt(self):
+        return {
+            "node_id": "node-a",
+            "holder_id": self.holder,
+            "controller_epoch": self.epoch,
+            "lease_until": self.clock.iso(self.lease_until - self.clock.value),
+        }
+
+    def _fence(self, receipt):
+        if (receipt["holder_id"], receipt["controller_epoch"]) != (
+            self.holder,
+            self.epoch,
+        ) or self.lease_until <= self.clock.value:
+            raise PlatformError("controller_lease_lost", 409)
+        self.fences.append(dict(receipt))
+
     def claim_controller(self, holder_id, expected_epoch):
-        assert expected_epoch == self.epoch
+        if expected_epoch != self.epoch:
+            raise PlatformError("controller_epoch_conflict", 409)
+        if self.lease_until > self.clock.value:
+            if holder_id != self.holder:
+                raise PlatformError("controller_lease_held", 409)
+            return self._receipt()
         self.epoch += 1
         self.holder = holder_id
+        self.lease_until = self.clock.value + 30
         self.events.append(("claim", self.epoch))
-        return self.renew_controller(holder_id, self.epoch)
+        return self._receipt()
 
     def renew_controller(self, holder_id, controller_epoch):
-        assert (holder_id, controller_epoch) == (self.holder, self.epoch)
-        return {"holder_id": holder_id, "controller_epoch": self.epoch, "lease_until": self.clock.iso(30)}
+        self._fence({"holder_id": holder_id, "controller_epoch": controller_epoch})
+        self.lease_until = self.clock.value + 30
+        self.events.append(("renew", self.epoch))
+        return self._receipt()
 
     def operation(self, operation_id):
         return copy.deepcopy(self.operations[operation_id])
 
     def register_resource(self, document):
+        self._fence({key: document[key] for key in ("holder_id", "controller_epoch")})
         self.events.append(("intent", document["template"]["kind"], document["resource_ref"]))
         op = self.operations[document["operation_id"]]
         row = {
@@ -95,6 +133,8 @@ class Platform:
         previous = self.rows.get(row["resource_ref"])
         if previous:
             assert previous["template"] == row["template"]
+            if previous["uid"] is None and previous["stop_requested_at"] is None:
+                previous["controller_epoch"] = document["controller_epoch"]
             return copy.deepcopy(previous)
         self.rows[row["resource_ref"]] = row
         return copy.deepcopy(row)
@@ -108,6 +148,7 @@ class Platform:
         return [copy.deepcopy(row) for row in self.rows.values() if row["operation_id"] == operation_id]
 
     def observe_resource(self, resource_ref, document):
+        self._fence({key: document[key] for key in ("holder_id", "controller_epoch")})
         self.events.append((document["action"], resource_ref))
         row = self.rows[resource_ref]
         if document["action"] == "bind":
@@ -115,8 +156,10 @@ class Platform:
                 assert row["uid"] == document["uid"]
             row["uid"] = document["uid"]
             row["node_name"] = document.get("node_name", "")
+            row["controller_epoch"] = document["controller_epoch"]
             row["observed_state"] = document.get("runtime_state", row["observed_state"])
         elif document["action"] == "stop":
+            row["controller_epoch"] = document["controller_epoch"]
             row["stop_requested_at"] = row["stop_requested_at"] or self.clock.iso()
             if row["stop_state"] != "confirmed":
                 row["stop_state"] = "requested"
@@ -149,7 +192,7 @@ class Platform:
         self.events.append(("fact", phase, sequence))
         op = self.operations[operation["operation_id"]]
         assert sequence == op.get("fact_sequence", 0) + 1
-        assert detail["controller"]["controller_epoch"] == self.epoch
+        self._fence(detail["controller"])
         op.update(fact_sequence=sequence, result=copy.deepcopy(detail))
         return copy.deepcopy(op)
 
@@ -835,3 +878,223 @@ def test_retry_refuses_a_recorded_pod_outside_the_frozen_operation(runtime, fiel
     platform.rows[first["exec_ref"]][field] = "foreign"
     with pytest.raises(ExecutorError, match="frozen_resource_scope_mismatch"):
         executor.launch(operation)
+
+
+@pytest.fixture
+def controller_http(runtime):
+    """Real client status/reason parsing over the repository's strict 30s lease model."""
+    executor, server, _, _, _, clock = runtime
+    state = SimpleNamespace(failure=None, read_failure=False, calls=[])
+
+    def reply(request):
+        path = request.url.path.removeprefix(PREFIX)
+        state.calls.append(path)
+        try:
+            if path == "/nodes/plan":
+                if state.read_failure:
+                    return httpx.Response(503, json={"error": {"reason": "fixture_read_unavailable"}})
+                return httpx.Response(200, json=server.node_snapshot())
+            body = json.loads(request.content)
+            if path == "/controllers/claim":
+                receipt = server.claim_controller(**body)
+                if state.failure == "claim-response-loss":
+                    state.failure = None
+                    raise httpx.ReadTimeout("fixture lost claim response")
+            elif path == "/controllers/renew":
+                failure, state.failure = state.failure, None
+                if failure == "unavailable":
+                    raise PlatformError("fixture_unavailable", 503)
+                if failure == "held":
+                    raise PlatformError("controller_lease_held", 409)
+                if failure == "forbidden":
+                    raise PlatformError("service_role_refused", 403)
+                if failure == "wrong-conflict":
+                    raise PlatformError("controller_fact_fence_stale", 409)
+                receipt = server.renew_controller(**body)
+                if failure == "renew-response-loss":
+                    raise httpx.ReadTimeout("fixture lost renew response")
+                if failure == "slow-response":
+                    clock.sleep(21)
+            else:
+                pytest.fail("unexpected controller endpoint")
+            return httpx.Response(200, json=receipt)
+        except PlatformError as exc:
+            return httpx.Response(exc.status, json={"error": {"reason": str(exc)}})
+
+    client = PlatformClient(executor.config, transport=httpx.MockTransport(reply))
+    executor.platform = client
+    yield executor, server, state, clock
+    client.close()
+
+
+def test_controller_recovers_after_idle_expiry_with_fresh_epoch(controller_http):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    executor, server, state, clock = controller_http
+    first = executor._controller()
+    clock.sleep(31)
+    state.calls.clear()
+    second = executor._controller()
+    assert second == {"holder_id": executor.holder_id, "controller_epoch": first["controller_epoch"] + 1}
+    assert state.calls == ["/controllers/renew", "/nodes/plan", "/controllers/claim", "/controllers/renew"]
+    assert server.lease_until > clock.value
+
+
+@pytest.mark.parametrize("failure", ["unavailable", "wrong-conflict", "renew-response-loss", "held", "forbidden"])
+def test_uncertain_or_other_renew_failure_reads_fresh_but_refuses_current_action(controller_http, failure):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    executor, server, state, clock = controller_http
+    first = executor._controller()
+    clock.sleep(11)
+    state.failure = failure
+    state.calls.clear()
+    with pytest.raises(PlatformError):
+        executor._controller()
+    assert state.calls == ["/controllers/renew", "/nodes/plan"]
+    assert executor.controller_epoch == 0 and not executor.renew_at
+    assert executor._controller() == first
+    assert server.epoch == first["controller_epoch"]
+
+
+def test_unknown_claim_response_is_reread_without_allowing_current_action(controller_http):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    executor, server, state, _ = controller_http
+    state.failure = "claim-response-loss"
+    with pytest.raises(PlatformError, match="platform_unreachable"):
+        executor._controller()
+    assert state.calls == ["/nodes/plan", "/controllers/claim", "/nodes/plan"]
+    assert server.epoch == 1 and executor.controller_epoch == 0
+    assert executor._controller()["controller_epoch"] == 1
+    assert state.calls[-3:] == ["/nodes/plan", "/controllers/claim", "/controllers/renew"]
+
+
+@pytest.mark.parametrize("offset", [-3600, 3600])
+def test_controller_cache_uses_monotonic_time_not_server_wall_clock(controller_http, monkeypatch, offset):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    executor, server, state, clock = controller_http
+    first = executor._controller()
+    monkeypatch.setattr(clock, "time", lambda: clock.value + offset)
+    clock.sleep(11)
+    assert executor._controller() == first
+    assert state.calls[-1] == "/controllers/renew"
+    assert server.lease_until == clock.value + 30
+
+
+def test_controller_rejects_a_response_that_consumed_its_safe_lease_budget(controller_http):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    from runtime_manager.executors.protocol import ExecutorError
+
+    executor, _, state, _ = controller_http
+    state.failure = "slow-response"
+    with pytest.raises(ExecutorError, match="controller_lease_receipt_expired"):
+        executor._controller()
+    assert executor.controller_epoch == 0
+    assert state.calls[-1] == "/nodes/plan"
+
+
+def test_idempotent_claim_renews_the_existing_lease_before_caching(controller_http):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    executor, server, state, clock = controller_http
+    server.claim_controller(executor.holder_id, 0)
+    clock.sleep(29)
+    assert executor._controller()["controller_epoch"] == 1
+    assert state.calls == ["/nodes/plan", "/controllers/claim", "/controllers/renew"]
+    assert server.lease_until == clock.value + 30
+
+
+def test_concurrent_idle_recovery_claims_only_one_new_epoch(controller_http):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    executor, server, state, clock = controller_http
+    executor._controller()
+    clock.sleep(31)
+    state.calls.clear()
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        receipts = list(pool.map(lambda _: executor._controller(), range(8)))
+    assert all(receipt == receipts[0] for receipt in receipts)
+    assert server.epoch == 2 and state.calls.count("/controllers/claim") == 1
+    assert state.calls.count("/controllers/renew") == 2
+
+
+def test_new_epoch_preserves_existing_uid_then_fences_observation_cleanup_and_facts(runtime):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    from runtime_manager.operations import OperationExecutor
+
+    executor, platform, cluster, operation, _, clock = runtime
+    target = executor.launch(operation)
+    ref = target["exec_ref"]
+    before = platform.resource(ref)
+    assert before["controller_epoch"] == 1 and before["stop_state"] == "held"
+    clock.sleep(31)
+    assert executor._controller()["controller_epoch"] == 2
+    unchanged = platform.resource(ref)
+    assert (unchanged["uid"], unchanged["controller_epoch"], unchanged["stop_state"]) == (before["uid"], 1, "held")
+    assert executor.observe(ref)["ready"]
+    marker = len(platform.fences)
+    executor.request_stop(ref, operation)
+    assert executor.confirm_stopped(ref)["stopped"]
+    assert executor.cleanup(operation)["complete"]
+    service = SimpleNamespace(config=executor.config, runtime=executor, platform=platform)
+    OperationExecutor.report(service, operation, "completed", detail={"stopped": True, "cleanup_complete": True})
+    assert all(fence == {"holder_id": executor.holder_id, "controller_epoch": 2} for fence in platform.fences[marker:])
+    assert platform.resource(ref)["uid"] == before["uid"]
+    assert not any(kind == "pods" for kind, _ in cluster.objects)
+
+
+def test_live_other_holder_blocks_existing_writer_mutations_and_facts(runtime):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    from runtime_manager.operations import OperationExecutor
+
+    executor, platform, cluster, operation, events, clock = runtime
+    ref = executor.launch(operation)["exec_ref"]
+    clock.sleep(31)
+    platform.claim_controller("other-live-holder", platform.epoch)
+    before = copy.deepcopy((platform.rows, cluster.objects))
+    marker = len(events)
+    with pytest.raises(PlatformError, match="controller_lease_held"):
+        executor.request_stop(ref, operation)
+    service = SimpleNamespace(config=executor.config, runtime=executor, platform=platform)
+    with pytest.raises(PlatformError, match="controller_lease_held"):
+        OperationExecutor.report(service, operation, "failed")
+    assert (platform.rows, cluster.objects) == before
+    assert not any(event[0] in {"stop", "stopped", "create", "delete", "fact"} for event in events[marker:])
+
+
+def test_uncertain_renew_and_failed_fresh_read_never_reclaim(controller_http):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    executor, _, state, clock = controller_http
+    executor._controller()
+    clock.sleep(11)
+    state.failure, state.read_failure = "renew-response-loss", True
+    state.calls.clear()
+    with pytest.raises(PlatformError, match="platform_unreachable"):
+        executor._controller()
+    assert executor.controller_epoch == 0
+    assert state.calls == ["/controllers/renew", "/nodes/plan"]
+
+
+def test_recovered_controller_only_cleans_an_expired_prepare_without_starting_it(runtime, monkeypatch):
+    """覆盖 AC: AC-01、AC-13、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-55."""
+    from runtime_manager.operations import OperationExecutor
+
+    executor, platform, cluster, operation, events, clock = runtime
+    operation.update(kind="prepare", stage="admitted", deadline=clock.iso(20))
+    executor._controller()
+    clock.sleep(31)
+
+    def refuse_expired(operation_id):
+        assert operation_id == operation["operation_id"]
+        assert datetime.fromisoformat(operation["deadline"]).timestamp() <= clock.value
+        raise PlatformError("operation_expired", 409)
+
+    monkeypatch.setattr(platform, "claim", refuse_expired, raising=False)
+    monkeypatch.setattr(executor, "prepare", lambda *_: pytest.fail("expired prepare must never start"))
+    service = OperationExecutor(executor.config, platform=platform, runtime=executor, clock=clock)
+    try:
+        service.execute(operation["operation_id"])
+    finally:
+        service.close()
+    assert executor.controller_epoch == 2
+    facts = [event for event in events if event[0] == "fact"]
+    assert len(facts) == 1 and facts[0][1] == "failed"
+    assert platform.operations[operation["operation_id"]]["result"]["cleanup_complete"] is True
+    assert platform.operations[operation["operation_id"]]["result"]["stopped"] is True
+    assert not platform.rows and not cluster.objects
