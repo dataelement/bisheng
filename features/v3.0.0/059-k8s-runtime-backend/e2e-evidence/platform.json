@@ -1,14 +1,14 @@
 {
   "schema": "f059-platform-evidence/v1",
-  "recorded_at": "2026-10-22T19:19:33.945726+00:00",
+  "recorded_at": "2026-10-22T20:22:21.252458+00:00",
   "state": "python_v1_online_observe_passed_full_suite_continuing",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:b2288f642fbabc7e2ada1ab2fd4d9bd78a6b2ce96c24d59bb51c4d0044f34c82",
+    "manager_source": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:59692b82ae7bd1d806e741a4c86f165bd472301feec31b06d3dc66306d00eb3b",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
@@ -19,8 +19,13 @@
       "bisheng/app_runtime/domain/services/runtime_data_grant_service.py",
       "bisheng/app_runtime/domain/services/runtime_data_session_service.py"
     ],
-    "helm_revision": 21,
-    "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927"
+    "helm_revision": 22,
+    "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
+    "backend_data_cpu_source": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+    "backend_data_cpu_files": [
+      "bisheng/app_runtime/domain/services/runtime_data_session_service.py",
+      "bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py"
+    ]
   },
   "attempts": [
     {
@@ -678,5 +683,117 @@
       "T244",
       "T245"
     ]
+  },
+  "offline_data_cpu100_success": {
+    "ledger": {
+      "resource_ref": "52882475-2fcb-5869-923a-604b275ca9fd",
+      "pod_uid": "776ae57a-b32a-4bd2-9048-4efdf0d47323",
+      "stop_state": "confirmed",
+      "cleanup_state": "complete",
+      "stop_evidence_kind": "kubelet_terminal",
+      "operation_id": "241db50ca0ab4b949440217abf7e5356",
+      "status": "completed",
+      "cleanup_status": "complete",
+      "deadline": "2026-10-22T20:07:59",
+      "tier": {
+        "memory_mb": 128,
+        "cpu_millicores": 100
+      },
+      "data_action_finished": "done"
+    },
+    "timeline": {
+      "operation_id": "241db50ca0ab4b949440217abf7e5356",
+      "create_time": "2026-10-22T20:06:59",
+      "deadline": "2026-10-22T20:07:59",
+      "status": "completed",
+      "cleanup_status": "complete",
+      "data_action_finished": "done",
+      "charged_memory_mb": 128,
+      "charged_cpu_millicores": 100,
+      "reservation_state": "released",
+      "facts": [
+        {
+          "phase": "starting",
+          "at": "2026-10-22T20:06:59"
+        },
+        {
+          "phase": "ready",
+          "at": "2026-10-22T20:07:12"
+        },
+        {
+          "phase": "completed",
+          "at": "2026-10-22T20:07:16"
+        }
+      ],
+      "total_seconds": 17.0,
+      "ready_seconds": 13.0
+    },
+    "pod": {
+      "uid": "776ae57a-b32a-4bd2-9048-4efdf0d47323",
+      "name": "app-6153b2cdf43a4bbef23a5d0a47e2a916ca8a0082",
+      "namespace": "e2e-f059-apps",
+      "created_at": "2026-10-22T20:06:59Z",
+      "resource_ref": "52882475-2fcb-5869-923a-604b275ca9fd",
+      "containers": [
+        {
+          "name": "data-helper",
+          "resources": {
+            "requests": {
+              "ephemeral-storage": "8Gi",
+              "cpu": "100m",
+              "memory": "128Mi"
+            },
+            "limits": {
+              "ephemeral-storage": "8Gi",
+              "cpu": "100m",
+              "memory": "128Mi"
+            }
+          }
+        }
+      ],
+      "init": [
+        {
+          "name": "data-layout",
+          "resources": {
+            "requests": {
+              "ephemeral-storage": "8Gi",
+              "cpu": "100m",
+              "memory": "128Mi"
+            },
+            "limits": {
+              "ephemeral-storage": "8Gi",
+              "cpu": "100m",
+              "memory": "128Mi"
+            }
+          }
+        }
+      ]
+    },
+    "response_check": "phase checked; original shared API assertions passed",
+    "boundary": "same-image CPU parameter correction; original 60-second total and cleanup-before-response unchanged"
+  },
+  "first_recovery_after_timed_out_stop": {
+    "operation_id": "d5c5e311f5044dc89659764493868cb8",
+    "version_id": "ba5d47d9369540df9d5219adc72a55bf",
+    "status": "completed",
+    "cleanup_status": "complete",
+    "row_comparison": "stopped_to_resumed equal",
+    "original_stop_status_unchanged": "timed_out",
+    "journal_event": "r10-recovery-resume passed"
+  },
+  "new_independent_cycle": {
+    "operation_id": "a89bbe4dfe99484faaa6308d8910aeea",
+    "version_id": "ba5d47d9369540df9d5219adc72a55bf",
+    "event": "stop-resume passed",
+    "boundary": "new independent stop/resume; not rewriting original failed cycle"
+  },
+  "current_business_batch": {
+    "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-cycle-resumed.json",
+    "log": "/opt/e2e-f059/logs/platform-k189r10-cycle-cpu100.log",
+    "state": "in_progress",
+    "python_v2_version": "a1c22f4e6de448dab2783ffd499568ef",
+    "python_v2_stage_observed": "deploy starting after precheck and approval",
+    "python_v2_operation_id": "462c127e015248ab9b9cd512be8f1dc8",
+    "remaining": "complete v2 access; Node/static/source-image/full-image/expected dependency failure; stopped edit/export and fault acceptance"
   }
 }

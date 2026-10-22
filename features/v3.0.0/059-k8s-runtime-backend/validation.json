@@ -1,6 +1,6 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T20:06:03.519690+00:00",
+  "recorded_at": "2026-10-22T20:22:21.254431+00:00",
   "validated_source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
   "sdd": {
     "spec_confirmed": true,
@@ -966,26 +966,13 @@
       "post_retries": false
     },
     "current_business_batch": {
-      "batch": "k189r10",
-      "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
-      "production_runtime_identical_to_image_source": "a06b281b2ada8cfa15cb79c29fad0044408e4db9",
-      "profile_revision": 2,
-      "stage": "platform",
-      "scenarios": 6,
-      "result": "python_v1_online_and_observe_passed_continuation_running",
-      "new_arm_run": false,
-      "verified_tls": true,
-      "explicit_public_ca": true,
-      "failed_operation_id": "d9729fe5c905480bbfd2cf796f344a97",
-      "source_after_maintenance_fix": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
-      "manual_one_shot_receipt": "/opt/e2e-f059/evidence/k189r10-manual-publish-once.json",
-      "original_suite_timeout_seconds": 900,
-      "original_suite_deadline_extended": false,
-      "resumed_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-resumed.json",
-      "parent_journal_sha256": "3a2961d24f6428cc4ee268e166372c7cc404237079441985f837ea4788f773f5",
-      "manual_receipt_sha256": "299c8b4816a248611c4ae114cb414eaf528324eb362106bafef312a1678f8a55",
-      "resumed_script_sha256": "a61be39364416261f9e5df8770e146f4bef943d28266f1e6943e73631b661bc0",
-      "original_suite_timeout_preserved": true
+      "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-cycle-resumed.json",
+      "log": "/opt/e2e-f059/logs/platform-k189r10-cycle-cpu100.log",
+      "state": "in_progress",
+      "python_v2_version": "a1c22f4e6de448dab2783ffd499568ef",
+      "python_v2_stage_observed": "deploy starting after precheck and approval",
+      "python_v2_operation_id": "462c127e015248ab9b9cd512be8f1dc8",
+      "remaining": "complete v2 access; Node/static/source-image/full-image/expected dependency failure; stopped edit/export and fault acceptance"
     },
     "business_batch_history": [
       {
@@ -1244,6 +1231,98 @@
         "cpu_seconds": 0.697129728
       },
       "boundary": "isolated same-image import measurement, not new K8s Pod acceptance"
+    },
+    "current_native_deployment": {
+      "backend": {
+        "files": {
+          "bisheng/app_runtime/domain/services/runtime_data_session_service.py": "ca6eb28964b717f0744ae2db4d5ab11ec2541563b40e49035be50e49fb471626",
+          "bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py": "e74775a5837014f0c608a1efd306b19d021d2a11de54d2e95a7b944c9df6b0ef"
+        },
+        "backend_and_worker_restarted": true,
+        "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+        "openfga_unchanged": true,
+        "public_env_http_status": 200
+      },
+      "helm_revision": 22,
+      "image": {
+        "manager_image_id": "sha256:604747e7fb7d833859305bd093bc5dc42c5cfb9feb84a1b1dee1c53af30fa634",
+        "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:59692b82ae7bd1d806e741a4c86f165bd472301feec31b06d3dc66306d00eb3b",
+        "public_push": false,
+        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-24"
+      },
+      "deployment": {
+        "descriptor_uid_unchanged": true,
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:59692b82ae7bd1d806e741a4c86f165bd472301feec31b06d3dc66306d00eb3b",
+        "helm_upgrade_completed": true,
+        "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+        "descriptor_data_unchanged": true,
+        "helper_and_profile_images_unchanged": true,
+        "app_proxy_unchanged": true
+      },
+      "native": {
+        "build_exit": 0,
+        "import_smoke_exit": 0,
+        "public_push": false,
+        "manager_image_id": "sha256:604747e7fb7d833859305bd093bc5dc42c5cfb9feb84a1b1dee1c53af30fa634",
+        "platform": "linux/amd64",
+        "source_revision": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+        "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+        "changed_runtime_files": [
+          "runtime_manager/k8s_templates.py"
+        ],
+        "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+        "preceding_manager_source": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
+        "schema": "f059-native-manager/v1"
+      }
+    },
+    "offline_data_cpu100_success": {
+      "ledger": {
+        "resource_ref": "52882475-2fcb-5869-923a-604b275ca9fd",
+        "pod_uid": "776ae57a-b32a-4bd2-9048-4efdf0d47323",
+        "stop_state": "confirmed",
+        "cleanup_state": "complete",
+        "stop_evidence_kind": "kubelet_terminal",
+        "operation_id": "241db50ca0ab4b949440217abf7e5356",
+        "status": "completed",
+        "cleanup_status": "complete",
+        "deadline": "2026-10-22T20:07:59",
+        "tier": {
+          "memory_mb": 128,
+          "cpu_millicores": 100
+        },
+        "data_action_finished": "done"
+      },
+      "timeline": {
+        "operation_id": "241db50ca0ab4b949440217abf7e5356",
+        "create_time": "2026-10-22T20:06:59",
+        "deadline": "2026-10-22T20:07:59",
+        "status": "completed",
+        "cleanup_status": "complete",
+        "data_action_finished": "done",
+        "charged_memory_mb": 128,
+        "charged_cpu_millicores": 100,
+        "reservation_state": "released",
+        "facts": [
+          {
+            "phase": "starting",
+            "at": "2026-10-22T20:06:59"
+          },
+          {
+            "phase": "ready",
+            "at": "2026-10-22T20:07:12"
+          },
+          {
+            "phase": "completed",
+            "at": "2026-10-22T20:07:16"
+          }
+        ],
+        "total_seconds": 17.0,
+        "ready_seconds": 13.0
+      },
+      "pod_uid": "776ae57a-b32a-4bd2-9048-4efdf0d47323",
+      "cpu_requests_and_limits": "100m per init/helper; sequential peak100m",
+      "original_deadline_seconds": 60
     }
   },
   "not_executed": [

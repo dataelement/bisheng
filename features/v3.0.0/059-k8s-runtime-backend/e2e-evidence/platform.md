@@ -93,3 +93,9 @@ r10已真实通过preview-and-approval（审批人访问、其他角色拒绝、
 最终d7/Helm21内网digest b2288f64…三控制服务ready/epoch16，descriptor/helper/profile/report保持。原9f57…按正常对账timed_out/cleanupcomplete，a27…同UID kubelet_terminal且fresh API absent，原PVC4c5…仍Bound，proof SHA `8b15806b82c3d9c095d1f5204f8d7d848b23e603e8003d287c2be7b49eaa2ae6`；原超时不改成功。
 
 私有check尚未创建续办journal或发resume。首次offline rows data4b25…19:48:20创建、19:49:15 ready、动作done，19:49:20期限到、19:49:29清理完成；HTTP失败保持，不把SQL已执行等同响应通过。同8a镜像CPU25m与100m原生隔离导入实测31.699秒与6.9965秒，登记100m离线资源/预占配对，不放宽60秒或改同步互斥。
+
+## 100m离线数据及独立停启真实通过
+
+当前6f/Helm22，私有digest59692b82…，controller epoch17；同源backend两资源参数文件已更新。实际data Pod776ae57a…的data-layout和data-helper均requests=limits=100m/128MiB，原8a镜像不变。内部op241db50c…20:06:59创建，20:07:12 ready、20:07:16 completed/cleanupcomplete；**13秒就绪、17秒全链路**，原deadline20:07:59（60秒）保持。真实MySQL预占128Mi/100m，停止清理后才released；同UID kubelet_terminal/cleanupcomplete，public API check通过。旧4b25超时原样保留。
+
+同已批准v1新恢复d5c5e311…真实completed/cleanupcomplete，冻结停用数据逐值相等；独立下一趟原suite.cycle亦通过，恢复opa89bbe4d…，不把原9f57失败改成功。v2 a1c22f4e…已完成预检/审批，正式deploy462c127e…starting，当前还不能宣称v2访问/其余五场景全部通过。

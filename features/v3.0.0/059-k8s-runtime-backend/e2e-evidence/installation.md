@@ -40,3 +40,7 @@ Helm14以d86e66a2d固定manager镜像升级manager/egress/admission，全部Read
 前次控制候选a06/Helm19、digest4666d753…；143来源的16项报告、helper及profile2逐字节保留，r9启动前新镜像assess_capabilities仍ready。此次仅准入收尾修复与真实旧失败正常清理验证，不宣称又完整执行16项；当前候选指针详见JSON，旧Helm10快照归历史记录。
 
 当前候选249/Helm20、digest42c6c3c5…，仅可信维护模板材料PodUID接线修复；helper143/profile2及16项安装报告不变，node ready/epoch15。首个正式Python上线与访问/数据边界已通过，见platform证据；没有重复完整16项探测或跨节点/ARM冒认。
+
+## 当前6f候选与离线数据CPU修正
+
+固定source6f254f337，LAN digest59692b82…、Helm22三控制服务正常滚动，node ready/epoch17。descriptor UID/data、有效143能力报告、helper8a/profile2/app-proxy不变；只更新backend两源文件并重启专用backend/worker，原文件SHA已先核对且备份保留，OpenFGA不变。未把此次滚动冒认为新的16项完整探测。
