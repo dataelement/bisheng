@@ -390,7 +390,7 @@ class LiveVibeSuite:
             )
             return record
         assert deployment["status"] != "failed", "publication failed; inspect the platform's deployment failure"
-        await self.preview_and_approve(record)
+        await self.preview_and_approve(record, scenario)
         await self.poll(
             lambda: self.owned(app_id, scenario.slug),
             lambda value: value["state"] == "online" and value["current_version_id"] == record["version_id"],
@@ -407,8 +407,12 @@ class LiveVibeSuite:
         )
         return record
 
-    async def preview_and_approve(self, record):
+    async def preview_and_approve(self, record, scenario):
         app_id, version = record["app_id"], record["version_id"]
+        production = await self.owned(app_id, scenario.slug)
+        production_rows = (
+            await self.rows(scenario, app_id) if scenario.table and production["state"] == "online" else None
+        )
         status = await self.request("GET", f"/apps/{app_id}/publish-status")
         approval = status["approval"]
         assert approval and approval["status"] == "pending", (
@@ -418,7 +422,16 @@ class LiveVibeSuite:
         await self.request("POST", path, role="NONOWNER", expected_code=16264)
         preview = await self.request("POST", path, role="APPROVER")
         current = await self.request("GET", path, role="APPROVER")
-        assert current["session_id"] == preview["session_id"] and current["entry_url"]
+        assert current["session_id"] == preview["session_id"] and current["state"] == "running"
+        entry = self.entry_url(current["entry_url"])
+        assert urlsplit(entry).path == "/apps/preview/" + quote(preview["session_id"], safe="")
+        response = await self.client.get(entry.rstrip("/") + "/", headers=auth_headers(self.tokens["APPROVER"]))
+        assert response.status_code == 200 and scenario.expected_text in response.text
+        for role in ["OWNER", "NONOWNER", "FOREIGN"]:
+            refused = await self.client.get(entry.rstrip("/") + "/", headers=auth_headers(self.tokens[role]))
+            assert refused.status_code == 404 and refused.json()["status_code"] == 16144
+        if production_rows is not None:
+            assert await self.rows(scenario, app_id) == production_rows, "preview changed production SQLite rows"
         await self.request("DELETE", path + "/" + preview["session_id"], role="APPROVER")
         closed = await self.request("GET", path, role="APPROVER")
         assert closed["state"] != "running"
@@ -468,12 +481,7 @@ class LiveVibeSuite:
             await self.request(
                 "GET", f"/apps/{app_id}/data/tables", role=role, expected_code=16101 if role == "FOREIGN" else 16162
             )
-        entry = detail["entry_url"].rstrip("/") + scenario.entry_path
-        actual_origin, expected_origin = urlsplit(entry), urlsplit(required("F059_E2E_ENTRY_BASE"))
-        assert (actual_origin.scheme, actual_origin.netloc) == (expected_origin.scheme, expected_origin.netloc), (
-            "entry must use the exact configured gateway origin"
-        )
-        assert actual_origin.scheme in {"http", "https"} and not actual_origin.username and not actual_origin.password
+        entry = self.entry_url(detail["entry_url"].rstrip("/") + scenario.entry_path)
         response = await self.client.get(entry, headers=auth_headers(self.tokens["OWNER"]))
         assert response.status_code == 200 and scenario.expected_text in response.text
         unauthenticated = await self.client.get(entry, headers={"Cookie": ""})
@@ -577,48 +585,71 @@ class LiveVibeSuite:
             assert await self.rows(scenario, app_id) == before
         self.journal.record("stop-resume", ["AC-29", "AC-33", "AC-35", "AC-36"], "passed", app_id=app_id)
 
+    @staticmethod
+    def entry_url(value):
+        expected = urlsplit(required("F059_E2E_ENTRY_BASE"))
+        assert expected.scheme in {"http", "https"} and expected.netloc
+        assert not expected.username and not expected.password
+        actual = urlsplit(value)
+        if not actual.scheme and not actual.netloc and actual.path.startswith("/"):
+            value = f"{expected.scheme}://{expected.netloc}" + value
+            actual = urlsplit(value)
+        assert (actual.scheme, actual.netloc) == (expected.scheme, expected.netloc), (
+            "entry must use the exact configured gateway origin"
+        )
+        assert not actual.username and not actual.password and not actual.query and not actual.fragment
+        return value
+
     async def checkpoint(self, event, *, verify=False):
-        """Observe an operator-driven restart/upgrade; never inject faults concurrently."""
+        """Read-only API observation; cluster fault evidence is supplied by the operator."""
         if event not in {"manager-restart", "runtime-upgrade", "app-restart"}:
             raise ValueError("checkpoint supports manager-restart, runtime-upgrade or app-restart")
         key = "checkpoint:" + event
+        scenarios = [item for item in self.settings.scenarios if item.expected_failure_code is None]
+        before = self.journal.document.get(key)
+        if verify:
+            assert before and 0 <= time.time() - before["observed_at"] <= self.settings.timeout, (
+                "checkpoint missing or outside configured recovery deadline"
+            )
+            assert set(before["apps"]) == {item.slug for item in scenarios}, "checkpoint scenario scope changed"
+            for scenario in scenarios:
+                record = self.journal.document["apps"].get(scenario.slug)
+                assert record and before["apps"][scenario.slug]["app_id"] == record["app_id"], (
+                    "checkpoint application identity changed"
+                )
         results = {}
-        for scenario in self.settings.scenarios:
-            if scenario.expected_failure_code is not None:
-                continue
-            record = self.journal.document["apps"][scenario.slug]
-            app_id = record["app_id"]
+        for scenario in scenarios:
+            app_id = self.journal.document["apps"][scenario.slug]["app_id"]
             detail = await self.owned(app_id, scenario.slug)
+            assert detail["state"] == "online"
+            instance = await self.request("GET", f"/apps/{app_id}/instance")
             results[scenario.slug] = {
                 "app_id": app_id,
                 "version_id": detail["current_version_id"],
-                "instance": await self.request("GET", f"/apps/{app_id}/instance"),
+                "instance_id": instance["instance_id"],
                 "rows": await self.rows(scenario, app_id) if scenario.table else None,
             }
             if verify:
-                await self.observe(scenario)
+                entry = self.entry_url(detail["entry_url"].rstrip("/") + scenario.entry_path)
+                response = await self.client.get(entry, headers=auth_headers(self.tokens["OWNER"]))
+                assert response.status_code == 200 and scenario.expected_text in response.text
         if not verify:
             self.journal.document[key] = {"observed_at": time.time(), "apps": results}
             self.journal.save()
             return
-        before = self.journal.document[key]
-        assert time.time() - before["observed_at"] <= self.settings.timeout, (
-            "checkpoint exceeded configured recovery deadline"
-        )
         for slug, current in results.items():
             old = before["apps"][slug]
             assert current["version_id"] == old["version_id"] and current["rows"] == old["rows"]
             if event != "app-restart":
-                assert current["instance"]["instance_id"] == old["instance"]["instance_id"], (
-                    "control upgrade rebuilt an application"
-                )
-        # This proves API observations only. The installer/operator must attach
-        # the actual changed deployment/Pod UID and fault timestamps separately.
+                assert current["instance_id"] == old["instance_id"], "control upgrade rebuilt an application"
         self.journal.record(
             "checkpoint-observation",
             ["AC-06", "AC-07", "AC-33", "AC-40", "AC-55"],
             "passed",
             event=event,
             injection_verified=False,
-            apps=list(results),
+            apps={
+                slug: {name: item[name] for name in ["app_id", "version_id", "instance_id"]}
+                for slug, item in results.items()
+            },
         )
