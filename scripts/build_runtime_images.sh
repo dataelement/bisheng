@@ -19,6 +19,13 @@ case "$engine" in linux/x86_64|linux/amd64) engine_arch=amd64;; linux/aarch64|li
 if [[ "$host_arch" != "$TARGET_ARCH" || "$engine_arch" != "$TARGET_ARCH" ]]; then
   echo 'Refusing cross-architecture or emulated release evidence' >&2; exit 1
 fi
+# Context-named Docker builders share the Engine verified above and its local images.
+# Hard-coding "default" breaks native Engines exposed through OrbStack or Desktop.
+native_builder="$(docker context show)"
+builder_driver="$(docker buildx inspect "$native_builder" | sed -n 's/^Driver:[[:space:]]*//p')"
+[[ "$builder_driver" == docker ]] || {
+  echo 'The active context must use its native Docker driver builder' >&2; exit 1
+}
 metadata_dir="dist/runtime-metadata-${TARGET_ARCH}"
 inventory="dist/runtime-images-${TARGET_ARCH}.json"
 mkdir -p "$metadata_dir"
@@ -38,7 +45,7 @@ build_one() {
   local name="$1" dockerfile="$2" context="$3"
   shift 3
   # The native daemon builder can consume the just-built local manager/helper base.
-  docker buildx build --builder default --platform "linux/$TARGET_ARCH" --provenance=false --load \
+  docker buildx build --builder "$native_builder" --platform "linux/$TARGET_ARCH" --provenance=false --load \
     --label "org.opencontainers.image.revision=$source_revision" \
     --label "org.opencontainers.image.version=$RUNTIME_RELEASE" \
     --file "$dockerfile" --tag "$(image_for "$name")" "$@" "$context"

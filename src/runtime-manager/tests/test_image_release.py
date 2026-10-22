@@ -177,7 +177,7 @@ def test_indexes_require_exactly_verified_platform_manifests():
         attach_indexes(release, indexes)
 
 
-def mock_builder(tmp_path, monkeypatch, *, publish=False, wrong_engine=False, existing=False):
+def mock_builder(tmp_path, monkeypatch, *, publish=False, wrong_engine=False, existing=False, context="default"):
     import os
     import subprocess
 
@@ -191,6 +191,8 @@ from pathlib import Path
 args=sys.argv[1:]
 with open(os.environ["MOCK_DOCKER_LOG"],"a") as stream:stream.write(json.dumps(args)+"\\n")
 if args[0]=="info":print("linux/"+("arm64" if os.environ.get("MOCK_WRONG_ENGINE")=="1" else "amd64"))
+elif args[:2]==["context","show"]:print(os.environ.get("MOCK_DOCKER_CONTEXT","default"))
+elif args[:2]==["buildx","inspect"]:print("Driver: "+os.environ.get("MOCK_BUILDER_DRIVER","docker"))
 elif args[:3]==["buildx","imagetools","inspect"]:
  if os.environ.get("MOCK_EXISTING")=="1":print("existing")
  else:print("manifest unknown",file=sys.stderr);sys.exit(1)
@@ -216,6 +218,7 @@ elif args[:2]==["image","inspect"]:
     monkeypatch.setenv("MOCK_DOCKER_LOG", str(log))
     monkeypatch.setenv("MOCK_WRONG_ENGINE", str(int(wrong_engine)))
     monkeypatch.setenv("MOCK_EXISTING", str(int(existing)))
+    monkeypatch.setenv("MOCK_DOCKER_CONTEXT", context)
     monkeypatch.setenv("RUNTIME_RELEASE", "v-test")
     monkeypatch.setenv("RUNTIME_PUBLISH", str(int(publish)))
     monkeypatch.setenv("TARGET_ARCH", "amd64")
@@ -240,6 +243,23 @@ def test_mock_builder_local_never_pushes_and_freezes_only_local_evidence(tmp_pat
     assert (tmp_path / "dist/runtime-images-amd64.json").is_file(), result.stdout + result.stderr
     document = json.loads((tmp_path / "dist/runtime-images-amd64.json").read_text())
     assert document["state"] == "local-native-verified"
+
+
+def test_mock_builder_uses_current_context_native_daemon_builder(tmp_path, monkeypatch):
+    result, commands = mock_builder(tmp_path, monkeypatch, context="orbstack")
+    assert result.returncode == 0, result.stderr
+    builds = [command for command in commands if command[:2] == ["buildx", "build"]]
+    assert len(builds) == 9
+    assert all(command[command.index("--builder") + 1] == "orbstack" for command in builds)
+    assert not any(command[:2] == ["context", "use"] for command in commands)
+
+
+def test_mock_builder_rejects_non_daemon_builder_before_build(tmp_path, monkeypatch):
+    monkeypatch.setenv("MOCK_BUILDER_DRIVER", "docker-container")
+    result, commands = mock_builder(tmp_path, monkeypatch, context="orbstack")
+    assert result.returncode != 0
+    assert "native Docker driver" in result.stderr
+    assert not any(command[:2] == ["buildx", "build"] for command in commands)
 
 
 def test_mock_builder_rejects_cross_architecture_before_build(tmp_path, monkeypatch):
