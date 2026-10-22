@@ -15,6 +15,7 @@ import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
 import store from '~/store';
+import { useAgentToolPreferences } from '~/components/Chat/Input/AgentToolSelector';
 
 const systemNoticeTodayKey = () => {
   const d = new Date();
@@ -186,6 +187,7 @@ function Sidebar({
 export default function MainLayout() {
   const { pathname, search } = useLocation();
   const outlet = useOutlet();
+  useAgentToolPreferences();
   const { user, logout, isUserLoading } = useAuthContext();
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
@@ -224,9 +226,10 @@ export default function MainLayout() {
   const isMenuUnavailableRoute = pathname.startsWith('/menu-unavailable');
   const isSkillsRoute = /^\/skills(\/|$)/.test(pathname);
   const isSquareRoute = /^\/square(\/|$)/.test(pathname);
+  const isCapabilitiesRoute = /^\/capabilities(\/|$)/.test(pathname);
   /** Pages that read their view from the query string: a page react-activation froze keeps
    *  its old router context, so they are mounted fresh instead of cached. */
-  const isQueryDrivenRoute = isSkillsRoute || isSquareRoute;
+  const isQueryDrivenRoute = isSkillsRoute || isSquareRoute || isCapabilitiesRoute;
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏
@@ -454,7 +457,7 @@ export default function MainLayout() {
                   </button>
                   {isQueryDrivenRoute ? (
                     <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
-                      {localize(isSquareRoute ? 'com_workbench_sidebar.square' : 'com_skill_center_title')}
+                      {localize(isSquareRoute ? 'com_workbench_sidebar.square' : isCapabilitiesRoute ? 'com_capability_center.title' : 'com_skill_center_title')}
                     </span>
                   ) : null}
                   <div className="min-w-0 flex-1" aria-hidden />

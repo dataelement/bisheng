@@ -1,12 +1,13 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Outlined } from 'bisheng-icons';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem } from '~/components/ui';
+import { ComposerMenuText } from '~/components/ui/ComposerMenuText';
 import { useLocalize } from '~/hooks';
-import { ComposerMenuContext } from './ComposerSubmenu';
+import { ComposerMenuContext, ComposerSubmenu } from './ComposerSubmenu';
 import { KnowledgeSpaceDialog } from './KnowledgeSpaceDialog';
 import { useComposerMenuAnchor } from './useComposerMenuAnchor';
 import type { KnowledgeItem } from './knowledgeTypes';
-import { useAgentToolSelection, iconForGroup, labelForGroup, type AvailableToolGroup } from './AgentToolSelector';
+import { useAgentToolSelection, isToolGroupEnabled, labelForGroup, type AvailableToolGroup } from './AgentToolSelector';
 
 /** Match Harness: one 16px surface fade, only while more rows remain below. */
 function ComposerMenuScroll({ children }: { children: ReactNode }) {
@@ -65,10 +66,7 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
   availableTools = EMPTY_TOOLS, showTools, showWebSearch, webSearchActive, onWebSearchChange,
   showResearch, researchActive, onResearchChange, children }: Props) {
   const localize = useLocalize();
-  const { isChecked, toggle } = useAgentToolSelection(availableTools);
-  const activeToolGroups = showTools
-    ? availableTools.filter((group) => isChecked(group.id))
-    : [];
+  const { isChecked, toggle } = useAgentToolSelection(showTools ? availableTools : undefined);
   const trigger = useRef<HTMLButtonElement>(null);
   const pointerOpened = useRef(false);
   const returnFocus = () => {
@@ -102,6 +100,26 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
         <ComposerMenuScroll>
         <ComposerMenuContext.Provider value={{ page, setPage }}>
         {!page && <>
+        {showResearch && <DropdownMenuCheckboxItem aria-label={localize('com_linsight_task_mode')} indicatorSide="right" checked={researchActive}
+          disabled={disabled} onCheckedChange={onResearchChange} className="gap-2">
+          <Outlined.ListSuccess size={16} /><span className="dsh-command-name">{localize('com_linsight_task_mode')}</span>
+          <span className="dsh-command-description">{localize('dshChat.taskDescription')}</span>
+        </DropdownMenuCheckboxItem>}
+        </>}
+        {children}
+        {(showTools || showWebSearch) && <ComposerSubmenu label={localize('com_ui_tools')}
+          icon={<Outlined.Hammer size={16} />} disabled={disabled}>
+        {showTools && availableTools.map((group) => <DropdownMenuCheckboxItem key={group.id}
+          aria-label={labelForGroup(group, localize)} indicatorSide="right" checked={isToolGroupEnabled(group) && isChecked(group.id)} disabled={disabled || !isToolGroupEnabled(group)}
+          onCheckedChange={() => toggle(group)} onSelect={(event) => event.preventDefault()} className="gap-2">
+          <ComposerMenuText name={labelForGroup(group, localize)} description={group.description} />
+        </DropdownMenuCheckboxItem>)}
+        {showWebSearch && <DropdownMenuCheckboxItem aria-label={localize('com_tools_web_search')} indicatorSide="right" checked={webSearchActive}
+          disabled={disabled} onCheckedChange={onWebSearchChange} onSelect={(event) => event.preventDefault()} className="gap-2">
+          <ComposerMenuText name={localize('com_tools_web_search')} description={localize('dshChat.searchDescription')} />
+        </DropdownMenuCheckboxItem>}
+        </ComposerSubmenu>}
+        {!page && <>
         {showFileUpload && <DropdownMenuItem aria-label={localize('com_ui_upload_files')} disabled={fileUploadDisabled} onSelect={onFileUploadClick} className="gap-2">
           <Outlined.Attachment size={16} /><span className="dsh-command-name">{localize('com_ui_upload_files')}</span>
           <span className="dsh-command-description">{localize('dshChat.uploadDescription')}</span>
@@ -113,39 +131,12 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
           <Outlined.FolderClose size={16} /><span className="dsh-command-name">{localize('dshChat.selectKnowledge')}</span>
           <span className="dsh-command-description">{localize('dshChat.knowledgeDescription')}</span>
         </DropdownMenuItem>}
-        {showTools && availableTools.map((group) => <DropdownMenuCheckboxItem key={group.id}
-          aria-label={labelForGroup(group, localize)} indicatorSide="right" checked={isChecked(group.id)} disabled={disabled}
-          onCheckedChange={() => toggle(group)} onSelect={(event) => event.preventDefault()} className="gap-2">
-          {iconForGroup(group)}<span className="dsh-command-name">{labelForGroup(group, localize)}</span>
-          <span className="dsh-command-description">{group.description}</span>
-        </DropdownMenuCheckboxItem>)}
-        {showWebSearch && <DropdownMenuCheckboxItem aria-label={localize('com_tools_web_search')} indicatorSide="right" checked={webSearchActive}
-          disabled={disabled} onCheckedChange={onWebSearchChange} onSelect={(event) => event.preventDefault()} className="gap-2">
-          <Outlined.Earth size={16} /><span className="dsh-command-name">{localize('com_tools_web_search')}</span>
-          <span className="dsh-command-description">{localize('dshChat.searchDescription')}</span>
-        </DropdownMenuCheckboxItem>}
-        {showResearch && <DropdownMenuCheckboxItem aria-label={localize('com_linsight_task_mode')} indicatorSide="right" checked={researchActive}
-          disabled={disabled} onCheckedChange={onResearchChange} className="gap-2">
-          <Outlined.ListSuccess size={16} /><span className="dsh-command-name">{localize('com_linsight_task_mode')}</span>
-          <span className="dsh-command-description">{localize('dshChat.taskDescription')}</span>
-        </DropdownMenuCheckboxItem>}
         </>}
-        {children}
         </ComposerMenuContext.Provider>
         </ComposerMenuScroll>
       </DropdownMenuContent>
     </DropdownMenu>
     <div className="dsh-active-capabilities">
-      {activeToolGroups.map((group) => <button key={group.id} type="button"
-        className="dsh-composer-control dsh-active-capability" aria-pressed="true" disabled={disabled}
-        onClick={() => toggle(group)}>
-        {iconForGroup(group)}<span>{labelForGroup(group, localize)}</span><Outlined.Close size={12} />
-      </button>)}
-      {showWebSearch && webSearchActive && <button type="button"
-        className="dsh-composer-control dsh-active-capability" aria-pressed="true" disabled={disabled}
-        onClick={() => onWebSearchChange?.(false)}>
-        <Outlined.Earth size={14} /><span>{localize('com_tools_web_search')}</span><Outlined.Close size={12} />
-      </button>}
       {showResearch && researchActive && <button type="button"
         className="dsh-composer-control dsh-active-capability" aria-pressed="true" disabled={disabled}
         onClick={onResearchChange}>

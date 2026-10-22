@@ -66,5 +66,11 @@ export function useSidebarEntries(): SidebarEntry[] {
       active: pathname.startsWith(squarePath),
     });
   }
-  return orderSidebarEntries(entries, order);
+  const sorted = orderSidebarEntries(entries, order);
+  const home = links.find(link => link.section === 'home');
+  if (home && !home.to.startsWith('/menu-unavailable')) sorted.unshift({
+    id: 'capabilities', to: '/capabilities', icon: <Outlined.Application />,
+    label: localize('com_capability_center.title'), active: pathname.startsWith('/capabilities'),
+  });
+  return sorted;
 }

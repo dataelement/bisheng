@@ -58,6 +58,7 @@ const SettingsPage = lazy(() => import('~/pages/settings/SettingsPage'));
 const SquarePage = lazy(() =>
   import('~/pages/square/SquarePage').then((module) => ({ default: module.SquarePage })),
 );
+const CapabilityCenterPage = lazy(() => import('~/pages/capabilities/CapabilityCenterPage').then(module => ({ default: module.CapabilityCenterPage })));
 const SkillCenterPage = lazy(() =>
   import('~/pages/skills/SkillCenterPage').then((module) => ({ default: module.SkillCenterPage })),
 );
@@ -229,6 +230,7 @@ export const router = createBrowserRouter([
           // 广场 — every module's discover view behind one entry (tabs follow the module
           // grants, so the page needs no plugin gate of its own).
           { path: 'square', element: suspended(<SquarePage />) },
+          { path: 'capabilities', element: suspended(<MenuApprovalPluginGate pluginId="home"><CapabilityCenterPage /></MenuApprovalPluginGate>) },
           {
             // 技能 module home (我的技能 / 技能广场) — preview-gated, rides on 首页's menu grant.
             path: 'skills',

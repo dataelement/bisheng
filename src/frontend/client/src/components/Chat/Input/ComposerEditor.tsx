@@ -63,7 +63,17 @@ export const ComposerEditor = forwardRef<HTMLDivElement, ComposerEditorProps>(fu
     const saveSelection = () => {
         const selection = window.getSelection();
         if (selection?.rangeCount && rootRef.current?.contains(selection.anchorNode)) {
-            bookmark.current = selection.getRangeAt(0).cloneRange();
+            const range = selection.getRangeAt(0).cloneRange();
+            const container = range.startContainer;
+            const element = container instanceof HTMLElement ? container : container.parentElement;
+            const token = element?.closest(tokenSelector);
+            // Chromium may leave a collapsed caret inside a non-editable token
+            // after insertion or undo. Continue at its editable sibling boundary.
+            if (range.collapsed && token) {
+                range.setStartAfter(token); range.collapse(true);
+                selection.removeAllRanges(); selection.addRange(range);
+            }
+            bookmark.current = range;
         }
     };
     const publish = () => {

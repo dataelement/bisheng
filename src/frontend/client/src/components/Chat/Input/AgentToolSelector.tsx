@@ -8,12 +8,12 @@
  */
 import { Settings2Icon, WebhookIcon } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRecoilState } from "recoil";
 import { Switch } from "~/components/ui";
 import ApiAppIcon from "~/components/ui/icon/ApiApp";
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
-import { useLocalize } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import store from "~/store";
 import { cn } from "~/utils";
 
@@ -22,13 +22,13 @@ interface ChildTool {
   id: number;
   name?: string;
   tool_key: string;
+  enabled?: boolean;
   desc?: string;
   description?: string;
 }
 
 // Shape of each parent group in bsConfig.tools (workstation config), mirrors
-// linsight_config.tools: hierarchical parent with selected children + a single
-// `default_checked` flag applied to the whole group.
+// safe user-facing catalog: hierarchical parent with available children.
 export interface AvailableToolGroup {
   id: number;
   name: string;
@@ -60,6 +60,10 @@ function labelForGroup(group: AvailableToolGroup, localize: (key: string) => str
   return group.name;
 }
 
+export function isToolGroupEnabled(group: AvailableToolGroup) {
+  return !group.children?.length || group.children.some(child => child.enabled !== false);
+}
+
 export interface AgentToolSelection {
   /** At least one tool group is switched on. */
   isActive: boolean;
@@ -68,48 +72,51 @@ export interface AgentToolSelection {
 }
 
 /**
- * Selection state for the agent tools, separate from any UI so it keeps running
- * while its picker is closed: the default_checked seeding below must happen on
- * mount, not the first time a menu is opened. Call it once per input and hand the
- * result to AgentToolSelector (toolbar pill) or AgentToolList ("+" menu panel).
+ * Keep per-task tool choices while either picker presentation is closed.
+ * Share per-account preferences between the composer and capability details.
  */
+/** Mounted once by the authenticated layout, above cached and uncached pages. */
+export function useAgentToolPreferences() {
+  const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
+  const { user } = useAuthContext();
+  const userId = user?.id === undefined ? undefined : String(user.id);
+  const restoring = useRef<{ userId: string; value: typeof selected }>();
+  const hydratedUser = useRef<string>();
+  useEffect(() => {
+    if (!userId) return;
+    let restored: typeof selected = [];
+    try {
+      const value = JSON.parse(localStorage.getItem(`bs:${userId}:selectedAgentTools`) || '[]');
+      if (Array.isArray(value)) restored = value;
+    } catch { /* An unavailable snapshot starts with an empty selection. */ }
+    restoring.current = { userId, value: restored };
+    hydratedUser.current = userId;
+    setSelected(restored);
+  }, [userId, setSelected]);
+  useEffect(() => {
+    if (!userId || hydratedUser.current !== userId) return;
+    if (restoring.current) {
+      if (restoring.current.value !== selected) return;
+      restoring.current = undefined;
+    }
+    try { localStorage.setItem(`bs:${userId}:selectedAgentTools`, JSON.stringify(selected)); }
+    catch { /* Keep the in-session choice when browser storage is unavailable. */ }
+  }, [userId, selected]);
+}
+
 export function useAgentToolSelection(availableTools: AvailableToolGroup[] | undefined): AgentToolSelection {
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
-  const [initialized, setInitialized] = useRecoilState(store.agentToolsInitialized);
-
-  // One-shot initialisation from admin-configured default_checked set.
-  // Ignores subsequent bsConfig changes within the same session so a user's
-  // manual toggles aren't overwritten when the config gets refetched.
+  // Revalidate the user selection when the authorized catalog changes.
   useEffect(() => {
-    if (initialized || !availableTools || availableTools.length === 0) return;
-    const defaults = availableTools
-      .filter((g) => g.default_checked)
-      .map((g) => ({
-        id: g.id,
-        name: g.name,
-        description: g.description,
-        children: (g.children || []).map((c) => ({
-          id: c.id,
-          tool_key: c.tool_key,
-          name: c.name,
-          desc: c.desc || c.description,
-        })),
-      }));
-    if (defaults.length) setSelected(defaults);
-    setInitialized(true);
-  }, [availableTools, initialized, setSelected, setInitialized]);
-
-  // Prune selections for groups that no longer exist in the admin config
-  // (e.g., admin removed a tool between sessions).
-  useEffect(() => {
-    if (!availableTools?.length || selected.length === 0) return;
-    const validIds = new Set(availableTools.map((g) => g.id));
+    if (!availableTools || selected.length === 0) return;
+    const validIds = new Set(availableTools.filter(isToolGroupEnabled).map((g) => g.id));
     const pruned = selected.filter((g) => validIds.has(g.id));
     if (pruned.length !== selected.length) setSelected(pruned);
   }, [availableTools, selected, setSelected]);
 
   const isChecked = (id: number) => selected.some((g) => g.id === id);
   const toggle = (group: AvailableToolGroup) => {
+    if (!isToolGroupEnabled(group)) return;
     if (isChecked(group.id)) {
       setSelected(selected.filter((g) => g.id !== group.id));
     } else {
@@ -119,7 +126,7 @@ export function useAgentToolSelection(availableTools: AvailableToolGroup[] | und
           id: group.id,
           name: group.name,
           description: group.description,
-          children: (group.children || []).map((c) => ({
+          children: (group.children || []).filter(c => c.enabled !== false).map((c) => ({
             id: c.id,
             tool_key: c.tool_key,
             name: c.name,

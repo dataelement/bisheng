@@ -1,0 +1,196 @@
+import json
+import sys
+from types import ModuleType, SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+from fastapi import HTTPException
+
+from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
+
+
+def tool(id=1, kind=1, name="Current time", key="get_current_time"):
+    return SimpleNamespace(id=id, is_preset=kind, name=name, tool_key=key, desc="Description", is_delete=0)
+
+
+def make_service(monkeypatch, rows):
+    module = ModuleType("bisheng.tool.domain.services.tool")
+    group = SimpleNamespace(
+        id=12,
+        is_preset=0,
+        description="Tools",
+        name="Enterprise tools",
+        children=rows,
+        api_key="private-test-key",
+        openapi_schema="private headers",
+    )
+    module.ToolServices = lambda **kwargs: SimpleNamespace(get_tool_list=AsyncMock(return_value=[group]))
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    work = SimpleNamespace(
+        publications=SimpleNamespace(list_enabled=AsyncMock(return_value={1})),
+        _tools=AsyncMock(return_value={row.id: row for row in rows}),
+        _skills=AsyncMock(return_value={}),
+        call_tool=AsyncMock(return_value='{"available": 85, "demo_data": true}'),
+    )
+    return CapabilityCatalogService(SimpleNamespace(tenant_id=2, user_id=7), work), work
+
+
+async def test_catalog_uses_resource_permissions_without_publication(monkeypatch):
+    app, _ = make_service(monkeypatch, [tool(), tool(2, key="email_send_email")])
+    result = await app.list()
+    assert len(result["items"]) == 2
+    assert result["items"][0]["trial"]["arguments"] == {"timezone": "Asia/Shanghai"}
+    assert result["items"][1]["ready"] is True
+    app.work.publications.list_enabled.assert_not_awaited()
+    assert "private-test-key" not in json.dumps(result)
+    assert "openapi_schema" not in json.dumps(result)
+
+
+async def test_readonly_demo_still_calls_the_normal_authorized_work_path(monkeypatch):
+    app, work = make_service(monkeypatch, [tool(1, 2, "demo_check_inventory", "hash")])
+    result = await app.trial(1, {"product_code": "MAT-001"})
+    work.call_tool.assert_awaited_once_with("bisheng_tool_1", {"product_code": "MAT-001"})
+    assert result["result"]["available"] == 85
+    assert result["demo_data"] is True
+
+
+async def test_permission_revocation_propagates_without_executing_another_path(monkeypatch):
+    app, work = make_service(monkeypatch, [tool()])
+    work.call_tool.side_effect = HTTPException(403, "revoked")
+    with pytest.raises(HTTPException) as error:
+        await app.trial(1, {"timezone": "Asia/Shanghai"})
+    assert error.value.status_code == 403
+
+
+async def test_arbitrary_enterprise_tools_have_no_inline_execution(monkeypatch):
+    app, work = make_service(monkeypatch, [tool(1, key="email_send_email")])
+    with pytest.raises(HTTPException) as error:
+        await app.trial(1, {})
+    assert error.value.status_code == 404
+    work.call_tool.assert_not_awaited()
+
+
+async def test_bounded_demo_arguments(monkeypatch):
+    app, work = make_service(monkeypatch, [tool()])
+    with pytest.raises(HTTPException) as error:
+        await app.trial(1, {"timezone": "a" * 5000})
+    assert error.value.status_code == 413
+    work.call_tool.assert_not_awaited()
+
+
+async def test_mcp_error_payload_is_audited_as_incomplete(monkeypatch):
+    from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
+
+    _app, work = make_service(monkeypatch, [tool(1, 2, "demo_check_inventory", "hash")])
+    service = WorkCapabilitiesService(SimpleNamespace(tenant_id=2), work.publications)
+    service._tools = work._tools
+    executor = SimpleNamespace(
+        args_schema={"type": "object"}, ainvoke=AsyncMock(return_value='{"isError":true,"content":[]}')
+    )
+    service._executor = AsyncMock(return_value=executor)
+    work.publications.audit = AsyncMock()
+    with pytest.raises(HTTPException) as error:
+        await service.call_tool("bisheng_tool_1", {})
+    assert error.value.status_code == 502
+    assert [call.args[-1]["status"] for call in work.publications.audit.await_args_list] == ["STARTED", "INCOMPLETE"]
+
+
+async def test_skill_requires_all_its_tools_to_be_usable(monkeypatch):
+    app, work = make_service(monkeypatch, [tool()])
+    work._skills.return_value = {1: SimpleNamespace(id=1)}
+    work._skill_info = lambda row: {
+        "id": 1,
+        "title": "Order review",
+        "description": "Review",
+        "name": "bisheng-2-1-order",
+    }
+    work._read_bundle = lambda row: {"tool_ids": [99]}
+    catalog = await app.list()
+    skill = next(row for row in catalog["items"] if row["kind"] == "skill")
+    assert skill["ready"] is False
+
+
+async def test_picker_catalog_is_safe_and_defaults_to_no_selection(monkeypatch):
+    app, work = make_service(monkeypatch, [tool()])
+    rows = await app.picker_tools()
+    assert rows[0]["default_checked"] is False
+    assert rows[0]["children"][0]["id"] == 1
+    assert "api_key" not in json.dumps(rows)
+    assert "openapi_schema" not in json.dumps(rows)
+    work.publications.list_enabled.assert_not_awaited()
+
+
+async def test_work_call_accepts_resource_permission_without_publication(monkeypatch):
+    from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
+
+    _, work = make_service(monkeypatch, [tool()])
+    work.publications.audit = AsyncMock()
+    work.publications.list_enabled.return_value = set()
+    service = WorkCapabilitiesService(SimpleNamespace(tenant_id=2), work.publications)
+    service._tools = work._tools
+    executor = SimpleNamespace(args_schema={"type": "object"}, ainvoke=AsyncMock(return_value="time"))
+    service._executor = AsyncMock(return_value=executor)
+    assert await service.call_tool("bisheng_tool_1", {}) == "time"
+    work.publications.list_enabled.assert_not_awaited()
+    work._tools.return_value = {}
+    with pytest.raises(HTTPException) as error:
+        await service.call_tool("bisheng_tool_1", {})
+    assert error.value.status_code == 403
+    assert executor.ainvoke.await_count == 1
+
+
+async def test_separate_publication_is_retired(monkeypatch):
+    from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
+
+    _, work = make_service(monkeypatch, [])
+    service = WorkCapabilitiesService(SimpleNamespace(tenant_id=2), work.publications)
+    with pytest.raises(HTTPException) as error:
+        await service.publish("tool", 1, False)
+    assert error.value.status_code == 410
+
+
+async def test_skill_loading_rechecks_resource_state_after_read(monkeypatch):
+    from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
+
+    _, work = make_service(monkeypatch, [tool()])
+    work.publications.audit = AsyncMock()
+    service = WorkCapabilitiesService(SimpleNamespace(tenant_id=2), work.publications)
+    skill = SimpleNamespace(id=1, name="review", display_name="Review", description="Review", content_hash="a" * 64)
+    service._skills = AsyncMock(side_effect=[{1: skill}, {}])
+    service._tools = work._tools
+    service._read_bundle = lambda row: {"tool_ids": [1], "files": [], "content": "Review"}
+    with pytest.raises(HTTPException) as error:
+        await service.read_skill("bisheng-skill://2/1/" + "a" * 64)
+    assert error.value.status_code == 409
+    work.publications.audit.assert_not_awaited()
+
+
+async def test_account_disabled_search_remains_manageable_but_picker_marks_it_disabled(monkeypatch):
+    from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
+
+    monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", AsyncMock(return_value={38}))
+    app, _ = make_service(monkeypatch, [tool(38, key="web_search"), tool()])
+    items = (await app.list())["items"]
+    search = next(item for item in items if item["resource_id"] == 38)
+    assert search["availability_enabled"] is False
+    assert search["ready"] is False
+    assert next(item for item in items if item["resource_id"] == 1)["ready"] is True
+    picker = await app.picker_tools()
+    assert next(child for child in picker[0]["children"] if child["id"] == 38)["enabled"] is False
+
+
+async def test_only_authorized_managed_search_can_change_account_availability(monkeypatch):
+    from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
+
+    save = AsyncMock()
+    monkeypatch.setattr(UserToolAvailabilityService, "save", save)
+    app, work = make_service(monkeypatch, [tool(38, key="web_search"), tool()])
+    work.publications.audit = AsyncMock()
+    assert await app.set_availability(38, False) == {"tool_id": 38, "enabled": False}
+    save.assert_awaited_once_with(38, False)
+    work.publications.audit.assert_awaited_once()
+    for forbidden in (1, 999):
+        with pytest.raises(HTTPException) as failure:
+            await app.set_availability(forbidden, False)
+        assert failure.value.status_code == 404
+    assert save.await_count == 1

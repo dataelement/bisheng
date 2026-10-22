@@ -8,7 +8,6 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
-import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
 import { getDailyConfigApi, getLinsiConfigApi, setDailyConfigApi, setLinsiConfigApi } from "@/controllers/API";
 import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -22,7 +21,7 @@ import { Model } from "./ModelManagement";
 import OrgKbConfig, { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
-import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
+import { ToolConfig as ToolConfigType } from "./ToolsConfig";
 import RecommendedAppsConfig from "./RecommendedAppsConfig";
 import { WorkbenchSensitivePolicy, type WorkbenchSensitivePolicyHandle } from "./WorkbenchSensitivePolicy";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
@@ -319,12 +318,6 @@ export default function DailyChatConfig({ scopeVersion = 0 }: { scopeVersion?: n
                                 </Select>
                             </div>
                         </ToggleSection> */}
-                        {/* v2.5 Agent-mode: available tools configuration (replaces 联网搜索 toggle) */}
-                        <ToolsConfig
-                            tools={formData.tools}
-                            onChange={(tools) => setFormData(prev => ({ ...prev, tools }))}
-                        />
-
                         <ToggleSection
                             title={t('chatConfig.knowledgeBase')}
                             enabled={formData.knowledgeBase.enabled}
@@ -343,14 +336,6 @@ export default function DailyChatConfig({ scopeVersion = 0 }: { scopeVersion?: n
                         >
                             {null}
                         </ToggleSection>
-
-                        {/* F035 (PRD §4.5): skill management replaces the legacy SOP manual library.
-                            The header toggle (default off) gates the client 添加技能 entry. */}
-                        <SkillManagement
-                            scopeVersion={scopeVersion}
-                            entryEnabled={formData.skillEntry.enabled}
-                            onEntryToggle={(enabled) => toggleFeature('skillEntry', enabled)}
-                        />
 
                         {/* Recommended Apps */}
                         <RecommendedAppsConfig

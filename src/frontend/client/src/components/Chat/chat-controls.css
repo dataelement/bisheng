@@ -128,7 +128,7 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
   padding:4px 8px;
 }
 .dsh-command-name { font-size:var(--dsh-command-name-size); font-weight:400; line-height:20px; flex:0 0 auto; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dsh-command-skills .skill-menu-text,
+.dsh-command-resource-text,
 .dsh-command-skill-text { display:flex; align-items:baseline; gap:8px; }
 /* Match the native Work skill picker: one typography owner for rows and search. */
 .dsh-skill-picker { display:flex; flex-direction:column; min-height:0; }
@@ -156,7 +156,6 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
 
 .dsh-command-skills .skill-menu-name { flex:0 0 auto; max-width:100%; }
 .dsh-command-skills .skill-menu-description { min-width:0; flex:1; }
-
 /* Harness uses a short surface overlay only while content extends below. */
 .dsh-command-scroll-frame { position:relative; }
 .dsh-command-scroll {

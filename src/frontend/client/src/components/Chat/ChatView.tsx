@@ -86,8 +86,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const { user } = useAuthContext();
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
   const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
-  const [selectedAgentTools, setSelectedAgentTools] = useRecoilState(store.selectedAgentTools);
-  const [agentToolsInitialized, setAgentToolsInitialized] = useRecoilState(store.agentToolsInitialized);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
   // Landing-only: the input box reports whether its attachment bar is showing
   // so the welcome subtitle can hide without shifting the title / input box.
@@ -125,10 +123,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   ]);
 
   // v2.5 interaction memory — per-user localStorage snapshots for the input
-  // bar (KB / tools; handled in the effect below). Rules:
+  // bar (KBs handled in the effect below). Rules:
   //  - KB space: default empty; remember user toggles
   //  - org KB: default per bsConfig.orgKbs[].default_checked; remember toggles
-  //  - tools: default per bsConfig.tools[].default_checked; remember toggles
+  // Tool preferences are restored once by MainLayout through useAgentToolPreferences.
   // The model selection is NOT here — it is scoped per conversation, resolved
   // further down (search: useChatModelResolution) once isTaskConversation is known.
   const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
@@ -177,27 +175,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       }
     } catch { /* ignore */ }
 
-    // Agent tool groups (parent-level). Same priority rule: any localStorage
-    // entry (including empty) is treated as the user's choice; admin
-    // default_checked only seeds the first session via AgentToolSelector
-    // when no key exists yet.
-    try {
-      const raw = localStorage.getItem(`${prefix}selectedAgentTools`);
-      let saved: any[] | null = null;
-      if (raw !== null) {
-        try {
-          const v = JSON.parse(raw);
-          if (Array.isArray(v)) saved = v;
-        } catch { /* ignore parse errors */ }
-      }
-      if (saved !== null) {
-        setSelectedAgentTools(saved);
-        setAgentToolsInitialized(true);
-      }
-      // else: key absent → leave initialized=false so AgentToolSelector
-      // applies admin defaults on first session.
-    } catch { /* ignore */ }
-
     // Web search toggle. ChatForm clears searchType on conversation change,
     // but its effect runs before this one (children commit first), so the
     // hydrated value wins on initial mount and survives refresh / new tab.
@@ -207,7 +184,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     } catch { /* ignore */ }
 
     memoReadyRef.current = true;
-  }, [bsConfig, user?.id, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized, setSearchType]);
+  }, [bsConfig, user?.id, setSelectedOrgKbs, setSearchType]);
 
 
   // Persist on change (after initial hydrate completes).
@@ -216,10 +193,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     localStorage.setItem(`bs:${user.id}:selectedOrgKbs`, JSON.stringify(selectedOrgKbs));
   }, [selectedOrgKbs, user?.id]);
 
-  useEffect(() => {
-    if (!memoReadyRef.current || !user?.id || !agentToolsInitialized) return;
-    localStorage.setItem(`bs:${user.id}:selectedAgentTools`, JSON.stringify(selectedAgentTools));
-  }, [selectedAgentTools, user?.id, agentToolsInitialized]);
 
   useEffect(() => {
     if (!memoReadyRef.current || !user?.id) return;

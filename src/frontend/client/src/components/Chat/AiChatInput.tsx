@@ -14,9 +14,9 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
+import store from "~/store";
 import { buildChatAccept, isFileNameAccepted } from "~/common/chatAccept";
 import { taskModeSkillsState } from "~/store/linsight";
-import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultCheckedSkills";
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 import { skillCenterPreviewEnabled } from "~/components/Skills/types";
@@ -29,7 +29,7 @@ import { Outlined } from "bisheng-icons";
 import { ArrowDown } from "lucide-react";
 import { Button } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
-import { useContainerCompact, usePrefersMobileLayout, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
+import { useContainerCompact, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import useLocalize from "~/hooks/useLocalize";
 import { useToastContext } from "~/Providers";
@@ -201,6 +201,7 @@ const AiChatInput = memo(
 
         // Skills belong to the current draft, shared by the landing and conversation inputs.
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
+        const [selectedTools, setSelectedTools] = useRecoilState(store.selectedAgentTools);
 
         // True while an IME composition is in flight — see handleKeyDown.
         const isComposingRef = useRef(false);
@@ -323,8 +324,7 @@ const AiChatInput = memo(
 
         // F035 (v2.6): the 添加技能 entry is hidden until admin enables it in
         // 工作台-技能管理. Absent on legacy deployments → treated as disabled.
-        const showAddSkill = !!bsConfig?.skillEntry?.enabled;
-        useDefaultCheckedSkills({ taskMode, skillEntryEnabled: showAddSkill, setSkills: setDailySkills });
+        const showAddSkill = true;
 
         // v2.5: daily chat always runs through the LangGraph Agent flow. Tools,
         // knowledge bases and files coexist freely — there's no mutex anymore.
@@ -391,7 +391,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, setDailySkills, showToast, localize]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, setDailySkills]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -450,12 +450,14 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        // Skills and knowledge spaces render as references in the writing area.
+        // Resource IDs share the native editor document while execution metadata stays in state.
         const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
+        const mountedTools = tools && agentMode && !isLingsi && onSelectedOrgKbsChange ? selectedTools : [];
         const { references, onReferencesChange } = useComposerReferences(
             mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
+            mountedTools, setSelectedTools,
         );
-        const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
+        const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0 || mountedTools.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
 

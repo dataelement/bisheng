@@ -1246,7 +1246,8 @@
     "gaodeMap": "Gaode Map",
     "gaodeMapSSE": "Gaode Map (SSE Protocol)",
     "gaodeMapStreamable": "Gaode Map (streamable Protocol)",
-    "gaodeMapDesc": "AMap provides a variety of location-based services, including geocoding, reverse geocoding, IP location, weather query, cycling path planning, walking path planning, driving path planning, bus path planning, distance measurement, keyword search, nearby search, and detailed search services"
+    "gaodeMapDesc": "AMap provides a variety of location-based services, including geocoding, reverse geocoding, IP location, weather query, cycling path planning, walking path planning, driving path planning, bus path planning, distance measurement, keyword search, nearby search, and detailed search services",
+    "skills": "Skills"
   },
   "test": {
     "test": "Test",
@@ -2341,7 +2342,8 @@
       "githubFetch": "Failed to fetch from GitHub: repo / branch / path not found or network error. Check the URL and retry",
       "githubRateLimit": "GitHub rate limit exceeded, please retry later",
       "unknown": "Operation failed, please retry"
-    }
+    },
+    "catalogHint": "Saved skills are available within organization permissions. Users choose per task; disabled skills stay unavailable."
   },
   "citation": {
     "unsupportedPreview": "Preview is not supported for this file type",

@@ -1229,7 +1229,8 @@
     "gaodeMap": "高德地图",
     "gaodeMapSSE": "高德地图（SSE 协议）",
     "gaodeMapStreamable": "高德地图（streamable 协议）",
-    "gaodeMapDesc": "高德地图API，提供地理编码、逆地理编码、IP定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等服务"
+    "gaodeMapDesc": "高德地图API，提供地理编码、逆地理编码、IP定位、天气查询、骑行路径规划、步行路径规划、驾车路径规划、公交路径规划、距离测量、关键词搜索、周边搜索、详情搜索等服务",
+    "skills": "技能"
   },
   "test": {
     "test": "测试",
@@ -2286,7 +2287,8 @@
       "githubFetch": "从 GitHub 拉取失败：仓库 / 分支 / 路径不存在或网络异常，请检查链接后重试",
       "githubRateLimit": "GitHub 访问已达速率限制，请稍后再试",
       "unknown": "操作失败，请重试"
-    }
+    },
+    "catalogHint": "技能保存后按企业权限提供，用户在前台按任务选择。停用后停止提供。"
   },
   "citation": {
     "unsupportedPreview": "该类型文件不支持预览",

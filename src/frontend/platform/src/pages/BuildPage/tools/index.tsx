@@ -11,7 +11,7 @@ import { userContext } from "@/contexts/userContext";
 import { refreshMcpApi } from "@/controllers/API/assistant";
 import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { CpuIcon, Star, User } from "lucide-react";
+import { CpuIcon, Sparkles, Star, User } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -19,6 +19,8 @@ import McpServerDialog from "./EditMcp";
 import EditTool from "./EditTool";
 import ToolItem from "./ToolItem";
 import ToolSet from "./ToolSet";
+import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 const MANAGED_TOOLS = [
     'Dalle3绘画', 'Bing web搜索', '天眼查',
@@ -72,6 +74,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         setLoading(false)
     }
     useEffect(() => {
+        if (type === 'skill') { setLoading(false); return; }
         setLoading(true)
         if (type === 'mcp') {
             loadMcpData()
@@ -110,11 +113,11 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
             <div className="relative w-full flex h-full overflow-y-scroll scrollbar-hide bg-background-main border-t">
                 <div className="relative w-fit p-6">
-                    <SearchInput
+                    {type !== 'skill' && <SearchInput
                         placeholder={t("tools.search")}
                         className="mt-6"
                         onChange={(e) => setKeyword(e.target.value)}
-                    />
+                    />}
                     <div className="mt-4">
                         <div
                             className={`flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${type === "" && "bg-muted-foreground/10"
@@ -140,17 +143,23 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             <CpuIcon />
                             <span>{t("tools.mcpTools")}</span>
                         </div>
+                        {select === null && canManageWorkbenchConfig(user) && <button
+                            type="button"
+                            className={`mt-1 flex w-full items-center gap-2 rounded-md px-4 py-2 text-left transition-colors hover:bg-muted-foreground/10 ${type === 'skill' ? 'bg-muted-foreground/10' : ''}`}
+                            onClick={() => setType('skill')}
+                        ><Sparkles /><span>{t('tools.skills')}</span></button>}
                     </div>
-                    <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between px-6">
+                    {type !== 'skill' && <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between px-6">
                         <div className="flex items-center gap-2">
                             <p className="text-sm text-muted-foreground break-keep">
                                 {t("tools.manageCustomTools")}
                             </p>
                             {/* F027 AC-12: "总记录数" badge removed from the tool list UI; backend response shape unchanged. */}
                         </div>
-                    </div>
+                    </div>}
                 </div>
                 <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-2 scrollbar-hide">
+                    {type === 'skill' ? <SkillManagement /> : <>
                     {
                         loading && <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary/5 z-10">
                             <LoadingIcon className="size-24" />
@@ -212,6 +221,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             )}
                         </Accordion>
                     }
+                    </>}
                 </div>
             </div>
 
@@ -279,6 +289,7 @@ const useToolType = (setType) => {
         setSearchParams({})
         if (!type) return
 
+        if (type === 'skill') { setType('skill'); return; }
         setType(type === 'mcp' ? type : 'edit')
         setTimeout(() => {
             document.getElementById(type === 'mcp' ? 'create-mcptool' : 'create-apitool')?.click()

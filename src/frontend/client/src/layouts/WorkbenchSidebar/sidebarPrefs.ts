@@ -2,7 +2,7 @@ import { createLocalStore, useLocalStore } from '~/utils/localStore';
 import type { WorkbenchNavSection } from '../useWorkbenchNavLinks';
 
 /** An entry of the desktop sidebar's module area: a module, or 广场. */
-export type SidebarEntryId = Exclude<WorkbenchNavSection, 'home'> | 'square';
+export type SidebarEntryId = Exclude<WorkbenchNavSection, 'home'> | 'square' | 'capabilities';
 
 /**
  * How the user arranged the desktop sidebar's module area (管理侧边栏): which entries are

@@ -68,15 +68,54 @@ test('menu insertion restores the caret in the middle of the sentence', () => {
     expect(editor.textContent).toBe('/PPTbefore /Wordafter');
 });
 
+function RepeatedSelectionHarness() {
+    const [skills, setSkills] = useState<{ name: string }[]>([]);
+    const binding = useComposerReferences(skills, [], setSkills);
+    return <>
+        <ComposerEditor value="" onChange={() => {}} {...binding} onKeyDown={() => {}} placeholder="Write" />
+        <button onClick={() => setSkills(previous => [...previous, { name: `skill-${previous.length}` }])}>select next</button>
+    </>;
+}
+
+test('consecutive menu insertions continue outside Chromium non-editable token caret positions', () => {
+    render(<RepeatedSelectionHarness />);
+    const editor = screen.getByRole('textbox');
+    document.execCommand = jest.fn((_command, _show, markup = '') => {
+        const range = window.getSelection()!.getRangeAt(0);
+        const container = range.startContainer;
+        const element = container instanceof Element ? container : container.parentElement;
+        if (element?.closest('[contenteditable="false"]')) return false;
+        const fragment = range.createContextualFragment(markup);
+        const token = fragment.lastChild!;
+        range.insertNode(fragment);
+        // Match Chromium's native caret inside the inserted token's text.
+        select(token.firstChild!, token.textContent!.length);
+        return true;
+    });
+    const add = screen.getByRole('button', { name: 'select next' });
+    fireEvent.click(add);
+    fireEvent.click(add);
+    fireEvent.click(add);
+    // Undo and pointer restoration can also report a collapsed token caret.
+    const lastToken = editor.querySelectorAll('[data-composer-reference]')[2];
+    select(lastToken.firstChild!, lastToken.textContent!.length);
+    fireEvent.blur(editor);
+    fireEvent.click(add);
+    expect(readComposerDocument(editor)).toEqual({ text: '', keys: ['skill:skill-0', 'skill:skill-1', 'skill:skill-2', 'skill:skill-3'] });
+    expect(window.getSelection()!.anchorNode).toBe(editor);
+});
+
 test('IME publishes only the committed text and keeps the active document intact', () => {
     render(<Harness />);
     const editor = screen.getByRole('textbox');
     fireEvent.compositionStart(editor);
-    editor.lastChild!.textContent = '中文';
+    // eslint-disable-next-line no-restricted-syntax -- Chinese text is IME input data, not UI copy.
+    const committedText = '中文';
+    editor.lastChild!.textContent = committedText;
     fireEvent.input(editor);
     expect(screen.getByTestId('text')).toHaveTextContent('before after');
     fireEvent.compositionEnd(editor);
-    expect(screen.getByTestId('text')).toHaveTextContent('中文');
+    expect(screen.getByTestId('text')).toHaveTextContent(committedText);
     expect(screen.getByTestId('skills')).toHaveTextContent('ppt');
 });
 
@@ -127,4 +166,45 @@ test('empty focused editor keeps its hint until IME draft text arrives and resto
     fireEvent.input(editor);
     expect(editor).toHaveAttribute('data-empty', 'true');
     expect(screen.getByTestId('text')).toBeEmptyDOMElement();
+});
+
+function ToolHarness() {
+    const [text, setText] = useState('Check inventory');
+    const [tools, setTools] = useState([
+        { id: 12, name: 'Inventory', children: [{ id: 41, tool_key: 'inventory' }] },
+        { id: 13, name: 'Time', children: [{ id: 1, tool_key: 'get_current_time' }] },
+    ]);
+    const binding = useComposerReferences([], [], () => {}, undefined, tools, setTools);
+    return <>
+        <ComposerEditor value={text} onChange={setText} {...binding} onKeyDown={() => {}} placeholder="Write" />
+        <output data-testid="tool-payload">{JSON.stringify(tools)}</output>
+        <output data-testid="prompt">{text}</output>
+        <button onClick={() => setTools(previous => previous.filter(tool => tool.id !== 12))}>uncheck inventory</button>
+    </>;
+}
+
+test('inline tools preserve executable children while staying outside prompt text', () => {
+    render(<ToolHarness />);
+    const editor = screen.getByRole('textbox');
+    expect(editor).toContainElement(screen.getByText('/Inventory'));
+    expect(readComposerDocument(editor)).toEqual({ text: 'Check inventory', keys: ['tool:12', 'tool:13'] });
+    const inventory = screen.getByText('/Inventory');
+    inventory.remove(); fireEvent.input(editor);
+    expect(JSON.parse(screen.getByTestId('tool-payload').textContent!)).toEqual([
+        { id: 13, name: 'Time', children: [{ id: 1, tool_key: 'get_current_time' }] },
+    ]);
+    editor.prepend(inventory); fireEvent.input(editor);
+    expect(JSON.parse(screen.getByTestId('tool-payload').textContent!)[0].children).toEqual([{ id: 41, tool_key: 'inventory' }]);
+    expect(screen.getByTestId('prompt')).toHaveTextContent('Check inventory');
+});
+
+test('unchecking tools and clearing the document update both reference and selection state', () => {
+    render(<ToolHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'uncheck inventory' }));
+    expect(screen.queryByText('/Inventory')).toBeNull();
+    expect(screen.getByText('/Time')).toBeInTheDocument();
+    const editor = screen.getByRole('textbox');
+    editor.replaceChildren(); fireEvent.input(editor);
+    expect(screen.getByTestId('tool-payload')).toHaveTextContent('[]');
+    expect(screen.getByTestId('prompt')).toBeEmptyDOMElement();
 });

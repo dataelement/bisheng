@@ -148,7 +148,7 @@ class SkillService:
                 name=s.name,
                 display_name=s.display_name or s.name,
                 description=s.description,
-                default_checked=bool(s.default_checked),
+                default_checked=False,
             )
             for s in skills
         ]

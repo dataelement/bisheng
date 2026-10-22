@@ -43,6 +43,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.model_audit_conversation",
     "bisheng.dsh.domain.models.model_audit_title",
     "bisheng.dsh.domain.models.model_audit_tree",
+    "bisheng.dsh.domain.models.work_publication",
     "bisheng.dsh_market.domain.models",
     # Already on the main router import chain — listed for completeness so
     # _force_import_all_models() guarantees them even if a future refactor

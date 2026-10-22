@@ -1,5 +1,4 @@
-// F035 (PRD §4.5): tenant custom skill management section, mounted in the
-// merged 日常 tab of 构建-工作台配置 (replaces the legacy SOP manual library).
+// Tenant skill management inside Build > Tools.
 // List shows display_name only — the skill ID stays detail-level; no
 // migration-source badge (FR-5.1).
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -14,7 +13,6 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/bs-ui/table";
 import { toast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { SkillBrief, SkillDetail, skillApi } from "@/controllers/API/linsight";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronRight, Plus, Sparkles, Upload } from "lucide-react";
@@ -29,12 +27,9 @@ const PAGE_SIZE = 10;
 
 interface SkillManagementProps {
     scopeVersion?: number;
-    /** F035 (v2.6): whether the client 添加技能 entry is shown. Default off. */
-    entryEnabled?: boolean;
-    onEntryToggle?: (enabled: boolean) => void;
 }
 
-export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntryToggle }: SkillManagementProps) {
+export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
     const { t } = useTranslation();
     const [skills, setSkills] = useState<SkillBrief[]>([]);
     const [total, setTotal] = useState(0);
@@ -90,17 +85,6 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
         });
     };
 
-    const handleDefaultCheckedToggle = (skill: SkillBrief, defaultChecked: boolean) => {
-        setSkills(prev => prev.map(s => s.name === skill.name ? { ...s, default_checked: defaultChecked } : s));
-        captureAndAlertRequestErrorHoc(skillApi.setSkillDefaultChecked(skill.name, defaultChecked)).then(res => {
-            if (res) {
-                toast({ variant: 'success', description: defaultChecked ? t('skillManage.defaultCheckedOnToast') : t('skillManage.defaultCheckedOffToast') });
-            } else {
-                setSkills(prev => prev.map(s => s.name === skill.name ? { ...s, default_checked: !defaultChecked } : s));
-            }
-        });
-    };
-
     const handleDelete = (skill: SkillBrief) => {
         bsConfirm({
             desc: t('skillManage.deleteConfirm', { name: skill.display_name }),
@@ -146,8 +130,7 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
         <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
                 <p className="text-lg font-bold">{t('skillManage.title')}</p>
-                <Switch checked={entryEnabled} onCheckedChange={onEntryToggle} />
-                <span className="text-sm text-muted-foreground">{t('skillManage.entryToggleTip')}</span>
+                <span className="text-sm text-muted-foreground">{t('skillManage.catalogHint')}</span>
             </div>
             <div className="flex items-center gap-2 mb-3">
                 <SearchInput
@@ -185,12 +168,6 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                             <TableHead className="w-56">{t('skillManage.columns.displayName')}</TableHead>
                             <TableHead>{t('skillManage.columns.description')}</TableHead>
                             <TableHead className="w-24">{t('skillManage.columns.status')}</TableHead>
-                            <TableHead className="w-28">
-                                <div className="flex items-center gap-1">
-                                    {t('skillManage.columns.defaultChecked')}
-                                    <QuestionTooltip content={t('skillManage.defaultCheckedTip')} />
-                                </div>
-                            </TableHead>
                             <TableHead className="w-40">{t('skillManage.columns.updateTime')}</TableHead>
                             <TableHead className="w-8" />
                         </TableRow>
@@ -198,7 +175,7 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                     <TableBody>
                         {skills.length === 0 && !loading && (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-10">{emptyHint}</TableCell>
+                                <TableCell colSpan={5} className="text-center text-muted-foreground py-10">{emptyHint}</TableCell>
                             </TableRow>
                         )}
                         {skills.map(skill => (
@@ -219,14 +196,6 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                                 {/* Quick toggle stays inline; stop the click from opening the detail sheet */}
                                 <TableCell onClick={(e) => e.stopPropagation()}>
                                     <Switch checked={skill.enabled} onCheckedChange={(checked) => handleToggle(skill, checked)} />
-                                </TableCell>
-                                {/* A disabled skill is never offered, so its preselect is frozen (value kept) */}
-                                <TableCell onClick={(e) => e.stopPropagation()}>
-                                    <Switch
-                                        checked={skill.default_checked}
-                                        disabled={!skill.enabled}
-                                        onCheckedChange={(checked) => handleDefaultCheckedToggle(skill, checked)}
-                                    />
                                 </TableCell>
                                 <TableCell className="text-muted-foreground text-xs">
                                     {(skill.update_time ?? skill.create_time)?.replace('T', ' ').slice(0, 16) ?? '--'}

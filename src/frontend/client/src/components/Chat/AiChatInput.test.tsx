@@ -24,7 +24,6 @@ jest.mock('recoil', () => ({
 }));
 jest.mock('~/store/linsight', () => ({ taskModeSkillsState: () => 'skills' }));
 jest.mock('~/pages/appChat/store/atoms', () => ({ bishengConfState: 'config' }));
-jest.mock('~/components/Linsight/Input/useDefaultCheckedSkills', () => ({ useDefaultCheckedSkills: () => {} }));
 jest.mock('~/hooks/queries/data-provider', () => ({ useGetWorkbenchModelsQuery: () => ({ data: {} }) }));
 jest.mock('~/hooks', () => ({ useContainerCompact: () => ({ ref: null, compact: false }) }));
 jest.mock('~/hooks/useLocalize', () => () => (key: string) => key);
