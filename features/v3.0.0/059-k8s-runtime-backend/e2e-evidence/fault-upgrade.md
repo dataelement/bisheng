@@ -17,3 +17,9 @@
 ## 未完成项
 
 189 初始化失败、取消、未知写入者、响应丢失、manager 重启、迁移失败/快照恢复、升级/卸载保留和最终清理尚未完成。私有故障代理与夹具本地测试只证明工具行为。单节点结果不能代表 NodeLost 跨节点围栏；T070 保持 pending。
+
+## 109 实际迁移基线（尚未v2/恢复）
+
+v1实际发布、独立审批12 executed，generation1/deploy completed与cleanup complete后，owner两次PATCH写入随机哨兵与NULL。每次写前非owner16162、跨租户16101且rows未变；两行及其SHA/随机值SHA已冻结于私有0600证据，完整ID见JSON。旧测试工具误把终态写成approved，曾在任何数据写前拒绝；修正后只对原成功发布接续两行PATCH，没有重复发布。v2失败和恢复仍待执行，不能把准备或本地SQLite repro计为平台故障通过。
+
+189新r2先准备未到创建资源阶段，controller空闲租约已过期导致renew409与terminal fact失败；前端部署最终16227/operation_timeout，但manager op仍running/admitted/cleanup pending。未修改租约、无Pod/PVC；登记T198/T199后正常修复。旧r2 journal与失败记录保留，不原地抹去重跑。

@@ -54,5 +54,52 @@
     "runtime upgrade/uninstall retention",
     "NodeLost or cross-node fencing"
   ],
-  "boundary": "local fixture/HTTP proxy preparations do not count as deployed fault proof; T070 remains pending"
+  "boundary": "local fixture/HTTP proxy preparations do not count as deployed fault proof; T070 remains pending",
+  "migration_v1_baseline": {
+    "host": "192.168.106.109",
+    "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+    "app_id": "971d1ff2e6ff4707a8e7d948c8300e33",
+    "deployment_id": "cf48aaca1cfe42d193a20785d79bb680",
+    "version_id": "38d776c7e46f4d7bb8f9447515cf98bc",
+    "approval_instance_id": 12,
+    "approval_status": "executed",
+    "operation_id": "5537ecd5decb48c391c49a8434fa3fdf",
+    "generation": 1,
+    "rows_sha256": "f3920b4883625621595620f31f34d6849c953555d0fcc3755b8685f0eb0b935f",
+    "sentinel_sha256": "50d0408b6162b71fbd60d06958dee46be22c9afc8df16ae85839de1d80a8f155",
+    "journal_sha256": "12c439bb727ac913ccb50748eb9d9430e5a4efe2f454a4d3ef591d115ddd0194",
+    "two_owner_writes_confirmed": true,
+    "nonowner_code": 16162,
+    "foreign_code": 16101,
+    "denied_patches_unchanged_rows": true,
+    "private_root": "/opt/e2e-f059-docker-platform/evidence/e2e-f059-migration-d109c2",
+    "old_tool_failure": "approval terminal incorrectly expected approved; refused before rows; fixed tool only resumed same successful publication without republish",
+    "migration_v2_run": false,
+    "restore_run": false
+  },
+  "controller_idle_red_189": {
+    "observed_at": 1792679583.9069412,
+    "node": {
+      "node_id": "e2e-f059-node",
+      "controller_holder": "95533d82-2e47-47bc-888d-e72ac07e2fff",
+      "controller_epoch": 2,
+      "lease_until": "2026-10-22T14:21:06",
+      "status": "ready"
+    },
+    "operation": {
+      "operation_id": "d0b665da84014b2fab43ef60f1b282b6",
+      "app_id": "2bde519a30f946a091f5ae4aa5cf2248",
+      "kind": "prepare",
+      "status": "running",
+      "stage": "admitted",
+      "deadline": "2026-10-22T14:34:12",
+      "cleanup_status": "pending",
+      "fact_sequence": 0,
+      "generation": 1,
+      "owner_epoch": 1
+    },
+    "resource_count": 0,
+    "resource_refs": [],
+    "evidence_sha256": "959db12479e9621a4a092105d0474275155f1d3a8695548b0dc758d5b40a103d"
+  }
 }
