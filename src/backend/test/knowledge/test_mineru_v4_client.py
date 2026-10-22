@@ -172,7 +172,7 @@ def test_total_timeout_applies_before_upload(tmp_path):
     source.write_bytes(b"%PDF-test")
     config = MineruV4Conf(api_url="https://mineru.example", job_timeout_seconds=1e-9)
     client = MineruV4Client(config, transport=httpx.MockTransport(lambda _: pytest.fail("Unexpected HTTP request")))
-    with pytest.raises(MineruV4Error, match="timed out"):
+    with pytest.raises(MineruV4Error, match=r"^MinerU V4 parse job timed out$"):
         client.parse(str(source), source.name, "auto", str(tmp_path))
 
 

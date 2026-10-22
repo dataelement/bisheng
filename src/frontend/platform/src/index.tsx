@@ -8,7 +8,8 @@ import './i18n';
 import "./style/index.css";
 // Shared tokens must win over legacy platform variables such as --radius.
 import '@bisheng/ui/tokens.css';
-import { QueryClient, QueryClientProvider } from "react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createPlatformQueryClient } from "./queryClient";
 import { installPlatformThemeBridge } from './utils/platformThemeBridge';
 
 const stopThemeBridge = installPlatformThemeBridge();
@@ -63,15 +64,7 @@ window.addEventListener('vite:preloadError', (event) => {
 });
 
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-      retry: 0
-    }
-  }
-})
+const queryClient = createPlatformQueryClient();
 root.render(
   <QueryClientProvider client={queryClient}>
     <ContextWrapper>

@@ -63,7 +63,7 @@
     "@radix-ui/react-toast": "catalog:",
     "@radix-ui/react-tooltip": "catalog:",
     "@rc-component/mini-decimal": "^1",
-    "@tanstack/react-query": "^4.28.0",
+    "@tanstack/react-query": "catalog:",
     "@tanstack/react-table": "^8.11.7",
     "@tanstack/react-virtual": "^3",
     "axios": "catalog:",
@@ -140,7 +140,8 @@
     "vite-plugin-static-copy": "catalog:",
     "xlsx": "^0.18.5",
     "xlsx-populate": "^1.21.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "@bisheng/chat": "workspace:*"
   },
   "devDependencies": {
     "@babel/plugin-transform-runtime": "^7.22.15",

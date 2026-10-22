@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next"
 
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLLmModelStatus } from "@/controllers/API/finetune"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useQuery } from "react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
@@ -209,7 +209,7 @@ export default function Management() {
 // model list（embeddings llm）
 export function useModel(type = 'llm') {
     const { data, isLoading, refetch } = useQuery({
-        queryKey: type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey",
+        queryKey: [type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey"],
         queryFn: () => type === 'llm' ? getModelListApi() : getAssistantModelList(),
         select: (data) => {
             const llmOptions = []

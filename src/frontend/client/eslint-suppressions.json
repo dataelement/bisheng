@@ -1,7 +1,7 @@
 {
   "postcss.config.cjs": {
     "@typescript-eslint/no-require-imports": {
-      "count": 2
+      "count": 1
     }
   },
   "src/@types/chat.ts": {
@@ -2517,7 +2517,7 @@
   },
   "src/pages/appChat/ChatInput.tsx": {
     "@typescript-eslint/no-unused-expressions": {
-      "count": 3
+      "count": 1
     },
     "no-restricted-imports": {
       "count": 1
@@ -2585,11 +2585,6 @@
       "count": 1
     }
   },
-  "src/pages/appChat/components/ChatFile.tsx": {
-    "no-useless-escape": {
-      "count": 1
-    }
-  },
   "src/pages/appChat/components/ConversationList.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -2600,7 +2595,7 @@
       "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 6
+      "count": 5
     },
     "no-console": {
       "count": 2
@@ -2627,12 +2622,6 @@
     }
   },
   "src/pages/appChat/components/InputForm.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
     }
@@ -2654,65 +2643,11 @@
       "count": 1
     }
   },
-  "src/pages/appChat/components/MessageBs.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/pages/appChat/components/MessageBsChoose.tsx": {
-    "@typescript-eslint/no-wrapper-object-types": {
-      "count": 1
-    }
-  },
   "src/pages/appChat/components/MessageButtons.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
     "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "src/pages/appChat/components/MessageFile.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/pages/appChat/components/MessageNodeRun.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/appChat/components/MessageRunlog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 8
-    },
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/appChat/components/MessageUser.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
@@ -2830,23 +2765,8 @@
     }
   },
   "src/pages/appChat/useMessages.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "no-console": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
     }
   },
   "src/pages/appChat/useWebsocket.ts": {

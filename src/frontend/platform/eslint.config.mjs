@@ -23,7 +23,7 @@ export default frontendConfig({
       {
         name: 'react-query',
         message:
-          'react-query v3 is unmaintained and frozen; migration to @tanstack/react-query is pending (ledger #6). Do not add new usage.',
+          'Legacy react-query v3 has been removed. Use @tanstack/react-query from the workspace catalog.',
       },
       {
         name: 'xlsx',
@@ -45,7 +45,7 @@ export default frontendConfig({
       {
         group: ['react-query/*'],
         message:
-          'react-query v3 is unmaintained and frozen (ledger #6). Do not add new usage.',
+          'Legacy react-query v3 has been removed. Use @tanstack/react-query from the workspace catalog.',
       },
       {
         group: ['xlsx-populate', 'xlsx-populate/*'],

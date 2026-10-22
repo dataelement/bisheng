@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button, Textarea, notification } from '@bisheng/ui';
+import { ConversationComposer } from '@bisheng/chat';
+import { Button, notification } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 
@@ -16,23 +17,24 @@ import { formatDate } from "@/util/utils";
 import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useVoiceDraft } from "@/hooks/useVoiceDraft";
-import GuideQuestions from "./GuideQuestions";
 import { isBlockingChatError,resolveChatErrorMessage } from "./chatErrorMessage";
 import { useMessageStore } from "./messageStore";
 
-export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
+export default function ChatInput({ clear, form, inputForm, wsUrl, onBeforSend, onClickClear }) {
 
-    const { t } = useTranslation()
+    const eventTarget = useMessageStore(state => state.eventTarget)
+    const { t } = useTranslation(['bs', 'shared'])
     const { appConfig } = useContext(locationContext)
 
     const [formShow, setFormShow] = useState(false)
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const [inputLock, setInputLock] = useState({ locked: false, reason: '' })
-    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+    const { data: linsightConfig } = useLinsightConfig();
 
     const { isLoading: audioOpening } = useAudioStore()
 
-    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, closeDanglingRunLogs, destory, setShowGuideQuestion } = useMessageStore()
+    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, closeDanglingRunLogs, destory, setShowGuideQuestion, setInputLocked } = useMessageStore()
+    useEffect(() => { setInputLocked(inputLock.locked); }, [inputLock.locked, setInputLocked]);
     const currentChatIdRef = useRef(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const voice = useVoiceDraft(inputRef, '', (value) => {
@@ -107,10 +109,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         sendWsMsg(wsMsg)
 
         // 滚动聊天到底
-        const messageDom = document.getElementById('message-panne')
-        if (messageDom) {
-            messageDom.scrollTop = messageDom.scrollHeight;
-        }
+
     }
 
     const diffRef = useRef(0)
@@ -134,16 +133,13 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
         return new Promise((res, rej) => {
             try {
-                const startTime = Date.now();
                 const ws = new WebSocket(`${webSocketProtocol}://${wsUrl}&chat_id=${chatId}`)
                 wsRef.current = ws
                 // websocket linsen
                 ws.onopen = () => {
                     // 记录连接成功的时间
-                    const endTime = Date.now();
 
                     // 计算连接建立所需的时间
-                    const connectionTime = endTime - startTime;
 
                     // console.log('WebSocket 连接建立时间: ' + connectionTime + ' 毫秒');
                     console.log("WebSocket connection established!");
@@ -273,115 +269,26 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             inputRef.current.value = message
             if (send) handleSendClick()
         }
-        document.addEventListener('userResendMsgEvent', handleCustomEvent)
+        eventTarget.addEventListener('userResendMsgEvent', handleCustomEvent)
         return () => {
-            document.removeEventListener('userResendMsgEvent', handleCustomEvent)
+            eventTarget.removeEventListener('userResendMsgEvent', handleCustomEvent)
         }
     }, [inputLock.locked, showWhenLocked, voice.busy])
 
-    // 点击引导词
-    const handleClickGuideWord = (message) => {
-        if (voice.busy) return
-        if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
-        inputRef.current.value = message
-        handleSendClick()
-    }
-
-    // auto input height
-    const handleTextAreaHeight = (e) => {
-        const textarea = e.target
-        textarea.style.height = 'auto'
-        textarea.style.height = textarea.scrollHeight + 'px'
-        // setInputEmpty(textarea.value.trim() === '')
-    }
-
-    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
-        <div className={`relative ${clear && 'pl-9'}`}>
-            {/* 语音转文字 */}
-            {linsightConfig?.asr_model?.id && <SpeechToTextComponent
-                key={chatId} {...voice.props} disabled={inputLock.locked}
-                realtime={!!linsightConfig.asr_model.realtime} modelId={linsightConfig.asr_model.id}
-            />}
-            {/* form */}
-            {
-                formShow && <div className="relative">
-                    <div className="absolute left-0 border bottom-2 bg-background-login px-4 py-2 rounded-md w-[50%] min-w-80 z-40">
-                        {inputForm}
-                    </div>
-                </div>
-            }
-            {/* 引导问题 */}
-            <GuideQuestions
-                locked={inputLock.locked}
-                chatId={chatId}
-                questions={questions}
-                onClick={handleClickGuideWord}
-            />
-            {/* clear */}
-            <div className="flex absolute left-0 top-4 z-10">
-                {
-                    clear && <div
-                        className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        onClick={() => { !inputLock.locked && onClickClear?.() }}
-                    ><Outlined.Delete className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></Outlined.Delete></div>
-                }
-            </div>
-            {/* form switch */}
-            <div className="flex absolute left-3 top-4 z-10">
-                {
-                    form && <div
-                        className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><Outlined.Upload size={32} className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></Outlined.Upload></div>
-                }
-            </div>
-            {/* send */}
-            <div className="flex gap-2 absolute right-3 top-4 z-10">
-                {stop.show ?
-                    <div
-                        onClick={() => {
-                            if (stop.disable || inputLock.locked) return
-                            setStop({ show: true, disable: true });
-                            sendWsMsg({ "action": "stop" });
-                        }}
-                        className={`w-6 h-6 bg-foreground rounded-full flex justify-center items-center cursor-pointer ${stop.disable || inputLock.locked && 'bg-muted-foreground text-muted-foreground'}`}>
-                        <span className="w-2 h-2.5 border-x-2 border-border"></span>
-                    </div>
-                    : <div
-                        id="bs-send-btn"
-                        className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
-                        onClick={() => { !inputLock.locked && handleSendClick() }}>
-                        <Outlined.Send className={`${inputLock.locked || audioOpening || voice.busy ? 'text-muted-foreground' : 'text-foreground'}`} />
-                    </div>
-                }
-            </div>
-            {/* stop autogen等待输入时专用*/}
-            <div className="absolute w-full flex justify-center bottom-32">
-                {autogenStop && <Button className="rounded-full" variant="outlined" onClick={() => {
-                        if (stop.disable) return
-                        setStop({ show: true, disable: true });
-                        setAutogenStop(false)
-                        sendWsMsg({ "action": "stop" });
-                    }} color="default"><Outlined.PlayerPause className="mr-2" />Stop</Button>}
-            </div>
-            {/* question */}
-            <Textarea
-                id="bs-send-input"
-                ref={inputRef}
-                rows={1}
-                style={{ height: 56 }}
-                disabled={inputLock.locked}
-                onInput={(event) => { voice.handleEdit(event.currentTarget.value); handleTextAreaHeight(event) }}
-                onCompositionStart={voice.compositionStart}
-                onCompositionEnd={voice.compositionEnd}
-                placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                        event.preventDefault();
-                        !inputLock.locked && handleSendClick()
-                    }
-                }} textareaClassName={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}></Textarea>
-        </div>
-        <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>
-    </div>
-};
+    return <div className="absolute bottom-0 w-full z-10">
+        {formShow && <div className="relative"><div className="absolute left-0 border bottom-2 bg-background-login px-4 py-2 rounded-md w-[50%] min-w-80 z-40">{inputForm}</div></div>}
+        <ConversationComposer inputRef={inputRef} canExecute inputDisabled={inputLock.locked} busy={audioOpening || voice.busy}
+            showStop={stop.show} stopDisabled={stop.disable}
+            labels={{ send: t('shared:app_chat.send'), stop: t('shared:app_chat.stop'), restart: t('chat.runNewWorkflow') }}
+            placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')} hint={appConfig.dialogTips}
+            onSend={handleSendClick} onStop={() => { if (!stop.disable) { setStop({ show: true, disable: true }); sendWsMsg({ action: 'stop' }); } }}
+            onInput={event => voice.handleEdit(event.currentTarget.value)} onCompositionStart={voice.compositionStart} onCompositionEnd={voice.compositionEnd}
+            voice={linsightConfig?.asr_model?.id ? <SpeechToTextComponent inline key={chatId} {...voice.props} disabled={inputLock.locked}
+                realtime={!!linsightConfig.asr_model.realtime} modelId={linsightConfig.asr_model.id} /> : undefined}
+            leadingActions={<div className="flex absolute left-0 top-4 z-10">
+                {clear && <Button size="small" variant="text" color="default" disabled={inputLock.locked} onClick={() => onClickClear?.()}><Outlined.Delete size={16} /></Button>}
+                {form && <Button size="small" variant="text" color="default" disabled={!showWhenLocked && inputLock.locked} onClick={() => setFormShow(!formShow)}><Outlined.Upload size={16} /></Button>}
+            </div>} />
+        {autogenStop && <Button variant="outlined" color="default" onClick={() => { if (!stop.disable) { setStop({ show: true, disable: true }); setAutogenStop(false); sendWsMsg({ action: 'stop' }); } }}><Outlined.PlayerPause size={16} />{t('shared:app_chat.stop')}</Button>}
+    </div>;
+}

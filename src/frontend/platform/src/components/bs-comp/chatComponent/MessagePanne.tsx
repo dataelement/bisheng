@@ -1,165 +1,27 @@
 // @ts-strict-ignore
-import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal";
-import ThumbsMessage from "@/pages/ChatAppPage/components/ThumbsMessage";
-import { useEffect,useRef } from "react";
-import { useTranslation } from "react-i18next";
-import FileBs from "./FileBs";
-import MessageBs,{ ReasoningLog } from "./MessageBs";
-import MessageSystem from "./MessageSystem";
-import MessageUser from "./MessageUser";
-import RunLog from "./RunLog";
-import Separator from "./Separator";
-import { useMessageStore } from "./messageStore";
+import { PlatformConversationMessages } from '@/components/bs-comp/appChat/PlatformConversationMessages';
+import { useEffect, useRef } from 'react';
+import { SuggestedQuestions, useConversationScroll } from '@bisheng/chat';
+import { messagesForPresentation } from '@bisheng/chat/core';
+import { useMessageStore } from './messageStore';
 
-export default function MessagePanne({ debug = false, mark = false, logo, useName, guideWord, loadMore,chat, version,onMarkClick = (...a: any) => { } }) {
-    const { t } = useTranslation()
-    const { chatId, messages, hisMessages } = useMessageStore()
+export default function MessagePanne({ canExecute = false, mark = false, logo, useName, guideWord, questions = [], loadMore,chat, version,onMarkClick = undefined }) {
+    const { chatId, messages, hisMessages, running, historyEnd, inputLocked, showGuideQuestion, setShowGuideQuestion, eventTarget } = useMessageStore()
 
-    // 反馈
-    const thumbRef = useRef(null)
-    // 溯源
-    const sourceRef = useRef(null)
+    const questionKey = questions.join("\n");
+    useEffect(() => { setShowGuideQuestion(!!questionKey); }, [chatId, questionKey, setShowGuideQuestion]);
 
-    // 自动滚动
-    const messagesRef = useRef(null)
-    const scrollLockRef = useRef(false)
-    useEffect(() => {
-        scrollLockRef.current = false
-        queryLockRef.current = false
-    }, [chatId])
-    const lastScrollTimeRef = useRef(0); // 记录上次执行的时间戳
-    useEffect(() => {
-        if (scrollLockRef.current) return;
-
-        const now = Date.now();
-        const throttleTime = 1200; // 1秒
-
-        // 如果距离上次执行的时间小于 throttleTime，则直接返回
-        if (now - lastScrollTimeRef.current < throttleTime) {
-            return;
-        }
-
-        // 执行滚动操作
-        messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-
-        // 更新上次执行的时间戳
-        lastScrollTimeRef.current = now;
-    }, [messages]);
-
-    // 消息滚动加载
-    const queryLockRef = useRef(false)
-    useEffect(() => {
-        function handleScroll() {
-            if (queryLockRef.current) return
-            const { scrollTop, clientHeight, scrollHeight } = messagesRef.current
-            // 距离底部 600px内，开启自动滚动
-            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 400
-
-            if (messagesRef.current.scrollTop <= 90) {
-                console.log('请求 :>> ', 1);
-                queryLockRef.current = true
-                loadMore()
-                // TODO 翻页定位
-                // 临时处理防抖
-                setTimeout(() => {
-                    queryLockRef.current = false
-                }, 1000);
-            }
-        }
-
-        messagesRef.current?.addEventListener('scroll', handleScroll);
-        return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messagesRef.current, messages, chatId]);
+    const messagesRef = useRef<HTMLDivElement>(null);
+    useConversationScroll({ scrollRef: messagesRef, sessionKey: chatId,
+        messages: messagesForPresentation(messages, { mode: 'assistant', sessionKey: chatId }),
+        canLoadOlder: typeof loadMore === 'function' && !running && !historyEnd, onLoadOlder: () => loadMore?.() });
 
     const messagesList = [...hisMessages, ...messages]
-    // 成对的qa msg
-    const findQa = (msgs, index) => {
-        const item = msgs[index]
-        if (item.category === 'answer') {
-            const a = item.message[item.chatKey] || item.message
-            let q = ''
-            while (index > -1) {
-                const qItem = msgs[--index]
-                if (qItem.category === 'question') {
-                    q = qItem.message[qItem.chatKey] || qItem.message
-                    break
-                }
-            }
-            return { q, a }
-        } else if (item.category === 'question') {
-            const q = item.message[item.chatKey] || item.message
-            let a = ''
-            while (msgs[++index]) {
-                const aItem = msgs[index]
-                if (aItem.category === 'answer') {
-                    a = aItem.message[aItem.chatKey] || aItem.message
-                    break
-                }
-            }
-            return { q, a }
-        }
-    }
-
     return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60">
-        {guideWord && <MessageBs
-            key={9999}
-            version={version}
-            start
-            data={{ message: guideWord, isSend: false, chatKey: '', end: true, user_name: '' }} />}
-        {
-            messagesList.map((msg, index) => {
-                // 工厂
-                let type = 'llm'
-                if (msg.isSend) {
-                    type = 'user'
-                } else if (msg.category === 'divider') {
-                    type = 'separator'
-                } else if (msg.files?.length) {
-                    type = 'file'
-                } else if (['tool', 'flow', 'knowledge'].includes(msg.category)
-                    // || (msg.category === 'processing' && msg.thought.indexOf(`status_code`) === -1)
-                ) { // 项目演示？
-                    type = 'runLog'
-                } else if (msg.thought) {
-                    type = 'system'
-                } else if (msg.category === 'reasoning_answer') {
-                    type = 'reasoning'
-                }
-
-                switch (type) {
-                    case 'user':
-                        return <MessageUser debug={debug} mark={mark} key={msg.id} useName={useName} data={msg} onMarkClick={() => onMarkClick('question', msg.id, findQa(messagesList, index))} />;
-                    case 'llm':
-                        return <MessageBs
-                            debug={debug}
-                            mark={mark}
-                            logo={logo}
-                            key={msg.id}
-                            version={version}
-                            data={msg}
-                            chat={chat}
-                            onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
-                            onSource={(data) => { sourceRef.current?.openModal(data) }}
-                            onMarkClick={() => onMarkClick('answer', msg.id, findQa(messagesList, index))}
-                        />;
-                    case 'system':
-                        return <MessageSystem key={msg.id} data={msg} />;
-                    case 'separator':
-                        return <Separator key={msg.id} text={msg.message || t('chat.roundOver')} />;
-                    case 'file':
-                        return <FileBs key={msg.id} data={msg} />;
-                    case 'runLog':
-                        return <RunLog key={msg.id} data={msg} />;
-                    case 'reasoning':
-                        return <ReasoningLog key={msg.id} loading={false} msg={msg.message} />
-                    default:
-                        return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>Unknown message type</div>;
-                }
-            })
-        }
-        {/* 踩 反馈 */}
-        <ThumbsMessage ref={thumbRef}></ThumbsMessage>
-        {/* 源文件类型 */}
-        <ResouceModal ref={sourceRef}></ResouceModal>
-    </div>
-};
+        <PlatformConversationMessages mode="assistant" sessionKey={chatId}
+            messages={guideWord ? [{ category: 'guide_word', message: guideWord }, ...messagesList] : messagesList}
+            canExecute={canExecute} canAnnotate={mark} logo={logo} title={chat?.name ?? ''} runCatalog={chat} userName={useName} version={version} onMarkClick={onMarkClick} />
+        <SuggestedQuestions questions={questions} canExecute={canExecute && !inputLocked && showGuideQuestion}
+            onSelect={word => { setShowGuideQuestion(false); eventTarget.dispatchEvent(new CustomEvent('userResendMsgEvent', { detail: { send: true, message: word } })); }} />
+    </div>;
+}

@@ -7,7 +7,7 @@ import { userContext } from "@/contexts/userContext";
 import { useEditorDashboardStore } from "@/store/dashboardStore";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQueryClient } from "react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Dashboard } from "./types/dataConfig";
 
 export const DashboardsQueryKey = "DashboardsQueryKey"
