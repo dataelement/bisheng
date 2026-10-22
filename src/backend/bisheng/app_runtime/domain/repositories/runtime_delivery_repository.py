@@ -201,7 +201,7 @@ class RuntimeDeliveryRepository:
         now = datetime.utcnow()
         if operation.kind != "data" or not now < operation.deadline <= now + timedelta(seconds=60):
             raise RuntimeConflict("data_operation_deadline_invalid")
-        async with self.transaction():
+        async with self.transaction() as session:
             node = await self.get(RuntimeNode, operation.node_id, lock=True)
             if (
                 node is None
@@ -229,6 +229,17 @@ class RuntimeDeliveryRepository:
                 raise RuntimeConflict("data_owner_fence_stale")
             if owner.data_operation_id:
                 raise RuntimeConflict("data_operation_in_progress")
+            # Count only the global node allocation; never load other tenant data.
+            with bypass_tenant_filter():
+                active_data = (
+                    await session.exec(
+                        select(func.count())
+                        .select_from(RuntimeAssignment)
+                        .where(RuntimeAssignment.node_id == node.id, RuntimeAssignment.data_operation_id != "")
+                    )
+                ).one()
+            if int(active_data) >= 2:
+                raise RuntimeConflict("data_capacity_exhausted")
             for previous in await self.find(RuntimeOperation, app_id=operation.app_id):
                 if previous.kind in MUTATING and (
                     previous.status not in TERMINAL or previous.cleanup_status != "complete"

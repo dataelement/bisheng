@@ -798,3 +798,7 @@ L1：架构/命名/内部序列化/跨库与租户/敏感信息/设计同步 PAS
 
 **红阶段**：缺模块7 failed；数据状态机1 failed；补错误码/有界读取/时区/路径查询/缓存回收先分别复现失败。最终14项通过（`/private/tmp/f059-k8s-data-executor-cache-final.log`），最新完整runtime见`/private/tmp/f059-runtime-data-cache-full.log`。Ruff与逐文件arch-guard通过。
 **元数据**：1/2目标文件、T043/T033依赖、配对红阶段PASS。**结果：PASS_WITH_NOTES**：集群/运输边界为模拟集群和HTTP传输测试，默认backend签发T049、SQLite维护T047和189真实验收仍必须完成。
+
+## T081/T082 跨租户并发补充复审
+
+新增实际双租户SQL用例先复现第三个数据会话仍可进入（`/private/tmp/f059-data-concurrency-red.log`）。在已锁节点下只聚合assignment.data_operation_id非空的数量，上限2；不加载其他租户对象，不用TTL释放未知归属。数据Repository/会话24 passed（`/private/tmp/f059-data-concurrency-final.log`），Ruff/架构守卫通过。L1架构、命名、SQL/租户、序列化、信息安全与设计同步PASS，前端N/A。原任务目标范围保持。**结果：PASS。**

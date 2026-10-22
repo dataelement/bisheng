@@ -137,3 +137,36 @@ async def test_kubernetes_reservations_include_the_actual_data_sidecar(runtime_r
     reserved = (await runtime_repo.find(RuntimeCapacityReservation, operation_id=result["operation_id"]))[0]
     assert reserved.memory_mb == 512 + extra
     assert reserved.cpu_millicores == 250 + (25 if extra else 0)
+
+
+async def test_data_concurrency_limit_is_global_across_tenants(owned):
+    from bisheng.core.context.tenant import current_tenant_id
+
+    repo, _, _ = owned
+    await repo.acquire_data_operation(data_operation())
+    for app_id, tenant in (("app-b", 1), ("app-c", 2)):
+        token = current_tenant_id.set(tenant)
+        try:
+            serving = operation("serve-" + app_id, app=app_id)
+            serving.tenant_id, serving.scope_key = tenant, f"{tenant}/{app_id}"
+            serving.status, serving.cleanup_status, serving.generation = "completed", "complete", 3
+            await repo.save(serving)
+            await repo.save(
+                RuntimeAssignment(
+                    tenant_id=tenant,
+                    app_id=app_id,
+                    node_id="node-a",
+                    generation=3,
+                    owner_epoch=1,
+                    active_operation_id=serving.id,
+                )
+            )
+            data = data_operation("data-" + app_id)
+            data.app_id, data.tenant_id, data.scope_key = app_id, tenant, f"{tenant}/{app_id}"
+            if tenant == 1:
+                await repo.acquire_data_operation(data)
+            else:
+                with pytest.raises(RuntimeConflict, match="capacity"):
+                    await repo.acquire_data_operation(data)
+        finally:
+            current_tenant_id.reset(token)

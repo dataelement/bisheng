@@ -271,7 +271,7 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 
 数据helper本地实现补充：data-v1签名输入为固定域`BISHENG-RUNTIME-DATA-V1\n`加canonical JSON（key_id和claims），claims精确绑定version/operation_id/request_id/app_id/exec_ref/pod_uid/actor_ref/action/parameters_sha256/nonce/issued_at/not_after/deadline；受理窗口最长5秒，总deadline不超过签发后60秒且仍受原数据操作期限限制。独立受信helper只加载公钥。卷内跨进程flock串行，started先fsync再创建有界SQLite子进程，子进程完成但done落盘失败仍保留未知；新只读请求查询原ID，不重放写操作。导出在platform目录生成文件、校验摘要后流式返回，不把CSV塞入journal或一次性读入内存。当前仅helper本地/HTTP合同完成，平台签发、数据会话、Pod内接线与真实集群尚未交付。
 
-数据会话底层互斥已接线：Repository按node→assignment顺序，在同一事务建立data_operation_id和离线helper 128MiB/25m预占；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。平台存储、Pod接线及自然人授权仍由后续Service/执行器任务实现。
+数据会话底层互斥已接线：Repository按node→assignment顺序，对节点内跨租户会话只做聚合计数并发上限2，在同一事务建立data_operation_id和离线helper 128MiB/25m预占；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。平台存储、Pod接线及自然人授权仍由后续Service/执行器任务实现。
 
 原AppDataService入口已接选择分发：Docker保持既有RPC；K8s在原owner/参数校验之后，由RuntimeDataSessionService提交内部会话、等待同UID helper就绪、调用后端签发接口并转交X-Runtime-Data-Grant。后台不跨SQL事务等待网络。在线固定原exec_ref/UID，不另起挂卷写入者；离线冷启动与调用共用60秒。manager唤醒响应丢失以已提交状态查询恢复，数据HTTP结果未知不重发。签发默认实现归T049，Pod数据运输/清理归T045，本阶段使用可注入合同测试，不表示两者已完成。
 
@@ -647,3 +647,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T042/T043 owner数据会话与既有业务入口选择分发 | 新会话及原owner/审计/账本41 passed；签发默认实现、Pod运输与真实验收仍待后续 |
 
 | 2026-10-22 | T044/T045数据运输/固定数据位置/owner票据转交，以及T009/T011/T033/T037/T041接线复审；UTC期限及短缓存回收 | data执行14项、helper控制20项、模板准入74项；完整runtime结果见validation；仍无默认签票与189部署结论 |
+
+| 2026-10-22 | T081/T082补充跨租户/多manager数据并发上限，不能仅靠进程内锁 | 新增用例先失败；数据Repository＋会话24 passed，无跨租户明细加载 |
