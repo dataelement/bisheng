@@ -4,6 +4,7 @@ import asyncio
 import base64
 import binascii
 import copy
+import hashlib
 import json
 import re
 import shutil
@@ -109,9 +110,23 @@ async def update(app_id: str, table: str, key: str, values: dict = Body(..., emb
 @router.get("/export")
 async def export(app_id: str, table: str, worker=Depends(scoped_data)):
     path, root = await asyncio.to_thread(worker.call, app_id, "export", {"table": table})
+
+    def digest():
+        result = hashlib.sha256()
+        with path.open("rb") as source:
+            while chunk := source.read(1024 * 1024):
+                result.update(chunk)
+        return result.hexdigest()
+
     return FileResponse(
         path,
+        headers={"X-Content-Sha256": await asyncio.to_thread(digest)},
         media_type="text/csv",
         filename=table + ".csv",
         background=BackgroundTask(shutil.rmtree, root, ignore_errors=True),
     )
+
+
+@router.post("/result")
+async def result(app_id: str, parameters: dict = Body(...), worker=Depends(scoped_data)):
+    return await asyncio.to_thread(worker.call, app_id, "result", parameters)

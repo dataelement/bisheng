@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import stat
 import time
 from dataclasses import replace
@@ -114,6 +115,7 @@ class KubernetesExecutor:
             "protocol_version": 2,
             "platform": self.descriptor.platform,
             "helper_image": self.document.get("helper_image", ""),
+            "assembler_image": self.document.get("assembler_image", ""),
             "status_policy_revision": self.descriptor.status_policy_revision,
             "data_transport_ready": self.data_transport is not None,
         }
@@ -139,6 +141,8 @@ class KubernetesExecutor:
         if platform != self.descriptor.platform:
             raise ExecutorError("frozen_platform_mismatch")
         mode = delivery.get("mode", "bundle")
+        if mode == "source-image":
+            mode = "bundle" if purpose.startswith("prepare-") else "image"
         startup = delivery.get("startup") or {}
         command = startup.get("command") or []
         if not isinstance(command, (list, tuple)) or any(not isinstance(x, str) for x in command):
@@ -146,9 +150,21 @@ class KubernetesExecutor:
         tier, health = payload.get("tier", {}), payload.get("health", {})
         reference = reference or _ref(operation, purpose)
         pvc = "" if purpose not in {"serve", "migrate", "restore", "data"} else _name("data-", operation["app_id"])
-        env = payload.get("runtime_env", {}) if purpose in {"serve", "probe", "preview"} else {}
+        env = dict(payload.get("runtime_env", {})) if purpose in {"serve", "probe", "preview"} else {}
         if not isinstance(env, dict) or any(not isinstance(v, str) for v in env.values()):
             raise ExecutorError("frozen_environment_invalid")
+        defaults = {}
+        if purpose in {"serve", "probe", "preview"}:
+            defaults = {
+                "PORT": str(payload.get("port", 8080)),
+                "BISHENG_APP_PORT": str(payload.get("port", 8080)),
+                "BISHENG_APP_ID": operation["app_id"],
+                "BISHENG_APP_DB_URL": "sqlite:////data/app.db",
+                "BISHENG_APP_DB_PATH": "/data/app.db",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "BISHENG_APP_BASE_PATH": payload.get("base_path", "/apps/" + payload.get("slug", operation["app_id"])),
+            }
+            env = {key: value for key, value in env.items() if key not in defaults}
         if deadline is None and purpose != "serve":
             deadline = int(_seconds(operation["deadline"]) - self.clock.time())
             if purpose == "preview":
@@ -181,9 +197,14 @@ class KubernetesExecutor:
             gid=profile.get("gid", 10001),
             mode=mode,
             port=payload.get("port", 8080),
-            health_path=health.get("path", "/health"),
+            health_path=health.get("path", "/"),
+            env=defaults,
+            schema_plan=tuple(payload.get("migration_plan", [])) if purpose in {"probe", "preview"} else (),
+            temporary_mb=self.document.get("temporary_storage_mb", 4096),
             pvc_name=pvc,
-            scratch_pvc=_name("scratch-", operation["operation_id"]) if purpose.startswith("prepare-") else "",
+            scratch_pvc=_name("scratch-", operation["operation_id"])
+            if purpose.startswith("prepare-") or purpose == "assemble"
+            else "",
             material_secret=_name("material-", reference)
             if mode == "bundle" or purpose in {"prepare-download", "prepare-upload"}
             else "",
@@ -337,6 +358,14 @@ class KubernetesExecutor:
         return grant
 
     def launch(self, operation, *, preview=False):
+        if self.config.egress_enabled:
+            from runtime_manager.egress import egress_env
+
+            credentials = self.platform.egress(operation["operation_id"], "runtime")
+            operation["payload"]["runtime_env"] = {
+                **operation["payload"].get("runtime_env", {}),
+                **egress_env(self.config, **credentials),
+            }
         purpose = "preview" if preview else ("probe" if operation["kind"] == "probe" else "serve")
         plan = self._plan(operation, purpose)
         delivery = operation["payload"]["resolved_delivery"]
@@ -350,7 +379,7 @@ class KubernetesExecutor:
                 operation,
                 plan,
                 plan.app_secret,
-                {key: value.encode() for key, value in operation["payload"]["runtime_env"].items()},
+                {key: operation["payload"]["runtime_env"][key].encode() for key in plan.secret_env},
                 "app-secret",
             )
         pod = self._create(row, template)
@@ -367,7 +396,7 @@ class KubernetesExecutor:
             if result["ready"]:
                 return {**result, "service_ref": service_ref, "service_uid": service_row["uid"]}
             if self.clock.time() >= deadline:
-                raise ExecutorError("workload_readiness_timeout")
+                raise ExecutorError("workload_readiness_timeout", tail=self._diagnostic(operation, plan.resource_ref))
             self.clock.sleep(min(1, deadline - self.clock.time()))
 
     def observe(self, exec_ref):
@@ -475,13 +504,59 @@ class KubernetesExecutor:
             "exec_ref": exec_ref,
         }
 
+    def _diagnostic(self, operation, reference):
+        from runtime_manager.container_runner import redact
+
+        try:
+            row = self.platform.resource(reference)
+            pod = self._fresh(row)
+        except (KubernetesAPIError, PlatformError, ExecutorError):
+            return "Execution observation unavailable"
+        output = []
+        for container in [*pod.get("spec", {}).get("initContainers", []), *pod.get("spec", {}).get("containers", [])]:
+            name = container["name"]
+            try:
+                text = self.client.logs(row["name"], container=name, tail=80)
+            except KubernetesAPIError:
+                continue
+            output.append(name + ":\n" + text)
+        for item in [
+            *pod.get("status", {}).get("initContainerStatuses", []),
+            *pod.get("status", {}).get("containerStatuses", []),
+        ]:
+            waiting = item.get("state", {}).get("waiting", {}).get("reason")
+            if waiting:
+                output.append(item.get("name", "container") + ": " + str(waiting)[:128])
+        env = {
+            **operation["payload"].get("runtime_env", {}),
+            "PIP_INDEX_URL": self.config.build_index_url,
+            "PIP_EXTRA_INDEX_URL": self.config.build_extra_index_url,
+            "NPM_REGISTRY": self.config.build_npm_registry,
+        }
+        return redact("\n".join(output), env).encode()[-16384:].decode("utf-8", errors="ignore")
+
     def logs(self, exec_ref, *, since=None, tail=200):
         row = self.platform.resource(exec_ref)
-        self._fresh(row)
+        pod = self._fresh(row)
         since_time = (
             datetime.fromtimestamp(since, UTC).isoformat().replace("+00:00", "Z") if since is not None else None
         )
-        return self.client.logs(row["name"], since_time=since_time, tail=tail, container="app")
+        parts = []
+        restarted = any(
+            c.get("name") == "app" and c.get("restartCount", 0) > 0
+            for c in pod.get("status", {}).get("containerStatuses", [])
+        )
+        if restarted:
+            try:
+                parts.append(
+                    self.client.logs(row["name"], since_time=since_time, tail=tail, container="app", previous=True)
+                )
+            except KubernetesAPIError as exc:
+                if exc.status_code not in {400, 404}:
+                    raise
+        parts.append(self.client.logs(row["name"], since_time=since_time, tail=tail, container="app"))
+        self._fresh(row)
+        return "\n".join(parts).encode()[-1024 * 1024 :].decode("utf-8", errors="ignore")
 
     def cleanup(self, operation):
         if operation["kind"] == "data" and operation["payload"].get("online"):
@@ -556,7 +631,7 @@ class KubernetesExecutor:
                 raise
         return result
 
-    def _phase(self, operation, stage, purpose, document):
+    def _phase(self, operation, stage, purpose, document, *, plan=None, result_container=None):
         current = self.platform.operation(operation["operation_id"])
         previous = current.get("result", {}).get("prepare_progress", {}).get(stage)
         if previous:
@@ -564,30 +639,32 @@ class KubernetesExecutor:
             if not self.confirm_stopped(previous["exec_ref"])["stopped"]:
                 raise ExecutorError("preparation_writer_stop_unconfirmed")
             return previous["result"]
-        profile = operation["payload"]["profile"]
-        plan = self._plan(
-            operation,
-            purpose,
-            reference=_ref(operation, purpose, stage),
-            image=profile["preparer_image"],
-            deadline=min(1800, int(_seconds(operation["deadline"]) - self.clock.time())),
-        )
-        if purpose == "prepare-install":
-            plan = replace(
-                plan,
-                command=("python", "-I", "/runtime/tools/k8s_prepare.py"),
-                material_secret="",
-                app_secret="",
-                secret_env=(),
+        if plan is None:
+            profile = operation["payload"]["profile"]
+            plan = self._plan(
+                operation,
+                purpose,
+                reference=_ref(operation, purpose, stage),
+                image=profile["preparer_image"],
+                deadline=min(1800, int(_seconds(operation["deadline"]) - self.clock.time())),
             )
-        else:
-            plan = replace(
-                plan, helper_env={"MATERIAL_PLAN": json.dumps(document, sort_keys=True, separators=(",", ":"))}
-            )
+            if purpose == "prepare-install":
+                plan = replace(
+                    plan,
+                    command=("python", "-I", "/runtime/tools/k8s_prepare.py"),
+                    prepare_environment=operation["payload"].get("delivery", {}).get("mode") == "source-image",
+                    material_secret="",
+                    app_secret="",
+                    secret_env=(),
+                )
+            else:
+                plan = replace(
+                    plan, helper_env={"MATERIAL_PLAN": json.dumps(document, sort_keys=True, separators=(",", ":"))}
+                )
         template = pod_template(plan)
         row = self._intent(operation, plan, template, plan.resource_ref)
         self._volume(operation, plan)
-        grant = self._material(operation, plan) if purpose != "prepare-install" else None
+        grant = self._material(operation, plan) if plan.material_secret else None
         pod = self._create(row, template)
         if grant:
             self.platform.bind_material_delegation(grant["delegation_id"], pod["metadata"]["uid"])
@@ -597,11 +674,11 @@ class KubernetesExecutor:
             pod = self._fresh(self.platform.resource(plan.resource_ref))
             status = pod.get("status", {})
             if status.get("phase") == "Failed":
-                raise ExecutorError("preparation_phase_failed")
+                raise ExecutorError("preparation_phase_failed", tail=self._diagnostic(operation, plan.resource_ref))
             if status.get("phase") == "Succeeded":
                 if any("running" in c.get("state", {}) for c in status.get("containerStatuses", [])):
                     raise ExecutorError("preparation_phase_status_inconsistent")
-                container = "prepare" if purpose == "prepare-install" else "transfer"
+                container = result_container or ("prepare" if purpose == "prepare-install" else "transfer")
                 output = self.client.logs(plan.name, container=container, tail=100)
                 if purpose == "prepare-install":
                     result = {"installed": True}
@@ -617,7 +694,7 @@ class KubernetesExecutor:
                         raise ExecutorError("preparation_result_invalid") from None
                 break
             if self.clock.time() >= deadline:
-                raise ExecutorError("preparation_phase_timeout")
+                raise ExecutorError("preparation_phase_timeout", tail=self._diagnostic(operation, plan.resource_ref))
             self.clock.sleep(min(1, deadline - self.clock.time()))
         self._save_progress(operation, stage, plan.resource_ref, result)
         self.request_stop(plan.resource_ref, operation)
@@ -626,13 +703,40 @@ class KubernetesExecutor:
         return result
 
     def prepare(self, operation):
-        if operation["kind"] != "prepare" or operation["payload"].get("delivery", {}).get("mode", "bundle") != "bundle":
+        if operation["kind"] != "prepare":
             raise ExecutorError("preparation_mode_unavailable")
         payload = operation["payload"]
+        mode = payload.get("delivery", {}).get("mode", "bundle")
+        if mode == "image":
+            reference = payload["delivery"].get("image", "")
+            if not isinstance(reference, str) or not re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}", reference
+            ):
+                raise ExecutorError("image_digest_required")
+            if payload.get("platform") != self.descriptor.platform:
+                raise ExecutorError("frozen_platform_mismatch")
+            return {
+                "mode": "image",
+                "image_ref": reference,
+                "platform": payload["platform"],
+                "startup": payload["delivery"].get("startup", {}),
+            }
+        if mode not in {"bundle", "source-image"}:
+            raise ExecutorError("preparation_mode_unavailable")
         document = {
             key: copy.deepcopy(payload[key]) for key in ("tenant_id", "source_artifact_id", "profile", "delivery")
         }
         document["app_id"] = operation["app_id"]
+        document["offline"] = bool(payload.get("offline"))
+        document["package_environment"] = {
+            key: value
+            for key, value in {
+                "PIP_INDEX_URL": self.config.build_index_url,
+                "PIP_EXTRA_INDEX_URL": self.config.build_extra_index_url,
+                "npm_config_registry": self.config.build_npm_registry,
+            }.items()
+            if value
+        }
         inputs = self._phase(operation, "inputs", "prepare-download", {**document, "phase": "inputs"})
         key = inputs.get("input_key")
         if not isinstance(key, str) or len(key) != 64 or any(c not in "0123456789abcdef" for c in key):
@@ -648,4 +752,9 @@ class KubernetesExecutor:
         self.platform.dependencies(
             operation["operation_id"], key, artifact_id=result["dependency_artifact_id"], verified=True
         )
-        return result
+        return self.assemble(operation, result) if mode == "source-image" else result
+
+    def assemble(self, operation, delivery):
+        from runtime_manager.oci_assembler import KubernetesAssembler
+
+        return KubernetesAssembler(self).prepare(operation, delivery)

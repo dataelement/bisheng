@@ -16,12 +16,14 @@ conventions worth knowing before adding an endpoint here:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Body, Depends, Query
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from bisheng.app_runtime.domain.services.app_data_service import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, AppDataService
 from bisheng.app_runtime.domain.services.app_meta_service import AppMetaService
@@ -228,8 +230,26 @@ async def export_app_table(
     blob's content type before saving it as a CSV.
     """
     filename, content = await AppDataService.export_table(app_id, table, actor=user)
+    if isinstance(content, Path):
+        return FileResponse(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+            background=BackgroundTask(AppDataService.cleanup_export, content),
+        )
     return Response(
         content=content,
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
+
+
+@router.get(
+    "/{app_id}/data/operations/{operation_id}/result",
+    response_model=UnifiedResponseModel[dict],
+    summary="Read an earlier data operation result",
+)
+async def recover_app_data_result(
+    app_id: str, operation_id: str, user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    return resp_200(data=await AppDataService.recover_result(app_id, operation_id, actor=user))

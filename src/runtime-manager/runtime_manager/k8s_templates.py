@@ -70,6 +70,9 @@ class PodPlan:
     runtime_class: str = ""
     pull_secret: str = ""
     data_key_configmap: str = "runtime-data-public-keys"
+    registry_secret: str = ""
+    prepare_environment: bool = False
+    schema_plan: tuple[dict, ...] = field(default_factory=tuple, repr=False)
     temporary_mb: int = 256
 
     def validate(self):
@@ -103,6 +106,7 @@ class PodPlan:
             self.runtime_class,
             self.pull_secret,
             self.data_key_configmap,
+            self.registry_secret,
         ):
             if value and not _NAME.fullmatch(value):
                 raise ValueError("k8s_reference_invalid")
@@ -138,6 +142,12 @@ class PodPlan:
         material = self.purpose in {"prepare-download", "prepare-upload"} or (
             self.mode == "bundle" and self.purpose in {"serve", "probe", "preview"}
         )
+        if type(self.prepare_environment) is not bool or (
+            self.prepare_environment and self.purpose != "prepare-install"
+        ):
+            raise ValueError("k8s_preparation_environment_refused")
+        if self.registry_secret and self.purpose != "assemble":
+            raise ValueError("k8s_registry_secret_purpose_refused")
         if material and not self.material_secret:
             raise ValueError("k8s_material_secret_required")
         if (
@@ -269,7 +279,23 @@ def pod_template(plan: PodPlan) -> dict:
     if plan.deadline_seconds is not None:
         spec["activeDeadlineSeconds"] = plan.deadline_seconds
     volumes, containers, init = spec["volumes"], spec["containers"], spec["initContainers"]
-    if plan.purpose in PREPARATION:
+    if plan.purpose == "assemble":
+        volumes.append({"name": "scratch", "persistentVolumeClaim": {"claimName": plan.scratch_pvc}})
+        mounts = [_mount("scratch", "/work", readonly=True)]
+        if plan.registry_secret:
+            volumes.append(
+                {
+                    "name": "registry-auth",
+                    "secret": {
+                        "secretName": plan.registry_secret,
+                        "defaultMode": 288,
+                        "items": [{"key": ".dockerconfigjson", "path": "config.json"}],
+                    },
+                }
+            )
+            mounts.append(_mount("registry-auth", "/run/registry", readonly=True))
+        containers.append(_container(plan, "assembler", command=plan.command, mounts=mounts, env=plan.helper_env))
+    elif plan.purpose in PREPARATION:
         volumes.append({"name": "scratch", "persistentVolumeClaim": {"claimName": plan.scratch_pvc}})
         trusted = plan.purpose in {"prepare-download", "prepare-upload"}
         mounts = (
@@ -283,6 +309,8 @@ def pod_template(plan: PodPlan) -> dict:
                 _mount("scratch", "/runtime/tools", subpath="tools", readonly=True),
             ]
         )
+        if plan.purpose == "prepare-install" and plan.prepare_environment:
+            mounts.append(_mount("scratch", "/opt/venv", subpath="environment"))
         if trusted:
             volumes.append(
                 {"name": "material-auth", "secret": {"secretName": plan.material_secret, "defaultMode": 256}}
@@ -315,6 +343,22 @@ def pod_template(plan: PodPlan) -> dict:
                 helper=True,
             )
         )
+        if plan.purpose in {"probe", "preview"} and plan.schema_plan:
+            init.append(
+                _container(
+                    plan,
+                    "schema-init",
+                    image=plan.helper_image,
+                    command=("python", "-I", "-m", "runtime_manager.k8s_data_helper", "schema-init"),
+                    mounts=[_mount("data", "/volume")],
+                    helper=True,
+                    env={
+                        "SCHEMA_PLAN": json.dumps(
+                            {"app_id": plan.app_id, "plan": plan.schema_plan}, sort_keys=True, separators=(",", ":")
+                        )
+                    },
+                )
+            )
         if plan.purpose in {"serve", "probe", "preview"}:
             mounts = [_mount("data", "/data", subpath="business")]
             if plan.mode == "bundle":

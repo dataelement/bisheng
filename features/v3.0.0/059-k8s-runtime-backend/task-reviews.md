@@ -818,3 +818,20 @@ L1：架构/命名/内部序列化/跨库与租户/敏感信息/设计同步 PAS
 | T047 | 实现 | PASS | PASS | PASS | PASS | N/A | PASS | PASS | PASS/PASS/PASS | PASS_WITH_NOTES |
 
 T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态。T084在Repository事务内锁，不带集群I/O；新阶段必须旧writer停止并清理。T087存储凭据仍仅backend持有。T047仅复用appdb SQLite importer，helper无平台HMAC/MinIO权限；无新数据库业务Owner。配对范围与新增基础任务已复审。T009维护模板、T045非数据维护dispatch为原任务增量接线，补充检查7项PASS，分别仍为1/2文件；无通用SQL入口。T047备注：仅本地SQLite和模拟集群，实际189/默认签发/镜像发行尚未验证，保持后续任务未完成。
+
+## T048–T053 / T088–T093
+
+| 任务组 | 类型 | 架构 | 命名 | 序列化 | 数据库 | 前端 | 信息泄漏 | 设计同步 | 文件/配对/依赖 | 结论 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| T048、T050、T052、T088、T090、T092 | 测试 | N/A | PASS | N/A | N/A | N/A | N/A | N/A | PASS/N/A/PASS | PASS |
+| T049 | 实现 | PASS | PASS | PASS | PASS | N/A | PASS | PASS | PASS/PASS/PASS | PASS |
+| T089 | 实现 | PASS | PASS | PASS | PASS | N/A | PASS | PASS | PASS/PASS/PASS | PASS |
+| T091、T093 | 实现 | PASS | PASS | PASS | PASS | N/A | PASS | PASS | PASS/PASS/PASS | PASS |
+| T051 | 实现 | PASS | PASS | PASS | N/A | N/A | PASS | PASS | PASS/PASS/PASS | PASS_WITH_NOTES |
+| T053 | 实现 | PASS | PASS | PASS | N/A | N/A | PASS | PASS | PASS/PASS/PASS | PASS_WITH_NOTES |
+
+红阶段：data-grants-red缺模块11 errors；k8s-profile-red 1 failed/3 passed；data-recovery-red 4 failed；data-recovery-api-red 2 failed；k8s-delivery-red 7 failed；diagnostic-red 2 failed/7 passed；oci-red缺模块9 failed。最终owner-recovery-final 64 passed（真实SQL、HTTP/API、独立验签互操作及原owner/audit）；k8s-delivery-final 142 passed；runtime-delivery-full 744 passed/10 skipped（加入OCI前）；oci-final 129 passed及oci-links 10 passed。
+
+逐项读源核对：签名私钥只由backend持有、只读内部公钥API、5秒票据受理期先提交；Service仅通过Repository访问SQL，owner不因管理员身份放宽。结果查询走新只读会话，原unknown互斥不提前释放；导出Endpoint委托Service，原Docker bytes响应不变。T051接线文件为执行器/k8s_prepare；T009的schema/组装/环境卷模板、T031材料下载进程环境、T047隔离schema初始化、T045结果RPC/CSV摘要、T017固定assembler镜像允许集合均为原任务增量，分别仍为1–2目标文件，7项补充审查PASS。临时镜像组装凭据不进入应用/无凭据安装阶段，不执行用户Dockerfile。
+
+备注：T051/T053只完成本地接线及模拟集群/命令合同；源码兼容逐语言实际行为、registry/CRI、189部署与CI双架构发行继续由后续任务验收，不能从本组通过推断已部署。无新增人审暂停点。

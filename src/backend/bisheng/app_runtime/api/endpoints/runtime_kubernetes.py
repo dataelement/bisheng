@@ -110,3 +110,10 @@ async def admission_plan(
     svc=Depends(service),
 ):
     return await svc.admission_plan(identity, resource_ref)
+
+
+@router.get("/data-public-keys")
+async def data_public_keys(identity=Depends(independent_role("manager"))):
+    from bisheng.app_runtime.domain.services.runtime_data_grant_service import RuntimeDataGrantService
+
+    return {"public_keys": RuntimeDataGrantService().public_keys()}

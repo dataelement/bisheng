@@ -199,7 +199,7 @@ def prepare_download(client, document, *, work=Path("/work"), resolver=resolve_d
     if document["phase"] == "inputs":
         if any(path.exists() for path in (original, source, materials, output, tools)):
             raise ValueError("helper_scratch_not_empty")
-        for path in (original, source, materials, output, tools):
+        for path in (original, source, materials, output, tools, work / "environment"):
             _directory(path)
         with TemporaryDirectory(prefix="helper-source-") as directory:
             root = Path(directory) / "source"
@@ -246,13 +246,33 @@ def prepare_download(client, document, *, work=Path("/work"), resolver=resolve_d
         resolved = work / "resolved"
         if resolved.exists():
             raise ValueError("helper_resolution_already_present")
-        resolver(document, source, offline, resolved)
+        previous = dict(os.environ)
+        try:
+            environment = document.get("package_environment", {})
+            if not isinstance(environment, dict) or set(environment) - {
+                "PIP_INDEX_URL",
+                "PIP_EXTRA_INDEX_URL",
+                "npm_config_registry",
+            }:
+                raise ValueError("helper_package_environment_invalid")
+            os.environ.update(environment)
+            os.environ["PIP_NO_INDEX"] = "1" if document.get("offline") else "0"
+            os.environ["npm_config_offline"] = "true" if document.get("offline") else "false"
+            proxy = getattr(client, "package_proxy", None)
+            if proxy:
+                os.environ.update(dict.fromkeys(("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"), proxy))
+                os.environ.update(NO_PROXY="", no_proxy="")
+            resolver(document, source, offline, resolved)
+        finally:
+            os.environ.clear()
+            os.environ.update(previous)
         if not resolved.is_dir() or resolved.is_symlink():
             raise ValueError("helper_resolution_missing")
         shutil.copytree(resolved, materials, dirs_exist_ok=True, symlinks=True)
     config = {
         "language": profile["language"],
         "cached": cached,
+        "source_image": document.get("delivery", {}).get("mode") == "source-image",
         "lock": document.get("delivery", {}).get("dependencies", {}).get("lock", ""),
     }
     (tools / "prepare.json").write_text(json.dumps(config, sort_keys=True))
@@ -323,7 +343,9 @@ def prepare_upload(client, document, *, work=Path("/work")):
         "dependency_artifact_id": dependency_id,
         "compiled_artifact_id": compiled_id,
         "startup": {
-            "command": startup_command(
+            "command": document.get("delivery", {}).get("startup", {}).get("command", [])
+            if document.get("delivery", {}).get("mode") == "source-image"
+            else startup_command(
                 source, profile["language"], document.get("delivery", {}).get("startup", {}).get("command")
             )
         },
@@ -363,7 +385,7 @@ def client_from_identity(path=Path("/run/material/identity.json"), *, clock=time
     if not isinstance(private, str) or len(private) != 64:
         raise ValueError("helper_private_key_invalid")
     ca = path.with_name("ca.crt")
-    return MaterialClient(
+    client = MaterialClient(
         identity["base_url"],
         delegation_id=identity["delegation_id"],
         key_id=identity["key_id"],
@@ -374,6 +396,9 @@ def client_from_identity(path=Path("/run/material/identity.json"), *, clock=time
         proxy_url=identity.get("proxy_url"),
         clock=clock,
     )
+
+    client.package_proxy = identity.get("proxy_url")
+    return client
 
 
 def main():

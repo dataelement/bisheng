@@ -229,6 +229,8 @@ K8s 1.28 不保证未启动容器都有终止记录；其 kubelet 延迟终态�
 
 准备阶段结果写入既有 preparing 事实的 detail.prepare_progress，按 inputs/resolve/install/upload 保存资源引用和结果，写入确认后才停止并清理该阶段 Pod。响应丢失先查询已提交事实，不盲目重跑安装。重试沿用资源账本中首次批准的 activeDeadlineSeconds，阶段总截止仍由冻结操作和材料授权限制。scratch PVC 复用首次绑定的 UID；清理需全部相关 Pod 已确认停止，正式数据 PVC 不随普通清理删除。新控制器申请清理时更新资源的 controller_epoch，仅更新清理权限，不改变 UID、停止证据或连续保护标记。
 
+本地实现补充：K8s源码兼容模式由backend同样冻结profile；无凭据安装Pod把Python环境写到scratch的environment子目录并固定挂载为/opt/venv，Node产物在编译后裁剪开发依赖。可信组装Pod只读scratch，用crane mutate追加/app代码与/opt/venv及既有语言入口模板，不执行RUN；registry配置只挂组装器。完整镜像不复制源码或安装依赖。实际CRI/registry与双架构镜像仍须后续真实验收。
+
 ### 4.7 材料授权与续期（Service已实现，尚未集群验收）
 
 期限实现：`RuntimeMaterialDelegation.expires_at`在operation/预览中分别是操作/会话的最晚期限；正式deployment-init可为NULL，表示每次重新检查当前归属、批准版本、冻结delivery和同UID，不是永久通行。300秒传输票据仍有独立期限，不能独立续期。该新表尚未在客户环境交付；模型声明可空，不改已发布迁移或做数据回填。
@@ -271,17 +273,23 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 
 恢复先保护当前数据库并确认其快照，再下载目标快照、校验、离线替换，fsync 后提交事实。启动失败保留 data_may_have_changed 和维护状态；不自动用旧备份覆盖新数据。预检和预览只初始化独立空库。
 
-数据helper本地实现补充：data-v1签名输入为固定域`BISHENG-RUNTIME-DATA-V1\n`加canonical JSON（key_id和claims），claims精确绑定version/operation_id/request_id/app_id/exec_ref/pod_uid/actor_ref/action/parameters_sha256/nonce/issued_at/not_after/deadline；受理窗口最长5秒，总deadline不超过签发后60秒且仍受原数据操作期限限制。独立受信helper只加载公钥。卷内跨进程flock串行，started先fsync再创建有界SQLite子进程，子进程完成但done落盘失败仍保留未知；新只读请求查询原ID，不重放写操作。导出在platform目录生成文件、校验摘要后流式返回，不把CSV塞入journal或一次性读入内存。当前仅helper本地/HTTP合同完成，平台签发、数据会话、Pod内接线与真实集群尚未交付。
+数据helper本地实现补充：data-v1签名输入为固定域`BISHENG-RUNTIME-DATA-V1\n`加canonical JSON（key_id和claims），claims精确绑定version/operation_id/request_id/app_id/exec_ref/pod_uid/actor_ref/action/parameters_sha256/nonce/issued_at/not_after/deadline；受理窗口最长5秒，总deadline不超过签发后60秒且仍受原数据操作期限限制。独立受信helper只加载公钥。卷内跨进程flock串行，started先fsync再创建有界SQLite子进程，子进程完成但done落盘失败仍保留未知；新只读请求查询原ID，不重放写操作。导出在platform目录生成文件、校验摘要后流式返回，不把CSV塞入journal或一次性读入内存。helper本地/HTTP、backend签发与会话、Pod模板与运输已通过本地合同；真实集群尚未验收。
 
 数据会话底层互斥已接线：Repository按node→assignment顺序，对节点内跨租户会话只做聚合计数并发上限2，在同一事务建立data_operation_id和离线helper 128MiB/25m预占；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。平台存储、Pod接线及自然人授权仍由后续Service/执行器任务实现。
 
-原AppDataService入口已接选择分发：Docker保持既有RPC；K8s在原owner/参数校验之后，由RuntimeDataSessionService提交内部会话、等待同UID helper就绪、调用后端签发接口并转交X-Runtime-Data-Grant。后台不跨SQL事务等待网络。在线固定原exec_ref/UID，不另起挂卷写入者；离线冷启动与调用共用60秒。manager唤醒响应丢失以已提交状态查询恢复，数据HTTP结果未知不重发。签发默认实现归T049，Pod数据运输/清理归T045，本阶段使用可注入合同测试，不表示两者已完成。
+原AppDataService入口已接选择分发：Docker保持既有RPC；K8s在原owner/参数校验之后，由RuntimeDataSessionService提交内部会话、等待同UID helper就绪、调用后端签发接口并转交X-Runtime-Data-Grant。后台不跨SQL事务等待网络。在线固定原exec_ref/UID，不另起挂卷写入者；离线冷启动与调用共用60秒。manager唤醒响应丢失以已提交状态查询恢复，数据HTTP结果未知不重发。T049已接默认backend签发实现，T045已接Pod运输/清理；实际集群E2E尚未执行。
 
 数据Pod运输已本地接线：正式Pod的data-helper与离线purpose=data使用固定`runtime_manager.k8s_data_helper`入口，公钥只投射到helper，Pod UID来自Downward API；准入只允许安装者指定的公钥ConfigMap。在线按原UID复用，helper不可用不回退到第二挂卷Pod；离线先复用已登记PVC并确认旧写入者已停止，不为查看数据创建新卷或Service。调用目标只能是安装描述的pod_cidrs内、同一资源UID的8092端口。v2数据API转交owner票据，使用后台持久互斥和卷内flock，不再抢操作线程持有的本地app锁。
 
 管理面`/execution-state`只返回空闲位，不返回SQLite或journal结果；未知/取消动作须等旧票据受理窗口结束并确认helper空闲，再释放在线会话。无法确认则保留互斥；离线仍需整个同UID Pod停止证据。业务数据结果查询始终需要新的backend owner票据。导出经理端只存短缓存并验证长度/摘要，丢失回调的过期缓存按既有清理周期回收，不清业务PVC。
 
 维护实现补充：受信maintenance Pod只持该阶段材料私钥，使用k8s_appdb适配既有PlatformAppDb到business/app.db与platform私有备份。卷内maintenance记录按操作/动作及参数摘要持久缓存结果，SQLite迁移journal保持DDL幂等。manager先将maintenance_progress提交平台，再按同UID停止、清理Pod与临时Secret，正式PVC保留；重启从确认结果续办。备份平台内容和SQL关联未确认则不进入DDL；恢复先保护当前库，不自动回滚。当前通过真实本地SQLite与模拟集群交互验证，未宣称189实测。
+
+签发与结果查询接线：backend从BISHENG_RUNTIME_DATA_SIGNING_KEY_FILE读取独立keyring（active_key_id/private_keys），仅其本地业务Service持私钥；manager内部GET data-public-keys只返回验证公钥，没有签发API。签发前重查当前自然人owner、data mutex、generation/epoch、Pod UID/执行域及投射key_id；先提交5秒受理截止，再发票据。轮转先投射验证公钥并确认helper可见，再切backend active_key_id，旧公钥至少覆盖已发票据受理窗口。
+
+未知结果通过登录owner业务GET `/api/v1/apps/{app_id}/data/operations/{operation_id}/result`查询。原data操作未确认清理时拒绝新会话；其后创建独立result只读操作、新request_id与当前UID授权，引用原request_id/参数摘要，绝不重复原update。导出由helper→manager→backend分块校验长度/摘要并落私有短缓存，FileResponse结束回收；backend过期缓存下次导出清理，进程崩溃不会清业务PVC。原Docker bytes与原审计入口保持。
+
+启动接线：PORT、BISHENG_APP_PORT、SQLite路径、base path等由平台覆盖，业务令牌与runtime egress变量只进应用Secret；helper使用自己的材料身份。预检/预览schema-init仅接独立空库。启动失败先抓有界脱敏日志再清理，同UID应用重启日志可读previous+current；实际启动验收仍未执行。
 
 ### 4.9 网络、准入和资源治理
 
@@ -657,3 +665,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T081/T082补充跨租户/多manager数据并发上限，不能仅靠进程内锁 | 新增用例先失败；数据Repository＋会话24 passed，无跨租户明细加载 |
 
 | 2026-10-22 | T083–T087顺序资源历史及原生Range，T046/T047独占SQLite维护接线 | 账本/Range/迁移图97 passed；维护及数据/模板90 passed；未部署 |
+
+| 2026-10-22 | T048–T053与T088–T093：签发/数据恢复/CSV流、交付接线与OCI组装 | backend64 passed；runtime744 passed/10 skipped（OCI加入前）；OCI及交付129 passed，解释器链接10 passed；真实部署/CI待验收 |

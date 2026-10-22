@@ -8,9 +8,15 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
+import os
+import shutil
+import tempfile
+import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from urllib.parse import quote
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from loguru import logger
@@ -42,6 +48,41 @@ from bisheng.common.services.config_service import settings
 
 
 class _DataTransport:
+    def __init__(self, *, http_transport=None, cache_root=None):
+        self.http_transport = http_transport
+        self.cache_root = (
+            Path(cache_root) if cache_root else Path(tempfile.gettempdir()) / "bisheng-runtime-data-exports"
+        )
+
+    async def _export(self, response, *, deadline):
+        self.cache_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self.cache_root.is_symlink() or self.cache_root.stat().st_uid != os.geteuid():
+            raise AppDataBusyError(reason="data_export_cache_unavailable")
+        for old in self.cache_root.glob("export-*"):
+            if not old.is_symlink() and old.is_dir() and old.stat().st_mtime < time.time() - 900:
+                shutil.rmtree(old, ignore_errors=True)
+        root = Path(tempfile.mkdtemp(prefix="export-", dir=self.cache_root))
+        path = root / "export.csv"
+        try:
+            digest, size = hashlib.sha256(), 0
+            with path.open("xb") as output:
+                path.chmod(0o600)
+                async for chunk in response.aiter_bytes(64 * 1024):
+                    if time.monotonic() >= deadline:
+                        raise AppDataBusyError(reason="data_result_unknown")
+                    output.write(chunk)
+                    digest.update(chunk)
+                    size += len(chunk)
+            if (
+                response.headers.get("Content-Length") != str(size)
+                or response.headers.get("X-Content-Sha256") != digest.hexdigest()
+            ):
+                raise AppDataBusyError(reason="data_export_integrity_mismatch")
+            return path
+        except BaseException:
+            shutil.rmtree(root, ignore_errors=True)
+            raise
+
     async def call(self, app_id, action, parameters, ticket, *, timeout):
         cfg = settings.app_runtime
         prefix = "/v2/apps/" + quote(app_id, safe="") + "/db"
@@ -52,16 +93,23 @@ class _DataTransport:
             "rows": f"/tables/{table}/rows",
             "update": f"/tables/{table}/rows/" + quote(str(parameters.get("key", "")), safe=""),
             "export": "/export",
+            "result": "/result",
         }
         if action not in paths:
             raise AppDataInvalidError(reason="data_action_refused")
-        method = "PATCH" if action == "update" else "GET"
+        method = "PATCH" if action == "update" else "POST" if action == "result" else "GET"
         query = (
             {key: parameters[key] for key in ("page", "size", "order") if parameters.get(key) is not None}
             if action == "rows"
             else ({"table": parameters["table"]} if action == "export" else {})
         )
-        raw = canonical_json({"values": parameters["values"]}) if action == "update" else b""
+        raw = (
+            canonical_json({"values": parameters["values"]})
+            if action == "update"
+            else canonical_json(parameters)
+            if action == "result"
+            else b""
+        )
         request = httpx.Request(method, cfg.manager_base_url.rstrip("/") + prefix + paths[action], params=query)
         headers = signed_headers(
             method, str(request.url), raw, key_id=cfg.runtime_control_key_id, secret=cfg.runtime_control_secret
@@ -69,8 +117,19 @@ class _DataTransport:
         headers["X-Runtime-Data-Grant"] = base64.urlsafe_b64encode(canonical_json(ticket)).decode("ascii")
         if raw:
             headers["Content-Type"] = "application/json"
-        async with httpx.AsyncClient(timeout=timeout, trust_env=False, follow_redirects=False) as client:
-            response = await client.request(method, request.url, content=raw, headers=headers)
+        deadline = time.monotonic() + timeout
+        async with httpx.AsyncClient(
+            timeout=timeout, trust_env=False, follow_redirects=False, transport=self.http_transport
+        ) as client:
+            async with client.stream(method, request.url, content=raw, headers=headers) as response:
+                if action == "export" and 200 <= response.status_code < 300:
+                    return await self._export(response, deadline=deadline)
+                content = bytearray()
+                async for chunk in response.aiter_bytes(64 * 1024):
+                    if len(content) + len(chunk) > 16 * 1024**2 or time.monotonic() >= deadline:
+                        raise AppDataBusyError(reason="data_result_unknown")
+                    content.extend(chunk)
+                response = httpx.Response(response.status_code, headers=response.headers, content=bytes(content))
         if response.status_code == 409:
             try:
                 document = response.json()
@@ -108,10 +167,24 @@ class RuntimeDataSessionService:
             "rows": {"table", "page", "size", "order"},
             "update": {"table", "key", "values"},
             "export": {"table"},
+            "result": {"target_request_id", "parameters_sha256"},
         }
         if action not in allowed or not isinstance(parameters, dict) or set(parameters) - allowed[action]:
             raise AppDataInvalidError(reason="data_parameters_invalid")
         result = dict(parameters)
+        if action == "result":
+            try:
+                if (
+                    set(result) != allowed[action]
+                    or str(UUID(result["target_request_id"])) != result["target_request_id"]
+                ):
+                    raise ValueError()
+                if len(result["parameters_sha256"]) != 64 or any(
+                    c not in "0123456789abcdef" for c in result["parameters_sha256"]
+                ):
+                    raise ValueError()
+            except (ValueError, TypeError, KeyError, AttributeError):
+                raise AppDataInvalidError(reason="data_result_query_invalid") from None
         if action == "rows":
             result.update(page=result.get("page") or 1, size=result.get("size") or 50, order=result.get("order"))
         if action == "update":
@@ -249,11 +322,40 @@ class RuntimeDataSessionService:
         except BaseErrorCode as exc:
             await self._finish(op, "unknown" if exc.kwargs.get("reason") == "data_result_unknown" else "failed")
             raise
-        await self._finish(op, "done")
-        while True:
-            current = await self.repo.get(RuntimeOperation, op.id)
-            if current.status in TERMINAL and current.cleanup_status == "complete":
-                return result
-            if self.clock() >= current.deadline:
-                raise AppDataBusyError(reason="data_cleanup_pending", request_id=op.payload["request_id"])
-            await self.sleep(min(0.1, (current.deadline - self.clock()).total_seconds()))
+        try:
+            await self._finish(op, "done")
+            while True:
+                current = await self.repo.get(RuntimeOperation, op.id)
+                if current.status in TERMINAL and current.cleanup_status == "complete":
+                    return result
+                if self.clock() >= current.deadline:
+                    raise AppDataBusyError(reason="data_cleanup_pending", request_id=op.payload["request_id"])
+                await self.sleep(min(0.1, (current.deadline - self.clock()).total_seconds()))
+        except BaseException:
+            if isinstance(result, Path):
+                result.unlink(missing_ok=True)
+                result.parent.rmdir()
+            raise
+
+    async def recover(self, app, actor, operation_id):
+        from bisheng.app_runtime.domain.services.app_data_service import AppDataService
+
+        AppDataService._require_owner(app, actor)
+        previous = await self.repo.get(RuntimeOperation, operation_id)
+        if (
+            previous is None
+            or previous.kind != "data"
+            or (previous.tenant_id, previous.app_id) != (app.tenant_id, app.id)
+        ):
+            raise AppDataBusyError(reason="data_result_scope_refused")
+        if previous.status not in TERMINAL or previous.cleanup_status != "complete":
+            raise AppDataBusyError(reason="data_action_stop_unconfirmed")
+        return await self.execute(
+            app,
+            actor,
+            "result",
+            {
+                "target_request_id": previous.payload["request_id"],
+                "parameters_sha256": previous.payload["parameters_digest"],
+            },
+        )

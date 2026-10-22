@@ -260,3 +260,20 @@ class KubernetesMaintenance:
                 raise
         self._finish(current, reference)
         return result
+
+
+def initialize_schema(document, *, volume=Path("/volume")):
+    from runtime_manager.appdb import AppDbSchemaService
+
+    if not isinstance(document, dict) or set(document) != {"app_id", "plan"}:
+        raise ExecutionError("isolated_schema_document_invalid")
+    volume = Path(volume)
+    _directory(volume)
+    _directory(volume / "business")
+    database = VolumeDatabase(volume, document["app_id"])
+
+    class IsolatedSchema(AppDbSchemaService):
+        def db_path(self, app_id):
+            return database.db_path(app_id)
+
+    return IsolatedSchema(Config(data_root=volume / "platform")).migrate(document["app_id"], document["plan"])

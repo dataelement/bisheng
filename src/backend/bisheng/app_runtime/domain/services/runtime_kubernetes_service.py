@@ -263,8 +263,9 @@ class RuntimeKubernetesService:
         profile = delivery.get("profile") or op.payload.get("profile") or {}
         image = delivery.get("image_ref") or delivery.get("image") or profile.get("runtime_image")
         helper = (node.capabilities or {}).get("helper_image")
-        available = {value for value in (image, helper, profile.get("preparer_image")) if isinstance(value, str)}
-        trusted = {"transfer", "data-layout", "material-fetch", "data-helper", "maintenance"}
+        assembler = (node.capabilities or {}).get("assembler_image") if purpose == "assemble" else None
+        available = {value for value in (image, helper, assembler, profile.get("preparer_image")) if isinstance(value, str)}
+        trusted = {"transfer", "data-layout", "schema-init", "material-fetch", "data-helper", "maintenance"}
         containers = [*spec.get("containers", []), *spec.get("initContainers", [])]
         if not containers:
             raise RuntimeConflict("resource_pod_containers_required")

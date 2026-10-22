@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；87 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 62 / 87 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；93 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 74 / 93 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -526,7 +526,7 @@
   **依赖:** T045、T029、T046
   **配对:** T046
 
-- [ ] **T048** — backend 数据动作签发及路由：契约与失败用例
+- [x] **T048** — backend 数据动作签发及路由：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_data_grants.py`
   **逻辑/验收**：原业务Service重新核验actor及当前data操作/UID后本地签发；不向manager提供通用签发API。data操作和查询结果授权原地失效，非owner、重放、错UID拒绝；管理身份不能自签；测试只定义输入/结果，不加入实现。
@@ -534,7 +534,7 @@
   **依赖:** T043、T047
   **配对:** T049
 
-- [ ] **T049** — backend 数据动作签发及路由
+- [x] **T049** — backend 数据动作签发及路由
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_data_grant_service.py`、`src/backend/bisheng/app_runtime/api/endpoints/runtime_kubernetes.py`
   **逻辑/验收**：原业务Service重新核验actor及当前data操作/UID后本地签发；不向manager提供通用签发API。data操作和查询结果授权原地失效，非owner、重放、错UID拒绝；管理身份不能自签；通过配对测试后完成 L1 task-review。
@@ -542,17 +542,65 @@
   **依赖:** T043、T047、T048
   **配对:** T048
 
+- [x] **T088** — K8s 兼容源码的 profile 冻结合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_k8s_delivery_coordinator.py`
+  **逻辑/验收**：prepare真实协调方法在K8s source-image解析并冻结运行/preparer profile和离线材料；Docker旧源码构建不改，完整镜像不要求bundle profile，不从manager临时配置猜基础镜像。
+  **覆盖 AC:** AC-01、AC-24、AC-25、AC-27、AC-28、AC-42、AC-54
+  **依赖:** T049
+  **配对:** T089
+
+- [x] **T089** — K8s 兼容源码 profile 协调接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_delivery_coordinator.py`
+  **逻辑/验收**：仅K8s source-image复用现有全局profile解析、冻结架构与材料归属；保持Docker和完整镜像原语义。环境注入/审批仍由原业务Owner负责。
+  **覆盖 AC:** AC-01、AC-24、AC-25、AC-27、AC-28、AC-42、AC-54
+  **依赖:** T049、T088
+  **配对:** T088
+
+- [x] **T090** — 数据恢复查询及导出流合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_data_recovery.py`
+  **逻辑/验收**：未知写结果只以新只读会话查询原request，不重做写操作；owner重检、原会话清理闸口与原参数摘要保持。HTTP分块导出落短缓存，验证长度/摘要/截止期并清理失败文件，Docker bytes兼容。
+  **覆盖 AC:** AC-15、AC-36、AC-37、AC-43、AC-48、AC-50
+  **依赖:** T049
+  **配对:** T091
+
+- [x] **T091** — 数据恢复协调与导出短缓存
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_data_session_service.py`、`src/backend/bisheng/app_runtime/domain/services/app_data_service.py`
+  **逻辑/验收**：原数据Service先验证owner；恢复原操作结果创建新result只读会话和新request_id，不重放写。K8s导出经有界分块落缓存供响应，错误/取消回收，审计按文件大小记录；不让backend访问SQLite。
+  **覆盖 AC:** AC-15、AC-36、AC-37、AC-43、AC-48、AC-50
+  **依赖:** T049、T090
+  **配对:** T090
+
+- [x] **T092** — 结果查询与文件响应业务入口合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_data_recovery_api.py`
+  **逻辑/验收**：登录owner通过data/operations/{operation_id}/result读取原结果，非owner拒绝；CSV FileResponse保留文件名/类型/鉴权错误信封，下载后缓存回收；原Docker字节响应不变。
+  **覆盖 AC:** AC-15、AC-36、AC-37、AC-43、AC-48、AC-50
+  **依赖:** T091
+  **配对:** T093
+
+- [x] **T093** — 数据恢复和流式导出 API 接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/api/endpoints/apps.py`
+  **逻辑/验收**：只委托AppDataService，不在Endpoint执行账本/存储逻辑；公开业务读取结果用统一信封，CSV短缓存FileResponse带BackgroundTask回收；保持原bytes路径。
+  **覆盖 AC:** AC-15、AC-36、AC-37、AC-43、AC-48、AC-50
+  **依赖:** T091、T092
+  **配对:** T092
+
 ### Wave 6
 
-- [ ] **T050** — 三种交付模式的 K8s 准备链：契约与失败用例
+- [x] **T050** — 三种交付模式的 K8s 准备链：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_delivery.py`
   **逻辑/验收**：Python3.11/Node20/static bundle预检、完整镜像直启、显式source-image准备；依赖材料命中与失效、新增依赖缺包/补包、安全解包；任务阶段独立身份/卷/限额/并发，启动失败不产生审批；测试只定义输入/结果，不加入实现。
   **覆盖 AC:** AC-08、AC-24、AC-25、AC-26、AC-27、AC-28、AC-29、AC-42、AC-43、AC-44、AC-45、AC-46、AC-54
-  **依赖:** T033、T047
+  **依赖:** T033、T047、T089
   **配对:** T051
 
-- [ ] **T051** — 三种交付模式的 K8s 准备链
+- [x] **T051** — 三种交付模式的 K8s 准备链
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_prepare.py`、`src/runtime-manager/runtime_manager/executors/kubernetes.py`
   **逻辑/验收**：Python3.11/Node20/static bundle预检、完整镜像直启、显式source-image准备；依赖材料命中与失效、新增依赖缺包/补包、安全解包；任务阶段独立身份/卷/限额/并发，启动失败不产生审批；通过配对测试后完成 L1 task-review。
@@ -560,7 +608,7 @@
   **依赖:** T033、T047、T050
   **配对:** T050
 
-- [ ] **T052** — 无守护进程的受限 OCI 组装：契约与失败用例
+- [x] **T052** — 无守护进程的受限 OCI 组装：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_oci_assembler.py`
   **逻辑/验收**：固定布局追加冻结基础镜像并设置既有启动语义；不执行RUN/Dockerfile，拒绝逃逸、设备/setuid/whiteout/外部硬链；仓库身份仅受信组装器使用，缺推送仓库仅阻断source-image；测试只定义输入/结果，不加入实现。
@@ -568,7 +616,7 @@
   **依赖:** T051
   **配对:** T053
 
-- [ ] **T053** — 无守护进程的受限 OCI 组装
+- [x] **T053** — 无守护进程的受限 OCI 组装
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/oci_assembler.py`、`src/runtime-manager/Dockerfile.assembler`
   **逻辑/验收**：固定布局追加冻结基础镜像并设置既有启动语义；不执行RUN/Dockerfile，拒绝逃逸、设备/setuid/whiteout/外部硬链；仓库身份仅受信组装器使用，缺推送仓库仅阻断source-image；通过配对测试后完成 L1 task-review。

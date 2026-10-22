@@ -31,6 +31,7 @@ audit row hold for every door (``test_mcp_face_reuses_same_service_method``).
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 from bisheng.app_runtime.domain.constants import AppAuditAction, AppState
@@ -132,21 +133,44 @@ class AppDataService:
         return result
 
     @classmethod
-    async def export_table(cls, app_id: str, table: str, *, actor) -> tuple[str, bytes]:
-        """``(filename, csv_bytes)`` — the whole table, audited as ``app.data_export``."""
+    async def export_table(cls, app_id: str, table: str, *, actor) -> tuple[str, bytes | Path]:
+        """Return bytes for Docker or a private CSV cache for K8s, with the same audit."""
         app = await cls._load_owned(app_id, actor)
         table = cls._identifier(table, what="table")
         content = await cls._call(
             app, actor, "export", {"table": table}, lambda: orchestrator_client.db_export(app_id=app.id, table=table)
         )
-        await cls._audit(
-            AppAuditAction.DATA_EXPORT,
-            app,
-            actor,
-            reason=f"table {table} exported",
-            detail={"table": table, "bytes": len(content or b"")},
-        )
+        try:
+            await cls._audit(
+                AppAuditAction.DATA_EXPORT,
+                app,
+                actor,
+                reason=f"table {table} exported",
+                detail={
+                    "table": table,
+                    "bytes": content.stat().st_size if isinstance(content, Path) else len(content or b""),
+                },
+            )
+        except BaseException:
+            if isinstance(content, Path):
+                cls.cleanup_export(content)
+            raise
         return f"{app.slug or app.id}-{table}.csv", content
+
+    @staticmethod
+    def cleanup_export(path: Path):
+        path.unlink(missing_ok=True)
+        try:
+            path.parent.rmdir()
+        except FileNotFoundError:
+            pass
+
+    @classmethod
+    async def recover_result(cls, app_id, operation_id, *, actor):
+        app = await cls._load_owned(app_id, actor)
+        from bisheng.app_runtime.domain.services.runtime_data_session_service import RuntimeDataSessionService
+
+        return await RuntimeDataSessionService().recover(app, actor, operation_id)
 
     @staticmethod
     async def _call(app, actor, action, parameters, legacy):

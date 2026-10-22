@@ -349,6 +349,11 @@ def create_app(helper):
 def main():
     import sys
 
+    if sys.argv[1:] == ["schema-init"]:
+        from runtime_manager.k8s_appdb import initialize_schema
+
+        initialize_schema(json.loads(os.environ["SCHEMA_PLAN"]))
+        return
     if sys.argv[1:] == ["maintenance"]:
         from runtime_manager.k8s_appdb import run_maintenance
         from runtime_manager.k8s_helper import client_from_identity

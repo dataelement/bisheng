@@ -1770,8 +1770,8 @@
       ],
       "pair": "T049",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T049",
@@ -1797,8 +1797,164 @@
       ],
       "pair": "T048",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T088",
+      "wave": 5,
+      "kind": "测试",
+      "title": "K8s 兼容源码的 profile 冻结合同",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_k8s_delivery_coordinator.py"
+      ],
+      "logic": "prepare真实协调方法在K8s source-image解析并冻结运行/preparer profile和离线材料；Docker旧源码构建不改，完整镜像不要求bundle profile，不从manager临时配置猜基础镜像。",
+      "acs": [
+        "AC-01",
+        "AC-24",
+        "AC-25",
+        "AC-27",
+        "AC-28",
+        "AC-42",
+        "AC-54"
+      ],
+      "depends": [
+        "T049"
+      ],
+      "pair": "T089",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T089",
+      "wave": 5,
+      "kind": "实现",
+      "title": "K8s 兼容源码 profile 协调接线",
+      "files": [
+        "src/backend/bisheng/app_runtime/domain/services/runtime_delivery_coordinator.py"
+      ],
+      "logic": "仅K8s source-image复用现有全局profile解析、冻结架构与材料归属；保持Docker和完整镜像原语义。环境注入/审批仍由原业务Owner负责。",
+      "acs": [
+        "AC-01",
+        "AC-24",
+        "AC-25",
+        "AC-27",
+        "AC-28",
+        "AC-42",
+        "AC-54"
+      ],
+      "depends": [
+        "T049",
+        "T088"
+      ],
+      "pair": "T088",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T090",
+      "wave": 5,
+      "kind": "测试",
+      "title": "数据恢复查询及导出流合同",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_data_recovery.py"
+      ],
+      "logic": "未知写结果只以新只读会话查询原request，不重做写操作；owner重检、原会话清理闸口与原参数摘要保持。HTTP分块导出落短缓存，验证长度/摘要/截止期并清理失败文件，Docker bytes兼容。",
+      "acs": [
+        "AC-15",
+        "AC-36",
+        "AC-37",
+        "AC-43",
+        "AC-48",
+        "AC-50"
+      ],
+      "depends": [
+        "T049"
+      ],
+      "pair": "T091",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T091",
+      "wave": 5,
+      "kind": "实现",
+      "title": "数据恢复协调与导出短缓存",
+      "files": [
+        "src/backend/bisheng/app_runtime/domain/services/runtime_data_session_service.py",
+        "src/backend/bisheng/app_runtime/domain/services/app_data_service.py"
+      ],
+      "logic": "原数据Service先验证owner；恢复原操作结果创建新result只读会话和新request_id，不重放写。K8s导出经有界分块落缓存供响应，错误/取消回收，审计按文件大小记录；不让backend访问SQLite。",
+      "acs": [
+        "AC-15",
+        "AC-36",
+        "AC-37",
+        "AC-43",
+        "AC-48",
+        "AC-50"
+      ],
+      "depends": [
+        "T049",
+        "T090"
+      ],
+      "pair": "T090",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T092",
+      "wave": 5,
+      "kind": "测试",
+      "title": "结果查询与文件响应业务入口合同",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_data_recovery_api.py"
+      ],
+      "logic": "登录owner通过data/operations/{operation_id}/result读取原结果，非owner拒绝；CSV FileResponse保留文件名/类型/鉴权错误信封，下载后缓存回收；原Docker字节响应不变。",
+      "acs": [
+        "AC-15",
+        "AC-36",
+        "AC-37",
+        "AC-43",
+        "AC-48",
+        "AC-50"
+      ],
+      "depends": [
+        "T091"
+      ],
+      "pair": "T093",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T093",
+      "wave": 5,
+      "kind": "实现",
+      "title": "数据恢复和流式导出 API 接线",
+      "files": [
+        "src/backend/bisheng/app_runtime/api/endpoints/apps.py"
+      ],
+      "logic": "只委托AppDataService，不在Endpoint执行账本/存储逻辑；公开业务读取结果用统一信封，CSV短缓存FileResponse带BackgroundTask回收；保持原bytes路径。",
+      "acs": [
+        "AC-15",
+        "AC-36",
+        "AC-37",
+        "AC-43",
+        "AC-48",
+        "AC-50"
+      ],
+      "depends": [
+        "T091",
+        "T092"
+      ],
+      "pair": "T092",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T050",
@@ -1826,12 +1982,13 @@
       ],
       "depends": [
         "T033",
-        "T047"
+        "T047",
+        "T089"
       ],
       "pair": "T051",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T051",
@@ -1865,8 +2022,8 @@
       ],
       "pair": "T050",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T052",
@@ -1891,8 +2048,8 @@
       ],
       "pair": "T053",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T053",
@@ -1919,8 +2076,8 @@
       ],
       "pair": "T052",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T054",

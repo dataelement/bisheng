@@ -175,6 +175,7 @@ class RuntimeDeliveryCoordinator:
         profile = (
             await RuntimeProfileService(self.repo).resolve(manifest.runtime, delivery.get("profile"), node.platform)
             if delivery["mode"] == "bundle"
+            or (node.executor_kind == "kubernetes" and delivery["mode"] == "source-image")
             else None
         )
         if profile:

@@ -150,6 +150,9 @@ class Platform:
         op.update(fact_sequence=sequence, result=copy.deepcopy(detail))
         return copy.deepcopy(op)
 
+    def egress(self, operation_id, phase, **kwargs):
+        return {"principal": phase + "-" + operation_id, "token": "fixture-egress-token"}
+
     def dependencies(self, operation_id, input_key, *, artifact_id=None, verified=False):
         self.operations[operation_id]["payload"]["dependency_resolution"] = {
             "input_key": input_key,

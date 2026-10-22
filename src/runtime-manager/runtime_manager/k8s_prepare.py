@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 from pathlib import Path, PurePosixPath
 
 
@@ -97,6 +98,31 @@ def prepare(
             module.lock(language)
             module.MATERIALS = output
         module.build(language)
+        if config.get("source_image") and language == "python3.11":
+            subprocess.run(["python", "-I", "-m", "venv", "--system-site-packages", "/opt/venv"], check=True)
+            subprocess.run(
+                [
+                    "/opt/venv/bin/python",
+                    "-I",
+                    "-m",
+                    "pip",
+                    "install",
+                    "--no-index",
+                    "--find-links=" + str(module.MATERIALS / "wheels"),
+                    "--require-hashes",
+                    "-r",
+                    str(module.MATERIALS / "runtime.lock"),
+                ],
+                check=True,
+            )
+            subprocess.run(["/opt/venv/bin/python", "-I", "-m", "pip", "check"], check=True)
+            subprocess.run(["/opt/venv/bin/python", "-I", "-c", "import bisheng_sdk"], check=True)
+        if config.get("source_image") and language == "node20":
+            subprocess.run(
+                ["npm", "prune", "--omit=dev", "--offline", "--ignore-scripts", "--no-audit", "--no-fund"],
+                cwd=source,
+                check=True,
+            )
     finally:
         os.environ.clear()
         os.environ.update(previous_environment)

@@ -1,0 +1,13 @@
+# Build context: repository root. Native CI freezes both resulting tool and image.
+ARG HELPER_IMAGE
+FROM golang:1.27.3-bookworm AS crane
+ARG CRANE_VERSION=v0.22.1
+RUN CGO_ENABLED=0 GOBIN=/out go install github.com/google/go-containerregistry/cmd/crane@${CRANE_VERSION} \
+    && mkdir -p /out/licenses \
+    && cp /go/pkg/mod/github.com/google/go-containerregistry@${CRANE_VERSION}/LICENSE /out/licenses/go-containerregistry.LICENSE \
+    && go version -m /out/crane > /out/licenses/crane-build.txt
+FROM ${HELPER_IMAGE}
+COPY --from=crane /out/crane /usr/local/bin/crane
+COPY --from=crane /out/licenses/ /usr/share/licenses/crane/
+USER 10001:10001
+ENTRYPOINT ["python", "-I", "-m", "runtime_manager.oci_assembler"]
