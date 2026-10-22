@@ -236,7 +236,19 @@ class DshModelService:
         return DshUpstreamErrorError()
 
     async def _settle(self, event, execution, status, error_code=None):
-        usage = execution.usage
+        try:
+            terminal = await self.settle_usage(
+                event, execution.usage, status,
+                error_code or getattr(execution, "failure_code", None),
+                provider_request_id=execution.provider_request_id,
+            )
+        except DshUsageUnavailableError:
+            execution.audit("usage", "UNCERTAIN")
+            raise
+        execution.audit("usage", "SETTLED" if terminal.total_tokens is not None else "USAGE_UNKNOWN")
+
+    async def settle_usage(self, event, usage, status, error_code=None, *, provider_request_id=None):
+        """Settle the shared ledger for platform Chat and desktop model calls."""
         now = self.now()
         now = now.replace(tzinfo=UTC) if now.tzinfo is None else now
         terminal = UsageEvent.model_validate(
@@ -248,9 +260,8 @@ class DshModelService:
                     "usage_source": "PROVIDER" if usage.total_tokens is not None else None,
                     "ended_at": now,
                     "settled_at": now if usage.total_tokens is not None else None,
-                    "provider_request_id": execution.provider_request_id,
+                    "provider_request_id": provider_request_id,
                     "error_code": error_code
-                    or getattr(execution, "failure_code", None)
                     or ("usage_missing" if usage.total_tokens is None else None),
                     "latency_ms": max(0, int((now - event.started_at).total_seconds() * 1000)),
                 }
@@ -264,13 +275,11 @@ class DshModelService:
                 current = await self.usage.get_request(event)
             except Exception:
                 logger.exception("DSH settlement could not be confirmed for request {}", event.request_id)
-                execution.audit("usage", "UNCERTAIN")
                 raise DshUsageUnavailableError() from error
             if current is None or current.model_dump() != terminal.model_dump():
-                execution.audit("usage", "UNCERTAIN")
                 raise DshUsageUnavailableError() from error
-        execution.audit("usage", "SETTLED" if usage.total_tokens is not None else "USAGE_UNKNOWN")
         record_settlement(terminal)
+        return terminal
 
     async def _stream(self, principal, request, execution, event):
         if isinstance(request, DshResponsesRequest):

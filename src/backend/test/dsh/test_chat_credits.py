@@ -151,3 +151,29 @@ async def test_chat_admission_uses_loaded_model_id(monkeypatch, requested_id):
     assert event.model_id == 7
     assert event.credit_rate == 125
     admission.assert_awaited_once()
+
+
+@pytest.mark.parametrize("succeeded,known,status", [(True, True, "SUCCEEDED"), (False, True, "FAILED"), (False, False, "USAGE_UNKNOWN")])
+async def test_chat_finishes_through_real_shared_settlement(succeeded, known, status):
+    from datetime import UTC, datetime
+
+    from bisheng.dsh.domain.schemas.usage import UsageEvent
+    from bisheng.dsh.domain.services.model import DshModelService
+
+    now = datetime(2026, 10, 22, tzinfo=UTC)
+    event = UsageEvent(request_id="chat-ledger", tenant_id=1, user_id=2, session_id="chat",
+                       model_id=7, credit_rate=125, usage_month="2026-10", billing_timezone="Asia/Shanghai",
+                       policy_version=1, event_version=1, quota_epoch=1, status="RUNNING", started_at=now)
+    ledger = SimpleNamespace(record_usage=AsyncMock())
+    service = DshModelService(policy_reader=None, model_loader=None, llm_builder=None,
+                              capabilities_for=None, usage=ledger, now=lambda: now)
+    execution = SimpleNamespace(usage=DshTokenUsage(input_tokens=12, output_tokens=7, total_tokens=19)
+                                if known else DshTokenUsage(), provider_request_id="provider-request")
+    await chat_credits.finish((service, event, execution), succeeded)
+    ledger.record_usage.assert_awaited_once()
+    terminal, version = ledger.record_usage.await_args.args
+    assert terminal.status == status
+    assert terminal.billed_tokens == (24 if known else None)
+    assert terminal.provider_request_id == "provider-request"
+    assert terminal.error_code == (None if succeeded else "chat_call_interrupted")
+    assert version == 1

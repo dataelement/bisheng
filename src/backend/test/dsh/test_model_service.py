@@ -365,3 +365,32 @@ async def test_work_admission_snapshots_model_multiplier(service_setup):
     assert ledger.events[0].credit_rate == 125
     assert ledger.events[-1].billed_tokens == 100
     assert ledger.used == 190
+
+
+@pytest.mark.parametrize("outcome", ["known", "unknown", "unavailable"])
+async def test_work_settlement_preserves_audit_boundary(service_setup, outcome):
+    from unittest.mock import AsyncMock, Mock
+
+    from bisheng.common.errcode.dsh import DshUsageUnavailableError
+    from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
+
+    service, *_ = service_setup
+    terminal = SimpleNamespace(total_tokens=12 if outcome == "known" else None)
+    service.settle_usage = AsyncMock(return_value=terminal)
+    if outcome == "unavailable":
+        service.settle_usage.side_effect = DshUsageUnavailableError()
+    event = object()
+    execution = SimpleNamespace(
+        usage=DshTokenUsage(), provider_request_id="provider", failure_code=None, audit=Mock()
+    )
+    if outcome == "unavailable":
+        with pytest.raises(DshUsageUnavailableError):
+            await service._settle(event, execution, "SUCCEEDED")
+    else:
+        await service._settle(event, execution, "SUCCEEDED")
+    service.settle_usage.assert_awaited_once_with(
+        event, execution.usage, "SUCCEEDED", None, provider_request_id="provider"
+    )
+    execution.audit.assert_called_once_with(
+        "usage", {"known": "SETTLED", "unknown": "USAGE_UNKNOWN", "unavailable": "UNCERTAIN"}[outcome]
+    )

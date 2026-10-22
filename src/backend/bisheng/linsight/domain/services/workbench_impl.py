@@ -1,5 +1,4 @@
 import asyncio
-import json
 import mimetypes
 import os
 import time
@@ -27,6 +26,7 @@ from bisheng.common.errcode.linsight import (
     LinsightFolderFileCountExceededError,
     LinsightFolderTotalSizeExceededError,
 )
+from bisheng.common.errcode.sandbox import SandboxConfigurationError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -54,7 +54,7 @@ from bisheng.linsight.domain.schemas.linsight_schema import (
 )
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
-from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.utils import util
 from bisheng.utils.util import async_calculate_md5
@@ -2228,24 +2228,40 @@ class LinsightWorkbenchImpl:
     async def _init_bisheng_code_tool(
         cls, selected_tool_ids: list[int], file_dir: str, user_id: int, session_version_id: str | None = None
     ) -> list[BaseTool]:
-        """Initialize the code interpreter separately (it needs the workspace dir bound).
+        """Bind the task's implicit execution capability through tool-use authorization.
 
-        ``selected_tool_ids`` is the user's per-turn tool selection. The id is
-        consumed (removed) on a hit so the generic ``init_by_tool_ids`` pass does
-        not build a second, workspace-less copy of the same tool.
+        Consume an explicit selection too, so every task owns one workspace-bound
+        interpreter. Revoked implicit access leaves the remaining tools available;
+        an explicitly requested capability retains normal permission errors.
         """
-        tools = []
         bisheng_code_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key="bisheng_code_interpreter")
-        if not bisheng_code_tool or bisheng_code_tool.id not in selected_tool_ids:
-            return tools
-        # Individual initialization code interpreter tool
-        selected_tool_ids.remove(bisheng_code_tool.id)
-        code_config = json.loads(bisheng_code_tool.extra) if bisheng_code_tool.extra else {}
+        if not bisheng_code_tool:
+            return []
+        explicit = bisheng_code_tool.id in selected_tool_ids
+        if explicit:
+            selected_tool_ids.remove(bisheng_code_tool.id)
+        tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id=bisheng_code_tool.type)
+        if tool_type is None:
+            raise SandboxConfigurationError()
+        try:
+            await ToolExecutor._ensure_use_permission_async(tool_type, user_id)
+        except PermissionError:
+            if explicit:
+                raise
+            logger.info("Task execution capability unavailable to user_id={}", user_id)
+            return []
+        code_config = ToolExecutor.parse_preset_extra(bisheng_code_tool, tool_type)
+        executor_type = code_config.get("type") or "local"
+        if executor_type not in {"container", "e2b"}:
+            raise SandboxConfigurationError()
         if "config" not in code_config:
             code_config["config"] = {}
-        if "local" not in code_config["config"]:
-            code_config["config"]["local"] = {}
-        code_config["config"]["local"]["local_sync_path"] = file_dir
+        if "container" not in code_config["config"]:
+            code_config["config"]["container"] = {}
+        code_config["config"]["container"]["local_sync_path"] = file_dir
+        # Sticky replica + work dir across tool_calls in one Linsight task (AC-06).
+        code_config["config"]["container"]["keep_session"] = True
+        code_config["config"]["container"]["timeout"] = 600
         if session_version_id:
             from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
@@ -2253,7 +2269,8 @@ class LinsightWorkbenchImpl:
             # Without it the local working dir is the ONLY copy, so the file tools
             # cannot see a code-generated deliverable and the next turn's
             # seed-from-previous finds an empty ``output/``.
-            code_config["config"]["local"]["workspace_prefix"] = f"{WORKSPACE_PREFIX}/{session_version_id}"
+            workspace_prefix = f"{WORKSPACE_PREFIX}/{session_version_id}"
+            code_config["config"]["container"]["workspace_prefix"] = workspace_prefix
         if "e2b" not in code_config["config"]:
             code_config["config"]["e2b"] = {}
         code_config["config"]["e2b"]["local_sync_path"] = file_dir
@@ -2267,32 +2284,35 @@ class LinsightWorkbenchImpl:
         # originals up to _RAW_KEEP_MAX_BYTES (50MB), which LocalExecutor serves for
         # free through local_sync_path. Filter here so the E2B ceiling is honoured
         # without shrinking what the local executor can reach.
-        file_list = []
-        oversized: list[str] = []
-        for root, dirs, files in os.walk(file_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                try:
-                    if os.path.getsize(file_path) > SIZE_AUTOPUSH:
-                        oversized.append(file_path)
-                        continue
-                except OSError:
-                    # Unstattable file: let it through rather than silently dropping
-                    # it — the push itself will surface any real problem.
-                    pass
-                file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
-        if oversized:
-            # Never let a bounded copy-in look complete: the model is told these
-            # paths exist, so a silent drop reads as "the tool is broken".
-            logger.warning(
-                "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
-                "pushed into the sandbox: {}",
-                len(oversized),
-                SIZE_AUTOPUSH,
-                ", ".join(os.path.basename(p) for p in oversized),
-            )
-        code_config["config"]["e2b"]["file_list"] = file_list
+        # Container mode copy-in happens at run() (AC-11); do not pre-scan.
+        if executor_type != "container":
+            file_list = []
+            oversized: list[str] = []
+            for root, dirs, files in os.walk(file_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        if os.path.getsize(file_path) > SIZE_AUTOPUSH:
+                            oversized.append(file_path)
+                            continue
+                    except OSError:
+                        # Unstattable file: let it through rather than silently dropping
+                        # it — the push itself will surface any real problem.
+                        pass
+                    file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
+            if oversized:
+                # Never let a bounded copy-in look complete: the model is told these
+                # paths exist, so a silent drop reads as "the tool is broken".
+                logger.warning(
+                    "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
+                    "pushed into the sandbox: {}",
+                    len(oversized),
+                    SIZE_AUTOPUSH,
+                    ", ".join(os.path.basename(p) for p in oversized),
+                )
+            code_config["config"]["e2b"]["file_list"] = file_list
 
+        bisheng_code_tool = GptsTools(**bisheng_code_tool.model_dump())
         bisheng_code_tool.extra = code_config
 
         tools = await ToolExecutor.init_by_tool_id(
@@ -2322,42 +2342,17 @@ class LinsightWorkbenchImpl:
         """
         tools = []
 
-        if not session_version.tools:
-            return tools
+        tool_ids = list(dict.fromkeys(cls._extract_tool_ids(session_version.tools or [])))
 
-        # &Extraction toolID
-        tool_ids = list(dict.fromkeys(cls._extract_tool_ids(session_version.tools)))  # de-dup, preserve order
-
-        # todo Better tool initialization scheme
-        # The code interpreter binds ONLY when the user picked it for this turn.
-        # It used to be gated on the daily-config whitelist (the admin-configured
-        # candidate list), which made it bind on every task turn regardless of the
-        # input-bar toggle — the whitelist is the set of tools a user MAY pick,
-        # not a set of tools to auto-enable.
+        # Task infrastructure is resolved on each execution/resume, independently
+        # of the optional tools selected in the composer. Initialization failures
+        # propagate before the model starts so capability loss is actionable.
         if need_upload and file_dir:
-            try:
-                bisheng_code_tool = await cls._init_bisheng_code_tool(
-                    tool_ids,
-                    file_dir,
-                    user_id=session_version.user_id,
-                    session_version_id=session_version.id,
+            tools.extend(
+                await cls._init_bisheng_code_tool(
+                    tool_ids, file_dir, user_id=session_version.user_id, session_version_id=session_version.id
                 )
-                tools.extend(bisheng_code_tool)
-            except Exception:
-                # Swallowing is deliberate (a broken tool must not kill the task),
-                # but it must stay diagnosable: logger.error(f"...{e!s}") dropped the
-                # traceback, so a run silently losing the code interpreter looked
-                # identical whether the cause was a permission gate, a bad config or
-                # a missing sandbox. logger.exception keeps the stack.
-                logger.exception(
-                    "Failed to initialize BiSheng code interpreter tool: session_version_id={}",
-                    session_version.id,
-                )
-
-        # Unified-resource direction (2026-06-16): task mode reuses the daily
-        # tool selection directly. Every selected tool id (a real GptsTools id
-        # the user already has access to) binds. The code interpreter is already
-        # consumed above when selected, so it is never built twice.
+            )
         valid_tool_ids = tool_ids
 
         # Initialization Tools
