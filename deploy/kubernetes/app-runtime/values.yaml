@@ -10,6 +10,7 @@ services:
   materialIssuerSecret: runtime-material-issuer
   admissionTlsSecret: runtime-admission-tls
   managerAccount: runtime-manager
+  pullSecret: ""
   managerReplicas: 1
   entryReplicas: 1
   egressReplicas: 1
@@ -30,6 +31,8 @@ execution:
   maxPods: 64
   temporaryStorageMi: 4096
   runtimeClass: ""
+  sandbox: default
+  runtimeClasses: {recommended: "", hardened: ""}
   statusPolicyRevision: v1
   cniUsername: ""
   pullSecret: ""
@@ -39,6 +42,8 @@ execution:
   probeReport: {}
   # Optional immutable canary approvals for the installation verification tool.
   canaryPlans: {}
+  # Frozen native CRI checks; only python/node/nginx version commands are accepted.
+  canaryProfiles: []
 images:
   manager: ""
   entry: ""
