@@ -10,7 +10,7 @@ import pytest
 from runtime_manager.config import Config
 from runtime_manager.container_runner import ExecutionError
 from runtime_manager.operations import OperationExecutor
-from runtime_manager.platform_client import PREFIX, PlatformClient
+from runtime_manager.platform_client import PREFIX, PlatformClient, PlatformError
 
 
 class Platform:
@@ -26,6 +26,7 @@ class Platform:
             "stage": "admitted",
             "deadline": (datetime.utcnow() + timedelta(minutes=5)).isoformat(),
             "fact_sequence": 0,
+            "cleanup_status": "pending",
             "payload": {},
         }
         self.facts = []
@@ -40,6 +41,8 @@ class Platform:
         self.op["status"] = "running"
 
     def fact(self, operation, sequence, phase, **kwargs):
+        if any(operation.get(key) != self.op.get(key) for key in ("node_id", "generation", "owner_epoch", "app_id")):
+            raise PlatformError("execution_fence_mismatch", 409)
         assert sequence == self.op["fact_sequence"] + 1
         self.op.update(fact_sequence=sequence, stage=phase)
         detail = deepcopy(kwargs.get("detail", {}))
@@ -555,5 +558,369 @@ def test_cleanup_retry_never_reuses_stale_stop_or_cleanup_flags(tmp_path):
             "stopped": False,
             "cleanup_complete": False,
         }
+    finally:
+        executor.close()
+
+
+class CleanupClock:
+    def __init__(self):
+        self.now = datetime.now().timestamp()
+        self.sleeps = []
+        self.on_sleep = lambda: None
+
+    def time(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+        self.on_sleep()
+
+
+def cleanup_runtime(platform, outcomes):
+    calls = []
+    remaining = iter(outcomes)
+    delivery = {
+        "mode": "bundle",
+        "compiled_artifact_id": "compiled-a",
+        "dependency_artifact_id": "dependency-a",
+        "platform": "linux/amd64",
+    }
+
+    def prepare(_):
+        calls.append("prepare")
+        return deepcopy(delivery)
+
+    def cleanup(_):
+        calls.append("cleanup")
+        return {"complete": next(remaining)}
+
+    def launch(_, **kwargs):
+        calls.append("launch")
+        return {"exec_ref": "pod-a", "ready": True}
+
+    def data(_, action, parameters):
+        calls.append(action)
+        return cleanup(None) if action == "finish-session" else {"exec_ref": "data-pod"}
+
+    runtime = SimpleNamespace(
+        prepare=prepare,
+        cleanup=cleanup,
+        launch=launch,
+        data=data,
+        _controller=lambda: {"holder_id": "holder-a", "controller_epoch": 1},
+    )
+    return runtime, calls, delivery
+
+
+def cleanup_executor(tmp_path, platform, runtime, clock):
+    return OperationExecutor(
+        Config(data_root=tmp_path, node_id="node-a", executor_kind="kubernetes", protocol_version=2),
+        platform=platform,
+        runtime=runtime,
+        clock=clock,
+    )
+
+
+@pytest.mark.parametrize("kind", ["prepare", "probe"])
+def test_async_cleanup_false_stays_live_until_actual_completion(tmp_path, kind):
+    """F059 覆盖 AC: AC-04、AC-49、AC-52、AC-55."""
+    platform, clock = Platform(kind), CleanupClock()
+    original_deadline = platform.op["deadline"]
+    runtime, calls, delivery = cleanup_runtime(platform, [False, False, True])
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+
+    def assert_live():
+        assert platform.op["status"] == "running" and platform.op["stage"] in {"preparing", "ready"}
+        assert not any(phase in {"failed", "completed"} for phase, _ in platform.facts)
+        if kind == "prepare":
+            assert platform.op["result"]["prepared_delivery"] == delivery
+
+    clock.on_sleep = assert_live
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "completed" and platform.op["cleanup_status"] == "complete"
+        assert platform.op["deadline"] == original_deadline
+        assert calls.count("cleanup") == 3 and calls.count("prepare" if kind == "prepare" else "launch") == 1
+        assert len(clock.sleeps) == 2
+        assert not any(phase == "failed" for phase, _ in platform.facts)
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize("kind", ["prepare", "probe"])
+def test_restart_resumes_prepared_or_ready_cleanup_without_reexecution(tmp_path, kind):
+    """F059 覆盖 AC: AC-04、AC-49、AC-52、AC-55."""
+    platform, clock = Platform(kind), CleanupClock()
+    runtime, calls, delivery = cleanup_runtime(platform, [False, True])
+    first = cleanup_executor(tmp_path, platform, runtime, clock)
+    clock.on_sleep = first._closing.set
+    first.execute("operation-a")
+    assert platform.op["status"] == "running" and platform.op["stage"] == (
+        "preparing" if kind == "prepare" else "ready"
+    )
+    assert not any(phase == "failed" for phase, _ in platform.facts)
+    if kind == "prepare":
+        assert platform.op["result"]["prepared_delivery"] == delivery
+    first.close()
+    clock.on_sleep = lambda: None
+    second = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        second.execute("operation-a")
+        assert platform.op["status"] == "completed"
+        assert calls.count("prepare" if kind == "prepare" else "launch") == 1
+        assert calls.count("cleanup") == 2
+        if kind == "probe":
+            assert [phase for phase, _ in platform.facts].count("starting") == 1
+    finally:
+        second.close()
+
+
+@pytest.mark.parametrize("cause", ["cancel", "deadline", "fence"])
+def test_cleanup_wait_keeps_original_cancel_deadline_and_ownership_fences(tmp_path, cause):
+    """F059 覆盖 AC: AC-49、AC-52、AC-55."""
+    platform, clock = Platform("prepare"), CleanupClock()
+    if cause == "deadline":
+        platform.op["deadline"] = datetime.utcfromtimestamp(clock.time() + 0.5).isoformat()
+    original_deadline = platform.op["deadline"]
+    runtime, calls, _ = cleanup_runtime(platform, [False] * 10)
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+
+    def interrupt():
+        if cause == "cancel":
+            platform.op["payload"]["cancel_requested"] = True
+        elif cause == "fence":
+            platform.op["owner_epoch"] += 1
+
+    clock.on_sleep = interrupt
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] != "completed" and platform.op["cleanup_status"] == "pending"
+        assert platform.op["deadline"] == original_deadline and calls.count("prepare") == 1
+        if cause == "fence":
+            assert platform.op["status"] == "running" and platform.op["stage"] == "preparing"
+            assert not any(phase in {"failed", "completed"} for phase, _ in platform.facts)
+        else:
+            assert not platform.facts[-1][1]["stopped"] and not platform.facts[-1][1]["cleanup_complete"]
+            assert (
+                platform.op["failure"]["reason"]
+                == {"cancel": "operation_cancelled", "deadline": "operation_timeout"}[cause]
+            )
+    finally:
+        executor.close()
+
+
+def test_controller_lease_loss_during_cleanup_does_not_complete_operation(tmp_path):
+    """F059 覆盖 AC: AC-49、AC-52、AC-55."""
+    from runtime_manager.platform_client import PlatformError
+
+    platform, clock = Platform("prepare"), CleanupClock()
+    runtime, calls, _ = cleanup_runtime(platform, [False] * 10)
+    lost = False
+
+    def controller():
+        if lost:
+            raise PlatformError("controller_lease_lost", 409)
+        return {"holder_id": "holder-a", "controller_epoch": 1}
+
+    def lose():
+        nonlocal lost
+        lost = True
+
+    runtime._controller = controller
+    clock.on_sleep = lose
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "running" and platform.op["stage"] == "preparing"
+        assert calls.count("prepare") == 1 and not any(phase in {"failed", "completed"} for phase, _ in platform.facts)
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize("finished", ["done", "failed", "unknown"])
+def test_data_finished_cleanup_wait_does_not_prepare_another_session(tmp_path, finished):
+    """F059 覆盖 AC: AC-35、AC-49、AC-52、AC-55."""
+    platform, clock = Platform("data"), CleanupClock()
+    platform.op.update(status="running", stage="ready", result={"data_target": {"exec_ref": "existing-data-pod"}})
+    platform.op["payload"]["data_action_finished"] = finished
+    runtime, calls, _ = cleanup_runtime(platform, [False, True])
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        executor.execute("operation-a")
+        assert "prepare-session" not in calls and calls.count("finish-session") == 2
+        assert platform.op["status"] == ("completed" if finished == "done" else "failed")
+        assert platform.op["cleanup_status"] == "complete"
+        assert not any(phase in {"starting", "ready"} for phase, _ in platform.facts)
+    finally:
+        executor.close()
+
+
+def test_old_execution_async_cleanup_waits_with_current_operation_fence(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform, clock = Platform("stop"), CleanupClock()
+    platform.op["status"] = "running"
+    old = {**deepcopy(platform.op), "operation_id": "old-operation", "kind": "deploy", "status": "completed"}
+    old["deadline"] = (datetime.utcnow() - timedelta(minutes=5)).isoformat()
+    platform.node_snapshot = lambda: {"operations": [old]}
+    platform.resources = lambda _: [{"kind": "Pod", "purpose": "serve", "resource_ref": "old-pod"}]
+    calls, answers = [], iter([False, True])
+    runtime = SimpleNamespace(
+        _controller=lambda: {"holder_id": "holder-a", "controller_epoch": 1},
+        request_stop=lambda ref, op: calls.append(("stop", ref, op["operation_id"])),
+        confirm_stopped=lambda ref: {"stopped": True},
+        cleanup=lambda op: calls.append(("cleanup", op["operation_id"])) or {"complete": next(answers)},
+    )
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        executor.stop_instances(platform.op)
+        assert calls == [("stop", "old-pod", "operation-a"), ("cleanup", "old-operation"), ("cleanup", "old-operation")]
+        assert clock.sleeps == [0.5] and platform.op["status"] == "running"
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize("saved", [None, [], {}])
+def test_invalid_prepared_fact_cannot_trigger_rebuild_or_completion(tmp_path, saved):
+    """F059 覆盖 AC: AC-04、AC-49、AC-52、AC-55."""
+    platform, clock = Platform("prepare"), CleanupClock()
+    platform.op.update(status="running", stage="preparing", result={"prepared_delivery": saved})
+    runtime, calls, _ = cleanup_runtime(platform, [False])
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        executor.execute("operation-a")
+        assert "prepare" not in calls and platform.op["status"] == "failed"
+        assert platform.op["failure"]["reason"] == "prepared_delivery_invalid"
+        assert not platform.facts[-1][1]["stopped"]
+    finally:
+        executor.close()
+
+
+def test_lost_prepared_fact_reply_adopts_only_exact_committed_delivery(tmp_path, monkeypatch):
+    """F059 覆盖 AC: AC-04、AC-49、AC-52、AC-55."""
+    platform, clock = Platform("prepare"), CleanupClock()
+    runtime, calls, delivery = cleanup_runtime(platform, [False, True])
+    original = platform.fact
+    lost = False
+
+    def accepted(operation, sequence, phase, **kwargs):
+        nonlocal lost
+        result = original(operation, sequence, phase, **kwargs)
+        if phase == "preparing" and "prepared_delivery" in kwargs.get("detail", {}) and not lost:
+            lost = True
+            raise PlatformError("platform_unreachable", 503)
+        return result
+
+    monkeypatch.setattr(platform, "fact", accepted)
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "completed" and calls.count("prepare") == 1
+        assert platform.op["result"]["delivery"] == delivery
+    finally:
+        executor.close()
+
+
+def test_prepare_progress_survives_prepared_result_fact_and_restart(tmp_path):
+    """F059 覆盖 AC: AC-04、AC-49、AC-52、AC-55."""
+    platform, clock = Platform("prepare"), CleanupClock()
+    progress = {
+        stage: {"exec_ref": stage + "-pod", "result": {"phase": stage}}
+        for stage in ("inputs", "resolve", "install", "upload")
+    }
+    platform.op.update(status="running", stage="preparing", result={"prepare_progress": deepcopy(progress)})
+    runtime, calls, delivery = cleanup_runtime(platform, [False, True])
+    first = cleanup_executor(tmp_path, platform, runtime, clock)
+    clock.on_sleep = first._closing.set
+    first.execute("operation-a")
+    assert platform.op["result"]["prepare_progress"] == progress
+    assert platform.op["result"]["prepared_delivery"] == delivery
+    first.close()
+    second = cleanup_executor(tmp_path, platform, runtime, clock)
+    clock.on_sleep = lambda: None
+    try:
+        second.execute("operation-a")
+        assert platform.op["status"] == "completed" and calls.count("prepare") == 1
+        assert platform.op["result"]["prepare_progress"] == progress
+    finally:
+        second.close()
+
+
+def test_cleanup_completion_after_original_deadline_is_not_reported_success(tmp_path):
+    """F059 覆盖 AC: AC-49、AC-52、AC-55."""
+    platform, clock = Platform("prepare"), CleanupClock()
+    platform.op["deadline"] = datetime.utcfromtimestamp(clock.time() + 0.5).isoformat()
+    runtime, _, _ = cleanup_runtime(platform, [])
+
+    def late(_):
+        clock.now += 1
+        return {"complete": True}
+
+    runtime.cleanup = late
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "timed_out"
+        assert platform.op["failure"]["reason"] == "operation_timeout"
+        assert not any(phase == "completed" for phase, _ in platform.facts)
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize("finished", ["done", "failed", "unknown"])
+def test_active_data_session_waits_for_async_finish_without_repreparing(tmp_path, finished):
+    """F059 覆盖 AC: AC-35、AC-49、AC-52、AC-55."""
+    platform, clock = Platform("data"), CleanupClock()
+    runtime, calls, _ = cleanup_runtime(platform, [False, True])
+    clock.on_sleep = lambda: platform.op["payload"].update(data_action_finished=finished)
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        executor.execute("operation-a")
+        assert calls.count("prepare-session") == 1 and calls.count("finish-session") == 2
+        assert platform.op["status"] == ("completed" if finished == "done" else "failed")
+        if finished == "unknown":
+            assert platform.op["failure"]["reason"] == "data_result_unknown"
+    finally:
+        executor.close()
+
+
+def test_cleanup_exception_is_not_retried_as_success(tmp_path):
+    """F059 覆盖 AC: AC-49、AC-52、AC-55."""
+    platform, clock = Platform("prepare"), CleanupClock()
+    runtime, calls, _ = cleanup_runtime(platform, [])
+
+    def uncertain(_):
+        calls.append("cleanup-error")
+        raise ExecutionError("cleanup_api_failed")
+
+    runtime.cleanup = uncertain
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "failed" and platform.op["cleanup_status"] == "pending"
+        assert platform.op["failure"]["reason"] == "cleanup_api_failed"
+        assert not platform.facts[-1][1]["stopped"] and not clock.sleeps
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize("kind", ["prepare", "probe"])
+def test_docker_async_cleanup_uses_same_wait_without_kubernetes_authority(tmp_path, kind):
+    """F059 覆盖 AC: AC-49、AC-52、AC-55、AC-56."""
+    platform, clock = Platform(kind), CleanupClock()
+    runtime, calls, _ = cleanup_runtime(platform, [False, True])
+    runtime._controller = lambda: pytest.fail("Docker must not claim Kubernetes control authority")
+    runtime.cleanup_local_scratch = lambda _: calls.append("local-scratch")
+    executor = OperationExecutor(
+        Config(data_root=tmp_path, node_id="node-a", protocol_version=2),
+        platform=platform,
+        runtime=runtime,
+        clock=clock,
+    )
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "completed" and calls.count("cleanup") == 2
+        assert calls.count("prepare" if kind == "prepare" else "launch") == 1
+        assert calls[-1] == "local-scratch"
     finally:
         executor.close()
