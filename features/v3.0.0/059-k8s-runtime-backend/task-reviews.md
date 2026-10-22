@@ -2815,3 +2815,9 @@ T191–T193主树真实backend conftest组合补验：170passed/7warnings，日�
 ## T198/T199 L1（00fbdce05 / e4052d1c2）
 
 七项：架构PASS（manager消费既有API）、命名PASS、序列化PASS（无API/摘要变更）、数据库/前端N/A、信息泄漏PASS（只固定错误与公开围栏字段）、设计同步PASS。范围两文件、前向依赖/测试先行配对/完整AC通过。16新安全配对先红10/2，最后相关173绿；主树完整runtime1275passed/13skipped，33.40s，含setuid。首次子树完整执行因Helm工具缺失1224/13/51失败，摘要明确全文被截断；配置已核工具后重新1275/13绿，未倒填失败。主树Ruff/arch/diff PASS。已有UID在新epoch的停止/观察/cleanup/fact、8线程单claim、未知响应拒绝及expired prepare不创建资源均有断言；失租不是停止证明。结论PASS，189同PID实际空闲恢复及交付五门保持pending。日志/private/tmp/f059-controller-integrated-runtime.log；子树L1/private/tmp/f059-t198-t199-l1.md。
+
+## T200/T201/T202 L1
+
+T200测试先行ad8d028b7：真实BundleDelivery/SourceImageDelivery、register_resource与SQLite仓库，37例先26红/11绿；首次缺合成config的导入失败独立保留，不计业务红例。实现按阶段选profile后37全绿。T202 f4967f5d0只补两旧fixture真实字段，原跨卷/探测/停止拒绝断言不改；初整套11失败/1670passed/18skip，最终主树完整backend **1681passed/18skipped**，日志/private/tmp/f059-backend-profile-full-final.log。
+
+七项：架构PASS（backend既有控制服务，无manager导入/存储I/O）；命名PASS；序列化PASS（固定内部RuntimeConflict，不改对外API/摘要）；数据库PASS（校验前拒绝，事务/租户/模型/DDL不变）；前端N/A；信息泄漏PASS（无payload/凭据输出）；设计同步PASS。独立代理只读T201审查无代码阻断。任务范围、先行依赖/配对与完整AC复核通过；Ruff/arch/diff PASS。发布线不含该F059文件已git cat-file确认，不将特性实现倒灌发布线。三个任务结论PASS，189部署与五个交付门仍pending。

@@ -6,8 +6,8 @@
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 194,
-    "tasks_total": 199,
+    "l1_completed": 197,
+    "tasks_total": 202,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -349,6 +349,20 @@
         "T199"
       ],
       "source_commit": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a"
+    },
+    "backend_profile_contract": {
+      "state": "L1_passed_full1681_18skip_live_pending",
+      "red_failed": 26,
+      "red_passed": 11,
+      "new_contracts_passed": 37,
+      "red_log": "/private/tmp/f059-backend-profile-contract-final-red.txt",
+      "green_log": "/private/tmp/f059-backend-profile-integrated.log",
+      "test_commit": "ad8d028b79fa4bb9c4d3a12b9f08f27ce0a518ab",
+      "live_189": "r3 failed resource register503 AttributeError before resource creation",
+      "full_backend_passed": 1681,
+      "full_backend_skipped": 18,
+      "full_log": "/private/tmp/f059-backend-profile-full-final.log",
+      "fixture_commit": "f4967f5d0452f005153214528abacf7bbc97a0ce"
     }
   },
   "not_executed": [

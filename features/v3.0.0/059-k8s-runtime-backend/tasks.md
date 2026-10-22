@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；199 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 194 / 199 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；202 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 197 / 202 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1579,6 +1579,29 @@
   **依赖:** T198
   **配对:** T198
 
+- [x] **T200** — backend真实冻结profile资源校验合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_k8s_frozen_profile_contract.py`
+  **逻辑/验收**：真实manifest model_dump与register_resource/SQLite账本配对：prepare已解析profile、运行冻结profile、非法类型及image/purge/source-image白名单；拒绝前不写资源。
+  **覆盖 AC:** AC-04、AC-13、AC-15、AC-24、AC-25、AC-36、AC-48、AC-55
+  **依赖:** T199
+  **配对:** T201
+
+- [x] **T202** — 旧资源测试fixture补齐真实协议字段
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_coordination.py`、`src/backend/test/app_runtime/test_runtime_kubernetes_service.py`
+  **逻辑/验收**：prepare fixture提供manifest delivery与已解析profile；直接Pod校验替身提供真实kind/image mode，保留探测/跨卷/停止证据全部拒绝断言。
+  **覆盖 AC:** AC-04、AC-13、AC-15、AC-24、AC-25、AC-36、AC-48、AC-55
+  **依赖:** T200
+
+- [x] **T201** — backend按阶段消费已解析profile
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`
+  **逻辑/验收**：prepare仅读payload.profile，其他阶段仅读resolved_delivery.profile；非法delivery/profile固定RuntimeConflict，不以stale对象fallback扩大镜像白名单；image/purge无profile合同保持。
+  **覆盖 AC:** AC-04、AC-13、AC-15、AC-24、AC-25、AC-36、AC-48、AC-55
+  **依赖:** T200、T202
+  **配对:** T200
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1680,3 +1703,7 @@ T196/T197经0a8f5a252合入候选0e493c07a，真实client/HMAC/ASGI先红4/38、
 T198/T199现场红例：189新prepare d0b665da84014b2fab43ef60f1b282b6、app2bde519a30f946a091f5ae4aa5cf2248，14:20:36领取epoch2/lease_until14:21:06；14:24:11开始永久renew409，尚无Pod/PVC且terminal fact也被拒绝。未修改租约，保留运行记录；修复与配对L1待合流。
 
 T198/T199完成于00fbdce05/合流候选e4052d1c2：16新安全配对先红绿、相关173passed；主树完整runtime1275passed/13skipped（setuid未跳过），Ruff/架构守卫通过。明确保留首轮缺Helm的51工具失败记录。空闲失租仅精确lost fresh CAS恢复，未知响应当前动作拒绝；既有UID停止/新epoch事实与expired prepare只清理终结均覆盖。194/199完成；同PID真实空闲恢复与最新双架构验收进行中，不提前标业务交付。
+
+T200/T201现场登记：189 e405/Helm12同Pod a7bc860e/restart0，旧过期op正常failed/cleanupcomplete；空闲后同holder epoch3→4并提交preparing fact成功，证明租约恢复。新r3资源注册503/AttributeError，backend校验仍混用manifest.profile字符串与解析对象；尚无Pod/PVC、失败正常cleanup。37条真实Service/SQLite配对先红26/11，独立测试提交ad8d028b7；补同样阶段对象边界，未扩大规格或放宽审批/镜像校验。
+
+T200/T201/T202完成：新增37真实Service/SQLite合同先红26/11→全绿，完整backend首轮11旧fixture缺协议字段/1670passed/18skip；仅补真实kind/mode/prepare对象后完整1681passed/18skip，拒绝断言不动。新37与旧两模块Ruff/架构守卫通过。197/202完成，189按独立backend新源码复验；manager仍固定e405/f004镜像，不转标新backend SHA为该镜像来源。

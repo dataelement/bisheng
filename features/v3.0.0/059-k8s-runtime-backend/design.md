@@ -724,3 +724,5 @@ Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。
 未创建运行分配的应用：manager查询platform.application得到精确`404/application_not_found`时返回既有`not_found`，backend可投影无实例；不能把资源查询404、权限错误或平台故障当无实例或停止证据。该修复恢复原有16101/16121区分，不弱化销毁与UID围栏。
 
 控制器租约恢复（T198/T199，候选e4052d1c2）：空闲期可以自然过期；下一动作仅在精确renew `409/controller_lease_lost` 后清缓存、重读node并以fresh epoch CAS领取。活跃异holder、403、503、其他冲突或响应不确定均重读且拒绝当前动作，不凭重读直接执行未知动作。领取后显式renew，避免同holder幂等claim返回接近过期的旧租约；从renew请求前monotonic计10秒续期，响应耗时达到20秒拒绝，不依赖客户与server壁钟一致。所有资源意图/观察/cleanup/fact仍取当前receipt，旧UID/creator epoch不凭过期改成停止；过期operation由现有平台claim拒绝，只清理并正常终结，不复活prepare。189红例已留存，同进程真实复验待执行。
+
+平台资源白名单校验与manager采用相同阶段合同（T200/T201）：backend prepare只消费payload.profile解析对象；probe/preview/deploy/data/restore等只消费resolved_delivery.profile冻结对象，拒绝错误类型，不回退到旧prepare或旧运行对象。完整镜像和purge缺profile仍许可，显式错误类型不许可；purge缺delivery可空，所有既有镜像digest/helper/卷/UID/租约校验保留。37项真实模型→Service→SQLite账本配对覆盖字段轮廓，避免用宽松桩掩盖跨进程协议。189旧r3资源注册503在本地已修，实际后端重部署待验。

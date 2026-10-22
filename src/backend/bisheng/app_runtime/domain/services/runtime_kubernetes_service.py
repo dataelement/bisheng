@@ -257,6 +257,24 @@ class RuntimeKubernetesService:
         return template, name, kind, expected_annotations[_PREFIX + "status-policy"]
 
     @staticmethod
+    def _delivery_profile(op, *, purge=False):
+        preparing = op.kind == "prepare"
+        delivery = op.payload.get("delivery") if preparing else op.payload.get("resolved_delivery")
+        if delivery is None and purge:
+            delivery = {}
+        if not isinstance(delivery, dict):
+            raise RuntimeConflict("resource_delivery_invalid")
+        # A manifest profile is a reference. Only the platform's resolved
+        # object can authorize runtime or preparer images for each phase.
+        profile = op.payload.get("profile") if preparing else delivery.get("profile")
+        optional = purge or delivery.get("mode") == "image"
+        if profile is None and optional:
+            profile = {}
+        if not isinstance(profile, dict) or (not profile and not optional):
+            raise RuntimeConflict("resource_profile_invalid")
+        return delivery, profile
+
+    @staticmethod
     def _validate_pod(template, op, node, purpose, resource_ref):
         expected_name = ("app-" + _hash(op.app_id)) if purpose in _PRODUCTION else "task-" + _hash(resource_ref)
         if template["metadata"]["name"] != expected_name or template["metadata"].get("finalizers") != [_FINALIZER]:
@@ -267,8 +285,7 @@ class RuntimeKubernetesService:
             "kubernetes.io/arch": node.platform.split("/")[-1],
         }:
             raise RuntimeConflict("resource_pod_platform_refused")
-        delivery = op.payload.get("resolved_delivery", op.payload.get("delivery", {})) or {}
-        profile = delivery.get("profile") or op.payload.get("profile") or {}
+        delivery, profile = RuntimeKubernetesService._delivery_profile(op, purge=purpose == "purge")
         image = delivery.get("image_ref") or delivery.get("image") or profile.get("runtime_image")
         helper = (node.capabilities or {}).get("helper_image")
         assembler = (node.capabilities or {}).get("assembler_image") if purpose == "assemble" else None
