@@ -31,3 +31,6 @@ Helm14以d86e66a2d固定manager镜像升级manager/egress/admission，全部Read
 第二轮同143源码/镜像完整探测exit0，16/16真实通过；SQLite证据UID 12e4f5eb-e512-4549-8395-eb9620c281d8，descriptor digest d7e831157cd56ff2a941118b9deafb2c2f62b572c633428efb4412839a337afd。canary Pod/PVC均正常清理，仅旧r4隔离PVC仍保留。报告发布后平台Node初次读仍blocked，业务需等正常配置投射/心跳ready再启动，未跳过准入。
 
 新报告投射及正常心跳后node ready=true/controller_epoch10，未重启或改状态；独立r6 platform套件已启动。私有启动守卫首轮缺now关键字在业务/API/journal前退出，修正v2后固定helper/报告检查通过；该记录不算产品失败或重放。
+
+
+2026-10-23 manager-only候选7816/Helm17：原生构建及禁网导入通过；descriptor UID/data、helper143、profile2及其16/16报告完全未变。新镜像评估ready、平台自然接管epoch11且ready；没有把保留的143探测报告改标成新运行。真实业务在独立r7继续。

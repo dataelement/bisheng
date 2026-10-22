@@ -659,5 +659,38 @@
     "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "boundary": "Native manager/helper build and real empty-dependency resolution only. No new ARM, CI public release or full business claim."
   },
-  "arm_current_instruction": "deferred by user; no new ARM run; historical results kept separately"
+  "arm_current_instruction": "deferred by user; no new ARM run; historical results kept separately",
+  "latest_native_amd64_manager_only": {
+    "native": {
+      "build_exit": 0,
+      "import_smoke_exit": 0,
+      "public_push": false,
+      "manager_image_id": "sha256:ec08599a64325be5b8dac8c7fe31885325ed7e1c586a098b29c824a979702184",
+      "platform": "linux/amd64",
+      "source_revision": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+      "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+      "changed_runtime_files": [
+        "runtime_manager/operations.py"
+      ],
+      "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+      "preceding_manager_source": "143606851370d6091b120d348549329b8113c6a6",
+      "schema": "f059-native-manager/v1"
+    },
+    "image": {
+      "manager_image_id": "sha256:ec08599a64325be5b8dac8c7fe31885325ed7e1c586a098b29c824a979702184",
+      "source_revision": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:3e0bf023a016b3f486bd5fe5cbcae85d89cc8737daaa9166f926291ec7781de5",
+      "public_push": false,
+      "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-19"
+    },
+    "deployed_helm_revision": 17,
+    "source_pack_sha256": "f7f0a7958fd8100f3c06a3a5f7b29579587692ebd4c8a88c0103cffd83699a90",
+    "source_pack_bytes": 57916766,
+    "changes": [
+      "runtime_manager/operations.py"
+    ],
+    "helper_unchanged_source": "143606851370d6091b120d348549329b8113c6a6",
+    "new_arm_run": false,
+    "public_release": false
+  }
 }

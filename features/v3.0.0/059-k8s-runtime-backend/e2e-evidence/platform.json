@@ -1,14 +1,14 @@
 {
   "schema": "f059-platform-evidence/v1",
-  "recorded_at": "2026-10-22T16:38:15.286537+00:00",
-  "state": "in_progress_r6_async_cleanup_wait_fix",
+  "recorded_at": "2026-10-22T17:48:07.531221+00:00",
+  "state": "in_progress_r7_with_async_cleanup_fix",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "143606851370d6091b120d348549329b8113c6a6",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:a537fc0b647d6213c63d30142c502bbc0befe993eec0965c9a735dd7d204cd61",
+    "manager_source": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:3e0bf023a016b3f486bd5fe5cbcae85d89cc8737daaa9166f926291ec7781de5",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
@@ -213,7 +213,7 @@
   ],
   "boundary": "Real preparation Pod startup and same-UID cleanup proven; no full business acceptance or cross-node/arm/CI release claim.",
   "next_batch": {
-    "name": "k189r6",
+    "name": "k189r7",
     "cases": 6,
     "profile_revision": 2,
     "identities_reused": true,
@@ -224,21 +224,190 @@
     "backend_node_ready_before_start": true,
     "stage": "platform",
     "automatic_finally_cleanup": false,
-    "source_revision": "143606851370d6091b120d348549329b8113c6a6",
+    "source_revision": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
     "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c",
-    "result": "failed_precheck_build",
-    "app_id": "f81b0089eade452b9aeeade4cfe6ef01",
-    "deployment_id": "04f444c61cfc4810b905163b47f986a8",
-    "version_id": "ca5bcf0750bd47a0b82d8a2a95e47b2c",
-    "operation_id": "8fb6b53a167e4ce28718336a4840a43d",
-    "completed_prepare_stages": [
-      "inputs",
-      "resolve",
-      "install",
-      "upload"
-    ],
-    "cleanup_status": "complete",
-    "reason": "preparation_cleanup_pending",
-    "failure_code": 16227
-  }
+    "result": "in_progress",
+    "app_id": "baa177a4b5fe42cbb8cf4dadc8f09299",
+    "deployment_id": "d623cbd318f04795bb6121a572ff566e",
+    "version_id": "35958375b3ff4b438f061c0cdfa6d24d"
+  },
+  "historical_batches": [
+    {
+      "name": "k189r6",
+      "cases": 6,
+      "profile_revision": 2,
+      "identities_reused": true,
+      "new_journal_required": true,
+      "prepared": true,
+      "business_started": true,
+      "requires_current_candidate_report_ready": true,
+      "backend_node_ready_before_start": true,
+      "stage": "platform",
+      "automatic_finally_cleanup": false,
+      "source_revision": "143606851370d6091b120d348549329b8113c6a6",
+      "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c",
+      "result": "failed_precheck_build",
+      "app_id": "f81b0089eade452b9aeeade4cfe6ef01",
+      "deployment_id": "04f444c61cfc4810b905163b47f986a8",
+      "version_id": "ca5bcf0750bd47a0b82d8a2a95e47b2c",
+      "operation_id": "8fb6b53a167e4ce28718336a4840a43d",
+      "completed_prepare_stages": [
+        "inputs",
+        "resolve",
+        "install",
+        "upload"
+      ],
+      "cleanup_status": "complete",
+      "reason": "preparation_cleanup_pending",
+      "failure_code": 16227,
+      "cleanup_proof": {
+        "status": "failed",
+        "pod_stop_evidence": [
+          {
+            "uid": "20326ce9-2f50-413e-a660-473ab463b034",
+            "evidence_kind": "kubelet_terminal",
+            "purpose": null,
+            "node_name": "binfeng-k8s-node189"
+          },
+          {
+            "uid": "9b867c1b-20d1-4160-ad36-2504c3edfb20",
+            "evidence_kind": "kubelet_terminal",
+            "purpose": null,
+            "node_name": "binfeng-k8s-node189"
+          },
+          {
+            "uid": "8acd7ee1-04be-4a29-84b9-0c2a8b3ca486",
+            "evidence_kind": "kubelet_terminal",
+            "purpose": null,
+            "node_name": "binfeng-k8s-node189"
+          },
+          {
+            "uid": "8d302955-967e-4f2a-8987-bcc749eae443",
+            "evidence_kind": "kubelet_terminal",
+            "purpose": null,
+            "node_name": "binfeng-k8s-node189"
+          }
+        ],
+        "owner_epoch": 1,
+        "cleanup_status": "complete",
+        "generation": 1,
+        "app_id": "f81b0089eade452b9aeeade4cfe6ef01",
+        "failure": {
+          "diagnostic_tail": "",
+          "reason": "preparation_cleanup_pending",
+          "data_may_have_changed": false,
+          "failed_stage": "preparing",
+          "maintenance": false
+        },
+        "operation_id": "8fb6b53a167e4ce28718336a4840a43d",
+        "manual_cleanup": false,
+        "prepare_progress_stages": [
+          "inputs",
+          "upload",
+          "install",
+          "resolve"
+        ],
+        "resources": [
+          {
+            "kind": "Secret",
+            "cleanup_state": "complete",
+            "name": "material-f6f0bb16d7a2911117608194a3d83e0aad369dee",
+            "stop_state": "requested",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "2bd1982b-22bc-5267-9c45-cc02388f4c54",
+            "node_name": "",
+            "fresh_api_absent": true,
+            "purpose": "prepare-download",
+            "uid": "71d6f89a-2be5-408c-b92b-2a9bd32b0430"
+          },
+          {
+            "kind": "PersistentVolumeClaim",
+            "cleanup_state": "complete",
+            "name": "scratch-a053752355f2c5f22bd0830d6c9feb2da6900ce6",
+            "stop_state": "requested",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "84c40229-90db-5bd5-8074-293c3cbebb97",
+            "node_name": "",
+            "fresh_api_absent": true,
+            "purpose": "prepare-download",
+            "uid": "e1121e30-70c4-4b76-8cf4-30911801cc0a"
+          },
+          {
+            "kind": "Pod",
+            "cleanup_state": "complete",
+            "name": "task-f6f0bb16d7a2911117608194a3d83e0aad369dee",
+            "stop_state": "confirmed",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "fefb4aac-4511-5d16-bf37-8e169e9d9dad",
+            "node_name": "binfeng-k8s-node189",
+            "fresh_api_absent": true,
+            "purpose": "prepare-download",
+            "uid": "20326ce9-2f50-413e-a660-473ab463b034"
+          },
+          {
+            "kind": "Pod",
+            "cleanup_state": "complete",
+            "name": "task-439ed9b572ff1266bab8875c9c8030a2a675d332",
+            "stop_state": "confirmed",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "42fa1188-826d-5e0b-9228-63ad3d01056b",
+            "node_name": "binfeng-k8s-node189",
+            "fresh_api_absent": true,
+            "purpose": "prepare-download",
+            "uid": "9b867c1b-20d1-4160-ad36-2504c3edfb20"
+          },
+          {
+            "kind": "Secret",
+            "cleanup_state": "complete",
+            "name": "material-439ed9b572ff1266bab8875c9c8030a2a675d332",
+            "stop_state": "requested",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "686cbc2e-c3b7-5742-b0e5-da7fa035062c",
+            "node_name": "",
+            "fresh_api_absent": true,
+            "purpose": "prepare-download",
+            "uid": "790b8932-8d65-4bee-97e5-1bbbb03aa33e"
+          },
+          {
+            "kind": "Pod",
+            "cleanup_state": "complete",
+            "name": "task-2e2c5560e79434f5db248d2d63a4eed46e108207",
+            "stop_state": "confirmed",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "f5bacb28-d679-5792-8584-54014650a1f8",
+            "node_name": "binfeng-k8s-node189",
+            "fresh_api_absent": true,
+            "purpose": "prepare-install",
+            "uid": "8acd7ee1-04be-4a29-84b9-0c2a8b3ca486"
+          },
+          {
+            "kind": "Pod",
+            "cleanup_state": "complete",
+            "name": "task-58d577c8dcfd02b256b3335d6a00ab021db65812",
+            "stop_state": "confirmed",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "17e28e07-b6f4-5011-88df-e09cbf69e97c",
+            "node_name": "binfeng-k8s-node189",
+            "fresh_api_absent": true,
+            "purpose": "prepare-upload",
+            "uid": "8d302955-967e-4f2a-8987-bcc749eae443"
+          },
+          {
+            "kind": "Secret",
+            "cleanup_state": "complete",
+            "name": "material-58d577c8dcfd02b256b3335d6a00ab021db65812",
+            "stop_state": "requested",
+            "namespace": "e2e-f059-apps",
+            "resource_ref": "18f111ed-a067-57c6-b7c6-fc7bb16d344f",
+            "node_name": "",
+            "fresh_api_absent": true,
+            "purpose": "prepare-upload",
+            "uid": "60938df2-63d0-43a1-95c7-0eaf828a7392"
+          }
+        ],
+        "schema": "f059-r6-cleanup/v1"
+      },
+      "cleanup_proof_sha256": "110aab26f2846ed75f35a02a95e948e40e8ec5cba21528ead45acec7dfa87d77"
+    }
+  ]
 }

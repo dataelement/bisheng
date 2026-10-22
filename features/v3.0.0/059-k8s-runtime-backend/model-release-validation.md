@@ -27,3 +27,6 @@ Go公网metadata等待、首轮取消及官方材料恢复分别保留，未计�
 709821ecb在189原生九镜像构建/隔离烟测及bundle/SQLite数据哨兵通过；d86e66a2d只修改K8s日志容器白名单，另原生manager构建/导入通过，未重复未改helper应用镜像或重标其来源。固定private digest/组件SHA详见JSON，非正式Docker Hub/CI发行。用户已要求先跑通K8s，暂停新的arm验证；此前e405的附加WAL 20秒超时仍未解决，不以旧0e绿色记录覆盖。
 
 当前开发候选143606851仅新增amd64 manager/helper原生构建与无网络lock:null解析烟测；应用profile2镜像保持旧认证digest。ARM按用户要求暂停，不重标历史结果为新SHA；正式CI/公开发行仍pending。
+
+
+2026-10-23：manager-only 7816原生amd64构建/导入通过，内网固定digest3e0bf023…，Helm17部署；只更新operations.py，不重标helper/profile旧来源。ARM按用户指示暂缓，正式公开CI发行仍未执行。详见JSON latest_native_amd64_manager_only。

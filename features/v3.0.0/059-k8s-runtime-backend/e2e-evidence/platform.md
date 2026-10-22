@@ -10,7 +10,7 @@
 | 材料入口 | 专用TLS代理缺根路径，origin404/backend401；精确补路由后新连接401，平台env200 | 401只证明入口及拒绝，signed transfer待复验 |
 | 旧k189r4 | 无持久create receipt，仍保留其操作和PVC | 不凭403日志/404或人工文件追认not_created |
 
-## 当前运行候选
+## 首个诊断候选（历史）
 
 - manager/egress/admission：`d86e66a2d`，固定digest见JSON；backend四文件来自`709821ecb`，其余平台源码保持先前基线。
 - Helm升级保持descriptor数据/UID、能力报告、CA、helper及profile revision 2；app-proxy未改。
@@ -39,3 +39,10 @@ prepare `e36537609ef047748674e5172885dddd` 的inputs成功，resolve失败；两
 新helper完整16项安装探测通过，backend节点正常恢复ready后启动原platform六场景。原runner SHA ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c，固定源码143606851，profile2；新journal隔离，旧r4/r5及追加链不变。当前进行中，platform失败保留现场，未执行all的finally cleanup。
 
 r6首个Python应用prepare8fb6b53a…真实完成inputs/resolve/install/upload；4Pod同UID停止，8条资源账本正常cleanupcomplete。执行器在第一次cleanup.pending时立即失败，公开16227/precheck_build；首次failed_stage=preparing正确保留。登记T225–T227按原期限等待，不把DELETE受理当完成、不复活失败操作；未生成审批或正式版本。
+
+
+## 当前候选与r7独立批次
+
+开发收尾来源7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13；manager原生amd64构建/禁网导入通过，内网digest `3e0bf023a016b3f486bd5fe5cbcae85d89cc8737daaa9166f926291ec7781de5`。Helm17三个控制服务更新，descriptor UID/data、helper143、profile2与安装报告逐字节保持；新镜像assess_capabilities及平台ready通过，controller_epoch11。无新16项探测或ARM/公开发行冒认。
+
+r6原失败记录保留；正常cleanup后8精确资源逐项fresh API absent、4Pod停止证明，proof SHA `110aab26f2846ed75f35a02a95e948e40e8ec5cba21528ead45acec7dfa87d77`。不复活旧operation。r7使用原runner、原身份及六场景新journal；首个Python deployment d623cbd318f04795bb6121a572ff566e（app baa177a4b5fe42cbb8cf4dadc8f09299）已接受。当前尚在准备/业务验收；platform模式失败保留现场，未执行all自动清理。

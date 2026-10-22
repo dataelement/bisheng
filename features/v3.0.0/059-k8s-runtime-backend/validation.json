@@ -1,7 +1,7 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T17:20:59.670679+00:00",
-  "validated_source_commit": "143606851370d6091b120d348549329b8113c6a6",
+  "recorded_at": "2026-10-22T17:48:07.531221+00:00",
+  "validated_source_commit": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
@@ -17,7 +17,9 @@
       "skipped": 13,
       "seconds": 33.66,
       "log": "/private/tmp/f059-async-cleanup-main-runtime-fixed.log",
-      "boundary": "Local integrated runtime regression; no live Kubernetes business or ARM/public release claim"
+      "boundary": "Local integrated runtime regression; no live Kubernetes business or ARM/public release claim",
+      "exit_code": 0,
+      "source_commit": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13"
     },
     "backend": {
       "passed": 1723,
@@ -729,7 +731,7 @@
       "result": "in_progress"
     },
     "async_cleanup_completion": {
-      "status": "implemented_l1_and_full_runtime_passed_live_pending",
+      "status": "native_amd64_built_and_deployed_r7_business_in_progress",
       "actual_operation_id": "8fb6b53a167e4ce28718336a4840a43d",
       "prepare_stages_succeeded": [
         "inputs",
@@ -747,7 +749,42 @@
       "related_regression_passed": 284,
       "selection_and_operations_passed": 65,
       "independent_readonly_review": "no actionable findings",
-      "r6_cleanup_proof_sha256": "110aab26f2846ed75f35a02a95e948e40e8ec5cba21528ead45acec7dfa87d77"
+      "r6_cleanup_proof_sha256": "110aab26f2846ed75f35a02a95e948e40e8ec5cba21528ead45acec7dfa87d77",
+      "native": {
+        "build_exit": 0,
+        "import_smoke_exit": 0,
+        "public_push": false,
+        "manager_image_id": "sha256:ec08599a64325be5b8dac8c7fe31885325ed7e1c586a098b29c824a979702184",
+        "platform": "linux/amd64",
+        "source_revision": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+        "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+        "changed_runtime_files": [
+          "runtime_manager/operations.py"
+        ],
+        "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+        "preceding_manager_source": "143606851370d6091b120d348549329b8113c6a6",
+        "schema": "f059-native-manager/v1"
+      },
+      "private_image": {
+        "manager_image_id": "sha256:ec08599a64325be5b8dac8c7fe31885325ed7e1c586a098b29c824a979702184",
+        "source_revision": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:3e0bf023a016b3f486bd5fe5cbcae85d89cc8737daaa9166f926291ec7781de5",
+        "public_push": false,
+        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-19"
+      },
+      "helm": {
+        "descriptor_uid_unchanged": true,
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:3e0bf023a016b3f486bd5fe5cbcae85d89cc8737daaa9166f926291ec7781de5",
+        "helm_upgrade_completed": true,
+        "source_revision": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+        "descriptor_data_unchanged": true,
+        "helper_and_profile_images_unchanged": true,
+        "app_proxy_unchanged": true
+      },
+      "helm_revision": 17,
+      "descriptor_report_unchanged": true,
+      "backend_node_ready": true,
+      "controller_epoch": 11
     }
   },
   "not_executed": [
