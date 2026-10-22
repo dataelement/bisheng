@@ -1057,3 +1057,408 @@ def test_closed_history_never_bypasses_a_replacement_live_uid(tmp_path):
         assert rows[-1]["stop_state"] == "held" and not platform.facts and not clock.sleeps
     finally:
         executor.close()
+
+
+class ExpiredStopPlatform(Platform):
+    def __init__(self):
+        super().__init__("stop")
+        self.op.update(status="running", generation=2, deadline=(datetime.utcnow() - timedelta(seconds=1)).isoformat())
+        self.old = {
+            **deepcopy(self.op),
+            "operation_id": "old-deploy",
+            "kind": "deploy",
+            "generation": 1,
+            "status": "completed",
+            "cleanup_status": "complete",
+        }
+        self.scope = {
+            "app_id": "app-a",
+            "node_id": "node-a",
+            "generation": 2,
+            "owner_epoch": 1,
+            "phase": "stopped",
+            "operation_id": self.old["operation_id"],
+            "exec_ref": "live-serve",
+        }
+        self.rows = [
+            {
+                "resource_ref": ref,
+                "operation_id": self.old["operation_id"],
+                "app_id": "app-a",
+                "node_id": "node-a",
+                "generation": 1,
+                "owner_epoch": 1,
+                "kind": "Pod",
+                "purpose": purpose,
+                "name": "app-fixed",
+                "namespace": "apps",
+                "uid": uid,
+                "stop_state": stop,
+                "cleanup_state": cleanup,
+            }
+            for ref, purpose, uid, stop, cleanup in [
+                ("closed-migrate", "migrate", "old-uid", "confirmed", "complete"),
+                ("live-serve", "serve", "live-uid", "held", "pending"),
+            ]
+        ]
+        self.rows.append(
+            {
+                **deepcopy(self.rows[-1]),
+                "resource_ref": "production-volume",
+                "kind": "PersistentVolumeClaim",
+                "name": "production-data",
+                "uid": "volume-uid",
+            }
+        )
+        self.events, self.claim_error, self.active = [], "operation_expired", self.op["operation_id"]
+        self.claim_status = 409
+        self.after_fact = None
+
+    def operation(self, ident):
+        return deepcopy(self.old if ident == self.old["operation_id"] else self.op)
+
+    def application(self, _):
+        return deepcopy(self.scope)
+
+    def node_snapshot(self):
+        return {"operations": [deepcopy(self.op)]}
+
+    def resources(self, ident):
+        return deepcopy(self.rows if ident == self.old["operation_id"] else [])
+
+    def plan(self):
+        return [deepcopy(self.op)]
+
+    def claim(self, _):
+        self.events.append(("claim", self.claim_error))
+        raise PlatformError(self.claim_error, self.claim_status)
+
+    def fact(self, operation, sequence, phase, **kwargs):
+        if self.active != operation["operation_id"]:
+            raise PlatformError("execution_fence_stale", 409)
+        if kwargs.get("detail", {}).get("stopped") and any(
+            row["kind"] == "Pod" and row["stop_state"] != "confirmed" for row in self.rows
+        ):
+            raise PlatformError("execution_not_confirmed_stopped", 409)
+        super().fact(operation, sequence, phase, **kwargs)
+        self.events.append(("fact", phase, kwargs["detail"]["stopped"], kwargs["detail"]["cleanup_complete"]))
+        if self.after_fact:
+            self.after_fact()
+        return {
+            "operation_id": self.op["operation_id"],
+            "phase": phase,
+            "node_id": self.op["node_id"],
+            "generation": self.op["generation"],
+            "owner_epoch": self.op["owner_epoch"],
+            "sequence": sequence,
+            "detail": deepcopy(kwargs["detail"]),
+        }
+
+
+def expired_stop_runtime(platform):
+    from runtime_manager.executors.protocol import ExecutorError
+
+    state = {"cleanup_calls": 0, "current_uid": "live-uid"}
+
+    def cleanup(old):
+        state["cleanup_calls"] += 1
+        platform.events.append(("cleanup", old["operation_id"]))
+        assert old["operation_id"] == platform.old["operation_id"]
+        assert platform.op["status"] == "timed_out" and platform.op["cleanup_status"] == "pending"
+        for row in platform.rows:
+            if row["kind"] == "PersistentVolumeClaim":
+                continue
+            if row["stop_state"] == "confirmed" and row["cleanup_state"] == "complete":
+                continue
+            platform.events.append(("fresh", row["resource_ref"], row["uid"]))
+            if row["uid"] != state["current_uid"]:
+                raise ExecutorError("resource_identity_changed")
+            row["stop_state"] = "confirmed"
+            if state["cleanup_calls"] > 1:
+                row["cleanup_state"] = "complete"
+        return {"complete": all(row["cleanup_state"] == "complete" for row in platform.rows if row["kind"] == "Pod")}
+
+    return SimpleNamespace(cleanup=cleanup, _controller=lambda: {"holder_id": "holder-a", "controller_epoch": 1}), state
+
+
+def test_expired_stop_persists_pending_before_cleaning_old_terminal_writer(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    volume = deepcopy(platform.rows[-1])
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "timed_out" and platform.op["cleanup_status"] == "pending"
+        assert platform.op["failure"]["reason"] == "operation_timeout"
+        assert platform.events[:3] == [
+            ("claim", "operation_expired"),
+            ("fact", "timed_out", False, False),
+            ("cleanup", "old-deploy"),
+        ]
+        assert state["cleanup_calls"] == 1
+        assert not any(event[0] == "fresh" and event[1] == "closed-migrate" for event in platform.events)
+        first_failure = deepcopy(platform.op["failure"])
+        executor._failure(platform.op, None, ExecutionError("later cleanup retry", tail="not the first diagnostic"))
+        assert state["cleanup_calls"] == 2 and platform.op["cleanup_status"] == "complete"
+        assert platform.op["status"] == "timed_out" and platform.op["failure"] == first_failure
+        assert platform.events[-1] == ("fact", "timed_out", True, True)
+        assert platform.rows[-1] == volume and volume["cleanup_state"] == "pending"
+        assert len([event for event in platform.events if event[0] == "claim"]) == 1
+    finally:
+        executor.close()
+
+
+def test_expired_stop_lost_terminal_response_waits_for_next_fresh_reconcile(tmp_path, monkeypatch):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    lost = True
+
+    def reply_lost():
+        nonlocal lost
+        if lost:
+            lost = False
+            raise PlatformError("platform_unreachable", 503)
+
+    platform.after_fact = reply_lost
+    monkeypatch.setattr(executor, "cleanup_data_workers", lambda: None)
+    monkeypatch.setattr(executor, "heartbeat", lambda: None)
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "timed_out" and state["cleanup_calls"] == 0
+        executor.reconcile()
+        assert state["cleanup_calls"] == 1 and platform.op["cleanup_status"] == "pending"
+        executor.reconcile()
+        assert state["cleanup_calls"] == 2 and platform.op["cleanup_status"] == "complete"
+        assert len([event for event in platform.events if event[0] == "claim"]) == 1
+    finally:
+        executor.close()
+
+
+def test_expired_stop_restart_keeps_failure_and_original_deadline(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    deadline = platform.op["deadline"]
+    try:
+        executor._failure(platform.op, None, ExecutionError("operation_timeout", tail="first timeout diagnostic"))
+        assert state["cleanup_calls"] == 1 and platform.op["cleanup_status"] == "pending"
+    finally:
+        executor.close()
+    restarted = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        restarted._failure(platform.op, None, ExecutionError("retry", tail="replacement diagnostic"))
+        assert platform.op["status"] == "timed_out" and platform.op["cleanup_status"] == "complete"
+        assert platform.op["failure"]["diagnostic_tail"] == "first timeout diagnostic"
+        assert platform.op["deadline"] == deadline and state["cleanup_calls"] == 2
+    finally:
+        restarted.close()
+
+
+@pytest.mark.parametrize("change", ["app_id", "node_id", "generation", "owner_epoch", "phase"])
+def test_expired_stop_changed_application_scope_cannot_cleanup_old_writers(tmp_path, change):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    platform.after_fact = lambda: platform.scope.update(
+        {change: 3 if change in {"generation", "owner_epoch"} else "foreign"}
+    )
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor.execute("operation-a")
+        assert state["cleanup_calls"] == 0 and platform.op["cleanup_status"] == "pending"
+        assert platform.rows[1]["stop_state"] == "held"
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize(
+    "change", ["running", "higher-generation", "higher-owner", "unknown-state", "missing-uid", "row-scope"]
+)
+def test_expired_stop_mixed_or_unconfirmed_sources_remain_held(tmp_path, change):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    if change == "running":
+        platform.old["status"] = "running"
+    elif change == "higher-generation":
+        platform.old["generation"] = 3
+    elif change == "higher-owner":
+        platform.old["owner_epoch"] = 2
+    elif change == "unknown-state":
+        platform.rows[1]["stop_state"] = "unknown"
+    elif change == "missing-uid":
+        platform.rows[1]["uid"] = None
+    else:
+        platform.rows[1]["app_id"] = "foreign"
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor.execute("operation-a")
+        assert state["cleanup_calls"] == 0 and platform.op["cleanup_status"] == "pending"
+        assert platform.op["status"] == "timed_out"
+    finally:
+        executor.close()
+
+
+def test_expired_stop_same_name_replacement_is_never_proved_stopped(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    state["current_uid"] = "new-uid"
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "timed_out" and platform.op["cleanup_status"] == "pending"
+        assert platform.rows[1]["stop_state"] == "held"
+        assert not any(event == ("fact", "timed_out", True, True) for event in platform.events)
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize("cause", ["backend-unavailable", "owner-refused", "not-expired", "other-refusal"])
+def test_expired_stop_requires_exact_expiry_and_persisted_owner_acknowledgment(tmp_path, cause):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    if cause == "backend-unavailable":
+        platform.application = lambda _: (_ for _ in ()).throw(PlatformError("platform_unreachable", 503))
+    elif cause == "owner-refused":
+        platform.active = "new-owner-operation"
+    elif cause == "not-expired":
+        platform.op["deadline"] = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
+    else:
+        platform.claim_error = "execution_fence_stale"
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor.execute("operation-a")
+        assert state["cleanup_calls"] == 0 and platform.rows[1]["stop_state"] == "held"
+        assert platform.op["cleanup_status"] == "pending"
+        if cause in {"not-expired", "other-refusal"}:
+            assert platform.op["status"] != "timed_out"
+    finally:
+        executor.close()
+
+
+def test_expired_stop_special_cleanup_does_not_change_docker_failure_path(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-52、AC-55."""
+    platform, calls = Platform("stop"), []
+    platform.op["deadline"] = (datetime.utcnow() - timedelta(seconds=1)).isoformat()
+    runtime = SimpleNamespace(cleanup=lambda operation: calls.append(operation["operation_id"]) or {"complete": True})
+    executor = OperationExecutor(Config(data_root=tmp_path), platform=platform, runtime=runtime)
+    try:
+        executor._failure(platform.op, None, PlatformError("operation_expired", 409))
+        assert calls == ["operation-a"] and platform.op["status"] == "failed"
+        assert platform.op["failure"]["reason"] == "execution_failed"
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize(
+    "cause", ["claim-503", "pending-fact-503", "fresh-operation-503", "resources-503", "controller-503", "snapshot-503"]
+)
+def test_expired_stop_uncertain_control_plane_never_mutates_old_writer(tmp_path, monkeypatch, cause):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    if cause == "claim-503":
+        platform.claim_status = 503
+    elif cause == "pending-fact-503":
+        monkeypatch.setattr(
+            platform, "fact", lambda *args, **kwargs: (_ for _ in ()).throw(PlatformError("platform_unreachable", 503))
+        )
+    elif cause == "fresh-operation-503":
+        original = platform.operation
+        monkeypatch.setattr(
+            platform,
+            "operation",
+            lambda ident: (
+                (_ for _ in ()).throw(PlatformError("platform_unreachable", 503))
+                if platform.op["status"] == "timed_out"
+                else original(ident)
+            ),
+        )
+    elif cause == "resources-503":
+        monkeypatch.setattr(
+            platform, "resources", lambda _: (_ for _ in ()).throw(PlatformError("platform_unreachable", 503))
+        )
+    elif cause == "snapshot-503":
+        monkeypatch.setattr(
+            platform, "node_snapshot", lambda: (_ for _ in ()).throw(PlatformError("platform_unreachable", 503))
+        )
+    else:
+        monkeypatch.setattr(
+            runtime, "_controller", lambda: (_ for _ in ()).throw(PlatformError("controller_lease_lost", 409))
+        )
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor.execute("operation-a")
+        assert state["cleanup_calls"] == 0 and platform.rows[1]["stop_state"] == "held"
+        assert platform.op["cleanup_status"] == "pending"
+        if cause == "claim-503":
+            assert platform.op["status"] != "timed_out"
+    finally:
+        executor.close()
+
+
+def test_expired_stop_owner_change_after_old_cleanup_refuses_final_release(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    original = runtime.cleanup
+    state["cleanup_calls"] = 1
+
+    def replaced(old):
+        answer = original(old)
+        platform.scope["generation"] += 1
+        return answer
+
+    runtime.cleanup = replaced
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "timed_out" and platform.op["cleanup_status"] == "pending"
+        assert not any(event == ("fact", "timed_out", True, True) for event in platform.events)
+    finally:
+        executor.close()
+
+
+def test_expired_stop_completed_cleanup_is_not_reopened(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    platform.op.update(
+        status="timed_out", stage="timed_out", cleanup_status="complete", failure={"reason": "operation_timeout"}
+    )
+    runtime, state = expired_stop_runtime(platform)
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor._failure(platform.op, None, ExecutionError("retry"))
+        assert state["cleanup_calls"] == 0 and not platform.events
+        assert platform.op["cleanup_status"] == "complete"
+    finally:
+        executor.close()
+
+
+def test_expired_stop_final_backend_guard_blocks_unlisted_application_writer(tmp_path, monkeypatch):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    original = platform.fact
+
+    def guarded(operation, sequence, phase, **kwargs):
+        if kwargs["detail"].get("stopped"):
+            raise PlatformError("execution_not_confirmed_stopped", 409)
+        return original(operation, sequence, phase, **kwargs)
+
+    monkeypatch.setattr(platform, "fact", guarded)
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor.execute("operation-a")
+        executor._failure(platform.op, None, ExecutionError("retry"))
+        assert state["cleanup_calls"] == 2 and platform.op["cleanup_status"] == "pending"
+        assert platform.op["status"] == "timed_out" and platform.op["failure"]["reason"] == "operation_timeout"
+        assert not any(event == ("fact", "timed_out", True, True) for event in platform.events)
+    finally:
+        executor.close()

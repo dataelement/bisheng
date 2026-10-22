@@ -306,6 +306,113 @@ class OperationExecutor:
             self.runtime.cleanup_preparation(operation)
         self.report(operation, "completed", detail={"serving": True, "cleanup_complete": True})
 
+    def _stop_cleanup_checkpoint(self, operation):
+        self.process_checkpoint()
+        self.runtime._controller()
+        current = self.platform.operation(operation["operation_id"])
+        keys = ("operation_id", "app_id", "node_id", "generation", "owner_epoch", "kind", "deadline")
+        if any(current.get(key) != operation.get(key) for key in keys):
+            raise ExecutorError("execution_fence_mismatch")
+        if (
+            current["status"] != "timed_out"
+            or current.get("cleanup_status") != "pending"
+            or current.get("failure", {}).get("reason") != "operation_timeout"
+        ):
+            raise ExecutorError("stop_cleanup_state_unconfirmed")
+        scope = self.platform.application(operation["app_id"])
+        if any(scope.get(key) != operation.get(key) for key in ("app_id", "node_id", "generation", "owner_epoch")) or (
+            scope.get("phase") != "stopped"
+        ):
+            raise ExecutorError("stop_cleanup_scope_changed")
+        return scope
+
+    def _expired_stop_cleanup(self, operation, current, exc):
+        if any(
+            current.get(key) != operation.get(key)
+            for key in ("operation_id", "app_id", "node_id", "generation", "owner_epoch", "kind", "deadline")
+        ):
+            raise ExecutorError("execution_fence_mismatch")
+        failure = (
+            current.get("failure", {})
+            if current["status"] in TERMINAL
+            else {
+                "reason": "operation_timeout",
+                "diagnostic_tail": str(getattr(exc, "tail", ""))[-16384:],
+                "failed_stage": current["stage"],
+                "maintenance": False,
+                "data_may_have_changed": False,
+            }
+        )
+        # A terminal pending fact keeps the active assignment fenced. Its ACK
+        # must precede cleanup; an unknown reply is retried only on a later pass.
+        receipt = self.report(operation, "timed_out", detail={**failure, "stopped": False, "cleanup_complete": False})
+        if (
+            not isinstance(receipt, dict)
+            or any(
+                receipt.get(key) != operation.get(key)
+                for key in ("operation_id", "node_id", "generation", "owner_epoch")
+            )
+            or receipt.get("phase") != "timed_out"
+        ):
+            raise ExecutorError("stop_cleanup_receipt_unconfirmed")
+        scope = self._stop_cleanup_checkpoint(operation)
+        sources = self.platform.node_snapshot()["operations"]
+        origin = scope.get("operation_id")
+        if origin and not any(old["operation_id"] == origin for old in sources):
+            sources.append(self.platform.operation(origin))
+        cleanup = []
+        found_route = not origin and not scope.get("exec_ref")
+        for old in sources:
+            if old["app_id"] != operation["app_id"] or old["operation_id"] == operation["operation_id"]:
+                continue
+            rows = self.platform.resources(old["operation_id"])
+            writers = [
+                row
+                for row in rows
+                if row["kind"] == "Pod" and row["purpose"] in {"serve", "migrate", "restore", "data", "purge"}
+            ]
+            if not writers:
+                continue
+            if (
+                old["status"] not in TERMINAL
+                or old.get("node_id") != operation["node_id"]
+                or type(old.get("generation")) is not int
+                or not 0 < old["generation"] <= operation["generation"]
+                or type(old.get("owner_epoch")) is not int
+                or not 0 < old["owner_epoch"] <= operation["owner_epoch"]
+            ):
+                raise ExecutorError("stop_cleanup_source_unconfirmed")
+            for row in rows:
+                if any(row.get(key) != old.get(key) for key in ("app_id", "node_id", "generation", "owner_epoch")) or (
+                    row.get("operation_id") != old["operation_id"]
+                ):
+                    raise ExecutorError("stop_cleanup_resource_scope_changed")
+                if row["kind"] != "Pod" or (
+                    row.get("stop_state") == "confirmed" and row.get("cleanup_state") == "complete"
+                ):
+                    continue
+                if (
+                    not isinstance(row.get("uid"), str)
+                    or not row["uid"]
+                    or row.get("stop_state") not in {"held", "requested", "confirmed"}
+                    or row.get("cleanup_state") not in {"pending", "complete"}
+                ):
+                    raise ExecutorError("stop_cleanup_writer_unconfirmed")
+            if old["operation_id"] == origin:
+                found_route = any(row["resource_ref"] == scope.get("exec_ref") for row in writers)
+            cleanup.append(old)
+        if not found_route:
+            raise ExecutorError("stop_cleanup_route_unconfirmed")
+        complete = True
+        for old in cleanup:
+            # Existing terminal-own cleanup authority only; never authorize an
+            # expired stop to mutate another operation's resources.
+            self._stop_cleanup_checkpoint(operation)
+            complete = bool(self.runtime.cleanup(old).get("complete")) and complete
+        if complete:
+            self._stop_cleanup_checkpoint(operation)
+            self.report(operation, "timed_out", detail={**failure, "stopped": True, "cleanup_complete": True})
+
     def _failure(self, operation, runner, exc):
         if isinstance(exc, (ExecutionError, ExecutorError)) and str(exc) == "manager_stopping":
             return
@@ -316,12 +423,40 @@ class OperationExecutor:
         ):
             logger.warning("committed serving operation retained for retirement retry: %s", operation["operation_id"])
             return
+        kubernetes_stop = self.config.executor_kind == "kubernetes" and operation["kind"] == "stop"
+        if kubernetes_stop:
+            if current["status"] in TERMINAL and current.get("cleanup_status") == "complete":
+                return
+            deadline = datetime.fromisoformat(current["deadline"].replace("Z", "+00:00"))
+            if deadline.tzinfo is None:
+                deadline = deadline.replace(tzinfo=UTC)
+            expired = datetime.fromtimestamp(self.clock.time(), UTC) >= deadline
+            timeout = expired and (
+                (isinstance(exc, PlatformError) and exc.status == 409 and str(exc) == "operation_expired")
+                or (isinstance(exc, (ExecutionError, ExecutorError)) and str(exc) == "operation_timeout")
+            )
+            if (current["status"] not in TERMINAL and timeout) or (
+                current["status"] == "timed_out"
+                and current.get("cleanup_status") == "pending"
+                and current.get("failure", {}).get("reason") == "operation_timeout"
+            ):
+                try:
+                    self._expired_stop_cleanup(operation, current, exc)
+                except Exception as cleanup_error:
+                    logger.error(
+                        "expired stop cleanup pending: %s (%s)", operation["operation_id"], type(cleanup_error).__name__
+                    )
+                return
         unknown_build = current.get("payload", {}).get("legacy_build_state") == "started"
         if unknown_build and current["status"] in TERMINAL:
             return
         stopped = complete = False
         try:
-            complete = bool(self.runtime.cleanup(operation).get("complete")) and not unknown_build
+            # A stop owns no serving Pod itself; its empty resource set cannot
+            # prove that application writers from earlier deployments stopped.
+            complete = (
+                not kubernetes_stop and bool(self.runtime.cleanup(operation).get("complete")) and not unknown_build
+            )
             stopped = complete
         except Exception as cleanup_error:
             logger.error("operation cleanup pending: %s (%s)", operation["operation_id"], type(cleanup_error).__name__)
