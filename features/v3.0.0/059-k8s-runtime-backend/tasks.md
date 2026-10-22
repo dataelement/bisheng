@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；188 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 182 / 188 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；193 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 185 / 193 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1492,6 +1492,45 @@
   **依赖:** T187
   **配对:** T187
 
+- [x] **T189** — 恢复后等待精确运行操作终态
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+  **逻辑/验收**：公开app可先online；验收须等待同一resume操作completed/cleanup complete，并复核同app/operation/version/generation。失败和身份变化不能放行，不吞维护错误。
+  **覆盖 AC:** AC-29、AC-33、AC-35、AC-36、AC-55
+  **依赖:** T182
+  **配对:** T190
+
+- [x] **T190** — 业务验收恢复操作同步
+  **类型**：实现
+  **文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`
+  **逻辑/验收**：仅修正验收工具同步，ready/serving阶段继续轮询，终态后核对身份与数据；业务API和运行时锁不改。
+  **覆盖 AC:** AC-29、AC-33、AC-35、AC-36、AC-55
+  **依赖:** T189
+  **配对:** T189
+
+- [ ] **T191** — 离线源码验收依赖物料合同
+  **类型**：测试
+  **文件**：`scripts/fixtures/f059/test_bootstrap.py`
+  **逻辑/验收**：只接收显式清单和逐wheel SHA的纯Python物料；拒绝缺依赖、篡改、native wheel、路径穿越、覆盖与pth；真实SDK断言不变。
+  **覆盖 AC:** AC-04、AC-24、AC-36、AC-46、AC-55
+  **依赖:** T184
+  **配对:** T192
+
+- [ ] **T192** — 源码验收包显式离线vendor物料
+  **类型**：实现
+  **文件**：`scripts/bootstrap_f059_acceptance.py`
+  **逻辑/验收**：显式source-wheelhouse从固定材料清单校验并保留真实SDK/httpx闭包及许可，只向source-image包加入_vendor与启动路径引导；不读取开发venv、不pip、不联网，不改生产模板或base。
+  **覆盖 AC:** AC-04、AC-24、AC-36、AC-46、AC-55
+  **依赖:** T191
+  **配对:** T191
+
+- [ ] **T193** — 离线源码验收前置说明
+  **类型**：基础设施
+  **文件**：`scripts/fixtures/f059/README.md`
+  **逻辑/验收**：区分Docker source-image裸base与K8s profile；记录离线vendor材料准备和许可，完整镜像需显式提供digest；说明本地材料烟测不代表平台验收。
+  **覆盖 AC:** AC-04、AC-24、AC-36、AC-46、AC-55
+  **依赖:** T192
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1499,7 +1538,7 @@
   **覆盖 AC:** AC-01、AC-02、AC-04、AC-10、AC-24、AC-36、AC-37、AC-46、AC-53、AC-56
   **依赖:** T066
 
-- [ ] **T068** — 189 专用资源安装验收
+- [x] **T068** — 189 专用资源安装验收
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/e2e-evidence/installation.json`、`features/v3.0.0/059-k8s-runtime-backend/e2e-evidence/installation.md`
   **逻辑/验收**：在192.168.106.189重新只读核对UID，再安装专用e2e-f059资源、合格local PV/PVC和镜像；验证真实拒绝与允许、包源/材料/SDK连通，保留原资源清单，不修改既有kube-system。
@@ -1571,3 +1610,11 @@ T183/T184配对与主线组合135passed；109 r2 prepare/bootstrap真实API通�
 T185/T186：189报告尚在86400秒有效期内，原公开诊断错误读取不存在的raw ready字段；配对红3/绿92后本地合入。T187/T188：109真实WAL读取失败，最小Docker复现确认只读挂载不能创建侧文件；禁止immutable忽略已提交WAL。发布线a77accb43没有runtime-manager模块，修复属于尚未合入发布线的托管特性，不能向发布线放孤立文件。
 
 T187/T188：0af6eda1b已合入；相关离线52通过/3真实默认跳过，实际Docker三种WAL布局3通过；SQL拒写和事务一致性配对均通过，原有容器/网络不变。下一候选完整集成/原生及109业务复验仍待执行。
+
+T189/T190：109修复后observe-v1真实通过；停用恢复时app先online，紧接数据GET遇到16167临时维护，稍后同op completed/cleanup complete及rows200确认。补验收工具同步，未将临时拒绝改成业务成功。
+
+T189/T190经7b728fcb6配对15项先红后绿、完整93合同通过；同runtime镜像54b生产目录与新HEAD字节不变。109续办保留既有应用/journal，189报告过期真实拒绝16121/precheck_build/无审批已通过；恢复及其他负例继续真实验证。
+
+T068完成：候选54b3ea2c1/Helm10第五实际探测16项+正常清理+真实公开诊断通过；三组报告负例实际发布16121/precheck_build/无审批操作并原样恢复、无manager重启。旧canary按自然到期同UID清理完毕，namespace Pod/PVC与计划均空。T067/T069/T070/T071/T072仍待完成。
+
+T191–T193现场夹具补登记：109第四source-image真实失败16124/precheck_probe/startup_exited；该离线路径的空requirements与顶层SDK导入不自足，补显式可校验vendor物料，不更改生产模板、base或SDK正向断言。完整镜像需显式加入场景。

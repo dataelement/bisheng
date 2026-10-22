@@ -2787,3 +2787,11 @@ T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态
 ## T187 / T188 — SQLite WAL侧文件（L1 PASS）
 
 实现0af6eda1b，仅DataExecutor单应用数据bind恒rw，业务读SQL仍mode=ro；不使用immutable或强制checkpoint。测试原挂载断言4红；真实原payload两失败/一对照通过，修复后三种布局3通过（64.26s），离线52通过/3真实默认跳过。实际非root、networknone、rootfsRO，最新随机WAL提交可见且主DB字节不变；SQLITE_READONLY明确拒写，并发读事务保持一致。证据/private/tmp/f059-wal-fix-1792674511/result.json及/private/tmp/f059-wal-fix-review.md。分层PASS，命名PASS，序列化N/A，数据库模型N/A，前端N/A，信息泄漏PASS，设计同步PASS；Ruff/架构守卫/diff通过。发布线未含此模块，适用范围记录于tasks现状；109平台未复验，不代替T067。
+
+## T189 / T190 — 恢复操作同步（L1 PASS）
+
+提交7b728fcb6。15新增先红后绿，完整93合同通过。固定owner resume响应的operation_id，只等待该deploy completed/stage completed/cleanup complete，ready/serving和cleanup pending不能提前读数据；失败/取消/超时、app/op/version/generation变化均拒绝。数据rows只调用一次，不吞16167、无固定sleep；源码生产协议未变。逐项分层PASS、命名PASS、序列化PASS（既有公开字段）、数据库N/A、前端N/A、信息泄漏PASS、设计同步PASS。Ruff/架构守卫/diff通过；真实109同r2复验正在进行。
+
+## T068 — 189安装与报告故障配对（L1 PASS）
+
+第五轮最终控制候选54b3、Helm10实际16检查全部通过、正常清理、真实公开诊断通过；过期/身份变化/必需项失败三组真实API负例与无重启恢复通过。旧资源按真实停止/自然到期同UID闭环，最终namespace Pod/PVC和canary计划为空。没有修改kube-system或全局RBAC。分层PASS、命名PASS、序列化PASS、数据库N/A、前端N/A、信息泄漏PASS、设计同步PASS；证据installation.json/MD。业务/故障/正式CI/L2仍分列未完成。

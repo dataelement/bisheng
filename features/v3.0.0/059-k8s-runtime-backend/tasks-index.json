@@ -4772,6 +4772,126 @@
       "review": "PASS"
     },
     {
+      "id": "T189",
+      "wave": 9,
+      "kind": "测试",
+      "title": "恢复后等待精确运行操作终态",
+      "files": [
+        "src/backend/test/app_runtime/test_k8s_e2e_contract.py"
+      ],
+      "logic": "公开app可先online；验收须等待同一resume操作completed/cleanup complete，并复核同app/operation/version/generation。失败和身份变化不能放行，不吞维护错误。",
+      "acs": [
+        "AC-29",
+        "AC-33",
+        "AC-35",
+        "AC-36",
+        "AC-55"
+      ],
+      "depends": [
+        "T182"
+      ],
+      "pair": "T190",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T190",
+      "wave": 9,
+      "kind": "实现",
+      "title": "业务验收恢复操作同步",
+      "files": [
+        "src/backend/test/e2e/helpers/vibe_runtime.py"
+      ],
+      "logic": "仅修正验收工具同步，ready/serving阶段继续轮询，终态后核对身份与数据；业务API和运行时锁不改。",
+      "acs": [
+        "AC-29",
+        "AC-33",
+        "AC-35",
+        "AC-36",
+        "AC-55"
+      ],
+      "depends": [
+        "T189"
+      ],
+      "pair": "T189",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T191",
+      "wave": 7,
+      "kind": "测试",
+      "title": "离线源码验收依赖物料合同",
+      "files": [
+        "scripts/fixtures/f059/test_bootstrap.py"
+      ],
+      "logic": "只接收显式清单和逐wheel SHA的纯Python物料；拒绝缺依赖、篡改、native wheel、路径穿越、覆盖与pth；真实SDK断言不变。",
+      "acs": [
+        "AC-04",
+        "AC-24",
+        "AC-36",
+        "AC-46",
+        "AC-55"
+      ],
+      "depends": [
+        "T184"
+      ],
+      "pair": "T192",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T192",
+      "wave": 7,
+      "kind": "实现",
+      "title": "源码验收包显式离线vendor物料",
+      "files": [
+        "scripts/bootstrap_f059_acceptance.py"
+      ],
+      "logic": "显式source-wheelhouse从固定材料清单校验并保留真实SDK/httpx闭包及许可，只向source-image包加入_vendor与启动路径引导；不读取开发venv、不pip、不联网，不改生产模板或base。",
+      "acs": [
+        "AC-04",
+        "AC-24",
+        "AC-36",
+        "AC-46",
+        "AC-55"
+      ],
+      "depends": [
+        "T191"
+      ],
+      "pair": "T191",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T193",
+      "wave": 7,
+      "kind": "基础设施",
+      "title": "离线源码验收前置说明",
+      "files": [
+        "scripts/fixtures/f059/README.md"
+      ],
+      "logic": "区分Docker source-image裸base与K8s profile；记录离线vendor材料准备和许可，完整镜像需显式提供digest；说明本地材料烟测不代表平台验收。",
+      "acs": [
+        "AC-04",
+        "AC-24",
+        "AC-36",
+        "AC-46",
+        "AC-55"
+      ],
+      "depends": [
+        "T192"
+      ],
+      "pair": null,
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",
@@ -4837,8 +4957,8 @@
       ],
       "pair": null,
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T069",

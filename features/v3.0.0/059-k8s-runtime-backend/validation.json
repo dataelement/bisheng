@@ -1,24 +1,24 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T13:08:54.398715+00:00",
-  "validated_source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
+  "recorded_at": "2026-10-22T13:17:47.900074+00:00",
+  "validated_source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 182,
-    "tasks_total": 188,
+    "l1_completed": 185,
+    "tasks_total": 190,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 1184,
-      "skipped": 10,
+      "passed": 1200,
+      "skipped": 13,
       "exit_code": 0,
-      "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
-      "scope": "full runtime including terminal API normalization, true Docker client and SQLite sentinel contracts",
-      "log": "/private/tmp/f059-runtime-diagnostics-integrated.log"
+      "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+      "scope": "full runtime including actual assessed diagnostics and WAL readonly SQL helper fixes",
+      "log": "/private/tmp/f059-runtime-wal-readiness-integrated.log"
     },
     "backend": {
       "passed": 1629,
@@ -26,7 +26,8 @@
       "exit_code": 0,
       "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
       "scope": "full app_runtime and app_publish with isolated model hooks and final diagnostics harness",
-      "log": "/private/tmp/f059-backend-current-integration.log"
+      "log": "/private/tmp/f059-backend-current-integration.log",
+      "same_production_source_through": "54b3ea2c15836529cc24667d9a58be49e35bf710"
     },
     "public_tenant_fix": {
       "passed": 17,
@@ -261,11 +262,11 @@
       "scope": "assessed report, projected refresh, identity changes, expiry, mandatory failure, API unavailable; real deployment pending"
     },
     "native_final_candidate": {
-      "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
-      "amd64": "nine native build, isolated/full Engine bundle smoke passed",
-      "arm64": "nine native build, isolated/full Engine bundle smoke passed",
+      "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+      "amd64": "passed",
+      "arm64": "passed",
       "evidence": "model-release-validation.json",
-      "boundary": "Current local code adds readiness/WAL fix; native result for7e preserved, new candidate must revalidate"
+      "boundary": "local native and Engine proof; formal CI not authorized"
     },
     "sqlite_wal_helper": {
       "source_commit": "0af6eda1b097c2cb4dcff78d77a3930e9ed2982e",
@@ -274,6 +275,20 @@
       "real_docker_passed": 3,
       "real_log": "/private/tmp/f059-wal-fix-1792674511/result.json",
       "scope": "native local one-app actual Docker payload; 109 platform revalidation pending"
+    },
+    "resume_harness": {
+      "passed": 93,
+      "new_red_green_cases": 15,
+      "source_commit": "7b728fcb664731bd51fa4fc54dcf471250587d27",
+      "production_runtime_source_unchanged_from": "54b3ea2c15836529cc24667d9a58be49e35bf710"
+    },
+    "installation_54b": {
+      "state": "passed",
+      "evidence": "e2e-evidence/installation.json",
+      "real_required_checks": 15,
+      "registry_check": true,
+      "real_api_negative_pairs": 3,
+      "without_manager_restart": true
     }
   },
   "not_executed": [
