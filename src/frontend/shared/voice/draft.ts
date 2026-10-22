@@ -56,4 +56,9 @@ export class VoiceDraft {
     this.previous = next;
     return next;
   }
+
+  /** Index just after the dictated span, where the caret should stay. */
+  caret(): number {
+    return this.end;
+  }
 }

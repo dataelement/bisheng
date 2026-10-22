@@ -49,6 +49,8 @@ export interface SkillRecord {
   enabled: boolean;
   contentHash: string;
   bundleMissing: boolean;
+  /** Last change, or the creation time when a row has never been updated. */
+  updatedAt: string;
   preview: string;
   /** Raw SKILL.md, including the YAML header. Present on the detail response. */
   sourceText?: string;

@@ -6,11 +6,11 @@ import type { TaskModeSkill } from '~/store/linsight';
 
 const personal: SkillRecord = {
   id: 7, name: 'pdf', displayName: '合同', description: '个人用的很长说明', source: 'personal',
-  enabled: true, contentHash: 'abc', bundleMissing: false, preview: '', files: [],
+  enabled: true, contentHash: 'abc', bundleMissing: false, updatedAt: '', preview: '', files: [],
 };
 const enterprise: SkillRecord = {
   id: 9, name: 'pdf', displayName: '合同', description: '企业用的很长说明', source: 'platform',
-  enabled: true, contentHash: 'def', bundleMissing: false, preview: '', files: [],
+  enabled: true, contentHash: 'def', bundleMissing: false, updatedAt: '', preview: '', files: [],
 };
 const mockNavigate = jest.fn();
 const mockRows = { current: [personal, enterprise] };

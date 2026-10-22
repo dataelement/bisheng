@@ -246,8 +246,15 @@ async def test_oversized_audio_is_rejected(monkeypatch):
     assert [event["type"] for event in browser.sent] == ["ready", "error"]
 
 
-@pytest.mark.parametrize("model_type,expected", [("asr_rt", True), ("asr", False)])
-async def test_effective_config_derives_capability_from_model_type(monkeypatch, model_type, expected):
+@pytest.mark.parametrize(
+    "model_name,model_type,expected",
+    [
+        ("16k_zh", "asr_rt", True),
+        ("16k_zh", "asr", True),
+        ("whisper-1", "asr", False),
+    ],
+)
+async def test_effective_config_derives_capability_from_model_type(monkeypatch, model_name, model_type, expected):
     config = WorkbenchModelConfig(asr_model=WSModel(id="12", realtime=not expected))
     typed = AsyncMock(return_value=(config, True, False))
     monkeypatch.setattr(LLMService, "_aget_typed_with_meta", typed)
@@ -257,7 +264,7 @@ async def test_effective_config_derives_capability_from_model_type(monkeypatch, 
         "get_model_server_info",
         AsyncMock(
             return_value=(
-                SimpleNamespace(model_name="16k_zh", model_type=model_type),
+                SimpleNamespace(model_name=model_name, model_type=model_type),
                 SimpleNamespace(type="tencent"),
             )
         ),

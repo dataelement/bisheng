@@ -24,6 +24,8 @@ interface SkillUploadDialogProps {
 }
 
 const MIB = 1024 * 1024;
+const MAX_UPLOAD_BYTES = 50 * MIB;
+const QUOTA_ERROR_CODES = new Set([11061, 11062]);
 
 export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: SkillUploadDialogProps) {
   const localize = useLocalize();
@@ -34,6 +36,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
   const [checking, setChecking] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<number>();
   const [duplicate, setDuplicate] = useState<{ skillId: number; contentHash: string }>();
   const [saving, setSaving] = useState(false);
   const checkSeq = useRef(0);
@@ -41,6 +44,8 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
   const input = useRef<HTMLInputElement>(null);
   const atCountLimit = !target && (usage.data?.count ?? 0) >= (usage.data?.countLimit ?? 20);
   const atByteLimit = !target && (usage.data?.usedBytes ?? 0) >= (usage.data?.bytesLimit ?? 209715200);
+  const quotaBlocked = atCountLimit || atByteLimit;
+  const showFileError = Boolean(error) && !(quotaBlocked && errorCode != null && QUOTA_ERROR_CODES.has(errorCode));
 
   useEffect(() => () => {
     checkSeq.current += 1;
@@ -48,6 +53,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
 
   const choose = (files: FileList | null) => {
     setError('');
+    setErrorCode(undefined);
     setDuplicate(undefined);
     setReady(false);
     const selected = files?.length === 1 ? files[0] : undefined;
@@ -57,7 +63,22 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
       setChecking(false);
       return;
     }
-    if (selected) void inspect(selected);
+    if (selected && !/\.(md|zip|skill)$/i.test(selected.name)) {
+      setChecking(false);
+      setError(localize('com_skill_center_error_format'));
+      return;
+    }
+    if (selected && (!selected.size || selected.size > MAX_UPLOAD_BYTES)) {
+      setChecking(false);
+      setError(localize('com_skill_center_error_size'));
+      return;
+    }
+    if (!selected) return;
+    if (quotaBlocked) {
+      setChecking(false);
+      return;
+    }
+    void inspect(selected);
   };
 
   const inspect = async (selected: File) => {
@@ -82,14 +103,17 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
   };
   const allowDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    event.stopPropagation();
     if (!saving) setDragging(true);
   };
   const endDrag = (event: DragEvent<HTMLDivElement>) => {
+    event.stopPropagation();
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
     setDragging(false);
   };
   const dropFile = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    event.stopPropagation();
     setDragging(false);
     if (saving) return;
     choose(event.dataTransfer.files);
@@ -105,10 +129,12 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
       if (Number.isInteger(skillId) && contentHash) {
         setDuplicate({ skillId, contentHash });
         setError('');
+        setErrorCode(undefined);
         return;
       }
     }
     if (cause instanceof SkillRequestError) {
+      setErrorCode(cause.statusCode);
       setError(translateApiErrorMessage({
         status_code: cause.statusCode,
         status_message: cause.statusMessage,
@@ -116,6 +142,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
       }));
       return;
     }
+    setErrorCode(undefined);
     setError(localize('com_skill_center_error_storage'));
   };
   const save = async () => {
@@ -159,6 +186,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
             bytesLimit: limit,
           })}
         </DialogDescription>
+        <p className="text-body-sm text-text-3">{localize('com_skill_center_formats')}</p>
         <input ref={input} type="file" accept=".md,.zip,.skill" className="hidden" onChange={(event) => { choose(event.target.files); event.target.value = ''; }} />
         <div
           className={cn(
@@ -174,10 +202,10 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
           <p className="text-body text-text-1">{file ? file.name : localize('com_skill_center_drop')}</p>
           {checking && <p role="status" className="text-body-sm text-text-3">{localize('com_skill_center_parsing')}</p>}
           <Button color="default" variant="outlined" disabled={saving} onClick={() => input.current?.click()}>
-            {localize(file || error ? 'com_skill_center_reselect' : 'com_skill_center_choose')}
+            {localize(file || showFileError ? 'com_skill_center_reselect' : 'com_skill_center_choose')}
           </Button>
         </div>
-        {error && (
+        {showFileError && (
           <div role="alert" className="space-y-2">
             <p className="text-body-sm text-red-600">{error}</p>
             <Button color="default" variant="outlined" onClick={() => input.current?.click()}>{localize('com_skill_center_reselect')}</Button>

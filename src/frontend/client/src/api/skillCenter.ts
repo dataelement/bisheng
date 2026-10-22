@@ -17,6 +17,7 @@ interface ApiCard {
   enabled: boolean;
   content_hash: string;
   bundle_missing: boolean;
+  update_time?: string | null;
   preview?: string;
   source_text?: string;
   files?: { path: string }[];
@@ -46,6 +47,7 @@ function toRecord(row: ApiCard, source: SkillRecord['source']): SkillRecord {
     enabled: Boolean(row.enabled),
     contentHash: row.content_hash,
     bundleMissing: Boolean(row.bundle_missing),
+    updatedAt: row.update_time || '',
     preview: row.preview || '',
     sourceText: row.source_text || '',
     files: (row.files || []).map((file) => file.path),

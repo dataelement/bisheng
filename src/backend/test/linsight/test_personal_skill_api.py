@@ -191,6 +191,7 @@ class TestPersonalSkillApi:
         assert [row["name"] for row in center["enterprise"]] == ["he-tong"]
         assert center["personal_count"] == 1 and center["enterprise_count"] == 1
         assert center["personal"][0]["bundle_missing"] is False
+        assert center["personal"][0]["update_time"]
         assert personal["id"] == center["personal"][0]["id"]
 
         candidates = api.client.get(f"{BASE}/candidates").json()["data"]

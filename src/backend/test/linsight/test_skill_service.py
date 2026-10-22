@@ -316,12 +316,20 @@ class TestUpdateDelete:
         assert detail.display_name == "演示技能v3"
         assert {f.path for f in detail.files} == {SKILL_MD, "new.txt"}
 
-    async def test_update_upload_name_mismatch_rejected(self, service):
+    async def test_update_upload_keeps_skill_id_when_frontmatter_differs(self, service):
         await service.create_from_upload(TENANT, USER, "demo-skill.md", _md_bytes())
-        with pytest.raises(SkillValidationError, match="must equal"):
-            await service.update_from_upload(
-                TENANT, "demo-skill", "other.md", _md_bytes(name="other-name", display_name="别名")
-            )
+        detail = await service.update_from_upload(
+            TENANT,
+            "demo-skill",
+            "other.md",
+            _md_bytes(name="other-name", display_name="别名", description="replaced"),
+        )
+        assert detail.name == "demo-skill"
+        assert detail.display_name == "别名"
+        assert detail.description == "replaced"
+        assert detail.normalized_from is None
+        assert "name: demo-skill" in detail.source_text
+        assert "other-name" not in detail.source_text
 
     async def test_set_status_unknown_404(self, service):
         with pytest.raises(SkillNotFoundError):

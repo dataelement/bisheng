@@ -65,6 +65,12 @@ export const useFileDropAndPaste = ({ enabled, onFilesReceived, allowFolders = f
             setIsDragging(false);
             dragCounter.current = 0;
 
+            // The skill upload dialog accepts .skill / .zip / .md. A drop there
+            // must not also be treated as a chat attachment, which rejects .skill
+            // and toasts that the application does not support the file type.
+            const target = e.target;
+            if (target instanceof Element && target.closest('[role="dialog"]')) return;
+
             // Directories must be pulled off the DataTransferItemList
             // synchronously — it is invalidated the moment this handler returns.
             // `dataTransfer.files` does not surface a dropped folder's contents at
