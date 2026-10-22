@@ -4989,6 +4989,60 @@
       "review": "PASS"
     },
     {
+      "id": "T198",
+      "wave": 7,
+      "kind": "测试",
+      "title": "控制器空闲过期与失租恢复围栏",
+      "files": [
+        "src/runtime-manager/tests/test_kubernetes_executor.py"
+      ],
+      "logic": "真实30秒租约和PlatformClient错误配对：空闲过期重新CAS领取；活跃异holder、未知响应和503不放行，既有UID恢复与新epoch事实及并发锁不生成虚假停止证据。",
+      "acs": [
+        "AC-01",
+        "AC-13",
+        "AC-15",
+        "AC-33",
+        "AC-35",
+        "AC-36",
+        "AC-48",
+        "AC-55"
+      ],
+      "depends": [
+        "T197"
+      ],
+      "pair": "T199",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T199",
+      "wave": 7,
+      "kind": "实现",
+      "title": "过期控制器租约按精确失租恢复",
+      "files": [
+        "src/runtime-manager/runtime_manager/executors/kubernetes.py"
+      ],
+      "logic": "精确409/controller_lease_lost使缓存失效，fresh node快照后CAS领取；其他失败不吞，当前不确定动作拒绝；按真实到期限制缓存，不改平台API及停止围栏。",
+      "acs": [
+        "AC-01",
+        "AC-13",
+        "AC-15",
+        "AC-33",
+        "AC-35",
+        "AC-36",
+        "AC-48",
+        "AC-55"
+      ],
+      "depends": [
+        "T198"
+      ],
+      "pair": "T198",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

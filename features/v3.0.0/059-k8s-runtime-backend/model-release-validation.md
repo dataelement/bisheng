@@ -15,3 +15,9 @@ Go公网metadata等待、首轮取消及官方材料恢复分别保留，未计�
 189真实业务暴露profile引用与对象混用，已修复并完整runtime1217/13skip通过。前述双架构原生证据仍准确对应54b，不能转标为新候选；9e7同SHA原生重建及烟测正在补验，正式公共CI仍未授权。
 
 候选更新为`0e493c07a`：另修精确无分配404观察语义，完整runtime1259/13skip通过；双架构原生按同SHA重新构建中。9e7不作为已完成的原生证据；54b历史证据保留。
+
+## 候选 0e493c07a 实际补验完成
+
+同SHA原生amd64和arm64均完成9镜像build、isolated smoke、full bundle smoke，全部exit0；arm64实际WAL 10/0skip、三种Docker布局通过。镜像config ID、工具/许可与物料SHA见JSON。amd64非本次容器57个、arm64为2个，前后及网络均保持；不得将旧54b的87个计数移用。54b与9e7过程仍保留于Git和私有日志，9e7未单独完成原生验收。
+
+189仅向专用LAN仓库推送manager固定manifest `b17045eb…`，Helm11升级控制三服务，明确保留原实际能力报告；未发布DockerHub。四个无分配失败draft经owner API正常删除。新六场景prepare暴露空闲租约过期后永久renew409，尚未创建业务Pod，登记T198/T199，不据原生结果声明K8s业务通过。

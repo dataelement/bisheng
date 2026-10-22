@@ -7,7 +7,7 @@
     "design_confirmed": true,
     "tasks_review": "LGTM",
     "l1_completed": 192,
-    "tasks_total": 197,
+    "tasks_total": 199,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -307,7 +307,7 @@
       "scanned_files": 10,
       "binary_wheel_skips": 8,
       "source_key_negative": "blocked_by_unchanged_scanner",
-      "real_platform_source_image": "pending",
+      "real_platform_source_image": "109 two revisions and missing-dependency negative passed",
       "integrated_backend_conftest_passed": 170
     },
     "profile_contract_candidate": {
@@ -328,7 +328,26 @@
       "targeted_passed": 75,
       "log": "/private/tmp/f059-unassigned-integrated-runtime.log",
       "real_189_unassigned_control_responses": 4,
-      "new_manager_live_validation": "pending"
+      "new_manager_live_validation": "four owner DELETE followed public GET16101"
+    },
+    "native_final_0e": {
+      "source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
+      "amd64": "passed",
+      "arm64": "passed",
+      "evidence": "model-release-validation.json",
+      "boundary": "local native nine-image/Engine; public CI not authorized"
+    },
+    "controller_idle_expiry": {
+      "state": "real_189_reproduced_fix_pending",
+      "operation_id": "d0b665da84014b2fab43ef60f1b282b6",
+      "controller_epoch": 2,
+      "lease_until": "2026-10-22T14:21:06",
+      "first_renew_409": "2026-10-22T14:24:11",
+      "no_pod_or_pvc_created": true,
+      "tasks": [
+        "T198",
+        "T199"
+      ]
     }
   },
   "not_executed": [

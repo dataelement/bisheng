@@ -1,7 +1,7 @@
 {
   "schema": "f059-model-release-validation/v1",
   "state": "partial-native-dual-architecture-passed-formal-ci-pending",
-  "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+  "source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
   "models": {
     "method": "static model/tenant hooks/dual-DB dialect tests; no real DM8 connection",
     "tenant_context_cases_passed": 17,
@@ -18,8 +18,8 @@
   },
   "native_arm64": {
     "schema": "f059-native-image-verification/v1",
-    "finished_at": "2026-10-22T13:25:38.735541+00:00",
-    "source_revision": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+    "finished_at": "2026-10-22T14:14:12.597970+00:00",
+    "source_revision": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
     "platform": "linux/arm64",
     "native_host": "arm64",
     "native_engine": "linux/aarch64",
@@ -30,58 +30,58 @@
     "images": {
       "app-node": {
         "image": null,
-        "image_id": "sha256:b636d9281aa7a518abbcfad7df8787e13eda7a0d60e46476b4670a3419a2d145",
+        "image_id": "sha256:207635908c895ce0cfe2b201d86175d6d7955d42ace79ecc1c0a2555f8569865",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-app-node:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-app-node:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {}
       },
       "app-node-preparer": {
         "image": null,
-        "image_id": "sha256:bc3375a5199d131cc222d4916db71d8f3e56ea7ea9d27d4450943a6113aa3518",
+        "image_id": "sha256:b6c8306c12169950b3c901518d14e24b03b42b8290798f8c56e6112f0844cbf4",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-app-node-preparer:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-app-node-preparer:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {}
       },
       "app-proxy": {
         "image": null,
-        "image_id": "sha256:3684f84044e5966d932a75205dfe0ffee7281147c62a186d4da43b9d7b2b055d",
+        "image_id": "sha256:d9ce7740c6c2495153de0deb2409258e5e5e465f0105e16ebbb9d67f8509c119",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-app-proxy:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-app-proxy:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {}
       },
       "app-python": {
         "image": null,
-        "image_id": "sha256:187c3477682efe27b9d5ac75a741b3501ce04825d3492165fd3bacd586720f1e",
+        "image_id": "sha256:1392fe7b352881893c382f2fd3338797de7cbd2a077feb60b0ea4b3aab2fc4cf",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-app-python:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-app-python:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {}
       },
       "app-python-preparer": {
         "image": null,
-        "image_id": "sha256:edebec2ad162965a8d00c822f9dcfe6deb359d8fa2efcbb4ee7c4f8b3a2dc47d",
+        "image_id": "sha256:3180d7c32e4d56104054a71f0f8a64015c12e03c6a42b2956fb203b5b78aec7f",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-app-python-preparer:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-app-python-preparer:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {}
       },
       "app-static": {
         "image": null,
-        "image_id": "sha256:2bbeea518ff15b78cb75bef8be551719cee6ca7d3eec6c2af66d5bfe840283d0",
+        "image_id": "sha256:4a144f3784b989b886929123da9a457b1127779cba9e18a04a8889367ec2fdff",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-app-static:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-app-static:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {}
       },
       "runtime-assembler": {
         "image": null,
-        "image_id": "sha256:296daeadd46d0d958d9d81335b904f0fb0003cd120d513e5fad783cff1e2b548",
+        "image_id": "sha256:7a04e0c7303198a1a393eaccb51603ba84f51021e22669c7821b50697895b4ae",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {
           "crane": "v0.22.1",
           "go-builder": "1.27.3",
@@ -93,10 +93,10 @@
       },
       "runtime-helper": {
         "image": null,
-        "image_id": "sha256:d5f1b8df7508bdef860dc97396e86420755ceef193d61bb9490984b12d5d5fb1",
+        "image_id": "sha256:23337409a59b4d6d19f3b74fabdb9f31feb42532277872eb491fe9c37f4d6bcc",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {
           "python-abi": "3.11",
           "python-packages": "/usr/share/licenses/bisheng/python-packages.json",
@@ -105,10 +105,10 @@
       },
       "runtime-manager": {
         "image": null,
-        "image_id": "sha256:0e695593e61704266eadf99845d6ad4f7c652871f438c6989d3e6fee2f1ea0a1",
+        "image_id": "sha256:3bb2eb2268c33da48f1ff1b6912e2e0da2cf8c9bd962a530ba69c806be8d9a90",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {}
       }
     },
@@ -122,22 +122,22 @@
           "dependency_reuse": true,
           "runtime_only_sentinel_persisted": true,
           "unchanged_data_bind_and_identity": {
-            "source": "/private/tmp/e2e-f059-native-54b3ea2c1/apps/e2e-f086-1cffe6aa0687-python311/db",
+            "source": "/private/tmp/e2e-f059-native-0e493c07a/apps/e2e-f086-052a47ac5778-python311/db",
             "directory_device": 35,
-            "directory_inode": 33889,
+            "directory_inode": 41190,
             "database_device": 35,
-            "database_inode": 33890
+            "database_inode": 41191
           },
           "verified_sqlite_backups": [
             {
-              "artifact_id": "e6d5ae31ab5e28b5968a6d1954d5b2a58f0fab29ed39477083ccc016f7a83852",
+              "artifact_id": "e707327c609ef747566a2a097245f468549658fe20cbb61fa145245315069ac5",
               "downloaded_sqlite_verified": true,
-              "sentinel_sha256": "0e2415fc9903e866681c4f7d82aef631a129ac92e39763e3b6a811a039dd95bd"
+              "sentinel_sha256": "7c062af7ba9cdecfa092ceb2c5b36e3191bff95c85c2e389e51f807d650d75ae"
             },
             {
-              "artifact_id": "e6d5ae31ab5e28b5968a6d1954d5b2a58f0fab29ed39477083ccc016f7a83852",
+              "artifact_id": "e707327c609ef747566a2a097245f468549658fe20cbb61fa145245315069ac5",
               "downloaded_sqlite_verified": true,
-              "sentinel_sha256": "0e2415fc9903e866681c4f7d82aef631a129ac92e39763e3b6a811a039dd95bd"
+              "sentinel_sha256": "7c062af7ba9cdecfa092ceb2c5b36e3191bff95c85c2e389e51f807d650d75ae"
             }
           ]
         },
@@ -175,10 +175,10 @@
       "real_docker_cases": 3,
       "image": {
         "image": null,
-        "image_id": "sha256:0e695593e61704266eadf99845d6ad4f7c652871f438c6989d3e6fee2f1ea0a1",
+        "image_id": "sha256:3bb2eb2268c33da48f1ff1b6912e2e0da2cf8c9bd962a530ba69c806be8d9a90",
         "native_smoke": true,
         "platform": "linux/arm64",
-        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261022-54b3ea2c1-arm64",
+        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261022-0e493c07a-arm64",
         "tools": {}
       },
       "main_database_unchanged": true,
@@ -203,14 +203,8 @@
     "published": false,
     "boundary": "Actual native local images, isolated resolver checks and complete Docker Engine integration using an in-memory artifact port; real generated data-helper payload tested in 3 WAL layouts. Not real backend/MinIO/approval/permissions E2E, K8s business, snapshot restore, cross-node recovery or public CI release.",
     "build_recovery": {
-      "candidate": "54b3ea2c15836529cc24667d9a58be49e35bf710",
-      "attempt1_exit": 130,
-      "cause": "Assembler waiting on public Go base metadata for over 8 minutes; exact owned Buildx subprocess canceled with SIGINT after verified official arm64 base was loaded",
-      "base_materials": "base-materials/preload-state.json",
-      "production_script_modified": false,
-      "daemon_configuration_modified": false,
-      "unrelated_processes_stopped": false,
-      "next_attempt": "Same unmodified nine-image script with original candidate/release and cached local base"
+      "required": false,
+      "existing_verified_base_cache_reused": true
     }
   },
   "artifact_sha256": {
@@ -222,8 +216,8 @@
   "native_arm64_scope": "Real native nine images, isolated resolver checks, complete Engine bundle/upgrade; random SQLite nonce and two downloaded backups; platform/approval/MinIO excluded",
   "native_amd64": {
     "schema": "f059-native-image-verification/v1",
-    "finished_at": "2026-10-22T13:17:14.448705+00:00",
-    "source_revision": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+    "finished_at": "2026-10-22T14:14:34.895687+00:00",
+    "source_revision": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
     "platform": "linux/amd64",
     "engine": {
       "OSType": "linux",
@@ -239,58 +233,58 @@
     "images": {
       "app-node": {
         "image": null,
-        "image_id": "sha256:9b36428a27ac419a1779b0b641912d0603a2c6ebaaa04227329ca0d2880111b3",
+        "image_id": "sha256:de7f22f64af2059c5acb4b465ab5d7608929007bd1949be05ed91ea5e5918df9",
         "native_smoke": true,
         "platform": "linux/amd64",
-        "tag": "e2e-f059/bisheng-app-node:e2e-f059-native-20261022-54b3ea2c1-amd64",
+        "tag": "e2e-f059/bisheng-app-node:e2e-f059-native-20261022-0e493c07a-amd64",
         "tools": {}
       },
       "app-node-preparer": {
         "image": null,
-        "image_id": "sha256:1be950b50d4501434149aa38011f67f6ead157224ce8be6d34e2eda90bb06d2c",
+        "image_id": "sha256:a35a4a88f2848be7f3eb603f938d0de6de39802d06acc53d6e0739885b033aee",
         "native_smoke": true,
         "platform": "linux/amd64",
-        "tag": "e2e-f059/bisheng-app-node-preparer:e2e-f059-native-20261022-54b3ea2c1-amd64",
+        "tag": "e2e-f059/bisheng-app-node-preparer:e2e-f059-native-20261022-0e493c07a-amd64",
         "tools": {}
       },
       "app-proxy": {
         "image": null,
-        "image_id": "sha256:a4fc4337c898da8a280d21121104b46bf14ced06eecce7f64a39f51a13e4d2bc",
+        "image_id": "sha256:a6ebc02e783ddcd5622646352fcbfc1685135d91e4e3e3ae8eab4a90ecffc7d9",
         "native_smoke": true,
         "platform": "linux/amd64",
-        "tag": "e2e-f059/bisheng-app-proxy:e2e-f059-native-20261022-54b3ea2c1-amd64",
+        "tag": "e2e-f059/bisheng-app-proxy:e2e-f059-native-20261022-0e493c07a-amd64",
         "tools": {}
       },
       "app-python": {
         "image": null,
-        "image_id": "sha256:1320db98342361dcc02c7e235ea092e669f4d933e408765111ee9d2da3484660",
+        "image_id": "sha256:81bfb337c68c318aa550fcd3a60b62335845e1881200dc35f4095db9a380f3b6",
         "native_smoke": true,
         "platform": "linux/amd64",
-        "tag": "e2e-f059/bisheng-app-python:e2e-f059-native-20261022-54b3ea2c1-amd64",
+        "tag": "e2e-f059/bisheng-app-python:e2e-f059-native-20261022-0e493c07a-amd64",
         "tools": {}
       },
       "app-python-preparer": {
         "image": null,
-        "image_id": "sha256:1a802033ccc8a7f87bc3beb9e4ab2f88ea6d2800e3227f7d43e0a370453b8903",
+        "image_id": "sha256:55cdac5ab14824096f9dbc595953fe2e9c86b0d817df51f521084cea4f375468",
         "native_smoke": true,
         "platform": "linux/amd64",
-        "tag": "e2e-f059/bisheng-app-python-preparer:e2e-f059-native-20261022-54b3ea2c1-amd64",
+        "tag": "e2e-f059/bisheng-app-python-preparer:e2e-f059-native-20261022-0e493c07a-amd64",
         "tools": {}
       },
       "app-static": {
         "image": null,
-        "image_id": "sha256:d95589921b77ff437b99873f28fe3ea0eae2e8e96a9ebede7362c9e440bb3117",
+        "image_id": "sha256:8b121fbd253e93af9913df5cac15f286fa4933bc09c850494ffa86c02ad24906",
         "native_smoke": true,
         "platform": "linux/amd64",
-        "tag": "e2e-f059/bisheng-app-static:e2e-f059-native-20261022-54b3ea2c1-amd64",
+        "tag": "e2e-f059/bisheng-app-static:e2e-f059-native-20261022-0e493c07a-amd64",
         "tools": {}
       },
       "runtime-assembler": {
         "image": null,
-        "image_id": "sha256:4e30583ded5de55771382ca1c81fd05f5d5ea2ffe0451c9fcf9f1be417cc10d6",
+        "image_id": "sha256:70db78b647519f63735681355fe7d65de20bf338357e33f2a7667ca926a50ce5",
         "native_smoke": true,
         "platform": "linux/amd64",
-        "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261022-54b3ea2c1-amd64",
+        "tag": "e2e-f059/bisheng-runtime-assembler:e2e-f059-native-20261022-0e493c07a-amd64",
         "tools": {
           "crane": "v0.22.1",
           "go-builder": "1.27.3",
@@ -302,10 +296,10 @@
       },
       "runtime-helper": {
         "image": null,
-        "image_id": "sha256:cd8dfa6286bb9391c0d898a0d9f73e5ee4d9997c8bfbc272e360e3d98643e29f",
+        "image_id": "sha256:9ca04c1b7213dde0c8177976a708d5c8d8bed512a28f74092b7ba93d7aa77599",
         "native_smoke": true,
         "platform": "linux/amd64",
-        "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261022-54b3ea2c1-amd64",
+        "tag": "e2e-f059/bisheng-runtime-helper:e2e-f059-native-20261022-0e493c07a-amd64",
         "tools": {
           "python-abi": "3.11",
           "python-packages": "/usr/share/licenses/bisheng/python-packages.json",
@@ -314,10 +308,10 @@
       },
       "runtime-manager": {
         "image": null,
-        "image_id": "sha256:1d6d00424ca24817211e8b92276d3c1c04ef2b4f1fdbe6a2c3fdf848b18f610c",
+        "image_id": "sha256:28f34e7a857af6d89bd34cf1cf4794c04fb4b41ee189e9b3c0ad19d424d85e6f",
         "native_smoke": true,
         "platform": "linux/amd64",
-        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261022-54b3ea2c1-amd64",
+        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261022-0e493c07a-amd64",
         "tools": {}
       }
     },
@@ -331,22 +325,22 @@
           "dependency_reuse": true,
           "runtime_only_sentinel_persisted": true,
           "unchanged_data_bind_and_identity": {
-            "source": "/opt/e2e-f059/native-54b3ea2c1/smoke-data/apps/e2e-f086-da8571a3d585-python311/db",
+            "source": "/opt/e2e-f059/native-0e493c07a/smoke-data/apps/e2e-f086-0fff0f41871e-python311/db",
             "directory_device": 2050,
-            "directory_inode": 812405251,
+            "directory_inode": 10263450,
             "database_device": 2050,
-            "database_inode": 812405256
+            "database_inode": 10263456
           },
           "verified_sqlite_backups": [
             {
-              "artifact_id": "a4c8f62ce09f6fe4f7b2bffb280ab236885f52203ce939a07ad6c91b454371e0",
+              "artifact_id": "c8f4d0375001bc7c6b6e704da27ecb3b5ca3b3f1a22c6fae60d727b4fb31f647",
               "downloaded_sqlite_verified": true,
-              "sentinel_sha256": "bf3257302949e90d3c763c345d3c795134fc65e3ed9692e3b2e1a4f968d6f102"
+              "sentinel_sha256": "91411fd89d3ab92a42d1121f583d2e46a924a7a43444c207a15b400a3788240c"
             },
             {
-              "artifact_id": "a4c8f62ce09f6fe4f7b2bffb280ab236885f52203ce939a07ad6c91b454371e0",
+              "artifact_id": "c8f4d0375001bc7c6b6e704da27ecb3b5ca3b3f1a22c6fae60d727b4fb31f647",
               "downloaded_sqlite_verified": true,
-              "sentinel_sha256": "bf3257302949e90d3c763c345d3c795134fc65e3ed9692e3b2e1a4f968d6f102"
+              "sentinel_sha256": "91411fd89d3ab92a42d1121f583d2e46a924a7a43444c207a15b400a3788240c"
             }
           ]
         },
@@ -377,7 +371,7 @@
         }
       ]
     },
-    "non_test_container_count": 87,
+    "non_test_container_count": 57,
     "unrelated_containers_unchanged": true,
     "network_inventory_unchanged": true,
     "published": false,
@@ -394,18 +388,9 @@
     "T071 remains incomplete: local dual-architecture proof cannot substitute unauthorized formal public CI release"
   ],
   "native_amd64_artifact_sha256": {
-    "bundle-smoke.log": "8f2c8b9dda03ea8c75134b2388cf35c00722f218bfb0998de27957c17eed80aa",
-    "capacity-preflight.json": "071b7134debfc9c8199affbafd1f9f0a47d5950b9d4b1cd9488995b0a21532e9",
-    "containers-after-smoke.jsonl": "ae1709519fa7cf32795aaea13ba6c8ceb6e918a14f0f1ea29c25f30a81d39acd",
-    "containers-before-smoke.jsonl": "838e50cd39ef1691d954dfdc727fb07a75616353d97826d22a833d00316f2994",
-    "git-fsck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "import-pack.log": "1b0796b35a76aec414db061c5ba9a6b8c21a9731ee24291c8295860e9be42259",
-    "native-build.log": "b43978405e5aaaf9d56aa16f2f2a9af826817acf70aa26c95e8208c35648120c",
-    "native-result.json": "e6629b46ac6926567124cddabb87a19776fca891631c92be8661d9f718cb22d2",
-    "native-smoke.json": "31956701756ffb94df05fae93e1c0bc79e29cfa4eab6fe82f73f004c4c73b2bc",
-    "networks-after-smoke.jsonl": "3c55749835aadedf603c854438c81bd65b15dfb5ccbde21416918bd53db9faa7",
-    "networks-before-smoke.jsonl": "3c55749835aadedf603c854438c81bd65b15dfb5ccbde21416918bd53db9faa7",
-    "runtime-images-amd64.json": "297035140934ba71132e674eeaf2eb576bcf1111110257ee368c894969bd605b"
+    "native-result.json": "367c88951bf7d91917b1bc5191c27d351318634aa606090ab6c8592a3bf3eb5c",
+    "checksums.json": "ad366acfaa4743e2bb717e7d75a9b244add5fc97e83bbb2e7709c44eab5794b2",
+    "runtime-images-amd64.json": "dfa83f88f5a54b800d59234e1438f7d306fe17d8a316d18aecef59ebabb743aa"
   },
   "native_amd64_scope": "Real native local images, isolated resolver checks and Docker Engine integration only; no registry manifest digests, CI public release, platform authorization/approval E2E, database snapshot restore or cross-node recovery claimed.",
   "previous_native_candidate": {
@@ -416,14 +401,37 @@
     "passed": 10,
     "skipped": 0,
     "real_docker_layouts": 3,
-    "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
-    "evidence_root": "/private/tmp/f059-arm64-20261022-54b3ea2c1"
+    "source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
+    "evidence_root": "/private/tmp/f059-arm64-20261022-0e493c07a"
   },
   "followup_candidate": {
     "source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
     "reason": "K8s parsed profile and precise unassigned observation contract fixes",
-    "native_validation": "in_progress",
+    "native_validation": "both_architectures_passed",
     "historical_native_results_source": "54b3ea2c15836529cc24667d9a58be49e35bf710",
     "formal_public_ci_release": "not_authorized"
+  },
+  "historical_native_candidates": [
+    {
+      "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+      "state": "both native passed; original full records preserved in Git cbf309ab0",
+      "previous_native_candidate": {
+        "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
+        "state": "both native architectures passed; superseded by diagnostics/WAL fixes, preserved in Git history"
+      }
+    }
+  ],
+  "native_arm64_artifact_sha256": {
+    "native-result.json": "22f29b1064098e92000296eb2f1d2b35f3972b3732aef680a73b89ba80f2579e",
+    "checksums.json": "4d5fdf5d8a67cf60e066a8acb8f13a3184cabf46e80027a1f423a735cd67c3aa",
+    "runtime-images-arm64.json": "54950a5ce2c3cb4c5b6b67d5f1af8b48889e0b8c50f8133ca059bf79c732ea2a"
+  },
+  "private_189_manager": {
+    "source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
+    "image": "192.168.106.189:5443/f059/runtime-manager@sha256:b17045eb4225a5ea30a177f6b99c25ba15c6ecf25b8b3fc7fabf56687cd510ce",
+    "helm_revision": 11,
+    "report_preserved": true,
+    "no_public_release": true,
+    "live_business": "blocked by expired controller lease; T198/T199 pending"
   }
 }

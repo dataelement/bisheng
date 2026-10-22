@@ -75,3 +75,5 @@ DM8按既有确认仅模型/DDL规范静态检查；通用SQLAlchemy dm分支编
 固定日志摘要、应用 ID 与步骤见同名 JSON。此处不将成功的代理请求当作宿主防火墙实际阻断证据，也不宣称真实模型正向调用已验证。
 
 完整镜像增量：独立d109image1批次v1/v2两次publish、预览审批及v1 stop/resume均有实际通过记录；首次批次最后观察退出1，后来安全诊断wrapper仅重做v2 observe（含SDK/附件/WS/数据/权限）退出0。原失败无精确栈，原因未定，不改写为无中断整批通过。固定日志及ID见JSON；T067仍pending。
+
+109 `d109src1`实际平台批次退出0：source-image两版发布、审批预览、HTTP/WS、SDK/OBO、真实附件、SQLite读写/导出、owner/非owner/跨租户配对、停用恢复与升级全程通过；缺离线依赖在precheck_build按16227拒绝且无审批。源码包使用显式8个pure-Python wheel及原SDK字节，bootstrap不访问网络、不读取开发venv。固定journal SHA `3c8b0eaff14c5483568767f64e8c706b512df81aa6ca0d0e98776a8bb35b79f4`，精确ID在JSON。旧失败source应用记录保留；当前manager仍54b，故障/最终清理未完成，T067不提前勾选。

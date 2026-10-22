@@ -955,5 +955,146 @@
       }
     ],
     "boundary": "actual new PV allocation; not a host-reboot or cross-node recovery proof"
+  },
+  "post_install_0e": {
+    "source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
+    "helm_revision": 11,
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:b17045eb4225a5ea30a177f6b99c25ba15c6ecf25b8b3fc7fabf56687cd510ce",
+    "report_preserved": true,
+    "four_draft_owner_deletes": {
+      "allowlist_sha256": "b7b9eaf9eaf8124bdaaf8b62d4bc147a21c07b5e032145664007747d8bcaee51",
+      "events": [
+        {
+          "app_id": "1608976ca1804450b682af1176a60436",
+          "current_version_id": null,
+          "deployment_id": "de43b474a8284f98adc46d68bd77627c",
+          "generation": 0,
+          "instance_id": null,
+          "instance_phase": "stopped",
+          "name": "preflight_passed",
+          "observed_at": 1792678835.768803,
+          "operation_id": null,
+          "operations": [],
+          "slug": "e2e-f059-report-expired-54b1",
+          "state": "draft",
+          "update_time": "2026-10-22T13:31:13"
+        },
+        {
+          "app_id": "1608976ca1804450b682af1176a60436",
+          "name": "delete_attempt",
+          "observed_at": 1792678835.7704237,
+          "slug": "e2e-f059-report-expired-54b1"
+        },
+        {
+          "app_id": "1608976ca1804450b682af1176a60436",
+          "business_code": 16101,
+          "name": "deleted_and_business_404",
+          "observed_at": 1792678836.5235364,
+          "slug": "e2e-f059-report-expired-54b1"
+        },
+        {
+          "app_id": "0e2037f51e5e4250804dd1e86348d73c",
+          "current_version_id": null,
+          "deployment_id": "132c0a1ba62b4db19ff47fa119e096d5",
+          "generation": 0,
+          "instance_id": null,
+          "instance_phase": "stopped",
+          "name": "preflight_passed",
+          "observed_at": 1792678836.666171,
+          "operation_id": null,
+          "operations": [],
+          "slug": "e2e-f059-report-cni-identity-54b1",
+          "state": "draft",
+          "update_time": "2026-10-22T13:31:53"
+        },
+        {
+          "app_id": "0e2037f51e5e4250804dd1e86348d73c",
+          "name": "delete_attempt",
+          "observed_at": 1792678836.6675334,
+          "slug": "e2e-f059-report-cni-identity-54b1"
+        },
+        {
+          "app_id": "0e2037f51e5e4250804dd1e86348d73c",
+          "business_code": 16101,
+          "name": "deleted_and_business_404",
+          "observed_at": 1792678838.0393536,
+          "slug": "e2e-f059-report-cni-identity-54b1"
+        },
+        {
+          "app_id": "7e11e7a544a34b56908caebed26e8dc1",
+          "current_version_id": null,
+          "deployment_id": "f08c72c694ba48f0834e1acf632616e1",
+          "generation": 0,
+          "instance_id": null,
+          "instance_phase": "stopped",
+          "name": "preflight_passed",
+          "observed_at": 1792678838.1816847,
+          "operation_id": null,
+          "operations": [],
+          "slug": "e2e-f059-report-mandatory-54b1",
+          "state": "draft",
+          "update_time": "2026-10-22T13:33:00"
+        },
+        {
+          "app_id": "7e11e7a544a34b56908caebed26e8dc1",
+          "name": "delete_attempt",
+          "observed_at": 1792678838.1832047,
+          "slug": "e2e-f059-report-mandatory-54b1"
+        },
+        {
+          "app_id": "7e11e7a544a34b56908caebed26e8dc1",
+          "business_code": 16101,
+          "name": "deleted_and_business_404",
+          "observed_at": 1792678838.9116855,
+          "slug": "e2e-f059-report-mandatory-54b1"
+        },
+        {
+          "app_id": "ab0e7472b27f43a884a4730f5f91907a",
+          "current_version_id": null,
+          "deployment_id": "c68e7e54051345528a798a4051b15346",
+          "generation": 0,
+          "instance_id": null,
+          "instance_phase": "stopped",
+          "name": "preflight_passed",
+          "observed_at": 1792678839.0845814,
+          "operation_id": null,
+          "operations": [
+            {
+              "cleanup_status": "complete",
+              "kind": "prepare",
+              "operation_id": "517dcb55c06341c586acf6d040f0e142",
+              "stage": "failed",
+              "status": "failed"
+            }
+          ],
+          "slug": "e2e-f059-python-bundle",
+          "state": "draft",
+          "update_time": "2026-10-22T13:50:23"
+        },
+        {
+          "app_id": "ab0e7472b27f43a884a4730f5f91907a",
+          "name": "delete_attempt",
+          "observed_at": 1792678839.086627,
+          "slug": "e2e-f059-python-bundle"
+        },
+        {
+          "app_id": "ab0e7472b27f43a884a4730f5f91907a",
+          "business_code": 16101,
+          "name": "deleted_and_business_404",
+          "observed_at": 1792678839.8394039,
+          "slug": "e2e-f059-python-bundle"
+        }
+      ],
+      "execute": true,
+      "journal_sha256": "2e3ab191c90050a7fea8849409fc99bc363a57b2fbdce84d60fe4491a30c9f0f",
+      "kind": "live-api",
+      "outcome": "completed",
+      "owner_user_id": 2,
+      "schema_version": 1,
+      "tenant_code": "e2e-f059-tenant-0c6eb1",
+      "tenant_id": 2
+    },
+    "delete_receipt_sha256": "df530fbb693835dfa83604c4adc54b588b2e0e03858bffb34806b87567b93bf7",
+    "boundary": "each public GET16101 after normal owner DELETE; no force cleanup; business acceptance blocked before resources by stale controller lease"
   }
 }
