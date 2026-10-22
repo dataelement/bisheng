@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；220 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 215 / 220 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；224 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 215 / 224 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1745,6 +1745,38 @@
   **依赖:** T219
   **配对:** T219
 
+- [ ] **T221** — 可选依赖锁空值及安装接续合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_helper.py`
+  **逻辑/验收**：真实manifest lock:null与省略、显式路径配对，使用可信common resolver覆盖环境变量与prepare配置接续；非法类型拒绝。
+  **覆盖 AC:** AC-15、AC-24、AC-47、AC-55
+  **依赖:** T220
+  **配对:** T222
+
+- [ ] **T222** — 可选依赖锁空值规范化
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_helper.py`、`src/runtime-manager/runtime_manager/k8s_prepare.py`
+  **逻辑/验收**：仅将已验证的可选lock None视为未指定的空字符串，显式字符串保留，非法类型拒绝，不改变来源/锁校验。
+  **覆盖 AC:** AC-15、AC-24、AC-47、AC-55
+  **依赖:** T221
+  **配对:** T221
+
+- [ ] **T223** — 终态清理重试保留原始失败诊断
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_operations_v2.py`
+  **逻辑/验收**：首次失败阶段、tail、维护/数据变化标记在真实cleanup重试后保留；停止/清理按本轮真实结果，保留期清空的tail不复活。
+  **覆盖 AC:** AC-18、AC-35、AC-48、AC-55
+  **依赖:** T220
+  **配对:** T224
+
+- [ ] **T224** — 清理重试保留首次失败事实
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/operations.py`
+  **逻辑/验收**：终态重试携带当前持久failure诊断字段，缺失tail不重建；phase不变、停止和cleanup仅使用实际结果，不复活操作。
+  **覆盖 AC:** AC-18、AC-35、AC-48、AC-55
+  **依赖:** T223
+  **配对:** T223
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1862,3 +1894,5 @@ T217/T218主树材料相关80passed/1skip（本机无nginx代理集成）；189�
 T219/T220 L1合流：固定源码706b138614f029c52d7be49bbc50453e847f0fd4；旧实现3个关键配对红测明确因账本节点不一致失败，新executor134通过、相邻302通过；主树runtime1371passed/13skipped。仅executor35行增量，无backend/API/DDL变化。215/220、99测试任务；现场正常对账与业务验收进行中。
 
 T219/T220真实恢复通过：189 Helm15/source706b；原失败op同UID首次node绑定→kubelet_terminal→三资源cleanupcomplete/APIabsent，全由正常对账执行。第三次正常发布8070bb…已接受，完整T069仍pending。
+
+2026-10-23 T221–T224登记：r5第三次prepare inputs通过，resolve失败后正常cleanupcomplete。原fact3保留TypeError诊断，后续terminal cleanup重试fact4覆盖为failed_stage=failed/空tail。189隔离native helper A/B确认dependencies={}成功，仅lock:null触发os.environ赋值TypeError，非缺少wheel。修复可选字段合同及首次诊断保留，不补写历史事实。

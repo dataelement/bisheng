@@ -7,7 +7,7 @@
     "design_confirmed": true,
     "tasks_review": "LGTM",
     "l1_completed": 215,
-    "tasks_total": 220,
+    "tasks_total": 224,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -438,6 +438,26 @@
       "descriptor_data_unchanged": true,
       "helper_and_profile_images_unchanged": true,
       "app_proxy_unchanged": true
+    },
+    "optional_lock_null": {
+      "status": "fix_in_progress",
+      "native_amd64_ab": "omitted lock succeeded; null lock TypeError at k8s_helper.resolve_download os.environ assignment",
+      "no_network_or_credentials": true
+    },
+    "terminal_failure_diagnostic_retention": {
+      "status": "fix_in_progress",
+      "real_facts": [
+        {
+          "sequence": 3,
+          "failed_stage": "preparing",
+          "tail": "runtime helper failed (TypeError)"
+        },
+        {
+          "sequence": 4,
+          "failed_stage": "failed",
+          "tail": ""
+        }
+      ]
     }
   },
   "not_executed": [

@@ -5571,6 +5571,99 @@
       "review": "PASS"
     },
     {
+      "id": "T221",
+      "wave": 9,
+      "kind": "测试",
+      "title": "可选依赖锁空值及安装接续合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_helper.py"
+      ],
+      "logic": "真实manifest lock:null与省略、显式路径配对，使用可信common resolver覆盖环境变量与prepare配置接续；非法类型拒绝。",
+      "acs": [
+        "AC-15",
+        "AC-24",
+        "AC-47",
+        "AC-55"
+      ],
+      "depends": [
+        "T220"
+      ],
+      "pair": "T222",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T222",
+      "wave": 9,
+      "kind": "实现",
+      "title": "可选依赖锁空值规范化",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_helper.py",
+        "src/runtime-manager/runtime_manager/k8s_prepare.py"
+      ],
+      "logic": "仅将已验证的可选lock None视为未指定的空字符串，显式字符串保留，非法类型拒绝，不改变来源/锁校验。",
+      "acs": [
+        "AC-15",
+        "AC-24",
+        "AC-47",
+        "AC-55"
+      ],
+      "depends": [
+        "T221"
+      ],
+      "pair": "T221",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T223",
+      "wave": 9,
+      "kind": "测试",
+      "title": "终态清理重试保留原始失败诊断",
+      "files": [
+        "src/runtime-manager/tests/test_operations_v2.py"
+      ],
+      "logic": "首次失败阶段、tail、维护/数据变化标记在真实cleanup重试后保留；停止/清理按本轮真实结果，保留期清空的tail不复活。",
+      "acs": [
+        "AC-18",
+        "AC-35",
+        "AC-48",
+        "AC-55"
+      ],
+      "depends": [
+        "T220"
+      ],
+      "pair": "T224",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T224",
+      "wave": 9,
+      "kind": "实现",
+      "title": "清理重试保留首次失败事实",
+      "files": [
+        "src/runtime-manager/runtime_manager/operations.py"
+      ],
+      "logic": "终态重试携带当前持久failure诊断字段，缺失tail不重建；phase不变、停止和cleanup仅使用实际结果，不复活操作。",
+      "acs": [
+        "AC-18",
+        "AC-35",
+        "AC-48",
+        "AC-55"
+      ],
+      "depends": [
+        "T223"
+      ],
+      "pair": "T223",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

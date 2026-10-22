@@ -738,3 +738,5 @@ Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。
 平台资源白名单校验与manager采用相同阶段合同（T200/T201）：backend prepare只消费payload.profile解析对象；probe/preview/deploy/data/restore等只消费resolved_delivery.profile冻结对象，拒绝错误类型，不回退到旧prepare或旧运行对象。完整镜像和purge缺profile仍许可，显式错误类型不许可；purge缺delivery可空，所有既有镜像digest/helper/卷/UID/租约校验保留。37项真实模型→Service→SQLite账本配对覆盖字段轮廓，避免用宽松桩掩盖跨进程协议。189旧r3资源注册503在本地已修，实际后端重部署待验。
 
 2026-10-23：登记T219/T220。真实r5第二次尝试材料下载及进度保存成功，延迟调度的首次节点绑定未回写导致停止确认409；按现有严格身份合同修复，业务验收仍未完成。
+
+**可选锁与终态诊断收尾（T221–T224）**：manifest可选依赖锁序列化None等同未指定；helper传给环境变量和prepare.json时规范化为空字符串，显式路径不变，非法类型拒绝。终态操作仅重试清理时保留已有reason/failed_stage/diagnostic_tail/maintenance/data_may_have_changed，停止及cleanup结果重新取真实事实；已从保留策略中删除的tail不重新构造。不回填已经覆盖的历史failure，原fact继续作为审计证据。
