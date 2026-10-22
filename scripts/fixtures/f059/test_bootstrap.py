@@ -182,9 +182,10 @@ def test_marker_and_admin_mismatch_refuse_reuse(tmp_path):
 
 @pytest.mark.parametrize("profile_revision", [1, 2])
 def test_custom_amd64_profiles_and_five_package_modes_match_real_schemas(tmp_path, monkeypatch, profile_revision):
+    from test.e2e.helpers.vibe_runtime import Scenario
+
     from bisheng.app_publish.domain.schemas.app_manifest import AppManifest
     from bisheng.app_runtime.domain.schemas.runtime_delivery import RuntimeProfileDefinition
-    from test.e2e.helpers.vibe_runtime import Scenario
 
     suite, _output, values = environment(tmp_path)
     profiles, scenarios = bootstrap.build_packages(
@@ -584,3 +585,174 @@ def test_admin_list_failure_is_not_ignored_or_followed_by_grant(tmp_path, monkey
     assert any(method == "GET" and path == "/tenants/2/admins" for method, path, role, kwargs in FixtureApi.calls)
     assert not any(method == "POST" and path == "/tenants/2/admins" for method, path, role, kwargs in FixtureApi.calls)
     assert not any(path.startswith("/approval/") for method, path, role, kwargs in FixtureApi.calls)
+
+
+@pytest.mark.parametrize("suffix", ["r2", "batch-03", "a" * 16])
+def test_application_suffix_builds_unique_valid_packages_without_changing_profiles(tmp_path, suffix):
+    """AC-01, AC-28: Repeated suites use distinct immutable application slugs."""
+    from test.e2e.helpers.vibe_runtime import Scenario
+
+    from bisheng.app_publish.domain.schemas.app_manifest import AppManifest
+
+    suite, _output, values = bootstrap.prepare_environment(
+        tmp_path / "e2e-f059-batch",
+        base="http://127.0.0.1/api/v1",
+        application_suffix=suffix,
+    )
+    profiles, scenarios = bootstrap.build_packages(
+        suite,
+        values,
+        inventory=inventory(),
+        demo_image="registry.invalid/demo@sha256:" + "a" * 64,
+    )
+    assert profiles == bootstrap.profile_definitions(inventory())
+    assert len(scenarios) == 6
+    for raw in scenarios:
+        scenario = Scenario.from_dict(raw)
+        assert scenario.slug.startswith(bootstrap.PREFIX) and scenario.slug.endswith("-" + suffix)
+        assert len(scenario.slug) <= 64
+        for path in (scenario.package, scenario.update):
+            if path is None:
+                continue
+            assert path.name.startswith(scenario.slug + "-v")
+            with tarfile.open(path) as package:
+                manifest = AppManifest.model_validate(yaml.safe_load(package.extractfile("bisheng-app.yaml")))
+                assert manifest.slug == manifest.name == scenario.slug
+                if scenario.runtime == "node20":
+                    assert json.load(package.extractfile("package.json"))["name"] == scenario.slug
+                    lock = json.load(package.extractfile("package-lock.json"))
+                    assert lock["name"] == lock["packages"][""]["name"] == scenario.slug
+    assert json.loads((suite / "environment-marker.json").read_text())["application_suffix"] == suffix
+
+
+@pytest.mark.parametrize("suffix", ["", "R2", "r_2", "-r2", "r2-", "r--2", "r/2", "a" * 17, 2])
+def test_application_suffix_rejects_invalid_values_before_creating_suite(tmp_path, suffix):
+    suite = tmp_path / "e2e-f059-invalid"
+    with pytest.raises(bootstrap.BootstrapError, match="application_suffix_invalid"):
+        bootstrap.prepare_environment(suite, base="http://127.0.0.1/api/v1", application_suffix=suffix)
+    assert not suite.exists()
+
+
+def test_application_slug_enforces_final_length_even_with_valid_suffix(monkeypatch):
+    monkeypatch.setattr(bootstrap, "PREFIX", "e2e-f059-" + "x" * 47 + "-")
+    with pytest.raises(bootstrap.BootstrapError, match="application_slug_invalid"):
+        bootstrap.application_slug("python-bundle", "r2")
+
+
+@pytest.mark.parametrize("initial,changed", [(None, "r2"), ("r2", None), ("r2", "r3")])
+def test_existing_batch_rejects_suffix_changes_without_overwriting_files(tmp_path, initial, changed):
+    suite, output, values = bootstrap.prepare_environment(
+        tmp_path / "e2e-f059-batch",
+        base="http://127.0.0.1/api/v1",
+        application_suffix=initial,
+    )
+    bootstrap.private_write(suite / "scenarios.json", "old-batch-evidence")
+    before = {path.name: path.read_bytes() for path in suite.iterdir()}
+    with pytest.raises(bootstrap.BootstrapError, match="existing_application_suffix_mismatch"):
+        bootstrap.prepare_environment(suite, base=values["E2E_API_BASE"], application_suffix=changed)
+    assert {path.name: path.read_bytes() for path in suite.iterdir()} == before
+    assert bootstrap.read_env(output) == values
+
+
+def test_suffix_marker_env_disagreement_is_rejected_without_repair(tmp_path):
+    suite, output, values = bootstrap.prepare_environment(
+        tmp_path / "e2e-f059-batch",
+        base="http://127.0.0.1/api/v1",
+        application_suffix="r2",
+    )
+    values["F059_E2E_APPLICATION_SUFFIX"] = "r3"
+    bootstrap.save_env(output, values)
+    before = {path.name: path.read_bytes() for path in suite.iterdir()}
+    with pytest.raises(bootstrap.BootstrapError, match="existing_application_suffix_mismatch"):
+        bootstrap.prepare_environment(suite, base=values["E2E_API_BASE"], application_suffix="r2")
+    assert {path.name: path.read_bytes() for path in suite.iterdir()} == before
+
+
+def test_suffix_prepare_then_bootstrap_reuses_credentials_and_keeps_old_batch(tmp_path, monkeypatch, capsys):
+    old, old_output, old_values = environment(tmp_path)
+    old_values["F059_E2E_OWNER_API_KEY"] = secrets.token_urlsafe(32)
+    bootstrap.save_env(old_output, old_values)
+    old_before = {path.name: path.read_bytes() for path in old.iterdir()}
+    new = tmp_path / "e2e-f059-r2"
+    copied = {
+        key: value
+        for key, value in old_values.items()
+        if key
+        not in {
+            "F059_ACCEPTANCE_INSTANCE",
+            "F059_E2E_SCENARIOS",
+            "F059_E2E_APPLICATION_SUFFIX",
+        }
+    }
+    bootstrap.save_env(new / "e2e.env", copied)
+    source = tmp_path / "inventory.json"
+    source.write_text(json.dumps(inventory()))
+    arguments = [
+        "--api-base",
+        old_values["E2E_API_BASE"],
+        "--suite-dir",
+        str(new),
+        "--profile-inventory",
+        str(source),
+        "--application-suffix",
+        "r2",
+    ]
+    assert bootstrap.main([*arguments, "--prepare-only"]) == 0
+    prepared = bootstrap.read_env(new / "e2e.env")
+    assert prepared["F059_ACCEPTANCE_INSTANCE"] != old_values["F059_ACCEPTANCE_INSTANCE"]
+    assert prepared["F059_E2E_APPLICATION_SUFFIX"] == "r2"
+    for key, value in copied.items():
+        if key != "F059_E2E_SCENARIOS":
+            assert prepared[key] == value
+    observed = []
+
+    async def capture(base, suite, output, values, **kwargs):
+        observed.append(values.copy())
+        assert not kwargs["register_first"]
+
+    monkeypatch.setattr(bootstrap, "bootstrap", capture)
+    assert bootstrap.main([*arguments, "--bootstrap"]) == 0
+    assert observed == [prepared]
+    assert bootstrap.read_env(new / "e2e.env") == prepared
+    assert {path.name: path.read_bytes() for path in old.iterdir()} == old_before
+    output = capsys.readouterr().out
+    assert old_values["F059_E2E_OWNER_API_KEY"] not in output
+    assert all(old_values[f"F059_E2E_{role}_PASSWORD"] not in output for role in bootstrap.ROLES)
+
+
+def test_legacy_default_batch_stays_compatible_and_cannot_be_relabelled(tmp_path):
+    suite, output, values = environment(tmp_path)
+    marker_path = suite / "environment-marker.json"
+    marker = json.loads(marker_path.read_text())
+    marker.pop("application_suffix")
+    values.pop("F059_E2E_APPLICATION_SUFFIX")
+    bootstrap.private_write(marker_path, json.dumps(marker))
+    bootstrap.save_env(output, values)
+    before = {path.name: path.read_bytes() for path in suite.iterdir()}
+    with pytest.raises(bootstrap.BootstrapError, match="existing_application_suffix_mismatch"):
+        bootstrap.prepare_environment(suite, base=values["E2E_API_BASE"], application_suffix="r2")
+    assert {path.name: path.read_bytes() for path in suite.iterdir()} == before
+    _, _, resumed = bootstrap.prepare_environment(suite, base=values["E2E_API_BASE"])
+    assert resumed["F059_ACCEPTANCE_INSTANCE"] == values["F059_ACCEPTANCE_INSTANCE"]
+    assert resumed["F059_E2E_APPLICATION_SUFFIX"] == ""
+
+
+def test_bootstrap_rejects_env_marker_batch_disagreement_before_api(tmp_path, monkeypatch):
+    suite, output, values = bootstrap.prepare_environment(
+        tmp_path / "e2e-f059-batch",
+        base="http://127.0.0.1/api/v1",
+        application_suffix="r2",
+    )
+    values["F059_E2E_APPLICATION_SUFFIX"] = "r3"
+    monkeypatch.setattr(bootstrap, "Api", lambda *_: pytest.fail("unexpected API construction"))
+    with pytest.raises(bootstrap.BootstrapError, match="environment_marker_mismatch"):
+        asyncio.run(
+            bootstrap.bootstrap(
+                values["E2E_API_BASE"],
+                suite,
+                output,
+                values,
+                profiles=[],
+                client=object(),
+            )
+        )
