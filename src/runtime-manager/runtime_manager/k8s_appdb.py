@@ -10,6 +10,7 @@ import fcntl
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -80,7 +81,7 @@ def run_maintenance(document, client, *, volume=Path("/volume")):
     if not isinstance(document, dict) or set(document) != {"operation", "action", "parameters"}:
         raise ExecutionError("maintenance_document_invalid")
     operation, action, parameters = document["operation"], document["action"], document["parameters"]
-    if action not in {"backup", "migrate", "restore"} or not isinstance(parameters, dict):
+    if action not in {"backup", "migrate", "restore", "purge"} or not isinstance(parameters, dict):
         raise ExecutionError("maintenance_action_invalid")
     try:
         operation_id = operation["operation_id"]
@@ -91,6 +92,10 @@ def run_maintenance(document, client, *, volume=Path("/volume")):
         ).hexdigest()
     except (ValueError, TypeError, KeyError, AttributeError):
         raise ExecutionError("maintenance_operation_invalid") from None
+    if action == "purge" and (
+        operation.get("kind") != "destroy" or operation.get("payload", {}).get("purge_volume") is not True
+    ):
+        raise ExecutionError("purge_operation_refused")
     service = VolumeMaintenance(volume, operation, client)
     journal = _directory(service.volume / "platform/maintenance")
     path = journal / (operation_id + "-" + action + ".json")
@@ -105,7 +110,29 @@ def run_maintenance(document, client, *, volume=Path("/volume")):
             if previous["parameters_digest"] != digest:
                 raise ExecutionError("maintenance_plan_conflict")
             return previous["result"]
-        if action == "backup":
+        if action == "purge":
+            if parameters:
+                raise ExecutionError("maintenance_parameters_invalid")
+            # All previous writers are fenced before this exclusive fixed-slot Pod.
+            # Do not follow application links, including links within backups.
+            for base in (service.volume / "business", service.volume / "platform"):
+                for child in base.iterdir():
+                    if child == journal:
+                        continue
+                    if child.is_symlink() or not child.is_dir():
+                        child.unlink()
+                    else:
+                        shutil.rmtree(child)
+                _sync_directory(base)
+            for child in journal.iterdir():
+                if child == lock_path:
+                    continue
+                if child.is_symlink() or not child.is_dir():
+                    child.unlink()
+                else:
+                    shutil.rmtree(child)
+            result = {"purged": True}
+        elif action == "backup":
             if parameters:
                 raise ExecutionError("maintenance_parameters_invalid")
             result = service.backup()
@@ -164,13 +191,28 @@ class KubernetesMaintenance:
         runtime = self.runtime
         current = runtime.platform.operation(operation["operation_id"])
         if (
-            current["kind"] not in {"deploy", "migrate", "restore"}
+            current["kind"] not in {"deploy", "migrate", "restore", "destroy"}
             or current["status"] != "running"
-            or action not in {"backup", "migrate", "restore"}
+            or action not in {"backup", "migrate", "restore", "purge"}
             or runtime.clock.time() >= _seconds(current["deadline"])
         ):
             raise ExecutorError("maintenance_operation_refused")
         body = current["payload"]
+        if (action == "purge") != (current["kind"] == "destroy") or (
+            action == "purge" and body.get("purge_volume") is not True
+        ):
+            raise ExecutorError("purge_operation_refused")
+        if action == "purge":
+            volume_ref = str(uuid5(NAMESPACE_URL, "bisheng-volume:" + current["node_id"] + ":" + current["app_id"]))
+            try:
+                volume = runtime.platform.resource(volume_ref)
+            except PlatformError as exc:
+                if exc.status != 404:
+                    raise
+                return {"purged": True, "volume_absent": True}
+            if volume["cleanup_state"] == "complete":
+                return {"purged": True, "volume_absent": True}
+
         if action == "migrate" and parameters.get("plan") != body.get("migration_plan"):
             raise ExecutorError("maintenance_plan_conflict")
         if action == "restore" and parameters != {"snapshot_id": body.get("snapshot_id")}:
@@ -182,16 +224,22 @@ class KubernetesMaintenance:
             if previous["parameters_digest"] != digest:
                 raise ExecutorError("maintenance_plan_conflict")
             self._finish(current, previous["exec_ref"])
+            if action == "purge":
+                runtime.purge_volume(current)
             return previous["result"]
         reference = str(uuid5(NAMESPACE_URL, "bisheng-maintenance:" + current["operation_id"] + ":" + action))
-        purpose = "restore" if action == "restore" else "migrate"
+        purpose = "purge" if action == "purge" else ("restore" if action == "restore" else "migrate")
         plan = runtime._plan(current, purpose, reference=reference, image=runtime.document["helper_image"])
         profile = (body.get("resolved_delivery") or {}).get("profile", {})
         document = {
             "operation": {
                 "operation_id": current["operation_id"],
                 "app_id": current["app_id"],
-                "payload": {"resolved_delivery": {"profile": {k: profile.get(k, 10001) for k in ("uid", "gid")}}},
+                "kind": current["kind"],
+                "payload": {
+                    "purge_volume": body.get("purge_volume") is True,
+                    "resolved_delivery": {"profile": {k: profile.get(k, 10001) for k in ("uid", "gid")}},
+                },
             },
             "action": action,
             "parameters": parameters,
@@ -202,15 +250,16 @@ class KubernetesMaintenance:
             command=(),
             app_secret="",
             secret_env=(),
-            material_secret="material-" + reference.replace("-", ""),
+            material_secret="" if action == "purge" else "material-" + reference.replace("-", ""),
             helper_env={"MATERIAL_PLAN": json.dumps(document, sort_keys=True, separators=(",", ":"))},
         )
         template = pod_template(plan)
         row = runtime._intent(current, plan, template, reference)
         runtime._volume(current, plan)
-        grant = runtime._material(current, plan)
+        grant = runtime._material(current, plan) if action != "purge" else None
         pod = runtime._create(row, template)
-        runtime.platform.bind_material_delegation(grant["delegation_id"], pod["metadata"]["uid"])
+        if grant:
+            runtime.platform.bind_material_delegation(grant["delegation_id"], pod["metadata"]["uid"])
         while True:
             runtime.checkpoint()
             runtime._controller()
@@ -259,6 +308,8 @@ class KubernetesMaintenance:
             if saved.get(action) != progress[action]:
                 raise
         self._finish(current, reference)
+        if action == "purge":
+            runtime.purge_volume(current)
         return result
 
 

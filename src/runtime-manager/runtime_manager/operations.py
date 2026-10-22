@@ -119,7 +119,9 @@ class OperationExecutor:
                 row
                 for row in resources
                 if row["kind"] == "Pod"
-                and (operation["kind"] == "destroy" or row["purpose"] in {"serve", "migrate", "restore", "data"})
+                and (
+                    operation["kind"] == "destroy" or row["purpose"] in {"serve", "migrate", "restore", "data", "purge"}
+                )
             ]
             if not pods:
                 continue
@@ -136,12 +138,6 @@ class OperationExecutor:
     def _launch(self, operation, runner=None, *, preview=False):
         if self.config.executor_kind == "docker":
             return self.runtime.launch(operation, runner=runner, preview=preview)
-        body = operation["payload"]
-        if self.config.egress_enabled:
-            from runtime_manager.egress import egress_env
-
-            credentials = self.platform.egress(operation["operation_id"], "runtime")
-            body["runtime_env"] = {**body.get("runtime_env", {}), **egress_env(self.config, **credentials)}
         return self.runtime.launch(operation, preview=preview)
 
     def execute(self, operation_id):
@@ -215,7 +211,7 @@ class OperationExecutor:
                 elif kind in {"deploy", "restore", "migrate"}:
                     self._deploy(operation)
                 elif kind in {"stop", "destroy"}:
-                    self.stop_instances(operation)
+                    self.stop_instances(operation, include_current=not (kind == "destroy" and body.get("purge_volume")))
                     if self.config.executor_kind == "docker":
                         # The adapter owns container and filesystem deletion.
                         for item in self.runtime.executions(app_id=operation["app_id"]):

@@ -318,7 +318,7 @@ class RuntimeOperationService:
                 fields = {"app_id": operation.app_id}
             pods = await self.repo.find(RuntimeExecutionResource, kind="Pod", lock=True, **fields)
             if operation.kind == "stop":
-                pods = [pod for pod in pods if pod.purpose in {"serve", "migrate", "restore", "data"}]
+                pods = [pod for pod in pods if pod.purpose in {"serve", "migrate", "restore", "data", "purge"}]
             if any(pod.stop_state != "confirmed" for pod in pods):
                 raise RuntimeConflict("execution_not_confirmed_stopped")
         if body.phase == "ready" and operation.kind in {"deploy", "restore", "preview", "probe"}:

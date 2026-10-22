@@ -17,7 +17,7 @@ from runtime_manager.k8s_config import validate_namespace
 STOP_FINALIZER = "runtime.bisheng.io/stop-confirmed"
 POLICY_ANNOTATION = "runtime.bisheng.io/status-policy"
 RESOURCE_LABEL = "runtime.bisheng.io/resource"
-PRODUCTION = {"serve", "migrate", "restore", "data"}
+PRODUCTION = {"serve", "migrate", "restore", "data", "purge"}
 PREPARATION = {"prepare-download", "prepare-install", "prepare-upload", "assemble"}
 PURPOSES = PRODUCTION | PREPARATION | {"probe", "preview"}
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
@@ -573,6 +573,7 @@ def capability_probe_template(plan, *, network=None, storage_claim=""):
         else {},
     )
     pod = pod_template(plan)
+    pod["metadata"]["name"] = "preflight-" + _hash(plan.resource_ref)
     if storage_claim:
         pod["spec"]["volumes"].append({"name": "probe-volume", "persistentVolumeClaim": {"claimName": storage_claim}})
         pod["spec"]["containers"][0]["volumeMounts"].append(_mount("probe-volume", "/probe-volume"))
