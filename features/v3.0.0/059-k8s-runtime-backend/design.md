@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、purge、能力探测、Chart、helper/assembler及验收工具已有实现，L1为240/245，剩真实业务、故障升级、109收尾、正式发行和L2门。完整本地runtime1586/13skip、backend1764/19skip通过，来源6f254f337；189当前Helm22/固定digest59692b82…、node ready/epoch17，helper143/profile2与有效16项实际能力报告保持。Python首版已正式上线并通过HTTP/WebSocket、SDK/OBO、附件、SQLite查询编辑导出及权限配对；原停用超时保留，正常收尾同UID证明/APIabsent/PVC保留已成立，新恢复和独立停启数据保留通过。离线data CPU参数修正后实际13秒ready、17秒完成并清理，原60秒及真实预占保持；v2预检/审批通过、正式启动中，其他语言/交付方式、离线编辑导出及故障仍在验证。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)；历史失败与证据保持。新ARM和109验证按用户优先级暂缓，DM8仅静态，未执行正式CI/公开发行，不能据此宣称完整交付或跨节点恢复。
+**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、purge、能力探测、Chart、helper/assembler及验收工具已实现，L1为242/247；剩真实业务、故障升级、109收尾、正式发行和L2门。候选995c80f2a完整runtime1595/13skip；backend生产保持6f，既有1764/19skip通过。189仍Helm22/digest59692b82…/epoch17，helper143/profile2与实际16项报告保持；Python和Node已完成v1/v2、HTTP/WebSocket、权限配对及停用恢复，Python另通过SDK/OBO、附件、SQLite。static旧probe全部init完成后nginx找不到/exit127，根因为bundle PATH缺系统sbin；同镜像原生对照与本地修复通过，原failed及同UID正常清理已冻结，待新镜像和独立新attempt复验。source-image、完整镜像、离线编辑导出及故障仍在验证。主安装域因旧r4未确认创建保持围栏，不卸载或手工释放。新ARM和109验证按用户优先级暂缓，DM8仅静态，未执行正式CI/公开发行。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)，不据本地或局部通过宣称完整交付/跨节点恢复。
 
 ### 4.2 拟实施拓扑与流程
 

@@ -1,24 +1,24 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T20:22:21.254431+00:00",
-  "validated_source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+  "recorded_at": "2026-10-22T20:47:09.399964+00:00",
+  "validated_source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 240,
-    "tasks_total": 245,
+    "l1_completed": 242,
+    "tasks_total": 247,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
-      "passed": 1586,
+      "source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
+      "passed": 1595,
       "skipped": 13,
-      "seconds": 34.14,
+      "seconds": 33.42,
       "exit_code": 0,
-      "log": "/private/tmp/f059-data-cpu-full-runtime.log"
+      "log": "/private/tmp/f059-static-path-full-runtime.log"
     },
     "backend": {
       "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
@@ -1323,6 +1323,18 @@
       "pod_uid": "776ae57a-b32a-4bd2-9048-4efdf0d47323",
       "cpu_requests_and_limits": "100m per init/helper; sequential peak100m",
       "original_deadline_seconds": 60
+    },
+    "static_bundle_system_path": {
+      "source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
+      "red_failed": 9,
+      "template_passed": 106,
+      "independent_adjacent_passed": 292,
+      "independent_review_sha256": "cfa95d41f0715e5de23806666808bfe0b6e2543fea259e4b726eb91323e07300",
+      "native_static_image_digest": "sha256:2f0311da8b281f35437fcf26b47c8249f8d86f98227a28bb231cd472071ee218",
+      "native_red_exit": 127,
+      "native_green_exit": 0,
+      "native_nginx_path": "/usr/sbin/nginx",
+      "k8s_business_retest": "pending"
     }
   },
   "not_executed": [
