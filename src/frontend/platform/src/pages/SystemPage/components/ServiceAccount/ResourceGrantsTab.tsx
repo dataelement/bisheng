@@ -1,17 +1,11 @@
 import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
-import { Button, SearchInput, notification, toast } from '@bisheng/ui';
+import { Button, SearchInput, Select, notification, toast } from '@bisheng/ui';
 import { Tooltip as SharedTooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 
 
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue,
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import {
 Table,
 TableBody,
@@ -61,6 +55,7 @@ export function ResourceGrantsTab({
   serviceAccountName,
 }: ResourceGrantsTabProps) {
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [grants, setGrants] = useState<ServiceAccountResourceGrant[]>([])
   const [keys, setKeys] = useState<ApiKeyItem[]>([])
   const [keyword, setKeyword] = useState("")
@@ -243,43 +238,32 @@ export function ResourceGrantsTab({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <SearchInput value={keyword} aria-label={t("openApiManagement.grants.resourceSearch")} placeholder={t("openApiManagement.grants.resourceSearch")} onChange={(event) => setKeyword(event.target.value)} className={"w-52"} />
-            <Select value={resourceType} onValueChange={setResourceType}>
-              <SelectTrigger
-                className="w-36"
-                aria-label={t("openApiManagement.grants.typeFilter")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={RESOURCE_GRANT_FILTER_ALL}>
-                  {t("openApiManagement.grants.allTypes")}
-                </SelectItem>
-                {SERVICE_ACCOUNT_RESOURCE_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {t(`openApiManagement.resourceTypes.${type}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={sourceType} onValueChange={setSourceType}>
-              <SelectTrigger
-                className="w-44"
-                aria-label={t("openApiManagement.grants.sourceFilter")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={RESOURCE_GRANT_FILTER_ALL}>
-                  {t("openApiManagement.grants.allSources")}
-                </SelectItem>
-                <SelectItem value="DIRECT">
-                  {t("openApiManagement.grantSources.DIRECT")}
-                </SelectItem>
-                <SelectItem value="CREATOR_GRANT">
-                  {t("openApiManagement.grantSources.CREATOR_GRANT")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <Select
+              {...selectLabels}
+              className="w-36"
+              options={[
+                { value: RESOURCE_GRANT_FILTER_ALL, label: t("openApiManagement.grants.allTypes") },
+                ...SERVICE_ACCOUNT_RESOURCE_TYPES.map((type) => ({
+                  value: type,
+                  label: t(`openApiManagement.resourceTypes.${type}`),
+                })),
+              ]}
+              value={resourceType}
+              onChange={(value) => { if (value != null) setResourceType(String(value)) }}
+              aria-label={t("openApiManagement.grants.typeFilter")}
+            />
+            <Select
+              {...selectLabels}
+              className="w-44"
+              options={[
+                { value: RESOURCE_GRANT_FILTER_ALL, label: t("openApiManagement.grants.allSources") },
+                { value: "DIRECT", label: t("openApiManagement.grantSources.DIRECT") },
+                { value: "CREATOR_GRANT", label: t("openApiManagement.grantSources.CREATOR_GRANT") },
+              ]}
+              value={sourceType}
+              onChange={(value) => { if (value != null) setSourceType(String(value)) }}
+              aria-label={t("openApiManagement.grants.sourceFilter")}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {directGrants.length ? (
@@ -354,33 +338,26 @@ export function ResourceGrantsTab({
                   <TableCell>
                     {isServiceAccountPermissionTier(grant.model_key) ? (
                       <Select
+                        {...selectLabels}
+                        className="w-28"
+                        options={SERVICE_ACCOUNT_PERMISSION_TIERS.map((key) => ({
+                          value: key,
+                          label: t(`openApiManagement.permissionTiers.${key}`),
+                        }))}
                         value={grant.model_key}
                         disabled={
                           !canChangeTier ||
                           loading ||
                           updatingGrantId === grant.assignee_id
                         }
-                        onValueChange={(value) =>
-                          void handleTierChange(grant, value)
-                        }
-                      >
-                        <SelectTrigger
-                          className="h-8 w-28 shadow-none"
-                          aria-label={t(
-                            "openApiManagement.grants.changeTierFor",
-                            { name: grant.resource_name },
-                          )}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SERVICE_ACCOUNT_PERMISSION_TIERS.map((key) => (
-                            <SelectItem key={key} value={key}>
-                              {t(`openApiManagement.permissionTiers.${key}`)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onChange={(value) => {
+                          if (value != null) void handleTierChange(grant, String(value))
+                        }}
+                        aria-label={t(
+                          "openApiManagement.grants.changeTierFor",
+                          { name: grant.resource_name },
+                        )}
+                      />
                     ) : (
                       grant.model_name
                     )}

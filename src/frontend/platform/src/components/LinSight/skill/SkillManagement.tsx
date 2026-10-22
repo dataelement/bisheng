@@ -1,4 +1,4 @@
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Button, SearchInput, Select, notification } from '@bisheng/ui';
 // F035 (PRD §4.5): tenant custom skill management section, mounted in the
 // merged 日常 tab of 构建-工作台配置 (replaces the legacy SOP manual library).
 // List shows display_name only — the skill ID stays detail-level; no
@@ -7,11 +7,11 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Switch } from "@bisheng/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { QuestionHint as QuestionTooltip } from "@/components/bs-comp/QuestionHint";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { SkillBrief, SkillDetail, skillApi } from "@/controllers/API/linsight";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Sparkles } from "lucide-react";
@@ -43,6 +43,7 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
     const [page, setPage] = useState(1);
     const [keyword, setKeyword] = useState("");
     const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
+    const selectLabels = useSelectLabels();
     const [loading, setLoading] = useState(false);
 
     const [uploadOpen, setUploadOpen] = useState(false);
@@ -165,23 +166,21 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
             <div className="flex items-center gap-2 mb-3">
                 <SearchInput placeholder={t("skillManage.searchPlaceholder")} onChange={(e) => handleSearch(e.target.value)} className={"w-64"} />
                 <Select
+                    {...selectLabels}
+                    aria-label={t("skillManage.columns.status")}
+                    className="w-28"
+                    options={[
+                        { value: "all", label: t("skillManage.statusAll") },
+                        { value: "enabled", label: t("skillManage.statusEnabled") },
+                        { value: "disabled", label: t("skillManage.statusDisabled") },
+                    ]}
                     value={statusFilter}
-                    onValueChange={(v) => {
+                    onChange={(v) => {
+                        if (v == null || v === statusFilter) return;
                         setStatusFilter(v as typeof statusFilter);
                         setPage(1);
                     }}
-                >
-                    <SelectTrigger className="w-28">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                            <SelectItem value="all">{t("skillManage.statusAll")}</SelectItem>
-                            <SelectItem value="enabled">{t("skillManage.statusEnabled")}</SelectItem>
-                            <SelectItem value="disabled">{t("skillManage.statusDisabled")}</SelectItem>
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
+                />
                 <div className="ml-auto flex gap-2">
                     <Button variant="outlined" onClick={() => setUploadOpen(true)} color="default">
                         <Upload className="size-4 mr-1.5" />

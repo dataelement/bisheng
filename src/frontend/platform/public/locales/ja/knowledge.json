@@ -437,5 +437,6 @@
     "start": "録音を開始",
     "pause": "録音を停止",
     "failed": "音声入力に失敗しました。もう一度お試しください。"
-  }
+  },
+  "fileStatusFilterLabel": "ファイルの状態で絞り込み：{{value}}"
 }

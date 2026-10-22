@@ -1,7 +1,7 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Button, Select, type SelectOption } from '@bisheng/ui';
 
-import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { getKnowledgeDetailApi } from "@/controllers/API";
 import { Tooltip as SharedTooltip,Switch } from "@bisheng/ui";
@@ -91,11 +91,9 @@ const MetadataFilter = ({
   const [relation, setRelation] = useState<"and" | "or">(() => {
     return data.value?.operator === "or" ? "or" : "and";
   });
-  const [searchTerm, setSearchTerm] = useState("");
   const [required, setRequired] = useState(false);
   const [availableMetadataState, setAvailableMetadataState] = useState<MetadataField[]>([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
-  const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
   const [error, setError] = useState(false)
   // 用 ref 存储最新状态，绕开闭包问题
@@ -394,14 +392,26 @@ const MetadataFilter = ({
       }
     };
   }, [onVarEvent, validateVars]);
-  const filteredMetadata = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
-    if (!term) return availableMetadataState;
-    return availableMetadataState.filter(meta =>
-      meta.name.toLowerCase().includes(term) ||
-      meta.knowledgeBase.toLowerCase().includes(term)
-    );
-  }, [availableMetadataState, searchTerm]);
+  const selectLabels = useSelectLabels();
+  const metadataOptions = useMemo<SelectOption[]>(() => availableMetadataState
+    .filter(meta => meta.id)
+    .map(meta => ({
+      value: meta.id,
+      label: meta.name,
+      icon: meta.icon,
+      description: `${meta.type} · ${meta.knowledgeBase}`,
+    })), [availableMetadataState]);
+  // Old panel search matched the field name or its knowledge base name.
+  const filterMetadataOption = useCallback((keyword: string, option: SelectOption) => {
+    const term = keyword.toLowerCase().trim();
+    const meta = availableMetadataState.find(m => m.id === option.value);
+    return option.label.toLowerCase().includes(term)
+      || (meta?.knowledgeBase || "").toLowerCase().includes(term);
+  }, [availableMetadataState]);
+  const valueTypeOptions = useMemo<SelectOption[]>(() => [
+    { value: "reference", label: t('reference') },
+    { value: "input", label: t('input') },
+  ], [t]);
   const addCondition = () => {
     setConditions(prev => [...prev, {
       id: generateUUID(8),
@@ -499,88 +509,66 @@ const MetadataFilter = ({
                 <div key={condition.id} className="relative group pl-10">
                   <div className="flex gap-2 items-center min-w-0">
                     <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[15%]' : 'max-w-[25%]'}`}>
-                      <Select
-                        value={condition.metadataField}
-                        onValueChange={(value) => updateCondition(condition.id, "metadataField", value)}
-                        onOpenChange={setIsSelectOpen}
+                      <SharedTooltip
+                        content={hasError ? fieldErrors[condition.id] : displayName}
+                        disabled={!condition.metadataField}
                       >
-                        <SelectTrigger className={`h-8 min-w-0 ${error ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
-                          <SelectValue placeholder={t('selectVariable')}>
-                            {condition.metadataField && (
-                              <><SharedTooltip   content={<>{hasError ? fieldErrors[condition.id] : displayName}</>}><div className="flex items-center gap-1" style={{ pointerEvents: 'auto' }}>
-                                      {displayIcon}
-                                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {displayName}
-                                      </span>
-                                    </div></SharedTooltip></>
-                            )}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="max-h-60 overflow-y-auto">
-                            {isLoadingMetadata ? (
-                              <div className="p-4 text-center text-sm text-gray-500">{t('loadingMetadataFields')}</div>
-                            ) : (
-                              <>
-                                <div className="p-2 border-b">
-                                  <div className="relative">
-                                    <Outlined.Search className="absolute left-3 top-2 h-3 w-3 text-muted-foreground" />
-                                    <input type="text" placeholder={t('searchMetadata')} className="w-full pl-8 pr-2 py-1 text-[12px] border rounded" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onClick={(e) => e.stopPropagation()} />
-                                  </div>
-                                </div>
-                                {filteredMetadata.length > 0 ? (
-                                  filteredMetadata.map((meta) => (
-                                    <SelectItem key={meta.id} value={meta.id} showIcon={false} customContent={true} className="pr-2 w-full max-w-[200px]">
-                                      <div className="flex items-center justify-between w-full gap-1 min-w-0">
-                                        <div className="flex items-center gap-1 min-w-0 flex-1">
-                                          <span className="flex-shrink-0 text-xs">{meta.icon}</span>
-                                          <span className="text-xs text-muted-foreground flex-shrink-0">{meta.type}</span>
-                                          <><SharedTooltip   content={<><p className="text-xs">{meta.name}</p></>}><span className="truncate text-xs min-w-0 flex-1">{meta.name}</span></SharedTooltip></>
-                                        </div>
-                                        <><SharedTooltip   content={<><p className="text-xs">{meta.knowledgeBase}</p></>}><span className="text-xs text-gray-500 truncate max-w-[60px] text-right flex-shrink-0 ml-1">{meta.knowledgeBase}</span></SharedTooltip></>
-                                      </div>
-                                    </SelectItem>
-                                  ))
-                                ) : (
-                                  <div className="p-2 text-center text-xs text-gray-500">{t('noMetadataFields')}</div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </SelectContent>
-                      </Select>
+                        <div className="min-w-0">
+                          <Select
+                            {...selectLabels}
+                            options={selectedMeta || !condition.metadataField
+                              ? metadataOptions
+                              // Keep a deleted / unknown field readable in the trigger.
+                              : [...metadataOptions, { value: condition.metadataField, label: displayName }]}
+                            value={condition.metadataField || null}
+                            onChange={(value) => updateCondition(condition.id, "metadataField", value == null ? "" : String(value))}
+                            placeholder={t('selectVariable')}
+                            aria-label={t('selectVariable')}
+                            showSearch
+                            filterOption={filterMetadataOption}
+                            loading={isLoadingMetadata}
+                            loadingText={t('loadingMetadataFields')}
+                            emptyText={t('noMetadataFields')}
+                            noMatchText={t('noMetadataFields')}
+                            status={error || hasError ? 'error' : 'default'}
+                            className="nodrag w-full min-w-0"
+                          />
+                        </div>
+                      </SharedTooltip>
                     </div>
                     <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[15%]' : 'max-w-[20%]'}`}>
-                      <Select value={condition.operator} onValueChange={(value) => updateCondition(condition.id, "operator", value)} disabled={!condition.metadataField}>
-                        <SelectTrigger className="h-8 min-w-0"><SelectValue placeholder={t('selectCondition')} /></SelectTrigger>
-                        <SelectContent>
-                          {metadataType && operatorConfig[metadataType].map((op) => (
-                            <SelectItem key={op} value={op}>{operatorLabels[op]}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Select
+                        {...selectLabels}
+                        options={metadataType ? operatorConfig[metadataType].map((op) => ({ value: op, label: operatorLabels[op] })) : []}
+                        value={condition.operator || null}
+                        onChange={(value) => updateCondition(condition.id, "operator", value == null ? "" : String(value))}
+                        disabled={!condition.metadataField}
+                        placeholder={t('selectCondition')}
+                        aria-label={t('selectCondition')}
+                        className="nodrag w-full min-w-0"
+                      />
                     </div>
                     {
                       ![`is_empty`, `is_not_empty`].includes(condition.operator) && (
                         <>
                           <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[16%]' : 'max-w-[20%]'}`}>
-                            <Select value={condition.valueType} onValueChange={(value: "reference" | "input") => updateCondition(condition.id, "valueType", value)}>
-                              <SelectTrigger className="h-8 min-w-0">
-                                <div className="flex items-center justify-between w-full">
-                                  <span>{condition.valueType === "reference" ? t('reference') : t('input')}</span>
-                                  {condition.valueType === "reference" && metadataType === "Time" && (
-                                    <div className="relative group/info flex-shrink-0">
-                                      <Outlined.Question size={16} className="text-gray-400" />
-                                      <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block p-2 bg-black text-white text-xs rounded z-10">{t('referenceFormatTip')}</div>
-                                    </div>
-                                  )}
-                                </div>
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="reference">{t('reference')}</SelectItem>
-                                <SelectItem value="input">{t('input')}</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <Select
+                                {...selectLabels}
+                                options={valueTypeOptions}
+                                value={condition.valueType}
+                                onChange={(value) => value != null && updateCondition(condition.id, "valueType", String(value))}
+                                aria-label={t('valueType')}
+                                className="nodrag flex-1 min-w-0"
+                              />
+                              {condition.valueType === "reference" && metadataType === "Time" && (
+                                <SharedTooltip content={t('referenceFormatTip')}>
+                                  <span className="flex-shrink-0" tabIndex={0}>
+                                    <Outlined.Question size={16} className="text-gray-400" />
+                                  </span>
+                                </SharedTooltip>
+                              )}
+                            </div>
                           </div>
                           <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[45%]' : 'max-w-[25%]'}`}>{<MetadataValueInput condition={condition} metadataType={stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField)?.type} nodeId={nodeId} updateCondition={updateCondition} />}</div>
                         </>

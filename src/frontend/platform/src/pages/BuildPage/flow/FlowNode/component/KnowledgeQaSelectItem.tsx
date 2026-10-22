@@ -1,8 +1,9 @@
 // @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
-import MultiSelect from "@/components/bs-ui/select/multi";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { getKnowledgeDetailApi,readFileLibDatabase } from "@/controllers/API";
-import { useEffect,useRef,useState } from "react";
+import { Select } from "@bisheng/ui";
+import { useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 
@@ -20,6 +21,7 @@ const mergeOptionsByValue = (currentOptions, nextOptions) => {
 export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const { t } = useTranslation('flow')
     const { flow } = useFlowStore()
+    const selectLabels = useSelectLabels()
     const [value, setValue] = useState<any>(() => data.value.map(el => {
         return { label: el.label, value: el.key }
     }))
@@ -28,14 +30,19 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
 
     const cursorRef = useRef<string | null>(null)
     const requestSeqRef = useRef(0)
+    const [keyword, setKeyword] = useState('')
+    const [loadingMore, setLoadingMore] = useState(false)
     const reload = (cursor: string | null, name: string) => {
         const requestSeq = ++requestSeqRef.current
+        setLoadingMore(!!cursor)
         readFileLibDatabase({ cursor, pageSize: PAGE_SIZE, name, type: 1, action: 'use' }).then(res => {
             if (requestSeq !== requestSeqRef.current) return
             cursorRef.current = res.next_cursor
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))
             setOptions(_ops => cursor ? mergeOptionsByValue(_ops, opts) : opts)
+        }).finally(() => {
+            if (requestSeq === requestSeqRef.current) setLoadingMore(false)
         })
     }
 
@@ -48,6 +55,13 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
     const loadMore = (name) => {
         if (cursorRef.current) reload(cursorRef.current, name)
     }
+
+    // Selected items must be known to the Select so their tags keep a label;
+    // only merge them into the unfiltered list so a server search stays exact.
+    const selectOptions = useMemo(() => {
+        const list = keyword ? options : mergeOptionsByValue(options, value)
+        return list.filter(option => option.value != null && option.value !== '')
+    }, [options, value, keyword])
 
     const handleSelect = (resVals) => {
         setValue(resVals)
@@ -107,22 +121,23 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
             {data.required && <span className="text-red-500">*</span>}
             {t(`${i18nPrefix}label`)}
         </Label>
-        <MultiSelect
+        <Select
+            {...selectLabels}
             id="knowledge-qaselect"
-            error={error}
-            errorKeys={errorKeys}
             multiple
-            className={''}
-            value={value}
-            options={options}
+            // No per-tag error marking in the shared Select: flag the whole field.
+            status={error || errorKeys.length ? 'error' : 'default'}
+            className="nodrag"
+            value={value.map(el => el.value)}
+            options={selectOptions}
             placeholder={t(`${i18nPrefix}placeholder`)}
-            searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
-            onChange={handleSelect}
-            onLoad={() => reload(null, '')}
-            onSearch={(val) => reload(null, val)}
-            onScrollLoad={(val) => loadMore(val)}
-        >
-            {/* {children?.(reload)} */}
-        </MultiSelect>
+            aria-label={t(`${i18nPrefix}label`)}
+            showSearch
+            onChange={(_vals, opts) => handleSelect(opts.map(el => ({ label: el.label, value: el.value })))}
+            onOpenChange={(open) => { if (open) reload(null, '') }}
+            onSearch={(val) => { setKeyword(val); reload(null, val) }}
+            onLoadMore={() => loadMore(keyword)}
+            loadingMore={loadingMore}
+        />
     </div>
 };

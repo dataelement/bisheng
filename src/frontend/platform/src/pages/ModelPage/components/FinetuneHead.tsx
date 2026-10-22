@@ -1,17 +1,10 @@
 // @ts-strict-ignore
-import { Button, SearchInput } from '@bisheng/ui';
+import { Button, SearchInput, Select } from '@bisheng/ui';
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectTrigger,
-    SelectValue
-} from "../../../components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Segmented } from "@bisheng/ui";
 import { getAllServicesApi } from "../../../controllers/API";
 import { useDebounce } from "../../../util/hook";
@@ -24,6 +17,7 @@ interface IProps {
 }
 export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: IProps) {
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
 
     const [type, setType] = useState('all')
     const [rt, setRt] = useState('all')
@@ -64,19 +58,19 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
                 { value: '1', label: t('finetune.inProgress') },
                 { value: '2', label: t('finetune.failedAborted') },
             ]} />
-            <Select defaultValue={rt} onValueChange={handleRtChange}>
-                <SelectTrigger className="w-[180px] shrink-0">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectItem value="all">{t('finetune.all')}</SelectItem>
-                        {
-                            services.filter(service => service.id != null && String(service.id) !== "").map(service => <SelectItem key={service.id} value={String(service.id)}>{service.name}</SelectItem>)
-                        }
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
+            <Select
+                {...selectLabels}
+                className="w-[180px] shrink-0"
+                aria-label={t('finetune.rtService')}
+                options={[
+                    { value: 'all', label: t('finetune.all') },
+                    ...services
+                        .filter(service => service.id != null && String(service.id) !== "")
+                        .map(service => ({ value: String(service.id), label: String(service.name ?? '') })),
+                ]}
+                value={rt}
+                onChange={(val) => handleRtChange(val == null ? 'all' : String(val))}
+            />
             <SearchInput ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)} className={"w-56 shrink-0"}></SearchInput>
         </div>
         <div className="flex flex-wrap items-center gap-4 mr-2">

@@ -420,6 +420,11 @@ class KnowledgeQAFilterConf(BaseModel):
 class LinsightConf(BaseModel):
     """Inspiration Configuration"""
 
+    # F087 removed tool_buffer, file_content_length, max_file_num,
+    # max_knowledge_num, retry_temperature and max_file_content_num: nothing read
+    # them since the deepagents migration. Deployed configs may still carry them;
+    # BaseModel ignores unknown keys, so those configs keep loading.
+
     debug: bool = Field(default=False, description="Whether to opendebugMode")
     citation_handles_enabled: bool = Field(
         default=True,
@@ -430,9 +435,6 @@ class LinsightConf(BaseModel):
             "per-turn source table together to the verbatim-id contract (citation.yaml). A session "
             "keeps the contract it started with (pinned in its handle table)."
         ),
-    )
-    tool_buffer: int = Field(
-        default=100000, description="Maximum Tool Execution Historytoken, you need to summarize your history after"
     )
     max_steps: int = Field(
         default=2500,
@@ -509,24 +511,8 @@ class LinsightConf(BaseModel):
         description="Max number of model-call steps that may be gracefully skipped (content-filter / "
         "exhausted-transient) within a single task before it fails cleanly. Bounds runaway degradation.",
     )
-    max_file_num: int = Field(
-        default=5, description="BuatSOPJampromptThe number of user-uploaded file information placed in the"
-    )
-    max_knowledge_num: int = Field(
-        default=20, description="BuatSOPJampromptThe amount of knowledge base information placed in the"
-    )
     waiting_list_url: str = Field(default=None, description="waiting list Jump link")
     default_temperature: float = Field(default=0, description="Default Temperature at Model Request")
-    retry_temperature: float = Field(
-        default=1, description="reactModejsonModel temperature when retrying after parsing failure"
-    )
-    file_content_length: int = Field(
-        default=5000,
-        description="The number of characters to read the contents of the file when splitting subtasks, which will be truncated when exceeded",
-    )
-    max_file_content_num: int = Field(
-        default=3, description="Number of files to read when subtasking, in reverse order by modification time"
-    )
     skills_root: str = Field(
         default="data/linsight_skills",
         description="LEGACY: the pre-object-storage on-disk skill root. Skill bundles now live in object "

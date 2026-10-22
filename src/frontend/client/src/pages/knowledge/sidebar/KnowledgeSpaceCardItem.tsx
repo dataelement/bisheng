@@ -2,21 +2,8 @@ import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { KnowledgeSpace } from "~/api/knowledge";
 import { KnowledgeSpaceIcon } from "~/components/illustrations";
-import {
-    DropdownMenu,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
+import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 import { ActionMenuLoadingRow } from "~/components/ActionMenu";
-import {
-    SidebarListMoreMenuContent,
-    sidebarListMoreMenuDangerIconClassName,
-    sidebarListMoreMenuDangerItemClassName,
-    sidebarListMoreMenuDangerLabelClassName,
-    sidebarListMoreMenuIconClassName,
-    sidebarListMoreMenuItemClassName,
-    sidebarListMoreMenuLabelClassName,
-} from "~/components/SidebarListMoreMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { formatTimeCard } from "../knowledgeUtils";
@@ -72,64 +59,45 @@ export default function KnowledgeSpaceCardItem({
     ) : (
         <>
             {(canEditSpace || canManageMembers) && (
-                <DropdownMenuItem
-                    className={sidebarListMoreMenuItemClassName}
-                    onClick={() => onSettings?.(space)}
-                >
-                    <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
-                    <span className={sidebarListMoreMenuLabelClassName}>
-                        {localize("com_knowledge.space_settings")}
-                    </span>
-                </DropdownMenuItem>
+                <DropdownItem icon={<Outlined.Edit />} onSelect={() => onSettings?.(space)}>
+                    {localize("com_knowledge.space_settings")}
+                </DropdownItem>
             )}
-            <DropdownMenuItem
-                onClick={() => onPin(space.id, !space.isPinned)}
-                className={sidebarListMoreMenuItemClassName}
+            <DropdownItem
+                icon={space.isPinned ? <Outlined.PinOff /> : <Outlined.Pin />}
+                onSelect={() => onPin(space.id, !space.isPinned)}
             >
-                {space.isPinned ? (
-                    <>
-                        <Outlined.PinOff className={sidebarListMoreMenuIconClassName} />
-                        <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.unpin")}</span>
-                    </>
-                ) : (
-                    <>
-                        <Outlined.Pin className={sidebarListMoreMenuIconClassName} />
-                        <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.pin_space")}</span>
-                    </>
-                )}
-            </DropdownMenuItem>
+                {space.isPinned ? localize("com_knowledge.unpin") : localize("com_knowledge.pin_space")}
+            </DropdownItem>
 
             {(canDeleteSpace || type === "joined") && (
-                <DropdownMenuItem
-                    onClick={async () => {
-                        // Delete-space uses the destructive variant (matches file-delete).
-                        // Exit-space keeps the default prompt — it's not destructive.
-                        const ok = canDeleteSpace
-                            ? await confirm({
-                                description: `${localize("com_knowledge.confirm_delete_space")}${localize("com_knowledge.delete_irreversible_warning")}`,
-                                variant: "destructive",
-                            })
-                            : await confirm({
-                                title: localize("com_knowledge.prompt"),
-                                description: localize("com_knowledge.confirm_exit_space"),
-                                confirmText: localize("com_knowledge.exit"),
-                                cancelText: localize("com_knowledge.cancel"),
-                            });
-                        if (ok) {
-                            canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
-                        }
-                    }}
-                    className={sidebarListMoreMenuDangerItemClassName}
-                >
-                    {canDeleteSpace ? (
-                        <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
-                    ) : (
-                        <Outlined.LogOut className={sidebarListMoreMenuDangerIconClassName} />
-                    )}
-                    <span className={sidebarListMoreMenuDangerLabelClassName}>
+                <>
+                    <DropdownSeparator />
+                    <DropdownItem
+                        danger
+                        icon={canDeleteSpace ? <Outlined.Delete /> : <Outlined.LogOut />}
+                        onSelect={async () => {
+                            // Delete-space uses the destructive variant (matches file-delete).
+                            // Exit-space keeps the default prompt — it's not destructive.
+                            const ok = canDeleteSpace
+                                ? await confirm({
+                                    description: `${localize("com_knowledge.confirm_delete_space")}${localize("com_knowledge.delete_irreversible_warning")}`,
+                                    variant: "destructive",
+                                })
+                                : await confirm({
+                                    title: localize("com_knowledge.prompt"),
+                                    description: localize("com_knowledge.confirm_exit_space"),
+                                    confirmText: localize("com_knowledge.exit"),
+                                    cancelText: localize("com_knowledge.cancel"),
+                                });
+                            if (ok) {
+                                canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
+                            }
+                        }}
+                    >
                         {canDeleteSpace ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}
-                    </span>
-                </DropdownMenuItem>
+                    </DropdownItem>
+                </>
             )}
         </>
     );
@@ -155,23 +123,23 @@ export default function KnowledgeSpaceCardItem({
                 )}
             </div>
 
-            <DropdownMenu onOpenChange={(open) => { setMenuOpen(open); if (open) onMenuOpen?.(); }}>
-                <DropdownMenuTrigger asChild>
+            {/* The menu is portaled, but React events still bubble to the row's onClick. */}
+            <span className="contents" onClick={(e) => e.stopPropagation()}>
+                <Dropdown
+                    align="end"
+                    onOpenChange={(open) => { setMenuOpen(open); if (open) onMenuOpen?.(); }}
+                    menu={moreMenuItems}
+                >
                     <button
                         type="button"
                         aria-label={localize("com_knowledge.space_settings")}
                         className={`flex size-7 shrink-0 items-center justify-center rounded-md text-text-3 outline-none ${menuOpen ? "bg-[#E4E4E4]" : "active:bg-[#E4E4E4]"
                             }`}
-                        onClick={(e) => e.stopPropagation()}
                     >
                         <Outlined.More className="size-5" />
                     </button>
-                </DropdownMenuTrigger>
-
-                <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                    {moreMenuItems}
-                </SidebarListMoreMenuContent>
-            </DropdownMenu>
+                </Dropdown>
+            </span>
         </div>
     );
 }

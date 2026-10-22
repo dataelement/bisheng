@@ -1,12 +1,12 @@
 // @ts-strict-ignore
 import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
-import { Button, Input, toast } from '@bisheng/ui';
+import { Button, Input, Select, toast } from '@bisheng/ui';
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Button as SharedButton, Switch, Tooltip as SharedTooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
@@ -70,6 +70,7 @@ const defaultForm = {
 
 export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforSave, onAfterSave }) {
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
     const { refetch: refetchConfig } = useLinsightConfig();
     const { user } = useContext(userContext);
     const { appConfig } = useContext(locationContext);
@@ -253,16 +254,16 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         <span>{t('model.providerType')}</span>
                         <ModelFieldHint className="ml-1" content={t('model.providerTypeTip')} />
                     </Label>
-                    <Select value={formData.type} disabled={id !== -1} onValueChange={handleTypeChange}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {_modelProvider.map((model => <SelectItem key={model.value} value={model.value}>{providerLabel(model, t)}</SelectItem>))}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <Select
+                        {...selectLabels}
+                        aria-label={t('model.providerType')}
+                        disabled={id !== -1}
+                        options={_modelProvider
+                            .filter(model => model.value != null && model.value !== '')
+                            .map(model => ({ value: model.value, label: providerLabel(model, t) }))}
+                        value={formData.type || null}
+                        onChange={(val) => { if (val != null) handleTypeChange(val) }}
+                    />
                 </div>
                 <div className="space-y-2">
                     <Label className="bisheng-label">

@@ -1,11 +1,11 @@
 // @ts-strict-ignore
-import { Button, Textarea, toast } from '@bisheng/ui';
+import { Button, Select, Textarea, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 
 
 import { Label } from "@/components/bs-ui/label";
-import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Sheet,SheetClose,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 
 import { runWorkflowNodeApi } from "@/controllers/API/workflow";
@@ -65,6 +65,7 @@ export const RunTest = forwardRef((props, ref) => {
     const [node, setNode] = useState<WorkflowNode>(null)
 
     const { t } = useTranslation('flow')
+    const selectLabels = useSelectLabels()
     const [currentIndex, setCurrentIndex] = useState(0)
     const { id: workflow_id } = useParams();
 
@@ -263,19 +264,14 @@ export const RunTest = forwardRef((props, ref) => {
                     </Button>
                     {results.length !== 0 && <p className="mt-2 mb-3 text-sm font-bold">{t('runResults')}</p>}
                     {results.length > 1 && <div className="mb-2">
-                        <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
-                            <SelectTrigger className="w-[180px]">
-                                {/* <SelectValue /> */}
-                                <span>{t('roundRunResult', { index: currentIndex + 1 })}</span>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    {
-                                        results.map((_, index) => <SelectItem key={index} value={index + ""}>{t('roundRunResult', { index: index + 1 })}</SelectItem>)
-                                    }
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+                        <Select
+                            {...selectLabels}
+                            options={results.map((_, index) => ({ value: String(index), label: t('roundRunResult', { index: index + 1 }) }))}
+                            value={String(currentIndex)}
+                            onChange={(val) => { if (val != null) setCurrentIndex(Number(val)) }}
+                            aria-label={t('runResults')}
+                            className="w-[180px]"
+                        />
                     </div>}
                     {results[currentIndex]?.map((res, i) => (
                         <ResultText key={res.text + i} title={res.title} value={res.text} />

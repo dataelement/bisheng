@@ -1,16 +1,16 @@
-import { Button, Input, notification } from '@bisheng/ui';
+import { Alert, Button, Input, Select, notification } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Checkbox, Tooltip as SharedTooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import DepartmentUsersSelect, {
   DepartmentUserOption,
 } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect";
 
 import { Label } from "@/components/bs-ui/label";
-import MultiSelect from "@/components/bs-ui/select/multi";
 import { Separator } from "@/components/bs-ui/separator";
 
 import { unmountTenantApi } from "@/controllers/API/department";
@@ -53,12 +53,15 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
     onChanged,
     handleDelete,
   } = controller;
+  const selectLabels = useSelectLabels();
   return (
     <div className="max-w-3xl pb-8">
       {isArchived && (
-        <div className="mb-4 rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-200">
-          {t("bs:department.archivedNotice")}
-        </div>
+        <Alert
+          type="warning"
+          className="mb-4"
+          description={t("bs:department.archivedNotice")}
+        />
       )}
 
       {loading && <p className="mb-4 text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</p>}
@@ -136,12 +139,15 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
           </div>
           <div className="space-y-1.5">
             <Label>{t("bs:department.defaultRoles")}</Label>
-            <MultiSelect
+            <Select
+              {...selectLabels}
               multiple
+              showSearch
+              aria-label={t("bs:department.defaultRoles")}
               value={defaultRoleIds}
-              options={assignableRoles}
+              options={assignableRoles.filter((o) => o.value != null && o.value !== "")}
               placeholder={t("bs:department.selectRoles")}
-              onChange={(vals) => setDefaultRoleIds(vals as string[])}
+              onChange={(vals) => setDefaultRoleIds(vals.map(String))}
               disabled={!canEditPermissions}
               className={FORM_CONTROL_WIDTH}
             />

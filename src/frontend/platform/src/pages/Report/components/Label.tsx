@@ -1,18 +1,11 @@
 // @ts-strict-ignore
-import { Input } from '@bisheng/ui';
+import { Input, Select } from '@bisheng/ui';
 import { Braces } from "lucide-react";
 import { useContext, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "../../../components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { TabsContext } from "../../../contexts/tabsContext";
 import { getVariablesApi } from "../../../controllers/API/flow";
 import { useDebounce } from "../../../util/hook";
@@ -39,26 +32,18 @@ export default function Label({ onInset }) {
     // labels
     const { selectChange, labels, onSearch } = useLabels(flowId, nodes);
     const { t } = useTranslation();
+    const selectLabels = useSelectLabels();
 
     return (
         <div className="flex flex-col gap-4">
             {/* Select component */}
-            <Select onValueChange={selectChange}>
-                <SelectTrigger className="">
-                    <SelectValue placeholder={t("report.selectComponent")} />
-                </SelectTrigger>
-                <SelectContent className="">
-                    <SelectGroup>
-                        {nodes.map((node, i) => {
-                            return (
-                                <SelectItem key={node.id} value={String(i)}>
-                                    {node.id}
-                                </SelectItem>
-                            );
-                        })}
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
+            <Select
+                {...selectLabels}
+                options={nodes.map((node, i) => ({ value: String(i), label: node.id }))}
+                onChange={(v) => { if (v != null) selectChange(v) }}
+                placeholder={t("report.selectComponent")}
+                aria-label={t("report.selectComponent")}
+            />
             {}
             <Input placeholder="Search..." onChange={onSearch}></Input>
             {}

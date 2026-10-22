@@ -62,6 +62,7 @@ from bisheng.llm.domain.schemas import (
     WorkbenchModelConfig,
     WSModel,
 )
+from bisheng.llm.domain.services.context_window import ContextWindowService
 from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
 from bisheng.llm.domain.utils import invalidate_llm_info_cache, to_llm_invoke_error, usable_proxy_url
 from bisheng.tenant.domain.constants import TenantAuditAction
@@ -1066,6 +1067,9 @@ class LLMService:
         invalidate_llm_info_cache(server_id=db_server.id)
         for one in new_server_info.models:
             invalidate_llm_info_cache(model_id=one.id)
+        # F087: the provider-reported context window is cached in Redis for an
+        # hour; a saved config (new base URL, model name, ...) must re-read it.
+        await ContextWindowService.invalidate([one.id for one in new_server_info.models])
 
         # Determine if the model status needs to be re-determined
         to_probe = []
@@ -1100,6 +1104,7 @@ class LLMService:
         # its old name and reported back as "does not exist". Evict first — an
         # on-demand check that answers from a minute-old snapshot is worthless.
         invalidate_llm_info_cache(model_id=model_id, server_id=exist_model.server_id)
+        await ContextWindowService.invalidate([model_id])
         # Probing ignores the online flag on purpose: a model taken offline
         # still needs checking before you decide to bring it back.
         await cls.test_model_status(exist_model, login_user)

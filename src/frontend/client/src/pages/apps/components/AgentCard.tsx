@@ -1,13 +1,12 @@
-import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
+import {
+  Dropdown,
+  DropdownItem,
+  Tooltip as SharedTooltip,
+  TooltipProvider as SharedTooltipProvider,
+} from '@bisheng/ui';
 import type { AppItem } from '~/@types/app';
 import { Button } from '~/components';
 import AppAvator from '~/components/Avator';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '~/components/ui';
 
 import { useLocalize, useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';
@@ -112,40 +111,33 @@ export function AgentCard({
                   <Outlined.Pin size={16} className="shrink-0" />
                 </span>
               ) : null}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              {/* The menu is portaled, but its clicks still bubble through the
+                  React tree to the card — stop them here. */}
+              <span className="contents" onClick={(e) => e.stopPropagation()}>
+                <Dropdown
+                  align="end"
+                  menu={
+                    <>
+                      {showPin ? (
+                        <DropdownItem onSelect={() => onTogglePin?.(agent)}>
+                          {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
+                        </DropdownItem>
+                      ) : null}
+                      {canShare ? (
+                        <DropdownItem onSelect={handleShare}>{localize('com_app_share_app')}</DropdownItem>
+                      ) : null}
+                    </>
+                  }
+                >
                   <button
                     type="button"
-                    onClick={(e) => e.stopPropagation()}
                     className="inline-flex size-6 items-center justify-center rounded-md border border-border-base bg-white text-text-3 fine-pointer:hover:bg-fill-1"
                     aria-label={localize('com_ui_more')}
                   >
                     <MoreVertical className="size-4" />
                   </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[120px]">
-                  {showPin ? (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTogglePin?.(agent);
-                      }}
-                    >
-                      {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
-                    </DropdownMenuItem>
-                  ) : null}
-                  {canShare ? (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleShare();
-                      }}
-                    >
-                      {localize('com_app_share_app')}
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </Dropdown>
+              </span>
             </div>
           ) : null
         ) : showPin ? (

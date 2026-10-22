@@ -1165,7 +1165,8 @@
     "autoTagGenerationTitle": "自動タグ付け",
     "autoTagGenerationDesc": "有効にすると、ナレッジスペースの作成・編集時にタグライブラリを選択できます。ファイル解析後にライブラリから適切なタグを付けます。",
     "searchTagLibrary": "タグライブラリ名を検索",
-    "tagLibraryEmpty": "タグライブラリはありません"
+    "tagLibraryEmpty": "タグライブラリはありません",
+    "appTypeFilter": "アプリの種類"
   },
   "bench": {
     "daily": "日常",
@@ -3114,7 +3115,17 @@
     "maximum": "{{max}}以下にしてください",
     "addItem": "項目を追加",
     "removeItem": "項目を削除",
-    "expand": "展開"
+    "expand": "展開",
+    "selectEmpty": "データがありません",
+    "selectNoMatch": "一致する結果がありません",
+    "selectLoading": "読み込み中…",
+    "clear": "クリア",
+    "remove": "削除",
+    "back": "戻る",
+    "done": "完了",
+    "searchModels": "モデルを検索",
+    "increase": "増やす",
+    "decrease": "減らす"
   },
   "tenant.mountedBadge": "子テナントのマウント先",
   "tenant.mountedTag": "子テナント",

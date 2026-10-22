@@ -1,6 +1,8 @@
 // @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
-import Cascader from "@/components/bs-ui/select/cascader";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { filterModelOption, toGroupedModelOptions, toModelSelectValue } from "@/components/bs-comp/formFields/modelOptions";
+import { Select } from "@bisheng/ui";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";
 import { useModel } from "@/pages/ModelPage/manage";
 import { useEffect,useMemo,useState } from "react";
@@ -32,25 +34,13 @@ export default function ModelItem({ agent = false, data, onChange, onValidate, i
         }
     }, [llmOptions]);
 
-    const defaultValue = useMemo(() => {
-        if (!modelId || !llmOptions || llmOptions.length === 0) return [];
+    const selectLabels = useSelectLabels();
+    const options = useMemo(() => toGroupedModelOptions(llmOptions), [llmOptions]);
 
-        let _defaultValue = [];
-        llmOptions.some(option => {
-            const model = option.children.find(el => String(el.value) === modelId);
-            if (model) {
-                _defaultValue = [{ value: option.value, label: option.label }, { value: model.value, label: model.label }];
-                return true;
-            }
-            return false;
-        });
-
-        if (_defaultValue.length === 0) {
-            onChange(null); // handle missing model gracefully
-        }
-
-        return _defaultValue;
-    }, [modelId, llmOptions]);
+    // A saved model that is no longer offered (deleted / offline) is cleared.
+    useEffect(() => {
+        if (modelId && options.length && !options.some(option => option.value === modelId)) onChange(null);
+    }, [modelId, options]);
 
     const [error, setError] = useState(false);
 
@@ -73,12 +63,19 @@ export default function ModelItem({ agent = false, data, onChange, onValidate, i
                 {data.required && <span className="text-red-500">*</span>}
                 {t(`${i18nPrefix}label`)}
             </Label>
-            <Cascader
-                error={error}
+            <Select
+                {...selectLabels}
+                className="nodrag w-full"
+                status={error ? 'error' : 'default'}
+                options={options}
+                filterOption={filterModelOption}
+                value={data.value ? String(data.value) : toModelSelectValue(modelId)}
+                onChange={(v) => {
+                    setModelId(v == null ? null : String(v));
+                    onChange(v == null ? null : Number(v));
+                }}
                 placeholder={t(`${i18nPrefix}placeholder`)}
-                defaultValue={defaultValue}
-                options={llmOptions}
-                onChange={(val) => onChange(Number(val[1]))}
+                aria-label={t(`${i18nPrefix}label`)}
             />
         </div>
     );

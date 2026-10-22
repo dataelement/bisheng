@@ -60,11 +60,6 @@ vi.mock("@/components/bs-comp/selectComponent/DepartmentUsersSelect", () => ({
   default: () => <div data-testid="admin-select" />,
 }));
 
-vi.mock("@/components/bs-ui/select/multi", () => ({
-  __esModule: true,
-  default: () => <div data-testid="roles-select" />,
-}));
-
 const mockedGetDepartmentAdminsApi = vi.mocked(getDepartmentAdminsApi);
 const mockedGetDepartmentApi = vi.mocked(getDepartmentApi);
 const mockedGetDepartmentAssignableRolesApi = vi.mocked(getDepartmentAssignableRolesApi);
