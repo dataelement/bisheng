@@ -3155,6 +3155,7 @@
     "close": "閉じる",
     "maskedFile": "マスクされたファイル.msk",
     "notFoundTitle": "ページが見つかりません",
-    "notFoundDescription": "アクセスしたページは存在しないか、削除されています。"
+    "notFoundDescription": "アクセスしたページは存在しないか、削除されています。",
+    "recommendedAppLimit": "おすすめのアプリは最大{{max}}件まで設定できます。"
   }
 }

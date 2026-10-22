@@ -3155,6 +3155,7 @@
     "close": "关闭",
     "maskedFile": "是真的马赛克.msk",
     "notFoundTitle": "页面不存在",
-    "notFoundDescription": "您访问的页面不存在或已被移除。"
+    "notFoundDescription": "您访问的页面不存在或已被移除。",
+    "recommendedAppLimit": "平台最多支持配置{{max}}个推荐应用"
   }
 }

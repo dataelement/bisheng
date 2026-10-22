@@ -3210,6 +3210,7 @@
     "close": "Close",
     "maskedFile": "Masked file.msk",
     "notFoundTitle": "Page not found",
-    "notFoundDescription": "The page you are trying to access does not exist or has been removed."
+    "notFoundDescription": "The page you are trying to access does not exist or has been removed.",
+    "recommendedAppLimit": "At most {{max}} recommended apps can be configured."
   }
 }

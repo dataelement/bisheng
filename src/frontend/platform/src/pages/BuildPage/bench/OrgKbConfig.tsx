@@ -12,7 +12,7 @@ import { readFileLibDatabase } from "@/controllers/API";
 import { Tooltip, TooltipProvider } from "@bisheng/ui";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
+import { DragDropContext, Draggable, Droppable } from "@hello-pangea/dnd";
 import { useTranslation } from "react-i18next";
 
 export interface OrgKbConfig {
