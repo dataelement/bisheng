@@ -5149,8 +5149,8 @@
       ],
       "pair": "T204",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T204",
@@ -5173,8 +5173,8 @@
       ],
       "pair": "T203",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T207",
@@ -5198,8 +5198,8 @@
       ],
       "pair": "T208",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T214",
@@ -5222,8 +5222,8 @@
       ],
       "pair": "T208",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T208",
@@ -5248,8 +5248,8 @@
       ],
       "pair": "T207",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T211",
@@ -5272,8 +5272,8 @@
       ],
       "pair": null,
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T212",
@@ -5298,8 +5298,8 @@
       ],
       "pair": "T207",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T213",
@@ -5323,8 +5323,8 @@
       ],
       "pair": "T207",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T205",
@@ -5348,8 +5348,8 @@
       ],
       "pair": "T206",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T206",
@@ -5372,8 +5372,8 @@
       ],
       "pair": "T205",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T209",
@@ -5396,8 +5396,8 @@
       ],
       "pair": "T210",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T210",
@@ -5420,8 +5420,8 @@
       ],
       "pair": "T209",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

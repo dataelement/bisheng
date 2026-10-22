@@ -1,33 +1,32 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T13:17:47.900074+00:00",
-  "validated_source_commit": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a",
+  "recorded_at": "2026-10-22T15:45:49.138668+00:00",
+  "validated_source_commit": "709821ecbe5c653aad3f90358173e0d110bee7e3",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 197,
-    "tasks_total": 202,
+    "l1_completed": 209,
+    "tasks_total": 214,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 1275,
+      "passed": 1328,
       "skipped": 13,
       "exit_code": 0,
-      "source_commit": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a",
-      "log": "/private/tmp/f059-controller-integrated-runtime.log",
-      "scope": "full runtime including precise lost lease/fresh CAS recovery; optional opt-in skips retained, setuid executed"
+      "source_commit": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+      "log": "/private/tmp/f059-creation-integrated-runtime.log",
+      "scope": "full runtime with durable rejection, unknown create and strict UID stop; no new arm run"
     },
     "backend": {
-      "passed": 1629,
+      "passed": 1723,
       "skipped": 18,
       "exit_code": 0,
-      "source_commit": "7e720073b8a57492b7befbbb7155ffe30331af01",
-      "scope": "full app_runtime and app_publish with isolated model hooks and final diagnostics harness",
-      "log": "/private/tmp/f059-backend-current-integration.log",
-      "same_production_source_through": "e4052d1c2b7fab800ab2e39606d443d358ff5a1a"
+      "source_commit": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+      "log": "/private/tmp/f059-creation-integrated-backend.log",
+      "scope": "full app_runtime/app_publish including signed creation protocol and lock refresh"
     },
     "public_tenant_fix": {
       "passed": 17,
@@ -363,6 +362,17 @@
       "full_backend_skipped": 18,
       "full_log": "/private/tmp/f059-backend-profile-full-final.log",
       "fixture_commit": "f4967f5d0452f005153214528abacf7bbc97a0ce"
+    },
+    "creation_concurrency": {
+      "passed": 4,
+      "log": "/private/tmp/f059-creation-concurrency-main.log",
+      "source_commit": "095a4bf8e4e4a695553262693913d4282b9c4efd",
+      "boundary": "Two independent SQLAlchemy repositories/sessions. ORM identity-map interleavings only, not MySQL/DM8 lock acceptance."
+    },
+    "arm_priority": {
+      "new_testing": "deferred_by_user",
+      "prior_unresolved_wal_timeout_preserved": true,
+      "priority": "189 Kubernetes business deployment first"
     }
   },
   "not_executed": [

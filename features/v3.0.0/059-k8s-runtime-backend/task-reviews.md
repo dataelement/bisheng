@@ -2821,3 +2821,243 @@ T191–T193主树真实backend conftest组合补验：170passed/7warnings，日�
 T200测试先行ad8d028b7：真实BundleDelivery/SourceImageDelivery、register_resource与SQLite仓库，37例先26红/11绿；首次缺合成config的导入失败独立保留，不计业务红例。实现按阶段选profile后37全绿。T202 f4967f5d0只补两旧fixture真实字段，原跨卷/探测/停止拒绝断言不改；初整套11失败/1670passed/18skip，最终主树完整backend **1681passed/18skipped**，日志/private/tmp/f059-backend-profile-full-final.log。
 
 七项：架构PASS（backend既有控制服务，无manager导入/存储I/O）；命名PASS；序列化PASS（固定内部RuntimeConflict，不改对外API/摘要）；数据库PASS（校验前拒绝，事务/租户/模型/DDL不变）；前端N/A；信息泄漏PASS（无payload/凭据输出）；设计同步PASS。独立代理只读T201审查无代码阻断。任务范围、先行依赖/配对与完整AC复核通过；Ruff/arch/diff PASS。发布线不含该F059文件已git cat-file确认，不将特性实现倒灌发布线。三个任务结论PASS，189部署与五个交付门仍pending。
+
+## Task Review: T203 — K8s自动补全的UID字段合同
+
+**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_templates.py`、`src/runtime-manager/tests/test_k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | N/A | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | N/A | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | N/A | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：本地先红3fail/6pass→绿9pass，相关497pass；189历史403具体reason未恢复。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T204 — 冻结显式core/v1 UID选择器
+
+**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | PASS | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | PASS | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | PASS | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：本地先红3fail/6pass→绿9pass，相关497pass；189历史403具体reason未恢复。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T207 — 持久创建事务与签名HTTP合同
+
+**类型**：测试。**文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_creation.py`、`src/backend/test/app_runtime/test_runtime_kubernetes_api.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | N/A | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | N/A | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | N/A | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：初轮新fixture漏导入造成26setup errors如实保留；修正后108pass，再补换epoch/混合unknown/独立HMAC身份配对；完整backend1723pass/18skip，UID停止负例保留。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T214 — 锁读后刷新资源identity map
+
+**类型**：测试。**文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_creation_concurrency.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | N/A | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | N/A | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | N/A | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：两独立Repository/Session四交错：旧方法内存插件4fail→主树4pass；验证ORM刷新，不替代MySQL/DM8行锁验收。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T208 — 资源账本单次创建与未创建围栏
+
+**类型**：实现。**文件**：`src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py`、`src/backend/bisheng/app_runtime/domain/models/runtime_kubernetes.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | PASS | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | PASS | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | PASS | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：初轮新fixture漏导入造成26setup errors如实保留；修正后108pass，再补换epoch/混合unknown/独立HMAC身份配对；完整backend1723pass/18skip，UID停止负例保留。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T211 — 既有资源Service夹具接入创建事务
+
+**类型**：测试。**文件**：`src/backend/test/app_runtime/test_runtime_kubernetes_service.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | N/A | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | N/A | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | N/A | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：初轮新fixture漏导入造成26setup errors如实保留；修正后108pass，再补换epoch/混合unknown/独立HMAC身份配对；完整backend1723pass/18skip，UID停止负例保留。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T212 — 创建收尾Service与只读准入接线
+
+**类型**：实现。**文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | PASS | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | PASS | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | PASS | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：初轮新fixture漏导入造成26setup errors如实保留；修正后108pass，再补换epoch/混合unknown/独立HMAC身份配对；完整backend1723pass/18skip，UID停止负例保留。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T213 — 签名观察API创建动作输入
+
+**类型**：实现。**文件**：`src/backend/bisheng/app_runtime/api/endpoints/runtime_kubernetes.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | PASS | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | PASS | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | PASS | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：初轮新fixture漏导入造成26setup errors如实保留；修正后108pass，再补换epoch/混合unknown/独立HMAC身份配对；完整backend1723pass/18skip，UID停止负例保留。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T205 — manager明确拒绝与未知创建恢复合同
+
+**类型**：测试。**文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | N/A | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | N/A | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | N/A | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：executor先红23新增失败/79既有通过→115pass，相邻188pass；完整runtime1328pass/13skip。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T206 — manager单次创建与独立无执行体收尾
+
+**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | PASS | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | PASS | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | PASS | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：executor先红23新增失败/79既有通过→115pass，相邻188pass；完整runtime1328pass/13skip。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T209 — 准入拒绝安全诊断合同
+
+**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_admission_diagnostics.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | N/A | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | N/A | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | N/A | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：先红10fail/1pass→11pass，相关508pass；恶意异常文本及类名不进入日志。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
+
+## Task Review: T210 — 准入拒绝固定枚举诊断
+
+**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Endpoint→Service→Repository；manager只调用平台/Engine API；没有MinIO或领域反向依赖。 |
+| 2 | 命名规范 | PASS | 行为命名，测试完整AC，创建尝试和停止证据区分。 |
+| 3 | 序列化约定 | PASS | 既有内部签名控制协议；外部deploy API不变，严格输入及响应回执。 |
+| 4 | 数据库约定 | PASS | 既有租户JsonType整对象重赋值、无DDL；锁序及锁后刷新，普通UID停止不放宽。 |
+| 5 | 前端约定 | N/A | 没有前端源代码。 |
+| 6 | 信息泄漏 | PASS | 固定enum诊断，不输出raw API/环境/异常类型或凭据；测试仅合成数据。 |
+| 7 | 设计同步 | PASS | design §4.5明确独立not_created/unknown及旧r4不追认；D1–D8未变。 |
+
+**验证**：先红10fail/1pass→11pass，相关508pass；恶意异常文本及类名不进入日志。 Ruff/逐文件架构守卫/diff-check通过。
+
+**元数据验证**：文件范围PASS、前向依赖PASS；实现配对测试已完成。
+
+**结果**：PASS；真实K8s业务交付仍由T069/T070验证。
