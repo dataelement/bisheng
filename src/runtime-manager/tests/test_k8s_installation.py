@@ -1,5 +1,6 @@
 """覆盖 AC: AC-13、AC-14、AC-19、AC-20、AC-21、AC-22、AC-23、AC-30、AC-31、AC-32、AC-34、AC-35、AC-39、AC-40、AC-41、AC-42、AC-54、AC-55."""
 
+import copy
 import importlib.util
 import json
 import os
@@ -442,6 +443,7 @@ def test_sandbox_probe_failure_is_actionable_without_making_up_success():
         "ok": False,
         "reason": "optional_runtime_class_not_configured",
         "evidence": {},
+        "observed_at": 123,
     }
 
 
@@ -462,3 +464,128 @@ def test_cli_never_allows_report_write_without_live_execution(tmp_path):
             ]
         )
     assert stopped.value.code == 2
+
+
+def test_installer_pod_and_pvc_templates_pass_the_actual_canary_reader(tmp_path):
+    from runtime_manager.k8s_admission import AdmissionPolicy, CanaryPlanReader, template_projection
+    from runtime_manager.k8s_templates import RESOURCE_LABEL
+
+    tool = load_installer()
+    helper = "example/helper@sha256:" + "a" * 64
+    native = "example/python@sha256:" + "b" * 64
+    templates = []
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.namespace = "runtime-apps"
+    verifier.timeout = 180
+    verifier.options = {"storage_size_mb": 1024}
+    verifier.document = {
+        "helper_image": helper,
+        "platform": "linux/amd64",
+        "status_policy_revision": "v1",
+        "storage": {"class": "", "sqlite_compatible": True, "filesystem": "ext4", "static_pool": True},
+    }
+
+    def capture(template):
+        templates.append(copy.deepcopy(template))
+        return template | {"metadata": template["metadata"] | {"uid": str(uuid4())}}
+
+    verifier._create = capture
+    verifier._result = lambda pod: {
+        "locking": True,
+        "fsync": True,
+        "sqlite_integrity": True,
+        "filesystem": "ext4",
+        "capacity_bytes": 1024**3,
+    }
+    verifier._pod("idle")
+    verifier._pod("idle", unschedulable=True)
+    verifier._pod("network", targets=[{"name": "egress", "host": "10.96.2.2", "port": 3128, "expected": "allowed"}])
+    verifier._pod("idle", image=native, command=("python", "--version"))
+    verifier._storage()
+    plans = {}
+    for template in templates:
+        meta = template["metadata"]
+        ref = meta["labels"][RESOURCE_LABEL]
+        plans[ref] = {
+            "resource_ref": ref,
+            "namespace": verifier.namespace,
+            "name": meta["name"],
+            "kind": template["kind"],
+            "template": template_projection(template),
+            "uid": None,
+            "allow_create": True,
+            "allow_update": False,
+            "allow_delete": False,
+            "stop_state": "held",
+            "cleanup_only": False,
+            "expires_at": 2000,
+        }
+    path = tmp_path / "plans.json"
+    path.write_text(json.dumps({"schema_version": 1, "plans": plans, "profile_images": [native]}))
+    reader = CanaryPlanReader(
+        lambda ref: pytest.fail("Preflight must not use backend business authority"),
+        path,
+        namespace=verifier.namespace,
+        helper_image=helper,
+        clock=lambda: 1000,
+    )
+    username = "system:serviceaccount:runtime-system:runtime-manager"
+    policy = AdmissionPolicy(
+        namespace=verifier.namespace, manager_username=username, status_policy_revision="v1", plan_reader=reader
+    )
+    kinds = {"Pod": "pods", "PersistentVolumeClaim": "persistentvolumeclaims"}
+    for template in templates:
+        ref = template["metadata"]["labels"][RESOURCE_LABEL]
+        assert reader(ref)["uid"] is None
+        result = policy.review(
+            {
+                "apiVersion": "admission.k8s.io/v1",
+                "kind": "AdmissionReview",
+                "request": {
+                    "uid": str(uuid4()),
+                    "operation": "CREATE",
+                    "namespace": verifier.namespace,
+                    "name": template["metadata"]["name"],
+                    "resource": {"group": "", "version": "v1", "resource": kinds[template["kind"]]},
+                    "userInfo": {"username": username},
+                    "object": template,
+                },
+            }
+        )
+        assert result["response"]["allowed"], result
+
+
+def test_create_has_only_create_authority_until_observed_uid_is_persisted(monkeypatch):
+    tool = load_installer()
+    reference, observed_uid = str(uuid4()), str(uuid4())
+    template = {
+        "apiVersion": "v1",
+        "kind": "PersistentVolumeClaim",
+        "metadata": {
+            "name": "preflight-volume",
+            "namespace": "runtime-apps",
+            "labels": {"runtime.bisheng.io/resource": reference},
+        },
+        "spec": {"accessModes": ["ReadWriteOnce"]},
+    }
+    plans = []
+
+    class Api:
+        def raw(self, method, path, **kwargs):
+            assert method == "POST" and kwargs["manager"] is True
+            assert plans[-1]["uid"] is None and plans[-1]["allow_create"] is True
+            assert plans[-1]["allow_update"] is False and plans[-1]["allow_delete"] is False
+            observed = copy.deepcopy(template)
+            observed["metadata"]["uid"] = observed_uid
+            return subprocess.CompletedProcess([], 0, json.dumps(observed), "")
+
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.api, verifier.namespace, verifier.document = Api(), "runtime-apps", {}
+    verifier.created = []
+    verifier._plans = lambda ref, plan: plans.append(copy.deepcopy(plan))
+    verifier._wait = lambda callback: callback()
+    observed = verifier._create(template)
+    assert observed["metadata"]["uid"] == observed_uid
+    assert plans[-1]["uid"] == observed_uid and plans[-1]["allow_create"] is False
+    assert plans[-1]["allow_update"] is True and plans[-1]["allow_delete"] is True
+    assert verifier.created[0]["uid"] == observed_uid

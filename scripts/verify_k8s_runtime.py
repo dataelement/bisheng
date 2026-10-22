@@ -119,7 +119,7 @@ def stop_confirmed(pod):
 
 
 def execute_checks(drivers, document, *, observed_at):
-    rows = []
+    rows, artifacts = [], {}
     for name, driver in sorted(drivers.items()):
         try:
             result = driver()
@@ -132,6 +132,8 @@ def execute_checks(drivers, document, *, observed_at):
                 "reason": "verified",
                 "evidence": result["evidence"],
             }
+            if result.get("observations"):
+                artifacts[name] = result["observations"]
         except Exception as error:
             reason = (
                 str(error)
@@ -139,8 +141,9 @@ def execute_checks(drivers, document, *, observed_at):
                 else "probe_failed"
             )
             row = {"name": name, "ok": False, "reason": reason, "evidence": {}}
-        rows.append(row)
+        rows.append({**row, "observed_at": observed_at})
     return {
+        "artifacts": artifacts,
         "source": "cluster-probe",
         "observed_at": observed_at,
         "descriptor_digest": descriptor_digest(document),
@@ -702,7 +705,20 @@ class InstallationVerifier:
         node = self.api.get("node", observed["spec"]["nodeName"])
         if "linux/" + node["status"]["nodeInfo"]["architecture"] != self.document["platform"]:
             raise ProbeError("cri_architecture_mismatch")
-        return self._proof(observed, digest=expected_image.split("@", 1)[1])
+        if observed["spec"]["containers"][0]["image"] != expected_image:
+            raise ProbeError("cri_requested_image_changed")
+        result = self._proof(observed, digest=expected_image.split("@", 1)[1])
+        result["observations"] = [
+            {
+                "uid": observed["metadata"]["uid"],
+                "resource_version": observed["metadata"]["resourceVersion"],
+                "image_ref": expected_image,
+                "image_id": row["imageID"],
+                "platform": self.document["platform"],
+            }
+            for row in rows
+        ]
+        return result
 
     def _image(self):
         result = self._image_one(self.idle, self.document["helper_image"])
@@ -719,7 +735,7 @@ class InstallationVerifier:
                 raise ProbeError("runtime_profile_invalid")
             pod = self._pod("idle", image=profile["runtime_image"], command=command)
             observed = self._observe(pod)
-            self._image_one(observed, profile["runtime_image"])
+            result["observations"].extend(self._image_one(observed, profile["runtime_image"])["observations"])
         return result
 
     def _sandbox(self, level):
@@ -747,6 +763,25 @@ class InstallationVerifier:
 
     def _network(self, group):
         targets = copy.deepcopy(self.options["network_targets"][group])
+        if group == "network-direct-denied":
+            if not {"backend", "minio", "kubernetes-api", "other-app"} <= {row.get("name") for row in targets} or any(
+                row.get("expected") != "denied" for row in targets
+            ):
+                raise ProbeError("direct_denial_targets_incomplete")
+        elif group == "network-dns-denied":
+            if not targets or any(
+                row.get("expected") != "denied" or row.get("protocol") != "udp-dns" for row in targets
+            ):
+                raise ProbeError("dns_denial_target_invalid")
+        else:
+            service = self.api.get("service", "egress-proxy", namespace=self.api.control)
+            if not targets or any(
+                row.get("expected") != "allowed"
+                or row.get("host") != service["spec"].get("clusterIP")
+                or row.get("port") != 3128
+                for row in targets
+            ):
+                raise ProbeError("egress_proxy_target_invalid")
         for row in targets:
             if row.get("expected") == "denied":
                 self._control_connect(row)
@@ -965,6 +1000,21 @@ class InstallationVerifier:
                 return not result.returncode
 
             self._wait(release)
+
+        def absent():
+            response = self.api.raw(
+                "GET", self._path(record["resource"], record["name"]), manager=True, accepted=(0, 1)
+            )
+            if response.returncode:
+                if "NotFound" in response.stderr:
+                    return True
+                raise ProbeError("preflight_absence_unconfirmed")
+            observed = json.loads(response.stdout)
+            if observed["metadata"]["uid"] != record["uid"]:
+                raise ProbeError("preflight_cleanup_identity_changed")
+            return False
+
+        self._wait(absent)
         self._plans(record["plan"]["resource_ref"], remove=True)
         self.created.remove(record)
 
