@@ -7,7 +7,7 @@
     "design_confirmed": true,
     "tasks_review": "LGTM",
     "l1_completed": 222,
-    "tasks_total": 227,
+    "tasks_total": 229,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -785,6 +785,21 @@
       "descriptor_report_unchanged": true,
       "backend_node_ready": true,
       "controller_epoch": 11
+    },
+    "startup_stage_budget": {
+      "status": "fix_in_progress",
+      "actual_probe_operation": "0816633805bd414d828ff1bef8b6995b",
+      "reason": "workload_readiness_timeout",
+      "cleanup_status": "complete",
+      "measured_event_times": {
+        "scheduled": "2026-10-22T17:47:32Z",
+        "environment_started": "2026-10-22T17:48:51Z",
+        "environment_killed": "2026-10-22T17:49:03Z"
+      },
+      "all_images_cached": true,
+      "materialized": true,
+      "application_started": false,
+      "environment_only_seconds": 12
     }
   },
   "not_executed": [

@@ -1,7 +1,7 @@
 {
   "schema": "f059-platform-evidence/v1",
   "recorded_at": "2026-10-22T17:48:07.531221+00:00",
-  "state": "in_progress_r7_with_async_cleanup_fix",
+  "state": "in_progress_r7_startup_stage_budget_fix",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
@@ -226,10 +226,19 @@
     "automatic_finally_cleanup": false,
     "source_revision": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
     "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c",
-    "result": "in_progress",
+    "result": "failed_probe_readiness_timeout",
     "app_id": "baa177a4b5fe42cbb8cf4dadc8f09299",
     "deployment_id": "d623cbd318f04795bb6121a572ff566e",
-    "version_id": "35958375b3ff4b438f061c0cdfa6d24d"
+    "version_id": "35958375b3ff4b438f061c0cdfa6d24d",
+    "prepare_operation_id": "6be875ba6c3f48569084f6155f8c67f7",
+    "prepare_status": "completed",
+    "prepare_cleanup_status": "complete",
+    "prepared_delivery_matches": true,
+    "probe_operation_id": "0816633805bd414d828ff1bef8b6995b",
+    "probe_status": "failed",
+    "probe_cleanup_status": "complete",
+    "probe_failure_reason": "workload_readiness_timeout",
+    "probe_pod_uid": "b7a85626-a271-4c1b-9f07-f47cc83ed13a"
   },
   "historical_batches": [
     {

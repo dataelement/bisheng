@@ -46,3 +46,7 @@ r6首个Python应用prepare8fb6b53a…真实完成inputs/resolve/install/upload�
 开发收尾来源7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13；manager原生amd64构建/禁网导入通过，内网digest `3e0bf023a016b3f486bd5fe5cbcae85d89cc8737daaa9166f926291ec7781de5`。Helm17三个控制服务更新，descriptor UID/data、helper143、profile2与安装报告逐字节保持；新镜像assess_capabilities及平台ready通过，controller_epoch11。无新16项探测或ARM/公开发行冒认。
 
 r6原失败记录保留；正常cleanup后8精确资源逐项fresh API absent、4Pod停止证明，proof SHA `110aab26f2846ed75f35a02a95e948e40e8ec5cba21528ead45acec7dfa87d77`。不复活旧operation。r7使用原runner、原身份及六场景新journal；首个Python deployment d623cbd318f04795bb6121a572ff566e（app baa177a4b5fe42cbb8cf4dadc8f09299）已接受。当前尚在准备/业务验收；platform模式失败保留现场，未执行all自动清理。
+
+### r7准备成功、初始化总窗口失败
+
+prepare6be875…最终completed/cleanupcomplete，4阶段、8资源完整结束且prepared_delivery等于delivery；T226真实路径已通过。probe081663…的材料初始化真实成功，但data-layout/schema-init/material-fetch/env串行共用90秒；Pod调度17:47:32、环境安装17:48:51启动、17:49:03被停止，仅12秒。所有镜像已有本机缓存；tail只到pip Lookinginlinks，app仍PodInitializing。4资源normalcleanupcomplete，保留原失败，不冒认审批/上线。登记T228/T229修正既定阶段计时。

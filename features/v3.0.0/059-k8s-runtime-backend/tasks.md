@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；227 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 222 / 227 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；229 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 222 / 229 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1800,6 +1800,22 @@
   **覆盖 AC:** AC-33、AC-49、AC-52
   **依赖:** T220
 
+- [ ] **T228** — 初始化与健康阶段期限配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
+  **逻辑/验收**：多init正常累计超过90秒可在各自阶段期限内就绪；单阶段/健康/原操作期限仍有界；重启重试不重新计时，时间或状态不确定不延长，同UID限制保持。
+  **覆盖 AC:** AC-24、AC-25、AC-28、AC-43、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T226、T227
+  **配对:** T229
+
+- [ ] **T229** — 修正初始化与应用就绪期限
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+  **逻辑/验收**：按既定阶段有界初始化与健康检查，修正全部init与健康共用一次90秒误判；不扩大原操作总期限、不改变资源围栏/API/DDL。
+  **覆盖 AC:** AC-24、AC-25、AC-28、AC-43、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T228
+  **配对:** T228
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1927,3 +1943,5 @@ T221–T224 L1合流：源143606851370d6091b120d348549329b8113c6a6，helper新�
 2026-10-23 T225–T227：r6 prepare8fb6b53a…的inputs/resolve/install/upload全部真实成功，4Pod同UID停止、8资源最终正常清理；单次cleanup返回pending被执行器误作preparation_cleanup_pending终态，平台16227/precheck_build。按既定有界异步对账合同修复，保留历史不复活操作；无新helper/API/DDL。
 
 T225–T227开发收尾：当前222/227完成（103测试任务）；主树runtime1438passed/13skip、Ruff/format/arch/diff通过。首次旧selection预期失败/等待已保留，改为持久事实序列与虚拟时钟到期held后65相关通过。r6 fresh API逐一确认8资源消失，4Pod停止证明，proof SHA110aab26…；镜像/189业务续办不由这些本地通过替代。
+
+2026-10-23 T228/T229：r7完整prepare已completed/cleanupcomplete，prepared_delivery与delivery一致；probe081663…在90秒内经历data-layout/schema-init/material-fetch，环境安装仅12秒即被统一readiness截止停止。cached镜像事件17:47:32→17:48:51→17:49:03证实串行阶段共用90秒，不把它误判为拉镜像/源码传输失败。按既定4.6阶段约束修复并保留原失败现场。

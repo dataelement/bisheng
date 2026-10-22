@@ -5739,6 +5739,61 @@
       "review": "PASS"
     },
     {
+      "id": "T228",
+      "wave": 9,
+      "kind": "测试",
+      "title": "初始化与健康阶段期限配对",
+      "files": [
+        "src/runtime-manager/tests/test_kubernetes_executor.py"
+      ],
+      "logic": "多init累计超过90秒可在各自期限内完成；单阶段、健康及原操作期限仍有界；重启不重计，未知不延长，同UID限制保持。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-28",
+        "AC-43",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T226",
+        "T227"
+      ],
+      "pair": "T229",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T229",
+      "wave": 9,
+      "kind": "实现",
+      "title": "修正初始化与应用就绪期限",
+      "files": [
+        "src/runtime-manager/runtime_manager/executors/kubernetes.py"
+      ],
+      "logic": "按既定阶段有界初始化和健康检查，不扩大原操作期限，不修改围栏/API/DDL。",
+      "acs": [
+        "AC-24",
+        "AC-25",
+        "AC-28",
+        "AC-43",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T228"
+      ],
+      "pair": "T228",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",
