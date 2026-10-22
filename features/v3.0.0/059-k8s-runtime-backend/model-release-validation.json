@@ -420,8 +420,8 @@
     "evidence_root": "/private/tmp/f059-arm64-20261022-54b3ea2c1"
   },
   "followup_candidate": {
-    "source_commit": "9e7e86cab55f8b26990d2e6b6374b36418d30669",
-    "reason": "K8s parsed profile contract fix",
+    "source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
+    "reason": "K8s parsed profile and precise unassigned observation contract fixes",
     "native_validation": "in_progress",
     "historical_native_results_source": "54b3ea2c15836529cc24667d9a58be49e35bf710",
     "formal_public_ci_release": "not_authorized"

@@ -720,3 +720,5 @@ Docker受信数据helper仅挂载一个应用数据库目录，该目录需允�
 K8s prepare 的 `payload.delivery.profile` 是 manifest 引用字符串，实际解析对象只从 `payload.profile` 读取；后续运行只从 `payload.resolved_delivery.profile` 读取冻结对象。两阶段不能互相 fallback 掩盖错误输入；非法 delivery/profile 类型在资源访问前以固定错误拒绝。完整镜像和 purge 可以不带应用 profile，平台/范围围栏继续校验。189首个指定profile实际prepare在旧实现中提前失败，T194/T195已本地修复；新候选真实重部署待验收。
 
 Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。验收工具接受显式、固定版本和逐wheel摘要的8个纯Python依赖，SDK字节必须与仓库产物一致，保留许可，以原始wheel打入源码包并zipimport运行；不改产品模板、SDK或扫描器。实际源码扫描与依赖二进制跳过分别记录，不能将wheel跳过表述成依赖源码已扫描。完整镜像仍需两个真实digest显式加入场景。此为验收前置修正，不增加产品发布模式。
+
+未创建运行分配的应用：manager查询platform.application得到精确`404/application_not_found`时返回既有`not_found`，backend可投影无实例；不能把资源查询404、权限错误或平台故障当无实例或停止证据。该修复恢复原有16101/16121区分，不弱化销毁与UID围栏。

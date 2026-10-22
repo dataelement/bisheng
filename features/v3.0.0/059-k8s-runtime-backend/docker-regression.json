@@ -160,5 +160,51 @@
     },
     "full_image": "separate fixed-digest batch running; not passed yet",
     "boundary": "real platform API, natural tenant users, approval and proxy; does not prove Docker firewall fallback L3 enforcement, real model positive request or all failure/restore/delete paths"
+  },
+  "complete_image_partial": {
+    "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+    "journal_sha256": "7f8eae51034e034b4c210ee7488aeebf9178ef08f34cbc830be951738ce4453f",
+    "apps": {
+      "e2e-f059-python-image-d109image1": {
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4",
+        "deployment_id": "9a2fdde368924820abc56e7a9590f515",
+        "version_id": "c1ed61c32e134b858e00636e563f9ae5",
+        "mode": "image",
+        "runtime": "python3.11"
+      }
+    },
+    "passed_events": [
+      {
+        "name": "publish",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4",
+        "version_id": "2ea5fcfe28034d59a33b5eee88bac087"
+      },
+      {
+        "name": "owner-and-entry-boundaries",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4"
+      },
+      {
+        "name": "stop-resume",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4",
+        "version_id": "2ea5fcfe28034d59a33b5eee88bac087"
+      },
+      {
+        "name": "iteration",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4",
+        "version_id": "c1ed61c32e134b858e00636e563f9ae5"
+      },
+      {
+        "name": "owner-and-entry-boundaries",
+        "outcome": "passed",
+        "app_id": "09d8ff6d31c740ada5604b90bbabbbc4"
+      }
+    ],
+    "first_platform_exit": 1,
+    "independent_v2_observe_exit": 0,
+    "boundary": "both publications and fresh v2 observations passed; original final observation failed without precise frame, transient cause unresolved, not an uninterrupted whole-batch pass"
   }
 }

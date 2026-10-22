@@ -1,12 +1,12 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22T13:17:47.900074+00:00",
-  "validated_source_commit": "9e7e86cab55f8b26990d2e6b6374b36418d30669",
+  "validated_source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 190,
+    "l1_completed": 192,
     "tasks_total": 197,
     "e2e": "in_progress",
     "l2": "not_started"
@@ -319,6 +319,16 @@
       "log": "/private/tmp/f059-profile-integrated-runtime.log",
       "real_189_failure": "AttributeError.get before resource creation; dict/str shape confirmed by read-only failed operation",
       "real_new_candidate_deployment": "pending"
+    },
+    "unassigned_observe_candidate": {
+      "source_commit": "0e493c07a8c25b85b762b5c6f95f65d2cb47d6f9",
+      "local_runtime_passed": 1259,
+      "local_runtime_skipped": 13,
+      "new_http_pairs": 42,
+      "targeted_passed": 75,
+      "log": "/private/tmp/f059-unassigned-integrated-runtime.log",
+      "real_189_unassigned_control_responses": 4,
+      "new_manager_live_validation": "pending"
     }
   },
   "not_executed": [

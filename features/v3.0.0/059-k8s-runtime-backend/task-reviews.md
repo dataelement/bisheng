@@ -2807,3 +2807,7 @@ T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态
 七项检查：架构PASS（manager仅消费backend冻结对象）；命名PASS；序列化PASS（稳定错误枚举，API/摘要不变）；数据库/前端N/A；信息泄漏PASS（不输出profile/env）；设计同步PASS（design.md明确prepare与运行对象路径）。范围两测试/一实现文件、依赖/先测试配对/AC均核对通过。Ruff与架构守卫通过，主树diff检查通过。T194、T195结果PASS，真实重部署不由本地结果替代。
 
 T191–T193主树真实backend conftest组合补验：170passed/7warnings，日志/private/tmp/f059-source-vendor-integrated.log；不触发新增实际部署结论。
+
+## T196/T197 L1（0a8f5a252 / 0e493c07a）
+
+七项复核：架构/命名/序列化/信息泄漏/设计同步PASS，数据库/前端N/A。精确application调用的404/application_not_found转既有NotFoundError；资源404、403/503/timeout与错误reason/status仍是故障。42项真实PlatformClient+HMAC/nonce+ASGI配对先红4/38，相关75绿；主树完整runtime1259passed/13skipped。两文件范围/前向依赖/T196先测试配对与AC验证通过。Ruff/arch/diff通过；结论PASS，实际189新镜像四个draft查询/owner清理仍待复验。只读现场四个精确控制响应证据/private/tmp/f059-unassigned-scope-evidence.jsonl，不包含凭据或payload。
