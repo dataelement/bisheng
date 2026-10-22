@@ -27,3 +27,13 @@ v1实际发布、独立审批12 executed，generation1/deploy completed与cleanu
 ## 189 控制器自然空闲续租复验
 
 e405候选同一Pod/容器/holder经历自然租约过期，精确renew409后fresh claim/renew成功，epoch3→4，descriptor未变。旧已到期操作进入failed/cleanupcomplete且无资源；这不是Pod停止证明。真实业务之后的独立准备失败仍保留在platform证据。
+
+## 189 主安装域卸载前置（静态复核）
+
+在 `6f254f337` 的 Chart 与调用链复核中，primary release 的卸载被旧 r4 未确认创建阻断：应用 `2122578f094b4c5fb19f9669815431f2`、操作 `6031594368584d1090ba7a7a2ca8e2e4` 的 PVC 仍为 Bound，未取得原写入者停止事实。按名字 404 不构成停止证明。
+
+Chart 卸载会删除 admission webhook、服务与 RBAC，以及执行域 NetworkPolicy、Quota、LimitRange；保留 Namespace/PV/PVC 不能替代持续围栏。当前五个业务应用即使全部停用，也不能据此卸载该 primary release。本轮没有执行卸载、移除保护或手工释放账本。
+
+完整卸载验收须使用独立 release/installationId、控制与执行 namespace、受限服务身份、合格 PV 和独立平台配置及逻辑存储域；运行真实 SQLite 应用并确认停止与 cleanup 后，才卸载该独立域。共享 backend 的新应用默认节点及 manager/data RPC 地址是全局配置，不能临时改向新 manager 而影响 primary。仅合成 SQLite/PVC 的 Helm 保留检查最多证明存储保留子合同，不算完整平台卸载通过。
+
+源码锚点：`deploy/kubernetes/app-runtime/templates/admission.yaml`、`network.yaml`、`rbac.yaml`、`storage.yaml`、`services.yaml`；`runtime_delivery_coordinator.py:45`、`runtime_control_client.py:21`、`runtime_data_session_service.py:113`。该项保持待验收，不将静态复核记为真实卸载结果。

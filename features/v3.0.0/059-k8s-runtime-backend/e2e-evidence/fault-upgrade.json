@@ -161,5 +161,20 @@
       "epoch_before": 3
     },
     "boundary": "Same PID/Pod/Container controller recovery observed. Distinct from business publication success or old writer stop."
+  },
+  "primary_uninstall_precondition_189": {
+    "verification": "static_chart_and_call_path_review",
+    "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+    "status": "blocked_by_unconfirmed_old_creation",
+    "app_id": "2122578f094b4c5fb19f9669815431f2",
+    "operation_id": "6031594368584d1090ba7a7a2ca8e2e4",
+    "pvc_uid": "41426a1e-9713-46d5-afa5-e520afcd186b",
+    "pvc_state": "Bound",
+    "uninstall_executed": false,
+    "absence_is_stop_proof": false,
+    "reason": "Primary release removal deletes admission, execution network policies and RBAC; retaining namespaces/PV/PVC alone does not retain fencing for an unconfirmed old creation.",
+    "safe_alternative": "Independent release/installation id, control and execution namespaces, platform configuration and logical storage scope; independently qualified PV and live capability report; stop and cleanup its real SQLite application before uninstall.",
+    "shared_backend_limitation": "Coordinator runtime_default_node_id and runtime/data manager_base_url are global configuration; do not redirect the primary backend or reuse its active execution domain.",
+    "scope": "No primary uninstall, guard/finalizer removal, manual SQL release or 404-based stop assertion."
   }
 }
