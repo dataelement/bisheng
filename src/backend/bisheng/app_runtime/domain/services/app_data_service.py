@@ -22,7 +22,8 @@ and the manager cannot:
 What it does **not** do is open the file. The database lives on the manager's
 host (``{data_root}/apps/{app_id}/db/app.db``); backend does not know that
 layout (K1) and in the multi-node shape is not even on that machine. Every
-call here is one ``orchestrator_client.db_*`` RPC. The F052 MCP data tools call
+call uses the existing manager data RPC. Docker retains the original client;
+Kubernetes uses RuntimeDataSessionService for the owner grant and durable mutex. The F052 MCP data tools call
 *these* methods — never the client directly — so that the owner rule and the
 audit row hold for every door (``test_mcp_face_reuses_same_service_method``).
 """
@@ -35,6 +36,7 @@ from typing import Any
 from bisheng.app_runtime.domain.constants import AppAuditAction, AppState
 from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
 from bisheng.common.errcode.app_factory import AppDataForbiddenError, AppDataInvalidError, AppNotFoundError
+from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import set_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import App, AppDao
@@ -62,12 +64,15 @@ class AppDataService:
     async def list_tables(cls, app_id: str, *, actor) -> dict[str, Any]:
         """``{tables: [{name, column_count}]}`` — ``[]`` is a legitimate answer."""
         app = await cls._load_owned(app_id, actor)
-        return await orchestrator_client.db_tables(app_id=app.id)
+        return await cls._call(app, actor, "tables", {}, lambda: orchestrator_client.db_tables(app_id=app.id))
 
     @classmethod
     async def get_table_schema(cls, app_id: str, table: str, *, actor) -> dict[str, Any]:
         app = await cls._load_owned(app_id, actor)
-        return await orchestrator_client.db_schema(app_id=app.id, table=cls._identifier(table, what="table"))
+        table = cls._identifier(table, what="table")
+        return await cls._call(
+            app, actor, "schema", {"table": table}, lambda: orchestrator_client.db_schema(app_id=app.id, table=table)
+        )
 
     @classmethod
     async def get_rows(
@@ -82,12 +87,14 @@ class AppDataService:
     ) -> dict[str, Any]:
         """One page in a stable order — the manager appends the row key as tiebreaker."""
         app = await cls._load_owned(app_id, actor)
-        return await orchestrator_client.db_rows(
-            app_id=app.id,
-            table=cls._identifier(table, what="table"),
-            page=cls._page(page),
-            size=cls._size(size),
-            order=cls._order(order),
+        parameters = {
+            "table": cls._identifier(table, what="table"),
+            "page": cls._page(page),
+            "size": cls._size(size),
+            "order": cls._order(order),
+        }
+        return await cls._call(
+            app, actor, "rows", parameters, lambda: orchestrator_client.db_rows(app_id=app.id, **parameters)
         )
 
     # -- writes ---------------------------------------------------------
@@ -105,7 +112,10 @@ class AppDataService:
         table = cls._identifier(table, what="table")
         cls._row_key(key)
         cls._values(values)
-        result = await orchestrator_client.db_update_row(app_id=app.id, table=table, key=str(key), values=values)
+        parameters = {"table": table, "key": str(key), "values": values}
+        result = await cls._call(
+            app, actor, "update", parameters, lambda: orchestrator_client.db_update_row(app_id=app.id, **parameters)
+        )
         await cls._audit(
             AppAuditAction.DATA_ROW_EDIT,
             app,
@@ -126,7 +136,9 @@ class AppDataService:
         """``(filename, csv_bytes)`` — the whole table, audited as ``app.data_export``."""
         app = await cls._load_owned(app_id, actor)
         table = cls._identifier(table, what="table")
-        content = await orchestrator_client.db_export(app_id=app.id, table=table)
+        content = await cls._call(
+            app, actor, "export", {"table": table}, lambda: orchestrator_client.db_export(app_id=app.id, table=table)
+        )
         await cls._audit(
             AppAuditAction.DATA_EXPORT,
             app,
@@ -135,6 +147,16 @@ class AppDataService:
             detail={"table": table, "bytes": len(content or b"")},
         )
         return f"{app.slug or app.id}-{table}.csv", content
+
+    @staticmethod
+    async def _call(app, actor, action, parameters, legacy):
+        if settings.app_runtime.runtime_protocol_version == 2:
+            from bisheng.app_runtime.domain.services.runtime_data_session_service import RuntimeDataSessionService
+
+            sessions = RuntimeDataSessionService()
+            if await sessions.supports(app):
+                return await sessions.execute(app, actor, action, parameters)
+        return await legacy()
 
     # -- helpers --------------------------------------------------------
 

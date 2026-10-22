@@ -758,3 +758,20 @@ L1：架构/命名/内部序列化/跨库与租户/敏感信息/设计同步 PAS
 
 **红阶段**：12 failed/2 passed（`/private/tmp/f059-data-repository-red.log`）；新增14项＋旧账本24 passed，再与节点/资源合计107 passed（`/private/tmp/f059-data-repository-final.log`）。真实SQLite事务；尚未MySQL/DM8或集群证明。Ruff与逐文件arch-guard通过。
 **元数据**：目标1/2文件、T041/T080依赖及配对先行PASS。**结果：PASS。**
+
+## Task Review: T042 / T043
+
+**任务**：owner数据会话与既有AppDataService接线。**文件**：`test_runtime_data_sessions.py`；`runtime_data_session_service.py`、`app_data_service.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | Service→Repository，网络在事务提交后；backend不访问SQLite/集群/MinIO |
+| 2 | 命名/AC | PASS | AC-15、AC-35、AC-36、AC-37、AC-43、AC-48、AC-49、AC-50 |
+| 3 | 序列化 | PASS | 原业务API/审计返回保持；内部header携带签名票据；rows参数默认值先规范化再摘要 |
+| 4 | 数据库 | PASS | 复用T082原子会话；serving代次不变；缺卷不启动应用；冷启动也受原60秒期限，未知响应保留互斥 |
+| 5 | 前端 | N/A | 无新增页面、文案或业务动作 |
+| 6 | 信息泄漏 | PASS | owner重新缩窄，管理员也不能代替owner；无票据日志/签发管理API；HTTP结果未知只调用一次，已提交唤醒结果可恢复 |
+| 7 | 设计同步 | PASS | 4.8记录控制/授权接口及后续接线边界；默认issuer对应T049，Pod运输对应T045 |
+
+**红阶段**：缺Service7 errors；已有业务入口分发1 failed；唤醒丢回复1 failed。最终新会话9项与原owner/审计/数据账本41 passed（`/private/tmp/f059-data-sessions-final.log`），Ruff与逐文件arch-guard通过。
+**元数据**：1/2目标文件、T017/T041/T082依赖、配对先行PASS。**结果：PASS_WITH_NOTES**：签发/网络通过注入合同验证；默认T049签发模块、T045实际Pod数据RPC尚未交付，F059仍不能启用部署验收，后续必须真实联通验证。

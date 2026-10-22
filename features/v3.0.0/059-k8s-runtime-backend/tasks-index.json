@@ -1460,7 +1460,9 @@
         "T082"
       ],
       "pair": "T043",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T043",
@@ -1488,7 +1490,9 @@
         "T042"
       ],
       "pair": "T042",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS_WITH_NOTES"
     },
     {
       "id": "T044",

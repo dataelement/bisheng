@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；82 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 51 / 82 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 53 / 82 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -439,7 +439,7 @@
   **依赖:** T041、T080、T081
   **配对:** T081
 
-- [ ] **T042** — owner 数据会话业务协调：契约与失败用例
+- [x] **T042** — owner 数据会话业务协调：契约与失败用例
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_data_sessions.py`
   **逻辑/验收**：在原权限/确认/审计后创建内部 kind=data；不改 serving代次/App态，数据/迁移/停用/部署互斥；事务先提交再唤醒，在线复用helper，停用冷启动也计入60秒，超时不等于cleanup；测试只定义输入/结果，不加入实现。
@@ -447,7 +447,7 @@
   **依赖:** T017、T041、T082
   **配对:** T043
 
-- [ ] **T043** — owner 数据会话业务协调
+- [x] **T043** — owner 数据会话业务协调
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_data_session_service.py`、`src/backend/bisheng/app_runtime/domain/services/app_data_service.py`
   **逻辑/验收**：在原权限/确认/审计后创建内部 kind=data；不改 serving代次/App态，数据/迁移/停用/部署互斥；事务先提交再唤醒，在线复用helper，停用冷启动也计入60秒，超时不等于cleanup；通过配对测试后完成 L1 task-review。

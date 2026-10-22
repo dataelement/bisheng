@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T041、T073–T082已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器已有准备/启动/观察/停止/清理/日志能力本地验证，数据能力待后续接线；Docker/K8s共同状态机、v2状态/日志/能力与路由组装已有本地验证；数据、发行与真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：T001–T043、T073–T082已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器已有准备/启动/观察/停止/清理/日志能力本地验证，数据能力待后续接线；Docker/K8s共同状态机、v2状态/日志/能力与路由组装已有本地验证；数据、发行与真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -272,6 +272,8 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 数据helper本地实现补充：data-v1签名输入为固定域`BISHENG-RUNTIME-DATA-V1\n`加canonical JSON（key_id和claims），claims精确绑定version/operation_id/request_id/app_id/exec_ref/pod_uid/actor_ref/action/parameters_sha256/nonce/issued_at/not_after/deadline；受理窗口最长5秒，总deadline不超过签发后60秒且仍受原数据操作期限限制。独立受信helper只加载公钥。卷内跨进程flock串行，started先fsync再创建有界SQLite子进程，子进程完成但done落盘失败仍保留未知；新只读请求查询原ID，不重放写操作。导出在platform目录生成文件、校验摘要后流式返回，不把CSV塞入journal或一次性读入内存。当前仅helper本地/HTTP合同完成，平台签发、数据会话、Pod内接线与真实集群尚未交付。
 
 数据会话底层互斥已接线：Repository按node→assignment顺序，在同一事务建立data_operation_id和离线helper 128MiB/25m预占；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。平台存储、Pod接线及自然人授权仍由后续Service/执行器任务实现。
+
+原AppDataService入口已接选择分发：Docker保持既有RPC；K8s在原owner/参数校验之后，由RuntimeDataSessionService提交内部会话、等待同UID helper就绪、调用后端签发接口并转交X-Runtime-Data-Grant。后台不跨SQL事务等待网络。在线固定原exec_ref/UID，不另起挂卷写入者；离线冷启动与调用共用60秒。manager唤醒响应丢失以已提交状态查询恢复，数据HTTP结果未知不重发。签发默认实现归T049，Pod数据运输/清理归T045，本阶段使用可注入合同测试，不表示两者已完成。
 
 ### 4.9 网络、准入和资源治理
 
@@ -637,3 +639,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T040/T041 公钥数据票据、持久journal、限时SQLite子进程及流式导出 | 18 passed，真实SQLite与本地HTTP；无189部署结论 |
 
 | 2026-10-22 | T081/T082补齐数据会话账本及K8s真实sidecar资源预占；已有字段不是已实现互斥的证据 | 新旧SQL及节点/资源107 passed；尚未数据Service/189验收 |
+
+| 2026-10-22 | T042/T043 owner数据会话与既有业务入口选择分发 | 新会话及原owner/审计/账本41 passed；签发默认实现、Pod运输与真实验收仍待后续 |
