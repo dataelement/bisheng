@@ -62,3 +62,11 @@ manager28449f9c…/helper5906c518…/assemblerCA9836c134…更新后，仅descri
 CMD问题已用固定CLI官方实现与三个base的实际无--cmd对照证伪，T252/T253撤回。d7中间候选16项探测自然通过且全部preflight Pod已正常清理（报告SHA35c968ac…），没有人为中止或修改其结果。当前分支全部src/scripts/deploy/workflow构建输入与0d5逐字节相同，保留SGID/PATH真实修复。
 
 正常helm upgrade恢复0d5精确manager28449f9c…/helper5906c518…/assemblerCA9836c134…；descriptor UID不变、摘要f306a49e…，使用原实际16项通过且与该摘要完全匹配的报告6720eaf4…（恢复时年龄1549秒，小于24小时），未宣称重跑探测或新构建。Helm26/自然ready/epoch21与三交付路径true已fresh验证。r4保留、app-proxy/profile/data配置不变。更正提交20175cad9，最终镜像源码基线0d5。
+
+## T254/T255新增上游探测：189真实复验
+
+dedc安装器通过独立r2 wrapper真实执行，exit0；完整16/16检查通过并正常清理，报告SHA `304b970cdba945fb4c60dffeb10eab3dbdd7ceffeb0b984dbfb39c52581070ce`。runtime镜像仍0d5，helper/profile/descriptor摘要不变，仅能力报告刷新；双guard摘要12588470…/b92a889b…证实范围。
+
+独立复核精确5个可能匹配三个业务Service的control canary：每个均1ADDED/10MODIFIED/1DELETED，同UID闭合，所有事件带NotReady gate、未出现gate=True或Ready=True；每个仅一次进入EndpointSlice，ready和serving明确false。三个正式Pod及Service UID/selector/publishNotReadyAddresses=false保持。registry-push精确对应egress canary UID7f51f0ff-cff8-4e99-9bb6-2cf18e07df32。独立JSON SHA `140eafa532248a53fe1dfef42f198a0bae3faaa47b49de12255d0ab53e508d62`；完整PSV SHA21d17d6c…/e59d0f0d…。
+
+第六个preflight-untrusted角色不匹配上述watch选择器，未连续观察其Ready/gate历史，不推定通过。未见ERROR或stderr错误；不以resourceVersion数字跳跃判断丢失，也不声称绝对无传输缺口/数据包级无影响。root核无control残留、Service不变和精确watch进程后主动SIGINT，两个SSH watch实际exit1属操作者停止记录，不记成130或测试故障。API probe/TCP、外部crane TLS权限、真实source-image业务各自独立。

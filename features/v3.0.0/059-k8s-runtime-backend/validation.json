@@ -1637,5 +1637,25 @@
       "status": "passed_but_redundant_cmd_tests_withdrawn",
       "not_current_delivery": true
     }
-  ]
+  ],
+  "installer_registry_upstream_dedc": {
+    "installer_commit": "dedc4831bb462f832877940901201061b1e027cf",
+    "report_path": "/opt/e2e-f059/evidence/install-dedc4831b-r2-report.json",
+    "report_sha256": "304b970cdba945fb4c60dffeb10eab3dbdd7ceffeb0b984dbfb39c52581070ce",
+    "wrapper_exit_code": 0,
+    "independent_review_result": "PASS_FOR_FIVE_SERVICE_MATCHING_CONTROL_CANARIES",
+    "independent_review_sha256": "140eafa532248a53fe1dfef42f198a0bae3faaa47b49de12255d0ab53e508d62",
+    "watch_scope": "five Service-matching control canaries only; preflight-untrusted role not observed",
+    "watch_exit_codes": [
+      1,
+      1
+    ],
+    "watch_exit_reason": "operator SIGINT after installer exit and exact process/Service/no-control-canary guards; not a test failure or exit130 claim",
+    "scope_limits": [
+      "TCP upstream check is distinct from external crane TLS/permissions and actual source-image assembly",
+      "No proof of unobserved sixth untrusted canary Ready history",
+      "No packet-level traffic continuity or absolute transport-gap claim",
+      "No new ARM/public release acceptance"
+    ]
+  }
 }

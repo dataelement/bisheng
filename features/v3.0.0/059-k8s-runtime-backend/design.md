@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成250/255，T256/T257准备循环取消检查已闭合，当前本地完整runtime1649/13skip，backend保持6f且既有1764/19skip。189安装仍为Helm27/epoch21、0d5运行镜像；Python、Node、static应用包与source-image均完成v1/v2及停用恢复，Python另通过SDK/OBO、附件与SQLite。完整镜像v1与停用恢复通过，v2审批11执行后因16226容量不足失败，旧v1仍online、pendingv2保留；不能将该失败改写为更新成功。仓库DNAT5000配置缺口已修正，dedc安装器的新真实探测执行中。取消修复仅本地通过，尚未部署或证明189取消。离线编辑导出及故障升级仍待续办。旧r4保持安全围栏，不能卸载主安装域。新ARM、109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
+**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成250/255，T256/T257准备循环取消检查已闭合，当前本地完整runtime1649/13skip，backend保持6f且既有1764/19skip。189安装仍为Helm27/epoch21、0d5运行镜像；Python、Node、static应用包与source-image均完成v1/v2及停用恢复，Python另通过SDK/OBO、附件与SQLite。完整镜像v1与停用恢复通过，v2审批11执行后因16226容量不足失败，旧v1仍online、pendingv2保留；不能将该失败改写为更新成功。仓库DNAT5000配置缺口已修正，dedc安装器已真实16/16通过；五个Service相关canary全程NotReady/非Serving观察闭合，第六untrusted未连续观察。取消修复仅本地通过，尚未部署或证明189取消。离线编辑导出及故障升级仍待续办。旧r4保持安全围栏，不能卸载主安装域。新ARM、109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
 
 ### 4.2 拟实施拓扑与流程
 
