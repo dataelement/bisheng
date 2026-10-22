@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；224 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 219 / 224 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；227 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 219 / 227 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1777,6 +1777,29 @@
   **依赖:** T223
   **配对:** T223
 
+- [ ] **T225** — 异步收尾等待与重启配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_operations_v2.py`
+  **逻辑/验收**：准备或探活完成后清理暂未结束保持非终态，结果不重做；取消/期限/失租保持围栏，确认清理后才完成。
+  **覆盖 AC:** AC-24、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T224
+  **配对:** T226
+
+- [ ] **T226** — 编排异步清理有界等待
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/operations.py`
+  **逻辑/验收**：修正K8s正常异步删除被当作准备失败的语义；同根收尾路径按原操作检查点/期限等待，不吞真实异常、不伪造清理完成。
+  **覆盖 AC:** AC-24、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T225
+  **配对:** T225
+
+- [ ] **T227** — K8s异步删除API合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
+  **逻辑/验收**：DELETE受理后同UID对象仍在时cleanup返回pending；真实消失后才完成，换UID/未知拒绝，不能重复创建或误删。
+  **覆盖 AC:** AC-24、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T220
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1900,3 +1923,5 @@ T219/T220真实恢复通过：189 Helm15/source706b；原失败op同UID首次nod
 T221–T224 L1合流：源143606851370d6091b120d348549329b8113c6a6，helper新增24配对/相关318通过；操作新增15配对/31操作及246相邻通过。主树runtime1410passed/13skip；219/224、101测试任务。helper相关首轮2个本机监听sandbox拒绝后原样授权复跑通过，未改用例跳过。189原生None/省略A/B根因已确认，新manager/helper及真实安装报告刷新进行中，无新ARM/公开发行。
 
 集成追溯复核修正：仅T223新增测试曾沿用F086 AC-63，现按F059标注AC-48、AC-49、AC-52、AC-55；保留既有F086旧测试注释。T221模块覆盖补AC-47、AC-55；功能代码及143镜像冻结不变。
+
+2026-10-23 T225–T227：r6 prepare8fb6b53a…的inputs/resolve/install/upload全部真实成功，4Pod同UID停止、8资源最终正常清理；单次cleanup返回pending被执行器误作preparation_cleanup_pending终态，平台16227/precheck_build。按既定有界异步对账合同修复，保留历史不复活操作；无新helper/API/DDL。

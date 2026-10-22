@@ -37,3 +37,5 @@ prepare `e36537609ef047748674e5172885dddd` 的inputs成功，resolve失败；两
 ## k189r6独立完整批次
 
 新helper完整16项安装探测通过，backend节点正常恢复ready后启动原platform六场景。原runner SHA ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c，固定源码143606851，profile2；新journal隔离，旧r4/r5及追加链不变。当前进行中，platform失败保留现场，未执行all的finally cleanup。
+
+r6首个Python应用prepare8fb6b53a…真实完成inputs/resolve/install/upload；4Pod同UID停止，8条资源账本正常cleanupcomplete。执行器在第一次cleanup.pending时立即失败，公开16227/precheck_build；首次failed_stage=preparing正确保留。登记T225–T227按原期限等待，不把DELETE受理当完成、不复活失败操作；未生成审批或正式版本。
