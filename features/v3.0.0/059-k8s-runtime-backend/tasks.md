@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；251 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 246 / 251 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；253 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 246 / 253 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1992,6 +1992,22 @@
   **依赖:** T250
   **配对:** T250
 
+- [ ] **T254** — 安装探测覆盖实际代理上游策略与服务隔离
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_installation.py`
+  **逻辑/验收**：仓库上游TCP不可达时不得执行外部crane或记registry-push通过；控制canary匹配egress-proxy真实策略并保持NotReady，不进入业务Service端点；固定origin解析和失败关闭配对。
+  **覆盖 AC:** AC-13、AC-16、AC-20、AC-28、AC-54、AC-55
+  **依赖:** T251
+  **配对:** T255
+
+- [ ] **T255** — 安装仓库探测增加受限代理上游检查
+  **类型**：实现
+  **文件**：`scripts/verify_k8s_runtime.py`、`deploy/kubernetes/app-runtime/README.md`
+  **逻辑/验收**：在原registry外部权限检查前，复用无凭据control canary按egress-proxy策略验证已配置registry origin的TCP可达；保持NotReady并核Service不发布未Ready地址；域名解析失败拒绝，不更改helper/manager/摘要/API。文档说明DNAT后目的端口与TCP、外部TLS及实际业务推送证据边界。
+  **覆盖 AC:** AC-13、AC-16、AC-20、AC-28、AC-54、AC-55
+  **依赖:** T254
+  **配对:** T254
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -2167,3 +2183,5 @@ T252/T253 L1闭合：缺省/空CMD六项先红、显式参数六项保持绿；�
 前述“crane继承CMD导致绕过入口”的判断撤回。固定v0.22.1官方实现设置非空entrypoint时已经Config.Cmd=nil，原assemble_image始终传该参数；--cmd空参数只是冗余。先前12个Mock用例仅证明新参数存在，未模拟真实CLI，不能作为原产品故障证据。源代码与测试两个文件已逐字节恢复0d5ef7b2b，实际SGID/PATH修复保留。T252/T253从活跃任务正文/索引撤出，不计完成或测试任务；活跃246/251、115测试。原提交、红绿日志、审查与已部署中间镜像历史不改写，新增纠正记录。官方依据：https://raw.githubusercontent.com/google/go-containerregistry/v0.22.1/cmd/crane/cmd/mutate.go （89–98行）。实际不带--cmd的三基础镜像对照另存，最终交付不保留此冗余变更。
 
 撤回复核完成：189真实crane v0.22.1对三个固定base不带--cmd仍导出Cmd=null，确认误报；仓库manifest不变。src/scripts/deploy/workflow相对0d5构建输入全相同，完整runtime1610/13skip（33.51s），Ruff/format/逐文件guard/diff复核。活跃246/251、115测试；已部署冗余d7保持等价，待其installer自然结束后回到0d5匹配有效报告，源代码发布尚未开始。
+
+T254/T255登记：189第二source prepare07b872e0d07441f7a333941560727bba在OCI仓库阶段失败；真实egress Pod5443超时，精确DNAT目的5000临时放行后0.008秒连通，撤回再次超时。原安装registry测试来自外部installer，仅Pod→proxy TCP检查不足。追加实际同策略上游TCP检查，不将其称为TLS或完整assembler链路。活跃246/253、116测试；两次旧失败保持，T252/T253编号撤回不复用。

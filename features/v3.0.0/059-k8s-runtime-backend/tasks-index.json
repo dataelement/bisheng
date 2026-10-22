@@ -6352,6 +6352,57 @@
       "review": "PASS"
     },
     {
+      "id": "T254",
+      "wave": 8,
+      "kind": "测试",
+      "title": "安装探测覆盖实际代理上游策略与服务隔离",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_installation.py"
+      ],
+      "logic": "仓库上游TCP不可达时不得执行外部crane或记registry-push通过；控制canary匹配egress-proxy真实策略并保持NotReady，不进入业务Service端点；固定origin解析和失败关闭配对。",
+      "acs": [
+        "AC-13",
+        "AC-16",
+        "AC-20",
+        "AC-28",
+        "AC-54",
+        "AC-55"
+      ],
+      "depends": [
+        "T251"
+      ],
+      "pair": "T255",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T255",
+      "wave": 8,
+      "kind": "实现",
+      "title": "安装仓库探测增加受限代理上游检查",
+      "files": [
+        "scripts/verify_k8s_runtime.py",
+        "deploy/kubernetes/app-runtime/README.md"
+      ],
+      "logic": "在原registry外部权限检查前，复用无凭据control canary按egress-proxy策略验证已配置registry origin的TCP可达；保持NotReady并核Service不发布未Ready地址；域名解析失败拒绝，不更改helper/manager/摘要/API。文档说明DNAT后目的端口与TCP、外部TLS及实际业务推送证据边界。",
+      "acs": [
+        "AC-13",
+        "AC-16",
+        "AC-20",
+        "AC-28",
+        "AC-54",
+        "AC-55"
+      ],
+      "depends": [
+        "T254"
+      ],
+      "pair": "T254",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

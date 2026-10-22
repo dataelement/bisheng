@@ -796,3 +796,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 T252/T253原修复判断已撤回：固定crane的entrypoint行为已清除Cmd，无需额外空参数；未保留该冗余设计或实现。
 
 2026-10-23 T252/T253更正：此前继承CMD问题为误判，撤回相关设计说明和冗余实现。固定crane v0.22.1在设置entrypoint时已按Docker语义清除Cmd；原组装器已满足既定启动合同。原记录保留用于追溯，本行优先。源码/测试恢复0d5字节，SGID与PATH修正不变。
+
+2026-10-23 T254/T255：安装registry探测补egress-proxy实际网络策略下的上游TCP检查，控制canary保持NotReady避免被业务Service选入；原外部crane权限/TLS检查和真实assembler业务验证分别保留。189 Docker仓库5443映射5000，Calico按DNAT后端口匹配，现场配置另增5000且已真实配对确认；不改变部署API、helper命令、镜像或descriptor摘要协议。
