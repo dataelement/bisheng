@@ -13,7 +13,6 @@ const fadeAnimation = {
 
 interface BackupPhaseProps {
   onNext: () => void;
-  onError: (error: Error) => void;
   backupCodes: string[];
   onDownload: () => void;
   downloaded: boolean;
