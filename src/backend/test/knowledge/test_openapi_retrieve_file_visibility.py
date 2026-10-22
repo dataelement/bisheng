@@ -89,19 +89,15 @@ async def test_prefilter_reaches_both_indexes_and_postfilter_removes_forbidden_c
     milvus = MagicMock()
     elastic = MagicMock()
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service."
-        "KnowledgeRag.init_knowledge_milvus_vectorstore",
+        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
         AsyncMock(return_value=milvus),
     )
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service."
-        "KnowledgeRag.init_knowledge_es_vectorstore",
+        "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
         AsyncMock(return_value=elastic),
     )
     retriever = MagicMock()
-    retriever.ainvoke = AsyncMock(
-        return_value=[doc(10, "allowed"), doc(11, "forbidden-body")]
-    )
+    retriever.ainvoke = AsyncMock(return_value=[doc(10, "allowed"), doc(11, "forbidden-body")])
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRetrieverTool",
         MagicMock(return_value=retriever),
@@ -132,20 +128,31 @@ async def test_service_account_actor_is_not_replaced_by_compatibility_owner(monk
     token = set_current_permission_actor(actor)
     captured = {}
 
-    async def batch_check(login_user, **_kwargs):
-        from bisheng.permission.application.identity import get_current_permission_actor
-
-        captured["login_user"] = login_user.user_id
-        captured["actor"] = get_current_permission_actor()
-        return {"10": frozenset({"visible"})}
+    async def batch_check(*, actor, targets):
+        captured["actor"] = actor
+        captured["targets"] = targets
+        return {("knowledge_file", "10"): True}
 
     svc = service()
     visibility = svc._visibility_service()
     visibility._non_primary_ids = AsyncMock(return_value=set())
     visibility._list_primary_file_ids_in_space = AsyncMock(return_value={10})
+    visibility._config = lambda: MagicMock(index_filter_threshold=100)
+    targets = (MagicMock(resource_type="knowledge_file", resource_id="10"),)
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_file_visibility_service."
-        "batch_check_business_actions",
+        "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id",
+        AsyncMock(return_value=MagicMock(id=8)),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.aget_file_by_ids",
+        AsyncMock(return_value=[MagicMock(id=10, knowledge_id=8, file_type=1)]),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_file_visibility_service.get_f048_resource_adapter",
+        AsyncMock(return_value=MagicMock(resolve_permission_targets_from_rows=AsyncMock(return_value=targets))),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_file_visibility_service.batch_check_verified_business_visible",
         batch_check,
     )
     try:
@@ -154,15 +161,13 @@ async def test_service_account_actor_is_not_replaced_by_compatibility_owner(monk
         reset_current_permission_actor(token)
 
     assert result.milvus_expr == "document_id in [10]"
-    assert captured == {"login_user": 99, "actor": actor}
+    assert captured == {"actor": actor, "targets": targets}
 
 
 async def test_permission_filter_failure_is_fail_closed(monkeypatch):
     svc = service()
     visibility = MagicMock()
-    visibility.build_index_prefilter = AsyncMock(
-        side_effect=PermissionServiceUnavailableError()
-    )
+    visibility.build_index_prefilter = AsyncMock(side_effect=PermissionServiceUnavailableError())
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
 
     with pytest.raises(PermissionServiceUnavailableError):
@@ -183,8 +188,7 @@ async def test_v2_adapter_maps_permission_outage_to_503_without_chunks(monkeypat
         AsyncMock(return_value=MagicMock(user_id=99)),
     )
     monkeypatch.setattr(
-        "bisheng.open_endpoints.api.endpoints.filelib."
-        "KnowledgeSpaceChatService.aretrieve_chunks",
+        "bisheng.open_endpoints.api.endpoints.filelib.KnowledgeSpaceChatService.aretrieve_chunks",
         AsyncMock(side_effect=PermissionServiceUnavailableError()),
     )
 
