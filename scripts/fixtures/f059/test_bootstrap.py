@@ -81,6 +81,66 @@ def test_prepare_is_local_private_stable_and_preserves_existing_admin(tmp_path, 
     assert '"api_bootstrap_executed": false' in output
 
 
+def test_platform_env_allowlist_ignores_docker_config_but_keeps_admin_values(tmp_path):
+    source = tmp_path / "platform.env"
+    sentinel = tmp_path / "must-not-be-created"
+    password = secrets.token_urlsafe(16) + "$(touch " + str(sentinel) + ")"
+    import shlex
+
+    content = (
+        'config={"nested": {"arbitrary": "Docker env value with spaces"}}\n'
+        + "LOWER_LEVEL_JSON={not shell syntax with spaces\n"
+        + "unknown Docker env syntax\n"
+        + "E2E_ADMIN_USERNAME=e2e-f059-admin\n"
+        + "export E2E_ADMIN_PASSWORD="
+        + shlex.quote(password)
+        + "\n"
+        + "F059_E2E_OWNER_API_KEY=not-to-be-inherited\n"
+    )
+    bootstrap.private_write(source, content)
+    suite, output, values = bootstrap.prepare_environment(
+        tmp_path / "e2e-f059-suite", base="http://127.0.0.1/api/v1", input_env=source
+    )
+    assert values["E2E_ADMIN_USERNAME"] == "e2e-f059-admin"
+    assert values["E2E_ADMIN_PASSWORD"] == password
+    assert "F059_E2E_OWNER_API_KEY" not in values
+    assert bootstrap.read_env(output)["E2E_ADMIN_PASSWORD"] == password
+    assert not sentinel.exists()
+    assert source.read_text() == content
+    assert suite.is_dir()
+    with pytest.raises(bootstrap.BootstrapError, match="env_file_invalid"):
+        bootstrap.read_env(source)
+
+
+@pytest.mark.parametrize(
+    "lines,reason",
+    [
+        ("E2E_ADMIN_PASSWORD=one\nE2E_ADMIN_PASSWORD=one\n", "env_duplicate_key"),
+        ("E2E_ADMIN_PASSWORD=two words\n", "env_value_not_a_scalar"),
+        ("E2E_ADMIN_PASSWORD='unclosed\n", "env_value_not_a_scalar"),
+        ("E2E_ADMIN_PASSWORD\n", "env_file_invalid"),
+        ("E2E_ADMIN_PASSWORD =value\n", "env_file_invalid"),
+    ],
+)
+def test_selected_platform_env_values_still_validate(tmp_path, lines, reason):
+    source = tmp_path / "platform.env"
+    bootstrap.private_write(source, "config=ignored spaces and JSON\n" + lines)
+    with pytest.raises(bootstrap.BootstrapError, match=reason):
+        bootstrap.read_env(source, allowlist={"E2E_ADMIN_PASSWORD"})
+
+
+def test_allowlisted_env_still_requires_private_file_and_strict_output_refuses_duplicates(tmp_path):
+    source = tmp_path / "platform.env"
+    bootstrap.private_write(source, "config=ignored\nE2E_ADMIN_PASSWORD=value\n")
+    source.chmod(0o644)
+    with pytest.raises(bootstrap.BootstrapError, match="private_file"):
+        bootstrap.read_env(source, allowlist={"E2E_ADMIN_PASSWORD"})
+    source.chmod(0o600)
+    bootstrap.private_write(source, "E2E_ADMIN_PASSWORD=value\nE2E_ADMIN_PASSWORD=value\n")
+    with pytest.raises(bootstrap.BootstrapError, match="env_duplicate_key"):
+        bootstrap.read_env(source)
+
+
 @pytest.mark.parametrize(
     "address", ["https://example.com", "http://8.8.8.8", "http://user:secret@127.0.0.1", "http://127.0.0.1?key=secret"]
 )
