@@ -82,8 +82,10 @@ def private_write(path, data):
     os.replace(temporary, path)
 
 
-def read_env(path):
+def read_env(path, *, allowlist=None):
+    """Read literals only; optional filtering happens before unrelated parsing."""
     values = {}
+    selected = frozenset(allowlist) if allowlist is not None else None
     if path is None:
         return values
     for line in private_read(path).splitlines():
@@ -93,9 +95,16 @@ def read_env(path):
         if line.startswith("export "):
             line = line[7:]
         key, separator, raw = line.partition("=")
+        if selected is not None and key.strip() not in selected:
+            continue
         if not separator or not re.fullmatch(r"[A-Z][A-Z0-9_]*", key):
             raise BootstrapError("env_file_invalid")
-        parts = shlex.split(raw, comments=False)
+        if key in values:
+            raise BootstrapError("env_duplicate_key")
+        try:
+            parts = shlex.split(raw, comments=False)
+        except ValueError:
+            raise BootstrapError("env_value_not_a_scalar") from None
         if len(parts) > 1:
             raise BootstrapError("env_value_not_a_scalar")
         values[key] = parts[0] if parts else ""
@@ -113,7 +122,7 @@ def prepare_environment(suite_dir, *, base, input_env=None, output_env=None, ent
     if input_env is not None and output.resolve() == Path(input_env).resolve():
         raise BootstrapError("platform_env_must_not_be_overwritten")
     values = read_env(output) if output.exists() else {}
-    supplied = read_env(input_env)
+    supplied = read_env(input_env, allowlist={"E2E_ADMIN_USERNAME", "E2E_ADMIN_PASSWORD"})
     for key in ("E2E_ADMIN_USERNAME", "E2E_ADMIN_PASSWORD"):
         if key in supplied:
             if key in values and values[key] != supplied[key]:
