@@ -1,6 +1,6 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T18:40:41.334856+00:00",
+  "recorded_at": "2026-10-22T18:53:47.247561+00:00",
   "validated_source_commit": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
   "sdd": {
     "spec_confirmed": true,
@@ -968,14 +968,36 @@
       "post_retries": false
     },
     "current_business_batch": {
-      "batch": "k189r9",
+      "batch": "k189r10",
       "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
       "production_runtime_identical_to_image_source": "a06b281b2ada8cfa15cb79c29fad0044408e4db9",
       "profile_revision": 2,
       "stage": "platform",
       "scenarios": 6,
       "result": "in_progress",
-      "new_arm_run": false
+      "new_arm_run": false,
+      "verified_tls": true,
+      "explicit_public_ca": true
+    },
+    "business_batch_history": [
+      {
+        "batch": "k189r9",
+        "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
+        "production_runtime_identical_to_image_source": "a06b281b2ada8cfa15cb79c29fad0044408e4db9",
+        "profile_revision": 2,
+        "stage": "platform",
+        "scenarios": 6,
+        "result": "in_progress",
+        "new_arm_run": false
+      }
+    ],
+    "test_entry_ca_correction": {
+      "r9_failed": "ConnectError",
+      "missing_public_ca_env_confirmed": true,
+      "certificate_verification_disabled": false,
+      "explicit_public_ca_http_status": 200,
+      "r9_normal_cleanup": true,
+      "production_code_changed": false
     }
   },
   "not_executed": [

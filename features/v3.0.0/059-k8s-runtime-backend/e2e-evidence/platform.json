@@ -1,7 +1,7 @@
 {
   "schema": "f059-platform-evidence/v1",
-  "recorded_at": "2026-10-22T18:40:41.334856+00:00",
-  "state": "in_progress_r9",
+  "recorded_at": "2026-10-22T18:53:47.247561+00:00",
+  "state": "in_progress_r10",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
@@ -220,25 +220,32 @@
   ],
   "boundary": "Real preparation Pod startup and same-UID cleanup proven; no full business acceptance or cross-node/arm/CI release claim.",
   "next_batch": {
-    "name": "k189r9",
+    "name": "k189r10",
     "cases": 6,
     "profile_revision": 2,
     "source_revision": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
     "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c",
-    "wrapper_sha256": "488f682dd2638f11ec967766f28c7ed8c5dab2edb396ec3527af3c5eaadcbdc2",
+    "wrapper_sha256": "b1eaf522e7a10b6a54911e8d46124e44d0b91b6f5713d24b0981edda3a072047",
     "stage": "platform",
     "automatic_finally_cleanup": false,
     "result": "in_progress",
-    "new_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r9.json",
+    "new_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10.json",
     "apps_at_start": {
-      "e2e-f059-python-bundle-k189r9": {
-        "deployment_id": "c25967794497461297c4e69eff56a1b9",
+      "e2e-f059-python-bundle-k189r10": {
+        "deployment_id": "d3b8870c2897480b9bb65fc6a1e7c41e",
         "runtime": "python3.11",
-        "app_id": "94dfba7e0d70452c8e75e3a3d5e521d3",
-        "version_id": "01d5ef2f4b254d6b80522613c062c97c",
+        "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+        "version_id": "ba5d47d9369540df9d5219adc72a55bf",
         "mode": "bundle"
       }
-    }
+    },
+    "entry_tls_preflight": {
+      "http_status": 200,
+      "verified_tls": true,
+      "explicit_public_ca": true
+    },
+    "explicit_public_ca_env": "F059_E2E_CA_FILE=/run/f059-ca.pem",
+    "production_runtime_and_image_unchanged": true
   },
   "historical_batches": [
     {
@@ -480,6 +487,33 @@
       "probe_ready": true,
       "resources_fresh_api_absent": 4,
       "cleanup_proof_sha256": "a37f1bab1216ab6029b5b7a24cf52f12db04ac375208d95b9a1e5de490855f1b"
+    },
+    {
+      "name": "k189r9",
+      "cases": 6,
+      "profile_revision": 2,
+      "source_revision": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
+      "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c",
+      "wrapper_sha256": "488f682dd2638f11ec967766f28c7ed8c5dab2edb396ec3527af3c5eaadcbdc2",
+      "stage": "platform",
+      "automatic_finally_cleanup": false,
+      "result": "failed_entry_connect_missing_test_ca",
+      "new_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r9.json",
+      "apps_at_start": {
+        "e2e-f059-python-bundle-k189r9": {
+          "deployment_id": "c25967794497461297c4e69eff56a1b9",
+          "runtime": "python3.11",
+          "app_id": "94dfba7e0d70452c8e75e3a3d5e521d3",
+          "version_id": "01d5ef2f4b254d6b80522613c062c97c",
+          "mode": "bundle"
+        }
+      },
+      "preview_started": true,
+      "public_ca_file_config_missing": true,
+      "production_code_changed": false,
+      "normal_platform_cleanup": true,
+      "failure_log": "/opt/e2e-f059/logs/platform-k189r9.log",
+      "cleanup_log": "/opt/e2e-f059/logs/cleanup-k189r9.log"
     }
   ]
 }

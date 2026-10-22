@@ -67,3 +67,7 @@ r8按原runner、身份和六场景新journal启动；首个Python app6da0d71cbd
 T232/T233原生amd64候选a06b281b2，内网固定digest `4666d75388bde2ae7c1b0b73916442451b4119a7384852cf373633e8489dfe32`，Helm19三个控制服务滚动完成；descriptor UID/data、有效报告、helper143/profile2/app-proxy均不变。r8原probe最终timed_out保留，修复后正常对账cleanupcomplete；4条精确资源fresh API absent，原同UID停止证明不变，proof SHA `a37f1bab1216ab6029b5b7a24cf52f12db04ac375208d95b9a1e5de490855f1b`。无手工delete/finalizer/SQL或操作复活。
 
 T234/T235修正共享E2E75秒HTTP截止，仅精确同步成功preview/resume/stop/delete采用settings总预算且不重试POST。合流d13e9ee91，112新旧合同、完整backend1753/19skip通过；runtime1519/13skip通过的生产字节保持。r9仅测试源码更新，a06生产镜像来源不重标；新六场景原套件、原身份和独立journal启动，旧批次不变。当前开发修复闭合230/235，完整业务/故障/发行/L2仍在门内；ARM和109按用户优先级暂缓。
+
+## r9工具CA修正与r10
+
+r9真实预览已启动，原platform日志保留ConnectError；只读配置确认F059_E2E_CA_FILE缺失，虽公共CA文件已挂载但客户端未加载。相同工具容器仅显式加入公共CA后，TLS校验开启的入口/api/v1/env得到200。原suite.cleanup阶段通过并正常回收r9应用/预览，未手工修改K8s或SQL。r10独立六场景沿用d13工具、a06镜像/helper143/profile2，显式设置CA且在任何业务API前验证TLS，结果见k189r10-entry-tls.json。生产代码未因本操作配置错误修改，未把入口前置200算成应用访问通过。
