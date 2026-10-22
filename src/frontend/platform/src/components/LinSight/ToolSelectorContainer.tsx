@@ -4,6 +4,8 @@ import ToolSelector from './ToolSelector';
 
 export default function ToolSelectorContainer({
   toolsData: initialToolsData,
+  loading,
+  loadErrorContent,
   selectedTools,
   toggleTool,
   removeTool,
@@ -54,6 +56,8 @@ export default function ToolSelectorContainer({
       isToolSelected={isToolSelected}
       handleDragEnd={handleDragEnd}
       toolsData={initialToolsData}
+      loading={loading}
+      loadErrorContent={loadErrorContent}
       activeToolTab={activeToolTab}
       setActiveToolTab={setActiveToolTab}
       toolSearchTerm={toolSearchTerm}

@@ -22,7 +22,8 @@ return { ...actual, notification: { ...actual.notification, open: Reflect.get(pr
 
 
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => Promise.resolve(promise)),
 }));

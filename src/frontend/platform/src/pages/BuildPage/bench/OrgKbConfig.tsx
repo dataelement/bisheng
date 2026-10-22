@@ -1,4 +1,6 @@
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Alert, Button, SearchInput } from '@bisheng/ui';
+import { showApiError } from '@/controllers/request';
+import { isApiError } from '@bisheng/api-client';
 
 import { Checkbox } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -50,6 +52,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     const [search, setSearch] = useState("");
     const [list, setList] = useState<KnowledgeBase[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState<unknown>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const fetchKbs = async (name: string) => {
@@ -63,8 +66,10 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                 return tb - ta;
             });
             setList(merged);
-        } catch {
-            notification.open({ type: "error", description: String(t("bench.fetchKbFailed") ?? '') });
+            setLoadError(null);
+        } catch (error) {
+            if (!isApiError(error) || (error.kind !== 'canceled' && error.presentation !== 'global')) setLoadError(error);
+            showApiError(error);
         } finally {
             setLoading(false);
         }
@@ -222,11 +227,13 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                         <h3 className="mb-2 text-sm font-medium">{t("bench.allKbs")}</h3>
                         <SearchInput placeholder={t("bench.searchKbName")} value={search} onChange={(e) => setSearch(e.target.value)} className={"w-full min-w-0 max-w-full"} />
                     </div>
+                    {!!loadError && <Alert type="error" live description={t('bench.fetchKbFailed')}
+                        actions={[{ label: t('build.retry'), onClick: () => void fetchKbs(search.trim()) }]} />}
                     <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-2" style={{ maxHeight: 360 }}>
                         {loading && (
                             <div className="py-8 text-center text-sm text-muted-foreground">{t("bench.loading")}</div>
                         )}
-                        {!loading && filteredList.length === 0 && (
+                        {!loading && !loadError && filteredList.length === 0 && (
                             <div className="py-8 text-center text-sm text-muted-foreground">
                                 {t("bench.noMatchKbs")}
                             </div>

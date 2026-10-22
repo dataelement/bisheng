@@ -1,3 +1,5 @@
+import { isApiError, shouldRetryApiError } from "@bisheng/api-client";
+import { showApiError } from "~/api/request";
 import { useState, useCallback, useRef } from "react";
 import i18next, { type TOptions } from "i18next";
 import {
@@ -39,6 +41,8 @@ import { useStorageQuotaGuard } from "~/hooks/usePersonalStorageQuota";
 
 /** Errors from uploadFileToServerApi: its manual throw (statusCode/errorData) or an axios rejection body. */
 interface UploadErrorLike {
+  status_code?: number;
+  data?: unknown;
   statusCode?: number;
   errorData?: TOptions;
   message?: string;
@@ -86,15 +90,17 @@ function readUploadError(err: unknown): {
 } {
     if (typeof err !== "object" || err === null) return {};
     const source = err as {
+        status_code?: unknown;
+        data?: unknown;
         statusCode?: unknown;
         errorData?: unknown;
         message?: unknown;
-        response?: { data?: { status_code?: unknown } };
+        response?: { data?: { status_code?: unknown; data?: unknown } };
     };
-    const rawCode = source.statusCode ?? source.response?.data?.status_code;
+    const rawCode = source.status_code ?? source.statusCode ?? source.response?.data?.status_code;
     return {
         statusCode: typeof rawCode === "number" ? rawCode : undefined,
-        errorData: toInterpolationValues(source.errorData),
+        errorData: toInterpolationValues(source.data ?? source.errorData ?? source.response?.data?.data),
         message: typeof source.message === "string" ? source.message : undefined,
     };
 }
@@ -120,7 +126,7 @@ const COLLAPSIBLE_CODES = new Set([18024, 19402, 19403]);
 /** Total byte size of an upload batch, for the personal-storage pre-check. */
 const sumFileSizes = (files: File[]): number => files.reduce((sum, file) => sum + file.size, 0);
 
-export interface UploadFailure { name: string; reason: string; statusCode?: number }
+export interface UploadFailure { name: string; reason: string; statusCode?: number; error: unknown }
 export interface EarlyStop { reason: string; statusCode: number; skippedCount: number }
 
 /**
@@ -144,13 +150,14 @@ export async function uploadFilesSequential(
             const res = await uploadFileToServerApi(spaceId, file, filenameOf?.(file));
             onSuccess(res, file);
         } catch (err) {
+            if (isApiError(err) && (err.kind === 'canceled' || err.presentation === 'global')) throw err;
             // statusCode is set by uploadFileToServerApi on a manual throw
             // (HTTP 200 + body.status_code != 200). Fall back to the axios error
             // body in case a non-2xx ever rejects before that check.
             const uploadErr = err as UploadErrorLike;
-            const statusCode: number | undefined = uploadErr.statusCode ?? uploadErr.response?.data?.status_code;
+            const { statusCode } = readUploadError(uploadErr);
             const reason = resolveUploadErrorReason(uploadErr);
-            failures.push({ name: file.name, reason, statusCode });
+            failures.push({ name: file.name, reason, statusCode, error: err });
             if (statusCode && COLLAPSIBLE_CODES.has(statusCode)) {
                 earlyStop = { reason, statusCode, skippedCount: files.length - i - 1 };
                 break;
@@ -341,33 +348,24 @@ export function useFileUpload({
             setUploadingFiles(prev => [...placeholders, ...prev]);
 
 
-            // Upload each file to server (sequential, with quota early-stop).
-            const uploadedPaths: string[] = [];
-            const { failures, earlyStop } = await uploadFilesSequential(
-                activeSpace.id,
-                fileArray,
-                (res) => uploadedPaths.push(res.file_path),
-            );
-            // Usage moved on every stored byte, and a rejection means the
-            // server's view moved too — re-read it either way.
-            void refreshQuota();
-            const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
-            if (failureMessage) {
-                showToast({ message: failureMessage, severity: NotificationSeverity.WARNING });
-            }
-
-            // If all uploads failed, clear placeholders and bail out
-            if (uploadedPaths.length === 0) {
-                setUploadingFiles(prev =>
-                    prev.filter(f => !placeholders.some(p => p.id === f.id))
-                );
-                return;
-            }
-
-            // Register all uploaded files and check for duplicates from response
             try {
+                // Upload each file to server (sequential, with quota early-stop).
+                const uploadedPaths: string[] = [];
+                const { failures, earlyStop } = await uploadFilesSequential(
+                    activeSpace.id,
+                    fileArray,
+                    (res) => uploadedPaths.push(res.file_path),
+                );
+                const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
+                if (failureMessage) {
+                    showToast({ message: failureMessage, severity: NotificationSeverity.WARNING });
+                }
+
+                if (uploadedPaths.length === 0) return;
+
+                // Register all uploaded files and check for duplicates from response.
                 // Upload succeeded; register the files. Retry the registration
-                // ONCE on failure (no re-upload) to recover from transient errors
+                // ONCE on a transport failure (no re-upload) to recover from transient errors
                 // — otherwise a flaky register leaves the files as storage orphans
                 // with no record in the space. A duplicate re-register from the
                 // retry is caught by the duplicate detection below.
@@ -380,7 +378,7 @@ export function useFileUpload({
                 try {
                     registeredFiles = await registerUploaded();
                 } catch (firstErr) {
-                    console.warn("[useFileUpload] file registration failed, retrying once:", firstErr);
+                    if (!isApiError(firstErr) || !shouldRetryApiError(firstErr)) throw firstErr;
                     registeredFiles = await registerUploaded();
                 }
                 const dupes = extractDuplicateFileEntries(registeredFiles);
@@ -406,23 +404,18 @@ export function useFileUpload({
                 if (!hasPendingRegisteredFiles) {
                     await loadFiles(1); // reconcile from page 1 (cursor mode: page>1 = append)
                 }
-            } catch (e) {
-                // Registration failed AFTER a successful upload: the file is in
-                // object storage but not registered in the space. Surface it
-                // instead of silently swallowing — the empty catch made it look
-                // like nothing happened while leaving a storage orphan and (below)
-                // clearing the placeholder, so the user got no feedback at all.
-                console.error("[useFileUpload] file registration failed:", e);
-                showToast({
+            } catch (error) {
+                if (isApiError(error)) showApiError(error);
+                else showToast({
                     message: localize("com_knowledge.file_register_failed"),
                     severity: NotificationSeverity.WARNING,
                 });
+            } finally {
+                void refreshQuota();
+                setUploadingFiles(prev =>
+                    prev.filter(f => !placeholders.some(p => p.id === f.id))
+                );
             }
-
-            // Clear placeholders after list data has been updated
-            setUploadingFiles(prev =>
-                prev.filter(f => !placeholders.some(p => p.id === f.id))
-            );
         },
         [activeSpace, currentFolderId, currentPage, files, isStorageBlocked, loadFiles, localize, refreshQuota, setFiles, setTotal, showToast]
     );
@@ -436,8 +429,9 @@ export function useFileUpload({
             await retryDuplicateFilesApi(activeSpace.id, fileObjs);
             void refreshQuota();
             await loadFiles(1); // refresh from page 1 (cursor mode: page>1 = append)
-        } catch {
-            showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.WARNING });
+        } catch (error) {
+            if (isApiError(error)) showApiError(error);
+            else showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.WARNING });
         } finally {
             setDuplicateFiles([]);
         }
@@ -478,6 +472,7 @@ export function useFileUpload({
             // Track whether a placeholder card was shown, so finally only clears it
             // when one was actually created (early-return rejections show none).
             let placeholderShown = false;
+            let uploadsStarted = false;
             try {
             const allFiles = Array.from(fileList);
 
@@ -530,7 +525,8 @@ export function useFileUpload({
                     });
                     return;
                 }
-            } catch {
+            } catch (error) {
+                if (isApiError(error) && (error.kind === 'canceled' || error.presentation === 'global')) throw error;
                 // Pre-check failed — fall through; backend will surface dup error
                 // via createFolderApi if it really collides.
             }
@@ -572,6 +568,7 @@ export function useFileUpload({
             // `file.name` strips the folder prefix Chromium would otherwise put
             // in the multipart filename.
             const uploadedItems: FolderUploadItemPayload[] = [];
+            uploadsStarted = true;
             const { failures, earlyStop } = await uploadFilesSequential(
                 activeSpace.id,
                 validFiles,
@@ -582,8 +579,6 @@ export function useFileUpload({
                 }),
                 (file) => file.name,
             );
-
-            void refreshQuota();
 
             const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
             if (failureMessage) {
@@ -605,16 +600,18 @@ export function useFileUpload({
                 if (dupes.length > 0) {
                     setDuplicateFiles(dupes);
                 }
-            } catch {
-                // Whole batch rejected before any row was created; the toast
-                // already fired in the interceptor. Nothing to refresh.
+            } catch (error) {
+                showApiError(error);
                 return;
             }
 
             dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
             await loadFiles(1); // refresh from page 1 (cursor mode: page>1 = append)
+            } catch (error) {
+                showApiError(error);
             } finally {
                 folderUploadInFlightRef.current = false;
+                if (uploadsStarted) void refreshQuota();
                 // Clear the placeholder; the refreshed list now carries the real folder.
                 if (placeholderShown) setUploadingFolder(null);
             }
@@ -679,10 +676,12 @@ export function useFileUpload({
                     // (async currentPath), so 18011 can still come back here.
                     if ((e as { status_code?: number } | null)?.status_code === 18011) {
                         showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING });
+                        if (isApiError(e)) e.presentation = 'toast';
                         setCreatingFolder(null);
                     } else {
-                        showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.WARNING });
+                        showApiError(e);
                     }
+                    throw e;
                 }
                 return;
             }
@@ -691,28 +690,24 @@ export function useFileUpload({
             const target = files.find(f => f.id === fileId);
             if (!target) return;
 
-            try {
-                if (target.type === FileType.FOLDER) {
-                    await renameFolderApi(activeSpace.id, fileId, newName);
-                } else {
-                    await renameFileApi(activeSpace.id, fileId, newName);
-                }
-                setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
-                if (target.type === FileType.FOLDER) {
-                    // Folder rename changes a tree node label — sync the left tree.
-                    dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
-                }
-                showToast({ message: localize("com_knowledge.rename_success"), severity: NotificationSeverity.SUCCESS });
-            } catch {
-                showToast({ message: localize("com_knowledge.rename_failed"), severity: NotificationSeverity.WARNING });
+            if (target.type === FileType.FOLDER) {
+                await renameFolderApi(activeSpace.id, fileId, newName);
+            } else {
+                await renameFileApi(activeSpace.id, fileId, newName);
             }
+            setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
+            if (target.type === FileType.FOLDER) {
+                // Folder rename changes a tree node label — sync the left tree.
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+            }
+            showToast({ message: localize("com_knowledge.rename_success"), severity: NotificationSeverity.SUCCESS });
         },
         [activeSpace, creatingFolder, currentFolderId, files, setFiles, showToast]
     );
 
     // ─── Delete file/folder ──────────────────────────────────────────────
     // Optimistic: drop the row from UI immediately, fire the backend API in
-    // the background, and surface a success toast right away. Folders with
+    // the background, and surface success after the server confirms. Folders with
     // many files can take a long time on the server — there's no reason to
     // freeze the UI while that runs. On failure we roll back by re-fetching.
     const handleDeleteFile = useCallback(
@@ -738,7 +733,6 @@ export function useFileUpload({
             markPendingDeletion([fileId]);
             setFiles(prev => prev.filter(f => f.id !== fileId));
             setTotal(prev => Math.max(0, prev - 1));
-            showToast({ message: localize("com_knowledge.deleted"), severity: NotificationSeverity.SUCCESS });
 
             // 2) Fire the backend API; on failure roll back via a reload.
             try {
@@ -747,12 +741,14 @@ export function useFileUpload({
                 } else {
                     await deleteFileApi(activeSpace.id, fileId);
                 }
-            } catch {
-                showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.WARNING });
+            } catch (error) {
+                if (isApiError(error)) showApiError(error);
+                else showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.WARNING });
                 clearPendingDeletion([fileId]);
                 loadFiles(1); // roll back to a fresh first page (cursor mode: page>1 = append)
                 return;
             }
+            showToast({ message: localize("com_knowledge.deleted"), severity: NotificationSeverity.SUCCESS });
             // Sync the sidebar tree only AFTER the folder delete has committed —
             // dispatching before the await fires loadFiles(1) while the DELETE is
             // still in flight, which re-fetches the not-yet-deleted folder.

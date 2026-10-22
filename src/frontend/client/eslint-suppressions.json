@@ -123,12 +123,6 @@
   "src/api/request.ts": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/api/user.ts": {
@@ -273,7 +267,7 @@
   },
   "src/components/Chat/ChatView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 26
+      "count": 25
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -496,22 +490,9 @@
       "count": 4
     }
   },
-  "src/components/Chat/MessageSelection/ExportFormatSheet.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/components/Chat/MessageSelection/ExportSelectionButton.tsx": {
     "no-restricted-syntax": {
       "count": 4
-    }
-  },
-  "src/components/Chat/MessageSelection/MessageSelectionToolbar.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/components/Chat/Messages/Content/ActionIcon.tsx": {
@@ -1081,7 +1062,7 @@
   },
   "src/components/Nav/Nav.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 3
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2286,7 +2267,7 @@
   },
   "src/pages/MenuUnavailablePage.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2360,9 +2341,6 @@
   "src/pages/Subscription/ArticleList/ArticleList.tsx": {
     "no-restricted-imports": {
       "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
     }
   },
   "src/pages/Subscription/ArticleList/ChannelSwitcher.tsx": {
@@ -2388,7 +2366,7 @@
   },
   "src/pages/Subscription/ChannelPreviewDrawer.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 9
+      "count": 8
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -2434,11 +2412,6 @@
       "count": 1
     }
   },
-  "src/pages/Subscription/Sidebar/ChannelSidebar.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
   "src/pages/Subscription/Sidebar/SectionHeader.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -2451,7 +2424,7 @@
   },
   "src/pages/Subscription/hooks/useChannelActions.ts": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     }
   },
   "src/pages/Subscription/hooks/useCrawlQueue.ts": {
@@ -2472,9 +2445,6 @@
   "src/pages/Subscription/hooks/useSourceManager.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3
-    },
-    "no-empty": {
-      "count": 2
     },
     "no-unsafe-finally": {
       "count": 1
@@ -2523,7 +2493,7 @@
   },
   "src/pages/appChat/ChatView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     },
     "no-restricted-imports": {
       "count": 1
@@ -2655,20 +2625,14 @@
   "src/pages/appChat/hooks/useAppSidebar.ts": {
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/pages/appChat/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
+      "count": 4
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 5
     },
     "no-case-declarations": {
       "count": 2
@@ -2684,9 +2648,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 17
     }
   },
   "src/pages/appChat/store/appSidebarAtoms.ts": {
@@ -3010,9 +2971,6 @@
     }
   },
   "src/pages/knowledge/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
     "no-console": {
       "count": 3
     },
@@ -3055,9 +3013,6 @@
     }
   },
   "src/pages/share.tsx": {
-    "no-console": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }

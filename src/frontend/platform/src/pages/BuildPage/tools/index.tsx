@@ -13,7 +13,7 @@ import { Accordion } from "@/components/bs-ui/accordion";
 import { userContext } from "@/contexts/userContext";
 import { refreshMcpApi } from "@/controllers/API/assistant";
 import { getToolsApi } from "@/controllers/API/tools";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { CpuIcon,Star } from "lucide-react";
 import { useCallback,useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -246,13 +246,18 @@ export const useMcpRefrensh = () => {
         loading,
         async refresh() {
             setLoading(true);
-            const res = await captureAndAlertRequestErrorHoc(refreshMcpApi())
+            try {
+            const res = await refreshMcpApi()
             if (res.length) {
                 setLoading(false);
                 return notification.open({ type: "error", description: (res.map(e => `${e} ${t("toolFetchFailed")}`)).filter(Boolean).join('\n') })
             }
             toast.show({ type: "success", message: String(t("refreshSuccess") ?? '') })
-            setLoading(false);
+            } catch (error) {
+                showApiError(error);
+            } finally {
+                setLoading(false);
+            }
         }
     }
 }

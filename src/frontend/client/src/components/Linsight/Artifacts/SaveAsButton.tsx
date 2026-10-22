@@ -1,3 +1,5 @@
+import { isApiError } from '@bisheng/api-client';
+import { showApiError } from '~/api/request';
 /**
  * F035 Track H (P4): the artifact hand-off action. Every type opens a menu now —
  * Markdown offers three local formats (original md / pdf / docx via the backend
@@ -127,7 +129,8 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
             await downloadArtifactFile(file, versionId, { citations });
         } catch (e) {
             console.error('artifact download failed:', e);
-            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.WARNING });
+            if (isApiError(e)) showApiError(e);
+            else showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.WARNING });
         } finally {
             setBusy(false);
         }
@@ -150,7 +153,8 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
             showToast?.({ message: localize('com_linsight_export_success'), severity: NotificationSeverity.SUCCESS });
         } catch (e) {
             console.error(`${toType} export failed:`, e);
-            showToast?.({ message: localize('com_linsight_export_failed'), severity: NotificationSeverity.WARNING });
+            if (isApiError(e)) showApiError(e);
+            else showToast?.({ message: localize('com_linsight_export_failed'), severity: NotificationSeverity.WARNING });
         } finally {
             setBusy(false);
         }

@@ -34,7 +34,8 @@ vi.mock("@/controllers/API/department", () => ({
   updateDepartmentApi: vi.fn(),
 }));
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => promise),
 }));
 

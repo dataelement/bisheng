@@ -1,11 +1,12 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
+import { useChannelLists } from "../hooks/useChannelLists";
 import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
     Channel,
     SortType,
-    getChannelsApi,
 } from "~/api/channels";
 import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
@@ -15,7 +16,6 @@ import { SectionHeader } from "./SectionHeader";
 import { useChannelActions } from "../hooks/useChannelActions";
 import { UserPopMenu } from "~/layouts/UserPopMenu";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
-import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
 import { MobileSidebarHeaderTabs } from "~/components/Nav/MobileSidebarHeaderTabs";
 import { cn } from "~/utils";
 
@@ -68,17 +68,9 @@ export function ChannelSidebar({
 
     const queryClient = useQueryClient();
 
-    const { data: createdChannels = [], isFetched: createdFetched } = useQuery({
-        queryKey: ["channels", "created", createdSortBy],
-        queryFn: () => getChannelsApi({ type: "created", sortBy: createdSortBy }),
-        placeholderData: (prev) => prev,
-    });
-
-    const { data: subscribedChannels = [], isFetched: subscribedFetched } = useQuery({
-        queryKey: ["channels", "subscribed", subscribedSortBy],
-        queryFn: () => getChannelsApi({ type: "subscribed", sortBy: subscribedSortBy }),
-        placeholderData: (prev) => prev,
-    });
+    const { created: { data: createdChannels = [], isFetched: createdFetched },
+        subscribed: { data: subscribedChannels = [], isFetched: subscribedFetched },
+        error: channelsError, retry: retryChannels } = useChannelLists({ createdOrder: createdSortBy, subscribedOrder: subscribedSortBy });
 
     // Channel CRUD operations (optimistic updates)
     const {
@@ -226,6 +218,7 @@ export function ChannelSidebar({
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >
+                        {Boolean(channelsError) && <ApiRequestFailure error={channelsError} onRetry={retryChannels} />}
                         {/* 我创建的 */}
                         <div className="pt-0">
                             <SectionHeader
@@ -251,7 +244,7 @@ export function ChannelSidebar({
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}
-                                    {!createdChannels.length && <div className="py-6 text-center text-sm text-text-3">{localize("com_subscription.no_data")}</div>}
+                                    {!channelsError && !createdChannels.length && <div className="py-6 text-center text-sm text-text-3">{localize("com_subscription.no_data")}</div>}
                                 </div>
                             )}
                         </div>
@@ -281,7 +274,7 @@ export function ChannelSidebar({
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}
-                                    {!subscribedChannels.length && <div className="py-6 text-center text-sm text-text-3">{localize("com_subscription.no_data")}</div>}
+                                    {!channelsError && !subscribedChannels.length && <div className="py-6 text-center text-sm text-text-3">{localize("com_subscription.no_data")}</div>}
                                 </div>
                             )}
                         </div>

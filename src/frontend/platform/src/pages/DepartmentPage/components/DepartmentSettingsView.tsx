@@ -14,7 +14,7 @@ import { Label } from "@/components/bs-ui/label";
 import { Separator } from "@/components/bs-ui/separator";
 
 import { unmountTenantApi } from "@/controllers/API/department";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest } from "@/controllers/request";
 import { isGuestDepartmentDeptId } from "@/pages/DepartmentPage/constants/systemDepartments";
 
 import type { useDepartmentSettingsController } from "./DepartmentSettings";
@@ -202,7 +202,7 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-wrap items-center gap-2">
               {canEditPermissions && (
-                <Button type="button" onClick={() => void handleGlobalSave()} disabled={saving}>
+                <Button type="button" onClick={handleUiRequest(handleGlobalSave)} disabled={saving}>
                   {t("save")}
                 </Button>
               )}
@@ -221,7 +221,7 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
                     desc: t("bs:tenant.unmountConfirm"),
                     okTxt: t("bs:tenant.unmountOk"),
                     onOk(next) {
-                      captureAndAlertRequestErrorHoc(unmountTenantApi(dept.id)).then((res) => {
+                      return unmountTenantApi(dept.id).then((res) => {
                         if (res) {
                           notification.open({ type: "success", title: String(t("bs:tenant.unmountSuccess") ?? ''), description: "" });
                           onChanged();

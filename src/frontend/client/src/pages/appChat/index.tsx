@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
-import { getAssistantDetailApi, getChatHistoryApi, getDeleteFlowApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { getAssistantDetailApi, getChatHistoryApi, getFlowApi, postBuildInit } from "~/api/apps";
 import { checkResourceAction } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
@@ -12,26 +12,17 @@ import store from "~/store";
 import ChatView from "./ChatView";
 import { appConversationsState } from "./store/appSidebarAtoms";
 import { chatApiVersionState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
-import { AppLostMessage } from "./useWebsocket";
+import { showApiError } from "~/api/request";
+import { Button } from "@bisheng/ui";
 
 const API_VERSION = 'v1';
-const TRAFFIC_LIMIT_ERROR_CODES = new Set([429, 503, 12045]);
-
-const getInitialChatError = (res: any) => {
-    const code = Number(res?.status_code);
-    if (TRAFFIC_LIMIT_ERROR_CODES.has(code)) {
-        return { code: String(code), data: res?.data ?? null };
-    }
-    return { code: AppLostMessage, data: null };
-};
-
 export const enum FLOW_TYPES {
     WORK_FLOW = 10,
     ASSISTANT = 5,
     SKILL = 1,
 }
 
-export default function index({ chatId = '', flowId = '', shareToken = '', flowType = '', apiVersion = '', isGuestMode = false }) {
+export default function AppChat({ chatId = '', flowId = '', shareToken = '', flowType = '', apiVersion = '', isGuestMode = false }) {
     const { conversationId: _cid, fid: _fid, type: _type } = useParams();
     const cid = _cid || chatId;
     const fid = _fid || flowId;
@@ -46,8 +37,8 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         return () => { setApiVersion('v1'); };
     }, [effectiveApiVersion, setApiVersion]);
     const [chats, setChats] = useRecoilState(chatsState)
-    const [__, setRunningState] = useRecoilState(runningState)
-    const [_, setChatId] = useRecoilState(chatIdState)
+    const [, setRunningState] = useRecoilState(runningState)
+    const [, setChatId] = useRecoilState(chatIdState)
     const chatState = useRecoilValue(currentChatState)
     const conversations = useRecoilValue(appConversationsState);
     const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
@@ -55,6 +46,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
     const build = useBuild()
     const navigate = useNavigate()
     const { showToast } = useToastContext()
+    const [loadError, setLoadError] = useState<unknown>(null);
 
     const flow = chatState?.flow;
     const headerTitleForMobile = useMemo(() => {
@@ -98,6 +90,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
     // Switch the active conversation.
     const init = async () => {
         if (!cid) return;
+        setLoadError(null);
 
         let flowData: FlowData | null = null
         let messages: ChatMessageType[] = []
@@ -113,8 +106,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 resource_type: objectType,
                 resource_id: fid!,
                 action: "use",
-            })
-                .catch(() => ({ allowed: false }));
+            });
             if (permission?.allowed) return true;
             showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.WARNING });
             navigate('/apps', { replace: true });
@@ -150,30 +142,13 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                     getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken, apiVersion: effectiveApiVersion })
                 ])
 
-                // Handle 403: no permission, redirect to app center
-                if (flowRes.status_code === 403) {
-                    showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.WARNING });
-                    navigate('/apps', { replace: true });
-                    return;
-                }
-
-                if (flowRes.status_code !== 200) {
-                    error = getInitialChatError(flowRes)
-                    const lostFlow = await getDeleteFlowApi(cid)
-                    flowRes.data = {
-                        id: lostFlow.data.flow_id,
-                        name: lostFlow.data.flow_name,
-                        logo: lostFlow.data.flow_logo,
-                        flow_type: lostFlow.data.flow_type,
-                    }
-                }
                 messages = msgRes.reverse()
                 flowData = { ...flowRes.data, isNew: !messages.length }
 
                 if (numericType === FLOW_TYPES.SKILL) {
                     try {
                         await build(flowData, cid);
-                    } catch (error) { }
+                    } catch { }
                 }
                 break;
             case FLOW_TYPES.ASSISTANT:
@@ -183,22 +158,6 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                     getChatHistoryApi({ flowId: fid, chatId: cid, flowType: type, shareToken, apiVersion: effectiveApiVersion })
                 ]);
 
-                // Handle 403: no permission, redirect to app center
-                if (assistantRes.status_code === 403) {
-                    showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.WARNING });
-                    navigate('/apps', { replace: true });
-                    return;
-                }
-
-                if (assistantRes.status_code !== 200) {
-                    error = getInitialChatError(assistantRes);
-                    const lostFlow = await getDeleteFlowApi(cid)
-                    assistantRes.data = {
-                        name: lostFlow.data.flow_name,
-                        logo: lostFlow.data.flow_logo,
-                        flow_type: lostFlow.data.flow_type,
-                    }
-                }
                 messages = historyRes.reverse();
                 flowData = { ...assistantRes.data, flow_type: FLOW_TYPES.ASSISTANT, isNew: !messages.length };
                 break;
@@ -237,9 +196,22 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
     }
 
+    const handleInit = () => {
+        void init().catch(cause => {
+            setLoadError(cause);
+            showApiError(cause);
+        });
+    };
     useEffect(() => {
-        init()
-    }, [cid])
+        handleInit();
+    }, [cid]);
+
+    if (loadError) return (
+        <div role="alert">
+            <p>{loadError instanceof Error ? loadError.message : localize('com_ui_error')}</p>
+            <Button variant="outlined" onClick={handleInit}>{localize('com_ui_retry')}</Button>
+        </div>
+    );
 
     if (!cid || !chatState?.flow) return null;
 
@@ -253,8 +225,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
  */
 
 const useBuild = () => {
-    const { showToast } = useToastContext();
-    const [_, setTabsState] = useRecoilState(tabsState)
+    const [, setTabsState] = useRecoilState(tabsState)
 
     // Consume the server-sent validation stream.
     async function streamNodeData(flow: any, chatId: string) {

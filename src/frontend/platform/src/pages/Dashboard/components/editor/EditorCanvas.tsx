@@ -5,6 +5,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 
 import { copyComponentTo, getDashboards } from "@/controllers/API/dashboard"
+import { showApiError } from "@/controllers/request"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { cn } from "@/utils"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -67,9 +68,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
             // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             notification.open({ type: "success", description: String(t('copyToTargetSuccess') ?? '') })
         },
-        onError: () => {
-            notification.open({ type: "error", description: String(t('copyFailed') ?? '') })
-        },
+        onError: showApiError,
     })
 
     // When the page loads, it automatically refreshes according to the query component configuration.

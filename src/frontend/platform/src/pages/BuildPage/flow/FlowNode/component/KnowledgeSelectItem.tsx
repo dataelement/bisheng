@@ -3,6 +3,7 @@ import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { getKnowledgeDetailApi,readFileLibDatabase } from "@/controllers/API";
 import { getSelectableKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
+import { showApiError } from "@/controllers/request";
 import { isVarInFlow } from "@/util/flowUtils";
 import { Tabs,Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -77,7 +78,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))
             setOptions(_ops => cursor ? mergeOptionsByValue(_ops, opts) : opts)
-        })
+        }).catch(showApiError)
     }
     // input文件变量s
     const loadFiles = () => {
@@ -108,7 +109,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         getSelectableKnowledgeSpacesApi().then(spaces => {
             allSpacesRef.current = spaces.map(s => ({ label: s.name, value: s.id }))
             setSpaceOptions(allSpacesRef.current)
-        })
+        }).catch(showApiError)
     }
     const filterSpaces = (name: string) => {
         const kw = (name || '').toLowerCase()

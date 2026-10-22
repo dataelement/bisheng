@@ -9,7 +9,7 @@ import {
     WORKBENCH_CHAT_POLICY,
     type SensitiveWordType,
 } from "@/controllers/API/sensitiveWordPolicy";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Checkbox, Switch } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
@@ -82,12 +82,11 @@ export const WorkbenchSensitivePolicy = forwardRef<WorkbenchSensitivePolicyHandl
                     autoReply: policy?.auto_reply || "",
                 });
                 setLoaded(true);
-            });
+            }).catch(showApiError);
         }, []);
 
         const savePolicy = async (nextForm: SensitiveForm) => {
-            const res = await captureAndAlertRequestErrorHoc(
-                updateSensitiveWordPolicyApi(
+            const res = await updateSensitiveWordPolicyApi(
                     {
                         enabled: nextForm.isCheck,
                         words_types: toApiWordsType(nextForm.wordsType),
@@ -96,8 +95,7 @@ export const WorkbenchSensitivePolicy = forwardRef<WorkbenchSensitivePolicyHandl
                         extra_config: {},
                     },
                     WORKBENCH_CHAT_POLICY,
-                ),
-            );
+                );
             if (res) {
                 setForm(nextForm);
             }

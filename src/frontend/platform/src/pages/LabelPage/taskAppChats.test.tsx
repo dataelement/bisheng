@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import TaskAppChats from './taskAppChats'
 
 const mock = vi.hoisted(() => ({ detail: vi.fn(), permission: vi.fn(), status: vi.fn(), next: vi.fn(), update: vi.fn(), assistant: vi.fn(), workflow: vi.fn(), similar: vi.fn(), qa: vi.fn(), clear: vi.fn(), change: vi.fn(), destroy: vi.fn(), completeQa: vi.fn() }))
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p.catch(() => false) }));
+vi.mock('@/controllers/request', async (importOriginal) => ({ ...await importOriginal<typeof import('@/controllers/request')>() }));
 vi.mock('@/controllers/API/flow', () => ({ getDeleteFlowApi: mock.detail }))
 vi.mock('@/controllers/API/log', () => ({ getMarkPermissionApi: mock.permission, getMarkStatusApi: mock.status, getNextMarkChatApi: mock.next, updateMarkStatusApi: mock.update }))
 vi.mock('@/components/bs-comp/chatComponent/messageStore', () => ({ MessageStoreProvider: ({ children }: { children: React.ReactNode }) => children, useMessageStore: () => ({ loadHistoryMsg: mock.assistant, loadMoreHistoryMsg: vi.fn(), changeChatId: mock.change, clearMsgs: mock.clear }) }))

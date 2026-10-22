@@ -1,3 +1,4 @@
+import { showApiError } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
 import { Button, Switch, Tag, Tooltip, TooltipProvider } from '@bisheng/ui'
 
@@ -51,6 +52,8 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
         setPendingOnline(online)
         try {
             await onToggle(model.id, online)
+        } catch (error) {
+            showApiError(error)
         } finally {
             // The caller updates the persisted value only after success. Clearing
             // the optimistic state therefore restores it on a failed request.
@@ -65,6 +68,8 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
         setVerifying(true)
         try {
             await onVerify(model.id)
+        } catch (error) {
+            showApiError(error)
         } finally {
             setVerifying(false)
             verifyLock.current = false

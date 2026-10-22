@@ -1512,7 +1512,7 @@ export async function addFilesApi(
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
         data,
-        { showError: true }
+        { showError: false }
     ) as ApiResponse<RawSpaceChild[]> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         throw new Error(res.status_message || res.message || res.msg || "register files failed");

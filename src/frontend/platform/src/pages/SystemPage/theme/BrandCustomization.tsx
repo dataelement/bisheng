@@ -10,7 +10,7 @@ import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels
 import { darkContext } from "@/contexts/darkContext";
 import type { BrandAsset,BrandAssetOption,BrandConfig,BrandText } from "@/controllers/API";
 import { getBrandAssetOptionsApi,getBrandConfigApi,saveBrandConfigApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { withBrandBaseUrl } from "@/utils/brand";
 import { Outlined } from "bisheng-icons";
 
@@ -198,18 +198,19 @@ export default function BrandCustomization() {
     const [previewTarget, setPreviewTarget] = useState<BrandPreviewTarget | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [loadFailed, setLoadFailed] = useState(false);
 
     useEffect(() => {
         let mounted = true;
 
         const loadBrandData = async () => {
             const [configData, optionEntries, loadingIconOptions] = await Promise.all([
-                captureAndAlertRequestErrorHoc(getBrandConfigApi()),
+                getBrandConfigApi(),
                 Promise.all(ASSET_ROWS.map(async ({ key }) => ({
                     key,
-                    options: await captureAndAlertRequestErrorHoc(getBrandAssetOptionsApi(key)),
+                    options: await getBrandAssetOptionsApi(key),
                 }))),
-                captureAndAlertRequestErrorHoc(getBrandAssetOptionsApi("loadingIcon")),
+                getBrandAssetOptionsApi("loadingIcon"),
             ]);
 
             if (!mounted) return;
@@ -233,7 +234,10 @@ export default function BrandCustomization() {
             setLoading(false);
         };
 
-        loadBrandData();
+        void loadBrandData().catch(error => {
+            if (mounted) setLoadFailed(true);
+            showApiError(error);
+        }).finally(() => { if (mounted) setLoading(false) });
 
         return () => {
             mounted = false;
@@ -413,13 +417,16 @@ export default function BrandCustomization() {
         }
 
         setSaving(true);
-        const saved = await captureAndAlertRequestErrorHoc(saveBrandConfigApi(normalizeForSave(config)));
-        setSaving(false);
-        if (!saved) return;
-
+        try {
+        const saved = await saveBrandConfigApi(normalizeForSave(config));
         setConfig(saved);
         applyRuntimeBrandConfig(saved);
         notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.brandSaveSuccess") ?? '') });
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -440,7 +447,7 @@ export default function BrandCustomization() {
                                 <Outlined.Refresh className="mr-1 size-4" />
                                 {t("theme.brandResetDefault")}
                             </Button>
-                            <Button type="button" loading={saving} onClick={handleSave} disabled={Boolean(saving) || (loading)}>
+                            <Button type="button" loading={saving} onClick={handleSave} disabled={loadFailed || Boolean(saving) || (loading)}>
                                 <Outlined.FileSaveAs className="mr-1 size-4" />
                                 {t("theme.brandSave")}
                             </Button>

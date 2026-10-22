@@ -1,7 +1,7 @@
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { changeCurrentVersion } from "@/controllers/API/flow";
 import { changeWorkflowCurrentVersion } from "@/controllers/API/workflow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { AppNumType } from "@/types/app";
 import { Select, Tooltip } from "@bisheng/ui";
 import { useState } from "react";
@@ -29,8 +29,8 @@ const SelectComp = ({ value, onChange, data, disabled = false }: SelectCompProps
         const request = data.flow_type === AppNumType.FLOW
             ? changeWorkflowCurrentVersion
             : changeCurrentVersion
-        captureAndAlertRequestErrorHoc(request({ flow_id: data.id, version_id: Number(id) }))
-        onChange?.(id)
+        request({ flow_id: data.id, version_id: Number(id) })
+            .then(() => onChange?.(id)).catch(showApiError)
     }
 
     const options = data.version_list.length

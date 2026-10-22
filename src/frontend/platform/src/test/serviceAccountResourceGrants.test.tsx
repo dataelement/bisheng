@@ -47,7 +47,8 @@ vi.mock("@/controllers/API/permission", () => ({
   getResourcePermissionContextApi: vi.fn(),
 }))
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn(),
 }))
 

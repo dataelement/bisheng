@@ -1002,6 +1002,7 @@
     "blindOverwriteOk": "仍然保存"
   },
   "build": {
+    "editPermissionRequired": "无编辑权限",
     "create": "创建",
     "assistant": "助手",
     "workflow": "工作流",

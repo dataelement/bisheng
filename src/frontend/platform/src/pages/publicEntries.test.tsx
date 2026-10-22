@@ -10,7 +10,7 @@ import { FormInput } from "./BuildPage/bench/FormInput";
 
 vi.mock("@/contexts/userContext", async () => ({ userContext: (await import("react")).createContext({ user: {} }) }));
 vi.mock("@/controllers/API/approval", () => ({ applyMenuAccessApi: vi.fn() }));
-vi.mock("@/controllers/request", () => ({ captureAndAlertRequestErrorHoc: (promise: Promise<unknown>) => promise }));
+vi.mock("@/controllers/request", async (importOriginal) => ({ ...await importOriginal<typeof import('@/controllers/request')>() }));
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
 const previous = await (() => ({ useToast: () => ({ toast: vi.fn() }) }))();

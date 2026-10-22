@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { cname } from "@/components/bs-ui/utils";
+import { showApiError } from "@/controllers/request";
 import { AppNumType,AppType } from "@/types/app";
 import { Outlined } from "bisheng-icons";
 import { Shield } from "lucide-react";
@@ -110,9 +111,13 @@ export default function CardComponent<T>({
 
   const handleCheckedChange = async (bln) => {
     if (!canSwitch || !onCheckedChange) return false
-    const res = await onCheckedChange(bln, data)
-    if (res === false) return
-    setChecked(bln)
+    try {
+      const res = await onCheckedChange(bln, data)
+      if (res === false) return
+      setChecked(bln)
+    } catch (error) {
+      showApiError(error)
+    }
   }
   const showAddTemp = Boolean(edit && isAdmin && type !== 'assistant' && onAddTemp)
   const showCopyItem = Boolean(showCopy && onCopy)

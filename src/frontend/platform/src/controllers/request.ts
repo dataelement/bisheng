@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate } from '@bisheng/api-client';
 import { notification } from '@bisheng/ui';
 
 import axios from "axios";
@@ -143,22 +144,9 @@ function decodeEnvelopeMessage(envelope: any) {
         ? i18MsgFromStatus
         : (i18Msg !== `api_errors:${statusCode}` ? i18Msg : statusMessage)
 
-    // Defensive fallback: backend may leave Msg template like "{message}" or
-    // "{field_name}" unsubstituted (BaseErrorCode does not .format(**kwargs)).
-    // Surface envelope.data.message rather than the literal placeholder so the
-    // user sees a meaningful error instead of "{message}".
-    if (/^\{\w+\}$/.test(String(finalMsg).trim())) {
-        const fromData = coerceErrorMessage(envelope?.data?.message)
-        if (fromData) return fromData
-    }
-    return finalMsg
-}
-
-// Detect the unified envelope shape so we can apply the same message
-// decoding whether the backend returned HTTP 200 with status_code != 200
-// or a non-2xx HTTP status carrying the envelope (e.g. F011 mount).
-function isEnvelope(data: any): boolean {
-    return data && typeof data === "object" && typeof data.status_code === "number"
+    const fallback = String(i18next.t('api_errors:fallback', { defaultValue: 'Request failed. Please try again.' }));
+    return resolveErrorMessageTemplate(String(finalMsg || ''), envelope?.data,
+        fallback === 'api_errors:fallback' ? 'Request failed. Please try again.' : fallback);
 }
 
 // License degradation (gateway returns 11001): throttle the toast so a burst of
@@ -173,132 +161,109 @@ function shouldToastLicenseExpired(): boolean {
     return false;
 }
 
-customAxios.interceptors.response.use(function (response) {
-    if (response.data instanceof Blob) return response.data;
-    if (response.data.status_code === 200) {
-        const url = response.config?.url || ""
-        if (url.includes("/user/login") || url.includes("/user/info")) {
-            clearSessionKickAck()
-        }
-        return response.data.data;
+export function showApiError(cause: unknown) {
+    const error = normalizeApiError(cause, {
+        message: cause instanceof Error ? cause.message : coerceErrorMessage(cause) || String(i18next.t('api_errors:fallback')),
+    });
+    if (error.kind !== 'canceled' && error.presentation === 'none') {
+        notification.open({ type: 'error', title: String(i18next.t('prompt')), description: error.message });
+        error.presentation = 'toast';
     }
-    if (response.data.status_code === 11010) {
-        return response.data;
-    }
-    // Silent mode: skip all global error handling, let the caller handle it
-    if (response.config.silent) {
-        return Promise.reject(response.data);
-    }
-    const statusCode = response.data.status_code
-    const errorMessage = decodeEnvelopeMessage(response.data)
+    return error;
+}
 
-    // License expired (gateway degradation): always toast (throttled) regardless of
-    // whether the caller wraps the call with captureAndAlertRequestErrorHoc, then
-    // reject(null) so the HoC doesn't double-toast. See feature 037.
+async function responseError(cause, response?) {
+    if (isApiError(cause)) return cause;
+    const original = response ?? cause?.response;
+    const envelope = await decodeErrorEnvelope(original?.data, { httpFailure: original?.status >= 400 }) ?? original?.data;
+    const message = isErrorEnvelope(envelope)
+        ? decodeEnvelopeMessage(envelope)
+        : coerceErrorMessage(cause?.message ?? cause);
+    return normalizeApiError(cause, {
+        response: original,
+        envelope,
+        message: message || String(i18next.t('api_errors:fallback')),
+    });
+}
+
+customAxios.interceptors.response.use(async function (response) {
+    const binary = response.data instanceof Blob || response.data instanceof ArrayBuffer;
+    const decoded = binary ? await decodeErrorEnvelope(response.data) : undefined;
+    const envelope = decoded ?? response.data;
+    if (!isErrorEnvelope(envelope)) return response.data;
+    if (envelope.status_code === 200) {
+        const url = response.config?.url || '';
+        if (url.includes('/user/login') || url.includes('/user/info')) clearSessionKickAck();
+        return binary ? response.data : envelope.data;
+    }
+    if (envelope.status_code === 11010) return envelope;
+    const error = await responseError(envelope, response);
+    if (response.config.silent) return Promise.reject(error);
+    const statusCode = envelope.status_code;
     if (statusCode === 11001) {
         if (shouldToastLicenseExpired()) {
-            notification.open({ type: 'error', title: String(`${i18next.t('prompt')}`), description: String(coerceErrorMessage(response.data?.status_message) || i18next.t('license.businessExpired.gateway')) })
+            notification.open({ type: 'error', title: String(i18next.t('prompt')), description: String(coerceErrorMessage(envelope.status_message) || i18next.t('license.businessExpired.gateway')) });
         }
-        return Promise.reject(null);
+        error.presentation = 'global';
+        return Promise.reject(error);
     }
-
-    // 密码过期，标记后透传给业务层处理
-    if (statusCode === 10601) {
-        return Promise.reject({ code: 10601, message: errorMessage });
-    }
-    // 无权访问
+    // The login page owns the password-reset interaction.
+    if (statusCode === 10601) return Promise.reject(error);
     if ([403, 404].includes(statusCode) && response.config.url !== '/api/v1/user/info') {
-        // 修改不跳转
-        localStorage.setItem('noAccessUrl', response.request.responseURL)
+        localStorage.setItem('noAccessUrl', response.request?.responseURL ?? response.config.url ?? '');
         if (response.config.method === 'get') {
-            location.href = __APP_ENV__.BASE_URL + '/' + statusCode
-        }
-        return Promise.reject(errorMessage);
+            location.href = __APP_ENV__.BASE_URL + '/' + statusCode;
+            error.presentation = 'global';
+        } else if (response.config.showError !== false) showApiError(error);
+        return Promise.reject(error);
     }
-    // 应用无编辑权限 (TODO业务状态码放行到具体业务中)
     if ([10599, 17005].includes(statusCode)) {
-        location.href = `${__APP_ENV__.BASE_URL}/build/apps?error=${statusCode}`
-        return Promise.reject(errorMessage);
+        location.href = `${__APP_ENV__.BASE_URL}/build/apps?error=${statusCode}`;
+        error.presentation = 'global';
+        return Promise.reject(error);
     }
-    // Kicked off by another device (HTTP 200 + business code 10604).
-    if (isSessionKickedEnvelope(response.data) && beginSessionKick(response.data)) {
-        return Promise.reject(errorMessage);
+    if (isSessionKickedEnvelope(envelope) && beginSessionKick(envelope)) {
+        error.presentation = 'global';
+        return Promise.reject(error);
     }
-    if (response.config.preserveError) {
-        return Promise.reject(Object.assign(new Error(errorMessage), {
-            response: { status: response.status, data: response.data },
-        }));
-    }
-    return Promise.reject(errorMessage);
-}, function (error) {
-    console.error('application error :>> ', error);
-    if (error.response?.status === 401) {
-        // Another device took the session — show the confirm dialog, do not
-        // bounce to login until the user acknowledges. Concurrent 401s after
-        // the first 10604 must not hijack that dialog with a generic redirect.
-        if (sessionKickInProgress) {
-            return Promise.reject(error.response?.data);
-        }
-        if (isSessionKickedEnvelope(error.response?.data) && beginSessionKick(error.response.data)) {
-            return Promise.reject(error.response.data);
-        }
-        // 必须在 remove 之前读取：从未持有 ws_token/UUR_INFO 时 401（如登录页拉 /user/info）不应整页跳转，否则会死循环。
-        const hadSession =
-            !!localStorage.getItem('ws_token')
-            || !!localStorage.getItem('UUR_INFO');
-        // cookie / Bearer 失效（含 token_version 失效、账号禁用）
+    if (response.config.showError !== false) showApiError(error);
+    return Promise.reject(error);
+}, async function (cause) {
+    const error = await responseError(cause);
+    if (error.httpStatus === 401) {
+        error.presentation = 'global';
+        if (sessionKickInProgress) return Promise.reject(error);
+        if (isSessionKickedEnvelope(error) && beginSessionKick(error)) return Promise.reject(error);
+        const hadSession = !!localStorage.getItem('ws_token') || !!localStorage.getItem('UUR_INFO');
         localStorage.removeItem('ws_token');
-        console.error('登录过期 :>> ');
         const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
-        if (thirdPartyLoginUrl) {
-            localStorage.removeItem('UUR_INFO');
-            window.location.href = thirdPartyLoginUrl;
-            return Promise.reject(i18next.t('request.session_expired'));
-        }
         localStorage.removeItem('UUR_INFO');
-        // 仅「曾有过登录态」时再回根路径，避免深路径 URL 上叠登录页且状态错乱。
+        if (thirdPartyLoginUrl) {
+            window.location.href = thirdPartyLoginUrl;
+            return Promise.reject(error);
+        }
         if (hadSession) {
             const base = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
             window.location.href = `${base}/`;
         }
-        return Promise.reject(i18next.t('request.sign_in_again'));
+        return Promise.reject(error);
     }
-    if (error.code === "ERR_CANCELED") return Promise.reject(error);
-    // Silent mode: skip toast, let the caller handle it
-    if (error.config?.silent) return Promise.reject(error);
-    // Backend may return our unified envelope on HTTP 4xx/5xx (e.g. F011
-    // tenant mount maps TenantTreeNestingForbiddenError → HTTP 400 with a
-    // structured body). Decode the envelope before falling back to the raw
-    // axios message so users see a friendly i18n string.
-    const envelope = error.response?.data
-    if (isEnvelope(envelope)) {
-        const errorMessage = decodeEnvelopeMessage(envelope)
-        notification.open({ type: 'error', title: String(`${i18next.t('prompt')}`), description: String(coerceErrorMessage(errorMessage) ?? '') })
-        return Promise.reject(error.config?.preserveError ? error : null);
-    }
-    // app 弹窗
-    notification.open({ type: 'error', title: String(`${i18next.t('prompt')}`), description: String(coerceErrorMessage(error?.message || error) ?? '') })
-    // Preserve opt-in transport evidence after the shared error handling.
-    return Promise.reject(error.config?.preserveError ? error : null);
-})
+    if (!cause.config?.silent && cause.config?.showError !== false) showApiError(error);
+    return Promise.reject(error);
+});
 
-export default customAxios
+export default customAxios;
 
+/** @deprecated Call the request directly and handle its rejection at the owning UI boundary. */
+export function captureAndAlertRequestErrorHoc<T>(apiFunc: Promise<T>): Promise<T> {
+    return apiFunc.catch(cause => {
+        throw showApiError(cause);
+    });
+}
 
-// 接口异常提示弹窗
-export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
-    return apiFunc.catch(error => {
-        if (error === null) return // app error
-        if (error?.code === "ERR_CANCELED") return 'canceled'
-
-        console.log('error :>> ', error);
-        // If iocFunc returns true, it means the caller has handled the error itself (e.g. showing its own toast)
-        const handled = iocFunc?.(error)
-        if (handled) return false
-
-        // 弹窗
-        notification.open({ type: 'error', title: String(`${i18next.t('prompt')}`), description: String(coerceErrorMessage(error) ?? '') })
-        console.error('逻辑异常 :>> ', error);
-        return false
-    })
-};
+/** Consume rejections only at a UI event boundary; inner request chains still reject. */
+export function handleUiRequest<Args extends unknown[]>(handler: (...args: Args) => unknown) {
+    return (...args: Args): void => {
+        void Promise.resolve().then(() => handler(...args)).catch(showApiError);
+    };
+}

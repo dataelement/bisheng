@@ -1271,7 +1271,8 @@
     "service_maintenance": "Hang tight for a moment — we'll be back to normal shortly.",
     "refresh": "Refresh to retry",
     "unknown_name": "Unknown app",
-    "featured": "Featured"
+    "featured": "Featured",
+    "history_deleted": "Conversation history deleted"
   },
   "com_knowledge": {
     "add_new": "Add",

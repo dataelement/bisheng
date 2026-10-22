@@ -1198,7 +1198,8 @@
     "service_maintenance": "短暂停留一下，马上恢复正常使用",
     "refresh": "刷新重试",
     "unknown_name": "未知应用",
-    "featured": "精选"
+    "featured": "精选",
+    "history_deleted": "历史会话已删除"
   },
   "com_knowledge": {
     "add_new": "新增",

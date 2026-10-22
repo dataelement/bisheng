@@ -1195,7 +1195,8 @@
     "service_maintenance": "少々お待ちください。まもなく通常どおりご利用いただけます。",
     "refresh": "再読み込み",
     "unknown_name": "不明なアプリ",
-    "featured": "おすすめ"
+    "featured": "おすすめ",
+    "history_deleted": "会話履歴を削除しました"
   },
   "com_knowledge": {
     "add_new": "新規追加",

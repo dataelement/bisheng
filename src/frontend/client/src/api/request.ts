@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate, type ErrorPresentation } from '@bisheng/api-client';
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import i18next from "i18next";
 import { setTokenHeader } from '~/api/chat/headers-helpers';
@@ -26,11 +27,11 @@ async function _get<T>(url: string, options?: AxiosRequestConfig & ErrorOptions)
   return response.data;
 }
 
-async function _getResponse<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
+async function _getResponse<T>(url: string, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
   return await customAxios.get(url, { ...options });
 }
 
-async function _post(url: string, data?: any, config?: AxiosRequestConfig) {
+async function _post(url: string, data?: any, config?: AxiosRequestConfig & ErrorOptions) {
   const response = await customAxios.post(url, config ? data : JSON.stringify(data), {
     headers: { 'Content-Type': 'application/json' },
     ...config
@@ -38,7 +39,7 @@ async function _post(url: string, data?: any, config?: AxiosRequestConfig) {
   return response.data;
 }
 
-async function _postResponse<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+async function _postResponse<T>(url: string, data?: any, config?: AxiosRequestConfig & ErrorOptions): Promise<T> {
   // Mirror of _getResponse: returns the full Axios response so callers can
   // read headers (e.g. Content-Disposition for file downloads).
   return await customAxios.post(url, config ? data : JSON.stringify(data), {
@@ -47,7 +48,7 @@ async function _postResponse<T>(url: string, data?: any, config?: AxiosRequestCo
   }) as unknown as T;
 }
 
-async function _postMultiPart(url: string, formData: FormData, options?: AxiosRequestConfig) {
+async function _postMultiPart(url: string, formData: FormData, options?: AxiosRequestConfig & ErrorOptions) {
   const response = await customAxios.post(url, formData, {
     ...options,
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -55,7 +56,7 @@ async function _postMultiPart(url: string, formData: FormData, options?: AxiosRe
   return response.data;
 }
 
-async function _postTTS(url: string, formData: FormData, options?: AxiosRequestConfig) {
+async function _postTTS(url: string, formData: FormData, options?: AxiosRequestConfig & ErrorOptions) {
   const response = await customAxios.post(url, formData, {
     ...options,
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -64,7 +65,7 @@ async function _postTTS(url: string, formData: FormData, options?: AxiosRequestC
   return response.data;
 }
 
-async function _put(url: string, data?: any, options?: AxiosRequestConfig) {
+async function _put(url: string, data?: any, options?: AxiosRequestConfig & ErrorOptions) {
   const response = await customAxios.put(url, JSON.stringify(data), {
     ...options,
     headers: { 'Content-Type': 'application/json' },
@@ -72,17 +73,17 @@ async function _put(url: string, data?: any, options?: AxiosRequestConfig) {
   return response.data;
 }
 
-async function _delete<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
+async function _delete<T>(url: string, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
   const response = await customAxios.delete(url, { ...options });
   return response.data;
 }
 
-async function _deleteWithOptions<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
+async function _deleteWithOptions<T>(url: string, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
   const response = await customAxios.delete(url, { ...options });
   return response.data;
 }
 
-async function _patch(url: string, data?: any, options?: AxiosRequestConfig) {
+async function _patch<T = unknown>(url: string, data?: any, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
   const response = await customAxios.patch(url, JSON.stringify(data), {
     ...options,
     headers: { 'Content-Type': 'application/json' },
@@ -112,25 +113,25 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
   failedQueue = [];
 };
 
-export const translateApiErrorMessage = (data: any) => {
-  const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : "";
-  const statusMessage = typeof data?.status_message === "string" ? data.status_message : "";
-  const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : "";
+function errorText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(errorText).filter(Boolean).join('; ');
+  if (value && typeof value === 'object') {
+    const item = value as Record<string, unknown>;
+    return errorText(item.msg ?? item.message ?? item.detail ?? item.status_message);
+  }
+  return '';
+}
 
-  if (statusCodeKey && i18next.exists(statusCodeKey)) {
-    return i18next.t(statusCodeKey, data?.data);
-  }
-  if (statusMessageKey && i18next.exists(statusMessageKey)) {
-    return i18next.t(statusMessageKey, data?.data);
-  }
-  // Last resort keeps t(key, vars) so {{xxx}} templates still interpolate from
-  // data.data; defaultValue guards the truly-untranslated case — never the raw key.
-  return (
-    statusMessage ||
-    (statusCodeKey
-      ? String(i18next.t(statusCodeKey, { ...(data?.data || {}), defaultValue: String(i18next.t("api_errors.fallback")) }))
-      : "")
-  );
+export const translateApiErrorMessage = (data: any) => {
+  const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : '';
+  const statusMessage = errorText(data?.status_message);
+  const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : '';
+  const message = statusCodeKey && i18next.exists(statusCodeKey) ? String(i18next.t(statusCodeKey, data?.data))
+    : statusMessageKey && i18next.exists(statusMessageKey) ? String(i18next.t(statusMessageKey, data?.data))
+    : statusMessage;
+  const fallback = String(i18next.t('api_errors.fallback', { defaultValue: 'Request failed. Please try again.' }));
+  return resolveErrorMessageTemplate(message || '', data?.data, fallback === 'api_errors.fallback' ? 'Request failed. Please try again.' : fallback);
 };
 
 const SESSION_KICKED_CODE = 10604
@@ -198,13 +199,16 @@ function shouldToastLicenseExpired(): boolean {
   return false;
 }
 
+const responsePresentation = new WeakMap<object, ErrorPresentation>();
+
 customAxios.interceptors.response.use(
-  (response) => {
+  async (response) => {
+    const envelope = await decodeErrorEnvelope(response.data) ?? response.data;
     const url = response.config?.url || ""
     if (
       response.status >= 200 &&
       response.status < 300 &&
-      (response.data?.status_code === 200 || response.data?.status_code == null) &&
+      (envelope?.status_code === 200 || envelope?.status_code == null) &&
       (url.includes("/user/login") || url.includes("/user/info") || url.includes("/api/user/me"))
     ) {
       clearSessionKickAck()
@@ -213,22 +217,24 @@ customAxios.interceptors.response.use(
     // License expired (gateway degradation): always surface a clear toast and reject,
     // regardless of per-call error flags, so end users learn it's an authorization
     // issue rather than a transient glitch. See feature 037.
-    if (response.data?.status_code === 11001) {
-      const message = translateApiErrorMessage(response.data) || response.data.status_message || '';
+    if (envelope?.status_code === 11001) {
+      responsePresentation.set(response, 'global');
+      const message = translateApiErrorMessage(envelope) || envelope.status_message || '';
       if (message && shouldToastLicenseExpired()) {
         window.showToast?.({ message, status: 'warning' });
       }
       const err: any = new Error(message || 'license expired (11001)');
       err.status_code = 11001;
-      err.status_message = response.data.status_message;
+      err.status_message = envelope.status_message;
       err.response = response;
       return Promise.reject(err);
     }
 
-    if (isSessionKickedEnvelope(response.data) && beginSessionKick(response.data)) {
-      const err: any = new Error(translateApiErrorMessage(response.data));
+    if (isSessionKickedEnvelope(envelope) && beginSessionKick(envelope)) {
+      responsePresentation.set(response, 'global');
+      const err: any = new Error(translateApiErrorMessage(envelope));
       err.status_code = SESSION_KICKED_CODE;
-      err.status_message = response.data.status_message;
+      err.status_message = envelope.status_message;
       err.response = response;
       return Promise.reject(err);
     }
@@ -237,14 +243,16 @@ customAxios.interceptors.response.use(
     // gateways often wrap upstream 5xx into a 200 envelope, so mirror the
     // HTTP-500 branch below and raise the global maintenance overlay here too.
     // Return early — the overlay covers the screen, no toast needed underneath.
-    if (response.data?.status_code === 500 && !response.config.skipMaintenance) {
+    if (envelope?.status_code === 500 && !response.config.skipMaintenance) {
+      responsePresentation.set(response, 'global');
       window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
       return response;
     }
 
     // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
     // explicitly opts out via skip403Redirect.
-    if (response.data.status_code === 403 && !response.config.skip403Redirect) {
+    if (envelope?.status_code === 403 && !response.config.skip403Redirect) {
+      responsePresentation.set(response, 'global');
       localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
       location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
       return response
@@ -256,24 +264,25 @@ customAxios.interceptors.response.use(
     // rely on silent failure (no skip403Redirect) keep the previous behavior.
     if (
       response.config.skip403Redirect
-      && response.data
-      && response.data.status_code !== 200
+      && isErrorEnvelope(envelope)
+      && envelope.status_code !== 200
     ) {
-      const message = translateApiErrorMessage(response.data);
-      const display = message || response.data.status_message || "";
-      if (display) {
+      const message = translateApiErrorMessage(envelope);
+      const display = message || envelope.status_message || "";
+      if (display && response.config.showError !== false) {
+        if (window.showToast) responsePresentation.set(response, 'toast');
         window.showToast?.({ message: display, status: 'warning' });
       }
-      const err: any = new Error(display || `request failed (${response.data.status_code})`);
-      err.status_code = response.data.status_code;
-      err.status_message = response.data.status_message;
+      const err: any = new Error(display || `request failed (${envelope.status_code})`);
+      err.status_code = envelope.status_code;
+      err.status_message = envelope.status_message;
       err.response = response;
       return Promise.reject(err);
     }
 
-    if (response.config.showError && response.data && response.data.status_code !== 200) {
-      console.log('业务错误:>> ', response.config.url, response.data);
-      window.showToast?.({ message: translateApiErrorMessage(response.data), status: 'warning' });
+    if (response.config.showError && isErrorEnvelope(envelope) && envelope.status_code !== 200) {
+      if (window.showToast) responsePresentation.set(response, 'toast');
+      window.showToast?.({ message: translateApiErrorMessage(envelope), status: 'warning' });
     }
     return response;
   },
@@ -286,6 +295,7 @@ customAxios.interceptors.response.use(
     // Gateway/backend service exception → surface the global maintenance overlay.
     // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
     if (error.response.status === 500 && !originalRequest?.skipMaintenance) {
+      responsePresentation.set(error.response, 'global');
       window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
     }
 
@@ -298,9 +308,12 @@ customAxios.interceptors.response.use(
 
     if (error.response.status === 401) {
       if (sessionKickInProgress) {
+        responsePresentation.set(error.response, 'global');
         return Promise.reject(error);
       }
-      if (isSessionKickedEnvelope(error.response.data) && beginSessionKick(error.response.data)) {
+      const envelope = await decodeErrorEnvelope(error.response.data, { httpFailure: true }) ?? error.response.data;
+      if (isSessionKickedEnvelope(envelope) && beginSessionKick(envelope)) {
+        responsePresentation.set(error.response, 'global');
         return Promise.reject(error);
       }
     }
@@ -327,6 +340,7 @@ customAxios.interceptors.response.use(
       // 401 makes debugging painful. Routes where a blank page is useless carry
       // their own unconditional guard instead (see routes/RequireLogin.tsx).
       if (import.meta.env.MODE === 'production') {
+        responsePresentation.set(error.response, 'global');
         redirectToLogin();
       }
       // } else {
@@ -381,6 +395,38 @@ customAxios.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+/** Keep the existing auth/refresh interceptor intact; normalize its outgoing result. */
+export function showApiError(cause: unknown) {
+  const error = normalizeApiError(cause, { message: cause instanceof Error ? cause.message : translateApiErrorMessage(cause) || String(i18next.t('api_errors.fallback')) });
+  if (error.kind !== 'canceled' && error.presentation === 'none' && window.showToast) {
+    window.showToast({ message: error.message, status: 'warning' });
+    error.presentation = 'toast';
+  }
+  return error;
+}
+
+async function normalizeRequestFailure(cause, response?) {
+  if (isApiError(cause)) return cause;
+  const original = response ?? cause?.response;
+  const envelope = await decodeErrorEnvelope(original?.data, { httpFailure: original?.status >= 400 }) ?? original?.data;
+  const error = normalizeApiError(cause, {
+    response: original,
+    envelope,
+    message: (isErrorEnvelope(envelope) ? translateApiErrorMessage(envelope) : cause?.message)
+      || String(i18next.t('api_errors.fallback')),
+  });
+  if (original && responsePresentation.has(original)) error.presentation = responsePresentation.get(original)!;
+  return error;
+}
+
+// A second response stage changes only the failure carrier. Authentication,
+// maintenance, token-refresh queues and their ordering remain in the first stage.
+customAxios.interceptors.response.use(async response => {
+  const envelope = await decodeErrorEnvelope(response.data) ?? response.data;
+  if (!isErrorEnvelope(envelope) || envelope.status_code === 200) return response;
+  return Promise.reject(await normalizeRequestFailure(envelope, response));
+}, async cause => Promise.reject(await normalizeRequestFailure(cause)));
 
 const paramsSerializer = (params) => {
   return Object.keys(params)

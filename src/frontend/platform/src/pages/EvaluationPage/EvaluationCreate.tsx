@@ -11,7 +11,7 @@ import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint
 import { TabsContext } from "@/contexts/tabsContext";
 import { createEvaluationApi } from "@/controllers/API/evaluate";
 import { getAppsApi } from "@/controllers/API/flow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { TypeModal } from "@/utils";
 import { find } from "lodash-es";
 
@@ -136,11 +136,11 @@ export default function EvaluatingCreate() {
       if (fileRef.current) {
         formData.append('file', fileRef.current); // Key name 'file' must match backend
       }
-      await captureAndAlertRequestErrorHoc(
-        createEvaluationApi(formData)
-      )
+      await createEvaluationApi(formData)
 
       navigate(-1);
+    } catch (error) {
+      showApiError(error);
     } finally {
       setLoading(false);
     }

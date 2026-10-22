@@ -9,7 +9,7 @@ import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
 import { getUserInfo, logoutApi } from "../controllers/API/user";
-import { captureAndAlertRequestErrorHoc, markSessionKickAck, requestInterceptor } from "../controllers/request";
+import { markSessionKickAck, requestInterceptor } from "../controllers/request";
 import { User } from "../types/api/user";
 
 type userContextType = {
@@ -61,7 +61,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
         // 覆盖
         if (overrid) {
-            return captureAndAlertRequestErrorHoc(overridComponent(data)).then(res => {
+            return overridComponent(data).then(res => {
                 setSavedComponents((comps =>
                     comps.map(comp =>
                         comp.name === data.name ? data : comp
@@ -83,7 +83,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     }
                 } while (savedComponents.some(item => item.name === data.name))
             }
-            return captureAndAlertRequestErrorHoc(saveComponent(data)).then(sucess => {
+            return saveComponent(data).then(sucess => {
                 sucess && setSavedComponents([...savedComponents, data])
             })
         }

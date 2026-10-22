@@ -10,7 +10,7 @@ import EditLabel from "../../../components/bs-ui/editLabel";
 import { alertContext } from "../../../contexts/alertContext";
 import { getModelInfoApi } from "../../../controllers/API";
 import { cancelTaskApi, getTaskInfoApi, publishTaskApi, unPublishTaskApi, updataTaskNameApi } from "../../../controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { handleUiRequest, showApiError } from "../../../controllers/request";
 import { TaskDB } from "../../../types/api/finetune";
 import FinetuneResult from "./FinetuneResult";
 import { formatMilliseconds } from "../../../util/utils";
@@ -47,23 +47,32 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
             bsConfirm({
                 desc: t('finetune.confirmCancelPublish'),
                 async onOk(next) {
-                    next()
                     setLoading(true)
-                    await onUnPublish()
-                    setLoading(false)
+                    try {
+                        await onUnPublish()
+                        next()
+                    } finally {
+                        setLoading(false)
+                    }
                 }
             })
         } else {
             setLoading(true)
-            await onUnPublish()
-            setLoading(false)
+            try {
+                await onUnPublish()
+            } finally {
+                setLoading(false)
+            }
         }
     }
 
     const handlePublish = async () => {
         setLoading(true)
-        await onPublish()
-        setLoading(false)
+        try {
+            await onPublish()
+        } finally {
+            setLoading(false)
+        }
     }
 
     const deleteClick = () => {
@@ -75,8 +84,8 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
         }
         bsConfirm({
             desc: tip,
-            onOk(next) {
-                onDelete()
+            async onOk(next) {
+                await onDelete()
                 next()
             }
         })
@@ -85,8 +94,8 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
     const stopClick = () => {
         bsConfirm({
             desc: t('finetune.confirmStopTraining'),
-            onOk(next) {
-                onStop()
+            async onOk(next) {
+                await onStop()
                 next()
             }
         })
@@ -94,12 +103,12 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     return <div className="absolute right-4 flex gap-2">
         {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="small" disabled={loading} onClick={cancelPublish}>
+            <Button size="small" disabled={loading} onClick={handleUiRequest(cancelPublish)}>
                 {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
                 {t('finetune.cancelPublish')}
             </Button> :
             status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="small" disabled={loading} onClick={handlePublish}>
+                <Button size="small" disabled={loading} onClick={handleUiRequest(handlePublish)}>
                     {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
                     {t('finetune.publish')}
                 </Button> : null
@@ -133,16 +142,14 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
     }
 
     useEffect(() => {
-        captureAndAlertRequestErrorHoc(getTaskInfoApi(id).then((data) => {
+        getTaskInfoApi(id).then((data) => {
             setBaseInfo(data.finetune)
-            getOnlineState(data.finetune.model_id)
-        }), (err) => {
-            setBaseInfo(null)
-        })
+            return getOnlineState(data.finetune.model_id)
+        }).catch(showApiError)
     }, [id])
 
     const handlePublish = async () => {
-        const res = await captureAndAlertRequestErrorHoc(publishTaskApi(id))
+        const res = await publishTaskApi(id)
         if (!res) return
         // 成功
         onStatusChange(TaskStatus.PUBLISH_SUCCESS)
@@ -151,14 +158,14 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
     }
 
     const handleUnPublish = async () => {
-        const res = await captureAndAlertRequestErrorHoc(unPublishTaskApi(id))
+        const res = await unPublishTaskApi(id)
         if (!res) return
         onStatusChange(TaskStatus.TRAIN_SUCCESS)
         setBaseInfo({ ...baseInfo, status: TaskStatus.TRAIN_SUCCESS })
     }
 
     const handleStopTrain = async () => {
-        const res = await captureAndAlertRequestErrorHoc(cancelTaskApi(id))
+        const res = await cancelTaskApi(id)
         if (!res) return
 
         onStatusChange(TaskStatus.TASK_ABORTED)
@@ -166,7 +173,7 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
     }
 
     const handleChangeName = async (name) => {
-        const res = await captureAndAlertRequestErrorHoc(updataTaskNameApi(id, name))
+        const res = await updataTaskNameApi(id, name)
         if (!res) return
 
         onStatusChange(baseInfo.status)
@@ -196,7 +203,7 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
                         }
                     ]}
                     str={baseInfo.model_name}
-                    onChange={(model_name) => handleChangeName(model_name)}>
+                    onChange={handleChangeName}>
                     {(val) => <div className="text-lg font-semibold">{val}</div>}
                 </EditLabel>
                 <BadgeView value={baseInfo.status} />

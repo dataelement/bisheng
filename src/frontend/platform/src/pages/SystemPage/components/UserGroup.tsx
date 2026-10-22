@@ -29,7 +29,6 @@ TableHead,
 TableHeader,
 TableRow
 } from "../../../components/bs-ui/table";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import EditUserGroup from "./EditUserGroup";
 
 const isGroupCreator = (user: any, ug: UserGroupV2) => {
@@ -102,15 +101,9 @@ export default function UserGroups() {
             desc: t('system.deleteGroup', { name: ug.group_name }),
             okTxt: t('delete'),
             onOk: async (next) => {
-                try {
-                    const res = await captureAndAlertRequestErrorHoc(
-                        deleteUserGroupV2(ug.id).then(() => loadData()),
-                    )
-                    if (res === false) return
+                    await deleteUserGroupV2(ug.id).then(() => loadData())
                     toast.show({ type: "success", message: String(t("deleteSuccess") ?? '') })
-                } finally {
                     next()
-                }
             },
         })
     }

@@ -5,7 +5,7 @@ import CreateDataSet from './CreateDataSet'
 
 const mock = vi.hoisted(() => ({ create: vi.fn(), message: vi.fn() }))
 vi.mock('@/controllers/API/finetune', () => ({ createDatasetApi: mock.create }))
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p }))
+vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p.catch(() => false), showApiError: vi.fn() }))
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
 const previous = await (() => ({ useToast: () => ({ message: mock.message }) }))();
@@ -51,4 +51,17 @@ it('resets the import mode and draft when reopened', () => {
     act(() => ref.current?.open())
     expect(screen.getByRole('radio', { name: 'dataset.localImport' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('textbox')).toHaveValue('')
+})
+
+it('retains the draft after a failed create and allows a successful retry', async () => {
+    mock.create.mockRejectedValueOnce(new Error('Create failed'))
+    const { onChange } = setup()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Retry dataset' } })
+    fireEvent.click(screen.getByText('Upload fixture'))
+    fireEvent.click(screen.getByRole('button', { name: 'confirm' }))
+    await waitFor(() => expect(mock.create).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('textbox')).toHaveValue('Retry dataset')
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'confirm' }))
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
 })

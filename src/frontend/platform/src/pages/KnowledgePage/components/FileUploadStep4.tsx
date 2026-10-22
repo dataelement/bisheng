@@ -9,12 +9,13 @@ import { readFileByLibDatabase } from "@/controllers/API";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";
 import { createWorkflowApi,getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest } from "@/controllers/request";
 import { initNode } from "@/util/flowUtils";
 import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate,useParams } from "react-router-dom";
 import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
+import { normalizeApiError } from "@bisheng/api-client";
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
@@ -186,17 +187,21 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
         finalId = kId.replace(/\D/g, '');
     }
 
-    const [details] = useKnowledgeDetails([finalId])
+    const [, fetchDetails] = useKnowledgeDetails([finalId])
 
     const handleCreateFlow = async (params) => {
+        const details = await fetchDetails([finalId])
+        if (!details[0]?.name) {
+            throw normalizeApiError(details, { message: t('api_errors:fallback') })
+        }
         const model = await getLlmDefaultModel()
 
-        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0]?.name || '', model.model_id, flowT)
-        const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(
+        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0].name, model.model_id, flowT)
+        const res = await createWorkflowApi(
             t('documentKnowledgeQa') + generateUUID(5),
             t('retrieveDocumentKnowledge'),
             "",
-            flow))
+            flow)
         history.pushState(null, null, __APP_ENV__.BASE_URL + '/build/apps');
 
         navigate('/flow/' + res.id);
@@ -222,7 +227,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
                     type='assist'
                     title={t('buildKnowledgeBaseQaAgent')}
                     description={<p>{t('afterDocumentParsing')}</p>}
-                    onClick={handleCreateFlow}
+                    onClick={handleUiRequest(handleCreateFlow)}
                 ></CardComponent>
             </div>}
         </div>

@@ -38,10 +38,15 @@ export async function getSomething(): Promise<SomeType> {
 }
 
 // Component usage
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { handleUiRequest } from "@/controllers/request"
 import { getSomething } from "@/controllers/API"
-captureAndAlertRequestErrorHoc(getSomething()).then(res => { ... })
+const handleLoad = handleUiRequest(async () => {
+  const result = await getSomething()
+  // Update the UI only after fulfillment.
+})
 ```
+
+Request failures reject a complete `ApiError` even after a shared notification. Services/hooks keep rejection; event/effect owners catch it with `showApiError` or `handleUiRequest`. An async confirmation returns its Promise so the dialog can keep its pending lock. Verified by `requestErrors.test.ts`, `requestCompatibilityMatrix.test.ts`, and `useConfirm.test.tsx` (F088, 2026-10-22).
 
 ## Known Pitfalls
 - **MinIO Image Proxy**: Vite `fileServiceTarget` must match backend `config.yaml` `object_storage.minio.sharepoint`, otherwise image requests get 403.

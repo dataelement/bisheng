@@ -26,6 +26,7 @@ const ToolSelector = ({
   toolSearchTerm,
   setToolSearchTerm,
   loading,
+  loadErrorContent,
   filteredTools,
   expandedItems,
   setManuallyExpandedItems,
@@ -373,6 +374,7 @@ const ToolSelector = ({
               transition: 'max-height 0.3s ease-out',
             }}
           >
+            {loadErrorContent}
             {loading ? (
               <div className="flex justify-center items-center h-full">
                 <LoadIcon className="animate-spin" />
@@ -457,7 +459,7 @@ const ToolSelector = ({
                   </AccordionItem>
                 ))}
               </Accordion>
-            ) : (
+            ) : loadErrorContent ? null : (
               <div className="text-center text-sm text-gray-500 py-4">
                 {t('toolSelector.noToolsFound')}
               </div>

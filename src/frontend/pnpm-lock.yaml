@@ -243,6 +243,9 @@ importers:
       '@ariakit/react-core':
         specifier: ^0.4.15
         version: 0.4.26(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@bisheng/api-client':
+        specifier: workspace:*
+        version: link:../packages/api-client
       '@bisheng/chat':
         specifier: workspace:*
         version: link:../packages/chat
@@ -689,6 +692,15 @@ importers:
         specifier: ^0.21.2
         version: 0.21.2(vite@6.4.5(@types/node@20.19.43)(jiti@1.21.7)(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.49.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
 
+  packages/api-client:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@20.19.43)(jiti@2.7.0)(jsdom@25.0.1(canvas@2.11.2))(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.49.0)
+
   packages/chat:
     dependencies:
       '@bisheng/ui':
@@ -742,7 +754,7 @@ importers:
     devDependencies:
       '@testing-library/react':
         specifier: ^16.0.0
-        version: 14.3.1(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: 'catalog:'
         version: 18.3.31
@@ -852,6 +864,9 @@ importers:
 
   platform:
     dependencies:
+      '@bisheng/api-client':
+        specifier: workspace:*
+        version: link:../packages/api-client
       '@bisheng/chat':
         specifier: workspace:*
         version: link:../packages/chat

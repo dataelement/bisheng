@@ -13,7 +13,7 @@ listServiceAccountResourceGrantsApi,
 setServiceAccountEnabledApi,
 updateServiceAccountApi,
 } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import type {
 ServiceAccountForm,
 ServiceAccountItem,
@@ -91,13 +91,13 @@ export function OverviewTab({
     }
     setLoading("save")
     try {
-      const updated = await captureAndAlertRequestErrorHoc(
-        updateServiceAccountApi(detail.id, payload),
-      )
+      const updated = await updateServiceAccountApi(detail.id, payload)
       if (!updated) return
       notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.updated") ?? '') })
       setEditing(false)
       onChanged(updated)
+    } catch (error) {
+      showApiError(error)
     } finally {
       setLoading(null)
     }
@@ -106,9 +106,7 @@ export function OverviewTab({
   const handleToggle = () => {
     const enabled = detail.status !== "enabled"
     setLoading("toggle")
-    void captureAndAlertRequestErrorHoc(
-      setServiceAccountEnabledApi(detail.id, enabled),
-    )
+    void setServiceAccountEnabledApi(detail.id, enabled)
       .then((updated) => {
         if (!updated) return
         notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t(
@@ -118,14 +116,12 @@ export function OverviewTab({
           ) ?? '') })
         onChanged(updated)
       })
-      .finally(() => setLoading(null))
+      .catch(showApiError).finally(() => setLoading(null))
   }
 
   const handleDelete = async () => {
     setLoading("delete")
-    const grants = await captureAndAlertRequestErrorHoc(
-      listServiceAccountResourceGrantsApi(detail.id),
-    ).finally(() => setLoading(null))
+    const grants = await listServiceAccountResourceGrantsApi(detail.id).finally(() => setLoading(null))
     if (!grants) return
     bsConfirm({
       title: t("openApiManagement.serviceAccount.deleteConfirmTitle"),
@@ -157,13 +153,13 @@ export function OverviewTab({
         </div>
       ),
       onOk: (close) => {
-        close()
         setLoading("delete")
-        void captureAndAlertRequestErrorHoc(deleteServiceAccountApi(detail.id))
+        return deleteServiceAccountApi(detail.id)
           .then((result) => {
             if (!result) return
             notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.deleted") ?? '') })
             onDeleted()
+            close()
           })
           .finally(() => setLoading(null))
       },
@@ -272,7 +268,7 @@ export function OverviewTab({
                   : "openApiManagement.actions.enable",
               )}
             </Button>
-            <Button variant="solid" disabled={loading !== null} onClick={handleDelete} color="danger">
+            <Button variant="solid" disabled={loading !== null} onClick={handleUiRequest(handleDelete)} color="danger">
               {loading === "delete" ? (
                 <Outlined.Loading
                   aria-hidden="true"

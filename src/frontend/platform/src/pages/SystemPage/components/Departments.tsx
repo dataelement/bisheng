@@ -4,7 +4,7 @@ import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getDepartmentApi } from "@/controllers/API/department";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { CreateDepartmentDialog } from "@/pages/DepartmentPage/components/CreateDepartmentDialog";
 import { DepartmentSettings } from "@/pages/DepartmentPage/components/DepartmentSettings";
 import { DepartmentTrafficControl } from "@/pages/DepartmentPage/components/DepartmentTrafficControl";
@@ -64,7 +64,7 @@ export default function Departments() {
 
   const handleCreated = useCallback(() => {
     setCreateOpen(false);
-    void tree.reloadLayer(createParentId);
+    void tree.reloadLayer(createParentId).catch(showApiError);
   }, [tree, createParentId]);
 
   const handleMarkAsTenant = useCallback((deptId: number, deptName: string) => {
@@ -73,7 +73,7 @@ export default function Departments() {
 
   const handleMounted = useCallback(() => {
     setMountTarget(null);
-    void tree.refreshAll();
+    void tree.refreshAll().catch(showApiError);
   }, [tree]);
 
   const handleTreeChange = useCallback(
@@ -93,7 +93,7 @@ export default function Departments() {
   const handleLocateMemberFromGlobal = useCallback(
     async ({ primaryDeptDeptId, userId }: { primaryDeptDeptId: string; userId: number }) => {
       setMemberHighlightUserId(userId);
-      const detail = await captureAndAlertRequestErrorHoc(getDepartmentApi(primaryDeptDeptId));
+      const detail = await getDepartmentApi(primaryDeptDeptId);
       if (!detail) return;
       await tree.reveal(detail.id);
       const node = tree.getNode(detail.id);
@@ -208,11 +208,11 @@ export default function Departments() {
                           deptName={selectedDept.name}
                           dept={selectedDept}
                           isArchived={selectedDept.status === "archived"}
-                          onChanged={handleTreeChange}
+                          onChanged={handleUiRequest(handleTreeChange)}
                           membersRefreshSignal={membersRefreshSignal}
                           highlightUserId={memberHighlightUserId}
                           onHighlightConsumed={handleMemberHighlightConsumed}
-                          onRequestLocateMember={handleLocateMemberFromGlobal}
+                          onRequestLocateMember={handleUiRequest(handleLocateMemberFromGlobal)}
                         />
                       </div>
                     </>
@@ -227,7 +227,7 @@ export default function Departments() {
                       <div>
                         <DepartmentSettings
                           dept={selectedDept}
-                          onChanged={handleTreeChange}
+                          onChanged={handleUiRequest(handleTreeChange)}
                           onMarkAsTenant={multiTenantEnabled && user?.is_global_super ? handleMarkAsTenant : undefined}
                         />
                       </div>

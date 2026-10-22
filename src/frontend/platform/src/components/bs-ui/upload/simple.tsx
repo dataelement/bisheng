@@ -5,9 +5,21 @@ import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 
 import { cname } from "../utils";
-import axios from "@/controllers/request";
+import axios, { showApiError } from "@/controllers/request";
+import { isApiError } from '@bisheng/api-client';
+import type { ReactNode } from 'react';
 
-export default function SimpleUpload({ filekey, uploadUrl, accept, className = '', icon = <UploadIcon className="group-hover:text-primary" />, preCheck, onUpload, onProgress, onError, onSuccess }) {
+interface SimpleUploadProps {
+    filekey: string;
+    uploadUrl: string;
+    accept: string[];
+    className?: string;
+    icon?: ReactNode;
+    preCheck?: (file: File) => unknown;
+    onSuccess: (name: string, path: string) => unknown;
+}
+
+export default function SimpleUpload({ filekey, uploadUrl, accept, className = '', icon = <UploadIcon className="group-hover:text-primary" />, preCheck, onSuccess }: SimpleUploadProps) {
     const { t } = useTranslation();
 
 
@@ -27,12 +39,14 @@ export default function SimpleUpload({ filekey, uploadUrl, accept, className = '
         if (preCheck) {
             try {
                 const checkResult = await preCheck(files[0]);
-                if (checkResult?.valid === false) {
-                    notification.open({ title: String(t('prompt') ?? ''), description: String(checkResult.message || t('code.preCheckFailed')) });
+                if (checkResult && typeof checkResult === 'object' && 'valid' in checkResult && checkResult.valid === false) {
+                    const message = 'message' in checkResult ? checkResult.message : undefined;
+                    notification.open({ title: String(t('prompt') ?? ''), description: String(message || t('code.preCheckFailed')) });
                     return;
                 }
             } catch (error) {
-                notification.open({ title: String(t('prompt') ?? ''), description: String(error.message || t('code.preCheckError')) });
+                if (isApiError(error)) showApiError(error);
+                else notification.open({ title: String(t('prompt') ?? ''), description: String(error.message || t('code.preCheckError')) });
                 return;
             }
         }
@@ -40,8 +54,12 @@ export default function SimpleUpload({ filekey, uploadUrl, accept, className = '
         const formData = new FormData();
         formData.append(filekey, files[0]);
 
-        const res = await axios.post(uploadUrl, formData);
-        onSuccess(files[0].name, res.file_path)
+        try {
+            const res = await axios.post(uploadUrl, formData);
+            await onSuccess(files[0].name, res.file_path)
+        } catch (error) {
+            showApiError(error);
+        }
     }
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({

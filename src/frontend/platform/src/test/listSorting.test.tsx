@@ -23,7 +23,7 @@ vi.mock('@/controllers/API/assistant', () => ({
   getChatOnlineApi: vi.fn(async () => ({ list: [], hasMore: false })),
   getRecommendedAppsApi: vi.fn(async () => [{ id: '1', name: 'App One' }, { id: '2', name: 'App Two' }]),
 }));
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: <T,>(pending: Promise<T>) => pending }));
+vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }));
 vi.mock('@/pages/BuildPage/apps', () => ({ SelectType: () => null }));
 vi.mock('@/components/bs-comp/cardComponent/avatar', () => ({ default: () => null }));
 vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({ bsConfirm: vi.fn() }));

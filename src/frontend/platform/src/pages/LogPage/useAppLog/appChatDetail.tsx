@@ -9,7 +9,7 @@ import { Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { getAssistantDetailApi } from "@/controllers/API/assistant";
 import { getDeleteFlowApi } from "@/controllers/API/flow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import ChatMessages from "@/pages/BuildPage/flow/FlowChat/ChatMessages";
 import { MessageStoreProvider as WorkflowMessageStoreProvider, useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { AppNumType } from "@/types/app";
@@ -35,7 +35,7 @@ function AppChatDetailContent() {
 
     useEffect(() => {
         let active = true
-        type === AppNumType.ASSISTANT && captureAndAlertRequestErrorHoc(getAssistantDetailApi(fid, 'v1').then(detail => { if (active) setAssistantDetail(detail) }))
+        if (type === AppNumType.ASSISTANT) void getAssistantDetailApi(fid, 'v1').then(detail => { if (active) setAssistantDetail(detail) }).catch(showApiError)
 
         type === AppNumType.FLOW ? loadFlowHistoryMsg(fid, cid, {
             appendHistory: true,

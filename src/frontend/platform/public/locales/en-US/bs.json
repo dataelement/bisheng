@@ -1012,6 +1012,7 @@
     "1008": "The current assistant or skill is not online, and direct conversation is not possible."
   },
   "build": {
+    "editPermissionRequired": "Edit permission required",
     "create": "Create",
     "assistant": "Assistant",
     "workflow": "Workflow",

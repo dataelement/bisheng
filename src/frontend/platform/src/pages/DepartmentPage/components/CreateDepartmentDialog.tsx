@@ -15,7 +15,7 @@ import DepartmentUsersSelect, {
   DepartmentUserOption,
 } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
 import { createDepartmentApi } from "@/controllers/API/department"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -46,21 +46,16 @@ export function CreateDepartmentDialog({
       return
     }
     setLoading(true)
-    captureAndAlertRequestErrorHoc(
-      createDepartmentApi({
+    createDepartmentApi({
         name,
         parent_id: parentId,
         admin_user_ids: adminSelectValue.length
           ? adminSelectValue.map((o) => o.value)
           : undefined,
-      })
-    ).then((res) => {
-      setLoading(false)
-      // captureAndAlertRequestErrorHoc 在接口失败时返回 false（不是 null）
-      if (res === false) return
+      }).then(() => {
       notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.create") ?? '') })
       onCreated()
-    })
+    }).catch(showApiError).finally(() => setLoading(false))
   }, [name, parentId, adminSelectValue, onCreated, t])
 
   return (

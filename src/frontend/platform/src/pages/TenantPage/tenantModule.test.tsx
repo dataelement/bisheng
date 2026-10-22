@@ -15,7 +15,7 @@ vi.mock("@/contexts/userContext", async () => ({ userContext: (await import("rea
 vi.mock("@/contexts/locationContext", async () => ({
   locationContext: (await import("react")).createContext({ appConfig: {} }),
 }));
-vi.mock("@/controllers/request", () => ({ captureAndAlertRequestErrorHoc: (promise: Promise<unknown>) => promise }));
+vi.mock("@/controllers/request", async (importOriginal) => ({ ...await importOriginal<typeof import('@/controllers/request')>() }));
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
 const previous = await (() => ({ toast: vi.fn() }))();

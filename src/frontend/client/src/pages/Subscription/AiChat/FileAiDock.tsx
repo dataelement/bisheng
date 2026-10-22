@@ -1,3 +1,4 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Outlined } from "bisheng-icons";
@@ -257,6 +258,9 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
         conversationId,
         title,
         isLoading,
+        historyError,
+        isClearing,
+        retryHistory,
         isStreaming,
         sendMessage,
         stopGenerating,
@@ -337,7 +341,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                 {messageHeader}
 
                 <div className="relative min-h-0 flex-1">
-                    <AiChatMessages
+                    {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                         messages={messages}
                         conversationId={conversationId}
                         title={title}
@@ -352,7 +356,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
-                    />
+                    />)}
                     <div
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-10 bg-gradient-to-t from-white to-white/0"
@@ -372,7 +376,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                         onChange={setInputText}
                         onSend={handleSend}
                         model={model}
-                        disabled={!modelOptions?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !modelOptions?.length}
                         isStreaming={isStreaming}
                         placeholder={placeholder}
                         variant="box"
@@ -463,7 +467,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                 </div>
                             </div>
 
-                            <AiChatMessages
+                            {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                                 messages={messages}
                                 conversationId={conversationId}
                                 title={title}
@@ -478,7 +482,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                                 emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                                 onPresetClick={(q) => setInputText(q)}
                                 onRegenerate={regenerate}
-                            />
+                            />)}
                         </div>
                     </div>
 
@@ -487,7 +491,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
                         onChange={setInputText}
                         onSend={handleSend}
                         model={model}
-                        disabled={!modelOptions?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !modelOptions?.length}
                         isStreaming={isStreaming}
                         placeholder={placeholder}
                         variant={open ? "line" : "box"}

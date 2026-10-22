@@ -1,4 +1,6 @@
 import { Tooltip as SharedTooltip } from '@bisheng/ui';
+import { isApiError } from '@bisheng/api-client';
+import { showApiError } from '~/api/request';
 import { Outlined } from 'bisheng-icons';
 import { useEffect, useRef, useState } from 'react';
 import { useRecoilState } from 'recoil';
@@ -33,12 +35,15 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
   const { showToast } = useToastContext();
   const [interruptAudio] = useRecoilState(interruptAudioAtom);
   const [, setAudioOpening] = useRecordingAudioLoading();
-  const errorRef = useRef(() => {});
+  const errorRef = useRef<(error?: unknown) => void>(() => {});
   const startingRef = useRef(false);
   const attemptRef = useRef(0);
   const armedRef = useRef(false);
   const seenStop = useRef(props.stopSignal);
-  errorRef.current = () => showToast({ message: localize('voice_input.failed'), status: 'error' });
+  errorRef.current = (error) => {
+    if (isApiError(error)) showApiError(error);
+    else showToast({ message: localize('voice_input.failed'), status: 'error' });
+  };
 
   const dropAttempt = () => {
     attemptRef.current += 1;
@@ -111,7 +116,7 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
           callbacks.current.onBusyChange?.(pending);
         },
         onText: (text) => callbacks.current.onChange(text),
-        onError: () => errorRef.current(),
+        onError: (error) => errorRef.current(error),
         onEnd: () => {
           sessionRef.current = null;
           callbacks.current.onRecordingEnd?.();
@@ -121,11 +126,11 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
       armedRef.current = false;
       sessionRef.current = session;
       void session.start();
-    } catch {
+    } catch (error) {
       if (attempt === attemptRef.current) {
         armedRef.current = false;
         setRecording(false);
-        errorRef.current();
+        errorRef.current(error);
       }
     } finally {
       if (attempt === attemptRef.current) startingRef.current = false;

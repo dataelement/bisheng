@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "../../../components/bs-ui/dialog";
 
 import { createAssistantsApi } from "../../../controllers/API/assistant";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 
 export default function CreateAssistant() {
 
@@ -90,17 +90,20 @@ ${t('build.exampleTwo')}
         if (isValid) {
             console.log('Form data:', formData);
             setLoading(true)
-            const res = await captureAndAlertRequestErrorHoc(
-                createAssistantsApi(
+            try {
+            const res = await createAssistantsApi(
                     formData.name, formData.roleAndTasks, formData.url,
-                ),
-            )
+                )
             if (res) {
                 //@ts-ignore
                 window.assistantCreate = true // Mark as creating new assistant
                 navigate('/assistant/' + res.id)
             }
-            setLoading(false)
+            } catch (error) {
+                showApiError(error)
+            } finally {
+                setLoading(false)
+            }
         }
     };
 

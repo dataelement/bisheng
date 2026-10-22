@@ -3,7 +3,7 @@ import { Input } from "@bisheng/ui";
 
 
 import { getTenantQuotaApi, setTenantQuotaApi } from "@/controllers/API/tenant";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type { Tenant, TenantQuota } from "@/types/api/tenant";
 import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useEffect, useMemo, useState } from "react";
@@ -40,8 +40,7 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    captureAndAlertRequestErrorHoc(
-      getTenantQuotaApi(tenant.id).then((res) => {
+    getTenantQuotaApi(tenant.id).then((res) => {
         setQuota(res);
         const cfg = (res?.quota_config ?? {}) as Record<string, unknown>;
         const next: Record<string, string> = {};
@@ -51,8 +50,7 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
           next[k] = cfg[k] === -1 || cfg[k] == null ? "" : String(cfg[k]);
         });
         setInputs(next);
-      }),
-    );
+      }).catch(showApiError);
   }, [tenant.id]);
 
   const quotaFields = useMemo(() => [{ key: "storage_gb", label: t("tenant.knowledgeStorageUsage") + " (GB)" }], [t]);
@@ -72,7 +70,7 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
   };
 
   const handleSave = async () => {
-    if (hasError) return;
+    if (!quota || hasError) return;
     const config: Record<string, number> = {};
     quotaFields.forEach(({ key }) => {
       const raw = inputs[key];
@@ -84,9 +82,11 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
     });
     setLoading(true);
     try {
-      await captureAndAlertRequestErrorHoc(setTenantQuotaApi(tenant.id, config));
+      await setTenantQuotaApi(tenant.id, config);
       notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
       onSuccess();
+    } catch (error) {
+      showApiError(error);
     } finally {
       setLoading(false);
     }
@@ -152,7 +152,7 @@ export function TenantQuotaDialog({ tenant, onClose, onSuccess }: Props) {
           <Button variant="outlined" onClick={onClose} color="default">
             {t("cancel")}
           </Button>
-          <Button onClick={handleSave} disabled={loading || hasError}>
+          <Button onClick={handleSave} disabled={!quota || loading || hasError}>
             {t("confirm")}
           </Button>
         </div>

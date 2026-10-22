@@ -1,3 +1,4 @@
+import { isApiError } from '@bisheng/api-client';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Outlined } from 'bisheng-icons';
@@ -14,7 +15,7 @@ import {
 } from '~/api/skillCenter';
 import { translateApiErrorMessage } from '~/api/request';
 import { useSkillCenter } from './useSkillCenter';
-import { SkillRequestError, type SkillRecord } from './types';
+import { type SkillRecord } from './types';
 
 interface SkillUploadDialogProps {
   open: boolean;
@@ -91,10 +92,10 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
       setReady(true);
     } catch (cause) {
       if (checkSeq.current !== seq) return;
-      const sameName = cause instanceof SkillRequestError
-        && cause.statusCode === 11055
-        && Number.isInteger(Number(cause.data?.skill_id))
-        && Boolean(cause.data?.content_hash || target?.contentHash);
+      const sameName = isApiError(cause)
+        && cause.status_code === 11055
+        && Number.isInteger(Number((cause.data as Record<string, unknown> | undefined)?.skill_id))
+        && Boolean((cause.data as Record<string, unknown> | undefined)?.content_hash || target?.contentHash);
       if (sameName) setReady(true);
       fail(cause);
     } finally {
@@ -123,9 +124,9 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
     onOpenChange(false);
   };
   const fail = (cause: unknown) => {
-    if (cause instanceof SkillRequestError && cause.statusCode === 11055) {
-      const skillId = Number(cause.data?.skill_id);
-      const contentHash = String(cause.data?.content_hash ?? target?.contentHash ?? '');
+    if (isApiError(cause) && cause.status_code === 11055) {
+      const skillId = Number((cause.data as Record<string, unknown> | undefined)?.skill_id);
+      const contentHash = String((cause.data as Record<string, unknown> | undefined)?.content_hash ?? target?.contentHash ?? '');
       if (Number.isInteger(skillId) && contentHash) {
         setDuplicate({ skillId, contentHash });
         setError('');
@@ -133,11 +134,11 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
         return;
       }
     }
-    if (cause instanceof SkillRequestError) {
-      setErrorCode(cause.statusCode);
+    if (isApiError(cause)) {
+      setErrorCode(cause.status_code);
       setError(translateApiErrorMessage({
-        status_code: cause.statusCode,
-        status_message: cause.statusMessage,
+        status_code: cause.status_code,
+        status_message: cause.status_message,
         data: cause.data,
       }));
       return;

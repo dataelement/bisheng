@@ -68,5 +68,8 @@ declare module "*.svg" {
 declare module "axios" {
   export interface AxiosRequestConfig {
     silent?: boolean
+    showError?: boolean
+    /** @deprecated Errors always retain transport evidence. */
+    preserveError?: boolean
   }
 }
