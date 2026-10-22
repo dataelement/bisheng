@@ -1,6 +1,6 @@
 """Offline harness contracts only; no assertion here proves a live deployment.
 
-覆盖 AC: AC-35, AC-36, AC-55, AC-56
+覆盖 AC: AC-01, AC-30, AC-32, AC-35, AC-36, AC-55, AC-56
 """
 
 from __future__ import annotations
@@ -1060,3 +1060,68 @@ def test_fault_cli_restore_partial_evidence_is_not_printed_as_full_pass(monkeypa
     assert fault_cli.main() == 0
     output = capsys.readouterr().out
     assert "PARTIAL" in output and "PASS" not in output
+
+
+@pytest.mark.parametrize("failure", [None, "unreadable", "backend", "ledger", "empty-checks", "executor", "runtimes", "protocol"])
+async def test_docker_installation_checks_real_legacy_diagnostics_without_k8s_fields(tmp_path, failure):
+    """AC-01, AC-30, AC-32, AC-55: Docker keeps its existing response; no readiness bypass."""
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    status = {
+        "backend_available": True,
+        "protocol_version": 2,
+        "node_id": "e2e-f059-docker-node",
+        "capacity": {"readable": True},
+        "supported_runtimes": ["python3.11", "node20", "static"],
+        "preflight": [
+            {"name": "orchestration_backend", "ok": True},
+            {"name": "platform_ledger", "ok": True},
+        ],
+    }
+    if failure == "unreadable":
+        status["capacity"]["readable"] = False
+    elif failure == "backend":
+        status["backend_available"] = False
+    elif failure == "ledger":
+        status["preflight"][1]["ok"] = False
+    elif failure == "empty-checks":
+        status["preflight"] = []
+    elif failure == "executor":
+        status["executor_kind"] = "kubernetes"
+    elif failure == "runtimes":
+        status["supported_runtimes"] = []
+    elif failure == "protocol":
+        status["protocol_version"] = 1
+    settings = SuiteSettings("e2e-f059-tenant", (), executor_kind="docker")
+    journal = EvidenceJournal(tmp_path / "docker.json", tenant_code=settings.tenant_code)
+    suite = LiveVibeSuite(settings, journal, None)
+    calls = []
+
+    async def request(method, path, **kwargs):
+        calls.append((path, kwargs))
+        return status if path == "/apps/runtime-status" and kwargs.get("role") == "ADMIN" else [{"id": "fixture"}]
+
+    suite.request = request
+    if failure:
+        with pytest.raises(AssertionError):
+            await suite.installation()
+        assert not journal.document["events"]
+    else:
+        await suite.installation()
+        assert journal.document["events"][-1]["outcome"] == "passed"
+        assert any(kwargs.get("expected_code") == 16106 for _, kwargs in calls)
+
+
+async def test_k8s_installation_never_accepts_legacy_docker_diagnostics(tmp_path):
+    """AC-01, AC-30, AC-32, AC-55: Docker compatibility cannot relax Kubernetes readiness."""
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    settings = SuiteSettings("e2e-f059-tenant", ())
+    suite = LiveVibeSuite(settings, EvidenceJournal(tmp_path / "k8s.json", tenant_code=settings.tenant_code), None)
+
+    async def request(*args, **kwargs):
+        return {"protocol_version": 2, "backend_available": True, "preflight": [{"name": "legacy", "ok": True}]}
+
+    suite.request = request
+    with pytest.raises((AssertionError, KeyError)):
+        await suite.installation()
