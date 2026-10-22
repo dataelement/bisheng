@@ -74,6 +74,7 @@ class PodPlan:
     prepare_environment: bool = False
     schema_plan: tuple[dict, ...] = field(default_factory=tuple, repr=False)
     temporary_mb: int = 256
+    volume_guard: dict = field(default_factory=dict, repr=False)
 
     def validate(self):
         validate_namespace(self.namespace)
@@ -341,6 +342,9 @@ def pod_template(plan: PodPlan) -> dict:
                 command=("python", "-I", "-m", "runtime_manager.k8s_helper", "data-layout"),
                 mounts=[_mount("data", "/volume")],
                 helper=True,
+                env={"VOLUME_GUARD": json.dumps(plan.volume_guard, sort_keys=True)}
+                if production and plan.volume_guard
+                else {},
             )
         )
         if plan.purpose in {"probe", "preview"} and plan.schema_plan:

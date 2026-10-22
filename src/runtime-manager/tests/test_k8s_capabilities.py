@@ -88,6 +88,58 @@ def test_probe_exception_is_a_safe_failed_check_not_a_success():
 def test_storage_probe_uses_real_private_files_and_retains_the_supplied_volume(tmp_path):
     from runtime_manager.k8s_capabilities import storage_checks
 
-    result = storage_checks(tmp_path)
-    assert result == {"locking": True, "fsync": True, "sqlite_integrity": True}
+    result = storage_checks(tmp_path, require_filesystem=False)
+    assert all(result[key] for key in ("locking", "fsync", "sqlite_integrity"))
+    assert result["capacity_bytes"] > 0
     assert tmp_path.is_dir() and list(tmp_path.iterdir()) == []
+
+
+def test_volume_guard_refuses_unmounted_directory_and_accepts_owned_bounded_mount(tmp_path, monkeypatch):
+    from runtime_manager import k8s_capabilities
+    from runtime_manager.k8s_helper import initialize_data_layout
+
+    guard = {
+        "namespace": "runtime-apps",
+        "installation_id": "e2e-f059",
+        "filesystem": "ext4",
+        "capacity_bytes": 1024**3,
+        "marker_required": True,
+    }
+    monkeypatch.setattr(k8s_capabilities, "mounted_filesystem", lambda path: "ext4")
+    monkeypatch.setattr(k8s_capabilities, "volume_capacity", lambda path: 1024**3)
+    with pytest.raises(ValueError, match="volume_marker"):
+        initialize_data_layout(tmp_path, guard=guard)
+    import json
+
+    (tmp_path / ".bisheng-volume.json").write_text(
+        json.dumps({"namespace": "runtime-apps", "installation_id": "e2e-f059"})
+    )
+    assert initialize_data_layout(tmp_path, guard=guard) == {"layout": 1}
+    monkeypatch.setattr(k8s_capabilities, "volume_capacity", lambda path: 500 * 1024**3)
+    with pytest.raises(ValueError, match="volume_capacity"):
+        initialize_data_layout(tmp_path, guard=guard)
+
+
+def test_optional_stronger_sandbox_falls_back_explicitly_to_verified_default():
+    from runtime_manager.k8s_capabilities import assess_capabilities
+
+    doc = descriptor()
+    doc["sandbox"] = {"requested": "hardened", "runtime_classes": {"hardened": "kata"}}
+    doc = complete(doc)
+    report = assess_capabilities(doc, now=1001)
+    assert report["ready"]
+    assert report["sandbox"] == {
+        "requested": "hardened",
+        "effective": "default",
+        "runtime_class": "",
+        "fallback": True,
+        "reason": "sandbox_unavailable",
+    }
+    assert "sandbox_fallback_default" in report["warnings"]
+    doc["probe_report"]["checks"].append({"name": "sandbox-hardened", "ok": True, "evidence": {"uid": str(uuid4())}})
+    report = assess_capabilities(doc, now=1001)
+    assert report["sandbox"]["effective"] == "hardened" and report["sandbox"]["runtime_class"] == "kata"
+    doc["probe_report"]["checks"] = [
+        item for item in doc["probe_report"]["checks"] if item["name"] != "network-direct-denied"
+    ]
+    assert not assess_capabilities(doc, now=1001)["ready"]

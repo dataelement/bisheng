@@ -41,8 +41,35 @@ def _directory(path):
     return path
 
 
-def initialize_data_layout(volume=Path("/volume")):
+def initialize_data_layout(volume=Path("/volume"), *, guard=None):
     root = _directory(volume)
+    if guard is not None:
+        from runtime_manager.k8s_capabilities import mounted_filesystem, volume_capacity
+
+        if not isinstance(guard, dict) or set(guard) != {
+            "namespace",
+            "installation_id",
+            "filesystem",
+            "capacity_bytes",
+            "marker_required",
+        }:
+            raise ValueError("volume_guard_invalid")
+        if mounted_filesystem(root) != guard["filesystem"] or guard["filesystem"] not in {"ext4", "xfs"}:
+            raise ValueError("volume_filesystem_incompatible")
+        requested = guard["capacity_bytes"]
+        if (
+            type(requested) is not int
+            or requested <= 0
+            or not 0.8 * requested <= volume_capacity(root) <= 1.1 * requested
+        ):
+            raise ValueError("volume_capacity_unbounded")
+        if guard["marker_required"]:
+            marker = root / ".bisheng-volume.json"
+            if marker.is_symlink() or not marker.is_file() or marker.stat().st_size > 4096:
+                raise ValueError("volume_marker_missing")
+            identity = json.loads(marker.read_text())
+            if any(identity.get(key) != guard[key] for key in ("namespace", "installation_id")):
+                raise ValueError("volume_marker_scope_refused")
     for name in ("business", "platform", "platform/backups", "platform/journal"):
         directory = _directory(root / name)
         directory.chmod(0o700 if name.startswith("platform") else 0o770)
@@ -319,7 +346,17 @@ def prepare_upload(client, document, *, work=Path("/work")):
                 )
             )
         language = profile["language"]
-        code = source / "dist" if language == "static" and (source / "dist/index.html").is_file() else source
+        if language == "static" and document.get("source_image"):
+            code = next(
+                (
+                    source / part
+                    for part in (".", "dist", "build", "public")
+                    if (source / part / "index.html").is_file()
+                ),
+                source,
+            )
+        else:
+            code = source / "dist" if language == "static" and (source / "dist/index.html").is_file() else source
         if code.is_symlink() or not code.resolve().is_relative_to(work.resolve()):
             raise ValueError("helper_output_path_escape")
         archive = archive_directory(
@@ -404,7 +441,9 @@ def client_from_identity(path=Path("/run/material/identity.json"), *, clock=time
 def main():
     action = sys.argv[1] if len(sys.argv) == 2 else ""
     if action == "data-layout":
-        result = initialize_data_layout()
+        result = initialize_data_layout(
+            guard=json.loads(os.environ["VOLUME_GUARD"]) if os.getenv("VOLUME_GUARD") else None
+        )
     elif action in {"material-fetch", "prepare-download", "prepare-upload"}:
         document = json.loads(os.environ["MATERIAL_PLAN"])
         client = client_from_identity()
