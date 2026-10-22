@@ -893,3 +893,170 @@ async def test_fault_operation_restore_accepts_dedup_and_marks_backup_associatio
     association = suite.journal.document["events"][-2]
     assert association["outcome"] == "unverified"
     assert association["confirmed_snapshot_candidates"] == ["snapshot-1"]
+
+
+@pytest.fixture
+def fault_cli():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[4] / "scripts/e2e_k8s_runtime.py"
+    spec = importlib.util.spec_from_file_location("f059_fault_cli_contract", path)
+    command = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(command)
+    return command
+
+
+async def test_fault_cli_restore_routes_explicit_intent_without_installation_or_cleanup(
+    tmp_path, monkeypatch, fault_cli
+):
+    """AC-51, AC-55: the operator's scoped restore is isolated from suite cleanup and cluster injection."""
+    import httpx
+
+    from test.e2e.helpers import vibe_runtime
+
+    expected = tmp_path / "rows.json"
+    expected.write_text('{"data":[{"id":1,"value":"snapshot-row"}]}')
+    settings = SuiteSettings("e2e-f059-tenant", ())
+    calls = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            assert kwargs["verify"] is settings.ssl_context and kwargs["trust_env"] is False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+    class Suite:
+        def __init__(self, *_args):
+            return None
+
+        async def authenticate(self):
+            calls.append("authenticate")
+
+        async def fault_operation(self, slug, **kwargs):
+            calls.append((slug, kwargs))
+            return {"protection_link_verified": False}
+
+    monkeypatch.setattr(httpx, "AsyncClient", Client)
+    monkeypatch.setattr(vibe_runtime, "LiveVibeSuite", Suite)
+    monkeypatch.setattr(vibe_runtime.SuiteSettings, "from_env", lambda: settings)
+    args = fault_cli.parser().parse_args(
+        [
+            "--stage",
+            "fault-operation",
+            "--operation-action",
+            "restore",
+            "--slug",
+            "e2e-f059-smoke",
+            "--snapshot-id",
+            "snapshot-1",
+            "--expected-generation",
+            "7",
+            "--acknowledge-data-loss",
+            "--expected-rows-file",
+            str(expected),
+            "--evidence",
+            str(tmp_path / "evidence.json"),
+        ]
+    )
+    result = await fault_cli.run(args)
+    assert result["protection_link_verified"] is False
+    assert calls[0] == "authenticate"
+    slug, intent = calls[1]
+    assert slug == "e2e-f059-smoke" and intent["action"] == "restore"
+    assert intent["expected_rows"] == {"data": [{"id": 1, "value": "snapshot-row"}]}
+    assert intent["expected_generation"] == 7 and intent["acknowledge_data_loss"] is True
+
+
+@pytest.mark.parametrize("invalid", ["ack", "generation", "operation", "rows", "symlink", "oversize", "json", "object"])
+async def test_fault_cli_invalid_restore_fails_before_authentication(tmp_path, monkeypatch, fault_cli, invalid):
+    """AC-51, AC-55: missing acknowledgement or untrusted expected-row files cannot trigger a restore."""
+    from test.e2e.helpers import vibe_runtime
+
+    path = tmp_path / "rows.json"
+    path.write_text('{"data":[]}')
+    if invalid == "symlink":
+        link = tmp_path / "link.json"
+        link.symlink_to(path)
+        path = link
+    elif invalid == "oversize":
+        path.write_text(" " * (1024 * 1024 + 1))
+    elif invalid == "json":
+        path.write_text("not-json")
+    elif invalid == "object":
+        path.write_text("[]")
+    argv = [
+        "--stage",
+        "fault-operation",
+        "--operation-action",
+        "restore",
+        "--slug",
+        "e2e-f059-smoke",
+        "--snapshot-id",
+        "snapshot-1",
+        "--evidence",
+        str(tmp_path / "evidence.json"),
+    ]
+    if invalid != "ack":
+        argv.append("--acknowledge-data-loss")
+    if invalid != "generation":
+        argv += ["--expected-generation", "7"]
+    if invalid == "operation":
+        argv += ["--operation-id", "unrelated-operation"]
+    if invalid != "rows":
+        argv += ["--expected-rows-file", str(path)]
+    args = fault_cli.parser().parse_args(argv)
+
+    def settings():
+        raise RuntimeError("invalid intent reached authentication setup")
+
+    monkeypatch.setattr(vibe_runtime.SuiteSettings, "from_env", settings)
+    with pytest.raises(ValueError):
+        await fault_cli.run(args)
+
+
+@pytest.mark.parametrize("action", ["observe", "cancel"])
+def test_fault_cli_requires_exact_operation_and_never_accepts_restore_flags(tmp_path, fault_cli, action):
+    """AC-43, AC-55: fault commands cannot silently reinterpret acknowledgement or a missing operation."""
+    argv = [
+        "--stage",
+        "fault-operation",
+        "--operation-action",
+        action,
+        "--slug",
+        "e2e-f059-smoke",
+        "--evidence",
+        str(tmp_path / "evidence.json"),
+    ]
+    if action == "observe":
+        argv += ["--expect-status", "failed"]
+    with pytest.raises(ValueError):
+        fault_cli.fault_intent(fault_cli.parser().parse_args(argv))
+    argv += ["--operation-id", "operation-1", "--acknowledge-data-loss"]
+    with pytest.raises(ValueError):
+        fault_cli.fault_intent(fault_cli.parser().parse_args(argv))
+
+
+def test_fault_cli_restore_partial_evidence_is_not_printed_as_full_pass(monkeypatch, capsys, fault_cli):
+    """AC-55: missing public backup association stays visibly PARTIAL despite successful row restoration."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        fault_cli,
+        "parser",
+        lambda: SimpleNamespace(
+            parse_args=lambda: SimpleNamespace(stage="fault-operation", evidence="private-evidence.json")
+        ),
+    )
+
+    async def run(args):
+        return {"protection_link_verified": False}
+
+    monkeypatch.setattr(fault_cli, "run", run)
+    assert fault_cli.main() == 0
+    output = capsys.readouterr().out
+    assert "PARTIAL" in output and "PASS" not in output
