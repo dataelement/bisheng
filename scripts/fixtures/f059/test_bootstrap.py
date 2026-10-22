@@ -1,0 +1,422 @@
+"""Local fixture contracts only; these checks do not prove deployed F059 ACs.
+
+Supports T066/T069 preparation. Real API permissions and deployed runtime
+acceptance remain the operator's live E2E responsibility.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import importlib.util
+import json
+import os
+import secrets
+import socket
+import sqlite3
+import struct
+import sys
+import tarfile
+import threading
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+import httpx
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[3]
+SPEC = importlib.util.spec_from_file_location("f059_bootstrap", ROOT / "scripts/bootstrap_f059_acceptance.py")
+bootstrap = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(bootstrap)
+sys.path[:0] = [str(ROOT / "src/backend"), str(ROOT / "src/bisheng-sdk")]
+
+
+def inventory():
+    names = ("app-python", "app-python-preparer", "app-node", "app-node-preparer", "app-static")
+    return {
+        "platform": "linux/amd64",
+        "images": {
+            name: {
+                "image": f"registry.invalid/{name}@sha256:" + str(index) * 64,
+                "image_id": "sha256:" + str(index + 1) * 64,
+                "platform": "linux/amd64",
+            }
+            for index, name in enumerate(names, 1)
+        },
+    }
+
+
+def environment(tmp_path):
+    return bootstrap.prepare_environment(tmp_path / "e2e-f059-suite", base="http://127.0.0.1:7860/api/v1")
+
+
+def test_prepare_is_local_private_stable_and_preserves_existing_admin(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "platform.env"
+    password = secrets.token_urlsafe(24)
+    bootstrap.private_write(source, "E2E_ADMIN_USERNAME=e2e-f059-admin\nE2E_ADMIN_PASSWORD=" + password + "\n")
+    suite = tmp_path / "e2e-f059-acceptance"
+    monkeypatch.setattr(bootstrap, "bootstrap", lambda *_args, **_kwargs: pytest.fail("unexpected API setup"))
+    args = [
+        "--api-base",
+        "http://127.0.0.1:7860",
+        "--suite-dir",
+        str(suite),
+        "--env-file",
+        str(source),
+        "--prepare-only",
+    ]
+    assert bootstrap.main(args) == 0
+    values = bootstrap.read_env(suite / "e2e.env")
+    assert values["E2E_ADMIN_PASSWORD"] == password
+    assert values["E2E_ADMIN_USERNAME"] == "e2e-f059-admin"
+    assert source.read_text().splitlines()[-1].endswith(password)
+    assert bootstrap.main(args) == 0
+    assert bootstrap.read_env(suite / "e2e.env") == values
+    assert (suite / "e2e.env").stat().st_mode & 0o777 == 0o600
+    assert (suite / "environment-marker.json").stat().st_mode & 0o777 == 0o600
+    output = capsys.readouterr().out
+    assert password not in output
+    assert all(values[f"F059_E2E_{role}_PASSWORD"] not in output for role in bootstrap.ROLES)
+    assert '"api_bootstrap_executed": false' in output
+
+
+@pytest.mark.parametrize(
+    "address", ["https://example.com", "http://8.8.8.8", "http://user:secret@127.0.0.1", "http://127.0.0.1?key=secret"]
+)
+def test_public_or_credential_bearing_api_refused(address):
+    with pytest.raises(bootstrap.BootstrapError):
+        bootstrap.api_base(address)
+
+
+def test_dedicated_path_private_input_and_output_guards(tmp_path):
+    with pytest.raises(bootstrap.BootstrapError, match="dedicated_suite"):
+        bootstrap.prepare_environment(tmp_path / "production", base="http://127.0.0.1/api/v1")
+    source = tmp_path / "input.env"
+    source.write_text("E2E_ADMIN_USERNAME=e2e-f059-admin\n")
+    source.chmod(0o644)
+    with pytest.raises(bootstrap.BootstrapError, match="private_file"):
+        bootstrap.read_env(source)
+    source.chmod(0o600)
+    with pytest.raises(bootstrap.BootstrapError, match="must_not_be_overwritten"):
+        bootstrap.prepare_environment(
+            tmp_path / "e2e-f059-suite", base="http://127.0.0.1/api/v1", input_env=source, output_env=source
+        )
+    target = tmp_path / "target"
+    target.symlink_to(source)
+    with pytest.raises(bootstrap.BootstrapError, match="link_refused"):
+        bootstrap.private_write(target, "replacement")
+    assert source.read_text().startswith("E2E_ADMIN_USERNAME=")
+
+
+def test_marker_and_admin_mismatch_refuse_reuse(tmp_path):
+    suite, output, values = environment(tmp_path)
+    source = tmp_path / "changed.env"
+    bootstrap.private_write(source, "E2E_ADMIN_PASSWORD=" + secrets.token_urlsafe(16) + "\n")
+    with pytest.raises(bootstrap.BootstrapError, match="credential_mismatch"):
+        bootstrap.prepare_environment(suite, base=values["E2E_API_BASE"], input_env=source)
+    with pytest.raises(bootstrap.BootstrapError, match="marker_mismatch"):
+        bootstrap.prepare_environment(suite, base="http://127.0.0.2/api/v1")
+    assert bootstrap.read_env(output) == values
+
+
+def test_custom_amd64_profiles_and_five_package_modes_match_real_schemas(tmp_path, monkeypatch):
+    from bisheng.app_publish.domain.schemas.app_manifest import AppManifest
+    from bisheng.app_runtime.domain.schemas.runtime_delivery import RuntimeProfileDefinition
+    from test.e2e.helpers.vibe_runtime import Scenario
+
+    suite, _output, values = environment(tmp_path)
+    profiles, scenarios = bootstrap.build_packages(
+        suite,
+        values,
+        inventory=inventory(),
+        demo_image="registry.invalid/demo@sha256:" + "a" * 64,
+        demo_image_v2="registry.invalid/demo@sha256:" + "b" * 64,
+        model_name="acceptance-model",
+        knowledge_ids=[37],
+    )
+    assert len(scenarios) == 6
+    for profile in profiles:
+        validated = RuntimeProfileDefinition.model_validate(profile)
+        assert validated.official is False
+        assert set(validated.platforms) == {"linux/amd64"}
+    for raw in scenarios:
+        scenario = Scenario.from_dict(raw)
+        for path in [scenario.package, scenario.update]:
+            if path is None:
+                continue
+            with tarfile.open(path) as package:
+                manifest = AppManifest.model_validate(yaml.safe_load(package.extractfile("bisheng-app.yaml")))
+                assert manifest.slug == scenario.slug
+                assert all(member.isfile() and member.name[0] != "/" for member in package.getmembers())
+        if scenario.runtime == "python3.11" and scenario.expected_failure_code is None:
+            assert {check["path"] for check in scenario.application_checks} >= {
+                "/sdk/identity",
+                "/sdk/storage-roundtrip",
+                "/sdk/model",
+                "/sdk/retrieve",
+            }
+    negative = scenarios[-1]
+    assert negative["expected_failure_code"] == 16227 and "update" not in negative
+    assert (suite / "demo-image-v1/main.py").is_file()
+    assert (suite / "demo-image-v2/fixture-version.txt").read_text() == "2"
+    assert values["F059_E2E_SCENARIOS"] == str(suite / "scenarios.json")
+
+
+@pytest.mark.parametrize("mutation", ["platform", "tag", "image_id", "image_arch"])
+def test_unfrozen_or_wrong_platform_profile_refused(mutation):
+    data = inventory()
+    if mutation == "platform":
+        data["platform"] = "linux/arm64"
+    elif mutation == "tag":
+        data["images"]["app-python"]["image"] = "registry.invalid/python:latest"
+    elif mutation == "image_id":
+        data["images"]["app-python"]["image_id"] = "missing"
+    else:
+        data["images"]["app-python"]["platform"] = "linux/arm64"
+    with pytest.raises(bootstrap.BootstrapError):
+        bootstrap.profile_definitions(data)
+
+
+class FixtureApi:
+    """Strict contract double: deliberately not counted as platform proof."""
+
+    calls = []
+    non_test_user = False
+    invalid_routes = False
+    wrong_tenant = False
+    values = {}
+
+    def __init__(self, base, client):
+        self.base, self.client = base, client
+        self.users = [{"user_id": 1, "user_name": self.values["E2E_ADMIN_USERNAME"]}]
+        if self.non_test_user:
+            self.users.append({"user_id": 80, "user_name": "ordinary-person"})
+        self.departments = []
+        self.tenants = [{"id": 1, "tenant_code": "default"}]
+
+    async def encrypted(self, _password):
+        return "test-rsa-ciphertext"
+
+    async def login(self, role, username, _password):
+        user_id = 1 if role == "ADMIN" else list(bootstrap.ROLES).index(role) + 2
+        return {"user_id": user_id, "user_name": username, "is_global_super": role == "ADMIN"}
+
+    async def request(self, method, path, *, role="ADMIN", **kwargs):
+        self.calls.append((method, path, role, kwargs))
+        body = kwargs.get("json", {})
+        if (method, path) == ("GET", "/user/list"):
+            return {"data": self.users}
+        if (method, path) == ("GET", "/tenants/"):
+            return {"data": self.tenants}
+        if (method, path) == ("GET", "/apps"):
+            return []
+        if (method, path) == ("GET", "/departments/children"):
+            return self.departments if "parent_id" in kwargs.get("params", {}) else [{"id": 1, "dept_id": "BS@root"}]
+        if (method, path) == ("POST", "/departments/"):
+            row = {"id": len(self.departments) + 10, "dept_id": "BS@test" + str(len(self.departments)), **body}
+            self.departments.append(row)
+            return row
+        if method == "POST" and path.endswith("/mount-tenant"):
+            assert path.split("/")[-2].isdigit(), "mount API requires internal integer id"
+            tenant = {"id": len(self.tenants) + 1, **body}
+            self.tenants.append(tenant)
+            return tenant
+        if method == "GET" and path.endswith("/assignable-roles"):
+            return [{"id": 2}]
+        if (method, path) == ("POST", "/departments/local-members"):
+            assert body["dept_id"].startswith("BS@test")
+            assert body["person_id"] == body["user_name"]
+            user = {"user_id": len(self.users) + 1, **body}
+            self.users.append(user)
+            return user
+        if (method, path) == ("GET", "/user/current-tenant"):
+            return {"leaf_tenant_id": 1 if self.wrong_tenant else (3 if role == "FOREIGN" else 2)}
+        if method == "POST" and path == "/tenants/2/admins":
+            assert body == {"user_id": 5}
+            return {}
+        if (method, path) == ("GET", "/approval/admin/scenarios"):
+            return [{"id": 7, "scenario_code": "app_publish_request", "enabled": True}]
+        if (method, path) == ("GET", "/approval/admin/scenarios/7/routes"):
+            rows = [{"id": 9, "route_type": "flow", "enabled": True, "flow_definition_id": 8, "match_config": {}}]
+            return rows + ([{"id": 11, "route_type": "pass", "enabled": True}] if self.invalid_routes else [])
+        if (method, path) == ("PUT", "/approval/admin/flows/8/nodes"):
+            assert role == "APPROVER"
+            assert body["nodes"][0]["approver_config"] == {"sources": [{"type": "direct_user", "user_ids": [5]}]}
+            return body
+        if (method, path) == ("GET", "/service-accounts"):
+            return {"data": []}
+        if (method, path) == ("POST", "/service-accounts"):
+            assert role == "APPROVER" and body["resource_owner_user_id"] == 2
+            return {"id": 42}
+        if (method, path) == ("POST", "/service-accounts/42/keys"):
+            assert body["scopes"] == ["app:manage"]
+            return {"plaintext": "test-fixture-private-key"}
+        if (method, path) == ("POST", "/runtime/profiles"):
+            return {"id": body["code"]}
+        if (method, path) == ("GET", "/runtime/profiles/defaults"):
+            return []
+        if (method, path) == ("PUT", "/runtime/profiles/default"):
+            assert body["expected_generation"] == 0
+            return body
+        raise AssertionError((method, path))
+
+
+async def run_setup(tmp_path, monkeypatch, **flags):
+    suite, output, values = environment(tmp_path)
+    FixtureApi.calls = []
+    FixtureApi.values = values
+    for name in ("non_test_user", "invalid_routes", "wrong_tenant"):
+        monkeypatch.setattr(FixtureApi, name, flags.get(name, False))
+    monkeypatch.setattr(bootstrap, "Api", FixtureApi)
+
+    def identity(request):
+        assert request.url.path == "/api/v2/auth/whoami"
+        assert request.headers["authorization"] == "Bearer test-fixture-private-key"
+        return httpx.Response(
+            200,
+            json={"data": {"mode": "S", "scopes": ["app:manage"], "resource_owner": {"user_id": 2}, "tenant_id": 2}},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(identity)) as client:
+        return await bootstrap.bootstrap(
+            values["E2E_API_BASE"],
+            suite,
+            output,
+            values,
+            profiles=bootstrap.profile_definitions(inventory()),
+            client=client,
+        ), suite
+
+
+def test_api_setup_uses_department_tenants_natural_users_manual_approval_and_mode_s(tmp_path, monkeypatch):
+    state, suite = asyncio.run(run_setup(tmp_path, monkeypatch))
+    assert state["complete"] is True
+    assert state["tenants"]["OWNER"]["id"] == 2 and state["tenants"]["FOREIGN"]["id"] == 3
+    assert state["approval"]["manual"] is True
+    assert len(state["profiles"]) == 3
+    assert all(not row["official"] for row in state["profiles"])
+    assert "test-fixture-private-key" not in (suite / "bootstrap-state.json").read_text()
+    assert bootstrap.read_env(suite / "e2e.env")["F059_E2E_OWNER_API_KEY"] == "test-fixture-private-key"
+    assert not any(
+        method == "POST" and path in {"/tenants/", "/user/create", "/user/regist"}
+        for method, path, *_ in FixtureApi.calls
+    )
+
+
+@pytest.mark.parametrize(
+    "flag, reason",
+    [
+        ("non_test_user", "non_test_or_unbounded"),
+        ("invalid_routes", "manual_publish_route"),
+        ("wrong_tenant", "tenant_scope_mismatch"),
+    ],
+)
+def test_api_setup_refuses_unsafe_inventory_or_permissions(tmp_path, monkeypatch, flag, reason):
+    with pytest.raises(bootstrap.BootstrapError, match=reason):
+        asyncio.run(run_setup(tmp_path, monkeypatch, **{flag: True}))
+    if flag == "non_test_user":
+        assert not any(method != "GET" for method, *_ in FixtureApi.calls)
+    assert not any(path == "/service-accounts" and method == "POST" for method, path, *_ in FixtureApi.calls)
+
+
+def test_api_client_encrypts_real_rsa_and_never_uses_password_fallback():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    password, token = secrets.token_urlsafe(16), secrets.token_urlsafe(24)
+
+    def respond(request):
+        if request.url.path.endswith("/public_key"):
+            data = {
+                "public_key": key.public_key()
+                .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
+                .decode()
+            }
+        elif request.url.path.endswith("/login"):
+            body = json.loads(request.content)
+            assert key.decrypt(base64.b64decode(body["password"]), padding.PKCS1v15()).decode() == password
+            assert body["user_name"] == "e2e-f059-admin"
+            data = {"access_token": token}
+        else:
+            assert request.headers["cookie"] == "access_token_cookie=" + token
+            data = {"user_id": 1}
+        return httpx.Response(200, json={"status_code": 200, "data": data})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            return await bootstrap.Api("http://127.0.0.1/api/v1", client).login("ADMIN", "e2e-f059-admin", password)
+
+    assert asyncio.run(run()) == {"user_id": 1}
+
+
+def test_python_demo_real_sqlite_sdk_local_attachment_and_websocket(tmp_path, monkeypatch):
+    """Local protocol smoke; no claim of platform authorization or MinIO proof."""
+    application = tmp_path / "main.py"
+    application.write_text((ROOT / "scripts/fixtures/f059/python_demo.py").read_text())
+    (tmp_path / "fixture-version.txt").write_text("1")
+    (tmp_path / "capabilities.json").write_text("{}")
+    monkeypatch.setenv("BISHENG_APP_DB_PATH", str(tmp_path / "data/app.db"))
+    monkeypatch.setenv("BISHENG_APP_STORAGE_DIR", str(tmp_path / "attachments"))
+    monkeypatch.delenv("BISHENG_APP_STORAGE_ENDPOINT", raising=False)
+    monkeypatch.setenv("BISHENG_APP_ID", "e2e-f059-app")
+    spec = importlib.util.spec_from_file_location("f059_demo", application)
+    demo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(demo)
+    demo.initialize()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), demo.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_port
+    headers = {
+        "X-BiSheng-User-Id": "2",
+        "X-BiSheng-Subject-Kind": "human",
+        "X-BiSheng-App-Id": "e2e-f059-app",
+        "X-BiSheng-Access-Token": "test-visitor-handle",
+    }
+    try:
+        with httpx.Client(base_url=f"http://127.0.0.1:{port}", trust_env=False, timeout=5) as client:
+            assert client.get("/health").json()["version"] == "1"
+            assert client.get("/items").json()["items"] == [{"id": 1, "value": "initial"}]
+            with sqlite3.connect(demo.DATABASE) as db:
+                db.execute("UPDATE items SET value='persisted' WHERE id=1")
+            demo.initialize()
+            assert client.get("/items").json()["items"] == [{"id": 1, "value": "persisted"}]
+            assert client.get("/sdk/identity").status_code == 502
+            assert client.get("/sdk/identity", headers=headers).json() == {
+                "subject_kind": "human",
+                "app_id_matches": True,
+                "obo_present": True,
+            }
+            assert client.get("/sdk/storage-roundtrip", headers=headers).json()["storage_roundtrip"] is True
+            assert client.get("/sdk/model", headers=headers).status_code == 409
+            assert client.get("/sdk/retrieve", headers=headers).status_code == 409
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as stream:
+            key = base64.b64encode(os.urandom(16)).decode()
+            request = (
+                "GET /ws HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: "
+                + key
+                + "\r\n"
+                + "".join(name + ": " + value + "\r\n" for name, value in headers.items())
+                + "\r\n"
+            )
+            stream.sendall(request.encode())
+            reader = stream.makefile("rb")
+            assert reader.readline().startswith(b"HTTP/1.1 101")
+            while reader.readline() != b"\r\n":
+                pass
+            payload, mask = b"e2e-f059 websocket", os.urandom(4)
+            stream.sendall(
+                bytes([129, 128 | len(payload)])
+                + mask
+                + bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+            )
+            assert reader.read(2) == bytes([129, len(payload)])
+            assert reader.read(len(payload)) == payload
+            stream.sendall(bytes([136, 128]) + os.urandom(4))
+            assert reader.read(2) == struct.pack("BB", 136, 0)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)
