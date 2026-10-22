@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-13、AC-14、AC-19、AC-20、AC-21、AC-22、AC-23、AC-30、AC-31、AC-32、AC-34、AC-35、AC-39、AC-40、AC-41、AC-42、AC-54、AC-55."""
+"""覆盖 AC: AC-13、AC-14、AC-19、AC-20、AC-21、AC-22、AC-23、AC-30、AC-31、AC-32、AC-34、AC-35、AC-39、AC-40、AC-41、AC-42、AC-48、AC-49、AC-54、AC-55."""
 
 import copy
 import importlib.util
@@ -6,6 +6,9 @@ import json
 import os
 import shutil
 import subprocess
+import threading
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from uuid import uuid4
 
@@ -1165,3 +1168,293 @@ def test_chart_cni_identity_is_admission_source_and_invalidates_only_old_report(
     }
     assert descriptor_digest(changed) != identity
     assert not assess_capabilities(changed, now=1001)["ready"]
+
+
+@contextmanager
+def chart_lookup_api(objects):
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_GET(self):
+            path = self.path.split("?", 1)[0]
+            requests.append(path)
+            if path == "/version":
+                response = {"major": "1", "minor": "28", "gitVersion": "v1.28.15"}
+            elif path == "/api":
+                response = {
+                    "kind": "APIVersions",
+                    "apiVersion": "v1",
+                    "versions": ["v1"],
+                    "serverAddressByClientCIDRs": [],
+                }
+            elif path == "/apis":
+                response = {"kind": "APIGroupList", "apiVersion": "v1", "groups": []}
+            elif path == "/api/v1":
+                response = {
+                    "kind": "APIResourceList",
+                    "apiVersion": "v1",
+                    "groupVersion": "v1",
+                    "resources": [
+                        {
+                            "name": "configmaps",
+                            "singularName": "",
+                            "namespaced": True,
+                            "kind": "ConfigMap",
+                            "verbs": ["get"],
+                        }
+                    ],
+                }
+            else:
+                response = objects.get(path)
+            payload = json.dumps(
+                response
+                or {"kind": "Status", "apiVersion": "v1", "status": "Failure", "reason": "NotFound", "code": 404}
+            ).encode()
+            self.send_response(200 if response is not None else 404)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.01), daemon=True)
+    thread.start()
+    try:
+        yield "http://127.0.0.1:" + str(server.server_port), requests
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def upgrade_lookup_objects(values, *, legacy=False):
+    namespace = values["services"]["namespace"]
+    execution = values["execution"]
+    reference, uid = str(uuid4()), str(uuid4())
+    plan = {
+        "resource_ref": reference,
+        "namespace": execution["namespace"],
+        "name": "preflight-retained",
+        "kind": "Pod",
+        "uid": uid,
+        "expires_at": 1234,
+        "allow_create": False,
+        "allow_update": True,
+        "allow_delete": True,
+        "cleanup_only": False,
+        "stop_state": "held",
+        "template": {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": "preflight-retained",
+                "namespace": execution["namespace"],
+                "labels": {"runtime.bisheng.io/resource": reference},
+            },
+            "spec": {},
+        },
+    }
+    plans = {"schema_version": 1, "plans": {reference: plan}, "profile_images": ["example/native@sha256:" + "b" * 64]}
+
+    def cm(name, data):
+        return {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": name,
+                "namespace": namespace,
+                "uid": str(uuid4()),
+                "resourceVersion": "21",
+                "labels": {"app.kubernetes.io/managed-by": "Helm"},
+                "annotations": {
+                    "meta.helm.sh/release-name": "test-runtime",
+                    "meta.helm.sh/release-namespace": namespace,
+                },
+            },
+            "data": data,
+        }
+
+    descriptor = {
+        "installation_id": execution["installationId"],
+        "cluster_id": execution["clusterId"],
+        "namespace": execution["namespace"],
+    }
+    plan_cm = cm("runtime-canary-plans", {"plans.json": json.dumps(plans, indent=2)})
+    if not legacy:
+        plan_cm["metadata"]["labels"]["runtime.bisheng.io/installation"] = execution["installationId"]
+    descriptor_cm = cm("runtime-deployment-descriptor", {"descriptor.json": json.dumps(descriptor)})
+    prefix = "/api/v1/namespaces/" + namespace + "/configmaps/"
+    return {prefix + row["metadata"]["name"]: row for row in (plan_cm, descriptor_cm)}
+
+
+def render_upgrade(values, tmp_path, objects, *, expect_success=True):
+    values_path, config_path = tmp_path / "upgrade-values.yaml", tmp_path / "lookup-kubeconfig.json"
+    values_path.write_text(yaml.safe_dump(values))
+    with chart_lookup_api(objects) as (url, requests):
+        config_path.write_text(
+            json.dumps(
+                {
+                    "apiVersion": "v1",
+                    "kind": "Config",
+                    "clusters": [{"name": "lookup", "cluster": {"server": url}}],
+                    "users": [{"name": "lookup", "user": {}}],
+                    "contexts": [{"name": "lookup", "context": {"cluster": "lookup", "user": "lookup"}}],
+                    "current-context": "lookup",
+                }
+            )
+        )
+        result = subprocess.run(
+            [
+                HELM,
+                "template",
+                "test-runtime",
+                str(CHART),
+                "-n",
+                values["services"]["namespace"],
+                "-f",
+                str(values_path),
+                "--is-upgrade",
+                "--dry-run=server",
+                "--kubeconfig",
+                str(config_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    if not expect_success:
+        assert result.returncode != 0
+        return result
+    assert result.returncode == 0, result.stderr
+    assert any(path.endswith("/configmaps/runtime-canary-plans") for path in requests)
+    return [row for row in yaml.safe_load_all(result.stdout) if row]
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_chart_upgrade_preserves_live_canary_plans_and_profiles_with_identity_fence(values, tmp_path, legacy):
+    objects = upgrade_lookup_objects(values, legacy=legacy)
+    original = next(row for row in objects.values() if row["metadata"]["name"] == "runtime-canary-plans")
+    documents = render_upgrade(values, tmp_path, objects)
+    retained = next(
+        row for row in documents if row["kind"] == "ConfigMap" and row["metadata"]["name"] == "runtime-canary-plans"
+    )
+    assert retained["data"] == original["data"]
+    assert retained["metadata"]["uid"] == original["metadata"]["uid"]
+    assert retained["metadata"]["resourceVersion"] == original["metadata"]["resourceVersion"]
+    assert retained["metadata"]["labels"]["runtime.bisheng.io/installation"] == values["execution"]["installationId"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "missing",
+        "release",
+        "namespace",
+        "managed-by",
+        "uid",
+        "rv",
+        "installation",
+        "descriptor-missing",
+        "descriptor-release",
+        "descriptor-scope",
+        "malformed-json",
+        "unknown-data",
+        "plans-not-map",
+        "profile-unpinned",
+        "plan-scope",
+        "plan-uid",
+        "schema-version",
+        "plan-flags",
+        "plan-template",
+    ],
+)
+def test_chart_upgrade_refuses_missing_foreign_or_invalid_canary_evidence(values, tmp_path, change):
+    objects = upgrade_lookup_objects(values, legacy=change.startswith("descriptor-"))
+    prefix = "/api/v1/namespaces/" + values["services"]["namespace"] + "/configmaps/"
+    cm = objects[prefix + "runtime-canary-plans"]
+    if change == "missing":
+        objects.pop(prefix + "runtime-canary-plans")
+    elif change == "release":
+        cm["metadata"]["annotations"]["meta.helm.sh/release-name"] = "foreign"
+    elif change == "namespace":
+        cm["metadata"]["namespace"] = "foreign"
+    elif change == "managed-by":
+        cm["metadata"]["labels"]["app.kubernetes.io/managed-by"] = "foreign"
+    elif change == "uid":
+        cm["metadata"]["uid"] = "not-a-uid"
+    elif change == "rv":
+        cm["metadata"].pop("resourceVersion")
+    elif change == "installation":
+        cm["metadata"]["labels"]["runtime.bisheng.io/installation"] = "foreign"
+    elif change == "descriptor-missing":
+        objects.pop(prefix + "runtime-deployment-descriptor")
+    elif change == "descriptor-release":
+        objects[prefix + "runtime-deployment-descriptor"]["metadata"]["annotations"]["meta.helm.sh/release-name"] = (
+            "foreign"
+        )
+    elif change == "descriptor-scope":
+        descriptor_cm = objects[prefix + "runtime-deployment-descriptor"]
+        descriptor_cm["data"]["descriptor.json"] = json.dumps(
+            {
+                "installation_id": "foreign",
+                "cluster_id": values["execution"]["clusterId"],
+                "namespace": values["execution"]["namespace"],
+            }
+        )
+    elif change == "malformed-json":
+        cm["data"]["plans.json"] = "{broken"
+    elif change == "unknown-data":
+        cm["data"]["extra"] = "unmanaged"
+    else:
+        data = json.loads(cm["data"]["plans.json"])
+        if change == "plans-not-map":
+            data["plans"] = []
+        elif change == "profile-unpinned":
+            data["profile_images"] = ["example/native:latest"]
+        elif change == "plan-scope":
+            next(iter(data["plans"].values()))["namespace"] = "foreign"
+        elif change == "plan-uid":
+            next(iter(data["plans"].values()))["uid"] = "not-a-uid"
+        elif change == "schema-version":
+            data["schema_version"] = 1.5
+        elif change == "plan-flags":
+            next(iter(data["plans"].values()))["allow_delete"] = "true"
+        elif change == "plan-template":
+            next(iter(data["plans"].values()))["template"]["metadata"]["namespace"] = "foreign"
+        cm["data"]["plans.json"] = json.dumps(data)
+    render_upgrade(values, tmp_path, objects, expect_success=False)
+
+
+def test_chart_install_refuses_seeded_canary_plans(values, tmp_path):
+    values["execution"]["canaryPlans"] = {str(uuid4()): {"allow_create": True}}
+    render(values, tmp_path, expect_success=False)
+
+
+def test_recovery_rechecks_stop_after_plan_persistence_before_releasing_finalizer(monkeypatch):
+    tool = load_installer()
+    monkeypatch.setattr(tool.time, "time", lambda: 1000)
+    verifier = expired_canary_verifier(tool)
+    save = verifier._plans
+
+    def change_after_stop(ref, plan=None, **kwargs):
+        save(ref, plan, **kwargs)
+        if plan and plan.get("stop_state") == "confirmed":
+            verifier.api.pod["status"]["phase"] = "Unknown"
+
+    verifier._plans = change_after_stop
+    with pytest.raises(tool.ProbeError, match="preflight_stop_unconfirmed"):
+        verifier.recover_expired()
+    assert not verifier.api.released
+
+
+def test_process_flag_does_not_substitute_for_this_pod_binding_refusal(monkeypatch):
+    tool = load_installer()
+    monkeypatch.setattr(tool.time, "time", lambda: 1000)
+    verifier = expired_canary_verifier(tool, outcome="wrong-rejection")
+    verifier.binding_verified = True
+    with pytest.raises(tool.ProbeError, match="binding_delete_fence_unconfirmed"):
+        verifier.recover_expired()
+    assert not verifier.api.released
