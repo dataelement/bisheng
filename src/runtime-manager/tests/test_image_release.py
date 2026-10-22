@@ -463,3 +463,132 @@ def test_real_local_resolver_never_executes_application_hooks(tmp_path, monkeypa
         assert (output / "npm" / ("root" if language == "node20" else "frontend") / "package-lock.json").is_file()
     else:
         assert (output / "download.in").is_file()
+
+
+@pytest.fixture
+def sqlite_smoke_tool():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "f059_sqlite_native_smoke", ROOT / "scripts/smoke_runtime_delivery.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def sqlite_fixture_server(monkeypatch, sqlite_smoke_tool):
+    """Run the actual fixture HTTP handler and SQLite, without Docker or remote hosts."""
+    from contextlib import contextmanager
+    from http.server import HTTPServer
+    from threading import Thread
+
+    @contextmanager
+    def server(version, database):
+        monkeypatch.setenv("F059_SMOKE_DATABASE", str(database))
+        namespace = {"__name__": "f059_sqlite_fixture_contract"}
+        exec(compile(sqlite_smoke_tool.sqlite_source(version), "f059_sqlite_fixture", "exec"), namespace)
+        http = HTTPServer(("127.0.0.1", 0), namespace["Handler"])
+        thread = Thread(target=http.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{http.server_port}"
+        finally:
+            http.shutdown()
+            http.server_close()
+            thread.join(timeout=5)
+            assert not thread.is_alive()
+
+    return server
+
+
+def test_native_sqlite_sentinel_is_written_after_v1_and_survives_real_v2_start(
+    tmp_path, sqlite_smoke_tool, sqlite_fixture_server
+):
+    """AC-33, AC-35, AC-56: a runtime-only random value survives, not a fixture's identical default seed."""
+    import sqlite3
+
+    database = tmp_path / "app.db"
+    with sqlite_fixture_server(1, database) as url:
+        sentinel = sqlite_smoke_tool.write_sqlite_sentinel(url)
+        sqlite_smoke_tool.check_sqlite_response(url, 1, sentinel)
+    assert sentinel not in sqlite_smoke_tool.sqlite_source(1)
+    assert sentinel not in sqlite_smoke_tool.sqlite_source(2)
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT value FROM data WHERE id=1").fetchone() == (sentinel,)
+    with sqlite_fixture_server(2, database) as url:
+        sqlite_smoke_tool.check_sqlite_response(url, 2, sentinel)
+
+
+def test_native_sqlite_check_rejects_a_recreated_database_with_default_seed(
+    tmp_path, sqlite_smoke_tool, sqlite_fixture_server
+):
+    """AC-33, AC-55, AC-56: v2 recreating SQLite must fail even though both versions initialize a row."""
+    database = tmp_path / "app.db"
+    with sqlite_fixture_server(1, database) as url:
+        sentinel = sqlite_smoke_tool.write_sqlite_sentinel(url)
+    database.unlink()
+    with sqlite_fixture_server(2, database) as url, pytest.raises(AssertionError, match="sentinel"):
+        sqlite_smoke_tool.check_sqlite_response(url, 2, sentinel)
+
+
+@pytest.mark.parametrize("change", ["source", "readonly", "type", "missing", "directory", "database"])
+def test_native_sqlite_mount_check_rejects_path_or_storage_replacement(tmp_path, sqlite_smoke_tool, change):
+    """AC-33, AC-35, AC-55: code upgrade retains the exact /data bind and held directory/file identity."""
+    import copy
+    import sqlite3
+
+    from runtime_manager.config import Config
+
+    cfg = Config(data_root=tmp_path)
+    app = "e2e-f059-sentinel"
+    directory = cfg.app_data_dir(app)
+    directory.mkdir(parents=True)
+    database = directory / "app.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE data (id INTEGER PRIMARY KEY, value TEXT)")
+    record = {"Mounts": [{"Type": "bind", "Source": str(directory), "Destination": "/data", "RW": True}]}
+    baseline = sqlite_smoke_tool.sqlite_mount_identity(cfg, app, record)
+    sqlite_smoke_tool.sqlite_mount_identity(cfg, app, record, expected=baseline)
+    changed = copy.deepcopy(record)
+    if change == "source":
+        changed["Mounts"][0]["Source"] = str(tmp_path / "other-data")
+    elif change == "readonly":
+        changed["Mounts"][0]["RW"] = False
+    elif change == "type":
+        changed["Mounts"][0]["Type"] = "volume"
+    elif change == "missing":
+        changed["Mounts"] = []
+    elif change == "directory":
+        directory.rename(directory.with_name("old-db"))
+        directory.mkdir()
+        database.write_bytes(b"replacement")
+    elif change == "database":
+        database.rename(directory / "old.sqlite")
+        database.write_bytes(b"replacement")
+    with pytest.raises(AssertionError):
+        sqlite_smoke_tool.sqlite_mount_identity(cfg, app, changed, expected=baseline)
+
+
+def test_native_backup_is_downloaded_and_queried_for_the_runtime_sentinel(tmp_path, sqlite_smoke_tool):
+    """AC-33, AC-46, AC-56: confirmed metadata alone cannot prove a backup contains the changed row."""
+    import sqlite3
+    from uuid import uuid4
+
+    from runtime_manager.config import Config
+
+    cfg = Config(data_root=tmp_path)
+    app, operation_id, sentinel = "e2e-f059-sentinel", uuid4().hex, uuid4().hex
+    directory = cfg.app_data_dir(app)
+    directory.mkdir(parents=True)
+    with sqlite3.connect(directory / "app.db") as connection:
+        connection.execute("CREATE TABLE data (id INTEGER PRIMARY KEY, value TEXT)")
+        connection.execute("INSERT INTO data VALUES (1, ?)", (sentinel,))
+    artifacts = sqlite_smoke_tool.Artifacts()
+    operation = {"operation_id": operation_id, "app_id": app}
+    result = sqlite_smoke_tool.verify_sqlite_backup(cfg, artifacts, operation, sentinel)
+    assert result["sentinel_sha256"] and result["artifact_id"] in artifacts.files
+    assert result["downloaded_sqlite_verified"] is True
+    with pytest.raises(AssertionError, match="sentinel"):
+        sqlite_smoke_tool.verify_sqlite_backup(cfg, artifacts, operation, "different-runtime-value")

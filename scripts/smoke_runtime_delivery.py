@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
 import urllib.request
 from pathlib import Path
 from uuid import uuid4
@@ -65,7 +66,120 @@ def read(url):
         return response.read()
 
 
-def run_suite(inventory, root):
+def sqlite_source(version):
+    return """import json, os, sqlite3
+from http.server import BaseHTTPRequestHandler, HTTPServer
+DATABASE = os.environ.get('F059_SMOKE_DATABASE', '/data/app.db')
+with sqlite3.connect(DATABASE) as c:
+    c.execute('CREATE TABLE IF NOT EXISTS data (id INTEGER PRIMARY KEY, value TEXT)')
+    c.execute("INSERT OR IGNORE INTO data VALUES (1, 'initial')")
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *_args):
+        return
+    def do_GET(self):
+        with sqlite3.connect(DATABASE) as c:
+            value=c.execute('SELECT value FROM data WHERE id=1').fetchone()[0]
+        self.send_response(200); self.end_headers(); self.wfile.write(('version-VERSION:'+value).encode())
+    def do_POST(self):
+        size=int(self.headers.get('Content-Length', '0'))
+        if self.path != '/sentinel' or not 0 < size <= 1024:
+            self.send_response(400); self.end_headers(); return
+        value=json.loads(self.rfile.read(size))['value']
+        if not isinstance(value, str) or len(value) != 32 or any(letter not in '0123456789abcdef' for letter in value):
+            self.send_response(400); self.end_headers(); return
+        with sqlite3.connect(DATABASE) as c:
+            changed=c.execute('UPDATE data SET value=? WHERE id=1', (value,)).rowcount
+            if changed != 1:
+                raise RuntimeError('sentinel_target_missing')
+        self.send_response(200); self.end_headers(); self.wfile.write(json.dumps({'value':value}).encode())
+if __name__ == '__main__':
+    HTTPServer(('0.0.0.0', int(os.environ['PORT'])), Handler).serve_forever()
+""".replace("VERSION", str(version))
+
+
+def write_sqlite_sentinel(base):
+    # This value is generated only after v1 is running. Neither source revision
+    # contains it, so a freshly initialized v2 database cannot recreate it.
+    sentinel = uuid4().hex
+    request = urllib.request.Request(
+        base.rstrip("/") + "/sentinel",
+        data=json.dumps({"value": sentinel}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+        request, timeout=5
+    ) as response:
+        assert json.loads(response.read()) == {"value": sentinel}
+    return sentinel
+
+
+def check_sqlite_response(base, version, sentinel):
+    assert read(base.rstrip("/") + "/").decode() == f"version-{version}:" + sentinel, (
+        "runtime-only SQLite sentinel was lost or recreated"
+    )
+
+
+def sqlite_mount_identity(config, app, record, *, expected=None):
+    mounts = [
+        mount
+        for mount in record.get("Mounts", [])
+        if mount.get("Destination") == "/data"
+    ]
+    assert len(mounts) == 1, "exactly one persistent data mount is required"
+    mount = mounts[0]
+    assert mount.get("Type") == "bind" and mount.get("RW") is True, (
+        "data bind must remain writable"
+    )
+    source = Path(mount["Source"]).resolve()
+    assert source == config.host_app_data_dir(app).resolve(), (
+        "data mount source changed"
+    )
+    directory = config.app_data_dir(app)
+    database = directory / "app.db"
+    assert (
+        not directory.is_symlink() and database.is_file() and not database.is_symlink()
+    )
+    directory_stat, database_stat = directory.stat(), database.stat()
+    identity = {
+        "source": str(source),
+        "directory_device": directory_stat.st_dev,
+        "directory_inode": directory_stat.st_ino,
+        "database_device": database_stat.st_dev,
+        "database_inode": database_stat.st_ino,
+    }
+    if expected is not None:
+        assert identity == expected, (
+            "data path or held storage identity changed during code upgrade"
+        )
+    return identity
+
+
+def verify_sqlite_backup(config, platform, operation, sentinel):
+    backup = PlatformAppDb(config, platform, operation).backup()
+    assert backup and backup["confirmed_at"]
+    candidate = (
+        config.data_root
+        / "backup-verification"
+        / (operation["operation_id"] + ".sqlite")
+    )
+    downloaded = platform.download(
+        operation["operation_id"], backup["artifact_id"], candidate
+    )
+    assert downloaded["kind"] == "snapshot" and downloaded["state"] == "verified"
+    with sqlite3.connect(f"file:{candidate}?mode=ro", uri=True) as connection:
+        assert connection.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+        assert connection.execute("SELECT value FROM data WHERE id=1").fetchone() == (
+            sentinel,
+        ), "downloaded SQLite backup did not contain the runtime-only sentinel"
+    return {
+        "artifact_id": backup["artifact_id"],
+        "downloaded_sqlite_verified": True,
+        "sentinel_sha256": hashlib.sha256(sentinel.encode()).hexdigest(),
+    }
+
+
+def run_suite(inventory, root, *, sqlite_only=False):
     engine = _RealDockerBackend(base_url=os.environ.get("RTM_DOCKER_HOST"))
     suite = "e2e-f086-" + uuid4().hex[:12]
     network = engine._client().create_network(
@@ -96,18 +210,7 @@ def run_suite(inventory, root):
                 "app-python",
                 "app-python-preparer",
                 "main.py",
-                """import os, sqlite3
-from http.server import BaseHTTPRequestHandler, HTTPServer
-with sqlite3.connect('/data/app.db') as c:
-    c.execute('CREATE TABLE IF NOT EXISTS data (id INTEGER PRIMARY KEY, value TEXT)')
-    c.execute("INSERT OR IGNORE INTO data VALUES (1, 'retained')")
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        with sqlite3.connect('/data/app.db') as c:
-            value=c.execute('SELECT value FROM data').fetchone()[0]
-        self.send_response(200); self.end_headers(); self.wfile.write(('version-1:'+value).encode())
-HTTPServer(('0.0.0.0', int(os.environ['PORT'])), Handler).serve_forever()
-""",
+                sqlite_source(1),
             ),
             (
                 "node20",
@@ -124,6 +227,8 @@ HTTPServer(('0.0.0.0', int(os.environ['PORT'])), Handler).serve_forever()
                 "<h1>version-1</h1>",
             ),
         ]:
+            if sqlite_only and language != "python3.11":
+                continue
             app = suite + "-" + language.replace(".", "")
             source = root / "sources" / app
             source.mkdir(parents=True)
@@ -165,6 +270,8 @@ HTTPServer(('0.0.0.0', int(os.environ['PORT'])), Handler).serve_forever()
             }
             profiles[language] = profile
             deliveries = []
+            sentinel, held_data = None, None
+            verified_backups = []
             hits_before = platform.cache_hits
             for version in [1, 2]:
                 (source / filename).write_text(
@@ -199,15 +306,35 @@ HTTPServer(('0.0.0.0', int(os.environ['PORT'])), Handler).serve_forever()
                 )
                 value = read(f"http://{ready['target']['host']}:8080/").decode()
                 assert f"version-{version}" in value, value
+                if language == "python3.11":
+                    held_data = sqlite_mount_identity(
+                        cfg,
+                        app,
+                        engine.inspect_container(ready["exec_ref"]),
+                        expected=held_data,
+                    )
+                    base = f"http://{ready['target']['host']}:8080"
+                    if version == 1:
+                        sentinel = write_sqlite_sentinel(base)
+                        assert (
+                            sentinel not in content
+                            and sentinel not in (source / filename).read_text()
+                        )
+                    check_sqlite_response(base, version, sentinel)
                 engine.stop_container(ready["exec_ref"], timeout=5)
                 engine.remove_container(ready["exec_ref"])
                 if language == "python3.11":
-                    assert "retained" in value
                     data = DataExecutor(cfg, engine)
                     tables = data.call(app, "tables", {})
                     assert tables["tables"]
-                    backup = PlatformAppDb(cfg, platform, operation).backup()
-                    assert backup["confirmed_at"]
+                    rows = data.call(app, "rows", {"table": "data"})
+                    assert (
+                        rows["total"] == 1
+                        and rows["rows"][0]["values"]["value"] == sentinel
+                    )
+                    verified_backups.append(
+                        verify_sqlite_backup(cfg, platform, operation, sentinel)
+                    )
             assert (
                 deliveries[0]["dependency_artifact_id"]
                 == deliveries[1]["dependency_artifact_id"]
@@ -222,8 +349,31 @@ HTTPServer(('0.0.0.0', int(os.environ['PORT'])), Handler).serve_forever()
                     "offline": True,
                     "code_update": True,
                     "dependency_reuse": True,
+                    **(
+                        {
+                            "runtime_only_sentinel_persisted": True,
+                            "unchanged_data_bind_and_identity": held_data,
+                            "verified_sqlite_backups": verified_backups,
+                        }
+                        if language == "python3.11"
+                        else {}
+                    ),
                 }
             )
+        if sqlite_only:
+            assert {image["Id"] for image in engine.list_images()} == before, (
+                "SQLite bundle smoke built OCI images"
+            )
+            print(
+                json.dumps(
+                    {
+                        "platform": inventory["platform"],
+                        "scope": "sqlite-only",
+                        "checks": results,
+                    }
+                )
+            )
+            return
         # A frontend install hook and build execute offline. Source-dependent
         # hook results must be regenerated rather than reused across revisions.
         app = suite + "-frontend"
@@ -396,7 +546,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory", required=True)
     parser.add_argument("--data-root", required=True)
+    parser.add_argument(
+        "--sqlite-only",
+        action="store_true",
+        help="Run only the native Python SQLite code-upgrade and backup checks",
+    )
     args = parser.parse_args()
     run_suite(
-        json.loads(Path(args.inventory).read_text()), Path(args.data_root).resolve()
+        json.loads(Path(args.inventory).read_text()),
+        Path(args.data_root).resolve(),
+        sqlite_only=args.sqlite_only,
     )
