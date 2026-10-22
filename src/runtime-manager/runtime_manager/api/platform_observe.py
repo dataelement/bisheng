@@ -8,13 +8,21 @@ from runtime_manager.api.operations import authorized, executor
 from runtime_manager.api.readonly import _parse_since
 from runtime_manager.container_runner import OP_LABEL, redact
 from runtime_manager.errors import NotFoundError
+from runtime_manager.platform_client import PlatformError
 
 router = APIRouter(prefix="/v2", dependencies=[Depends(authorized)])
 
 
 def record(app_id):
     service = executor()
-    scope = service.platform.application(app_id)
+    try:
+        scope = service.platform.application(app_id)
+    except PlatformError as exc:
+        # Only the application's missing assignment means no execution. A
+        # resource lookup failure or unavailable platform must remain an error.
+        if exc.status == 404 and str(exc) == "application_not_found":
+            raise NotFoundError("No registered application execution") from None
+        raise
     ref = scope.get("exec_ref")
     if not ref:
         raise NotFoundError("No registered application execution")
