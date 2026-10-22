@@ -383,6 +383,8 @@ class RuntimeExecutor(Protocol):
 | `RuntimeOperation` 内部扩展 | kind=data、request_id、action/parameters_digest、actor_ref、target_exec_ref/UID、deadline、result/cleanup 状态 | 原业务 Service 授权创建；每应用数据/维护互斥，不改 serving 代次，不向 CLI 暴露新业务动作 |
 | 操作事实 detail 扩展 | resource_ref、UID/namespace、镜像身份、stopped 证据、failure stage | 通过已鉴权 manager 提交；不接收业务容器自报成功 |
 
+manager可GET资源脱敏读模型及按操作列举资源，重启不依赖本地记录；相同未创建意图可由新租约恢复controller_epoch。活跃操作中间阶段停止不释放整笔容量，终态仍要求所有相关Pod的同UID停止证据。
+
 控制Service只提交SQL资源意图，返回时事务已结束；manager随后才调用K8s API。Node.engine_id固定为`cluster_id/namespace`，注册时校验冻结域、镜像和profile、资源标签/代次、摘要与租约；Secret和env仅接受脱敏投影。控制路由经现有外层`/api/v1`挂载；材料内容接口仍严格使用6.2.1冻结的根路径，不增加该前缀。
 
 新增路由位于 backend app_runtime API → Service → Repository：
@@ -609,3 +611,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T029独立材料客户端与manager控制client完成：可信TLS/CA、固定签名、分块校验/丢块恢复、票据轮换与阶段deadline不变 | 26项client、完整runtime623 passed/10 skipped；材料/控制197 passed；尚未部署 |
 
 | 2026-10-22 | T077/T078持久缓存选择、T030/T031材料helper与隔离install、T009模板接线完成；固定输入/材料与进程身份边界保持 | runtime645 passed/10 skipped，backend定向213 passed；无真实镜像/集群结论 |
+
+| 2026-10-22 | 补齐资源恢复GET、相同待创建意图的控制器接续、阶段日志容器白名单；修正中间stop容量释放时机 | 控制68项、client/Core/lifecycle82项；执行器仍待接入 |

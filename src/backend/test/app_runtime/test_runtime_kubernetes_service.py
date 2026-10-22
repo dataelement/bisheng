@@ -304,3 +304,39 @@ async def test_boolean_controller_epoch_cannot_coerce_to_the_current_epoch(contr
         await register(control, controller_epoch=True)
     with pytest.raises(RuntimeConflict):
         await svc.renew_controller(MANAGER, holder_id="controller-a", controller_epoch=True)
+
+
+async def test_manager_can_recover_resource_identity_and_protection_without_local_files(control):
+    svc, _repository, op = control
+    await register(control)
+    await svc.observe_resource(
+        MANAGER,
+        REF,
+        {"action": "bind", "holder_id": "controller-a", "controller_epoch": 1, "uid": UID, "node_name": "worker-a"},
+    )
+    row = await svc.resource(MANAGER, REF)
+    assert row["app_id"] == op.app_id and row["generation"] == op.generation and row["owner_epoch"] == op.owner_epoch
+    assert row["purpose"] == "serve" and row["status_policy_revision"] == "v1"
+    assert row["protected_since_creation"] is True and row["binding_policy_verified"] is True
+    assert (await svc.resources(MANAGER, op.id))["resources"] == [row]
+    for identity in (ADMISSION, ServiceIdentity("other", "node-b", ("manager",))):
+        with pytest.raises(RuntimeConflict):
+            await svc.resource(identity, REF)
+        with pytest.raises(RuntimeConflict):
+            await svc.resources(identity, op.id)
+
+
+async def test_intermediate_phase_stop_does_not_release_the_whole_operation_reservation(control):
+    from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeCapacityReservation
+    from test.app_runtime.test_runtime_kubernetes_repository import evidence
+
+    svc, repository, op = control
+    await register(control)
+    auth = {"holder_id": "controller-a", "controller_epoch": 1}
+    await svc.observe_resource(MANAGER, REF, {**auth, "action": "bind", "uid": UID, "node_name": "worker-a"})
+    await svc.observe_resource(MANAGER, REF, {**auth, "action": "stop", "operation_id": op.id})
+    row = await repository.get(RuntimeExecutionResource, REF)
+    proof = {**evidence(), "name": row.name, "namespace": row.namespace}
+    await svc.observe_resource(MANAGER, REF, {**auth, "action": "stopped", "evidence": proof})
+    held = (await repository.find(RuntimeCapacityReservation, operation_id=op.id))[0]
+    assert held.state != "released"

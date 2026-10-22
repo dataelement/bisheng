@@ -346,3 +346,31 @@ def test_renewal_cannot_silently_switch_to_another_transfer(client, tmp_path):
     with pytest.raises(MaterialClientError):
         download(c, tmp_path / "out")
     assert not (tmp_path / "out").exists()
+
+
+def test_control_recovery_reads_preserve_resource_scope_and_operation_filter():
+    from runtime_manager.platform_client import PREFIX, PlatformClient, PlatformError
+
+    calls = []
+
+    def reply(request):
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"resources": [], "node": {"controller_epoch": 2}, "operations": []})
+
+    client = PlatformClient(
+        Config(platform_base_url="http://backend", platform_key_id="manager", platform_secret="fixture-control-key"),
+        transport=httpx.MockTransport(reply),
+    )
+    try:
+        assert client.node_snapshot()["node"]["controller_epoch"] == 2
+        client.resource(D)
+        assert client.resources("operation-a") == []
+        with pytest.raises(PlatformError):
+            client.resources("../other?x=1")
+    finally:
+        client.close()
+    assert calls == [
+        "http://backend" + PREFIX + "/nodes/plan",
+        "http://backend" + PREFIX + "/resources/" + D,
+        "http://backend" + PREFIX + "/resources?operation_id=operation-a",
+    ]

@@ -318,3 +318,13 @@ def test_inconsistent_list_snapshot_is_not_returned_as_complete(client_factory):
 
     with pytest.raises(KubernetesAPIError, match="list_snapshot_changed"):
         client_factory(handler).list("pods")
+
+
+def test_trusted_phase_results_use_only_a_named_bounded_container_log(client_factory):
+    calls = []
+    client = client_factory(lambda request: calls.append(request) or httpx.Response(200, text="fixture helper result"))
+    assert client.logs("task-a", container="transfer", tail=100) == "fixture helper result"
+    assert calls[0].url.params["container"] == "transfer" and calls[0].url.params["limitBytes"] == "1048576"
+    with pytest.raises(ValueError):
+        client.logs("task-a", container="../../foreign")
+    assert len(calls) == 1

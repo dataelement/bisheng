@@ -241,12 +241,31 @@ class KubernetesClient:
             yield {"type": "RESET", "object": snapshot}
         raise KubernetesAPIError("k8s_watch_relist_limit")
 
-    def logs(self, pod_name: str, *, tail: int = 100, previous: bool = False, since_seconds: int | None = None) -> str:
+    def logs(
+        self,
+        pod_name: str,
+        *,
+        tail: int = 100,
+        previous: bool = False,
+        since_seconds: int | None = None,
+        container: str = "app",
+    ) -> str:
+        if container not in {
+            "app",
+            "transfer",
+            "prepare",
+            "material-fetch",
+            "environment",
+            "data-layout",
+            "data-helper",
+            "maintenance",
+        }:
+            raise ValueError("k8s_log_container_invalid")
         path = self._path("pods", pod_name) + "/log"
         if type(tail) is not int or not 1 <= tail <= 1000:
             raise ValueError("k8s_log_tail_invalid")
         params = {
-            "container": "app",
+            "container": container,
             "tailLines": str(tail),
             "previous": str(bool(previous)).lower(),
             "limitBytes": "1048576",

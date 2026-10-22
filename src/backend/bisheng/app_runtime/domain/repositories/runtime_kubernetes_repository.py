@@ -142,6 +142,10 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
                 current = matches[0]
                 if any(getattr(current, k) != getattr(row, k) for k in _INTENT_FIELDS):
                     raise RuntimeConflict("resource_intent_conflict")
+                if current.uid is None and current.stop_requested_at is None:
+                    # Identical pending intent, freshly fenced controller, same owner.
+                    current.controller_epoch = controller_epoch
+                    await session.flush()
                 return current
             if row.kind == "Pod":
                 reservations = await self.find(RuntimeCapacityReservation, operation_id=row.operation_id, lock=True)

@@ -321,6 +321,18 @@ class RuntimeKubernetesService:
         return {
             "resource_ref": row.id,
             "operation_id": row.operation_id,
+            "app_id": row.app_id,
+            "node_id": row.node_id,
+            "cluster_id": row.cluster_id,
+            "generation": row.generation,
+            "owner_epoch": row.owner_epoch,
+            "purpose": row.purpose,
+            "status_policy_revision": row.status_policy_revision,
+            "protected_since_creation": row.protected_since_creation,
+            "binding_policy_verified": row.binding_policy_verified,
+            "stop_requested_at": row.stop_requested_at.isoformat() if row.stop_requested_at else None,
+            "stop_evidence": copy.deepcopy(row.stop_evidence),
+            "template": copy.deepcopy(row.approved_template),
             "namespace": row.namespace,
             "name": row.name,
             "kind": row.kind,
@@ -331,6 +343,20 @@ class RuntimeKubernetesService:
             "stop_state": row.stop_state,
             "cleanup_state": row.cleanup_state,
         }
+
+    async def resource(self, identity, resource_ref):
+        _identity(identity, "manager")
+        _ref(resource_ref)
+        async with self._scope(identity, RuntimeExecutionResource, resource_ref) as row:
+            return self._resource_document(row)
+
+    async def resources(self, identity, operation_id):
+        _identity(identity, "manager")
+        async with self._scope(identity, RuntimeOperation, operation_id):
+            rows = await self.repo.find(RuntimeExecutionResource, operation_id=operation_id, limit=1001)
+            if len(rows) > 1000 or any(row.node_id != identity.node_id for row in rows):
+                raise RuntimeConflict("resource_recovery_scope_invalid")
+            return {"resources": [self._resource_document(row) for row in rows]}
 
     async def observe_resource(self, identity, resource_ref, body):
         _identity(identity, "manager")
@@ -353,7 +379,13 @@ class RuntimeKubernetesService:
             elif body["action"] == "stopped":
                 row = await self.repo.confirm_resource_stop(resource_ref, body.get("evidence"), **auth)
                 pods = await self.repo.find(RuntimeExecutionResource, operation_id=row.operation_id, kind="Pod")
-                if pods and all(pod.stop_state == "confirmed" for pod in pods):
+                operation = await self.repo.get(RuntimeOperation, row.operation_id)
+                if (
+                    operation
+                    and operation.status in TERMINAL
+                    and pods
+                    and all(pod.stop_state == "confirmed" for pod in pods)
+                ):
                     await self.repo.release_resources(row.operation_id)
             elif body["action"] == "cleanup":
                 row = await self.repo.complete_resource_cleanup(resource_ref, uid=body.get("uid"), **auth)

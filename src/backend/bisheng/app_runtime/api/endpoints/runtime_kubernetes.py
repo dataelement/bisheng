@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from bisheng.app_runtime.api.endpoints.runtime_delivery import RuntimeRoute, role
@@ -67,6 +67,24 @@ async def claim(body: ControllerClaim, identity=Depends(independent_role("manage
 @router.post("/controllers/renew")
 async def renew(body: ControllerRenew, identity=Depends(independent_role("manager")), svc=Depends(service)):
     return await svc.renew_controller(identity, **body.model_dump())
+
+
+@router.get("/resources")
+async def resources(
+    operation_id: str = Query(min_length=1, max_length=36),
+    identity=Depends(independent_role("manager")),
+    svc=Depends(service),
+):
+    return await svc.resources(identity, operation_id)
+
+
+@router.get("/resources/{resource_ref}")
+async def resource(
+    resource_ref: str = Path(pattern=_UUID),
+    identity=Depends(independent_role("manager")),
+    svc=Depends(service),
+):
+    return await svc.resource(identity, resource_ref)
 
 
 @router.post("/resources")

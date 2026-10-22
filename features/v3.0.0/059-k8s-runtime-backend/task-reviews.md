@@ -607,3 +607,14 @@ T009/T013增量L1：应用凭据支持只给app容器的Secret引用，材料Sec
 **红阶段**：先14 failed（缺两个目标模块，`/private/tmp/f059-k8s-helper-red.log`）；补identity期限/UID等待两项先复现失败后修复。最终helper19项；完整runtime645 passed、10 skipped（`/private/tmp/f059-runtime-helper-full.log`）；backend新增与原合同组合213 passed。全app_runtime及中间件753 passed/18 skipped，仍有先前3项旧权限夹具失败（`/private/tmp/f059-helper-backend-full.log`）；不记为全模块通过。Ruff/逐文件arch-guard通过。离线pip/npm真实安装和镜像尚未实测，留到发行及189 E2E。
 **元数据验证**：目标1/2文件PASS；配对T030已红阶段；依赖T009/T029/T078 PASS。
 **结果**：PASS。
+
+## T007/T015/T017/T019/T029 恢复接线补充复审
+
+目标仍属于各原任务文件，未扩展单任务文件范围。执行器接入前新增测试先复现：Service/API缺少资源恢复读取（2项），中间阶段stop误释放整笔容量（1项），新控制器恢复未创建意图保留旧controller_epoch（1项），阶段日志缺容器参数（1项），控制client缺恢复查询（1项）。分别修正并复审七项L1：架构/命名/内部序列化/租户与事务/敏感信息/设计同步PASS，前端N/A。
+
+- manager的GET resources按操作/已鉴权node限定，资源模板仅脱敏投影；无本地文件恢复依赖。
+- 活跃操作中间Pod停止仍保留预占；终态且全部Pod同UID停止才释放。
+- 仅相同owner、操作与模板、未绑定且未stop的资源意图允许在新租约下更新controller_epoch；不存在同名异UID接管。
+- Core logs仅允许明确容器白名单与1MiB上限；公开应用日志仍默认为app。
+
+**验证**：控制Service/API/账本68 passed（`/private/tmp/f059-control-recovery-final.log`）；新旧client/Core/lifecycle82 passed（`/private/tmp/f059-control-client-recovery-final.log`）。红阶段日志对应`control-recovery-red`、`control-recovery-api-red`、`control-resume-red`、`phase-logs-red`、`control-client-recovery-red`。实际执行器及集群仍未交付。**结果：PASS。**

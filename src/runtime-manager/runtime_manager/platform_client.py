@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import ssl
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -127,8 +128,19 @@ class PlatformClient:
     def heartbeat(self, body):
         return self.request("POST", PREFIX + "/nodes/heartbeat", document=body)
 
+    def node_snapshot(self):
+        return self.request("GET", PREFIX + "/nodes/plan")
+
     def plan(self):
-        return self.request("GET", PREFIX + "/nodes/plan")["operations"]
+        return self.node_snapshot()["operations"]
+
+    def resource(self, resource_ref):
+        return self.request("GET", PREFIX + "/resources/" + self._resource_ref(resource_ref))
+
+    def resources(self, operation_id):
+        if not isinstance(operation_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,36}", operation_id):
+            raise PlatformError("operation_reference_invalid", 400)
+        return self.request("GET", PREFIX + "/resources?operation_id=" + operation_id)["resources"]
 
     def operation(self, operation_id):
         result = self.request("GET", PREFIX + "/operations/" + operation_id)

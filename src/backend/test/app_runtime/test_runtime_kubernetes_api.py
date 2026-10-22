@@ -155,3 +155,15 @@ async def test_unknown_parameters_and_disabled_runtime_do_not_create_resources(a
     api_client.settings.enabled = False
     assert (await api_client.send("POST", "/resources", body)).status_code == 403
     assert await api_client.repo.find(RuntimeExecutionResource, operation_id=api_client.op.id) == []
+
+
+async def test_manager_recovery_reads_are_node_bound_and_do_not_require_a_live_operation(api_client):
+    await create(api_client)
+    response = await api_client.send("GET", f"/resources/{REF}")
+    assert response.status_code == 200 and response.json()["purpose"] == "serve"
+    response = await api_client.send("GET", f"/resources?operation_id={api_client.op.id}")
+    assert response.status_code == 200 and len(response.json()["resources"]) == 1
+    assert (await api_client.send("GET", f"/resources/{REF}", role="admission")).status_code == 403
+    assert (
+        await api_client.send("GET", f"/resources?operation_id={api_client.op.id}", role="entry")
+    ).status_code == 403

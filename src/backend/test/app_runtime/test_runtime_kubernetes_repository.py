@@ -324,3 +324,13 @@ async def test_later_capability_report_cannot_retroactively_protect_an_old_pod(r
     await repo.save(node)
     row = await bind(repo, row)
     assert not row.protected_since_creation
+
+
+async def test_new_controller_can_resume_the_identical_uncreated_resource_intent(repo):
+    op = await setup_operation(repo)
+    await repo.claim_controller("node-a", holder_id="controller-a", expected_epoch=0, now=NOW)
+    row = await repo.create_resource_intent(resource(op), holder_id="controller-a", controller_epoch=1, now=NOW)
+    later = NOW + timedelta(seconds=31)
+    await repo.claim_controller("node-a", holder_id="controller-b", expected_epoch=1, now=later)
+    recovered = await repo.create_resource_intent(row, holder_id="controller-b", controller_epoch=2, now=later)
+    assert recovered.uid is None and recovered.controller_epoch == 2
