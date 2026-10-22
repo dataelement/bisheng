@@ -331,7 +331,12 @@ CREATE兼容仅接受API正常默认的Pending及按正常/init容器资源计�
 
 已实现 `deploy/kubernetes/app-runtime/` Helm Chart、受限基础清单、values.schema，以及 `scripts/verify_k8s_runtime.py` 安装探测工具；代码交付不代表现场探测已通过。Chart 不安装整个平台或默认修改现有 kube-system；安装过程分安装者权限与常驻 manager 权限。
 
-安装引导使用只读installer canary ConfigMap，计划最长1小时、固定helper/命令/镜像、无业务凭据或生产卷，避免节点未ready不能执行自身探测的循环。外部安装者真实验证15项基线、可选registry/沙箱后，CAS发布绑定descriptor摘要的24小时报告；每6小时刷新。失败/过期拒绝新工作；manager不能签发ready。
+安装引导使用只读installer canary ConfigMap，计划最长1小时、固定helper/命令/镜像、无业务凭据或生产卷，避免节点未ready不能执行自身探测的循环。
+
+恢复使用逐Pod namespace/name/UID/deletionTimestamp绑定证据；未调度删除中Pod须由外部installer真实POST binding得到being deleted拒绝并再次读取，不能复用全局布尔值。已绑定Pod仍需可信终态，finalizer移除前再读一次停止状态。仅接管自然过期计划；丢失计划或同名替换不自动接管。
+
+Helm升级查验同release/namespace和UID/RV后原样保留canary plans.json及profile_images；旧无installation label对象额外校验同release descriptor安装范围再补标识。缺对象或错归属/非法数据拒绝升级，初装禁止values预置活跃计划。保留镜像列表不隐式授权新profile，新供应须由installer核对。descriptor.cni_username与admission ENV同源，CNI身份改变使旧报告失效。
+外部安装者真实验证15项基线、可选registry/沙箱后，CAS发布绑定descriptor摘要的24小时报告；每6小时刷新。失败/过期拒绝新工作；manager不能签发ready。
 
 生产与scratch写入前，可信init只读验证ext4/xfs、实际有界容量及namespace/installation marker；普通目录或loop未挂载不能通过。预检真实验证SQLite锁/fsync。helper由同版本manager、Node与Python preparer产物组合，固定prepare.py、原生Node库、SDK及wheelhouse/许可证；在禁网最终镜像中实际执行Python/uv/Node/static解析，不能以import或runtime已装包替代完整材料。离线新增依赖仍须匹配架构/ABI并提前供应。
 
@@ -353,7 +358,21 @@ manager 的 token 自动轮转文件按请求刷新，TLS 使用集群 CA，不�
 
 卸载先关闭业务运行时开关，撤销入口/材料/出口并有界停止执行体，确认终止后移除系统服务及本安装的控制资源。生产卷、未确认保护备份及平台产物保留；namespace/PV 不纳入默认 Helm 删除，不执行 `kubectl delete namespace`。有未知写入者时卸载报告未完成并保留必需的保护记录，不能删 finalizer 假装成功。
 
+
+现场兼容细化（T164–T174）：
+
+- `execution.storageControllerUsernames` 是显式可信控制器用户名列表；admission 的 `RTM_STORAGE_CONTROLLER_USERNAMES` 与 descriptor.storage_controller_usernames 同源。更换它使旧报告摘要失效；不增加任何 RBAC。189 的真实 PVC binder/protection 使用各自 kube-system ServiceAccount，不能假设为 controller-manager 用户名。
+- `kubectl auth can-i` 使用资源 TYPE 与 `--subresource=exec/status`；`pods/exec` 会按 TYPE/NAME 解析，不能作为 exec 权限证据。
+- Core API 对从未绑定的 Pending Pod 将 DELETE 宽限规范化为 0。仅同 UID/RV、无 nodeName、无运行状态历史、无 PodScheduled=True、无 Unknown/NodeLost 时兼容；绑定或写入状态不确定仍拒绝强删。finalizer 释放仍需本资源停止证据与 fresh reread。
+- PSA 负例使用 schema 有效的 privileged=True / allowPrivilegeEscalation=True，只接受真实 PodSecurity 拒绝；dry-run 的 UID=None 计划在 finally 撤销，撤销失败和探测失败均以安全原因保留。旧版本留下的 UID=None 计划不自动收养或伪造 UID。
+- 网络白名单须覆盖平台实际数据路径。189 平台经 Docker published port 转发，Calico 看到的目标端口为 DNAT 后 443/7860；只放行宿主入口 5444/17860 会阻断 manager heartbeat。部署值修正不能替代应用出站隔离测试。
+- 原生发行 smoke 的 hostile CWD 显式0755、poison 文件0644，UID10001先实际读取候选再验证 `-I` 只导入可信包，避免因不可读目录导致假阳性。该修复只影响验收脚本。
+
 ## 5. 已知坑与处理位置
+
+- Kubernetes ObjectMeta.finalizers 使用omitempty；API移除最后一个finalizer时可省略字段。准入仅将该空数组与省略等价，仍先核对停止已确认和同UID；额外非空finalizer不放宽。189真实dry-run复现，配对测试先红2后绿198。
+- ScopedRuntimeRecord以None默认等待真实before_flush租户注入，存储仍非空有索引；模型测试用局部Session子类注册真实hook，避免向后续审批测试泄漏进程级监听器。完整backend组合已复验。
+
 
 | 反直觉事实 | 如果不知道会怎样 | 在哪处理 |
 | --- | --- | --- |
@@ -679,3 +698,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T048–T053与T088–T093：签发/数据恢复/CSV流、交付接线与OCI组装 | backend64 passed；runtime744 passed/10 skipped（OCI加入前）；OCI及交付129 passed，解释器链接10 passed；真实部署/CI待验收 |
 
 | 2026-10-22 | 并行合入安装/发行/验收工具、安全purge、canary引导/刷新、scratch写入前guard、OCI端点与准入、launcher/SDK/源码限制及重试冻结；记录189真实安装和109原生回归 | D1–D8未变；隔离探测仍在修复，业务E2E/双架构发行/L2未完成，不将本地或镜像烟测记为完整交付 |
+
+| 2026-10-22 | T158–T174：故障CLI与真实安装兼容修复完成本地L1；runtime1129/10skip、安装组合263、业务harness69/4skip；新增原生权限合同31项 | 189私有镜像a5f3f259、正式15项重测中；109专用平台初始化中，业务/故障/正式CI/L2仍未完成 |

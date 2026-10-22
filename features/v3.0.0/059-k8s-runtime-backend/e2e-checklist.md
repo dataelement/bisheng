@@ -85,7 +85,9 @@ python scripts/e2e_k8s_runtime.py --stage cleanup --evidence /tmp/e2e-f059-api.j
 - `installation`：真实平台诊断与权限；必须先有安装工具的实际集群探测，不能以此代替。
 - `platform`：setup 精确清理上次同 slug 的测试应用，逐包 deploy→轮询→预览→审批→上线→GET→日志/权限/数据/CSV→停用恢复→可选版本更新。为后续故障验收保留本次应用与 journal；失败也保留可诊断现场，随后显式 cleanup。
 - `observe`、`cycle`：续用 journal，再按当前后端事实与自然 owner 核验，分别只读行程或停用恢复。
-- `fault-upgrade`：支持 manager-restart、runtime-upgrade、app-restart 的 before/after 观察。**不触发故障**，after不自动等待实例健康；操作者须在恢复期限内运行并附实际Pod/Deployment UID与时间。journal 标明 `injection_verified=false`，单凭这个结果不能声称注入已完成。
+- `fault-upgrade`：支持 manager-restart、runtime-upgrade、app-restart 的 before/after 观察。**不触发故障**，after在既定恢复期限内只读轮询实例与数据；操作者须在恢复期限内运行并附实际Pod/Deployment UID与时间。after不补写业务数据或触发SDK/附件写入；journal 标明 `injection_verified=false`，单凭这个结果不能声称注入已完成。
+- `fault-operation`：observe/cancel/restore仅操作同suite精确app和operation；restore必须提供snapshot、fresh expected-generation、明确acknowledge-data-loss及expected-rows-file。保护快照允许去重，公开API缺少关联时记录 `protection_link_verified=false`，需由主agent补安全账本证据，不能声明完整AC-51。
+- `platform`预览还须以独立approver真实GET entry_url，并验证owner/nonowner/foreign被拒绝，生产SQLite rows预览前后相同。
 - `all`：完整业务行程，setup清理＋finally teardown清理；pytest 同样双重cleanup并共享 class 事件循环。仅使用 `--stage all` 时失败finally也可能删除诊断实例，先保存日志。
 - `cleanup`：只遍历场景文件中的精确 slug；fresh GET 再核对同租户、同自然 owner、name前缀，online先停用再删除，最后GET精确16101。不删除租户/用户、全体前缀、非测试资源或未知writer；失败必须保留给主agent处理。
 

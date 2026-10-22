@@ -2967,8 +2967,8 @@
       ],
       "pair": null,
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX: real Calico pods/status metadata path"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T112",
@@ -2990,8 +2990,8 @@
       ],
       "pair": "T111",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX: real Calico pods/status metadata path"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T113",
@@ -3767,8 +3767,8 @@
       ],
       "pair": "T146",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T146",
@@ -3792,8 +3792,8 @@
       ],
       "pair": "T145",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T147",
@@ -3801,8 +3801,7 @@
       "kind": "测试",
       "title": "CNI 身份与能力报告绑定合同",
       "files": [
-        "src/runtime-manager/tests/test_k8s_installation.py",
-        "src/runtime-manager/tests/test_k8s_capabilities.py"
+        "src/runtime-manager/tests/test_k8s_installation.py"
       ],
       "logic": "Chart描述与admission身份同源；仅变更CNI身份使旧报告失效；只更新probe_report不改变描述摘要。",
       "acs": [
@@ -3816,8 +3815,8 @@
       ],
       "pair": "T148",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T148",
@@ -3839,8 +3838,8 @@
       ],
       "pair": "T147",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T149",
@@ -3862,8 +3861,8 @@
       ],
       "pair": "T150",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T150",
@@ -3885,8 +3884,8 @@
       ],
       "pair": "T149",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T151",
@@ -3909,8 +3908,8 @@
       ],
       "pair": "T152",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T152",
@@ -3933,8 +3932,8 @@
       ],
       "pair": "T151",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T153",
@@ -3947,16 +3946,15 @@
       "logic": "当前context选择对应docker driver builder，禁止依赖不可用default context；保留host/daemon/image架构一致与原生烟测门禁。",
       "acs": [
         "AC-42",
-        "AC-54",
-        "AC-55"
+        "AC-54"
       ],
       "depends": [
         "T123"
       ],
       "pair": "T154",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T154",
@@ -3969,16 +3967,478 @@
       "logic": "命令级选择当前原生daemon的docker driver builder，不改全局context；同版本构建、离线resolver与烟测通过后生成清单。",
       "acs": [
         "AC-42",
-        "AC-54",
-        "AC-55"
+        "AC-54"
       ],
       "depends": [
         "T153"
       ],
       "pair": "T153",
       "command": "",
-      "status": "pending",
-      "review": "NEEDS_FIX"
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T155",
+      "wave": 8,
+      "kind": "测试",
+      "title": "预览访问和只读 checkpoint 合同",
+      "files": [
+        "src/backend/test/app_runtime/test_k8s_e2e_contract.py"
+      ],
+      "logic": "实际访问审批预览，配对owner/nonowner/foreign拒绝，预览前后生产行不变；checkpoint只GET且请求前校验时限、app范围。",
+      "acs": [
+        "AC-17",
+        "AC-18",
+        "AC-27",
+        "AC-35",
+        "AC-46",
+        "AC-55"
+      ],
+      "depends": [
+        "T133"
+      ],
+      "pair": "T156",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T156",
+      "wave": 8,
+      "kind": "实现",
+      "title": "预览入口与只读故障观察",
+      "files": [
+        "src/backend/test/e2e/helpers/vibe_runtime.py"
+      ],
+      "logic": "走真实预览入口；故障after不调用带写入的observe，不将API观察当作故障注入证明。",
+      "acs": [
+        "AC-17",
+        "AC-18",
+        "AC-27",
+        "AC-35",
+        "AC-46",
+        "AC-55"
+      ],
+      "depends": [
+        "T155"
+      ],
+      "pair": "T155",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T157",
+      "wave": 8,
+      "kind": "测试",
+      "title": "真实 pytest 入口 CA 一致性",
+      "files": [
+        "src/backend/test/e2e/test_e2e_vibe_k8s_runtime.py",
+        "src/backend/test/app_runtime/test_k8s_e2e_contract.py"
+      ],
+      "logic": "pytest live与CLI都用显式证书SSLContext；TLS/WS不关闭证书验证。",
+      "acs": [
+        "AC-42",
+        "AC-46",
+        "AC-55"
+      ],
+      "depends": [
+        "T155"
+      ],
+      "pair": "T155",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T158",
+      "wave": 8,
+      "kind": "测试",
+      "title": "精确故障操作合同",
+      "files": [
+        "src/backend/test/app_runtime/test_k8s_e2e_contract.py"
+      ],
+      "logic": "suite slug/app/op/snapshot范围、fresh generation与ack正反，取消/恢复配对权限和终态拒绝；恢复数据对比，不以新增快照数判通过。",
+      "acs": [
+        "AC-07",
+        "AC-27",
+        "AC-35",
+        "AC-43",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T155"
+      ],
+      "pair": "T159",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T159",
+      "wave": 8,
+      "kind": "实现",
+      "title": "精确取消及快照恢复 harness",
+      "files": [
+        "src/backend/test/e2e/helpers/vibe_runtime.py"
+      ],
+      "logic": "只对本suite精确operation观测和取消；恢复显式确认并比对预期rows，允许保护快照去重，公开接口缺关联证据时记录未验证。",
+      "acs": [
+        "AC-07",
+        "AC-27",
+        "AC-35",
+        "AC-43",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T158"
+      ],
+      "pair": "T158",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T163",
+      "wave": 8,
+      "kind": "测试",
+      "title": "故障操作 CLI 参数合同",
+      "files": [
+        "src/backend/test/app_runtime/test_k8s_e2e_contract.py"
+      ],
+      "logic": "验证fault-operation阶段的slug、operation、snapshot、expected generation、ack与expected rows参数正反。",
+      "acs": [
+        "AC-07",
+        "AC-35",
+        "AC-43",
+        "AC-55"
+      ],
+      "depends": [
+        "T159"
+      ],
+      "pair": "T160",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T160",
+      "wave": 8,
+      "kind": "实现",
+      "title": "故障操作 CLI 入口",
+      "files": [
+        "scripts/e2e_k8s_runtime.py"
+      ],
+      "logic": "公开平台API执行显式suite范围操作，返回真实业务状态；不调用集群接口或自动注入基础设施故障。",
+      "acs": [
+        "AC-07",
+        "AC-35",
+        "AC-43",
+        "AC-55"
+      ],
+      "depends": [
+        "T163"
+      ],
+      "pair": "T163",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T161",
+      "wave": 8,
+      "kind": "测试",
+      "title": "空 finalizers 序列化合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_admission.py"
+      ],
+      "logic": "真实API省略空finalizers时，停止未确认仍拒绝，确认后允许；CNI注解保留、额外finalizer/伪造状态仍拒绝。",
+      "acs": [
+        "AC-13",
+        "AC-20",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T111"
+      ],
+      "pair": "T162",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T162",
+      "wave": 8,
+      "kind": "实现",
+      "title": "准入兼容省略空 finalizers",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_admission.py"
+      ],
+      "logic": "仅metadata.finalizers空数组按omitempty规范化为省略；不改变同UID/停止确认或非空finalizer严格比较。",
+      "acs": [
+        "AC-13",
+        "AC-20",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T161"
+      ],
+      "pair": "T161",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T164",
+      "wave": 8,
+      "kind": "测试",
+      "title": "kubectl 子资源拒绝合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_installation.py"
+      ],
+      "logic": "exec/status必须以--subresource明确请求；create pods允许不代表exec允许。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-55"
+      ],
+      "depends": [
+        "T145"
+      ],
+      "pair": "T165",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T165",
+      "wave": 8,
+      "kind": "实现",
+      "title": "kubectl 子资源显式检查",
+      "files": [
+        "scripts/verify_k8s_runtime.py"
+      ],
+      "logic": "使用资源TYPE加--subresource而非TYPE/NAME，真实核对exec和status拒绝。",
+      "acs": [
+        "AC-13",
+        "AC-14",
+        "AC-55"
+      ],
+      "depends": [
+        "T164"
+      ],
+      "pair": "T164",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T166",
+      "wave": 8,
+      "kind": "测试",
+      "title": "存储控制器身份配置合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_installation.py"
+      ],
+      "logic": "同源ENV/descriptor；非法、空、重复及自然用户身份拒绝，变化后旧报告失效。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-55"
+      ],
+      "depends": [
+        "T147"
+      ],
+      "pair": "T167",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T167",
+      "wave": 8,
+      "kind": "基础设施",
+      "title": "存储控制器配置与schema",
+      "files": [
+        "deploy/kubernetes/app-runtime/values.yaml",
+        "deploy/kubernetes/app-runtime/values.schema.json"
+      ],
+      "logic": "显式控制器用户名列表，默认兼容既有部署；不赋予新RBAC权限。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-55"
+      ],
+      "depends": [
+        "T166"
+      ],
+      "pair": "T166",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T168",
+      "wave": 8,
+      "kind": "基础设施",
+      "title": "存储控制器环境与描述同源",
+      "files": [
+        "deploy/kubernetes/app-runtime/templates/workloads.yaml"
+      ],
+      "logic": "admission ENV与descriptor从同一execution.storageControllerUsernames读取。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-55"
+      ],
+      "depends": [
+        "T167"
+      ],
+      "pair": null,
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T169",
+      "wave": 8,
+      "kind": "测试",
+      "title": "API未绑定Pod零宽限删除合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_admission.py"
+      ],
+      "logic": "仅同UID/RV、Pending未绑定且无任意writer状态可接受API规范化零宽限；绑定、Unknown、终态、过期RV拒绝。",
+      "acs": [
+        "AC-13",
+        "AC-20",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T161"
+      ],
+      "pair": "T170",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T170",
+      "wave": 8,
+      "kind": "实现",
+      "title": "未绑定Pod删除选项兼容",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_admission.py"
+      ],
+      "logic": "兼容API server把未绑定Pod删除宽限归零；保留UID/RV和停止证据围栏，不放开有写入历史的强删。",
+      "acs": [
+        "AC-13",
+        "AC-20",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T169"
+      ],
+      "pair": "T169",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T171",
+      "wave": 8,
+      "kind": "测试",
+      "title": "PSA负例和dry-run撤销合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_installation.py"
+      ],
+      "logic": "schema有效的特权Pod必须由真实PSA拒绝；所有dryRun失败路径撤销未创建计划并保留双重失败。",
+      "acs": [
+        "AC-13",
+        "AC-19",
+        "AC-20",
+        "AC-55"
+      ],
+      "depends": [
+        "T164"
+      ],
+      "pair": "T172",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T172",
+      "wave": 8,
+      "kind": "实现",
+      "title": "PSA真实拒绝及计划清理",
+      "files": [
+        "scripts/verify_k8s_runtime.py"
+      ],
+      "logic": "privileged与allowPrivilegeEscalation同时设真；只认PodSecurity拒绝，finally撤销UID空的dryRun计划，清理失败不能吞掉。",
+      "acs": [
+        "AC-13",
+        "AC-19",
+        "AC-20",
+        "AC-55"
+      ],
+      "depends": [
+        "T171"
+      ],
+      "pair": "T171",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T173",
+      "wave": 8,
+      "kind": "测试",
+      "title": "原生隔离烟测可读目录合同",
+      "files": [
+        "src/runtime-manager/tests/test_image_release.py"
+      ],
+      "logic": "umask022/077下UID10001可遍历shadow并读取poison文件，防止权限拒绝导致假阳性。",
+      "acs": [
+        "AC-42",
+        "AC-54"
+      ],
+      "depends": [
+        "T153"
+      ],
+      "pair": "T174",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T174",
+      "wave": 8,
+      "kind": "实现",
+      "title": "原生隔离烟测目录权限",
+      "files": [
+        "scripts/build_runtime_images.sh"
+      ],
+      "logic": "shadow0755、poison0644；实际-I命令先读候选再确认只导入trusted模块，不改变运行镜像权限。",
+      "acs": [
+        "AC-42",
+        "AC-54"
+      ],
+      "depends": [
+        "T173"
+      ],
+      "pair": "T173",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

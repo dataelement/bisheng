@@ -1,31 +1,31 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T10:49:09.248453+00:00",
-  "validated_source_commit": "4bd3351be66aa5b92f291f9425d1a6cbfc40a881",
+  "recorded_at": "2026-10-22T12:20:47.349707+00:00",
+  "validated_source_commit": "b8f0988513779542b882ff49cb44a3d63616dd82",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 134,
-    "tasks_total": 142,
+    "l1_completed": 168,
+    "tasks_total": 174,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 967,
+      "passed": 1129,
       "skipped": 10,
       "exit_code": 0,
-      "source_commit": "ce2e25076",
-      "scope": "full runtime before final CREATE-default compatibility; final admission patch separately 171 passed",
-      "log": "/private/tmp/f059-integration-runtime-latest.log"
+      "source_commit": "a5f3f259b56109816b7a4ebaf2ac9e72d0915217",
+      "scope": "full runtime before builder-only shadow permission fix; image release separate31passed",
+      "log": "/private/tmp/f059-runtime-resume-integrated.log"
     },
     "backend": {
-      "passed": 1564,
+      "passed": 1587,
+      "skipped": 18,
       "exit_code": 0,
-      "scope": "full app_runtime and app_publish including scratch fixture repair",
-      "log": "/private/tmp/f059-backend-full-final.log",
-      "skipped": 18
+      "scope": "app_runtime/app_publish before latest fault harness; fault harness separately69passed4live-skipped",
+      "log": "/private/tmp/f059-backend-resume-fixed.log"
     },
     "public_tenant_fix": {
       "passed": 17,
@@ -67,7 +67,9 @@
       "kubernetes": "v1.28.15",
       "storageclass_count": 0,
       "pv_count": 0,
-      "installed_application_resources": false
+      "installed_application_resources": false,
+      "historical": true,
+      "note": "Read-only pre-install inventory; current dedicated19PV/runtime/platform installed. Full mandatory probes and business acceptance incomplete."
     },
     "full_app_runtime_with_middleware": {
       "passed": 785,
@@ -76,7 +78,7 @@
       "exit_code": 1,
       "log": "/private/tmp/f059-coordination-backend-full.log",
       "test_config": "explicit fixture-only JWT signing key; no production credentials",
-      "remaining": "Vibe permission-registration fixtures lack new candidate count stubs; old linsight_skill non-registration assertion contradicts inherited release implementation. Retain as pending test maintenance, not a full green gate."
+      "remaining": "Historical failed snapshot superseded by backend1587passed and isolated model hook fix af8b0fe75; not current gate."
     },
     "material_client": {
       "passed": 26,
@@ -223,6 +225,18 @@
       "exit_code": 0,
       "scope": "native Docker containers, not CRI acceptance",
       "extra_ca_warning": "assembler extra CA file initially inherited 0600; rebuilt test CA images with 0444 and new profile revision2; no TLS verification disabled"
+    },
+    "installer_admission_capabilities": {
+      "passed": 263,
+      "exit_code": 0,
+      "source_commit": "a5f3f259b56109816b7a4ebaf2ac9e72d0915217",
+      "log": "/private/tmp/f059-189-fixes-local-final.log"
+    },
+    "fault_harness": {
+      "passed": 69,
+      "skipped": 4,
+      "scope": "synthetic contract; live opt-in disabled",
+      "log": "/private/tmp/f059-harness-resume-integrated.log"
     }
   },
   "not_executed": [
@@ -234,5 +248,7 @@
     "offline installation"
   ],
   "blocking_integration_prerequisite": null,
-  "release_parent": "9d156f261cc7769fcf75f41caeb104a425308017"
+  "release_parent": "9d156f261cc7769fcf75f41caeb104a425308017",
+  "historical_validated_source_commit": "4bd3351be66aa5b92f291f9425d1a6cbfc40a881",
+  "public_release": "not executed or authorized for current F059; no new public push/tag/DockerHub release"
 }

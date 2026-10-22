@@ -1849,3 +1849,713 @@ T085仅DDL，parent来自alembic heads的f059_merge_release_heads；DM8仅静态
 ## T111/T112 实测复审重开
 
 189首个canary已通过CREATE并被scheduler绑定；Calico实际通过pods/status维护三个保留注解，原_status无条件拒绝导致sandbox未启动。保留事件及UID，不强删/移除finalizer；该配对重开NEEDS_FIX，只补认证CNI、同UID/节点且status/spec不变的metadata路径，终态与其他字段仍拒绝。新实现/配对通过后再更新结果，当前不作为安装成功。
+
+
+## Task Review: T111 — 续办复核
+
+**任务**: Calico 元数据来源及收尾合同
+**类型**: 测试
+**文件**: `src/runtime-manager/tests/test_k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T112 — 续办复核
+
+**任务**: Calico 元数据来源隔离
+**类型**: 实现
+**文件**: `src/runtime-manager/runtime_manager/k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | PASS | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | PASS | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T143 — 续办复核
+
+**任务**: canary 配置投射刷新合同
+**类型**: 测试
+**文件**: `src/runtime-manager/tests/test_k8s_installation.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T144 — 续办复核
+
+**任务**: canary 配置投射刷新
+**类型**: 实现
+**文件**: `scripts/verify_k8s_runtime.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | PASS | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | PASS | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T145 — 续办复核
+
+**任务**: 过期 canary 恢复围栏合同
+**类型**: 测试
+**文件**: `src/runtime-manager/tests/test_k8s_installation.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T146 — 续办复核
+
+**任务**: 过期 canary 逐资源恢复
+**类型**: 实现
+**文件**: `scripts/verify_k8s_runtime.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | PASS | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | PASS | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T147 — 续办复核
+
+**任务**: CNI 身份与能力报告绑定合同
+**类型**: 测试
+**文件**: `src/runtime-manager/tests/test_k8s_installation.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T148 — 续办复核
+
+**任务**: 描述纳入 CNI 身份
+**类型**: 基础设施
+**文件**: `deploy/kubernetes/app-runtime/templates/workloads.yaml`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | PASS | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | PASS | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T149 — 续办复核
+
+**任务**: 租户上下文默认值合同
+**类型**: 测试
+**文件**: `src/backend/test/app_runtime/test_runtime_model_contracts.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | PASS | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T150 — 续办复核
+
+**任务**: 运行记录租户默认值修订
+**类型**: 基础设施
+**文件**: `src/backend/bisheng/app_runtime/domain/models/runtime_delivery.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | PASS | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | PASS | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | PASS | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T151 — 续办复核
+
+**任务**: Helm 升级保留 canary 计划合同
+**类型**: 测试
+**文件**: `src/runtime-manager/tests/test_k8s_installation.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T152 — 续办复核
+
+**任务**: Helm 升级保留恢复计划
+**类型**: 基础设施
+**文件**: `deploy/kubernetes/app-runtime/templates/services.yaml`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | PASS | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | PASS | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T153 — 续办复核
+
+**任务**: 原生 Docker context 构建合同
+**类型**: 测试
+**文件**: `src/runtime-manager/tests/test_image_release.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T154 — 续办复核
+
+**任务**: 原生 context 构建入口
+**类型**: 实现
+**文件**: `scripts/build_runtime_images.sh`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | PASS | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | PASS | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T155 — 续办复核
+
+**任务**: 预览访问和只读 checkpoint 合同
+**类型**: 测试
+**文件**: `src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T156 — 续办复核
+
+**任务**: 预览入口与只读故障观察
+**类型**: 实现
+**文件**: `src/backend/test/e2e/helpers/vibe_runtime.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | PASS | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | PASS | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T157 — 续办复核
+
+**任务**: 真实 pytest 入口 CA 一致性
+**类型**: 测试
+**文件**: `src/backend/test/e2e/test_e2e_vibe_k8s_runtime.py`、`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T161 — 续办复核
+
+**任务**: 空 finalizers 序列化合同
+**类型**: 测试
+**文件**: `src/runtime-manager/tests/test_k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | N/A | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | N/A | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+
+## Task Review: T162 — 续办复核
+
+**任务**: 准入兼容省略空 finalizers
+**类型**: 实现
+**文件**: `src/runtime-manager/runtime_manager/k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 测试仅HTTP/隔离Session；生产未增跨层依赖。 |
+| 2 | 命名规范 | PASS | 沿用既有命名，AC全称可追溯。 |
+| 3 | 序列化约定 | PASS | 内部descriptor/既有envelope；仅已验证omitempty规范化。 |
+| 4 | 数据库约定 | N/A | 模型非空/索引及上下文填充通过；其余未改数据库。 |
+| 5 | 前端约定 | N/A | 无前端源代码。 |
+| 6 | 信息泄漏 | PASS | 无硬编码凭据；日志和恢复证据仅专用资源身份。 |
+| 7 | 设计同步 | PASS | design §4.10/§5同步已实现恢复、升级和报告约束。 |
+
+**元数据验证**: 文件范围 PASS | 配对测试 PASS/N/A | 依赖 PASS
+**结果**: PASS（代码合同；不替代T067–T072真实验收及L2）
+
+## Task Review: T158 — 现场修复及合流复核
+
+**任务**：精确故障操作合同
+**类型**：测试
+**文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | N/A | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | N/A | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：业务harness69passed/4live-skipped；真实API未在此计通过。
+
+**元数据验证**：文件范围 PASS；配对测试 N/A；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T159 — 现场修复及合流复核
+
+**任务**：精确取消及快照恢复 harness
+**类型**：实现
+**文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | PASS | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | PASS | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：业务harness69passed/4live-skipped；真实API未在此计通过。
+
+**元数据验证**：文件范围 PASS；配对测试 PASS；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T163 — 现场修复及合流复核
+
+**任务**：故障操作 CLI 参数合同
+**类型**：测试
+**文件**：`src/backend/test/app_runtime/test_k8s_e2e_contract.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | N/A | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | N/A | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：业务harness69passed/4live-skipped；真实API未在此计通过。
+
+**元数据验证**：文件范围 PASS；配对测试 N/A；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T160 — 现场修复及合流复核
+
+**任务**：故障操作 CLI 入口
+**类型**：实现
+**文件**：`scripts/e2e_k8s_runtime.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | PASS | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | PASS | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：业务harness69passed/4live-skipped；真实API未在此计通过。
+
+**元数据验证**：文件范围 PASS；配对测试 PASS；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T164 — 现场修复及合流复核
+
+**任务**：kubectl 子资源拒绝合同
+**类型**：测试
+**文件**：`src/runtime-manager/tests/test_k8s_installation.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | N/A | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | N/A | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：主线installer/admission/capabilities组合263passed；runtime1129passed/10skipped（发行权限修复前），真实基线尚在重测。
+
+**元数据验证**：文件范围 PASS；配对测试 N/A；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T165 — 现场修复及合流复核
+
+**任务**：kubectl 子资源显式检查
+**类型**：实现
+**文件**：`scripts/verify_k8s_runtime.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | PASS | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | PASS | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：主线installer/admission/capabilities组合263passed；runtime1129passed/10skipped（发行权限修复前），真实基线尚在重测。
+
+**元数据验证**：文件范围 PASS；配对测试 PASS；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T166 — 现场修复及合流复核
+
+**任务**：存储控制器身份配置合同
+**类型**：测试
+**文件**：`src/runtime-manager/tests/test_k8s_installation.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | N/A | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | N/A | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：主线installer/admission/capabilities组合263passed；runtime1129passed/10skipped（发行权限修复前），真实基线尚在重测。
+
+**元数据验证**：文件范围 PASS；配对测试 N/A；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T167 — 现场修复及合流复核
+
+**任务**：存储控制器配置与schema
+**类型**：基础设施
+**文件**：`deploy/kubernetes/app-runtime/values.yaml`、`deploy/kubernetes/app-runtime/values.schema.json`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | PASS | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | PASS | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：主线installer/admission/capabilities组合263passed；runtime1129passed/10skipped（发行权限修复前），真实基线尚在重测。
+
+**元数据验证**：文件范围 PASS；配对测试 PASS；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T168 — 现场修复及合流复核
+
+**任务**：存储控制器环境与描述同源
+**类型**：基础设施
+**文件**：`deploy/kubernetes/app-runtime/templates/workloads.yaml`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | PASS | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | PASS | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：主线installer/admission/capabilities组合263passed；runtime1129passed/10skipped（发行权限修复前），真实基线尚在重测。
+
+**元数据验证**：文件范围 PASS；配对测试 N/A；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T169 — 现场修复及合流复核
+
+**任务**：API未绑定Pod零宽限删除合同
+**类型**：测试
+**文件**：`src/runtime-manager/tests/test_k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | N/A | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | N/A | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：主线installer/admission/capabilities组合263passed；runtime1129passed/10skipped（发行权限修复前），真实基线尚在重测。
+
+**元数据验证**：文件范围 PASS；配对测试 N/A；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T170 — 现场修复及合流复核
+
+**任务**：未绑定Pod删除选项兼容
+**类型**：实现
+**文件**：`src/runtime-manager/runtime_manager/k8s_admission.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | PASS | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | PASS | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：主线installer/admission/capabilities组合263passed；runtime1129passed/10skipped（发行权限修复前），真实基线尚在重测。
+
+**元数据验证**：文件范围 PASS；配对测试 PASS；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T171 — 现场修复及合流复核
+
+**任务**：PSA负例和dry-run撤销合同
+**类型**：测试
+**文件**：`src/runtime-manager/tests/test_k8s_installation.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | N/A | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | N/A | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：主线installer/admission/capabilities组合263passed；runtime1129passed/10skipped（发行权限修复前），真实基线尚在重测。
+
+**元数据验证**：文件范围 PASS；配对测试 N/A；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T172 — 现场修复及合流复核
+
+**任务**：PSA真实拒绝及计划清理
+**类型**：实现
+**文件**：`scripts/verify_k8s_runtime.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | PASS | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | PASS | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：主线installer/admission/capabilities组合263passed；runtime1129passed/10skipped（发行权限修复前），真实基线尚在重测。
+
+**元数据验证**：文件范围 PASS；配对测试 PASS；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T173 — 现场修复及合流复核
+
+**任务**：原生隔离烟测可读目录合同
+**类型**：测试
+**文件**：`src/runtime-manager/tests/test_image_release.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | N/A | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | N/A | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：发行合同红2failed→绿31passed；原生Linux UID10001对照证据，不替代189最终镜像。
+
+**元数据验证**：文件范围 PASS；配对测试 N/A；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。
+
+## Task Review: T174 — 现场修复及合流复核
+
+**任务**：原生隔离烟测目录权限
+**类型**：实现
+**文件**：`scripts/build_runtime_images.sh`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅执行器/外部installer/验收工具既有边界；无backend反向依赖。 |
+| 2 | 命名规范 | PASS | snake_case及既有参数命名；测试AC标注使用完整ID。 |
+| 3 | 序列化约定 | PASS | 既有内部descriptor/JSON；部署API与摘要函数不改。 |
+| 4 | 数据库约定 | N/A | 不新增ORM或SQL业务写入。 |
+| 5 | 前端约定 | N/A | 无前端代码。 |
+| 6 | 信息泄漏 | PASS | 失败只输出安全原因；不记录token/响应正文；测试采用合成数据。 |
+| 7 | 设计同步 | PASS | design §4.10已同步具体API行为、身份配置及故障验收边界。 |
+
+**验证**：发行合同红2failed→绿31passed；原生Linux UID10001对照证据，不替代189最终镜像。
+
+**元数据验证**：文件范围 PASS；配对测试 PASS；依赖 PASS（按任务索引顺序及完成状态核对）。
+
+**结果**：PASS。

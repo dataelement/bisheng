@@ -158,6 +158,11 @@ python scripts/verify_k8s_runtime.py --context <context> --control-namespace bis
 
 ## 6. 升级、卸载与验收
 
+升级会通过Helm lookup核对当前release的canary ConfigMap，保留计划原始内容及UID/RV；不能用values重置活跃计划。初装canaryPlans必须为空。升级预演使用`--is-upgrade --dry-run=server`，离线渲染无法证明旧对象归属时会拒绝。无installation label的旧安装还要核对同release descriptor范围。
+
+`--cleanup-expired`仅接管自然过期且UID确认的计划。未调度Pod的停止证据按资源重新实测binding拒绝；已绑定Pod需可信终态，未知/替换/缺失均保留。若旧Chart曾清空计划，先保存证据并由管理员核对精确UID，不按名称批量清理。
+
+
 升级先保存脱敏值、descriptor/profile/策略版本和证据，确认镜像/依赖/平台接口独立可用。保持 admission CA、material seed、owner 公钥和策略保护连续；不能卸掉 webhook 后领养旧 Pod。升级服务 Deployment 不创建应用 Deployment/Job ownerReference，不连带重建或删除独立应用 Pod/PVC。manager 采用 Recreate 避免旧新控制进程争用；多副本只允许后端租约保证单持有者，不以租约超时认定旧写入者已死。
 
 代理升级会断开被终止进程的 TCP/WebSocket；按既有排空/重连协议验收，不承诺原连接永不重建。每次变更后重做真实探测，核对保持的同 UID 应用、SQLite 数据、附件和版本路由。
@@ -165,3 +170,5 @@ python scripts/verify_k8s_runtime.py --context <context> --control-namespace bis
 卸载前用平台停用入口并安全停止执行，确认所有 writer 的停止事实；保留源码、依赖、快照、附件和应用 PVC。`helm uninstall` 保留 Chart 的 namespace、公钥 ConfigMap和 local PV；没有 Helm ownerReference 的应用 Pod/PVC也不会随控制层删除。不能以卸载成功代替 writer 停止。只有 owner 显式删除应用的既有流程在停写确认和安全擦除成功后允许清理应用数据；Retain PV 后续由安装者按证据处理。
 
 真实交付还必须补业务 E2E：发布审批/预览、Python/Node/static bundle与完整镜像/source-image、HTTP/WebSocket、应用身份/OBO/SDK、材料/附件、SQLite 数据权限、停用恢复；以及初始化失败、取消、重启、响应丢失、未知写入者、迁移失败、数据库快照恢复、升级和卸载保留。记录静态、模拟、真实执行、未验证和环境限制；189 单节点 amd64 不代表跨节点或 arm64 已通过。
+
+现场配置须明确 `execution.storageControllerUsernames`（例如启用逐控制器ServiceAccount的集群），其身份同时绑定admission与能力报告。平台若经宿主机端口DNAT，`network.backendPorts`需包含网络策略实际观察到的容器端口。请用真实探测验证，不能仅以宿主curl成功判定Pod可达。
