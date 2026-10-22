@@ -77,3 +77,9 @@ r9真实预览已启动，原platform日志保留ConnectError；只读配置确�
 r10已真实通过preview-and-approval（审批人访问、其他角色拒绝、批准）。首次deploy d9729fe5…maintenance_phase_failed/cleanupcomplete，Pod同UID停止正常，生产PVC4c5b459c…保留；原Pod日志已回收，未声称现场取到KeyError。实际固定8a helper非root/禁网/合成身份A/B与模板→reader双红定位MATERIAL_POD_UID遗漏。单行模板修复79a15870f/合流249d5fc85，全runtime1532/13skip通过；原生镜像digest42c6c3c5…，Helm20保持helper/profile/report，node ready/epoch15。
 
 原900秒套件期限保持。owner专用脚本先核tenant2、精确app/version/原approval executed、旧op failed/cleanupcomplete，再O_EXCL0600持久submission_unknown，仅一次POST既有manual-publish入口发新attempt；不重打包/创建版本/重审批、不改旧失败记录。当前异步等待结果，未知请求不重发；新结果以独立k189r10-manual-publish-once.json记录。
+
+## 首个K8s正式应用与真实访问通过
+
+同一已批准v1的明确新deploy20d42a22…已completed/cleanupcomplete；公开fresh核对online、同版本/审批，无新增版本或审批。正式Pod a27db53e…Running/Ready，生产PVC仍4c5b459c…；证据k189r10-first-online.json，manual receipt SHA `299c8b4816a248611c4ae114cb414eaf528324eb362106bafef312a1678f8a55`。首次维护错误修复的真实上线闭环已成立。
+
+原r10套件按900秒自然退出，日志/parent journal不改（SHA `3a2961d24f6428cc4ee268e166372c7cc404237079441985f837ea4788f773f5`）。薄续办脚本fresh确认已批准v1在线和其余5slug尚无应用，以O_EXCL新journal关联原journal/manual校验和，复用原suite方法，未重发首版。首次原observe真实通过：HTTP200/未登录拒绝、/sdk/identity与/sdk/storage-roundtrip、WebSocket允许/拒绝、owner与非owner/跨租户管理边界、SQLite表/结构/行查询/PATCH/CSV导出及拒绝配对。首版停用恢复和v2、其他语言/交付方式及故障仍在执行，不宣称T069/T070全部完成。

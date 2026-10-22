@@ -1,7 +1,7 @@
 {
   "schema": "f059-platform-evidence/v1",
-  "recorded_at": "2026-10-22T19:10:13.028929+00:00",
-  "state": "r10_same_approved_version_manual_retry_pending",
+  "recorded_at": "2026-10-22T19:19:33.945726+00:00",
+  "state": "python_v1_online_observe_passed_full_suite_continuing",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
@@ -228,7 +228,7 @@
     "wrapper_sha256": "b1eaf522e7a10b6a54911e8d46124e44d0b91b6f5713d24b0981edda3a072047",
     "stage": "platform",
     "automatic_finally_cleanup": false,
-    "result": "preview_approval_passed_initial_deploy_failed_explicit_retry_pending",
+    "result": "python_v1_online_and_observe_passed_continuation_running",
     "new_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10.json",
     "apps_at_start": {
       "e2e-f059-python-bundle-k189r10": {
@@ -250,8 +250,14 @@
     "maintenance_fix_source": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
     "initial_failed_operation": "d9729fe5c905480bbfd2cf796f344a97",
     "production_pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27",
-    "manual_one_shot_phase": "submission_unknown",
-    "manual_one_shot_receipt": "/opt/e2e-f059/evidence/k189r10-manual-publish-once.json"
+    "manual_one_shot_phase": "verified",
+    "manual_one_shot_receipt": "/opt/e2e-f059/evidence/k189r10-manual-publish-once.json",
+    "new_deploy_operation": "20d42a22ce414ceda571038d10363ce8",
+    "original_suite_result": "natural_900_second_wait_expired_before_manual_recovery",
+    "continuation_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-resumed.json",
+    "continuation_script_sha256": "a61be39364416261f9e5df8770e146f4bef943d28266f1e6943e73631b661bc0",
+    "parent_sha256": "3a2961d24f6428cc4ee268e166372c7cc404237079441985f837ea4788f773f5",
+    "manual_receipt_sha256": "299c8b4816a248611c4ae114cb414eaf528324eb362106bafef312a1678f8a55"
   },
   "historical_batches": [
     {
@@ -520,6 +526,98 @@
       "normal_platform_cleanup": true,
       "failure_log": "/opt/e2e-f059/logs/platform-k189r9.log",
       "cleanup_log": "/opt/e2e-f059/logs/cleanup-k189r9.log"
+    }
+  ],
+  "first_python_online": {
+    "new_version_or_approval_created": false,
+    "original_pvc_preserved": true,
+    "pod_running_and_ready": true,
+    "observed_at": "2026-10-22T19:14:21.515421Z",
+    "production_pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27",
+    "pod_name": "app-6153b2cdf43a4bbef23a5d0a47e2a916ca8a0082",
+    "manager_source": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:42c6c3c5ba9adb6f6340d0de979e9896d32e81f205f44851c492f50ea4fd7209",
+    "manual_sql_or_finalizer_change": false,
+    "pod_uid": "a27db53e-6f47-4ff3-b455-35ec038ca578",
+    "manual_receipt_sha256": "299c8b4816a248611c4ae114cb414eaf528324eb362106bafef312a1678f8a55",
+    "manual_publish": {
+      "status": "completed",
+      "cleanup_status": "complete",
+      "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+      "version_id": "ba5d47d9369540df9d5219adc72a55bf",
+      "old_operation_id": "d9729fe5c905480bbfd2cf796f344a97",
+      "purpose": "f059-r10-owner-manual-publish-v1",
+      "phase": "verified",
+      "operation_id": "20d42a22ce414ceda571038d10363ce8",
+      "approval_instance_id": 2
+    },
+    "boundary": "First approved Python release online after explicit new attempt. Production entry/SDK/data acceptance remains separate.",
+    "profile_revision": 2,
+    "schema": "f059-first-online/v1"
+  },
+  "first_python_observe": [
+    {
+      "kind": "live-api",
+      "name": "application-check",
+      "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+      "acs": [
+        "AC-36",
+        "AC-46"
+      ],
+      "observed_at": 1792696638.147508,
+      "path": "/health",
+      "outcome": "passed"
+    },
+    {
+      "kind": "live-api",
+      "name": "application-check",
+      "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+      "acs": [
+        "AC-36",
+        "AC-46"
+      ],
+      "observed_at": 1792696638.1925256,
+      "path": "/sdk/identity",
+      "outcome": "passed"
+    },
+    {
+      "kind": "live-api",
+      "name": "application-check",
+      "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+      "acs": [
+        "AC-36",
+        "AC-46"
+      ],
+      "observed_at": 1792696638.5836573,
+      "path": "/sdk/storage-roundtrip",
+      "outcome": "passed"
+    },
+    {
+      "kind": "live-api",
+      "name": "websocket-allow-deny",
+      "acs": [
+        "AC-12",
+        "AC-36",
+        "AC-53"
+      ],
+      "observed_at": 1792696638.7143133,
+      "outcome": "passed",
+      "slug": "e2e-f059-python-bundle-k189r10"
+    },
+    {
+      "kind": "live-api",
+      "name": "owner-and-entry-boundaries",
+      "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+      "acs": [
+        "AC-10",
+        "AC-12",
+        "AC-33",
+        "AC-36",
+        "AC-46"
+      ],
+      "observed_at": 1792696647.621125,
+      "outcome": "passed",
+      "entry_status": 200
     }
   ]
 }

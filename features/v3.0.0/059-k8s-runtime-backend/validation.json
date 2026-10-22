@@ -1,6 +1,6 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T19:10:13.028929+00:00",
+  "recorded_at": "2026-10-22T19:19:33.945726+00:00",
   "validated_source_commit": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
   "sdd": {
     "spec_confirmed": true,
@@ -974,7 +974,7 @@
       "profile_revision": 2,
       "stage": "platform",
       "scenarios": 6,
-      "result": "approved_same_version_explicit_manual_retry_pending",
+      "result": "python_v1_online_and_observe_passed_continuation_running",
       "new_arm_run": false,
       "verified_tls": true,
       "explicit_public_ca": true,
@@ -982,7 +982,12 @@
       "source_after_maintenance_fix": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
       "manual_one_shot_receipt": "/opt/e2e-f059/evidence/k189r10-manual-publish-once.json",
       "original_suite_timeout_seconds": 900,
-      "original_suite_deadline_extended": false
+      "original_suite_deadline_extended": false,
+      "resumed_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-resumed.json",
+      "parent_journal_sha256": "3a2961d24f6428cc4ee268e166372c7cc404237079441985f837ea4788f773f5",
+      "manual_receipt_sha256": "299c8b4816a248611c4ae114cb414eaf528324eb362106bafef312a1678f8a55",
+      "resumed_script_sha256": "a61be39364416261f9e5df8770e146f4bef943d28266f1e6943e73631b661bc0",
+      "original_suite_timeout_preserved": true
     },
     "business_batch_history": [
       {
@@ -1005,7 +1010,7 @@
       "production_code_changed": false
     },
     "maintenance_material_uid": {
-      "status": "local_fix_passed_deployed_real_retry_pending",
+      "status": "real_python_first_release_online_verified",
       "actual_reason": "maintenance_phase_failed",
       "actual_failed_stage": "maintenance",
       "actual_cleanup_status": "complete",
@@ -1059,6 +1064,102 @@
         "controller_epoch": 15,
         "ready": true
       }
+    },
+    "first_k8s_python_online": {
+      "new_version_or_approval_created": false,
+      "original_pvc_preserved": true,
+      "pod_running_and_ready": true,
+      "observed_at": "2026-10-22T19:14:21.515421Z",
+      "production_pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27",
+      "pod_name": "app-6153b2cdf43a4bbef23a5d0a47e2a916ca8a0082",
+      "manager_source": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:42c6c3c5ba9adb6f6340d0de979e9896d32e81f205f44851c492f50ea4fd7209",
+      "manual_sql_or_finalizer_change": false,
+      "pod_uid": "a27db53e-6f47-4ff3-b455-35ec038ca578",
+      "manual_receipt_sha256": "299c8b4816a248611c4ae114cb414eaf528324eb362106bafef312a1678f8a55",
+      "manual_publish": {
+        "status": "completed",
+        "cleanup_status": "complete",
+        "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+        "version_id": "ba5d47d9369540df9d5219adc72a55bf",
+        "old_operation_id": "d9729fe5c905480bbfd2cf796f344a97",
+        "purpose": "f059-r10-owner-manual-publish-v1",
+        "phase": "verified",
+        "operation_id": "20d42a22ce414ceda571038d10363ce8",
+        "approval_instance_id": 2
+      },
+      "boundary": "First approved Python release online after explicit new attempt. Production entry/SDK/data acceptance remains separate.",
+      "profile_revision": 2,
+      "schema": "f059-first-online/v1"
+    },
+    "first_k8s_python_observe": {
+      "status": "passed",
+      "journal_events": [
+        {
+          "kind": "live-api",
+          "name": "application-check",
+          "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+          "acs": [
+            "AC-36",
+            "AC-46"
+          ],
+          "observed_at": 1792696638.147508,
+          "path": "/health",
+          "outcome": "passed"
+        },
+        {
+          "kind": "live-api",
+          "name": "application-check",
+          "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+          "acs": [
+            "AC-36",
+            "AC-46"
+          ],
+          "observed_at": 1792696638.1925256,
+          "path": "/sdk/identity",
+          "outcome": "passed"
+        },
+        {
+          "kind": "live-api",
+          "name": "application-check",
+          "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+          "acs": [
+            "AC-36",
+            "AC-46"
+          ],
+          "observed_at": 1792696638.5836573,
+          "path": "/sdk/storage-roundtrip",
+          "outcome": "passed"
+        },
+        {
+          "kind": "live-api",
+          "name": "websocket-allow-deny",
+          "acs": [
+            "AC-12",
+            "AC-36",
+            "AC-53"
+          ],
+          "observed_at": 1792696638.7143133,
+          "outcome": "passed",
+          "slug": "e2e-f059-python-bundle-k189r10"
+        },
+        {
+          "kind": "live-api",
+          "name": "owner-and-entry-boundaries",
+          "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+          "acs": [
+            "AC-10",
+            "AC-12",
+            "AC-33",
+            "AC-36",
+            "AC-46"
+          ],
+          "observed_at": 1792696647.621125,
+          "outcome": "passed",
+          "entry_status": 200
+        }
+      ],
+      "scope": "Official suite.observe: management/HTTP/session denial/SDK identity+storage/WebSocket allow-deny/SQLite schema read+patch+CSV and owner/foreign refusals. Remaining modes/faults not claimed."
     }
   },
   "not_executed": [
