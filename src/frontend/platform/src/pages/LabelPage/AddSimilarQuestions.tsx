@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { captureQaOperation, type QaOperation } from '@bisheng/chat/core';
 import { Button, Input, toast } from '@bisheng/ui';
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -13,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { addSimilarQa, getQaList } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AnnotationFormHandle, AnnotationFormProps } from "./annotationTypes";
 
@@ -29,9 +30,24 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
     );
 
     const qRef = useRef('');
+    const operationRef = useRef<Readonly<QaOperation>>();
+    const generationRef = useRef(0);
+    const pendingRef = useRef(false);
+    const [saving, setSaving] = useState(false);
+    useEffect(() => () => {
+        generationRef.current += 1;
+        pendingRef.current = false;
+        operationRef.current = undefined;
+    }, []);
 
     useImperativeHandle(ref, () => ({
-        open(id, qa) {
+        close,
+        open(_id, qa, operation) {
+            generationRef.current += 1;
+            operationRef.current = operation ? captureQaOperation(operation) : undefined;
+            pendingRef.current = false;
+            setSaving(false);
+            setError(false);
             qRef.current = qa.q;
             setOpen(true);
             setKnowledgeLib([]);
@@ -54,6 +70,7 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
 
 
     const handleSubmit = async () => {
+        if (pendingRef.current) return;
         const errors = [];
         if (knowledgeLib.length === 0) {
             errors.push(t('log.qaLibRequired'));
@@ -66,17 +83,29 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') });
         }
 
-        captureAndAlertRequestErrorHoc(addSimilarQa({
+        const generation = generationRef.current;
+        const operation = operationRef.current;
+        pendingRef.current = true;
+        setSaving(true);
+        await captureAndAlertRequestErrorHoc(addSimilarQa({
             ids: selectedItems,
             question: qRef.current
-        }).then(() => {
-            toast.show({ type: 'success', message: String(t('log.addSuccess') ?? '') });
-            onMarked?.()
-            close();
-        }));
+        }).then(async () => {
+            if (generation === generationRef.current) {
+                toast.show({ type: 'success', message: String(t('log.addSuccess') ?? '') });
+                close();
+            }
+            await onMarked?.(operation);
+        })).finally(() => {
+            if (generation === generationRef.current) { pendingRef.current = false; setSaving(false); }
+        });
     };
 
     const close = () => {
+        generationRef.current += 1;
+        operationRef.current = undefined;
+        pendingRef.current = false;
+        setSaving(false);
         qRef.current = '';
         setKnowledgeLib([]);
         setSelectedItems([]);
@@ -156,7 +185,7 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
                         <DialogClose asChild>
                             <Button variant="outlined" type="button" onClick={close} color="default">{t('log.cancel')}</Button>
                         </DialogClose>
-                        <Button type="submit" onClick={handleSubmit}>{t('log.confirm')}</Button>
+                        <Button type="submit" loading={saving} disabled={saving} onClick={handleSubmit}>{t('log.confirm')}</Button>
                     </DialogFooter>
                 </div>
             </DialogContent>

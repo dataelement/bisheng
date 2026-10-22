@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Alert, Button } from '@bisheng/ui';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { Alert, Button, Select } from '@bisheng/ui';
 
 import { Checkbox } from '@bisheng/ui';
 import {
@@ -65,6 +66,7 @@ function ExistingAssigneeRow({
   onRemove,
 }: ExistingAssigneeRowProps) {
   const { t } = useTranslation("permission")
+  const selectLabels = useSelectLabels()
   const [targetModelKey, setTargetModelKey] = useState(assignee.model.key)
   const editable = canMutatePermissionAssignee(assignee, context, models)
   const currentIsGrantable = models.some(
@@ -100,22 +102,10 @@ function ExistingAssigneeRow({
         </div>
       </div>
 
-      <select
-        aria-label={`grant.model.${assignee.assignee_id}`}
-        value={targetModelKey}
-        disabled={!editable || pending}
-        onChange={(event) => setTargetModelKey(event.target.value)}
-        className="min-h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-      >
-        {!currentIsGrantable && (
-          <option value={assignee.model.key}>{assignee.model.name}</option>
-        )}
-        {models.map((model) => (
-          <option key={model.key} value={model.key}>
-            {model.name}
-          </option>
-        ))}
-      </select>
+      <Select {...selectLabels} aria-label={`grant.model.${assignee.assignee_id}`}
+        value={targetModelKey} disabled={!editable || pending} size="large"
+        options={[...(!currentIsGrantable ? [{ value: assignee.model.key, label: assignee.model.name }] : []), ...models.map(model => ({ value: model.key, label: model.name }))]}
+        onChange={value => setTargetModelKey(String(value ?? ''))} />
 
       <div className="flex flex-wrap items-start gap-2">
         <Button type="button" variant="outlined" className="min-h-11" aria-label={`grant.move.${assignee.assignee_id}`} disabled={
@@ -145,6 +135,7 @@ export function PermissionGrantTab({
   onSuccess,
 }: PermissionGrantTabProps) {
   const { t } = useTranslation("permission")
+  const selectLabels = useSelectLabels()
   const [models, setModels] = useState<GrantablePermissionModel[]>([])
   const [subjectType, setSubjectType] = useState<SubjectType>(
     fixedSubjectType ?? "user",
@@ -371,19 +362,10 @@ export function PermissionGrantTab({
             <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
               {t("action.grant")}
             </span>
-            <select
-              aria-label={t("grant.addModel")}
-              value={selectedModelKey}
-              disabled={loadingModels || models.length === 0}
-              onChange={(event) => setSelectedModelKey(event.target.value)}
-              className="h-8 w-[132px] rounded-[6px] border-0 bg-white px-1 text-[14px] leading-[22px] text-[#212121] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-            >
-              {models.map((model) => (
-                <option key={model.key} value={model.key}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+            <Select {...selectLabels} aria-label={t("grant.addModel")} variant="ghost"
+              value={selectedModelKey || null} disabled={loadingModels || models.length === 0}
+              className="w-[132px]" options={models.map(model => ({ value: model.key, label: model.name }))}
+              onChange={value => setSelectedModelKey(String(value ?? ''))} />
           </div>
         </div>
 
@@ -470,19 +452,10 @@ export function PermissionGrantTab({
           <div className="flex flex-wrap items-end justify-between gap-3 border-t pt-3">
             <label className="min-w-56 flex-1 text-sm font-medium">
               <span className="mb-1 block">{t("grant.model")}</span>
-              <select
-                aria-label={t("grant.addModel")}
-                value={selectedModelKey}
-                disabled={loadingModels || models.length === 0}
-                onChange={(event) => setSelectedModelKey(event.target.value)}
-                className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {models.map((model) => (
-                  <option key={model.key} value={model.key}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
+              <Select {...selectLabels} aria-label={t("grant.addModel")} size="large"
+                value={selectedModelKey || null} disabled={loadingModels || models.length === 0}
+                options={models.map(model => ({ value: model.key, label: model.name }))}
+                onChange={value => setSelectedModelKey(String(value ?? ''))} />
             </label>
             <Button type="button" className="min-h-11" disabled={
                 pendingKey !== null ||

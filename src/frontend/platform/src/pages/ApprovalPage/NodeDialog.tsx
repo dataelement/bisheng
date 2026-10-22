@@ -1,4 +1,5 @@
-import { Button, Input } from '@bisheng/ui';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { Button, Dropdown, DropdownChevron, DropdownItem, Input, Select } from '@bisheng/ui';
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
@@ -22,6 +23,7 @@ interface NodeDialogProps {
 export function NodeDialog({ open, initial, allowedSourceTypes, onClose, onConfirm }: NodeDialogProps) {
   const [name, setName] = useState(initial.node_name ?? "");
   const { t } = useTranslation("bs");
+  const selectLabels = useSelectLabels();
   const [mode, setMode] = useState(initial.node_mode ?? "or");
   type SourceEntry = { type: string; label: string; userIds?: number[]; userNames?: string[] };
   const [sources, setSources] = useState<SourceEntry[]>([]);
@@ -134,32 +136,20 @@ export function NodeDialog({ open, initial, allowedSourceTypes, onClose, onConfi
                     )}
                   </span>
                 ))}
-                <select
-                  value=""
-                  onChange={(e) => e.target.value && addSource(e.target.value)}
-                  className="h-7 rounded-full border border-dashed border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2 text-xs text-muted-foreground outline-none"
-                >
-                  <option value="">＋ {t("approvalPage.addApprover")}</option>
-                  {effectiveSourceOptions
-                    .filter((o) => !sources.some((s) => s.type === o.value))
-                    .map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {t(o.labelKey, { defaultValue: o.value })}
-                      </option>
-                    ))}
-                </select>
+                <Dropdown disabled={effectiveSourceOptions.every(o => sources.some(s => s.type === o.value))}
+                  menu={effectiveSourceOptions.filter(o => !sources.some(s => s.type === o.value)).map(o =>
+                    <DropdownItem key={o.value} onSelect={() => addSource(o.value)}>{t(o.labelKey, { defaultValue: o.value })}</DropdownItem>)}>
+                  <Button size="small" variant="outlined" color="default" aria-label={t("approvalPage.addApprover")}>
+                    <Outlined.Plus size={14} />{t("approvalPage.addApprover")}<DropdownChevron />
+                  </Button>
+                </Dropdown>
               </div>
             </div>
             <label className="block text-sm text-muted-foreground">
               {t("approvalPage.nodeModeLabel")}
-              <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value)}
-                className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
-              >
-                <option value="or">{t("approvalPage.nodeModeOrFull")}</option>
-                <option value="and">{t("approvalPage.nodeModeAndFull")}</option>
-              </select>
+              <Select {...selectLabels} aria-label={t("approvalPage.nodeModeLabel")} value={mode} className="mt-1"
+                options={[{ value: 'or', label: t("approvalPage.nodeModeOrFull") }, { value: 'and', label: t("approvalPage.nodeModeAndFull") }]}
+                onChange={value => setMode(String(value ?? 'or'))} />
             </label>
           </div>
           <DialogFooter>

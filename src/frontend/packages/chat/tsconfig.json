@@ -1,0 +1,1 @@
+{"extends":"../../config/tsconfig.base.json","compilerOptions":{"allowJs":false,"noImplicitAny":true},"include":["src"],"exclude":["src/**/*.test.ts","src/**/*.test.tsx"]}
