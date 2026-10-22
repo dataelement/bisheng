@@ -35,6 +35,31 @@ manager 的 token 由显式 projected ServiceAccountToken 投射，3600 秒轮�
 - `storage`：经实际验证的 ext4/xfs 块文件系统；预置 PV 或指定 StorageClass，生产和 scratch 独立。默认 `sqliteCompatible: false`，核实存储前不能填 true。
 - `offline`：离线默认开启；显式配置包源、镜像端点、可选 source-image 目标仓库及 registry Secret。无公共源兜底。节点 CRI 的镜像拉取由节点配置负责，不受 Pod 的 NetworkPolicy 约束。source-image 仓库/认证/CDN 出站按完整 origin 显式登记 `imageRegistryEndpoints`；私有仓库若用 5000/5443 等端口，`network.egressPorts` 也必须包含该端口。`insecureRegistry` 仅为指定目标 origin 启用 HTTP，不降低其他 base/认证端点的 TLS；跨仓库组装需为完整 OCI tar 预留临时磁盘配额。
 
+### 平台 HTTPS 根路径与外层代理
+
+`platform.origin` 必须同时提供既有 `/api/v1/internal/app-runtime/v2/…` 控制接口和独立的 `/internal/app-runtime/v2/material-access/…` 材料接口。后者由 backend 在根路径挂载，不带 `/api/v1` 或 `/workspace`；仅转发 `/api`、`/apps` 会使 helper 下载源码、依赖或上传产物时得到 404。Chart 不安装平台 nginx，部署者须核对该 origin 经过的**每一层**反向代理、Ingress 或网关。
+
+产品 nginx 的 `docker/nginx/conf.d/default.conf` 已提供下列精确路由。自建入口须保留相同语义：原方法、原路径、原查询参数和请求体传到 backend；不能 rewrite、添加 workspace 别名、重定向到浏览器登录，也不能把全部 `/internal/` 对外转发。`proxy_pass` 不带 URI 部分，保留原始签名目标；材料 Ed25519 签名、Pod UID、委托、票据和分块摘要仍由 backend 校验，不能在代理处跳过鉴权。
+
+```nginx
+location ^~ /internal/app-runtime/v2/material-access/ {
+    proxy_pass http://backend_server;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_request_buffering off;
+    proxy_buffering off;
+    client_max_body_size 16m;
+    client_body_timeout 60s;
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 65s;
+    proxy_read_timeout 65s;
+}
+```
+
+`backend_server` 复用本部署既有 backend upstream；Host/转发来源头按平台入口现有规则传递，不改写 `X-Material-*` 身份头。16 MiB 是**单次材料分块**的 nginx 上限，不是整个源码或依赖包大小；backend 继续独立执行 64 KiB 控制请求、16 MiB 分块及材料总大小限制。关闭请求/响应缓冲，避免把流式材料落入代理临时文件；65 秒代理读写超时给 backend 的 60 秒材料请求期限保留返回错误的余量。
+
+入口配置变更先执行 `nginx -t`，成功后按现有发布方式 reload，并用新连接复核原 `/api` 路由。向 HTTPS origin 的材料 exchange 路径发送无身份请求应得到 backend 的 401，而非 404、SPA HTML 或登录跳转；这只能证明根路径可达，不能证明有效签名材料传输成功。安装验收还须以真实委托覆盖 exchange、带原始 query 的 Range 下载、分块上传和 finalize，并保留签名篡改拒绝的配对证据。
+
 ### 必需的既有 Secret 与公钥
 
 Secret 在 control namespace 中预先创建，私密值通过部署系统/安全文件供应；不要放进 values、Git、报告或命令行参数。
