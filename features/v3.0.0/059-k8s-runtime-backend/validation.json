@@ -1,34 +1,32 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T19:46:50.003045+00:00",
-  "validated_source_commit": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
+  "recorded_at": "2026-10-22T20:06:03.519690+00:00",
+  "validated_source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 236,
+    "l1_completed": 240,
     "tasks_total": 245,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "source_commit": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
-      "passed": 1573,
+      "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+      "passed": 1586,
       "skipped": 13,
-      "seconds": 32.88,
+      "seconds": 34.14,
       "exit_code": 0,
-      "log": "/private/tmp/f059-stop-final-full-runtime.log",
-      "scope": "Full integrated runtime after independent review correction; backend/helper unchanged"
+      "log": "/private/tmp/f059-data-cpu-full-runtime.log"
     },
     "backend": {
-      "source_commit": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
-      "passed": 1753,
+      "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
+      "passed": 1764,
       "skipped": 19,
-      "seconds": 48.48,
+      "seconds": 50.14,
       "exit_code": 0,
-      "log": "/private/tmp/f059-final-dev-budget-backend.log",
-      "scope": "Full app_runtime/app_publish including request-budget helper contracts; localhost tests authorized"
+      "log": "/private/tmp/f059-data-cpu-full-backend.log"
     },
     "public_tenant_fix": {
       "passed": 17,

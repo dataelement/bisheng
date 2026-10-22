@@ -6124,8 +6124,8 @@
       ],
       "pair": "T243",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T243",
@@ -6150,8 +6150,8 @@
       ],
       "pair": "T242",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T244",
@@ -6175,8 +6175,8 @@
       ],
       "pair": "T245",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T245",
@@ -6200,8 +6200,8 @@
       ],
       "pair": "T244",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

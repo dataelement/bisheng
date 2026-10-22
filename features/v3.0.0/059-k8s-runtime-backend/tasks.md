@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；245 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 236 / 245 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 240 / 245 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1912,7 +1912,7 @@
   **依赖:** T240
   **配对:** T240
 
-- [ ] **T242** — 离线数据CPU真实预占配对
+- [x] **T242** — 离线数据CPU真实预占配对
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_data_sessions.py`、`src/backend/test/app_runtime/test_runtime_data_repository.py`
   **逻辑/验收**：offline frozen tier及实际预占均128Mi/100m，99m拒绝/100m允许且拒绝无残留；online保持25m且不增预占，60秒/租户/并发2和mutex保持。
@@ -1920,7 +1920,7 @@
   **依赖:** T241
   **配对:** T243
 
-- [ ] **T243** — 离线数据Pod预占100m CPU
+- [x] **T243** — 离线数据Pod预占100m CPU
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_data_session_service.py`、`src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py`
   **逻辑/验收**：仅offline可信tier与实际容量预占由25m调100m；原同步响应、60秒期限、票据、并发和停止释放规则不变。
@@ -1928,7 +1928,7 @@
   **依赖:** T242
   **配对:** T242
 
-- [ ] **T244** — 离线数据模板CPU与平台tier配对
+- [x] **T244** — 离线数据模板CPU与平台tier配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_templates.py`
   **逻辑/验收**：data-layout和data-helper按可信plan CPU100m生成requests=limits；旧冻结25m模板不变，serve sidecar及其他helper保持25m，内存/权限/期限不变。
@@ -1936,7 +1936,7 @@
   **依赖:** T241
   **配对:** T245
 
-- [ ] **T245** — 离线数据helper沿用可信tier CPU
+- [x] **T245** — 离线数据helper沿用可信tier CPU
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`
   **逻辑/验收**：仅purpose=data的helper使用plan.cpu_millicores，在线sidecar与其他helper25m保持；无helper镜像/descriptor/网络/API变更。
@@ -2097,3 +2097,5 @@ T240/T241首轮独立复核发现503恢复阻断，NEEDS_FIX，仍pending。d489
 T240/T241复审闭合：0bd6aa173合入d7c0cc4fd；503恢复精确到期清理与期限内正常stop两配对先红2/1绿，96操作及511相邻通过，独立96/静态复审PASS。主树全runtime1573passed/13skip（32.88s）。非精确expiry的不确定stop保留active非终态，不制造failed死锁；原terminal非timeout首因保持。236/241，剩五项真实验收/发行/L2门，不能由本地通过代替。
 
 T242–T245：Helm21/source d7已使原stop真实timed_out/cleanupcomplete，同UID停止/APIabsent/PVC原UID保留。首个停用rows数据动作done但ready55秒、清理69秒超原60秒；offline data4b25…失败保留。189同8a helper非root/禁网/128MiB导入25m耗31.699s/0.7926CPU，100m耗6.9965s/0.6971CPU。仅把离线Pod CPU参数与真实预占调100m（所有容器串行init同预算），不改60秒/同步响应/单writer/sidecar。此为实现资源参数修正，不推翻D1–D8或AC。236/245、112测试任务。
+
+T242–T245 L1闭合：992905292与f84415f25同源合流6f254f337；backend两行+runtime单行。backend初红4/31绿，95相关通过；模板初红2/95绿，598相关通过。主树完整runtime1586passed/13skip（34.14s）、backend1764passed/19skip（50.14s），Ruff/format/逐文件guard/diff通过。240/245，五真实验收/发行/L2门保持；189实际100m新数据会话待复验。

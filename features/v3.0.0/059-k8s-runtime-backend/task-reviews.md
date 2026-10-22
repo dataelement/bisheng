@@ -3377,3 +3377,23 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 架构PASS（原OperationExecutor/平台与K8s协议），命名PASS，序列化PASS（无API变更），数据库/租户N/A（不改backend/SQL/DDL），前端N/A，信息泄漏PASS（固定reason/既有脱敏tail），设计同步PASS（4.5及5原合同补漏）。依赖/配对T240及单文件范围PASS。必须先真实timed_out pending回执，再fresh归属，仅旧terminal自身cleanup单轮；不确定API保持hold，最终仍backend全app停止guard；非精确到期stop保留active可重试，已终态非timeout首因不改，原deadline和PVC保持。
 **结果：PASS**。de653+0bd6aa173，合流d7c0cc4fd，完整1573/13skip及静态门；独立首次P2已按同scope复审闭合。无新ARM/公开push/tag/发行或真实部署通过冒认。
+
+## Task Review: T242 — 离线数据CPU真实预占配对
+
+测试两既有文件、完整AC-18、AC-33、AC-43、AC-48、AC-49、AC-55、依赖T241与配对T243及范围PASS。真实SQLite仓库事务99m拒绝无op/reservation/mutex残留、100m允许，offline冻结tier100/online25且无新增预占、非data/期限/代次/UID拒绝均覆盖。初红4/31绿→95相关通过，主树backend1764/19skip。
+**结果：PASS**；原报告 `/private/tmp/f059-t242-t243-l1.md`，不冒称MySQL/DM8真实容量验收。
+
+## Task Review: T243 — 离线数据Pod预占100m CPU
+
+七项：架构PASS（Service冻结请求/Repository事务准入），命名PASS，序列化PASS（键/类型不变），数据库/租户PASS（既有聚合、锁、回滚，无DDL/模型/租户过滤变化），前端N/A，信息泄漏PASS，无新增日志/凭据；设计同步PASS（4.8及5资源参数实测）。两文件共两行，依赖/配对T242与范围PASS。离线100m/128MiB与真实预占一致，online25m且不增预占，60秒/并发2/同步响应/票据/mutex保持。
+**结果：PASS**。来源992905292418308b298d48a24d20cc9e19032c15。
+
+## Task Review: T244 — 离线数据模板CPU与平台tier配对
+
+单测试文件、完整AC及依赖T241/配对T245与范围PASS。data-layout/init与data-helper双requests=limits按100m/250m生成，串行init峰值为同tier非双倍；旧data25m及其他helper25m保持，内存/安全/卷/期限不变。先红2/95绿，598相邻通过，主树runtime1586/13skip。
+**结果：PASS**；原 `/private/tmp/f059-t245-l1-review.md`。
+
+## Task Review: T245 — 离线数据helper沿用可信tier CPU
+
+七项：架构PASS（原PodPlan与模板，无新输入），命名PASS，序列化PASS（K8s quantity原格式），数据库/租户N/A，前端N/A，信息泄漏PASS，设计同步PASS。单CPU表达式，仅helper且purpose=data读取可信plan.cpu_millicores；其他helper25m/旧冻结data25m兼容，requests=limits且内存128Mi、60秒/非root/无材料身份保持。依赖/配对T244与范围PASS；同源backend新会话100m/真实预占100m同步集成。
+**结果：PASS**。f84415f2540b1b762dcfba2b7e8e521ca170f3bd，合流6f254f337dd6e8a36733501a2266bf08a04a56e9，完整两套与静态门通过。真实新Pod性能单列。
