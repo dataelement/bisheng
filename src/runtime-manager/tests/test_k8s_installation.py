@@ -788,3 +788,178 @@ def test_failure_report_publication_error_keeps_initial_failure(tmp_path, monkey
         {"phase": "publish", "reason": "probe_failed", "exception_type": "RuntimeError"},
     ]
     assert "SECRET_PUBLISH_RESPONSE" not in captured.out + captured.err
+
+
+class PlanRefreshApi:
+    control, execution = "runtime-system", "runtime-apps"
+
+    def __init__(self, tool, *, failure=None, count=1):
+        self.tool, self.failure, self.calls = tool, failure, []
+        self.cm = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": "runtime-canary-plans",
+                "namespace": self.control,
+                "uid": str(uuid4()),
+                "resourceVersion": "10",
+            },
+            "data": {"plans.json": json.dumps({"schema_version": 1, "plans": {}})},
+        }
+        self.pods = [
+            {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "metadata": {
+                    "name": "runtime-admission-" + str(index),
+                    "namespace": self.control,
+                    "uid": str(uuid4()),
+                    "resourceVersion": "30",
+                    "labels": {"app": "runtime-admission"},
+                },
+                "spec": {
+                    "automountServiceAccountToken": False,
+                    "volumes": [{"name": "canary-plans", "configMap": {"name": "runtime-canary-plans"}}],
+                    "containers": [
+                        {
+                            "name": "runtime-admission",
+                            "volumeMounts": [{"name": "canary-plans", "mountPath": "/run/preflight", "readOnly": True}],
+                        }
+                    ],
+                },
+                "status": {"phase": "Running"},
+            }
+            for index in range(count)
+        ]
+
+    def get(self, kind, name, *, namespace=None):
+        self.calls.append(("get", kind, name, namespace))
+        assert namespace == self.control
+        if kind == "configmap":
+            assert name == "runtime-canary-plans"
+            return copy.deepcopy(self.cm)
+        assert kind == "pod"
+        pod = copy.deepcopy(next(row for row in self.pods if row["metadata"]["name"] == name))
+        if self.failure == "replaced-before":
+            pod["metadata"]["uid"] = str(uuid4())
+        elif self.failure == "foreign-namespace":
+            pod["metadata"]["namespace"] = self.execution
+        elif self.failure == "foreign-label":
+            pod["metadata"]["labels"] = {"app": "application"}
+        elif self.failure == "terminating":
+            pod["metadata"]["deletionTimestamp"] = "2026-10-22T00:00:00Z"
+        elif self.failure == "subpath":
+            pod["spec"]["containers"][0]["volumeMounts"][0]["subPath"] = "plans.json"
+        elif self.failure == "other-volume":
+            pod["spec"]["volumes"][0]["configMap"]["name"] = "some-other-config"
+        return pod
+
+    def call(self, arguments, *, document=None, manager=False):
+        self.calls.append(("call", copy.deepcopy(arguments), copy.deepcopy(document), manager))
+        assert manager is False
+        if arguments[0] == "replace":
+            if self.failure == "replace-failed":
+                raise self.tool.ProbeError("kubectl_request_failed")
+            assert arguments == ["replace", "-f", "-", "-o", "json"]
+            self.cm = copy.deepcopy(document)
+            self.cm["metadata"]["resourceVersion"] = str(int(self.cm["metadata"]["resourceVersion"]) + 1)
+            return subprocess.CompletedProcess([], 0, json.dumps(self.cm), "")
+        if arguments[0] == "get":
+            assert arguments == ["get", "pods", "-n", self.control, "-l", "app=runtime-admission", "-o", "json"]
+            return subprocess.CompletedProcess([], 0, json.dumps({"items": self.pods}), "")
+        assert arguments[:2] == ["patch", "pod"]
+        assert arguments[3:6] == ["-n", self.control, "--type=json"]
+        if self.failure == "conflict":
+            raise self.tool.ProbeError("kubectl_request_failed")
+        patch = json.loads(arguments[arguments.index("-p") + 1])
+        pod = next(row for row in self.pods if row["metadata"]["name"] == arguments[2])
+        assert patch[0] == {"op": "test", "path": "/metadata/uid", "value": pod["metadata"]["uid"]}
+        assert patch[1] == {
+            "op": "test",
+            "path": "/metadata/resourceVersion",
+            "value": pod["metadata"]["resourceVersion"],
+        }
+        assert not any(row["path"].startswith("/spec") for row in patch)
+        for row in patch[2:]:
+            if row["path"] == "/metadata/annotations":
+                pod["metadata"]["annotations"] = row["value"]
+            else:
+                assert row["path"] == "/metadata/annotations/runtime.bisheng.io~1canary-plans-revision"
+                pod["metadata"].setdefault("annotations", {})["runtime.bisheng.io/canary-plans-revision"] = row["value"]
+        pod["metadata"]["resourceVersion"] = str(int(pod["metadata"]["resourceVersion"]) + 1)
+        result = copy.deepcopy(pod)
+        if self.failure == "replaced-after":
+            result["metadata"]["uid"] = str(uuid4())
+        return subprocess.CompletedProcess([], 0, json.dumps(result), "")
+
+
+def planning_verifier(tool, **kwargs):
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.api = PlanRefreshApi(tool, **kwargs)
+    verifier.namespace = verifier.api.execution
+    return verifier
+
+
+def test_plans_refresh_only_admission_pod_annotations_after_each_cm_revision():
+    tool = load_installer()
+    verifier = planning_verifier(tool, count=2)
+    verifier.api.pods[0]["metadata"]["annotations"] = {"existing.annotation": "retained"}
+    original_specs = [copy.deepcopy(row["spec"]) for row in verifier.api.pods]
+    revisions = []
+    reference = str(uuid4())
+    plan = {"expires_at": 123, "uid": None, "allow_create": True}
+    verifier._plans(reference, plan)
+    revisions.append(verifier.api.pods[0]["metadata"]["annotations"]["runtime.bisheng.io/canary-plans-revision"])
+    verifier._plans(reference, {**plan, "uid": str(uuid4()), "allow_create": False})
+    revisions.append(verifier.api.pods[0]["metadata"]["annotations"]["runtime.bisheng.io/canary-plans-revision"])
+    verifier._plans(reference, remove=True)
+    revisions.append(verifier.api.pods[0]["metadata"]["annotations"]["runtime.bisheng.io/canary-plans-revision"])
+    assert len(set(revisions)) == 3
+    assert [row["spec"] for row in verifier.api.pods] == original_specs
+    assert verifier.api.pods[0]["metadata"]["annotations"]["existing.annotation"] == "retained"
+    assert json.loads(verifier.api.cm["data"]["plans.json"])["plans"] == {}
+    assert len([row for row in verifier.api.calls if row[:1] == ("call",) and row[1][0] == "patch"]) == 6
+    assert all("deployment" not in str(row).lower() for row in verifier.api.calls)
+
+
+@pytest.mark.parametrize(
+    "failure,reason",
+    [
+        ("replaced-before", "admission_refresh_identity_changed"),
+        ("replaced-after", "admission_refresh_identity_changed"),
+        ("foreign-namespace", "admission_refresh_scope_invalid"),
+        ("foreign-label", "admission_refresh_scope_invalid"),
+        ("terminating", "admission_refresh_scope_invalid"),
+        ("subpath", "admission_refresh_scope_invalid"),
+        ("other-volume", "admission_refresh_scope_invalid"),
+        ("conflict", "admission_refresh_refused"),
+    ],
+)
+def test_plan_refresh_conflicts_or_scope_changes_fail_closed(failure, reason):
+    tool = load_installer()
+    verifier = planning_verifier(tool, failure=failure)
+    with pytest.raises(tool.ProbeError, match=reason) as stopped:
+        verifier._plans(str(uuid4()), {"expires_at": 123})
+    assert tool.safe_failure(stopped.value)["reason"] == reason
+    patches = [row for row in verifier.api.calls if row[:1] == ("call",) and row[1][0] == "patch"]
+    assert len(patches) == (1 if failure in {"conflict", "replaced-after"} else 0)
+
+
+def test_plan_refresh_never_runs_when_cm_update_fails_or_no_admission_pod_exists():
+    tool = load_installer()
+    failed = planning_verifier(tool, failure="replace-failed")
+    with pytest.raises(tool.ProbeError, match="kubectl_request_failed"):
+        failed._plans(str(uuid4()), {})
+    assert not any(row[:1] == ("call",) and row[1][0] in {"get", "patch"} for row in failed.api.calls)
+    missing = planning_verifier(tool, count=0)
+    with pytest.raises(tool.ProbeError, match="admission_refresh_targets_unavailable"):
+        missing._plans(str(uuid4()), {})
+
+
+def test_plan_refresh_refuses_invalid_cm_scope_before_any_write():
+    tool = load_installer()
+    verifier = planning_verifier(tool)
+    verifier.api.cm["metadata"]["namespace"] = "other-namespace"
+    with pytest.raises(tool.ProbeError, match="admission_refresh_revision_unconfirmed"):
+        verifier._plans(str(uuid4()), {})
+    assert not any(row[:1] == ("call",) for row in verifier.api.calls)

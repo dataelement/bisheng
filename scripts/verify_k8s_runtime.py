@@ -48,6 +48,11 @@ _SAFE_PROBE_REASONS = frozenset(
     {
         "admission_negative_unconfirmed",
         "admission_negative_was_accepted",
+        "admission_refresh_identity_changed",
+        "admission_refresh_refused",
+        "admission_refresh_revision_unconfirmed",
+        "admission_refresh_scope_invalid",
+        "admission_refresh_targets_unavailable",
         "assembly_registry_not_configured",
         "binding_canary_already_scheduled",
         "binding_delete_fence_unconfirmed",
@@ -465,8 +470,138 @@ class InstallationVerifier:
             document["plans"].pop(ref, None)
         else:
             document["plans"][ref] = plan
+        try:
+            original = cm["metadata"]
+            if (
+                original["name"] != "runtime-canary-plans"
+                or original["namespace"] != self.api.control
+                or str(UUID(original["uid"])) != original["uid"]
+                or not isinstance(original["resourceVersion"], str)
+                or not original["resourceVersion"]
+            ):
+                raise ValueError()
+        except (KeyError, TypeError, ValueError):
+            raise ProbeError("admission_refresh_revision_unconfirmed") from None
         cm["data"]["plans.json"] = json.dumps(document, sort_keys=True, separators=(",", ":"))
-        self.api.call(["replace", "-f", "-"], document=cm)
+        response = self.api.call(["replace", "-f", "-", "-o", "json"], document=cm)
+        try:
+            saved = json.loads(response.stdout)
+            original, observed = cm["metadata"], saved["metadata"]
+            if (
+                original["name"] != "runtime-canary-plans"
+                or original["namespace"] != self.api.control
+                or observed["name"] != original["name"]
+                or observed["namespace"] != original["namespace"]
+                or observed["uid"] != original["uid"]
+                or str(UUID(observed["uid"])) != observed["uid"]
+                or not isinstance(observed["resourceVersion"], str)
+                or not 0 < len(observed["resourceVersion"]) <= 1024
+            ):
+                raise ValueError()
+            # The annotation contains only an opaque public revision, never
+            # canary templates or any credential/configuration bytes.
+            revision = hashlib.sha256((observed["uid"] + "\0" + observed["resourceVersion"]).encode()).hexdigest()
+        except (KeyError, TypeError, ValueError):
+            raise ProbeError("admission_refresh_revision_unconfirmed") from None
+        self._refresh_admission_plans(revision)
+
+    def _admission_refresh_target(self, pod):
+        metadata = pod.get("metadata", {})
+        if (
+            self.api.control == self.namespace
+            or metadata.get("namespace") != self.api.control
+            or metadata.get("labels", {}).get("app") != "runtime-admission"
+            or metadata.get("deletionTimestamp")
+            or not _NAME.fullmatch(metadata.get("name", ""))
+            or pod.get("status", {}).get("phase") != "Running"
+        ):
+            raise ProbeError("admission_refresh_scope_invalid")
+        try:
+            if (
+                str(UUID(metadata["uid"])) != metadata["uid"]
+                or not isinstance(metadata["resourceVersion"], str)
+                or not metadata["resourceVersion"]
+            ):
+                raise ValueError()
+        except (KeyError, TypeError, ValueError):
+            raise ProbeError("admission_refresh_identity_changed") from None
+        volumes = set()
+        for volume in pod.get("spec", {}).get("volumes", []):
+            references = [volume.get("configMap", {})]
+            references += [source.get("configMap", {}) for source in volume.get("projected", {}).get("sources", [])]
+            if any(reference.get("name") == "runtime-canary-plans" for reference in references):
+                volumes.add(volume.get("name"))
+        mounted = any(
+            mount.get("name") in volumes
+            and mount.get("mountPath") == "/run/preflight"
+            and mount.get("readOnly") is True
+            and not mount.get("subPath")
+            and not mount.get("subPathExpr")
+            for container in pod.get("spec", {}).get("containers", [])
+            if container.get("name") == "runtime-admission"
+            for mount in container.get("volumeMounts", [])
+        )
+        if not mounted:
+            raise ProbeError("admission_refresh_scope_invalid")
+        return metadata
+
+    def _refresh_admission_plans(self, revision):
+        # K8s 1.28 documentation explicitly recommends a Pod annotation update
+        # for immediate mounted-ConfigMap refresh. This is only a refresh hint;
+        # the existing actual admission request still verifies plan visibility.
+        # https://github.com/kubernetes/website/blob/release-1.28/content/en/docs/tasks/configure-pod-container/configure-pod-configmap.md#mounted-configmaps-are-updated-automatically
+        try:
+            response = self.api.call(
+                ["get", "pods", "-n", self.api.control, "-l", "app=runtime-admission", "-o", "json"]
+            )
+            pods = json.loads(response.stdout)["items"]
+        except Exception:
+            raise ProbeError("admission_refresh_refused") from None
+        if not isinstance(pods, list) or not pods:
+            raise ProbeError("admission_refresh_targets_unavailable")
+        annotation = "runtime.bisheng.io/canary-plans-revision"
+        for listed in pods:
+            previous = self._admission_refresh_target(listed)
+            try:
+                current = self.api.get("pod", previous["name"], namespace=self.api.control)
+            except Exception:
+                raise ProbeError("admission_refresh_refused") from None
+            metadata = self._admission_refresh_target(current)
+            if metadata["uid"] != previous["uid"] or metadata["name"] != previous["name"]:
+                raise ProbeError("admission_refresh_identity_changed")
+            patch = [
+                {"op": "test", "path": "/metadata/uid", "value": metadata["uid"]},
+                {"op": "test", "path": "/metadata/resourceVersion", "value": metadata["resourceVersion"]},
+            ]
+            if metadata.get("annotations") is None:
+                patch.append({"op": "add", "path": "/metadata/annotations", "value": {annotation: revision}})
+            else:
+                patch.append(
+                    {"op": "add", "path": "/metadata/annotations/" + annotation.replace("/", "~1"), "value": revision}
+                )
+            try:
+                response = self.api.call(
+                    [
+                        "patch",
+                        "pod",
+                        previous["name"],
+                        "-n",
+                        self.api.control,
+                        "--type=json",
+                        "-p",
+                        json.dumps(patch),
+                        "-o",
+                        "json",
+                    ]
+                )
+                changed = json.loads(response.stdout)
+            except Exception:
+                raise ProbeError("admission_refresh_refused") from None
+            result = self._admission_refresh_target(changed)
+            if result["uid"] != previous["uid"] or result["name"] != previous["name"]:
+                raise ProbeError("admission_refresh_identity_changed")
+            if result.get("annotations", {}).get(annotation) != revision:
+                raise ProbeError("admission_refresh_revision_unconfirmed")
 
     def _create(self, template):
         meta = template["metadata"]
