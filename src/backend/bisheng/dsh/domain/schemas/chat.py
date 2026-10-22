@@ -23,7 +23,8 @@ class ChatCapabilities(BaseModel):
         default=False, description="Whether assistant reasoning content is supported by the provider."
     )
     max_completion_tokens: bool = Field(
-        default=False, description="Whether the provider accepts max_completion_tokens instead of max_tokens."
+        default=False,
+        description="Whether the provider adapter accepts max_completion_tokens natively or through parameter compatibility.",
     )
     stop: bool = Field(default=True, description="Whether the provider accepts stop sequences.")
     temperature: bool = Field(
