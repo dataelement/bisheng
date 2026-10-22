@@ -28,6 +28,9 @@ from runtime_manager.platform_protocol import signed_headers
 
 logger = logging.getLogger(__name__)
 _TERMINAL = {"Succeeded", "Failed"}
+_CNI_ANNOTATIONS = frozenset(
+    {"cni.projectcalico.org/containerID", "cni.projectcalico.org/podIP", "cni.projectcalico.org/podIPs"}
+)
 _KINDS = {"pods": "Pod", "services": "Service", "secrets": "Secret", "persistentvolumeclaims": "PersistentVolumeClaim"}
 _META_SERVER = {
     "uid",
@@ -277,12 +280,26 @@ class AdmissionPolicy:
         if op == "CREATE" and kind == "Pod" and obj.get("status"):
             _deny("admission_prefilled_status_refused")
         if kind == "Pod":
+            # The frozen plan predates CNI attachment. Never treat manager input
+            # as CNI provenance, even when it also appears in that frozen plan.
+            if self._cni_annotations(expected):
+                _deny("admission_cni_prefilled_refused")
+            if op == "CREATE" and self._cni_annotations(obj):
+                _deny("admission_cni_prefilled_refused")
             self._pod_baseline(obj)
             if op == "CREATE" and obj["spec"].get("nodeName"):
                 _deny("admission_node_binding_refused")
             if op == "UPDATE":
                 if not _same_identity(old, obj) or old.get("spec", {}).get("nodeName") != obj["spec"].get("nodeName"):
                     _deny("admission_binding_changed")
+                # oldObject is the API server's same-UID persisted state. Only
+                # the configured CNI actor can have introduced these fields;
+                # the manager may preserve them but never add/change/remove one.
+                before_cni, after_cni = self._cni_annotations(old), self._cni_annotations(obj)
+                if before_cni != after_cni or (before_cni and not self.cni_username):
+                    _deny("admission_cni_source_mutation_refused")
+                for key in before_cni:
+                    comparison["metadata"]["annotations"].pop(key)
                 comparison["spec"].pop("nodeName", None)
                 if STOP_FINALIZER not in meta.get("finalizers", []):
                     if plan.get("stop_state") != "confirmed":
@@ -335,25 +352,38 @@ class AdmissionPolicy:
         if _normalize(before) != _normalize(after):
             _deny("admission_pvc_controller_mutation_refused")
 
+    @staticmethod
+    def _cni_annotations(pod):
+        annotations = pod.get("metadata", {}).get("annotations", {})
+        if not isinstance(annotations, dict):
+            _deny("admission_cni_annotation_invalid")
+        values = {}
+        for key in _CNI_ANNOTATIONS:
+            if key not in annotations:
+                continue
+            value = annotations[key]
+            if not isinstance(value, str) or len(value) > 256 or any(c in value for c in "\r\n\x00"):
+                _deny("admission_cni_annotation_invalid")
+            if value and key.endswith(("podIP", "podIPs")):
+                try:
+                    if any(not ipaddress.ip_interface(part).ip.is_private for part in value.split(",")):
+                        raise ValueError()
+                except ValueError:
+                    _deny("admission_cni_annotation_invalid")
+            values[key] = value
+        return values
+
     def _cni_metadata(self, old, obj):
         if not _same_identity(old, obj) or not _protected(old, self.revision) or not _protected(obj, self.revision):
             _deny("admission_cni_identity_refused")
         if old.get("status", {}) != obj.get("status", {}):
             _deny("admission_cni_status_refused")
         before, after = copy.deepcopy(old), copy.deepcopy(obj)
-        keys = {"cni.projectcalico.org/containerID", "cni.projectcalico.org/podIP", "cni.projectcalico.org/podIPs"}
         for pod in (before, after):
+            values = self._cni_annotations(pod)
             annotations = pod["metadata"].get("annotations", {})
-            for key in keys:
-                value = annotations.pop(key, "")
-                if not isinstance(value, str) or len(value) > 256:
-                    _deny("admission_cni_annotation_invalid")
-                if value and key.endswith(("podIP", "podIPs")):
-                    try:
-                        if any(not ipaddress.ip_interface(part).ip.is_private for part in value.split(",")):
-                            raise ValueError()
-                    except ValueError:
-                        _deny("admission_cni_annotation_invalid")
+            for key in values:
+                annotations.pop(key)
             if not annotations:
                 pod["metadata"].pop("annotations", None)
         if _normalize(before) != _normalize(after):
@@ -411,6 +441,10 @@ class AdmissionPolicy:
                 _deny("admission_resources_required")
 
     def _status(self, req, old, obj):
+        # A status subresource update must not create an alternate writer for
+        # CNI-owned metadata, including an authenticated bound-node request.
+        if self._cni_annotations(old) != self._cni_annotations(obj):
+            _deny("admission_cni_source_mutation_refused")
         if not _same_identity(old, obj) or old.get("spec", {}).get("nodeName") != obj.get("spec", {}).get("nodeName"):
             _deny("admission_status_identity_refused")
         if not _protected(old, self.revision) or not _protected(obj, self.revision):
