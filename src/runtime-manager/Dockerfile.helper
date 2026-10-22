@@ -1,0 +1,25 @@
+# Build context: repository root. The dependency base is the same release/architecture manager image.
+ARG MANAGER_IMAGE
+FROM ${MANAGER_IMAGE} AS package
+USER 0:0
+WORKDIR /build
+COPY src/runtime-manager/pyproject.toml /build/pyproject.toml
+COPY src/runtime-manager/runtime_manager /build/runtime_manager
+# Build tooling is used only by CI; the final helper installs a prebuilt project wheel offline.
+RUN pip install --no-cache-dir hatchling==1.27.0 \
+    && pip wheel --no-deps --no-build-isolation --wheel-dir /wheels /build
+
+FROM ${MANAGER_IMAGE}
+USER 0:0
+COPY --from=package /wheels/ /tmp/runtime-wheels/
+COPY LICENSE /usr/share/licenses/bisheng/LICENSE
+RUN pip install --no-index --no-deps /tmp/runtime-wheels/*.whl \
+    && python -I -m runtime_manager.image_catalog python-packages --output /usr/share/licenses/bisheng/python-packages.json \
+    && rm -rf /tmp/runtime-wheels /app/runtime_manager \
+    && mkdir -p /workspace /data /scratch \
+    && chown 10001:10001 /workspace /data /scratch
+# Isolated Python imports only trusted site-packages, never application code from /workspace.
+WORKDIR /tmp
+USER 10001:10001
+ENTRYPOINT ["python", "-I", "-m", "runtime_manager.k8s_helper"]
+CMD []
