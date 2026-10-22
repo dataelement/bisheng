@@ -355,3 +355,235 @@ async def test_same_explicit_ca_authenticates_loopback_https_and_websocket_and_w
                 await suite.websocket(scenario, origin + "/apps/smoke")
     assert "PRIVATE KEY" not in (tmp_path / "evidence.json").read_text()
     assert str(tls_material["key"]) not in (tmp_path / "evidence.json").read_text()
+
+
+@pytest.mark.parametrize("event", ["manager-restart", "runtime-upgrade", "app-restart"])
+async def test_fault_checkpoint_after_is_read_only_and_records_exact_observations(tmp_path, monkeypatch, event):
+    """AC-33, AC-40, AC-55: checkpoint inspection cannot repair rows by rewriting them."""
+    from types import SimpleNamespace
+
+    import httpx
+
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    monkeypatch.setenv("F059_E2E_ENTRY_BASE", "https://entry.invalid")
+    scenario = SimpleNamespace(
+        slug="e2e-f059-smoke", table="items", entry_path="/", expected_text="e2e-f059", expected_failure_code=None
+    )
+    settings = SuiteSettings("e2e-f059-tenant", (scenario,))
+    journal = EvidenceJournal(tmp_path / "evidence.json", tenant_code=settings.tenant_code)
+    journal.document["apps"][scenario.slug] = {"app_id": "app-1"}
+    writes = []
+
+    def transport(request):
+        assert request.method == "GET"
+        assert str(request.url) == "https://entry.invalid/apps/e2e-f059-smoke/"
+        return httpx.Response(200, text="e2e-f059")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+        suite = LiveVibeSuite(settings, journal, client)
+        suite.tokens["OWNER"] = "fixture-owner"
+        suite.users["OWNER"], suite.tenant_id = 42, 7
+
+        async def request(method, path, **kwargs):
+            if method != "GET":
+                writes.append((method, path))
+                raise AssertionError("fault checkpoints cannot mutate app data")
+            if path.endswith("/instance"):
+                return {"instance_id": "instance-1"}
+            if path.endswith("/rows"):
+                return {"data": [{"id": 1, "value": "committed"}], "total": 1}
+            return {
+                "app_id": "app-1",
+                "slug": scenario.slug,
+                "name": scenario.slug,
+                "tenant_id": 7,
+                "owner_user_id": 42,
+                "state": "online",
+                "current_version_id": "version-1",
+                "entry_url": "https://entry.invalid/apps/e2e-f059-smoke",
+            }
+
+        async def observe(*args):
+            raise AssertionError("full observe performs SDK and database writes")
+
+        suite.request, suite.observe = request, observe
+        await suite.checkpoint(event)
+        await suite.checkpoint(event, verify=True)
+    assert writes == []
+    fact = journal.document["events"][-1]
+    assert fact["injection_verified"] is False
+    assert fact["apps"][scenario.slug]["instance_id"] == "instance-1"
+    assert fact["apps"][scenario.slug]["version_id"] == "version-1"
+
+
+@pytest.mark.parametrize("invalid", ["missing", "expired", "scope"])
+async def test_fault_checkpoint_rejects_invalid_baseline_before_any_network(tmp_path, invalid):
+    """AC-55: an absent/expired or replaced checkpoint scope does not authorize requests."""
+    import time
+    from types import SimpleNamespace
+
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    scenario = SimpleNamespace(slug="e2e-f059-smoke", expected_failure_code=None)
+    settings = SuiteSettings("e2e-f059-tenant", (scenario,))
+    journal = EvidenceJournal(tmp_path / "evidence.json", tenant_code=settings.tenant_code)
+    journal.document["apps"][scenario.slug] = {"app_id": "app-1"}
+    if invalid != "missing":
+        journal.document["checkpoint:manager-restart"] = {
+            "observed_at": time.time() - (1000 if invalid == "expired" else 0),
+            "apps": {scenario.slug: {"app_id": "different-app" if invalid == "scope" else "app-1"}},
+        }
+    suite = LiveVibeSuite(settings, journal, None)
+
+    async def request(*args, **kwargs):
+        raise RuntimeError("invalid checkpoint made a network call")
+
+    suite.request = request
+    with pytest.raises((AssertionError, ValueError)):
+        await suite.checkpoint("manager-restart", verify=True)
+
+
+async def test_preview_exercises_real_entry_with_paired_denial_and_preserves_production_rows(tmp_path, monkeypatch):
+    """AC-05, AC-36, AC-50: the trial is reached by its raiser and cannot change production data."""
+    from types import SimpleNamespace
+
+    import httpx
+
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    monkeypatch.setenv("F059_E2E_ENTRY_BASE", "https://entry.invalid")
+    settings = SuiteSettings("e2e-f059-tenant", ())
+    journal = EvidenceJournal(tmp_path / "evidence.json", tenant_code=settings.tenant_code)
+    seen, reads = [], []
+
+    def transport(request):
+        seen.append((request.url.path, request.headers["cookie"]))
+        if request.headers["cookie"] == "access_token_cookie=fixture-approver":
+            return httpx.Response(200, text="e2e-f059-preview")
+        return httpx.Response(404, json={"status_code": 16144, "status_message": "not found", "data": None})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+        suite = LiveVibeSuite(settings, journal, client)
+        suite.tokens = {role: "fixture-" + role.lower() for role in ["OWNER", "NONOWNER", "FOREIGN", "APPROVER"]}
+        closed = False
+
+        async def request(method, path, **kwargs):
+            nonlocal closed
+            if path == "/apps/app-1":
+                return {
+                    "app_id": "app-1",
+                    "slug": "e2e-f059-smoke",
+                    "name": "e2e-f059-smoke",
+                    "tenant_id": 7,
+                    "owner_user_id": 42,
+                    "state": "online",
+                }
+            if path.endswith("/publish-status"):
+                return {"approval": {"instance_id": "approval-1", "status": "pending"}}
+            if path.endswith("/preview"):
+                if kwargs.get("expected_code"):
+                    assert kwargs["expected_code"] == 16264
+                    return None
+                return {
+                    "session_id": "session-1",
+                    "entry_url": "/apps/preview/session-1",
+                    "state": "reclaimed" if closed else "running",
+                }
+            if method == "DELETE":
+                closed = True
+                return None
+            if path == "/approval/my-tasks":
+                return {"data": [{"task_id": "task-1", "instance_id": "approval-1", "status": "pending"}]}
+            if path == "/approval/my-tasks/task-1":
+                return {"status": "approved"}
+            return None
+
+        async def rows(scenario, app_id):
+            reads.append(app_id)
+            return {"data": [{"id": 1, "value": "production-value"}], "total": 1}
+
+        suite.request, suite.rows = request, rows
+        suite.users["OWNER"], suite.tenant_id = 42, 7
+        scenario = SimpleNamespace(slug="e2e-f059-smoke", table="items", expected_text="e2e-f059")
+        await suite.preview_and_approve({"app_id": "app-1", "version_id": "version-1"}, scenario)
+    assert reads == ["app-1", "app-1"]
+    assert seen == [
+        ("/apps/preview/session-1/", "access_token_cookie=fixture-" + role)
+        for role in ["approver", "owner", "nonowner", "foreign"]
+    ]
+    assert journal.document["events"][-1]["name"] == "preview-and-approval"
+
+
+@pytest.mark.parametrize("change", ["rows", "version_id", "instance_id"])
+async def test_fault_checkpoint_cannot_claim_recovery_when_durable_observations_changed(tmp_path, monkeypatch, change):
+    """AC-33, AC-40, AC-55: a changed row/version/application instance leaves no PASS event."""
+    import time
+    from types import SimpleNamespace
+
+    import httpx
+
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    monkeypatch.setenv("F059_E2E_ENTRY_BASE", "https://entry.invalid")
+    scenario = SimpleNamespace(
+        slug="e2e-f059-smoke", table="items", entry_path="/", expected_text="e2e-f059", expected_failure_code=None
+    )
+    settings = SuiteSettings("e2e-f059-tenant", (scenario,))
+    journal = EvidenceJournal(tmp_path / "evidence.json", tenant_code=settings.tenant_code)
+    journal.document["apps"][scenario.slug] = {"app_id": "app-1"}
+    baseline = {
+        "app_id": "app-1",
+        "version_id": "version-1",
+        "instance_id": "instance-1",
+        "rows": {"data": [{"id": 1, "value": "committed"}]},
+    }
+    journal.document["checkpoint:manager-restart"] = {"observed_at": time.time(), "apps": {scenario.slug: baseline}}
+    current = {**baseline, change: {"data": []} if change == "rows" else "changed"}
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, text="e2e-f059"))
+    ) as client:
+        suite = LiveVibeSuite(settings, journal, client)
+        suite.tokens["OWNER"] = "fixture-owner"
+        suite.users["OWNER"], suite.tenant_id = 42, 7
+
+        async def request(method, path, **kwargs):
+            assert method == "GET"
+            if path.endswith("/instance"):
+                return {"instance_id": current["instance_id"]}
+            if path.endswith("/rows"):
+                return current["rows"]
+            return {
+                "app_id": "app-1",
+                "slug": scenario.slug,
+                "name": scenario.slug,
+                "tenant_id": 7,
+                "owner_user_id": 42,
+                "state": "online",
+                "current_version_id": current["version_id"],
+                "entry_url": "https://entry.invalid/apps/e2e-f059-smoke",
+            }
+
+        suite.request = request
+        with pytest.raises(AssertionError):
+            await suite.checkpoint("manager-restart", verify=True)
+    assert journal.document["events"] == []
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "https://other.invalid/apps/preview/1",
+        "//other.invalid/apps/preview/1",
+        "https://entry.invalid@other.invalid/apps/preview/1",
+        "/apps/preview/1?credential=not-allowed",
+        "/apps/preview/1#unexpected",
+    ],
+)
+def test_entry_evidence_never_sends_identity_to_an_unexpected_origin(monkeypatch, entry):
+    """AC-12, AC-55: untrusted entry data cannot redirect a real user's cookie."""
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    monkeypatch.setenv("F059_E2E_ENTRY_BASE", "https://entry.invalid")
+    with pytest.raises(AssertionError):
+        LiveVibeSuite.entry_url(entry)
