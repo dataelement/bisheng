@@ -135,16 +135,27 @@ def test_scoped_runtime_tenant_default_waits_for_context_without_nullable_storag
 
 
 @pytest.fixture
-def runtime_tenant_engine(mock_settings):
+def runtime_tenant_session(mock_settings, monkeypatch):
+    from functools import partial
+
     from sqlalchemy import create_engine
+    from sqlmodel import Session
 
     from bisheng.core.database import tenant_filter
 
+    class RuntimeTenantSession(Session):
+        pass
+
+    # Exercise the real hooks on a local Session class without registering
+    # process-wide filtering that leaks into subsequent test packages.
+    monkeypatch.setattr(tenant_filter, "Session", RuntimeTenantSession)
+    monkeypatch.setattr(tenant_filter, "_initialized", False)
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", set())
     tenant_filter.register_tenant_filter_events()
     engine = create_engine("sqlite://")
     RuntimeAssignment.__table__.create(engine)
     try:
-        yield engine
+        yield partial(RuntimeTenantSession, engine)
     finally:
         engine.dispose()
 
@@ -153,14 +164,12 @@ def runtime_tenant_engine(mock_settings):
     "declaration,expected",
     [({}, 37), ({"tenant_id": None}, 37), ({"tenant_id": 0}, 37), ({"tenant_id": 37}, 37), ({"tenant_id": 91}, 91)],
 )
-def test_runtime_tenant_autofill_and_explicit_identity_are_preserved(runtime_tenant_engine, declaration, expected):
-    from sqlmodel import Session
-
+def test_runtime_tenant_autofill_and_explicit_identity_are_preserved(runtime_tenant_session, declaration, expected):
     from bisheng.core.context.tenant import current_tenant_id
 
     token = current_tenant_id.set(37)
     try:
-        with Session(runtime_tenant_engine) as session:
+        with runtime_tenant_session() as session:
             row = RuntimeAssignment(app_id="tenant-default-app", node_id="node-a", **declaration)
             session.add(row)
             session.flush()
@@ -170,16 +179,15 @@ def test_runtime_tenant_autofill_and_explicit_identity_are_preserved(runtime_ten
         current_tenant_id.reset(token)
 
 
-def test_unscoped_runtime_insert_without_context_fails_closed(runtime_tenant_engine, mock_settings):
+def test_unscoped_runtime_insert_without_context_fails_closed(runtime_tenant_session, mock_settings):
     from sqlalchemy.exc import IntegrityError
-    from sqlmodel import Session
 
     from bisheng.core.context.tenant import current_tenant_id
 
     mock_settings.multi_tenant.enabled = True
     token = current_tenant_id.set(None)
     try:
-        with Session(runtime_tenant_engine) as session:
+        with runtime_tenant_session() as session:
             session.add(RuntimeAssignment(app_id="unscoped-app", node_id="node-a"))
             with pytest.raises(IntegrityError):
                 session.flush()
