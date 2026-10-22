@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-25、AC-27、AC-39、AC-42、AC-54、AC-56。"""
+"""覆盖 AC: AC-24、AC-25、AC-26、AC-27、AC-39、AC-42、AC-44、AC-54、AC-56。"""
 
 from __future__ import annotations
 
@@ -195,6 +195,9 @@ elif args[:3]==["buildx","imagetools","inspect"]:
  if os.environ.get("MOCK_EXISTING")=="1":print("existing")
  else:print("manifest unknown",file=sys.stderr);sys.exit(1)
 elif args[0]=="run":
+ if "-i" in args:
+  sys.stdin.read()
+  if os.environ.get("MOCK_FAIL_RESOLVE")=="1":sys.exit(42)
  if "uname" in args:print("x86_64")
  elif "crane" in args and args[-1]=="version":print("v0.22.1")
 elif args[:2]==["image","inspect"]:
@@ -289,3 +292,133 @@ def test_generated_inventory_still_builds_original_profile_catalog(tmp_path):
     assert len(result["profiles"]) == 3
     assert all(set(profile["platforms"]) == {"linux/amd64", "linux/arm64"} for profile in result["profiles"])
     assert result["defaults"]["python3.11"] == "python311-standard@17"
+
+
+def test_helper_supplies_fixed_download_tool_and_native_offline_materials():
+    helper = (ROOT / "src/runtime-manager/Dockerfile.helper").read_text()
+    assert "ARG NODE_IMAGE" in helper and "ARG PYTHON_PREPARER_IMAGE" in helper
+    assert "FROM ${NODE_IMAGE} AS node-tools" in helper
+    assert "FROM ${PYTHON_PREPARER_IMAGE} AS materials" in helper
+    assert "COPY src/app-runtime/common/prepare.py /opt/bisheng/prepare.py" in helper
+    assert "COPY --from=materials /opt/bisheng/wheelhouse/ /opt/bisheng/wheelhouse/" in helper
+    assert "pip install --no-index --find-links=/opt/bisheng/wheelhouse hatchling==1.27.0" in helper
+    assert "COPY --from=node-tools /usr/local/bin/node /usr/local/bin/node" in helper
+    assert "COPY --from=node-tools /usr/local/lib/node_modules/npm/ /usr/local/lib/node_modules/npm/" in helper
+    assert all(name in helper for name in ("libstdc++.so.6", "libgcc_s.so.1", "libatomic.so.1"))
+    assert "/usr/share/licenses/node" in helper and "ldconfig" in helper
+    assert "UV_PYTHON_DOWNLOADS=never" in helper and "HOME=/tmp" in helper
+
+
+def test_mock_builder_builds_helper_from_same_release_native_profiles(tmp_path, monkeypatch):
+    result, commands = mock_builder(tmp_path, monkeypatch)
+    assert result.returncode == 0, result.stderr
+    builds = [command for command in commands if command[:2] == ["buildx", "build"]]
+    by_name = {command[command.index("--tag") + 1].split("bisheng-")[1].split(":")[0]: command for command in builds}
+    helper = by_name["runtime-helper"]
+    for dependency, argument in (
+        ("runtime-manager", "MANAGER_IMAGE"),
+        ("app-node", "NODE_IMAGE"),
+        ("app-python-preparer", "PYTHON_PREPARER_IMAGE"),
+    ):
+        assert builds.index(by_name[dependency]) < builds.index(helper)
+        assert f"{argument}=dataelement/bisheng-{dependency}:v-test-amd64" in helper
+    assert builds.index(helper) < builds.index(by_name["runtime-assembler"])
+
+
+def test_native_smoke_exercises_actual_offline_resolvers_and_preserves_storage_scope():
+    builder = (ROOT / "scripts/build_runtime_images.sh").read_text()
+    code = builder.split("<<'PY_RESOLVE'\n", 1)[1].split("\nPY_RESOLVE", 1)[0]
+    compile(code, "helper-native-resolve-smoke", "exec")
+    assert "resolve_download(document, source, offline, output)" in code
+    assert '"bisheng-sdk==0.1.1' in code and '"uv.lock"' in code
+    assert '"node20"' in code and '"static"' in code
+    assert '"PIP_NO_INDEX": "1"' in code and '"npm_config_offline": "true"' in code
+    assert "preinstall" in code and "install" in code and "postinstall" in code
+    assert "assert not marker.exists()" in code
+    assert 'storage_checks("/tmp", require_filesystem=False)' in builder
+    assert '--entrypoint python "$image" -I -' in builder
+
+
+def test_offline_resolver_failure_prevents_publication(tmp_path, monkeypatch):
+    monkeypatch.setenv("MOCK_FAIL_RESOLVE", "1")
+    result, commands = mock_builder(tmp_path, monkeypatch, publish=True)
+    assert result.returncode != 0
+    assert not any(command[0] == "push" for command in commands)
+
+
+@pytest.mark.parametrize("language", ["python3.11", "uv-lock", "node20", "static"])
+def test_real_local_resolver_never_executes_application_hooks(tmp_path, monkeypatch, language):
+    """Host-tool execution supplements image smoke; it does not prove native image delivery."""
+    import importlib.util
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    from runtime_manager import k8s_helper
+
+    if language == "uv-lock" and not shutil.which("uv"):
+        pytest.skip("local uv unavailable; native image smoke remains mandatory")
+    if language in {"node20", "static"} and not shutil.which("npm"):
+        pytest.skip("local npm unavailable; native image smoke remains mandatory")
+    spec = importlib.util.spec_from_file_location(
+        "trusted_local_resolve_smoke", ROOT / "src/app-runtime/common/prepare.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(k8s_helper, "_load_download_tool", lambda: module)
+    tools = Path(sys.executable).parent
+    if language in {"python3.11", "uv-lock"}:
+        # uv-managed project test environments may intentionally omit pip.
+        # Use ensurepip from the local interpreter, without changing that environment.
+        subprocess.run([sys.executable, "-m", "venv", str(tmp_path / "toolchain")], check=True, capture_output=True)
+        tools = tmp_path / "toolchain" / "bin"
+    monkeypatch.setenv("PATH", str(tools) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("PIP_NO_INDEX", "1")
+    monkeypatch.setenv("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+    monkeypatch.setenv("UV_OFFLINE", "1")
+    monkeypatch.setenv("UV_PYTHON_DOWNLOADS", "never")
+    monkeypatch.setenv("UV_CACHE_DIR", str(tmp_path / "uv"))
+    monkeypatch.setenv("npm_config_offline", "true")
+    monkeypatch.setenv("npm_config_audit", "false")
+    monkeypatch.setenv("npm_config_update_notifier", "false")
+    source, offline, output = [tmp_path / name for name in ("source", "offline", "output")]
+    source.mkdir()
+    offline.mkdir()
+    marker = tmp_path / "application-executed"
+    if language == "python3.11":
+        (source / "requirements.txt").write_text(
+            "# An empty offline lock still runs the real trusted pip downloader.\n"
+        )
+    elif language == "uv-lock":
+        (source / "pyproject.toml").write_text(
+            '[project]\nname="resolve-smoke"\nversion="0.0.0"\nrequires-python=">=3.11"\ndependencies=[]\n'
+        )
+        (source / "uv.lock").write_text(
+            'version = 1\nrevision = 2\nrequires-python = ">=3.11"\n[[package]]\nname = "resolve-smoke"\nversion = "0.0.0"\nsource = { virtual = "." }\n'
+        )
+    else:
+        project = source if language == "node20" else source / "frontend"
+        project.mkdir(exist_ok=True)
+        hook = "node -e " + json.dumps("require('fs').writeFileSync(" + json.dumps(str(marker)) + ", 'unsafe')")
+        (project / "package.json").write_text(
+            json.dumps(
+                {
+                    "name": "resolve-smoke",
+                    "version": "0.0.0",
+                    "private": True,
+                    "scripts": dict.fromkeys(("preinstall", "install", "postinstall"), hook),
+                    "dependencies": {},
+                }
+            )
+        )
+    k8s_helper.resolve_download(
+        {"profile": {"language": "python3.11" if language == "uv-lock" else language}}, source, offline, output
+    )
+    assert not marker.exists()
+    if language == "uv-lock":
+        assert (output / "uv-requirements.txt").is_file()
+    elif language in {"node20", "static"}:
+        assert (output / "npm" / ("root" if language == "node20" else "frontend") / "package-lock.json").is_file()
+    else:
+        assert (output / "download.in").is_file()

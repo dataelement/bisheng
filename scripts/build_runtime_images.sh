@@ -45,13 +45,16 @@ build_one() {
 }
 build_one runtime-manager src/runtime-manager/Dockerfile src/runtime-manager
 build_one app-proxy src/app-proxy/Dockerfile src/app-proxy
-build_one runtime-helper src/runtime-manager/Dockerfile.helper . --build-arg MANAGER_IMAGE="$(image_for runtime-manager)"
-build_one runtime-assembler src/runtime-manager/Dockerfile.assembler . --build-arg HELPER_IMAGE="$(image_for runtime-helper)"
 build_one app-python src/app-runtime/python3.11/Dockerfile . --target runtime
 build_one app-python-preparer src/app-runtime/python3.11/Dockerfile . --target preparer
 build_one app-node src/app-runtime/node20/Dockerfile . --target runtime
 build_one app-node-preparer src/app-runtime/node20/Dockerfile . --target preparer
 build_one app-static src/app-runtime/static/Dockerfile . --target runtime
+build_one runtime-helper src/runtime-manager/Dockerfile.helper . \
+  --build-arg MANAGER_IMAGE="$(image_for runtime-manager)" \
+  --build-arg NODE_IMAGE="$(image_for app-node)" \
+  --build-arg PYTHON_PREPARER_IMAGE="$(image_for app-python-preparer)"
+build_one runtime-assembler src/runtime-manager/Dockerfile.assembler . --build-arg HELPER_IMAGE="$(image_for runtime-helper)"
 
 shadow="$(mktemp -d)"
 trap 'rm -rf "$shadow"' EXIT
@@ -66,7 +69,60 @@ for name in "${names[@]}"; do
     runtime-helper|runtime-assembler)
       docker run "${common[@]}" --workdir /smoke --env PYTHONPATH=/smoke \
         --mount "type=bind,src=$shadow,dst=/smoke,readonly" --entrypoint python "$image" -I -c \
-        'import os,sys,sysconfig,importlib,pathlib,tempfile; assert sys.flags.isolated == 1 and os.getuid() == 10001; modules=[importlib.import_module("runtime_manager."+name) for name in ("k8s_helper","k8s_prepare","k8s_data_helper","k8s_capabilities","oci_assembler")]; assert all(pathlib.Path(m.__file__).is_relative_to(sysconfig.get_paths()["purelib"]) for m in modules); from runtime_manager.k8s_capabilities import storage_checks; assert all(storage_checks("/tmp").values()); assert not os.access("/",os.W_OK)'
+        'import os,sys,sysconfig,importlib,pathlib,tempfile; assert sys.flags.isolated == 1 and os.getuid() == 10001; modules=[importlib.import_module("runtime_manager."+name) for name in ("k8s_helper","k8s_prepare","k8s_data_helper","k8s_capabilities","oci_assembler")]; assert all(pathlib.Path(m.__file__).is_relative_to(sysconfig.get_paths()["purelib"]) for m in modules); from runtime_manager.k8s_capabilities import storage_checks; assert all(storage_checks("/tmp", require_filesystem=False).values()); assert not os.access("/",os.W_OK)'
+      # Exercise the production fixed-path resolver, not just import/version checks.
+      # No credential, application execution or network is allowed in this smoke.
+      docker run "${common[@]}" -i --entrypoint python "$image" -I - <<'PY_RESOLVE'
+import json
+import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from runtime_manager.k8s_helper import resolve_download
+
+os.environ.update({"PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1", "UV_OFFLINE": "1", "npm_config_offline": "true"})
+assert Path("/opt/bisheng/prepare.py").is_file()
+assert list(Path("/opt/bisheng/wheelhouse").glob("bisheng_sdk-0.1.1-*.whl"))
+assert Path("/usr/share/licenses/node/Node.LICENSE").is_file()
+assert Path("/usr/share/licenses/node/npm.LICENSE").is_file()
+
+with TemporaryDirectory(prefix="native-resolve-") as temporary:
+    root = Path(temporary)
+
+    def resolve(name, language):
+        source, offline, output = [root / name / kind for kind in ("source", "offline", "output")]
+        source.mkdir(parents=True)
+        offline.mkdir()
+        document = {"profile": {"language": language}, "delivery": {"dependencies": {}}}
+        return document, source, offline, output
+
+    document, source, offline, output = resolve("requirements", "python3.11")
+    (source / "requirements.txt").write_text("bisheng-sdk==0.1.1\nfastapi==0.115.14\nuvicorn==0.35.0\n")
+    resolve_download(document, source, offline, output)
+    assert list((output / "wheels").glob("bisheng_sdk-0.1.1-*.whl"))
+    assert list((output / "wheels").glob("httpx-*.whl"))
+
+    document, source, offline, output = resolve("uv-lock", "python3.11")
+    (source / "pyproject.toml").write_text('[project]\nname="resolve-smoke"\nversion="0.0.0"\nrequires-python=">=3.11"\ndependencies=[]\n')
+    (source / "uv.lock").write_text('version = 1\nrevision = 2\nrequires-python = ">=3.11"\n[[package]]\nname = "resolve-smoke"\nversion = "0.0.0"\nsource = { virtual = "." }\n')
+    resolve_download(document, source, offline, output)
+    assert (output / "uv-requirements.txt").is_file()
+
+    for language in ("node20", "static"):
+        document, source, offline, output = resolve(language, language)
+        project = source if language == "node20" else source / "frontend"
+        project.mkdir(exist_ok=True)
+        marker = root / (language + "-application-executed")
+        hook = "node -e " + json.dumps("require('fs').writeFileSync(" + json.dumps(str(marker)) + ", 'unsafe')")
+        (project / "package.json").write_text(json.dumps({
+            "name": "resolve-smoke", "version": "0.0.0", "private": True,
+            "scripts": dict.fromkeys(("preinstall", "install", "postinstall"), hook),
+            "dependencies": {},
+        }))
+        resolve_download(document, source, offline, output)
+        location = "root" if language == "node20" else "frontend"
+        assert (output / "npm" / location / "package-lock.json").is_file()
+        assert not marker.exists()
+PY_RESOLVE
       if [[ "$name" == runtime-assembler ]]; then
         docker run "${common[@]}" --entrypoint crane "$image" version | grep -Fx 'v0.22.1'
         docker run "${common[@]}" --entrypoint python "$image" -I -c \
