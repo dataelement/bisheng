@@ -38,7 +38,7 @@ export default frontendConfig({
       {
         name: 'react-virtualized',
         message:
-          'react-virtualized is frozen — the app standardizes on react-window / @tanstack/react-virtual (ledger #8). Do not add new usage.',
+          'react-virtualized was removed with unreachable input components (ledger #8). Use react-window from the workspace catalog for existing file preview lists.',
       },
     ],
     patterns: [

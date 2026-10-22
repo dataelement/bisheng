@@ -423,22 +423,9 @@
       "count": 2
     }
   },
-  "src/components/Chat/Input/Mention.tsx": {
-    "no-restricted-imports": {
-      "count": 2
-    }
-  },
   "src/components/Chat/Input/PopoverButtons.tsx": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/components/Chat/Input/PromptsCommand.tsx": {
-    "jsx-a11y/no-autofocus": {
-      "count": 1
-    },
-    "no-restricted-imports": {
-      "count": 2
     }
   },
   "src/components/Chat/Input/StreamAudio.tsx": {
@@ -595,9 +582,6 @@
       "count": 3
     },
     "no-restricted-imports": {
-      "count": 1
-    },
-    "no-useless-escape": {
       "count": 1
     }
   },
