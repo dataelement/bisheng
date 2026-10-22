@@ -1462,3 +1462,93 @@ def test_expired_stop_final_backend_guard_blocks_unlisted_application_writer(tmp
         assert not any(event == ("fact", "timed_out", True, True) for event in platform.events)
     finally:
         executor.close()
+
+
+def test_uncertain_stop_claim_can_recover_then_confirm_expiry_and_finish_cleanup(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    platform.claim_status = 503
+    deadline = platform.op["deadline"]
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "running" and platform.op["cleanup_status"] == "pending"
+        assert not platform.facts and state["cleanup_calls"] == 0
+        platform.claim_status = 409
+        executor.execute("operation-a")
+        assert platform.op["status"] == "timed_out" and state["cleanup_calls"] == 1
+        executor._failure(platform.op, None, ExecutionError("later cleanup retry"))
+        assert platform.op["cleanup_status"] == "complete" and state["cleanup_calls"] == 2
+        assert platform.op["deadline"] == deadline and platform.op["failure"]["reason"] == "operation_timeout"
+        assert len([event for event in platform.events if event[0] == "claim"]) == 2
+    finally:
+        executor.close()
+
+
+def test_uncertain_stop_claim_recovers_inside_original_deadline_without_timing_out(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    runtime, state = expired_stop_runtime(platform)
+    platform.claim_status = 503
+    platform.op["deadline"] = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
+    deadline, volume = platform.op["deadline"], deepcopy(platform.rows[-1])
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor.execute("operation-a")
+        assert platform.op["status"] == "running" and not platform.facts and state["cleanup_calls"] == 0
+
+        def claimed(_):
+            platform.events.append(("claim", "recovered"))
+            platform.op["status"] = "running"
+
+        def stop(ref, operation):
+            row = next(row for row in platform.rows if row["resource_ref"] == ref)
+            assert row["uid"] == state["current_uid"] and operation["operation_id"] == "operation-a"
+            platform.events.append(("request_stop", ref, row["uid"]))
+            row["stop_state"] = "requested"
+
+        def confirmed(ref):
+            row = next(row for row in platform.rows if row["resource_ref"] == ref)
+            assert row["uid"] == state["current_uid"]
+            row["stop_state"] = "confirmed"
+            return {"stopped": True}
+
+        def cleaned(old):
+            assert old["operation_id"] == "old-deploy"
+            for row in platform.rows:
+                if row["kind"] == "Pod":
+                    assert row["stop_state"] == "confirmed"
+                    row["cleanup_state"] = "complete"
+            return {"complete": True}
+
+        platform.claim, runtime.request_stop, runtime.confirm_stopped, runtime.cleanup = (
+            claimed,
+            stop,
+            confirmed,
+            cleaned,
+        )
+        executor.execute("operation-a")
+        assert platform.op["status"] == "completed" and platform.op["cleanup_status"] == "complete"
+        assert platform.op["deadline"] == deadline and platform.rows[-1] == volume
+        assert platform.op["failure"] == {} and not any(phase == "timed_out" for phase, _ in platform.facts)
+        assert [event for event in platform.events if event[0] == "request_stop"] == [
+            ("request_stop", "live-serve", "live-uid")
+        ]
+    finally:
+        executor.close()
+
+
+def test_non_timeout_terminal_stop_failure_is_not_reclassified_or_revived(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform = ExpiredStopPlatform()
+    failure = {"reason": "writer_stop_unconfirmed", "failed_stage": "queued", "diagnostic_tail": "first failure"}
+    platform.op.update(status="failed", stage="failed", failure=deepcopy(failure))
+    runtime, state = expired_stop_runtime(platform)
+    executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
+    try:
+        executor._failure(platform.op, None, PlatformError("operation_expired", 409))
+        assert platform.op["status"] == "failed" and platform.op["cleanup_status"] == "pending"
+        assert platform.op["failure"] == failure and state["cleanup_calls"] == 0
+    finally:
+        executor.close()

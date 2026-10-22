@@ -447,6 +447,10 @@ class OperationExecutor:
                         "expired stop cleanup pending: %s (%s)", operation["operation_id"], type(cleanup_error).__name__
                     )
                 return
+            if current["status"] not in TERMINAL:
+                # Uncertain control results must not strand a durable stop in
+                # failed/pending. A later pass retries within its original fence.
+                return
         unknown_build = current.get("payload", {}).get("legacy_build_state") == "started"
         if unknown_build and current["status"] in TERMINAL:
             return
