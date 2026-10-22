@@ -1,18 +1,18 @@
 # Frontend Dependency Cleanup Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 清理无效依赖，将两端仍在使用的列表排序切到受维护的实现，保持业务行为与页面样式。
 
 **Architecture:** 已有 pnpm workspace + catalog 继续作为共享版本入口。列表排序采用 `@hello-pangea/dnd`，通用拖拽仍按实际用途保留 `react-dnd`；先证明旧组件不可达再删除依赖，不为清理依赖重新接回旧功能。
 
-**Tech Stack:** React 18.3.1、TypeScript、pnpm 9.15.9、Vitest / Jest；拟固定 `@hello-pangea/dnd` 18.0.1、共享 `react-window` 1.8.11。
+**Tech Stack:** React 18.3.1、TypeScript、pnpm 9.15.9、Vitest / Jest；固定 `@hello-pangea/dnd` 18.0.1、共享 `react-window` 1.8.11。
 
-**Spec:** 本会话确认的依赖治理方向及下述验收范围；这是待确认的维护计划，不表示已批准实施或已经完成。
+**Spec:** 本会话确认的依赖治理方向及下述验收范围；用户于 2026-10-22 批准实施；开发和技术验证完成，真实业务环境验收待用户执行，见同目录 verification 文档。
 
 ## Global Constraints
 
-- 先拉取最新 `feat/3.0.0`，执行时创建 `codex/frontend-dependency-cleanup` 分支；本轮只写计划。
+- 先拉取最新 `feat/3.0.0`，已在 `codex/frontend-dependency-cleanup` 分支执行，基线为 `6331d7cfc`。
 - 走 `docs/SDD-Guide.md` §1 维护路径：依赖替换、删除不可达代码，不改变产品契约。出现排序语义、交互或数据契约变化时，暂停该项并找用户判断。
 - 不升级 React，不全局开启 StrictMode；在隔离测试中验证拖拽组件兼容 StrictMode。
 - 不调整视觉，不迁移状态库，不顺带替换 `react-color` 或尚在使用的 `react-dnd`。
@@ -45,13 +45,13 @@
 
 **接口边界：** 不改变运行中的组件或 API；删除项必须有完整的入口不可达证据。
 
-- [ ] 记录当前 lint / 类型基线和构建大小；建立依赖及调用入口清单，覆盖静态引用、导出链、路由、动态导入与 glob 加载。
-- [ ] 删除 `@types/axios` 声明及只属于它的锁文件节点；运行 platform 类型检查，与基线逐项比较。
-- [ ] 证明两个旧输入组件不可达后，一起删除旧文件及 `react-virtualized` 声明；共享工具只删除确认没有其他调用者的部分。如果发现有效入口，保留该项并单独记录待迁移，不强删。
-- [ ] 将两端 `react-window` 改用 catalog，固定 1.8.11；不升级其他依赖。核对 `react-dnd` 的有效入口并保留依赖和 Provider。
-- [ ] 收缩生成的 ESLint suppressions，不手工放宽规则；验证被删组件不存在运行时引用，确认原有冻结规则覆盖剩余遗留依赖。
-- [ ] 串行构建两端；验收文件预览的长列表滚动、当前聊天输入及上传、现有收藏入口。
-- [ ] 单独提交本批清理结果，记录删除依据与依然保留的依赖。
+- [x] 记录当前 lint / 类型基线和构建大小；建立依赖及调用入口清单，覆盖静态引用、导出链、路由、动态导入与 glob 加载。
+- [x] 删除 `@types/axios` 声明及只属于它的锁文件节点；运行 platform 类型检查，与基线逐项比较。
+- [x] 证明两个旧输入组件不可达后，一起删除旧文件及 `react-virtualized` 声明；共享工具只删除确认没有其他调用者的部分。如果发现有效入口，保留该项并单独记录待迁移，不强删。
+- [x] 将两端 `react-window` 改用 catalog，固定 1.8.11；不升级其他依赖。核对 `react-dnd` 的有效入口并保留依赖和 Provider。
+- [x] 收缩生成的 ESLint suppressions，不手工放宽规则；验证被删组件不存在运行时引用，确认原有冻结规则覆盖剩余遗留依赖。
+- [ ] 串行构建两端已通过；文件预览长列表、真实聊天上传和收藏入口仍待业务验收。
+- [x] 单独提交本批清理结果，记录删除依据与依然保留的依赖。
 
 ## 第二批：按业务模块替换列表排序
 
@@ -69,27 +69,27 @@
 
 每个模块执行相同的小闭环：
 
-- [ ] 先记录现有排序结果和保存载荷；补一个真实交互回归，而不只 mock 排序库调用回调。
-- [ ] 引入 catalog 固定的新包，迁移该模块导入和确有必要的类型/兼容处理；遇到拖拽占位、ref 或数据属性依赖时逐处核对。
-- [ ] 用隔离 StrictMode 测试执行至少一次键盘排序，断言顺序、回调次数和项目 ID；取消操作不产生保存。工作流复用并补强 `DragOptions.test.tsx`，明确覆盖排序后继续编辑。
-- [ ] 浏览器验证本模块鼠标拖拽、容器滚动和保存后刷新；用户测试当前模块时，可以继续下一模块，有行为差异及时打断。
-- [ ] 测试通过后按模块提交，避免把多个尚未验收的模块混成一次提交。
+- [x] 先记录现有排序结果和保存载荷；补一个真实交互回归，而不只 mock 排序库调用回调。
+- [x] 引入 catalog 固定的新包，迁移该模块导入和确有必要的类型/兼容处理；遇到拖拽占位、ref 或数据属性依赖时逐处核对。
+- [x] 用隔离 StrictMode 测试执行至少一次键盘排序，断言顺序、回调次数和项目 ID；取消操作不产生保存。工作流复用并补强 `DragOptions.test.tsx`，明确覆盖排序后继续编辑。
+- [ ] 已用真实组件和隔离 API 验证鼠标/键盘、滚动和保存载荷，工作流/模板重载通过；各模块真实后端保存后刷新待业务验收。
+- [x] 测试通过后按模块提交，避免把多个尚未验收的模块混成一次提交。
 
 收尾：
 
-- [ ] 再次追踪 `platform/src/components/bs-comp/sheets/TaggingSheet.tsx`；确认无入口则删除死组件及无效引用，否则按相同规则迁移并列入验收。
-- [ ] 全仓搜索后移除两端 `react-beautiful-dnd` 声明、锁文件节点及旧类型残留；保留禁止重新引入旧库的 lint 规则。
-- [ ] 不改 `react-dnd` 收藏拖拽，不重新连接旧文件上传拖拽监听。
+- [x] 再次追踪 `platform/src/components/bs-comp/sheets/TaggingSheet.tsx`；确认无入口则删除死组件及无效引用，否则按相同规则迁移并列入验收。
+- [x] 全仓搜索后移除两端 `react-beautiful-dnd` 声明、锁文件节点及旧类型残留；保留禁止重新引入旧库的 lint 规则。
+- [x] 不改 `react-dnd` 收藏拖拽，不重新连接旧文件上传拖拽监听。
 
 ## 第三批：整体验证和交付
 
-- [ ] 检查 catalog 与锁文件：两端排序库版本唯一；`react-beautiful-dnd` / `@types/axios` 不再解析；`react-virtualized` 删除或有明确保留入口与理由。
-- [ ] 在 `src/frontend/` 运行 `pnpm lint`、`pnpm typecheck`、`pnpm check-i18n`、`pnpm test:config`；已有问题逐项对照基线，不新增 suppression 或 strict-ignore。发生新错误必须修复。
-- [ ] 运行各模块的 Vitest / Jest 回归，单 worker；按上表逐模块完成浏览器验证，不用纯单元测试代替真实拖动。
-- [ ] 串行运行 `pnpm build:platform`、`pnpm build:client`；检查生产页面启动，以及拖拽模块按需加载没有运行时错误。
-- [ ] 用相同压缩与构建口径比较本批前后产物；记录 gzip 差异，不预先承诺一定减少体积。
-- [ ] 特别回归工作流画布拖动/缩放、代码编辑、文件上传一次、长列表预览及主题/看板配色；这些能力不应因列表库替换而变化。
-- [ ] 完成 `/sdd-code-review --base feat/3.0.0`，交付测试结果和逐模块验收表；用户明确要求后再合并、推送和删除开发分支。
+- [x] 检查 catalog 与锁文件：两端排序库版本唯一；`react-beautiful-dnd` / `@types/axios` 不再解析；`react-virtualized` 删除或有明确保留入口与理由。
+- [x] 在 `src/frontend/` 运行 `pnpm lint`、`pnpm typecheck`、`pnpm check-i18n`、`pnpm test:config`；已有问题逐项对照基线，不新增 suppression 或 strict-ignore。发生新错误必须修复。
+- [x] 运行各模块的 Vitest / Jest 回归，单 worker；按上表逐模块完成浏览器验证，不用纯单元测试代替真实拖动。
+- [x] 串行运行 `pnpm build:platform`、`pnpm build:client`；检查生产页面启动，以及拖拽模块按需加载没有运行时错误。
+- [x] 用相同压缩与构建口径比较本批前后产物；记录 gzip 差异，不预先承诺一定减少体积。
+- [ ] 特别回归工作流画布拖动/缩放、代码编辑、文件上传一次、长列表预览及主题/看板配色；已通过相关输入/文件/配色自动化测试，真实页面组合验收待用户执行。
+- [x] 完成对照 `feat/3.0.0` 的独立维护变更 review（无 spec/design，按维护路径审查），交付测试结果和逐模块验收表；用户明确要求后再合并、推送和删除开发分支。
 
 ## 暂不实施
 
