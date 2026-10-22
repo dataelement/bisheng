@@ -7,7 +7,7 @@ import type { AnnotationFormHandle } from './annotationTypes'
 
 const mock = vi.hoisted(() => ({ update: vi.fn(), add: vi.fn(), list: vi.fn(), generate: vi.fn(), message: vi.fn() }))
 vi.mock('@/controllers/API', () => ({ updateQa: mock.update, addSimilarQa: mock.add, getQaList: mock.list, generateSimilarQa: mock.generate }))
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p }))
+vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p.catch(() => false) }))
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
 const previous = await (() => ({ useToast: () => ({ message: mock.message }) }))();
@@ -66,3 +66,60 @@ it('submits only checked existing-QA IDs and clears them on reopening', async ()
     fireEvent.click(screen.getByRole('button', { name: 'log.confirm' }))
     expect(mock.add).toHaveBeenCalledTimes(1)
 })
+
+
+it('keeps a reopened QA dialog and returns the captured origin after an earlier save completes', async () => {
+    let resolveSave: (value: unknown) => void = () => undefined;
+    mock.update.mockImplementationOnce(() => new Promise(resolve => { resolveSave = resolve; }));
+    const ref = createRef<AnnotationFormHandle>();
+    const onMarked = vi.fn();
+    render(<SaveQaLibForm ref={ref} onMarked={onMarked} />);
+    const origin = { taskId: 'task-a', conversationId: 'a', sourceMessageId: 'message-a', actionId: 'save-a', sessionGeneration: 1 };
+    act(() => ref.current?.open('message-a', { q: 'A question', a: 'A answer' }, origin));
+    fireEvent.click(screen.getByText('Select knowledge'));
+    fireEvent.click(screen.getByRole('button', { name: 'log.confirm' }));
+    act(() => ref.current?.open('message-b', { q: 'B question', a: 'B answer' }, { ...origin, conversationId: 'b', actionId: 'save-b', sessionGeneration: 2 }));
+    await act(async () => { resolveSave({}); });
+    expect(onMarked).toHaveBeenCalledWith(origin);
+    expect(screen.getByDisplayValue('B question')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+});
+
+it('does not append generated questions to a reopened dialog', async () => {
+    let resolveGenerate: (value: unknown) => void = () => undefined;
+    mock.generate.mockImplementationOnce(() => new Promise(resolve => { resolveGenerate = resolve; }));
+    const { ref } = openForm(SaveQaLibForm);
+    fireEvent.click(screen.getByRole('button', { name: 'log.aiGenerate' }));
+    act(() => ref.current?.open('message-b', { q: 'B question', a: 'B answer' }));
+    await act(async () => { resolveGenerate({ questions: ['Late A question'] }); });
+    expect(screen.queryByDisplayValue('Late A question')).toBeNull();
+    expect(screen.getByDisplayValue('B question')).toBeTruthy();
+});
+
+
+it('keeps a failed new-QA write editable and never reports completion', async () => {
+    mock.update.mockRejectedValueOnce(new Error('write failed'));
+    const { onMarked } = openForm(SaveQaLibForm);
+    fireEvent.click(screen.getByText('Select knowledge'));
+    fireEvent.click(screen.getByRole('button', { name: 'log.confirm' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'log.confirm' })).toBeEnabled());
+    expect(onMarked).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue('Question')).toBeTruthy();
+});
+
+it('returns the original similar-question operation without closing a reopened dialog', async () => {
+    let resolveSave: (value: unknown) => void = () => undefined;
+    mock.add.mockImplementationOnce(() => new Promise(resolve => { resolveSave = resolve; }));
+    const ref = createRef<AnnotationFormHandle>(); const onMarked = vi.fn();
+    render(<AddSimilarQuestions ref={ref} onMarked={onMarked} />);
+    const origin = { taskId: 'task-a', conversationId: 'a', sourceMessageId: 'question-a', actionId: 'similar-a', sessionGeneration: 1 };
+    act(() => ref.current?.open('question-a', { q: 'Question A', a: '' }, origin));
+    fireEvent.click(screen.getByText('Select knowledge'));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Existing question' }));
+    fireEvent.click(screen.getByRole('button', { name: 'log.confirm' }));
+    act(() => ref.current?.open('question-b', { q: 'Question B', a: '' }, { ...origin, conversationId: 'b', actionId: 'similar-b', sessionGeneration: 2 }));
+    await act(async () => { resolveSave({}); });
+    expect(mock.add).toHaveBeenCalledWith({ ids: [123], question: 'Question A' });
+    expect(onMarked).toHaveBeenCalledWith(origin);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+});

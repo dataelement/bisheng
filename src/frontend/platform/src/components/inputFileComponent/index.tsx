@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import type { WorkflowFileFieldProps } from '@bisheng/chat';
+import type { ReactNode } from 'react';
 import { Button, notification } from '@bisheng/ui';
 import { locationContext } from "@/contexts/locationContext";
 import { MAX_MEDIA_FILES, isMediaFileName } from "@/util/fileAcceptUtils";
@@ -24,8 +26,9 @@ export default function InputFileComponent({
   onFileChange,
   editNode = false,
   isSSO = false,
-  multiple = false
-}: FileComponentType) {
+  multiple = false,
+  renderControl,
+}: FileComponentType & { renderControl?: (props: WorkflowFileFieldProps) => ReactNode }) {
   const { t } = useTranslation();
   const [myValue, setMyValue] = useState(value);
   const [loading, setLoading] = useState(false);
@@ -216,6 +219,9 @@ export default function InputFileComponent({
   };
 
 
+
+  if (renderControl) return renderControl({ value: myValue, placeholder, disabled, loading,
+    onClick: () => { if (!disabled && !loading) handleButtonClick(); } });
 
   return (
     <div className={disabled ? "input-component-div" : "w-full"}>

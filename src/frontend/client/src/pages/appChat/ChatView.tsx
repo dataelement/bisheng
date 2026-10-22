@@ -51,7 +51,7 @@ const _SELECTABLE_CATEGORIES = new Set([
 export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }) {
     const { user } = useAuthContext();
     const help = useChatHelpers()
-    useWebSocket(help)
+    useWebSocket(help, { canExecute: !readOnly })
 
     const localize = useLocalize();
     const navigate = useNavigate();

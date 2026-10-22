@@ -27,8 +27,19 @@ const checkFileType = (file, accepts) => {
 };
 
 
+export interface ChatFilesHandle {
+    openPicker: () => void;
+    upload: (files: FileList | File[]) => void;
+}
+interface ChatFilesProps {
+    v: string;
+    accepts?: string;
+    disabled?: boolean;
+    onChange: (files: { path: string; name: string }[] | null) => void;
+}
+
 // @accepts '.png,.jpg'
-export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange }, ref) {
+export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ v, accepts, disabled, onChange }, ref) {
 
     const { t } = useTranslation();
     const [files, setFiles] = useState([]);
@@ -91,7 +102,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
 
         // 显示无效文件提示（区分类型/大小错误）
         if (invalidTips.length > 0) {
-            notification.open({ type: 'info', description: String(invalidTips.join('；') ?? '') });
+            notification.open({ type: 'info', description: String(invalidTips.join('\n') ?? '') });
         }
 
         // 只要有有效文件就继续上传流程
@@ -192,6 +203,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
     };
 
     useImperativeHandle(ref, () => ({
+        openPicker: () => { if (!disabled) fileInputRef.current?.click(); },
         upload: (fileList) => {
             if (disabled) return;
             handleFileChange(Array.from(fileList));
@@ -230,14 +242,6 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                     </div>
                 ))}
             </div>}
-
-            {/* File Upload Button */}
-            <div
-                className={`absolute right-10 top-5 cursor-pointer ${disabled ? 'text-gray-400 cursor-not-allowed' : ''}`}
-                onClick={() => !disabled && fileInputRef.current.click()}
-            >
-                <Outlined.Attachment size={18} />
-            </div>
 
             {/* File Input */}
             <input

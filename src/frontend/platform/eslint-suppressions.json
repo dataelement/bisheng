@@ -146,16 +146,13 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 4
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 1
     },
     "no-console": {
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 6
+      "count": 5
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
@@ -167,49 +164,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    }
-  },
-  "src/components/bs-comp/chatComponent/FileBs.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
-  "src/components/bs-comp/chatComponent/GuideQuestions.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/components/bs-comp/chatComponent/MessageBs.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    }
-  },
-  "src/components/bs-comp/chatComponent/MessageButtons.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
-  "src/components/bs-comp/chatComponent/MessagePanne.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 2
     }
   },
   "src/components/bs-comp/chatComponent/citationUtils.ts": {
@@ -227,19 +181,13 @@
   },
   "src/components/bs-comp/chatComponent/messageStore.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    },
-    "no-console": {
       "count": 3
     },
-    "no-restricted-syntax": {
-      "count": 1
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
     },
-    "prefer-const": {
-      "count": 4
+    "no-console": {
+      "count": 1
     }
   },
   "src/components/bs-comp/department/LazyDepartmentTree.tsx": {
@@ -1031,7 +979,7 @@
   },
   "src/index.tsx": {
     "@typescript-eslint/ban-ts-comment": {
-      "count": 5
+      "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -1360,40 +1308,21 @@
       "count": 2
     }
   },
-  "src/pages/BuildPage/flow/FlowChat/ChatFileFile.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
   "src/pages/BuildPage/flow/FlowChat/ChatInput.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 4
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 6
+      "count": 2
     },
     "no-console": {
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 3
     },
     "react-hooks/exhaustive-deps": {
       "count": 4
-    }
-  },
-  "src/pages/BuildPage/flow/FlowChat/ChatMessages.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 2
     }
   },
   "src/pages/BuildPage/flow/FlowChat/ChatPane.tsx": {
@@ -1415,24 +1344,6 @@
       "count": 1
     }
   },
-  "src/pages/BuildPage/flow/FlowChat/GuideQuestions.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "no-console": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/flow/FlowChat/InputForm.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/flow/FlowChat/MessageBs.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    }
-  },
   "src/pages/BuildPage/flow/FlowChat/MessageMarkDown.tsx": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
@@ -1449,19 +1360,16 @@
   },
   "src/pages/BuildPage/flow/FlowChat/messageStore.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 9
+      "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    },
-    "no-console": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
       "count": 2
     },
-    "prefer-const": {
-      "count": 5
+    "no-console": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 1
     }
   },
   "src/pages/BuildPage/flow/FlowNode/Parameter.tsx": {
@@ -2592,13 +2500,10 @@
       "count": 3
     },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 12
     }
   },
   "src/pages/LabelPage/taskApps.tsx": {
@@ -2627,7 +2532,7 @@
   },
   "src/pages/LogPage/useAppLog/appChatDetail.tsx": {
     "@typescript-eslint/no-unused-expressions": {
-      "count": 3
+      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 2

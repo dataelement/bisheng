@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import InputFileComponent from "./InputFileComponent";
 import { Button } from "~/components";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
-import { MessageWarper } from "./MessageBsChoose";
+import { MessageFrame } from '@bisheng/chat';
 
 /**
  * @component 会话报告生成专用表单
@@ -86,7 +86,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
 
     if (items.length === 0) return null
 
-    return <MessageWarper flow={flow} logo={logo}>
+    return <MessageFrame title={flow.name} logo={logo}>
         <div className="">
             <div className="max-h-[520px] overflow-y-auto space-y-2 px-1">
                 {items.map((item, i) => <div key={item.id} className="w-full text-sm">
@@ -134,7 +134,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
                 <Button size="sm" className="mt-4 h-8 px-4" onClick={handleStart}>{localize('com_ui_start')}</Button>
             </div>}
         </div>
-    </MessageWarper>
+    </MessageFrame>
 });
 
 export default InputFormSkill

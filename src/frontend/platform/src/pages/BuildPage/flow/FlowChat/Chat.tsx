@@ -11,6 +11,7 @@ export default function Chat({
     clear = false,
     form = false,
     useName,
+    title = '',
     inputForm = null,
     guideWord,
     wsUrl,
@@ -20,9 +21,9 @@ export default function Chat({
 }) {
     const [loading, setLoading] = useState(autoRun)
 
-    return <div className="h-full bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/points.png)` }}>
+    return <div className="h-full bg-background-login">
         <div className="relative h-full">
-            <ChatMessages debug={debug} version={version} logo={logo} useName={useName} guideWord={guideWord} loadMore={loadMore}></ChatMessages>
+            <ChatMessages title={title} canExecute debug={debug} version={version} logo={logo} useName={useName} guideWord={guideWord} loadMore={loadMore}></ChatMessages>
             <ChatInput autoRun={autoRun} version={version} clear={clear} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} onLoad={() => setLoading(false)} ></ChatInput>
         </div>
         {/* {loading && <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary/5 z-10">

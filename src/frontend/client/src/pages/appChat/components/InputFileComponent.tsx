@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import type { WorkflowFileFieldProps } from '@bisheng/chat';
+import type { ReactNode } from 'react';
 
 import { FileSearch2, Loader2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -10,6 +12,20 @@ import { uploadFile, uploadFileWithProgress } from "~/api/apps";
 import useLocalize from "~/hooks/useLocalize";
 import { normalizeSuffixList } from "../fileAcceptUtils";
 
+interface InputFileComponentProps {
+    renderControl?: (props: WorkflowFileFieldProps) => ReactNode;
+    value?: string;
+    onChange: (name: string) => void;
+    disabled?: boolean;
+    suffixes?: string | readonly string[];
+    fileTypes?: unknown;
+    placeholder?: string;
+    onFileChange: (value: unknown) => void;
+    editNode?: boolean;
+    isSSO?: boolean;
+    multiple?: boolean;
+    flow?: unknown;
+}
 export default function InputFileComponent({
     value,
     onChange,
@@ -21,8 +37,9 @@ export default function InputFileComponent({
     editNode = false,
     isSSO = false,
     multiple = false,
-    flow
-}) {
+    flow,
+    renderControl,
+}: InputFileComponentProps) {
     const t = useLocalize()
     const [myValue, setMyValue] = useState(value);
     const [loading, setLoading] = useState(false);
@@ -208,6 +225,12 @@ export default function InputFileComponent({
         // then fire no change event at all. Clear it so a second attempt works.
         event.target.value = "";
     };
+
+    if (renderControl) return <>
+        <input ref={inputRef} type="file" className="hidden" accept={acceptAttr} multiple={multiple}
+            disabled={disabled || loading} onChange={handleFilesPicked} />
+        {renderControl({ value: myValue, placeholder, disabled, loading, onClick: handleButtonClick })}
+    </>;
 
     return (
         <div className={disabled ? "input-component-div" : "w-full"}>

@@ -21,7 +21,7 @@ export default function ChatComponent({
 }) {
 
     return <div className="relative h-full">
-        <MessagePanne logo={logo} debug={debug} version={version} useName={useName} guideWord={guideWord} loadMore={loadMore} chat={chat}></MessagePanne>
-        <ChatInput clear={clear} questions={questions} version={version} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} onClickClear={onClickClear}></ChatInput>
+        <MessagePanne questions={questions} canExecute logo={logo} debug={debug} version={version} useName={useName} guideWord={guideWord} loadMore={loadMore} chat={chat}></MessagePanne>
+        <ChatInput clear={clear} version={version} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} onClickClear={onClickClear}></ChatInput>
     </div>
 };
