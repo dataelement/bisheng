@@ -71,3 +71,9 @@ T234/T235修正共享E2E75秒HTTP截止，仅精确同步成功preview/resume/st
 ## r9工具CA修正与r10
 
 r9真实预览已启动，原platform日志保留ConnectError；只读配置确认F059_E2E_CA_FILE缺失，虽公共CA文件已挂载但客户端未加载。相同工具容器仅显式加入公共CA后，TLS校验开启的入口/api/v1/env得到200。原suite.cleanup阶段通过并正常回收r9应用/预览，未手工修改K8s或SQL。r10独立六场景沿用d13工具、a06镜像/helper143/profile2，显式设置CA且在任何业务API前验证TLS，结果见k189r10-entry-tls.json。生产代码未因本操作配置错误修改，未把入口前置200算成应用访问通过。
+
+## r10维护接线修复与同版本显式重试
+
+r10已真实通过preview-and-approval（审批人访问、其他角色拒绝、批准）。首次deploy d9729fe5…maintenance_phase_failed/cleanupcomplete，Pod同UID停止正常，生产PVC4c5b459c…保留；原Pod日志已回收，未声称现场取到KeyError。实际固定8a helper非root/禁网/合成身份A/B与模板→reader双红定位MATERIAL_POD_UID遗漏。单行模板修复79a15870f/合流249d5fc85，全runtime1532/13skip通过；原生镜像digest42c6c3c5…，Helm20保持helper/profile/report，node ready/epoch15。
+
+原900秒套件期限保持。owner专用脚本先核tenant2、精确app/version/原approval executed、旧op failed/cleanupcomplete，再O_EXCL0600持久submission_unknown，仅一次POST既有manual-publish入口发新attempt；不重打包/创建版本/重审批、不改旧失败记录。当前异步等待结果，未知请求不重发；新结果以独立k189r10-manual-publish-once.json记录。

@@ -1,25 +1,25 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T19:02:59.321115+00:00",
-  "validated_source_commit": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
+  "recorded_at": "2026-10-22T19:10:13.028929+00:00",
+  "validated_source_commit": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 230,
+    "l1_completed": 232,
     "tasks_total": 237,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "source_commit": "b5d243f0a757810198789c616eb58d7efd582a2e",
-      "passed": 1519,
+      "source_commit": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
+      "passed": 1532,
       "skipped": 13,
-      "seconds": 32.78,
+      "seconds": 32.72,
       "exit_code": 0,
-      "log": "/private/tmp/f059-terminal-cleanup-full-runtime-authorized.log",
-      "scope": "Full runtime with localhost/temporary-file test permissions; initial sandbox permission failures retained separately. No remote/ARM acceptance claim."
+      "log": "/private/tmp/f059-maintenance-uid-full-runtime.log",
+      "scope": "Full integrated runtime; no new backend/helper/ARM claim"
     },
     "backend": {
       "source_commit": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
@@ -974,11 +974,15 @@
       "profile_revision": 2,
       "stage": "platform",
       "scenarios": 6,
-      "result": "approved_preview_passed_deploy_maintenance_failed_fix_in_progress",
+      "result": "approved_same_version_explicit_manual_retry_pending",
       "new_arm_run": false,
       "verified_tls": true,
       "explicit_public_ca": true,
-      "failed_operation_id": "d9729fe5c905480bbfd2cf796f344a97"
+      "failed_operation_id": "d9729fe5c905480bbfd2cf796f344a97",
+      "source_after_maintenance_fix": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
+      "manual_one_shot_receipt": "/opt/e2e-f059/evidence/k189r10-manual-publish-once.json",
+      "original_suite_timeout_seconds": 900,
+      "original_suite_deadline_extended": false
     },
     "business_batch_history": [
       {
@@ -1001,11 +1005,10 @@
       "production_code_changed": false
     },
     "maintenance_material_uid": {
-      "status": "fix_in_progress",
+      "status": "local_fix_passed_deployed_real_retry_pending",
       "actual_reason": "maintenance_phase_failed",
       "actual_failed_stage": "maintenance",
       "actual_cleanup_status": "complete",
-      "actual_failure_log_retained": false,
       "actual_pod_log_unavailable_after_normal_cleanup": true,
       "local_contract": "maintenance reads MATERIAL_POD_UID but template only injects transfer/material-fetch",
       "native_helper_ab": {
@@ -1015,7 +1018,47 @@
         "identity": "synthetic_only",
         "production_volume_access": false
       },
-      "production_pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27"
+      "production_pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27",
+      "actual_pod_failure_log_retained": false
+    },
+    "maintenance_uid_live_candidate": {
+      "native": {
+        "build_exit": 0,
+        "import_smoke_exit": 0,
+        "public_push": false,
+        "manager_image_id": "sha256:0a6c3f7d4d007499a54ed15de247022a824e897c64f0255a10e7671f476d8a38",
+        "platform": "linux/amd64",
+        "source_revision": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
+        "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+        "changed_runtime_files": [
+          "runtime_manager/k8s_templates.py"
+        ],
+        "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+        "preceding_manager_source": "a06b281b2ada8cfa15cb79c29fad0044408e4db9",
+        "schema": "f059-native-manager/v1"
+      },
+      "image": {
+        "manager_image_id": "sha256:0a6c3f7d4d007499a54ed15de247022a824e897c64f0255a10e7671f476d8a38",
+        "source_revision": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:42c6c3c5ba9adb6f6340d0de979e9896d32e81f205f44851c492f50ea4fd7209",
+        "public_push": false,
+        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-22"
+      },
+      "helm": {
+        "descriptor_uid_unchanged": true,
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:42c6c3c5ba9adb6f6340d0de979e9896d32e81f205f44851c492f50ea4fd7209",
+        "helm_upgrade_completed": true,
+        "source_revision": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
+        "descriptor_data_unchanged": true,
+        "helper_and_profile_images_unchanged": true,
+        "app_proxy_unchanged": true
+      },
+      "node": {
+        "node_id": "e2e-f059-node",
+        "status": "ready",
+        "controller_epoch": 15,
+        "ready": true
+      }
     }
   },
   "not_executed": [

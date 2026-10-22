@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理等待缺陷已完成L1修复；r7完整prepare成功并进入probe，但探活总预算将多段init与健康检查混算，启动阶段期限及数据取消新动作闸已通过L1与完整本地集成。r8四init96秒后Ready，终态finalizer移除后删除误拒导致原操作超时；a06/Helm19已正常对账完成4资源清理，失败记录及停止证明保留。开发L1现为230/235，独立r9通过完整prepare/probe及预览启动后，工具漏配公共CA导致入口连接失败，原套件正常cleanup完成；独立r10已通过显式CA/TLS前置检查继续业务验收，最新状态见[platform.json](./e2e-evidence/platform.json)，尚无正式业务上线通过结论。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
+**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理等待缺陷已完成L1修复；r7完整prepare成功并进入probe，但探活总预算将多段init与健康检查混算，启动阶段期限及数据取消新动作闸已通过L1与完整本地集成。r8四init96秒后Ready，终态finalizer移除后删除误拒导致原操作超时；a06/Helm19已正常对账完成4资源清理，失败记录及停止证明保留。开发L1现为232/237，独立r9通过完整prepare/probe及预览启动后，工具漏配公共CA导致入口连接失败，原套件正常cleanup完成；独立r10已通过显式CA/TLS前置检查继续业务验收，最新状态见[platform.json](./e2e-evidence/platform.json)，尚无正式业务上线通过结论。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -773,3 +773,5 @@ T234/T235工具适配：preview/resume等待ready、stop/delete等待completed�
 T234/T235已本地L1通过；d13e9ee91整合1753 backend与1519 runtime通过。189 Helm19的a06原生镜像已使r8失败操作正常cleanupcomplete/4精确资源fresh404，历史failure与停止证明保留；r9新批次真实业务继续，不宣称正式上线验收通过。
 
 2026-10-23 T236/T237：r10已通过预览访问与权限拒绝/审批，正式上线在维护阶段失败。原Pod日志已清理；模板→reader及实际helper禁网A/B定位遗漏材料PodUID。原失败、正常清理和生产PVC均保留，修复后可由owner对已批准版本显式manual-publish发起新attempt，不能复活旧op或重发未知POST。
+
+T236/T237已实现：单行可信maintenance+material_secret条件，实际reader配对及全runtime1532/13skip通过；249/Helm20部署保持helper143/profile2/报告。r10原预览/拒绝/审批通过，首次维护失败保留，新owner明确manual-publish只发一次、同版本/原审批、新operation，不复活旧操作或延长900秒原套件等待；真实上线结果见platform.json。

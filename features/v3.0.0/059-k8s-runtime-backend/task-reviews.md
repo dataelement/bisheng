@@ -3342,3 +3342,13 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 
 **类型**：实现。**文件**：`src/backend/test/e2e/helpers/vibe_runtime.py`。架构PASS（共享测试helper，无产品状态Owner变更），命名PASS，序列化PASS（既有响应断言不变），数据库/租户N/A，前端N/A，信息泄漏PASS，设计同步PASS（工具期限及已知坑）。依赖/配对T234与文件范围PASS。仅精确同步成功路径使用settings.timeout read与asyncio总预算，连接/写入/pool不超过15秒或总预算；超时直接停止、未知POST不重发，不修改平台operation deadline/API或脚本重复配置。Ruff/format/逐文件架构守卫及diff通过；主树完整backend1753/19skip、48.48s。
 **结果：PASS**。开发闭合230/235；真实平台、故障升级、109剩余、正式发行与L2不能由工具合同替代。
+
+## Task Review: T236 — 维护容器材料身份UID接线配对
+
+**类型**：测试。**文件**：`src/runtime-manager/tests/test_k8s_templates.py`。命名/完整AC-33、AC-34、AC-35、AC-48、AC-49、AC-50、AC-51、AC-55 PASS；前端N/A，其余按测试子集N/A；依赖T235及范围/配对T237 PASS。真实Pod模板→Downward API fieldRef→未mock的client_from_identity/MaterialClient，两种维护先红KeyError；purge无材料身份、普通app/data-helper隔离、缺Secret和reserved literal拒绝共11通过；最终13新增/534相关全绿。合成身份禁网，不据此声称取到189已清理原Pod日志。
+**结果：PASS**。源79a15870f021fe2b704b2ae352b84891229789b5；脱敏短栈红 `/private/tmp/f059-t236-red.log`，绿 `/private/tmp/f059-t236-t237-related-green.log`。
+
+## Task Review: T237 — 可信维护容器注入材料PodUID
+
+**类型**：实现。**文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`。架构PASS（原可信helper渲染器），命名PASS，序列化PASS（core/v1 metadata.uid），数据库/租户N/A，前端N/A，信息泄漏PASS，设计同步PASS（4.8及5已知坑、修订历史）。依赖/配对T236已完成，单文件范围PASS。仅name=maintenance且material_secret存在时增加与transfer相同的Downward字段；原Secret/签名/期限/非root只读保护不变，purge没有材料身份、普通app/data-helper不获材料UID，保留literal注入拒绝。没有helper/API/模型/DDL改动。主树1532/13skip、Ruff/format/逐文件guard/diffcheck通过。
+**结果：PASS**。原agent L1 `/private/tmp/f059-t236-t237-l1.md` 的parent文档备注已闭合；原生helperA/B另证缺字段失败/补字段空库backup(None)通过，真实新attempt仍单列，不冒认上线完成。

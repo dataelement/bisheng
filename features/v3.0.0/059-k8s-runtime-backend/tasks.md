@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；237 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 230 / 237 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 232 / 237 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1864,7 +1864,7 @@
   **依赖:** T234
   **配对:** T234
 
-- [ ] **T236** — 维护容器材料身份UID接线配对
+- [x] **T236** — 维护容器材料身份UID接线配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_templates.py`
   **逻辑/验收**：真实模板到helper身份reader验证migrate/restore具备受控downward PodUID；purge无材料身份、普通app/data-helper不获材料UID、reserved env仍拒绝。
@@ -1872,7 +1872,7 @@
   **依赖:** T235
   **配对:** T237
 
-- [ ] **T237** — 可信维护容器注入材料PodUID
+- [x] **T237** — 可信维护容器注入材料PodUID
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`
   **逻辑/验收**：仅有material_secret的可信maintenance容器从core/v1 metadata.uid取得材料签名身份绑定；保留无材料身份purge和其他角色隔离，不改helper/API/DDL。
@@ -2021,3 +2021,5 @@ T232/T233本地L1完成：1bd926bb2两文件先红4/203绿后准入208与邻接5
 T234/T235通过21250d329合入d13e9ee91：新预算合同先红5/12绿，112合同全绿；主树完整backend1753passed/19skip（48.48s），runtime生产与已通过1519/13skip版本一致。开发修复已闭合，当前230/235；五项实际交付/发行/L2继续保留。189 Helm19已固定a06镜像4666d753…，r8原timed_out保持且4资源fresh API absent/cleanupcomplete；proof SHAa37f1bab…。r9新六场景仅采用d13验收工具源码，生产runtime与a06逐字节相同；不重标镜像来源。
 
 T236/T237来自r10真实上线维护失败：probe、预览访问/拒绝、审批均真实通过；deploy d9729fe5…maintenance_phase_failed后正常cleanupcomplete，生产PVC保留。原Pod日志已清理，未声称取得现场KeyError；固定8a helper、非root/禁网/合成身份/空临时卷A/B证明缺MATERIAL_POD_UID报KeyError，只注入UID则backup(None)通过。模板确实漏配maintenance UID，按原材料身份合同补配对，不放宽权限。
+
+T236/T237已通过79a15870f合入249d5fc85：模板→实际身份reader先红2/11正反绿，534相邻全绿；主树完整runtime1532passed/13skip（32.72s）及静态门通过。原生amd64构建/导入后私有digest42c6c3c5…、Helm20同源三个控制服务更新，descriptor/helper143/profile2和有效报告不变，平台ready/controller_epoch15。owner fresh核旧failed/cleanupcomplete、同已批准version/approval后，仅一次manual-publish新attempt已提交；结果pending不重发，原r10套件期限900秒不延长。当前232/237，真实业务/故障/发行/L2门保留。
