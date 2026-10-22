@@ -5721,19 +5721,17 @@
       ],
       "logic": "DELETE受理后同UID对象仍在时cleanup返回pending；真实消失后才完成，换UID/未知拒绝，不能重复创建或误删。",
       "acs": [
-        "AC-24",
-        "AC-48",
+        "AC-33",
         "AC-49",
-        "AC-52",
-        "AC-55"
+        "AC-52"
       ],
       "depends": [
         "T220"
       ],
       "pair": null,
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "test_kubernetes_executor.py + test_k8s_observe.py + test_k8s_data_executor.py: 211 passed; four new asynchronous deletion cases passed",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

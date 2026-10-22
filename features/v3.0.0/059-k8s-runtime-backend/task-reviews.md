@@ -3257,3 +3257,22 @@ T219/T220真实闭环补证：189的原UID停止确认、账本node首次补齐�
 **结果**：PASS；不回填历史失败，新镜像原生与业务验收另记。
 
 T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际有效ID；仅注释变更，不改旧F086既有测试或1410项运行结果。
+
+
+## Task Review: T227 — K8s异步删除API合同
+
+**类型**：测试。**文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 仅既有假Cluster与真实executor合同测试 |
+| 2 | 命名/AC | PASS | 明确pending、fresh404和替换UID；完整AC-33、AC-49、AC-52 |
+| 3 | 序列化 | N/A | 无生产API变化 |
+| 4 | 数据库 | N/A | 既有内存账本，无SQL/模型变化 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 仅合成测试数据 |
+| 7 | 设计同步 | N/A | 测试任务；T226独立记录等待实现 |
+
+**元数据验证**：文件范围PASS；依赖T220完成；无实现配对要求。声明AC已按实际测试收敛到AC-33、AC-49、AC-52。
+**验证**：4新合同通过；executor/observe/data-executor 211通过；Ruff/format/arch/diff通过。原fake即时删除的4红仅证明fixture覆盖缺口，未冒称生产红；首轮相关命令模块名错误未运行，保留日志。
+**结果：PASS**。本地提交04e73b6fba3be24984209d5d057b91dc38471de3；原L1 `/private/tmp/f059-t227-l1.md`。无生产修改、远端操作、ARM或公开发行。
