@@ -277,7 +277,7 @@ class RuntimeDeliveryRepository:
                     raise RuntimeConflict("owner_operation_in_progress")
             result = await self.create_operation(operation)
             if offline:
-                await self.admit(result.id, memory_mb=128, cpu_millicores=25)
+                await self.admit(result.id, memory_mb=128, cpu_millicores=100)
             owner.data_operation_id = result.id
             await self.save(owner)
             return result

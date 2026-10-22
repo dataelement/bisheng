@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-04、AC-05、AC-33、AC-34、AC-35、AC-36、AC-43、AC-48、AC-49、AC-50、AC-52."""
+"""覆盖 AC: AC-04、AC-05、AC-18、AC-33、AC-34、AC-35、AC-36、AC-43、AC-48、AC-49、AC-50、AC-52、AC-55."""
 
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -9,6 +9,7 @@ from bisheng.app_runtime.domain.models.runtime_delivery import (
     RuntimeAssignment,
     RuntimeCapacityReservation,
     RuntimeNode,
+    RuntimeOperation,
 )
 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
 from test.app_runtime.test_runtime_delivery_repository import operation
@@ -50,7 +51,69 @@ async def test_data_session_keeps_serving_owner_and_generation_unchanged(owned):
     await repo.claim(data.id, node_id="node-a", generation=3, owner_epoch=1)
     assert (await repo.get(RuntimeAssignment, assignment.id)).generation == 3
     reservation = (await repo.find(RuntimeCapacityReservation, operation_id=data.id))[0]
-    assert reservation.memory_mb == 128 and reservation.cpu_millicores == 25
+    assert reservation.memory_mb == 128 and reservation.cpu_millicores == 100
+
+
+@pytest.mark.parametrize("available_cpu,accepted", [(99, False), (100, True)])
+async def test_offline_data_reserves_actual_cpu_capacity_atomically(owned, available_cpu, accepted):
+    """覆盖 AC: AC-18、AC-33、AC-43、AC-48、AC-49、AC-55."""
+    repo, assignment, serving = owned
+    node = await repo.get(RuntimeNode, "node-a")
+    node.cpu_budget_millicores, node.memory_budget_mb = available_cpu, 128
+    await repo.save(node)
+    op = data_operation()
+    if accepted:
+        await repo.acquire_data_operation(op)
+        reservation = (await repo.find(RuntimeCapacityReservation, operation_id=op.id))[0]
+        assert (reservation.memory_mb, reservation.cpu_millicores, reservation.state) == (128, 100, "held")
+        assert (await repo.get(RuntimeAssignment, assignment.id)).data_operation_id == op.id
+    else:
+        with pytest.raises(RuntimeConflict, match=r"^capacity_exhausted$"):
+            await repo.acquire_data_operation(op)
+        assert await repo.get(RuntimeOperation, op.id) is None
+        assert not await repo.find(RuntimeCapacityReservation, operation_id=op.id)
+        assert (await repo.get(RuntimeAssignment, assignment.id)).data_operation_id == ""
+    owner = await repo.get(RuntimeAssignment, assignment.id)
+    assert (owner.active_operation_id, owner.generation, owner.owner_epoch) == (serving.id, 3, 1)
+
+
+async def test_online_data_adds_no_reservation_even_when_unreserved_capacity_is_empty(owned):
+    """覆盖 AC: AC-18、AC-33、AC-43、AC-48、AC-49、AC-55."""
+    repo, assignment, serving = owned
+    node = await repo.get(RuntimeNode, "node-a")
+    node.cpu_budget_millicores = node.memory_budget_mb = 0
+    await repo.save(node)
+    data = await repo.acquire_data_operation(data_operation(), offline=False)
+    assert not await repo.find(RuntimeCapacityReservation, operation_id=data.id)
+    owner = await repo.get(RuntimeAssignment, assignment.id)
+    assert (owner.active_operation_id, owner.generation, owner.owner_epoch, owner.data_operation_id) == (
+        serving.id,
+        3,
+        1,
+        data.id,
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value,reason",
+    [
+        ("kind", "deploy", "data_operation_deadline_invalid"),
+        ("deadline", -1, "data_operation_deadline_invalid"),
+        ("deadline", 61, "data_operation_deadline_invalid"),
+        ("generation", 4, "data_owner_fence_stale"),
+        ("owner_epoch", 2, "data_owner_fence_stale"),
+    ],
+)
+async def test_data_cpu_adjustment_preserves_operation_and_owner_fences(owned, field, value, reason):
+    """覆盖 AC: AC-33、AC-43、AC-48、AC-49、AC-55."""
+    repo, assignment, _ = owned
+    op = data_operation()
+    setattr(op, field, datetime.utcnow() + timedelta(seconds=value) if field == "deadline" else value)
+    with pytest.raises(RuntimeConflict, match="^" + reason + "$"):
+        await repo.acquire_data_operation(op)
+    assert await repo.get(RuntimeOperation, op.id) is None
+    assert not await repo.find(RuntimeCapacityReservation, operation_id=op.id)
+    assert (await repo.get(RuntimeAssignment, assignment.id)).data_operation_id == ""
 
 
 @pytest.mark.parametrize("kind", ["deploy", "stop", "destroy", "migrate", "restore"])
