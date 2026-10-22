@@ -94,7 +94,7 @@ def check_result(name, raw, uid):
     return {"ok": True, "evidence": {"uid": uid}}
 
 
-def stop_confirmed(pod):
+def stop_confirmed(pod, *, binding_verified=False):
     meta, spec, status = (
         pod.get("metadata", {}),
         pod.get("spec", {}),
@@ -114,7 +114,7 @@ def stop_confirmed(pod):
         for row in status.get(key, [])
     ]
     return not any("running" in state for state in states) and (
-        (not spec.get("nodeName") and not states) or status.get("phase") in {"Succeeded", "Failed"}
+        (not spec.get("nodeName") and not states and binding_verified) or status.get("phase") in {"Succeeded", "Failed"}
     )
 
 
@@ -305,6 +305,7 @@ class InstallationVerifier:
         ):
             raise ValueError("descriptor_scope_or_digest_invalid")
         self.created, self.control_created, self.idle = [], [], None
+        self.binding_verified = False
 
     def baseline(self):
         namespace = self.api.get("namespace", self.namespace)
@@ -626,27 +627,34 @@ class InstallationVerifier:
         )
         if not response.returncode or "being deleted" not in response.stderr:
             raise ProbeError("binding_delete_fence_unconfirmed")
+        self.binding_verified = True
         return self._proof(fresh)
 
     def _delete_request(self, current, resource):
-        meta = current["metadata"]
-        body = {
-            "apiVersion": "v1",
-            "kind": "DeleteOptions",
-            "gracePeriodSeconds": 5,
-            "preconditions": {
-                "uid": meta["uid"],
-                "resourceVersion": meta["resourceVersion"],
-            },
-        }
+        expected_uid, name = current["metadata"]["uid"], current["metadata"]["name"]
 
         def attempt():
-            result = self.api.raw(
-                "DELETE", self._path(resource, meta["name"]), document=body, manager=True, accepted=(0, 1)
-            )
+            fresh = self.api.get(resource, name, manager=True)
+            if fresh["metadata"]["uid"] != expected_uid:
+                raise ProbeError("preflight_delete_identity_changed")
+            if fresh["metadata"].get("deletionTimestamp"):
+                return True
+            body = {
+                "apiVersion": "v1",
+                "kind": "DeleteOptions",
+                "gracePeriodSeconds": 5,
+                "preconditions": {"uid": expected_uid, "resourceVersion": fresh["metadata"]["resourceVersion"]},
+            }
+            result = self.api.raw("DELETE", self._path(resource, name), document=body, manager=True, accepted=(0, 1))
             if result.returncode and not any(
                 reason in result.stderr
-                for reason in ("admission_uid_refused", "admission_plan_action_refused", "admission_plan_unavailable")
+                for reason in (
+                    "admission_uid_refused",
+                    "admission_plan_action_refused",
+                    "admission_plan_unavailable",
+                    "Conflict",
+                    "object has been modified",
+                )
             ):
                 raise ProbeError("preflight_delete_refused")
             return result.returncode == 0
@@ -763,6 +771,9 @@ class InstallationVerifier:
 
     def _network(self, group):
         targets = copy.deepcopy(self.options["network_targets"][group])
+        for target in targets:
+            if target.get("name") == "other-app" and target.get("host") == "@preflight":
+                target["host"] = self.idle["status"]["podIP"]
         if group == "network-direct-denied":
             if not {"backend", "minio", "kubernetes-api", "other-app"} <= {row.get("name") for row in targets} or any(
                 row.get("expected") != "denied" for row in targets
@@ -967,7 +978,7 @@ class InstallationVerifier:
                 fresh = self.api.get("pod", record["name"], manager=True)
                 if fresh["metadata"]["uid"] != record["uid"]:
                     raise ProbeError("preflight_cleanup_identity_changed")
-                return fresh if stop_confirmed(fresh) else None
+                return fresh if stop_confirmed(fresh, binding_verified=self.binding_verified) else None
 
             self._wait(stopped)
             record["plan"]["stop_state"] = "confirmed"
@@ -975,6 +986,8 @@ class InstallationVerifier:
 
             def release():
                 fresh = self.api.get("pod", record["name"], manager=True)
+                if fresh["metadata"]["uid"] != record["uid"]:
+                    raise ProbeError("preflight_cleanup_identity_changed")
                 patch = {
                     "metadata": {
                         "resourceVersion": fresh["metadata"]["resourceVersion"],
@@ -995,7 +1008,10 @@ class InstallationVerifier:
                     manager=True,
                     accepted=(0, 1),
                 )
-                if result.returncode and "admission_stop_unconfirmed" not in result.stderr:
+                if result.returncode and not any(
+                    reason in result.stderr
+                    for reason in ("admission_stop_unconfirmed", "Conflict", "object has been modified")
+                ):
                     raise ProbeError("preflight_finalizer_release_refused")
                 return not result.returncode
 
@@ -1039,7 +1055,7 @@ class InstallationVerifier:
             fresh = self.api.get("pod", name, namespace=self.api.control)
             if fresh["metadata"]["uid"] != uid:
                 raise ProbeError("control_cleanup_identity_changed")
-            return fresh if stop_confirmed(fresh) else None
+            return fresh if stop_confirmed(fresh, binding_verified=self.binding_verified) else None
 
         fresh = self._wait(stopped)
         patch = {

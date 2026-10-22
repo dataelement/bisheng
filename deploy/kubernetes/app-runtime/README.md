@@ -120,13 +120,15 @@ probe plan 为安装者本地文件，不放任何 secret：
       {"name": "backend", "host": "<backend IP>", "port": 7860, "expected": "denied"},
       {"name": "minio", "host": "<MinIO IP>", "port": 9000, "expected": "denied"},
       {"name": "kubernetes-api", "host": "<API IP>", "port": 6443, "expected": "denied"},
-      {"name": "other-app", "host": "<known listening other-app IP>", "port": 8080, "expected": "denied"}
+      {"name": "other-app", "host": "@preflight", "port": 8080, "expected": "denied"}
     ],
     "network-egress-allowed": [{"name": "egress", "host": "<egress ClusterIP>", "port": 3128, "expected": "allowed"}],
     "network-dns-denied": [{"name": "cluster-dns", "host": "<actual DNS IP>", "port": 53, "expected": "denied", "protocol": "udp-dns"}]
   }
 }
 ```
+
+`other-app` 可用 `@preflight` 指向工具自身已启动的独立 idle canary，避免首次安装还没有业务应用的循环前置；负例仍从另一个执行 Pod 发起并做监听正对照。工具运行位置须能连到计划中的正对照目标（通常是专用集群管理机/节点）。
 
 HMAC 由安全环境变量 `RTM_VERIFY_PLATFORM_KEY_ID`、`RTM_VERIFY_PLATFORM_SECRET` 注入，限本安装 node_id 的 manager 角色。它验证控制侧 HTTPS、签名允许/未签名拒绝及节点范围；**不能代替后续应用 Pod/SDK/材料委托链路 E2E**。
 
