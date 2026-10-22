@@ -924,3 +924,136 @@ def test_docker_async_cleanup_uses_same_wait_without_kubernetes_authority(tmp_pa
         assert calls[-1] == "local-scratch"
     finally:
         executor.close()
+
+
+def historical_pod_stop_scope(platform):
+    """Model fixed-name Pod reuse while retaining precise per-UID resource rows."""
+    from runtime_manager.executors.protocol import ExecutorError
+
+    old = {**deepcopy(platform.op), "operation_id": "previous-deploy", "kind": "deploy", "status": "completed"}
+    old["deadline"] = (datetime.utcnow() - timedelta(minutes=5)).isoformat()
+    original = platform.operation
+    platform.operation = lambda ident: deepcopy(old) if ident == old["operation_id"] else original(ident)
+    platform.node_snapshot = lambda: {"operations": [deepcopy(platform.op)]}
+    platform.application = lambda _: {"app_id": platform.op["app_id"], "operation_id": old["operation_id"]}
+    rows = [
+        {
+            "kind": "Pod",
+            "purpose": purpose,
+            "resource_ref": ref,
+            "name": "app-fixed-name",
+            "namespace": "apps",
+            "uid": uid,
+            "stop_state": stop,
+            "cleanup_state": cleanup,
+        }
+        for purpose, ref, uid, stop, cleanup in [
+            ("migrate", "old-migrate-1", "old-uid-1", "confirmed", "complete"),
+            ("migrate", "old-migrate-2", "old-uid-2", "confirmed", "complete"),
+            ("serve", "live-serve", "live-uid", "held", "pending"),
+        ]
+    ]
+    platform.resources = lambda ident: rows if ident == old["operation_id"] else []
+    current, calls = {"uid": "live-uid"}, []
+
+    def fresh(ref):
+        row = next(row for row in rows if row["resource_ref"] == ref)
+        calls.append(("fresh", ref, row["uid"]))
+        if row["uid"] != current["uid"]:
+            raise ExecutorError("resource_identity_changed")
+        return row
+
+    def request_stop(ref, operation):
+        calls.append(("request_stop", ref, operation["operation_id"]))
+        fresh(ref)
+
+    def confirm_stopped(ref):
+        fresh(ref)["stop_state"] = "confirmed"
+        calls.append(("confirmed", ref))
+        return {"stopped": True}
+
+    def cleanup(operation):
+        calls.append(("cleanup", operation["operation_id"]))
+        pending = [row for row in rows if row["cleanup_state"] != "complete"]
+        for row in pending:
+            fresh(row["resource_ref"])
+        for row in pending:
+            row["cleanup_state"] = "complete"
+        return {"complete": not pending}
+
+    runtime = SimpleNamespace(
+        _controller=lambda: {"holder_id": "holder-a", "controller_epoch": 1},
+        request_stop=request_stop,
+        confirm_stopped=confirm_stopped,
+        cleanup=cleanup,
+    )
+    return runtime, rows, current, calls
+
+
+def test_stop_skips_closed_historical_uids_but_stops_the_same_name_live_pod(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    platform, clock = Platform("stop"), CleanupClock()
+    platform.op["status"] = "running"
+    runtime, rows, _, calls = historical_pod_stop_scope(platform)
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        executor.stop_instances(platform.op)
+        assert [entry for entry in calls if entry[0] == "request_stop"] == [
+            ("request_stop", "live-serve", platform.op["operation_id"])
+        ]
+        assert {entry[1:] for entry in calls if entry[0] == "fresh"} == {("live-serve", "live-uid")}
+        assert ("confirmed", "live-serve") in calls
+        assert calls.count(("cleanup", "previous-deploy")) == 2 and clock.sleeps == [0.5]
+        assert all(row["stop_state"] == "confirmed" and row["cleanup_state"] == "complete" for row in rows)
+        assert platform.op["status"] == "running" and not platform.facts
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize(
+    "stop,cleanup",
+    [
+        ("confirmed", "pending"),
+        ("held", "complete"),
+        ("unknown", "unknown"),
+        (None, "complete"),
+        (True, "complete"),
+        ("confirmed", True),
+        ("confirmed", None),
+    ],
+)
+def test_partially_closed_or_unknown_historical_pods_still_use_same_uid_fence(tmp_path, stop, cleanup):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    from runtime_manager.executors.protocol import ExecutorError
+
+    platform, clock = Platform("stop"), CleanupClock()
+    platform.op["status"] = "running"
+    runtime, rows, _, calls = historical_pod_stop_scope(platform)
+    rows[0].update(stop_state=stop, cleanup_state=cleanup)
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        with pytest.raises(ExecutorError, match="resource_identity_changed"):
+            executor.stop_instances(platform.op)
+        assert calls == [("request_stop", "old-migrate-1", "operation-a"), ("fresh", "old-migrate-1", "old-uid-1")]
+        assert rows[-1]["stop_state"] == "held" and platform.op["status"] == "running"
+        assert not platform.facts and not clock.sleeps
+    finally:
+        executor.close()
+
+
+def test_closed_history_never_bypasses_a_replacement_live_uid(tmp_path):
+    """F059 覆盖 AC: AC-33、AC-49、AC-52、AC-55."""
+    from runtime_manager.executors.protocol import ExecutorError
+
+    platform, clock = Platform("stop"), CleanupClock()
+    platform.op["status"] = "running"
+    runtime, rows, current, calls = historical_pod_stop_scope(platform)
+    current["uid"] = "unexpected-replacement-uid"
+    executor = cleanup_executor(tmp_path, platform, runtime, clock)
+    try:
+        with pytest.raises(ExecutorError, match="resource_identity_changed"):
+            executor.stop_instances(platform.op)
+        assert calls == [("request_stop", "live-serve", "operation-a"), ("fresh", "live-serve", "live-uid")]
+        assert rows[-1]["stop_state"] == "held" and not platform.facts and not clock.sleeps
+    finally:
+        executor.close()

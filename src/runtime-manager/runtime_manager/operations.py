@@ -159,6 +159,8 @@ class OperationExecutor:
             if not pods:
                 continue
             for row in pods:
+                if row.get("stop_state") == "confirmed" and row.get("cleanup_state") == "complete":
+                    continue
                 self.checkpoint(operation)
                 self.runtime._controller()
                 self.runtime.request_stop(row["resource_ref"], operation)
