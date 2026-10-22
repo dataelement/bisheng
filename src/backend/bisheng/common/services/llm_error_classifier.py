@@ -30,9 +30,14 @@ import enum
 from dataclasses import dataclass
 
 import openai
+from langchain_core.exceptions import ContextOverflowError
 from langgraph.errors import GraphRecursionError
 
-from bisheng.common.errcode.linsight import LinsightBishengLLMError
+from bisheng.common.errcode.linsight import (
+    LinsightBishengLLMError,
+    LinsightContextCompressFailedError,
+    LinsightContextOverflowError,
+)
 
 
 class Behavior(str, enum.Enum):
@@ -60,6 +65,10 @@ class ErrorType(str, enum.Enum):
     SERVICE_UNAVAILABLE = "service_unavailable"
     NETWORK_TIMEOUT = "network_timeout"
     TASK_ABORTED = "task_aborted"
+    # F087: still over the model's context window after compression and a retry.
+    CONTEXT_OVERFLOW = "context_overflow"
+    # F087: summarising the task history for compression failed twice.
+    CONTEXT_COMPRESS_FAILED = "context_compress_failed"
     UNKNOWN = "unknown"
 
 
@@ -302,15 +311,35 @@ def _is_content_filter(exc: BaseException) -> bool:
     return any(keyword in text for keyword in _CONTENT_FILTER_KEYWORDS)
 
 
+def _is_context_overflow(exc: BaseException) -> bool:
+    """The provider rejected the request as longer than the model's context window.
+
+    ``BishengLLM`` re-raises such rejections as ``ContextOverflowError`` (F087);
+    nothing else in the chain needs inspecting.
+    """
+    return isinstance(exc, ContextOverflowError)
+
+
+def _is_context_compress_failed(exc: BaseException) -> bool:
+    # Matched by class name: the task-mode summarization middleware raises it and
+    # this module must not import ``linsight``.
+    return type(exc).__name__ == LinsightContextCompressFailedError.__name__
+
+
 def unwrap(error: BaseException) -> BaseException:
     """Follow the ``__cause__`` chain to the original provider exception.
 
     ``task_exec`` wraps the real cause in ``TaskExecutionError(...) from e``;
-    classification should run on the root cause, not the wrapper.
+    classification should run on the root cause, not the wrapper. The walk stops
+    early at a recognised context overflow or compression failure: those are
+    already the provider error in its classified form, and the SDK error they
+    chain to would read as a plain 400.
     """
     current = error
     depth = 0
     while getattr(current, "__cause__", None) is not None and depth < 10:
+        if _is_context_overflow(current) or _is_context_compress_failed(current):
+            return current
         current = current.__cause__  # type: ignore[assignment]
         depth += 1
     return current
@@ -329,6 +358,11 @@ def classify_behavior(exc: BaseException) -> Behavior:
     the generic rate-limit retry branch.
     """
     # 1) FAIL_FAST — unrecoverable, do not retry and do not waste degrade budget.
+    # A context overflow must reach the task-mode summarization middleware (the
+    # OUTER layer, F087 design decision 7) untouched; retrying the same request or
+    # degrading it would hide it from that middleware (design decision 9).
+    if _is_context_overflow(exc) or _is_context_compress_failed(exc):
+        return Behavior.FAIL_FAST
     if _is_quota(exc):
         return Behavior.FAIL_FAST
     if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
@@ -385,6 +419,10 @@ def label_error(exc: BaseException) -> ErrorType:
     A miss falls through to ``UNKNOWN`` (still rendered as friendly localized
     copy by the frontend). Never raises; never affects fault tolerance.
     """
+    if _is_context_overflow(exc):
+        return ErrorType.CONTEXT_OVERFLOW
+    if _is_context_compress_failed(exc):
+        return ErrorType.CONTEXT_COMPRESS_FAILED
     # Framework/loop aborts (recursion ceiling / tool-loop breaker) get their own
     # friendly label instead of falling through to the generic UNKNOWN card.
     if _is_task_aborted(exc):
@@ -423,11 +461,10 @@ def classify_for_event(error: BaseException | str) -> ClassifiedError:
     """Unwrap → label → structured payload for ``_handle_task_failure``.
 
     Accepts either an exception (classified via the cause chain) or a bare
-    message string (best-effort keyword label). ``error_code`` is the single
-    umbrella ``LinsightBishengLLMError`` (11090); the frontend branches on
-    ``error_type``, not the numeric code, so one code plus a precise
-    ``error_type`` is enough and avoids minting a new code in a segment reserved
-    for another concern.
+    message string (best-effort keyword label). ``error_code`` is the umbrella
+    ``LinsightBishengLLMError`` (11090) except for the two F087 context failures,
+    which get their own codes so logs and Open API callers can tell them apart.
+    The frontend still branches on ``error_type``.
     """
     if isinstance(error, str):
         return ClassifiedError(
@@ -435,8 +472,15 @@ def classify_for_event(error: BaseException | str) -> ClassifiedError:
             error_code=LinsightBishengLLMError.Code,
             detail=error,
         )
+    error_type = label_error(unwrap(error))
     return ClassifiedError(
-        error_type=label_error(unwrap(error)).value,
-        error_code=LinsightBishengLLMError.Code,
+        error_type=error_type.value,
+        error_code=_ERROR_CODES.get(error_type, LinsightBishengLLMError.Code),
         detail=str(error),
     )
+
+
+_ERROR_CODES: dict[ErrorType, int] = {
+    ErrorType.CONTEXT_OVERFLOW: LinsightContextOverflowError.Code,
+    ErrorType.CONTEXT_COMPRESS_FAILED: LinsightContextCompressFailedError.Code,
+}

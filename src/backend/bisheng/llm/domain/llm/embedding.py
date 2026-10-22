@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from typing import Self
 
 import numpy as np
@@ -8,7 +9,6 @@ from pydantic import Field
 
 from bisheng.core.ai import (
     AzureOpenAIEmbeddings,
-    DashScopeEmbeddings,
     OllamaEmbeddings,
     OpenAIEmbeddings,
     VolcengineEmbeddings,
@@ -69,12 +69,42 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
     return user_kwargs
 
 
-def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params["dashscope_api_key"] = server_config.get("openai_api_key", "")
+_QWEN_EMBEDDING_BATCH_LIMITS = {
+    "text-embedding-v1": 25,
+    "text-embedding-v2": 25,
+    "text-embedding-v3": 10,
+    "text-embedding-v4": 10,
+    "qwen3.7-text-embedding": 20,
+    "qwen3.7-text-embedding-flash": 20,
+}
 
-    user_kwargs = _get_user_kwargs(model_config)
-    user_kwargs.update(params)
-    return user_kwargs
+
+def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    server_config = dict(server_config or {})
+    server_config["openai_api_base"] = (
+        server_config.get("openai_api_base")
+        or server_config.get("base_url")
+        or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    )
+    # The shared helper merges into user_kwargs; keep stored config untouched.
+    params = _get_openai_params(deepcopy(params), server_config, deepcopy(model_config))
+    # Canonical provider values must also win over LangChain's field aliases.
+    params.pop("openai_api_base", None)
+    params.pop("openai_api_key", None)
+
+    model = params["model"]
+    batch_limit = _QWEN_EMBEDDING_BATCH_LIMITS.get(model)
+    chunk_size = params.setdefault("chunk_size", batch_limit or 10)
+    if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size <= 0:
+        raise ValueError(f"Qwen embedding chunk_size for model {model!r} must be a positive integer")
+    if batch_limit is not None and chunk_size > batch_limit:
+        raise ValueError(f"Qwen embedding chunk_size for model {model!r} must not exceed {batch_limit}")
+
+    model_kwargs = dict(params.get("model_kwargs") or {})
+    if "encoding_format" not in params:
+        model_kwargs.setdefault("encoding_format", "float")
+    params["model_kwargs"] = model_kwargs
+    return params
 
 
 _node_type: dict = {
@@ -86,7 +116,7 @@ _node_type: dict = {
     # OfficalAPISERVICES
     LLMServerType.OPENAI.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.AZURE_OPENAI.value: {"client": AzureOpenAIEmbeddings, "params_handler": _get_azure_openai_params},
-    LLMServerType.QWEN.value: {"client": DashScopeEmbeddings, "params_handler": _get_qwen_params},
+    LLMServerType.QWEN.value: {"client": OpenAIEmbeddings, "params_handler": _get_qwen_params},
     LLMServerType.QIAN_FAN.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.MINIMAX.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.ZHIPU.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},

@@ -28,16 +28,22 @@ export function useVoiceDraft(
   return {
     busy,
     handleEdit: (next: string) => {
+      const previous = valueRef.current;
       valueRef.current = next;
-      if (draft.current && !draft.current.reconcile(next))
-        setStopSignal((signal) => signal + 1);
+      if (!draft.current || next === previous) return;
+      draft.current.freeze();
+      setStopSignal((signal) => signal + 1);
     },
     compositionStart: () => {
       composing.current = true;
+      if (!draft.current) return;
+      draft.current.freeze();
+      setStopSignal((signal) => signal + 1);
     },
     compositionEnd: () => {
       composing.current = false;
-      if (pending.current !== null) apply(pending.current);
+      if (pending.current !== null && draft.current && !draft.current.isFrozen())
+        apply(pending.current);
       pending.current = null;
       if (ended.current) draft.current = null;
     },

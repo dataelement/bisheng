@@ -10,8 +10,8 @@
 | 步骤 | 状态 | 备注 |
 |------|------|------|
 | spec.md | ✅ 已评审 | 2026-09-20 用户确认 ★；AC-01–AC-28 |
-| design.md | ✅ 已评审 | 2026-09-20 用户确认 ★；含实现收口修订 |
-| tasks.md | ✅ 已拆解 | 用户已确认审查；29 个任务 / 10 个 Wave |
+| design.md | ✅ 已评审 | 2026-09-20 用户确认 ★；2026-10-21 去掉主机名发现，副本只认 `endpoints` |
+| tasks.md | ✅ 已拆解 | 用户已确认审查；29 个任务 / 10 个 Wave。原 T015 / T016 的主机名扫描已从代码删除，以 design.md 决策 12 为准 |
 | 实现 | ✅ 代码 29 / 29 | Wave 1–10；T028 业务 E2E 待 compose 实跑（见实际偏差记录） |
 
 ---
@@ -22,7 +22,7 @@
 - **无新表 / 无 Alembic / 无新对外路径**。浏览器与 FastAPI 不直连 runner。错误码模块 **280** 已在 release-contract 登记，落码时回写 constitution C5。
 - **自包含**：任务内联文件与逻辑；**为什么这么做指向 design §3 决策编号，不复制论证**。
 - **共享文件只做增量**：`load_tools.py` 只改 dispatch；`workbench_impl.py` 只改 `_init_bisheng_code_tool` 的 container 分支（**不要删** E2B `file_list` 预扫，E2B 冻结）；`docker-compose.yml` 只加 `sandbox_net` 与具名 runner；`local_executor.py` 瘦身为 `execute_code`；`settings.py` 只加 `sandbox_conf`。
-- **禁止**：`deploy_mode` / `orchestrator` 配置项；runner 向 Redis/API 注册；`else: E2bCodeExecutor`；容器模式装配时预扫 `file_list`；静默回落进程内 `exec`；把 E2B 的 5MB `SIZE_AUTOPUSH` 套到 container。
+- **禁止**：`deploy_mode` / `orchestrator` 配置项；`discover_*` 主机名扫描；runner 向 Redis/API 注册；`else: E2bCodeExecutor`；容器模式装配时预扫 `file_list`；静默回落进程内 `exec`；把 E2B 的 5MB `SIZE_AUTOPUSH` 套到 container。
 - **无新 Celery 任务**：执行发生在既有 Linsight / workflow / default worker 进程内，tenant 已由既有 ContextVar 注入；**不得**把 `tenant_id` / MinIO 密钥写进 runner 子进程 env。
 - **前端**：只改 Platform 内置工具弹窗；Client 无新页面。
 - **Docker / 加固断言**标测试降级（需 compose 实跑），理由见对应任务。
@@ -47,7 +47,7 @@
 
 - [x] **T003**: `sandbox_conf` 缺省 / env / 无编排枚举 单测
   **文件**: `src/backend/test/sandbox/test_sandbox_conf.py`
-  **逻辑**: 构造 `Settings`：① YAML **无** `sandbox_conf` 段仍能实例化，字段为内置默认（`discover_host_pattern=code-runner-{n}`、`discover_index_start=1`、`discover_ttl_s` 15～30、`pool_lease_ttl_s=900`、`max_sessions_per_replica=1`、`code_node_enabled=True`）。② `BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN` 能覆盖 pattern。③ 模型 **没有** `deploy_mode` / `orchestrator` 字段（赋值应被拒绝或 extra ignore 后读不到）。④ `endpoints` 字段存在且默认空列表（DNS 跳过行为在 T015 测，本任务不 import discover）。⑤ `max_sessions_per_replica>1` 时须有显式 uid 隔离开关，否则校验失败（决策 11/13）。
+  **逻辑**: 构造 `Settings`：① YAML **无** `sandbox_conf` 段仍能实例化。默认 `endpoints=[]`（没有副本），模型上**没有** `discover_*` 字段；`pool_lease_ttl_s=900`、`max_sessions_per_replica=1`、`code_node_enabled=True`。② `BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN` 不生效，读不到该属性。③ 模型 **没有** `deploy_mode` / `orchestrator` 字段（赋值应被拒绝或 extra ignore 后读不到）。④ `endpoints` 默认空列表；空列表领租约走 28001，本任务不测 HTTP。⑤ `max_sessions_per_replica>1` 时须有显式 uid 隔离开关，否则校验失败（决策 11/13）。
   **覆盖 AC**: AC-13, AC-21, AC-25
   **依赖**: 无
 
@@ -125,31 +125,31 @@
 
 - [x] **T013**: `FakeRunnerClient` + `ContainerExecutor` 单测
   **文件**: `src/backend/test/sandbox/test_container_executor.py`, `src/backend/test/sandbox/fake_runner.py`
-  **逻辑**: Fake **必须尊重路径参数**（坑 12）。① `endpoints` 非空：跳过 DNS，shuffle 后 `POST /v1/sessions`，503 换下一台，全 503 → 抛 `SandboxCapacityExceededError`（28002），与 28001/超时/协议错误在断言上可区分。② 一台都不可达 → 28001。③ 成功路径出口 `{exitcode, log, file_list}` 与本地模式字段名一致。④ copy-in 在 `run()` 时刻扫描 `dir_path`（含 `skills/`）；超限点名且不静默；记录 copy-in 字节数。⑤ `keep_session=True` 第二次 exec 打同一 URL，不再 discover。⑥ 协议乱响应 → 28006，**不得**调用 `LocalExecutor`。⑦ 超时映射 28003。⑧ `description` 含 design §4.4 库清单中的 `pandas` / `openpyxl` / `python-pptx` / `pymupdf`（与镜像声明对齐，二进制是否真装在 T025）。本任务不写实现文件。
+  **逻辑**: Fake **必须尊重路径参数**（坑 12）。① `endpoints` 非空：shuffle 后 `POST /v1/sessions`，503 换下一台，全 503 → 抛 `SandboxCapacityExceededError`（28002），与 28001/超时/协议错误在断言上可区分。② 一台都不可达或列表为空 → 28001。③ 成功路径出口 `{exitcode, log, file_list}` 与本地模式字段名一致。④ copy-in 在 `run()` 时刻扫描 `dir_path`（含 `skills/`）；超限点名且不静默；记录 copy-in 字节数。⑤ `keep_session=True` 第二次 exec 打同一 URL，不再挑选。⑥ 协议乱响应 → 28006，**不得**调用 `LocalExecutor`。⑦ 超时映射 28003。⑧ `description` 含 design §4.4 库清单中的 `pandas` / `openpyxl` / `python-pptx` / `pymupdf`（与镜像声明对齐，二进制是否真装在 T025）。本任务不写实现文件。
   **覆盖 AC**: AC-01, AC-03, AC-04, AC-05, AC-06, AC-10, AC-11, AC-26, AC-27
   **依赖**: T001, T006, T012
 
 - [x] **T014**: 实现 `ContainerExecutor`
   **文件**: `src/backend/bisheng_langchain/gpts/tools/code_interpreter/container_executor.py`
-  **逻辑**: 只实现 `execute_code` / `close`（领租约、tar、exec、copy-out、finally DELETE 除非 `keep_session`）。产物收割走 T006 共享 `run_with_dir`。`description` 与本地模式库清单对齐且 `path_namespace_rules(include_skills=True)`。错误映射 T001 的 28001–28004、28006。记录 copy-in 字节数。禁止 import docker / kubernetes。**禁止**实现 DNS `discover()`：本任务只消费已注入的 `endpoints`（T013 ①）；主机名展开留给 T016，避免本文件被下一波重写。
+  **逻辑**: 只实现 `execute_code` / `close`（领租约、tar、exec、copy-out、finally DELETE 除非 `keep_session`）。产物收割走 T006 共享 `run_with_dir`。`description` 与本地模式库清单对齐且 `path_namespace_rules(include_skills=True)`。错误映射 T001 的 28001–28004、28006。记录 copy-in 字节数。禁止 import docker / kubernetes。副本 URL **只**来自已注入的 `endpoints`，不实现主机名扫描。
   **设计依据**: design 决策 4、5、9、10 · §4.1–§4.2 · §5 坑 1、4、17
   **测试**: T013 全绿
   **覆盖 AC**: AC-01, AC-03, AC-04, AC-05, AC-06, AC-11, AC-26
   **依赖**: T001, T013
 
-### Wave 5 — 副本发现（决策 12）
+### Wave 5 — 主机名扫描（已删除，决策 12 只认 endpoints）
 
-- [x] **T015**: `discover()` 单测
-  **文件**: `src/backend/test/sandbox/test_discover.py`
-  **逻辑**: mock `getaddrinfo` / health。pattern `code-runner-{n}`、start=1：1、2 命中，3 NXDOMAIN → 缓存两台 **主机名** URL 不是 IP。K8s pattern `code-runner-{n}.code-runner`、start=0：从 0 扫到 NXDOMAIN。TTL 内不重探。已 bind 的 sticky 实例不 rediscover。`endpoints` 非空完全跳过 DNS。连续连不上即停（不跳号）。
+- [x] **T015**: 原 `discover()` 单测，2026-10-21 删除
+  **文件**: 原 `src/backend/test/sandbox/test_discover.py` 已删除。替代断言在 `test/sandbox/test_sandbox_conf.py`：模型没有 `discover_*`，`BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN` 不生效。
+  **逻辑**: 不再测主机名扫描。`endpoints` 是唯一副本列表。
   **覆盖 AC**: AC-01, AC-05
   **依赖**: T004
 
-- [x] **T016**: 实现 `discover()` 并接到 `ContainerExecutor`
-  **文件**: `src/backend/bisheng_langchain/gpts/tools/code_interpreter/discover.py`（T014 文件可改为调用它，本任务最多再改 `container_executor.py`）
-  **逻辑**: 替换 `{n}`、解析 `host:discover_port`、可选 `GET /health`。缓存 `discover_ttl_s`。无 `deploy_mode` 分支。
+- [x] **T016**: 原 `discover.py`，2026-10-21 删除
+  **文件**: `discover.py` 已删除。`container_executor.py` 的副本 URL 只来自 `endpoints`。
+  **逻辑**: 不替换 `{n}`、不解析主机名模式、不缓存扫描结果。空列表领租约即不可达。
   **设计依据**: design 决策 9、12 · §4.5–§4.6 · §5 坑 18
-  **测试**: T015 全绿；T013 在注入 `endpoints` 时仍绿
+  **测试**: T003 断言没有 `discover_*`；T013 在注入 `endpoints` 时仍绿
   **覆盖 AC**: AC-01, AC-05
   **依赖**: T014, T015
 
@@ -233,7 +233,7 @@
 
 - [x] **T026**: compose：具名 `code-runner-1/2` + `sandbox_net` + worker 双挂
   **文件**: `docker/docker-compose.yml`
-  **逻辑**: **不用** `deploy.replicas`。`sandbox_net.internal: true`。runner 只挂该网、**无** `ports:`。`backend_worker`（及实际跑灵思的 worker 服务）挂 `default` + `sandbox_net`。加固：`cap_drop: ALL`、`read_only: true`、`mem_limit`（≥2g，坑 5）、`pids_limit`、`security_opt: no-new-privileges`、`tmpfs` `/tmp` `mode=755`、`user: "65534"`。平台容器上 `config.yaml` / `entrypoint.sh` 改为 `:ro`（AC-28）；runner **不挂**这两文件。只增量服务与网络，不改 mysql/redis 口令。
+  **逻辑**: **不用** `deploy.replicas`。`sandbox_net.internal: true`。runner 只挂该网、**无** `ports:`。`backend` 与 `backend_worker` 挂 `default` + `sandbox_net`，并设置 `BS_SANDBOX_CONF__ENDPOINTS` 为 `http://code-runner-1:8080` 与 `http://code-runner-2:8080`。不写 `DISCOVER_*`。加固：`cap_drop: ALL`、`read_only: true`、`mem_limit`（≥2g，坑 5）、`pids_limit`、`security_opt: no-new-privileges`、`tmpfs` `/tmp` `mode=755`、`user: "65534"`。平台容器上 `config.yaml` / `entrypoint.sh` 改为 `:ro`（AC-28）；runner **不挂**这两文件。只增量服务与网络，不改 mysql/redis 口令。加第三台 runner 时把其 URL 追加进这份列表。
   **设计依据**: design 决策 2、12 · §4.6 · §5 坑 5、6、13
   **跨 Feature 影响**: compose 是全平台启动面；runner 失败不得让 mysql healthcheck 挂掉（runner 不要写进中间件 `depends_on` 链的关键路径，或允许 worker 在 28001 下降级可见而非卡死启动）。
   **覆盖 AC**: AC-12, AC-13, AC-14, AC-28
@@ -316,3 +316,4 @@
 > 推翻已 ★ 确认的决策时，先停下与用户重新确认，再记录。
 
 - 2026-09-20 实现收口：`execute_code` 非 `@abstractmethod`、镜像 `--no-install-project`、runner `SANDBOX_TOKEN`。见 design 修订历史 2026-09-20。T028 业务 E2E（日常 docx / 灵思 sticky / 代码节点 28005 / 停 runner→28001）待 compose 实跑。
+- 2026-10-21 去掉主机名发现：删除 `discover.py` 与 `test_discover.py`。副本只认 `endpoints`。见 design 修订历史 2026-10-21。

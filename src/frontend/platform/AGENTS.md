@@ -11,8 +11,10 @@ pnpm start -- --host 0.0.0.0                                          # dev serv
 VITE_PROXY_TARGET=http://localhost:8180 pnpm start -- --host 0.0.0.0  # commercial gateway proxy mode
 ```
 
+Both apps extend `../config/` for TypeScript, ESLint, PostCSS and Vite proxy helpers. Shared dependency versions are managed by the workspace catalog. See `../config/README.md`.
+
 ## Tech Stack
-Vite 5 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + **Zustand** + React Context + **react-query v3** + react-i18next + react-router-dom v6 + **@xyflow/react** + axios (wrapped in `@/controllers/request.ts`)
+Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + **Zustand** + React Context + **react-query v3** + react-i18next + react-router-dom v6 + **@xyflow/react** + axios (wrapped in `@/controllers/request.ts`)
 
 ## Mandatory Rules (platform-specific — common hard rules in root §4)
 - **Path Aliases**: `@/` → `src/`.

@@ -6,7 +6,6 @@ import {
   ListboxOptions,
   Transition,
 } from '@headlessui/react';
-import { AnchorPropsWithSelection } from '@headlessui/react/dist/internal/floating';
 import type { Option } from '~/common';
 import { cn } from '~/utils/';
 
@@ -16,7 +15,7 @@ interface DropdownProps {
   onChange: (value: string | Option) => void;
   options: (string | Option)[];
   className?: string;
-  anchor?: AnchorPropsWithSelection;
+  anchor?: React.ComponentProps<typeof ListboxOptions>['anchor'];
   sizeClasses?: string;
   testId?: string;
 }

@@ -1486,17 +1486,6 @@ button {
    found in ~33 business files is now a no-op — clean it up as files get touched.)
    Sanctioned exceptions below only make bars LESS visible, never force them on. */
 
-/* Hide scrollbar entirely (used by horizontal tab strips) */
-.no-scrollbar {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
 /* Show scrollbar only while actively scrolling (used by NotificationsDialog) */
 .scroll-on-scroll {
   scrollbar-width: thin; /* Firefox: always thin so toggling never reflows */
@@ -1833,26 +1822,7 @@ html {
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 
-/* Global font stack = font-family-base in 基础-字体规范.md §1.
- * Pure system stack (zero webfont loading): SF Pro + PingFang on Apple,
- * Segoe UI + Microsoft YaHei on Windows, Roboto + Noto Sans CJK on Android.
- * Step ① of the two-step swap: @font-face blocks and font files
- * (Inter / AlibabaPuHuiTi / Roboto Mono / Söhne) are intentionally KEPT
- * until the Windows regression pass confirms rendering, then removed. */
-body,
-html {
-  height: 100%;
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "PingFang SC",
-    "Hiragino Sans GB",
-    "Microsoft YaHei",
-    "Noto Sans CJK SC",
-    sans-serif;
-}
+
 
 .dark body,
 .dark html {

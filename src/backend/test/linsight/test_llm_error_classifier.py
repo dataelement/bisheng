@@ -428,3 +428,85 @@ def test_upstream_reset_labels_as_service_unavailable():
         status_code=400,
     )
     assert label_error(exc) is ErrorType.SERVICE_UNAVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# F087: context overflow / context compression failure
+# ---------------------------------------------------------------------------
+
+_VLLM_OVERFLOW = (
+    "This model's maximum context length is 133120 tokens. However, you requested 0 output tokens and "
+    "your prompt contains at least 133121 input tokens"
+)
+
+
+def _overflow_chain():
+    """What BishengLLM raises: the recognised overflow, chained to the SDK error."""
+    import httpx
+
+    from bisheng.llm.domain.llm.context_overflow import as_context_overflow
+
+    request = httpx.Request("POST", "http://vllm.local/v1/chat/completions")
+    original = openai.BadRequestError(
+        _VLLM_OVERFLOW, response=httpx.Response(400, request=request), body={"error": {"message": _VLLM_OVERFLOW}}
+    )
+    overflow = as_context_overflow(original)
+    overflow.__cause__ = original
+    return overflow
+
+
+class LinsightContextCompressFailedError(Exception):
+    """Stand-in matched by class name, like the real one in common.errcode.linsight."""
+
+
+def test_context_overflow_is_fail_fast():
+    assert classify_behavior(_overflow_chain()) is Behavior.FAIL_FAST
+
+
+def test_context_overflow_label():
+    assert label_error(_overflow_chain()) is ErrorType.CONTEXT_OVERFLOW
+
+
+def test_unwrap_stops_at_the_recognised_overflow():
+    overflow = _overflow_chain()
+    try:
+        try:
+            raise overflow
+        except Exception as e:
+            raise RuntimeError("Task execution failed") from e
+    except RuntimeError as wrapper:
+        assert unwrap(wrapper) is overflow
+
+
+def test_classify_for_event_overflow_code():
+    try:
+        try:
+            raise _overflow_chain()
+        except Exception as e:
+            raise RuntimeError("Task execution failed") from e
+    except RuntimeError as wrapper:
+        result = classify_for_event(wrapper)
+
+    assert result.error_type == "context_overflow"
+    assert result.error_code == 11075
+
+
+def test_compress_failed_label_and_code():
+    exc = LinsightContextCompressFailedError("summary failed twice")
+
+    assert classify_behavior(exc) is Behavior.FAIL_FAST
+    assert label_error(exc) is ErrorType.CONTEXT_COMPRESS_FAILED
+    result = classify_for_event(exc)
+    assert (result.error_type, result.error_code) == ("context_compress_failed", 11076)
+
+
+def test_daily_chat_path_sees_context_overflow():
+    """chat_service labels with label_error(unwrap(exc)) — the same chain must resolve."""
+    try:
+        raise _overflow_chain()
+    except Exception as exc:
+        assert label_error(unwrap(exc)) is ErrorType.CONTEXT_OVERFLOW
+
+
+def test_other_errors_keep_the_umbrella_code():
+    assert classify_for_event(make_exc(openai.BadRequestError, message="bad", status_code=400)).error_code == 11090
