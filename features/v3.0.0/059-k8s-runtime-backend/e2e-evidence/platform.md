@@ -109,3 +109,11 @@ static原probe486ca50c…的所有init成功，但app exit127/nginx:notfound；�
 T246/T247修复bundle PATH补系统sbin；同固定2f0311镜像原生A/B及entrypoint nginx -t成功，完整runtime1595/13skip和独立292合同通过。995c80f2a/Helm23/digest7cef8910…/epoch18已部署，backend/helper/profile/report保持。
 
 原cycle journal自然失败退出，SHA94ca8e8590845ab2e4bb10edacaee7198de6eca176141dc9c904fc20bdf46f0f冻结。新薄工具fresh核draft/零正式版本/无审批/assignment和同源摘要后，O_EXCL新static-resumed journal，仅一次同app新attempt50292d68…/version1672b4a7…；前两个已通过场景不重做。static/source/image及缺依赖仍在运行，未知请求不重发，无自动cleanup/延时/改旧终态。
+
+## Static两版通过与源码组装权限修复
+
+static v1 1672b4a7…与v2 4fb07dc0…均真实完成发布、审批预览、访问/owner边界、停用恢复与更新。当前Python/Node/static三个bundle均两版通过，static不要求WebSocket。原static-resumed journal自然停止在下一source-image预检，SHA `9c953e824afb0548e8547911ca386008cc5f8e5e03da7871ea5eec95083a9415`；不把整批写成功。
+
+source prepare70eb72db…依赖安装及产物上传完成，OCI组装失败`oci_privilege_bits_refused`，公开16227/precheck_build；failed/cleanupcomplete，5Pod均有同UID kubelet_terminal，9注册资源正常cleanup，fresh逐项absence另取。只读保留scratch34统计267个SGID目录、零特殊位普通文件，确认fsGroup目录继承；backend存储端口返回的sourceartifact0bce…与原598757byte包SHA538dae69…完全一致。
+
+T248–T251修复只允许归档前的目录SGID并在层内去除，继续拒绝SUID目录和非目录SGID；另补OCI固定PATH标准sbin，保持D7受限布局/冻结基础镜像/凭据及启动合同。source0d5ef7b2b，完整runtime1610/13skip、独立L1通过，新amd64三镜像及descriptor/能力探测刷新后方可新attempt；当前尚未source/fullimage上线，不冒认T069/T070完成。

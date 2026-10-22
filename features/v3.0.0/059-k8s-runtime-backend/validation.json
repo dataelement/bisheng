@@ -1,24 +1,24 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T20:47:09.399964+00:00",
-  "validated_source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
+  "recorded_at": "2026-10-22T21:28:54.818155+00:00",
+  "validated_source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 242,
-    "tasks_total": 247,
+    "l1_completed": 246,
+    "tasks_total": 251,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
-      "passed": 1595,
+      "source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "passed": 1610,
       "skipped": 13,
-      "seconds": 33.42,
+      "seconds": 33.01,
       "exit_code": 0,
-      "log": "/private/tmp/f059-static-path-full-runtime.log"
+      "log": "/private/tmp/f059-oci-final-full-runtime.log"
     },
     "backend": {
       "source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
@@ -1335,6 +1335,21 @@
       "native_green_exit": 0,
       "native_nginx_path": "/usr/sbin/nginx",
       "k8s_business_retest": "pending"
+    },
+    "oci_final_l1": {
+      "source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "tasks": [
+        "T248",
+        "T249",
+        "T250",
+        "T251"
+      ],
+      "result": "PASS",
+      "independent_report": "/private/tmp/f059-oci-t248-t251-independent-l1.md",
+      "independent_sha256": "c7891b93c7eda501c3bcb761eb889008d16c5340892fb75ad4d3e9812f5ecd94",
+      "native_189_revalidation": "pending",
+      "public_push": false,
+      "arm": "paused_by_user"
     }
   },
   "not_executed": [
@@ -1346,5 +1361,15 @@
   "blocking_integration_prerequisite": null,
   "release_parent": "9d156f261cc7769fcf75f41caeb104a425308017",
   "historical_validated_source_commit": "4bd3351be66aa5b92f291f9425d1a6cbfc40a881",
-  "public_release": "not executed or authorized for current F059; no new public push/tag/DockerHub release"
+  "public_release": "not executed or authorized for current F059; no new public push/tag/DockerHub release",
+  "prior_runtime_validations": [
+    {
+      "source_commit": "995c80f2a1d7288a2e5b9e7dc650f7ce1d911798",
+      "passed": 1595,
+      "skipped": 13,
+      "seconds": 33.42,
+      "exit_code": 0,
+      "log": "/private/tmp/f059-static-path-full-runtime.log"
+    }
+  ]
 }
