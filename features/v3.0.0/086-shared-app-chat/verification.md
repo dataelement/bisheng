@@ -335,3 +335,26 @@ legacy fields keep their existing unrestricted behavior.
 - Isolated browser preview verified app avatar/name, hover primary buttons,
   and clickable QA action. Temporary fixture/config/server and preview tab
   cleaned up; no live backend annotation writes.
+
+## Accepted integration closeout (2026-10-22)
+
+- User completed live flow testing, accepted the functional result and requested
+  local merge into latest feat/3.0.0 followed by development-branch deletion.
+- Pulled origin/feat/3.0.0 e3f30d9b7e and merged it into the feature without
+  conflicts. Since previous sync 58996f12b6, upstream changed only MinerU backend
+  errors/tests/docs; no frontend files changed after the following regression run.
+- Fresh regression: shared chat 45 tests/10 files, platform focused suites 53
+  tests/11 files, client upload/accept suites 10 tests/2 files — 108 total pass.
+  /tmp/f086-close-chat-tests.log, /tmp/f086-close-platform-tests.log,
+  /tmp/f086-close-client-tests.log.
+- Both production builds pass on the upstream-integrated result:
+  /tmp/f086-close-platform-build.log, /tmp/f086-close-client-build.log.
+- Shared chat strict types and lint pass; workspace check-i18n passes with no new
+  drift. /tmp/f086-close-chat-types.log, /tmp/f086-close-chat-lint.log,
+  /tmp/f086-close-i18n.log.
+- Root gates still stop at existing platform baseline: lint 85 errors, none in
+  feature-delta files; typecheck one error at clientVoiceDraft.test.tsx:47. That
+  test matches origin/feat/3.0.0 exactly. /tmp/f086-close-lint.log,
+  /tmp/f086-close-types.log. These gates are not reported as passing.
+- Independent final acceptance review found no actionable P1/P2 issues; see
+  code-review.md. No remote push or deployment requested/performed.
