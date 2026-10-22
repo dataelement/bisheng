@@ -6,8 +6,7 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
 } from "lucide-react";
-import { Outlined } from "bisheng-icons";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useMemo } from "react";
 import { MessageTime } from "./MessageTime";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
 import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
@@ -731,7 +730,7 @@ function AssistantBubble({
                     transient busy notice — copy/feedback on a "try again" status is
                     meaningless; the notice carries its own Retry. */}
                 {!isStreaming && regularContent && !isTransientError && (
-                    <div className="dsh-message-actions flex items-center gap-1 mt-1.5 text-gray-400">
+                    <div className="dsh-message-actions dsh-response-actions flex items-center gap-1 mt-1.5 text-gray-400">
                         <CitationReferencesDrawer
                             content={regularContent}
                             webContent={webContent}
@@ -754,21 +753,7 @@ function AssistantBubble({
                             actionButtons={
                                 <>
                                     <CopyButton text={regularContent} stripHandles={stripCitationHandlesOnCopy} />
-                                    {/* Export is only offered where the host opts in via allowExport
-                                        (the full homepage/task chat). The lightweight knowledge/file/
-                                        article docks and the share view leave it off. */}
-                                    {allowExport && message.conversationId && message.messageId && (
-                                        <ExportSelectionButton
-                                            chatId={message.conversationId}
-                                            messageId={message.messageId}
-                                        />
-                                    )}
-                                    <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
-                                        messageId={message.messageId || ""}
-                                        text={regularContent}
-                                    />
-                                    {/* 点赞/点踩 — the answer persists as a chatmessage row, so
+                                    {/* Feedback persists as a chatmessage row, so
                                         reuse the existing /liked + /chat/comment endpoints keyed
                                         by message_id. Hidden on the read-only share view. */}
                                     {allowFeedback && message.messageId && (
@@ -780,6 +765,21 @@ function AssistantBubble({
                                             }
                                         />
                                     )}
+                                    {/* Export is only offered where the host opts in via allowExport
+                                        (the full homepage/task chat). The lightweight knowledge/file/
+                                        article docks and the share view leave it off. */}
+                                    {allowExport && message.conversationId && message.messageId && (
+                                        <ExportSelectionButton
+                                            className="dsh-message-action"
+                                            chatId={message.conversationId}
+                                            messageId={message.messageId}
+                                        />
+                                    )}
+                                    <TextToSpeechButton
+                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
+                                        messageId={message.messageId || ""}
+                                        text={regularContent}
+                                    />
                                 </>
                             }
                         />

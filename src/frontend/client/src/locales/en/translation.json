@@ -352,6 +352,8 @@
   "com_error_no_user_key": "No key found. Please provide a key and try again.",
   "com_error_retry": "Retry",
   "com_feedback_placeholder": "Share your suggestions — we'll keep improving (optional)",
+  "com_feedback_like": "Like",
+  "com_feedback_dislike": "Dislike",
   "com_feedback_thanks": "Thanks for your feedback — we'll use it to improve our answers",
   "com_feedback_title": "Feedback",
   "com_file_content_exceed_tokens": "File content exceeds 30k tokens",

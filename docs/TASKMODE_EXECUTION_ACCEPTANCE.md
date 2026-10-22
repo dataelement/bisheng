@@ -2,7 +2,7 @@
 
 ## 范围
 
-目标分支为 `dataelement/bisheng:codex/work120-main-integration`，基础提交 `480fc2972`。本轮同步 3006 已发布的 `a01d35a3c` Cookie 配置修复。平台 Chat 的任务模式在服务端隔离容器执行；桌面 Work 保持本地执行边界。日常聊天的技能使用规则沿用现有实现。
+最终共同开发分支为 `dataelement/bisheng:feat/bisheng-work-120-main`。本轮修复从 `codex/work120-main-integration@480fc2972` 开始，并于 2026-10-22 按用户要求合入共同分支，保留该分支的 `cb4b18018` 前端修改。本轮同步 3006 已发布的 `a01d35a3c` Cookie 配置修复。平台 Chat 的任务模式在服务端隔离容器执行；桌面 Work 保持本地执行边界。日常聊天的技能使用规则沿用现有实现。
 
 ## 根因及修改
 
