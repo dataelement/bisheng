@@ -1675,7 +1675,8 @@
     "before_sha256": "93061b799e0e68d74ef7b3c7d66217c697fe5e7b477b4d9c955b53412da893cd",
     "v2_upgrade": "not_passed",
     "manual_retry": "not_submitted",
-    "missing_dependency": "not_executed"
+    "missing_dependency": "not_executed",
+    "resolved_by": "fullimage_manual_retry_passed; original failure remains historical"
   },
   "preparation_cancellation_development": {
     "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
@@ -1690,5 +1691,136 @@
     "actual_cancellation": "not_executed",
     "arm": "deferred",
     "public_release": false
+  },
+  "fullimage_manual_retry_passed": {
+    "parent_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-image-capacity-resumed.json",
+    "parent_sha256": "c6e17830766aa738621e7f681f2e04cc3eb9223e46ce5021266fc894e4aea11b",
+    "tool_sha256": "3ba6276831c11ffcfd89b6acd5b8ab51726b0b4d5443a27197afc87850e056c0",
+    "operator_proof_sha256": "63700163f061b50b9e90a8162877c904fd93a0963af1464792b0eff5e0d777d8",
+    "suite_exit_code": 0,
+    "manual_receipt": {
+      "name": "r10-image-manual-publish-verified",
+      "acs": [
+        "AC-04",
+        "AC-05",
+        "AC-08",
+        "AC-36",
+        "AC-55"
+      ],
+      "outcome": "passed",
+      "kind": "live-api",
+      "observed_at": 1792711643.5252063,
+      "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+      "version_id": "77d42f56f77f4287b63574b9fd81b0ab",
+      "operation_id": "68cc365b61d84c6585b7f9db897ea5c0",
+      "generation": 4,
+      "approval_instance_id": 11,
+      "original_deployment_id": "c562f14128b042f1834ccee5b5cedf3e",
+      "original_deployment_outcome": "failed",
+      "original_failure_code": 16226,
+      "versions": [
+        "0865c634ece74322b038ba47be7b8838",
+        "77d42f56f77f4287b63574b9fd81b0ab"
+      ]
+    },
+    "post_manual_observations": [
+      {
+        "name": "application-check",
+        "acs": [
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792711645.5136497,
+        "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+        "path": "/health"
+      },
+      {
+        "name": "application-check",
+        "acs": [
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792711645.569608,
+        "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+        "path": "/sdk/identity"
+      },
+      {
+        "name": "application-check",
+        "acs": [
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792711646.1958764,
+        "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+        "path": "/sdk/storage-roundtrip"
+      },
+      {
+        "name": "owner-and-entry-boundaries",
+        "acs": [
+          "AC-10",
+          "AC-12",
+          "AC-33",
+          "AC-36",
+          "AC-46"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792711654.9757226,
+        "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+        "entry_status": 200
+      },
+      {
+        "name": "r10-image-capacity-continuation-completed",
+        "acs": [
+          "AC-55"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792711706.105236,
+        "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+        "version_id": "77d42f56f77f4287b63574b9fd81b0ab",
+        "operation_id": "68cc365b61d84c6585b7f9db897ea5c0"
+      }
+    ],
+    "missing_dependency": [
+      {
+        "name": "preapproval-failure",
+        "acs": [
+          "AC-08",
+          "AC-09",
+          "AC-28"
+        ],
+        "outcome": "passed",
+        "kind": "live-api",
+        "observed_at": 1792711705.2895129,
+        "app_id": "fb9a0f9e32f84ef99ae60ee60f6dc34b",
+        "stage": "precheck_build",
+        "code": 16227
+      }
+    ],
+    "final_event": {
+      "name": "r10-image-capacity-continuation-completed",
+      "acs": [
+        "AC-55"
+      ],
+      "outcome": "passed",
+      "kind": "live-api",
+      "observed_at": 1792711706.105236,
+      "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+      "version_id": "77d42f56f77f4287b63574b9fd81b0ab",
+      "operation_id": "68cc365b61d84c6585b7f9db897ea5c0"
+    },
+    "original_failed_parent_unchanged": true,
+    "original_capacity_failure_record_retained": true,
+    "new_versions_or_approvals": false,
+    "prior_four_current_versions_unchanged": true,
+    "old_r4_hold_preserved": true,
+    "offline_data_fault_upgrade_l2_still_pending": true
   }
 }

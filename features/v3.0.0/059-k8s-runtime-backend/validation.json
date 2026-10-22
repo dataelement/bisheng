@@ -1657,5 +1657,17 @@
       "No packet-level traffic continuity or absolute transport-gap claim",
       "No new ARM/public release acceptance"
     ]
+  },
+  "r10_complete_five_delivery_business": {
+    "success_parent_sha256": "c6e17830766aa738621e7f681f2e04cc3eb9223e46ce5021266fc894e4aea11b",
+    "suite_exit_code": 0,
+    "five_v1_v2_and_cycles": "passed",
+    "fullimage_manual_publish_operation_id": "68cc365b61d84c6585b7f9db897ea5c0",
+    "fullimage_generation": 4,
+    "fullimage_approval": 11,
+    "negative_dependency_code": 16227,
+    "original_failures_retained": true,
+    "T069_still_pending_offline_and_delete": true,
+    "T070_still_pending": true
   }
 }

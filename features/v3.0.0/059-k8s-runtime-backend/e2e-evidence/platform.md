@@ -157,3 +157,11 @@ source v2 `818d435bba5c4902be4c16ff879c87fb` 已实际完成预检、预览审�
 suite按原900秒自然失败退出，父journal SHA `1c1c6a8db64f987ad5e85b816c4ed51219e21692a636bd2289a1909bbcc51aec`；保留两次source旧失败及本次v2失败，不将失败覆写为成功。单次manual-publish续办与缺依赖负例待后续独立记录。
 
 T256/T257开发已L1通过，本地完整runtime1649/13skip；250/255，新增取消检查尚未部署或真实验收。ARM继续暂缓。
+
+## 完整镜像同批准v2单次手动恢复与缺依赖负例通过
+
+确认预览三精确UID正常cleanup、预约released、fresh API absent且容量6784Mi/3125m后，root只读check通过；仅一次owner manual-publish同v2，无新版本或审批。新操作 `68cc365b61d84c6585b7f9db897ea5c0` / generation4 completed/cleanupcomplete；审批仍11、两个版本不变。v2随后原HTTP/WebSocket、SDK/OBO/附件/数据及owner/nonowner/跨租户观察通过，另外四应用current v2/版本与审批未变。旧r4仍held。
+
+缺依赖仅一次新提交：app `fb9a0f9e32f84ef99ae60ee60f6dc34b` / deployment `5df7298126ff4c2a9ec734d0b1fe0787`，真实16227/precheck_build/无审批通过。续办exit0并写最终 `r10-image-capacity-continuation-completed/passed`，成功父SHA `c6e17830766aa738621e7f681f2e04cc3eb9223e46ce5021266fc894e4aea11b`；原失败父1c1c…、source两次失败及c562容量失败历史保留，不伪造generic iteration-passed。
+
+至此Python、Node、static应用包、source-image、完整镜像五种场景均真实首发/升级主路径与停用恢复通过；完整镜像升级明确区分原容量拒绝和新手动成功。离线查改导出/恢复删除、故障升级及L2仍未闭合，不提前勾T069/T070。
