@@ -4941,6 +4941,54 @@
       "review": "PASS"
     },
     {
+      "id": "T196",
+      "wave": 7,
+      "kind": "测试",
+      "title": "无运行分配与平台故障状态配对",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_observe.py"
+      ],
+      "logic": "真实PlatformClient的application_not_found/404映射为无实例；403/503/超时及资源故障保持不可用，Docker/K8s和正常实例保持配对。",
+      "acs": [
+        "AC-01",
+        "AC-33",
+        "AC-35",
+        "AC-36",
+        "AC-55"
+      ],
+      "depends": [
+        "T186"
+      ],
+      "pair": "T197",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T197",
+      "wave": 7,
+      "kind": "实现",
+      "title": "只读实例查询保留无分配语义",
+      "files": [
+        "src/runtime-manager/runtime_manager/api/platform_observe.py"
+      ],
+      "logic": "只将platform.application精确application_not_found+404转换NotFoundError；不将任意平台/API资源失败视为无写入者，不放宽删除与停止围栏。",
+      "acs": [
+        "AC-01",
+        "AC-33",
+        "AC-35",
+        "AC-36",
+        "AC-55"
+      ],
+      "depends": [
+        "T196"
+      ],
+      "pair": "T196",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

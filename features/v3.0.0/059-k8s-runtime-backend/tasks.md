@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；195 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 190 / 195 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；197 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 190 / 197 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1547,6 +1547,22 @@
   **依赖:** T194
   **配对:** T194
 
+- [ ] **T196** — 无运行分配与平台故障状态配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_observe.py`
+  **逻辑/验收**：真实PlatformClient的application_not_found/404映射为无实例；403/503/超时及资源故障保持不可用，Docker/K8s和正常实例保持配对。
+  **覆盖 AC:** AC-01、AC-33、AC-35、AC-36、AC-55
+  **依赖:** T186
+  **配对:** T197
+
+- [ ] **T197** — 只读实例查询保留无分配语义
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/api/platform_observe.py`
+  **逻辑/验收**：只将platform.application精确application_not_found+404转换NotFoundError；不将任意平台/API资源失败视为无写入者，不放宽删除与停止围栏。
+  **覆盖 AC:** AC-01、AC-33、AC-35、AC-36、AC-55
+  **依赖:** T196
+  **配对:** T196
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1640,3 +1656,5 @@ T194/T195：189 首个 bundle 的真实payload类型为payload.profile=dict、de
 T191–T193：66e507ec8合入，170合同及裸Python禁网原生SDK/附件/SQLite/WS/certifi/TLS配对通过。依赖保持原始8wheel字节；scanner实际10文件扫描、8wheel按binary跳过、0命中；不宣称依赖源码已扫描，原展开模式3个假阳性证据保留。109/189真实source-image仍待复验。T194补OCI旧夹具缺失delivery字段，第二文件owner明确转给A。
 
 T194/T195通过54488cdd4合入候选9e7e86cab；主树全runtime1217passed/13skipped，未跳过setuid参数；A权限上下文的04755→0755限制不代表宿主文件系统全局行为。170夹具/harness在真实backend conftest集成通过。190/195完成，5项真实交付/L2仍待；新候选原生及189真实重部署继续。
+
+T196/T197：189四个失败draft的只读清理预检在GET instance收到16121，实际默认node配置正确；无assignment时控制API返回application_not_found/404，而manager未映射成无实例。补精确缺失与真正平台故障配对，不改清理工具来忽略故障。
