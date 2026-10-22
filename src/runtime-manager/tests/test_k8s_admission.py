@@ -428,7 +428,8 @@ def test_nonterminal_scheduler_condition_update_has_no_backend_dependency(templa
     )
 
 
-def test_delete_and_finalizer_removal_require_uid_and_committed_stop(template, plan):
+@pytest.mark.parametrize("omit_finalizers", [False, True])
+def test_delete_and_finalizer_removal_require_uid_and_committed_stop(template, plan, omit_finalizers):
     old = terminal(template)
     options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 30}
     assert allowed(policy(lambda _: plan), request(old, operation="DELETE", old=old, options=options))
@@ -438,6 +439,8 @@ def test_delete_and_finalizer_removal_require_uid_and_committed_stop(template, p
         )
     new = copy.deepcopy(old)
     new["metadata"]["finalizers"] = []
+    if omit_finalizers:
+        new["metadata"].pop("finalizers")
     assert not allowed(policy(lambda _: plan), request(new, operation="UPDATE", old=old))
     plan["stop_state"] = "confirmed"
     plan["cleanup_only"] = True
@@ -695,11 +698,14 @@ def test_manager_preserves_authenticated_calico_annotations_during_normal_metada
     assert allowed(verifier, request(new, operation="UPDATE", old=old))
 
 
-def test_manager_can_remove_only_confirmed_stop_finalizer_after_calico_update(calico_history, plan):
+@pytest.mark.parametrize("omit_finalizers", [False, True])
+def test_manager_can_remove_only_confirmed_stop_finalizer_after_calico_update(calico_history, plan, omit_finalizers):
     """AC-13, AC-49: CNI annotations must not deadlock confirmed terminal Pod cleanup."""
     verifier, _, old, _ = calico_history
     new = copy.deepcopy(old)
     new["metadata"]["finalizers"] = []
+    if omit_finalizers:
+        new["metadata"].pop("finalizers")
     assert not allowed(verifier, request(new, operation="UPDATE", old=old))
     plan["stop_state"] = "confirmed"
     assert allowed(verifier, request(new, operation="UPDATE", old=old))

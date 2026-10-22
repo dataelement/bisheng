@@ -117,6 +117,10 @@ def _normalize(value, path=()):
             continue
         if path == () and key == "status":
             continue
+        if path == ("metadata",) and key == "finalizers" and child == []:
+            # ObjectMeta.Finalizers uses omitempty after the last authorized
+            # finalizer is removed; nonempty protection remains compared.
+            continue
         if path == ("spec",) and (key, str(child)) in {
             ("serviceAccountName", "default"),
             ("serviceAccount", "default"),
