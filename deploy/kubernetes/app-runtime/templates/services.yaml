@@ -2,6 +2,73 @@
 {{- range .Values.execution.canaryProfiles }}
 {{- $profileImages = append $profileImages .runtime_image }}
 {{- end }}
+{{- $canary := lookup "v1" "ConfigMap" .Values.services.namespace "runtime-canary-plans" }}
+{{- $canaryData := dict "schema_version" 1 "plans" (dict) "profile_images" $profileImages | toJson }}
+{{- if not (empty .Values.execution.canaryPlans) }}
+{{- fail "canary plans are installer-owned; values may not seed or replace plans" }}
+{{- end }}
+{{- if .Release.IsUpgrade }}
+{{- if not $canary }}{{ fail "existing canary plans are required for upgrade" }}{{ end }}
+{{- $owned := dict "runtime-canary-plans" $canary }}
+{{- $installation := get (default (dict) $canary.metadata.labels) "runtime.bisheng.io/installation" }}
+{{- if and $installation (ne $installation .Values.execution.installationId) }}
+{{- fail "canary installation identity mismatch" }}
+{{- end }}
+{{- if not $installation }}
+{{- $descriptor := lookup "v1" "ConfigMap" .Values.services.namespace "runtime-deployment-descriptor" }}
+{{- if not $descriptor }}{{ fail "legacy canary descriptor is required for upgrade" }}{{ end }}
+{{- $_ := set $owned "runtime-deployment-descriptor" $descriptor }}
+{{- $domain := fromJson (get (default (dict) $descriptor.data) "descriptor.json") }}
+{{- if or (ne $domain.installation_id .Values.execution.installationId) (ne $domain.cluster_id .Values.execution.clusterId) (ne $domain.namespace .Values.execution.namespace) }}
+{{- fail "legacy canary descriptor scope mismatch" }}
+{{- end }}
+{{- end }}
+{{- range $name, $object := $owned }}
+{{- $meta := default (dict) $object.metadata }}
+{{- $labels := default (dict) $meta.labels }}
+{{- $annotations := default (dict) $meta.annotations }}
+{{- if or (ne $meta.name $name) (ne $meta.namespace $.Values.services.namespace) (ne (get $labels "app.kubernetes.io/managed-by") "Helm") (ne (get $annotations "meta.helm.sh/release-name") $.Release.Name) (ne (get $annotations "meta.helm.sh/release-namespace") $.Release.Namespace) }}
+{{- fail "existing canary object is not owned by this release" }}
+{{- end }}
+{{- if or (not (kindIs "string" $meta.uid)) (not (regexMatch "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$" $meta.uid)) (not (kindIs "string" $meta.resourceVersion)) (empty $meta.resourceVersion) }}
+{{- fail "existing canary object identity is invalid" }}
+{{- end }}
+{{- end }}
+{{- if or (not (kindIs "map" $canary.data)) (ne (len $canary.data) 1) (not (kindIs "string" (get $canary.data "plans.json"))) }}
+{{- fail "existing canary data is invalid" }}
+{{- end }}
+{{- $canaryData = get $canary.data "plans.json" }}
+{{- $document := fromJson $canaryData }}
+{{- if or (gt (len $canaryData) 1048576) (ne (len $document) 3) (not (kindIs "float64" $document.schema_version)) (ne $document.schema_version 1.0) (not (kindIs "map" $document.plans)) (not (kindIs "slice" $document.profile_images)) }}
+{{- fail "existing canary document is invalid" }}
+{{- end }}
+{{- range $image := $document.profile_images }}
+{{- if or (not (kindIs "string" $image)) (not (regexMatch "^[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}$" $image)) }}
+{{- fail "existing canary profile image is invalid" }}
+{{- end }}
+{{- end }}
+{{- range $ref, $plan := $document.plans }}
+{{- if or (not (regexMatch "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$" $ref)) (not (kindIs "map" $plan)) }}
+{{- fail "existing canary plan identity is invalid" }}
+{{- end }}
+{{- if or (ne $plan.resource_ref $ref) (ne $plan.namespace $.Values.execution.namespace) (not (kindIs "string" $plan.name)) (not (hasPrefix "preflight-" $plan.name)) (not (has $plan.kind (list "Pod" "PersistentVolumeClaim"))) (not (has $plan.stop_state (list "held" "confirmed"))) (not (kindIs "float64" $plan.expires_at)) (le $plan.expires_at 0.0) }}
+{{- fail "existing canary plan scope is invalid" }}
+{{- end }}
+{{- range $flag := list "allow_create" "allow_update" "allow_delete" "cleanup_only" }}
+{{- if not (kindIs "bool" (get $plan $flag)) }}{{ fail "existing canary plan authority is invalid" }}{{ end }}
+{{- end }}
+{{- if or (and $plan.allow_create $plan.uid) (and (or $plan.uid $plan.allow_update $plan.allow_delete) (not (regexMatch "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$" (default "" $plan.uid)))) }}
+{{- fail "existing canary plan UID is invalid" }}
+{{- end }}
+{{- $template := default (dict) $plan.template }}
+{{- $meta := default (dict) $template.metadata }}
+{{- if or (ne $template.kind $plan.kind) (ne $meta.name $plan.name) (ne $meta.namespace $plan.namespace) (ne (get (default (dict) $meta.labels) "runtime.bisheng.io/resource") $ref) }}
+{{- fail "existing canary plan template scope is invalid" }}
+{{- end }}
+{{- end }}
+{{- else if $canary }}
+{{- fail "existing canary plans require an upgrade of their owning release" }}
+{{- end }}
 {{- if eq .Values.services.namespace .Values.execution.namespace }}
 {{- fail "control and execution namespaces must differ" }}
 {{- end }}
@@ -82,5 +149,11 @@ kind: ConfigMap
 metadata:
   name: runtime-canary-plans
   namespace: {{ .Values.services.namespace }}
+  labels:
+    runtime.bisheng.io/installation: {{ .Values.execution.installationId | quote }}
+{{- if .Release.IsUpgrade }}
+  uid: {{ $canary.metadata.uid | quote }}
+  resourceVersion: {{ $canary.metadata.resourceVersion | quote }}
+{{- end }}
 data:
-  plans.json: {{ dict "schema_version" 1 "plans" .Values.execution.canaryPlans "profile_images" $profileImages | toJson | quote }}
+  plans.json: {{ $canaryData | quote }}

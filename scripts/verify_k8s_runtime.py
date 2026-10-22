@@ -93,6 +93,7 @@ _SAFE_PROBE_REASONS = frozenset(
         "preflight_recovery_scope_invalid",
         "preflight_recovery_uid_unconfirmed",
         "preflight_result_missing",
+        "preflight_stop_unconfirmed",
         "probe_deadline_exceeded",
         "probe_driver_set_incomplete",
         "rbac_exec_allowed",
@@ -1293,6 +1294,8 @@ class InstallationVerifier:
                 fresh = self.api.get("pod", record["name"], manager=True)
                 if fresh["metadata"]["uid"] != record["uid"]:
                     raise ProbeError("preflight_cleanup_identity_changed")
+                if not stop_confirmed(fresh, binding_evidence=record.get("binding_stop_evidence")):
+                    raise ProbeError("preflight_stop_unconfirmed")
                 patch = {
                     "metadata": {
                         "resourceVersion": fresh["metadata"]["resourceVersion"],
