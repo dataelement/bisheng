@@ -4,6 +4,8 @@
 Default mode writes local fixtures only. --bootstrap uses real platform APIs.
 No default password, SQL write, manager RPC, container engine, or cluster API is
 used. The dedicated admin identity and empty-instance inventory are mandatory.
+Application suffixes are immutable per suite. Use a new suite and evidence
+journal for each new publication batch; deleted application slugs stay reserved.
 """
 
 from __future__ import annotations
@@ -111,7 +113,26 @@ def read_env(path, *, allowlist=None):
     return values
 
 
-def prepare_environment(suite_dir, *, base, input_env=None, output_env=None, entry_base=None):
+def validate_application_suffix(value):
+    if value is None:
+        return ""
+    if not isinstance(value, str) or not 1 <= len(value) <= 16 or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", value):
+        raise BootstrapError("application_suffix_invalid")
+    return value
+
+
+def application_slug(case, application_suffix=None):
+    suffix = validate_application_suffix(application_suffix)
+    slug = PREFIX + case + ("-" + suffix if suffix else "")
+    if len(slug) > 64 or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+        raise BootstrapError("application_slug_invalid")
+    return slug
+
+
+def prepare_environment(
+    suite_dir, *, base, input_env=None, output_env=None, entry_base=None, application_suffix=None
+):
+    suffix = validate_application_suffix(application_suffix)
     suite = Path(suite_dir).resolve()
     if not any(part.startswith(PREFIX) or part == "e2e-f059" for part in suite.parts):
         raise BootstrapError("dedicated_suite_directory_required")
@@ -122,6 +143,8 @@ def prepare_environment(suite_dir, *, base, input_env=None, output_env=None, ent
     if input_env is not None and output.resolve() == Path(input_env).resolve():
         raise BootstrapError("platform_env_must_not_be_overwritten")
     values = read_env(output) if output.exists() else {}
+    if "F059_E2E_APPLICATION_SUFFIX" in values and values["F059_E2E_APPLICATION_SUFFIX"] != suffix:
+        raise BootstrapError("existing_application_suffix_mismatch")
     supplied = read_env(input_env, allowlist={"E2E_ADMIN_USERNAME", "E2E_ADMIN_PASSWORD"})
     for key in ("E2E_ADMIN_USERNAME", "E2E_ADMIN_PASSWORD"):
         if key in supplied:
@@ -133,15 +156,27 @@ def prepare_environment(suite_dir, *, base, input_env=None, output_env=None, ent
         if marker.get("purpose") != "e2e-f059-only" or marker.get("api_base") != base:
             raise BootstrapError("existing_environment_marker_mismatch")
         str(UUID(marker["instance_id"]))
+        if marker.get("application_suffix", "") != suffix:
+            raise BootstrapError("existing_application_suffix_mismatch")
     else:
-        marker = {"purpose": "e2e-f059-only", "api_base": base, "instance_id": str(uuid4())}
+        marker = {
+            "purpose": "e2e-f059-only",
+            "api_base": base,
+            "instance_id": str(uuid4()),
+            "application_suffix": suffix,
+        }
         private_write(marker_path, json.dumps(marker, indent=2))
     nonce = marker["instance_id"].replace("-", "")[:6]
     values.setdefault("E2E_ADMIN_USERNAME", PREFIX + "root-" + nonce)
     values.setdefault("E2E_ADMIN_PASSWORD", "Aa1!" + secrets.token_urlsafe(16))
     if not values["E2E_ADMIN_USERNAME"].startswith(PREFIX):
         raise BootstrapError("dedicated_admin_identity_required")
-    values.update(E2E_API_BASE=base, F059_E2E="1", F059_ACCEPTANCE_INSTANCE=marker["instance_id"])
+    values.update(
+        E2E_API_BASE=base,
+        F059_E2E="1",
+        F059_ACCEPTANCE_INSTANCE=marker["instance_id"],
+        F059_E2E_APPLICATION_SUFFIX=suffix,
+    )
     values.setdefault("F059_E2E_TENANT_CODE", PREFIX + "tenant-" + nonce)
     values.setdefault("F059_E2E_FOREIGN_TENANT_CODE", PREFIX + "foreign-" + nonce)
     values.setdefault("F059_E2E_EXECUTOR", "kubernetes")
@@ -296,7 +331,7 @@ def build_packages(
     ):
         if mode == "image" and not demo_image:
             continue
-        slug = PREFIX + suffix
+        slug = application_slug(suffix, values.get("F059_E2E_APPLICATION_SUFFIX") or None)
         revisions = []
         for version in (1, 2):
             manifest = application_manifest(
@@ -444,7 +479,11 @@ class Api:
 
 async def bootstrap(base, suite, output, values, *, profiles, register_first=False, client=None):
     marker = json.loads(private_read(suite / "environment-marker.json"))
-    if marker.get("api_base") != base or marker.get("instance_id") != values["F059_ACCEPTANCE_INSTANCE"]:
+    if (
+        marker.get("api_base") != base
+        or marker.get("instance_id") != values["F059_ACCEPTANCE_INSTANCE"]
+        or marker.get("application_suffix", "") != values.get("F059_E2E_APPLICATION_SUFFIX", "")
+    ):
         raise BootstrapError("environment_marker_mismatch")
     if client is None:
         async with httpx.AsyncClient(timeout=60, trust_env=False, follow_redirects=False) as session:
@@ -683,6 +722,10 @@ def main(argv=None):
     parser.add_argument("--env-file", type=Path)
     parser.add_argument("--output-env-file", type=Path)
     parser.add_argument("--entry-base")
+    parser.add_argument(
+        "--application-suffix",
+        help="Optional 1-16 lowercase letters/digits and single hyphens; immutable per suite. New batch needs a new journal.",
+    )
     parser.add_argument("--profile-inventory", type=Path)
     parser.add_argument("--profile-revision", type=int, default=1)
     parser.add_argument("--demo-image")
@@ -698,7 +741,12 @@ def main(argv=None):
         raise BootstrapError("mode_invalid")
     base = api_base(args.api_base)
     suite, output, values = prepare_environment(
-        args.suite_dir, base=base, input_env=args.env_file, output_env=args.output_env_file, entry_base=args.entry_base
+        args.suite_dir,
+        base=base,
+        input_env=args.env_file,
+        output_env=args.output_env_file,
+        entry_base=args.entry_base,
+        application_suffix=args.application_suffix,
     )
     profiles, scenarios = [], []
     if args.profile_inventory:
