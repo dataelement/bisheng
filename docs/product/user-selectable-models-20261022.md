@@ -28,4 +28,4 @@
 
 后台 58 项通过、2 项环境用例跳过；管理端相关 28 项通过，类型检查、定向 ESLint、构建、架构检查通过。桌面相关 65 项通过，合入最新 f97e158 后重跑的名称及服务回归 53 项通过，类型检查通过。
 
-代码审查：[BISHENG #2515](https://github.com/dataelement/bisheng/pull/2515)、[桌面 #72](https://github.com/dataelement/bisheng-work/pull/72)。本次已部署候选代码，PR 保持开放供审查。
+代码审查：[BISHENG #2515](https://github.com/dataelement/bisheng/pull/2515)、[桌面 #72](https://github.com/dataelement/bisheng-work/pull/72)。后续按用户确认直接合入后台 `feat/bisheng-work-120-main` 与桌面 `V1.2.0`；以上 PR 保留为改动历史入口。
