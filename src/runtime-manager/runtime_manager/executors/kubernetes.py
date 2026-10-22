@@ -28,6 +28,8 @@ from runtime_manager.k8s_admission import template_projection
 from runtime_manager.k8s_client import KubernetesAPIError, KubernetesClient
 from runtime_manager.k8s_lifecycle import StopIdentity, finish_stop, request_stop
 from runtime_manager.k8s_templates import (
+    PREPARATION,
+    PRODUCTION,
     RESOURCE_LABEL,
     PodPlan,
     pod_template,
@@ -263,10 +265,13 @@ class KubernetesExecutor:
                 "namespace": self.settings.namespace,
                 "installation_id": self.document.get("installation_id", self.settings.cluster_id),
                 "filesystem": self.document.get("storage", {}).get("filesystem", "ext4"),
-                "capacity_bytes": self.document.get("storage", {}).get("size_mb", 1024) * 1024**2,
+                "capacity_bytes": self.document.get("storage", {}).get(
+                    "scratch_size_mb" if purpose in PREPARATION else "size_mb", 1024
+                )
+                * 1024**2,
                 "marker_required": self.document.get("storage", {}).get("static_pool") is True,
             }
-            if purpose in {"serve", "data", "migrate", "restore", "purge"}
+            if purpose in PRODUCTION | PREPARATION
             else {},
             pvc_name=pvc,
             scratch_pvc=_name("scratch-", operation["operation_id"])

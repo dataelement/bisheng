@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-05、AC-11、AC-12、AC-16、AC-17、AC-18、AC-19、AC-20、AC-21、AC-24、AC-27、AC-33、AC-34、AC-43、AC-44、AC-54."""
+"""覆盖 AC: AC-05、AC-11、AC-12、AC-16、AC-17、AC-18、AC-19、AC-20、AC-21、AC-24、AC-27、AC-30、AC-33、AC-34、AC-43、AC-44、AC-54."""
 
 from dataclasses import replace
 
@@ -307,3 +307,49 @@ def test_data_sidecar_gets_public_keys_and_uid_without_app_credentials(plan):
     )
     volume = next(v for v in spec["volumes"] if v["name"] == "data-keys")
     assert volume["configMap"]["name"] == "runtime-data-public-keys"
+
+
+@pytest.mark.parametrize("purpose", ["prepare-download", "prepare-install", "prepare-upload", "assemble"])
+def test_preparation_starts_with_trusted_readonly_scratch_guard(plan, purpose):
+    import json
+
+    from runtime_manager.k8s_templates import pod_template
+
+    guard = {
+        "namespace": plan.namespace,
+        "installation_id": "e2e-f059",
+        "filesystem": "ext4",
+        "capacity_bytes": 4 * 1024**3,
+        "marker_required": True,
+    }
+    current = replace(
+        plan,
+        purpose=purpose,
+        pvc_name="",
+        scratch_pvc="scratch-a",
+        deadline_seconds=120,
+        volume_guard=guard,
+        registry_secret="registry-a" if purpose == "assemble" else "",
+        helper_env={"MATERIAL_PLAN": "scoped"},
+    )
+    spec = pod_template(current)["spec"]
+    validator = spec["initContainers"][0]
+    assert validator["name"] == "storage-guard"
+    assert validator["image"] == plan.helper_image
+    assert validator["command"] == ["python", "-I", "-m", "runtime_manager.k8s_helper", "storage-guard"]
+    assert validator["env"] == [{"name": "VOLUME_GUARD", "value": json.dumps(guard, sort_keys=True)}]
+    scratch = next(mount for mount in validator["volumeMounts"] if mount["name"] == "scratch")
+    assert scratch == {"name": "scratch", "mountPath": "/volume", "readOnly": True}
+    assert {mount["name"] for mount in validator["volumeMounts"]} == {"scratch", "tmp"}
+    assert validator["securityContext"]["readOnlyRootFilesystem"] is True
+    assert validator["securityContext"]["runAsNonRoot"] is True
+    assert "valueFrom" not in str(validator) and "MATERIAL_PLAN" not in str(validator)
+    assert spec["containers"][0]["name"] != "storage-guard"
+
+
+@pytest.mark.parametrize("purpose", ["probe", "preview"])
+def test_ephemeral_data_without_pvc_does_not_get_scratch_guard(plan, purpose):
+    from runtime_manager.k8s_templates import pod_template
+
+    spec = pod_template(replace(plan, purpose=purpose, pvc_name="", deadline_seconds=120))["spec"]
+    assert not any(container["name"] == "storage-guard" for container in spec["initContainers"])

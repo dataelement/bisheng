@@ -1,4 +1,4 @@
-"""覆盖 AC: AC-15、AC-16、AC-24、AC-25、AC-26、AC-28、AC-29、AC-42、AC-43、AC-44、AC-45、AC-46、AC-54."""
+"""覆盖 AC: AC-15、AC-16、AC-24、AC-25、AC-26、AC-28、AC-30、AC-34、AC-29、AC-42、AC-43、AC-44、AC-45、AC-46、AC-54."""
 
 import hashlib
 import io
@@ -423,3 +423,87 @@ def test_binding_wait_stops_at_the_original_deadline():
     with pytest.raises(MaterialClientError):
         helper._manifest(Client(), "compiled-a")
     assert state["now"] <= 100002 and state["attempts"] <= 6
+
+
+def guard_document():
+    return {
+        "namespace": "runtime-apps",
+        "installation_id": "e2e-f059",
+        "filesystem": "ext4",
+        "capacity_bytes": 1024**3,
+        "marker_required": True,
+    }
+
+
+def test_verify_volume_is_readonly_and_never_creates_business_layout(tmp_path, monkeypatch):
+    from runtime_manager import k8s_capabilities
+    from runtime_manager.k8s_helper import verify_volume
+
+    marker = tmp_path / ".bisheng-volume.json"
+    marker.write_text(json.dumps({"namespace": "runtime-apps", "installation_id": "e2e-f059"}))
+    monkeypatch.setattr(k8s_capabilities, "mounted_filesystem", lambda path: "ext4")
+    monkeypatch.setattr(k8s_capabilities, "volume_capacity", lambda path: 1024**3)
+    before = marker.read_bytes()
+    assert verify_volume(tmp_path, guard=guard_document()) == {"verified": True}
+    assert marker.read_bytes() == before
+    assert sorted(path.name for path in tmp_path.iterdir()) == [".bisheng-volume.json"]
+
+
+@pytest.mark.parametrize(
+    "problem", ["unmounted", "oversized", "undersized", "marker-missing", "wrong-scope", "unknown-filesystem"]
+)
+def test_bad_scratch_volume_is_rejected_without_writes(tmp_path, monkeypatch, problem):
+    from runtime_manager import k8s_capabilities
+    from runtime_manager.k8s_helper import initialize_data_layout, verify_volume
+
+    marker = tmp_path / ".bisheng-volume.json"
+    marker.write_text(
+        json.dumps(
+            {"namespace": "other-apps" if problem == "wrong-scope" else "runtime-apps", "installation_id": "e2e-f059"}
+        )
+    )
+    if problem == "marker-missing":
+        marker.unlink()
+    filesystem = "overlay" if problem == "unmounted" else "" if problem == "unknown-filesystem" else "ext4"
+    capacity = 500 * 1024**3 if problem == "oversized" else 128 * 1024**2 if problem == "undersized" else 1024**3
+    monkeypatch.setattr(k8s_capabilities, "mounted_filesystem", lambda path: filesystem)
+    monkeypatch.setattr(k8s_capabilities, "volume_capacity", lambda path: capacity)
+    for action in (verify_volume, initialize_data_layout):
+        with pytest.raises(ValueError, match="volume_"):
+            action(tmp_path, guard=guard_document())
+    assert not (tmp_path / "business").exists() and not (tmp_path / "platform").exists()
+
+
+def test_guard_does_not_create_missing_volume_or_accept_a_symlink(tmp_path):
+    from runtime_manager.k8s_helper import verify_volume
+
+    missing = tmp_path / "missing"
+    with pytest.raises(ValueError, match="volume_"):
+        verify_volume(missing, guard=guard_document())
+    assert not missing.exists()
+    linked = tmp_path / "linked"
+    linked.symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(ValueError, match="volume_"):
+        verify_volume(linked, guard=guard_document())
+
+
+def test_storage_guard_cli_never_constructs_download_identity_or_runs_source(monkeypatch):
+    from runtime_manager import k8s_helper
+
+    monkeypatch.setattr(k8s_helper.sys, "argv", ["helper", "storage-guard"])
+    monkeypatch.setenv("VOLUME_GUARD", json.dumps(guard_document()))
+    monkeypatch.setattr(
+        k8s_helper, "client_from_identity", lambda: pytest.fail("guard must not load material identity")
+    )
+    monkeypatch.setattr(
+        k8s_helper, "prepare_download", lambda *args, **kwargs: pytest.fail("guard must not download source")
+    )
+    seen = []
+    monkeypatch.setattr(k8s_helper, "verify_volume", lambda **kwargs: seen.append(kwargs) or {"verified": True})
+    k8s_helper.main()
+    assert seen == [{"guard": guard_document()}]
+    monkeypatch.setattr(
+        k8s_helper, "verify_volume", lambda **kwargs: (_ for _ in ()).throw(ValueError("volume_capacity_unbounded"))
+    )
+    with pytest.raises(ValueError, match="volume_capacity"):
+        k8s_helper.main()
