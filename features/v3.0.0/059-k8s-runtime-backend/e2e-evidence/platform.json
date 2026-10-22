@@ -1163,5 +1163,532 @@
       "version_id": "60ebc5e1230942cb975be94de9fab954"
     },
     "running_identity_sha256": "74a246285a7f1c82545479fcb8e60787cb9970503386bf22cb76f59ffd0c42bd"
+  },
+  "source_v2_passed": {
+    "deployment_id": "afaaff456f46430a95659bd7de7e2ceb",
+    "version_id": "818d435bba5c4902be4c16ff879c87fb",
+    "prepare_operation_id": "13c9c01e925f4c42947b49e18be35802",
+    "preview_approval_http_websocket_owner": "passed",
+    "image_identity": {
+      "app_id": "fad0b104e09c46cda59469248ab20605",
+      "application_layer_digest": "sha256:0cc450d49beb2cc35fa8687d3f741d7a9f03ab4458151a787f43820f7d5dcf33",
+      "base_image": "192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
+      "base_layer_count": 10,
+      "cmd_matches_frozen_startup": true,
+      "config_digest": "sha256:a3cb8cff3a26fd25792b585ea5b6ca0e0df195b9652692424d078b83d8edea04",
+      "container_id": "docker://66ec31a474042a32af31f10c73f001813f6dcd0acb81950a5d4edbf9491152cf",
+      "cri_image_id": "docker-pullable://192.168.106.189:5443/f059/apps@sha256:a8a3ef4b3282fd3dede239299afa7da342c75ad6e4a8fdf7bc45a3604e1eca89",
+      "deleting": false,
+      "deployment_id": "afaaff456f46430a95659bd7de7e2ceb",
+      "docker_config_id": "sha256:a3cb8cff3a26fd25792b585ea5b6ca0e0df195b9652692424d078b83d8edea04",
+      "exact_base_layer_prefix": true,
+      "observed_at": 1792709146.671216,
+      "phase": "Running",
+      "pod_name": "app-1eaef29a6764649b429a9f2a90aea27e4afd7752",
+      "pod_uid": "0ad1b4c0-db79-440c-a1f7-4acfba699692",
+      "profile_revision": 2,
+      "ready": true,
+      "schema": "f059-source-v2-image-identity/v1",
+      "source_image": "192.168.106.189:5443/f059/apps@sha256:a8a3ef4b3282fd3dede239299afa7da342c75ad6e4a8fdf7bc45a3604e1eca89",
+      "tls_and_hostname_verified": true,
+      "version_id": "818d435bba5c4902be4c16ff879c87fb"
+    },
+    "image_identity_sha256": "3ce4f56806d38ef283f0f27e4f32275488496585375927db4155dec38b860f63"
+  },
+  "fullimage_v2_capacity_failure": {
+    "parent_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-source-registry-resumed.json",
+    "parent_sha256": "1c1c6a8db64f987ad5e85b816c4ed51219e21692a636bd2289a1909bbcc51aec",
+    "parent_outcome": "failed",
+    "v1_business_http_websocket_stop_resume": "passed",
+    "before": {
+      "app": {
+        "current_version_id": "0865c634ece74322b038ba47be7b8838",
+        "id": "ec6229a98d434d7cb58f740b58945ff6",
+        "pending_version_id": "77d42f56f77f4287b63574b9fd81b0ab",
+        "slug": "e2e-f059-python-image-k189r10",
+        "state": "online"
+      },
+      "capacity": {
+        "cpu_budget_millicores": 4000,
+        "memory_budget_mb": 8192,
+        "r4_hold_preserved": true,
+        "reserved_cpu_millicores": 3125,
+        "reserved_memory_mb": 6784
+      },
+      "deployment": {
+        "approval_instance_id": 11,
+        "failure_code": 16226,
+        "failure_details": {
+          "app_reason": "capacity_exhausted",
+          "park_stage": "admission",
+          "reason": "iteration_failed"
+        },
+        "id": "c562f14128b042f1834ccee5b5cedf3e",
+        "stage": "publishing",
+        "status": "failed",
+        "version_id": "77d42f56f77f4287b63574b9fd81b0ab"
+      },
+      "operations": [
+        {
+          "cleanup_status": "complete",
+          "id": "af8922a5817043e0a61c2eaa00a44439",
+          "kind": "prepare",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": "0865c634ece74322b038ba47be7b8838"
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "a6c320e76f834b34a6da86a43359ad36",
+          "kind": "probe",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": "0865c634ece74322b038ba47be7b8838"
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "ab746056a47f41dba8e6ef17ccd0f8a7",
+          "kind": "preview",
+          "session_id": "1346873a7b48479b91f5d8ef48a6ad88",
+          "stage": "cancelled",
+          "status": "cancelled",
+          "version_id": "0865c634ece74322b038ba47be7b8838"
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "916e17a2ff6c42a284b7fc78ba338e64",
+          "kind": "deploy",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": "0865c634ece74322b038ba47be7b8838"
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "58b40f78a2164bc4a1affe5658ee2785",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "50c8eb274ef44ba088b66fcbcda68ffd",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "603e84c3d2984dc88d016e04ab5b0b54",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "1f2b88d2baaa40e692cb416c9a98daad",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "a993803418cf4ed691c09a9841205ab1",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "cf7cf0f16e73491ebbade11dc5458ed3",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "298b393d9a9b4ac38a37d4bd991fed41",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "4368d595730b410bb6a0fe4057a19826",
+          "kind": "stop",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "f8c06502a4c4405dbdf1bdd9e35ba367",
+          "kind": "deploy",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": "0865c634ece74322b038ba47be7b8838"
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "5a3e67249a7e4cb2bb8bf12e22535d16",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "5a8d9bc2a7bc4186940ae0e31e1ca6be",
+          "kind": "prepare",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": "77d42f56f77f4287b63574b9fd81b0ab"
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "ed671bea2498424087ce1d7b407a5547",
+          "kind": "probe",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": "77d42f56f77f4287b63574b9fd81b0ab"
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "e8e41897fb9a4cdeb92e1027753e121d",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "bbe06eaf607542ad81a721e021e0e09e",
+          "kind": "preview",
+          "session_id": "ddc8b2d98b5545cc9a31a4f2e382d9d6",
+          "stage": "cancelled",
+          "status": "cancelled",
+          "version_id": "77d42f56f77f4287b63574b9fd81b0ab"
+        },
+        {
+          "cleanup_status": "complete",
+          "id": "309e2c020a7b4cc39502b4dbdac4e48d",
+          "kind": "data",
+          "session_id": null,
+          "stage": "completed",
+          "status": "completed",
+          "version_id": ""
+        }
+      ],
+      "previews": [
+        {
+          "id": "1346873a7b48479b91f5d8ef48a6ad88",
+          "reclaim_reason": "manual",
+          "status": "reclaimed",
+          "version_id": "0865c634ece74322b038ba47be7b8838"
+        },
+        {
+          "id": "ddc8b2d98b5545cc9a31a4f2e382d9d6",
+          "reclaim_reason": "manual",
+          "status": "reclaimed",
+          "version_id": "77d42f56f77f4287b63574b9fd81b0ab"
+        }
+      ],
+      "resources": [
+        {
+          "cleanup_state": "complete",
+          "kind": "Pod",
+          "name": "task-a70fdbc69c2536663feed90292bb19c47d8f4f1c",
+          "operation_id": "ab746056a47f41dba8e6ef17ccd0f8a7",
+          "purpose": "preview",
+          "resource_ref": "06c1e6f5-c986-5449-9cbd-98e6ee198383",
+          "stop_evidence_kind": "kubelet_terminal",
+          "stop_state": "confirmed",
+          "uid": "0493f4ac-761d-4ee4-964e-fb7df9359906"
+        },
+        {
+          "cleanup_state": "pending",
+          "kind": "PersistentVolumeClaim",
+          "name": "data-07560d0f5d6ee4b0d34bd3b26604fd5346754065",
+          "operation_id": "916e17a2ff6c42a284b7fc78ba338e64",
+          "purpose": "migrate",
+          "resource_ref": "07bf633a-779e-50ae-a9c3-e2c7d004cfdf",
+          "stop_evidence_kind": null,
+          "stop_state": "held",
+          "uid": "55f2a8fc-a27d-4878-ada2-44cd5b167736"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Service",
+          "name": "svc-a70fdbc69c2536663feed90292bb19c47d8f4f1c",
+          "operation_id": "ab746056a47f41dba8e6ef17ccd0f8a7",
+          "purpose": "preview",
+          "resource_ref": "0a7607ef-95b7-5341-8403-d8eddd976fad",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "40582563-985f-4115-90f9-16491174dbb8"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Pod",
+          "name": "task-911bd63f7a60ab90904b1a2e34161cdb80c4f14f",
+          "operation_id": "a6c320e76f834b34a6da86a43359ad36",
+          "purpose": "probe",
+          "resource_ref": "20ab2a67-f685-5a5e-8b70-36e20f21e415",
+          "stop_evidence_kind": "kubelet_terminal",
+          "stop_state": "confirmed",
+          "uid": "47a0c256-a5ea-4de7-a112-6478815948ff"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Service",
+          "name": "svc-4e2c9d1deb53f0b5ab675e7d4056f8cf763fd9d0",
+          "operation_id": "bbe06eaf607542ad81a721e021e0e09e",
+          "purpose": "preview",
+          "resource_ref": "27f12a40-e669-5de6-9e8a-51a8cefab0c4",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "03e207b2-14d2-44e9-b0f9-5cda14a7af45"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Secret",
+          "name": "material-f48a3bf54f0f5a2eaae35c1512f370c7",
+          "operation_id": "916e17a2ff6c42a284b7fc78ba338e64",
+          "purpose": "migrate",
+          "resource_ref": "3a690a4d-a564-561c-af52-183644e2431d",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "f874c9b8-20ed-4085-9f50-da5ee870904a"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Secret",
+          "name": "material-b7d9c03b49585d079dc0803bbd9f8f7f",
+          "operation_id": "916e17a2ff6c42a284b7fc78ba338e64",
+          "purpose": "migrate",
+          "resource_ref": "56df9297-fa1f-5762-9ecc-b3f3de8d6add",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "b151a745-8a8a-4d25-8783-79858a3dba6b"
+        },
+        {
+          "cleanup_state": "pending",
+          "kind": "Service",
+          "name": "svc-af3b6ece1cb2732961077cf077865aa649acafbd",
+          "operation_id": "f8c06502a4c4405dbdf1bdd9e35ba367",
+          "purpose": "serve",
+          "resource_ref": "61be0c97-f82b-5f99-a5c7-d139c90faaf3",
+          "stop_evidence_kind": null,
+          "stop_state": "held",
+          "uid": "65a21932-837e-4a0c-b292-3d61e6caa457"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Service",
+          "name": "svc-911bd63f7a60ab90904b1a2e34161cdb80c4f14f",
+          "operation_id": "a6c320e76f834b34a6da86a43359ad36",
+          "purpose": "probe",
+          "resource_ref": "61cca54e-20a3-5eba-a6c3-03a66705c112",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "74b03713-7b59-49a4-8f19-47922580162d"
+        },
+        {
+          "cleanup_state": "pending",
+          "kind": "Secret",
+          "name": "credentials-af3b6ece1cb2732961077cf077865aa649acafbd",
+          "operation_id": "f8c06502a4c4405dbdf1bdd9e35ba367",
+          "purpose": "serve",
+          "resource_ref": "7504cf8e-12a6-5a4a-859a-2c5b45e59d14",
+          "stop_evidence_kind": null,
+          "stop_state": "held",
+          "uid": "126e9522-5f56-4230-b1bb-47a6d3321dde"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Service",
+          "name": "svc-0d1cbbee734d7b506162653f55cca08db395a764",
+          "operation_id": "ed671bea2498424087ce1d7b407a5547",
+          "purpose": "probe",
+          "resource_ref": "7ce23516-766f-5454-b643-f21146d3e966",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "074a864d-e3c2-4ba9-811c-3df0a26dbf10"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Secret",
+          "name": "credentials-34d28f3c17b5ef3693955e16b5db843f57db83e8",
+          "operation_id": "916e17a2ff6c42a284b7fc78ba338e64",
+          "purpose": "serve",
+          "resource_ref": "ab191115-62b1-51ae-8df9-a34a8ed61a52",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "81450992-d839-427e-8c67-dc6508521e5e"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Service",
+          "name": "svc-34d28f3c17b5ef3693955e16b5db843f57db83e8",
+          "operation_id": "916e17a2ff6c42a284b7fc78ba338e64",
+          "purpose": "serve",
+          "resource_ref": "aed2424b-5ebf-5281-be08-2cede2fa04c0",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "068d8e91-7c65-40b0-b9a1-54cada20010b"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Pod",
+          "name": "app-07560d0f5d6ee4b0d34bd3b26604fd5346754065",
+          "operation_id": "916e17a2ff6c42a284b7fc78ba338e64",
+          "purpose": "migrate",
+          "resource_ref": "b7d9c03b-4958-5d07-9dc0-803bbd9f8f7f",
+          "stop_evidence_kind": "kubelet_terminal",
+          "stop_state": "confirmed",
+          "uid": "a5c377bb-9d61-4426-bffe-e623f1579e3b"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Pod",
+          "name": "task-0d1cbbee734d7b506162653f55cca08db395a764",
+          "operation_id": "ed671bea2498424087ce1d7b407a5547",
+          "purpose": "probe",
+          "resource_ref": "c12c5e05-22bc-5f4c-a105-a09157a3c4ea",
+          "stop_evidence_kind": "kubelet_terminal",
+          "stop_state": "confirmed",
+          "uid": "5937be0a-e4d4-4bc3-a34f-4b4356192477"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Pod",
+          "name": "app-07560d0f5d6ee4b0d34bd3b26604fd5346754065",
+          "operation_id": "916e17a2ff6c42a284b7fc78ba338e64",
+          "purpose": "serve",
+          "resource_ref": "c3991d10-73ab-5489-9d32-df799d04e3f5",
+          "stop_evidence_kind": "kubelet_terminal",
+          "stop_state": "confirmed",
+          "uid": "85e1c9df-ea02-4c8e-9128-a03e3211f625"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Pod",
+          "name": "task-4e2c9d1deb53f0b5ab675e7d4056f8cf763fd9d0",
+          "operation_id": "bbe06eaf607542ad81a721e021e0e09e",
+          "purpose": "preview",
+          "resource_ref": "c8782c82-0437-59e8-96b0-18a40f5a2a2a",
+          "stop_evidence_kind": "kubelet_terminal",
+          "stop_state": "confirmed",
+          "uid": "c7510b74-cf50-4114-aa1e-e554a71d86b6"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Secret",
+          "name": "credentials-4e2c9d1deb53f0b5ab675e7d4056f8cf763fd9d0",
+          "operation_id": "bbe06eaf607542ad81a721e021e0e09e",
+          "purpose": "preview",
+          "resource_ref": "e5048b64-b6dc-5bae-ba31-b912e3f3fe18",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "9c08ddd5-a563-4401-a95c-466ec0c5734c"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Secret",
+          "name": "credentials-911bd63f7a60ab90904b1a2e34161cdb80c4f14f",
+          "operation_id": "a6c320e76f834b34a6da86a43359ad36",
+          "purpose": "probe",
+          "resource_ref": "e6f369d5-a2ee-5dec-a013-a260b8e64da1",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "ef79f388-d22b-4c9b-b44a-5c3d65c494d0"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Secret",
+          "name": "credentials-a70fdbc69c2536663feed90292bb19c47d8f4f1c",
+          "operation_id": "ab746056a47f41dba8e6ef17ccd0f8a7",
+          "purpose": "preview",
+          "resource_ref": "ea27bfb8-95b0-53c7-8d53-2aa5939022e3",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "f48314c0-f796-4686-b05f-f4f738d2c416"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Pod",
+          "name": "app-07560d0f5d6ee4b0d34bd3b26604fd5346754065",
+          "operation_id": "916e17a2ff6c42a284b7fc78ba338e64",
+          "purpose": "migrate",
+          "resource_ref": "f48a3bf5-4f0f-5a2e-aae3-5c1512f370c7",
+          "stop_evidence_kind": "kubelet_terminal",
+          "stop_state": "confirmed",
+          "uid": "9c727d24-b3be-47a8-bcf8-9a3351028f4b"
+        },
+        {
+          "cleanup_state": "complete",
+          "kind": "Secret",
+          "name": "credentials-0d1cbbee734d7b506162653f55cca08db395a764",
+          "operation_id": "ed671bea2498424087ce1d7b407a5547",
+          "purpose": "probe",
+          "resource_ref": "f9063489-203a-596d-af2d-c57c84f3aedd",
+          "stop_evidence_kind": null,
+          "stop_state": "requested",
+          "uid": "30584fd2-bb1c-40cc-ab2f-8e944a313dbc"
+        },
+        {
+          "cleanup_state": "pending",
+          "kind": "Pod",
+          "name": "app-07560d0f5d6ee4b0d34bd3b26604fd5346754065",
+          "operation_id": "f8c06502a4c4405dbdf1bdd9e35ba367",
+          "purpose": "serve",
+          "resource_ref": "fce73681-0463-5307-9162-00a59ca27942",
+          "stop_evidence_kind": null,
+          "stop_state": "held",
+          "uid": "3f044354-872a-405c-b54b-74ad4cf73251"
+        }
+      ],
+      "schema": "f059-fullimage-upgrade-capacity-before/v1"
+    },
+    "before_sha256": "93061b799e0e68d74ef7b3c7d66217c697fe5e7b477b4d9c955b53412da893cd",
+    "v2_upgrade": "not_passed",
+    "manual_retry": "not_submitted",
+    "missing_dependency": "not_executed"
+  },
+  "preparation_cancellation_development": {
+    "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
+    "core_revision": "1a568c85c3586a629ce18b6c538fe520799b4e36",
+    "tasks_complete": 250,
+    "tasks_total": 255,
+    "runtime_passed": 1649,
+    "runtime_skipped": 13,
+    "full_runtime_log_sha256": "10eb19fa0b1a40d7e27baabfe36c61d861f0bdb24d84bc759b8604e189f96e7a",
+    "l1": "PASS",
+    "deployed": false,
+    "actual_cancellation": "not_executed",
+    "arm": "deferred",
+    "public_release": false
   }
 }

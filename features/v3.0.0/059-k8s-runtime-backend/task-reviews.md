@@ -3442,3 +3442,23 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 **结果：PASS。** 来源dedc4831bb462f832877940901201061b1e027cf；范围仅安装脚本和README。七项：架构/命名/序列化/信息泄漏/设计同步PASS，DB/前端N/A；无manager/helper镜像、API、descriptor摘要或凭据分发变化。安装器先由无凭据/无SA的NotReady control canary按真实egress-proxy selector检查TCP，对应Service启用publishNotReadyAddresses拒绝；原外部crane四步仍在后续。域名由installer解析，不冒称egress DNS/TLS/auth或完整assembler路径。原UID/RV停止及unknown保护保持。
 
 独立报告`/private/tmp/f059-t254-t255-independent-l1.md`，SHA `ff400d5ab04ed928070b6a7fa07cc49be412ca48f5fede620cc5b252bf0ecc99`；独立18绿/静态门，作者213绿；root合流完整runtime1628 passed/13 skipped（33.76秒），日志`/private/tmp/f059-registry-upstream-full-runtime.log`。backend源未变，沿既有1764/19skip记录。189真实新canary/EndpointSlice及源码业务仍待实际证据，不以L1代替。
+
+## Task Review: T256 — 准备阶段取消、围栏与期限配对
+
+**结果：PASS。** 测试提交79f4adb6fa325265bf7402b9696ad9a2a1baca9d，目标两文件；覆盖AC-43、AC-48、AC-49、AC-52、AC-55、依赖T255及配对T257均核对。实际_phase/_startup_checkpoint及停止/确认方法未替换，外部Platform/Cluster与时钟为模拟；以拒绝/耗时/进度未提交/同UID停止事实为断言。旧19fail/7pass→固定实现26pass，201相邻通过；不把19种配对条件当19个独立现场故障。测试命名/完整AC标注PASS，无前端；其余实现检查N/A。报告 `/private/tmp/f059-t256-l1.md` SHA dd6fe802af640c81503e2dfc0ef5ee8e98799db8b1b8ea539ee82aa262fbf231。
+
+## Task Review: T257 — 准备阶段持续检查持久操作
+
+**结果：PASS。** 核心1a568c85c，融合2ac60f808；生产仅kubernetes.py五行既有检查。独立按完整executor、outer failure、PlatformClient/backend只读资源链、UID停止事实复核；同两模块26pass。主树全runtime1649/13skip（33.77s），Ruff/format/路径架构守卫/diff通过。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构 | PASS | 保留manager编排与backend权威操作边界 |
+| 2 | 命名 | PASS | 复用既有检查方法 |
+| 3 | 序列化 | PASS | 不修改API或事实格式 |
+| 4 | 数据库 | N/A | 无模型、SQL或迁移变更 |
+| 5 | 前端 | N/A | 无UI变更 |
+| 6 | 信息泄漏 | PASS | 无新增凭据、日志或异常响应 |
+| 7 | 设计同步 | PASS | design4.6及现状已同步 |
+
+元数据：文件范围PASS、T256已完成、T255依赖PASS。读取失败不接受成功结果，outer failure仍须fresh范围与正常同UID清理；未放宽停止/容量释放条件，不延长原期限。独立报告 `/private/tmp/f059-t257-independent-l1.md` SHA83dbd6c9bf858330b97960e83d42c18db15e0891edf5b9f829cec25fc5d9142c。以上是本地模拟/静态，不是189真实取消或容量释放证明。

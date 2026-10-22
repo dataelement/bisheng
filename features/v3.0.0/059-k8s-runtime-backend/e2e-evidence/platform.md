@@ -147,3 +147,13 @@ prepare `07b872e0d07441f7a333941560727bba` 的inputs/resolve/install/upload全�
 实际产物`f059/apps@sha256:d95ed14789fbb261fa479c1a4c2c06b8d9d47ea113fdcc88d1183e65f0d45074`经CA/主机名校验只读读取manifest/config：保留冻结b632基础10层，仅追加一层；入口、User10001:10001、workdir及显式Cmd[python,main.py]均符合本次冻结startup。lineage SHA `b55761d153e65350cf5e0b9e8c44d66717b90177cefb12d957026663355b7695`。恢复后生产Pod UID `058c99b2-cf64-4227-94ad-111e450f06dc`实际Running/Ready且无删除标记，CRI manifest与Docker config b0a5df71…均一致；identity SHA `74a246285a7f1c82545479fcb8e60787cb9970503386bf22cb76f59ffd0c42bd`。不将显式startup误作缺省Cmd。
 
 第二版已受理`afaaff456f46430a95659bd7de7e2ceb` / `818d435bba5c4902be4c16ff879c87fb`，prepare13c9c01e…进行中。完整镜像/缺依赖/离线数据/故障门未完成，当前成功父journal尚未冻结；不执行依赖成功父的工具。安装器dedc新真实探测等该业务自然结束后串行执行。
+
+## source-image第二版与完整镜像容量拒绝
+
+source v2 `818d435bba5c4902be4c16ff879c87fb` 已实际完成预检、预览审批、更新、HTTP/WebSocket与owner边界；prepare13c9…completed/cleanupcomplete。实际OCI/CRI/Docker config及Running/Ready Pod UID0ad1b4c0…一致，保留原冻结base10层加一应用层；完整身份SHA `3ce4f56806d38ef283f0f27e4f32275488496585375927db4155dec38b860f63`。
+
+完整镜像v1与停用恢复已过；v2 `77d42f56f77f4287b63574b9fd81b0ab` 审批11执行后，deployment c562…failed/publishing/16226，原因为iteration_failed/capacity_exhausted/admission。旧v1仍online、pendingv2保留，没有新deploy操作。v2预览bbe06…已cancelled/cleanupcomplete；公开API与只读SQL证据相符。容量当前6784Mi/3125m含旧r4 held，预算8192/4000，不擅自释放r4。readonly证据SHA `93061b799e0e68d74ef7b3c7d66217c697fe5e7b477b4d9c955b53412da893cd`。
+
+suite按原900秒自然失败退出，父journal SHA `1c1c6a8db64f987ad5e85b816c4ed51219e21692a636bd2289a1909bbcc51aec`；保留两次source旧失败及本次v2失败，不将失败覆写为成功。单次manual-publish续办与缺依赖负例待后续独立记录。
+
+T256/T257开发已L1通过，本地完整runtime1649/13skip；250/255，新增取消检查尚未部署或真实验收。ARM继续暂缓。

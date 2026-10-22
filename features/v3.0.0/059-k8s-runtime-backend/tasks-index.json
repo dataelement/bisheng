@@ -6448,8 +6448,8 @@
       ],
       "pair": "T256",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",
