@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T029、T073–T076已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；执行器/helper及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：T001–T031、T073–T078已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -239,6 +239,8 @@ manager 通过现有服务 HMAC 在 backend 创建材料授权；后台从已验
 6. 停用、删除、部署代次切换、预览结束在原业务事务中撤销授权。backend 提供 material 用途 egress 的短投影，依当前授权持续生成有效期，不能仍由原准备操作的 deadline 决定。
 7. 重建新 Pod 必须由 manager 新建 UID 绑定；manager 不在线时，已绑定但尚未取完材料的 Pod 可继续或续取，容器重启复用 emptyDir。没有声称 manager 停机时可凭旧 Secret 任意创建新 Pod。
 8. 内容传输仍以 backend 为唯一网关，沿用内容摘要/大小/安全解包及 finalize 确认；不发 MinIO 直链。部署配置提供可信 TLS/CA，不能用关闭证书校验解决内部地址问题。
+
+实现接线补充：准备先由可信下载Pod只取源码并计算input_key，manager调用既有dependency-plans；backend在当前操作行锁下持久化dependency_resolution。下一下载Pod使用新公钥授权，backend复查选中计划、同应用/profile/架构与verified材料后允许取缓存；缺缓存才在可信下载阶段解析纯wheel/ignore-scripts npm材料。无身份install Pod只挂source/output可写、original/materials/tools只读，使用固定预制工具链；缓存命中跳过install hooks，仅重新编译代码。上传Pod不运行应用代码，确认产物后由manager继续提交结果。正式bundle的material-fetch准备可信environment.sh，Python在运行镜像内以/opt/venv离线安装；Node/static无需在runtime镜像安装Python。所有可信Python helper使用-I且发行镜像必须将模块放入可信site-packages，不能只依赖/app工作目录。
 
 ### 4.8 数据维护及在线、停用数据接口
 
@@ -605,3 +607,5 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | T026/T027材料HTTP根路由及T075/T076多租户中间件接入完成；manager登记公钥/UID与workload材料身份独立 | 15项HTTP、3项中间件通过；客户端/helper/集群尚待实施 |
 
 | 2026-10-22 | T029独立材料客户端与manager控制client完成：可信TLS/CA、固定签名、分块校验/丢块恢复、票据轮换与阶段deadline不变 | 26项client、完整runtime623 passed/10 skipped；材料/控制197 passed；尚未部署 |
+
+| 2026-10-22 | T077/T078持久缓存选择、T030/T031材料helper与隔离install、T009模板接线完成；固定输入/材料与进程身份边界保持 | runtime645 passed/10 skipped，backend定向213 passed；无真实镜像/集群结论 |

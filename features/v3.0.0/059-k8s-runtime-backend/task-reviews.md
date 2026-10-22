@@ -565,3 +565,45 @@ T009/T013增量L1：应用凭据支持只给app容器的Secret引用，材料Sec
 **红阶段**：17项为5 failed/12 errors（缺MaterialClient与新控制方法，`/private/tmp/f059-material-client-red.log`）；补6项manifest/无效deadline/换票身份，先复现5失败后修复。最终23项新client＋3项旧client共26 passed；完整runtime623 passed、10 skipped（`/private/tmp/f059-runtime-material-client-full.log`）。材料/控制/模型/旧材料组合197 passed（`/private/tmp/f059-material-control-green.log`），Ruff与逐文件arch-guard通过。
 **元数据验证**：目标1/2文件PASS；T029配对T028已红阶段；依赖T007/T027 PASS。
 **结果**：PASS。
+
+## Task Review: T077 / T078
+
+**任务**：准备操作缓存选择合同/材料授权接线。**类型**：测试/实现。
+**文件**：T077 `test_runtime_dependency_materials.py`；T078 `runtime_profile_service.py`、`runtime_material_service.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 既有Service→Repository，不新增API权限Owner或跨层SQL |
+| 2 | 命名/AC | PASS | 覆盖 AC-15、AC-25、AC-28、AC-29、AC-46、AC-47 |
+| 3 | 序列化 | PASS | 既有dependency-plans响应不变；选择只进入内部operation payload |
+| 4 | 数据库 | PASS | 操作→计划行锁，持久选择先于新Pod授权；同应用/profile/平台/verified；输入键不可变，无I/O占锁 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 仅固定缓存引用，当前操作失效即拒绝；伪造payload缺少匹配计划不能扩大材料集合 |
+| 7 | 设计同步 | PASS | 4.7同步缓存选择持久化，D1–D8不变 |
+
+**红阶段**：11 errors（缺clock及选择合同，`/private/tmp/f059-dependency-material-red.log`）。新增11项及原profile/材料/控制/模型共213 passed（`/private/tmp/f059-dependency-material-final.log`）；Ruff/逐文件arch-guard通过。
+**元数据验证**：目标1/2文件PASS；配对T077已红阶段；依赖T023/T029 PASS。
+**结果**：PASS。
+
+## T008/T009 helper集成补充复审
+
+既有模板任务的目标文件未变。新3项测试先复现可信helper从共享目录导入、Pod UID缺少权威注入、prepare缺固定子目录挂载；修复后模板/准入71 passed。可信helper统一`python -I -m`（发行镜像须安装模块到可信site-packages），材料UID仅Downward API；install只挂source/output可写、original/materials/tools只读，不挂完整scratch或身份。D4隔离要求保持，禁止helper PATH覆盖。L1七项复查PASS；后续需真实镜像/集群验证。
+
+## Task Review: T030 / T031
+
+**任务**：受信材料helper与无凭据环境物化合同/实现。**类型**：测试/实现。
+**文件**：T030 `tests/test_k8s_helper.py`；T031 `k8s_helper.py`、`k8s_prepare.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 独立执行包；可信传输只读写冻结材料；安装脚本为无网络client/身份的独立文件 |
+| 2 | 命名/AC | PASS | 覆盖 AC-15、AC-16、AC-24、AC-25、AC-26、AC-28、AC-29、AC-42、AC-43、AC-44、AC-45、AC-46、AC-54 |
+| 3 | 序列化 | PASS | 阶段结果固定标记JSON，产物必须后台verified+confirmed_at；无宿主路径当事实源 |
+| 4 | 数据库 | N/A | 无SQL或MinIO；平台接口为材料唯一入口 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 可信解包安全限额/边界；原始源码不导入；pip下载隔离模式；材料私钥仅Secret文件；上传不执行用户脚本；UID绑定等待有界、不延长期限 |
+| 7 | 设计同步 | PASS | 4.7/准备流程同步：先inputs算key，再选缓存并resolve；凭据不进入install Pod，固定/opt/venv离线物化 |
+
+**红阶段**：先14 failed（缺两个目标模块，`/private/tmp/f059-k8s-helper-red.log`）；补identity期限/UID等待两项先复现失败后修复。最终helper19项；完整runtime645 passed、10 skipped（`/private/tmp/f059-runtime-helper-full.log`）；backend新增与原合同组合213 passed。全app_runtime及中间件753 passed/18 skipped，仍有先前3项旧权限夹具失败（`/private/tmp/f059-helper-backend-full.log`）；不记为全模块通过。Ruff/逐文件arch-guard通过。离线pip/npm真实安装和镜像尚未实测，留到发行及189 E2E。
+**元数据验证**：目标1/2文件PASS；配对T030已红阶段；依赖T009/T029/T078 PASS。
+**结果**：PASS。

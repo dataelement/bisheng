@@ -878,6 +878,60 @@
       "review": "PASS"
     },
     {
+      "id": "T077",
+      "wave": 4,
+      "kind": "测试",
+      "title": "准备操作依赖缓存选择：合同与失败用例",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_dependency_materials.py"
+      ],
+      "logic": "选中依赖缓存须持久化在当前准备操作，校验同应用/profile/platform/verified，输入键不可变化；新材料授权从选择与真实计划推导，不接受伪造引用。",
+      "acs": [
+        "AC-15",
+        "AC-25",
+        "AC-28",
+        "AC-29",
+        "AC-46",
+        "AC-47"
+      ],
+      "depends": [
+        "T023",
+        "T029"
+      ],
+      "pair": "T078",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T078",
+      "wave": 4,
+      "kind": "实现",
+      "title": "依赖缓存选择与材料授权接线",
+      "files": [
+        "src/backend/bisheng/app_runtime/domain/services/runtime_profile_service.py",
+        "src/backend/bisheng/app_runtime/domain/services/runtime_material_service.py"
+      ],
+      "logic": "依赖resolve/confirm在操作行锁下持久选中结果；材料授权复查SQL计划和缓存范围，不把任意调用方artifact变为允许材料；不改变旧Docker内容确认合同。",
+      "acs": [
+        "AC-15",
+        "AC-25",
+        "AC-28",
+        "AC-29",
+        "AC-46",
+        "AC-47"
+      ],
+      "depends": [
+        "T023",
+        "T029",
+        "T077"
+      ],
+      "pair": "T077",
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T030",
       "wave": 4,
       "kind": "测试",
@@ -903,10 +957,13 @@
       ],
       "depends": [
         "T009",
-        "T029"
+        "T029",
+        "T078"
       ],
       "pair": "T031",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T031",
@@ -939,7 +996,9 @@
         "T030"
       ],
       "pair": "T030",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T032",

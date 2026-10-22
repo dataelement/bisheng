@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；76 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 33 / 76 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；78 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 37 / 78 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -293,15 +293,31 @@
   **依赖:** T007、T027、T028
   **配对:** T028
 
-- [ ] **T030** — 受信材料 helper 与离线环境物化：契约与失败用例
+- [x] **T077** — 准备操作依赖缓存选择：合同与失败用例
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_dependency_materials.py`
+  **逻辑/验收**：缓存选择须持久化当前准备操作；同应用/profile/platform/verified、输入键不可变；材料授权从真实选择/SQL计划推导，伪造引用不扩权；测试不混入实现。
+  **覆盖 AC:** AC-15、AC-25、AC-28、AC-29、AC-46、AC-47
+  **依赖:** T023、T029
+  **配对:** T078
+
+- [x] **T078** — 依赖缓存选择与材料授权接线
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_profile_service.py`、`src/backend/bisheng/app_runtime/domain/services/runtime_material_service.py`
+  **逻辑/验收**：resolve/confirm在操作行锁下持久选中结果，授权复查同范围SQL计划和材料；禁止任意引用扩大授权、终态写入或更换输入键。保持旧Docker内容确认合同。配对测试及L1后完成。
+  **覆盖 AC:** AC-15、AC-25、AC-28、AC-29、AC-46、AC-47
+  **依赖:** T023、T029、T077
+  **配对:** T077
+
+- [x] **T030** — 受信材料 helper 与离线环境物化：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_helper.py`
   **逻辑/验收**：material-fetch 只安全取冻结材料；无凭据 environment 阶段在固定 /opt/venv/Node/static 路径物化；prepare 分下载/安装编译/上传独立 Pod，代码不会借传输身份执行；环境键包含 profile/ABI/架构/锁/安装输入；测试只定义输入/结果，不加入实现。
   **覆盖 AC:** AC-15、AC-16、AC-24、AC-25、AC-26、AC-28、AC-29、AC-42、AC-43、AC-44、AC-45、AC-46、AC-54
-  **依赖:** T009、T029
+  **依赖:** T009、T029、T078
   **配对:** T031
 
-- [ ] **T031** — 受信材料 helper 与离线环境物化
+- [x] **T031** — 受信材料 helper 与离线环境物化
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_helper.py`、`src/runtime-manager/runtime_manager/k8s_prepare.py`
   **逻辑/验收**：material-fetch 只安全取冻结材料；无凭据 environment 阶段在固定 /opt/venv/Node/static 路径物化；prepare 分下载/安装编译/上传独立 Pod，代码不会借传输身份执行；环境键包含 profile/ABI/架构/锁/安装输入；通过配对测试后完成 L1 task-review。

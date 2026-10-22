@@ -1,28 +1,28 @@
 {
   "feature": "F059",
   "recorded_at": "2026-10-22",
-  "validated_source_commit": "5cf9678af1b6ec2fabecb5dbbc3183aeef8c325c",
+  "validated_source_commit": "0cf8cb53fdebebb9da9aa52d7c75ff2ea79953c9",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 33,
-    "tasks_total": 76,
+    "l1_completed": 37,
+    "tasks_total": 78,
     "e2e": "not_started",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 623,
+      "passed": 645,
       "skipped": 10,
       "exit_code": 0,
-      "log": "/private/tmp/f059-runtime-material-client-full.log"
+      "log": "/private/tmp/f059-runtime-helper-full.log"
     },
     "backend": {
-      "passed": 197,
+      "passed": 213,
       "exit_code": 0,
       "scope": "material/control/model and legacy material paths",
-      "log": "/private/tmp/f059-material-control-green.log"
+      "log": "/private/tmp/f059-dependency-material-final.log"
     },
     "public_tenant_fix": {
       "passed": 17,
@@ -67,17 +67,23 @@
       "installed_application_resources": false
     },
     "full_app_runtime_with_middleware": {
-      "passed": 742,
+      "passed": 753,
       "failed": 3,
       "skipped": 18,
       "exit_code": 1,
-      "log": "/private/tmp/f059-material-http-full.log",
+      "log": "/private/tmp/f059-helper-backend-full.log",
       "test_config": "explicit fixture-only JWT signing key; no production credentials",
       "remaining": "Vibe permission-registration fixtures lack new candidate count stubs; old linsight_skill non-registration assertion contradicts inherited release implementation. Retain as pending test maintenance, not a full green gate."
     },
     "material_client": {
       "passed": 26,
       "log": "/private/tmp/f059-material-client-final.log"
+    },
+    "kubernetes_helper_templates": {
+      "helper_cases": 19,
+      "template_admission_passed": 71,
+      "runtime_full_log": "/private/tmp/f059-runtime-helper-full.log",
+      "real_image_validation": false
     }
   },
   "not_executed": [
