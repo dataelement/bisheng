@@ -147,7 +147,7 @@ class KubernetesDataExecutor:
             for row in self.runtime.platform.resources(old["operation_id"]):
                 if (
                     row["kind"] == "Pod"
-                    and row["purpose"] in {"serve", "data", "migrate", "restore"}
+                    and row["purpose"] in {"serve", "data", "migrate", "restore", "purge"}
                     and row["stop_state"] != "confirmed"
                 ):
                     raise DataBusyError("Previous application writer is not confirmed stopped")

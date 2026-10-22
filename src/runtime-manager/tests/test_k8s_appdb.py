@@ -177,3 +177,69 @@ def test_manager_maintenance_persists_result_before_cleanup_and_reuses_it(runtim
     assert (
         platform.operation(operation["operation_id"])["result"]["maintenance_progress"]["backup"]["result"] == snapshot
     )
+
+
+def test_owner_purge_wipes_business_and_backups_without_following_links(tmp_path):
+    volume, path, operation, client = setup(tmp_path)
+    external = tmp_path / "external"
+    external.mkdir()
+    (external / "keep").write_text("unrelated")
+    (volume / "business" / "link").symlink_to(external, target_is_directory=True)
+    (volume / "platform" / "protected-backups").mkdir(parents=True)
+    (volume / "platform" / "protected-backups" / "old.sqlite").write_text("private")
+    operation["kind"] = "destroy"
+    operation["payload"]["purge_volume"] = True
+    result = run(volume, operation, None, "purge")
+    assert result == {"purged": True}
+    assert not path.exists()
+    assert list((volume / "business").iterdir()) == []
+    assert not (volume / "platform" / "protected-backups").exists()
+    assert (external / "keep").read_text() == "unrelated"
+    assert run(volume, operation, None, "purge") == result
+    assert client.uploads == []
+
+
+@pytest.mark.parametrize("kind,confirmed", [("deploy", True), ("destroy", False)])
+def test_purge_requires_explicit_destroy_intent(tmp_path, kind, confirmed):
+    volume, path, operation, _client = setup(tmp_path)
+    operation["kind"] = kind
+    operation["payload"]["purge_volume"] = confirmed
+    with pytest.raises(ExecutionError, match="purge_operation_refused"):
+        run(volume, operation, None, "purge")
+    assert path.exists()
+
+
+def test_destroy_maintenance_uses_no_application_or_material_identity_and_replays(runtime):
+    import json
+
+    from runtime_manager.k8s_data_executor import KubernetesDataExecutor
+
+    executor, platform, cluster, operation, events, _ = runtime
+    # First allocate the real volume through an earlier approved lifecycle.
+    plan = executor._plan(operation, "serve")
+    executor._volume(operation, plan)
+    operation["kind"] = "destroy"
+    operation["stage"] = "stopping"
+    operation["payload"] = {"purge_volume": True}
+    create = cluster.create
+
+    def finished(resource, document):
+        obj = create(resource, document)
+        if resource == "pods":
+            assert document["metadata"]["name"] == plan.name
+            assert not any("secret" in v or "configMap" in v for v in document["spec"]["volumes"])
+            current = cluster.objects[resource, document["metadata"]["name"]]
+            current["status"]["phase"] = "Succeeded"
+            for item in current["status"]["containerStatuses"]:
+                item["state"] = {"terminated": {"exitCode": 0}}
+        return obj
+
+    cluster.create = finished
+    cluster.logs = lambda *args, **kwargs: "BISHENG_RUNTIME_RESULT " + json.dumps({"purged": True})
+    driver = KubernetesDataExecutor(executor)
+    assert driver.request(operation, "purge", {}) == {"purged": True}
+    assert not platform.delegations
+    assert not any(kind == "persistentvolumeclaims" for kind, _ in cluster.objects)
+    before = len([event for event in events if event[0] == "create"])
+    assert driver.request(operation, "purge", {})["purged"]
+    assert len([event for event in events if event[0] == "create"]) == before

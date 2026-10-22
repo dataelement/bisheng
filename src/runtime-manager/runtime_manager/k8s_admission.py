@@ -591,6 +591,101 @@ class AdmissionPlanClient:
         self.http.close()
 
 
+class CanaryPlanReader:
+    """Installer-owned finite bootstrap plans; never backend business authority."""
+
+    def __init__(self, fallback, path, *, namespace, helper_image, clock=None):
+        import time
+
+        self.fallback, self.path = fallback, Path(path)
+        self.namespace, self.helper_image = validate_namespace(namespace), helper_image
+        self.clock = clock or time.time
+
+    def __call__(self, reference):
+        from uuid import UUID
+
+        try:
+            with self.path.open("rb") as stream:
+                raw = stream.read(1024 * 1024 + 1)
+        except FileNotFoundError:
+            return self.fallback(reference)
+        if len(raw) > 1024 * 1024:
+            raise ValueError("canary_document_invalid")
+        document = json.loads(raw)
+        if document.get("schema_version") != 1 or not isinstance(document.get("plans"), dict):
+            raise ValueError("canary_document_invalid")
+        plan = document["plans"].get(reference)
+        if plan is None:
+            return self.fallback(reference)
+        try:
+            if str(UUID(reference)) != reference:
+                raise ValueError()
+            expires = plan["expires_at"]
+            if type(expires) not in {int, float} or not 0 < expires - self.clock() <= 3600:
+                raise ValueError()
+            name, template = plan["name"], plan["template"]
+            meta = template["metadata"]
+            if (plan["resource_ref"], plan["namespace"], template["kind"], meta["name"], meta["namespace"]) != (
+                reference,
+                self.namespace,
+                plan["kind"],
+                name,
+                self.namespace,
+            ):
+                raise ValueError()
+            if not name.startswith("preflight-") or meta.get("labels", {}).get(RESOURCE_LABEL) != reference:
+                raise ValueError()
+            if not meta.get("annotations", {}).get("runtime.bisheng.io/operation", "").startswith("preflight-"):
+                raise ValueError()
+            uid = plan.get("uid")
+            if plan.get("allow_create") and uid is not None:
+                raise ValueError()
+            if (plan.get("allow_update") or plan.get("allow_delete")) and (
+                not isinstance(uid, str) or str(UUID(uid)) != uid
+            ):
+                raise ValueError()
+            if plan["kind"] == "Pod":
+                spec = template["spec"]
+                if meta.get("labels", {}).get("runtime.bisheng.io/purpose") != "probe":
+                    raise ValueError()
+                if type(spec.get("activeDeadlineSeconds")) is not int or not 1 <= spec["activeDeadlineSeconds"] <= 600:
+                    raise ValueError()
+                for volume in spec.get("volumes", []):
+                    if set(volume) - {"name", "emptyDir", "persistentVolumeClaim"}:
+                        raise ValueError()
+                    if "persistentVolumeClaim" in volume and not volume["persistentVolumeClaim"].get(
+                        "claimName", ""
+                    ).startswith("preflight-"):
+                        raise ValueError()
+                commands = {
+                    ("python", "-I", "-m", "runtime_manager.k8s_capabilities", action)
+                    for action in ("network", "storage", "idle")
+                } | {("python", "-I", "-m", "runtime_manager.k8s_helper", "data-layout")}
+                native = {
+                    ("python", "-I", "-c", "import platform; print(platform.machine())"),
+                    ("node", "-e", "console.log(process.arch)"),
+                    ("python", "--version"),
+                    ("node", "--version"),
+                    ("nginx", "-v"),
+                    ("nginx", "-t"),
+                }
+                profile_images = document.get("profile_images", [])
+                for container in [*spec.get("containers", []), *spec.get("initContainers", [])]:
+                    command = tuple(container.get("command", []))
+                    if container.get("args") or any("valueFrom" in env for env in container.get("env", [])):
+                        raise ValueError()
+                    if container.get("image") == self.helper_image:
+                        if command not in commands | native:
+                            raise ValueError()
+                    elif container.get("image") not in profile_images or command not in native:
+                        raise ValueError()
+            elif plan["kind"] != "PersistentVolumeClaim":
+                raise ValueError()
+        except (KeyError, TypeError, AttributeError, ValueError):
+            raise ValueError("canary_plan_refused") from None
+        return copy.deepcopy(plan)
+
+
 def main():
     """Internal HTTPS endpoint; installer network policy restricts API-server access."""
     import uvicorn
@@ -601,11 +696,19 @@ def main():
         secret_file=os.environ["RTM_ADMISSION_SECRET_FILE"],
         ca_file=os.getenv("RTM_ADMISSION_PLATFORM_CA_FILE"),
     )
+    reader = client
+    if os.getenv("RTM_ADMISSION_CANARY_PLANS_FILE"):
+        reader = CanaryPlanReader(
+            client,
+            os.environ["RTM_ADMISSION_CANARY_PLANS_FILE"],
+            namespace=os.environ["RTM_K8S_NAMESPACE"],
+            helper_image=os.environ["RTM_ADMISSION_HELPER_IMAGE"],
+        )
     policy = AdmissionPolicy(
         namespace=os.environ["RTM_K8S_NAMESPACE"],
         manager_username=os.environ["RTM_ADMISSION_MANAGER_USERNAME"],
         status_policy_revision=os.environ["RTM_ADMISSION_STATUS_POLICY_REVISION"],
-        plan_reader=client,
+        plan_reader=reader,
         data_key_configmap=os.getenv("RTM_DATA_PUBLIC_KEYS_CONFIGMAP", "runtime-data-public-keys"),
         cni_username=os.getenv("RTM_ADMISSION_CNI_USERNAME", ""),
         storage_controller_usernames=tuple(

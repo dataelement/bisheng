@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 import stat
 import time
@@ -90,7 +91,9 @@ class KubernetesExecutor:
         path = config.material_issuer_key_file
         if path:
             try:
-                if stat.S_IMODE(path.stat().st_mode) & 0o077:
+                metadata = path.stat()
+                mode = stat.S_IMODE(metadata.st_mode)
+                if mode & 0o027 or (mode & 0o040 and metadata.st_gid not in {os.getegid(), *os.getgroups()}):
                     raise ExecutorError("material_issuer_file_permissions_invalid")
                 with path.open("rb") as source:
                     self._seed = source.read(33)
@@ -185,10 +188,12 @@ class KubernetesExecutor:
         payload = operation["payload"]
         delivery = payload.get("resolved_delivery") or payload.get("delivery") or {}
         profile = delivery.get("profile") or payload.get("profile") or {}
-        platform = delivery.get("platform") or profile.get("platform")
+        platform = (
+            self.descriptor.platform if purpose == "purge" else (delivery.get("platform") or profile.get("platform"))
+        )
         if platform != self.descriptor.platform:
             raise ExecutorError("frozen_platform_mismatch")
-        mode = delivery.get("mode", "bundle")
+        mode = "image" if purpose == "purge" else delivery.get("mode", "bundle")
         if mode == "source-image":
             mode = "bundle" if purpose.startswith("prepare-") else "image"
         startup = delivery.get("startup") or {}
@@ -197,7 +202,11 @@ class KubernetesExecutor:
             raise ExecutorError("frozen_command_invalid")
         tier, health = payload.get("tier", {}), payload.get("health", {})
         reference = reference or _ref(operation, purpose)
-        pvc = "" if purpose not in {"serve", "migrate", "restore", "data"} else _name("data-", operation["app_id"])
+        pvc = (
+            ""
+            if purpose not in {"serve", "migrate", "restore", "data", "purge"}
+            else _name("data-", operation["app_id"])
+        )
         env = dict(payload.get("runtime_env", {})) if purpose in {"serve", "probe", "preview"} else {}
         if not isinstance(env, dict) or any(not isinstance(v, str) for v in env.values()):
             raise ExecutorError("frozen_environment_invalid")
@@ -619,7 +628,13 @@ class KubernetesExecutor:
                 if not self.confirm_stopped(row["resource_ref"])["stopped"]:
                     return {"complete": False, "reason": "writer_stop_unconfirmed"}
         for row in rows:
-            if row["kind"] == "PersistentVolumeClaim" and row["purpose"] in {"serve", "migrate", "restore", "data"}:
+            if row["kind"] == "PersistentVolumeClaim" and row["purpose"] in {
+                "serve",
+                "migrate",
+                "restore",
+                "data",
+                "purge",
+            }:
                 continue
             if row["cleanup_state"] == "complete":
                 continue
@@ -657,6 +672,41 @@ class KubernetesExecutor:
                     else:
                         return {"complete": False, "reason": "resource_cleanup_pending"}
             self._observation(row, "cleanup", uid=row["uid"])
+        return {"complete": True}
+
+    def purge_volume(self, operation):
+        reference = str(uuid5(NAMESPACE_URL, "bisheng-volume:" + self.config.node_id + ":" + operation["app_id"]))
+        row = self.platform.resource(reference)
+        if row["cleanup_state"] == "complete":
+            return {"complete": True}
+        if (row["app_id"], row["node_id"], row["kind"]) != (
+            operation["app_id"],
+            self.config.node_id,
+            "PersistentVolumeClaim",
+        ):
+            raise ExecutorError("purge_volume_scope_refused")
+        row = self._observation(row, "stop", operation_id=operation["operation_id"])
+        try:
+            obj = self._fresh(row)
+        except KubernetesAPIError as exc:
+            if exc.status_code != 404:
+                raise
+        else:
+            self._controller()
+            self.client.delete(
+                "persistentvolumeclaims",
+                row["name"],
+                uid=row["uid"],
+                resource_version=obj["metadata"]["resourceVersion"],
+            )
+            try:
+                self._fresh(row)
+            except KubernetesAPIError as exc:
+                if exc.status_code != 404:
+                    raise
+            else:
+                raise ExecutorError("purge_volume_cleanup_pending")
+        self._observation(row, "cleanup", uid=row["uid"])
         return {"complete": True}
 
     def data(self, operation, action, parameters):
