@@ -177,7 +177,9 @@ def test_indexes_require_exactly_verified_platform_manifests():
         attach_indexes(release, indexes)
 
 
-def mock_builder(tmp_path, monkeypatch, *, publish=False, wrong_engine=False, existing=False, context="default"):
+def mock_builder(
+    tmp_path, monkeypatch, *, publish=False, wrong_engine=False, existing=False, context="default", creation_mask=-1
+):
     import os
     import subprocess
 
@@ -197,6 +199,11 @@ elif args[:3]==["buildx","imagetools","inspect"]:
  if os.environ.get("MOCK_EXISTING")=="1":print("existing")
  else:print("manifest unknown",file=sys.stderr);sys.exit(1)
 elif args[0]=="run":
+ if os.environ.get("MOCK_REQUIRE_READABLE_SHADOW")=="1" and "--workdir" in args and args[args.index("--workdir")+1]=="/smoke":
+  mount=next(a for a in args if a.startswith("type=bind,src=") and "dst=/smoke" in a)
+  shadow=Path(dict(part.split("=",1) for part in mount.split(",") if "=" in part)["src"])
+  if shadow.stat().st_mode & 0o005 != 0o005 or (shadow/"runtime_manager.py").stat().st_mode & 0o004 != 0o004:
+   print("native smoke shadow is not readable by unrelated UID 10001",file=sys.stderr);sys.exit(43)
  if "-i" in args:
   sys.stdin.read()
   if os.environ.get("MOCK_FAIL_RESOLVE")=="1":sys.exit(42)
@@ -227,7 +234,11 @@ elif args[:2]==["image","inspect"]:
     tool.mkdir(parents=True)
     (tool / "image_catalog.py").write_text((ROOT / "src/runtime-manager/runtime_manager/image_catalog.py").read_text())
     result = subprocess.run(
-        ["bash", str(ROOT / "scripts/build_runtime_images.sh")], cwd=tmp_path, capture_output=True, text=True
+        ["bash", str(ROOT / "scripts/build_runtime_images.sh")],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        umask=creation_mask,
     )
     commands = [json.loads(line) for line in log.read_text().splitlines()]
     return result, commands
@@ -260,6 +271,16 @@ def test_mock_builder_rejects_non_daemon_builder_before_build(tmp_path, monkeypa
     assert result.returncode != 0
     assert "native Docker driver" in result.stderr
     assert not any(command[:2] == ["buildx", "build"] for command in commands)
+
+
+@pytest.mark.parametrize("creation_mask", [0o022, 0o077])
+def test_native_smoke_shadow_is_readable_by_helper_uid(tmp_path, monkeypatch, creation_mask):
+    monkeypatch.setenv("MOCK_REQUIRE_READABLE_SHADOW", "1")
+    result, commands = mock_builder(tmp_path, monkeypatch, creation_mask=creation_mask)
+    assert result.returncode == 0, result.stderr
+    isolated = [command for command in commands if "--workdir" in command and "/smoke" in command]
+    assert len(isolated) == 2
+    assert all("-I" in command for command in isolated)
 
 
 def test_mock_builder_rejects_cross_architecture_before_build(tmp_path, monkeypatch):
