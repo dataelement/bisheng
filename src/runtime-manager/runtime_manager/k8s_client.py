@@ -261,6 +261,9 @@ class KubernetesClient:
             "data-layout",
             "data-helper",
             "maintenance",
+            "storage-guard",
+            "schema-init",
+            "assembler",
         }:
             raise ValueError("k8s_log_container_invalid")
         path = self._path("pods", pod_name) + "/log"

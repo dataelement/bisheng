@@ -350,3 +350,99 @@ def test_absolute_log_window_uses_since_time_without_changing_its_meaning(client
     assert "sinceSeconds" not in calls[0].url.params
     with pytest.raises(ValueError):
         client.logs("app-a", since_time="2026-10-01T00:00:00Z", since_seconds=30)
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        "app",
+        "transfer",
+        "prepare",
+        "material-fetch",
+        "environment",
+        "data-layout",
+        "data-helper",
+        "maintenance",
+        "storage-guard",
+        "schema-init",
+        "assembler",
+    ],
+)
+def test_every_fixed_managed_container_has_bounded_scoped_logs(client_factory, container):
+    """覆盖 AC: AC-03、AC-48、AC-52."""
+    calls = []
+    client = client_factory(
+        lambda request: calls.append(request) or httpx.Response(200, text="fixed helper diagnostic")
+    )
+    assert client.logs("task-a", container=container, tail=80) == "fixed helper diagnostic"
+    assert len(calls) == 1 and calls[0].method == "GET"
+    assert calls[0].url.path == f"/api/v1/namespaces/{NAMESPACE}/pods/task-a/log"
+    assert dict(calls[0].url.params) == {
+        "container": container,
+        "tailLines": "80",
+        "previous": "false",
+        "limitBytes": "1048576",
+    }
+
+
+@pytest.mark.parametrize(
+    "container",
+    ["custom", "storage-guard-extra", "schema-init-extra", "ASSEMBLER", "", "../foreign", "app?container=foreign"],
+)
+def test_unregistered_log_container_is_rejected_without_request(client_factory, container):
+    """覆盖 AC: AC-03、AC-48、AC-52."""
+    calls = []
+    client = client_factory(lambda request: calls.append(request) or httpx.Response(200, text="must not be requested"))
+    with pytest.raises(ValueError, match="k8s_log_container_invalid"):
+        client.logs("task-a", container=container)
+    assert not calls
+
+
+def test_log_contract_covers_only_real_fixed_template_names(client_factory):
+    """覆盖 AC: AC-03、AC-48、AC-52."""
+    from runtime_manager.k8s_templates import PREPARATION, PRODUCTION, PURPOSES, PodPlan, pod_template
+
+    names = set()
+    for purpose in PURPOSES:
+        plan = PodPlan(
+            namespace=NAMESPACE,
+            app_id="app-a",
+            operation_id="operation-a",
+            resource_ref="ref-a",
+            node_id="node-a",
+            generation=1,
+            owner_epoch=1,
+            purpose=purpose,
+            platform="linux/amd64",
+            status_policy_revision="v1",
+            image="example/runtime@sha256:" + "a" * 64,
+            helper_image="example/helper@sha256:" + "b" * 64,
+            command=("python", "main.py"),
+            memory_mb=512,
+            cpu_millicores=250,
+            deadline_seconds=None if purpose == "serve" else 60,
+            pvc_name="data-a" if purpose in PRODUCTION else "",
+            scratch_pvc="scratch-a" if purpose in PREPARATION else "",
+            material_secret="material-a",
+            schema_plan=({"op": "create_table", "table": "items", "columns": []},),
+        )
+        spec = pod_template(plan)["spec"]
+        names.update(c["name"] for c in spec["initContainers"] + spec["containers"])
+    assert names == {
+        "app",
+        "transfer",
+        "prepare",
+        "material-fetch",
+        "environment",
+        "data-layout",
+        "data-helper",
+        "maintenance",
+        "storage-guard",
+        "schema-init",
+        "assembler",
+    }
+    calls = []
+    client = client_factory(lambda request: calls.append(request) or httpx.Response(200, text="fixed log"))
+    for name in sorted(names):
+        assert client.logs("task-a", container=name) == "fixed log"
+    assert len(calls) == len(names)
