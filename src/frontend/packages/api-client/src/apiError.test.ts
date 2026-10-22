@@ -77,3 +77,35 @@ it('renders available error parameters and never exposes unresolved placeholders
   expect(resolveErrorMessageTemplate('Validation failed: {field}', { field: 'name' }, 'Request failed')).toBe('Validation failed: name');
   expect(resolveErrorMessageTemplate('Validation failed: {missing}', {}, 'Request failed')).toBe('Request failed');
 });
+
+describe('readable transport failures', () => {
+  const transportMessages = { network: 'Cannot connect. Check your network and try again.', timeout: 'The request timed out. Check the result before retrying.' };
+
+  it.each([
+    ['ERR_NETWORK', 'network', 'Cannot connect. Check your network and try again.'],
+    ['ECONNABORTED', 'timeout', 'The request timed out. Check the result before retrying.'],
+    ['ETIMEDOUT', 'timeout', 'The request timed out. Check the result before retrying.'],
+  ])('explains %s while retaining the original error', (code, kind, message) => {
+    const cause = Object.assign(new Error('Technical transport details'), { code });
+    const error = normalizeApiError(cause, { message: cause.message, transportMessages });
+    expect(error).toMatchObject({ code, kind, message });
+    expect(error.cause).toBe(cause);
+    expect(cause.message).toBe('Technical transport details');
+  });
+
+  it('can localize an existing transport error without changing its identity or handling state', () => {
+    const error = normalizeApiError({ code: 'ERR_NETWORK' }, { message: 'Network Error' });
+    error.presentation = 'global';
+    const localized = normalizeApiError(error, { message: 'Ignored fallback', transportMessages });
+    expect(localized).toBe(error);
+    expect(localized).toMatchObject({ message: 'Cannot connect. Check your network and try again.', presentation: 'global' });
+  });
+
+  it.each([
+    { status_code: 26130, status_message: 'Version changed', data: { version: 3 } },
+    { response: { status: 409, data: { status_code: 26130, status_message: 'Version changed', data: { version: 3 } } } },
+  ])('keeps a specific business explanation instead of a transport fallback', cause => {
+    const error = normalizeApiError(cause, { message: 'The version changed. Refresh before saving.', transportMessages });
+    expect(error).toMatchObject({ status_code: 26130, data: { version: 3 }, message: 'The version changed. Refresh before saving.' });
+  });
+});

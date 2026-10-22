@@ -161,8 +161,19 @@ function shouldToastLicenseExpired(): boolean {
     return false;
 }
 
+function normalizeRequestError(cause: unknown, options: Parameters<typeof normalizeApiError>[1]) {
+    const error = normalizeApiError(cause, options);
+    if (error.kind !== 'network' && error.kind !== 'timeout') return error;
+    const key = error.kind === 'network' ? 'api_errors:network_error' : 'api_errors:request_timeout';
+    if (!i18next.exists(key)) return error;
+    return normalizeApiError(error, {
+        ...options,
+        transportMessages: { [error.kind]: String(i18next.t(key)) },
+    });
+}
+
 export function showApiError(cause: unknown) {
-    const error = normalizeApiError(cause, {
+    const error = normalizeRequestError(cause, {
         message: cause instanceof Error ? cause.message : coerceErrorMessage(cause) || String(i18next.t('api_errors:fallback')),
     });
     if (error.kind !== 'canceled' && error.presentation === 'none') {
@@ -173,13 +184,13 @@ export function showApiError(cause: unknown) {
 }
 
 async function responseError(cause, response?) {
-    if (isApiError(cause)) return cause;
+    if (isApiError(cause)) return normalizeRequestError(cause, { message: cause.message });
     const original = response ?? cause?.response;
     const envelope = await decodeErrorEnvelope(original?.data, { httpFailure: original?.status >= 400 }) ?? original?.data;
     const message = isErrorEnvelope(envelope)
         ? decodeEnvelopeMessage(envelope)
         : coerceErrorMessage(cause?.message ?? cause);
-    return normalizeApiError(cause, {
+    return normalizeRequestError(cause, {
         response: original,
         envelope,
         message: message || String(i18next.t('api_errors:fallback')),

@@ -14,6 +14,7 @@ export interface ErrorEnvelope {
 
 interface NormalizeOptions {
   message: string;
+  transportMessages?: Partial<Record<'network' | 'timeout', string>>;
   response?: ApiErrorResponse;
   envelope?: unknown;
 }
@@ -64,7 +65,11 @@ export function isApiError(value: unknown): value is ApiError {
 }
 
 export function normalizeApiError(cause: unknown, options: NormalizeOptions): ApiError {
-  return isApiError(cause) ? cause : new ApiError(cause, options);
+  const error = isApiError(cause) ? cause : new ApiError(cause, options);
+  const message = error.kind === 'network' || error.kind === 'timeout'
+    ? options.transportMessages?.[error.kind] : undefined;
+  if (message) error.message = message;
+  return error;
 }
 
 export function shouldRetryApiError(error: unknown): boolean {

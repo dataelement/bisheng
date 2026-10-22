@@ -396,9 +396,19 @@ customAxios.interceptors.response.use(
   },
 );
 
-/** Keep the existing auth/refresh interceptor intact; normalize its outgoing result. */
+function normalizeRequestError(cause: unknown, options: Parameters<typeof normalizeApiError>[1]) {
+  const error = normalizeApiError(cause, options);
+  if (error.kind !== 'network' && error.kind !== 'timeout') return error;
+  const key = error.kind === 'network' ? 'api_errors.network_error' : 'api_errors.request_timeout';
+  if (!i18next.exists(key)) return error;
+  return normalizeApiError(error, {
+    ...options,
+    transportMessages: { [error.kind]: String(i18next.t(key)) },
+  });
+}
+
 export function showApiError(cause: unknown) {
-  const error = normalizeApiError(cause, { message: cause instanceof Error ? cause.message : translateApiErrorMessage(cause) || String(i18next.t('api_errors.fallback')) });
+  const error = normalizeRequestError(cause, { message: cause instanceof Error ? cause.message : translateApiErrorMessage(cause) || String(i18next.t('api_errors.fallback')) });
   if (error.kind !== 'canceled' && error.presentation === 'none' && window.showToast) {
     window.showToast({ message: error.message, status: 'warning' });
     error.presentation = 'toast';
@@ -407,10 +417,10 @@ export function showApiError(cause: unknown) {
 }
 
 async function normalizeRequestFailure(cause, response?) {
-  if (isApiError(cause)) return cause;
+  if (isApiError(cause)) return normalizeRequestError(cause, { message: cause.message });
   const original = response ?? cause?.response;
   const envelope = await decodeErrorEnvelope(original?.data, { httpFailure: original?.status >= 400 }) ?? original?.data;
-  const error = normalizeApiError(cause, {
+  const error = normalizeRequestError(cause, {
     response: original,
     envelope,
     message: (isErrorEnvelope(envelope) ? translateApiErrorMessage(envelope) : cause?.message)

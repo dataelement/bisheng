@@ -528,5 +528,7 @@
   "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed.",
   "90002": "Your current role does not have permission to access the workbench. Please contact the administrator if needed.",
   "personIdAlreadyExists": "Person ID already exists",
+  "network_error": "Unable to connect to the server. Check your network connection and try again.",
+  "request_timeout": "The request timed out. Check whether the operation completed before trying again.",
   "fallback": "The operation failed. Please try again later."
 }
