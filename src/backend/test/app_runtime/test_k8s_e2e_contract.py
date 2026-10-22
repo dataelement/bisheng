@@ -632,3 +632,264 @@ async def test_pytest_live_fixture_uses_same_verified_tls_context_as_cli(tmp_pat
     assert observed[0]["verify"] is settings.ssl_context
     assert observed[0]["trust_env"] is False
     assert cleanup == [True, True]
+
+
+@pytest.fixture
+def fault_operation_suite(tmp_path):
+    """Offline driver contract only; public API responses here are not live evidence."""
+    from types import SimpleNamespace
+
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    scenario = SimpleNamespace(slug="e2e-f059-smoke", table="items", expected_failure_code=None)
+    settings = SuiteSettings("e2e-f059-tenant", (scenario,))
+    journal = EvidenceJournal(tmp_path / "evidence.json", tenant_code=settings.tenant_code)
+    journal.document["apps"][scenario.slug] = {"app_id": "app-1"}
+    suite = LiveVibeSuite(settings, journal, None)
+    suite.users["OWNER"], suite.tenant_id = 42, 7
+    state = SimpleNamespace(
+        requests=[],
+        detail={
+            "app_id": "app-1",
+            "slug": scenario.slug,
+            "name": scenario.slug,
+            "tenant_id": 7,
+            "owner_user_id": 42,
+            "state": "online",
+            "current_version_id": "version-1",
+        },
+        binding={"app_id": "app-1", "generation": 7, "operation_id": "operation-1", "current_version_id": "version-1"},
+        operation={
+            "operation_id": "operation-1",
+            "kind": "deploy",
+            "stage": "preparing",
+            "status": "pending",
+            "cleanup_status": "pending",
+            "failure": {},
+            "deadline": "2030-01-01T00:00:00",
+        },
+        snapshots=[{"snapshot_id": "snapshot-1", "sha256": "a" * 64, "confirmed_at": "2026-10-22T00:00:00"}],
+        rows={"data": [{"id": 1, "value": "snapshot-row"}], "total": 1},
+        cancelled=False,
+        restored=False,
+        protect=True,
+    )
+
+    async def request(method, path, **kwargs):
+        role = kwargs.get("role", "OWNER")
+        state.requests.append((method, path, role, kwargs))
+        if role in {"NONOWNER", "FOREIGN"}:
+            assert kwargs["expected_code"] == 16105
+            return {"status_code": 16105}
+        if kwargs.get("expected_code"):
+            assert kwargs["expected_code"] == 16166
+            return {"status_code": 16166}
+        if path == "/apps/app-1":
+            return state.detail
+        if path.endswith("/runtime/state"):
+            return dict(state.binding)
+        if path.endswith("/runtime/snapshots"):
+            protected = (
+                [{"snapshot_id": "protected-1", "sha256": "b" * 64, "confirmed_at": "2026-10-22T00:00:01"}]
+                if state.restored and state.protect
+                else []
+            )
+            return state.snapshots + protected
+        if path.endswith("/cancel"):
+            state.cancelled = True
+            return {"operation_id": "operation-1", "cancel_requested": True}
+        if path.endswith("/runtime/restore"):
+            state.restored = True
+            return {"operation_id": "restore-1", "status": "pending"}
+        if "/runtime/operations/" in path:
+            if path.endswith("/restore-1"):
+                return {
+                    "operation_id": "restore-1",
+                    "kind": "restore",
+                    "status": "completed",
+                    "stage": "completed",
+                    "cleanup_status": "complete",
+                    "failure": {},
+                }
+            return {
+                **state.operation,
+                **(
+                    {
+                        "status": "cancelled",
+                        "stage": "cancelled",
+                        "cleanup_status": "complete",
+                        "failure": {"reason": "operation_cancelled"},
+                    }
+                    if state.cancelled
+                    else {}
+                ),
+            }
+        raise AssertionError("unexpected harness request")
+
+    async def rows(scenario, app_id):
+        assert app_id == "app-1"
+        return state.rows
+
+    suite.request, suite.rows = request, rows
+    return suite, state
+
+
+async def test_fault_operation_observes_exact_scope_failure_and_pairs_owner_denials(fault_operation_suite):
+    """AC-28, AC-43, AC-47, AC-52, AC-55: exact operation failure/stage and cleanup remain queryable."""
+    suite, state = fault_operation_suite
+    state.operation.update(
+        status="failed",
+        stage="failed",
+        cleanup_status="pending",
+        failure={"reason": "material_denied", "failed_stage": "preparing"},
+    )
+    await suite.fault_operation(
+        "e2e-f059-smoke",
+        action="observe",
+        operation_id="operation-1",
+        expected_status="failed",
+        expected_reason="material_denied",
+        expected_failure_stage="preparing",
+        expected_cleanup="pending",
+    )
+    assert all(method == "GET" for method, *_ in state.requests)
+    assert {role for _, path, role, _ in state.requests if "/runtime/operations/" in path} == {
+        "OWNER",
+        "NONOWNER",
+        "FOREIGN",
+    }
+    assert suite.journal.document["events"][-1]["failure_reason"] == "material_denied"
+    assert suite.journal.document["events"][-1]["injection_verified"] is False
+
+
+async def test_fault_operation_cancellation_uses_exact_active_operation_and_waits_cleanup(fault_operation_suite):
+    """AC-43, AC-52, AC-55: owner cancellation pairs both denials and verifies persisted terminal cleanup."""
+    suite, state = fault_operation_suite
+    await suite.fault_operation("e2e-f059-smoke", action="cancel", operation_id="operation-1")
+    mutations = [(path, role) for method, path, role, _ in state.requests if method == "POST"]
+    assert mutations == [
+        ("/apps/app-1/runtime/operations/operation-1/cancel", role) for role in ["NONOWNER", "FOREIGN", "OWNER"]
+    ]
+    event = suite.journal.document["events"][-1]
+    assert event["status"] == "cancelled" and event["cleanup_status"] == "complete"
+
+
+@pytest.mark.parametrize("stage", ["serving", "retiring"])
+async def test_fault_operation_serving_cancel_requires_real_owner_refusal(fault_operation_suite, stage):
+    """AC-43, AC-52: serving/retiring is an explicit 16166 refusal, never reported as cancelled."""
+    suite, state = fault_operation_suite
+    state.operation["stage"] = stage
+    await suite.fault_operation("e2e-f059-smoke", action="cancel", operation_id="operation-1")
+    owner = [kwargs for method, _, role, kwargs in state.requests if method == "POST" and role == "OWNER"]
+    assert owner == [{"expected_code": 16166}]
+    assert suite.journal.document["events"][-1]["outcome"] == "refused"
+    assert not state.cancelled
+
+
+@pytest.mark.parametrize("status", ["completed", "failed", "cancelled", "timed_out"])
+async def test_fault_operation_does_not_reissue_cancel_for_terminal_work(fault_operation_suite, status):
+    """AC-43, AC-55: an existing terminal result is not relabeled as this suite's cancellation."""
+    suite, state = fault_operation_suite
+    state.operation["status"] = status
+    with pytest.raises(ValueError, match="terminal"):
+        await suite.fault_operation("e2e-f059-smoke", action="cancel", operation_id="operation-1")
+    assert not any(method == "POST" for method, *_ in state.requests)
+
+
+@pytest.mark.parametrize("mismatch", ["prefix", "journal", "owner", "operation", "active"])
+async def test_fault_operation_refuses_untrusted_scope_before_owner_mutation(fault_operation_suite, mismatch):
+    """AC-35, AC-49, AC-52, AC-55: no supplied name or stale operation authorizes a different writer."""
+    suite, state = fault_operation_suite
+    slug = "foreign-app" if mismatch == "prefix" else "e2e-f059-smoke"
+    if mismatch == "journal":
+        suite.journal.document["apps"].clear()
+    if mismatch == "owner":
+        state.detail["owner_user_id"] = 999
+    if mismatch == "operation":
+        state.operation["operation_id"] = "different-operation"
+    if mismatch == "active":
+        state.binding["operation_id"] = "different-operation"
+    with pytest.raises((ValueError, AssertionError)):
+        await suite.fault_operation(slug, action="cancel", operation_id="operation-1")
+    assert not any(method == "POST" and role == "OWNER" for method, _, role, _ in state.requests)
+
+
+async def test_fault_operation_restore_requires_fresh_generation_and_protects_current_data(fault_operation_suite):
+    """AC-33, AC-50, AC-51, AC-55: explicit owner restore pairs denials, preserves a backup and verifies rows."""
+    suite, state = fault_operation_suite
+    await suite.fault_operation(
+        "e2e-f059-smoke",
+        action="restore",
+        snapshot_id="snapshot-1",
+        expected_generation=7,
+        acknowledge_data_loss=True,
+        expected_rows=state.rows,
+    )
+    posts = [
+        (role, kwargs["json"])
+        for method, path, role, kwargs in state.requests
+        if method == "POST" and path.endswith("/restore")
+    ]
+    assert [role for role, _ in posts] == ["NONOWNER", "FOREIGN", "OWNER"]
+    assert len({json.dumps(body, sort_keys=True) for _, body in posts}) == 1
+    assert posts[-1][1]["expected_current_generation"] == 7
+    assert posts[-1][1]["acknowledge_data_loss"] is True
+    assert (
+        len([path for method, path, _, _ in state.requests if method == "GET" and path.endswith("/runtime/state")]) == 2
+    )
+    event = suite.journal.document["events"][-1]
+    assert event["snapshot_id"] == "snapshot-1"
+    assert event["rows_verified"] is True and event["operation_id"] == "restore-1"
+    assert event["outcome"] == "partial" and event["protection_link_verified"] is False
+    assert suite.journal.document["events"][-2]["outcome"] == "unverified"
+
+
+@pytest.mark.parametrize("invalid", ["ack", "generation", "snapshot", "unconfirmed", "rows"])
+async def test_fault_operation_restore_invalid_intent_cannot_mutate(fault_operation_suite, invalid):
+    """AC-47, AC-51, AC-55: missing owner acknowledgement, stale generation or foreign material prevents restore."""
+    suite, state = fault_operation_suite
+    if invalid == "unconfirmed":
+        state.snapshots[0]["confirmed_at"] = None
+    with pytest.raises((ValueError, AssertionError)):
+        await suite.fault_operation(
+            "e2e-f059-smoke",
+            action="restore",
+            snapshot_id="foreign-snapshot" if invalid == "snapshot" else "snapshot-1",
+            expected_generation=6 if invalid == "generation" else 7,
+            acknowledge_data_loss=invalid != "ack",
+            expected_rows=None if invalid == "rows" else state.rows,
+        )
+    assert not any(method == "POST" for method, *_ in state.requests)
+
+
+async def test_fault_operation_restore_cannot_claim_success_without_row_match(fault_operation_suite):
+    """AC-33, AC-51, AC-55: completion alone does not prove data restoration."""
+    suite, _state = fault_operation_suite
+    with pytest.raises(AssertionError):
+        await suite.fault_operation(
+            "e2e-f059-smoke",
+            action="restore",
+            snapshot_id="snapshot-1",
+            expected_generation=7,
+            acknowledge_data_loss=True,
+            expected_rows={"data": []},
+        )
+    assert not any(event["name"] == "restore-operation" for event in suite.journal.document["events"])
+
+
+async def test_fault_operation_restore_accepts_dedup_and_marks_backup_association_unverified(fault_operation_suite):
+    """AC-51, AC-55: legitimate content dedup is not a failure or proof of protection association."""
+    suite, state = fault_operation_suite
+    state.protect = False
+    result = await suite.fault_operation(
+        "e2e-f059-smoke",
+        action="restore",
+        snapshot_id="snapshot-1",
+        expected_generation=7,
+        acknowledge_data_loss=True,
+        expected_rows=state.rows,
+    )
+    assert result["status"] == "completed" and result["protection_link_verified"] is False
+    association = suite.journal.document["events"][-2]
+    assert association["outcome"] == "unverified"
+    assert association["confirmed_snapshot_candidates"] == ["snapshot-1"]

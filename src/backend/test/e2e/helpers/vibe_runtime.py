@@ -653,3 +653,214 @@ class LiveVibeSuite:
                 for slug, item in results.items()
             },
         )
+
+    async def fault_operation(
+        self,
+        slug,
+        *,
+        action,
+        operation_id=None,
+        snapshot_id=None,
+        expected_generation=None,
+        acknowledge_data_loss=False,
+        expected_rows=None,
+        expected_status=None,
+        expected_reason=None,
+        expected_failure_stage=None,
+        expected_cleanup=None,
+    ):
+        """Exercise scoped public APIs only; never manufacture cluster fault evidence."""
+        validate_slug(slug)
+        scenario = next((item for item in self.settings.scenarios if item.slug == slug), None)
+        record = self.journal.document["apps"].get(slug)
+        if scenario is None or not record or action not in {"observe", "cancel", "restore"}:
+            raise ValueError("operation requires an exact configured and journaled application")
+        for value in [operation_id, snapshot_id]:
+            if value is not None and not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value):
+                raise ValueError("operation and snapshot identifiers must be exact path segments")
+        app_id = record["app_id"]
+        detail = await self.owned(app_id, slug)
+        base = f"/apps/{app_id}/runtime"
+        if action == "restore":
+            if operation_id:
+                raise ValueError("restore creates and follows its own operation; do not supply an operation ID")
+            return await self.restore_operation(
+                scenario,
+                detail,
+                snapshot_id=snapshot_id,
+                expected_generation=expected_generation,
+                acknowledge_data_loss=acknowledge_data_loss,
+                expected_rows=expected_rows,
+            )
+        if not operation_id or snapshot_id or expected_generation is not None or acknowledge_data_loss:
+            raise ValueError("observe/cancel requires one exact operation and no restore intent")
+        path = base + "/operations/" + operation_id
+        terminal = {"completed", "failed", "cancelled", "timed_out"}
+
+        async def read():
+            value = await self.request("GET", path)
+            assert value["operation_id"] == operation_id, "operation response identity changed"
+            return value
+
+        current = await read()
+        for role in ["NONOWNER", "FOREIGN"]:
+            await self.request("GET", path, role=role, expected_code=16105)
+        if action == "cancel":
+            if current["status"] in terminal:
+                raise ValueError("terminal operation cannot prove a new cancellation")
+            binding = await self.request("GET", base + "/state")
+            assert binding["app_id"] == app_id and binding["operation_id"] == operation_id, (
+                "only the exact active operation may be cancelled"
+            )
+            for role in ["NONOWNER", "FOREIGN"]:
+                await self.request("POST", path + "/cancel", role=role, expected_code=16105)
+            if current["stage"] in {"serving", "retiring"}:
+                await self.request("POST", path + "/cancel", expected_code=16166)
+                self.journal.record(
+                    "operation-cancel",
+                    ["AC-43", "AC-52", "AC-55"],
+                    "refused",
+                    app_id=app_id,
+                    operation_id=operation_id,
+                    code=16166,
+                    stage=current["stage"],
+                    injection_verified=False,
+                )
+                return current
+            accepted = await self.request("POST", path + "/cancel")
+            assert accepted["operation_id"] == operation_id and accepted["cancel_requested"] is True
+            expected_status, expected_cleanup, expected_reason = "cancelled", "complete", "operation_cancelled"
+        if expected_status not in terminal | {"pending", "running"}:
+            raise ValueError("observe requires an explicit expected operation status")
+        if expected_cleanup is not None and expected_cleanup not in {"pending", "complete", "storage_pending"}:
+            raise ValueError("unsupported expected cleanup status")
+
+        def matches(value):
+            if value["status"] in terminal and value["status"] != expected_status:
+                raise AssertionError("operation reached a different terminal status")
+            if value["status"] != expected_status:
+                return False
+            failure = value.get("failure") or {}
+            if expected_reason is not None:
+                assert failure.get("reason") == expected_reason, "operation failure reason differs"
+            if expected_failure_stage is not None:
+                assert failure.get("failed_stage") == expected_failure_stage, "operation failure stage differs"
+            return expected_cleanup is None or value["cleanup_status"] == expected_cleanup
+
+        final = await self.poll(read, matches, description="exact operation outcome and cleanup")
+        failure = final.get("failure") or {}
+        self.journal.record(
+            "operation-" + action,
+            ["AC-28", "AC-43", "AC-47", "AC-49", "AC-52", "AC-55"],
+            "passed",
+            app_id=app_id,
+            operation_id=operation_id,
+            status=final["status"],
+            stage=final["stage"],
+            cleanup_status=final["cleanup_status"],
+            failure_reason=failure.get("reason"),
+            failure_stage=failure.get("failed_stage"),
+            injection_verified=False,
+        )
+        return final
+
+    async def restore_operation(
+        self,
+        scenario,
+        detail,
+        *,
+        snapshot_id,
+        expected_generation,
+        acknowledge_data_loss,
+        expected_rows,
+    ):
+        """Require explicit owner intent and verify rows after this one restore operation."""
+        if acknowledge_data_loss is not True or type(expected_generation) is not int or expected_generation < 1:
+            raise ValueError("restore requires explicit acknowledgement and expected generation")
+        if not snapshot_id or not scenario.table or not isinstance(expected_rows, dict):
+            raise ValueError("restore requires one snapshot and a SQLite expected-rows object")
+        rows_bytes = json.dumps(expected_rows, sort_keys=True, separators=(",", ":")).encode()
+        if len(rows_bytes) > 1024 * 1024:
+            raise ValueError("restore expected rows exceeds evidence limit")
+        app_id = detail["app_id"]
+        base = f"/apps/{app_id}/runtime"
+
+        async def state():
+            current = await self.request("GET", base + "/state")
+            assert current["app_id"] == app_id and current["generation"] == expected_generation, (
+                "restore generation changed; no implicit retry is permitted"
+            )
+            assert current["current_version_id"] == detail["current_version_id"]
+            return current
+
+        await state()
+        snapshots = await self.request("GET", base + "/snapshots")
+        selected = [item for item in snapshots if item["snapshot_id"] == snapshot_id and item.get("confirmed_at")]
+        assert len(selected) == 1, "snapshot must be confirmed in this exact application"
+        body = {
+            "snapshot_id": snapshot_id,
+            "expected_current_generation": expected_generation,
+            "acknowledge_data_loss": True,
+            "idempotency_key": "e2e-f059-restore-"
+            + hashlib.sha256(f"{app_id}/{snapshot_id}/{expected_generation}".encode()).hexdigest(),
+        }
+        for role in ["NONOWNER", "FOREIGN"]:
+            await self.request("POST", base + "/restore", role=role, expected_code=16105, json=body)
+        await state()
+        submitted = await self.request("POST", base + "/restore", json=body)
+        operation_id = submitted["operation_id"]
+        assert re.fullmatch(r"[A-Za-z0-9_-]{1,128}", operation_id)
+        self.journal.record(
+            "restore-requested",
+            ["AC-51", "AC-55"],
+            "submitted",
+            app_id=app_id,
+            operation_id=operation_id,
+            snapshot_id=snapshot_id,
+            generation=expected_generation,
+        )
+
+        async def read():
+            value = await self.request("GET", base + "/operations/" + operation_id)
+            assert value["operation_id"] == operation_id and value["kind"] == "restore"
+            assert value["status"] not in {"failed", "cancelled", "timed_out"}, "restore did not complete"
+            return value
+
+        final = await self.poll(
+            read,
+            lambda value: value["status"] == "completed" and value["cleanup_status"] == "complete",
+            description="explicit restore completion",
+        )
+        after = await self.owned(app_id, scenario.slug)
+        assert after["current_version_id"] == detail["current_version_id"], "restore changed the application version"
+        assert await self.rows(scenario, app_id) == expected_rows, (
+            "restored rows differ from the explicit expected data"
+        )
+        confirmed = await self.request("GET", base + "/snapshots")
+        # The public operation response has no protected-snapshot reference.
+        # Snapshot IDs/counts cannot prove this association: content-addressed
+        # storage may legitimately reuse a previously confirmed backup.
+        confirmed_ids = sorted(item["snapshot_id"] for item in confirmed if item.get("confirmed_at"))
+        self.journal.record(
+            "restore-protection-association",
+            ["AC-51", "AC-55"],
+            "unverified",
+            app_id=app_id,
+            operation_id=operation_id,
+            confirmed_snapshot_candidates=confirmed_ids,
+            reason="public_operation_has_no_protected_snapshot_reference",
+            injection_verified=False,
+        )
+        self.journal.record(
+            "restore-operation",
+            ["AC-33", "AC-50", "AC-51", "AC-55"],
+            "partial",
+            app_id=app_id,
+            operation_id=operation_id,
+            snapshot_id=snapshot_id,
+            rows_verified=True,
+            protection_link_verified=False,
+            expected_rows_sha256=hashlib.sha256(rows_bytes).hexdigest(),
+            injection_verified=False,
+        )
+        return {**final, "protection_link_verified": False}
