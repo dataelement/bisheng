@@ -1125,3 +1125,150 @@ async def test_k8s_installation_never_accepts_legacy_docker_diagnostics(tmp_path
     suite.request = request
     with pytest.raises((AssertionError, KeyError)):
         await suite.installation()
+
+
+@pytest.fixture
+def cycle_suite(tmp_path):
+    """Offline public-contract sequences; no result/version/generation on operations."""
+    from types import SimpleNamespace
+
+    from test.e2e.helpers.vibe_runtime import LiveVibeSuite
+
+    scenario = SimpleNamespace(slug="e2e-f059-cycle", table="items")
+    settings = SuiteSettings("e2e-f059-tenant", (scenario,))
+    journal = EvidenceJournal(tmp_path / "cycle.json", tenant_code=settings.tenant_code)
+    journal.document["apps"][scenario.slug] = {"app_id": "app-1"}
+    suite = LiveVibeSuite(settings, journal, None)
+    suite.users["OWNER"], suite.tenant_id = 42, 7
+    state = SimpleNamespace(
+        phase="online",
+        requests=[],
+        row_reads=[],
+        operation_reads=0,
+        complete_seen=False,
+        mutation=None,
+        operations=[
+            {"status": "running", "stage": "ready", "cleanup_status": "pending"},
+            {"status": "running", "stage": "serving", "cleanup_status": "pending"},
+            {"status": "completed", "stage": "completed", "cleanup_status": "pending"},
+            {"status": "completed", "stage": "completed", "cleanup_status": "complete"},
+        ],
+    )
+
+    async def request(method, path, **kwargs):
+        role = kwargs.get("role", "OWNER")
+        state.requests.append((method, path, role))
+        if role == "NONOWNER":
+            assert kwargs.get("expected_code") == 16106
+            return {"status_code": 16106}
+        if method == "POST":
+            if path.endswith("/stop"):
+                state.phase = "stopped"
+                return {"app_id": "app-1", "state": "stopped", "ok": True, "version_id": "version-1"}
+            assert path.endswith("/resume")
+            state.phase = "resumed"
+            return {
+                "app_id": "other-app" if state.mutation == "resume-app" else "app-1",
+                "state": "online",
+                "ok": state.mutation != "resume-refused",
+                "version_id": "other-version" if state.mutation == "resume-version" else "version-1",
+                "detail": {"operation_id": "../other" if state.mutation == "resume-id" else "resume-1"},
+            }
+        if path == "/apps/app-1":
+            return {
+                "app_id": "app-1",
+                "slug": scenario.slug,
+                "name": scenario.slug,
+                "tenant_id": 7,
+                "owner_user_id": 42,
+                "state": "stopped" if state.phase == "stopped" else "online",
+                "current_version_id": "other-version"
+                if state.complete_seen and state.mutation == "detail-version"
+                else "version-1",
+            }
+        if path.endswith("/runtime/state"):
+            changed = state.complete_seen
+            return {
+                "app_id": "other-app" if changed and state.mutation == "state-app" else "app-1",
+                "state": "online",
+                "operation_id": "other-op" if changed and state.mutation == "state-op" else "resume-1",
+                "generation": 8 if changed and state.mutation == "state-generation" else 7,
+                "current_version_id": "other-version" if changed and state.mutation == "state-version" else "version-1",
+            }
+        assert path == "/apps/app-1/runtime/operations/resume-1"
+        state.operation_reads += 1
+        value = state.operations[min(state.operation_reads - 1, len(state.operations) - 1)]
+        state.complete_seen = value == {"status": "completed", "stage": "completed", "cleanup_status": "complete"}
+        return {
+            "operation_id": "other-op" if state.mutation == "operation-id" else "resume-1",
+            "kind": "probe" if state.mutation == "operation-kind" else "deploy",
+            "failure": {},
+            **value,
+        }
+
+    async def rows(_scenario, _app_id):
+        state.row_reads.append((state.phase, state.operation_reads))
+        if state.phase == "resumed":
+            assert state.complete_seen, "rows read before exact resume operation completed"
+        return {"rows": [{"key": 1, "values": {"value": "runtime-only-value"}}], "total": 1}
+
+    async def poll(reader, predicate, **_kwargs):
+        for _ in range(12):
+            result = await reader()
+            if predicate(result):
+                return result
+        raise AssertionError("bounded public operation sequence did not complete")
+
+    suite.request, suite.rows, suite.poll = request, rows, poll
+    return suite, scenario, state
+
+
+async def test_cycle_waits_exact_resume_completion_and_cleanup_before_rows(cycle_suite):
+    """AC-33, AC-35, AC-36, AC-55: online/ready is not completed maintenance."""
+    suite, scenario, state = cycle_suite
+    await suite.cycle(scenario)
+    assert state.row_reads == [("online", 0), ("resumed", 4)]
+    event = suite.journal.document["events"][-1]
+    assert event["operation_id"] == "resume-1" and event["version_id"] == "version-1" and event["generation"] == 7
+    assert all(path.endswith("/resume-1") for method, path, _ in state.requests if "/operations/" in path)
+    assert (
+        sum(method == "POST" and path.endswith("/resume") and role == "OWNER" for method, path, role in state.requests)
+        == 1
+    )
+
+
+@pytest.mark.parametrize("status", ["failed", "cancelled", "timed_out"])
+async def test_cycle_cannot_mistake_failed_resume_for_online_success(cycle_suite, status):
+    """AC-36, AC-55: online projection cannot conceal a failed exact operation."""
+    suite, scenario, state = cycle_suite
+    state.operations = [{"status": status, "stage": status, "cleanup_status": "complete"}]
+    with pytest.raises(AssertionError):
+        await suite.cycle(scenario)
+    assert state.row_reads == [("online", 0)]
+    assert not suite.journal.document["events"]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "resume-app",
+        "resume-version",
+        "resume-id",
+        "resume-refused",
+        "operation-id",
+        "operation-kind",
+        "state-app",
+        "state-op",
+        "state-generation",
+        "state-version",
+        "detail-version",
+    ],
+)
+async def test_cycle_rejects_changed_resume_identity_or_serving_version(cycle_suite, mutation):
+    """AC-33, AC-35, AC-55: never follow another operation or a changed generation/version."""
+    suite, scenario, state = cycle_suite
+    state.mutation = mutation
+    with pytest.raises(AssertionError):
+        await suite.cycle(scenario)
+    assert state.row_reads == [("online", 0)]
+    assert not suite.journal.document["events"]

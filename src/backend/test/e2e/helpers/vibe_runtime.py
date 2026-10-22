@@ -574,23 +574,77 @@ class LiveVibeSuite:
             )
 
     async def cycle(self, scenario):
-        """AC-29, AC-33, AC-35: stop/resume preserves committed SQLite rows."""
+        """AC-29, AC-33, AC-35: compare rows after the exact resume completed."""
         app_id = self.journal.document["apps"][scenario.slug]["app_id"]
+        original = await self.owned(app_id, scenario.slug)
+        assert original["state"] == "online" and original["current_version_id"]
+        version_id = original["current_version_id"]
         before = await self.rows(scenario, app_id) if scenario.table else None
         await self.request("POST", f"/apps/{app_id}/actions/stop", role="NONOWNER", expected_code=16106)
         await self.request("POST", f"/apps/{app_id}/actions/stop")
         stopped = await self.owned(app_id, scenario.slug)
-        assert stopped["state"] == "stopped"
+        assert stopped["state"] == "stopped" and stopped["current_version_id"] == version_id
         await self.request("POST", f"/apps/{app_id}/actions/resume", role="NONOWNER", expected_code=16106)
-        await self.request("POST", f"/apps/{app_id}/actions/resume")
-        await self.poll(
-            lambda: self.owned(app_id, scenario.slug),
-            lambda value: value["state"] == "online",
-            description="resumed online application",
+        resumed = await self.request("POST", f"/apps/{app_id}/actions/resume")
+        assert (
+            resumed["app_id"] == app_id
+            and resumed["ok"] is True
+            and resumed["state"] == "online"
+            and resumed["version_id"] == version_id
+        ), "resume did not accept this application's existing version"
+        operation_id = (resumed.get("detail") or {}).get("operation_id")
+        assert isinstance(operation_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", operation_id), (
+            "resume must identify its exact runtime operation"
         )
+
+        async def state():
+            current = await self.request("GET", f"/apps/{app_id}/runtime/state")
+            assert (
+                current["app_id"] == app_id
+                and current["operation_id"] == operation_id
+                and current["current_version_id"] == version_id
+                and current["state"] == "online"
+            ), "resumed application or operation identity changed"
+            assert type(current["generation"]) is int and current["generation"] > 0
+            return current
+
+        generation = (await state())["generation"]
+
+        async def operation():
+            current = await self.request("GET", f"/apps/{app_id}/runtime/operations/{operation_id}")
+            assert current["operation_id"] == operation_id and current["kind"] == "deploy", (
+                "resume operation identity or kind changed"
+            )
+            assert current["status"] not in {"failed", "cancelled", "timed_out"}, "resume execution did not complete"
+            return current
+
+        # Online is committed at ready, before execution retirement and cleanup.
+        # The public operation has no result/version/generation fields; use its
+        # completed stage plus the separate authoritative application state.
+        await self.poll(
+            operation,
+            lambda value: (
+                value["status"] == "completed"
+                and value["stage"] == "completed"
+                and value["cleanup_status"] == "complete"
+                and not value.get("failure")
+            ),
+            description="exact resume operation completion and cleanup",
+        )
+        current = await self.owned(app_id, scenario.slug)
+        assert current["state"] == "online" and current["current_version_id"] == version_id
+        assert (await state())["generation"] == generation, "resume generation changed before data verification"
         if scenario.table:
             assert await self.rows(scenario, app_id) == before
-        self.journal.record("stop-resume", ["AC-29", "AC-33", "AC-35", "AC-36"], "passed", app_id=app_id)
+        self.journal.record(
+            "stop-resume",
+            ["AC-29", "AC-33", "AC-35", "AC-36"],
+            "passed",
+            app_id=app_id,
+            operation_id=operation_id,
+            version_id=version_id,
+            generation=generation,
+        )
 
     @staticmethod
     def entry_url(value):
