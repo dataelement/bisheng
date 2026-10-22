@@ -288,7 +288,7 @@ def test_even_an_unsafe_approved_spec_cannot_disable_baseline(template, plan):
 
 
 def test_api_server_defaults_are_normalized_but_unknown_fields_are_refused(template, plan):
-    """AC-13, AC-30: reproduce the v1.28.15 server-dryRun defaults observed for the 189 canary."""
+    """AC-13, AC-30: accept observed canary defaults and documented v1.28.15 fieldRef defaults."""
     obj = copy.deepcopy(template)
     obj["metadata"].update(uid=UID, creationTimestamp="2026-10-22T10:42:03Z")
     obj["status"] = {"phase": "Pending", "qosClass": "Guaranteed"}
@@ -301,11 +301,39 @@ def test_api_server_defaults_are_normalized_but_unknown_fields_are_refused(templ
     )
     for c in obj["spec"]["containers"] + obj["spec"]["initContainers"]:
         c.update(terminationMessagePath="/dev/termination-log", terminationMessagePolicy="File")
+        # Kubernetes v1.28.15 SetDefaults_ObjectFieldSelector defaults the
+        # downward API version before validating admission sees the Pod.
+        for env in c.get("env", []):
+            if "fieldRef" in env.get("valueFrom", {}):
+                env["valueFrom"]["fieldRef"].setdefault("apiVersion", "v1")
         if c.get("env") == []:
             c.pop("env")
     assert allowed(policy(lambda _: plan), request(obj))
     obj["spec"]["serviceAccountName"] = "privileged"
     assert not allowed(policy(lambda _: plan), request(obj))
+
+
+@pytest.mark.parametrize("container_name", ["material-fetch", "data-helper"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"apiVersion": "v2"},
+        {"fieldPath": "metadata.name"},
+        {"unapprovedField": "unapproved"},
+    ],
+    ids=["non-v1", "different-field-path", "extra-field"],
+)
+def test_downward_api_uid_selector_mutations_remain_refused(template, plan, container_name, change):
+    """AC-13, AC-30, AC-49: freeze UID selectors without ignoring unknown fields."""
+    obj = copy.deepcopy(template)
+    container = next(
+        item for item in obj["spec"]["containers"] + obj["spec"]["initContainers"] if item["name"] == container_name
+    )
+    selector = next(env["valueFrom"]["fieldRef"] for env in container["env"] if "valueFrom" in env)
+    selector.update(change)
+    response = policy(lambda _: plan).review(request(obj))["response"]
+    assert response["allowed"] is False
+    assert response["status"] == {"code": 403, "message": "admission_template_mismatch"}
 
 
 @pytest.mark.parametrize("group", ["containers", "initContainers"])

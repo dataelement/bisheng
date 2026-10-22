@@ -249,9 +249,13 @@ def _container(plan, name, *, image=None, command=None, mounts=(), helper=False,
     if command:
         item["command"] = list(command)
     if name in {"transfer", "material-fetch"}:
-        item["env"].append({"name": "MATERIAL_POD_UID", "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}}})
+        item["env"].append(
+            {"name": "MATERIAL_POD_UID", "valueFrom": {"fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.uid"}}}
+        )
     if name == "data-helper":
-        item["env"].append({"name": "DATA_POD_UID", "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}}})
+        item["env"].append(
+            {"name": "DATA_POD_UID", "valueFrom": {"fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.uid"}}}
+        )
     return item
 
 

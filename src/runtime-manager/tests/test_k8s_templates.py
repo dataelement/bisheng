@@ -253,7 +253,10 @@ def test_material_pod_uid_comes_from_downward_api_and_never_a_caller_literal(pla
             if any(m["name"] == "material-auth" for m in c["volumeMounts"])
         )
         env = next(e for e in transfer["env"] if e["name"] == "MATERIAL_POD_UID")
-        assert env == {"name": "MATERIAL_POD_UID", "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}}}
+        assert env == {
+            "name": "MATERIAL_POD_UID",
+            "valueFrom": {"fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.uid"}},
+        }
     with pytest.raises(ValueError):
         pod_template(replace(plan, helper_env={"MATERIAL_POD_UID": "caller-value"}))
 
@@ -294,10 +297,9 @@ def test_data_sidecar_gets_public_keys_and_uid_without_app_credentials(plan):
     assert helper["command"] == ["python", "-I", "-m", "runtime_manager.k8s_data_helper"]
     context = json.loads(next(e["value"] for e in helper["env"] if e["name"] == "DATA_CONTEXT"))
     assert context == {"app_id": plan.app_id, "exec_ref": plan.resource_ref}
-    assert (
-        next(e for e in helper["env"] if e["name"] == "DATA_POD_UID")["valueFrom"]["fieldRef"]["fieldPath"]
-        == "metadata.uid"
-    )
+    assert next(e for e in helper["env"] if e["name"] == "DATA_POD_UID")["valueFrom"] == {
+        "fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.uid"}
+    }
     assert any(v["name"] == "data-keys" and v["readOnly"] for v in helper["volumeMounts"])
     assert not any(
         v["name"] in {"material-auth", "data-keys"}
