@@ -1,9 +1,10 @@
+import { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardPortal } from '~/components/ui/HoverCard';
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Channel, SortType, getChannelsApi } from "~/api/channels";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/Popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { ChannelSquareTabs } from "../ChannelSquareTabs";
@@ -342,23 +343,14 @@ export function ChannelSwitcher({
                         : "flex min-w-0 flex-1 justify-center",
                 )}
             >
-                <Tooltip open={Boolean(infoContent) && infoOpen && !open} onOpenChange={setInfoOpen}>
-                    <TooltipTrigger asChild>
-                        <span
+                <HoverCard openDelay={100} closeDelay={100} open={Boolean(infoContent) && infoOpen && !open} onOpenChange={setInfoOpen}><HoverCardTrigger asChild><span tabIndex={0}
                             className="pointer-events-auto max-w-full truncate text-[32px] font-bold leading-[40px] text-text-1"
                             style={{ fontFamily: SERIF_FONT_STACK }}
                             onMouseEnter={() => setInfoOpen(true)}
                             onMouseLeave={() => setInfoOpen(false)}
                         >
                             {channelName}
-                        </span>
-                    </TooltipTrigger>
-                    {infoContent ? (
-                        <TooltipContent noArrow side="bottom" align="center" className="rounded-lg w-[240px] max-w-md bg-white px-3 py-2 text-gray-800 shadow-popup">
-                            {infoContent}
-                        </TooltipContent>
-                    ) : null}
-                </Tooltip>
+                        </span></HoverCardTrigger><HoverCardPortal><HoverCardContent side="bottom" align="center" className="rounded-lg w-[240px] max-w-md bg-white px-3 py-2 text-gray-800 shadow-popup">{infoContent}</HoverCardContent></HoverCardPortal></HoverCard>
             </div>
             {absoluteCenterTitle ? <div className="min-w-0 flex-1" aria-hidden /> : null}
             {/* Invisible clone of the persistent 频道/广场 toggle (overlaid at the row's

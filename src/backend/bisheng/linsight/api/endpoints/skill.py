@@ -35,8 +35,9 @@ def _current_tenant_id() -> int:
 
 async def _read_upload(file: UploadFile) -> bytes:
     data = await file.read()
-    if len(data) > await resolve_skill_upload_limit():
-        raise SkillFileTooLargeError()
+    limit = await resolve_skill_upload_limit()
+    if len(data) > limit:
+        raise SkillFileTooLargeError(limit_mb=limit // (1024 * 1024))
     return data
 
 

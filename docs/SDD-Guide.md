@@ -24,7 +24,7 @@ Not every change runs the full pipeline. Match track to scope:
 
 | Track | When | Steps |
 |---|---|---|
-| **Hotfix / trivial** | bug fix, copy/text change, dep bump, ≲ 1 file of logic, **no contract change** | branch → fix → arch-guard + smoke pass → `/code-review` → merge. No spec/design/tasks. |
+| **Hotfix / trivial** | bug fix, copy/text change, dep bump, ≲ 1 file of logic, **no contract change** | branch → fix → arch-guard + smoke pass → `/sdd-code-review` → merge. No spec/design/tasks. |
 | **Small feature** | single module, no cross-feature contract, low uncertainty | lightweight `spec.md` (AC list) → implement → `/e2e-test` → review. Decisions/gotchas: record in the PR, or a short `design.md` if non-trivial. |
 | **Full SDD** | new capability, cross-module, new/changed contract, or touches a constitution clause | full pipeline (§2) |
 
@@ -46,7 +46,7 @@ Not every change runs the full pipeline. Match track to scope:
 6. implement  →  /task-review <dir> <id>  →  check off
         — harness auto-catches violations & runs smoke (§6); deviations handled per §4
 7. /e2e-test <dir>   (mandatory; frontend = Playwright 🚧)
-8. /code-review --base <main>   (+ CI auto-review 🚧)
+8. /sdd-code-review --base <main>   (+ CI auto-review 🚧)
 9. merge
 ```
 

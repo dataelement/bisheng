@@ -1,5 +1,5 @@
 // src/stores/webSearchStore.ts
-import { create } from 'zustand'
+import { create } from 'zustand';
 
 // webSearchStore.ts
 interface WebSearchConfig {

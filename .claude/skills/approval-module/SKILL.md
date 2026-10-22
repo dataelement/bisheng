@@ -131,7 +131,7 @@ ApprovalCenterService.decide_task()
 
 | 文件 | 职责 |
 |------|------|
-| `src/frontend/client/src/components/messageApproval/MessageApprovalDialog.tsx` | 「消息与审批」统一弹窗外壳（导航栏：我的审批 / 我的申请 / 通知 + 徽标） |
+| `src/frontend/client/src/pages/settings/SettingsPage.tsx` | 「设置」页：承载我的审批 / 我的申请 / 通知三个区的外壳（取代旧的审批中心弹窗） |
 | `src/frontend/client/src/components/approval/ApprovalPane.tsx` | 我的审批 / 我的申请 列表 + 详情 + 同意/拒绝/撤回/撤销授权 |
 | `src/frontend/client/src/components/approval/ApprovalDetailPanels.tsx` | 任务详情 / 实例详情面板（基础信息、业务内容、进度时间轴） |
 | `src/frontend/client/src/components/approval/approvalPresentation.tsx` | 审批公共展示层（状态徽章、时间轴节点、信息网格、格式化） |

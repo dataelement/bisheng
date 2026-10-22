@@ -1,11 +1,11 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
+import { Button, Select } from '@bisheng/ui';
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import MultiSelect from "@/components/bs-ui/select/multi";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { notification } from "@bisheng/ui";
 import {
     actionToI18nKey,
     AuditLogFilters,
@@ -85,6 +85,9 @@ const useTenantFilter = (enabled: boolean) => {
 // agree with (controllers/API/log.ts) — keeping them in one file is what makes
 // the filter label and the table cell provably the same key. The cell
 // renderers themselves live in ./auditRow so the CSV export shares them.
+// Backend audit data marker.
+// eslint-disable-next-line no-restricted-syntax
+const editMarker = '编辑后';
 export { actionToI18nKey }
 
 type FilterKeys = {
@@ -124,10 +127,10 @@ const toFilters = (keys: FilterKeys): AuditLogFilters => ({
 
 export default function SystemLog() {
     const { t } = useTranslation()
-    const { toast } = useToast()
     const { appConfig } = useContext(locationContext)
     const { user } = useContext(userContext)
     const multiTenantEnabled = !!appConfig.multiTenantEnabled
+    const selectLabels = useSelectLabels()
     const { users, loadUsers } = useUsers()
     const { groups, loadData } = useGroups()
     const { modules, loadModules } = useModules(multiTenantEnabled)
@@ -164,11 +167,11 @@ export default function SystemLog() {
             if (!res) return
             const rows = res.data || []
             if (!rows.length) {
-                toast({ variant: 'warning', description: t('log.exportEmpty') })
+                notification.open({ type: 'warning', description: t('log.exportEmpty') })
                 return
             }
             if (res.total > rows.length) {
-                toast({ variant: 'warning', description: t('log.exportTruncated', { total: res.total, max: rows.length }) })
+                notification.open({ type: 'warning', description: t('log.exportTruncated', { total: res.total, max: rows.length }) })
             }
             const csv = buildAuditCsv(rows, t, actionToI18nKey, { withTenant: showTenant })
             exportCsv(csv, `Audit_${formatDate(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.csv`, true)
@@ -188,90 +191,75 @@ export default function SystemLog() {
         )}
         <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
-                <div className="w-[200px] relative">
-                    <MultiSelect contentClassName="overflow-y-auto max-w-[200px]" multiple
-                        options={users}
-                        value={keys.userIds}
-                        placeholder={t('log.selectUser')}
-                        // onLoad={loadUsers}
-                        // onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds }}
-                        onChange={(values) => setKeys({ ...keys, userIds: values })}
-                    ></MultiSelect>
-                </div>
-                <div className="w-[200px] relative">
-                    <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({ ...keys, groupId: value })}>
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.selectUserGroup')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
+                <Select
+                    {...selectLabels}
+                    multiple
+                    showSearch
+                    allowClear
+                    className="w-[200px]"
+                    aria-label={t('log.selectUser')}
+                    placeholder={t('log.selectUser')}
+                    options={users.filter(u => u.value != null && u.value !== '')}
+                    value={keys.userIds}
+                    onChange={(values) => setKeys({ ...keys, userIds: values })}
+                />
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[200px]"
+                    aria-label={t('log.selectUserGroup')}
+                    placeholder={t('log.selectUserGroup')}
+                    onOpenChange={(open) => { if (open) loadData() }}
+                    value={keys.groupId || null}
+                    onChange={(value) => setKeys({ ...keys, groupId: value == null ? '' : value })}
+                    options={groups.filter(g => g.id != null && g.id !== '').map(g => ({ value: g.id, label: g.group_name }))}
+                />
                 <div className="w-[180px] relative">
                     <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({ ...keys, start: t })} />
                 </div>
                 <div className="w-[180px] relative">
                     <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({ ...keys, end: t })} />
                 </div>
-                <div className="w-[180px] relative">
-                    <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({ ...keys, action: '', moduleId: value })}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder={t('log.systemModule')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {modules.map(m => <SelectItem value={m.value} key={m.value}>{t(m.name)}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="w-[180px] relative">
-                    <Select value={keys.action} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({ ...keys, action: value })}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder={t('log.actionBehavior')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {actions.map(a => <SelectItem value={a.value} key={a.value}>{t(a.name)}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="w-[220px] relative">
-                    <MultiSelect contentClassName="overflow-y-auto max-w-[220px]"
-                        options={apps}
-                        value={keys.targetAppId ? [keys.targetAppId] : []}
-                        placeholder={t('log.selectApp')}
-                        searchPlaceholder={t('log.searchApp')}
-                        onLoad={loadApps}
-                        onSearch={searchApps}
-                        onChange={(values) => setKeys({ ...keys, targetAppId: values[0] || '' })}
-                    ></MultiSelect>
-                </div>
-                {showTenant && <div className="w-[180px] relative">
-                    <Select value={keys.tenantId} onOpenChange={loadTenants} onValueChange={(value) => setKeys({ ...keys, tenantId: value })}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder={t('log.selectTenant')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {tenants.filter(tenant => tenant.id != null).map(tenant =>
-                                    <SelectItem value={String(tenant.id)} key={tenant.id}>{tenant.tenant_name}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>}
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[180px]"
+                    aria-label={t('log.systemModule')}
+                    placeholder={t('log.systemModule')}
+                    onOpenChange={(open) => { if (open) loadModules() }}
+                    value={keys.moduleId || null}
+                    onChange={(value) => setKeys({ ...keys, action: '', moduleId: value == null ? '' : value })}
+                    options={modules.filter(m => m.value != null && m.value !== '').map(m => ({ value: m.value, label: t(m.name) }))}
+                />
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[180px]"
+                    aria-label={t('log.actionBehavior')}
+                    placeholder={t('log.actionBehavior')}
+                    onOpenChange={(open) => { if (open) handleActionOpen() }}
+                    value={keys.action || null}
+                    onChange={(value) => setKeys({ ...keys, action: value == null ? '' : value })}
+                    options={actions.filter(a => a.value != null && a.value !== '').map(a => ({ value: a.value, label: t(a.name) }))}
+                />
+                <Select {...selectLabels} allowClear showSearch className="w-[220px]"
+                    aria-label={t('log.selectApp')} placeholder={t('log.selectApp')}
+                    options={apps} value={keys.targetAppId || null}
+                    onOpenChange={open => { if (open) loadApps() }} onSearch={searchApps}
+                    onChange={value => setKeys({ ...keys, targetAppId: value == null ? '' : String(value) })} />
+                {showTenant && <Select {...selectLabels} allowClear className="w-[180px]"
+                    aria-label={t('log.selectTenant')} placeholder={t('log.selectTenant')}
+                    options={tenants.filter(tenant => tenant.id != null).map(tenant => ({ value: String(tenant.id), label: tenant.tenant_name }))}
+                    value={keys.tenantId || null} onOpenChange={open => { if (open) loadTenants() }}
+                    onChange={value => setKeys({ ...keys, tenantId: value == null ? '' : String(value) })} />}
                 <div>
-                    <Button className="mr-3 px-6" onClick={handleSearch}>
+                    <Button className="mr-3" onClick={handleSearch}>
                         {t('log.searchButton')}
                     </Button>
-                    <Button variant="outline" className="mr-3 px-6" onClick={handleReset}>
+                    <Button variant="outlined" onClick={handleReset} color="default">
                         {t('log.resetButton')}
                     </Button>
-                    <Button variant="outline" className="px-6" disabled={exporting} onClick={handleExport}>
+                    <Button variant="outlined" color="default" className="px-6" disabled={exporting} onClick={handleExport}>
                         {t('log.exportButton')}
                     </Button>
                 </div>
@@ -310,7 +298,7 @@ export default function SystemLog() {
                                 {showTenant && <TableCell>{log.tenant_name || log.tenant_id || '-'}</TableCell>}
                                 <TableCell>{log.ip_address}</TableCell>
                                 <TableCell className="max-w-[250px]">
-                                    <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || t('log.objectTypeEnum.none')}</div>
+                                    <div className="whitespace-pre-line break-all">{log.note?.replace(editMarker, `\n${editMarker}`) || t('log.objectTypeEnum.none')}</div>
                                 </TableCell>
                                 <TableCell className="max-w-[200px]">
                                     <div className="break-all truncate-multiline">{log.reason || '-'}</div>
@@ -358,7 +346,7 @@ const useUsers = () => {
             setUsers(options)
         })
     }
-    const search = (name) => {
+    const search = () => {
         // const newUsers = userRef.current.filter(u => u.label.toLowerCase().includes(name.toLowerCase())
         //     || selectedRef.current.includes(u.value))
         // setUsers(newUsers)

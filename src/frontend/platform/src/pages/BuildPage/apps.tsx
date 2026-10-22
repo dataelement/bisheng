@@ -1,20 +1,21 @@
 // @ts-strict-ignore
+import { Button, SearchInput, notification } from '@bisheng/ui';
 import CardComponent from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
+import { hasResourceAction,useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
-import { MoveOneIcon } from "@/components/bs-icons/moveOne";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "@/components/bs-ui/button";
-import { SearchInput } from "@/components/bs-ui/input";
+import { Outlined } from "bisheng-icons";
+
+
 import LoadMore from "@/components/bs-comp/loadMore";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import SelectSearch from "@/components/bs-ui/select/select";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+
 import { userContext } from "@/contexts/userContext";
 import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
 import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
@@ -30,13 +31,14 @@ import { HOSTED_APP_STATES, stateI18nKey } from "./hostedApp/types";
 import { FlowType } from "@/types/flow";
 import { useInfiniteCursorTable } from "@/util/hook";
 import { generateUUID } from "@/utils";
-import { useContext, useEffect, useRef, useState } from "react";
+import { Select, Tag } from "@bisheng/ui";
+import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import CreateApp from "./CreateApp";
-import { useCreateTemp, useErrorPrompt, useQueryLabels } from "./hook";
 import CardSelectVersion from "./CardSelectVersion";
+import CreateApp from "./CreateApp";
 import CreateTemp from "./CreateTemp";
+import { useCreateTemp,useQueryLabels } from "./hook";
 
 /**
  * 按应用上线(2)/下线(1)状态筛选，与后端 ``/api/v1/workflow/list?status=`` 一致。
@@ -49,26 +51,30 @@ import CreateTemp from "./CreateTemp";
 export const SelectAppStatus = ({ defaultValue = 'all', hosted = false, onChange }: { defaultValue?: string; hosted?: boolean; onChange: (v: string) => void }) => {
     const [value, setValue] = useState(defaultValue)
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+
+    const options = [
+        { value: 'all', label: t('build.allAppStatus') },
+        ...(hosted ? HOSTED_APP_STATES.map(state => ({ value: state, label: t(stateI18nKey(state)) })) : [
+            { value: '2', label: t('build.online') },
+            { value: '1', label: t('build.offline') },
+        ]),
+    ]
 
     return (
-        <Select value={value} onValueChange={(v) => { onChange(v); setValue(v) }}>
-            <SelectTrigger className="max-w-36 min-w-[9rem]">
-                <SelectValue placeholder={t('build.allAppStatus')} />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectGroup>
-                    <SelectItem value="all">{t('build.allAppStatus')}</SelectItem>
-                    {hosted
-                        ? HOSTED_APP_STATES.map((state) => (
-                            <SelectItem key={state} value={state}>{t(stateI18nKey(state))}</SelectItem>
-                        ))
-                        : <>
-                            <SelectItem value="2">{t('build.online')}</SelectItem>
-                            <SelectItem value="1">{t('build.offline')}</SelectItem>
-                        </>}
-                </SelectGroup>
-            </SelectContent>
-        </Select>
+        <Select
+            {...selectLabels}
+            aria-label={t('tenant.statusFilter')}
+            className="max-w-36 min-w-[9rem]"
+            placeholder={t('build.allAppStatus')}
+            options={options}
+            value={value}
+            onChange={(v) => {
+                if (v == null || String(v) === value) return
+                onChange(String(v))
+                setValue(String(v))
+            }}
+        />
     )
 }
 
@@ -80,8 +86,9 @@ export const SelectAppStatus = ({ defaultValue = 'all', hosted = false, onChange
 export const SelectType = ({ all = false, includeHosted = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
     const { t } = useTranslation();
+    const selectLabels = useSelectLabels()
 
-    const options: any = [
+    const options: { label: string; value: string }[] = [
         { label: t('build.workflow'), value: AppType.FLOW },
         { label: t('build.assistant'), value: AppType.ASSISTANT },
     ];
@@ -95,18 +102,44 @@ export const SelectType = ({ all = false, includeHosted = false, defaultValue = 
     }
 
 
-    return <Select value={value} onValueChange={(v) => { onChange(v); setValue(v) }}>
-        <SelectTrigger className="max-w-32">
-            <SelectValue placeholder={t('build.allAppTypes')} />
-        </SelectTrigger>
-        <SelectContent>
-            <SelectGroup>
-                {options.map(el => (
-                    <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>
-                ))}
-            </SelectGroup>
-        </SelectContent>
-    </Select>
+    return <Select
+        {...selectLabels}
+        aria-label={t('build.appTypeFilter')}
+        className="max-w-32"
+        placeholder={t('build.allAppTypes')}
+        options={options}
+        value={value}
+        onChange={(v) => {
+            if (v == null || String(v) === value) return
+            onChange(String(v))
+            setValue(String(v))
+        }}
+    />
+}
+
+interface LabelFilterSelectProps {
+    options: { label: string; value: number | string | null }[]
+    value: number | string | null
+    onChange: (value: number | string) => void
+}
+
+/** Tag filter of the app list; -1 is the "all tags" row added by useQueryLabels. */
+function LabelFilterSelect({ options, value, onChange }: LabelFilterSelectProps) {
+    const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+
+    return <Select
+        {...selectLabels}
+        aria-label={t('chat.filterLabel')}
+        className="w-52"
+        showSearch
+        placeholder={t('chat.allLabels')}
+        options={options
+            .filter(o => o.value != null && o.value !== '')
+            .map(o => ({ value: o.value as number | string, label: o.label }))}
+        value={value || null}
+        onChange={(v) => { if (v != null) onChange(v) }}
+    />
 }
 
 const TypeNames = {
@@ -145,7 +178,6 @@ export default function Apps() {
     }, [i18n]);
     const { user } = useContext(userContext);
     const { appConfig } = useContext(locationContext);
-    const { message } = useToast()
     const navigate = useNavigate()
     // F054: the third type only exists where the app-factory runtime layer is
     // deployed. Deployment-level flag, read from /api/v1/env.
@@ -336,13 +368,13 @@ export default function Apps() {
         })
     }
 
-    const { toast } = useToast()
+
     const handleSetting = (data) => {
         if (data.flow_type === AppNumType.HOSTED_APP) {
             return navigate(`/build/apps/${data.id}`)
         }
         if (!data.write) {
-            return toast({ variant: 'warning', description: t('build.noEditPermission') })
+            return notification.open({ type: 'warning', description: t('build.noEditPermission') })
         }
         if (data.flow_type === 5) {
             navigate(`/assistant/${data.id}`, { state: { flow: data } })
@@ -356,7 +388,7 @@ export default function Apps() {
         createAppModalRef.current.open(type, tempId);
     }
 
-    const { selectLabel, setSelectLabel, setSearchKey, filteredOptions, allOptions, refetchLabels } = useQueryLabels(t)
+    const { selectLabel, setSelectLabel, filteredOptions, allOptions, refetchLabels } = useQueryLabels(t)
     const handleLabelSearch = (id) => {
         setSelectLabel(allOptions.find(l => l.value === id))
         filterData({ tag_id: id })
@@ -384,22 +416,13 @@ export default function Apps() {
                             : { status: v === 'all' ? undefined : Number(v), app_state: undefined })
                     }}
                 />
-                <SelectSearch
-                    value={!selectLabel.value ? '' : selectLabel.value}
+                <LabelFilterSelect
                     options={allOptions}
-                    selectPlaceholder={t('chat.allLabels')}
-                    inputPlaceholder={t('chat.searchLabels')}
-                    selectClass="w-52"
-                    onOpenChange={() => setSearchKey('')}
-                    onChange={(e) => setSearchKey(e.target.value)}
-                    onValueChange={handleLabelSearch}>
-                </SelectSearch>
+                    value={selectLabel.value}
+                    onChange={handleLabelSearch}
+                />
                 {canCreateApp && (
-                    <Button
-                        variant="ghost"
-                        className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto"
-                        onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL && tempTypeRef.current !== AppType.HOSTED_APP ? tempTypeRef.current : AppType.FLOW}`)}
-                    ><MoveOneIcon className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
+                    <Button variant="text" className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto" onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL && tempTypeRef.current !== AppType.HOSTED_APP ? tempTypeRef.current : AppType.FLOW}`)} color="default"><Outlined.MoveToFolder className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
                 )}
             </div>
             {/* list */}
@@ -489,9 +512,9 @@ export default function Apps() {
                                         </LabelShow>
                                     }
                                     footer={
-                                        <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === AppNumType.ASSISTANT && 'bg-[#fdb136]'}`}>
+                                        <span className="absolute bottom-0 right-0"><Tag size="small" color={item.flow_type === AppNumType.ASSISTANT ? "warning" : "brand"}>
                                             {typeCnNames[item.flow_type]}
-                                        </Badge>
+                                        </Tag></span>
                                     }
                                 ></CardComponent>
                             ))

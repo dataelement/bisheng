@@ -28,6 +28,7 @@ from typing import Annotated, Any
 from json_repair import json_repair
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool, tool
 from langchain_core.tools.base import ArgsSchema
 from langgraph.prebuilt import InjectedState
@@ -44,7 +45,10 @@ from bisheng.linsight.domain.services.binary_content_guard import (
 from bisheng.linsight.domain.services.invalid_tool_call_middleware import (
     build_invalid_tool_call_repair_middleware,
 )
-from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
+from bisheng.linsight.domain.services.resilience_middleware import (
+    SubagentContextOverflowMiddleware,
+    build_resilience_middleware,
+)
 from bisheng.linsight.domain.services.tool_loop_middleware import build_tool_loop_breaker_middleware
 from bisheng.linsight.domain.services.unattended_run import caller_instructions, is_unattended_run
 from bisheng.llm.domain.services import LLMService
@@ -1075,6 +1079,203 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
     }
 
 
+# Appended to an Available Skills row. Not written into SKILL.md.
+SKILL_SELECTED_NOTE = "用户选中了这个技能"
+SKILL_TOOL_UNAVAILABLE_NOTE = "该技能需要的工具当前不可用"
+# deepagents always binds these on the main graph. A skill that names one of
+# them is not missing a tool. ``execute`` is omitted: it is filtered per run.
+_FRAMEWORK_TOOL_NAMES = frozenset({"ls", "read_file", "write_file", "edit_file", "glob", "grep", "task"})
+_ALWAYS_AVAILABLE_TOOL_NAMES = frozenset({"ask_user", "export_docx", "export_pdf"})
+
+
+def task_tool_names(tools, *, has_code_interpreter: bool) -> set[str]:
+    """Tools this run can actually call, including the framework file tools."""
+    names = {getattr(tool, "name", None) for tool in tools or []}
+    names.discard(None)
+    names.update(_FRAMEWORK_TOOL_NAMES)
+    names.update(_ALWAYS_AVAILABLE_TOOL_NAMES)
+    if has_code_interpreter:
+        names.add(CODE_INTERPRETER_TOOL)
+    return names
+
+
+def _skill_line_notes(skill: dict, selected: set[str], available: set[str]) -> str:
+    """Sentences for one Available Skills row. Empty when the row stays as listed."""
+    notes: list[str] = []
+    name = skill.get("name")
+    if name and name in selected:
+        notes.append(SKILL_SELECTED_NOTE)
+    allowed = [item for item in (skill.get("allowed_tools") or []) if item]
+    if allowed and any(item not in available for item in allowed):
+        notes.append(SKILL_TOOL_UNAVAILABLE_NOTE)
+    return " ".join(notes)
+
+
+def annotate_available_skills(text: str, skills: list[dict], selected: set[str], available: set[str]) -> str:
+    """Append the selection and missing-tool sentences onto existing skill rows."""
+    notes = {skill.get("name"): _skill_line_notes(skill, selected, available) for skill in skills}
+    notes = {name: note for name, note in notes.items() if name and note}
+    if not notes:
+        return text
+    lines = []
+    for line in text.split("\n"):
+        rewritten = line
+        for name, note in notes.items():
+            marker = f"- **{name}**:"
+            if marker in line and note not in line:
+                rewritten = f"{line} {note}"
+                break
+        lines.append(rewritten)
+    return "\n".join(lines)
+
+
+def _state_dict(state) -> dict:
+    if isinstance(state, dict):
+        return state
+    return {}
+
+
+class SkillSelectionMiddleware(AgentMiddleware):
+    """Mark checked skills and unavailable tools on the Available Skills rows.
+
+    Sits after deepagents' ``SkillsMiddleware``. That middleware already wrote
+    the list from ``skills_metadata``; this one only edits those rows. It does
+    not read ``SKILL.md`` again, so a checkpoint that already has
+    ``skills_metadata`` is left on disk as-is.
+    """
+
+    def __init__(
+        self,
+        selected_names: list[str] | None,
+        tool_names: set[str] | list[str] | None,
+        session=None,
+        skill_row_enabled=None,
+    ) -> None:
+        super().__init__()
+        self.tools = []
+        self._selected = set(selected_names or [])
+        self._available = set(tool_names or [])
+        # Read at call time. Provisioning updates the snapshot after the tools exist.
+        self._session = session
+        # Test seam. Production loads the row on each code run.
+        self._skill_row_enabled = skill_row_enabled
+
+    @property
+    def name(self) -> str:
+        return "LinsightSkillSelection"
+
+    def _rewrite(self, request):
+        skills = _state_dict(getattr(request, "state", None)).get("skills_metadata") or []
+        system_message = getattr(request, "system_message", None)
+        if not skills or system_message is None:
+            return request
+        blocks = []
+        changed = False
+        for block in system_message.content_blocks:
+            text = block.get("text") if isinstance(block, dict) else getattr(block, "text", None)
+            if not isinstance(text, str):
+                blocks.append(block)
+                continue
+            rewritten = annotate_available_skills(text, skills, self._selected, self._available)
+            if rewritten == text:
+                blocks.append(block)
+                continue
+            changed = True
+            if isinstance(block, dict):
+                blocks.append({**block, "text": rewritten})
+            else:
+                blocks.append({"type": "text", "text": rewritten})
+        if not changed:
+            return request
+        return request.override(system_message=SystemMessage(content_blocks=blocks))
+
+    def _missing_reply(self, request) -> ToolMessage | None:
+        call = getattr(request, "tool_call", None) or {}
+        name = call.get("name")
+        if not name or getattr(request, "tool", None) is not None or name in self._available:
+            return None
+        skills = _state_dict(getattr(request, "state", None)).get("skills_metadata") or []
+        declared = {
+            tool_name
+            for skill in skills
+            for tool_name in (skill.get("allowed_tools") or [])
+            if tool_name and tool_name not in self._available
+        }
+        if name not in declared:
+            return None
+        # Not status="error": a repeated error result would trip the tool-loop
+        # breaker and end the task. The skill stays usable for everything else.
+        return ToolMessage(content=SKILL_TOOL_UNAVAILABLE_NOTE, tool_call_id=call.get("id") or "", name=name)
+
+    def _snapshot(self) -> list[dict] | None:
+        if self._session is None:
+            return None
+        return getattr(self._session, "skill_snapshot", None)
+
+    def _enabled_sync(self, skill_id: int) -> bool | None:
+        if self._skill_row_enabled is not None:
+            return self._skill_row_enabled(skill_id)
+        from bisheng.linsight.domain.services.skill_runtime_guard import load_skill_enabled_sync
+
+        return load_skill_enabled_sync(skill_id)
+
+    async def _enabled(self, skill_id: int) -> bool | None:
+        if self._skill_row_enabled is not None:
+            enabled = self._skill_row_enabled(skill_id)
+            if hasattr(enabled, "__await__"):
+                return await enabled
+            return enabled
+        from bisheng.linsight.domain.services.skill_runtime_guard import load_skill_enabled
+
+        return await load_skill_enabled(skill_id)
+
+    def _code_reply(self, request) -> ToolMessage | None:
+        call = getattr(request, "tool_call", None) or {}
+        if call.get("name") != CODE_INTERPRETER_TOOL or not self._snapshot():
+            return None
+        from bisheng.linsight.domain.services.skill_runtime_guard import refuse_code
+
+        text = refuse_code((call.get("args") or {}).get("python_code") or "", self._snapshot(), self._enabled_sync)
+        if not text:
+            return None
+        return ToolMessage(content=text, tool_call_id=call.get("id") or "", name=call.get("name"))
+
+    async def _acode_reply(self, request) -> ToolMessage | None:
+        call = getattr(request, "tool_call", None) or {}
+        if call.get("name") != CODE_INTERPRETER_TOOL or not self._snapshot():
+            return None
+        from bisheng.linsight.domain.services.skill_runtime_guard import arefuse_code
+
+        text = await arefuse_code((call.get("args") or {}).get("python_code") or "", self._snapshot(), self._enabled)
+        if not text:
+            return None
+        return ToolMessage(content=text, tool_call_id=call.get("id") or "", name=call.get("name"))
+
+    def wrap_model_call(self, request, handler):
+        return handler(self._rewrite(request))
+
+    async def awrap_model_call(self, request, handler):
+        return await handler(self._rewrite(request))
+
+    def wrap_tool_call(self, request, handler):
+        reply = self._missing_reply(request)
+        if reply is not None:
+            return reply
+        reply = self._code_reply(request)
+        if reply is not None:
+            return reply
+        return handler(request)
+
+    async def awrap_tool_call(self, request, handler):
+        reply = self._missing_reply(request)
+        if reply is not None:
+            return reply
+        reply = await self._acode_reply(request)
+        if reply is not None:
+            return reply
+        return await handler(request)
+
+
 async def create_linsight_agent(
     session_model,
     tools: Sequence[BaseTool],
@@ -1086,6 +1287,7 @@ async def create_linsight_agent(
     skills_present: bool = False,
     turn_budget_sink: dict | None = None,
     citation_scope=None,
+    context_window_sink: dict | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -1105,11 +1307,14 @@ async def create_linsight_agent(
             tell the user. Main graph only — a subagent landing early is internal.
         citation_scope: F069 ``LinsightCitationScope`` of this run; bound to the
             retrieval tools so the completion audit knows which sources were seen.
+        context_window_sink: mutable dict filled with the context window this run
+            uses (F087), so the caller can log it when the task fails.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
     """
     from deepagents import create_deep_agent
+    from deepagents.graph import DeepAgentState
 
     svid = svid or session_model.id
     tools = _bind_linsight_citation_scope(list(tools or []), citation_scope)
@@ -1120,6 +1325,8 @@ async def create_linsight_agent(
     # researcher handoff) follows the session's citation contract in lockstep.
     citation_handles = bool(citation_scope is not None and getattr(citation_scope, "enabled", False))
     model, supports_vision = await _resolve_model(session_model, model_id)
+    context_window = context_window_sink if context_window_sink is not None else {}
+    await _apply_context_window(model, svid, context_window)
 
     if backend is None:
         backend = _default_backend(svid, file_dir)
@@ -1158,10 +1365,23 @@ async def create_linsight_agent(
     # because the citation tail middleware below needs the same gate.
     has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
     has_web = any(_is_web_citation_tool(t) for t in tools)
+    # Built here (not with the rest of the researcher stack below) because the
+    # main graph's subagent-overflow handler draws from its degrade allowance.
+    researcher_resilience = build_resilience_middleware(linsight_conf, is_subagent=True)
     middlewares: list = [
+        # F087 P1: BiSheng summarization replaces the framework's (design decision
+        # 7). FIRST in the list = outermost, so it wraps resilience the way the
+        # framework middleware did: resilience retries never re-run compression,
+        # and a context overflow it re-raises is compressed and retried here.
+        *_summarization(model, backend, context_window),
         build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
+        # F087: a `task` call whose subagent stayed over the context window after
+        # compression comes back as a tool result instead of failing the task.
+        SubagentContextOverflowMiddleware(researcher_resilience, context_window),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
+        # F087 P1: one tool result <= 10% of the usable input (known windows only).
+        *_result_budget(backend, context_window),
     ]
     # F069 P1: per-turn source table (+ one-shot "add the handles" nudge after a
     # handle-less output/*.md write). awrap_model_call only — never wrap_tool_call
@@ -1197,6 +1417,15 @@ async def create_linsight_agent(
             SkillsMiddleware(
                 backend=FilesystemBackend(root_dir=file_dir, virtual_mode=True),
                 sources=[(f"/{WORKSPACE_SKILLS_DIR}/", "Skills")],
+            )
+        )
+        # Session ``skills`` already holds the directory names provisioning kept,
+        # including a personal skill that covered a checked tenant skill.
+        middlewares.append(
+            SkillSelectionMiddleware(
+                selected_names=list(getattr(session_model, "skills", None) or []),
+                tool_names=task_tool_names(tools, has_code_interpreter=has_code_interpreter),
+                session=session_model,
             )
         )
 
@@ -1256,7 +1485,9 @@ async def create_linsight_agent(
     researcher_tools = researcher.get("tools") or []
     researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_citation_tool(t) for t in researcher_tools)
     researcher["middleware"] = [
-        build_resilience_middleware(linsight_conf, is_subagent=True),
+        # Same summarization (own instance) outermost on the subagent's graph.
+        *_summarization(model, backend, context_window),
+        researcher_resilience,
         # Same tool-loop breaker on the subagent's own graph (its tool calls run in
         # a separate subgraph the main-graph middleware never wraps).
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),
@@ -1266,6 +1497,8 @@ async def create_linsight_agent(
         # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
         # carries over; revisit if it is ever added to that deny list.
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
+        # Same per-result budget on the subagent's graph, at the same depth as the main graph's.
+        *_result_budget(backend, context_window),
         # F069 P1: the researcher gets the source table too (no nudge — it does
         # not write deliverables).
         *(_researcher_source_middleware(citation_scope) if (citation_handles and researcher_citable) else []),
@@ -1282,32 +1515,93 @@ async def create_linsight_agent(
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the
     # prompt never points at an "Available Skills" section that does not exist.
-    return create_deep_agent(
-        model=model,
-        tools=[*tools, *hitl_tools, *export_tools],
-        system_prompt=_with_caller_instructions(
-            _with_citation_rules(
-                _build_linsight_system_prompt(
-                    has_kb,
-                    skills_present=skills_advertised,
-                    # Gates the hard "no export_docx/export_pdf" rule: only meaningful
-                    # when the skill's script route can actually run in this session.
-                    has_code_interpreter=has_code_interpreter,
-                    has_web_search=has_web,
-                    citation_handles=citation_handles,
-                    unattended=unattended,
+    # F087 P1: drop deepagents' own summarization from the main graph and every
+    # subagent; ours is already first in their middleware lists (design decision 7).
+    from bisheng.linsight.domain.services.context_budget import bisheng_summarization
+
+    with bisheng_summarization(model):
+        return create_deep_agent(
+            model=model,
+            tools=[*tools, *hitl_tools, *export_tools],
+            system_prompt=_with_caller_instructions(
+                _with_citation_rules(
+                    _build_linsight_system_prompt(
+                        has_kb,
+                        skills_present=skills_advertised,
+                        # Gates the hard "no export_docx/export_pdf" rule: only meaningful
+                        # when the skill's script route can actually run in this session.
+                        has_code_interpreter=has_code_interpreter,
+                        has_web_search=has_web,
+                        citation_handles=citation_handles,
+                        unattended=unattended,
+                    ),
+                    has_kb or has_web,
+                    handles=citation_handles,
                 ),
-                has_kb or has_web,
-                handles=citation_handles,
+                caller_instructions(session_model),
             ),
-            caller_instructions(session_model),
-        ),
-        middleware=middlewares,
-        subagents=[researcher],
-        backend=backend,
-        checkpointer=checkpointer,
-        store=None,
+            middleware=middlewares,
+            subagents=[researcher],
+            # The main graph already defaults to DeepAgentState, but deepagents only
+            # forwards an explicit state_schema to subagents. Without it the researcher
+            # falls back to create_agent's AgentState, whose messages channel is not a
+            # DeltaChannel: it inherits this checkpointer and stores the full message
+            # list at every step, so one subagent run writes O(N^2) bytes to Redis
+            # (~90 MB measured for a 200-step researcher on 105). With it, subagent
+            # checkpoints hold deltas plus a snapshot every 50 updates.
+            state_schema=DeepAgentState,
+            backend=backend,
+            checkpointer=checkpointer,
+            store=None,
+        )
+
+
+def _summarization(model, backend, context_window: dict) -> list:
+    """BiSheng's summarization middleware for one graph, or none when the model's
+    provider is unknown (the framework's own then stays, see bisheng_summarization)."""
+    from deepagents._models import get_model_provider
+
+    from bisheng.linsight.domain.services.context_budget import BishengSummarizationMiddleware
+
+    if not get_model_provider(model):
+        return []
+    return [BishengSummarizationMiddleware(model, backend, context_window.get("usable_input"))]
+
+
+def _result_budget(backend, context_window: dict) -> list:
+    usable_input = context_window.get("usable_input")
+    if not usable_input:
+        return []
+    from bisheng.linsight.domain.services.context_budget import ToolResultBudgetMiddleware
+
+    return [ToolResultBudgetMiddleware(backend, usable_input)]
+
+
+async def _apply_context_window(model: BaseChatModel, svid: str, sink: dict | None) -> None:
+    """Tell deepagents how much input this model takes (F087, design decisions 1-2).
+
+    Must run before ``create_deep_agent``: the framework picks fraction-based or
+    fixed thresholds when it builds the summarization middleware, from whether
+    ``profile["max_input_tokens"]`` exists. An unknown window leaves the profile
+    alone so the framework keeps its pre-F087 defaults (spec AC-08). The
+    researcher subagent has no model of its own and shares this instance.
+    """
+    from bisheng.llm.domain.services.context_window import ContextWindowService
+
+    result = await ContextWindowService.resolve(model)
+    logger.info(
+        "[linsight-context-window] svid={} model_id={} window={} kind={} source={} usable_input={}",
+        svid,
+        getattr(model, "model_id", None),
+        result.window,
+        result.kind,
+        result.source,
+        result.usable_input,
     )
+    if sink is not None:
+        sink.update(window=result.window, kind=result.kind, usable_input=result.usable_input, source=result.source)
+    if result.usable_input is not None:
+        model.profile = {"max_input_tokens": result.usable_input}
 
 
 async def _resolve_model(session_model, model_id: str | None) -> tuple[BaseChatModel, bool]:

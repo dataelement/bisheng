@@ -4,47 +4,23 @@ import KnowledgeSpace from "@/pages/BuildPage/bench/KnowledgeSpace";
 import { userContext } from "@/contexts/userContext";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, fallback?: string | { defaultValue?: string }) => {
-      if (typeof fallback === "string") return fallback;
-      if (fallback && typeof fallback === "object" && "defaultValue" in fallback) return fallback.defaultValue || key;
-      return key;
-    },
-  }),
-}));
-
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
-  useToast: () => ({
-    toast: vi.fn(),
-  }),
-}));
-
-vi.mock("@/components/bs-ui/input", async () => {
-  const React = await import("react");
-  return {
-    Input: React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>((props, ref) => (
-      <input ref={ref} {...props} />
-    )),
-    NonNegativeInput: React.forwardRef<
-      HTMLInputElement,
-      React.ComponentProps<"input"> & { onValueChange?: (value: number) => void }
-    >(({ defaultValue, onValueChange, value, ...props }, ref) => (
-      <input
-        ref={ref}
-        {...props}
-        value={value ?? defaultValue ?? ""}
-        onChange={(event) => onValueChange?.(Number(event.target.value))}
-      />
-    )),
-    SearchInput: React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>((props, ref) => (
-      <input ref={ref} {...props} />
-    )),
-    Textarea: React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"textarea">>((props, ref) => (
-      <textarea ref={ref} {...props} />
-    )),
-  };
+const stable = vi.hoisted(() => ({ t: (key: string, fallback?: string | {defaultValue?: string}) => typeof fallback === 'string' ? fallback : fallback?.defaultValue ?? key, toast: vi.fn() }));
+vi.mock('react-i18next', async () => {
+ const messages = (await import('../../public/locales/zh-Hans/bs.json')).default;
+ const t = (key: string, fallback?: string | {defaultValue?: string}) => {
+  const value = key.split('.').reduce<unknown>((result, part) => result && typeof result === 'object' ? (result as Record<string, unknown>)[part] : undefined, messages);
+  return typeof value === 'string' ? value : stable.t(key, fallback);
+ };
+ return {useTranslation: () => ({t})};
 });
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({useToast: () => ({toast: stable.toast})}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+});
+
+
 
 vi.mock("@/controllers/request", () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -62,6 +38,8 @@ vi.mock("@/controllers/API/departmentKnowledgeSpace", () => ({
   getDepartmentKnowledgeSpacesApi: vi.fn(),
   setDepartmentKnowledgeSpacesVisibilityApi: vi.fn(),
 }));
+
+vi.mock("@/controllers/API/sensitiveWordPolicy", () => ({ getSensitiveWordPolicyApi: vi.fn(async () => ({ enabled: false, reviewScope: [], wordsType: [] })), updateSensitiveWordPolicyApi: vi.fn(async () => ({})) }));
 
 vi.mock("@/controllers/API", () => ({
   getKnowledgeConfigApi: vi.fn(),

@@ -1,8 +1,10 @@
-import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
+import { Button } from '@bisheng/ui';
+
+import { Dialog,DialogContent,DialogHeader,DialogTitle,DialogTrigger } from "@/components/bs-ui/dialog";
 import { darkContext } from "@/contexts/darkContext";
-import { Expand } from "lucide-react";
-import { useContext, useState } from "react";
+import { Outlined } from "bisheng-icons";
+
+import { useContext,useState } from "react";
 import AceEditor from "react-ace";
 
 export default function CodePythonItem({ data, onChange, i18nPrefix }) {
@@ -28,7 +30,7 @@ export default function CodePythonItem({ data, onChange, i18nPrefix }) {
         />
         <Dialog >
             <DialogTrigger asChild>
-                <Button className="absolute right-2 top-0 size-5" size="icon" variant="ghost"><Expand size={14} /></Button>
+                <Button className="absolute right-2 top-0 size-5" size="medium" variant="text" color="default" iconOnly><Outlined.FullScreen size={14} /></Button>
             </DialogTrigger>
             <DialogContent className="h-[600px] lg:max-w-[800px] ">
                 <DialogHeader>

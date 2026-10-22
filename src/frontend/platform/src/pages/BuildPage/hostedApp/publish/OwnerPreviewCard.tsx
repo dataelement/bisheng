@@ -24,7 +24,7 @@
  * The preview opens in a new tab. It runs the version at a URL of its own, and
  * replacing the detail page with it would take the owner off their app.
  */
-import { Button } from "@/components/bs-ui/button"
+import { Button } from "@bisheng/ui"
 import {
   getPreviewStatusApi,
   reclaimPreviewApi,

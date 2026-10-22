@@ -1,10 +1,12 @@
 // @ts-strict-ignore
-import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "@/components/bs-ui/button";
+import { Button } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
-import { File, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Tag } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import VarInput from "./VarInput";
@@ -40,7 +42,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
                 <Label className="flex items-center bisheng-label">
                     {t('messageContentVariable')}
                 </Label>
-                <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
+                <Tag size="small" color="brand" className="">{data.key}</Tag>
             </div>
             <VarInput
                 error={error}
@@ -59,15 +61,11 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
                     {
                         files.map((file) => (
                             <div className="max-w-56 relative flex rounded-md border px-2 py-1 items-center gap-2 bg-muted">
-                                <File className="min-w-5" />
+                                <Outlined.File className="min-w-5" />
                                 <div className="max-w-full flex-1 pr-4">
                                     <p className="w-full font-bold truncate">{file.name}</p>
                                 </div>
-                                <Button
-                                    size="icon"
-                                    variant="outline"
-                                    className="p-0 size-5 rounded-full absolute right-[-10px] top-[-10px] bg-background"
-                                    onClick={() => handleFileRemove(file.path)}><X size={14} /></Button>
+                                <Button size="medium" variant="outlined" className="p-0 size-5 rounded-full absolute right-[-10px] top-[-10px] bg-background" onClick={() => handleFileRemove(file.path)} color="default" iconOnly><Outlined.Close size={14} /></Button>
                             </div>
                         ))
                     }

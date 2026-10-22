@@ -1,4 +1,5 @@
-import { LoadIcon } from "@/components/bs-icons";
+import { Outlined } from "bisheng-icons";
+
 
 export default function MessageNodeRun({ data }) {
     // const { t } = useTranslation('flow')
@@ -8,7 +9,7 @@ export default function MessageNodeRun({ data }) {
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer">
                 <div className="flex items-center font-bold gap-2 text-sm">
                     {
-                        <LoadIcon className="text-primary duration-300" />
+                        <Outlined.Loading size={16} className="animate-spin text-primary duration-300" />
                     }
                     <span>{data.message.name}</span>
                 </div>

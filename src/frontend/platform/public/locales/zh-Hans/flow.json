@@ -158,6 +158,7 @@
   "cannotBeEmpty": "{{label}}不可为空",
   "editReportTemplate": "编辑报告模板",
   "nodeErrorMessage": "{{nodeName}}节点错误：{{varNameCn}}已失效.",
+  "nodeLogError": "失败原因",
   "required": "不可为空",
   "isRequired": "是否必填",
   "documentKnowledgeBase": "文档知识库",
@@ -602,5 +603,9 @@
         "label": "输出变量"
       }
     }
-  }
+  },
+  "rerunWorkflow": "重新运行",
+  "type": "类型",
+  "valueType": "值类型",
+  "selectDbType": "请选择数据库类型"
 }

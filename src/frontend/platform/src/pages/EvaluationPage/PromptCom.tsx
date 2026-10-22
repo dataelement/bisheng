@@ -1,10 +1,13 @@
+import { Button } from '@bisheng/ui';
 import { useContext, useEffect, useState } from "react";
 import { PopUpContext } from "@/contexts/popUpContext";
 import GenericModal from "@/modals/genericModal";
 import { TextAreaComponentType } from "@/types/components";
 import { TypeModal } from "@/utils";
 
-import { ExternalLink } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+
+import { useTranslation } from "react-i18next";
 
 export default function PromptAreaComponent({
   field_name,
@@ -16,6 +19,7 @@ export default function PromptAreaComponent({
   editNode = false,
   type = TypeModal.PROMPT,
 }: TextAreaComponentType) {
+  const { t } = useTranslation();
   const [myValue, setMyValue] = useState(value);
   const { openPopUp } = useContext(PopUpContext);
   useEffect(() => {
@@ -39,8 +43,8 @@ export default function PromptAreaComponent({
               <GenericModal
                 type={type}
                 value={myValue}
-                buttonText="check & Save"
-                modalTitle="Edit Prompt"
+                buttonText={t("code.checkAndSave")}
+                modalTitle={t("evaluation.editPrompt")}
                 setValue={(t: string) => {
                   setMyValue(t);
                   onChange(t);
@@ -57,34 +61,26 @@ export default function PromptAreaComponent({
                 " whitespace-wrap input-primary"
           }
         >
-          {myValue !== "" ? myValue : "enter your prompt"}
+          {myValue !== "" ? myValue : t("evaluation.enterPrompt")}
         </span>
-        <button
-          onClick={() => {
+        <Button type="button" variant="text" size="medium" aria-label={t("evaluation.editPrompt")} onClick={() => {
             openPopUp(
               <GenericModal
                 field_name={field_name}
                 type={TypeModal.PROMPT}
                 value={myValue}
-                buttonText="check & Save"
-                modalTitle="Edit Prompt"
+                buttonText={t("code.checkAndSave")}
+                modalTitle={t("evaluation.editPrompt")}
                 setValue={handleSave}
                 nodeClass={nodeClass}
                 setNodeClass={setNodeClass}
               />
             );
-          }}
-        >
+          }} color="default" iconOnly>
           {!editNode && (
-            <ExternalLink
-              strokeWidth={1.5}
-              className={
-                "icons-parameters-comp" +
-                (disabled ? " text-ring" : " hover:text-accent-foreground")
-              }
-            />
+            <Outlined.ExpandTextInput size={16} />
           )}
-        </button>
+        </Button>
       </div>
     </div>
   );

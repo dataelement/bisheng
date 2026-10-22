@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useSetRecoilState } from 'recoil';
-import * as Tabs from '@radix-ui/react-tabs';
+import { Segmented } from '@bisheng/ui';
 import type { SandpackPreviewRef, CodeEditorRef } from '@codesandbox/sandpack-react';
 import useArtifacts from '~/hooks/Artifacts/useArtifacts';
 import DownloadArtifact from './DownloadArtifact';
@@ -49,7 +49,7 @@ export default function Artifacts() {
   };
 
   return (
-    <Tabs.Root value={activeTab} onValueChange={setActiveTab} asChild>
+    <>
       {/* Main Parent */}
       <div className="flex h-full w-full items-center justify-center">
         {/* Main Container */}
@@ -103,21 +103,15 @@ export default function Artifacts() {
                 <RefreshCw size={16} className="mr-2 animate-spin text-text-secondary" />
               )}
               {/* Tabs */}
-              <Tabs.List className="mr-2 inline-flex h-7 rounded-full border border-border-medium bg-surface-tertiary">
-                <Tabs.Trigger
-                  value="preview"
-                  disabled={isMutating}
-                  className="border-0.5 flex items-center gap-1 rounded-full border-transparent py-1 pl-2.5 pr-2.5 text-xs font-medium text-text-secondary data-[state=active]:border-border-light data-[state=active]:bg-surface-primary-alt data-[state=active]:text-text-primary"
-                >
-                  {localize('com_ui_preview')}
-                </Tabs.Trigger>
-                <Tabs.Trigger
-                  value="code"
-                  className="border-0.5 flex items-center gap-1 rounded-full border-transparent py-1 pl-2.5 pr-2.5 text-xs font-medium text-text-secondary data-[state=active]:border-border-light data-[state=active]:bg-surface-primary-alt data-[state=active]:text-text-primary"
-                >
-                  {localize('com_ui_code')}
-                </Tabs.Trigger>
-              </Tabs.List>
+              <Segmented
+                size="small"
+                value={activeTab}
+                onChange={setActiveTab}
+                options={[
+                  { value: 'preview', label: localize('com_ui_preview') },
+                  { value: 'code', label: localize('com_ui_code') },
+                ]}
+              />
               <button
                 className="text-text-secondary"
                 onClick={() => {
@@ -139,6 +133,7 @@ export default function Artifacts() {
           </div>
           {/* Content */}
           <ArtifactTabs
+            activeTab={activeTab}
             isMermaid={isMermaid}
             artifact={currentArtifact}
             isSubmitting={isSubmitting}
@@ -186,6 +181,6 @@ export default function Artifacts() {
           </div>
         </div>
       </div>
-    </Tabs.Root>
+    </>
   );
 }

@@ -4,7 +4,8 @@ import { FileSources, FileContext } from '~/types/chat';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { TFile } from '~/types/chat';
 import { CrossIcon, DotsIcon } from '~/components/svg';
-import { Button, Checkbox } from '~/components/ui';
+import { Button } from '~/components/ui';
+import { Checkbox } from '@bisheng/ui';
 import { formatDate, getFileType } from '~/utils';
 import useLocalize from '~/hooks/useLocalize';
 import FileIcon from '~/components/svg/Files/FileIcon';
@@ -22,7 +23,7 @@ export const fileTableColumns: ColumnDef<TFile>[] = [
           }
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
           aria-label="Select all"
-          className="flex"
+          className="peer flex"
         />
       );
     },
@@ -32,7 +33,7 @@ export const fileTableColumns: ColumnDef<TFile>[] = [
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
           aria-label="Select row"
-          className="flex"
+          className="peer flex"
         />
       );
     },

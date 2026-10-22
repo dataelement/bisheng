@@ -1,7 +1,10 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
+import { Button, Input, Select, notification } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
+
 import {
   Dialog,
   DialogContent,
@@ -9,16 +12,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
+
 import { Label } from "@/components/bs-ui/label"
-import MultiSelect from "@/components/bs-ui/select/multi"
-import { toast } from "@/components/bs-ui/toast/use-toast"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/bs-ui/tooltip"
+
+
 import { cn } from "@/utils"
 import {
   applyDepartmentMemberEditApi,
@@ -49,6 +46,7 @@ export function OrganizationMemberEditDialog({
   onSaved,
 }: Props) {
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<DepartmentMemberEditForm | null>(null)
@@ -81,11 +79,7 @@ export function OrganizationMemberEditDialog({
         getDepartmentMemberEditFormApi(deptId, member.user_id)
       )
       if (!data) {
-        toast({
-          title: t("prompt"),
-          variant: "warning",
-          description: t("bs:department.memberEditLoadFailed"),
-        })
+        notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.memberEditLoadFailed") ?? '') })
         return
       }
       setForm(data)
@@ -217,15 +211,11 @@ export function OrganizationMemberEditDialog({
         }
         if (chk?.has_assets) {
           const c = chk.counts
-          toast({
-            title: t("prompt"),
-            variant: "warning",
-            description: t("bs:department.deleteLocalMemberBlocked", {
+          notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.deleteLocalMemberBlocked", {
               k: c.knowledge_spaces,
               f: c.flows,
               a: c.assistants,
-            }),
-          })
+            }) ?? '') })
           close()
           return
         }
@@ -236,17 +226,18 @@ export function OrganizationMemberEditDialog({
           close()
           return
         }
-        toast({
-          title: t("prompt"),
-          variant: "success",
-          description: t("bs:department.deleteLocalMemberDone"),
-        })
+        notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.deleteLocalMemberDone") ?? '') })
         onSaved()
         onClose()
         close()
       },
     })
   }, [deptId, form, member, onClose, onSaved, t])
+
+  const lockedGroupIds = useMemo(
+    () => new Set<number>(form?.locked_group_ids ?? []),
+    [form]
+  )
 
   const title = useMemo(() => {
     if (!form) return t("edit")
@@ -259,11 +250,7 @@ export function OrganizationMemberEditDialog({
   const handleSave = async () => {
     if (!member || !form) return
     if (form.edit_mode === "local_primary" && !userName.trim()) {
-      toast({
-        title: t("prompt"),
-        variant: "warning",
-        description: t("bs:department.localUserNameRequired"),
-      })
+      notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.localUserNameRequired") ?? '') })
       return
     }
     setSaving(true)
@@ -299,11 +286,7 @@ export function OrganizationMemberEditDialog({
         )
         if (res === false) return
       }
-      toast({
-        title: t("prompt"),
-        variant: "success",
-        description: t("bs:department.memberEditSaved"),
-      })
+      notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.memberEditSaved") ?? '') })
       onSaved()
       onClose()
     } finally {
@@ -314,7 +297,8 @@ export function OrganizationMemberEditDialog({
   const renderRoleMultiSelect = (
     options: { id: number; role_name: string }[],
     selected: Set<number>,
-    onSelectionChange: (next: Set<number>) => void
+    onSelectionChange: (next: Set<number>) => void,
+    ariaLabel: string
   ) => {
     if (!options.length) {
       return (
@@ -322,13 +306,18 @@ export function OrganizationMemberEditDialog({
       )
     }
     return (
-      <MultiSelect
+      <Select
+        {...selectLabels}
         multiple
+        showSearch
         className="mt-1"
-        options={options.map((r) => ({ label: r.role_name, value: String(r.id) }))}
+        aria-label={ariaLabel}
+        options={options
+          .filter((r) => r.id != null)
+          .map((r) => ({ label: r.role_name, value: String(r.id) }))}
         value={Array.from(selected).map(String)}
         onChange={(vals) => {
-          const next = new Set((vals as string[]).map((id) => Number(id)))
+          const next = new Set(vals.map((id) => Number(id)))
           onSelectionChange(next)
           // Sync-delete a removed role from every other dropdown that offers it,
           // so shared/global roles can actually be removed instead of being
@@ -337,7 +326,6 @@ export function OrganizationMemberEditDialog({
           pruneSharedRoleEverywhere(removed)
         }}
         placeholder={t("bs:department.multiSelectRolesPlaceholder")}
-        searchPlaceholder={t("system.searchRoles")}
       />
     )
   }
@@ -359,18 +347,13 @@ export function OrganizationMemberEditDialog({
           <div className="space-y-4 py-1">
             <div>
               <Label>{t("system.username")}</Label>
-              <Input
-                className="mt-1"
-                value={userName}
-                disabled={
+              <Input value={userName} disabled={
                   form.edit_mode === "affiliate" || form.edit_mode === "synced_primary"
-                }
-                onChange={(e) => setUserName(e.target.value)}
-              />
+                } onChange={(e) => setUserName(e.target.value)} className={"mt-1"} />
             </div>
             <div>
               <Label>{t("bs:department.personId")}</Label>
-              <Input className="mt-1 bg-muted" readOnly value={form.user.person_id || "-"} />
+              <Input readOnly value={form.user.person_id || "-"} className={"mt-1 bg-muted"} />
             </div>
 
             {form.edit_mode !== "affiliate" && (
@@ -382,20 +365,30 @@ export function OrganizationMemberEditDialog({
                       {t("bs:department.memberEditUserGroupsEmpty")}
                     </p>
                   ) : (
-                    <MultiSelect
+                    <Select
+                      {...selectLabels}
                       multiple
+                      showSearch
                       className="mt-1"
-                      options={form.manageable_groups.map((g) => ({
-                        label: g.group_name,
-                        value: String(g.id),
-                      }))}
-                      lockedValues={(form.locked_group_ids ?? []).map(String)}
+                      aria-label={t("bs:department.userGroups")}
+                      options={form.manageable_groups
+                        .filter((g) => g.id != null)
+                        .map((g) => ({
+                          label: g.group_name,
+                          value: String(g.id),
+                          // Locked groups cannot be toggled from the panel
+                          disabled: lockedGroupIds.has(g.id),
+                        }))}
                       value={Array.from(groupSel).map(String)}
-                      onChange={(vals) =>
-                        setGroupSel(new Set((vals as string[]).map((id) => Number(id))))
-                      }
+                      onChange={(vals) => {
+                        // Locked groups stay selected even if removed via a tag or clear
+                        const next = new Set(vals.map((id) => Number(id)))
+                        groupSel.forEach((id) => {
+                          if (lockedGroupIds.has(id)) next.add(id)
+                        })
+                        setGroupSel(next)
+                      }}
                       placeholder={t("bs:department.multiSelectUserGroupsPlaceholder")}
-                      searchPlaceholder={t("system.searchUserGroups")}
                     />
                   )}
                 </div>
@@ -412,10 +405,9 @@ export function OrganizationMemberEditDialog({
                       />
                     ) : (
                       <>
-                        <TooltipProvider delayDuration={300}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div
+                        <SharedTooltipProvider delayDuration={300}><SharedTooltip  content={<><p className="break-words text-left text-xs">
+                                {form.primary_department.name}
+                              </p></>} side="bottom" ><div
                                 className={cn(
                                   "mt-1 flex h-9 w-full min-w-0 cursor-default items-center rounded-md border border-input bg-muted px-3 py-1 text-sm text-foreground shadow-sm",
                                 )}
@@ -423,15 +415,7 @@ export function OrganizationMemberEditDialog({
                                 <span className="min-w-0 flex-1 truncate">
                                   {form.primary_department.name}
                                 </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="z-[100] max-w-md">
-                              <p className="break-words text-left text-xs">
-                                {form.primary_department.name}
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                              </div></SharedTooltip></SharedTooltipProvider>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {t("bs:department.memberEditPrimaryReadonly")}
                         </p>
@@ -442,7 +426,12 @@ export function OrganizationMemberEditDialog({
                 {form.primary_department && (
                   <div>
                     <Label>{t("bs:department.roles")}</Label>
-                    {renderRoleMultiSelect(primaryRoleOptions, primaryRoles, setPrimaryRoles)}
+                    {renderRoleMultiSelect(
+                      primaryRoleOptions,
+                      primaryRoles,
+                      setPrimaryRoles,
+                      t("bs:department.roles")
+                    )}
                   </div>
                 )}
                 {form.affiliate_rows.length > 0 && (
@@ -455,7 +444,8 @@ export function OrganizationMemberEditDialog({
                           form.assignable_roles_catalog[row.dept_id] ?? [],
                           affRoleByDept[row.dept_id] ?? new Set(),
                           (next) =>
-                            setAffRoleByDept((prev) => ({ ...prev, [row.dept_id]: next }))
+                            setAffRoleByDept((prev) => ({ ...prev, [row.dept_id]: next })),
+                          `${row.name} ${t("bs:department.roles")}`
                         )}
                       </div>
                     ))}
@@ -470,7 +460,8 @@ export function OrganizationMemberEditDialog({
                 {renderRoleMultiSelect(
                   form.assignable_roles_catalog[form.context.dept_id] ?? [],
                   ctxRoles,
-                  setCtxRoles
+                  setCtxRoles,
+                  t("bs:department.roles")
                 )}
               </div>
             )}
@@ -479,18 +470,13 @@ export function OrganizationMemberEditDialog({
         <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             {form?.edit_mode === "local_primary" && (
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={saving || loading}
-                onClick={() => handleDeleteLocalMember()}
-              >
+              <Button type="button" variant="solid" disabled={saving || loading} onClick={() => handleDeleteLocalMember()} color="danger">
                 {t("bs:department.deleteLocalMember")}
               </Button>
             )}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose} disabled={saving}>
+            <Button variant="outlined" onClick={onClose} disabled={saving} color="default">
               {t("cancel")}
             </Button>
             <Button onClick={() => void handleSave()} disabled={saving || loading || !form}>

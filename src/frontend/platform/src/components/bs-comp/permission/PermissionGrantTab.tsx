@@ -1,6 +1,7 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Alert, Button } from '@bisheng/ui';
+
+import { Checkbox } from '@bisheng/ui';
 import {
   getGrantablePermissionModelsApi,
   mutateResourceGrantsApi,
@@ -117,26 +118,12 @@ function ExistingAssigneeRow({
       </select>
 
       <div className="flex flex-wrap items-start gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11"
-          aria-label={`grant.move.${assignee.assignee_id}`}
-          disabled={
+        <Button type="button" variant="outlined" className="min-h-11" aria-label={`grant.move.${assignee.assignee_id}`} disabled={
             !editable || pending || targetModelKey === assignee.model.key
-          }
-          onClick={() => onMove(assignee, targetModelKey)}
-        >
+          } onClick={() => onMove(assignee, targetModelKey)} color="default">
           {t("grant.move")}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 text-red-700"
-          aria-label={`grant.remove.${assignee.assignee_id}`}
-          disabled={!editable || pending}
-          onClick={() => onRemove(assignee)}
-        >
+        <Button type="button" variant="outlined" className="min-h-11 text-red-700" aria-label={`grant.remove.${assignee.assignee_id}`} disabled={!editable || pending} onClick={() => onRemove(assignee)} color="default">
           {t("grant.remove")}
         </Button>
       </div>
@@ -345,12 +332,12 @@ export function PermissionGrantTab({
         data-testid="legacy-permission-grant-layout"
       >
         {conflict && (
-          <p
-            className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-900"
-            role="alert"
-          >
-            {t("grant.conflict")}
-          </p>
+          <Alert
+            type="error"
+            className="mb-3"
+            description={t("grant.conflict")}
+            live
+          />
         )}
 
         <div className="min-h-0 flex-1 overflow-hidden">
@@ -360,7 +347,7 @@ export function PermissionGrantTab({
         {subjectType === "department" &&
           !hideDepartmentIncludeChildrenControl && (
             <label className="mt-3 flex h-10 shrink-0 items-center gap-2 text-sm">
-              <Checkbox
+              <Checkbox className="peer"
                 checked={includeChildren}
                 onCheckedChange={(checked) =>
                   handleIncludeChildrenChange(checked === true)
@@ -401,15 +388,11 @@ export function PermissionGrantTab({
         </div>
 
         <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
-          <Button
-            type="button"
-            disabled={
+          <Button type="button" disabled={
               pendingKey !== null ||
               selectedSubjects.length === 0 ||
               !selectedModelKey
-            }
-            onClick={handleAdd}
-          >
+            } onClick={handleAdd}>
             {t("grant.submit")}
           </Button>
         </div>
@@ -420,17 +403,10 @@ export function PermissionGrantTab({
   return (
     <div className="flex min-h-0 flex-col gap-4">
       {!canEdit && (
-        <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-          {t("grant.readOnly")}
-        </p>
+        <Alert description={t("grant.readOnly")} />
       )}
       {conflict && (
-        <p
-          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-900"
-          role="alert"
-        >
-          {t("grant.conflict")}
-        </p>
+        <Alert type="error" description={t("grant.conflict")} live />
       )}
 
       {showExistingAssignees && assignees.length > 0 && (
@@ -481,7 +457,7 @@ export function PermissionGrantTab({
 
           {subjectType === "department" && (
             <label className="flex min-h-11 items-center gap-2 text-sm">
-              <Checkbox
+              <Checkbox className="peer"
                 checked={includeChildren}
                 onCheckedChange={(checked) =>
                   handleIncludeChildrenChange(checked === true)
@@ -508,16 +484,11 @@ export function PermissionGrantTab({
                 ))}
               </select>
             </label>
-            <Button
-              type="button"
-              className="min-h-11"
-              disabled={
+            <Button type="button" className="min-h-11" disabled={
                 pendingKey !== null ||
                 selectedSubjects.length === 0 ||
                 !selectedModelKey
-              }
-              onClick={handleAdd}
-            >
+              } onClick={handleAdd}>
               {t("grant.submit")}
             </Button>
           </div>

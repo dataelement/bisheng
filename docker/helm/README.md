@@ -1,7 +1,7 @@
 # BiSheng Helm charts
 
 Two independent charts. The platform never talks to the Kubernetes API; the
-worker finds runners by DNS (`code-runner-{n}.code-runner…` from ordinal 0).
+worker calls the replica URLs in `sandbox.endpoints`.
 
 | Chart | What it installs |
 |-------|------------------|
@@ -24,7 +24,7 @@ helm upgrade --install sandbox docker/helm/bisheng-sandbox \
 helm upgrade --install bisheng docker/helm/bisheng \
   --namespace bisheng --create-namespace \
   --set sandbox.token="$SANDBOX_TOKEN" \
-  --set sandbox.discoverHostPattern='code-runner-{n}.code-runner.bisheng-sandbox.svc.cluster.local'
+  --set sandbox.endpoints='{http://code-runner-0.code-runner.bisheng-sandbox.svc.cluster.local:8080,http://code-runner-1.code-runner.bisheng-sandbox.svc.cluster.local:8080}'
 ```
 
 `SANDBOX_TOKEN` must be the same on both releases.
@@ -46,7 +46,7 @@ lose the working directory.
 helm upgrade sandbox docker/helm/bisheng-sandbox --reuse-values --set replicaCount=4
 ```
 
-The worker refresh thread picks up new ordinals; no worker restart.
+Then add each new Pod URL to the platform chart `sandbox.endpoints` and upgrade that release. Nothing scans DNS for new ordinals.
 
 ## Check
 

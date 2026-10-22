@@ -2,24 +2,9 @@
 import { DepartmentTree } from "@/pages/DepartmentPage/components/DepartmentTree";
 import { render, screen } from "@/test/test-utils";
 import type { DepartmentTreeNode } from "@/types/api/department";
-import type { ChangeEventHandler } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: ({
-    placeholder,
-    onChange,
-  }: {
-    placeholder?: string;
-    onChange?: ChangeEventHandler<HTMLInputElement>;
-  }) => (
-    <input
-      aria-label={placeholder}
-      placeholder={placeholder}
-      onChange={onChange}
-    />
-  ),
-}));
+
 
 const tree: DepartmentTreeNode[] = [
   {

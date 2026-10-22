@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 /**
  * F035 Track H: multi-select list of enabled skills, rendered inside the
  * "+" menu's "Add Skill" submenu. Data: GET /api/v1/linsight/skill/selectable
@@ -12,8 +13,9 @@ import { useQuery } from '@tanstack/react-query';
 import { getSelectableSkills } from '~/api/linsight';
 import { DropdownMenuItem } from '~/components/ui';
 import { SearchInput, StateView } from '@bisheng/ui';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize } from '~/hooks';
+import { useIsClipped } from '~/hooks/useIsClipped';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 
@@ -29,32 +31,6 @@ interface SkillRowProps {
 }
 
 /**
- * Whether a single-line element is actually cut off. Re-measures on resize, so
- * it keeps up with panel-width changes.
- */
-function useIsClipped<T extends HTMLElement>(text?: string) {
-    const ref = useRef<T | null>(null);
-    const [clipped, setClipped] = useState(false);
-
-    useLayoutEffect(() => {
-        const el = ref.current;
-        if (!el) {
-            setClipped(false);
-            return;
-        }
-        // +1 absorbs sub-pixel rounding, which otherwise reports a clip on text
-        // that fits exactly.
-        const measure = () => setClipped(el.scrollWidth > el.clientWidth + 1);
-        measure();
-        const ro = new ResizeObserver(measure);
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, [text]);
-
-    return [ref, clipped] as const;
-}
-
-/**
  * One selectable row. Name and description are each clamped to a single line;
  * the full text moves into a tooltip — but only when something actually
  * overflows, which we can only know by measuring, hence the per-row component.
@@ -67,9 +43,9 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
     return (
         // Always wrapped: rendering the tooltip conditionally would instead swap
         // the row's element type and remount it on every measure.
-        <Tooltip delayDuration={300}>
-            <TooltipTrigger asChild>
-                <DropdownMenuItem
+        <SharedTooltip disabled={!showTooltip} content={<><p className="font-medium">{skill.display_name}</p>{skill.description && (
+                        <p className="mt-0.5 text-[10px] leading-[15px] text-white/70">{skill.description}</p>
+                    )}</>} side="right"  align="start"><DropdownMenuItem
                     onSelect={(e) => {
                         e.preventDefault();
                         onToggle(skill);
@@ -97,26 +73,7 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                         )}
                     </div>
                     {isChecked && <Outlined.Check size={14} className="mt-1 shrink-0 text-blue-500" />}
-                </DropdownMenuItem>
-            </TooltipTrigger>
-            {/* No content unless something is actually cut off — a tooltip that just
-                repeats what is already fully visible is noise. Once it does show, it
-                carries the whole row: a name-only tooltip next to a visible
-                description reads as if the description were missing. */}
-            {showTooltip && (
-                <TooltipContent
-                    side="right"
-                    align="start"
-                    sideOffset={8}
-                    className="max-w-[260px] whitespace-normal break-words leading-[18px]"
-                >
-                    <p className="font-medium">{skill.display_name}</p>
-                    {skill.description && (
-                        <p className="mt-0.5 text-[10px] leading-[15px] text-white/70">{skill.description}</p>
-                    )}
-                </TooltipContent>
-            )}
-        </Tooltip>
+                </DropdownMenuItem></SharedTooltip>
     );
 }
 

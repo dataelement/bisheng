@@ -27,8 +27,8 @@
  * model. Two buttons doing one thing on one screen is worse than either.
  */
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { Button } from "@bisheng/ui"
+import { notification } from "@bisheng/ui"
 import {
   getHostedAppErrorMessage,
   withdrawApprovalApi,
@@ -83,16 +83,16 @@ export function ApprovalStatusCard({
     setWithdrawing(true)
     try {
       await withdrawApprovalApi(instanceId)
-      toast({
+      notification.open({
         title: t("prompt"),
-        variant: "success",
+        type: "success",
         description: t("hostedApp.publishStatus.withdrawDone"),
       })
       onChanged()
     } catch (error) {
-      toast({
+      notification.open({
         title: t("prompt"),
-        variant: "error",
+        type: "error",
         description:
           getHostedAppErrorMessage(error) ||
           t("hostedApp.publishStatus.withdrawFailed"),

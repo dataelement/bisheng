@@ -114,9 +114,14 @@ vi.mock("@/pages/SystemPage/components/permission/ImpactDialog", () => ({
   },
 }))
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   message: (...args: unknown[]) => childCalls.message(...args),
-}))
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 
 vi.mock("@/controllers/API/permission", () => ({
   createPermissionCatalogDraftApi: vi.fn(),
@@ -338,8 +343,8 @@ describe("F048 RolesAndPermissions", () => {
 
     await waitFor(() => {
       expect(childCalls.message).toHaveBeenCalledWith({
-        variant: "error",
-        description: "model.deleteBlockedByGrants",
+        type: "error",
+        message: "model.deleteBlockedByGrants",
       })
     })
   })
@@ -359,8 +364,8 @@ describe("F048 RolesAndPermissions", () => {
 
     await waitFor(() => {
       expect(childCalls.message).toHaveBeenCalledWith({
-        variant: "error",
-        description: "model.deleteFailed",
+        type: "error",
+        message: "model.deleteFailed",
       })
     })
   })

@@ -116,6 +116,8 @@ services:
       BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       # Shared with code-runner-*; editor "run once" executes in this process.
       BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      # One URL per replica. Adding code-runner-3 means appending its URL here.
+      BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
       BS_SANDBOX_CONF__LOCAL_ISOLATION: ${LOCAL_ISOLATION:-uid}
     volumes:
@@ -163,6 +165,8 @@ services:
       BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
       BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      # One URL per replica. Adding code-runner-3 means appending its URL here.
+      BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
       BS_SANDBOX_CONF__LOCAL_ISOLATION: ${LOCAL_ISOLATION:-uid}
     volumes:
@@ -441,7 +445,7 @@ services:
     depends_on: [backend]
     restart: on-failure
 
-  # Named replicas (not deploy.replicas): worker DNS is code-runner-{n} from 1.
+  # Named replicas (not deploy.replicas). Platform endpoints list each of these.
   # No ports: — isolation is network unreachability, not hiding a host port.
   code-runner-1: &code_runner
     image: dataelement/bisheng-sandbox:${SANDBOX_IMAGE_TAG:-v3.0.0-beta1}
@@ -468,7 +472,7 @@ services:
     environment:
       TZ: Asia/Shanghai
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
-      SANDBOX_MAX_SESSIONS: "2"
+      SANDBOX_MAX_SESSIONS: "50"
       SANDBOX_ENABLE_UID_ISOLATION: "true"
       SANDBOX_LEASE_TTL_S: "900"
     networks:

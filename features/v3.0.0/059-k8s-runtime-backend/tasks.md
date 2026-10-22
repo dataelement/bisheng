@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；73 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 17 / 73 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；74 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 17 / 74 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -65,12 +65,19 @@
   **覆盖 AC:** AC-15、AC-39、AC-48、AC-56
   **依赖:** T003
 
+- [ ] **T074** — 发布线继承的迁移图汇合
+  **类型**：基础设施
+  **文件**：`src/backend/bisheng/core/database/alembic/versions/f059_merge_release_heads.py`
+  **逻辑/验收**：合并已授权发布线9d156f261c后，实际出现f059_merge_f086_heads、asr_rt_model_type、merge_skill_center_heads三条head；新增空merge revision保留三条原父链，不改表/数据、不重写历史；以已有单head门禁和模型/账本回归验证。降级只回到原分叉。
+  **覆盖 AC:** AC-39、AC-48、AC-56
+  **依赖:** T073
+
 - [ ] **T005** — F086 公共修复继承核对
   **类型**：基础设施
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/prerequisites.md`、`features/v3.0.0/059-k8s-runtime-backend/prerequisites.json`
   **逻辑/验收**：逐文件比对原 F086 的多租户启动、BIGINT 和测试修复与 release-line；记录已有同内容提交或发布线继承方式。禁止直接复制权限分叉；真实平台验收以前必须有来源 SHA/内容证据。
   **覆盖 AC:** AC-36、AC-55、AC-56
-  **依赖:** T073
+  **依赖:** T074
 
 ### Wave 2
 
@@ -607,7 +614,7 @@
 - [ ] **T072** — L2 代码审查及交付核对
   **类型**：审查
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/code-review.md`、`features/v3.0.0/059-k8s-runtime-backend/delivery-validation.json`
-  **逻辑/验收**：按code-review技能以755d4456e5及release-line确认基准审查真实diff，修复边界/并发/权限/信息泄漏；核对所有任务L1和AC证据、Docker保留，更新design现状和交付证据；不自动合并/发tag。
+  **逻辑/验收**：按sdd-code-review技能以755d4456e5及release-line确认基准审查真实diff，修复边界/并发/权限/信息泄漏；核对所有任务L1和AC证据、Docker保留，更新design现状和交付证据；不自动合并/发tag。
   **覆盖 AC:** AC-01、AC-02、AC-03、AC-04、AC-05、AC-06、AC-07、AC-08、AC-09、AC-10、AC-11、AC-12、AC-13、AC-14、AC-15、AC-16、AC-17、AC-18、AC-19、AC-20、AC-21、AC-22、AC-23、AC-24、AC-25、AC-26、AC-27、AC-28、AC-29、AC-30、AC-31、AC-32、AC-33、AC-34、AC-35、AC-36、AC-37、AC-39、AC-40、AC-41、AC-42、AC-43、AC-44、AC-45、AC-46、AC-47、AC-48、AC-49、AC-50、AC-51、AC-52、AC-53、AC-54、AC-55、AC-56
   **依赖:** T071
 
@@ -620,3 +627,5 @@
 - 2026-10-21：用户确认修订设计；本轮拆解覆盖 55 条有效 AC，开始 tasks 自动审查；尚未宣称已实现或部署。
 
 - 2026-10-21：T001 配置实现/验证通过；T006 客户端测试先行，红阶段为缺少待实现模块（12 passed / 17 errors），不把该阶段记为接口实现成功。
+
+- 2026-10-22：公共修复已授权并进入发布线9d156f261c；继承产生的真实三head新增T074登记，保留原revision父链；为继承最新共享组件逐文件适配Vibe调用，未改变产品合同。

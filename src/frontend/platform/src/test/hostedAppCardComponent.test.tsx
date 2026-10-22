@@ -83,9 +83,9 @@ describe("CardComponent delete entry", () => {
     })
     await openMenu()
     const label = await screen.findByText("delete")
-    const item = label.closest("[data-slot='dropdown-menu-item']")
+    const item = label.closest("[role='menuitem']")
     expect(item).toBeTruthy()
-    expect(item?.getAttribute("data-disabled")).not.toBeNull()
+    expect(item).toHaveAttribute("aria-disabled", "true")
   })
 })
 

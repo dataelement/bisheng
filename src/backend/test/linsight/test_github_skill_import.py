@@ -25,9 +25,8 @@ from bisheng.linsight.domain.services.github_skill_fetcher import (
     fetch_skill_files,
     parse_github_url,
 )
-from test.linsight.fixtures.fake_minio import FakeMinioStorage
-
 from bisheng.linsight.domain.services.skill_store import SKILL_MD, SkillStore
+from test.linsight.fixtures.fake_minio import FakeMinioStorage
 
 TENANT = 1
 USER = 7
@@ -240,12 +239,22 @@ class _FakeSkillDao:
         return skill
 
     @classmethod
-    async def get_by_name(cls, name):
-        return cls.rows.get(name)
+    async def get_by_name(cls, name, owner_user_id=0, **kwargs):
+        row = cls.rows.get(name)
+        if row is not None and getattr(row, "owner_user_id", 0) != owner_user_id:
+            return None
+        return row
 
     @classmethod
-    async def get_by_display_name(cls, display_name):
-        return next((s for s in cls.rows.values() if s.display_name == display_name), None)
+    async def get_by_display_name(cls, display_name, owner_user_id=0, **kwargs):
+        return next(
+            (
+                s
+                for s in cls.rows.values()
+                if s.display_name == display_name and getattr(s, "owner_user_id", 0) == owner_user_id
+            ),
+            None,
+        )
 
 
 @pytest.fixture

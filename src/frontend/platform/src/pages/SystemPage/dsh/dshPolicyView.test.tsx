@@ -80,7 +80,7 @@ beforeEach(() => {
 describe('unified usage selection', () => {
     it('loads the entire tenant on switching to departments and restores it after clearing selection', async () => {
         render(<PolicyView />)
-        fireEvent.mouseDown(screen.getByRole('tab', { name: 'dsh.byDepartment' }), {
+        fireEvent.click(screen.getByRole('radio', { name: 'dsh.byDepartment' }), {
             button: 0,
             ctrlKey: false,
         })
@@ -158,7 +158,7 @@ describe('unified usage selection', () => {
     })
     it('shows department aggregate usage without a member-detail section', async () => {
         render(<PolicyView />)
-        fireEvent.mouseDown(screen.getByRole('tab', { name: 'dsh.byDepartment' }), {
+        fireEvent.click(screen.getByRole('radio', { name: 'dsh.byDepartment' }), {
             button: 0,
             ctrlKey: false,
         })

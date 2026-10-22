@@ -1,7 +1,7 @@
 // @ts-strict-ignore
-import { useEffect, useMemo, useState } from "react"
-import { useMessageStore } from "./messageStore"
+import { useEffect,useMemo } from "react"
 import { useTranslation } from "react-i18next"
+import { useMessageStore } from "./messageStore"
 
 // 引导词推荐
 export default function GuideQuestions({ locked, chatId, questions, onClick }) {

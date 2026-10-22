@@ -1,15 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { Dropdown, DropdownItem } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Article, getArticleDetailApi } from "~/api/channels";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useToastContext } from "~/Providers";
@@ -205,44 +200,33 @@ export default function ArticlePage() {
                     scrolled ? "pointer-events-none opacity-0" : "opacity-100",
                 )}
             >
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <button
-                            type="button"
-                            className="inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-text-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
-                            aria-label={localize("com_subscription.channel_settings")}
-                        >
-                            <Outlined.MoreCircle className="size-5" />
-                        </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        align="end"
-                        sideOffset={6}
-                        className="z-[120] w-[160px] space-y-1 border border-black/5 bg-white/85 p-1"
+                <Dropdown
+                    align="end"
+                    menu={
+                        <>
+                            <DropdownItem icon={<Outlined.Share />} onSelect={handleShare}>
+                                {localize("com_subscription.share")}
+                            </DropdownItem>
+                            <DropdownItem icon={<Outlined.Earth />} onSelect={handleOpenOriginal}>
+                                {localize("com_subscription.original_webpage")}
+                            </DropdownItem>
+                            <DropdownItem
+                                icon={<Outlined.AddToKnowledgeBase />}
+                                onSelect={() => setShowKnowledgeModal(true)}
+                            >
+                                {localize("com_subscription.add_to_knowledge_space")}
+                            </DropdownItem>
+                        </>
+                    }
+                >
+                    <button
+                        type="button"
+                        className="inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-text-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
+                        aria-label={localize("com_subscription.channel_settings")}
                     >
-                        <DropdownMenuItem
-                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-text-1"
-                            onClick={handleShare}
-                        >
-                            <Outlined.Share className="size-4 text-text-2" />
-                            {localize("com_subscription.share")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-text-1"
-                            onClick={handleOpenOriginal}
-                        >
-                            <Outlined.Earth className="size-4 text-text-2" />
-                            {localize("com_subscription.original_webpage")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-text-1"
-                            onClick={() => setShowKnowledgeModal(true)}
-                        >
-                            <Outlined.AddToKnowledgeBase className="size-4 text-text-2" />
-                            {localize("com_subscription.add_to_knowledge_space")}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                        <Outlined.MoreCircle className="size-5" />
+                    </button>
+                </Dropdown>
             </div>
 
             {/* AI dock pinned to the bottom — parity with the PC article view.

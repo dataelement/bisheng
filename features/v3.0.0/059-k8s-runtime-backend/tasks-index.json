@@ -118,6 +118,27 @@
       "review": "PASS"
     },
     {
+      "id": "T074",
+      "wave": 1,
+      "kind": "基础设施",
+      "title": "发布线继承的迁移图汇合",
+      "files": [
+        "src/backend/bisheng/core/database/alembic/versions/f059_merge_release_heads.py"
+      ],
+      "logic": "合并已授权发布线 9d156f261c 后，真实 Alembic heads 为 f059_merge_f086_heads、asr_rt_model_type、merge_skill_center_heads。新增空 merge revision 保留三条原父链，不改表、不改数据、不重写已发布 revision；用已有单 head 门禁及模型/账本回归验证，降级只回到原分叉。",
+      "acs": [
+        "AC-39",
+        "AC-48",
+        "AC-56"
+      ],
+      "depends": [
+        "T073"
+      ],
+      "pair": null,
+      "command": "python -m pytest test/database/test_alembic_single_head.py",
+      "status": "pending"
+    },
+    {
       "id": "T005",
       "wave": 1,
       "kind": "基础设施",
@@ -133,7 +154,7 @@
         "AC-56"
       ],
       "depends": [
-        "T073"
+        "T074"
       ],
       "pair": null,
       "command": ""

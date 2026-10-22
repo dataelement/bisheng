@@ -2,7 +2,8 @@
 import { CheckIcon } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";
-import { Button, Textarea } from "~/components";
+import { Button } from "~/components";
+import { Textarea } from '@bisheng/ui';
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import useLocalize from "~/hooks/useLocalize";

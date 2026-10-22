@@ -1,7 +1,8 @@
-import react from "@vitejs/plugin-react-swc";
+import { createFrontendProxy, frontendEnvDefinitions, loadFrontendEnv, resolveApiTarget } from '../config/vite';
+import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
 import { createHtmlPlugin } from 'vite-plugin-html';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
@@ -13,56 +14,6 @@ import svgr from "vite-plugin-svgr";
  * 内层网关访问 api或者前端静态资源需要去掉【custom】前缀
  */
 const app_env = { BASE_URL: '' } // /custom
-
-const commonProxyOptions = {
-  changeOrigin: true,
-  secure: false,
-  ws: true
-};
-
-// Emit one loud, actionable warning the first time MinIO answers a proxied
-// object request with 403. For presigned (SigV4) URLs to the public bucket a
-// 403 is almost always SignatureDoesNotMatch: changeOrigin rewrites Host to the
-// proxy target host, but the URL was signed for the backend `sharepoint` host.
-// The classic trap is `127.0.0.1` vs `localhost` (not interchangeable for
-// signing). Without this, the only symptom is silently broken images.
-let warnedMinio403 = false;
-const warnMinioSignatureMismatch = (targetHost: string, requestUrl: string) => {
-  if (warnedMinio403) return;
-  warnedMinio403 = true;
-  console.warn(
-    `\n\x1b[33m[bisheng:minio-proxy] ⚠️  MinIO returned 403 for "${requestUrl}".\n` +
-    `  Almost certainly a SigV4 host mismatch: the dev proxy forwards Host=${targetHost},\n` +
-    `  but the presigned URL was signed for a different host.\n` +
-    `  Fix: set VITE_MINIO_PROXY_TARGET so its host EXACTLY equals backend config.yaml\n` +
-    `  object_storage.minio.sharepoint  (note: 127.0.0.1 ≠ localhost).\x1b[0m\n`,
-  );
-};
-
-const createProxyConfig = (target: string, rewrite = true, isMinio = false, verbose = false) => ({
-  ...commonProxyOptions,
-  target,
-  ...(rewrite && {
-    rewrite: (p: string) => p.replace(new RegExp(`^${app_env.BASE_URL}`), '')
-  }),
-  configure: (proxy: import('http-proxy').ProxyServer) => {
-    // Per-request logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
-    // dozens of lines per page load and buries the warnings that matter.
-    if (verbose) {
-      proxy.on('proxyReq', (proxyReq) => {
-        console.log('Proxying request to:', proxyReq.path);
-      });
-    }
-    if (isMinio) {
-      const targetHost = new URL(target).host;
-      proxy.on('proxyRes', (proxyRes, req) => {
-        if (proxyRes.statusCode === 403) {
-          warnMinioSignatureMismatch(targetHost, req.url || '');
-        }
-      });
-    }
-  }
-});
 
 const apiRoutes = ["/api/", "/health"];
 const fileServiceRoutes = ["/bisheng", "/tmp-dir"];
@@ -97,8 +48,8 @@ function resolveMinioProxyTarget(env: Record<string, string>): string {
 export default defineConfig(({ command, mode }) => {
   // 必须从 .env.development.local 等文件加载；仅用 process.env 时配置阶段读不到 VITE_ 变量，会回落到 7860，
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
-  const env = loadEnv(mode, path.resolve(__dirname), "");
-  const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860/";
+  const env = loadFrontendEnv(mode, __dirname);
+  const target = resolveApiTarget(env);
   // Gateway-owned `/api/license/*` (F037/F067 status). Must not fall through to
   // FastAPI. Override with VITE_GATEWAY_PROXY_TARGET when 115 is not the lab GW.
   const gatewayTarget = env.VITE_GATEWAY_PROXY_TARGET || "http://127.0.0.1:8098";
@@ -123,10 +74,11 @@ export default defineConfig(({ command, mode }) => {
   };
 
   const proxyLog = env.VITE_PROXY_LOG === '1';
-  const apiProxyConfig = createProxyConfig(target, true, false, proxyLog);
-  const gatewayProxyConfig = createProxyConfig(gatewayTarget, true, false, proxyLog);
-  const fileServiceProxyConfig = createProxyConfig(fileServiceTarget, true, true, proxyLog);
-  const proxyTargets: Record<string, ReturnType<typeof createProxyConfig>> = {};
+  const rewrite = (url: string) => app_env.BASE_URL && url.startsWith(app_env.BASE_URL) ? url.slice(app_env.BASE_URL.length) : url;
+  const apiProxyConfig = createFrontendProxy(target, { rewrite, verbose: proxyLog });
+  const gatewayProxyConfig = createFrontendProxy(gatewayTarget, { rewrite, verbose: proxyLog });
+  const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
+  const proxyTargets: Record<string, ReturnType<typeof createFrontendProxy>> = {};
   // More specific than `/api/` and must be registered first, otherwise Vite's
   // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
   proxyTargets[`${app_env.BASE_URL}/api/license`] = gatewayProxyConfig;
@@ -223,11 +175,15 @@ export default defineConfig(({ command, mode }) => {
       }),
     ],
     define: {
+      ...frontendEnvDefinitions(env),
+      // react-draggable reads this flag on every drag/resize start in the browser.
+      'process.env.DRAGGABLE_DEBUG': 'false',
       __APP_ENV__: JSON.stringify(app_env_define)
     },
     server: {
       host: '0.0.0.0',
       port: 3001,
+      strictPort: true,
       proxy: {
         ...proxyTargets,
       },

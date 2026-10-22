@@ -1,4 +1,5 @@
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { notification } from '@bisheng/ui';
+
 import { getAllLabelsApi } from "@/controllers/API/label";
 import { AppType } from "@/types/app";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -59,12 +60,12 @@ export const useErrorPrompt = () => {
     const search = location.search;
     const params = new URLSearchParams(search);
     const error = params.get('error');
-    const { toast } = useToast()
+
     const { t } = useTranslation()
 
     useEffect(() => {
         if (error) {
-            toast({ description: t(`api_errors:${error}`, { defaultValue: t('api_errors:fallback') }), variant: 'error' });
+            notification.open({ type: 'error', description: String(t(`api_errors:${error}`, { defaultValue: t('api_errors:fallback') }) ?? '') });
 
             // Clear the 'error' parameter from the URL
             const newUrl = window.location.origin + window.location.pathname;

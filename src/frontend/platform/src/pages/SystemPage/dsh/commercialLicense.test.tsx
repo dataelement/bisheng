@@ -1,3 +1,4 @@
+import messages from '../../../../public/locales/en-US/bs.json'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { CommercialLicenseDialog } from './CommercialLicenseDialog'
@@ -18,7 +19,7 @@ const license: DshLicense = { status: 'active', source: 'builtin', assigned: 1, 
 describe('commercial License request', () => {
     it('prepares the same complete request for preview, email and clipboard', async () => {
         render(<CommercialLicenseDialog open onOpenChange={vi.fn()} license={license} tenantName="Acme" />)
-        const preview = screen.getByRole('textbox', { name: 'DSH Enterprise License Request' }) as HTMLTextAreaElement
+        const preview = screen.getByRole('textbox', { name: messages.dsh.commercialLicenseSubject }) as HTMLTextAreaElement
         expect(preview.value).toContain('Please help us obtain a commercial License.')
         expect(preview.value).toContain('Company: Acme')
         expect(preview.value).toContain('Seats required: [Please fill in]')

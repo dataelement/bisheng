@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Integer, func, update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Column, DateTime, Field, String, Text, UniqueConstraint, col, or_, select, text
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -95,6 +96,24 @@ class LinsightSkillBase(SQLModelSerializable):
     created_by: int | None = Field(
         default=None, description="Creator user id", sa_column=Column(Integer, nullable=True, comment="Creator user id")
     )
+    # 0 is a tenant skill (built-in or admin upload). A non-zero value is the
+    # user who owns a personal skill. NULL is not used: a unique index treats
+    # NULLs as distinct, so it would not stop two tenant skills from sharing a name.
+    owner_user_id: int = Field(
+        default=0,
+        description="0 for a tenant skill; otherwise the owning user id",
+        sa_column=Column(
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="0 for a tenant skill; otherwise the owning user id",
+        ),
+    )
+    last_import_id: str | None = Field(
+        default=None,
+        description="Latest personal-skill import id; empty for tenant skills",
+        sa_column=Column(String(64), nullable=True, comment="Latest personal-skill import id"),
+    )
     create_time: datetime = Field(
         default_factory=datetime.now,
         description="Creation time",
@@ -109,7 +128,15 @@ class LinsightSkill(LinsightSkillBase, table=True):
     """Inspiration (Linsight) tenant custom skill."""
 
     __tablename__ = "linsight_skill"
-    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_linsight_skill_tenant_name"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "owner_user_id", "name", name="uq_linsight_skill_tenant_owner_name"),
+        UniqueConstraint(
+            "tenant_id",
+            "owner_user_id",
+            "last_import_id",
+            name="uq_linsight_skill_tenant_owner_import",
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True, description="Skill unique id")
 
@@ -126,7 +153,8 @@ class LinsightSkillDao:
 
     Bulk ``UPDATE`` statements (``set_enabled``) are *not* rewritten by the
     do_orm_execute listener — it only touches SELECTs — so they carry an
-    explicit ``WHERE tenant_id = current`` of their own.
+    explicit ``WHERE tenant_id = current AND owner_user_id = owner``. The
+    default owner is 0, the tenant skill the management pages still edit.
     """
 
     @classmethod
@@ -152,17 +180,27 @@ class LinsightSkillDao:
             return skill
 
     @classmethod
-    async def get_by_name(cls, name: str) -> LinsightSkill | None:
+    async def get_by_name(cls, name: str, *, owner_user_id: int = 0) -> LinsightSkill | None:
         with strict_tenant_filter():
             async with get_async_db_session() as session:
-                result = await session.exec(select(LinsightSkill).where(LinsightSkill.name == name))
+                result = await session.exec(
+                    select(LinsightSkill).where(
+                        LinsightSkill.name == name,
+                        LinsightSkill.owner_user_id == owner_user_id,
+                    )
+                )
                 return result.first()
 
     @classmethod
-    async def get_by_display_name(cls, display_name: str) -> LinsightSkill | None:
+    async def get_by_display_name(cls, display_name: str, *, owner_user_id: int = 0) -> LinsightSkill | None:
         with strict_tenant_filter():
             async with get_async_db_session() as session:
-                result = await session.exec(select(LinsightSkill).where(LinsightSkill.display_name == display_name))
+                result = await session.exec(
+                    select(LinsightSkill).where(
+                        LinsightSkill.display_name == display_name,
+                        LinsightSkill.owner_user_id == owner_user_id,
+                    )
+                )
                 return result.first()
 
     @classmethod
@@ -172,8 +210,9 @@ class LinsightSkillDao:
         enabled: bool | None = None,
         page: int = 1,
         page_size: int = 10,
+        owner_user_id: int = 0,
     ) -> tuple[list[LinsightSkill], int]:
-        statement = select(LinsightSkill)
+        statement = select(LinsightSkill).where(LinsightSkill.owner_user_id == owner_user_id)
         if keyword:
             pattern = f"%{keyword}%"
             statement = statement.where(
@@ -209,16 +248,19 @@ class LinsightSkillDao:
                 return list(result.all()), total
 
     @classmethod
-    async def list_enabled(cls) -> list[LinsightSkill]:
+    async def list_enabled(cls, *, owner_user_id: int = 0) -> list[LinsightSkill]:
         with strict_tenant_filter():
             async with get_async_db_session() as session:
-                statement = select(LinsightSkill).where(LinsightSkill.enabled == True)  # noqa: E712
+                statement = select(LinsightSkill).where(
+                    LinsightSkill.enabled == True,  # noqa: E712
+                    LinsightSkill.owner_user_id == owner_user_id,
+                )
                 statement = statement.order_by(col(LinsightSkill.create_time).desc())
                 result = await session.exec(statement)
                 return list(result.all())
 
     @classmethod
-    async def set_enabled(cls, name: str, enabled: bool) -> bool:
+    async def set_enabled(cls, name: str, enabled: bool, *, owner_user_id: int = 0) -> bool:
         # Bulk UPDATE is not intercepted by the do_orm_execute tenant filter
         # (it only rewrites SELECTs), so scope the write to the current tenant
         # explicitly — otherwise toggling a name shared with Root (or any
@@ -229,6 +271,7 @@ class LinsightSkillDao:
                 update(LinsightSkill)
                 .where(col(LinsightSkill.name) == name)
                 .where(col(LinsightSkill.tenant_id) == tid)
+                .where(col(LinsightSkill.owner_user_id) == owner_user_id)
                 .values(enabled=enabled, update_time=datetime.now())
             )
             result = await session.exec(statement)
@@ -236,7 +279,7 @@ class LinsightSkillDao:
             return result.rowcount > 0
 
     @classmethod
-    async def set_default_checked(cls, name: str, default_checked: bool) -> bool:
+    async def set_default_checked(cls, name: str, default_checked: bool, *, owner_user_id: int = 0) -> bool:
         # Same explicit tenant scoping (and update_time bump) as set_enabled;
         # MySQL's ON UPDATE would bump update_time anyway.
         tid = get_current_tenant_id() or DEFAULT_TENANT_ID
@@ -245,6 +288,7 @@ class LinsightSkillDao:
                 update(LinsightSkill)
                 .where(col(LinsightSkill.name) == name)
                 .where(col(LinsightSkill.tenant_id) == tid)
+                .where(col(LinsightSkill.owner_user_id) == owner_user_id)
                 .values(default_checked=default_checked, update_time=datetime.now())
             )
             result = await session.exec(statement)
@@ -252,13 +296,173 @@ class LinsightSkillDao:
             return result.rowcount > 0
 
     @classmethod
-    async def delete_by_name(cls, name: str) -> bool:
+    async def delete_by_name(cls, name: str, *, owner_user_id: int = 0) -> bool:
         with strict_tenant_filter():
             async with get_async_db_session() as session:
-                result = await session.exec(select(LinsightSkill).where(LinsightSkill.name == name))
+                result = await session.exec(
+                    select(LinsightSkill).where(
+                        LinsightSkill.name == name,
+                        LinsightSkill.owner_user_id == owner_user_id,
+                    )
+                )
                 skill = result.first()
                 if not skill:
                     return False
                 await session.delete(skill)
                 await session.commit()
                 return True
+
+    @classmethod
+    async def get_by_id(cls, skill_id: int) -> LinsightSkill | None:
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(select(LinsightSkill).where(LinsightSkill.id == skill_id))
+                return result.first()
+
+    @classmethod
+    async def get_by_last_import_id(cls, import_id: str, *, owner_user_id: int) -> LinsightSkill | None:
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(
+                    select(LinsightSkill).where(
+                        LinsightSkill.last_import_id == import_id,
+                        LinsightSkill.owner_user_id == owner_user_id,
+                    )
+                )
+                return result.first()
+
+    @classmethod
+    async def list_visible(cls, owner_user_id: int) -> list[LinsightSkill]:
+        """Tenant skills plus this user's personal skills, in one query."""
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                statement = (
+                    select(LinsightSkill)
+                    .where(or_(LinsightSkill.owner_user_id == 0, LinsightSkill.owner_user_id == owner_user_id))
+                    .order_by(col(LinsightSkill.id).asc())
+                )
+                result = await session.exec(statement)
+                return list(result.all())
+
+    @classmethod
+    async def personal_usage(cls, owner_user_id: int) -> tuple[int, int]:
+        """Count and total bytes of one user's personal skills in the current tenant."""
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                statement = select(
+                    func.count(LinsightSkill.id),
+                    func.coalesce(func.sum(LinsightSkill.size), 0),
+                ).where(LinsightSkill.owner_user_id == owner_user_id)
+                count, total = (await session.exec(statement)).one()
+                return int(count), int(total)
+
+    @classmethod
+    async def create_personal(cls, skill: LinsightSkill, *, count_limit: int, bytes_limit: int) -> LinsightSkill:
+        """Insert one personal skill only when the owner's quota still has room.
+
+        The count, the byte total and the insert commit together. A quota miss
+        rolls back and leaves every existing row as it was.
+        """
+        async with get_async_db_session() as session:
+            with strict_tenant_filter():
+                statement = select(
+                    func.count(LinsightSkill.id),
+                    func.coalesce(func.sum(LinsightSkill.size), 0),
+                ).where(LinsightSkill.owner_user_id == skill.owner_user_id)
+                count, total = (await session.exec(statement)).one()
+            if int(count) >= count_limit:
+                raise PersonalQuotaExceeded("count")
+            if int(total) + int(skill.size or 0) > bytes_limit:
+                raise PersonalQuotaExceeded("bytes")
+            if skill.update_time is None:
+                skill.update_time = skill.create_time
+            session.add(skill)
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                raise
+            await session.refresh(skill)
+            return skill
+
+    @classmethod
+    async def update_bundle(
+        cls,
+        skill_id: int,
+        *,
+        owner_user_id: int,
+        expected_content_hash: str,
+        content_hash: str,
+        object_path: str,
+        size: int,
+        display_name: str,
+        description: str,
+        last_import_id: str | None,
+    ) -> bool:
+        """Replace the stored bundle only while the row still has the expected hash.
+
+        The skill id and enabled flag are not in the SET clause, so a successful
+        overwrite keeps both. A lost race updates nothing.
+        """
+        tid = get_current_tenant_id() or DEFAULT_TENANT_ID
+        async with get_async_db_session() as session:
+            statement = (
+                update(LinsightSkill)
+                .where(col(LinsightSkill.id) == skill_id)
+                .where(col(LinsightSkill.tenant_id) == tid)
+                .where(col(LinsightSkill.owner_user_id) == owner_user_id)
+                .where(col(LinsightSkill.content_hash) == expected_content_hash)
+                .values(
+                    content_hash=content_hash,
+                    object_path=object_path,
+                    size=size,
+                    display_name=display_name,
+                    description=description,
+                    last_import_id=last_import_id,
+                    update_time=datetime.now(),
+                )
+            )
+            result = await session.exec(statement)
+            await session.commit()
+            return result.rowcount > 0
+
+    @classmethod
+    async def set_owner_enabled(cls, skill_id: int, *, owner_user_id: int, enabled: bool) -> bool:
+        """Toggle one personal skill. Bulk UPDATE must name the tenant and the owner."""
+        tid = get_current_tenant_id() or DEFAULT_TENANT_ID
+        async with get_async_db_session() as session:
+            statement = (
+                update(LinsightSkill)
+                .where(col(LinsightSkill.id) == skill_id)
+                .where(col(LinsightSkill.tenant_id) == tid)
+                .where(col(LinsightSkill.owner_user_id) == owner_user_id)
+                .values(enabled=enabled, update_time=datetime.now())
+            )
+            result = await session.exec(statement)
+            await session.commit()
+            return result.rowcount > 0
+
+    @classmethod
+    async def delete_owned(cls, skill_id: int, *, owner_user_id: int) -> bool:
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(
+                    select(LinsightSkill).where(
+                        LinsightSkill.id == skill_id,
+                        LinsightSkill.owner_user_id == owner_user_id,
+                    )
+                )
+                skill = result.first()
+                if skill is None:
+                    return False
+                await session.delete(skill)
+                await session.commit()
+                return True
+
+
+class PersonalQuotaExceeded(Exception):
+    """Raised inside the insert transaction. ``kind`` is ``count`` or ``bytes``."""
+
+    def __init__(self, kind: str):
+        self.kind = kind
+        super().__init__(kind)

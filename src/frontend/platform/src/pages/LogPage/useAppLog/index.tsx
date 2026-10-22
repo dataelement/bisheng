@@ -1,17 +1,18 @@
 // @ts-strict-ignore
+import { Button, Select, toast } from '@bisheng/ui';
 
 import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
 import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
 import FilterByUser from "@/components/bs-comp/filterTableDataComponent/FilterByUser";
 import FilterByUsergroup from "@/components/bs-comp/filterTableDataComponent/FilterByUsergroup";
-import { ThunmbIcon } from "@/components/bs-icons";
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
-import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "@/components/bs-ui/button";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Tag } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { exportCsvDataApi, getAuditAppListApi } from "@/controllers/API/log";
@@ -60,8 +61,9 @@ const filterReducer = (state: FilterState, action: Action): FilterState => {
 
 export default function AppUseLog() {
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
     const { appConfig } = useContext(locationContext)
-    const { message } = useToast()
+
     // 20 items per page
     const { page, pageSize, data: datalist, total, loading, setPage, filterData } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(param.dateRange || [])
@@ -170,10 +172,7 @@ export default function AppUseLog() {
             const diffTime = adjustedEnd.getTime() - adjustedStart.getTime();
             const diffDays = Math.floor(diffTime / (24 * 60 * 60 * 1000)) + 1; // Total days including start and end dates
             if (diffDays > 60) {
-                message({
-                    variant: 'error',
-                    description: t('log.exportDateRangeExceed'),
-                })
+                toast.show({ type: 'error', message: String(t('log.exportDateRangeExceed') ?? '') })
                 setAuditing(false);
                 return;
             }
@@ -181,10 +180,7 @@ export default function AppUseLog() {
 
         // Display toast message
         if (showToast) {
-            message({
-                variant: 'warning',
-                description: toastMessage,
-            })
+            toast.show({ type: 'warning', message: String(toastMessage ?? '') })
         }
 
         // Generate request parameters
@@ -274,33 +270,33 @@ export default function AppUseLog() {
                 <FilterByUser value={filters.userName} placeholder={t('log.userName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userName']: value } })} />
                 <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
                 <FilterByDate value={filters.dateRange} placeholders={[`${t('log.startDate')}`, `${t('log.endDate')}`]} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['dateRange']: value } })} />
-                <div className="w-[200px] relative">
-                    <Select value={filters.feedback} onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['feedback']: value } })}>
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.userFeedbackPlaceholder')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                <SelectItem value={'like'}>{t('log.likeFeedback')}</SelectItem>
-                                <SelectItem value={'dislike'}>{t('log.dislikeFeedback')}</SelectItem>
-                                <SelectItem value={'copied'}>{t('log.copyFeedback')}</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                {appConfig.isPro && <div className="w-[200px] relative">
-                    <Select value={filters.sensitive_status} onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['sensitive_status']: value } })} >
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.sensitiveReviewResult')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                <SelectItem value={'2'}>{t('log.sensitiveViolation')}</SelectItem>
-                                <SelectItem value={'1'}>{t('log.sensitivePass')}</SelectItem>
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>}
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[200px]"
+                    aria-label={t('log.userFeedbackPlaceholder')}
+                    placeholder={t('log.userFeedbackPlaceholder')}
+                    value={filters.feedback || null}
+                    onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['feedback']: value == null ? '' : String(value) } })}
+                    options={[
+                        { value: 'like', label: t('log.likeFeedback') },
+                        { value: 'dislike', label: t('log.dislikeFeedback') },
+                        { value: 'copied', label: t('log.copyFeedback') },
+                    ]}
+                />
+                {appConfig.isPro && <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[200px]"
+                    aria-label={t('log.sensitiveReviewResult')}
+                    placeholder={t('log.sensitiveReviewResult')}
+                    value={filters.sensitive_status || null}
+                    onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['sensitive_status']: value == null ? '' : String(value) } })}
+                    options={[
+                        { value: '2', label: t('log.sensitiveViolation') },
+                        { value: '1', label: t('log.sensitivePass') },
+                    ]}
+                />}
                 <Button onClick={() => {
                     const dateRange = filters.dateRange || [];
                     const originalStart = dateRange[0];
@@ -314,10 +310,10 @@ export default function AppUseLog() {
                     }
 
                     filterData({ ...filters, dateRange: [adjustedStart, adjustedEnd] })
-                }} >{t('log.searchButton')}</Button>
-                <Button onClick={resetClick} variant="outline">{t('log.resetButton')}</Button>
-                <Button onClick={handleExport} disabled={auditing}>
-                    {auditing && <LoadIcon className="mr-1" />}{t('log.exportButton')}</Button>
+                }}>{t('log.searchButton')}</Button>
+                <Button onClick={resetClick} variant="outlined" color="default">{t('log.resetButton')}</Button>
+                <Button onClick={handleExport} loading={auditing} disabled={Boolean(auditing)}>
+                    {t('log.exportButton')}</Button>
             </div>
             <Table>
                 <TableHeader>
@@ -346,30 +342,30 @@ export default function AppUseLog() {
                             <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                             <TableCell className="break-all flex gap-2">
                                 <div className="text-center text-xs relative">
-                                    <ThunmbIcon
-                                        type='like'
-                                        className={`cursor-pointer ${el.like_count && 'text-primary hover:text-primary'}`}
+                                    <Outlined.ThumbsUp
+                                        size={16} aria-hidden
+                                        className={el.like_count ? 'text-primary' : 'text-gray-400'}
                                     />
                                     <span className="left-4 top-[-4px] break-keep">{el.like_count}</span>
                                 </div>
                                 <div className="text-center text-xs relative">
-                                    <ThunmbIcon
-                                        type='unLike'
-                                        className={`cursor-pointer ${el.dislike_count && 'text-primary hover:text-primary'}`}
+                                    <Outlined.ThumbsDown
+                                        size={16} aria-hidden
+                                        className={el.dislike_count ? 'text-primary' : 'text-gray-400'}
                                     />
                                     <span className="left-4 top-[-4px] break-keep">{el.dislike_count}</span>
                                 </div>
                                 <div className="text-center text-xs relative">
-                                    <ThunmbIcon
-                                        type='copy'
-                                        className={`cursor-pointer ${el.copied_count && 'text-primary hover:text-primary'}`}
+                                    <Outlined.Copy
+                                        size={16} aria-hidden
+                                        className={el.copied_count ? 'text-primary' : 'text-gray-400'}
                                     />
                                     <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
                                 </div>
                             </TableCell>
                             {appConfig.isPro && <TableCell>
-                                {el.sensitive_status === 1 ? <Badge variant="outline" className="text-green-500">{t('log.sensitivePass')}</Badge>
-                                    : <Badge variant="outline" className="text-red-500">{t('log.sensitiveViolation')}</Badge>
+                                {el.sensitive_status === 1 ? <Tag size="small" dot color="success" className="whitespace-nowrap shrink-0">{t('log.sensitivePass')}</Tag>
+                                    : <Tag size="small" dot color="danger" className="whitespace-nowrap shrink-0">{t('log.sensitiveViolation')}</Tag>
                                 }
                             </TableCell>}
                             <TableCell className="text-right" onClick={() => {
@@ -378,11 +374,10 @@ export default function AppUseLog() {
                             }}>
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>Add to dataset</Button> */}
                                 {
-                                    el.chat_id && <Link
+                                    el.chat_id && <Button asChild size="small" variant="link"><Link
                                         to={el.flow_type === 15 ? `/log/chatlog/${el.chat_id}` : `/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
-                                        className="no-underline hover:underline text-primary"
                                         onClick={handleCachePage}
-                                    >{t('lib.details')}</Link>
+                                    >{t('lib.details')}</Link></Button>
                                 }
                             </TableCell>
                         </TableRow>

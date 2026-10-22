@@ -3,13 +3,7 @@ import { Column } from '@tanstack/react-table';
 
 import { cn } from '~/utils';
 import { Button } from './Button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from './DropdownMenu';
+import { Dropdown, DropdownItem, DropdownSeparator } from '@bisheng/ui';
 
 interface DataTableColumnHeaderProps<TData, TValue> extends React.HTMLAttributes<HTMLDivElement> {
   column: Column<TData, TValue>;
@@ -27,35 +21,33 @@ export function DataTableColumnHeader<TData, TValue>({
 
   return (
     <div className={cn('flex items-center space-x-2', className)}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="data-[state=open]:bg-accent -ml-3 h-8">
-            <span>{title}</span>
-            {column.getIsSorted() === 'desc' ? (
-              <ArrowDownIcon className="ml-2 h-4 w-4" />
-            ) : column.getIsSorted() === 'asc' ? (
-              <ArrowUpIcon className="ml-2 h-4 w-4" />
-            ) : (
-              <CaretSortIcon className="ml-2 h-4 w-4" />
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="z-[1001]">
-          <DropdownMenuItem onClick={() => column.toggleSorting(false)}>
-            <ArrowUpIcon className="text-muted-foreground/70 mr-2 h-3.5 w-3.5" />
-            Asc
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => column.toggleSorting(true)}>
-            <ArrowDownIcon className="text-muted-foreground/70 mr-2 h-3.5 w-3.5" />
-            Desc
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => column.toggleVisibility(false)}>
-            <EyeNoneIcon className="text-muted-foreground/70 mr-2 h-3.5 w-3.5" />
-            Hide
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Dropdown
+        menu={
+          <>
+            <DropdownItem icon={<ArrowUpIcon />} onSelect={() => column.toggleSorting(false)}>
+              Asc
+            </DropdownItem>
+            <DropdownItem icon={<ArrowDownIcon />} onSelect={() => column.toggleSorting(true)}>
+              Desc
+            </DropdownItem>
+            <DropdownSeparator />
+            <DropdownItem icon={<EyeNoneIcon />} onSelect={() => column.toggleVisibility(false)}>
+              Hide
+            </DropdownItem>
+          </>
+        }
+      >
+        <Button variant="ghost" size="sm" className="data-[state=open]:bg-accent -ml-3 h-8">
+          <span>{title}</span>
+          {column.getIsSorted() === 'desc' ? (
+            <ArrowDownIcon className="ml-2 h-4 w-4" />
+          ) : column.getIsSorted() === 'asc' ? (
+            <ArrowUpIcon className="ml-2 h-4 w-4" />
+          ) : (
+            <CaretSortIcon className="ml-2 h-4 w-4" />
+          )}
+        </Button>
+      </Dropdown>
     </div>
   );
 }

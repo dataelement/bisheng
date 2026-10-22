@@ -1,13 +1,15 @@
 // @ts-strict-ignore
 import { FileIcon } from "@/components/bs-icons/file";
 import { truncateString } from "@/util/utils";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
-import { ChevronDown, ChevronUp, Search } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
+import { Outlined } from "bisheng-icons";
+import { KnowledgeTooltip } from "./KnowledgeTooltip";
+
+import { getMetaFile,readFileByLibDatabase } from '@/controllers/API';
+import { useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getMetaFile, readFileByLibDatabase } from '@/controllers/API';
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import Tip from "@/components/bs-ui/tooltip/tip";
+
+
 
 interface FileSelectorProps {
     knowledgeId: string | number;
@@ -317,17 +319,17 @@ export default function FileSelector({
                                     type={getFileType(selectedFile.label)}
                                     className="size-[30px] min-w-[30px]"
                                 />
-                                <Tip content={selectedFile.label}>
+                                <KnowledgeTooltip content={selectedFile.label}>
                                     <div className="truncate flex-1">{selectedFile.label}</div>
-                                </Tip>
+                                </KnowledgeTooltip>
                             </>
                         ) : (
                             <span className="text-gray-500">{t('file.selectFile')}</span>
                         )}
                         {isOpen ? (
-                            <ChevronUp className="ml-2 h-4 w-4 opacity-50" />
+                            <Outlined.Up className="ml-2 h-4 w-4 opacity-50" />
                         ) : (
-                            <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                            <Outlined.Down className="ml-2 h-4 w-4 opacity-50" />
                         )}
                     </div>
                 </DropdownMenuTrigger>
@@ -340,7 +342,7 @@ export default function FileSelector({
                     {/* 搜索框 */}
                     <div className="p-2 border-b border-gray-200 sticky top-0 bg-white z-10">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
+                            <Outlined.Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
                             <input
                                 ref={searchInputRef}
                                 type="text"
@@ -388,7 +390,7 @@ export default function FileSelector({
                                         }}
                                         className="cursor-pointer hover:bg-gray-50 px-3 py-2 focus:bg-gray-50 outline-none"
                                     >
-                                        <Tip content={file.label} side="top" styleClasses="z-[999]">
+                                        <KnowledgeTooltip content={file.label} side="top" styleClasses="z-[999]">
                                             <div className="flex items-center gap-3 w-full h-full">
                                                 <FileIcon
                                                     type={getFileType(file.label)}
@@ -403,14 +405,14 @@ export default function FileSelector({
                                                     </div>
                                                 )}
                                             </div>
-                                        </Tip>
+                                        </KnowledgeTooltip>
                                     </DropdownMenuItem>
                                 ))}
 
                                 {/* 加载更多指示器 */}
                                 {hasMore && (
                                     <div className="px-4 py-3 flex justify-center items-center min-h-10">
-                                        {loading && <LoadingIcon className="w-5 h-5" />}
+                                        {loading && <Outlined.Loading className="animate-spin w-5 h-5" />}
                                     </div>
                                 )}
 

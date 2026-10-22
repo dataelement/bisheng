@@ -1,0 +1,217 @@
+---
+status: done
+component: Pagination
+---
+
+# 分页 Pagination
+
+把一长串数据切成一页一页，每次只看一页，用页码在页之间跳。用户要**找、比、回头找**某一条（表格、成员列表、日志）时用分页；只是往下逛（应用广场、消息流）用滚动加载。组件库 `@bisheng/ui` 导出 **`Pagination`**。规范全文见「文档 → 组件规范 → 分页 Pagination」。
+
+**组件把规范写死的部分**：「共 N 条」默认不显示，`showTotal` 打开后固定在最左、数字不变色；省略规则（≤ 7 页全铺，否则首末页常驻 + 当前页左右各 2 页，省略号只替 2 页及以上）；当前页浅主题色底 + 主题色文字（跟随蓝 / 绿主题与深色模式）；首末页时箭头置灰而不隐藏；只有 1 页、甚至 0 条时分页照常显示；总页数 > 10 自动出跳页；改每页条数回到第 1 页；末页数据删空自动退到新的末页；手机（< 576px）自动换简洁型。这些没有 prop。
+
+**留给业务页的**：换页后把列表滚回顶部、筛选条件变了回到第 1 页、页码写进地址栏——列表和路由归页面管。
+
+所有文案经 `locale` 传入（组件库不带任何语言的文案），下面的 demo 共用这一份：
+
+```ts
+const locale = {
+  total: (n) => `共 ${n} 条`,
+  pageSize: (n) => `${n} 条/页`,
+  jumpPrefix: '跳至',
+  jumpSuffix: '页',
+  jumpError: (max) => `请输入 1–${max}`,
+  prev: '上一页',
+  next: '下一页',
+  nav: '分页',
+};
+```
+
+## 基础用法
+
+整排靠容器右侧对齐。页数不超过 7 页时全部铺开。
+
+```tsx
+import { Pagination } from '@bisheng/ui';
+
+const locale = {
+  total: (n) => `共 ${n} 条`,
+  prev: '上一页',
+  next: '下一页',
+  nav: '分页',
+};
+
+export default () => <Pagination total={58} locale={locale} />;
+```
+
+## 总条数
+
+「共 N 条」**可选**，默认不显示；用户需要知道一共有多少条时（日志、审计记录、成员列表）用 `showTotal` 打开。打开后放在最左侧，数字与文字同为辅助文字色、不变色不加粗，超过 4 位加千分位。
+
+```tsx
+import { Pagination } from '@bisheng/ui';
+
+const locale = {
+  total: (n) => `共 ${n} 条`,
+  prev: '上一页',
+  next: '下一页',
+  nav: '分页',
+};
+
+export default () => <Pagination total={12800} pageSize={2000} showTotal locale={locale} />;
+```
+
+## 页数多
+
+超过 7 页时首页、末页常驻，当前页左右各留 2 页，其余用省略号代替。省略号不可点；页数多时靠跳页直达（总页数 > 10 自动出现）。输入超出范围**不跳转、不改成末页**，输入框变红，悬停提示范围；按回车或失焦时跳转，跳完清空。
+
+```tsx
+import { useState } from 'react';
+import { Pagination } from '@bisheng/ui';
+
+const locale = {
+  total: (n) => `共 ${n} 条`,
+  jumpPrefix: '跳至',
+  jumpSuffix: '页',
+  jumpError: (max) => `请输入 1–${max}`,
+  prev: '上一页',
+  next: '下一页',
+  nav: '分页',
+  jumpAria: '跳转页码',
+};
+
+export default () => {
+  const [page, setPage] = useState(7);
+  return <Pagination total={128} current={page} onChange={setPage} locale={locale} />;
+};
+```
+
+## 每页条数
+
+默认不出现，业务觉得用户需要一次看更多时用 `showSizeChanger` 打开（日志、审计记录）。选项固定 10 / 20 / 50 / 100；**改了每页条数就回到第 1 页**，`onChange` 带回 `(1, 新条数)`。
+
+```tsx
+import { useState } from 'react';
+import { Pagination } from '@bisheng/ui';
+
+const locale = {
+  total: (n) => `共 ${n} 条`,
+  pageSize: (n) => `${n} 条/页`,
+  jumpPrefix: '跳至',
+  jumpSuffix: '页',
+  jumpError: (max) => `请输入 1–${max}`,
+  prev: '上一页',
+  next: '下一页',
+  nav: '分页',
+  pageSizeAria: '每页条数',
+  jumpAria: '跳转页码',
+};
+
+export default () => {
+  const [state, setState] = useState({ page: 6, pageSize: 10 });
+  return (
+    <div>
+      <Pagination
+        total={1280}
+        current={state.page}
+        pageSize={state.pageSize}
+        onChange={(page, pageSize) => setState({ page, pageSize })}
+        showTotal
+        showSizeChanger
+        showQuickJumper={false}
+        locale={locale}
+      />
+      <p style={{ marginTop: 8, color: 'rgb(var(--text-3))', fontSize: 12, textAlign: 'right' }}>
+        第 {state.page} 页，每页 {state.pageSize} 条
+      </p>
+    </div>
+  );
+};
+```
+
+## 尺寸
+
+三档 24 / 32 / 40，默认 medium。**跟着表格行高挑档**：紧凑行高的表格、弹窗和抽屉里的列表配 small。每页条数和跳页输入框随档同高。
+
+```tsx
+import { Pagination } from '@bisheng/ui';
+
+const locale = {
+  total: (n) => `共 ${n} 条`,
+  prev: '上一页',
+  next: '下一页',
+  nav: '分页',
+};
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    {['small', 'medium', 'large'].map((size) => (
+      <Pagination key={size} size={size} total={58} defaultCurrent={4} locale={locale} />
+    ))}
+  </div>
+);
+```
+
+## 简洁型
+
+弹窗、抽屉、侧栏等窄容器用 `simple`：`‹ 6 / 13 ›`，中间只显示、不能点，换页靠两侧箭头，不带每页条数和跳页。不传 `simple` 时，**手机上自动换成简洁型**，small 档同时升到 medium。
+
+```tsx
+import { Pagination } from '@bisheng/ui';
+
+const locale = {
+  total: (n) => `共 ${n} 条`,
+  prev: '上一页',
+  next: '下一页',
+  nav: '分页',
+};
+
+export default () => (
+  <div style={{ maxWidth: 360, marginLeft: 'auto' }}>
+    <Pagination simple size="small" total={128} defaultCurrent={6} locale={locale} />
+  </div>
+);
+```
+
+## 只有一页、没有数据、禁用
+
+只有 1 页时照常显示，两个箭头都禁用；没有数据也保留——分页一会儿有一会儿没有，表格底部会跟着跳。`disabled` 只用于整张表格不可操作时（如批量处理中）。
+
+```tsx
+import { Pagination } from '@bisheng/ui';
+
+const locale = {
+  total: (n) => `共 ${n} 条`,
+  jumpPrefix: '跳至',
+  jumpSuffix: '页',
+  jumpError: (max) => `请输入 1–${max}`,
+  prev: '上一页',
+  next: '下一页',
+  nav: '分页',
+};
+
+export default () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <Pagination total={8} showTotal locale={locale} />
+    <Pagination total={0} showTotal locale={locale} />
+    <Pagination total={128} defaultCurrent={4} disabled locale={locale} />
+  </div>
+);
+```
+
+## API
+
+| 属性 | 说明 | 类型 | 默认值 |
+|---|---|---|---|
+| `total` | 总条数；空列表传 0 | `number` | — |
+| `current` / `defaultCurrent` | 当前页（受控 / 非受控） | `number` | `1` |
+| `pageSize` / `defaultPageSize` | 每页条数（受控 / 非受控） | `number` | `10` |
+| `onChange` | 换页、改条数时触发；改条数时 `page` 恒为 1；末页删空自动退页时也会触发 | `(page, pageSize) => void` | — |
+| `size` | 尺寸 | `'small' \| 'medium' \| 'large'` | `'medium'` |
+| `simple` | 简洁型；不传时手机自动开启 | `boolean` | — |
+| `showTotal` | 显示「共 N 条」（可选，放最左侧） | `boolean` | `false` |
+| `showSizeChanger` | 显示每页条数选择器 | `boolean` | `false` |
+| `pageSizeOptions` | 每页条数选项 | `number[]` | `[10, 20, 50, 100]` |
+| `showQuickJumper` | 显示跳页；不传时总页数 > 10 自动出现 | `boolean` | — |
+| `disabled` | 整个分页禁用 | `boolean` | `false` |
+| `locale` | 全部文案，见页首示例；`total` 收到的数字已加千分位 | `Partial<PaginationLocale>` | 英文兜底 |
+| `className` | 只用于布局 | `string` | — |

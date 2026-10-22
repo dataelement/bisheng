@@ -1,17 +1,18 @@
 // @ts-strict-ignore
 import FileView from "@/components/bs-comp/FileView";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { cn } from "@/utils";
-import { Info } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+
+import { ExcelPreview } from "@bisheng/file-viewers";
+import React,{ useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import useKnowledgeStore from "../useKnowledgeStore";
 import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
-import { ExcelPreview } from "@bisheng/file-viewers";
+import RichPreviewFile,{ isRichKnowledgePreview } from "./RichPreviewFile";
 import TxtFileViewer from "./TxtFileViewer";
-import RichPreviewFile, { isRichKnowledgePreview } from "./RichPreviewFile";
 
 export default function PreviewFile({
   urlState,
@@ -239,7 +240,7 @@ export default function PreviewFile({
       }
       return <div className="flex justify-center items-center h-full text-gray-400">{t('previewFailed')}</div>;
     }
-    if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
+    if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><Outlined.Loading  className="size-4 animate-spin"/></div>;
     if (isRichKnowledgePreview(previewData)) {
       return <RichPreviewFile file={file} previewData={previewData} />;
     }
@@ -360,7 +361,7 @@ export default function PreviewFile({
   }}>
     <div className={`${edit ? 'absolute -top-8 right-0 z-10' : 'relative'} flex justify-center items-center mb-2 text-sm h-10`}>
       <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
-        <Info className='mr-1 text-red-500' size={14} />
+        <Outlined.Info className='mr-1 text-red-500' size={14} />
         <span className="text-red-500">{t('segmentRangeDetected')}</span>
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>

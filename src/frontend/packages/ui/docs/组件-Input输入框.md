@@ -27,6 +27,7 @@
 - **Textarea 默认三行高**，允许纵向手动拉伸、禁止横向；自动长高的场景要设上限，别让一个框吃掉整屏。
 - **addon 与输入框共享一条外描边**，圆角只保留整体的外侧两角；addon 用浅灰填充底 + 次要文字色，看上去「属于框」而不是一个按钮。
 - addon 只放「内容的一部分」（前缀、单位）。清除、明暗切换这类动作放后缀 icon，不做成 addon。
+- 要拿来计算的数（数量、比例、时长）用数字输入框，见 [组件-InputNumber数字输入框.md](组件-InputNumber数字输入框.md)；手机号、验证码这类「由数字组成的文本」仍用基础输入框。
 
 ## 3. 尺寸 Size
 
@@ -170,3 +171,4 @@
 | 2026-08-26 | 一键清除图标定稿：Outlined.CloseCircle → **Filled.CloseCircle，固定 14px 不随档，色降一档 text-4（悬停 text-3）**（设计师拍板，初版 12px 当天调 14px）；实现注意行容器的 `[&_svg]:size-*` 阶梯类会压过图标自身 class，尺寸用内联样式钉死 | 待 committer 窗口提交 |
 | 2026-08-25 | 新增 **`borderless` 形态**（Input / Textarea，Search / Password 透传）：嵌在自带描边容器里的字段整套关掉描边+悬停+聚焦环，1px 透明边保尺寸；此前用 `border-none` 类名压不干净聚焦环（`shadow-focus` 单独就画出一圈）。AddSourceDropdown、ArchivedChatsTable 两处改用该 prop；定档来源为创建频道添加信息源面板的设计反馈 | 待 committer 窗口提交 |
 | 2026-08-25 | **Textarea 首迁**：频道简介（创建频道/频道设置，设计点名）+ 知识空间设置两处文本域换规范 `Textarea`；旧 `ui/Textarea` 剩余 4 个消费者均为聊天 composer 形态，划出表单文本域范围不迁 | 待 committer 窗口提交 |
+| 2026-10-21 | §2 形态表下补一行指针：数值输入归口新建的《组件-InputNumber数字输入框.md》（设计师拍板独立成组件），数字组成的文本仍用基础输入框。本文其余规则未增未减未改 | 待 committer 窗口提交 |

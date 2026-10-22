@@ -88,74 +88,74 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
   });
   it("global super admin sees org/userGroup/role/orgSync/system/theme; legacy user table hidden", () => {
     renderWithUser({ role: "admin", user_id: 1 });
-    expect(screen.getByText(ORG)).toBeInTheDocument();
-    expect(screen.getByText(USER_GROUP)).toBeInTheDocument();
-    expect(screen.getByText(ROLE)).toBeInTheDocument();
-    expect(screen.getByText(ORG_SYNC)).toBeInTheDocument();
-    expect(screen.getByText(SYSCFG)).toBeInTheDocument();
-    expect(screen.getByText(THEME)).toBeInTheDocument();
-    expect(screen.queryByText(LEGACY)).toBeNull();
-    expect(screen.getByText(SERVICE_ACCOUNT)).toBeInTheDocument();
-    expect(screen.getByText(PERSONAL_TOKEN)).toBeInTheDocument();
-    expect(screen.getByText(RESOURCE_TIER)).toBeInTheDocument();
-    expect(screen.getByText(SERVICE_ACCOUNT).closest("[role=tablist]")?.parentElement).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("tab", { name: ORG })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: USER_GROUP })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: ROLE })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: ORG_SYNC })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: SYSCFG })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: THEME })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: LEGACY })).toBeNull();
+    expect(screen.getByRole("tab", { name: SERVICE_ACCOUNT })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: PERSONAL_TOKEN })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: RESOURCE_TIER })).toBeInTheDocument();
+    expect(screen.getByRole("tablist")).toHaveClass("overflow-x-auto");
   });
 
   it("Child Admin sees org/role but NOT system config / theme / org sync (instance-level only)", () => {
     renderWithUser({ role: "user", is_child_admin: true, user_id: 2 });
-    expect(screen.getByText(ORG)).toBeInTheDocument();
-    expect(screen.getByText(ROLE)).toBeInTheDocument();
-    expect(screen.queryByText(SYSCFG)).toBeNull();
-    expect(screen.queryByText(THEME)).toBeNull();
-    expect(screen.queryByText(ORG_SYNC)).toBeNull();
-    expect(screen.queryByText(LEGACY)).toBeNull();
-    expect(screen.getByText(SERVICE_ACCOUNT)).toBeInTheDocument();
-    expect(screen.getByText(PERSONAL_TOKEN)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: ORG })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: ROLE })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: SYSCFG })).toBeNull();
+    expect(screen.queryByRole("tab", { name: THEME })).toBeNull();
+    expect(screen.queryByRole("tab", { name: ORG_SYNC })).toBeNull();
+    expect(screen.queryByRole("tab", { name: LEGACY })).toBeNull();
+    expect(screen.getByRole("tab", { name: SERVICE_ACCOUNT })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: PERSONAL_TOKEN })).toBeInTheDocument();
     // Tiers are platform-level (shared across tenants): a Child Admin never sees them (F055 AC-45).
-    expect(screen.queryByText(RESOURCE_TIER)).toBeNull();
+    expect(screen.queryByRole("tab", { name: RESOURCE_TIER })).toBeNull();
   });
 
   it("hides the resource-tier tab from a global super admin when the app-factory runtime layer is not deployed", () => {
     renderWithUser({ role: "admin", user_id: 1 }, true, false);
-    expect(screen.getByText(SYSCFG)).toBeInTheDocument();
-    expect(screen.queryByText(RESOURCE_TIER)).toBeNull();
+    expect(screen.getByRole("tab", { name: SYSCFG })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: RESOURCE_TIER })).toBeNull();
   });
 
   it("hides the Open API tabs from a global super admin when the deployment has not opted in", () => {
     renderWithUser({ role: "admin", user_id: 1 }, false);
     // Everything the role earns is still there — only the F053 surface is gated.
-    expect(screen.getByText(ORG)).toBeInTheDocument();
-    expect(screen.getByText(ROLE)).toBeInTheDocument();
-    expect(screen.queryByText(SERVICE_ACCOUNT)).toBeNull();
-    expect(screen.queryByText(PERSONAL_TOKEN)).toBeNull();
+    expect(screen.getByRole("tab", { name: ORG })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: ROLE })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: SERVICE_ACCOUNT })).toBeNull();
+    expect(screen.queryByRole("tab", { name: PERSONAL_TOKEN })).toBeNull();
   });
 
   it("Department Admin sees org/role but NOT system config / theme / org sync", () => {
     renderWithUser({ role: "user", is_department_admin: true, user_id: 3 });
-    expect(screen.getByText(ORG)).toBeInTheDocument();
-    expect(screen.getByText(ROLE)).toBeInTheDocument();
-    expect(screen.queryByText(SYSCFG)).toBeNull();
-    expect(screen.queryByText(THEME)).toBeNull();
-    expect(screen.queryByText(ORG_SYNC)).toBeNull();
-    expect(screen.queryByText(SERVICE_ACCOUNT)).toBeNull();
-    expect(screen.queryByText(PERSONAL_TOKEN)).toBeNull();
-    expect(screen.queryByText(RESOURCE_TIER)).toBeNull();
+    expect(screen.getByRole("tab", { name: ORG })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: ROLE })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: SYSCFG })).toBeNull();
+    expect(screen.queryByRole("tab", { name: THEME })).toBeNull();
+    expect(screen.queryByRole("tab", { name: ORG_SYNC })).toBeNull();
+    expect(screen.queryByRole("tab", { name: SERVICE_ACCOUNT })).toBeNull();
+    expect(screen.queryByRole("tab", { name: PERSONAL_TOKEN })).toBeNull();
+    expect(screen.queryByRole("tab", { name: RESOURCE_TIER })).toBeNull();
   });
 
   it("plain user sees neither org nor role; falls back to legacy user table", () => {
     renderWithUser({ role: "user", user_id: 4 });
-    expect(screen.queryByText(ORG)).toBeNull();
-    expect(screen.queryByText(ROLE)).toBeNull();
-    expect(screen.queryByText(SYSCFG)).toBeNull();
-    expect(screen.queryByText(THEME)).toBeNull();
-    expect(screen.queryByText(ORG_SYNC)).toBeNull();
-    expect(screen.getByText(LEGACY)).toBeInTheDocument();
-    expect(screen.queryByText(SERVICE_ACCOUNT)).toBeNull();
-    expect(screen.queryByText(PERSONAL_TOKEN)).toBeNull();
+    expect(screen.queryByRole("tab", { name: ORG })).toBeNull();
+    expect(screen.queryByRole("tab", { name: ROLE })).toBeNull();
+    expect(screen.queryByRole("tab", { name: SYSCFG })).toBeNull();
+    expect(screen.queryByRole("tab", { name: THEME })).toBeNull();
+    expect(screen.queryByRole("tab", { name: ORG_SYNC })).toBeNull();
+    expect(screen.getByRole("tab", { name: LEGACY })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: SERVICE_ACCOUNT })).toBeNull();
+    expect(screen.queryByRole("tab", { name: PERSONAL_TOKEN })).toBeNull();
   });
 
   it("user-group manager sees the user-group tab even without admin flags", () => {
     renderWithUser({ role: "user", can_manage_user_groups: true, user_id: 5 });
-    expect(screen.getByText(USER_GROUP)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: USER_GROUP })).toBeInTheDocument();
   });
 });

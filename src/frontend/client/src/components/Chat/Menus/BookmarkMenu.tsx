@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useState, useId, useCallback, useMemo, useRef } from 'react';
 import { useRecoilValue } from 'recoil';
 import * as Ariakit from '@ariakit/react';
@@ -10,7 +11,7 @@ import type { TConversationTag } from '~/types/chat';
 import type { FC } from 'react';
 import type * as t from '~/common';
 import { useConversationTagsQuery, useTagConversationMutation } from '~/hooks/queries/data-provider';
-import { DropdownPopup, TooltipAnchor } from '~/components/ui';
+import { DropdownPopup } from '~/components/ui';
 import { BookmarkContext } from '~/Providers/BookmarkContext';
 import { BookmarkEditDialog } from '~/components/Bookmarks';
 import { useBookmarkSuccess, useLocalize } from '~/hooks';
@@ -164,10 +165,7 @@ const BookmarkMenu: FC = () => {
         setIsOpen={setIsMenuOpen}
         keyPrefix={`${conversationId}-bookmark-`}
         trigger={
-          <TooltipAnchor
-            description={localize('com_ui_bookmarks_add')}
-            render={
-              <Ariakit.MenuButton
+          <SharedTooltip  content={localize('com_ui_bookmarks_add')}  ><Ariakit.MenuButton
                 id="bookmark-menu-button"
                 aria-label={localize('com_ui_bookmarks_add')}
                 className={cn(
@@ -177,9 +175,7 @@ const BookmarkMenu: FC = () => {
                 data-testid="bookmark-menu"
               >
                 {renderButtonContent()}
-              </Ariakit.MenuButton>
-            }
-          />
+              </Ariakit.MenuButton></SharedTooltip>
         }
         items={dropdownItems}
       />

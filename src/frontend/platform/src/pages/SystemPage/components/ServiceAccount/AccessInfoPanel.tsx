@@ -1,5 +1,5 @@
-import { Button } from "@/components/bs-ui/button"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { Button } from "@bisheng/ui"
+import { notification } from "@bisheng/ui"
 import { locationContext } from "@/contexts/locationContext"
 import { getDevToolkitVersionsApi } from "@/controllers/API/devToolkit"
 import type { DevToolkitVersions } from "@/types/api/devToolkit"
@@ -119,10 +119,10 @@ export function AccessInfoPanel() {
         t("openApiManagement.accessInfo.copyFooter"),
       ].join("\n"),
     )
-    toast({
+    notification.open({
       title: t("openApiManagement.accessInfo.title"),
       description: t("openApiManagement.feedback.copied"),
-      variant: "success",
+      type: "success",
     })
   }
 

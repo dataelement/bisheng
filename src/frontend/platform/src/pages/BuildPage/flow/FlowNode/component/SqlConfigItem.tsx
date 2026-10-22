@@ -1,13 +1,15 @@
 // @ts-strict-ignore
-import { Input } from "@/components/bs-ui/input";
+import { Input, Select } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
-import { Switch } from "@/components/bs-ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { useEffect, useState } from "react";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Switch } from "@bisheng/ui";
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function SqlConfigItem({ data, onChange, onValidate }) {
     const { t } = useTranslation('flow');
+    const selectLabels = useSelectLabels();
     const [values, setValues] = useState(data.value);
     const [errors, setErrors] = useState({});
 
@@ -106,56 +108,31 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
                     {/* 数据库类型下拉框 */}
                     <Label className="flex items-center bisheng-label">{t("dbType")}</Label>
                     <Select
-                        value={database_engine}
-                        onValueChange={(value) => handleChange("database_engine", value)}
-                    >
-                        <SelectTrigger className={`mt-2 mb-4 nodrag ${errors.database_engine ? "border-red-500" : ""}`}>
-                            <SelectValue placeholder={t("selectDbType")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {DATABASE_OPTIONS.map((engine) => (
-                                <SelectItem key={engine} value={engine}>
-                                    {engine}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                        {...selectLabels}
+                        options={DATABASE_OPTIONS.map((engine) => ({ value: engine, label: engine }))}
+                        value={database_engine || null}
+                        onChange={(value) => handleChange("database_engine", value == null ? "" : String(value))}
+                        placeholder={t("selectDbType")}
+                        status={errors.database_engine ? "error" : "default"}
+                        aria-label={t("dbType")}
+                        className="nodrag mt-2 mb-4 w-full"
+                    />
 
                     {/* 数据库地址 */}
                     <Label className="flex items-center bisheng-label">{t("dbAddress")}</Label> {/* 数据库地址 */}
-                    <Input
-                        className={`mt-2 nodrag ${errors.db_address ? "border-red-500" : ""}`}
-                        value={db_address}
-                        type="text"
-                        onChange={(e) => handleChange("db_address", e.target.value)}
-                    />
+                    <Input value={db_address} type="text" onChange={(e) => handleChange("db_address", e.target.value)} className={`mt-2 nodrag ${errors.db_address ? "border-red-500" : ""}`} />
 
                     {/* 数据库名称 */}
                     <Label className="flex items-center bisheng-label mt-4">{t("dbName")}</Label> {/* 数据库名称 */}
-                    <Input
-                        className={`mt-2 nodrag ${errors.db_name ? "border-red-500" : ""}`}
-                        value={db_name}
-                        type="text"
-                        onChange={(e) => handleChange("db_name", e.target.value)}
-                    />
+                    <Input value={db_name} type="text" onChange={(e) => handleChange("db_name", e.target.value)} className={`mt-2 nodrag ${errors.db_name ? "border-red-500" : ""}`} />
 
                     {/* 数据库用户名 */}
                     <Label className="flex items-center bisheng-label mt-4">{t("dbUsername")}</Label> {/* 数据库用户名 */}
-                    <Input
-                        className={`mt-2 nodrag ${errors.db_username ? "border-red-500" : ""}`}
-                        value={db_username}
-                        type="text"
-                        onChange={(e) => handleChange("db_username", e.target.value)}
-                    />
+                    <Input value={db_username} type="text" onChange={(e) => handleChange("db_username", e.target.value)} className={`mt-2 nodrag ${errors.db_username ? "border-red-500" : ""}`} />
 
                     {/* 数据库密码 */}
                     <Label className="flex items-center bisheng-label mt-4">{t("dbPassword")}</Label> {/* 数据库密码 */}
-                    <Input
-                        className={`mt-2 nodrag ${errors.db_password ? "border-red-500" : ""}`}
-                        value={db_password}
-                        type="password"
-                        onChange={(e) => handleChange("db_password", e.target.value)}
-                    />
+                    <Input value={db_password} type="password" onChange={(e) => handleChange("db_password", e.target.value)} className={`mt-2 nodrag ${errors.db_password ? "border-red-500" : ""}`} />
                 </>
             )}
         </div>

@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { CheckCircle, Download, Eye, Loader2, Trash2, X } from "lucide-react";
 import {
@@ -6,7 +7,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "~/components/ui/Dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { Button } from "~/components/ui/Button";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
@@ -139,9 +140,7 @@ interface ActionButtonProps {
 
 function ActionButton({ label, onClick, disabled, className, children }: ActionButtonProps) {
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <button
+        <SharedTooltip  content={label} side="top" ><button
                     type="button"
                     disabled={disabled}
                     onClick={onClick}
@@ -152,16 +151,7 @@ function ActionButton({ label, onClick, disabled, className, children }: ActionB
                     )}
                 >
                     {children}
-                </button>
-            </TooltipTrigger>
-            <TooltipContent
-                noArrow
-                side="top"
-                className="z-[200] rounded-md bg-[#1D2129] px-2 py-1 text-xs text-white"
-            >
-                {label}
-            </TooltipContent>
-        </Tooltip>
+                </button></SharedTooltip>
     );
 }
 

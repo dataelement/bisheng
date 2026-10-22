@@ -1,23 +1,24 @@
+import { Button, notification } from '@bisheng/ui';
 import { SubjectSearchDepartment } from "@/components/bs-comp/permission/SubjectSearchDepartment"
 import type { SelectedSubject } from "@/components/bs-comp/permission/types"
-import { Button } from "@/components/bs-ui/button"
+
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+Dialog,
+DialogContent,
+DialogDescription,
+DialogFooter,
+DialogHeader,
+DialogTitle,
 } from "@/components/bs-ui/dialog"
 import { Label } from "@/components/bs-ui/label"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+
 import {
-  batchCreateDepartmentKnowledgeSpacesApi,
-  getDepartmentKnowledgeSpacesApi,
-  type DepartmentKnowledgeSpaceSummary,
+batchCreateDepartmentKnowledgeSpacesApi,
+getDepartmentKnowledgeSpacesApi,
+type DepartmentKnowledgeSpaceSummary,
 } from "@/controllers/API/departmentKnowledgeSpace"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect,useMemo,useState } from "react"
 import { useTranslation } from "react-i18next"
 
 interface DepartmentSpaceDialogProps {
@@ -85,11 +86,7 @@ export function DepartmentSpaceDialog({
 
   const handleSubmit = async () => {
     if (!selectedDepartmentIds.length) {
-      toast({
-        title: t("prompt"),
-        variant: "warning",
-        description: t("departmentSpace.selectRequired"),
-      })
+      notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("departmentSpace.selectRequired") ?? '') })
       return
     }
 
@@ -101,13 +98,9 @@ export function DepartmentSpaceDialog({
 
     if (res === false) return
 
-    toast({
-      title: t("prompt"),
-      variant: "success",
-      description: t("departmentSpace.submitSuccess", {
+    notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("departmentSpace.submitSuccess", {
         count: Array.isArray(res) ? res.length : selectedDepartmentIds.length,
-      }),
-    })
+      }) ?? '') })
     onCreated?.()
     onOpenChange(false)
   }
@@ -167,7 +160,7 @@ export function DepartmentSpaceDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outlined" onClick={() => onOpenChange(false)} color="default">
             {t("cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={submitting || !selectedDepartmentIds.length}>

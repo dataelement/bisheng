@@ -1,8 +1,9 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import AceEditor from "react-ace";
 // import "ace-builds/webpack-resolver";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Button } from "../../components/bs-ui/button";
+
 import BaseModal from "../baseModal";
 import { BookMarked } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -57,11 +58,7 @@ export default function DictAreaModal({
                         className="h-[500px] w-full rounded-lg border-[1px] border-border custom-scroll"
                     />
                     <div className="flex h-fit w-full justify-end">
-                        <Button
-                            className="mt-3 rounded-full"
-                            type="submit"
-                            onClick={handleCreate}
-                        >
+                        <Button className="mt-3 rounded-full" type="submit" onClick={handleCreate}>
                             {t('save')}
                         </Button>
                     </div>

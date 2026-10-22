@@ -14,12 +14,7 @@
  * the platform interceptor navigate the whole SPA to `/403`.
  */
 import { LoadingIcon } from "@/components/bs-icons/loading"
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/bs-ui/tabs"
+import { Tabs } from "@bisheng/ui"
 import { useTranslation } from "react-i18next"
 import { useParams, useSearchParams } from "react-router-dom"
 import { HostedAppHeader } from "./Header"
@@ -105,21 +100,11 @@ export function HostedAppDetail() {
     <div className="flex h-full min-h-0 w-full flex-col px-6 pt-4">
       <HostedAppHeader app={app} />
       <Tabs
-        value={activeTab}
-        onValueChange={handleTabChange}
-        className="flex min-h-0 w-full flex-1 flex-col"
-      >
-        <TabsList className="shrink-0 self-start">
-          <TabsTrigger value="publish">
-            {t("hostedApp.detail.tabs.publish")}
-          </TabsTrigger>
-          <TabsTrigger value="data">{t("hostedApp.detail.tabs.data")}</TabsTrigger>
-          <TabsTrigger value="logs">{t("hostedApp.detail.tabs.logs")}</TabsTrigger>
-          <TabsTrigger value="versions">
-            {t("hostedApp.detail.tabs.versions")}
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="publish" className="min-h-0 flex-1 overflow-y-auto">
+        activeKey={activeTab}
+        onChange={handleTabChange}
+        className="flex min-h-0 w-full flex-1 flex-col [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1 [&>[role=tabpanel]]:overflow-hidden [&>[role=tabpanel]>div]:h-full"
+        items={[
+          { key: "publish", label: t("hostedApp.detail.tabs.publish"), children: <div className="min-h-0 flex-1 overflow-y-auto">
           <PublishTab
             app={app}
             instance={instance}
@@ -182,14 +167,14 @@ export function HostedAppDetail() {
             }
             dangerZoneSlot={<DangerZoneCard app={app} />}
           />
-        </TabsContent>
-        <TabsContent value="data" className="min-h-0 flex-1 overflow-hidden">
+          </div> },
+          { key: "data", label: t("hostedApp.detail.tabs.data"), children: <div className="min-h-0 flex-1 overflow-hidden">
           <DataTab appId={app.app_id} appName={app.slug || app.name} />
-        </TabsContent>
-        <TabsContent value="logs" className="min-h-0 flex-1 overflow-hidden">
+          </div> },
+          { key: "logs", label: t("hostedApp.detail.tabs.logs"), children: <div className="min-h-0 flex-1 overflow-hidden">
           <LogsTab appId={app.app_id} />
-        </TabsContent>
-        <TabsContent value="versions" className="min-h-0 flex-1 overflow-y-auto">
+          </div> },
+          { key: "versions", label: t("hostedApp.detail.tabs.versions"), children: <div className="min-h-0 flex-1 overflow-y-auto">
           <VersionsTab
             appId={app.app_id}
             contentSlot={
@@ -199,8 +184,9 @@ export function HostedAppDetail() {
               />
             }
           />
-        </TabsContent>
-      </Tabs>
+          </div> },
+        ]}
+      />
     </div>
   )
 }

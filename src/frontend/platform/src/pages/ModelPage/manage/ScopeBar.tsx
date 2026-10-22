@@ -1,3 +1,4 @@
+import { notification, Select } from '@bisheng/ui';
 // Page-level admin-scope switcher for LLM management.
 //
 // v2.5.1: scope was originally exposed as a global HeaderTenantScope
@@ -7,20 +8,11 @@
 // lives on this page so its visible affordance matches where it changes
 // data. Renders nothing for non-super-admin users.
 
-import { ChevronDown } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useQueryClient } from "react-query"
 
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/bs-ui/dropdownMenu"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 import { getTenantsApi } from "@/controllers/API/tenant"
 import { useAdminScope } from "@/hooks/useAdminScope"
 import { Tenant } from "@/types/api/tenant"
@@ -48,6 +40,8 @@ function SuperAdminScopeSwitcher({
     onScopeChange?: () => void | Promise<void>
 }): JSX.Element {
     const { t } = useTranslation("bs")
+    const selectLabels = useSelectLabels()
+    const labelId = useId()
     const queryClient = useQueryClient()
     const { scope, loading: scopeLoading, setScope } = useAdminScope()
     const [tenants, setTenants] = useState<Tenant[]>([])
@@ -85,19 +79,8 @@ function SuperAdminScopeSwitcher({
         if (rootTenant) {
             return displayTenantName(rootTenant.tenant_name) || rootTenant.tenant_code
         }
-        return t("tenant.adminScope.global", { defaultValue: "全树（默认）" })
+        return t("tenant.adminScope.global")
     }, [rootTenant, t])
-
-    const currentLabel = useMemo(() => {
-        if (scope.scope_tenant_id === null) {
-            return rootLabel
-        }
-        const hit = tenants.find((row) => row.id === scope.scope_tenant_id)
-        if (!hit) {
-            return t("tenant.adminScope.loading", { defaultValue: "加载中..." })
-        }
-        return displayTenantName(hit.tenant_name) || hit.tenant_code
-    }, [scope.scope_tenant_id, tenants, t, rootLabel])
 
     const handleSelect = async (next: number | null) => {
         if (scopeLoading) return
@@ -108,67 +91,56 @@ function SuperAdminScopeSwitcher({
             // -aware data (e.g. ModelSelect dropdowns).
             await queryClient.invalidateQueries()
             await onScopeChange?.()
-            toast({
-                variant: "success",
-                description: next === null
-                    ? t("tenant.adminScope.cleared", { defaultValue: "已恢复全树视图" })
+            notification.open({ type: "success", description: String(next === null
+                    ? t("tenant.adminScope.cleared")
                     : t("tenant.adminScope.switched", {
-                        defaultValue: "已切换管理视图",
                         name: tenants.find((r) => r.id === next)?.tenant_name || "",
-                    }),
-            })
+                    }) ?? '') })
         } catch {
             // request interceptor will surface the error toast
         }
     }
 
-    const childTenants = tenants.filter((row) => row.id !== ROOT_TENANT_ID)
+    const options = useMemo(() => {
+        const list = [
+            // The "no scope" entry is the Root tenant; it stands for scope_tenant_id = null.
+            { value: ROOT_TENANT_ID, label: rootLabel, disabled: false },
+            ...tenants
+                .filter((row) => row.id !== ROOT_TENANT_ID && row.id != null)
+                .map((row) => ({
+                    value: row.id,
+                    label: displayTenantName(row.tenant_name) || row.tenant_code,
+                    disabled: false,
+                })),
+        ]
+        // The current scope may point at a tenant the list has not returned
+        // (yet): keep a readable label in the trigger instead of a bare id.
+        const current = scope.scope_tenant_id
+        if (current !== null && !list.some((option) => option.value === current)) {
+            list.push({ value: current, label: t("tenant.adminScope.loading"), disabled: true })
+        }
+        return list
+    }, [tenants, rootLabel, scope.scope_tenant_id, t])
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <button
-                    type="button"
-                    className="h-9 px-3 bg-secondary rounded-md flex items-center justify-center cursor-pointer hover:bg-secondary/80 transition-colors"
-                    title={t("tenant.adminScope.label", { defaultValue: "管理视图" }) + ": " + currentLabel}
-                    disabled={scopeLoading}
-                >
-                    <span className="text-xs text-muted-foreground mr-1">
-                        {t("tenant.adminScope.label", { defaultValue: "管理视图" })}：
-                    </span>
-                    <span className="text-sm max-w-32 truncate">{currentLabel}</span>
-                    <ChevronDown className="ml-1 w-4 h-4" />
-                </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-[180px]">
-                <DropdownMenuLabel>
-                    {t("tenant.adminScope.label", { defaultValue: "管理视图" })}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => handleSelect(null)}>
-                    {scope.scope_tenant_id === null ? "✓ " : ""}
-                    {rootLabel}
-                </DropdownMenuItem>
-                {tenantsLoading && (
-                    <DropdownMenuItem disabled>
-                        {t("tenant.adminScope.loading", { defaultValue: "加载中..." })}
-                    </DropdownMenuItem>
-                )}
-                {!tenantsLoading && childTenants.length === 0 && (
-                    <DropdownMenuItem disabled>
-                        {t("tenant.adminScope.noChild", { defaultValue: "暂无子租户" })}
-                    </DropdownMenuItem>
-                )}
-                {childTenants.map((row) => (
-                    <DropdownMenuItem
-                        key={row.id}
-                        onSelect={() => handleSelect(row.id)}
-                    >
-                        {scope.scope_tenant_id === row.id ? "✓ " : ""}
-                        {displayTenantName(row.tenant_name) || row.tenant_code}
-                    </DropdownMenuItem>
-                ))}
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+            <span id={labelId} className="shrink-0 text-sm text-text-2">
+                {t("tenant.adminScope.label")}
+            </span>
+            <Select
+                {...selectLabels}
+                aria-labelledby={labelId}
+                className="w-48"
+                options={options}
+                value={scope.scope_tenant_id ?? ROOT_TENANT_ID}
+                loading={tenantsLoading}
+                disabled={scopeLoading}
+                onChange={(value) => {
+                    if (value == null) return
+                    const next = Number(value)
+                    void handleSelect(next === ROOT_TENANT_ID ? null : next)
+                }}
+            />
+        </div>
     )
 }

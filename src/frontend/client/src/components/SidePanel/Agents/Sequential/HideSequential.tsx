@@ -1,13 +1,8 @@
 import { AgentCapabilities } from '~/types/chat';
 import { useFormContext, Controller } from 'react-hook-form';
 import type { AgentForm } from '~/common';
-import {
-  Checkbox,
-  HoverCard,
-  // HoverCardContent,
-  // HoverCardPortal,
-  // HoverCardTrigger,
-} from '~/components/ui';
+import { HoverCard } from '~/components/ui';
+import { Checkbox } from '@bisheng/ui';
 // import { CircleHelpIcon } from '~/components/svg';
 // import { useLocalize } from '~/hooks';
 // import { ESide } from '~/common';
@@ -29,7 +24,7 @@ export default function HideSequential() {
                 {...field}
                 checked={field.value}
                 onCheckedChange={field.onChange}
-                className="relative float-left  mr-2 inline-flex h-4 w-4 cursor-pointer"
+                className="peer relative float-left  mr-2 inline-flex h-4 w-4 cursor-pointer"
                 value={field.value?.toString()}
               />
             )}

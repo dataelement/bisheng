@@ -1,18 +1,25 @@
 // @ts-strict-ignore
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { Alert, Button, Cascader, Textarea, toast } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
-import { Textarea } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
-import Cascader from "@/components/bs-ui/select/cascader";
-import { Switch } from "@/components/bs-ui/switch";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import Tip from "@/components/bs-ui/tooltip/tip";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import {
+    fromModelCascaderValue,
+    toModelCascaderOptions,
+    toModelCascaderValue,
+} from "@/components/bs-comp/formFields/modelOptions";
+import { Switch } from "@bisheng/ui";
+
+import { ModelFieldHint } from "../ModelFieldHint";
+import { Tooltip as Tip } from "@bisheng/ui";
 import { getKnowledgeModelEnvelope, updateKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Settings } from "lucide-react";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { defalutPrompt } from "./WorkbenchModel";
@@ -23,34 +30,31 @@ import {
     normalizeKnowledgeModelIds,
 } from "./knowledgeModelValidation";
 
-export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, footer = null }) => {
-
-    const defaultValue = useMemo(() => {
-        let _defaultValue = []
-        if (!value) return _defaultValue
-        options.some(option => {
-            const model = option.children.find(el => el.value === value)
-            if (model) {
-                _defaultValue = [{ value: option.value, label: option.label }, { value: model.value, label: model.label }]
-                return true
-            }
-        })
-        return _defaultValue
-    }, [value, options])
+export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, placeholder = '' }) => {
+    const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+    const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options])
+    const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value])
 
     return (
-        <div>
+        <div className="min-w-0">
             <Label className="bisheng-label">
                 <span>{label}</span>
                 {required && <span className="text-red-500 text-xs">*</span>}
-                {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText} />}
+                {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText} />}
             </Label>
             <Cascader
-                defaultValue={defaultValue}
-                options={options}
-                close={close}
-                onChange={(val) => onChange(val[1])}
-                footer={footer}
+                {...selectLabels}
+                className="w-full"
+                options={cascaderOptions}
+                value={cascaderValue}
+                allowClear={close}
+                onChange={(path) => onChange(fromModelCascaderValue(path))}
+                placeholder={placeholder || t('build.selectModel')}
+                aria-label={typeof label === 'string' && label ? label : t('build.selectModel')}
+                backLabel={t('sharedUi.back')}
+                doneLabel={t('sharedUi.done')}
+                searchPlaceholder={t('sharedUi.searchModels')}
             />
         </div>
     );
@@ -93,19 +97,14 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) =
             </DialogHeader>
             <div>
                 <Label className="bisheng-label">{label || t('model.docKnowledgeAbstractPrompt')}</Label>
-                <Textarea
-                    value={textValue}
-                    onChange={(e) => {
+                <Textarea value={textValue} onChange={(e) => {
                         setTextValue(e.target.value)
                         modifyNotSavedRef.current = true;
-                    }}
-                    className="mt-1"
-                    rows={16}
-                />
+                    }} rows={16} textareaClassName={"mt-1"} />
             </div>
             <DialogFooter>
-                <Button variant="outline" className="px-11" type="button" onClick={handleCancel}>{t('model.cancel')}</Button>
-                <Button disabled={false} type="submit" className="px-11" onClick={() => {
+                <Button variant="outlined" type="button" onClick={handleCancel} color="default">{t('model.cancel')}</Button>
+                <Button disabled={false} type="submit" onClick={() => {
                     modifyNotSavedRef.current = false
                     onSave(textValue)
                     setOpen(false)
@@ -198,7 +197,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         setFormAndClearInherited(next)
     }
 
-    const { message } = useToast()
+
     const [saveload, setSaveLoad] = useState(false)
     const handleSave = async () => {
         const {
@@ -222,7 +221,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         if (!qaSimilarModelId) {
             errors.push(t('model.qaSimilarModel') + t('bs:required'))
         }
-        if (errors.length) return message({ variant: 'error', description: errors })
+        if (errors.length) return toast.show({ type: 'error', message: errors.filter(Boolean).join('\n') })
 
         const data = {
             embedding_model_id: embeddingModelId,
@@ -239,7 +238,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         await captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig(data).then(res => {
             lastSaveFormDataRef.current = data
             setUnavailableModelFields([])
-            message({ variant: 'success', description: t('model.saveSuccess') })
+            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') })
         }))
         setSaveLoad(false)
     };
@@ -253,21 +252,23 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             ...patch,
         }).then(res => {
             lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...patch }
-            message({ variant: 'success', description: t('model.promptSaved') })
+            toast.show({ type: 'success', message: String(t('model.promptSaved') ?? '') })
         }))
     }
 
     if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <LoadingIcon />
+        <Outlined.Loading  className="size-4 animate-spin"/>
     </div>
 
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <FallbackBlockedBanner visible={fallbackBlocked} />
             {unavailableModelFields.length > 0 && (
-                <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
-                    {t('model.unavailableSelectionsCleared')}
-                </div>
+                <Alert
+                    type="warning"
+                    description={t('model.unavailableSelectionsCleared')}
+                    live
+                />
             )}
             {inheritedFromRoot && (
                 <div className="-mb-2 text-xs text-muted-foreground flex items-center">
@@ -309,8 +310,8 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                             onRestore={() => setFormAndClearInherited({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
                         >
                             <Tip content={t('model.docKnowledgeAbstractPromptTooltip')} side="top">
-                                <Button variant="link" size="sm" className="h-auto px-0">
-                                    <Settings size={14} className="mr-1" />
+                                <Button variant="link" size="small" className="h-auto px-0">
+                                    <Outlined.Setting size={14} className="mr-1" />
                                     {t('model.editPromptButton')}
                                 </Button>
                             </Tip>
@@ -332,8 +333,8 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                             onRestore={() => setFormAndClearInherited({ ...form, autoTagPrompt: lastSaveFormDataRef.current.auto_tag_prompt })}
                         >
                             <Tip content={t('model.autoTagPromptTooltip')} side="top">
-                                <Button variant="link" size="sm" className="h-auto px-0">
-                                    <Settings size={14} className="mr-1" />
+                                <Button variant="link" size="small" className="h-auto px-0">
+                                    <Outlined.Setting size={14} className="mr-1" />
                                     {t('model.editPromptButton')}
                                 </Button>
                             </Tip>
@@ -362,13 +363,9 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 onChange={(val) => handleModelChange('asr_model_id', { ...form, asrModelId: val })}
             />
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
-                <Button
-                    className="px-10"
-                    disabled={saveload}
-                    onClick={handleSave}
-                >
-                    {saveload && <LoadIcon className="mr-2" />}
+                <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
+                <Button disabled={saveload} onClick={handleSave}>
+                    {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>
             </div>

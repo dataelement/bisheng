@@ -1,29 +1,22 @@
-import { Button } from "@/components/bs-ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/bs-ui/dropdownMenu"
-import { Switch } from "@/components/bs-ui/switch"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/bs-ui/tooltip"
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
+import { Alert, Button, Select } from '@bisheng/ui';
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Switch } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+
 import type {
-  PermissionActionLevel,
-  PermissionCatalogAction,
-  PermissionCatalogChange,
-  PermissionCatalogDraft,
-} from "@/controllers/API/permission"
-import { cn } from "@/utils"
-import { ChevronDown, GripVertical, Info } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { actionLabel, resourceTypeLabel } from "./actionLabels"
+PermissionActionLevel,
+PermissionCatalogAction,
+PermissionCatalogChange,
+PermissionCatalogDraft,
+} from "@/controllers/API/permission";
+import { cn } from "@/utils";
+
+import { useCallback,useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { actionLabel,resourceTypeLabel } from "./actionLabels";
 
 interface ActionLevelBoardProps {
   actions: PermissionCatalogAction[]
@@ -50,8 +43,10 @@ function uniqueActions(
   return Array.from(unique.values())
 }
 
+const UNASSIGNED_KEY = "unassigned"
+
 function levelKey(level: ActionLevelValue): string {
-  return level === null ? "unassigned" : String(level)
+  return level === null ? UNASSIGNED_KEY : String(level)
 }
 
 export function ActionLevelBoard({
@@ -92,6 +87,11 @@ export function ActionLevelBoard({
         ? t("actionLevel.unassigned")
         : t("actionLevel.level", { level }),
     [t],
+  )
+  const selectLabels = useSelectLabels()
+  const levelOptions = useMemo(
+    () => LEVELS.map((option) => ({ value: levelKey(option), label: levelName(option) })),
+    [levelName],
   )
 
   // Derived from the diff against the published release rather than accumulated
@@ -197,21 +197,10 @@ export function ActionLevelBoard({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            
-            disabled={pendingChanges.length === 0 || submitting}
-            onClick={resetToRelease}
-          >
+          <Button type="button" variant="outlined" disabled={pendingChanges.length === 0 || submitting} onClick={resetToRelease} color="default">
             {t("actionLevel.discardChanges")}
           </Button>
-          <Button
-            type="button"
-            
-            disabled={pendingChanges.length === 0 || submitting}
-            onClick={() => void handlePublishChanges()}
-          >
+          <Button type="button" disabled={pendingChanges.length === 0 || submitting} onClick={() => void handlePublishChanges()}>
             {t("actionLevel.publishChanges")}
           </Button>
         </div>
@@ -223,22 +212,17 @@ export function ActionLevelBoard({
           role="status"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <Info aria-hidden="true" className="size-4 shrink-0 text-primary" />
+            <Outlined.Info aria-hidden="true" className="size-4 shrink-0 text-primary" />
             <span>
               {t("actionLevel.pendingChanges", {
                 count: pendingChanges.length,
               })}
             </span>
-            <button
-              type="button"
-              className="text-primary underline-offset-2 hover:underline"
-              aria-expanded={showChangeList}
-              onClick={() => setShowChangeList((current) => !current)}
-            >
+            <Button variant="text" size="small" type="button" className="underline-offset-2 hover:underline" aria-expanded={showChangeList} onClick={() => setShowChangeList((current) => !current)} color="primary">
               {showChangeList
                 ? t("actionLevel.hideChangeList")
                 : t("actionLevel.showChangeList")}
-            </button>
+            </Button>
           </div>
           {showChangeList && (
             <ul className="mt-2 space-y-1 pl-6 text-muted-foreground">
@@ -253,17 +237,16 @@ export function ActionLevelBoard({
       )}
 
       {draftErrorMessage && (
-        <p
-          className="shrink-0 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {draftErrorMessage}
-        </p>
+        <Alert
+          type="error"
+          className="shrink-0"
+          description={draftErrorMessage}
+          live
+        />
       )}
 
       {/* The only scroll area on this tab: the level columns, header and banners stay put. */}
-      <TooltipProvider delayDuration={200}>
-        <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1 xl:grid-cols-5">
+      <SharedTooltipProvider delayDuration={200}><div className="grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1 xl:grid-cols-5">
           {LEVELS.map((level) => {
             const key = levelKey(level)
             const zoneActions = normalizedActions.filter(
@@ -336,32 +319,23 @@ export function ActionLevelBoard({
                             a full-width select repeated the drag target on every card
                             and doubled the card's height. */}
                         <div className="flex items-center gap-1.5">
-                          <GripVertical
+                          <Outlined.Drag
                             aria-hidden="true"
                             className="size-4 shrink-0 cursor-grab text-muted-foreground"
                           />
 
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                          <SharedTooltip  content={<><p className="font-medium">
                                 {actionLabel(t, action.code, action.name)}
-                              </p>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-64">
-                              <p className="font-medium">
-                                {actionLabel(t, action.code, action.name)}
-                              </p>
-                              <p className="mt-0.5 opacity-80">{action.code}</p>
-                              <p className="mt-1 opacity-80">
+                              </p><p className="mt-0.5 opacity-80">{action.code}</p><p className="mt-1 opacity-80">
                                 {t("actionLevel.appliesTo")}:{" "}
                                 {action.resource_types
                                   .map((resourceType) =>
                                     resourceTypeLabel(t, resourceType),
                                   )
                                   .join("、")}
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
+                              </p></>} ><p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                                {actionLabel(t, action.code, action.name)}
+                              </p></SharedTooltip>
 
                           <Switch
                             aria-label={`${t("actionLevel.active")}.${action.code}`}
@@ -377,41 +351,23 @@ export function ActionLevelBoard({
                             keyboard, a touch screen, or anyone who would rather
                             pick than aim. Compact so it does not dominate the card. */}
                         <div className="mt-1.5 flex items-center gap-2 pl-[22px]">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label={`${t("actionLevel.change")}.${action.code}`}
-                                disabled={disabled || submitting}
-                                className="inline-flex h-6 items-center gap-1 rounded border px-1.5 text-xs text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {levelName(level)}
-                                <ChevronDown aria-hidden="true" className="size-3" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              <DropdownMenuRadioGroup
-                                value={String(level ?? "UNASSIGNED")}
-                                onValueChange={(value) =>
-                                  handleLevelChange(
-                                    action.code,
-                                    value === "UNASSIGNED"
-                                      ? null
-                                      : (Number(value) as PermissionActionLevel),
-                                  )
-                                }
-                              >
-                                {LEVELS.map((option) => (
-                                  <DropdownMenuRadioItem
-                                    key={levelKey(option)}
-                                    value={String(option ?? "UNASSIGNED")}
-                                  >
-                                    {levelName(option)}
-                                  </DropdownMenuRadioItem>
-                                ))}
-                              </DropdownMenuRadioGroup>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <Select
+                            {...selectLabels}
+                            size="small"
+                            className="w-28 shrink-0"
+                            aria-label={`${t("actionLevel.change")}.${action.code}`}
+                            disabled={disabled || submitting}
+                            options={levelOptions}
+                            value={levelKey(level)}
+                            onChange={(value) =>
+                              handleLevelChange(
+                                action.code,
+                                value == null || value === UNASSIGNED_KEY
+                                  ? null
+                                  : (Number(value) as PermissionActionLevel),
+                              )
+                            }
+                          />
 
                           {!active && (
                             <span className="text-xs text-muted-foreground">
@@ -441,8 +397,7 @@ export function ActionLevelBoard({
               </div>
             )
           })}
-        </div>
-      </TooltipProvider>
+        </div></SharedTooltipProvider>
     </section>
   )
 }

@@ -72,16 +72,16 @@ frontend:
       memory: 128Mi
   extraEnv: []
 
-# Isolation-environment discovery. Token must match the bisheng-sandbox chart.
-# Pattern uses StatefulSet ordinal DNS (n from 0), not a ClusterIP VIP.
+# Isolation-environment access. Token must match the bisheng-sandbox chart.
+# List each replica URL. Do not point this at the ClusterIP Service.
 sandbox:
   enabled: true
   token: bisheng-sandbox-local
   existingSecret: ""
   existingSecretKey: token
-  discoverHostPattern: "code-runner-{n}.code-runner.bisheng-sandbox.svc.cluster.local"
-  discoverIndexStart: 0
-  discoverTtlS: 60
+  endpoints:
+    - http://code-runner-0.code-runner.bisheng-sandbox.svc.cluster.local:8080
+    - http://code-runner-1.code-runner.bisheng-sandbox.svc.cluster.local:8080
 
 middleware:
   milvus:

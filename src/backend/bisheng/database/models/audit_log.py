@@ -63,6 +63,7 @@ class EventType(Enum):
 
     ADD_TOOL = "add_tool"  # Add Widget
     UPDATE_TOOL = "update_tool"
+    UPDATE_SANDBOX_CONF = "update_sandbox_conf"
     DELETE_TOOL = "delete_tool"
 
     USER_LOGIN = "user_login"  # Login Pengguna

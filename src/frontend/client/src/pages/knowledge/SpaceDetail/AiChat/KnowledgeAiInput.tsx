@@ -25,6 +25,7 @@ import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { cn } from "~/utils";
+import { useVoiceDraft } from "~/hooks/Input/useVoiceDraft";
 
 interface KnowledgeAiInputProps {
     availableTags: { id: number; name: string }[];
@@ -71,6 +72,7 @@ export function KnowledgeAiInput({
     const badgeRef = useRef<HTMLSpanElement>(null);
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
     const [inputText, setInputText] = useState("");
+    const voice = useVoiceDraft(textareaRef, inputText, setInputText);
     const [selectedTag, setSelectedTag] = useState<FolderChatTag | null>(null);
     const [showPicker, setShowPicker] = useState(false);
     const [pickerSearch, setPickerSearch] = useState("");
@@ -123,7 +125,7 @@ export function KnowledgeAiInput({
         const ro = new ResizeObserver(() => apply());
         ro.observe(el);
         return () => ro.disconnect();
-    }, [selectedTag?.id, selectedTag?.name]);
+    }, [selectedTag]);
 
     useEffect(() => {
         setTagDeleteHighlight(false);
@@ -148,6 +150,7 @@ export function KnowledgeAiInput({
     const handleInput = useCallback(
         (e: React.ChangeEvent<HTMLTextAreaElement>) => {
             const val = e.target.value;
+            voice.handleEdit(val);
             setInputText(val);
 
             if (isComposingRef.current) return;
@@ -167,7 +170,7 @@ export function KnowledgeAiInput({
             }
             setShowPicker(false);
         },
-        [selectedTag]
+        [selectedTag, voice]
     );
 
     // Select a tag from the picker
@@ -207,6 +210,7 @@ export function KnowledgeAiInput({
 
     // Handle send
     const handleSend = useCallback(() => {
+        if (voice.busy) return;
         if (isStreaming || disabled || !inputText.trim()) return;
         onSend(inputText.trim(), null, selectedTag ?? undefined);
         setInputText("");
@@ -214,7 +218,7 @@ export function KnowledgeAiInput({
         // Mobile: blur after sending so the keyboard dismisses and the grey overlay
         // (driven by focus → keyboardVisible) clears instead of lingering.
         if (isH5) textareaRef.current?.blur();
-    }, [isStreaming, disabled, inputText, selectedTag, onSend, isH5]);
+    }, [voice.busy, isStreaming, disabled, inputText, selectedTag, onSend, isH5]);
 
     // Handle keydown
     const handleKeyDown = useCallback(
@@ -273,11 +277,10 @@ export function KnowledgeAiInput({
         <div className="flex shrink-0 items-center gap-2">
             {showVoice && (
                 <SpeechToTextComponent
-                    disabled={disabled}
-                    onChange={(e) => {
-                        const newText = (inputText || "") + e;
-                        setInputText(newText);
-                    }}
+                    {...voice.props}
+                    disabled={disabled || isStreaming}
+                    realtime={!!modelData?.asr_model?.realtime}
+                    modelId={modelData?.asr_model?.id}
                 />
             )}
             {isStreaming ? (
@@ -302,7 +305,7 @@ export function KnowledgeAiInput({
                 <button
                     type="button"
                     onClick={handleSend}
-                    disabled={disabled || !inputText.trim()}
+                    disabled={disabled || voice.busy || !inputText.trim()}
                     className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
                     aria-label="Send message"
                     data-testid="send-button"
@@ -372,9 +375,11 @@ export function KnowledgeAiInput({
                             onChange={handleInput}
                             onKeyDown={handleKeyDown}
                             onCompositionStart={() => {
+                                voice.compositionStart();
                                 isComposingRef.current = true;
                             }}
                             onCompositionEnd={() => {
+                                voice.compositionEnd();
                                 isComposingRef.current = false;
                             }}
                             onFocus={() => onFocusChange?.(true)}

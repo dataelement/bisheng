@@ -1,8 +1,10 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
-import { Card, CardContent } from "@/components/bs-ui/card";
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, Position } from "@xyflow/react";
-import { Plus } from "lucide-react";
+import { Button } from '@bisheng/ui';
+
+import { Card,CardContent } from "@/components/bs-ui/card";
+import { BaseEdge,EdgeLabelRenderer,getBezierPath,Position } from "@xyflow/react";
+import { Outlined } from "bisheng-icons";
+
 import { useMemo } from "react";
 import Sidebar from "./Sidebar";
 
@@ -101,12 +103,8 @@ export default function CustomEdge({
                         zIndex: 1000,
                     }}
                 >
-                    <Button
-                        size="icon"
-                        className="rounded-full w-5 h-5 pointer-events-auto"
-                        onClick={() => onButtonClick(id)}
-                    >
-                        <Plus size={18} className="text-[#fff]" />
+                    <Button size="medium" className="rounded-full w-5 h-5 pointer-events-auto" onClick={() => onButtonClick(id)} iconOnly>
+                        <Outlined.Plus size={18} className="text-[#fff]" />
                     </Button>
                     {isDropdownOpen && (
                         <Card

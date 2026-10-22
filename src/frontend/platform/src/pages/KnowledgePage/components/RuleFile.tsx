@@ -1,12 +1,16 @@
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Input } from "@/components/bs-ui/input";
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Input } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
-import { useMemo, useEffect, useState, useRef, useCallback } from "react";
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { KnowledgeHint } from "./KnowledgeTooltip";
+
 import { cn } from "@/utils";
-import { CheckCircle2, Circle } from "lucide-react";
+
 
 // Utility function: Convert 1/0 or boolean values to standard boolean
 const toBoolean = (value) => {
@@ -101,15 +105,15 @@ export default function RuleFile({
 
         return {
             splitMode: baseRules.split_mode ?? baseRules.splitMode ?? "auto",
-            chunkSize: String(baseRules.chunk_size ?? baseRules.chunkSize ?? "1000"),
-            chunkOverlap: String(baseRules.chunk_overlap ?? baseRules.chunkOverlap ?? "0"),
+            chunkSize: String(baseRules.chunk_size ?? baseRules.chunkSize),
+            chunkOverlap: String(baseRules.chunk_overlap ?? baseRules.chunkOverlap),
             retainImages: toBoolean(baseRules.retain_images ?? baseRules.retainImages),
             forceOcr: toBoolean(baseRules.force_ocr ?? baseRules.forceOcr),
             enableFormula: toBoolean(baseRules.enable_formula ?? baseRules.enableFormula),
             pageHeaderFooter: toBoolean(baseRules.filter_page_header_footer ?? baseRules.pageHeaderFooter ?? false),
-            hierarchyLevel: String(baseRules.hierarchy_level ?? baseRules.hierarchyLevel ?? "3"),
+            hierarchyLevel: String(baseRules.hierarchy_level ?? baseRules.hierarchyLevel),
             appendTitle: toBoolean(baseRules.append_title ?? baseRules.appendTitle ?? false),
-            maxChunkSize: String(baseRules.max_chunk_size ?? baseRules.maxChunkSize ?? "1000"),
+            maxChunkSize: String(baseRules.max_chunk_size ?? baseRules.maxChunkSize),
         };
     }, [isAdjustMode, parsedOriginalSplitRule, rules]);
 
@@ -193,7 +197,7 @@ export default function RuleFile({
                             />
                             <Label htmlFor="retainImages" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                 {t('keepImages')}
-                                <QuestionTooltip className="text-[#999999]" content={t('retainImagesTooltip')} />
+                                <KnowledgeHint className="text-[#999999]" content={t('retainImagesTooltip')} />
                             </Label>
                         </div>
 
@@ -211,7 +215,7 @@ export default function RuleFile({
                                         />
                                         <Label htmlFor="forceOcr" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                             {t('ocrForce')}
-                                            <QuestionTooltip className="text-[#999999]" content={t('ocrForceTip')} />
+                                            <KnowledgeHint className="text-[#999999]" content={t('ocrForceTip')} />
                                         </Label>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -230,7 +234,7 @@ export default function RuleFile({
                                         />
                                         <Label htmlFor="pageHeaderFooter" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                             {t('hfFilter')}
-                                            <QuestionTooltip className="text-[#999999]" content={t('hfFilterTooltip')} />
+                                            <KnowledgeHint className="text-[#999999]" content={t('hfFilterTooltip')} />
                                         </Label>
                                     </div>
                                 </div>
@@ -261,8 +265,8 @@ export default function RuleFile({
                                 <div className="mb-1 flex items-start justify-between">
                                     <span className="text-[14px] text-gray-800" style={mediumTitleStyle}>{mode.title}</span>
                                     {internalValues.splitMode === mode.id
-                                        ? <CheckCircle2 className="size-5 shrink-0 text-primary" />
-                                        : <Circle className="size-5 shrink-0 text-gray-200" />
+                                        ? <Outlined.CheckCircle className="size-5 shrink-0 text-primary" />
+                                        : <Outlined.Round className="size-5 shrink-0 text-gray-200" />
                                     }
                                 </div>
                                 <p className="text-[14px] leading-relaxed text-gray-500 break-words">
@@ -278,18 +282,9 @@ export default function RuleFile({
                                 <div className="flex items-center gap-3">
                                     <Label className="whitespace-nowrap text-sm text-gray-600 min-w-[90px]">{t('splitLength')}</Label>
                                     <div className="flex h-9 overflow-hidden rounded-md border border-input bg-white">
-                                        <Input
-                                            type="number"
-                                            step="100"
-                                            min={0}
-                                            value={internalValues.chunkSize}
-                                            onChange={(e) => handleSettingChange('chunkSize', e)}
-                                            boxClassName="w-[150px]"
-                                            className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-                                            onBlur={(e) => {
+                                        <Input type="number" step="100" min={0} value={internalValues.chunkSize} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; return handleSettingChange('chunkSize', e); }} onBlur={(e) => {
                                                 if (!e.target.value) handleSettingChange('chunkSize', { target: { value: '1000' } });
-                                            }}
-                                        />
+                                            }} className={["w-[150px]", "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"].filter(Boolean).join(" ")} />
                                         <div className="pointer-events-none flex items-center border-l border-[#ebecf0] bg-white px-3 text-sm text-[#9ca3af]">
                                             {t('characters')}
                                         </div>
@@ -298,18 +293,9 @@ export default function RuleFile({
                                 <div className="flex items-center gap-3">
                                     <Label className="whitespace-nowrap text-sm text-gray-600 min-w-[90px]">{t('chunkOverlap')}</Label>
                                     <div className="flex h-9 overflow-hidden rounded-md border border-input bg-white">
-                                        <Input
-                                            type="number"
-                                            step="10"
-                                            min={0}
-                                            value={internalValues.chunkOverlap}
-                                            onChange={(e) => handleSettingChange('chunkOverlap', e)}
-                                            boxClassName="w-[150px]"
-                                            className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-                                            onBlur={(e) => {
+                                        <Input type="number" step="10" min={0} value={internalValues.chunkOverlap} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; return handleSettingChange('chunkOverlap', e); }} onBlur={(e) => {
                                                 if (!e.target.value) handleSettingChange('chunkOverlap', { target: { value: '0' } });
-                                            }}
-                                        />
+                                            }} className={["w-[150px]", "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"].filter(Boolean).join(" ")} />
                                         <div className="pointer-events-none flex items-center border-l border-[#ebecf0] bg-white px-3 text-sm text-[#9ca3af]">
                                             {t('characters')}
                                         </div>
@@ -326,20 +312,9 @@ export default function RuleFile({
                                             {t('splitLength')}
                                         </Label>
                                         <div className="flex h-9 overflow-hidden rounded-md border border-input bg-white">
-                                            <Input
-                                                id="splitLength"
-                                                type="number"
-                                                step="100"
-                                                min={0}
-                                                value={internalValues.chunkSize}
-                                                onChange={(e) => handleSettingChange('chunkSize', e)}
-                                                placeholder={t('splitSizePlaceholder')}
-                                                boxClassName="w-[150px]"
-                                                className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-                                                onBlur={(e) => {
+                                            <Input id="splitLength" type="number" step="100" min={0} value={internalValues.chunkSize} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; return handleSettingChange('chunkSize', e); }} placeholder={t('splitSizePlaceholder')} onBlur={(e) => {
                                                     if (!e.target.value) handleSettingChange('chunkSize', { target: { value: '1000' } });
-                                                }}
-                                            />
+                                                }} className={["w-[150px]", "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"].filter(Boolean).join(" ")} />
                                             <div className="pointer-events-none flex items-center border-l border-[#ebecf0] bg-white px-3 text-sm text-[#9ca3af]">
                                                 {t('characters')}
                                             </div>
@@ -351,20 +326,9 @@ export default function RuleFile({
                                             {t('chunkOverlap')}
                                         </Label>
                                         <div className="flex h-9 overflow-hidden rounded-md border border-input bg-white">
-                                            <Input
-                                                id="chunkOverlap"
-                                                type="number"
-                                                step="10"
-                                                min={0}
-                                                value={internalValues.chunkOverlap}
-                                                onChange={(e) => handleSettingChange('chunkOverlap', e)}
-                                                placeholder={t('chunkOverlapPlaceholder')}
-                                                boxClassName="w-[150px]"
-                                                className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-                                                onBlur={(e) => {
+                                            <Input id="chunkOverlap" type="number" step="10" min={0} value={internalValues.chunkOverlap} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; return handleSettingChange('chunkOverlap', e); }} placeholder={t('chunkOverlapPlaceholder')} onBlur={(e) => {
                                                     if (!e.target.value) handleSettingChange('chunkOverlap', { target: { value: '0' } });
-                                                }}
-                                            />
+                                                }} className={["w-[150px]", "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"].filter(Boolean).join(" ")} />
                                             <div className="pointer-events-none flex items-center border-l border-[#ebecf0] bg-white px-3 text-sm text-[#9ca3af]">
                                                 {t('characters')}
                                             </div>
@@ -386,21 +350,12 @@ export default function RuleFile({
                                         </Label>
                                         <div className="flex items-center gap-2">
                                             <div className="flex h-9 overflow-hidden rounded-md border border-input bg-white">
-                                                <Input
-                                                    id="hierarchyLevel"
-                                                    type="number"
-                                                    min={1}
-                                                    max={5}
-                                                    value={internalValues.hierarchyLevel}
-                                                    onChange={(e) => handleSettingChange('hierarchyLevel', e)}
-                                                    boxClassName="w-[120px]"
-                                                    className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-                                                />
+                                                <Input id="hierarchyLevel" type="number" min={1} max={5} value={internalValues.hierarchyLevel} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 1, max: 5 })) return; return handleSettingChange('hierarchyLevel', e); }} className={["w-[120px]", "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"].filter(Boolean).join(" ")} />
                                                 <div className="pointer-events-none flex items-center border-l border-[#ebecf0] bg-white px-3 text-sm text-[#9ca3af]">
                                                     {t('layer')}
                                                 </div>
                                             </div>
-                                            <QuestionTooltip
+                                            <KnowledgeHint
                                                 className="text-[#999]"
                                                 content={renderTooltipWithImage(
                                                     splitLevelTooltipImageSrc,
@@ -417,16 +372,7 @@ export default function RuleFile({
                                         </Label>
                                         <div className="flex items-center gap-2">
                                             <div className="flex h-9 overflow-hidden rounded-md border border-input bg-white">
-                                                <Input
-                                                    id="maxChunkSize"
-                                                    type="number"
-                                                    step="100"
-                                                    min={0}
-                                                    value={internalValues.maxChunkSize}
-                                                    onChange={(e) => handleSettingChange('maxChunkSize', e)}
-                                                    boxClassName="w-[150px]"
-                                                    className="h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"
-                                                />
+                                                <Input id="maxChunkSize" type="number" step="100" min={0} value={internalValues.maxChunkSize} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; return handleSettingChange('maxChunkSize', e); }} className={["w-[150px]", "h-full rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0"].filter(Boolean).join(" ")} />
                                                 <div className="pointer-events-none flex items-center border-l border-[#ebecf0] bg-white px-3 text-sm text-[#9ca3af]">
                                                     {t('characters')}
                                                 </div>
@@ -443,7 +389,7 @@ export default function RuleFile({
                                     />
                                     <Label htmlFor="appendTitle" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                         {t('appendTitle')}
-                                        <QuestionTooltip
+                                        <KnowledgeHint
                                             className="text-[#999]"
                                             content={renderTooltipWithImage(appendTitleTooltipImageSrc, 'appendTitleTooltipImageAlt')}
                                         />

@@ -1,23 +1,18 @@
 // @ts-strict-ignore
 import { FileIcon } from "@/components/bs-icons/file";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/bs-ui/select";
-import { delChunkInPreviewApi, previewFileSplitApi, updatePreviewChunkApi } from "@/controllers/API";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Select } from "@bisheng/ui";
+import { delChunkInPreviewApi,previewFileSplitApi,updatePreviewChunkApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { cn } from "@/util/utils";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useParams } from "react-router-dom";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewFile from "./PreviewFile";
 import PreviewParagraph from "./PreviewParagraph";
-import { buildMediaUploadPreviewData, isMediaUploadSuffix, type RichPreviewData } from "./RichPreviewFile";
-import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
+import { buildMediaUploadPreviewData,isMediaUploadSuffix,type RichPreviewData } from "./RichPreviewFile";
 
 interface IProps {
   rules: any;
@@ -30,15 +25,17 @@ interface IProps {
   kId?: string | number;
   showPreview?: boolean;
   onDeleteFile?: (filePath: string) => void;
+  onFileTypeChange?: (fileType: 'file' | 'table') => void;
 }
 export type Partition = {
   [key in string]: { text: string, type: string, part_id: string }
 }
 export default function PreviewResult({
-  showPreview, previewCount, rules, resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile
+  showPreview, previewCount, rules, resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile, onFileTypeChange
 }: IProps) {
   const { id } = useParams()
   const { t } = useTranslation(['knowledge', 'bs']);
+  const selectLabels = useSelectLabels();
 
   const [chunks, setChunks] = useState([]) // 当前文件分块
   const [partitions, setPartitions] = useState<Partition>(null) // 当前文件分区
@@ -51,23 +48,10 @@ export default function PreviewResult({
     const file = rules.fileList[0]
     setSelectId(file.id)
   }, [])
-  const currentFile = useMemo(() => {  // 当前选择文件
-    const _currentFile = rules.fileList.find(file => file.id === selectId)
-    // 触发keydown事件,切换tab
-    if (_currentFile) {
-      const dom = document.getElementById(_currentFile.fileType === 'table' ? 'knowledge_table_tab' : 'knowledge_file_tab')
-      const keydownEvent = new KeyboardEvent('keydown', {
-        key: 'Enter',
-        code: 'Enter',
-        keyCode: 13,
-        which: 13,
-        bubbles: true,
-        cancelable: true
-      });
-      dom && dom.dispatchEvent(keydownEvent);
-    }
-    return _currentFile
-  }, [selectId])
+  const currentFile = useMemo(() => rules.fileList.find(file => file.id === selectId), [rules.fileList, selectId])
+  useEffect(() => {
+    if (currentFile) onFileTypeChange?.(currentFile.fileType === 'table' ? 'table' : 'file')
+  }, [currentFile?.fileType, selectId, onFileTypeChange])
   const [fileViewUrl, setFileViewUrl] = useState<{ load: boolean; url: string }>({ load: true, url: '' }) // 当前选择文件预览url
 
   const [loading, setLoading] = useState(false)
@@ -240,21 +224,21 @@ export default function PreviewResult({
       {/* 下拉框 - 右上角 */}
       {(step === 3 || (step === 2 && showPreview)) && (
         <div className="flex justify-end">
-          <Select value={selectId} onValueChange={setSelectId}>
-            <SelectTrigger className="w-72">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {rules.fileList.map((file, index) => (
-                <SelectItem key={file.id} value={file.id}>
-                  <div className="flex items-center gap-2">
-                    <FileIcon type={file.suffix} className="size-4 min-w-4" />
-                    {file.fileName}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Select
+            {...selectLabels}
+            className="w-72"
+            aria-label={t('selectFile')}
+            options={rules.fileList
+              .filter(file => file.id != null && file.id !== '')
+              .map(file => ({
+                value: file.id,
+                label: String(file.fileName ?? ''),
+                icon: <FileIcon type={file.suffix} className="size-4 min-w-4" />,
+              }))}
+            value={selectId || null}
+            // Keep the raw id: currentFile is found by strict equality.
+            onChange={(value) => setSelectId(value == null ? '' : value as string)}
+          />
         </div>)
       }
       {/* 其他内容 */}

@@ -250,6 +250,8 @@ export type SubmissionState = {
     model: string;
     /** F035 Track H: skill names picked in the task-mode input (enabled skills only). */
     skills?: string[];
+    /** Skill rows the user checked. Same order as `skills`. */
+    skill_ids?: number[];
     enableWebSearch: boolean;
     useKnowledgeBase: boolean;
     prevVersionId?: string;
@@ -287,6 +289,7 @@ export type TaskModeToolItem = {
 };
 
 export type TaskModeSkill = {
+    id?: number;
     name: string;
     display_name: string;
     description?: string;

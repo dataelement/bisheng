@@ -1,5 +1,4 @@
 // @ts-strict-ignore
-import { message } from '@/components/bs-ui/toast/use-toast';
 import { generateUUID } from '@/components/bs-ui/utils';
 import { getChatHistory } from '@/controllers/API';
 import { WorkflowMessage } from '@/types/flow';

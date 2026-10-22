@@ -1,34 +1,36 @@
-import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
+import { Button } from '@bisheng/ui';
+import { Tag } from "@bisheng/ui";
+
+
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/bs-ui/table"
-import { listGatewayOrgSyncLogsApi } from "@/controllers/API/orgSync"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { OrgSyncLog } from "@/types/api/orgSync"
-import { formatIsoDateTime } from "@/util/utils"
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { GatewayLogDetailDialog } from "./GatewayLogDetailDialog"
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow,
+} from "@/components/bs-ui/table";
+import { listGatewayOrgSyncLogsApi } from "@/controllers/API/orgSync";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { OrgSyncLog } from "@/types/api/orgSync";
+import { formatIsoDateTime } from "@/util/utils";
+import { useCallback,useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { GatewayLogDetailDialog } from "./GatewayLogDetailDialog";
 
 const PAGE_SIZE = 20
 
 function RunStatusBadge({ status }: { status: string | null | undefined }) {
   const { t } = useTranslation("orgSync")
   if (!status) return <span className="text-muted-foreground">-</span>
-  const variantMap: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    success: "default",
-    partial: "secondary",
-    failed: "destructive",
-    running: "outline",
+  const variantMap: Record<string, "success" | "warning" | "danger" | "brand"> = {
+    success: "success",
+    partial: "warning",
+    failed: "danger",
+    running: "brand",
   }
   const label = t(`runStatus.${status}`, status)
-  return <Badge variant={variantMap[status] || "outline"}>{label}</Badge>
+  return <Tag size="small" dot color={variantMap[status] || "default"}>{label}</Tag>
 }
 
 function hasErrorDetails(log: OrgSyncLog): boolean {
@@ -128,17 +130,13 @@ export default function OrgSync() {
                   </TableCell>
                   <TableCell>
                     {hasErrorDetails(log) ? (
-                      <Badge variant="destructive">{t("columns.yes")}</Badge>
+                      <Tag size="small" dot color="danger">{t("columns.yes")}</Tag>
                     ) : (
                       <span className="text-muted-foreground">{t("columns.no")}</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setDetailLog(log)}
-                    >
+                    <Button size="small" variant="outlined" onClick={() => setDetailLog(log)} color="default">
                       {t("actions.viewDetail")}
                     </Button>
                   </TableCell>
@@ -156,20 +154,10 @@ export default function OrgSync() {
             {t("pagination.pageOf", { page, maxPage })}
           </span>
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page <= 1 || loading}
-              onClick={goPrev}
-            >
+            <Button size="small" variant="outlined" disabled={page <= 1 || loading} onClick={goPrev} color="default">
               {t("pagination.prev")}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page >= maxPage || loading}
-              onClick={goNext}
-            >
+            <Button size="small" variant="outlined" disabled={page >= maxPage || loading} onClick={goNext} color="default">
               {t("pagination.next")}
             </Button>
           </div>
