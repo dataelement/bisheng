@@ -57,6 +57,7 @@ class PodPlan:
     uid: int = 10001
     gid: int = 10001
     mode: str = "bundle"
+    runtime_language: str = ""
     port: int = 8080
     health_path: str = "/health"
     pvc_name: str = ""
@@ -92,7 +93,12 @@ class PodPlan:
         ):
             if type(value) is not int or not 0 < value <= 2**31 - 1:
                 raise ValueError("k8s_resources_or_identity_invalid")
-        if self.platform not in {"linux/amd64", "linux/arm64"} or self.mode not in {"bundle", "image"}:
+        if (
+            self.platform not in {"linux/amd64", "linux/arm64"}
+            or self.mode not in {"bundle", "image"}
+            or not isinstance(self.runtime_language, str)
+            or self.runtime_language not in {"", "python3.11", "node20", "static"}
+        ):
             raise ValueError("k8s_profile_invalid")
         if self.purpose not in PURPOSES:
             raise ValueError("k8s_purpose_invalid")
@@ -418,6 +424,11 @@ def pod_template(plan: PodPlan) -> dict:
                     _mount("environment", "/opt/venv", readonly=True),
                 ]
             app = _container(plan, "app", command=plan.command, mounts=mounts, env=plan.env)
+            if plan.mode == "bundle" and plan.runtime_language == "static":
+                # Pod command replaces OCI ENTRYPOINT, unlike Docker's Cmd.
+                # Retain the fixed runtime wrapper and pass the frozen argv as args.
+                app["command"] = ["/opt/bisheng/entrypoint.sh"]
+                app["args"] = list(plan.command)
             app["env"].extend(
                 {"name": key, "valueFrom": {"secretKeyRef": {"name": plan.app_secret, "key": key}}}
                 for key in sorted(plan.secret_env)
