@@ -1508,3 +1508,80 @@ def test_rbac_can_i_distinguishes_subresources_from_named_parent_resources(monke
     )
     assert command[-2:] == ["-n", "runtime-apps"]
     assert "system:serviceaccount:runtime-system:runtime-manager" in command
+
+
+@pytest.mark.parametrize(
+    "identities",
+    [
+        None,
+        [
+            "system:serviceaccount:kube-system:persistent-volume-binder",
+            "system:serviceaccount:kube-system:pvc-protection-controller",
+        ],
+    ],
+)
+def test_chart_storage_controller_identities_are_shared_by_admission_and_report(values, tmp_path, identities):
+    from runtime_manager.k8s_capabilities import REQUIRED_CHECKS, assess_capabilities, descriptor_digest
+
+    default = ["system:kube-controller-manager", "system:kube-scheduler"]
+    if identities is not None:
+        values["execution"]["storageControllerUsernames"] = identities
+
+    def rendered():
+        documents = render(values, tmp_path)
+        cm = next(
+            row
+            for row in documents
+            if row["kind"] == "ConfigMap" and row["metadata"]["name"] == "runtime-deployment-descriptor"
+        )
+        deployment = next(
+            row for row in documents if row["kind"] == "Deployment" and row["metadata"]["name"] == "runtime-admission"
+        )
+        environment = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+        raw = next(row["value"] for row in environment if row["name"] == "RTM_STORAGE_CONTROLLER_USERNAMES")
+        return json.loads(cm["data"]["descriptor.json"]), json.loads(raw)
+
+    document, configured = rendered()
+    assert configured == document["storage_controller_usernames"] == (identities if identities is not None else default)
+    initial_digest = descriptor_digest(document)
+    values["execution"]["probeReport"] = {
+        "source": "cluster-probe",
+        "observed_at": 1000,
+        "descriptor_digest": initial_digest,
+        "checks": [{"name": name, "ok": True, "evidence": {"uid": str(uuid4())}} for name in REQUIRED_CHECKS],
+    }
+    verified, _ = rendered()
+    assert descriptor_digest(verified) == initial_digest
+    assert assess_capabilities(verified, now=1001)["ready"]
+    values["execution"]["storageControllerUsernames"] = ["system:serviceaccount:kube-system:replacement-volume-binder"]
+    changed, configured = rendered()
+    assert configured == changed["storage_controller_usernames"] == values["execution"]["storageControllerUsernames"]
+    assert {key: value for key, value in changed.items() if key != "storage_controller_usernames"} == {
+        key: value for key, value in verified.items() if key != "storage_controller_usernames"
+    }
+    assert descriptor_digest(changed) != initial_digest
+    assert not assess_capabilities(changed, now=1001)["ready"]
+
+
+@pytest.mark.parametrize(
+    "identities",
+    [
+        [],
+        [""],
+        ["alice"],
+        ["system:anonymous"],
+        ["system:authenticated"],
+        ["system:serviceaccounts"],
+        ["system:node:worker-a"],
+        ["system:serviceaccount:BadNamespace:pvc-binder"],
+        ["system:serviceaccount:kube-system:-binder"],
+        ["system:serviceaccount:kube-system:binder..controller"],
+        ["system:serviceaccount:kube-system:"],
+        ["system:kube-scheduler", "system:kube-scheduler"],
+        [7],
+        {"controller": "system:kube-controller-manager"},
+    ],
+)
+def test_chart_refuses_empty_foreign_ambiguous_or_duplicate_storage_identities(values, tmp_path, identities):
+    values["execution"]["storageControllerUsernames"] = identities
+    render(values, tmp_path, expect_success=False)
