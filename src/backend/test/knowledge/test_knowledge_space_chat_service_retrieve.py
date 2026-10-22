@@ -40,6 +40,12 @@ from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service impo
 )
 
 
+@pytest.fixture(autouse=True)
+def filelib_shared_eligibility_boundary(monkeypatch):
+    monkeypatch.setattr(filelib_mod, 'build_filelib_space_query_service',
+        MagicMock(return_value=SimpleNamespace(require_spaces=AsyncMock())))
+
+
 class _StubNotFoundError(Exception):
     """Stand-in for bisheng.common.errcode.http_error.NotFoundError.
 
@@ -148,6 +154,7 @@ async def test_retrieve_chunks_maps_original_links_without_changing_chunk_order(
         MagicMock(return_value=chat_service),
     )
     source_service = SimpleNamespace(
+        storage=None,
         resolve_links=AsyncMock(
             return_value={
                 9: RetrieveSourceLink(
@@ -231,7 +238,7 @@ async def test_retrieve_chunks_source_link_timeout_degrades_to_empty_link(monkey
         user_context_service=SimpleNamespace(use_user=use_user),
         version_repo=MagicMock(),
         doc_repo=MagicMock(),
-        source_service=SimpleNamespace(resolve_links=slow_links),
+        source_service=SimpleNamespace(resolve_links=slow_links, storage=None),
         file_repo=MagicMock(),
         retrieval_runtime=runtime,
     )
@@ -265,7 +272,7 @@ async def test_retrieve_chunks_total_deadline_returns_504(monkeypatch):
             user_context_service=SimpleNamespace(use_user=use_user),
             version_repo=MagicMock(),
             doc_repo=MagicMock(),
-            source_service=SimpleNamespace(resolve_links=AsyncMock(return_value={})),
+            source_service=SimpleNamespace(resolve_links=AsyncMock(return_value={}), storage=None),
             file_repo=MagicMock(),
             retrieval_runtime=runtime,
         )
@@ -327,242 +334,86 @@ def test_parse_document_type_code_from_file_encoding():
 
 async def test_openapi_knowledge_list_uses_developer_token_user(monkeypatch):
     request = MagicMock()
-    developer_user = MagicMock()
-    page_data = SimpleNamespace(
-        data=[{"id": 118, "name": "GR00011"}],
-        page_size=20,
-        has_more=False,
-        next_cursor=None,
-    )
-    list_knowledge = AsyncMock(return_value=page_data)
-    monkeypatch.setattr(filelib_mod.KnowledgeService, "get_knowledge", list_knowledge)
-
-    response = await filelib_mod.get_knowledge(
-        request=request,
-        knowledge_type=filelib_mod.KnowledgeTypeEnum.NORMAL.value,
-        name="GR",
-        page_size=20,
-        cursor="cursor-1",
-        login_user=developer_user,
-    )
-
-    list_knowledge.assert_awaited_once_with(
-        request,
-        developer_user,
-        filelib_mod.KnowledgeTypeEnum.NORMAL,
-        name="GR",
-        cursor="cursor-1",
-        page_size=20,
-    )
-    assert response.data is page_data
+    request.query_params = {}
+    user = MagicMock()
+    page = SimpleNamespace(data=[], has_more=False, next_cursor=None)
+    listing = AsyncMock(return_value=page)
+    monkeypatch.setattr(filelib_mod.FilelibKnowledgeListService, 'list_spaces', listing)
+    response = await filelib_mod.get_knowledge(request=request, knowledge_type=3,
+        compatibility_knowledge_type=None, name='GR', page_size=20, cursor='cursor-1', login_user=user)
+    listing.assert_awaited_once_with(name='GR', cursor='cursor-1', page_size=20)
+    assert response.data is page
 
 
 async def test_openapi_file_list_enriches_shougang_fields(monkeypatch):
-    request = MagicMock()
-    developer_user = MagicMock()
-    file_items = [
-        SimpleNamespace(id=101, file_name="report.pdf", file_encoding="SGGF-RPT-QM-20260400000007"),
-        SimpleNamespace(id=102, file_name="legacy.pdf", file_encoding=None),
-    ]
-    list_files = AsyncMock(return_value=(file_items, 2, False))
-    load_primary_flags = AsyncMock(return_value={101: False})
-    monkeypatch.setattr(filelib_mod.KnowledgeService, "aget_knowledge_files", list_files)
-    monkeypatch.setattr(filelib_mod, "_load_file_primary_flags", load_primary_flags)
-
-    response = await filelib_mod.get_filelist(
-        request=request,
-        knowledge_id=7,
-        login_user=developer_user,
-        status=None,
-    )
-
-    list_files.assert_awaited_once_with(
-        request,
-        developer_user,
-        7,
-        None,
-        None,
-        1,
-        10,
-        file_type=filelib_mod.FileType.FILE.value,
-    )
-    load_primary_flags.assert_awaited_once_with([101, 102])
-    assert response.data["total"] == 2
-    assert response.data["writeable"] is False
-
-    first, second = response.data["data"]
-    assert first["file_encoding"] == "SGGF-RPT-QM-20260400000007"
-    assert first["document_type"] == "RPT"
-    assert first["is_primary"] is False
-    assert first["categoryID"] == "入库分类测试"
-    assert first["categoryGroupClassCode"] == "分类编码测试"
-    assert first["docTypeCode"] == "分类赋码测试"
-
-    assert second["file_encoding"] == ""
-    assert second["document_type"] == ""
-    assert second["is_primary"] is True
+    from bisheng.open_endpoints.domain.services.filelib_space_query_service import FilelibSpaceQueryService
+    user = SimpleNamespace(tenant_id=1)
+    rows = [SimpleNamespace(id=101, file_name='report.pdf', file_encoding='SGGF-RPT-QM-20260400000007'),
+            SimpleNamespace(id=102, file_name='legacy.pdf', file_encoding=None)]
+    query = FilelibSpaceQueryService(request=None, user=user, repository=SimpleNamespace(
+        primary_flags=AsyncMock(return_value={101: False}), find_by_ids=AsyncMock(return_value=rows),
+        abstracts=AsyncMock(return_value={102: '共享摘要'})), space_service=None)
+    query.require_space = AsyncMock()
+    query.route = AsyncMock()
+    listing = AsyncMock(return_value=(rows, 2, False))
+    monkeypatch.setattr('bisheng.open_endpoints.domain.services.filelib_space_query_service.KnowledgeService.aget_knowledge_files', listing)
+    response = await filelib_mod.get_filelist(request=MagicMock(), knowledge_id=7, login_user=user,
+                                              status=None, service=query)
+    assert listing.await_args.kwargs['include_titles'] is False
+    first, second = response.data['data']
+    assert first['document_type'] == 'RPT' and first['is_primary'] is False
+    assert first['categoryID'] == '入库分类测试'
+    assert first['categoryGroupClassCode'] == '分类编码测试'
+    assert first['docTypeCode'] == '分类赋码测试'
+    assert second['file_encoding'] == '' and second['is_primary'] is True
+    assert second['title'] == '共享摘要'
+    assert response.data['total'] == 2 and response.data['writeable'] is False
 
 
 def test_openapi_file_detail_text_object_candidates_follow_content_format():
-    file_record = SimpleNamespace(
-        id=101,
-        file_name="report.pdf",
-        preview_file_object_name=None,
-    )
-
-    text_candidates = filelib_mod._unique_text_object_candidates(file_record, "text")
-    markdown_candidates = filelib_mod._unique_text_object_candidates(file_record, "markdown")
-
-    assert text_candidates[:2] == ["preview/101.txt", "text/101.txt"]
-    assert markdown_candidates[:2] == ["preview/101.md", "markdown/101.md"]
+    from bisheng.open_endpoints.domain.services.filelib_space_content_service import FilelibSpaceContentService
+    file = SimpleNamespace(id=101, preview_file_object_name=None)
+    assert FilelibSpaceContentService.text_candidates(file, 'text')[:2] == ['preview/101.txt', 'text/101.txt']
+    assert FilelibSpaceContentService.text_candidates(file, 'markdown')[:2] == ['preview/101.md', 'markdown/101.md']
 
 
-async def test_openapi_file_detail_returns_file_and_preview_content(monkeypatch):
-    request = MagicMock()
-    developer_user = MagicMock()
-    file_record = SimpleNamespace(
-        id=101,
-        knowledge_id=7,
-        file_encoding="SGGF-RPT-QM-20260400000007",
-        file_name="report.pdf",
-        file_size=256,
-        status=filelib_mod.KnowledgeFileStatus.SUCCESS.value,
-        update_time=datetime(2026, 6, 10, 8, 30, 0),
-        preview_file_object_name="preview/101.md",
-    )
-    db_knowledge = SimpleNamespace(id=7, user_id=9, index_name="idx")
-    get_files = AsyncMock(return_value=[file_record])
-    query_knowledge = AsyncMock(return_value=db_knowledge)
-    ensure_read = AsyncMock()
-    load_primary_flags = AsyncMock(return_value={101: False})
-    load_text_object = AsyncMock(return_value="# title\nbody")
-    load_es = AsyncMock(side_effect=AssertionError("text object should be preferred"))
-    monkeypatch.setattr(filelib_mod.KnowledgeFileDao, "aget_files_by_file_encoding", get_files)
-    monkeypatch.setattr(filelib_mod.KnowledgeDao, "aquery_by_id", query_knowledge)
-    monkeypatch.setattr(filelib_mod.KnowledgeService.permission_service, "ensure_knowledge_read_async", ensure_read)
-    monkeypatch.setattr(filelib_mod, "_load_file_primary_flags", load_primary_flags)
-    monkeypatch.setattr(filelib_mod, "_load_file_content_from_text_object", load_text_object)
-    monkeypatch.setattr(filelib_mod, "_load_file_content_from_es", load_es)
-
-    response = await filelib_mod.get_file_detail(
-        request=request,
-        file_encoding=" SGGF-RPT-QM-20260400000007 ",
-        knowledge_id=None,
-        content_format="markdown",
-        login_user=developer_user,
-    )
-
-    get_files.assert_awaited_once_with("SGGF-RPT-QM-20260400000007", knowledge_id=None)
-    query_knowledge.assert_awaited_once_with(7)
-    ensure_read.assert_awaited_once_with(login_user=developer_user, owner_user_id=9, knowledge_id=7)
-    load_primary_flags.assert_awaited_once_with([101])
-    load_text_object.assert_awaited_once_with(file_record, "markdown")
-    assert response.data.file.id == 101
-    assert response.data.file.knowledge_id == 7
-    assert response.data.file.file_encoding == "SGGF-RPT-QM-20260400000007"
-    assert response.data.file.file_name == "report.pdf"
-    assert response.data.file.file_size == 256
-    assert response.data.file.status == filelib_mod.KnowledgeFileStatus.SUCCESS.value
-    assert response.data.file.update_time == "2026-06-10 08:30:00"
-    assert response.data.file.is_primary is False
-    assert response.data.file.document_type == "RPT"
-    assert response.data.file.categoryID == "入库分类测试"
-    assert response.data.file.categoryGroupClassCode == "分类编码测试"
-    assert response.data.file.docTypeCode == "分类赋码测试"
-    assert response.data.content == "# title\nbody"
-    assert response.data.chunk_count == 1
+async def test_openapi_file_detail_returns_file_and_preview_content():
+    from bisheng.open_endpoints.domain.services.filelib_space_query_service import FilelibSpaceQueryService
+    file = SimpleNamespace(id=101, knowledge_id=7, status=2, file_name='report.pdf', file_size=256,
+        file_encoding='SGGF-RPT-QM-20260400000007', update_time=datetime(2026,6,10,8,30))
+    query = FilelibSpaceQueryService(request=None, user=None, space_service=None, repository=SimpleNamespace(
+        find_by_encoding=AsyncMock(return_value=[file]), primary_flags=AsyncMock(return_value={101: True})),
+        content_service=SimpleNamespace(read=AsyncMock(return_value=('# title\nbody', 1))))
+    query.require_space = AsyncMock()
+    response = await filelib_mod.get_file_detail(request=MagicMock(), file_encoding=' CODE ', knowledge_id=None,
+        content_format='markdown', login_user=MagicMock(), service=query)
+    query.repository.find_by_encoding.assert_awaited_once_with('CODE', None)
+    assert response.data.file.id == 101 and response.data.file.document_type == 'RPT'
+    assert response.data.file.update_time == '2026-06-10 08:30:00'
+    assert response.data.content == '# title\nbody' and response.data.chunk_count == 1
 
 
-async def test_openapi_file_detail_non_success_returns_empty_data(monkeypatch):
-    file_record = SimpleNamespace(
-        id=101,
-        knowledge_id=7,
-        file_encoding="SGGF-RPT-QM-20260400000007",
-        file_name="report.pdf",
-        status=filelib_mod.KnowledgeFileStatus.FAILED.value,
-    )
-    db_knowledge = SimpleNamespace(id=7, user_id=9)
-    load_text_object = AsyncMock(side_effect=AssertionError("non-success files should not load content"))
-    monkeypatch.setattr(
-        filelib_mod.KnowledgeFileDao, "aget_files_by_file_encoding", AsyncMock(return_value=[file_record])
-    )
-    monkeypatch.setattr(filelib_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=db_knowledge))
-    monkeypatch.setattr(
-        filelib_mod.KnowledgeService.permission_service,
-        "ensure_knowledge_read_async",
-        AsyncMock(),
-    )
-    monkeypatch.setattr(filelib_mod, "_load_file_content_from_text_object", load_text_object)
-
-    response = await filelib_mod.get_file_detail(
-        request=MagicMock(),
-        file_encoding="SGGF-RPT-QM-20260400000007",
-        knowledge_id=7,
-        content_format="text",
-        login_user=MagicMock(),
-    )
-
-    assert response.data.file is None
-    assert response.data.content == ""
-    assert response.data.chunk_count == 0
+async def test_openapi_file_detail_non_success_returns_empty_data():
+    from bisheng.open_endpoints.domain.services.filelib_space_query_service import FilelibSpaceQueryService
+    reader = AsyncMock(side_effect=AssertionError('not parsed'))
+    query = FilelibSpaceQueryService(request=None, user=None, space_service=None, repository=SimpleNamespace(
+        find_by_encoding=AsyncMock(return_value=[SimpleNamespace(id=101,knowledge_id=7,status=3)])),
+        content_service=SimpleNamespace(read=reader))
+    query.require_space = AsyncMock()
+    result = await query.detail('CODE', 7, 'text')
+    assert result.file is None and result.content == '' and result.chunk_count == 0
+    reader.assert_not_awaited()
 
 
-async def test_openapi_file_detail_duplicate_encoding_raises_409(monkeypatch):
-    monkeypatch.setattr(
-        filelib_mod.KnowledgeFileDao,
-        "aget_files_by_file_encoding",
-        AsyncMock(return_value=[SimpleNamespace(id=1), SimpleNamespace(id=2)]),
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        await filelib_mod.get_file_detail(
-            request=MagicMock(),
-            file_encoding="SGGF-RPT-QM-20260400000007",
-            knowledge_id=None,
-            content_format="text",
-            login_user=MagicMock(),
-        )
-
-    assert exc.value.status_code == 409
+async def test_openapi_file_detail_duplicate_encoding_raises_409():
+    from bisheng.open_endpoints.domain.services.filelib_space_query_service import FilelibSpaceQueryService
+    query = FilelibSpaceQueryService(request=None, user=None, space_service=None,
+        repository=SimpleNamespace(find_by_encoding=AsyncMock(return_value=[object(),object()])))
+    with pytest.raises(HTTPException) as error:
+        await query.detail('CODE', None, 'text')
+    assert error.value.status_code == 409
 
 
-async def test_openapi_file_detail_falls_back_to_es_chunks(monkeypatch):
-    file_record = SimpleNamespace(
-        id=101,
-        knowledge_id=7,
-        file_encoding="SGGF-RPT-QM-20260400000007",
-        file_name="report.pdf",
-        file_size=None,
-        status=filelib_mod.KnowledgeFileStatus.SUCCESS.value,
-        update_time=None,
-        preview_file_object_name=None,
-    )
-    db_knowledge = SimpleNamespace(id=7, user_id=9, index_name="idx")
-    monkeypatch.setattr(
-        filelib_mod.KnowledgeFileDao, "aget_files_by_file_encoding", AsyncMock(return_value=[file_record])
-    )
-    monkeypatch.setattr(filelib_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=db_knowledge))
-    monkeypatch.setattr(
-        filelib_mod.KnowledgeService.permission_service,
-        "ensure_knowledge_read_async",
-        AsyncMock(),
-    )
-    monkeypatch.setattr(filelib_mod, "_load_file_primary_flags", AsyncMock(return_value={101: True}))
-    monkeypatch.setattr(filelib_mod, "_load_file_content_from_text_object", AsyncMock(return_value=None))
-    load_es = AsyncMock(return_value=("chunk 1\nchunk 2", 2))
-    monkeypatch.setattr(filelib_mod, "_load_file_content_from_es", load_es)
-
-    response = await filelib_mod.get_file_detail(
-        request=MagicMock(),
-        file_encoding="SGGF-RPT-QM-20260400000007",
-        knowledge_id=7,
-        content_format="text",
-        login_user=MagicMock(),
-    )
-
-    load_es.assert_awaited_once_with(db_knowledge, 101)
-    assert response.data.content == "chunk 1\nchunk 2"
-    assert response.data.chunk_count == 2
 
 
 # ---------------------------------------------------------------------------

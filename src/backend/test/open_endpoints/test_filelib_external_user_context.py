@@ -244,6 +244,9 @@ async def test_retrieve_uses_external_user_for_complete_business_call(monkeypatc
         context_events.append(("exit", target_user))
 
     user_context_service = SimpleNamespace(use_user=use_user)
+    shared_guard = SimpleNamespace(require_spaces=AsyncMock())
+    build_guard = MagicMock(return_value=shared_guard)
+    monkeypatch.setattr(filelib_endpoint, 'build_filelib_space_query_service', build_guard)
     chat_service = SimpleNamespace(aretrieve_chunks=AsyncMock(return_value=[]))
     build_service = MagicMock(return_value=chat_service)
     monkeypatch.setattr(
@@ -295,6 +298,8 @@ async def test_retrieve_uses_external_user_for_complete_business_call(monkeypatc
         retrieval_runtime=retrieval_runtime,
     )
     chat_service.aretrieve_chunks.assert_awaited_once()
+    assert build_guard.call_args.kwargs['user'] is target_user
+    shared_guard.require_spaces.assert_awaited_once_with([118])
     assert response.status_code == 200
     assert response.data.total == 0
 

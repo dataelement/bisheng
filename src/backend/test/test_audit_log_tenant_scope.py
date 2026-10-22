@@ -955,6 +955,13 @@ def _patch_session_dao_helpers(monkeypatch, session):
         'bisheng.api.services.audit_log.AppChatList',
         _appchat_passthrough,
     )
+    monkeypatch.setattr(
+        'bisheng.api.services.audit_log.ChatFeedbackService.comments_for_chats',
+        AsyncMock(return_value={
+            'c-1': [{'message_id': 321, 'comment': '请补充出处', 'liked': 0}],
+            'r-1': [{'message_id': 400, 'comment': '其他租户意见', 'liked': 2}],
+        }),
+    )
     # Enrichment lookups → empty lists; we focus on the tenant-scope filter.
     monkeypatch.setattr(
         'bisheng.api.services.audit_log.UserDao.aget_user_by_ids',
@@ -1013,6 +1020,12 @@ class TestGetSessionListServiceEndToEnd:
         assert total == 2
         assert chat_ids == {'c-1', 'c-2'}
         assert 'r-1' not in chat_ids  # the original screenshot bug
+        from bisheng.chat_session.domain.services.chat_feedback_service import ChatFeedbackService
+        assert set(ChatFeedbackService.comments_for_chats.await_args.args[0]) == {'c-1', 'c-2'}
+        commented = next(row for row in rows if row.chat_id == 'c-1')
+        assert commented.comment_count == 1
+        assert commented.feedback_comments == [{'message_id': 321, 'comment': '请补充出处', 'liked': 0}]
+        assert next(row for row in rows if row.chat_id == 'c-2').comment_count == 0
 
     async def test_global_super_sees_all_tenant_sessions(
         self, patch_session_dao, session,

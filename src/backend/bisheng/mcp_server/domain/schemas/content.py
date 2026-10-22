@@ -3,6 +3,7 @@ from typing import Annotated, Any, Literal
 from pydantic import ConfigDict, Field
 
 from bisheng.mcp_server.domain.schemas.browse import Cursor, ResourceId, StrictRequest
+from bisheng.mcp_server.domain.schemas.identity import McpIdentityRequest
 from bisheng.open_endpoints.domain.schemas.filelib import KnowledgeBaseFilter, RetrieveFilters
 
 MaxChars = Annotated[int, Field(strict=True, ge=1, le=50000)]
@@ -18,7 +19,7 @@ class McpRetrieveFilters(RetrieveFilters):
     knowledge_base_filters: list[McpKnowledgeBaseFilter] = Field(default_factory=list, max_length=20)
 
 
-class FileDetailRequest(StrictRequest):
+class FileDetailRequest(McpIdentityRequest):
     knowledge_id: ResourceId
     file_id: ResourceId
     include_content: bool = Field(default=True, strict=True)
@@ -27,7 +28,7 @@ class FileDetailRequest(StrictRequest):
     cursor: Cursor | None = None
 
 
-class FileSourceRequest(StrictRequest):
+class FileSourceRequest(McpIdentityRequest):
     knowledge_id: ResourceId
     file_id: ResourceId
     source_type: Literal["auto", "preview", "original"] = "auto"

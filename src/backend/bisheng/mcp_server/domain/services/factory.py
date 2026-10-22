@@ -7,6 +7,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
 )
@@ -25,11 +26,26 @@ from bisheng.knowledge.domain.services.knowledge_mcp_ingestion_service import Kn
 from bisheng.knowledge.domain.services.knowledge_mcp_query_service import KnowledgeMcpQueryService
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.rag.async_retrieval_runtime import get_async_retrieval_runtime
+from bisheng.mcp_server.domain.schemas.identity import McpExecutionIdentity
 from bisheng.mcp_server.domain.schemas.ingestion import MAX_FILE_BYTES, MAX_TEXT_BYTES
+from bisheng.mcp_server.domain.services.user_context_service import McpUserContextService
 from bisheng.open_endpoints.domain.schemas.filelib import RetrieveReq, RetrieveResp
 from bisheng.open_endpoints.domain.services.filelib_retrieve_service import FilelibRetrieveService
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import FilelibRetrieveSourceService
 from bisheng.open_endpoints.domain.services.filelib_sync_factory import build_knowledge_space_service_for_filelib_sync
+from bisheng.tenant.domain.repositories.implementations.tenant_membership_repository_impl import (
+    TenantMembershipRepositoryImpl,
+)
+from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
+
+
+async def resolve_execution_identity(principal: DeveloperTokenPrincipal, external_id: str) -> McpExecutionIdentity:
+    enabled = settings.multi_tenant.enabled
+    async with get_async_db_session() as session:
+        service = McpUserContextService(
+            UserRepositoryImpl(session), TenantMembershipRepositoryImpl(session), multi_tenant_enabled=enabled
+        )
+        return await service.resolve(principal, external_id)
 
 
 async def get_source_origin() -> str | None:

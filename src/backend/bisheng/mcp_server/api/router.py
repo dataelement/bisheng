@@ -1,4 +1,5 @@
 import logging
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from functools import partial
@@ -22,9 +23,13 @@ from bisheng.core.config.settings import McpServerConf
 from bisheng.mcp_server.api.endpoints.tools import register_tools
 from bisheng.mcp_server.domain.schemas.ingestion import MAX_BODY_BYTES
 from bisheng.mcp_server.domain.services.auth_service import McpAuthService
-from bisheng.mcp_server.domain.services.factory import build_search_service, build_tool_services
+from bisheng.mcp_server.domain.services.factory import (
+    build_search_service,
+    build_tool_services,
+    resolve_execution_identity,
+)
 from bisheng.mcp_server.domain.services.search_service import McpSearchService
-from bisheng.mcp_server.domain.services.tool_runtime import McpToolRuntime
+from bisheng.mcp_server.domain.services.tool_runtime import McpToolRuntime, _execution_audited, audit_execution
 from bisheng.utils import get_request_ip
 
 logger = logging.getLogger(__name__)
@@ -35,16 +40,37 @@ async def get_config() -> McpServerConf:
     return (await settings.get_mcp_conf()).server
 
 
+class AuditedMcpServer(FastMCP):
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        request = self.get_context().request_context.request
+        principal = request.scope.get("state", {}).get("mcp_principal") if request is not None else None
+        started = time.monotonic()
+        audit_token = _execution_audited.set(False)
+        try:
+            return await super().call_tool(name, arguments)
+        finally:
+            try:
+                # SDK 前置拒绝尚未进入业务函数。保留审计但不记录任何参数。
+                if principal is not None and not _execution_audited.get():
+                    known = any(tool.name == name for tool in self._tool_manager.list_tools())
+                    audit_execution(name if known else "unknown_tool", principal, None, "rejected", started)
+            finally:
+                _execution_audited.reset(audit_token)
+
+
 class McpServerApp:
     def __init__(
         self,
         config_provider: Callable[[], Awaitable[McpServerConf]] = get_config,
         search_factory: Callable[..., Any] = build_search_service,
         tool_factory: Callable[..., Any] | None = None,
+        identity_resolver: Callable[..., Any] = resolve_execution_identity,
     ) -> None:
         self.config_provider = config_provider
-        self.search_service = McpSearchService(search_factory)
-        self.tool_runtime = McpToolRuntime(tool_factory or partial(build_tool_services, search_factory=search_factory))
+        self.search_service = McpSearchService(search_factory, identity_resolver)
+        self.tool_runtime = McpToolRuntime(
+            tool_factory or partial(build_tool_services, search_factory=search_factory), identity_resolver
+        )
         self.max_body_bytes = MAX_BODY_BYTES
         self.server: FastMCP | None = None
         self.security: TransportSecuritySettings | None = None
@@ -57,7 +83,7 @@ class McpServerApp:
             return
         # MCP accepts any Host/Origin; token and resource checks remain mandatory.
         self.security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
-        server = FastMCP("Bisheng", stateless_http=True, json_response=True, transport_security=self.security)
+        server = AuditedMcpServer("Bisheng", stateless_http=True, json_response=True, transport_security=self.security)
         register_tools(server, self.search_service, self.tool_runtime)
         server.streamable_http_app()
         self.server = server

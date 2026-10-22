@@ -2,11 +2,17 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from bisheng.database.models.message import ChatMessage, ChatMessageQuery
 from bisheng.database.models.session import MessageSession
 from bisheng.user.domain.models.user import User
+
+
+class AppChatFeedback(BaseModel):
+    message_id: int
+    comment: str
+    liked: int = 0
 
 
 class AppChatList(BaseModel):
@@ -21,6 +27,8 @@ class AppChatList(BaseModel):
     like_count: Optional[int] = None
     dislike_count: Optional[int] = None
     copied_count: Optional[int] = None
+    comment_count: int = 0
+    feedback_comments: list[AppChatFeedback] = Field(default_factory=list)
     sensitive_status: Optional[int] = None  # Sensitive word review status
     user_groups: Optional[List[Any]] = None  # Groups to which the user belongs
     mark_user: Optional[str] = None

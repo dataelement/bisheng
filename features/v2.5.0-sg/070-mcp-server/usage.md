@@ -25,7 +25,7 @@ mcp:
 
 ## 2. 配置 Token 与资源权限
 
-管理员在现有开发者 Token 管理页面创建或编辑 Token，选择绑定用户和部门；绑定用户需要具备目标知识资源权限。
+管理员在现有开发者 Token 管理页面创建或编辑 Token，选择绑定用户和部门；绑定用户及其归属需保持有效，目标知识资源权限由工具指定的业务账号决定。
 
 路由白名单可留空：未配置、`null` 或 `[]` 时不启用路由过滤，默认允许所有支持开发者 Token 的路由。如果需要仅允许 MCP，可配置以下规则：
 
@@ -40,11 +40,11 @@ mcp:
 ```
 
 也支持现有 PATH/PREFIX 规则。非空白名单必须命中 `/mcp` 及当前 HTTP 方法，否则返回 403/19812；MCP 与 REST 使用一致的空白名单语义。
-不自动修改任何 Token 的已存白名单。路由放行不等于获得资源权限，写工具仍受绑定用户上传权限约束。
+不自动修改任何 Token 的已存白名单。路由放行不等于获得资源权限，写工具仍受指定目标用户上传权限约束。
 配置 IP 与限流后，复制完整 Token，调用头为 `X-Developer-Token: <完整Token>`，不加 Bearer。
 握手、通知、工具列表和每次调用都是 HTTP 请求，都会验证 Token 并计入既有 Token 请求限流。
 
-Token 验证成功不等于资源可读。MCP 固定使用绑定用户，不接收 `external_id`、`user_id` 或 `tenant_id`。
+Token 验证成功不等于资源可读。十工具均必填 external_id，并按目标用户及其当前有效租户执行；不接收 user_id 或 tenant_id。账号由可信业务后端验证真实登录用户后固定提供，允许跨 Token 租户，缺参/账号不唯一/租户失效均拒绝，不回退 Token 用户。有效 Token 可代理管理员账号，不能交给不可信终端自行选择身份。
 签发的来源链接沿用既有检索接口语义和有效期；链接本身应按凭证处理，不放入普通日志。
 
 ## 3. 客户端接入
@@ -85,6 +85,7 @@ async def main() -> None:
                 tools = await session.list_tools()
                 print([tool.name for tool in tools.tools])
                 result = await session.call_tool("search_knowledge", {
+                    "external_id": os.environ["BISHENG_EXTERNAL_ID"],
                     "query": "安全管理要求有哪些",
                     "knowledge_base_ids": [knowledge_id],
                     "top_k": 5,
@@ -95,7 +96,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-知识库 ID 由接入方配置；首期没有知识库发现工具。响应是片段与来源，不包含模型生成答案。
+知识库 ID 由接入方配置；F078 已新增空间发现等九工具，完整示例见 [使用文档](../../../docs/api/mcp-usage.md)。BISHENG_EXTERNAL_ID 仅用于受控示例，生产从已认证会话导出。旧客户端须补账号并刷新工具清单。响应是片段与来源，不包含模型生成答案。
 输入限制：query 去空白后 1～2000 字符、1～20 个正整数知识库 ID、top_k 1～50、max_content 1～15000。
 `max_content` 保留按知识库合并内容的限制语义；可使用已有 filters/ANY 标签筛选，ALL 仍不支持。
 空结果为 `chunks=[], total=0`，业务失败为 `isError=true`，不能把两者混为一谈。
@@ -117,5 +118,5 @@ asyncio.run(main())
 ## 5. 关闭与回退
 
 把 DB 系统配置 `mcp.server.enabled` 改为 `false`，确认缓存更新后重启，`/mcp` 返回 404。
-旧 REST 保持可用。本期无数据库结构迁移，不需要数据回滚。
+旧 REST 保持可用。本期无数据库结构迁移；回退不会撤销已创建文件或其权限。
 本次代码默认开启；没有修改实际部署的 DB 配置、创建/编辑真实 Token、提交、推送或部署。

@@ -1,4 +1,4 @@
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpaceFileNotFoundError, SpacePermissionDeniedError
@@ -14,7 +14,6 @@ from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import 
     KnowledgeDocumentEntryResolutionError,
     KnowledgeDocumentEntryResolver,
 )
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.open_endpoints.domain.schemas.filelib import FileSourceUrlResp
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
@@ -59,19 +58,16 @@ class FilelibFileSourceService:
 
     async def get_source_url(self, file_id: int) -> FileSourceUrlResp:
         entry = await self.file_repository.find_by_id(file_id)
-        if entry is None or entry.file_type != FileType.FILE.value:
+        if entry is None or entry.file_type != FileType.FILE.value or getattr(entry, 'deleted_at', None) is not None:
             raise SpaceFileNotFoundError()
         knowledge = await self.knowledge_repository.find_by_id(int(entry.knowledge_id))
         if knowledge is None or knowledge.state == KnowledgeState.DELETING.value:
             raise SpaceFileNotFoundError()
-        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
-            await self.space_service._require_read_permission(int(knowledge.id))
-        else:
-            await KnowledgeService.permission_service.ensure_knowledge_read_async(
-                login_user=self.login_user,
-                owner_user_id=knowledge.user_id,
-                knowledge_id=knowledge.id,
-            )
+        if knowledge.type != KnowledgeTypeEnum.SPACE.value:
+            raise HTTPException(status_code=422, detail='filelib file APIs require SPACE knowledge')
+        if int(entry.tenant_id or 1) != int(self.login_user.tenant_id):
+            raise SpacePermissionDeniedError()
+        await self.space_service._require_read_permission(int(knowledge.id))
         if "view_file" not in await self._load_permissions(file_id, int(entry.knowledge_id)):
             raise SpacePermissionDeniedError()
         try:

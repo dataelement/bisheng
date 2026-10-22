@@ -35,6 +35,7 @@ from bisheng.core.context.tenant import (
 from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.developer_token.domain.services import DeveloperTokenService
 from bisheng.mcp_server.api.router import McpServerApp, mcp_routes
+from bisheng.mcp_server.domain.schemas.identity import McpExecutionIdentity
 from bisheng.open_endpoints.domain.schemas.filelib import RetrieveChunk, RetrieveResp
 from test.developer_token.test_developer_token_dependency import _prepare_principal_auth
 
@@ -53,7 +54,7 @@ EXPECTED_TOOL_NAMES = {
 
 
 @asynccontextmanager
-async def server(monkeypatch, *, enabled=True, failure=None, search=None):
+async def server(monkeypatch, *, enabled=True, failure=None, search=None, identity_resolver=None):
     """AC-01-10, AC-12: real SDK and HTTP with controlled business dependencies."""
     calls = []
     active = set()
@@ -101,9 +102,20 @@ async def server(monkeypatch, *, enabled=True, failure=None, search=None):
         finally:
             active.remove(user.user_id)
 
+    async def resolve(principal, external_id):
+        target_id = {"0007": 7, "0008": 8}[external_id]
+        return McpExecutionIdentity(
+            user=UserPayload(user_id=target_id, user_name="target", user_role=[2], tenant_id=target_id),
+            tenant_id=target_id,
+            token_id=principal.token_id,
+            token_user_id=principal.user.user_id,
+            token_tenant_id=principal.tenant_id,
+        )
+
     runtime = McpServerApp(
         config_provider=AsyncMock(return_value=McpServerConf(enabled=enabled)),
         search_factory=factory,
+        identity_resolver=identity_resolver or resolve,
     )
     app = Starlette(routes=mcp_routes(runtime))
     async with runtime.lifespan():
@@ -178,9 +190,11 @@ async def test_real_token_route_rules_apply_to_mcp_http_and_sdk(monkeypatch, rul
         if allowed:
             async with session(app, token="test-mcp-route") as client:
                 assert {tool.name for tool in (await client.list_tools()).tools} == EXPECTED_TOOL_NAMES
-                result = await client.call_tool("search_knowledge", {"query": "q", "knowledge_base_ids": [118]})
+                result = await client.call_tool(
+                    "search_knowledge", {"external_id": "0007", "query": "q", "knowledge_base_ids": [118]}
+                )
                 assert not result.isError
-            assert calls == [(7, 5, frozenset({5}), "q")]
+            assert calls == [(7, 7, frozenset({7}), "q")]
         else:
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app)) as client:
                 response = await client.post(
@@ -199,9 +213,11 @@ async def test_sdk_lists_and_calls_only_search_knowledge(monkeypatch, path):
             tools = (await client.list_tools()).tools
             assert {tool.name for tool in tools} == EXPECTED_TOOL_NAMES
             assert tools[0].inputSchema["additionalProperties"] is False
-            assert "external_id" not in tools[0].inputSchema["properties"]
+            assert "external_id" in tools[0].inputSchema["required"]
             assert tools[0].outputSchema["properties"]["chunks"]
-            result = await client.call_tool("search_knowledge", {"query": " query ", "knowledge_base_ids": [118]})
+            result = await client.call_tool(
+                "search_knowledge", {"external_id": "0007", "query": " query ", "knowledge_base_ids": [118]}
+            )
             assert not result.isError
             assert result.structuredContent["chunks"][0]["content"] == "authorized content"
             assert result.structuredContent["total"] == 1
@@ -212,12 +228,12 @@ async def test_sdk_lists_and_calls_only_search_knowledge(monkeypatch, path):
 @pytest.mark.parametrize(
     "arguments",
     [
-        {"query": "q", "knowledge_base_ids": [118], "external_id": "admin"},
-        {"query": "q", "knowledge_base_ids": [118], "user_id": 1},
-        {"query": "q", "knowledge_base_ids": [118], "tenant_id": 1},
-        {"query": "  ", "knowledge_base_ids": [118]},
-        {"query": "q", "knowledge_base_ids": [0]},
-        {"query": "q", "knowledge_base_ids": [118], "top_k": 51},
+        {"external_id": "0007", "query": "q", "knowledge_base_ids": [118], "source": "admin"},
+        {"external_id": "0007", "query": "q", "knowledge_base_ids": [118], "user_id": 1},
+        {"external_id": "0007", "query": "q", "knowledge_base_ids": [118], "tenant_id": 1},
+        {"external_id": "0007", "query": "  ", "knowledge_base_ids": [118]},
+        {"external_id": "0007", "query": "q", "knowledge_base_ids": [0]},
+        {"external_id": "0007", "query": "q", "knowledge_base_ids": [118], "top_k": 51},
     ],
 )
 async def test_sdk_rejects_invalid_or_identity_parameters(monkeypatch, arguments):
@@ -248,7 +264,9 @@ async def test_empty_results_and_sanitized_failure(monkeypatch, empty):
 
     async with server(monkeypatch, search=retrieve) as (app, _, active):
         async with session(app) as client:
-            result = await client.call_tool("search_knowledge", {"query": "q", "knowledge_base_ids": [118]})
+            result = await client.call_tool(
+                "search_knowledge", {"external_id": "0007", "query": "q", "knowledge_base_ids": [118]}
+            )
             assert result.isError is not empty
             if empty:
                 assert result.structuredContent == {"chunks": [], "total": 0}
@@ -272,7 +290,10 @@ async def test_concurrent_requests_and_cancel_restore_context(monkeypatch):
 
         async def run(token):
             async with session(app, token) as client:
-                return await client.call_tool("search_knowledge", {"query": "q", "knowledge_base_ids": [118]})
+                return await client.call_tool(
+                    "search_knowledge",
+                    {"external_id": "0008" if token == "second" else "0007", "query": "q", "knowledge_base_ids": [118]},
+                )
 
         results = await asyncio.gather(run("first"), run("second"))
         assert all(not result.isError for result in results)
@@ -291,7 +312,7 @@ async def test_concurrent_requests_and_cancel_restore_context(monkeypatch):
                         "method": "tools/call",
                         "params": {
                             "name": "search_knowledge",
-                            "arguments": {"query": "cancel", "knowledge_base_ids": [118]},
+                            "arguments": {"external_id": "0007", "query": "cancel", "knowledge_base_ids": [118]},
                         },
                     },
                 )
@@ -357,7 +378,9 @@ async def test_tool_timeout_is_error_and_releases_resources(monkeypatch):
 
     async with server(monkeypatch, search=retrieve) as (app, _, active):
         async with session(app) as client:
-            result = await client.call_tool("search_knowledge", {"query": "q", "knowledge_base_ids": [118]})
+            result = await client.call_tool(
+                "search_knowledge", {"external_id": "0007", "query": "q", "knowledge_base_ids": [118]}
+            )
             assert result.isError
             assert "timed out" in result.content[0].text
         assert not active
@@ -375,7 +398,9 @@ async def test_inherited_admin_context_cannot_bypass_token_identity(monkeypatch)
     try:
         async with server(monkeypatch) as (app, calls, active):
             async with session(app) as client:
-                result = await client.call_tool("search_knowledge", {"query": "q", "knowledge_base_ids": [118]})
+                result = await client.call_tool(
+                    "search_knowledge", {"external_id": "0007", "query": "q", "knowledge_base_ids": [118]}
+                )
                 assert not result.isError
             assert calls == [(7, 7, frozenset({7}), "q")]
             assert not active

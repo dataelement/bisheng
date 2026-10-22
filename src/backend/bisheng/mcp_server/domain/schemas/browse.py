@@ -1,6 +1,8 @@
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import AfterValidator, Field, StringConstraints, model_validator
+
+from bisheng.mcp_server.domain.schemas.identity import McpIdentityRequest, StrictRequest
 
 ResourceId = Annotated[int, Field(strict=True, gt=0)]
 FolderId = Annotated[
@@ -15,11 +17,7 @@ Statuses = Annotated[list[Status], Field(max_length=7)]
 SpaceIds = Annotated[list[ResourceId], Field(min_length=1, max_length=20)]
 
 
-class StrictRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
-
-
-class PageRequest(StrictRequest):
+class PageRequest(McpIdentityRequest):
     cursor: Cursor | None = None
     page_size: PageSize = 20
 

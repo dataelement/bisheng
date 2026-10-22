@@ -1,5 +1,8 @@
 # MCP 知识空间工具：实现设计与分批计划
 
+> 2026-10-22 身份契约更新：[F081](../081-mcp-external-user-identity/spec.md) 已获用户确认。十工具顶层必填 `external_id`，以目标用户及其当前有效租户执行；Token 保留接入、绑定有效性、IP/路由/限流校验。本文首期的绑定用户、禁止身份参数或原样兼容描述如与 F081 冲突，以 F081 为准；历史验证记录不代表新身份契约验收。
+
+
 - Feature ID: `078-mcp-knowledge-tools`
 - Status: `IMPLEMENTED_LOCAL`
 - Created: `2026-10-16`
@@ -11,12 +14,12 @@
 
 落点为 `knowledge_mcp_content_service.py`、其领域回归和受控 Owner 的 SDK 流程替身。备选的逐格式补拼对象路径会继续复制预览分支，因此不采用。回退可还原本次局部提交，无数据迁移。
 
-继续扩展已有 `mcp_server`。MCP 层负责 schema、协议、绑定身份、超时和安全结果；知识模块负责查询、内容和写入；现有共享检索服务负责 RAG。服务之间直接调用领域接口，不在后端通过 HTTP 回调自身 REST，也不让 MCP endpoint 导入其他模块 endpoint。
+继续扩展已有 `mcp_server`。MCP 层负责 schema、协议、目标身份、超时和安全结果；知识模块负责查询、内容和写入；现有共享检索服务负责 RAG。服务之间直接调用领域接口，不在后端通过 HTTP 回调自身 REST，也不让 MCP endpoint 导入其他模块 endpoint。
 
 ```mermaid
 flowchart TD
     A[外部 MCP 客户端] --> B[/mcp Token 与统一路由鉴权]
-    B --> C[实际工具任务：绑定用户与租户]
+    B --> C[实际工具任务：目标用户与当前租户]
     C --> D[浏览与文件搜索]
     C --> E[正文与来源]
     C --> F[文本或 Base64 上传]
@@ -33,7 +36,7 @@ flowchart TD
 
 | Boundary | Allowed Change | Disallowed Change | Revalidation Trigger |
 |---|---|---|---|
-| MCP | 注册九工具、统一执行上下文、实际请求体上限、严格 schema | 改默认开关/跨域、允许匿名/身份切换、删除旧工具 | 协议、SDK、生命周期或鉴权改动 |
+| MCP | 注册九工具、统一执行上下文、实际请求体上限、严格 schema | 改默认开关/跨域、允许匿名、绕过 F081 指定账号规则、删除旧工具 | 协议、SDK、生命周期或鉴权改动 |
 | knowledge | 新增范围明确的领域服务；为其补必要 Repository 方法 | 在新 Service 写 ORM/SQL、新 DAO 入口、改变既有下载/覆盖政策 | 文件权限、canonical、上传或派生存储改动 |
 | open_endpoints | 调用已有 `FilelibRetrieveService` 等领域能力 | 跨模块 API 导入、自身 HTTP 调用、改变原 Filelib 契约 | 共享服务变更时复跑受影响 REST 回归 |
 | permission / tenant | 使用统一权限服务和已有细粒度权限；上下文自动注入 | 将业务 permission ID 当 FGA relation、手写 ORM tenant 条件、扩大发现权限 | 授权或数据范围变化需重新确认 |

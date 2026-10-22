@@ -7,6 +7,9 @@ from bisheng.database.models.session import MessageSession
 
 class ChatFeedbackRepository(BaseRepository[ChatMessage, int], ABC):
     @abstractmethod
+    async def list_comments(self, chat_ids: list[str]) -> list[dict]: ...
+
+    @abstractmethod
     async def lock_message(self, message_id: int) -> ChatMessage | None: ...
 
     @abstractmethod
