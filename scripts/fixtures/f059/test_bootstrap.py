@@ -180,7 +180,8 @@ def test_marker_and_admin_mismatch_refuse_reuse(tmp_path):
     assert bootstrap.read_env(output) == values
 
 
-def test_custom_amd64_profiles_and_five_package_modes_match_real_schemas(tmp_path, monkeypatch):
+@pytest.mark.parametrize("profile_revision", [1, 2])
+def test_custom_amd64_profiles_and_five_package_modes_match_real_schemas(tmp_path, monkeypatch, profile_revision):
     from bisheng.app_publish.domain.schemas.app_manifest import AppManifest
     from bisheng.app_runtime.domain.schemas.runtime_delivery import RuntimeProfileDefinition
     from test.e2e.helpers.vibe_runtime import Scenario
@@ -194,11 +195,13 @@ def test_custom_amd64_profiles_and_five_package_modes_match_real_schemas(tmp_pat
         demo_image_v2="registry.invalid/demo@sha256:" + "b" * 64,
         model_name="acceptance-model",
         knowledge_ids=[37],
+        profile_revision=profile_revision,
     )
     assert len(scenarios) == 6
     for profile in profiles:
         validated = RuntimeProfileDefinition.model_validate(profile)
         assert validated.official is False
+        assert validated.revision == profile_revision
         assert set(validated.platforms) == {"linux/amd64"}
     for raw in scenarios:
         scenario = Scenario.from_dict(raw)
@@ -208,6 +211,10 @@ def test_custom_amd64_profiles_and_five_package_modes_match_real_schemas(tmp_pat
             with tarfile.open(path) as package:
                 manifest = AppManifest.model_validate(yaml.safe_load(package.extractfile("bisheng-app.yaml")))
                 assert manifest.slug == scenario.slug
+                if scenario.mode == "bundle":
+                    assert manifest.delivery.profile.endswith("@" + str(profile_revision))
+                elif scenario.mode == "source-image":
+                    assert "profile" not in manifest.delivery.model_dump()
                 assert all(member.isfile() and member.name[0] != "/" for member in package.getmembers())
         if scenario.runtime == "python3.11" and scenario.expected_failure_code is None:
             assert {check["path"] for check in scenario.application_checks} >= {
@@ -313,7 +320,7 @@ class FixtureApi:
             assert body["scopes"] == ["app:manage"]
             return {"plaintext": "test-fixture-private-key"}
         if (method, path) == ("POST", "/runtime/profiles"):
-            return {"id": body["code"]}
+            return {"id": body["code"] + "@" + str(body["revision"])}
         if (method, path) == ("GET", "/runtime/profiles/defaults"):
             return []
         if (method, path) == ("PUT", "/runtime/profiles/default"):
@@ -344,7 +351,7 @@ async def run_setup(tmp_path, monkeypatch, **flags):
             suite,
             output,
             values,
-            profiles=bootstrap.profile_definitions(inventory()),
+            profiles=bootstrap.profile_definitions(inventory(), revision=flags.get("profile_revision", 1)),
             client=client,
         ), suite
 
@@ -480,3 +487,74 @@ def test_python_demo_real_sqlite_sdk_local_attachment_and_websocket(tmp_path, mo
         server.shutdown()
         server.server_close()
         thread.join(5)
+
+
+@pytest.mark.parametrize("value", [0, -1, True, "2", 1.5])
+def test_profile_revision_must_be_a_positive_integer(value):
+    with pytest.raises(bootstrap.BootstrapError, match="profile_revision_invalid"):
+        bootstrap.profile_definitions(inventory(), revision=value)
+
+
+def test_revision_defaults_to_one_and_cli_generates_revision_two_without_implicit_increment(tmp_path, capsys):
+    assert {row["revision"] for row in bootstrap.profile_definitions(inventory())} == {1}
+    source = tmp_path / "inventory.json"
+    source.write_text(json.dumps(inventory()))
+    suite = tmp_path / "e2e-f059-suite"
+    arguments = [
+        "--api-base",
+        "http://127.0.0.1",
+        "--suite-dir",
+        str(suite),
+        "--profile-inventory",
+        str(source),
+        "--profile-revision",
+        "2",
+        "--prepare-only",
+    ]
+    assert bootstrap.main(arguments) == 0
+    definitions = json.loads((suite / "profiles.json").read_text())
+    assert {row["revision"] for row in definitions} == {2}
+    assert bootstrap.main(arguments) == 0
+    assert json.loads((suite / "profiles.json").read_text()) == definitions
+    with tarfile.open(suite / "e2e-f059-python-bundle-v1.tar.gz") as archive:
+        assert yaml.safe_load(archive.extractfile("bisheng-app.yaml"))["delivery"]["profile"] == "e2e-f059-python311@2"
+    assert capsys.readouterr().err == ""
+
+
+def test_api_import_and_defaults_use_selected_revision_two(tmp_path, monkeypatch):
+    state, _suite = asyncio.run(run_setup(tmp_path, monkeypatch, profile_revision=2))
+    imports = [
+        kwargs["json"]
+        for method, path, role, kwargs in FixtureApi.calls
+        if method == "POST" and path == "/runtime/profiles"
+    ]
+    defaults = [
+        kwargs["json"]["profile_id"]
+        for method, path, role, kwargs in FixtureApi.calls
+        if method == "PUT" and path == "/runtime/profiles/default"
+    ]
+    assert len(imports) == len(defaults) == 3
+    assert {row["revision"] for row in imports} == {2}
+    assert all(reference.endswith("@2") for reference in defaults)
+    assert {row["revision"] for row in state["profiles"]} == {2}
+
+
+def test_profile_immutable_conflict_is_not_retried_as_override(tmp_path, monkeypatch):
+    original = FixtureApi.request
+
+    def conflicting_api(self, method, path, **kwargs):
+        if method == "POST" and path == "/runtime/profiles":
+            FixtureApi.calls.append((method, path, kwargs.get("role", "ADMIN"), kwargs))
+            raise bootstrap.BootstrapError("api_refused_profile_immutable_conflict")
+        return original(self, method, path, **kwargs)
+
+    async def conflict(self, method, path, **kwargs):
+        return await conflicting_api(self, method, path, **kwargs)
+
+    monkeypatch.setattr(FixtureApi, "request", conflict)
+    with pytest.raises(bootstrap.BootstrapError, match="profile_immutable_conflict"):
+        asyncio.run(run_setup(tmp_path, monkeypatch, profile_revision=2))
+    assert sum(method == "POST" and path == "/runtime/profiles" for method, path, role, kwargs in FixtureApi.calls) == 1
+    assert not any(
+        method == "PUT" and path == "/runtime/profiles/default" for method, path, role, kwargs in FixtureApi.calls
+    )
