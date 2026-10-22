@@ -64,6 +64,8 @@ class KubernetesDataExecutor:
             raise DataBusyError("Data session scope mismatch")
         if active and (
             current["status"] in {"completed", "failed", "cancelled", "timed_out"}
+            or current.get("cancel_requested")
+            or current["payload"].get("cancel_requested")
             or self._now() >= self._deadline(current)
         ):
             raise DataBusyError("Data session is no longer active")
@@ -209,6 +211,7 @@ class KubernetesDataExecutor:
         except (KeyError, TypeError, ValueError):
             raise DataBusyError("Owner data grant does not match the active session") from None
         _, _, base = self._pod(current, target)
+        current = self._current(current)
         timeout = max(0.001, self._deadline(current) - self._now())
         document = {"grant": copy.deepcopy(ticket), "parameters": parameters}
         try:

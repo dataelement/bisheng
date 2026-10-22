@@ -22,7 +22,7 @@ KEYS = {"active_key_id": "data-key", "private_keys": {"data-key": "64" * 32}}
 
 
 @pytest.fixture
-async def signed_session(session):
+async def signed_session(session, request):
     c = session
     async with c.repo.transaction() as db:
         connection = await db.connection()
@@ -30,7 +30,8 @@ async def signed_session(session):
     await c.repo.save(
         App(id=c.app.id, slug="fixture-app", name="fixture", owner_user_id=1, tenant_id=1, state="stopped")
     )
-    op = await c.svc._start(c.app, c.actor, "tables", {})
+    action, parameters = getattr(request, "param", ("tables", {}))
+    op = await c.svc._start(c.app, c.actor, action, parameters)
     op.status, op.stage = "running", "ready"
     await c.repo.save(op)
     target = await c.repo.save(
@@ -128,3 +129,36 @@ async def test_readonly_public_keys_never_expose_signing_material(signed_session
     document = signed_session.issuer.public_keys()
     assert set(document) == {"data-key"}
     assert document["data-key"] != KEYS["private_keys"]["data-key"]
+
+
+@pytest.mark.parametrize(
+    "signed_session",
+    [("update", {"table": "items", "key": "1", "values": {"name": "new"}})],
+    indirect=True,
+)
+@pytest.mark.parametrize("cancelled", [False, True])
+async def test_owner_cancellation_blocks_fresh_grants_without_releasing_the_session(signed_session, cancelled):
+    """覆盖 AC: AC-36、AC-43、AC-48、AC-49、AC-55."""
+    from bisheng.app_runtime.domain.services.runtime_management_service import RuntimeManagementService
+
+    c = signed_session
+    parameters = {"table": "items", "key": "1", "values": {"name": "new"}}
+    original_deadline = c.op.deadline
+    if cancelled:
+        outcome = await RuntimeManagementService(c.repo, objects=object()).cancel(c.app.id, c.op.id, c.actor)
+        assert outcome == {"operation_id": c.op.id, "cancel_requested": True}
+        assert "cancel_requested" not in c.op.payload  # The caller still has the pre-cancel snapshot.
+        with pytest.raises(AppDataBusyError):
+            await c.issuer.issue(c.app, c.actor, c.op, c.target, "update", parameters)
+    else:
+        ticket = await c.issuer.issue(c.app, c.actor, c.op, c.target, "update", parameters)
+        assert ticket["claims"]["action"] == "update"
+        assert ticket["claims"]["not_after"] <= int(original_deadline.replace(tzinfo=UTC).timestamp())
+    current = await c.repo.get(RuntimeOperation, c.op.id)
+    owner = await c.repo.get(RuntimeAssignment, c.owner.id)
+    assert current.deadline == original_deadline
+    assert (current.status, current.stage, current.cleanup_status) == ("running", "ready", "pending")
+    assert owner.data_operation_id == current.id
+    if cancelled:
+        assert current.payload["cancel_requested"] is True
+        assert "data_grant_not_after" not in current.payload

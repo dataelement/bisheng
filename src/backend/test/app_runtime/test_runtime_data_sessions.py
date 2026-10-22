@@ -286,3 +286,38 @@ async def test_lost_wakeup_response_uses_committed_state_without_replaying_data(
     monkeypatch.setattr(c.svc.control, "wakeup", lost)
     assert await c.svc.execute(c.app, c.actor, "tables", {}) == {"tables": []}
     assert c.transport.calls == 1
+
+
+@pytest.mark.parametrize("ready", [False, True])
+async def test_cancelled_data_session_is_refused_before_waiting_or_issuing(session, monkeypatch, ready):
+    """覆盖 AC: AC-33、AC-36、AC-43、AC-48、AC-49、AC-55."""
+    c = session
+    wake = c.svc.control.wakeup
+
+    async def cancel_before_delivery(operation_id):
+        op = await c.repo.get(RuntimeOperation, operation_id)
+        if op.payload.get("data_action_finished"):
+            return  # Actual manager cleanup/stop evidence is still outstanding.
+        if ready:
+            await wake(operation_id)
+            op = await c.repo.get(RuntimeOperation, operation_id)
+        op.payload = {**op.payload, "cancel_requested": True}
+        await c.repo.save(op)
+
+    async def unexpected_issue(*args, **kwargs):
+        pytest.fail("cancelled data session reached grant issuance")
+
+    async def unexpected_wait(*args):
+        pytest.fail("cancelled data session waited for readiness")
+
+    monkeypatch.setattr(c.svc.control, "wakeup", cancel_before_delivery)
+    monkeypatch.setattr(c.svc.issuer, "issue", unexpected_issue)
+    monkeypatch.setattr(c.svc, "sleep", unexpected_wait)
+    with pytest.raises(AppDataBusyError) as rejected:
+        await c.svc.execute(c.app, c.actor, "tables", {})
+    assert rejected.value.kwargs["reason"] == "data_session_cancelled"
+    owner = await c.repo.get(RuntimeAssignment, c.owner.id)
+    current = await c.repo.get(RuntimeOperation, owner.data_operation_id)
+    assert current.payload["cancel_requested"] is True
+    assert current.cleanup_status == "pending" and current.status not in {"completed", "cancelled"}
+    assert not c.transport.calls and not any(event[0] in {"issue", "call"} for event in c.events)

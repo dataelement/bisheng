@@ -281,6 +281,8 @@ class RuntimeDataSessionService:
             current = await self.repo.get(RuntimeOperation, op.id)
             if current is None or self.clock() >= current.deadline or current.status in TERMINAL:
                 raise AppDataBusyError(reason="data_session_not_ready", request_id=op.payload["request_id"])
+            if current.payload.get("cancel_requested"):
+                raise AppDataBusyError(reason="data_session_cancelled", request_id=op.payload["request_id"])
             if current.stage == "ready":
                 document = await RuntimeOperationService(self.repo).describe(current)
                 target = document.get("result", {}).get("data_target")
