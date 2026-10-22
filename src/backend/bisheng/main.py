@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from bisheng.api.router import router, router_rpc
+from bisheng.app_runtime.api.endpoints.runtime_material import router as runtime_material_router
 from bisheng.app_runtime.api.exception_handlers import register_app_runtime_exception_handlers
 from bisheng.app_runtime.domain.services.app_access_log_service import flush_pending_access_records
 from bisheng.common.errcode import BaseErrorCode
@@ -246,6 +247,7 @@ def create_app():
     app.include_router(router)
     app.include_router(router_rpc)
     app.include_router(router_public)
+    app.include_router(runtime_material_router)
     from bisheng.department.api.endpoints.department_limit import (
         router as department_limit_router,
     )

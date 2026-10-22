@@ -6,7 +6,7 @@ from datetime import timedelta
 
 import pytest
 
-from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeNode
+from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeNode, RuntimeOperation
 from bisheng.app_runtime.domain.models.runtime_kubernetes import RuntimeExecutionResource
 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
 from bisheng.app_runtime.domain.services.runtime_protocol import ServiceIdentity, content_digest
@@ -73,6 +73,8 @@ async def control(repo):
     await repo.save(node)
     svc = RuntimeKubernetesService(repo, clock=lambda: NOW)
     op = await setup_operation(repo)
+    op = await repo.get(RuntimeOperation, op.id)
+    assert op.status == "running"
     op.payload = {"resolved_delivery": {"mode": "bundle", "profile": {"runtime_image": IMAGE, "preparer_image": IMAGE}}}
     await repo.save(op)
     await svc.claim_controller(MANAGER, holder_id="controller-a", expected_epoch=0)

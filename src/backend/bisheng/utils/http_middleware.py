@@ -46,6 +46,8 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # is the same kind of request for the same reason.
     "/api/v1/internal/app-proxy/authorize",
     "/api/v1/internal/app-runtime/v2/",
+    # Workload Ed25519 authorization establishes its own verified tenant scope.
+    "/internal/app-runtime/v2/material-access/",
     # The nginx error_page fallback: a static page served when app-proxy is down.
     # Reached by an anonymous browser, so it must not require a session.
     "/api/v1/apps/_unavailable",
@@ -99,7 +101,9 @@ def owns_dsh_credential(method: str, path: str) -> bool:
 
 def _uses_browser_identity(path: str) -> bool:
     """v2 credentials and v3 default operators resolve identity at their endpoints."""
-    return path not in {"/api/v2", "/api/v3"} and not path.startswith(("/api/v2/", "/api/v3/"))
+    return path not in {"/api/v2", "/api/v3"} and not path.startswith(
+        ("/api/v2/", "/api/v3/", "/internal/app-runtime/v2/material-access/")
+    )
 
 
 def _decode_jwt_subject(token: str) -> dict | None:

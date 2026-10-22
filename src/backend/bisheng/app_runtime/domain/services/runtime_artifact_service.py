@@ -68,36 +68,10 @@ class RuntimeArtifactService:
 
     async def create_upload(self, operation_id, *, kind, sha256, size_bytes, platform="", metadata=None, node_id=None):
         op = await self.operation(operation_id, node_id)
-        if kind not in KINDS or not re.fullmatch("[0-9a-f]{64}", sha256):
-            raise RuntimeConflict("invalid_artifact")
-        limit = self.snapshot_limit if kind == "snapshot" else self.artifact_limit
-        if not isinstance(size_bytes, int) or size_bytes < 0 or size_bytes > limit:
-            raise RuntimeConflict("artifact_size_limit")
-        scope = f"{op.tenant_id}/{op.app_id}"
         async with self.repo.transaction():
-            existing = await self.repo.find(RuntimeArtifact, scope_key=scope, kind=kind, sha256=sha256, lock=True)
-            if existing:
-                artifact = existing[0]
-                if artifact.size_bytes != size_bytes or artifact.platform != platform:
-                    raise RuntimeConflict("artifact_content_conflict")
-            else:
-                artifact = RuntimeArtifact(
-                    tenant_id=op.tenant_id,
-                    app_id=op.app_id,
-                    scope_key=scope,
-                    kind=kind,
-                    sha256=sha256,
-                    size_bytes=size_bytes,
-                    platform=platform,
-                    producer_operation_id=op.id,
-                    metadata_=metadata or {},
-                )
-                artifact.object_key = f"tenants/{op.tenant_id}/apps/{op.app_id}/" + (
-                    f"snapshots/{op.id}/{artifact.id}.sqlite"
-                    if kind == "snapshot"
-                    else f"artifacts/{kind}/{sha256}.tar.gz"
-                )
-                artifact = await self.repo.save(artifact)
+            artifact = await self._upload_artifact(
+                op, kind=kind, sha256=sha256, size_bytes=size_bytes, platform=platform, metadata=metadata
+            )
             ticket = secrets.token_urlsafe(32)
             sessions = await self.repo.find(
                 RuntimeTransfer, operation_id=op.id, artifact_id=artifact.id, action="upload", lock=True
@@ -122,6 +96,41 @@ class RuntimeArtifactService:
                 transfer.offset = artifact.size_bytes
             transfer = await self.repo.save(transfer)
         return {"transfer_id": transfer.id, "ticket": ticket, "offset": transfer.offset, **_public_artifact(artifact)}
+
+    async def _upload_artifact(self, op, *, kind, sha256, size_bytes, platform="", metadata=None):
+        """Resolve content inside the caller's already-authorized tenant transaction.
+
+        Legacy operation and workload authorization stay independent. This method
+        allocates an artifact only; it never creates or approves a transfer ticket.
+        """
+        if kind not in KINDS or not isinstance(sha256, str) or not re.fullmatch("[0-9a-f]{64}", sha256):
+            raise RuntimeConflict("invalid_artifact")
+        limit = self.snapshot_limit if kind == "snapshot" else self.artifact_limit
+        if type(size_bytes) is not int or size_bytes < 0 or size_bytes > limit:
+            raise RuntimeConflict("artifact_size_limit")
+        scope = f"{op.tenant_id}/{op.app_id}"
+        existing = await self.repo.find(RuntimeArtifact, scope_key=scope, kind=kind, sha256=sha256, lock=True)
+        if existing:
+            artifact = existing[0]
+            if artifact.size_bytes != size_bytes or artifact.platform != platform:
+                raise RuntimeConflict("artifact_content_conflict")
+        else:
+            artifact = RuntimeArtifact(
+                tenant_id=op.tenant_id,
+                app_id=op.app_id,
+                scope_key=scope,
+                kind=kind,
+                sha256=sha256,
+                size_bytes=size_bytes,
+                platform=platform,
+                producer_operation_id=op.id,
+                metadata_=metadata or {},
+            )
+            artifact.object_key = f"tenants/{op.tenant_id}/apps/{op.app_id}/" + (
+                f"snapshots/{op.id}/{artifact.id}.sqlite" if kind == "snapshot" else f"artifacts/{kind}/{sha256}.tar.gz"
+            )
+            artifact = await self.repo.save(artifact)
+        return artifact
 
     async def authorized_transfer(self, transfer_id, ticket, *, node_id=None, action="upload", lock=False):
         transfer = await self.repo.get(RuntimeTransfer, transfer_id, lock=lock)

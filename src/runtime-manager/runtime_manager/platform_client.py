@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import os
+import ssl
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlsplit
+from uuid import UUID
 
 import httpx
 
@@ -24,7 +26,7 @@ class PlatformError(RuntimeError):
 
 
 class PlatformClient:
-    def __init__(self, config: Config, *, transport=None):
+    def __init__(self, config: Config, *, transport=None, ca_file=None):
         self.config = config
         parsed = urlsplit(config.platform_base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
@@ -33,6 +35,7 @@ class PlatformClient:
             base_url=config.platform_base_url.rstrip("/"),
             transport=transport,
             timeout=60,
+            verify=ssl.create_default_context(cafile=str(ca_file) if ca_file else None),
             trust_env=False,
             follow_redirects=False,
         )
@@ -75,6 +78,51 @@ class PlatformClient:
             return response.json()
         except ValueError as exc:
             raise PlatformError("platform_response_invalid") from exc
+
+    @staticmethod
+    def _resource_ref(value):
+        try:
+            if not isinstance(value, str) or str(UUID(value)) != value:
+                raise ValueError()
+        except (TypeError, ValueError, AttributeError):
+            raise PlatformError("resource_reference_invalid", 400) from None
+        return value
+
+    def claim_controller(self, holder_id, expected_epoch):
+        return self.request(
+            "POST",
+            PREFIX + "/controllers/claim",
+            document={
+                "holder_id": holder_id,
+                "expected_epoch": expected_epoch,
+            },
+        )
+
+    def renew_controller(self, holder_id, controller_epoch):
+        return self.request(
+            "POST",
+            PREFIX + "/controllers/renew",
+            document={
+                "holder_id": holder_id,
+                "controller_epoch": controller_epoch,
+            },
+        )
+
+    def register_resource(self, document):
+        return self.request("POST", PREFIX + "/resources", document=document)
+
+    def observe_resource(self, resource_ref, document):
+        reference = self._resource_ref(resource_ref)
+        return self.request("POST", PREFIX + f"/resources/{reference}/observations", document=document)
+
+    def create_material_delegation(self, document):
+        # The document contains a public key only; workload keys never go to SQL.
+        return self.request("POST", PREFIX + "/material-delegations", document=document)
+
+    def bind_material_delegation(self, delegation_id, pod_uid):
+        reference = self._resource_ref(delegation_id)
+        self._resource_ref(pod_uid)
+        return self.request("POST", PREFIX + f"/material-delegations/{reference}/bind", document={"pod_uid": pod_uid})
 
     def heartbeat(self, body):
         return self.request("POST", PREFIX + "/nodes/heartbeat", document=body)

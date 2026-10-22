@@ -65,7 +65,8 @@ class RuntimeMaterialDelegation(ScopedRuntimeRecord, table=True):
     allowed_artifacts: list = Field(default_factory=list, sa_column=Column(JsonType, nullable=False))
     allowed_actions: list = Field(default_factory=list, sa_column=Column(JsonType, nullable=False))
     proxy_credential_hash: str = Field(default="", max_length=64)
-    expires_at: datetime
+    # None means current deployment ownership is revalidated on every request.
+    expires_at: datetime | None = None
     revoked_at: datetime | None = None
 
 
