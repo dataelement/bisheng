@@ -3,9 +3,9 @@ import { useRef } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useConversationScroll } from './useConversationScroll';
 afterEach(cleanup);
-function Fixture({ ids, session = 'a', load = () => undefined, rowHeight = 500 }: { ids: string[]; session?: string; load?: () => void | Promise<unknown>; rowHeight?: number }) {
+function Fixture({ ids, session = 'a', load = () => undefined, rowHeight = 500, canLoadOlder = true }: { canLoadOlder?: boolean; ids: string[]; session?: string; load?: () => void | Promise<unknown>; rowHeight?: number }) {
   const ref = useRef<HTMLDivElement>(null);
-  useConversationScroll({ scrollRef: ref, messages: ids.map(key => ({ key })), sessionKey: session, canLoadOlder: true, onLoadOlder: load });
+  useConversationScroll({ scrollRef: ref, messages: ids.map(key => ({ key })), sessionKey: session, canLoadOlder, onLoadOlder: load });
   return <div data-testid="viewport" ref={node => {
     Object.defineProperty(ref, 'current', { value: node, writable: true });
     if (node) {
@@ -37,4 +37,18 @@ it('fills an underfilled viewport once per new history cursor without a retry lo
   expect(load).toHaveBeenCalledTimes(1);
   rerender(<Fixture ids={['0', '1']} rowHeight={50} load={load} />);
   await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+});
+
+it('detaches on a small upward scroll, survives a redraw, and resumes only at the bottom', () => {
+  const { rerender } = render(<Fixture ids={['1', '2']} rowHeight={200} canLoadOlder={false} />);
+  const node = screen.getByTestId('viewport');
+  node.scrollTop = 100; fireEvent.scroll(node);
+  node.scrollTop = 90; fireEvent.scroll(node);
+  rerender(<Fixture ids={['1', '2']} rowHeight={200} canLoadOlder={false} />);
+  expect(node.scrollTop).toBe(90);
+  rerender(<Fixture ids={['1', '2']} rowHeight={220} canLoadOlder={false} />);
+  expect(node.scrollTop).toBe(90);
+  node.scrollTop = 140; fireEvent.scroll(node);
+  rerender(<Fixture ids={['1', '2']} rowHeight={250} canLoadOlder={false} />);
+  expect(node.scrollTop).toBe(500);
 });

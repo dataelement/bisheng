@@ -93,3 +93,11 @@ business journey at a time. The following items are intentionally **unchecked**:
 Final command results are recorded in `verification.md`. Full-repo gates must
 be distinguished from changed-file/package gates: unrelated existing skill-center
 errors can block the root command even while shared code checks pass.
+
+## User acceptance and integration decision (2026-10-22)
+
+User: “测下来流程都通了，没啥大问题，合并回3.0.0分支，先拉取最新代码，然后删除当前开发分支。”
+Live functional smoke accepted. Detailed edge-case/design items above have not
+been individually signed off in this record; do not auto-check them from the
+aggregate acceptance statement. Final automated checks are recorded separately
+in verification.md.

@@ -210,3 +210,128 @@ upstream InputFormSkill and voice callback changes also survived the auto-merge.
 - The new shared-UI Popover/Slider dependencies are already present in the local
   workspace store; only their package-local links were added. No full dependency
   installation or canvas relinking was performed.
+
+## Remaining platform Select migration (2026-10-22)
+
+User authorized migrating ordinary platform selects and explicitly retaining
+specialized panels. Inventory and module acceptance cases are recorded in
+platform-select-migration.md. The remaining application-log picker and twelve
+native value selectors now use @bisheng/ui Select; add-approver actions use the
+shared Dropdown. Two unused legacy selector implementations were removed.
+Native option-change tests were updated to exercise the real shared option menus
+and aria-disabled guards, with disabled click assertions retained. No permission
+or approval API/persistence contract changed; the approval skill's architecture,
+scenario/route/notification/outbox contracts remain unchanged.
+
+- RED: the new filter regressions fail before migration, and the updated
+  permission interaction tests fail against native selects.
+  /tmp/f086-platform-select-red.log, /tmp/f086-native-select-red.log.
+- 34 tests in six files pass: remote application search, paging/last-page guard,
+  selection cache and removal, log filtering/export, permission ADD/MOVE and
+  read-only guards, approval configuration and route/node selection contracts.
+  /tmp/f086-platform-all-select-final-tests.log. The two new approval cases were
+  rerun after awaiting their initial role-load effect to avoid an act warning:
+  /tmp/f086-platform-native-controls-tests.log (2 passed).
+- Changed-file lint passes. lint:prune only shrinks suppressions. Full platform
+  lint remains at the existing 85 errors, and typecheck still has only the same
+  upstream clientVoiceDraft.test.tsx:47 error (no new diagnostics).
+  /tmp/f086-platform-all-select-final-lint.log,
+  /tmp/f086-platform-new-select-lint.log,
+  /tmp/f086-platform-all-select-prune.log,
+  /tmp/f086-platform-all-select-final-types.log.
+- Platform production build passes: /tmp/f086-platform-all-select-final-build.log.
+- Browser with real RouteDialog and application filter: Select works in the
+  modal; clearing a flow exposes required validation; restoring/saving retains
+  numeric ID 12; no-condition sends an empty match_config, no UI sentinel;
+  remote app search and tag removal work. All API traffic mocked, no page errors.
+  /tmp/f086-platform-select-browser.log; f086-platform-selects.png inspected.
+- Temporary browser fixture/config removed and its separate server stopped.
+
+## Client workflow upload type regression (2026-10-22)
+
+The client adapter passed normalized upload categories (`image`) directly to the
+file input, rather than converting them into extensions. Restored the existing
+fileAcceptToInputAccept conversion. The upload picker handler now also checks
+extensions before single/batch upload, case-insensitively; unsupported picks
+show the existing translated type error and never reach the upload API. Mixed
+batches keep valid files, all-invalid picks preserve the previous value. The
+picker resets after every attempt so a file can be selected again. Unconfigured
+legacy fields keep their existing unrestricted behavior.
+
+- RED: 3 of the 4 initial component regressions failed before the fix:
+  /tmp/f086-file-type-red.log.
+- GREEN: 10 Jest tests across the component and accept utility pass, including
+  string/array image configuration, invalid single/multiple selection, mixed
+  batches and case-insensitive extensions. /tmp/f086-file-type-final-tests.log.
+- Changed-file lint passes; lint:prune shrinks the existing unused-var count by
+  one. Full client lint remains at 101 errors + 1 warning and typecheck returns
+  only the same five upstream skill-center errors, no changed-file diagnostics.
+  /tmp/f086-file-type-final-lint.log, /tmp/f086-file-type-prune.log,
+  /tmp/f086-file-type-types.log. No dependency installation or real upload.
+
+## Debug chat scrolling and code node editor bounds (2026-10-22)
+
+- Scroll cause: the 400px bottom threshold treated upward reading as following;
+  debug hosts also supplied no-op history loaders. Upward movement now suspends
+  following, returning to the bottom resumes it. Hosts only enable pagination
+  with an actual history callback, retaining audit-view pagination.
+- Shared scroll tests: 45 tests in 10 files pass; host regressions and existing
+  session/question checks: 7 tests in 3 files pass. Shared types and changed-file
+  lint pass. Logs: /tmp/f086-scroll-chat-tests.log,
+  /tmp/f086-scroll-host-tests.log, /tmp/f086-scroll-chat-types.log,
+  /tmp/f086-scroll-chat-lint.log, /tmp/f086-scroll-host-lint.log.
+- Browser with the real scroll hook: a 10px upward wheel movement remains at
+  scrollTop 110 after rerender and content growth; scrolling down resumes
+  following, with zero distance from the bottom after subsequent growth.
+- Code editor cause: react-ace defaults to inline 500px width and height,
+  overriding the existing utility classes. Explicit width 100% and height
+  160px restore node bounds; the expanded editor fills its dialog's remaining
+  grid row, with dialog height capped to the viewport.
+- Browser RED: a 300px host contained a 500x500 editor overflowing horizontally.
+  GREEN: editor 300x160, no overflow; expanded editor stays inside its dialog.
+  Logs: /tmp/f086-editor-red.log, /tmp/f086-editor-green.log.
+- Editor changed-file lint passes. Temporary browser fixture/config removed and
+  its separate server stopped. All browser API traffic blocked; no backend writes.
+
+## Workflow bottom controls visibility (2026-10-22)
+
+- Root cause: bdc886930b removed global Tailwind important. React Flow's
+  `.react-flow__panel.left` then overrode `left-52`, placing controls behind the
+  higher-z-index sidebar. Controls were still mounted, not deleted.
+- Applied a local `!left-52` override to retain the original offset without
+  restoring global important.
+- Real-browser RED: left 15px, four buttons obscured by sidebar. GREEN: left
+  223px, all four buttons unobscured and clickable; create-note callback passed.
+  /tmp/f086-controls-red.log, /tmp/f086-controls-green.log.
+- Isolated temporary fixture/config removed and its dev server stopped.
+
+## Shared attachment file cards (2026-10-22)
+
+- Both hosts already render ConversationAttachments, but client supplied a legacy
+  FileIcon. Removed that host override and the unused renderIcon port; the shared
+  card now selects bisheng-icons Colored file icons for supported extensions
+  (Word/WPS, Excel/ET, CSV, PowerPoint/DPS, Markdown, HTML, text), with Outlined
+  PDF/generic fallback. Extension matching is case-insensitive.
+- Kept client-style card layout, unified semantic colors, fixed icon slots and
+  bounded long filenames with ellipsis/title. Media/image presentation unchanged.
+- Three attachment tests pass, shared package typecheck and changed-file ESLint
+  for shared/client files pass. Browser verified six file types, no overflow,
+  and download callback. Final screenshot inspected: f086-file-cards.png.
+- Temporary fixture/config removed and separate dev server stopped.
+
+## Annotation conversation identity and actions (2026-10-22)
+
+- Annotation host supplied empty app name/avatar to both conversation adapters.
+  Now reads existing /chat/info session metadata and supplies its flow_name and
+  flow_logo to workflow and assistant messages. Application editor/detail APIs
+  remain unused; late responses cannot overwrite another conversation's identity.
+- Restored small primary solid buttons for similar-question and QA actions,
+  with hover/focus visibility and the similar-question action aligned right.
+  Kept existing flag icon because bisheng-icons has no equivalent flag icon.
+- RED: two new identity tests failed. GREEN: 17 tests across annotation routing,
+  forms and metadata pass, including out-of-order metadata. Changed-file lint
+  passes. /tmp/f086-annotation-header-red.log,
+  /tmp/f086-annotation-final-tests.log, /tmp/f086-annotation-final-lint.log.
+- Isolated browser preview verified app avatar/name, hover primary buttons,
+  and clickable QA action. Temporary fixture/config/server and preview tab
+  cleaned up; no live backend annotation writes.

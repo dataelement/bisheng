@@ -17,7 +17,7 @@ export default function Chat({
     wsUrl,
     onBeforSend,
     version,
-    loadMore = () => { }
+    loadMore
 }) {
     const [loading, setLoading] = useState(autoRun)
 

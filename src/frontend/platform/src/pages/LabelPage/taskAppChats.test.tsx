@@ -3,14 +3,15 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import TaskAppChats from './taskAppChats'
 
-const mock = vi.hoisted(() => ({ permission: vi.fn(), status: vi.fn(), next: vi.fn(), update: vi.fn(), assistant: vi.fn(), workflow: vi.fn(), similar: vi.fn(), qa: vi.fn(), clear: vi.fn(), change: vi.fn(), destroy: vi.fn(), completeQa: vi.fn() }))
+const mock = vi.hoisted(() => ({ detail: vi.fn(), permission: vi.fn(), status: vi.fn(), next: vi.fn(), update: vi.fn(), assistant: vi.fn(), workflow: vi.fn(), similar: vi.fn(), qa: vi.fn(), clear: vi.fn(), change: vi.fn(), destroy: vi.fn(), completeQa: vi.fn() }))
 vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p.catch(() => false) }));
+vi.mock('@/controllers/API/flow', () => ({ getDeleteFlowApi: mock.detail }))
 vi.mock('@/controllers/API/log', () => ({ getMarkPermissionApi: mock.permission, getMarkStatusApi: mock.status, getNextMarkChatApi: mock.next, updateMarkStatusApi: mock.update }))
 vi.mock('@/components/bs-comp/chatComponent/messageStore', () => ({ MessageStoreProvider: ({ children }: { children: React.ReactNode }) => children, useMessageStore: () => ({ loadHistoryMsg: mock.assistant, loadMoreHistoryMsg: vi.fn(), changeChatId: mock.change, clearMsgs: mock.clear }) }))
 vi.mock('@/pages/BuildPage/flow/FlowChat/messageStore', () => ({ MessageStoreProvider: ({ children }: { children: React.ReactNode }) => children, useMessageStore: () => ({ loadHistoryMsg: mock.workflow, loadMoreHistoryMsg: vi.fn(), changeChatId: mock.change, clearMsgs: mock.clear }) }))
 vi.mock('@/store/assistantStore', () => ({ useAssistantStore: () => ({ destroy: mock.destroy }) }))
-vi.mock('@/components/bs-comp/chatComponent/MessagePanne', () => ({ default: ({ onMarkClick }: { onMarkClick: (type: string, id: string, qa: { q: string; a: string }) => void }) => <button onClick={() => onMarkClick('question', 'message-1', { q: 'Question', a: 'Answer' })}>Assistant annotation</button> }))
-vi.mock('../BuildPage/flow/FlowChat/ChatMessages', () => ({ default: ({ onMarkClick }: { onMarkClick: (kind: string, id: string, qa: { q: string; a: string }) => void }) => <button onClick={() => onMarkClick('answer', 'message-2', { q: 'Question', a: 'Answer' })}>Workflow annotation</button> }))
+vi.mock('@/components/bs-comp/chatComponent/MessagePanne', () => ({ default: ({ onMarkClick, chat, logo }: { chat?: { name: string }; logo?: React.ReactNode; onMarkClick: (type: string, id: string, qa: { q: string; a: string }) => void }) => <div>{logo}<span>{chat?.name}</span><button onClick={() => onMarkClick('question', 'message-1', { q: 'Question', a: 'Answer' })}>Assistant annotation</button></div> }))
+vi.mock('../BuildPage/flow/FlowChat/ChatMessages', () => ({ default: ({ onMarkClick, title, logo }: { title?: string; logo?: React.ReactNode; onMarkClick: (kind: string, id: string, qa: { q: string; a: string }) => void }) => <div>{logo}<span>{title}</span><button onClick={() => onMarkClick('answer', 'message-2', { q: 'Question', a: 'Answer' })}>Workflow annotation</button></div> }))
 vi.mock('./SaveQaLibForm', async () => {
     const React = await import('react')
     return { default: React.forwardRef(({ onMarked }: { onMarked: (operation?: unknown) => void }, ref) => {
@@ -26,6 +27,7 @@ vi.mock('./AddSimilarQuestions', async () => {
 afterEach(cleanup)
 beforeEach(() => {
     vi.clearAllMocks()
+    mock.detail.mockResolvedValue({ flow_name: 'Weather assistant', flow_logo: '/test-app.png' })
     mock.permission.mockResolvedValue(true)
     mock.status.mockResolvedValue({ status: 1, is_self: true })
     mock.next.mockImplementation(({ action }: { action: string }) => Promise.resolve(action === 'next' ? { flow_id: 'flow-2', chat_id: 'chat-2', flow_type: 10 } : null))
@@ -110,4 +112,24 @@ it('does not apply an old A completion to a newly opened A after A → B → A',
     await act(async () => { await completeOldA?.(); });
     expect(mock.update).toHaveBeenCalledWith({ session_id: 'chat-1', task_id: 7, status: 2 });
     expect(screen.getByRole('radio', { name: 'label.unlabeled' })).toHaveAttribute('aria-checked', 'true');
+});
+
+it.each([5, 10])('restores application name and avatar from session metadata for type %s', async type => {
+    setup(type);
+    expect(await screen.findByText('Weather assistant')).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/test-app.png');
+    expect(mock.detail).toHaveBeenCalledWith('chat-1');
+});
+
+it('ignores application metadata arriving after the next conversation has opened', async () => {
+    let finishOld: (value: { flow_name: string; flow_logo: string }) => void = () => undefined;
+    mock.detail.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+        .mockResolvedValueOnce({ flow_name: 'Next application', flow_logo: '/next.png' });
+    setup(10);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'label.nextChat' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'label.nextChat' }));
+    expect(await screen.findByText('Next application')).toBeInTheDocument();
+    await act(async () => { finishOld({ flow_name: 'Old application', flow_logo: '/old.png' }); });
+    expect(screen.queryByText('Old application')).not.toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/next.png');
 });

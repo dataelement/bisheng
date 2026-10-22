@@ -12,6 +12,7 @@ export function useConversationScroll(options: ConversationScrollOptions) {
   const latest = useRef(options);
   latest.current = options;
   const following = useRef(true);
+  const previousScrollTop = useRef(0);
   const autoRequestedKey = useRef<string>();
   const [loadRevision, setLoadRevision] = useState(0);
   const loading = useRef<object | null>(null);
@@ -34,6 +35,7 @@ export function useConversationScroll(options: ConversationScrollOptions) {
       node.scrollTop = node.scrollHeight;
     }
     previous.current = { sessionKey, first, last, height: node.scrollHeight };
+    previousScrollTop.current = node.scrollTop;
   }, [messages, scrollRef, sessionKey]);
   const loadOlder = useCallback(() => {
     const current = latest.current;
@@ -58,7 +60,10 @@ export function useConversationScroll(options: ConversationScrollOptions) {
     const node = scrollRef.current;
     if (!node) return;
     const handleScroll = () => {
-      following.current = node.scrollHeight - node.scrollTop - node.clientHeight <= 400;
+      const movedUp = node.scrollTop < previousScrollTop.current;
+      // Reading older content always wins over following, even near the bottom.
+      following.current = !movedUp && node.scrollHeight - node.scrollTop - node.clientHeight <= 24;
+      previousScrollTop.current = node.scrollTop;
       if (node.scrollTop <= 90) loadOlder();
     };
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(fillViewport);

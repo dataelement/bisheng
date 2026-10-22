@@ -142,3 +142,12 @@ scope drift, no claims of checks that did not run.
   CSS loading, formulas, dark/narrow and untouched legacy sibling styling.
 - [x] Shared 37 tests + package strict types/lint; two app build logs recorded.
 - [ ] Real business/design acceptance remains the earlier unchecked checklist.
+
+### Integration authorization (2026-10-22)
+
+The user completed live flow testing, reported no major issues, and explicitly
+requested merging into the latest feat/3.0.0 and deleting codex/086-shared-app-chat.
+This supersedes the earlier no-commit/no-merge status notes. Individual stress,
+permission variants and designer sign-off are not inferred from that smoke pass;
+unchecked detailed checklist entries remain a coverage record, not an assertion
+that those specific scenarios were individually executed.

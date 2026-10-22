@@ -20,12 +20,10 @@ export default function ChatMessages({
 }) {
     const { chatId, messages, inputForm, eventTarget, running, historyEnd, questions, inputLocked } = useMessageStore()
 
-    // 反馈
-    // 溯
     const messagesRef = useRef<HTMLDivElement>(null);
     useConversationScroll({ scrollRef: messagesRef, sessionKey: chatId,
         messages: messagesForPresentation(messages, { mode: 'workflow', sessionKey: chatId }),
-        canLoadOlder: !running && !historyEnd, onLoadOlder: () => loadMore?.() });
+        canLoadOlder: typeof loadMore === 'function' && !running && !historyEnd, onLoadOlder: () => loadMore?.() });
 
     const messagesList = guideWord && !messages.some(message => message.category === 'guide_word') ? [{ category: 'guide_word', message: guideWord }, ...messages] : [...messages]
     return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-44 px-4">

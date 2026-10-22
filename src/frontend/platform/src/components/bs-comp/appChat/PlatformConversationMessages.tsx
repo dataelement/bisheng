@@ -58,17 +58,17 @@ export function PlatformConversationMessages({ mode, sessionKey, messages: rows,
                     const id = message.sourceMessageId;
                     if (message.category === 'guide_word') return canExecute ? <PlatformVoiceAction id={id ?? message.key} text={message.text} /> : null;
                     if (message.kind === 'form' || message.kind === 'choice') return <PlatformVoiceAction id={id ?? message.key} text={message.text} />;
-                    if (message.kind === 'user') return canAnnotate && id ? <Button size="small" variant="text" color="default" onClick={() => handleMark(message)}><FlagIcon className="size-3.5" />{t('addSimilarQuestion')}</Button> : null;
+                    if (message.kind === 'user') return canAnnotate && id ? <><span /><div className="mt-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"><Button size="small" variant="solid" color="primary" onClick={() => handleMark(message)}><FlagIcon className="size-3.5" />{t('addSimilarQuestion')}</Button></div></> : null;
                     const { referenceText, webContent } = splitMessageContent(message.text);
                     return <>
                         <div>
                             <CitationReferencesDrawer content={referenceText} webContent={webContent} citations={normalizeCitationItems(message.raw)} allowRemoteCitationResolve />
                             <SourceEntry extra={asRecord(parsePayload(message.raw.extra))} end={message.final} source={message.raw.source} onSource={() => sourceRef.current?.openModal({ chatId: sessionKey, messageId: id, message: referenceText })} />
                         </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                             {mode === 'assistant' && version !== 'v2' && <PlatformVoiceAction id={id ?? message.key} text={referenceText} />}
                             <CopyMessageAction label={t('shared:app_chat.copy')} copiedLabel={t('shared:app_chat.copied')} onCopy={() => copyText(contentRef.current ?? referenceText)} />
-                            {canAnnotate && id && message.kind === 'answer' && message.text.trim() && <Button size="small" variant="text" color="default" onClick={() => handleMark(message)}><FlagIcon className="size-3.5" />{t('addQa')}</Button>}
+                            {canAnnotate && id && message.kind === 'answer' && message.text.trim() && <Button size="small" variant="solid" color="primary" onClick={() => handleMark(message)}><FlagIcon className="size-3.5" />{t('addQa')}</Button>}
                         </div>
                     </>;
                 },

@@ -1,8 +1,10 @@
 // @ts-strict-ignore
-import { captureQaOperation, isCurrentQaOperation, type QaOperation } from '@bisheng/chat/core';
+import { asRecord, displayText, captureQaOperation, isCurrentQaOperation, type QaOperation } from '@bisheng/chat/core';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import type { AnnotationFormHandle } from './annotationTypes';
 import { Button } from '@bisheng/ui';
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { getDeleteFlowApi } from "@/controllers/API/flow";
 import MessagePanne from "@/components/bs-comp/chatComponent/MessagePanne";
 import { MessageStoreProvider as AssistantMessageStoreProvider, useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 
@@ -64,6 +66,9 @@ function TaskAppChatsContent() {
     const navigator = useNavigate()
 
     const mark = useAuth()
+    const [appInfo, setAppInfo] = useState({ chatId: '', name: '', logo: '' })
+    const app = appInfo.chatId === cid ? appInfo : { name: '', logo: '' }
+    const logo = <AppAvator id={app.name || fid} flowType={type} url={app.logo} className="size-6 min-w-6" />
 
     const [status, setStatus] = React.useState(LabelStatus.Unlabeled)
     const [isSelf, setIsSelf] = useState(false)
@@ -86,7 +91,12 @@ function TaskAppChatsContent() {
         const session = sessionRef.current
         qaFormRef.current?.close()
         similarFormRef.current?.close()
-        // type === 'assistant' && loadAssistantState(fid, 'v1') 禁用助手详情,涉及权限403问题
+        // Session metadata is available without requiring application edit access.
+        void captureAndAlertRequestErrorHoc(getDeleteFlowApi(cid).then(detail => {
+            if (sessionRef.current !== session) return
+            const info = asRecord(detail)
+            setAppInfo({ chatId: cid, name: displayText(info.flow_name), logo: displayText(info.flow_logo) })
+        }))
         type === AppNumType.FLOW ? loadFlowHistoryMsg(fid, cid, {
             appendHistory: true,
             lastMsg: ""
@@ -163,8 +173,8 @@ function TaskAppChatsContent() {
             </div>
             <div className="min-h-0 flex-1">
                 {type === AppNumType.FLOW
-                    ? <ChatMessages mark={mark} logo='' useName='' guideWord='' loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={handleMarkClick}></ChatMessages>
-                    : <MessagePanne mark={mark} logo='' useName='' guideWord=''
+                    ? <ChatMessages mark={mark} title={app.name} logo={logo} useName='' guideWord='' loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={handleMarkClick}></ChatMessages>
+                    : <MessagePanne mark={mark} chat={app} logo={logo} useName='' guideWord=''
                         loadMore={() => loadMoreHistoryMsg(fid, true)}
                         onMarkClick={handleMarkClick}
                     ></MessagePanne>

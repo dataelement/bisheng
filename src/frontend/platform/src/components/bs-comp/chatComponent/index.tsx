@@ -16,7 +16,7 @@ export default function ChatComponent({
     onBeforSend,
     onClickClear,
     chat,
-    loadMore = () => { },
+    loadMore,
     version
 }) {
 

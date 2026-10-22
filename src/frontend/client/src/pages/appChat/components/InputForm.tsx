@@ -7,7 +7,7 @@ import useSelectCopy from '~/hooks/useSelectCopy';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 import { emitAreaTextEvent, EVENT_TYPE } from '../useAreaText';
-import { normalizeFileAccept } from '../fileAcceptUtils';
+import { fileAcceptToInputAccept, normalizeFileAccept } from '../fileAcceptUtils';
 import { bishengConfState } from '../store/atoms';
 import InputFileComponent from './InputFileComponent';
 
@@ -28,7 +28,7 @@ export function InputForm({ data, flow, logo }: InputFormProps) {
                     renderControl={props => <WorkflowFileField {...props} id={id} />}
                     placeholder={localize('com_file_current_empty')} value="" multiple={field.multiple}
                     onChange={onFileNameChange}
-                    suffixes={normalizeFileAccept(field.raw.file_type, { mediaEnabled: !!config?.enable_media_upload })}
+                    suffixes={fileAcceptToInputAccept(normalizeFileAccept(field.raw.file_type, { mediaEnabled: !!config?.enable_media_upload }))}
                     onFileChange={value => onChange(Array.isArray(value) ? value : value ? [value] : [])} />;
                 if (field.type !== 'select') return null;
                 const options = field.options.map(text => ({ label: text, value: text }));

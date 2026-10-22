@@ -1,14 +1,26 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { Outlined } from 'bisheng-icons';
+import { Colored, Outlined } from 'bisheng-icons';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ChatAttachment } from '../core/types';
 export interface AttachmentServices {
   resolveUrl: (url: string) => string;
   getImageUrl?: (file: ChatAttachment) => Promise<string | null>;
   onDownload: (file: ChatAttachment) => void | Promise<unknown>;
-  renderIcon?: (file: ChatAttachment) => ReactNode;
   renderMedia?: (file: ChatAttachment) => ReactNode;
   labels: { download: string; unavailable: string; close: string; preview: string };
+}
+function AttachmentFileIcon({ name }: { name: string }) {
+  const extension = name.split(/[?#]/)[0].split('.').pop()?.toLowerCase();
+  const Icon = extension === 'doc' || extension === 'docx' || extension === 'wps' ? Colored.FileDoc
+    : extension === 'xls' || extension === 'xlsx' || extension === 'et' ? Colored.FileXls
+    : extension === 'csv' ? Colored.FileCsv
+    : extension === 'ppt' || extension === 'pptx' || extension === 'dps' ? Colored.FilePptx
+    : extension === 'md' ? Colored.FileMd
+    : extension === 'html' || extension === 'htm' ? Colored.FileHtml
+    : extension === 'txt' ? Colored.FileTxt
+    : extension === 'pdf' ? Outlined.FilePdf : Outlined.File;
+  const outlined = Icon === Outlined.FilePdf || Icon === Outlined.File;
+  return <span className="flex size-10 shrink-0 items-center justify-center text-text-2" aria-hidden="true"><Icon size={outlined ? 24 : 40} /></span>;
 }
 function isImage(file: ChatAttachment): boolean { return /\.(?:png|jpe?g|gif|bmp|webp)(?:[?#].*)?$/i.test(file.name || file.url); }
 function isMedia(file: ChatAttachment): boolean { return /\.(?:mp[34]|wav|m4a|aac|ogg|flac|mov|avi|mkv|webm)(?:[?#].*)?$/i.test(file.name || file.url); }
@@ -53,10 +65,10 @@ export function ConversationAttachments({ files, services }: { files: readonly C
     {others.length > 0 && <div className="mt-2 flex max-w-sm flex-wrap gap-2 first:mt-0">{others.map((file, index) => <div key={file.id || file.url || index}>
       {isMedia(file) && services.renderMedia ? services.renderMedia(file)
         : <button type="button" disabled={!file.url} onClick={() => { if (file.url) void services.onDownload(file); }}
-          className="group min-w-52 relative flex items-center gap-2 border bg-white p-2 rounded-xl cursor-pointer text-left">
-          {services.renderIcon?.(file) ?? <Outlined.FileWord size={20} />}
-          <span className="flex-1"><span className="block max-w-48 text-sm font-medium text-gray-700 truncate">{file.name}</span>
-            <span className="block text-xs text-gray-400 mt-1">{file.url ? services.labels.download : services.labels.unavailable}</span>
+          className="group relative flex w-52 max-w-full items-center gap-2 rounded-xl border border-border-base bg-bg-page p-2 text-left cursor-pointer">
+          <AttachmentFileIcon name={file.name} />
+          <span className="min-w-0 flex-1"><span title={file.name} className="block truncate text-body text-text-1">{file.name}</span>
+            <span className="mt-1 block text-caption text-text-3">{file.url ? services.labels.download : services.labels.unavailable}</span>
           </span>
         </button>}
     </div>)}</div>}

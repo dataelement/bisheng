@@ -11,13 +11,10 @@ export default function MessagePanne({ canExecute = false, mark = false, logo, u
     const questionKey = questions.join("\n");
     useEffect(() => { setShowGuideQuestion(!!questionKey); }, [chatId, questionKey, setShowGuideQuestion]);
 
-    // 反馈
-    // 溯源
-
     const messagesRef = useRef<HTMLDivElement>(null);
     useConversationScroll({ scrollRef: messagesRef, sessionKey: chatId,
         messages: messagesForPresentation(messages, { mode: 'assistant', sessionKey: chatId }),
-        canLoadOlder: !running && !historyEnd, onLoadOlder: () => loadMore?.() });
+        canLoadOlder: typeof loadMore === 'function' && !running && !historyEnd, onLoadOlder: () => loadMore?.() });
 
     const messagesList = [...hisMessages, ...messages]
     return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60">

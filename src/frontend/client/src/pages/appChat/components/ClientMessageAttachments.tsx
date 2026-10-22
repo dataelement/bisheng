@@ -3,7 +3,6 @@ import type { ChatAttachment, ChatMessage } from '@bisheng/chat/core';
 import { useCallback } from 'react';
 import { getAttachmentUrl } from '~/api/chatApi';
 import { MediaAttachmentChip } from '~/components/Chat/attachments/MediaAttachmentChip';
-import { FileIcon, getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
 import { useLocalize } from '~/hooks';
 import { resolveKnowledgePreviewUrl } from '~/pages/knowledge/FilePreview/previewUrlUtils';
 import { downloadFile } from '~/utils';
@@ -15,7 +14,6 @@ export function ClientMessageAttachments({ message, conversationId }: { message:
     return <ConversationAttachments files={message.files} services={{ resolveUrl,
         getImageUrl: message.kind === 'user' ? getImageUrl : undefined,
         onDownload: file => downloadFile(resolveUrl(file.url), file.name),
-        renderIcon: file => <FileIcon loading={false} type={getFileTypebyFileName(file.name) || 'txt'} />,
         renderMedia: file => <MediaAttachmentChip variant="message" file={{ ...file.raw, name: file.name, filename: file.name, filepath: file.url, file_path: file.url }} />,
         labels: { download: t('shared:app_chat.attachment_download'), unavailable: t('shared:app_chat.attachment_unavailable'), close: t('shared:app_chat.close'), preview: t('shared:app_chat.image_preview') },
     }} />;
