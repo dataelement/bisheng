@@ -589,3 +589,14 @@ def test_create_has_only_create_authority_until_observed_uid_is_persisted(monkey
     assert plans[-1]["uid"] == observed_uid and plans[-1]["allow_create"] is False
     assert plans[-1]["allow_update"] is True and plans[-1]["allow_delete"] is True
     assert verifier.created[0]["uid"] == observed_uid
+
+
+def test_unscheduled_canary_needs_verified_atomic_binding_fence():
+    tool = load_installer()
+    pod = {
+        "metadata": {"name": "preflight-unassigned", "uid": str(uuid4()), "deletionTimestamp": "2026-10-22T00:00:00Z"},
+        "spec": {},
+        "status": {},
+    }
+    assert not tool.stop_confirmed(pod)
+    assert tool.stop_confirmed(pod, binding_verified=True)
