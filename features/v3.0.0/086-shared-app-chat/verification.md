@@ -178,3 +178,35 @@ No new select implementation or dependency remains in the shared package.
   clean. Logs: /tmp/f086-form-platform-final-types.log,
   /tmp/f086-form-platform-final-lint.log, /tmp/f086-form-client-types.log,
   /tmp/f086-form-client-lint.log.
+
+## Merge latest release line (2026-10-22)
+
+User requested merging the newest release line into this feature branch. Saved
+all F086 work in local checkpoint 5e93dfff2 and a pre-merge recovery archive at
+/tmp/f086-premerge-files.tar.gz, then merged origin/feat/3.0.0 at 58996f12b.
+Three textual conflicts: release-contract.md keeps both F086 and F087 history
+entries; both InputForm adapters retain shared chat layout/upload/submission and
+adopt the upstream @bisheng/ui Select plus the upstream localized copy hooks.
+No old message renderers or deleted legacy select wrappers were restored. The
+upstream InputFormSkill and voice callback changes also survived the auto-merge.
+
+- Both production builds pass: /tmp/f086-merge-build.log.
+- 44 shared-chat tests, 27 host regression tests and one new merge regression
+  covering real shared Select single/multiple submission pass (72 total).
+  /tmp/f086-merge-chat-tests.log, /tmp/f086-merge-platform-tests.log,
+  /tmp/f086-merge-select-tests.log.
+- @bisheng/chat and @bisheng/ui typechecks/lint pass; resolved form files and the
+  new regression test pass targeted lint.
+- Browser: actual platform InputForm uses the upstream 32px Select, gray focus
+  border and 2px gray shadow; popup stays below the trigger, single/multiple work,
+  no errors or 390px overflow. All API traffic blocked. Screenshot
+  f086-merge-select.png inspected; /tmp/f086-merge-browser.log.
+- Full workspace gates remain blocked by upstream/previous issues: platform lint
+  85 errors; client lint 101 errors + 1 warning; platform typecheck one error in
+  clientVoiceDraft.test.tsx (47), client five skill-center errors. The affected
+  source/test files match origin/feat/3.0.0; no merge-conflict form diagnostics.
+  /tmp/f086-merge-lint.log, /tmp/f086-merge-types.log,
+  /tmp/f086-merge-client-lint.log, /tmp/f086-merge-client-types.log.
+- The new shared-UI Popover/Slider dependencies are already present in the local
+  workspace store; only their package-local links were added. No full dependency
+  installation or canvas relinking was performed.

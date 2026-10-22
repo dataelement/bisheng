@@ -1,12 +1,10 @@
 import { useState, useRef, memo } from 'react';
 import { Ellipsis } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
-import type { MouseEvent } from 'react';
 import { useDuplicateConversationMutation, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { useLocalize, useArchiveHandler, useNavigateToConvo } from '~/hooks';
 import { useToastContext, useChatContext } from '~/Providers';
-import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
-import { ActionMenuContent, ActionMenuItem } from '~/components/ActionMenu';
+import { Dropdown, DropdownItem, DropdownSeparator } from '@bisheng/ui';
 import { useDeleteConversationConfirm } from './useDeleteConversationConfirm';
 import ShareButton from './ShareButton';
 import { cn } from '~/utils';
@@ -23,7 +21,7 @@ function ConvoOptions({
   conversationId: string | null;
   title: string | null;
   retainView: () => void;
-  renameHandler: (e: MouseEvent) => void;
+  renameHandler: () => void;
   isPopoverActive: boolean;
   setIsPopoverActive: React.Dispatch<React.SetStateAction<boolean>>;
   isActiveConvo: boolean;
@@ -60,10 +58,6 @@ function ConvoOptions({
     },
   });
 
-  const handleRename = (e: Event) => {
-    renameHandler(e as unknown as MouseEvent);
-  };
-
   const handleDelete = () => {
     if (!conversationId) {
       return;
@@ -73,8 +67,25 @@ function ConvoOptions({
 
   return (
     <>
-      <DropdownMenu open={isPopoverActive} onOpenChange={setIsPopoverActive}>
-        <DropdownMenuTrigger asChild>
+      {/* The menu is portaled, but its clicks still bubble through the React
+          tree to the conversation row — stop them here. */}
+      <span className="contents" onClick={(e) => e.stopPropagation()}>
+        <Dropdown
+          align="end"
+          open={isPopoverActive}
+          onOpenChange={setIsPopoverActive}
+          menu={
+            <>
+              <DropdownItem icon={<Outlined.Edit />} onSelect={renameHandler}>
+                {localize('com_ui_rename')}
+              </DropdownItem>
+              <DropdownSeparator />
+              <DropdownItem danger icon={<Outlined.Delete />} onSelect={handleDelete}>
+                {localize('com_ui_delete')}
+              </DropdownItem>
+            </>
+          }
+        >
           <button
             ref={triggerRef}
             type="button"
@@ -86,28 +97,11 @@ function ConvoOptions({
                 ? 'opacity-100'
                 : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
             )}
-            onClick={(e) => e.stopPropagation()}
           >
             <Ellipsis className="icon-md" aria-hidden />
           </button>
-        </DropdownMenuTrigger>
-        <ActionMenuContent
-          width={140}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ActionMenuItem
-            icon={<Outlined.Edit />}
-            label={localize('com_ui_rename')}
-            onSelect={handleRename}
-          />
-          <ActionMenuItem
-            danger
-            icon={<Outlined.Delete />}
-            label={localize('com_ui_delete')}
-            onSelect={handleDelete}
-          />
-        </ActionMenuContent>
-      </DropdownMenu>
+        </Dropdown>
+      </span>
       {showShareDialog && (
         <ShareButton
           conversationId={conversationId ?? ''}

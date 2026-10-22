@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, Input, notification } from '@bisheng/ui';
+import { Button, Input, notification, Select } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 import { useCallback,useEffect,useMemo,useState } from "react";
 import { EnumMultiSelect } from "./EnumMultiSelect";
@@ -13,13 +13,7 @@ DialogHeader,
 DialogTitle
 } from "@/components/bs-ui/dialog";
 
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { generateUUID } from "@/components/bs-ui/utils";
 import { Tag } from "@bisheng/ui";
@@ -95,6 +89,7 @@ export function FilterConditionDialog({
   filtersLogic
 }: Props) {
   const { t } = useTranslation("dashboard")
+  const selectLabels = useSelectLabels()
   const [draft, setDraft] = useState<FilterGroup>({
     logic: "and",
     conditions: [createEmptyCondition()]
@@ -293,6 +288,21 @@ export function FilterConditionDialog({
       }
     }
   }
+  // Operators offered per field type; date fields have none here
+  const getOperatorOptions = (fieldType?: FieldType) => {
+    const operators: [FilterOperator, string][] = fieldType === "string"
+      ? [
+        ["equals", 'equals'], ["not_equals", 'notEquals'], ["contains", 'contains'],
+        ["not_contains", 'notContains'], ["is_empty", 'isEmpty'], ["is_not_empty", 'isNotEmpty'],
+      ]
+      : fieldType === "number"
+        ? [
+          ["equals", 'equals'], ["not_equals", 'notEquals'], ["greater_than", 'greaterThan'],
+          ["greater_than_or_equal", 'greaterThanOrEqual'], ["less_than", 'lessThan'], ["less_than_or_equal", 'lessThanOrEqual'],
+        ]
+        : []
+    return operators.map(([value, key]) => ({ value, label: t(`filterConditionDialog.operators.${key}`) }))
+  }
   const handleToggleLogic = () => {
     setDraft(prev => ({
       ...prev,
@@ -386,81 +396,45 @@ export function FilterConditionDialog({
                     <div className="flex items-center gap-2 p-2">
                       {/* 第一个下拉框：选择字段 */}
                       <Select
-                        value={c.fieldCode}
-                        onValueChange={v => handleFieldChange(c.id, v)}
-                      >
-                        <SelectTrigger className="w-[120px] h-8">
-                          <SelectValue placeholder={t('filterConditionDialog.placeholders.selectField')} />
-                        </SelectTrigger>
-                        <SelectContent className=" overflow-y-auto w-[160px] max-h-[200px]">
-                          {filteredFields.length > 0 ? (
-                            filteredFields.map(f => {
-                              const displayText = getFieldDisplayName(f.fieldCode) || "暂无";
-                              return (
-                                <SelectItem key={f.fieldCode} value={f.fieldCode} className="truncate">
-                                  <span className="truncate block w-[80px]" title={displayText}>
-                                    {displayText}
-                                  </span>
-                                </SelectItem>
-                              )
-                            })
-                          ) : (
-                            <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                              {t('filterConditionDialog.filterTypes.noFields')}
-                            </div>
-                          )}
-                        </SelectContent>
-                      </Select>
+                        {...selectLabels}
+                        className="w-[120px]"
+                        options={filteredFields
+                          .filter(f => f.fieldCode != null && f.fieldCode !== '')
+                          .map(f => ({ value: f.fieldCode, label: getFieldDisplayName(f.fieldCode) || t('noValue') }))}
+                        value={c.fieldCode || null}
+                        onChange={v => { if (v != null) handleFieldChange(c.id, String(v)) }}
+                        placeholder={t('filterConditionDialog.placeholders.selectField')}
+                        aria-label={t('filterConditionDialog.placeholders.selectField')}
+                        emptyText={t('filterConditionDialog.filterTypes.noFields')}
+                      />
                       {/* 第二个下拉框：筛选类型 */}
                       {c.fieldCode && (
                         <Select
-                          value={c.filterType}
-                          onValueChange={v => handleFilterTypeChange(c.id, v as "conditional" | "enum")}
-                        >
-                          <SelectTrigger className="w-[100px] h-8">
-                            <SelectValue placeholder={t('filterConditionDialog.placeholders.filterType')} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="conditional">{t('filterConditionDialog.filterTypes.conditional')}</SelectItem>
-                            {c.fieldType !== "number" && <SelectItem value="enum">{t('filterConditionDialog.filterTypes.enum')}</SelectItem>}
-                          </SelectContent>
-                        </Select>
+                          {...selectLabels}
+                          className="w-[100px]"
+                          options={[
+                            { value: "conditional", label: t('filterConditionDialog.filterTypes.conditional') },
+                            ...(c.fieldType !== "number" ? [{ value: "enum", label: t('filterConditionDialog.filterTypes.enum') }] : []),
+                          ]}
+                          value={c.filterType || null}
+                          onChange={v => { if (v != null) handleFilterTypeChange(c.id, v as "conditional" | "enum") }}
+                          placeholder={t('filterConditionDialog.placeholders.filterType')}
+                          aria-label={t('filterConditionDialog.placeholders.filterType')}
+                        />
                       )}
                       {/* 条件筛选的操作符和值输入 */}
                       {c.fieldCode && c.filterType === "conditional" && (
                         <>
                           {/* 操作符 */}
                           <Select
-                            value={c.operator}
-                            onValueChange={v => handleOperatorChange(c.id, v as FilterOperator)}
-                          >
-                            <SelectTrigger className="w-[160px] h-8">
-                              <SelectValue placeholder={t('filterConditionDialog.placeholders.operator')} />
-                            </SelectTrigger>
-                            <SelectContent className=" overflow-y-auto w-[160px] max-h-[240px]">
-                              {c.fieldType === "string" ? (
-                                <>
-                                  <SelectItem value="equals">{t('filterConditionDialog.operators.equals')}</SelectItem>
-                                  <SelectItem value="not_equals">{t('filterConditionDialog.operators.notEquals')}</SelectItem>
-                                  <SelectItem value="contains">{t('filterConditionDialog.operators.contains')}</SelectItem>
-                                  <SelectItem value="not_contains">{t('filterConditionDialog.operators.notContains')}</SelectItem>
-                                  <SelectItem value="is_empty">{t('filterConditionDialog.operators.isEmpty')}</SelectItem>
-                                  <SelectItem value="is_not_empty">{t('filterConditionDialog.operators.isNotEmpty')}</SelectItem>
-                                </>
-                              ) : c.fieldType === "number" ? (
-                                <>
-                                  <SelectItem value="equals">{t('filterConditionDialog.operators.equals')}</SelectItem>
-                                  <SelectItem value="not_equals">{t('filterConditionDialog.operators.notEquals')}</SelectItem>
-                                  <SelectItem value="greater_than">{t('filterConditionDialog.operators.greaterThan')}</SelectItem>
-                                  <SelectItem value="greater_than_or_equal">{t('filterConditionDialog.operators.greaterThanOrEqual')}</SelectItem>
-                                  <SelectItem value="less_than">{t('filterConditionDialog.operators.lessThan')}</SelectItem>
-                                  <SelectItem value="less_than_or_equal">{t('filterConditionDialog.operators.lessThanOrEqual')}</SelectItem>
-                                  {/* <SelectItem value="is_empty">{t('filterConditionDialog.operators.isEmpty')}</SelectItem>
-                                  <SelectItem value="is_not_empty">{t('filterConditionDialog.operators.isNotEmpty')}</SelectItem> */}
-                                </>
-                              ) : null}
-                            </SelectContent>
-                          </Select>
+                            {...selectLabels}
+                            className="w-[160px]"
+                            options={getOperatorOptions(c.fieldType)}
+                            value={c.operator || null}
+                            onChange={v => { if (v != null) handleOperatorChange(c.id, v as FilterOperator) }}
+                            placeholder={t('filterConditionDialog.placeholders.operator')}
+                            aria-label={t('filterConditionDialog.placeholders.operator')}
+                          />
                           {/* 值输入 */}
                           {c.operator && operatorNeedsValue(c.operator) && (
                             <>

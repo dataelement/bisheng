@@ -80,6 +80,8 @@ class XinChuangFormatterLoader(BaseBishengLoader):
             "file_extension": file_extension,
             "tmp_dir": self.tmp_dir,
             "image_object_dir": self.image_object_dir,
+            "image_url_builder": self.image_url_builder,
+            "split_for_retrieval": self.split_for_retrieval,
         }
         if loader_type == "word":
             return BishengWordLoader(**params, retain_images=self.retain_images)

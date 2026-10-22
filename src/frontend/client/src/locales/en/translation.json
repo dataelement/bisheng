@@ -476,6 +476,12 @@
   "com_linsight_error_title_unknown": "Task failed",
   "com_linsight_error_desc_unknown": "An error occurred while running the task, which has stopped.",
   "com_linsight_error_hint_unknown": "Tip: start the task again; contact an administrator if it keeps failing.",
+  "com_linsight_error_title_context_overflow": "Content exceeds the model's length limit",
+  "com_linsight_error_desc_context_overflow": "The content to process is longer than the current model can handle in one request, so it stopped.",
+  "com_linsight_error_hint_context_overflow": "Tip: shorten the content or split it into smaller tasks, or switch to a model with a longer context.",
+  "com_linsight_error_title_context_compress_failed": "Couldn't condense earlier steps",
+  "com_linsight_error_desc_context_compress_failed": "The task has many steps, so earlier steps had to be condensed into a summary before it could continue. That failed, and the task stopped.",
+  "com_linsight_error_hint_context_compress_failed": "Tip: start the task again; if it keeps failing, ask an administrator to check the model service.",
   "com_linsight_stop": "Stop",
   "com_linsight_stop_confirm_title": "Stop the current task?",
   "com_linsight_stop_confirm_desc": "The running task will be stopped and cannot be resumed.",
@@ -2590,5 +2596,12 @@
   "com_skill_center_description": "Description",
   "com_skill_center_menu": "Skills",
   "com_skill_center_manage": "Manage skills",
-  "com_skill_center_menu_available": "Available skills"
+  "com_skill_center_menu_available": "Available skills",
+  "com_select": {
+    "empty": "No data",
+    "no_match": "No matches",
+    "loading": "Loading…",
+    "clear": "Clear",
+    "remove": "Remove"
+  }
 }

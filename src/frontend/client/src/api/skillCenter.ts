@@ -122,6 +122,40 @@ export async function findPersonalSkillByImport(importId: string): Promise<Skill
   return toRecord(unwrap(response), 'personal');
 }
 
+export interface SkillUploadCheck {
+  name: string;
+  displayName: string;
+  description: string;
+  size: number;
+  files: string[];
+}
+
+/** Parse and validate one file. A passing result is not saved. */
+export async function checkPersonalSkill(file: File, skillId?: number): Promise<SkillUploadCheck> {
+  const form = new FormData();
+  form.append('file', file);
+  if (skillId) form.append('skill_id', String(skillId));
+  const response = await request.postMultiPart(
+    `${SKILL_API}/personal/check`,
+    form,
+    { showError: false },
+  ) as Envelope<{
+    name: string;
+    display_name: string;
+    description: string;
+    size: number;
+    files?: { path: string }[];
+  }>;
+  const data = unwrap(response);
+  return {
+    name: data.name,
+    displayName: data.display_name || data.name,
+    description: data.description || '',
+    size: data.size,
+    files: (data.files || []).map((item) => item.path),
+  };
+}
+
 function skillForm(file: File, importId: string, expectedHash?: string): FormData {
   const form = new FormData();
   form.append('file', file);

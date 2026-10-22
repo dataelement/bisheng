@@ -21,7 +21,7 @@ def build_app():
     return create_app(
         token=token,
         sessions_root=os.environ.get("SANDBOX_SESSIONS_ROOT") or "/tmp/sessions",
-        max_sessions=int(os.environ.get("SANDBOX_MAX_SESSIONS") or "1"),
+        max_sessions=int(os.environ.get("SANDBOX_MAX_SESSIONS") or "50"),
         lease_ttl_s=float(os.environ.get("SANDBOX_LEASE_TTL_S") or "900"),
         max_copy_in_bytes=int(os.environ.get("SANDBOX_MAX_COPY_IN_BYTES") or str(50 * 1024 * 1024)),
         enable_uid_isolation=_bool_env("SANDBOX_ENABLE_UID_ISOLATION", True),
@@ -34,7 +34,7 @@ def main() -> None:
     get_logger().info(
         "starting host=0.0.0.0 port=%s max_sessions=%s lease_ttl_s=%s isolation=%s",
         port,
-        os.environ.get("SANDBOX_MAX_SESSIONS") or "1",
+        os.environ.get("SANDBOX_MAX_SESSIONS") or "50",
         os.environ.get("SANDBOX_LEASE_TTL_S") or "900",
         _bool_env("SANDBOX_ENABLE_UID_ISOLATION", True),
     )

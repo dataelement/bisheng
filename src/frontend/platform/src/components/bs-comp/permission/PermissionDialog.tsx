@@ -1,4 +1,4 @@
-import { Button } from '@bisheng/ui';
+import { Alert, Button } from '@bisheng/ui';
 
 import { Checkbox } from '@bisheng/ui';
 import {
@@ -16,7 +16,7 @@ import {
   type PermissionGrantAssignee,
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
-import { AlertTriangle, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ModeHeader } from "./ModeHeader"
@@ -164,13 +164,12 @@ export function PermissionDialog({
           )}
 
           {failed && !loading && (
-            <p
-              className="mx-5 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900"
-              role="alert"
-            >
-              <AlertTriangle aria-hidden="true" className="size-4" />
-              {t("dialog.loadFailed")}
-            </p>
+            <Alert
+              type="error"
+              className="mx-5"
+              description={t("dialog.loadFailed")}
+              live
+            />
           )}
 
           {context && !loading && !failed && (

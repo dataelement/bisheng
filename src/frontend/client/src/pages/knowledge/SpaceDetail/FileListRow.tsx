@@ -1,13 +1,11 @@
 import { Tooltip as SharedTooltip } from '@bisheng/ui';
-import { Button, Tag } from "@bisheng/ui";
+import { Button, Dropdown, DropdownItem, DropdownSeparator, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { FileSearch, GitBranch, History } from "lucide-react";
 import { useState } from "react";
 
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
-import { DropdownMenu, DropdownMenuTrigger } from "~/components";
 import { Checkbox } from '@bisheng/ui';
-import { ActionMenuContent, ActionMenuItem, ActionMenuLoadingRow } from "~/components/ActionMenu";
 
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
@@ -262,67 +260,83 @@ export function FileListRow({
         || showMoveItem || showVersionManagement || showVersionHistory
     );
 
+    // The danger row gets its own group only when something sits above it.
+    const hasItemsAboveDelete = (isAdmin && !isFolder) || canRename || showMoveItem
+        || (isAdmin && hasRetryOption) || Boolean(onManagePermission)
+        || showVersionManagement || showVersionHistory;
+
     const moreMenuItems = permissionsLoading ? (
-        <ActionMenuLoadingRow />
+        <DropdownItem disabled icon={<Outlined.Loading className="animate-spin motion-reduce:animate-pulse" />}>
+            {localize("com_list_loading")}
+        </DropdownItem>
     ) : (
         <>
             {isAdmin && !isFolder && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                <DropdownItem
+                    onSelect={() => onEditTags()}
                     icon={<Outlined.Tag />}
-                    label={localize("com_knowledge.edit_tags")}
-                />
+                >
+                    {localize("com_knowledge.edit_tags")}
+                </DropdownItem>
             )}
             {canRename && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); startRenaming(); }}
+                <DropdownItem
+                    onSelect={() => startRenaming()}
                     icon={<Outlined.Edit />}
-                    label={localize("com_knowledge.rename")}
-                />
+                >
+                    {localize("com_knowledge.rename")}
+                </DropdownItem>
             )}
             {showMoveItem && (
-                <ActionMenuItem
+                <DropdownItem
                     disabled={!canMove || isUploading}
-                    onClick={(e) => { e.stopPropagation(); onMove?.(); }}
+                    onSelect={() => onMove?.()}
                     icon={<Outlined.MoveToFolder />}
-                    label={localize("com_knowledge.move")}
-                />
+                >
+                    {localize("com_knowledge.move")}
+                </DropdownItem>
             )}
             {isAdmin && hasRetryOption && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                <DropdownItem
+                    onSelect={() => onRetry?.()}
                     icon={<Outlined.Refresh />}
-                    label={localize("com_knowledge.retry")}
-                />
+                >
+                    {localize("com_knowledge.retry")}
+                </DropdownItem>
             )}
             {onManagePermission && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                <DropdownItem
+                    onSelect={() => onManagePermission()}
                     icon={<Outlined.PeopleSafe />}
-                    label={localize("com_permission.manage_permission")}
-                />
+                >
+                    {localize("com_permission.manage_permission")}
+                </DropdownItem>
             )}
             {showVersionManagement && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                <DropdownItem
+                    onSelect={() => onOpenVersionManagement?.(file)}
                     icon={<GitBranch />}
-                    label={localize("com_knowledge.version.menu_version_management")}
-                />
+                >
+                    {localize("com_knowledge.version.menu_version_management")}
+                </DropdownItem>
             )}
             {showVersionHistory && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
+                <DropdownItem
+                    onSelect={() => onOpenVersionHistory?.(file)}
                     icon={<History />}
-                    label={localize("com_knowledge.version.menu_version_history")}
-                />
+                >
+                    {localize("com_knowledge.version.menu_version_history")}
+                </DropdownItem>
             )}
+            {canDelete && hasItemsAboveDelete && <DropdownSeparator />}
             {canDelete && (
-                <ActionMenuItem
+                <DropdownItem
                     danger
-                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    onSelect={() => onDelete()}
                     icon={<Outlined.Delete />}
-                    label={localize("com_knowledge.delete")}
-                />
+                >
+                    {localize("com_knowledge.delete")}
+                </DropdownItem>
             )}
         </>
     );
@@ -535,31 +549,39 @@ export function FileListRow({
                     <span aria-hidden className="mx-1 h-2 w-px shrink-0 bg-border-base" />
                 )}
                 {showMoreMenu && (
-                    <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
-                        <DropdownMenuTrigger asChild>
-                            {/* No Tooltip here: a tooltip on a menu trigger lingers over the
-                                open menu unless it is manually suppressed. The menu itself
-                                names the actions, so aria-label alone is enough. */}
-                            <Button
-                                color="default"
-                                variant="text"
-                                size="medium"
-                                iconOnly
-                                className={rowActionClass}
-                                aria-label={localize("com_knowledge_operation")}
-                            >
-                                <Outlined.More />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <ActionMenuContent align="end" width={140}>{moreMenuItems}</ActionMenuContent>
-                    </DropdownMenu>
+                    <Dropdown
+                        align="end"
+                        open={moreMenuOpen}
+                        onOpenChange={handleMoreMenuOpenChange}
+                        menu={moreMenuItems}
+                    >
+                        {/* No Tooltip here: a tooltip on a menu trigger lingers over the
+                            open menu unless it is manually suppressed. The menu itself
+                            names the actions, so aria-label alone is enough. */}
+                        <Button
+                            color="default"
+                            variant="text"
+                            size="medium"
+                            iconOnly
+                            className={rowActionClass}
+                            aria-label={localize("com_knowledge_operation")}
+                        >
+                            <Outlined.More />
+                        </Button>
+                    </Dropdown>
                 )}
             </div>
 
             {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
+            {/* Clicks inside the portaled menu still bubble through the React tree;
+                keep them from toggling the row's selection. */}
             {showMoreMenu && (
-                <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
-                    <DropdownMenuTrigger asChild>
+                <span className="contents" onClick={(e) => e.stopPropagation()}>
+                    <Dropdown
+                        open={contextMenuOpen}
+                        onOpenChange={setContextMenuOpen}
+                        menu={moreMenuItems}
+                    >
                         <button
                             type="button"
                             aria-hidden="true"
@@ -567,9 +589,8 @@ export function FileListRow({
                             className="fixed size-0 opacity-0"
                             style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
                         />
-                    </DropdownMenuTrigger>
-                    <ActionMenuContent align="start" width={140}>{moreMenuItems}</ActionMenuContent>
-                </DropdownMenu>
+                    </Dropdown>
+                </span>
             )}
         </div>
     );

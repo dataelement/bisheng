@@ -9,6 +9,7 @@ import { Tenant } from "@/types/api/tenant";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isGlobalSuperUser } from "./permissions";
+import { isSpeechModelType } from "./speechConfig";
 import { ScopeBanner } from "./SystemConfigBanners";
 import AssisModel from "./tabs/AssisModel";
 import EvaluationModel from "./tabs/EvaluationModel";
@@ -89,7 +90,7 @@ export default function SystemModelConfig({
                     label: model.model_name
                 }
                 if (!model.online) return
-                if (model.model_type === 'asr') {
+                if (isSpeechModelType(model.model_type)) {
                     serverAsrItem.children.push(item)
                 } else if (model.model_type === 'tts') {
                     serverTtsItem.children.push(item)
@@ -129,7 +130,7 @@ export default function SystemModelConfig({
                     rootTenant={rootTenant}
                     childTenant={childTenant}
                 />
-                <Tabs activeKey={activeTab} onChange={(tab) => {
+                <Tabs className="[&_[role=tablist]]:px-4" activeKey={activeTab} onChange={(tab) => {
                     setActiveTab(tab)
                     onTabChange?.(tab)
                 }} items={[

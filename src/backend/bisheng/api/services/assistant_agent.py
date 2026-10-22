@@ -577,6 +577,9 @@ class AssistantAgent(AssistantUtils):
         """
         Run Agent Conversation
         """
+        from bisheng_langchain.gpts.tools.code_interpreter.factory import refresh_open_code_executors
+
+        refresh_open_code_executors(self.tools)
         await self.fake_callback(callback)
 
         if chat_history:

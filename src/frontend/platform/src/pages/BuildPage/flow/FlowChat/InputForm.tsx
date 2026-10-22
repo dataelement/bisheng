@@ -1,8 +1,7 @@
 import { MessageFrame, WorkflowFileField, WorkflowForm } from '@bisheng/chat';
 import { normalizeFormFields, type RawMessage } from '@bisheng/chat/core';
-import { toast } from '@bisheng/ui';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
-import MultiSelect from '@/components/bs-ui/select/multi';
+import { Select, toast } from '@bisheng/ui';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
 import InputFileComponent from '@/components/inputFileComponent';
 import { locationContext } from '@/contexts/locationContext';
 import { fileAcceptToInputAccept, normalizeFileAccept } from '@/util/fileAcceptUtils';
@@ -11,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 
 export function InputForm({ data, title, logo, onSubmit }: { data: RawMessage; title: string; logo?: ReactNode; onSubmit: (values: Record<string, unknown>, summary: string) => void }) {
     const { t } = useTranslation();
+    const selectLabels = useSelectLabels();
     const { appConfig } = useContext(locationContext);
     return <MessageFrame title={title} logo={logo}>
         <WorkflowForm key={String(data.node_id)} fields={normalizeFormFields(data.value)} canExecute
@@ -25,14 +25,14 @@ export function InputForm({ data, title, logo, onSubmit }: { data: RawMessage; t
                     suffixes={fileAcceptToInputAccept(normalizeFileAccept(field.raw.file_type, { mediaEnabled: !!appConfig.enableMediaUpload }))}
                     onFileChange={value => onChange(Array.isArray(value) ? value : value ? [value] : [])} />;
                 if (field.type !== 'select') return null;
-                if (field.multiple) return <MultiSelect multiple disabled={disabled} className=""
+                const options = field.options.map(text => ({ label: text, value: text }));
+                if (field.multiple) return <Select {...selectLabels} multiple disabled={disabled}
                     value={typeof value === 'string' ? value.split(',').filter(Boolean) : []}
-                    options={field.options.map(text => ({ label: text, value: text }))}
-                    placeholder={t('flow:selectOption')} onChange={values => onChange(values.join(','))} />;
-                return <Select disabled={disabled} value={typeof value === 'string' ? value : undefined} onValueChange={onChange}>
-                    <SelectTrigger><SelectValue placeholder="" /></SelectTrigger>
-                    <SelectContent><SelectGroup>{field.options.map(text => <SelectItem key={text} value={text}>{text}</SelectItem>)}</SelectGroup></SelectContent>
-                </Select>;
+                    options={options} placeholder={t('flow:selectOption')} aria-label={field.label}
+                    onChange={values => onChange(values.join(','))} />;
+                return <Select {...selectLabels} disabled={disabled} value={typeof value === 'string' ? value : null}
+                    options={options} placeholder={t('flow:selectOption')} aria-label={field.label}
+                    onChange={value => onChange(value ?? '')} />;
             }} />
     </MessageFrame>;
 }

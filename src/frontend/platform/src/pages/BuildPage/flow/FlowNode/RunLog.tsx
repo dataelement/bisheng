@@ -1,9 +1,9 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Button, Select } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 
-import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { downloadFile } from "@/util/utils";
 import { ChevronsRightIcon } from "lucide-react";
 import { useEffect,useMemo,useRef,useState } from "react";
@@ -166,6 +166,7 @@ const Log = ({ type, name, data }) => {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
     const { t } = useTranslation('flow')
+    const selectLabels = useSelectLabels()
     const [currentIndex, setCurrentIndex] = useState(0)
     // key
     const currentData = useMemo(() =>
@@ -173,6 +174,8 @@ const Log = ({ type, name, data }) => {
     )
 
     const handleClickOutside = (event) => {
+        // The round picker's listbox is portaled to <body>; a pick there is not "outside".
+        if (event.target instanceof Element && event.target.closest('[role="listbox"]')) return;
         if (ref.current && !ref.current.contains(event.target)) {
             setOpen(false);
         }
@@ -210,19 +213,14 @@ const Log = ({ type, name, data }) => {
                         <Outlined.Close size={18} className="cursor-pointer" onClick={() => setOpen(false)} />
                     </div>
                     {data.length > 1 && <div className="mb-2">
-                        <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
-                            <SelectTrigger className="w-[180px]">
-                                {/* <SelectValue /> */}
-                                <span>{t('roundRunResult', { index: currentIndex + 1 })}</span>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    {
-                                        data.map((_, index) => <SelectItem key={index} value={index + ""}>{t('roundRunResult', { index: index + 1 })}</SelectItem>)
-                                    }
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+                        <Select
+                            {...selectLabels}
+                            options={data.map((_, index) => ({ value: String(index), label: t('roundRunResult', { index: index + 1 }) }))}
+                            value={String(currentIndex)}
+                            onChange={(val) => { if (val != null) setCurrentIndex(Number(val)) }}
+                            aria-label={t('runResults')}
+                            className="nodrag w-[180px]"
+                        />
                     </div>}
                     <div className="">
                         {currentData.map((item) => item.type === 'file' ?

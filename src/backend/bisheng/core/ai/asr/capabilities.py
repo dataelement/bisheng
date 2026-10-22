@@ -42,6 +42,15 @@ VOLC_RESOURCES = {
 }
 
 
+def should_promote_legacy_asr(server_type: str, model_name: str | None, model_type: str) -> bool:
+    """File-typed rows whose engine already has a realtime client.
+
+    The provider lives on ``llm_server.type``. Callers must not add a tenant
+    filter: every tenant's matching row moves together.
+    """
+    return model_type == "asr" and realtime_protocol(server_type, model_name) is not None
+
+
 def realtime_protocol(provider: str, model: str | None) -> str | None:
     if provider == "qwen":
         return ALI_MODELS.get(model or "")

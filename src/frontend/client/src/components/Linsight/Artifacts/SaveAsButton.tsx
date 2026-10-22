@@ -26,14 +26,13 @@
  *               interrupt the copy.
  *   - 'toolbar' preview-panel toolbar icon button.
  */
+import { Dropdown, DropdownItem, DropdownSeparator } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import type { ChatCitation } from '~/api/chatApi';
 import { getMdDownload } from '~/api/linsight';
 import { listUploadableSpacesApi } from '~/api/messageExport';
 import { NotificationSeverity } from '~/common';
-import { ActionMenuContent, ActionMenuDivider, ActionMenuItem } from '~/components/ActionMenu';
-import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { AddToKnowledgeModal } from '~/pages/Subscription/Article/AddToKnowledgeModal';
 import { useToastContext } from '~/Providers';
@@ -112,8 +111,6 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const [busy, setBusy] = useState(false);
-    /** Was the menu opened by pointer? Drives whether closing restores focus. */
-    const pointerOpened = useRef(false);
     const { pickerOpen, setPickerOpen, openPicker, saveTo, saving } =
         useSaveArtifactToKnowledge(file, versionId, citations);
 
@@ -179,13 +176,6 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
             title={label}
             aria-label={label}
             className={cn(TRIGGER_BASE, TRIGGER_VARIANT[variant], className)}
-            // Pointer opens must not leave a focus ring behind: Radix hands
-            // focus back to the trigger when the menu closes, and Chrome
-            // re-applies :focus-visible to that programmatic focus. Remember
-            // how the menu was opened so the close can skip the hand-back.
-            onPointerDown={() => {
-                pointerOpened.current = true;
-            }}
             // File rows are themselves clickable (row click = preview) and answer
             // Enter, so the action must not bubble — otherwise downloading a file
             // would also open it.
@@ -195,12 +185,7 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
                     handleDownloadOriginal();
                 }
             }}
-            onKeyDown={(e) => {
-                // A keyboard open DOES want the focus hand-back on close —
-                // otherwise the tab position is lost with nothing to show for it.
-                pointerOpened.current = false;
-                e.stopPropagation();
-            }}
+            onKeyDown={(e) => e.stopPropagation()}
         >
             {glyph}
             {variant === 'labeled' && <span className="whitespace-nowrap">{label}</span>}
@@ -219,61 +204,45 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
         >
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-                {/* Shared ActionMenu chrome — same panel as the sidebar convo menu
-                    (12px radius, soft shadow, 32px rows, grey 16px leading icons).
-                    File-type glyphs follow getFileTypeIcon's md/pdf/docx mapping. */}
-                {/* w-auto: the longest label ("Save to knowledge space" in en)
-                    overflows the frame's fixed 160px — let content set the width. */}
-                <ActionMenuContent
-                    className="w-auto min-w-[160px]"
-                    onClick={(e) => e.stopPropagation()}
-                    // Mouse users get no focus hand-back, so the trigger can't
-                    // sit there wearing a focus ring after the menu is gone.
-                    onCloseAutoFocus={(e) => {
-                        if (pointerOpened.current) e.preventDefault();
-                    }}
-                >
-                    {isMarkdown ? (
-                        <>
-                            <ActionMenuItem
-                                icon={<Outlined.FileEditing />}
-                                label={localize('com_linsight.downloadAs', { format: 'Markdown' })}
-                                onClick={handleDownloadOriginal}
-                            />
-                            <ActionMenuItem
-                                icon={<Outlined.FilePdf />}
-                                label={localize('com_linsight.downloadAs', { format: 'PDF' })}
-                                onClick={() => handleExport('pdf')}
-                            />
-                            <ActionMenuItem
-                                icon={<Outlined.FileWord />}
-                                label={localize('com_linsight.downloadAs', { format: 'Docx' })}
-                                onClick={() => handleExport('docx')}
-                            />
-                        </>
-                    ) : (
-                        <ActionMenuItem
-                            icon={<Outlined.Download />}
-                            label={localize('com_linsight.downloadToLocal')}
-                            onClick={handleDownloadOriginal}
-                        />
-                    )}
-                    {canSaveToKnowledge && (
-                        <>
-                            <ActionMenuDivider />
-                            <ActionMenuItem
-                                icon={<Outlined.AddToKnowledgeBase />}
-                                label={localize('com_linsight.saveToKnowledge')}
-                                disabled={saving}
-                                onClick={openPicker}
-                            />
-                        </>
-                    )}
-                </ActionMenuContent>
-            </DropdownMenu>
-            {/* Sibling of the menu, not a child: inside DropdownMenuContent it
+            {/* File-type glyphs follow getFileTypeIcon's md/pdf/docx mapping. */}
+            <Dropdown
+                menu={
+                    <>
+                        {isMarkdown ? (
+                            <>
+                                <DropdownItem icon={<Outlined.FileEditing />} onSelect={handleDownloadOriginal}>
+                                    {localize('com_linsight.downloadAs', { format: 'Markdown' })}
+                                </DropdownItem>
+                                <DropdownItem icon={<Outlined.FilePdf />} onSelect={() => handleExport('pdf')}>
+                                    {localize('com_linsight.downloadAs', { format: 'PDF' })}
+                                </DropdownItem>
+                                <DropdownItem icon={<Outlined.FileWord />} onSelect={() => handleExport('docx')}>
+                                    {localize('com_linsight.downloadAs', { format: 'Docx' })}
+                                </DropdownItem>
+                            </>
+                        ) : (
+                            <DropdownItem icon={<Outlined.Download />} onSelect={handleDownloadOriginal}>
+                                {localize('com_linsight.downloadToLocal')}
+                            </DropdownItem>
+                        )}
+                        {canSaveToKnowledge && (
+                            <>
+                                <DropdownSeparator />
+                                <DropdownItem
+                                    icon={<Outlined.AddToKnowledgeBase />}
+                                    disabled={saving}
+                                    onSelect={openPicker}
+                                >
+                                    {localize('com_linsight.saveToKnowledge')}
+                                </DropdownItem>
+                            </>
+                        )}
+                    </>
+                }
+            >
+                {trigger}
+            </Dropdown>
+            {/* Sibling of the menu, not a child: inside the menu panel it
                 would unmount the moment the menu closes on item select. */}
             {canSaveToKnowledge && (
                 <AddToKnowledgeModal

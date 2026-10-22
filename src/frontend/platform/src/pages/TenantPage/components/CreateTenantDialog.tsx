@@ -1,4 +1,4 @@
-import { Button, Input, notification } from '@bisheng/ui';
+import { Alert, Button, Input, notification } from '@bisheng/ui';
 
 
 
@@ -63,9 +63,11 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
           {tenant ? t("tenant.edit") : t("tenant.create")}
         </h3>
         {!tenant && (
-          <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950 dark:text-amber-100">
-            {t("tenant.createDeprecatedDesc")}
-          </div>
+          <Alert
+            type="warning"
+            className="mb-4"
+            description={t("tenant.createDeprecatedDesc")}
+          />
         )}
         <div className="space-y-4">
           <div>

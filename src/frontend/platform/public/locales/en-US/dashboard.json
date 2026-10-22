@@ -3,7 +3,6 @@
   "settings": "Settings",
   "noValue": "None",
   "removeSelectedValue": "Remove {{value}}",
-
   "chartSelector": {
     "title": "Chart Link Configuration",
     "selectCharts": "Select Linked Charts",
@@ -274,6 +273,14 @@
       "axis": "Axis",
       "dataLabel": "Data Label",
       "gridLine": "Grid Line"
+    },
+    "textFormat": {
+      "fontSize": "Font size",
+      "color": "Text color",
+      "align": "Alignment",
+      "alignLeft": "Align left",
+      "alignCenter": "Align center",
+      "alignRight": "Align right"
     }
   },
   "useChartState": {
@@ -399,7 +406,10 @@
     "day": "Time(Day)",
     "hour": "Time(Hour)"
   },
-  "user_group_infos": {},
+  "user_group_infos": {
+    "user_group_id": "User Group ID",
+    "user_group_name": "User Group Name"
+  },
   "user_department_infos": {
     "department_id": "Department ID",
     "department_name": "Department Name"
@@ -422,5 +432,51 @@
   "model_name": "Model Name",
   "total_token": "Token Consumption",
   "like_count": "Like Count",
-  "dislike_count": "Dislike Count"
+  "dislike_count": "Dislike Count",
+  "active_user_count": "Active Users",
+  "api_call_count": "API Call Count",
+  "app_name": "Application Name",
+  "app_type": "Application Type",
+  "avg_first_token_cost_time": "Average First Token Response Latency",
+  "copy_count": "Copy Count",
+  "doc_parse_count": "Document Upload Count",
+  "doc_parse_success_count": "Successful Document Storage Count",
+  "doc_parse_success_rate": "Document Storage Success Rate",
+  "duration_seconds": "Session Duration",
+  "etl_parse_count": "ETL Processing Count",
+  "etl_parse_success_count": "Successful ETL Processing Count",
+  "etl_parse_success_rate": "ETL Processing Success Rate",
+  "max_concurrent_llm_sessions": "Maximum Concurrent LLM Sessions",
+  "max_concurrent_sessions": "Maximum Concurrent Online Sessions",
+  "mid_active_user": "Active User Scale Statistics",
+  "mid_app_increment": "Application Scale Statistics",
+  "mid_doc_parse_dtl": "File Parsing Performance",
+  "mid_knowledge_file_increment": "Knowledge Base File Statistics",
+  "mid_knowledge_increment": "Knowledge Base Size Statistics",
+  "mid_model_call_dtl": "Model Cost and Performance",
+  "mid_session_run_dtl": "Application Concurrency and Time Consumption",
+  "mid_sessions_increment": "Application Usage Statistics",
+  "mid_tool_call_dtl": "Tool Call Analysis",
+  "mid_user_increment": "User Scale Statistics",
+  "mid_user_interact_dtl": "User Feedback Statistics",
+  "model_call_count": "Model Call Count",
+  "model_call_success_rate": "Model Call Success Rate",
+  "model_server_id": "Service Provider ID",
+  "model_server_name": "Service Provider Name",
+  "new_app_count": "New Applications",
+  "new_document_knowledge_base_count": "New Document Knowledge Bases",
+  "new_qa_knowledge_base_count": "New QA Knowledge Bases",
+  "new_user_count": "New Users",
+  "platform_user_count": "Number of Users",
+  "session_count": "Session Count",
+  "tool_call_count": "Tool Call Count",
+  "tool_call_success_count": "Successful Tool Calls",
+  "tool_call_success_rate": "Tool Call Success Rate",
+  "tool_name": "Tool Name",
+  "total_app_count": "Total Applications",
+  "total_document_knowledge_base_count": "Total Document Knowledge Bases",
+  "total_file_count": "Total Files",
+  "total_qa_count": "Total QA Pairs",
+  "total_qa_knowledge_base_count": "Total QA Knowledge Bases",
+  "total_user_count": "Total Users"
 }

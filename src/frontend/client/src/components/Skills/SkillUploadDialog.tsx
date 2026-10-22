@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Outlined } from 'bisheng-icons';
 import { Button } from '@bisheng/ui';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '~/components/ui/Dialog';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import {
+  checkPersonalSkill,
   createPersonalSkill,
   findPersonalSkillByImport,
   getPersonalSkillUsage,
@@ -30,19 +31,54 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
   const usage = useQuery(['skill-center', 'usage'], getPersonalSkillUsage, { enabled: open, retry: false });
   const [file, setFile] = useState<File>();
   const [dragging, setDragging] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [duplicate, setDuplicate] = useState<{ skillId: number; contentHash: string }>();
   const [saving, setSaving] = useState(false);
+  const checkSeq = useRef(0);
   const importId = useRef(globalThis.crypto?.randomUUID?.() ?? `import-${Date.now()}`);
   const input = useRef<HTMLInputElement>(null);
   const atCountLimit = !target && (usage.data?.count ?? 0) >= (usage.data?.countLimit ?? 20);
   const atByteLimit = !target && (usage.data?.usedBytes ?? 0) >= (usage.data?.bytesLimit ?? 209715200);
 
+  useEffect(() => () => {
+    checkSeq.current += 1;
+  }, []);
+
   const choose = (files: FileList | null) => {
     setError('');
     setDuplicate(undefined);
-    setFile(files?.length === 1 ? files[0] : undefined);
-    if (files && files.length > 1) setError(localize('com_skill_center_error_multiple'));
+    setReady(false);
+    const selected = files?.length === 1 ? files[0] : undefined;
+    setFile(selected);
+    if (files && files.length > 1) {
+      setError(localize('com_skill_center_error_multiple'));
+      setChecking(false);
+      return;
+    }
+    if (selected) void inspect(selected);
+  };
+
+  const inspect = async (selected: File) => {
+    const seq = checkSeq.current + 1;
+    checkSeq.current = seq;
+    setChecking(true);
+    try {
+      await checkPersonalSkill(selected, target?.id);
+      if (checkSeq.current !== seq) return;
+      setReady(true);
+    } catch (cause) {
+      if (checkSeq.current !== seq) return;
+      const sameName = cause instanceof SkillRequestError
+        && cause.statusCode === 11055
+        && Number.isInteger(Number(cause.data?.skill_id))
+        && Boolean(cause.data?.content_hash || target?.contentHash);
+      if (sameName) setReady(true);
+      fail(cause);
+    } finally {
+      if (checkSeq.current === seq) setChecking(false);
+    }
   };
   const allowDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -83,7 +119,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
     setError(localize('com_skill_center_error_storage'));
   };
   const save = async () => {
-    if (!file || saving || atCountLimit || atByteLimit) return;
+    if (!file || !ready || saving || atCountLimit || atByteLimit) return;
     setSaving(true);
     setError('');
     try {
@@ -136,6 +172,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
         >
           <Outlined.Skill className="size-8 text-text-3" aria-hidden />
           <p className="text-body text-text-1">{file ? file.name : localize('com_skill_center_drop')}</p>
+          {checking && <p role="status" className="text-body-sm text-text-3">{localize('com_skill_center_parsing')}</p>}
           <Button color="default" variant="outlined" disabled={saving} onClick={() => input.current?.click()}>
             {localize(file || error ? 'com_skill_center_reselect' : 'com_skill_center_choose')}
           </Button>
@@ -159,7 +196,11 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
         <div className="flex justify-end gap-2">
           <Button color="default" variant="outlined" disabled={saving} onClick={close}>{localize('com_skill_center_cancel')}</Button>
           {!duplicate && (
-            <Button loading={saving} disabled={!file || atCountLimit || atByteLimit} onClick={() => void save()}>
+            <Button
+              loading={saving}
+              disabled={!file || checking || !ready || atCountLimit || atByteLimit}
+              onClick={() => void save()}
+            >
               {localize(target ? 'com_skill_center_save_update' : 'com_skill_center_add')}
             </Button>
           )}

@@ -1,38 +1,46 @@
-import { Input, type InputProps } from '@bisheng/ui';
+import { InputNumber, type InputNumberError, type InputNumberProps } from '@bisheng/ui';
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { QuestionHint as QuestionTooltip } from '@/components/bs-comp/QuestionHint';
 
-interface NonNegativeInputProps extends InputProps {
+interface NonNegativeInputProps
+    extends Omit<InputNumberProps, 'value' | 'defaultValue' | 'onChange' | 'min' | 'max' | 'step' | 'precision' | 'errorMessage' | 'className'> {
     label?: string;
     tooltip?: string;
+    /** Outside verdict from the form; shown in place of the field's own range message. */
     error?: string;
     min?: number;
     max?: number;
+    /** Restored (and reported) when the field is left empty. */
     defaultValue?: number;
-    inputClassName?: string;
+    /** Callers may hold an empty string while their state is unset. */
+    value?: number | '' | null;
+    className?: string;
+    /** Reports only valid integers inside [min, max]. */
     onValueChange?: (value: number) => void;
 }
 
+/**
+ * A non-negative integer field on the shared InputNumber: it never rewrites what is typed,
+ * reports range / decimal problems on blur, and falls back to `defaultValue` when left empty.
+ */
 export const NonNegativeInput = React.forwardRef<HTMLInputElement, NonNegativeInputProps>(function NonNegativeInput(
-    { className, inputClassName, label, tooltip, required, error, min = 0, max, defaultValue = 0,
-        value, onValueChange, onChange, onBlur, id, maxLength: _maxLength, ...props }, ref,
+    { className, label, tooltip, required, error, min = 0, max, defaultValue = 0, value, onValueChange, onBlur, id, ...props }, ref,
 ) {
-    void _maxLength;
     const { t } = useTranslation('bs');
-    const [text, setText] = React.useState(String(value ?? defaultValue));
-    const [internalError, setInternalError] = React.useState('');
+    const toNumber = (v: number | '' | null | undefined) => (typeof v === 'number' ? v : null);
+    const [current, setCurrent] = React.useState<number | null>(toNumber(value) ?? defaultValue);
     React.useEffect(() => {
-        if (value !== undefined && value !== null) setText(String(value));
+        if (typeof value === 'number') setCurrent(value);
     }, [value]);
+    // Whether the field is showing its own range / decimal message under the box.
+    const [fieldErrorShown, setFieldErrorShown] = React.useState(false);
 
-    const validate = (raw: string) => {
-        if (raw === '') return t('sharedUi.required');
-        if (!/^\d+$/.test(raw)) return t('sharedUi.nonNegativeInteger');
-        if (Number(raw) < min) return t('sharedUi.minimum', { min });
-        if (max !== undefined && Number(raw) > max) return t('sharedUi.maximum', { max });
-        return '';
+    const errorMessage = (fieldError: InputNumberError) => {
+        if (error) return error;
+        if (fieldError.type === 'precision') return t('sharedUi.nonNegativeInteger');
+        return current !== null && current < min ? t('sharedUi.minimum', { min }) : t('sharedUi.maximum', { max });
     };
 
     return <div className={className}>
@@ -41,22 +49,37 @@ export const NonNegativeInput = React.forwardRef<HTMLInputElement, NonNegativeIn
             {tooltip && <QuestionTooltip content={tooltip} />}
             {required && <span className="bisheng-tip">*</span>}
         </label>}
-        <Input {...props} ref={ref} id={id} type="text" inputMode="numeric" value={text} required={required} aria-invalid={Boolean(error || internalError) || undefined} onChange={(event) => {
-                const raw = event.target.value;
-                if (!/^\d*$/.test(raw) || (raw.length > 1 && raw.startsWith('0'))) return;
-                setText(raw);
-                const nextError = raw === '' ? '' : validate(raw);
-                setInternalError(nextError);
-                if (raw !== '' && !nextError) onValueChange?.(Number(raw));
-                onChange?.(event);
-            }} onBlur={(event) => {
-                if (text.trim() === '') {
-                    setText(String(defaultValue));
-                    setInternalError('');
+        <InputNumber
+            {...props}
+            ref={ref}
+            id={id}
+            value={current}
+            min={min}
+            max={max}
+            step={1}
+            precision={0}
+            required={required}
+            aria-required={required || undefined}
+            status={error ? 'error' : props.status}
+            increaseLabel={props.increaseLabel ?? t('sharedUi.increase')}
+            decreaseLabel={props.decreaseLabel ?? t('sharedUi.decrease')}
+            errorMessage={errorMessage}
+            onErrorChange={(fieldError) => {
+                setFieldErrorShown(fieldError !== null);
+                props.onErrorChange?.(fieldError);
+            }}
+            onChange={(next, detail) => {
+                setCurrent(next);
+                if (next !== null && !detail.error) onValueChange?.(next);
+            }}
+            onBlur={(event) => {
+                if (current === null) {
+                    setCurrent(defaultValue);
                     onValueChange?.(defaultValue);
-                } else setInternalError(validate(text));
+                }
                 onBlur?.(event);
-            }} className={inputClassName} />
-        {(error || internalError) && <p className="bisheng-tip mt-1">{error || internalError}</p>}
+            }}
+        />
+        {error && !fieldErrorShown && <p className="bisheng-tip mt-1">{error}</p>}
     </div>;
 });

@@ -1,8 +1,8 @@
-import { Button } from '@bisheng/ui';
+import { Button, Select } from '@bisheng/ui';
 
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { InputField } from "./InputField";
@@ -37,6 +37,7 @@ type FormErrors = Partial<Record<"api_key" | "max_chars", string>>;
 
 export function WebFetchForm({ formData, onSubmit }: WebFetchFormProps) {
     const { t } = useTranslation("tool");
+    const selectLabels = useSelectLabels();
     const [engine, setEngine] = useState(formData?.type || DEFAULT_ENGINE);
     const [engineConfigs, setEngineConfigs] = useState<Record<string, EngineConfig>>(formData?.config || {});
     const [maxChars, setMaxChars] = useState(String(formData?.max_chars ?? DEFAULT_MAX_CHARS));
@@ -83,18 +84,18 @@ export function WebFetchForm({ formData, onSubmit }: WebFetchFormProps) {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
                 <Label htmlFor="web-fetch-engine" className="bisheng-label">{t("webFetchEngine")}</Label>
-                <Select value={engine} onValueChange={(value) => value && handleEngineChange(value)}>
-                    <SelectTrigger id="web-fetch-engine" className="h-8 mt-2">
-                        <SelectValue placeholder={t("pleaseSelect")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {ENGINE_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                                {t(option.labelKey)}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <Select
+                    {...selectLabels}
+                    id="web-fetch-engine"
+                    aria-label={t("webFetchEngine")}
+                    className="mt-2"
+                    placeholder={t("pleaseSelect")}
+                    options={ENGINE_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+                    value={engine || null}
+                    onChange={(value) => {
+                        if (value != null) handleEngineChange(String(value));
+                    }}
+                />
             </div>
             <InputField
                 required

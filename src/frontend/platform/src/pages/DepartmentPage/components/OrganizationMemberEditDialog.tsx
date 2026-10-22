@@ -1,7 +1,8 @@
 // @ts-strict-ignore
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
-import { Button, Input, notification } from '@bisheng/ui';
+import { Button, Input, Select, notification } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 
 import {
@@ -13,7 +14,6 @@ import {
 } from "@/components/bs-ui/dialog"
 
 import { Label } from "@/components/bs-ui/label"
-import MultiSelect from "@/components/bs-ui/select/multi"
 
 
 import { cn } from "@/utils"
@@ -46,6 +46,7 @@ export function OrganizationMemberEditDialog({
   onSaved,
 }: Props) {
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<DepartmentMemberEditForm | null>(null)
@@ -233,6 +234,11 @@ export function OrganizationMemberEditDialog({
     })
   }, [deptId, form, member, onClose, onSaved, t])
 
+  const lockedGroupIds = useMemo(
+    () => new Set<number>(form?.locked_group_ids ?? []),
+    [form]
+  )
+
   const title = useMemo(() => {
     if (!form) return t("edit")
     if (form.edit_mode === "affiliate") return t("bs:department.memberEditTitleAffiliate")
@@ -291,7 +297,8 @@ export function OrganizationMemberEditDialog({
   const renderRoleMultiSelect = (
     options: { id: number; role_name: string }[],
     selected: Set<number>,
-    onSelectionChange: (next: Set<number>) => void
+    onSelectionChange: (next: Set<number>) => void,
+    ariaLabel: string
   ) => {
     if (!options.length) {
       return (
@@ -299,13 +306,18 @@ export function OrganizationMemberEditDialog({
       )
     }
     return (
-      <MultiSelect
+      <Select
+        {...selectLabels}
         multiple
+        showSearch
         className="mt-1"
-        options={options.map((r) => ({ label: r.role_name, value: String(r.id) }))}
+        aria-label={ariaLabel}
+        options={options
+          .filter((r) => r.id != null)
+          .map((r) => ({ label: r.role_name, value: String(r.id) }))}
         value={Array.from(selected).map(String)}
         onChange={(vals) => {
-          const next = new Set((vals as string[]).map((id) => Number(id)))
+          const next = new Set(vals.map((id) => Number(id)))
           onSelectionChange(next)
           // Sync-delete a removed role from every other dropdown that offers it,
           // so shared/global roles can actually be removed instead of being
@@ -314,7 +326,6 @@ export function OrganizationMemberEditDialog({
           pruneSharedRoleEverywhere(removed)
         }}
         placeholder={t("bs:department.multiSelectRolesPlaceholder")}
-        searchPlaceholder={t("system.searchRoles")}
       />
     )
   }
@@ -354,20 +365,30 @@ export function OrganizationMemberEditDialog({
                       {t("bs:department.memberEditUserGroupsEmpty")}
                     </p>
                   ) : (
-                    <MultiSelect
+                    <Select
+                      {...selectLabels}
                       multiple
+                      showSearch
                       className="mt-1"
-                      options={form.manageable_groups.map((g) => ({
-                        label: g.group_name,
-                        value: String(g.id),
-                      }))}
-                      lockedValues={(form.locked_group_ids ?? []).map(String)}
+                      aria-label={t("bs:department.userGroups")}
+                      options={form.manageable_groups
+                        .filter((g) => g.id != null)
+                        .map((g) => ({
+                          label: g.group_name,
+                          value: String(g.id),
+                          // Locked groups cannot be toggled from the panel
+                          disabled: lockedGroupIds.has(g.id),
+                        }))}
                       value={Array.from(groupSel).map(String)}
-                      onChange={(vals) =>
-                        setGroupSel(new Set((vals as string[]).map((id) => Number(id))))
-                      }
+                      onChange={(vals) => {
+                        // Locked groups stay selected even if removed via a tag or clear
+                        const next = new Set(vals.map((id) => Number(id)))
+                        groupSel.forEach((id) => {
+                          if (lockedGroupIds.has(id)) next.add(id)
+                        })
+                        setGroupSel(next)
+                      }}
                       placeholder={t("bs:department.multiSelectUserGroupsPlaceholder")}
-                      searchPlaceholder={t("system.searchUserGroups")}
                     />
                   )}
                 </div>
@@ -405,7 +426,12 @@ export function OrganizationMemberEditDialog({
                 {form.primary_department && (
                   <div>
                     <Label>{t("bs:department.roles")}</Label>
-                    {renderRoleMultiSelect(primaryRoleOptions, primaryRoles, setPrimaryRoles)}
+                    {renderRoleMultiSelect(
+                      primaryRoleOptions,
+                      primaryRoles,
+                      setPrimaryRoles,
+                      t("bs:department.roles")
+                    )}
                   </div>
                 )}
                 {form.affiliate_rows.length > 0 && (
@@ -418,7 +444,8 @@ export function OrganizationMemberEditDialog({
                           form.assignable_roles_catalog[row.dept_id] ?? [],
                           affRoleByDept[row.dept_id] ?? new Set(),
                           (next) =>
-                            setAffRoleByDept((prev) => ({ ...prev, [row.dept_id]: next }))
+                            setAffRoleByDept((prev) => ({ ...prev, [row.dept_id]: next })),
+                          `${row.name} ${t("bs:department.roles")}`
                         )}
                       </div>
                     ))}
@@ -433,7 +460,8 @@ export function OrganizationMemberEditDialog({
                 {renderRoleMultiSelect(
                   form.assignable_roles_catalog[form.context.dept_id] ?? [],
                   ctxRoles,
-                  setCtxRoles
+                  setCtxRoles,
+                  t("bs:department.roles")
                 )}
               </div>
             )}

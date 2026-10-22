@@ -28,7 +28,6 @@ export * from './TextareaAutosize';
 export * from './Pagination';
 export * from './Progress';
 export * from './InputOTP';
-export { default as Combobox } from './Combobox';
 export { default as Dropdown } from './Dropdown';
 export { default as FileUpload } from './FileUpload';
 export { default as DropdownPopup } from './DropdownPopup';

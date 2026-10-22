@@ -367,7 +367,7 @@ BISHENG 的投影走「淡」路线：带一点蓝黑色、透明度很低，把
 
 1. ~~`src/design-token.cjs` 新增 `SHADOW` 数组（popup / modal 两档，值见 §2.1）并入 `tailwindTheme.boxShadow`；`packages/ui/src/styles/tokens.css` 落 `--shadow-popup` / `--shadow-modal` CSS 变量（boxShadow 引变量，方便暗色模式后续单独调）。~~ **✅ 2026-08-13 已落**（Toast 落地时先行接线）：`packages/ui/design-token.cjs` SHADOW + `tailwindTheme.boxShadow`、`packages/ui/src/styles/tokens.css` 与 `client/src/style.css` 两处 CSS 变量、`client/tailwind.config.cjs` 与 `packages/ui/tailwind-preset.cjs` 两处 `boxShadow` → 类名 `shadow-popup` / `shadow-modal` 现已可用。存量 shadow 迁移未动。
 1a. §2.2「只用这两档」的 agent 执行口径：禁用 Tailwind 预设 `shadow-sm` / `shadow-md` / `shadow-lg` / `shadow-xl` / `shadow-2xl` 与一切 `shadow-[…]` 任意值；`shadow-none` 仅用于压掉第三方组件自带投影，不得用任意值替换第三方投影。正文按元规范 §0 写成白话，此处是精确清单。
-2. `packages/ui/tailwind-preset.cjs` 的 borderRadius 缺 `'4xl': '2rem'`（client 的 tailwind.config.cjs:294 已有）——补齐，否则库内组件用不了 rounded-4xl。
+2. ~~`packages/ui/tailwind-preset.cjs` 的 borderRadius 缺 `'4xl': '2rem'`（client 的 tailwind.config.cjs:294 已有）——补齐，否则库内组件用不了 rounded-4xl。~~ **✅ 2026-10-21 已落**（Select / Dropdown 圆角配置落地时补齐）。
 3. Dialog 基座含 `sm:rounded-lg`，业务覆写圆角必须连 `sm:` 变体一起写（`rounded-2xl sm:rounded-2xl`）；弹窗统一 16px 落地时直接改基座为 `rounded-2xl`，此坑随之消失。
 4. 弹窗边框 `border-[#ebebeb]` 属裸 hex，迁移时换语义 token `border-border-base`（色彩规范 semantic 层）。
 5. `design-token.mdx` 增加「阴影 Shadow」节，从 SSOT 渲染（SHADOW 进 cjs 之后做，别手抄值）。

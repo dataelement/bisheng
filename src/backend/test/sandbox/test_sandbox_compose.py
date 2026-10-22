@@ -71,6 +71,11 @@ def test_compose_named_runners_and_hardening():
     assert "sandbox_net" in backend["networks"]
     assert "default" in backend["networks"]
     assert "BS_SANDBOX_CONF__TOKEN" in backend["environment"]
+    expected_endpoints = '["http://code-runner-1:8080","http://code-runner-2:8080"]'
+    assert backend["environment"]["BS_SANDBOX_CONF__ENDPOINTS"] == expected_endpoints
+    assert worker["environment"]["BS_SANDBOX_CONF__ENDPOINTS"] == expected_endpoints
+    assert "DISCOVER" not in " ".join(backend["environment"])
+    assert "DISCOVER" not in " ".join(worker["environment"])
 
     for name in ("code-runner-1", "code-runner-2"):
         svc = data["services"][name]
@@ -90,7 +95,7 @@ def test_compose_named_runners_and_hardening():
         env = svc["environment"]
         joined = " ".join(f"{k}={v}" for k, v in env.items()) if isinstance(env, dict) else " ".join(env)
         env_map = env if isinstance(env, dict) else {}
-        assert str(env_map.get("SANDBOX_MAX_SESSIONS")) == "2"
+        assert str(env_map.get("SANDBOX_MAX_SESSIONS")) == "50"
         assert str(env_map.get("SANDBOX_ENABLE_UID_ISOLATION")).lower() == "true"
         assert "minio" not in joined.lower()
         assert "mysql" not in joined.lower()

@@ -1,12 +1,11 @@
 // @ts-strict-ignore
-import { Button, Input, Textarea, toast } from '@bisheng/ui';
+import { Button, Dropdown, DropdownChevron, DropdownItem, Input, Textarea, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
-import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
 import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 
@@ -352,17 +351,19 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         <div>
                             <div className="flex justify-between items-center mb-2">
                                 <label className="">{t('tools.mcpServerConfig')}</label>
-                                <Select value={'1'} onValueChange={handleExampleSelect}>
-                                    <SelectTrigger className="w-[180px]">
-                                        <span>{t('tools.examples')}</span>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectGroup>
-                                            <SelectItem value="gaode1">{t('tools.gaodeMapSSE')}</SelectItem>
-                                            <SelectItem value="gaode2">{t('tools.gaodeMapStreamable')}</SelectItem>
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
+                                {/* Inserting an example is an action (the trigger never shows a value), so this is a menu, not a Select. */}
+                                <Dropdown
+                                    align="end"
+                                    menu={<>
+                                        <DropdownItem onSelect={() => handleExampleSelect('gaode1')}>{t('tools.gaodeMapSSE')}</DropdownItem>
+                                        <DropdownItem onSelect={() => handleExampleSelect('gaode2')}>{t('tools.gaodeMapStreamable')}</DropdownItem>
+                                    </>}
+                                >
+                                    <Button type="button" variant="outlined" color="default">
+                                        {t('tools.examples')}
+                                        <DropdownChevron />
+                                    </Button>
+                                </Dropdown>
                             </div>
                             <Textarea ref={textareaRef} value={formData.openapiSchema} placeholder={t('tools.enterOpenAPISchema')} onChange={(e) => {
                                     setFormData(prev => ({

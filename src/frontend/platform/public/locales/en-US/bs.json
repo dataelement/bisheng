@@ -707,7 +707,9 @@
       "jina": "Jina Deep Search",
       "serp": "Serp API",
       "tavily": "Tavily",
-      "cloudsway": "cloudsway",
+      "cloudsway": "Cloudsway",
+      "cloudswayAccessKeyTip": "Get it from the Cloudsway console. It is issued together with the Endpoint.",
+      "cloudswayEndpointTip": "Get it from the Cloudsway console. Enter only this identifier, not a full URL. To change the request address, use Base URL below.",
       "searXNG": "searXNG",
       "deepseek": "DeepSeek Web Search",
       "serverUrl": "Server URL",
@@ -834,6 +836,7 @@
     "getApiKey": "Get a {{provider}} API key",
     "formatExample": "Example: {{example}}",
     "streamingAsrHint": "Streaming speech recognition supports paraformer-realtime-v2, paraformer-realtime-v1 and qwen3-asr-flash-realtime. Save and test the model, then select it as the workbench ASR model.",
+    "fileAsrHint": "File recognition. Upload the full recording, then transcribe it.",
     "speechCredentials": "Real-time speech recognition",
     "providerSilicon": "SiliconFlow",
     "providerTencent": "Tencent Cloud",
@@ -1179,7 +1182,8 @@
     "autoTagGenerationTitle": "Automatic tagging",
     "autoTagGenerationDesc": "When enabled, users can choose a tag library for a knowledge space. After parsing, matching tags are selected from the library.",
     "searchTagLibrary": "Search tag libraries",
-    "tagLibraryEmpty": "No tag libraries"
+    "tagLibraryEmpty": "No tag libraries",
+    "appTypeFilter": "App type"
   },
   "bench": {
     "daily": "Daily",
@@ -3166,7 +3170,17 @@
     "maximum": "Must be at most {{max}}",
     "addItem": "Add item",
     "removeItem": "Remove item",
-    "expand": "Expand"
+    "expand": "Expand",
+    "selectEmpty": "No data",
+    "selectNoMatch": "No matches",
+    "selectLoading": "Loading…",
+    "clear": "Clear",
+    "remove": "Remove",
+    "back": "Back",
+    "done": "Done",
+    "searchModels": "Search models",
+    "increase": "Increase",
+    "decrease": "Decrease"
   },
   "tenant.mountedBadge": "Child tenant mount point",
   "tenant.mountedTag": "Child tenant",

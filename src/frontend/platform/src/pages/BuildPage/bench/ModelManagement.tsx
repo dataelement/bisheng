@@ -49,7 +49,8 @@ interface ModelManagementProps {
  *  line up, and the two used to carry the same literal twice, so widening one
  *  silently broke the alignment. The three trailing columns are wider than the
  *  Chinese text needs because English and Japanese labels are longer. */
-const MODEL_ROW_COLUMNS = "1.2fr 0.85fr 1.3fr 88px 140px 140px 36px";
+const MODEL_ROW_COLUMNS =
+    "minmax(220px, 1.2fr) minmax(160px, 0.9fr) minmax(240px, 1.3fr) 88px 140px 140px 36px";
 
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
     (
@@ -78,7 +79,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         const { t } = useTranslation();
         const navigate = useNavigate();
 
-        // Resolve the selected model's name from the cascader options so the
+        // Resolve the selected model's name from the provider-grouped options so the
         // display-name input can fall back to it as placeholder when left empty.
         const getModelLabel = (id: string) => {
             if (!id) return "";
@@ -88,19 +89,6 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
             }
             return "";
         };
-
-        const selectFooter = (
-            <div
-                className="px-3 py-2 text-sm text-primary cursor-pointer hover:bg-[#EBF0FF] dark:hover:bg-gray-700"
-                onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    navigate("/model/management?systemModel=assis");
-                }}
-            >
-                + {t("bench.addMoreModels")}
-            </div>
-        );
 
         // Bind ref to each model item
         const setItemRef = (el: HTMLDivElement | null, index: number) => {
@@ -119,15 +107,15 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
 
         return (
             <div className="mt-2 border p-4 rounded-md bg-background overflow-x-auto">
-                <div className="min-w-[860px]">
-                    <div className="grid mb-4 items-end" style={{ gridTemplateColumns: MODEL_ROW_COLUMNS }}>
-                        <div className="">
+                <div className="min-w-[1072px]">
+                    <div className="grid mb-4 items-end gap-x-2" style={{ gridTemplateColumns: MODEL_ROW_COLUMNS }}>
+                        <div className="min-w-0">
                             <Label className="bisheng-label">{t("bench.model")}</Label>
                         </div>
-                        <div className="">
+                        <div className="min-w-0">
                             <Label className="bisheng-label">{t("bench.displayName")}</Label>
                         </div>
-                        <div className="">
+                        <div className="min-w-0">
                             <Label className="bisheng-label">{t("bench.modelDescription")}</Label>
                         </div>
                         {/* No whitespace-nowrap on these three: the cells are fixed-width
@@ -156,10 +144,10 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                         <div
                             key={model.key}
                             ref={(el) => setItemRef(el, index)}
-                            className="grid items-center mb-4"
+                            className="grid items-center mb-4 gap-x-2"
                             style={{ gridTemplateColumns: MODEL_ROW_COLUMNS }}
                         >
-                            <div className="pr-2" id={model.id}>
+                            <div className="min-w-0" id={model.id}>
                                 {assistantLlmOptions.length > 0 ? (
                                     <ModelSelect
                                         key={model.id}
@@ -167,7 +155,6 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                                         value={model.id}
                                         options={assistantLlmOptions}
                                         onChange={(val) => onModelChange(index, val)}
-                                        footer={selectFooter}
                                     />
                                 ) : (
                                     <ModelSelect
@@ -176,20 +163,19 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                                         value={""}
                                         options={[]}
                                         onChange={(val) => {}}
-                                        footer={selectFooter}
                                     />
                                 )}
                                 {errors[model.key] && (
                                     <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[0]}</p>
                                 )}
                             </div>
-                            <div className="pr-2">
+                            <div className="min-w-0">
                                 <Input value={model.displayName} onChange={(e) => onNameChange(index, e.target.value)} placeholder={getModelLabel(model.id) || t("bench.displayName")} />
                                 {errors[model.key] && (
                                     <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[1]}</p>
                                 )}
                             </div>
-                            <div className="pr-2">
+                            <div className="min-w-0">
                                 <Input value={model.description || ""} maxLength={MODEL_DESCRIPTION_MAX_LENGTH} onChange={(e) => onDescriptionChange?.(index, e.target.value)} placeholder={t("bench.modelDescriptionPlaceholder")} showCount />
                             </div>
 
@@ -239,9 +225,15 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                         </div>
                     ))}
                 </div>
-                <Button variant="outlined" className="mt-2" size="small" iconOnly onClick={onAdd} color="default">
-                    <Outlined.Plus className="size-5" />
-                </Button>
+                <div className="mt-2 flex items-center gap-3">
+                    <Button variant="outlined" size="small" iconOnly onClick={onAdd} color="default">
+                        <Outlined.Plus className="size-5" />
+                    </Button>
+                    {/* Lived in the dropdown footer of the old cascader; the shared Select has no footer slot. */}
+                    <Button variant="link" size="small" onClick={() => navigate("/model/management?systemModel=assis")}>
+                        {t("bench.addMoreModels")}
+                    </Button>
+                </div>
 
                 {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
             </div>

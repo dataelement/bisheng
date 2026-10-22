@@ -4,21 +4,8 @@ import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { KnowledgeSpace } from "~/api/knowledge";
-import {
-    DropdownMenu,
-    DropdownMenuItem,
-    DropdownMenuTrigger
-} from "~/components/ui/DropdownMenu";
+import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 import { ActionMenuLoadingRow } from "~/components/ActionMenu";
-import {
-    SidebarListMoreMenuContent,
-    sidebarListMoreMenuDangerIconClassName,
-    sidebarListMoreMenuDangerItemClassName,
-    sidebarListMoreMenuDangerLabelClassName,
-    sidebarListMoreMenuIconClassName,
-    sidebarListMoreMenuItemClassName,
-    sidebarListMoreMenuLabelClassName,
-} from "~/components/SidebarListMoreMenu";
 import { useConfirm } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -122,65 +109,46 @@ export default function KnowledgeSpaceItem({
     ) : (
         <>
             {(canEditSpace || canManageMembers) && (
-                <DropdownMenuItem
-                    className={sidebarListMoreMenuItemClassName}
-                    onClick={() => onSettings?.(space)}
-                >
-                    <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
-                    <span className={sidebarListMoreMenuLabelClassName}>
-                        {localize("com_knowledge.space_settings")}
-                    </span>
-                </DropdownMenuItem>
+                <DropdownItem icon={<Outlined.Edit />} onSelect={() => onSettings?.(space)}>
+                    {localize("com_knowledge.space_settings")}
+                </DropdownItem>
             )}
-            <DropdownMenuItem
-                onClick={() => onPin(space.id, !space.isPinned)}
-                className={sidebarListMoreMenuItemClassName}
+            <DropdownItem
+                icon={space.isPinned ? <Outlined.PinOff /> : <Outlined.Pin />}
+                onSelect={() => onPin(space.id, !space.isPinned)}
             >
-                {space.isPinned ? (
-                    <>
-                        <Outlined.PinOff className={sidebarListMoreMenuIconClassName} />
-                        <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.unpin")}</span>
-                    </>
-                ) : (
-                    <>
-                        <Outlined.Pin className={sidebarListMoreMenuIconClassName} />
-                        <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.pin_space")}</span>
-                    </>
-                )}
-            </DropdownMenuItem>
+                {space.isPinned ? localize("com_knowledge.unpin") : localize("com_knowledge.pin_space")}
+            </DropdownItem>
 
             {(canDeleteSpace || type === "joined") && (
-                <DropdownMenuItem
-                    onClick={async () => {
-                        // Delete-space uses the destructive variant (matches file-delete).
-                        // Exit-space keeps the default prompt — it's not destructive.
-                        const ok = canDeleteSpace
-                            ? await confirm({
-                                description: `${localize("com_knowledge.confirm_delete_space_name", { 0: space.name })}${localize("com_knowledge.delete_irreversible_warning")}`,
-                                variant: "destructive",
-                            })
-                            : await confirm({
-                                title: localize("com_knowledge.prompt"),
-                                description: localize("com_knowledge.confirm_exit_space"),
-                                confirmText: localize("com_knowledge.exit"),
-                                cancelText: localize("com_knowledge.cancel"),
-                            });
+                <>
+                    <DropdownSeparator />
+                    <DropdownItem
+                        danger
+                        icon={canDeleteSpace ? <Outlined.Delete /> : <Outlined.LogOut />}
+                        onSelect={async () => {
+                            // Delete-space uses the destructive variant (matches file-delete).
+                            // Exit-space keeps the default prompt — it's not destructive.
+                            const ok = canDeleteSpace
+                                ? await confirm({
+                                    description: `${localize("com_knowledge.confirm_delete_space_name", { 0: space.name })}${localize("com_knowledge.delete_irreversible_warning")}`,
+                                    variant: "destructive",
+                                })
+                                : await confirm({
+                                    title: localize("com_knowledge.prompt"),
+                                    description: localize("com_knowledge.confirm_exit_space"),
+                                    confirmText: localize("com_knowledge.exit"),
+                                    cancelText: localize("com_knowledge.cancel"),
+                                });
 
-                        if (ok) {
-                            canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
-                        }
-                    }}
-                    className={sidebarListMoreMenuDangerItemClassName}
-                >
-                    {canDeleteSpace ? (
-                        <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
-                    ) : (
-                        <Outlined.LogOut className={sidebarListMoreMenuDangerIconClassName} />
-                    )}
-                    <span className={sidebarListMoreMenuDangerLabelClassName}>
+                            if (ok) {
+                                canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
+                            }
+                        }}
+                    >
                         {canDeleteSpace ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}
-                    </span>
-                </DropdownMenuItem>
+                    </DropdownItem>
+                </>
             )}
         </>
     );
@@ -215,23 +183,24 @@ export default function KnowledgeSpaceItem({
                     has `container-type: inline-size`, which would otherwise become the
                     trigger's containing block and offset the popup from the cursor (visible
                     in the WeCom WebView). React events still bubble through the component
-                    tree, so the stopPropagation calls below still guard the row's onClick. */}
+                    tree, so the stopPropagation wrapper below still guards the row's onClick. */}
                 {!hideMoreMenu && createPortal(
-                    <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
-                        <DropdownMenuTrigger asChild>
+                    <span className="contents" onClick={(e) => e.stopPropagation()}>
+                        <Dropdown
+                            align="end"
+                            open={contextMenuOpen}
+                            onOpenChange={setContextMenuOpen}
+                            menu={moreMenuItems}
+                        >
                             <button
                                 type="button"
                                 aria-hidden="true"
                                 tabIndex={-1}
                                 className="fixed size-0 opacity-0"
                                 style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
-                                onClick={(e) => e.stopPropagation()}
                             />
-                        </DropdownMenuTrigger>
-                        <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                            {moreMenuItems}
-                        </SidebarListMoreMenuContent>
-                    </DropdownMenu>,
+                        </Dropdown>
+                    </span>,
                     document.body,
                 )}
                 <div className="flex items-center flex-1">
@@ -289,33 +258,34 @@ export default function KnowledgeSpaceItem({
                       • -mr-3 (-12px): negative right margin lets the box extend past the list's
                         right padding so the button can reach its intended offset from the edge. */}
                 {!hideMoreMenu && (
-                <div className="sticky right-1 z-[1] ml-2 -mr-3 pr-3 flex h-5 w-8 flex-shrink-0 items-center justify-start">
-                    <DropdownMenu onOpenChange={(open) => { setMenuOpen(open); if (open) onMenuOpen?.(); }}>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                className={`
-                                    relative flex size-5 items-center justify-center rounded-md outline-none
-                                    before:absolute before:content-[''] ${compact ? "before:-inset-2" : "before:-inset-1"}
-                                    ${showSpaceHighlight ? "bg-[#EEEEEE] hover:!bg-[#E4E4E4]" : "bg-[#FBFBFB] group-hover:bg-[#F4F4F4] hover:!bg-[#E4E4E4]"}
-                                    ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
-                                `}
-                                // Match the row's background-color transition (350ms ease-in-out)
-                                // so the button bg fades in sync with the row; keep opacity at 200ms.
-                                style={{
-                                    transitionProperty: "opacity, background-color",
-                                    transitionDuration: "200ms, 350ms",
-                                    transitionTimingFunction: "ease, ease-in-out",
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <Outlined.More className="size-4 text-text-2" />
-                            </button>
-                        </DropdownMenuTrigger>
-
-                        <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                            {moreMenuItems}
-                        </SidebarListMoreMenuContent>
-                    </DropdownMenu>
+                <div
+                    className="sticky right-1 z-[1] ml-2 -mr-3 pr-3 flex h-5 w-8 flex-shrink-0 items-center justify-start"
+                    // The menu is portaled, but React events still bubble to the row's onClick.
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <Dropdown
+                        align="end"
+                        onOpenChange={(open) => { setMenuOpen(open); if (open) onMenuOpen?.(); }}
+                        menu={moreMenuItems}
+                    >
+                        <button
+                            className={`
+                                relative flex size-5 items-center justify-center rounded-md outline-none
+                                before:absolute before:content-[''] ${compact ? "before:-inset-2" : "before:-inset-1"}
+                                ${showSpaceHighlight ? "bg-[#EEEEEE] hover:!bg-[#E4E4E4]" : "bg-[#FBFBFB] group-hover:bg-[#F4F4F4] hover:!bg-[#E4E4E4]"}
+                                ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
+                            `}
+                            // Match the row's background-color transition (350ms ease-in-out)
+                            // so the button bg fades in sync with the row; keep opacity at 200ms.
+                            style={{
+                                transitionProperty: "opacity, background-color",
+                                transitionDuration: "200ms, 350ms",
+                                transitionTimingFunction: "ease, ease-in-out",
+                            }}
+                        >
+                            <Outlined.More className="size-4 text-text-2" />
+                        </button>
+                    </Dropdown>
                 </div>
                 )}
             </div>

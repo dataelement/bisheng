@@ -672,6 +672,7 @@
     "getApiKey": "{{provider}} の API キーを取得",
     "formatExample": "形式の例：{{example}}",
     "streamingAsrHint": "リアルタイム音声認識は paraformer-realtime-v2、paraformer-realtime-v1、qwen3-asr-flash-realtime に対応しています。保存して接続テストを実行後、ワークベンチの ASR モデルとして選択してください。",
+    "fileAsrHint": "ファイル認識です。録音全体をアップロードしてから文字起こしします。",
     "speechCredentials": "リアルタイム音声認識設定",
     "providerSilicon": "SiliconFlow",
     "providerTencent": "Tencent Cloud",
@@ -968,7 +969,9 @@
       "jina": "Jina 深層検索",
       "serp": "Serp API",
       "tavily": "Tavily",
-      "cloudsway": "cloudsway",
+      "cloudsway": "Cloudsway",
+      "cloudswayAccessKeyTip": "Cloudsway コンソールで取得します。Endpoint とセットで発行されます。",
+      "cloudswayEndpointTip": "Cloudsway コンソールで取得します。識別子だけを入力し、完全な URL は入力しないでください。リクエスト先を変更する場合は、下の Base URL に入力します。",
       "searXNG": "searXNG",
       "deepseek": "DeepSeek ウェブ検索",
       "serverUrl": "サーバーアドレス",
@@ -1162,7 +1165,8 @@
     "autoTagGenerationTitle": "自動タグ付け",
     "autoTagGenerationDesc": "有効にすると、ナレッジスペースの作成・編集時にタグライブラリを選択できます。ファイル解析後にライブラリから適切なタグを付けます。",
     "searchTagLibrary": "タグライブラリ名を検索",
-    "tagLibraryEmpty": "タグライブラリはありません"
+    "tagLibraryEmpty": "タグライブラリはありません",
+    "appTypeFilter": "アプリの種類"
   },
   "bench": {
     "daily": "日常",
@@ -3111,7 +3115,17 @@
     "maximum": "{{max}}以下にしてください",
     "addItem": "項目を追加",
     "removeItem": "項目を削除",
-    "expand": "展開"
+    "expand": "展開",
+    "selectEmpty": "データがありません",
+    "selectNoMatch": "一致する結果がありません",
+    "selectLoading": "読み込み中…",
+    "clear": "クリア",
+    "remove": "削除",
+    "back": "戻る",
+    "done": "完了",
+    "searchModels": "モデルを検索",
+    "increase": "増やす",
+    "decrease": "減らす"
   },
   "tenant.mountedBadge": "子テナントのマウント先",
   "tenant.mountedTag": "子テナント",

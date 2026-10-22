@@ -1,12 +1,11 @@
 // @ts-strict-ignore
-import { Button, Input, Textarea, toast } from '@bisheng/ui';
+import { Button, Dropdown, DropdownChevron, DropdownItem, Input, Textarea, toast } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
 import { Popover,PopoverClose,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
-import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
 import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 
@@ -317,17 +316,19 @@ const EditTool = forwardRef((props: any, ref) => {
                                     </div>
                                 </PopoverContent>
                             </Popover>
-                            <Select value="1" onValueChange={(k) => handleSelectTemplate(k)}>
-                                <SelectTrigger >
-                                    <span>{t('tools.examples')}</span>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value="json">{t('tools.weatherJson')}</SelectItem>
-                                        <SelectItem value="yaml">{t('tools.petShopYaml')}</SelectItem>
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
+                            {/* Inserting an example is an action (the trigger never shows a value), so this is a menu, not a Select. */}
+                            <Dropdown
+                                align="end"
+                                menu={<>
+                                    <DropdownItem onSelect={() => handleSelectTemplate('json')}>{t('tools.weatherJson')}</DropdownItem>
+                                    <DropdownItem onSelect={() => handleSelectTemplate('yaml')}>{t('tools.petShopYaml')}</DropdownItem>
+                                </>}
+                            >
+                                <Button type="button" variant="outlined" color="default">
+                                    {t('tools.examples')}
+                                    <DropdownChevron />
+                                </Button>
+                            </Dropdown>
                         </div>
                     </div>
                     <div className="px-6 mb-4" >

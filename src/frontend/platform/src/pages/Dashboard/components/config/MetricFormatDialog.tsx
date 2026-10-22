@@ -4,12 +4,23 @@ import { Button, Input } from '@bisheng/ui';
 import { Dialog,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
-import { Select,SelectContent,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
-import { Checkbox,RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Checkbox,RadioGroup,Radio as RadioGroupItem,Select } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import type { DimensionItem,MetricFormat } from "./DimensionBlock";
 interface MetricFormatDialogProps {formatDialogOpen:boolean;setFormatDialogOpen:(open:boolean)=>void;editingMetric:DimensionItem|null;setEditingMetric:React.Dispatch<React.SetStateAction<DimensionItem|null>>;localFormat:MetricFormat|null;setLocalFormat:React.Dispatch<React.SetStateAction<MetricFormat|null>>;onFormatChange?:(id:string,format:MetricFormat)=>void}
-export function MetricFormatDialog({formatDialogOpen,setFormatDialogOpen,editingMetric,setEditingMetric,localFormat,setLocalFormat,onFormatChange}:MetricFormatDialogProps){const {t}=useTranslation("dashboard");if (!editingMetric || !localFormat) return null;return (        <Dialog
+const UNIT_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  duration: ['ms', 's', 'min', 'hour'].map((value) => ({ value, label: value })),
+  storage: ['B', 'KB', 'MB', 'GB', 'TB'].map((value) => ({ value, label: value })),
+}
+export function MetricFormatDialog({formatDialogOpen,setFormatDialogOpen,editingMetric,setEditingMetric,localFormat,setLocalFormat,onFormatChange}:MetricFormatDialogProps){const {t}=useTranslation("dashboard");const selectLabels=useSelectLabels();if (!editingMetric || !localFormat) return null;const unitOptions = localFormat.type === 'number'
+  ? [
+      { value: 'none', label: t('dimensionBlock.dialog.none') },
+      { value: 'Thousand', label: 'Thousand (K)' },
+      { value: 'Million', label: 'Million (M)' },
+      { value: 'Billion', label: 'Billion (B)' },
+    ]
+  : UNIT_OPTIONS[localFormat.type] ?? [];return (        <Dialog
           open={formatDialogOpen}
           onOpenChange={(open) => {
             setFormatDialogOpen(open)
@@ -111,47 +122,20 @@ export function MetricFormatDialog({formatDialogOpen,setFormatDialogOpen,editing
                     <div>
                       <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.unit')}</div>
                       <Select
+                        {...selectLabels}
+                        options={unitOptions}
                         value={localFormat.unit ||
                           (localFormat.type === 'storage' ? 'B' :
                             localFormat.type === 'duration' ? 'ms' :
                               'none')}
-                        onValueChange={(value) => {
-                          const unitVal = value === "none" ? "" : value;
+                        onChange={(value) => {
+                          if (value == null) return;
+                          const unitVal = value === "none" ? "" : String(value);
                           setLocalFormat({ ...localFormat, unit: unitVal })
                         }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={t('dimensionBlock.dialog.selectUnit')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {/* Select Items Logic */}
-                          {localFormat.type === 'number' && (
-                            <>
-                              <SelectItem value="none">{t('dimensionBlock.dialog.none')}</SelectItem>
-                              <SelectItem value="Thousand">Thousand (K)</SelectItem>
-                              <SelectItem value="Million">Million (M)</SelectItem>
-                              <SelectItem value="Billion">Billion (B)</SelectItem>
-                            </>
-                          )}
-                          {localFormat.type === 'duration' && (
-                            <>
-                              <SelectItem value="ms">ms</SelectItem>
-                              <SelectItem value="s">s</SelectItem>
-                              <SelectItem value="min">min</SelectItem>
-                              <SelectItem value="hour">hour</SelectItem>
-                            </>
-                          )}
-                          {localFormat.type === 'storage' && (
-                            <>
-                              <SelectItem value="B">B</SelectItem>
-                              <SelectItem value="KB">KB</SelectItem>
-                              <SelectItem value="MB">MB</SelectItem>
-                              <SelectItem value="GB">GB</SelectItem>
-                              <SelectItem value="TB">TB</SelectItem>
-                            </>
-                          )}
-                        </SelectContent>
-                      </Select>
+                        placeholder={t('dimensionBlock.dialog.selectUnit')}
+                        aria-label={t('dimensionBlock.dialog.unit')}
+                      />
                     </div>
                     <div>
                       <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.suffix')}</div>

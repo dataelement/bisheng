@@ -1,4 +1,4 @@
-import { Button, SearchInput, Textarea } from '@bisheng/ui';
+import { Button, SearchInput, Select, Slider, Textarea } from '@bisheng/ui';
 import { Accordion,AccordionContent,AccordionItem,AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Checkbox,RadioGroup,Radio as RadioGroupItem,Switch,Tag } from "@bisheng/ui";
 
@@ -10,8 +10,7 @@ import { Card,CardContent,CardDescription,CardFooter,CardHeader,CardTitle } from
 import { Label } from "@/components/bs-ui/label";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 
-import { Select,SelectContent,SelectGroup,SelectItem,SelectLabel,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
-import { Slider } from "@/components/bs-ui/slider";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { Table,TableBody,TableCaption,TableCell,TableFooter,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 import { useTranslation } from "react-i18next"; // Import useTranslation
@@ -39,6 +38,9 @@ const invoices = [
 
 export default function Example(params) {
     const { t } = useTranslation(); // Initialize translation hook
+    const selectLabels = useSelectLabels();
+    const fruitOptions = ['apple', 'banana', 'blueberry', 'grapes', 'pineapple']
+        .map((fruit) => ({ value: fruit, label: t(`example.${fruit}`), group: t('example.fruits') }));
 
     return <div className="h-[calc(100vh-220px-var(--license-banner-h,0px))] overflow-y-auto py-10 pl-2 pr-10">
         <Label className="mt-10">{t('example.buttons')}</Label>
@@ -65,28 +67,21 @@ export default function Example(params) {
         </div>
         <Label>{t('example.dropdown')}</Label>
         <div className="flex flex-col gap-2 mb-6">
-            <Select>
-                <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder={t('example.selectAFruit')} />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectLabel>{t('example.fruits')}</SelectLabel>
-                        <SelectItem value="apple">{t('example.apple')}</SelectItem>
-                        <SelectItem value="banana">{t('example.banana')}</SelectItem>
-                        <SelectItem value="blueberry">{t('example.blueberry')}</SelectItem>
-                        <SelectItem value="grapes">{t('example.grapes')}</SelectItem>
-                        <SelectItem value="pineapple">{t('example.pineapple')}</SelectItem>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
+            <Select
+                {...selectLabels}
+                options={fruitOptions}
+                placeholder={t('example.selectAFruit')}
+                aria-label={t('example.dropdown')}
+                className="w-[180px]"
+            />
         </div>
         <Label>{t('example.slider')}</Label>
         <div className="flex flex-col gap-2 mb-6">
             <Slider
-                defaultValue={[50]}
+                defaultValue={50}
                 max={100}
                 step={1}
+                thumbLabel={t('example.slider')}
                 className="w-[60%]"
             />
         </div>

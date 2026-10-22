@@ -1,4 +1,4 @@
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Button, SearchInput, Select, notification } from '@bisheng/ui';
 
 import { Checkbox } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -13,13 +13,7 @@ DialogHeader,
 DialogTitle,
 } from "@/components/bs-ui/dialog";
 
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue,
-} from "@/components/bs-ui/select";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import {
 getGrantablePermissionModelsApi,
@@ -70,6 +64,7 @@ export function ResourceGrantDialog({
   onGranted,
 }: ResourceGrantDialogProps) {
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [resourceType, setResourceType] = useState<string>(
     SERVICE_ACCOUNT_RESOURCE_TYPES[0],
   )
@@ -291,27 +286,21 @@ export function ResourceGrantDialog({
             <label className="space-y-1 text-sm">
               <span>{t("openApiManagement.grants.resourceType")}</span>
               <Select
-                value={resourceType}
-                onValueChange={(value) => {
-                  setResourceType(value)
+                {...selectLabels}
+                options={SERVICE_ACCOUNT_RESOURCE_TYPES.map((type) => ({
+                  value: type,
+                  label: t(`openApiManagement.resourceTypes.${type}`),
+                }))}
+                value={resourceType || null}
+                onChange={(value) => {
+                  if (value == null) return
+                  setResourceType(String(value))
                   setSelectedResources([])
                   setModels([])
                   setModelKey("")
                 }}
-              >
-                <SelectTrigger
-                  aria-label={t("openApiManagement.grants.resourceType")}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SERVICE_ACCOUNT_RESOURCE_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {t(`openApiManagement.resourceTypes.${type}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                aria-label={t("openApiManagement.grants.resourceType")}
+              />
             </label>
             <label className="space-y-1 text-sm">
               <span>{t("openApiManagement.grants.resourceSearch")}</span>
@@ -385,23 +374,19 @@ export function ResourceGrantDialog({
         <label className="space-y-1 text-sm">
           <span>{t("openApiManagement.grants.model")}</span>
           <Select
-            value={modelKey}
+            {...selectLabels}
+            options={models
+              .filter((model) => model.key != null && model.key !== "")
+              .map((model) => ({
+                value: model.key,
+                label: t(`openApiManagement.permissionTiers.${model.key}`),
+              }))}
+            value={modelKey || null}
             disabled={!selectedResources.length || loadingModels}
-            onValueChange={setModelKey}
-          >
-            <SelectTrigger aria-label={t("openApiManagement.grants.model")}>
-              <SelectValue
-                placeholder={t("openApiManagement.grants.modelPlaceholder")}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {models.map((model) => (
-                <SelectItem key={model.key} value={model.key}>
-                  {t(`openApiManagement.permissionTiers.${model.key}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(value) => setModelKey(value == null ? "" : String(value))}
+            placeholder={t("openApiManagement.grants.modelPlaceholder")}
+            aria-label={t("openApiManagement.grants.model")}
+          />
         </label>
         <DialogFooter>
           <Button variant="outlined" disabled={loading} onClick={() => onOpenChange(false)} color="default">

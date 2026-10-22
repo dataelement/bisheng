@@ -13,7 +13,6 @@ from urllib.parse import urlencode
 
 from websockets.asyncio.client import connect
 
-from .capabilities import BAIDU_MODELS, TENCENT_MODELS
 from .connection import StreamConnection, app_id, required
 from .realtime import RealtimeASRClient
 
@@ -100,8 +99,8 @@ class BaiduConnection(StreamConnection):
 
 class BaiduRealtimeASRClient(RealtimeASRClient):
     def __init__(self, model: str, config: dict):
-        if model not in BAIDU_MODELS:
-            raise ValueError("Unsupported Baidu streaming ASR model")
+        if not str(model or "").strip():
+            raise ValueError("ASR model name is required")
         self.model = model
         self.config = dict(config)
         self.app_id = app_id(config)
@@ -191,8 +190,8 @@ class TencentConnection(StreamConnection):
 
 class TencentRealtimeASRClient(RealtimeASRClient):
     def __init__(self, model: str, config: dict):
-        if model not in TENCENT_MODELS:
-            raise ValueError("Unsupported Tencent streaming ASR model")
+        if not str(model or "").strip():
+            raise ValueError("ASR model name is required")
         self.model = model
         self.config = dict(config)
         self.app_id = app_id(config)

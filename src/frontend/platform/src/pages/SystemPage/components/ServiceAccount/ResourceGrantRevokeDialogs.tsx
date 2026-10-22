@@ -1,4 +1,4 @@
-import { Button } from '@bisheng/ui';
+import { Alert, Button } from '@bisheng/ui';
 
 import {
   Dialog,
@@ -146,16 +146,13 @@ export function ResourceGrantRevokeDialogs({
             ))}
           </div>
           {automaticGrantCount ? (
-            <div className="rounded-md border border-success-foreground/40 bg-success-background p-3 text-sm">
-              <p className="font-medium">
-                {t("openApiManagement.grants.revokeAllRetainedTitle", {
-                  count: automaticGrantCount,
-                })}
-              </p>
-              <p className="mt-1">
-                {t("openApiManagement.grants.revokeAllRetainedHint")}
-              </p>
-            </div>
+            <Alert
+              type="success"
+              title={t("openApiManagement.grants.revokeAllRetainedTitle", {
+                count: automaticGrantCount,
+              })}
+              description={t("openApiManagement.grants.revokeAllRetainedHint")}
+            />
           ) : null}
           <DialogFooter>
             <Button variant="outlined" disabled={loading} onClick={() => onRevokeAllOpenChange(false)} color="default">

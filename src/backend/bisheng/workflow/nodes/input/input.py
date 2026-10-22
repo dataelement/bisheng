@@ -1,7 +1,7 @@
 import copy
 import json
 import time
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -25,7 +25,7 @@ from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.input.const import InputFileMetadata
 
 
-class ParseModeEnum(str, Enum):
+class ParseModeEnum(StrEnum):
     KEEP_RAW = "keep_raw"
     EXTRACT_TEXT = "extract_text"
     INGEST_TO_KNOWLEDGE_BASE = "ingest_to_temp_kb"
@@ -143,7 +143,7 @@ class InputNode(BaseNode):
         if not isinstance(result, dict):
             return
         questions = []
-        for key, value in result.items():
+        for value in result.values():
             if isinstance(value, list):
                 questions = value
                 break
@@ -324,7 +324,7 @@ class InputNode(BaseNode):
             ret.append({"key": f"{self.id}.{k}", "value": v, "type": "variable"})
         return [ret]
 
-    def get_upload_file_path_content(self, file_url: str) -> (list, list):
+    def get_upload_file_path_content(self, file_url: str, *, split_for_retrieval: bool = True) -> (list, list):
         """
         params:
             file_url: upload to minio share url
@@ -338,11 +338,29 @@ class InputNode(BaseNode):
         metadatas = []
         try:
             file_rule = FileProcessBase(knowledge_id=0)
+            from bisheng.chat_session.domain.services.workflow_file_service import WorkflowFileService
             from bisheng.knowledge.rag.pipeline.types import PipelineConfig
             from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
 
+            callback = getattr(self, "callback_manager", None)
+            image_storage = WorkflowFileService.image_storage(
+                chat_id=getattr(callback, "chat_id", None),
+                user_id=self.user_id,
+                tenant_id=self.tenant_id or 1,
+                workflow_id=self.workflow_id,
+                run_id=getattr(callback, "unique_id", None) or self.exec_unique_id or generate_uuid(),
+                node_id=self.id,
+                source_url=file_url,
+                file_name=file_name,
+            )
+
             pipeline = TempFilePipeline(
-                invoke_user_id=self.user_id, local_file_path=filepath, file_name=file_name, file_rule=file_rule
+                invoke_user_id=self.user_id,
+                local_file_path=filepath,
+                file_name=file_name,
+                file_rule=file_rule,
+                split_for_retrieval=split_for_retrieval,
+                image_storage=image_storage,
             )
             result = pipeline.run(PipelineConfig())
 
@@ -434,7 +452,9 @@ class InputNode(BaseNode):
             ):
                 continue
 
-            texts, metadatas = self.get_upload_file_path_content(one_file_url)
+            texts, metadatas = self.get_upload_file_path_content(
+                one_file_url, split_for_retrieval=ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE.value in modes
+            )
             if file_content_length < file_content_max_size:
                 file_content = "\n".join(texts)
                 file_content = file_content[: file_content_max_size - file_content_length]

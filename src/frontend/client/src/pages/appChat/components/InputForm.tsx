@@ -2,8 +2,8 @@ import { MessageFrame, WorkflowFileField, WorkflowForm } from '@bisheng/chat';
 import { normalizeFormFields, type RawMessage } from '@bisheng/chat/core';
 import type { ReactNode } from 'react';
 import { useRecoilValue } from 'recoil';
-import MultiSelect from '~/components/ui/MultiSelect';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/Select';
+import { Select } from '@bisheng/ui';
+import useSelectCopy from '~/hooks/useSelectCopy';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 import { emitAreaTextEvent, EVENT_TYPE } from '../useAreaText';
@@ -14,6 +14,7 @@ import InputFileComponent from './InputFileComponent';
 interface InputFormProps { data: RawMessage; flow: { name: string }; logo?: ReactNode }
 export function InputForm({ data, flow, logo }: InputFormProps) {
     const localize = useLocalize();
+    const selectCopy = useSelectCopy();
     const config = useRecoilValue(bishengConfState);
     const { showToast } = useToastContext();
     return <MessageFrame title={flow.name} logo={logo}>
@@ -30,14 +31,14 @@ export function InputForm({ data, flow, logo }: InputFormProps) {
                     suffixes={normalizeFileAccept(field.raw.file_type, { mediaEnabled: !!config?.enable_media_upload })}
                     onFileChange={value => onChange(Array.isArray(value) ? value : value ? [value] : [])} />;
                 if (field.type !== 'select') return null;
-                if (field.multiple) return <MultiSelect multiple disabled={disabled} className=""
+                const options = field.options.map(text => ({ label: text, value: text }));
+                if (field.multiple) return <Select {...selectCopy} multiple disabled={disabled}
                     value={typeof value === 'string' ? value.split(',').filter(Boolean) : []}
-                    options={field.options.map(text => ({ label: text, value: text }))}
-                    placeholder={localize('com_ui_please_select')} onChange={values => onChange(values.join(','))} />;
-                return <Select disabled={disabled} value={typeof value === 'string' ? value : undefined} onValueChange={onChange}>
-                    <SelectTrigger><SelectValue placeholder="" /></SelectTrigger>
-                    <SelectContent className="bg-white"><SelectGroup>{field.options.map(text => <SelectItem key={text} value={text}>{text}</SelectItem>)}</SelectGroup></SelectContent>
-                </Select>;
+                    options={options} placeholder={localize('com_ui_please_select')} aria-label={field.label}
+                    onChange={values => onChange(values.join(','))} />;
+                return <Select {...selectCopy} disabled={disabled} value={typeof value === 'string' ? value : null}
+                    options={options} placeholder={localize('com_ui_please_select')} aria-label={field.label}
+                    onChange={value => onChange(value ?? '')} />;
             }} />
     </MessageFrame>;
 }
