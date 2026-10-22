@@ -14,6 +14,7 @@ describe('frontend dependency ownership', () => {
   it('uses the maintained list sorting library in both applications', () => {
     for (const app of ['client', 'platform']) {
       expect(manifest(app).dependencies?.['@hello-pangea/dnd']).toBe('catalog:');
+      expect(manifest(app).dependencies).not.toHaveProperty('react-beautiful-dnd');
     }
   });
   it('uses Axios own types instead of the deprecated stub', () => {

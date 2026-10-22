@@ -33,7 +33,7 @@ export default frontendConfig({
       {
         name: 'react-beautiful-dnd',
         message:
-          'react-beautiful-dnd is deprecated upstream (no React 18 StrictMode support) and frozen; use @hello-pangea/dnd when migrating (ledger #8).',
+          'react-beautiful-dnd was removed (ledger #8). Use @hello-pangea/dnd from the workspace catalog for list sorting.',
       },
       {
         name: 'react-virtualized',
@@ -42,6 +42,10 @@ export default frontendConfig({
       },
     ],
     patterns: [
+      {
+        group: ['react-beautiful-dnd/*', 'react-virtualized/*'],
+        message: 'Removed legacy dependencies (ledger #8). Use catalog list sorting and file preview libraries.',
+      },
       {
         group: ['recoil/*'],
         message:

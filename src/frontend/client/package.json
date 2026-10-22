@@ -104,7 +104,6 @@
     "react": "catalog:",
     "react-activation": "^0.13.4",
     "react-avatar-editor": "^13.0.2",
-    "react-beautiful-dnd": "^13.1.1",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "catalog:",

@@ -48,7 +48,6 @@
     "pdfjs-dist": "3.10.111",
     "react": "catalog:",
     "react-ace": "^11.0.1",
-    "react-beautiful-dnd": "^13.1.1",
     "react-color": "^2.19.3",
     "react-day-picker": "^9.13.0",
     "react-dom": "catalog:",

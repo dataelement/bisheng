@@ -2792,11 +2792,6 @@
       "count": 3
     }
   },
-  "src/pages/apps/components/MarkLabel.tsx": {
-    "no-restricted-imports": {
-      "count": 1
-    }
-  },
   "src/pages/apps/components/SearchOverlay.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4

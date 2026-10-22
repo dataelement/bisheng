@@ -1,5 +1,11 @@
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+
+it('retains integrity verification for the official patched SheetJS artifact', () => {
+  const lockfile = readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8');
+  expect(lockfile).toContain('resolution: {integrity: sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==, tarball: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz}');
+});
 
 // Resolve from each consumer so stale app-local dependencies cannot hide behind a root import.
 for (const consumer of ['client', 'platform', 'packages/file-viewers']) {

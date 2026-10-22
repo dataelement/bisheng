@@ -33,15 +33,19 @@ export default frontendConfig({
       {
         name: 'react-color',
         message:
-          'react-color is deprecated and frozen (ledger #8). Do not add new usage.',
+          'Existing react-color pickers remain frozen pending shared design-library coverage (ledger #8). Do not add new usage.',
       },
       {
         name: 'react-beautiful-dnd',
         message:
-          'react-beautiful-dnd is deprecated upstream (no React 18 StrictMode support) and frozen; use @hello-pangea/dnd when migrating (ledger #8).',
+          'react-beautiful-dnd was removed (ledger #8). Use @hello-pangea/dnd from the workspace catalog for list sorting.',
       },
     ],
     patterns: [
+      {
+        group: ['react-beautiful-dnd/*'],
+        message: 'Use @hello-pangea/dnd from the workspace catalog for list sorting.',
+      },
       {
         group: ['react-query/*'],
         message:
