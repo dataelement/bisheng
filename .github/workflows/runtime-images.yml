@@ -32,10 +32,11 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build, native smoke, push and inventory
+      - name: Build, native isolated smoke, push and inventory
         env:
           RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
           TARGET_ARCH: ${{ matrix.arch }}
+          RUNTIME_PUBLISH: '1'
         run: bash scripts/build_runtime_images.sh
       - name: Native offline bundle, reuse and SQLite integration
         env:
@@ -43,7 +44,7 @@ jobs:
           TARGET_ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
-          work="$(mktemp -d /tmp/e2e-f086-runtime.XXXXXX)"
+          work="$(mktemp -d /tmp/e2e-f059-runtime.XXXXXX)"
           trap 'sudo rm -rf "$work"' EXIT
           docker run --rm --network host --user 0:0 --env PYTHONPATH=/app \
             --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
@@ -57,6 +58,7 @@ jobs:
           name: runtime-images-${{ matrix.arch }}
           path: dist/runtime-images-*.json
   catalog:
+    # The job dependency includes both native smoke and Docker regression steps.
     needs: native
     runs-on: ubuntu-22.04
     steps:
@@ -71,23 +73,35 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Publish service indexes after both native jobs
-        env:
-          RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
+      - name: Verify matching native inventories before publishing any service index
+        run: |
+          python src/runtime-manager/runtime_manager/image_catalog.py merge \
+            --inventory dist/runtime-images-amd64.json --inventory dist/runtime-images-arm64.json \
+            --output dist/runtime-release.json
+          python src/runtime-manager/runtime_manager/image_catalog.py indexes \
+            --release-manifest dist/runtime-release.json > dist/service-indexes.tsv
+      - name: Publish immutable service indexes from frozen per-platform digests
         run: |
           set -euo pipefail
-          for name in runtime-manager app-proxy; do
-            image="dataelement/bisheng-${name}:${RUNTIME_RELEASE}"
+          while IFS=$'\t' read -r name image amd arm; do
             if docker buildx imagetools inspect "$image" > /tmp/index-existing 2>/tmp/index-error; then
               echo "Refusing existing index $image"; exit 1
             elif ! grep -Eqi 'manifest unknown|not found|no such manifest' /tmp/index-error; then
-              cat /tmp/index-error >&2; exit 1
+              echo 'Cannot establish index absence; publication refused' >&2; exit 1
             fi
-            docker buildx imagetools create --tag "$image" "$image-amd64" "$image-arm64"
-          done
-      - name: Generate both-platform catalog
+          done < dist/service-indexes.tsv
+          while IFS=$'\t' read -r name image amd arm; do
+            docker buildx imagetools create --tag "$image" "$amd" "$arm"
+            docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' > "dist/${name}-index.json"
+          done < dist/service-indexes.tsv
+          python src/runtime-manager/runtime_manager/image_catalog.py finalize \
+            --release-manifest dist/runtime-release.json --index-dir dist --output dist/runtime-release.json
+      - name: Generate both-platform application catalog
         run: python src/runtime-manager/tools/runtime_materials.py catalog --inventory dist/runtime-images-amd64.json --inventory dist/runtime-images-arm64.json --output dist/runtime-profiles.json --revision ${{ github.run_number }}
       - uses: actions/upload-artifact@v4
         with:
           name: runtime-profiles
-          path: dist/runtime-profiles.json
+          path: |
+            dist/runtime-profiles.json
+            dist/runtime-release.json
+            dist/*-index.json
