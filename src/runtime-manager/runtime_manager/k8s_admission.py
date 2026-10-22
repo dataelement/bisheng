@@ -514,7 +514,26 @@ class AdmissionPolicy:
         if cond.get("uid") != meta.get("uid") or cond.get("resourceVersion") != meta.get("resourceVersion"):
             _deny("admission_delete_precondition_required")
         grace = opts.get("gracePeriodSeconds")
-        if type(grace) is not int or not 1 <= grace <= 120:
+        status = obj.get("status", {})
+        # Core/v1 forces zero grace before admission for a never-bound Pod.
+        # Exact UID/RV checks above still fence a concurrent scheduler binding;
+        # zero grace is never accepted for a possible current or former writer.
+        normalized_unbound = (
+            obj.get("kind") == "Pod"
+            and type(grace) is int
+            and grace == 0
+            and not obj.get("spec", {}).get("nodeName")
+            and status.get("phase") == "Pending"
+            and status.get("reason") not in {"Unknown", "NodeLost"}
+            and not any(
+                status.get(key) for key in ("containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses")
+            )
+            and not any(
+                item.get("type") == "PodScheduled" and item.get("status") == "True"
+                for item in status.get("conditions", [])
+            )
+        )
+        if not normalized_unbound and (type(grace) is not int or not 1 <= grace <= 120):
             _deny("admission_force_delete_refused")
 
     def _terminal_delete(self, req, obj):

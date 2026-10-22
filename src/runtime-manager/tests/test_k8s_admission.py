@@ -902,3 +902,36 @@ def test_calico_status_metadata_exception_requires_the_exact_configured_actor(
         verifier,
         request(new, operation="UPDATE", subresource="status", old=old, username=username, groups=groups),
     )
+
+
+def test_api_normalized_zero_grace_is_allowed_only_for_never_bound_pending_pod(template, plan):
+    """覆盖 AC: AC-13、AC-20、AC-49。Unscheduled delete is normalized by the API server."""
+    old = copy.deepcopy(template)
+    old["metadata"].update(uid=UID, resourceVersion="17")
+    old["status"] = {"phase": "Pending", "qosClass": "Guaranteed"}
+    options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 0}
+    assert allowed(policy(lambda _: plan), request(old, operation="DELETE", old=old, options=options))
+
+
+@pytest.mark.parametrize("mutation", ["bound", "running", "init-state", "unknown", "lost", "missing-phase", "stale-rv"])
+def test_zero_grace_keeps_bound_uncertain_or_changed_pods_protected(template, plan, mutation):
+    """覆盖 AC: AC-13、AC-20、AC-49。Zero grace never proves a possible writer stopped."""
+    old = copy.deepcopy(template)
+    old["metadata"].update(uid=UID, resourceVersion="17")
+    old["status"] = {"phase": "Pending", "qosClass": "Guaranteed"}
+    options = {"preconditions": {"uid": UID, "resourceVersion": "17"}, "gracePeriodSeconds": 0}
+    if mutation == "bound":
+        old["spec"]["nodeName"] = "worker-a"
+    elif mutation == "running":
+        old["status"]["containerStatuses"] = [{"state": {"running": {}}}]
+    elif mutation == "init-state":
+        old["status"]["initContainerStatuses"] = [{"state": {"terminated": {"exitCode": 0}}}]
+    elif mutation == "unknown":
+        old["status"]["phase"] = "Unknown"
+    elif mutation == "lost":
+        old["status"]["reason"] = "NodeLost"
+    elif mutation == "missing-phase":
+        old["status"].pop("phase")
+    else:
+        options["preconditions"]["resourceVersion"] = "old"
+    assert not allowed(policy(lambda _: plan), request(old, operation="DELETE", old=old, options=options))
