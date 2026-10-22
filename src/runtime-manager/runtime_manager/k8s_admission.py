@@ -27,6 +27,18 @@ from runtime_manager.k8s_templates import POLICY_ANNOTATION, RESOURCE_LABEL, STO
 from runtime_manager.platform_protocol import signed_headers
 
 logger = logging.getLogger(__name__)
+_LOGGABLE_REFUSALS = frozenset(
+    {
+        "admission_template_mismatch",
+        "admission_plan_action_refused",
+        "admission_plan_unavailable",
+        "admission_plan_scope_refused",
+        "admission_pod_baseline_refused",
+        "admission_actor_refused",
+        "admission_stop_unconfirmed",
+        "admission_input_invalid",
+    }
+)
 _TERMINAL = {"Succeeded", "Failed"}
 _CNI_ANNOTATIONS = frozenset(
     {"cni.projectcalico.org/containerID", "cni.projectcalico.org/podIP", "cni.projectcalico.org/podIPs"}
@@ -210,6 +222,9 @@ class AdmissionPolicy:
             result = {"uid": uid, "allowed": False, "status": {"code": 403, "message": str(exc)}}
         except (KeyError, TypeError, ValueError, AttributeError):
             result = {"uid": uid, "allowed": False, "status": {"code": 403, "message": "admission_input_invalid"}}
+        if result["allowed"] is False:
+            reason = result["status"]["message"]
+            logger.warning("%s", reason if reason in _LOGGABLE_REFUSALS else "admission_refused")
         return {"apiVersion": "admission.k8s.io/v1", "kind": "AdmissionReview", "response": result}
 
     def validate(self, req):
@@ -257,9 +272,8 @@ class AdmissionPolicy:
             _deny("admission_resource_ref_required")
         try:
             plan = self.plan_reader(ref)
-        except Exception as exc:
-            # Only a safe type name is logged; backend failure must deny creation.
-            logger.warning("admission plan unavailable (%s)", type(exc).__name__)
+        except Exception:
+            # Backend failure must deny creation; review logs only fixed reasons.
             _deny("admission_plan_unavailable")
         if not isinstance(plan, dict) or (
             plan.get("resource_ref"),
