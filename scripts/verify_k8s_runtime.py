@@ -163,6 +163,24 @@ def failure_details(error):
                 "exception_type": exception_type,
             }
         )
+        nested = row.get("failures")
+        if exception_type == "ProbeRunFailure" and isinstance(nested, list):
+            for step in nested[:2]:
+                if not isinstance(step, dict) or step.get("phase") not in {"probe", "cleanup"}:
+                    continue
+                step_type = safe_exception_type(step.get("exception_type"))
+                step_reason = step.get("reason")
+                failures.append(
+                    {
+                        "phase": "check",
+                        "name": row["name"],
+                        "step": step["phase"],
+                        "reason": step_reason
+                        if step_type == "ProbeError" and isinstance(step_reason, str) and step_reason in _SAFE_PROBE_REASONS
+                        else "probe_failed",
+                        "exception_type": step_type,
+                    }
+                )
     failures.append({"phase": "cleanup", **safe_failure(error.cleanup_error)})
     return failures
 
@@ -266,6 +284,8 @@ def execute_checks(drivers, document, *, observed_at):
                 artifacts[name] = result["observations"]
         except Exception as error:
             row = {"name": name, "ok": False, **safe_failure(error), "evidence": {}}
+            if isinstance(error, ProbeRunFailure):
+                row["failures"] = failure_details(error)
         rows.append({**row, "observed_at": observed_at})
     return {
         "artifacts": artifacts,
@@ -813,9 +833,13 @@ class InstallationVerifier:
         pod["metadata"]["name"] = plan["name"]
         pod["metadata"]["labels"][RESOURCE_LABEL] = ref
         plan["template"] = copy.deepcopy(pod)
-        self._plans(ref, plan)
         if psa:
-            pod["spec"]["containers"][0]["securityContext"]["privileged"] = True
+            # Keep the payload schema-valid so the real restricted PSA check,
+            # rather than the API's contradictory-security-context validator,
+            # must refuse the dry-run request.
+            pod["spec"]["containers"][0]["securityContext"].update(
+                privileged=True, allowPrivilegeEscalation=True
+            )
         else:
             pod["spec"]["containers"][0]["image"] = "unauthorized.invalid/image:latest"
 
@@ -824,8 +848,8 @@ class InstallationVerifier:
                 "POST", self._path("pods") + "?dryRun=All", document=pod, manager=True, accepted=(0, 1)
             )
             if not response.returncode:
-                # Do not hide a failed isolation check or delete an unexpected
-                # object by name: its same-UID cleanup requires operator review.
+                # A successful server dry-run persisted no Pod. It is still a
+                # failed isolation check; never retry with a live CREATE.
                 raise ProbeError("admission_negative_was_accepted")
             expected = "violates PodSecurity" if psa else "admission_template_mismatch"
             if expected in response.stderr:
@@ -834,9 +858,21 @@ class InstallationVerifier:
                 return False
             raise ProbeError("admission_negative_unconfirmed")
 
-        self._wait(denied)
-        self._plans(ref, remove=True)
-        return self._proof(self.idle)
+        probe_error = None
+        try:
+            self._plans(ref, plan)
+            self._wait(denied)
+            return self._proof(self.idle)
+        except BaseException as error:
+            probe_error = error
+            raise
+        finally:
+            # This approval belongs only to a dry-run that cannot allocate a
+            # UID. Do not leave it to block later same-UID resource recovery.
+            try:
+                self._plans(ref, remove=True)
+            except Exception as cleanup_error:
+                raise ProbeRunFailure(probe_error, cleanup_error) from None
 
     def _status(self):
         current = self.api.get("pod", self.idle["metadata"]["name"], manager=True)

@@ -1585,3 +1585,192 @@ def test_chart_storage_controller_identities_are_shared_by_admission_and_report(
 def test_chart_refuses_empty_foreign_ambiguous_or_duplicate_storage_identities(values, tmp_path, identities):
     values["execution"]["storageControllerUsernames"] = identities
     render(values, tmp_path, expect_success=False)
+
+
+def negative_probe_verifier(tool, *, outcome="psa", initial_failure=False, cleanup_failure=False):
+    from runtime_manager.k8s_templates import RESOURCE_LABEL
+
+    reference = str(uuid4())
+    template = {
+        "metadata": {"name": "preflight-base", "namespace": "runtime-apps", "labels": {RESOURCE_LABEL: reference}},
+        "spec": {
+            "containers": [
+                {
+                    "image": "example/helper@sha256:" + "a" * 64,
+                    "securityContext": {"privileged": False, "allowPrivilegeEscalation": False},
+                }
+            ]
+        },
+    }
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.namespace, verifier.idle = "runtime-apps", {"metadata": {"uid": str(uuid4())}}
+    verifier.created = [{"resource": "pods", "plan": {"template": template}}]
+    verifier.plans, verifier.calls = {}, []
+
+    def plans(ref, plan=None, *, remove=False):
+        verifier.calls.append(("plan", ref, remove))
+        if remove:
+            if cleanup_failure:
+                raise tool.ProbeError("admission_refresh_revision_unconfirmed")
+            verifier.plans.pop(ref, None)
+        else:
+            verifier.plans[ref] = copy.deepcopy(plan)
+            if initial_failure:
+                raise tool.ProbeError("admission_refresh_refused")
+
+    class Api:
+        def raw(self, method, path, **kwargs):
+            verifier.calls.append((method, path, copy.deepcopy(kwargs)))
+            assert method == "POST" and path.endswith("?dryRun=All") and kwargs["manager"] is True
+            if outcome == "api-unknown":
+                raise tool.ProbeError("kubectl_request_failed")
+            security = kwargs["document"]["spec"]["containers"][0]["securityContext"]
+            if security.get("privileged") is True and security.get("allowPrivilegeEscalation") is False:
+                return subprocess.CompletedProcess(
+                    [], 1, "", "cannot set allowPrivilegeEscalation to false and privileged to true"
+                )
+            if outcome == "accepted":
+                return subprocess.CompletedProcess([], 0, "{}", "")
+            reason = {
+                "psa": 'violates PodSecurity "restricted:v1.28"',
+                "template": "admission_template_mismatch",
+                "schema": "Pod invalid: schema_validation_refused",
+                "unavailable": "admission_plan_unavailable",
+            }[outcome]
+            return subprocess.CompletedProcess([], 1, "", reason)
+
+    def wait(callback):
+        if not callback():
+            raise tool.ProbeError("probe_deadline_exceeded")
+
+    verifier.api, verifier._plans, verifier._wait = Api(), plans, wait
+    return verifier
+
+
+def test_psa_negative_is_schema_valid_and_removes_only_its_dry_run_plan():
+    tool = load_installer()
+    verifier = negative_probe_verifier(tool)
+    original = copy.deepcopy(verifier.created)
+    assert verifier._admission_negative(psa=True)["ok"]
+    submitted = next(row[2]["document"] for row in verifier.calls if row[0] == "POST")
+    assert submitted["spec"]["containers"][0]["securityContext"] == {
+        "privileged": True,
+        "allowPrivilegeEscalation": True,
+    }
+    assert verifier.created == original
+    assert not verifier.plans
+    assert [row[2] for row in verifier.calls if row[0] == "plan"] == [False, True]
+
+
+@pytest.mark.parametrize(
+    "outcome,reason",
+    [
+        ("schema", "admission_negative_unconfirmed"),
+        ("template", "admission_negative_unconfirmed"),
+        ("accepted", "admission_negative_was_accepted"),
+        ("api-unknown", "kubectl_request_failed"),
+        ("unavailable", "probe_deadline_exceeded"),
+    ],
+)
+def test_psa_probe_refuses_unproven_denials_and_cleans_dry_run_approval(outcome, reason):
+    tool = load_installer()
+    verifier = negative_probe_verifier(tool, outcome=outcome)
+    with pytest.raises(tool.ProbeError, match=reason):
+        verifier._admission_negative(psa=True)
+    assert not verifier.plans
+    assert [row[2] for row in verifier.calls if row[0] == "plan"] == [False, True]
+
+
+@pytest.mark.parametrize("psa", [True, False])
+def test_dry_run_plan_is_removed_when_registration_refresh_fails(psa):
+    tool = load_installer()
+    verifier = negative_probe_verifier(tool, initial_failure=True)
+    with pytest.raises(tool.ProbeError, match="admission_refresh_refused"):
+        verifier._admission_negative(psa=psa)
+    assert not verifier.plans
+    assert not any(row[0] == "POST" for row in verifier.calls)
+
+
+@pytest.mark.parametrize("outcome,probe_reason", [("psa", None), ("schema", "admission_negative_unconfirmed")])
+def test_negative_probe_preserves_cleanup_error_and_original_failure(outcome, probe_reason):
+    tool = load_installer()
+    verifier = negative_probe_verifier(tool, outcome=outcome, cleanup_failure=True)
+    with pytest.raises(tool.ProbeRunFailure) as failed:
+        verifier._admission_negative(psa=True)
+    details = tool.failure_details(failed.value)
+    assert details[-1] == {
+        "phase": "cleanup",
+        "reason": "admission_refresh_revision_unconfirmed",
+        "exception_type": "ProbeError",
+    }
+    if probe_reason:
+        assert details[0] == {"phase": "probe", "reason": probe_reason, "exception_type": "ProbeError"}
+    else:
+        assert len(details) == 1 and failed.value.probe_error is None
+    assert verifier.plans and all(plan["uid"] is None for plan in verifier.plans.values())
+
+
+def test_per_check_report_keeps_safe_negative_probe_and_cleanup_diagnostics():
+    tool = load_installer()
+    verifier = negative_probe_verifier(tool, outcome="schema", cleanup_failure=True)
+    report = tool.execute_checks(
+        {"restricted-psa": lambda: verifier._admission_negative(psa=True)}, {}, observed_at=1000
+    )
+    row = report["checks"][0]
+    assert not row["ok"]
+    assert row["failures"] == [
+        {"phase": "probe", "reason": "admission_negative_unconfirmed", "exception_type": "ProbeError"},
+        {"phase": "cleanup", "reason": "admission_refresh_revision_unconfirmed", "exception_type": "ProbeError"},
+    ]
+
+
+def test_outer_cleanup_failure_keeps_safe_nested_probe_cleanup_evidence():
+    tool = load_installer()
+    verifier = negative_probe_verifier(tool, outcome="schema", cleanup_failure=True)
+    report = tool.execute_checks(
+        {"restricted-psa": lambda: verifier._admission_negative(psa=True)}, {}, observed_at=1000
+    )
+    error = tool.ProbeRunFailure(None, tool.ProbeError("preflight_finalizer_release_refused"), report)
+    details = tool.failure_details(error)
+    assert any(
+        row.get("name") == "restricted-psa"
+        and row.get("step") == "probe"
+        and row["reason"] == "admission_negative_unconfirmed"
+        for row in details
+    )
+    assert any(
+        row.get("name") == "restricted-psa"
+        and row.get("step") == "cleanup"
+        and row["reason"] == "admission_refresh_revision_unconfirmed"
+        for row in details
+    )
+    assert details[-1]["phase"] == "cleanup" and details[-1]["reason"] == "preflight_finalizer_release_refused"
+
+
+def test_nested_cleanup_diagnostics_do_not_copy_private_exception_fields():
+    tool = load_installer()
+    report = {
+        "checks": [
+            {
+                "name": "restricted-psa",
+                "ok": False,
+                "exception_type": "ProbeRunFailure",
+                "reason": "probe_failed",
+                "failures": [
+                    {"phase": "probe", "exception_type": "ProbeError", "reason": "PRIVATE_SENTINEL"},
+                    {
+                        "phase": "cleanup",
+                        "exception_type": "ProbeError",
+                        "reason": "admission_refresh_refused",
+                        "stderr": "PRIVATE_SENTINEL",
+                    },
+                ],
+            }
+        ]
+    }
+    details = tool.failure_details(
+        tool.ProbeRunFailure(None, tool.ProbeError("preflight_finalizer_release_refused"), report)
+    )
+    assert "PRIVATE_SENTINEL" not in json.dumps(details)
+    assert any(row.get("step") == "probe" and row["reason"] == "probe_failed" for row in details)
+    assert any(row.get("step") == "cleanup" and row["reason"] == "admission_refresh_refused" for row in details)
