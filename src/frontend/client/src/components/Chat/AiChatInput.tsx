@@ -331,7 +331,8 @@ const AiChatInput = memo(
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
         const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
-            && taskMode && (showAddSkill || skillCenterPreviewEnabled);
+            && (taskMode || (taskModeEntry && !!onToggleTaskMode))
+            && (showAddSkill || skillCenterPreviewEnabled);
         const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled;
 
@@ -663,10 +664,13 @@ const AiChatInput = memo(
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
                                 >
-                                    {/* Task mode owns skill selection and execution. */}
+                                    {/* Selecting a skill activates task mode for this draft. */}
                                     {showSkillPicker ? <ChatSkillSelector menu
                                             selected={dailySkills} disabled={!!disabled}
-                                            onChange={setDailySkills} />
+                                            onChange={(skills) => {
+                                                setDailySkills(skills);
+                                                if (skills.length > 0 && !taskMode) onToggleTaskMode?.();
+                                            }} />
                                         : null}
                                 </ChatResourceMenu>
                             )}

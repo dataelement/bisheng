@@ -84,3 +84,9 @@
 - KnowledgeSpaceDialog publishes its open/close lifecycle to the desktop presentation bridge. The dialog portal uses the full desktop window; the underlying chat layout follows the host-provided chat region dimensions.
 - The knowledge overlay has an explicit presentation class so the host can apply Work's sampled mask color and alpha. Browser-only dialogs retain the shared Modal behavior.
 - Client production build passed. 3006 frontend release: `chat-window-dialog-20261022-1905`, preserving the current enterprise skills, backend and admin deployment. Visual acceptance is assigned to the user.
+
+
+## 2026-10-22 Select skills before task mode
+- Synced `feat/bisheng-work-120-main@fd153d685` before the change.
+- Chat exposes the enabled skill picker to users with task-mode access while composing ordinary chat. Selecting a skill retains the selection and activates task mode; further skill selection keeps task mode active. Switching back to ordinary chat clears task skills and keeps the picker available.
+- Ten focused composer tests and the client production build passed. Deployed client build to 3006 release `chat-skill-auto-mode-20261022`, preserving the current backend and admin files. Desktop Chat loads this client; visual acceptance remains with the user.
