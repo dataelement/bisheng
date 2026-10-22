@@ -28,7 +28,7 @@ export default frontendConfig({
       {
         name: 'recoil',
         message:
-          'Recoil is archived by Meta and frozen — no new atoms/selectors/imports (ledger #5). Server state goes to @tanstack/react-query; new client-global state awaits the Jotai migration decision.',
+          'Recoil is archived by Meta and frozen — no new atoms/selectors/imports (ledger #5). Server state goes to @tanstack/react-query; new cross-page client state may use Zustand to align with platform. Keep existing Recoil state in place.',
       },
       {
         name: 'react-beautiful-dnd',
