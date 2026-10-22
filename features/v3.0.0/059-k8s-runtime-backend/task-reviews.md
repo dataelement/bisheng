@@ -3416,3 +3416,11 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 **结果：PASS。** 三运行时受控crane参数3项先红，再补标准sbin；与T247已真实原生A/B的PATH一致，依赖bin优先不变。无用户可覆写PATH口、base/entrypoint/uid/command/registry不变。七项中架构/命名/信息泄漏/设计同步PASS，数据库/对外序列化/前端N/A；单文件/完整AC/配对依赖PASS。
 
 最终完整runtime1610 passed /13 skipped（33.01s），日志`/private/tmp/f059-oci-final-full-runtime.log`；原SGID完整1607/13skip及两份红例日志保留。Ruff/format/逐文件archguard/diff通过。backend与6f逐字节不变，未重标backend测试SHA。真实新镜像及K8s复验不能由本地通过代替。
+
+## Task Review: T252/T253 — OCI继承CMD与兼容入口
+
+**结果：PASS。** 测试单文件/完整AC-24、AC-25、AC-27、AC-28、AC-54、配对及T251前向依赖PASS；三运行时缺省/空list先红6、显式列表/逗号参数6保持绿。实现沿用原列表验证及CSV编码，仅取消非空分支，显式写空CMD，保持Procfile/包start/static模板的既有入口解析优先级。无helper/backend/外部API或用户完整镜像变化。
+
+七项：架构/命名/信息泄漏/设计同步PASS，ORM/对外响应序列化/数据库/前端N/A；目标单文件与配对依赖PASS。独立链路和diff复核无阻断；审查者沙箱剥除SGID的旧相邻13失败未计产品缺陷，root的真实位完整测试与原生Linux证据单列。
+
+完整runtime1622 passed /13 skipped，33.09s，`/private/tmp/f059-oci-cmd-final-runtime.log`；Ruff/format/逐文件guard/diff通过。189非root真实crane v0.22.1在三个固定CA基础镜像上验证默认Cmd→空Cmd(null)，入口正确、临时tar删除，无仓库manifest更改：`/private/tmp/f059-crane-empty-cmd-native.log`。代码镜像需最终新SHA构建/探测/业务复验，不把0d5中间镜像或本地测试写作最终交付通过。
