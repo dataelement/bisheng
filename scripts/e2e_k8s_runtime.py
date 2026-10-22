@@ -4,6 +4,8 @@
 See features/v3.0.0/059-k8s-runtime-backend/e2e-checklist.md for environment,
 fixture schema, permissions and operator-driven fault checkpoints. This tool
 never contacts the Kubernetes API or injects a cluster fault.
+F059_E2E_CA_FILE optionally adds a public PEM CA for both HTTPS and WSS;
+certificate and hostname verification always remain enabled.
 """
 
 from __future__ import annotations
@@ -38,16 +40,13 @@ def parser():
         required=True,
         help="Private resumable journal; contains IDs, never credentials",
     )
-    command.add_argument(
-        "--event", choices=["manager-restart", "runtime-upgrade", "app-restart"]
-    )
+    command.add_argument("--event", choices=["manager-restart", "runtime-upgrade", "app-restart"])
     command.add_argument("--checkpoint", choices=["before", "after"])
     return command
 
 
 async def run(args):
     import httpx
-
     from test.e2e.helpers.vibe_runtime import (
         EvidenceJournal,
         LiveVibeSuite,
@@ -57,7 +56,7 @@ async def run(args):
     settings = SuiteSettings.from_env()
     journal = EvidenceJournal(args.evidence, tenant_code=settings.tenant_code)
     async with httpx.AsyncClient(
-        timeout=75, trust_env=False, follow_redirects=False
+        timeout=75, trust_env=False, follow_redirects=False, verify=settings.ssl_context
     ) as client:
         suite = LiveVibeSuite(settings, journal, client)
         await suite.authenticate()

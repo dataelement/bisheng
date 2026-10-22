@@ -12,10 +12,12 @@ import hashlib
 import json
 import os
 import re
+import ssl
+import stat
 import tarfile
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
@@ -126,12 +128,42 @@ class Scenario:
         )
 
 
+def build_tls_context(ca_file=None):
+    """Add an explicit public CA bundle while retaining verified system trust.
+
+    Read bounded regular files without following symlinks. Certificate-only
+    PEM excludes mixed private-key bundles, and no bytes/path enter evidence.
+    """
+    context = ssl.create_default_context()
+    if ca_file is None:
+        return context
+    try:
+        path = Path(ca_file)
+        if not stat.S_ISREG(path.lstat().st_mode):
+            raise ValueError()
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(descriptor, "rb") as stream:
+            information = os.fstat(stream.fileno())
+            if not stat.S_ISREG(information.st_mode) or not 0 < information.st_size <= 1024 * 1024:
+                raise ValueError()
+            public = stream.read(1024 * 1024 + 1)
+        if len(public) > 1024 * 1024 or not re.fullmatch(
+            rb"(?:\s*-----BEGIN CERTIFICATE-----\s+[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\s*)+", public
+        ):
+            raise ValueError()
+        context.load_verify_locations(cadata=public.decode("ascii"))
+    except (OSError, ValueError):
+        raise ValueError("F059_E2E_CA_FILE must be an existing regular non-symlink public PEM CA file") from None
+    return context
+
+
 @dataclass(frozen=True)
 class SuiteSettings:
     tenant_code: str
     scenarios: tuple[Scenario, ...]
     timeout: float = 600
     executor_kind: str = "kubernetes"
+    ssl_context: ssl.SSLContext = field(default_factory=build_tls_context, repr=False, compare=False)
 
     @classmethod
     def from_env(cls):
@@ -154,7 +186,8 @@ class SuiteSettings:
         executor = os.environ.get("F059_E2E_EXECUTOR", "kubernetes")
         if executor not in {"docker", "kubernetes"}:
             raise ValueError("F059_E2E_EXECUTOR must be docker or kubernetes")
-        return cls(tenant, scenarios, timeout, executor)
+        context = build_tls_context(os.environ.get("F059_E2E_CA_FILE", "").strip() or None)
+        return cls(tenant, scenarios, timeout, executor, context)
 
 
 class EvidenceJournal:
@@ -472,14 +505,15 @@ class LiveVibeSuite:
 
         uri = entry.rstrip("/") + scenario.websocket_path
         uri = ("wss://" if uri.startswith("https://") else "ws://") + uri.split("://", 1)[1]
+        tls = {"ssl": self.settings.ssl_context} if uri.startswith("wss://") else {}
         async with connect(
-            uri, additional_headers=auth_headers(self.tokens["OWNER"]), proxy=None, open_timeout=15
+            uri, additional_headers=auth_headers(self.tokens["OWNER"]), proxy=None, open_timeout=15, **tls
         ) as socket:
             await socket.send("e2e-f059-echo")
             assert await asyncio.wait_for(socket.recv(), timeout=15) == "e2e-f059-echo"
         try:
             async with connect(
-                uri, additional_headers=auth_headers(self.tokens["NONOWNER"]), proxy=None, open_timeout=15
+                uri, additional_headers=auth_headers(self.tokens["NONOWNER"]), proxy=None, open_timeout=15, **tls
             ):
                 raise AssertionError("nonowner WebSocket must be refused before upgrade")
         except InvalidStatus as exc:
