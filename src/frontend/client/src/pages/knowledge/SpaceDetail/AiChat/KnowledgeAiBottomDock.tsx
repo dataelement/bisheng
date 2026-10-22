@@ -22,7 +22,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
-import { useResetRecoilState } from "recoil";
+import { useRecoilValue, useResetRecoilState } from "recoil";
+import store from "~/store";
 import { knowledgeSelectedFilesState } from "../../selectionStore";
 import {
     Tooltip,

@@ -16,6 +16,8 @@ import { KnowledgeModel } from "./tabs/KnowledgeModel";
 import WorkflowModel from "./tabs/WorkflowModel";
 import WorkbenchModel from "./tabs/WorkbenchModel";
 
+import { DshDesktopModelConfig } from "./dsh/DshDesktopModelConfig";
+
 const ROOT_TENANT_ID = 1;
 
 export default function SystemModelConfig({
@@ -123,12 +125,12 @@ export default function SystemModelConfig({
                 <span>{t('model.systemModelSettings')}</span>
             </div>
             <div className="px-4">
-                <ScopeBanner
+                {activeTab !== "desktop" && <ScopeBanner
                     isGlobalSuper={isGlobalSuper}
                     scopeTenantId={scope.scope_tenant_id ?? null}
                     rootTenant={rootTenant}
                     childTenant={childTenant}
-                />
+                />}
                 <Tabs
                     value={activeTab}
                     onValueChange={(tab) => {
@@ -137,12 +139,13 @@ export default function SystemModelConfig({
                     }}
                     className="flex flex-col"
                 >
-                    <TabsList className="w-[550px] m-auto">
+                    <TabsList className="w-[660px] max-w-full m-auto">
                         <TabsTrigger value="workbench" className="w-[150px]">{t('model.workModel')}</TabsTrigger>
                         <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>
                         <TabsTrigger value="assis" className="w-[150px]">{t('model.assistantModel')}</TabsTrigger>
                         <TabsTrigger value="evaluation" className="w-[150px]">{t('model.evaluationModel')}</TabsTrigger>
                         <TabsTrigger value="workflow" className="w-[150px]">{t('model.workflowModel')}</TabsTrigger>
+                    <TabsTrigger value="desktop" className="w-[150px]">{t('model.desktop')}</TabsTrigger>
                     </TabsList>
                      <TabsContent value="workbench">
                         <WorkbenchModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} ttsModel={ttsModel} onBack={onBack}></WorkbenchModel>
@@ -155,6 +158,9 @@ export default function SystemModelConfig({
                     </TabsContent>
                     <TabsContent value="evaluation">
                         <EvaluationModel llmOptions={llmOptions} onBack={onBack}></EvaluationModel>
+                    </TabsContent>
+                    <TabsContent value="desktop">
+                        <DshDesktopModelConfig data={data} />
                     </TabsContent>
                     <TabsContent value="workflow">
                         <WorkflowModel llmOptions={llmOptions} onBack={onBack}></WorkflowModel>

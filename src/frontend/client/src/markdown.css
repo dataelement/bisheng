@@ -74,7 +74,7 @@
     --tw-prose-td-borders: hsl(var(--mk-bc) / 0.2);
 }
 
-.dark .bs-mkdown {
+:is(.dark, body[data-dsh-chat-theme=dark]) .bs-mkdown {
     --mk-bc: 0 0% 100%;
 }
 
@@ -122,7 +122,7 @@
     font-weight: 500;
 }
 
-.dark .bs-mkdown :where(a):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+:is(.dark, body[data-dsh-chat-theme=dark]) .bs-mkdown :where(a):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
     color: #4dabf7;
 }
 
@@ -132,7 +132,7 @@
 }
 
 /* 暗黑模式下<strong>标签字体颜色 */
-.dark .bs-mkdown :where(strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+:is(.dark, body[data-dsh-chat-theme=dark]) .bs-mkdown :where(strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
     color: white;
 }
 
@@ -427,7 +427,7 @@
 }
 
 /* Table border color in dark mode: subtle light tint instead of #E0E0E0 */
-.dark .bs-mkdown :where(table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+:is(.dark, body[data-dsh-chat-theme=dark]) .bs-mkdown :where(table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
     --mk-table-border: hsl(0 0% 100% / 0.12);
 }
 
@@ -463,7 +463,7 @@
 }
 
 /* Header background in dark mode: subtle light tint instead of #FBFBFB */
-.dark .bs-mkdown :where(thead th):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+:is(.dark, body[data-dsh-chat-theme=dark]) .bs-mkdown :where(thead th):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
     background-color: hsl(0 0% 100% / 0.04);
 }
 
@@ -650,7 +650,7 @@
     background-color: #F6F8FA;
 }
 
-.dark .bs-mkdown :where(tbody tr:nth-child(even) td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+:is(.dark, body[data-dsh-chat-theme=dark]) .bs-mkdown :where(tbody tr:nth-child(even) td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
     background-color: hsl(0 0% 100% / 0.03);
 }
 

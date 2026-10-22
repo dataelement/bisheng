@@ -13,6 +13,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { SSESubmission } from "./useAiChatSSE";
 
 /** Every SSE turn opened during a test, in order. */
+let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
 
 jest.mock("./useAiChatSSE", () => ({
@@ -46,7 +47,7 @@ jest.mock("~/store", () => ({
 }));
 jest.mock("~/store/linsight", () => ({
     SopStatus: { Running: "running", Stoped: "stoped", SopGenerating: "sop_generating" },
-    taskModeSkillsState: () => ({ __testValue: [] }),
+    taskModeSkillsState: () => ({ __testValue: mockSelectedSkills }),
 }));
 
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
@@ -103,6 +104,7 @@ const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 
 beforeEach(() => {
     mockOpenedStreams.length = 0;
+    mockSelectedSkills = [];
     mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
     mockGetSessionName.mockResolvedValue("");
 });
@@ -293,6 +295,8 @@ describe("useAiChat adopts a new conversation id", () => {
             turn.submission.onStart();
             turn.submission.onCreated?.("c-real", {
                 messageId: "42",
+                parentMessageId: "",
+                sender: "user",
                 conversationId: "c-real",
                 text: "blocked keyword",
             });
@@ -339,4 +343,30 @@ describe("useAiChat adopts a new conversation id", () => {
         await waitFor(() => expect(result.current.conversationId).toBe("new"));
         expect(result.current.messages).toHaveLength(0);
     });
+});
+
+
+describe('task mode owns skill execution', () => {
+    it.each([false, true])('sends the mode-scoped skill selection when taskMode=%s', async (taskMode) => {
+        mockSelectedSkills = [{ name: 'writing' }];
+        const { result } = renderChat('c1');
+        await waitFor(() => expect(result.current.messages).toHaveLength(1));
+        act(() => result.current.sendMessage('Use this skill', null, { taskMode }));
+        expect(latestStream().submission.payload).toMatchObject({
+            task_mode: taskMode,
+            skills: taskMode ? ['writing'] : [],
+        });
+    });
+});
+
+
+test('an incomplete upload rejects submission before starting a stream', async () => {
+  const { result } = renderChat('c1');
+  await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  let accepted;
+  act(() => {
+    accepted = result.current.sendMessage('Use this file', [{ name: 'draft.txt', valid: false }], { taskMode: true });
+  });
+  expect(accepted).toBe(false);
+  expect(mockOpenedStreams).toHaveLength(0);
 });

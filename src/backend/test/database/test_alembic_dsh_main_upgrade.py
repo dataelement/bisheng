@@ -20,15 +20,19 @@ def test_main_migrations_are_byte_for_byte_unchanged():
         assert hashlib.sha256((VERSIONS / filename).read_bytes()).hexdigest() == expected, filename
 
 
-def test_main_upgrade_contains_exactly_one_feature_revision():
+def test_main_upgrade_contains_native_auth_and_unified_credit_revisions():
     scripts = _script_directory()
-    assert scripts.get_heads() == ["work110_dsh_local_sessions"]
+    assert scripts.get_heads() == ["f062_credit_multiplier"]
     steps = scripts._upgrade_revs("head", MANIFEST["head"])
     assert [(step.revision.revision, step.revision.down_revision) for step in steps] == [
         ("work110_dsh_local_sessions", MANIFEST["head"]),
+        ("f062_unified_model_access", "work110_dsh_local_sessions"),
+        ("f062_credit_multiplier", "f062_unified_model_access"),
     ]
     assert {file.name for file in VERSIONS.glob("*.py")} - MANIFEST["files"].keys() == {
         "v3_0_0_work110_dsh_local_sessions.py",
+        "f062_unified_model_access.py",
+        "f062_credit_multiplier.py",
     }
 
 

@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs"
+import { Tabs, TabsContent } from "@/components/bs-ui/tabs"
 import {
   getResourcePermissionContextApi,
   type ApplyPermissionModeDraftResult,
@@ -18,6 +18,7 @@ import {
 import { AlertTriangle, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { permissionDialogClassName, PermissionSubjectTabs } from "./PermissionSubjectLayout"
 import { ModeHeader } from "./ModeHeader"
 import { PermissionGrantTab } from "./PermissionGrantTab"
 import { PermissionListTab } from "./PermissionListTab"
@@ -147,7 +148,7 @@ export function PermissionDialog({
         <DialogContent
           ref={contentRef}
           onOpenAutoFocus={handleContentOpenAutoFocus}
-          className="flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-0"
+          className={`${permissionDialogClassName} p-0`}
         >
           <DialogHeader className="shrink-0 px-5 pb-4 pt-5">
             <DialogTitle>
@@ -195,17 +196,7 @@ export function PermissionDialog({
                 className="flex min-h-0 flex-1 flex-col px-5 pb-5 pt-4"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <TabsList className="h-auto w-fit shrink-0 rounded-[6px] border border-[#ECECEC] bg-white p-[3px] shadow-none">
-                    {SUBJECT_TABS.map((tab) => (
-                      <TabsTrigger
-                        key={tab.value}
-                        value={tab.value}
-                        className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:border-transparent data-[state=active]:bg-primary/10 data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:shadow-none data-[state=inactive]:border-transparent"
-                      >
-                        {t(tab.labelKey)}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
+                  <PermissionSubjectTabs tabs={SUBJECT_TABS.map(tab => ({ value: tab.value, label: t(tab.labelKey) }))} />
 
                   {canAddPermission && (
                     <Button
@@ -247,7 +238,7 @@ export function PermissionDialog({
           <DialogContent
             ref={grantContentRef}
             onOpenAutoFocus={handleGrantContentOpenAutoFocus}
-            className="flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5"
+            className={`${permissionDialogClassName} p-5`}
           >
             <DialogHeader className="shrink-0">
               <DialogTitle>
@@ -260,24 +251,8 @@ export function PermissionDialog({
 
             <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="flex items-center gap-3">
-                <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-[6px] border border-[#ECECEC] bg-white p-[3px]">
-                  {SUBJECT_TABS.map((tab) => (
-                    <button
-                      key={tab.value}
-                      type="button"
-                      aria-pressed={grantSubjectType === tab.value}
-                      className={[
-                        "min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] leading-[22px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                        grantSubjectType === tab.value
-                          ? "bg-primary/10 font-medium text-primary"
-                          : "font-normal text-[#818181]",
-                      ].join(" ")}
-                      onClick={() => setGrantSubjectType(tab.value)}
-                    >
-                      {t(tab.labelKey)}
-                    </button>
-                  ))}
-                </div>
+                <PermissionSubjectTabs tabs={SUBJECT_TABS.map(tab => ({ value: tab.value, label: t(tab.labelKey) }))}
+                  value={grantSubjectType} onChange={setGrantSubjectType} />
 
                 {grantSubjectType === "department" && (
                   <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[14px] leading-[22px] text-[#212121]">

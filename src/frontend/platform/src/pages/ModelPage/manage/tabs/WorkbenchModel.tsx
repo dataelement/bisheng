@@ -1,3 +1,4 @@
+import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 // @ts-strict-ignore
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -56,6 +57,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 }
 
 export default function WorkbenchModel({ onBack }) {
+    const { config: enterpriseConfig } = useDshBrowserConfig();
     const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
     const { t } = useTranslation('model')
     const { message } = useToast()
@@ -157,14 +159,14 @@ export default function WorkbenchModel({ onBack }) {
     const handleSave = () => {
         const errors = [];
         if (!form.models.length) {
-            errors.push('请至少配置一个对话模型');
+            errors.push(t('model.chatModelRequired'));
         }
         // Reject blank rows: a model without an id serializes to `{ id: '' }`,
         // which reaches the client model picker as <SelectItem value="">
         // (empty string) and crashes the whole page in Radix. Force the admin
         // to pick a model or remove the empty row before saving.
         if (form.models.some((model) => !model.id)) {
-            errors.push('存在未选择模型的对话模型行，请选择模型或删除该行');
+            errors.push(t('model.chatModelRowRequired'));
         }
         if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
             errors.push(t('model.workVectorModel') + t('bs:required'));
@@ -241,8 +243,8 @@ export default function WorkbenchModel({ onBack }) {
                     <InheritedBadge visible={true} />
                 </div>
             )}
-            <div>
-                <h3 className="bisheng-label mb-2">日常模式/知识空间/订阅对话模型</h3>
+            {!enterpriseConfig?.enabled && <div>
+                <h3 className="bisheng-label mb-2">{t('model.workbenchChatModels')}</h3>
                 <ModelManagement
                     ref={modelRefs}
                     models={form.models}
@@ -290,7 +292,7 @@ export default function WorkbenchModel({ onBack }) {
                         models: prev.models.map((item, i) => i === index ? { ...item, visual } : item),
                     }))}
                 />
-            </div>
+            </div>}
             <ModelSelect
                 close
                 label={t('model.workVectorModel')}

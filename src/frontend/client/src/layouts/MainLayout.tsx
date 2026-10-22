@@ -1,3 +1,5 @@
+import { DesktopShellBridge } from './DesktopShellBridge';
+import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
 import { getBysConfigApi } from '~/api/apps';
 import { Outlined } from 'bisheng-icons';
 import { X } from 'lucide-react';
@@ -24,8 +26,6 @@ import WorkbenchAccessGuard from './WorkbenchAccessGuard';
 import { lastSectionPaths } from './appModuleNavPaths';
 import { useWorkbenchNavLinks } from './useWorkbenchNavLinks';
 import { WorkbenchSidebar } from './WorkbenchSidebar';
-import { DesktopShellBridge } from './DesktopShellBridge';
-import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
 
 interface SidebarItemProps {
   icon: React.ReactNode;
@@ -114,7 +114,7 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
-        'h-[100dvh] flex flex-col justify-between py-4 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        'dsh-system-sidebar h-[100dvh] flex flex-col justify-between py-4 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
         // Rail: let the content column shrink to its 44px width instead of stretching the track.
         // Expanded drawer keeps the stretched full-width layout.
         showExpandedHubSidebar ? undefined : 'items-center',
@@ -219,6 +219,7 @@ export default function MainLayout() {
     isSettingsRoute ||
     (isAppsArea && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
+  const showPlatformNavigation = !isDesktopEmbedded();
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
   const isMenuUnavailableRoute = pathname.startsWith('/menu-unavailable');
   const isSkillsRoute = /^\/skills(\/|$)/.test(pathname);
@@ -232,7 +233,7 @@ export default function MainLayout() {
   // MainLayout 左栏,点页面内菜单按钮触发系统主菜单整页右滑露出。
   const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute || isQueryDrivenRoute);
   /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
-  const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
+  const systemMenuRevealing = showPlatformNavigation && systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
 
   // Route change auto-closes the revealed system menu (covers nav-link clicks).
   useEffect(() => {
@@ -294,7 +295,7 @@ export default function MainLayout() {
   // hand-off shows no size/position jump, instead of a blank flash.
   if (isUserLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-white">
+      <div className="dsh-chat-startup flex h-full w-full items-center justify-center">
         <LoadingIcon className="w-48 text-primary" />
       </div>
     );
@@ -351,6 +352,7 @@ export default function MainLayout() {
     <div
       className={cn(
         'relative flex w-screen',
+        (isChatHomeRoute || !showPlatformNavigation) && 'dsh-web-chat',
         // Desktop is a flat white page split by the sidebar's hairline (Figma 13139:111431);
         // mobile keeps the gray backdrop its sliding panels are drawn against.
         isMobile ? 'min-h-[100dvh] overflow-x-clip bg-fill-1' : 'h-[100dvh] overflow-hidden bg-white',
@@ -358,7 +360,7 @@ export default function MainLayout() {
     >
       <DesktopShellBridge />
       <WorkbenchAccessGuard />
-      {shouldHideSidebarOnMobileAppsArea ? (
+      {showPlatformNavigation && (shouldHideSidebarOnMobileAppsArea ? (
         systemMenuRevealing ? (
           <div className="absolute inset-y-0 left-0 z-30">
             <Sidebar
@@ -375,9 +377,9 @@ export default function MainLayout() {
       ) : (
         // On 设置 the page's own nav takes this slot (same width and chrome); its back
         // button brings the workbench sidebar back.
-        <WorkbenchSidebar hidden={isSettingsRoute || isDesktopEmbedded()} />
-      )}
-      {isMobile && isAppsArea && !isAppChatRoute && mobileSidebarOpen ? (
+        <WorkbenchSidebar hidden={isSettingsRoute} />
+      ))}
+      {showPlatformNavigation && isMobile && isAppsArea && !isAppChatRoute && mobileSidebarOpen ? (
         <div
           className="fixed inset-0 z-[55] flex"
           role="dialog"

@@ -189,7 +189,7 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def _get_llm(cls, invoke_user_id: int) -> (BishengLLM, Any):
         # Get and validate the workbench configuration
-        workbench_conf = await cls._get_workbench_config()
+        workbench_conf = await cls._get_workbench_config(invoke_user_id)
 
         # BuatLLMInstances
         linsight_conf = settings.get_linsight_conf()
@@ -1607,9 +1607,12 @@ class LinsightWorkbenchImpl:
             return {"task_title": fallback, "chat_id": chat_id, "error_message": str(e)}
 
     @classmethod
-    async def _get_workbench_config(cls):
+    async def _get_workbench_config(cls, user_id: int):
         """Get and validate the workbench configuration"""
         workbench_conf = await LLMService.get_workbench_llm()
+        from bisheng.dsh.domain.services.model_catalog import project_workbench_config
+
+        workbench_conf = await project_workbench_config(workbench_conf, user_id)
         if not workbench_conf or not workbench_conf.linsight_default_model_id:
             raise cls.BishengLLMError(
                 "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model"

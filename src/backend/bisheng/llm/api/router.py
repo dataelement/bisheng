@@ -232,6 +232,9 @@ async def get_workbench_llm(request: Request, login_user: UserPayload = Depends(
     """Get Idea-Related Model Configurations. Honors admin-scope; envelope
     surfaces ``inherited_from_root`` / ``fallback_blocked`` for the UI."""
     cfg, inherited, blocked = await LLMService.aget_workbench_llm_with_meta()
+    from bisheng.dsh.domain.services.model_catalog import project_workbench_config
+
+    cfg = await project_workbench_config(cfg, login_user.user_id)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 

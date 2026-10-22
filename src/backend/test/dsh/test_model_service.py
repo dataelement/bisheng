@@ -66,7 +66,7 @@ class Ledger:
         assert expected_version == 1
         self.events.append(event)
         if event.total_tokens is not None:
-            self.used += event.total_tokens
+            self.used += event.billed_tokens
         return event
 
 
@@ -78,7 +78,9 @@ def service_setup():
         quota_epoch=1,
         quota_sync_state="READY",
         allowed_model_ids=[42],
-        rows=[SimpleNamespace(model_id=42, version=1, quota_sync_state="READY", monthly_token_limit=100)],
+        rows=[
+            SimpleNamespace(model_id=42, version=1, quota_sync_state="READY", credit_rate=100, monthly_token_limit=100)
+        ],
         monthly_token_limit=100,
     )
     model = SimpleNamespace(
@@ -300,7 +302,7 @@ async def test_real_redis_settlement_and_changed_model_keep_total(service_setup,
     service, llm, _ledger, policy, _state = service_setup
     policy.allowed_model_ids = [4, 5]
     policy.rows = [
-        SimpleNamespace(model_id=model, version=1, quota_sync_state="READY", monthly_token_limit=1000)
+        SimpleNamespace(model_id=model, version=1, quota_sync_state="READY", credit_rate=100, monthly_token_limit=1000)
         for model in (4, 5)
     ]
     policy.monthly_token_limit = 1000
@@ -327,9 +329,9 @@ async def test_real_redis_settlement_and_changed_model_keep_total(service_setup,
     assert await real_quota.redis.hget(real_quota.keys(running())[1], "used") == "1110"
     with pytest.raises(DshMonthlyTokenLimitExceededError):
         await service.complete(principal(), request().model_copy(update={"model": "bisheng:4"}))
-    other = await service.complete(principal(), request().model_copy(update={"model": "bisheng:5"}))
-    assert other["usage"]["total_tokens"] == 210
-    assert llm.calls == 2
+    with pytest.raises(DshMonthlyTokenLimitExceededError):
+        await service.complete(principal(), request().model_copy(update={"model": "bisheng:5"}))
+    assert llm.calls == 1
 
 
 async def test_context_length_refusal_preserves_client_error_without_freezing(service_setup):
@@ -352,3 +354,14 @@ async def test_context_length_refusal_preserves_client_error_without_freezing(se
         await service.complete(principal(), request())
     assert ledger.events[-1].total_tokens is None
     assert not ledger.frozen
+
+
+async def test_work_admission_snapshots_model_multiplier(service_setup):
+    service, llm, ledger, policy, _state = service_setup
+    policy.rows[0].credit_rate = 125
+    llm.measured = lambda: {"input_tokens": 30, "output_tokens": 50, "total_tokens": 80}
+    result = await service.complete(principal(), request())
+    assert result["usage"]["total_tokens"] == 80
+    assert ledger.events[0].credit_rate == 125
+    assert ledger.events[-1].billed_tokens == 100
+    assert ledger.used == 190

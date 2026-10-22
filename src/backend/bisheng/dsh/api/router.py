@@ -10,10 +10,14 @@ from bisheng.dsh.api.endpoints.model_audit_title import router as model_audit_ti
 from bisheng.dsh.api.endpoints.models import router as model_router
 from bisheng.dsh.api.endpoints.self_service import router as self_router
 from bisheng.dsh.api.endpoints.settings import router as settings_router
+from bisheng.dsh.api.endpoints.unified_policy import router as unified_policy_router
 from bisheng.dsh.api.endpoints.tools import router as tool_router
+from bisheng.dsh.api.endpoints.web_session import router as web_session_router
 
 router = APIRouter()
 router.include_router(local_auth_router)
+router.include_router(unified_policy_router)
+router.include_router(web_session_router)
 
 compatibility_router = APIRouter(prefix="/api")
 compatibility_router.include_router(local_auth_router)

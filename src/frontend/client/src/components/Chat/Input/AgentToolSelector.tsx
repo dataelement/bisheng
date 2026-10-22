@@ -102,7 +102,7 @@ export function useAgentToolSelection(availableTools: AvailableToolGroup[] | und
   // Prune selections for groups that no longer exist in the admin config
   // (e.g., admin removed a tool between sessions).
   useEffect(() => {
-    if (!availableTools || selected.length === 0) return;
+    if (!availableTools?.length || selected.length === 0) return;
     const validIds = new Set(availableTools.map((g) => g.id));
     const pruned = selected.filter((g) => validIds.has(g.id));
     if (pruned.length !== selected.length) setSelected(pruned);
@@ -133,6 +133,8 @@ export function useAgentToolSelection(availableTools: AvailableToolGroup[] | und
   return { isActive: selected.length > 0, isChecked, toggle };
 }
 
+export { iconForGroup, labelForGroup };
+
 interface AgentToolListProps {
   availableTools: AvailableToolGroup[];
   selection: AgentToolSelection;
@@ -144,26 +146,30 @@ export function AgentToolList({ availableTools, selection, disabled }: AgentTool
   const localize = useLocalize();
   return (
     <>
-      {availableTools.map((group) => (
-        <div key={group.id} className="flex h-8 shrink-0 justify-between items-center rounded-lg px-2">
-          <div className="flex gap-2 items-center min-w-0">
-            {iconForGroup(group)}
-            <span
-              className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
-              title={group.description || labelForGroup(group, localize)}
-            >
-              {labelForGroup(group, localize)}
-            </span>
+      {availableTools.map((group) => {
+        const label = labelForGroup(group, localize);
+        return (
+          <div key={group.id} className="flex h-8 shrink-0 justify-between items-center rounded-lg px-2">
+            <div className="flex gap-2 items-center min-w-0">
+              {iconForGroup(group)}
+              <span
+                className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
+                title={group.description || label}
+              >
+                {label}
+              </span>
+            </div>
+            <Switch
+              variant="tool"
+              aria-label={label}
+              className="shrink-0"
+              disabled={disabled}
+              checked={selection.isChecked(group.id)}
+              onCheckedChange={() => selection.toggle(group)}
+            />
           </div>
-          <Switch
-            variant="tool"
-            className="shrink-0"
-            disabled={disabled}
-            checked={selection.isChecked(group.id)}
-            onCheckedChange={() => selection.toggle(group)}
-          />
-        </div>
-      ))}
+        );
+      })}
     </>
   );
 }
@@ -182,7 +188,7 @@ export default function AgentToolSelector({ availableTools, selection, disabled,
           // Radix keeps the trigger in [data-placeholder] state; without this the
           // base `data-[placeholder]:text-gray-500` would override to #595959 and
           // mismatch the knowledge/model selects. Pin it to the shared #4E5969.
-          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-1 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
+          "dsh-composer-control h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-2 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
         )}
       >
         <div className="flex min-w-0 gap-1.5 items-center">
@@ -201,7 +207,7 @@ export default function AgentToolSelector({ availableTools, selection, disabled,
         </div>
       </SelectTrigger>
       <SelectContent
-        className="bg-white rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
+        className="dsh-chat-menu bg-page rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
         viewportClassName="flex flex-col gap-1 p-3"
       >
         <AgentToolList availableTools={availableTools} selection={selection} disabled={disabled} />

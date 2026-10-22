@@ -1,5 +1,8 @@
 {
   "model": {
+    "chatModelRequired": "Configure at least one chat model.",
+    "chatModelRowRequired": "Select a model for each row or remove the empty row.",
+    "workbenchChatModels": "Chat models for daily mode, knowledge spaces, and subscriptions",
     "editPrompt": "Edit Prompt",
     "docKnowledgeAbstractPrompt": "Document Knowledge Base Abstract Prompt",
     "docKnowledgeAbstractPromptTooltip": "When uploading files to the document knowledge base, the prompt used for summarizing the file",
@@ -109,7 +112,8 @@
     "status": "Status",
     "available": "Available",
     "actions": "Actions",
-    "configureDshPermission": "Configure permissions",
+    "desktop": "Desktop",
+    "configureDshPermission": "Visibility",
     "noOnlineDshModels": "No online models available yet",
     "visionRetry": "Load or save failed. Retry",
     "loading": "Loading"

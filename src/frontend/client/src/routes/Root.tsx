@@ -15,9 +15,12 @@ import { MobileNav, Nav } from '~/components/Nav';
 import { useAgentsMap, useAssistantsMap, useAuthContext, useFileMap, useSearch } from '~/hooks';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
+import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
+
 
 export default function Root() {
   const [, setBannerHeight] = useState(0);
+  const embedded = isDesktopEmbedded();
   const isSmallScreen = usePrefersMobileLayout();
   const [navVisible, setNavVisible] = useRecoilState(store.chatHistoryDrawerOpen);
   const mobileNavHidden = useRecoilValue(store.chatMobileNavHiddenState);
@@ -44,7 +47,7 @@ export default function Root() {
     // (same BrandTickSpinner, size and centering) so the platform→client
     // hand-off shows no size/position jump.
     return (
-      <div className="flex h-full w-full items-center justify-center bg-white">
+      <div className="dsh-chat-startup flex h-full w-full items-center justify-center">
         <LoadingIcon className="w-48 text-primary" />
       </div>
     );
@@ -66,15 +69,16 @@ export default function Root() {
                 flex-1 min-h-0 overflow-hidden hands the height down to ChatView so
                 the page never scrolls the input box out of the viewport.
               */}
-              <div className="flex h-[100dvh] max-h-[100dvh] min-w-0 flex-col overflow-hidden">
+              <div className="dsh-chat-root flex h-[100dvh] max-h-[100dvh] min-w-0 flex-col overflow-hidden">
                 <Banner onHeightChange={setBannerHeight} />
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                   <div className="relative z-0 flex min-h-0 w-full flex-1 overflow-hidden">
                     {/* Desktop lists conversations in the workbench sidebar (MainLayout);
-                        the chat-local nav is the mobile history drawer only. */}
-                    {isSmallScreen ? <Nav navVisible={navVisible} setNavVisible={setNavVisible} /> : null}
+                        the chat-local nav is the mobile history drawer only. Hidden entirely
+                        when embedded in the desktop client. */}
+                    {!embedded && isSmallScreen ? <Nav navVisible={navVisible} setNavVisible={setNavVisible} /> : null}
                     <div className="relative flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">
-                      {showMobileNav && isSmallScreen && !mobileNavHidden ? (
+                      {!embedded && showMobileNav && isSmallScreen && !mobileNavHidden ? (
                         // 勿用 fixed 贴视口：会盖住 MainLayout 白卡 rounded-xl 上沿与两侧灰底留白（与知识库 H5、StandaloneChat 一致）
                         <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
                           <MobileNav
@@ -86,7 +90,7 @@ export default function Root() {
                         </div>
                       ) : null}
                       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
+                        <Outlet context={{ navVisible: embedded || navVisible, setNavVisible } satisfies ContextType} />
                       </div>
                     </div>
                   </div>

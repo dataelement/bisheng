@@ -1,3 +1,5 @@
+import type { UseLazyDepartmentTreeOptions } from "../department/useLazyDepartmentTree"
+import { SubjectBusinessId } from "../selectComponent/SubjectSearchStatus"
 import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import {
@@ -30,12 +32,14 @@ interface SubjectSearchDepartmentProps {
   resourceType?: ResourceType
   resourceId?: string
   allowOrganizationTree?: boolean
+  dataSource?: UseLazyDepartmentTreeOptions
   includeChildren?: boolean
   onIncludeChildrenChange?: (v: boolean) => void
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void
   showIncludeChildrenToggle?: boolean
   disabledIds?: number[]
   disabledLabel?: string
+  searchPlaceholder?: string
 }
 
 export function SubjectSearchDepartment({
@@ -44,12 +48,14 @@ export function SubjectSearchDepartment({
   resourceType,
   resourceId,
   allowOrganizationTree = false,
+  dataSource,
   includeChildren = false,
   onIncludeChildrenChange = () => undefined,
   onSelectionSummaryChange,
   showIncludeChildrenToggle = true,
   disabledIds = [],
   disabledLabel,
+  searchPlaceholder,
 }: SubjectSearchDepartmentProps) {
   const { t } = useTranslation("permission")
   const disabledIdSet = new Set(disabledIds)
@@ -77,6 +83,7 @@ export function SubjectSearchDepartment({
         scoped
           ? getGrantSubjectDepartmentPathTreeApi(resourceType!, resourceId!, id)
           : getDepartmentPathTreeApi(id, false),
+      ...dataSource,
     }
   )
 
@@ -101,8 +108,7 @@ export function SubjectSearchDepartment({
   // Summary = the explicit department picks (decision 10: the subtree coverage is
   // conveyed by the include-children flag, not enumerated).
   useEffect(() => {
-    onSelectionSummaryChange?.(departmentSubjects)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    onSelectionSummaryChange?.(value.filter(subject => subject.type === "department"))
   }, [value, onSelectionSummaryChange])
 
   const handleToggle = (node: DepartmentTreeNode) => {
@@ -117,7 +123,7 @@ export function SubjectSearchDepartment({
     selectedPathRef.current.set(node.id, node.path)
     onChange([
       ...value,
-      { type: "department", id: node.id, name: node.name, include_children: includeChildren },
+      { type: "department", id: node.id, name: node.name, externalId: node.dept_id, departmentPath: node.name, departmentTreePath: node.path, include_children: includeChildren },
     ])
   }
 
@@ -158,7 +164,7 @@ export function SubjectSearchDepartment({
           renderRowPrefix={renderRowPrefix}
           renderRowSuffix={renderRowSuffix}
           isRowDisabled={(n) => disabledIdSet.has(n.id)}
-          searchPlaceholder={t("search.department")}
+          searchPlaceholder={searchPlaceholder ?? t("search.department")}
           emptyHint={t("empty.departments")}
           wheelScrollFix
           className="p-1"

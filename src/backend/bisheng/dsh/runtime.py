@@ -20,9 +20,9 @@ async def read_policy(user_id: int):
         from bisheng.core.database import get_sync_db_session
 
         with get_sync_db_session() as session:
-            from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
+            from bisheng.dsh.domain.repositories.unified_policy import UnifiedPolicyRepository
 
-            policy = DshSubjectPolicyRepository(session).effective(user_id)
+            policy = UnifiedPolicyRepository(session).effective(user_id)
             return policy.model_copy(deep=True) if policy else None
 
     return await asyncio.to_thread(read)

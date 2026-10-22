@@ -6,6 +6,7 @@ import { DshDesktopModelConfig } from '@/pages/ModelPage/manage/dsh/DshDesktopMo
 import type { DshSection } from '@/pages/DshPage/sections'
 import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { CreditRulesView } from './CreditRulesView'
 import { AuditHistory } from './AuditHistory'
 import { PolicyView } from './PolicyView'
 import { SettingsPanel } from './SettingsPanel'
@@ -16,7 +17,7 @@ interface DshManagementProps {
     usageToolbarTarget?: HTMLDivElement | null
 }
 
-export function DshManagement({ section = 'models', usageToolbarTarget }: DshManagementProps) {
+export function DshManagement({ section = 'usage', usageToolbarTarget }: DshManagementProps) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
@@ -26,7 +27,7 @@ export function DshManagement({ section = 'models', usageToolbarTarget }: DshMan
     return <div className="flex h-full min-h-0 flex-col px-6 py-5">
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}
-            {activeSection === 'usage' && <PolicyView toolbarTarget={usageToolbarTarget} />}
+            {activeSection === 'usage' && <div className="space-y-6"><CreditRulesView /><PolicyView toolbarTarget={usageToolbarTarget} /></div>}
             {activeSection === 'model-audit' && <ModelAuditPanel />}
             {activeSection === 'operations' && <AuditHistory revision={0} />}
             {activeSection === 'access' && <SettingsPanel settings={config} canEdit={user?.role === 'admin' || !!user?.is_global_super} />}

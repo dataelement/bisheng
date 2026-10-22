@@ -1,12 +1,4 @@
-/**
- * Admin-preselected skills ("默认勾选" in 技能管理): skills flagged
- * default_checked are merged into the 'new' selection as soon as the 添加技能
- * entry is available, so the picker shows them checked in daily mode too, and
- * they become ordinary chips the user can remove once task mode is on. Daily
- * turns never send skills, so the daily-mode checkmark mounts nothing. Seeding
- * is frontend-only on purpose — the backend still mounts exactly the skills the
- * request names.
- */
+/** Seed enterprise defaults for the current task-mode selection. */
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { getSelectableSkills, type SelectableSkill } from '~/api/linsight';
@@ -39,7 +31,7 @@ interface UseDefaultCheckedSkillsOptions {
 
 export function useDefaultCheckedSkills({ taskMode, skillEntryEnabled, setSkills }: UseDefaultCheckedSkillsOptions) {
     const prevTaskModeRef = useRef(taskMode);
-    const active = skillEntryEnabled;
+    const active = taskMode && skillEntryEnabled;
     // Same query key as SkillSelector, so the picker and the seed share one cache.
     const { data, isFetching } = useQuery({
         queryKey: ['linsightSelectableSkills'],
@@ -49,8 +41,7 @@ export function useDefaultCheckedSkills({ taskMode, skillEntryEnabled, setSkills
         refetchOnReconnect: false,
     });
 
-    // Leaving task mode clears the selection (AiChatInput's effect, which runs
-    // before this hook's), so put the admin defaults back right away.
+    // A new task-mode session receives defaults after the previous selection is cleared.
     useEffect(() => {
         if (prevTaskModeRef.current && !taskMode) seeded = false;
         prevTaskModeRef.current = taskMode;

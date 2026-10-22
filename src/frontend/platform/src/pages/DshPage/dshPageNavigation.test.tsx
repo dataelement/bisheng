@@ -62,7 +62,7 @@ describe('DshPage navigation', () => {
         expect(tablist.closest('.px-2')).toBeTruthy()
         expect(screen.getAllByRole('tab')).toHaveLength(5)
         expect(screen.queryByRole('tab', { name: 'dsh.operations' })).toBeNull()
-        expect(screen.getByRole('tab', { name: 'dsh.userUsage' })).toHaveAttribute(
+        expect(screen.getByRole('tab', { name: 'dsh.unified.overview' })).toHaveAttribute(
             'data-state',
             'active',
         )
@@ -106,9 +106,9 @@ describe('DshPage navigation', () => {
             </MemoryRouter>,
         )
         expect(screen.queryByRole('tab', { name: 'dsh.operations' })).toBeNull()
-        expect(screen.getByRole('tab', { name: 'dsh.modelsAndQuotas' })).toHaveAttribute('data-state', 'active')
-        expect(screen.getByTestId('dsh-section')).toHaveTextContent('models')
-        expect(resolveDshSection('?tab=operations')).toBe('models')
+        expect(screen.getByRole('tab', { name: 'dsh.unified.overview' })).toHaveAttribute('data-state', 'active')
+        expect(screen.getByTestId('dsh-section')).toHaveTextContent('usage')
+        expect(resolveDshSection('?tab=operations')).toBe('usage')
         expect(resolveDshSection('?tab=operations', ['access'])).toBe('access')
     })
 })

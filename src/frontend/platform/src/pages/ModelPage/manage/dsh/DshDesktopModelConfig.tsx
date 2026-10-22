@@ -9,9 +9,10 @@ import {
     TableRow,
 } from '@/components/bs-ui/table'
 import { ShieldCheck } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ModelAccessDialog, type DshAccessModel } from './ModelAccessDialog'
+import { ModelMultiplierInput } from './ModelMultiplierInput'
 import { ModelVisionSwitch } from './ModelVisionSwitch'
 
 type ModelServer = {
@@ -29,6 +30,14 @@ type ModelServer = {
 export function DshDesktopModelConfig({ data }: { data: ModelServer[] }) {
     const { t } = useTranslation('model')
     const [selected, setSelected] = useState<DshAccessModel | null>(null)
+    const [savingRates, setSavingRates] = useState<Set<number>>(() => new Set())
+    const onRateSaving = useCallback((modelId: number, saving: boolean) => {
+        setSavingRates(current => {
+            const next = new Set(current)
+            if (saving) next.add(modelId); else next.delete(modelId)
+            return next
+        })
+    }, [])
     const models = useMemo(
         () =>
             data.flatMap((server) =>
@@ -52,6 +61,7 @@ export function DshDesktopModelConfig({ data }: { data: ModelServer[] }) {
                             <TableHead>{t('model.serviceProvider')}</TableHead>
                             <TableHead>{t('model.status')}</TableHead>
                             <TableHead>{t('model.supportsImages')}</TableHead>
+                            <TableHead>{t('dsh.unified.multiplier', { ns: 'bs' })}</TableHead>
                             <TableHead className="text-right">
                                 {t('model.actions')}
                             </TableHead>
@@ -74,9 +84,11 @@ export function DshDesktopModelConfig({ data }: { data: ModelServer[] }) {
                                     </Badge>
                                 </TableCell>
                                 <TableCell><ModelVisionSwitch modelId={model.id} /></TableCell>
+                                <TableCell><ModelMultiplierInput modelId={model.id} modelName={model.model_name} onSavingChange={onRateSaving} /></TableCell>
                                 <TableCell className="text-right">
                                     <Button
                                         variant="link"
+                                        disabled={savingRates.has(model.id)}
                                         onClick={() =>
                                             setSelected({
                                                 id: model.id,

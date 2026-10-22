@@ -107,6 +107,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.finetune.domain.models.model_deploy",
     "bisheng.finetune.domain.models.finetune",
     "bisheng.open_api.domain.models",
+    "bisheng.dsh.domain.models.unified_policy",
     "bisheng.dsh.domain.models.user_policy",
     "bisheng.dsh.domain.models.admin_operation",
     "bisheng.dsh.domain.models.monthly_usage",

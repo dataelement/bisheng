@@ -1,5 +1,8 @@
 {
   "model": {
+    "chatModelRequired": "请至少配置一个对话模型",
+    "chatModelRowRequired": "存在未选择模型的对话模型行，请选择模型或删除该行",
+    "workbenchChatModels": "日常模式/知识空间/订阅对话模型",
     "editPrompt": "编辑提示词",
     "docKnowledgeAbstractPrompt": "文档知识库摘要提示词",
     "docKnowledgeAbstractPromptTooltip": "文档知识库上传文件时，对文件进行摘要的提示词",
@@ -107,7 +110,8 @@
     "status": "状态",
     "available": "可用",
     "actions": "操作",
-    "configureDshPermission": "配置权限",
+    "desktop": "桌面端",
+    "configureDshPermission": "可见范围",
     "noOnlineDshModels": "暂无已上线的可用模型",
     "visionRetry": "读取或保存失败，重试",
     "loading": "加载中"

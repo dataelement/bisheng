@@ -1299,6 +1299,9 @@ async def _resolve_model(session_model, model_id: str | None) -> tuple[BaseChatM
     ``get_workbench_llm`` re-validates model refs and is not free to call twice.
     """
     workbench_conf = await LLMService.get_workbench_llm(tenant_id=session_model.tenant_id)
+    from bisheng.dsh.domain.services.model_catalog import project_workbench_config
+
+    workbench_conf = await project_workbench_config(workbench_conf, session_model.user_id)
     linsight_conf = settings.get_linsight_conf()
 
     resolved_id = model_id
