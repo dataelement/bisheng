@@ -12,14 +12,14 @@
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
-    "helper_images": "new143 helper; application runtime/preparer profile2 unchanged",
+    "helper_images": "helper and assembler from 0d5; application runtime/preparer profiles revision 2 unchanged",
     "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
     "backend_data_cancel_source": "a1de5271f5f00cef0cba06d41f09c673a9190525",
     "backend_data_cancel_files": [
       "bisheng/app_runtime/domain/services/runtime_data_grant_service.py",
       "bisheng/app_runtime/domain/services/runtime_data_session_service.py"
     ],
-    "helm_revision": 22,
+    "helm_revision": 27,
     "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
     "backend_data_cpu_source": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
     "backend_data_cpu_files": [
@@ -807,8 +807,8 @@
   },
   "current_business_batch": {
     "journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-source-resumed.json",
-    "state": "running",
-    "journal_frozen": false,
+    "state": "failed",
+    "journal_frozen": true,
     "source_tool_sha256": "80d6d7241cf64b92453329a62b28e6edbbd33409bea7765ec74464c90daa97cb",
     "parent_sha256": "9c953e824afb0548e8547911ca386008cc5f8e5e03da7871ea5eec95083a9415",
     "fresh_cleanup_proof_sha256": "efbbae5234528e89931fcf51e1bf923daa0d9cfdc712c65a2c4dfdf5dc032ac1",
@@ -830,7 +830,11 @@
       "offline_data",
       "fault_upgrade"
     ],
-    "auto_cleanup": false
+    "auto_cleanup": false,
+    "journal_sha256": "12231d57220e4f5343f2db67c0fa988382f34a33d62ba14f28c7739ac692e100",
+    "failure_reason": "oci_registry_operation_failed",
+    "failure_stage": "precheck_build",
+    "normal_cleanup_proof_sha256": "55db28c0b554c8e4c0dfeca61fff76f996471f87cd5f5cfc1f1dca6484f6b7f8"
   },
   "python_node_v2_passed": {
     "runtime_source_commit": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
@@ -984,16 +988,16 @@
   "final_code_candidate": {
     "source_commit": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
     "tasks_complete": 246,
-    "tasks_total": 251,
+    "tasks_total": 253,
     "runtime_passed": 1610,
     "runtime_skipped": 13,
     "all_build_inputs_byte_equal": true,
     "withdrawn_cmd_candidate": "d7f7c2e10ab9805d41120d19e32d102310b06654",
     "reason": "Pinned crane already clears Cmd with the existing entrypoint flag",
     "restore_deployment": "passed",
-    "source_continuation": "running",
+    "source_continuation": "failed_registry_network_configuration",
     "source_preflight_check": "passed_without_new_publication",
-    "helm_revision": 26,
+    "helm_revision": 27,
     "controller_epoch": 21
   },
   "cmd_false_positive_correction": {
@@ -1002,5 +1006,69 @@
     "no_registry_mutation": true,
     "new_source_publication_started": false,
     "temporary_candidate_equivalent_redundant_flag": true
+  },
+  "source_registry_failure": {
+    "prepare_operation_id": "07b872e0d07441f7a333941560727bba",
+    "inputs_resolve_install_upload": "completed",
+    "oci_assembly": "failed during registry access",
+    "root_cause": "Calico egress policy observed Docker DNAT destination port 5000; only external port 5443 was allowed",
+    "diagnostic": {
+      "after_removal": {
+        "result": "TimeoutError",
+        "seconds": 3.011
+      },
+      "before": {
+        "result": "TimeoutError",
+        "seconds": 3.008
+      },
+      "diagnostic_policy_deleted": true,
+      "diagnostic_policy_uid": "4a9affa2-c26a-4eed-a842-4ed4f8b3a5fb",
+      "dnat_target": "172.17.0.2:5000",
+      "finished_at": "2026-10-22T22:18:40.554384Z",
+      "started_at": "2026-10-22T22:18:32.714147Z",
+      "target": "192.168.106.189:5443",
+      "with_exact_dnat_port": {
+        "result": "connected",
+        "seconds": 0.008
+      }
+    },
+    "diagnostic_sha256": "5c0f8b1033b223b7a6c75e762f9bbdc3d21a3d063b8c5ff9f37679e34f63b52f",
+    "delivery_fix": {
+      "configuration_only": true,
+      "descriptor_and_report_unchanged": true,
+      "dnat_diagnostic_sha256": "5c0f8b1033b223b7a6c75e762f9bbdc3d21a3d063b8c5ff9f37679e34f63b52f",
+      "egress_ports_after": [
+        80,
+        443,
+        5000,
+        5443,
+        5444
+      ],
+      "egress_ports_before": [
+        80,
+        443,
+        5443,
+        5444
+      ],
+      "egress_real_tcp_after": {
+        "result": "connected",
+        "seconds": 0.008
+      },
+      "helm_revision": 27,
+      "image_and_profiles_unchanged": true,
+      "new_capability_probe_claimed": false,
+      "observed_at": 1792707597.673588
+    },
+    "delivery_fix_sha256": "bdf01d29a962f0ed0733ef1d275ccb2be9e9883b511fe4025a736419f0ca4a3b",
+    "egress_tls": {
+      "ca_and_hostname_verified": true,
+      "http_status": 200,
+      "sha256": "873961a7cd15539963d839e981edb17ee8d9cc719c22493569ea9df1d46ff288",
+      "assembler_push_claimed": false
+    },
+    "cleanup_resources": 9,
+    "same_uid_terminal_pods": 5,
+    "new_source_publication": "not yet submitted",
+    "installation_probe_gap": "registry-push previously ran crane externally; same-selector upstream TCP check added in T254/T255"
   }
 }

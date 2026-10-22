@@ -131,3 +131,11 @@ T248–T251修复只允许归档前的目录SGID并在层内去除，继续拒�
 ## 正确基线恢复与源码新attempt
 
 当前Helm26/0d5精确镜像/匹配有效16报告，三路径true、自然ready/epoch21。root重新逐项GET确认旧prepare70eb…的9资源正常cleanup/APIabsent，五Pod同UID kubelet_terminal；fresh proof SHA `efbbae5234528e89931fcf51e1bf923daa0d9cfdc712c65a2c4dfdf5dc032ac1`。新工具80d6…的check通过，O_EXCL独立source-resumed journal只一次提交同draft，accepted deployment675d259a…/versiond71f4858…，prepare07b872e0…正在preparing。前三bundle两版不重做，不复活旧操作/延长deadline/自动cleanup；当前journal未冻结，不预造成功或摘要。source及完整镜像/缺依赖后续仍待自然业务结果。
+
+## 第二源码失败与仓库DNAT配置修复
+
+prepare `07b872e0d07441f7a333941560727bba` 的inputs/resolve/install/upload全部完成，SGID修正已进入真实组装路径；crane仓库操作失败，原journal冻结SHA `12231d57220e4f5343f2db67c0fa988382f34a33d62ba14f28c7739ac692e100`，不补写成功。9精确资源正常cleanupcomplete/APIabsent，5Pod有同UID kubelet_terminal，proof SHA `55db28c0b554c8e4c0dfeca61fff76f996471f87cd5f5cfc1f1dca6484f6b7f8`。
+
+真实egress Pod到189:5443原超时3.008秒；临时仅对egress selector及专用仓库IP放行DNAT后5000端口，0.008秒连接；撤销该策略又超时3.011秒。诊断SHA `5c0f8b1033b223b7a6c75e762f9bbdc3d21a3d063b8c5ff9f37679e34f63b52f`。Helm27仅在network.egressPorts增加5000；既有镜像、profile、descriptor及报告不变，不声称重新完成能力探测。修复receipt SHA `bdf01d29a962f0ed0733ef1d275ccb2be9e9883b511fe4025a736419f0ca4a3b`；真实egress公共CA及主机名校验开启，仓库/v2/返回200，TLS证据SHA `873961a7cd15539963d839e981edb17ee8d9cc719c22493569ea9df1d46ff288`。
+
+安装探测原registry-push由外部installer执行crane，网络项仅验证Pod能到proxy3128；T254/T255补同策略canary上游TCP，控制canary保持NotReady避免进入业务Service。TCP、外部TLS/权限和实际assembler推送分别记证据。ARM、109、公开发行继续暂缓；下一次源码发布必须新独立journal/一次POST，原两次失败保持。

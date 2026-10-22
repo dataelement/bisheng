@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、purge、能力探测、Chart、helper/assembler及验收工具已实现，L1为242/247；剩真实业务、故障升级、109收尾、正式发行和L2门。候选995c80f2a完整runtime1595/13skip；backend生产保持6f，既有1764/19skip通过。189已Helm23/digest7cef8910…/epoch18，helper143/profile2与实际16项报告保持；Python和Node已完成v1/v2、HTTP/WebSocket、权限配对及停用恢复，Python另通过SDK/OBO、附件、SQLite。static旧probe全部init完成后nginx找不到/exit127，根因为bundle PATH缺系统sbin；同镜像原生对照与本地修复通过，原failed及同UID正常清理已冻结，新镜像已部署，独立新attempt复验中。source-image、完整镜像、离线编辑导出及故障仍在验证。主安装域因旧r4未确认创建保持围栏，不卸载或手工释放。新ARM和109验证按用户优先级暂缓，DM8仅静态，未执行正式CI/公开发行。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)，不据本地或局部通过宣称完整交付/跨节点恢复。
+**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成246/253，新增T254/T255安装探测补强进行中。运行镜像保持0d5固定digest，完整runtime1610/13skip；backend保持6f，既有1764/19skip。189现为Helm27/epoch21，Python、Node、static应用包均完成v1/v2及停用恢复，Python另通过SDK/OBO、附件与SQLite。第二source-image真实失败已定位为仓库Docker5443→5000的Calico DNAT出站配置缺口，配对确认并修正；源码/完整镜像、离线编辑导出及故障升级仍待续办。旧r4保持安全围栏，不能卸载主安装域。新ARM、109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -405,6 +405,7 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 | 原 Protocol 是 Docker API 形状，目录逻辑散落在多个模块 | 加 K8s 文件后仍然访问 manager 本机路径或 Docker | 新 `executors/`；原 operations/preparer/data API 统一依赖能力接口 |
 | RWO 是单节点挂载，不是单 Pod 或进程写锁 | 同节点新旧应用或维护并发写生产库 | `executors/kubernetes.py`、资源账本、停止确认及固定生产位置准入 |
 | ClusterIP 不能默认由集群外平台主机访问 | 平台与 Pod 均健康，发布唤醒/应用访问却超时 | 安装 values 的共享 entry/control 私网接入及端到端连通性探测 |
+| Docker发布5443的仓库可在Calico策略阶段已变成5000；外部installer能推送不证明egress Pod能连通 | 安装16项通过而真实source-image在crane阶段超时 | network.egressPorts同时按现场DNAT后端口配置；verify_k8s_runtime仓库检查先用egress-proxy同selector的NotReady canary检查TCP，外部crane与业务E2E分别证明其他层 |
 | finalizer 保留对象，普通 Failed/404 不证明停止；从未启动的容器也可能没有 ID | init 镜像/材料失败后永久卡住，或节点分区后误释放 | `k8s_lifecycle.py` 分 never_scheduled/kubelet_terminal/unknown；status 来源准入，无 ID 不单独阻塞也不单独放行 |
 | Deployment/Job 控制器可以自主补 Pod | manager 停止旧实例做迁移时，旧实例又出现 | 本轮用直接管理 Pod；正式/维护共用固定名称 |
 | init 与业务容器共享 Pod 网络 | “只给 init 放行 backend”实际也给了业务容器网络通路 | 只放代理端点，容器凭据分离，backend 动作鉴权 |
