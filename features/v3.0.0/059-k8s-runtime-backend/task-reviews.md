@@ -643,3 +643,32 @@ T009/T013增量L1：应用凭据支持只给app容器的Secret引用，材料Sec
 **红阶段**：18 errors+1 failed（缺clock/节点/事实合同及全局错误泄漏，`/private/tmp/f059-k8s-coordination-red.log`）。新增ready正例、错误地址及硬阻断/入口反例后，22项协调；与资源/模型共106 passed（`/private/tmp/f059-k8s-coordination-final.log`）。全app_runtime/原中间件785 passed、18 skipped，仍仅3项已记录旧权限夹具失败（`/private/tmp/f059-coordination-backend-full.log`）；Ruff与逐文件arch-guard通过。无真实集群结论。
 **元数据验证**：目标1/2文件PASS；配对T079已红阶段；依赖T019/T031 PASS。
 **结果**：PASS。
+
+## T001/T002/T009/T023/T025/T029/T078 材料与配置接线补充复审
+
+原任务目标文件不变。新增回归先复现同内容新授权元数据冲突、依赖输入变更但字节相同的计划别名被拒绝、Secret 文件键和 CA/独立根种子配置缺失。修复使用每委托不可变 upload_declarations，内容去重不改写 Artifact 原始来源；别名要求持久计划、产生操作冻结选择和已确认上传同时成立。manager 的独立材料种子路径与平台 CA 显式配置；Secret 允许 identity.json/ca.crt 合法文件键。
+
+L1：架构/命名/内部序列化/跨库与租户/敏感信息/设计同步 PASS；前端 N/A。材料与资源联合150 passed（`/private/tmp/f059-material-executor-control-final.log`），完整runtime665 passed/10 skipped。无生产凭据、MinIO 直连或新商业化逻辑。**结果：PASS。**
+
+## T015/T017 清理授权补充复审
+
+真实SQL测试先复现两项失败：新控制器请求清理后资源代次仍旧；全部准备写入者已停止仍无法清理 scratch PVC。更新清理代次且保留原UID/证据；仅 prepare 的临时PVC在所有关联Pod确认停止后可删除，正式PVC普通清理不删除。Service/Repository61 passed（`/private/tmp/f059-executor-cleanup-policy-final.log`）。七项L1与原目标范围复核PASS，前端N/A。**结果：PASS。**
+
+## Task Review: T032 / T033
+
+**任务**：Kubernetes执行器能力合同/接线。**类型**：测试/实现。
+**文件**：T032 `tests/test_kubernetes_executor.py`；T033 `executors/kubernetes.py`、`executors/protocol.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 只有执行器调用namespace Core客户端；无Docker初始化、平台DB或MinIO；数据通过显式能力委托，未配置即拒绝 |
+| 2 | 命名/AC | PASS | 覆盖 AC-04、AC-05、AC-07、AC-08、AC-09、AC-11、AC-18、AC-33、AC-35、AC-43、AC-48、AC-49、AC-50、AC-52 |
+| 3 | 序列化 | PASS | 平台意图先于集群副作用；Secret/env仅摘要；准备阶段结果先持久事实再清理，恢复只读平台账本 |
+| 4 | 数据库 | N/A | adapter仅HTTP，无本地事实源/SQL；准备缓存由平台接口选择确认 |
+| 5 | 前端 | N/A | 无前端 |
+| 6 | 信息泄漏 | PASS | 材料子密钥独立、可重启恢复，根种子不离开manager；业务Secret与材料分离；异UID拒绝领养或删除；缺失/运行中Pod不释放写入者；停止提交先于finalizer移除 |
+| 7 | 设计同步 | PASS | 4.6/4.7更新阶段恢复与清理；准备/启动/观察/停止/日志实现，data保留显式后续运输能力；完整镜像解析/OCI组装由后续配对任务完成 |
+
+**红阶段**：最初1 failed/9 errors缺模块；补准备、清理、日志出现3 failed；时间推进复现预览deadline模板冲突1 failed。最终16项通过（`/private/tmp/f059-executor-restart-final.log`），完整runtime665 passed/10 skipped（`/private/tmp/f059-runtime-executor-full.log`）；Ruff、逐文件arch-guard通过。测试为模拟集群＋真实密码实现，**不是189部署验证**。共同状态机和helper数据动作尚未接线，不宣称端到端已交付。
+**元数据验证**：目标1/2文件PASS；T032依赖T031/T011/T019/T080均完成，T033配对红阶段先行；L1七项复审通过。
+**结果：PASS。**

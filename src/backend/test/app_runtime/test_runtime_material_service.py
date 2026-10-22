@@ -155,7 +155,7 @@ async def request(materials, grant, *, artifact_id=None, nonce=None, pod_uid=UID
         body,
         private_key=materials.signer,
         delegation_id=grant["delegation_id"],
-        key_id=KEY_ID,
+        key_id=grant.get("key_id", KEY_ID),
         pod_uid=pod_uid,
         timestamp=int(materials.clock["now"].replace(tzinfo=UTC).timestamp()),
         nonce=nonce or uuid4().hex,

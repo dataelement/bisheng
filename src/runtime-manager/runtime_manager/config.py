@@ -180,6 +180,8 @@ class Config:
     node_id: str = ""
     platform_key_id: str = ""
     platform_secret: str = field(default="", repr=False)
+    platform_ca_file: Path | None = None
+    material_issuer_key_file: Path | None = field(default=None, repr=False)
     inbound_key_id: str = ""
     inbound_secret: str = field(default="", repr=False)
     task_timeout_seconds: int = 1800
@@ -362,6 +364,9 @@ class Config:
         return f"http://{self.host}:{self.port}"
 
     def __post_init__(self):
+        for path in (self.platform_ca_file, self.material_issuer_key_file):
+            if path is not None and (not isinstance(path, Path) or not path.is_absolute()):
+                raise ValueError("runtime_identity_path_invalid")
         if self.executor_kind not in {"docker", "kubernetes"}:
             raise ValueError("runtime_executor_invalid")
         if self.executor_kind == "kubernetes" and self.protocol_version != 2:
@@ -381,6 +386,8 @@ def load_config() -> Config:
         node_id=_env_str("RTM_NODE_ID"),
         platform_key_id=_env_str("RTM_PLATFORM_KEY_ID"),
         platform_secret=_env_str("RTM_PLATFORM_SECRET"),
+        platform_ca_file=Path(value) if (value := _env_str("RTM_PLATFORM_CA_FILE")) else None,
+        material_issuer_key_file=Path(value) if (value := _env_str("RTM_MATERIAL_ISSUER_KEY_FILE")) else None,
         inbound_key_id=_env_str("RTM_INBOUND_KEY_ID"),
         inbound_secret=_env_str("RTM_INBOUND_SECRET"),
         task_timeout_seconds=_env_int("RTM_TASK_TIMEOUT_SECONDS", 1800),

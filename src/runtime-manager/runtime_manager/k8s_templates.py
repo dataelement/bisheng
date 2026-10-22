@@ -437,7 +437,13 @@ def secret_template(plan: PodPlan, *, name: str, data: dict[str, bytes]) -> dict
     if (
         not _NAME.fullmatch(name)
         or not data
-        or any(not _ENV.fullmatch(k) or not isinstance(v, bytes) for k, v in data.items())
+        or any(
+            not isinstance(k, str)
+            or not re.fullmatch(r"[A-Za-z0-9._-]{1,253}", k)
+            or k in {".", ".."}
+            or not isinstance(v, bytes)
+            for k, v in data.items()
+        )
     ):
         raise ValueError("k8s_secret_invalid")
     if sum(len(v) for v in data.values()) > 65536:

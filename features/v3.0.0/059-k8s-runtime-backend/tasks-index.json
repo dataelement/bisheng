@@ -1094,7 +1094,9 @@
         "T080"
       ],
       "pair": "T033",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T033",
@@ -1129,7 +1131,9 @@
         "T032"
       ],
       "pair": "T032",
-      "command": ""
+      "command": "",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T034",

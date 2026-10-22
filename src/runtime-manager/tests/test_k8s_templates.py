@@ -271,3 +271,14 @@ def test_prepare_install_mounts_the_fixed_tool_paths_without_transferring_identi
     assert mounts["/materials"]["subPath"] == "materials" and mounts["/materials"]["readOnly"] is True
     assert mounts["/output"]["subPath"] == "output"
     assert "material-auth" not in {m["name"] for m in mounts.values()}
+
+
+def test_file_secret_keys_support_identity_json_and_ca_certificate_without_path_segments(plan):
+    from runtime_manager.k8s_templates import secret_template
+
+    secret = secret_template(
+        plan, name=plan.material_secret, data={"identity.json": b"fixture identity", "ca.crt": b"fixture CA"}
+    )
+    assert set(secret["data"]) == {"identity.json", "ca.crt"}
+    with pytest.raises(ValueError):
+        secret_template(plan, name=plan.material_secret, data={"../outside": b"no"})

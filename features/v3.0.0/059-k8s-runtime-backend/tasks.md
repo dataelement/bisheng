@@ -341,7 +341,7 @@
   **依赖:** T019、T031、T079
   **配对:** T079
 
-- [ ] **T032** — K8s 执行能力与资源操作：契约与失败用例
+- [x] **T032** — K8s 执行能力与资源操作：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
   **逻辑/验收**：实现 prepare/launch/observe/request_stop/confirm_stopped/cleanup/logs/data 能力，只有 adapter 拼 Core API；固定名称/UID 账本、Service就绪端点、bounded wait、平台资源事实及数据/维护前后 stop 闸口；测试只定义输入/结果，不加入实现。
@@ -349,7 +349,7 @@
   **依赖:** T031、T011、T019、T080
   **配对:** T033
 
-- [ ] **T033** — K8s 执行能力与资源操作
+- [x] **T033** — K8s 执行能力与资源操作
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`、`src/runtime-manager/runtime_manager/executors/protocol.py`
   **逻辑/验收**：实现 prepare/launch/observe/request_stop/confirm_stopped/cleanup/logs/data 能力，只有 adapter 拼 Core API；固定名称/UID 账本、Service就绪端点、bounded wait、平台资源事实及数据/维护前后 stop 闸口；通过配对测试后完成 L1 task-review。

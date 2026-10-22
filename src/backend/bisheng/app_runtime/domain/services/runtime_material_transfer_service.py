@@ -115,8 +115,19 @@ class RuntimeMaterialTransferService:
                             platform=request.get("platform", ""),
                             metadata=metadata,
                         )
-                        if artifact.metadata_ != metadata:
+                        declarations = current.delegation.upload_declarations or {}
+                        declaration = {
+                            "kind": request["kind"],
+                            "sha256": request["sha256"],
+                            "size_bytes": request["size_bytes"],
+                            "platform": request.get("platform", ""),
+                            "metadata": metadata,
+                        }
+                        if artifact.id in declarations and declarations[artifact.id] != declaration:
                             _reject("material_upload_declaration_conflict")
+                        if artifact.id not in declarations:
+                            current.delegation.upload_declarations = {**declarations, artifact.id: declaration}
+                            await self.repo.save(current.delegation)
                     else:
                         if request["artifact_id"] not in current.delegation.allowed_artifacts:
                             _reject("material_artifact_refused", 403)

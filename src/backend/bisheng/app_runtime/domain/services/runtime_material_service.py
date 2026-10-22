@@ -282,6 +282,11 @@ class RuntimeMaterialService:
                     or selected.get("state") not in {"materials_ready", "verified"}
                 ):
                     _refused("material_dependency_selection_refused")
+                from bisheng.app_runtime.domain.services.runtime_profile_service import RuntimeDependencyService
+
+                await RuntimeDependencyService(self.repo).validated_artifact(
+                    op, selected["input_key"], selected["artifact_id"], producer_operation_id=plans[0].operation_id
+                )
                 refs[selected["artifact_id"]] = "dependencies"
         if purpose == "restore" and op.payload.get("snapshot_id"):
             refs[op.payload["snapshot_id"]] = "snapshot"
@@ -311,15 +316,6 @@ class RuntimeMaterialService:
                 or not (owned or public)
                 or (artifact.platform and artifact.platform != node.platform)
                 or (kind == "offline" and not artifact.metadata_.get("enabled", True))
-                or (
-                    kind == "dependencies"
-                    and purpose == "prepare-download"
-                    and (
-                        artifact.metadata_.get("input_key")
-                        != (op.payload.get("dependency_resolution") or {}).get("input_key")
-                        or artifact.metadata_.get("profile_id") != profile.get("profile_id")
-                    )
-                )
             ):
                 _refused("material_artifact_refused")
         if not actions:

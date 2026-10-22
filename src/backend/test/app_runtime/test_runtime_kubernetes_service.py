@@ -408,3 +408,56 @@ async def test_observed_service_state_cannot_select_an_unregistered_address_or_p
                 "runtime_state": state,
             },
         )
+
+
+async def test_new_controller_cleanup_updates_the_resource_admission_epoch(control):
+    svc, repository, op = control
+    await register(control)
+    await svc.observe_resource(
+        MANAGER,
+        REF,
+        {"action": "bind", "holder_id": "controller-a", "controller_epoch": 1, "uid": UID, "node_name": "worker-a"},
+    )
+    svc.clock = lambda: NOW + timedelta(seconds=31)
+    await svc.claim_controller(MANAGER, holder_id="controller-b", expected_epoch=1)
+    await svc.observe_resource(
+        MANAGER, REF, {"action": "stop", "holder_id": "controller-b", "controller_epoch": 2, "operation_id": op.id}
+    )
+    plan = await svc.admission_plan(ADMISSION, REF)
+    assert plan["allow_delete"] is True
+    assert (await repository.get(RuntimeExecutionResource, REF)).controller_epoch == 2
+
+
+async def test_scratch_volume_deletion_requires_all_operation_writers_confirmed(control):
+    svc, repository, op = control
+    op.kind = "prepare"
+    await repository.save(op)
+    pod = document(op, purpose="prepare-download")
+    await svc.register_resource(MANAGER, pod)
+    auth = {"holder_id": "controller-a", "controller_epoch": 1}
+    await svc.observe_resource(MANAGER, REF, {**auth, "action": "bind", "uid": UID, "node_name": "worker-a"})
+    volume_ref = "55555555-5555-4555-8555-555555555555"
+    volume = document(op, kind="PersistentVolumeClaim", purpose="prepare-download")
+    volume["resource_ref"] = volume_ref
+    volume["template"]["metadata"]["name"] = "scratch-fixture"
+    volume["template"]["metadata"]["labels"]["runtime.bisheng.io/resource"] = volume_ref
+    volume["template"]["spec"] = {"accessModes": ["ReadWriteOnce"], "resources": {"requests": {"storage": "512Mi"}}}
+    await svc.register_resource(MANAGER, volume)
+    await svc.observe_resource(MANAGER, volume_ref, {**auth, "action": "bind", "uid": volume_ref})
+    await svc.observe_resource(MANAGER, volume_ref, {**auth, "action": "stop", "operation_id": op.id})
+    assert (await svc.admission_plan(ADMISSION, volume_ref))["allow_delete"] is False
+    row = await repository.get(RuntimeExecutionResource, REF)
+    row.stop_state = "confirmed"
+    await repository.save(row)
+    assert (await svc.admission_plan(ADMISSION, volume_ref))["allow_delete"] is True
+
+
+async def test_normal_cleanup_never_authorizes_production_volume_deletion(control):
+    svc, _, op = control
+    volume = document(op, kind="PersistentVolumeClaim")
+    volume["template"]["spec"] = {"accessModes": ["ReadWriteOnce"], "resources": {"requests": {"storage": "512Mi"}}}
+    await svc.register_resource(MANAGER, volume)
+    auth = {"holder_id": "controller-a", "controller_epoch": 1}
+    await svc.observe_resource(MANAGER, REF, {**auth, "action": "bind", "uid": UID})
+    await svc.observe_resource(MANAGER, REF, {**auth, "action": "stop", "operation_id": op.id})
+    assert (await svc.admission_plan(ADMISSION, REF))["allow_delete"] is False

@@ -447,6 +447,15 @@ class RuntimeKubernetesService:
             )
             pending = row.cleanup_state != "complete"
             stopped = row.stop_state == "confirmed"
+            deletable = row.kind != "PersistentVolumeClaim"
+            if (
+                row.kind == "PersistentVolumeClaim"
+                and op
+                and op.kind == "prepare"
+                and row.purpose.startswith("prepare-")
+            ):
+                writers = await self.repo.find(RuntimeExecutionResource, operation_id=op.id, kind="Pod")
+                deletable = bool(writers) and all(writer.stop_state == "confirmed" for writer in writers)
             return {
                 "resource_ref": row.id,
                 "namespace": row.namespace,
@@ -468,7 +477,5 @@ class RuntimeKubernetesService:
                     and row.stop_requested_at is None
                 ),
                 "allow_update": bool(pending and controller and row.uid and (live or stopped)),
-                "allow_delete": bool(
-                    pending and controller and row.uid and row.stop_requested_at and row.kind != "PersistentVolumeClaim"
-                ),
+                "allow_delete": bool(pending and controller and row.uid and row.stop_requested_at and deletable),
             }

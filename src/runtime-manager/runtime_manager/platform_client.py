@@ -32,6 +32,7 @@ class PlatformClient:
         parsed = urlsplit(config.platform_base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
             raise PlatformError("platform_base_url_invalid")
+        ca_file = ca_file or config.platform_ca_file
         self._http = httpx.Client(
             base_url=config.platform_base_url.rstrip("/"),
             transport=transport,

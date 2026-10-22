@@ -221,6 +221,8 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
             await self.get(RuntimeOperation, operation_id, lock=True)
             row, _ = await self._resource_control(resource_id, holder_id, controller_epoch, now)
             await self._acting_operation(row, operation_id, now, allow_own_cleanup=True)
+            # Refresh only the cleanup authority, never the writer's stop evidence.
+            row.controller_epoch = controller_epoch
             if row.stop_requested_at is None:
                 row.stop_requested_at = now
             if row.stop_state != "confirmed":

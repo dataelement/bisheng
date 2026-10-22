@@ -341,3 +341,29 @@ async def test_transfer_identity_is_bound_to_its_authority_before_nonce_use(tran
     with pytest.raises(wire.MaterialProtocolError) as error:
         await call(t, grant, session)
     assert error.value.status_code == 403 and len(t.m.seen) == seen
+
+
+async def test_new_authority_can_reuse_identical_bytes_with_its_own_valid_provenance(transfers):
+    from test.app_runtime.test_runtime_kubernetes_service import MANAGER
+
+    t = transfers
+    t.m.op.payload = {**t.m.op.payload, "source_artifact_id": "source-a"}
+    await t.m.repo.save(t.m.op)
+    grant, session = await exchange(t, upload=upload())
+    await call(t, grant, session, "PUT", sub="/content", query="?offset=0", body=DATA)
+    confirmed = await finalize(t, grant, session)
+    new_grant = await t.m.svc.create_delegation(MANAGER, {**t.m.body, "key_id": "second-upload"})
+    await bind(t.m, new_grant)
+    _, scope = await request(t.m, new_grant, action="upload", **upload(metadata={"source_artifact_id": "source-a"}))
+    reused = await t.svc.exchange(scope)
+    assert reused["artifact_id"] == confirmed["artifact_id"] and reused["state"] == "confirmed"
+
+
+async def test_same_authority_upload_metadata_is_still_immutable(transfers):
+    t = transfers
+    t.m.op.payload = {**t.m.op.payload, "source_artifact_id": "source-a"}
+    await t.m.repo.save(t.m.op)
+    grant, _ = await exchange(t, upload=upload())
+    with pytest.raises(wire.MaterialProtocolError) as error:
+        await exchange(t, grant=grant, upload=upload(metadata={"source_artifact_id": "source-a"}))
+    assert error.value.status_code == 409

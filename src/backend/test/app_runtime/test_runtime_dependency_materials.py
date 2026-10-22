@@ -151,3 +151,36 @@ async def test_forged_operation_payload_without_matching_plan_does_not_expand_gr
     await m.repo.save(m.op)
     with pytest.raises(RuntimeConflict):
         await create(m)
+
+
+async def test_identical_dependency_bytes_support_a_new_verified_resolution_alias(dependencies):
+    from datetime import datetime
+    from uuid import uuid4
+
+    from bisheng.app_runtime.domain.services.runtime_artifact_service import RuntimeArtifactService
+    from test.app_runtime.test_runtime_artifacts import MemoryObjects
+
+    m, svc, artifact, _ = dependencies
+    values = m.op.model_dump(exclude={"id", "create_time", "update_time"})
+    values.update(
+        id=uuid4().hex,
+        idempotency_key="new-input",
+        request_digest="f" * 64,
+        payload={**m.op.payload},
+        deadline=datetime.utcnow() + timedelta(hours=1),
+    )
+    op = await m.repo.save(RuntimeOperation(**values))
+    key = "e" * 64
+    await svc.resolve(op, key)
+    upload = await RuntimeArtifactService(m.repo, MemoryObjects()).create_upload(
+        op.id,
+        kind="dependencies",
+        sha256=artifact.sha256,
+        size_bytes=artifact.size_bytes,
+        platform=artifact.platform,
+        metadata={"input_key": key, "profile_id": "profile-a"},
+    )
+    assert upload["artifact_id"] == artifact.id
+    result = await svc.confirm(op, key, artifact.id, verified=True)
+    assert result["artifact_id"] == artifact.id and result["state"] == "verified"
+    assert (await svc.resolve(op, key))["artifact_id"] == artifact.id

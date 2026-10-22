@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（尚未交付）**：T001–T031、T073–T080已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器及真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
+**F059 实施进展（尚未交付）**：T001–T031、T073–T080已完成本地验证及L1；已验证固定414字节协议及跨实现Ed25519互验。材料委托/传输及HTTP接线已验证；材料客户端已验证；helper与离线环境物化已本地验证；执行器已有准备/启动/观察/停止/清理/日志能力本地验证，数据能力待后续接线；共同状态机、发行与真实集群尚未完成。详见 [task-reviews.md](./task-reviews.md)，单测不代表集群验收。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -225,6 +225,8 @@ K8s 1.28 不保证未启动容器都有终止记录；其 kubelet 延迟终态�
 
 完整镜像模式不复制源码或重装依赖；只注入既有启动/健康/资源/网络/数据合同。兼容源码模式安装和编译完成后由可信 OCI 组装器构造 `/app`、依赖环境和既有 entrypoint；固定基础镜像已含用户/目录及必要运行工具，组装器不执行 RUN，不处理任意 Dockerfile。将来增加系统包必须发布新 profile 或完整镜像。Docker 旧 builder 路径保留，跨形态测试逐项证明启动语义相同。
 
+准备阶段结果写入既有 preparing 事实的 detail.prepare_progress，按 inputs/resolve/install/upload 保存资源引用和结果，写入确认后才停止并清理该阶段 Pod。响应丢失先查询已提交事实，不盲目重跑安装。重试沿用资源账本中首次批准的 activeDeadlineSeconds，阶段总截止仍由冻结操作和材料授权限制。scratch PVC 复用首次绑定的 UID；清理需全部相关 Pod 已确认停止，正式数据 PVC 不随普通清理删除。新控制器申请清理时更新资源的 controller_epoch，仅更新清理权限，不改变 UID、停止证据或连续保护标记。
+
 ### 4.7 材料授权与续期（Service已实现，尚未集群验收）
 
 期限实现：`RuntimeMaterialDelegation.expires_at`在operation/预览中分别是操作/会话的最晚期限；正式deployment-init可为NULL，表示每次重新检查当前归属、批准版本、冻结delivery和同UID，不是永久通行。300秒传输票据仍有独立期限，不能独立续期。该新表尚未在客户环境交付；模型声明可空，不改已发布迁移或做数据回填。
@@ -232,15 +234,17 @@ K8s 1.28 不保证未启动容器都有终止记录；其 kubelet 延迟终态�
 manager 通过现有服务 HMAC 在 backend 创建材料授权；后台从已验证的操作、部署/预览和 delivery 计算范围，不接受调用方任意指定材料、租户或应用。
 
 1. 授权区分 `operation` 与 `deployment-init`。前者有效期不超过操作 deadline，终态/取消即失效；后者绑定当前 generation/owner_epoch 和已登记生产 Pod UID。它在准备正式候选时要求当前归属仍是该有效 deploy/recover 操作、版本已批准且 delivery 已验证；切换后要求仍是当前 serving 归属，可在原 deploy 操作 completed 后继续初始化。不能要求候选在取材料前已经进入正式路由，也不能让已被替代的旧代次续期。
-2. 每个受信传输容器使用独立 Ed25519 密钥对：私钥仅挂该容器 Secret，backend 保存公钥、用途和撤销信息。资源登记先在manager端将Secret内容及Pod环境值投影为摘要，backend不接收私钥或持久保存明文环境；准入对实际资源执行同一投影再比较。业务凭据通过独立Secret引用只注入app，材料Secret只给传输容器。业务容器无挂载；不用 manager HMAC 作签名 key。manager 创建 Pod 后提交 UID 绑定事实，绑定前初始化请求等待，不接受自报 UID 建立授权。
+2. 每个受信传输容器使用独立 Ed25519 密钥对：私钥仅挂该容器 Secret，backend 保存公钥、用途和撤销信息。资源登记先在manager端将Secret内容及Pod环境值投影为摘要，backend不接收私钥或持久保存明文环境；准入对实际资源执行同一投影再比较。业务凭据通过独立Secret引用只注入app，材料Secret只给传输容器。业务容器无挂载；不用 manager HMAC 作签名 key。manager 使用独立、持久且只读挂载的32字节材料根种子，按资源 UUID 通过 HKDF-SHA256 派生不同 Ed25519 子密钥；重启恢复同一资源身份，不将根种子或子私钥写入 SQL。安装升级必须保留该种子，不能每次渲染随机覆盖。manager 创建 Pod 后提交 UID 绑定事实，绑定前初始化请求等待，不接受自报 UID 建立授权。
 3. 交换请求包含授权 ID、Pod UID、时间戳、nonce、目标材料；签名输入、头、动作和传输格式固定为 6.2.1 的 `material-v1`，不得另行猜测或复用服务 HMAC。请求签名与当前后台归属共同校验。时间偏差上界 60 秒，nonce 窗口 120 秒，Redis/授权不可确认时拒绝。签名证明持钥，UID 权威仍是 manager 已登记事实，不能由字段本身证明。
 4. backend 对下载发 300 秒、单材料、只读传输票据；上传票据另限有效操作和获批输出类型，ticket 仅存哈希。过期票据直接拒绝；续取须重新签名并核验当前有效归属和冻结引用，不能只用旧票据。上传只授予有效准备/数据维护操作，部署初始化绝不取得上传、快照恢复或控制权限。
 5. 预览初始化绑定当前有效预览操作、会话使用者和审批期限；回收/审批终态即撤销，不能借正式部署身份取得生产材料或生产附件。
 6. 停用、删除、部署代次切换、预览结束在原业务事务中撤销授权。backend 提供 material 用途 egress 的短投影，依当前授权持续生成有效期，不能仍由原准备操作的 deadline 决定。
 7. 重建新 Pod 必须由 manager 新建 UID 绑定；manager 不在线时，已绑定但尚未取完材料的 Pod 可继续或续取，容器重启复用 emptyDir。没有声称 manager 停机时可凭旧 Secret 任意创建新 Pod。
-8. 内容传输仍以 backend 为唯一网关，沿用内容摘要/大小/安全解包及 finalize 确认；不发 MinIO 直链。部署配置提供可信 TLS/CA，不能用关闭证书校验解决内部地址问题。
+8. 内容传输仍以 backend 为唯一网关，沿用内容摘要/大小/安全解包及 finalize 确认；不发 MinIO 直链。部署配置提供可信 TLS/CA，不能用关闭证书校验解决内部地址问题。manager 的 RTM_PLATFORM_CA_FILE 同时供控制客户端和受信 helper 的只读 ca.crt 使用；材料根种子路径为 RTM_MATERIAL_ISSUER_KEY_FILE，不能沿用服务 HMAC。
 
 实现接线补充：准备先由可信下载Pod只取源码并计算input_key，manager调用既有dependency-plans；backend在当前操作行锁下持久化dependency_resolution。下一下载Pod使用新公钥授权，backend复查选中计划、同应用/profile/架构与verified材料后允许取缓存；缺缓存才在可信下载阶段解析纯wheel/ignore-scripts npm材料。无身份install Pod只挂source/output可写、original/materials/tools只读，使用固定预制工具链；缓存命中跳过install hooks，仅重新编译代码。上传Pod不运行应用代码，确认产物后由manager继续提交结果。正式bundle的material-fetch准备可信environment.sh，Python在运行镜像内以/opt/venv离线安装；Node/static无需在runtime镜像安装Python。所有可信Python helper使用-I且发行镜像必须将模块放入可信site-packages，不能只依赖/app工作目录。
+
+材料去重与生产声明分开：Artifact 按内容身份保留原始元数据，每个材料委托另存不可变 upload_declarations，包含该授权上传的 kind/hash/size/platform/metadata。不同合法操作可复用相同内容，不能修改同一授权已经冻结的上传声明。依赖输入变化但解析产物字节相同时，只有同应用、平台、profile 的持久 dependency plan、产生操作的冻结选择及已确认上传记录共同证明，才允许新的输入键关联原产物；不能仅凭调用者传入 artifact_id 扩大读取范围。
 
 ### 4.8 数据维护及在线、停用数据接口
 
@@ -617,3 +621,7 @@ python scripts/e2e_k8s_runtime.py --namespace e2e-f059-apps --base-url "$BISHENG
 | 2026-10-22 | 补齐资源恢复GET、相同待创建意图的控制器接续、阶段日志容器白名单；修正中间stop容量释放时机 | 控制68项、client/Core/lifecycle82项；执行器仍待接入 |
 
 | 2026-10-22 | T079/T080心跳/控制事实接线、受限Service观察端点与保护断档记录完成；硬前置失败复用16121而非容量等待 | 定向106项；全模块785通过、18跳过、3项旧夹具待修；未部署 |
+
+| 2026-10-22 | 材料去重来源、独立根种子及 TLS CA 接线细化；未改变 D1–D8 | 材料组合99 passed，runtime配置完整648 passed/10 skipped，模板准入91 passed；尚未集群验收 |
+
+| 2026-10-22 | Kubernetes 执行器能力接线：持久准备进度、UID 恢复、Service 端点、停止及清理闸口 | 执行器16项，完整runtime665 passed/10 skipped；平台资源61 passed；共同状态机/数据能力与189仍待完成 |

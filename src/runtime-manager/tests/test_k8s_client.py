@@ -328,3 +328,15 @@ def test_trusted_phase_results_use_only_a_named_bounded_container_log(client_fac
     with pytest.raises(ValueError):
         client.logs("task-a", container="../../foreign")
     assert len(calls) == 1
+
+
+def test_platform_ca_and_material_issuer_are_independent_file_settings(monkeypatch, tmp_path):
+    ca = tmp_path / "platform-ca.crt"
+    issuer = tmp_path / "material-issuer.key"
+    monkeypatch.setenv("RTM_PLATFORM_CA_FILE", str(ca))
+    monkeypatch.setenv("RTM_MATERIAL_ISSUER_KEY_FILE", str(issuer))
+    config = load_config()
+    assert config.platform_ca_file == ca and config.material_issuer_key_file == issuer
+    assert str(issuer) not in repr(config)
+    with pytest.raises(ValueError):
+        Config(material_issuer_key_file=Path("relative-key"))

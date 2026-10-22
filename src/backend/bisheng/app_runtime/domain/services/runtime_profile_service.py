@@ -150,8 +150,12 @@ class RuntimeDependencyService:
             raise RuntimeConflict("dependency_operation_expired")
         return current
 
-    async def _artifact(self, operation, input_key, artifact_id):
-        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeArtifact
+    async def validated_artifact(self, operation, input_key, artifact_id, *, producer_operation_id=None):
+        from bisheng.app_runtime.domain.models.runtime_delivery import (
+            RuntimeArtifact,
+            RuntimeOperation,
+            RuntimeTransfer,
+        )
 
         artifact = await self.repo.get(RuntimeArtifact, artifact_id)
         profile = operation.payload.get("profile") or {}
@@ -164,9 +168,37 @@ class RuntimeDependencyService:
                 artifact.app_id,
             )
             != (operation.tenant_id, operation.app_id)
-            or artifact.metadata_.get("input_key") != input_key
-            or (profile.get("profile_id") and artifact.metadata_.get("profile_id") != profile["profile_id"])
             or (profile.get("platform") and artifact.platform != profile["platform"])
+        ):
+            raise RuntimeConflict("dependency_materials_not_verified")
+        original = artifact.metadata_.get("input_key") == input_key and (
+            not profile.get("profile_id") or artifact.metadata_.get("profile_id") == profile["profile_id"]
+        )
+        if original:
+            return artifact
+        # Identical bytes can have several resolutions. Validate the durable
+        # producing operation/confirmed transfer rather than rewriting provenance.
+        producer_id = producer_operation_id or operation.id
+        producer = await self.repo.get(RuntimeOperation, producer_id)
+        transfers = await self.repo.find(
+            RuntimeTransfer,
+            operation_id=producer_id,
+            artifact_id=artifact_id,
+            action="upload",
+            state="confirmed",
+        )
+        produced_profile = producer.payload.get("profile", {}) if producer else {}
+        selected = producer.payload.get("dependency_resolution", {}) if producer else {}
+        if (
+            producer is None
+            or (producer.tenant_id, producer.app_id) != (operation.tenant_id, operation.app_id)
+            or not transfers
+            or selected.get("input_key") != input_key
+            or selected.get("artifact_id") not in {None, artifact_id}
+            or any(
+                produced_profile.get(field) != profile.get(field)
+                for field in ("profile_id", "profile_digest", "platform", "abi", "runtime_image_id")
+            )
         ):
             raise RuntimeConflict("dependency_materials_not_verified")
         return artifact
@@ -202,7 +234,9 @@ class RuntimeDependencyService:
             if rows:
                 row = rows[0]
                 if row.artifact_id:
-                    await self._artifact(operation, input_key, row.artifact_id)
+                    await self.validated_artifact(
+                        operation, input_key, row.artifact_id, producer_operation_id=row.operation_id
+                    )
                     if row.state not in {"materials_ready", "verified"}:
                         raise RuntimeConflict("dependency_materials_not_verified")
                     await self._remember(operation, row)
@@ -238,7 +272,7 @@ class RuntimeDependencyService:
                 input_key=input_key,
                 lock=True,
             )
-            await self._artifact(operation, input_key, artifact_id)
+            await self.validated_artifact(operation, input_key, artifact_id)
             if not rows:
                 raise RuntimeConflict("dependency_materials_not_verified")
             row = rows[0]
