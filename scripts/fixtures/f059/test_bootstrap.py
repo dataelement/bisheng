@@ -814,8 +814,6 @@ def mutate_vendor_wheel(directory, member, *, symlink=False):
 
 
 def test_source_image_explicit_vendor_preserves_sdk_checks_licenses_and_other_modes(tmp_path, monkeypatch):
-    import zipfile
-
     materials = vendor_wheelhouse(tmp_path)
     suite, _output, values = environment(tmp_path)
     # Packaging untrusted input must never import dependency code, install, or call APIs.
@@ -829,24 +827,21 @@ def test_source_image_explicit_vendor_preserves_sdk_checks_licenses_and_other_mo
         with tarfile.open(source[key]) as package:
             main = package.extractfile("main.py").read().decode()
             compile(main, "main.py", "exec")
-            assert main.index("sys.path.insert") < main.index("from bisheng_sdk import")
+            assert main.index("sys.path[:0]") < main.index("from bisheng_sdk import")
             assert package.extractfile("requirements.txt").read() == b""
-            assert (
-                package.extractfile("_vendor/bisheng_sdk-0.1.1.dist-info/licenses/LICENSE").read()
-                == (ROOT / "LICENSE").read_bytes()
-            )
+            assert package.extractfile("_vendor/licenses/bisheng-sdk/LICENSE").read() == (ROOT / "LICENSE").read_bytes()
             manifests.append(package.extractfile("f059-source-vendor.json").read())
-            with zipfile.ZipFile(
-                ROOT / "src/backend/bisheng/dev_toolkit/artifacts/bisheng_sdk-0.1.1-py3-none-any.whl"
-            ) as sdk:
-                assert package.extractfile("_vendor/bisheng_sdk/auth.py").read() == sdk.read("bisheng_sdk/auth.py")
+            assert (
+                package.extractfile("_vendor/wheels/bisheng_sdk-0.1.1-py3-none-any.whl").read()
+                == (ROOT / "src/backend/bisheng/dev_toolkit/artifacts/bisheng_sdk-0.1.1-py3-none-any.whl").read_bytes()
+            )
     assert manifests[0] == manifests[1]
     for scenario in scenarios:
         if scenario["mode"] != "source-image":
             with tarfile.open(scenario["package"]) as package:
                 assert not any(item.name.startswith("_vendor/") for item in package)
                 if scenario["runtime"] == "python3.11":
-                    assert "sys.path.insert" not in package.extractfile("main.py").read().decode()
+                    assert "sys.path[:0]" not in package.extractfile("main.py").read().decode()
 
 
 def test_source_image_without_materials_exposes_docker_precondition(tmp_path):
@@ -960,3 +955,27 @@ def test_source_wheelhouse_cli_is_explicit_local_only(tmp_path, capsys):
     assert summary["api_bootstrap_executed"] is False
     source = next(item for item in json.loads((suite / "scenarios.json").read_text()) if item["mode"] == "source-image")
     assert source["source_dependencies"] == "explicit-vendored-wheelhouse"
+
+
+def test_source_vendor_original_wheels_report_scanner_boundary_and_real_source_key_refusal(tmp_path):
+    """T191: Preserve dependency binary skips; real source remains subject to the normal gate."""
+    from bisheng.app_publish.domain.services.secret_scanner import scan_package
+
+    materials = vendor_wheelhouse(tmp_path)
+    suite, _output, values = environment(tmp_path)
+    _profiles, scenarios = bootstrap.build_packages(suite, values, inventory=inventory(), source_wheelhouse=materials)
+    source = next(item for item in scenarios if item["mode"] == "source-image")
+    extracted = tmp_path / "inspect-source"
+    with tarfile.open(source["package"]) as package:
+        package.extractall(extracted, filter="data")
+    result = scan_package(extracted)
+    assert result.blocked is False
+    assert result.files_skipped == 8
+    assert {item["reason"] for item in result.skipped} == {"binary"}
+    assert all(item["file"].startswith("_vendor/wheels/") and item["file"].endswith(".whl") for item in result.skipped)
+    # A deliberately invalid synthetic credential shape is test data, never a real credential.
+    with (extracted / "main.py").open("a") as stream:
+        stream.write("\napi_key = '" + "sk-proj-" + "A" * 32 + "'\n")
+    rejected = scan_package(extracted)
+    assert rejected.blocked is True
+    assert any(item["rule_id"] == "openai_sk" and item["file"] == "main.py" for item in rejected.hits)

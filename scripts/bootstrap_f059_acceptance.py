@@ -315,7 +315,7 @@ def source_vendor_files(directory):
         wheels = manifest.get("wheels")
         if not isinstance(wheels, dict) or len(wheels) != len(SOURCE_VENDOR_VERSIONS):
             raise BootstrapError("source_vendor_closure_incomplete")
-        files, seen, unpacked = {}, set(), 0
+        files, original_wheels, seen, unpacked = {}, {}, set(), 0
         for relative, digest in sorted(wheels.items()):
             if not re.fullmatch(r"wheels/[A-Za-z0-9_.-]+\.whl", relative) or not DIGEST.fullmatch(str(digest)):
                 raise BootstrapError("source_vendor_wheel_reference_invalid")
@@ -384,16 +384,17 @@ def source_vendor_files(directory):
                         and bool(files[target])
                     )
                 if name == "bisheng-sdk":
-                    files["_vendor/" + prefix + "licenses/LICENSE"] = (ROOT / "LICENSE").read_bytes()
+                    original_wheels["_vendor/licenses/bisheng-sdk/LICENSE"] = (ROOT / "LICENSE").read_bytes()
                 elif not licensed:
                     raise BootstrapError("source_vendor_license_missing")
+                original_wheels["_vendor/wheels/" + Path(relative).name] = data
                 seen.add(name)
         if seen != set(SOURCE_VENDOR_VERSIONS):
             raise BootstrapError("source_vendor_closure_incomplete")
-        files["f059-source-vendor.json"] = json.dumps(
+        original_wheels["f059-source-vendor.json"] = json.dumps(
             {"format": manifest["format"], "python": "3.11", "wheels": wheels}, sort_keys=True, indent=2
         ).encode()
-        return files
+        return original_wheels
     except BootstrapError:
         raise
     except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile):
@@ -495,7 +496,7 @@ def build_packages(
                     files["main.py"] = files["main.py"].replace(
                         "from __future__ import annotations\n",
                         "from __future__ import annotations\n\nimport sys\nfrom pathlib import Path\n"
-                        "sys.path.insert(0, str(Path(__file__).resolve().parent / '_vendor'))\n",
+                        "sys.path[:0] = [str(path) for path in sorted((Path(__file__).resolve().parent / '_vendor/wheels').glob('*.whl'))]\n",
                         1,
                     )
                 if suffix == "missing-dependency":

@@ -103,7 +103,7 @@ source-wheelhouse/
 }
 ```
 
-上面的 JSON 仅展示两项写法，实际必须列齐八项。wheel 内的 `.dist-info`、证书和许可证原样保留；SDK wheel 未携带许可证文件，脚本补入仓库的 Apache-2.0 `LICENSE`，不修改 wheel 本身。目录和文件不得经过软链接。
+上面的 JSON 仅展示两项写法，实际必须列齐八项。八个 wheel 保持原始字节（含 `.dist-info`、证书和许可证），放入 `_vendor/wheels/`，通过 Python zipimport 加载，不在构建时展开或安装。SDK wheel 未携带许可证文件，脚本另外将仓库的 Apache-2.0 `LICENSE` 放到 `_vendor/licenses/bisheng-sdk/LICENSE`，不修改 wheel 本身。目录和文件不得经过软链接。
 
 ```bash
 python scripts/bootstrap_f059_acceptance.py \
@@ -114,9 +114,11 @@ python scripts/bootstrap_f059_acceptance.py \
   --prepare-only
 ```
 
-只有 source-image 的 v1/v2 包增加 `_vendor/`、经过校验的材料清单和 `main.py` 的加载路径引导；其 `requirements.txt` 保持为空，平台模板仍从裸基础镜像构建。bundle、完整镜像和 SDK 正向断言不变。未传材料时仍生成兼容现有 K8s profile 的 source-image 场景，但 `scenarios.json` 明确标注 `docker-vendor-unprovided-kubernetes-profile-required`，不表示 Docker 前置已满足。
+只有 source-image 的 v1/v2 包增加原始 wheel、SDK 许可、经过校验的材料清单和 `main.py` 的 zipimport 路径引导；其 `requirements.txt` 保持为空，平台模板仍从裸基础镜像构建。bundle、完整镜像和 SDK 正向断言不变。未传材料时仍生成兼容现有 K8s profile 的 source-image 场景，但 `scenarios.json` 明确标注 `docker-vendor-unprovided-kubernetes-profile-required`，不表示 Docker 前置已满足。
 
-在发布前，用实际打包的源码和材料在**裸 Python 基础镜像、禁网、非 root、只读根文件系统**条件下执行真实 SDK import、HTTP/SQLite/本地附件及 WebSocket 烟测。该结果只证明这组材料可以运行；平台 OBO、附件存储、权限和审批仍由真实平台 E2E 验证。若已有发布尝试，不要原地改旧包/旧 journal，使用新的应用 suffix 和独立证据批次，保留原失败记录。
+现有发布扫描器将这八个 wheel 逐项记录为 `binary` 跳过，不打开依赖源码扫描；不能写成全部源码扫描通过。应用自身的 `main.py`、manifest 等仍按原规则扫描，真实形态的密钥必须被拒绝，不增加忽略目录或修改 SDK。材料完整性和来源由逐 wheel 哈希、仓库 SDK 字节核验及许可证证据负责。此前直接展开 SDK 的方案在三处环境变量/请求头常量遇到扫描假阳性，原失败证据应保留。
+
+在发布前，用实际打包的源码和材料在**裸 Python 基础镜像、禁网、非 root、只读根文件系统**条件下执行真实 SDK import、HTTP/SQLite/本地附件、WebSocket，以及 certifi 证书资源读取和本地可信/不可信 CA 配对 TLS 烟测。该结果只证明这组材料可以运行；平台 OBO、附件存储、权限和审批仍由真实平台 E2E 验证。若已有发布尝试，不要原地改旧包/旧 journal，使用新的应用 suffix 和独立证据批次，保留原失败记录。
 
 ### 完整应用镜像
 
