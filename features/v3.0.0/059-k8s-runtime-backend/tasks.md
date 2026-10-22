@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；235 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 230 / 235 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；237 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 230 / 237 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1864,6 +1864,22 @@
   **依赖:** T234
   **配对:** T234
 
+- [ ] **T236** — 维护容器材料身份UID接线配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_templates.py`
+  **逻辑/验收**：真实模板到helper身份reader验证migrate/restore具备受控downward PodUID；purge无材料身份、普通app/data-helper不获材料UID、reserved env仍拒绝。
+  **覆盖 AC:** AC-33、AC-34、AC-35、AC-48、AC-49、AC-50、AC-51、AC-55
+  **依赖:** T235
+  **配对:** T237
+
+- [ ] **T237** — 可信维护容器注入材料PodUID
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_templates.py`
+  **逻辑/验收**：仅有material_secret的可信maintenance容器从core/v1 metadata.uid取得材料签名身份绑定；保留无材料身份purge和其他角色隔离，不改helper/API/DDL。
+  **覆盖 AC:** AC-33、AC-34、AC-35、AC-48、AC-49、AC-50、AC-51、AC-55
+  **依赖:** T236
+  **配对:** T236
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -2003,3 +2019,5 @@ T228–T231合流：来源a1de5271f5f00cef0cba06d41f09c673a9190525，runtime1483
 T232/T233本地L1完成：1bd926bb2两文件先红4/203绿后准入208与邻接585通过；合流b5d243f0a全runtime1519passed/13skip（32.78s）。首次默认沙箱30fail/11error均为localhost绑定、setuid权限受限，授权重跑通过，原日志保留。r8原操作随后timed_out，未复活；清理修复后只让终态正常对账。新增T234/T235校正E2E75秒请求预算，产品持久期限不变。当前228/235、107测试任务；ARM暂停。
 
 T234/T235通过21250d329合入d13e9ee91：新预算合同先红5/12绿，112合同全绿；主树完整backend1753passed/19skip（48.48s），runtime生产与已通过1519/13skip版本一致。开发修复已闭合，当前230/235；五项实际交付/发行/L2继续保留。189 Helm19已固定a06镜像4666d753…，r8原timed_out保持且4资源fresh API absent/cleanupcomplete；proof SHAa37f1bab…。r9新六场景仅采用d13验收工具源码，生产runtime与a06逐字节相同；不重标镜像来源。
+
+T236/T237来自r10真实上线维护失败：probe、预览访问/拒绝、审批均真实通过；deploy d9729fe5…maintenance_phase_failed后正常cleanupcomplete，生产PVC保留。原Pod日志已清理，未声称取得现场KeyError；固定8a helper、非root/禁网/合成身份/空临时卷A/B证明缺MATERIAL_POD_UID报KeyError，只注入UID则backup(None)通过。模板确实漏配maintenance UID，按原材料身份合同补配对，不放宽权限。

@@ -416,6 +416,7 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 | Node/Python 安装脚本可执行用户代码 | 准备任务盗用上传/管理凭据 | 传输与安装 Pod 分开，安装/编译无传输身份、无生产卷 |
 | 多个init与业务健康共用创建起90秒 | cached镜像也可能在环境安装刚开始就误判失败，重启若从now重计又可无限延长 | `executors/kubernetes.py`以同UID创建/前阶段finishedAt锚定，且不超过原操作期限 |
 | owner取消只是持久请求，操作线程尚未退出 | 仍ready的数据会话可新签票据或在观察I/O后发送新写入 | grant签发/ready当前状态检查；`k8s_data_executor.py`在RPC入口及转发前复查，既有动作按unknown保留 |
+| maintenance helper与transfer一样读取材料PodUID，而purge无材料身份 | 漏注入downward字段会在SQLite维护前KeyError，预检/预览仍可能正常 | `k8s_templates.py`仅对有material_secret的可信maintenance增加core/v1 metadata.uid；真实reader合同与禁网原生A/B |
 | finalizer清空时旧删除grace仍可能为正，kubelet会再次DELETE0 | 只允许带STOP的终态删除会在已持久停止后永久卡清理 | `k8s_admission.py`为无STOP的绑定kubelet逐次核对精确同UID停止授权；不放宽manager强删 |
 | 同步preview/resume/stop/delete的HTTP可等待超过75秒 | E2E客户端先超时，不能证明操作实际失败；重发可能造成重复意图 | `test/e2e/helpers/vibe_runtime.py`精确成功路径使用settings总预算且无POST重试；产品操作期限不变 |
 | DELETE受理后对象仍存在是正常异步过程，prepare的最终结果也必须单独持久化 | 一次cleanup.pending被误作发布失败，或重启重复准备且覆盖已上传结果 | `operations.py`有界等待与`prepared_delivery`；`executors/kubernetes.py`仍以同UID停止证明和fresh404完成收尾 |
@@ -770,3 +771,5 @@ T232/T233已实现并通过本地L1。固定版本官方依据：[Kubernetes v1.
 T234/T235工具适配：preview/resume等待ready、stop/delete等待completed是现有同步产品接口；共享E2E75秒read会早于实测96秒init结束。只对成功授权的精确同步调用采用settings.timeout总预算与read上限，连接/写入/pool短有界；拒绝配对、GET、preview DELETE、restore202不扩大。无重试POST，不改产品operation deadline或nginx/UI。
 
 T234/T235已本地L1通过；d13e9ee91整合1753 backend与1519 runtime通过。189 Helm19的a06原生镜像已使r8失败操作正常cleanupcomplete/4精确资源fresh404，历史failure与停止证明保留；r9新批次真实业务继续，不宣称正式上线验收通过。
+
+2026-10-23 T236/T237：r10已通过预览访问与权限拒绝/审批，正式上线在维护阶段失败。原Pod日志已清理；模板→reader及实际helper禁网A/B定位遗漏材料PodUID。原失败、正常清理和生产PVC均保留，修复后可由owner对已批准版本显式manual-publish发起新attempt，不能复活旧op或重发未知POST。

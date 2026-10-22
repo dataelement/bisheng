@@ -1,13 +1,13 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T18:53:47.247561+00:00",
+  "recorded_at": "2026-10-22T19:02:59.321115+00:00",
   "validated_source_commit": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
     "l1_completed": 230,
-    "tasks_total": 235,
+    "tasks_total": 237,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -974,10 +974,11 @@
       "profile_revision": 2,
       "stage": "platform",
       "scenarios": 6,
-      "result": "in_progress",
+      "result": "approved_preview_passed_deploy_maintenance_failed_fix_in_progress",
       "new_arm_run": false,
       "verified_tls": true,
-      "explicit_public_ca": true
+      "explicit_public_ca": true,
+      "failed_operation_id": "d9729fe5c905480bbfd2cf796f344a97"
     },
     "business_batch_history": [
       {
@@ -998,6 +999,23 @@
       "explicit_public_ca_http_status": 200,
       "r9_normal_cleanup": true,
       "production_code_changed": false
+    },
+    "maintenance_material_uid": {
+      "status": "fix_in_progress",
+      "actual_reason": "maintenance_phase_failed",
+      "actual_failed_stage": "maintenance",
+      "actual_cleanup_status": "complete",
+      "actual_failure_log_retained": false,
+      "actual_pod_log_unavailable_after_normal_cleanup": true,
+      "local_contract": "maintenance reads MATERIAL_POD_UID but template only injects transfer/material-fetch",
+      "native_helper_ab": {
+        "missing_uid": "KeyError:MATERIAL_POD_UID",
+        "injected_uid_empty_volume_backup": "passed",
+        "network": "none",
+        "identity": "synthetic_only",
+        "production_volume_access": false
+      },
+      "production_pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27"
     }
   },
   "not_executed": [

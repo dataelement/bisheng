@@ -5948,6 +5948,60 @@
       "review": "PASS"
     },
     {
+      "id": "T236",
+      "wave": 8,
+      "kind": "测试",
+      "title": "维护容器材料身份UID接线配对",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_templates.py"
+      ],
+      "logic": "真实模板到helper身份reader验证migrate/restore具备受控downward PodUID；purge无材料身份、普通app/data-helper不获材料UID、reserved env仍拒绝。",
+      "acs": [
+        "AC-33",
+        "AC-34",
+        "AC-35",
+        "AC-48",
+        "AC-49",
+        "AC-50",
+        "AC-51",
+        "AC-55"
+      ],
+      "depends": [
+        "T235"
+      ],
+      "pair": "T237",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T237",
+      "wave": 8,
+      "kind": "实现",
+      "title": "可信维护容器注入材料PodUID",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_templates.py"
+      ],
+      "logic": "仅有material_secret的可信maintenance容器从core/v1 metadata.uid取得材料签名身份绑定；保留无材料身份purge和其他角色隔离，不改helper/API/DDL。",
+      "acs": [
+        "AC-33",
+        "AC-34",
+        "AC-35",
+        "AC-48",
+        "AC-49",
+        "AC-50",
+        "AC-51",
+        "AC-55"
+      ],
+      "depends": [
+        "T236"
+      ],
+      "pair": "T236",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",
