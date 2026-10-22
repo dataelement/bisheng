@@ -5526,6 +5526,51 @@
       "review": "PASS"
     },
     {
+      "id": "T219",
+      "wave": 9,
+      "kind": "测试",
+      "title": "延迟调度节点绑定与停止证明配对",
+      "files": [
+        "src/runtime-manager/tests/test_kubernetes_executor.py"
+      ],
+      "logic": "创建时Pending空node，随后同UID调度；节点变化、UID替换、API/回执未知和已有停止证明拒绝配对。",
+      "acs": [
+        "AC-33",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T214",
+        "T216"
+      ],
+      "pair": "T220",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T220",
+      "wave": 9,
+      "kind": "实现",
+      "title": "同UID首次节点绑定刷新",
+      "files": [
+        "src/runtime-manager/runtime_manager/executors/kubernetes.py"
+      ],
+      "logic": "停止前新鲜读取同UID，仅空节点补实际绑定，保留既有停止证明和backend严格scope。",
+      "acs": [
+        "AC-33",
+        "AC-49",
+        "AC-52"
+      ],
+      "depends": [
+        "T219"
+      ],
+      "pair": "T219",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

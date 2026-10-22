@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；218 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 213 / 218 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；220 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 213 / 220 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1728,6 +1728,22 @@
   **覆盖 AC:** AC-13、AC-15、AC-24、AC-47、AC-48、AC-55
   **依赖:** T217
   **配对:** T217
+
+- [ ] **T219** — 延迟调度节点绑定与停止证明配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_kubernetes_executor.py`
+  **逻辑/验收**：创建时Pending且nodeName为空，后续同UID调度完成再停止；覆盖节点变化/清空、UID替换、API不确定、绑定回执不确定、已有confirmed证明不得改绑。严格mock验证停止证明节点必须等于账本，不伪造节点。
+  **覆盖 AC:** AC-33、AC-49、AC-52
+  **依赖:** T214、T216
+  **配对:** T220
+
+- [ ] **T220** — 同UID首次节点绑定刷新
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+  **逻辑/验收**：request_stop/confirm_stopped前新鲜读取同UID Pod，只允许空节点补齐为实际nodeName；不改变已确认停止证明，不放宽backend stop scope，未知结果保持资源占用。
+  **覆盖 AC:** AC-33、AC-49、AC-52
+  **依赖:** T219
+  **配对:** T219
 
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试

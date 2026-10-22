@@ -203,6 +203,9 @@ flowchart LR
 
 **创建事务收尾（T203–T214实施细化）**：新Pod意图在现有 `observed_state.creation` 保存 `version=1` 及 `unattempted → started → rejected`；POST前原子 `create_begin` 固定唯一 `create_attempt_id` 和controller epoch，重复begin不重发。只有同attempt/epoch的明确HTTP403能记录rejected；timeout、transport、5xx、409、2xx解析失败等保持started/unknown。新意图准入只有started允许CREATE，旧JSON空记录不回填为unattempted。收尾先 `create_fence` 将unattempted/rejected固定为fenced并关闭CREATE，再新鲜GET404，通过独立 `not_created` 观察记录无执行体证明。该路径stop_state=confirmed但evidence_kind=not_created、UID仍NULL；普通stopped的同UID证明完全不变。任一实际对象出现必须验证范围、绑定真实UID并走停止流程；已证明未创建后又出现对象则拒绝，不删除或移除finalizer。旧r4缺少唯一尝试账本，保留操作/PVC/预占，不凭历史manager日志或当前404自动追认。锁序保持operation→node→resource，资源加锁读取使用populate_existing强制刷新预读identity map，避免并发begin/fence覆盖。无新DDL、无直接MinIO依赖、无外部deploy API变更。
 
+**延迟调度绑定收尾（T219/T220）**：Kubernetes CREATE返回时Pod可能尚无nodeName。停止前必须从API server新鲜读取并核对同namespace/name/UID及范围标签；仅首次从空节点补齐为实际节点，已有非空节点不得变化或被清空。补齐后校验平台绑定回执，再生成停止证明，保持backend对证据节点与账本节点严格相等的要求。已有confirmed证明不得补绑或改写；UID/范围变化、GET或绑定结果不确定继续保留资源。189已观察同UID材料Pod成功、facts200，但旧实现账本节点为空导致stopped409；修复后须由正常对账收尾，不能人工清理finalizer或PVC。
+
+
 Pod的downward UID字段显式声明core/v1，避免K8s补默认值改变冻结projection；非v1、其他字段路径或额外字段仍严格拒绝。准入日志只固定8个安全原因或admission_refused，不输出请求、环境、异常正文/类型名或UID；API响应合同保持。历史189403未取到原reason，不将本地默认化复现当现场结论。
 
 实际受管容器诊断固定名单包含storage-guard、schema-init、assembler，拒绝任意容器名称；否则_prepare失败可能被日志读取参数ValueError遮蔽。platform.origin的反向代理必须原样转发 `/internal/app-runtime/v2/material-access/` 根前缀（与 `/api/v1/internal/app-runtime/v2` 控制面前缀不同），不rewrite path/query。材料分块16MiB、关闭请求/响应buffering、65s超时，后端继续验证workload签名/票据；不得笼统暴露所有/internal。189无凭据请求曾实得origin404/backend401，专用nginx补路由且reload生效后origin401；这仅证明入口和拒绝，不替代有效材料传输。
@@ -733,3 +736,5 @@ Docker source-image 兼容夹具基于裸Python，不继承bundle的预置SDK。
 控制器租约恢复（T198/T199，候选e4052d1c2）：空闲期可以自然过期；下一动作仅在精确renew `409/controller_lease_lost` 后清缓存、重读node并以fresh epoch CAS领取。活跃异holder、403、503、其他冲突或响应不确定均重读且拒绝当前动作，不凭重读直接执行未知动作。领取后显式renew，避免同holder幂等claim返回接近过期的旧租约；从renew请求前monotonic计10秒续期，响应耗时达到20秒拒绝，不依赖客户与server壁钟一致。所有资源意图/观察/cleanup/fact仍取当前receipt，旧UID/creator epoch不凭过期改成停止；过期operation由现有平台claim拒绝，只清理并正常终结，不复活prepare。189红例已留存，同进程真实复验待执行。
 
 平台资源白名单校验与manager采用相同阶段合同（T200/T201）：backend prepare只消费payload.profile解析对象；probe/preview/deploy/data/restore等只消费resolved_delivery.profile冻结对象，拒绝错误类型，不回退到旧prepare或旧运行对象。完整镜像和purge缺profile仍许可，显式错误类型不许可；purge缺delivery可空，所有既有镜像digest/helper/卷/UID/租约校验保留。37项真实模型→Service→SQLite账本配对覆盖字段轮廓，避免用宽松桩掩盖跨进程协议。189旧r3资源注册503在本地已修，实际后端重部署待验。
+
+2026-10-23：登记T219/T220。真实r5第二次尝试材料下载及进度保存成功，延迟调度的首次节点绑定未回写导致停止确认409；按现有严格身份合同修复，业务验收仍未完成。
