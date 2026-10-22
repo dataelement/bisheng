@@ -434,6 +434,11 @@ async def test_new_controller_cleanup_updates_the_resource_admission_epoch(contr
 async def test_scratch_volume_deletion_requires_all_operation_writers_confirmed(control):
     svc, repository, op = control
     op.kind = "prepare"
+    op.payload = {
+        **op.payload,
+        "delivery": {"mode": "bundle"},
+        "profile": op.payload["resolved_delivery"]["profile"],
+    }
     await repository.save(op)
     pod = document(op, purpose="prepare-download")
     pod["template"]["spec"]["volumes"] = [
@@ -475,7 +480,14 @@ def test_every_production_purpose_refuses_cross_application_volume(purpose):
 
     from bisheng.app_runtime.domain.services.runtime_kubernetes_service import RuntimeKubernetesService
 
-    operation = SimpleNamespace(app_id="app-a", id="operation-a", payload={"resolved_delivery": {"image_ref": IMAGE}})
+    operation = SimpleNamespace(
+        kind={"serve": "deploy", "data": "data", "migrate": "migrate", "restore": "restore", "purge": "destroy"}[
+            purpose
+        ],
+        app_id="app-a",
+        id="operation-a",
+        payload={"resolved_delivery": {"mode": "image", "image_ref": IMAGE}},
+    )
     node = SimpleNamespace(platform="linux/amd64", capabilities={"helper_image": HELPER})
     pod = document(SimpleNamespace(app_id="app-a", id="operation-a", generation=1, owner_epoch=1, node_id="node-a"))[
         "template"

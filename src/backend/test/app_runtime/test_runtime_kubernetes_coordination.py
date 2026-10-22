@@ -56,6 +56,11 @@ async def coordination(control):
 
     ctrl, repository, op = control
     op.kind = "prepare"
+    op.payload = {
+        **op.payload,
+        "delivery": {"mode": "bundle"},
+        "profile": op.payload["resolved_delivery"]["profile"],
+    }
     await repository.save(op)
     svc = RuntimeOperationService(repository, clock=lambda: NOW)
     return SimpleNamespace(svc=svc, control=ctrl, repo=repository, op=op)
