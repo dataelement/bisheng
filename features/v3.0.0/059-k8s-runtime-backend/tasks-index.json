@@ -5849,7 +5849,7 @@
     },
     {
       "id": "T232",
-      "wave": 9,
+      "wave": 8,
       "kind": "测试",
       "title": "终态finalizer移除后kubelet删除配对",
       "files": [
@@ -5873,7 +5873,7 @@
     },
     {
       "id": "T233",
-      "wave": 9,
+      "wave": 8,
       "kind": "实现",
       "title": "终态Pod正常删除准入收尾",
       "files": [

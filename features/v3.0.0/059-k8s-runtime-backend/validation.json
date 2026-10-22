@@ -788,7 +788,7 @@
       "controller_epoch": 11
     },
     "startup_stage_budget": {
-      "status": "deployed_a1de_r8_live_pending",
+      "status": "historical_r7_failure_fixed_r8_startup_passed",
       "actual_probe_operation": "0816633805bd414d828ff1bef8b6995b",
       "reason": "workload_readiness_timeout",
       "cleanup_status": "complete",
@@ -803,7 +803,11 @@
       "environment_only_seconds": 12,
       "fix_commit": "a3b50f9d6740a8f6654454fa5e701252c867d3cb",
       "executor_passed": 175,
-      "adjacent_passed": 392
+      "adjacent_passed": 392,
+      "historical_attempt": "k189r7",
+      "r8_init_total_seconds": 96,
+      "r8_probe_ready": true,
+      "r8_failed_later_during_cleanup": true
     },
     "data_cancel_fence": {
       "status": "backend_and_manager_deployed_a1de_live_data_pending",

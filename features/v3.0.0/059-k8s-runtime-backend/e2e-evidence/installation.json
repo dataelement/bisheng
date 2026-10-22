@@ -1,6 +1,6 @@
 {
   "schema": "f059-installation-evidence/v1",
-  "state": "passed-retained143-report-with-a1de-manager-current",
+  "state": "passed-retained143-report-with-a06-manager-current",
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "kubernetes": "v1.28.15",
@@ -172,10 +172,13 @@
     "plans_sha256": "9e7ec0ea64f0d822146dd9463877396e67ceabca7fea2e791bb6b4778f0c66ae"
   },
   "current_candidate": {
-    "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
-    "manager_egress_admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:26f61e7ba98726d3c78ade8236ef78d09567583282bf2292f911af04b2a4b7f1",
-    "helm_revision": 10,
-    "probe_report_after_upgrade": "fifth actual probe and public platform installation diagnostic passed"
+    "source_commit": "a06b281b2ada8cfa15cb79c29fad0044408e4db9",
+    "manager_egress_admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:4666d75388bde2ae7c1b0b73916442451b4119a7384852cf373633e8489dfe32",
+    "helm_revision": 19,
+    "probe_report_after_upgrade": "143 actual sixteen-check report retained byte-identically; current manager assess_capabilities ready accepted before r9; no new full sixteen-check claim",
+    "upgrade_receipt": "/opt/e2e-f059/evidence/runtime-twenty-first/receipt.json",
+    "descriptor_uid_unchanged": true,
+    "descriptor_data_unchanged": true
   },
   "remaining": [
     "Business and fault/upgrade acceptance are separate T069/T070; no cross-node claim",
@@ -1650,5 +1653,13 @@
     "reason": "Only manager startup/data RPC code and two backend cancellation gates changed; helper/profile/descriptor/report bytes unchanged; fresh capability report accepted",
     "backend_node_ready": true,
     "controller_epoch": 13
-  }
+  },
+  "current_candidate_history": [
+    {
+      "source_commit": "54b3ea2c15836529cc24667d9a58be49e35bf710",
+      "manager_egress_admission_image": "192.168.106.189:5443/f059/runtime-manager@sha256:26f61e7ba98726d3c78ade8236ef78d09567583282bf2292f911af04b2a4b7f1",
+      "helm_revision": 10,
+      "probe_report_after_upgrade": "fifth actual probe and public platform installation diagnostic passed"
+    }
+  ]
 }
