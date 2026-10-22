@@ -1669,5 +1669,23 @@
     "original_failures_retained": true,
     "T069_still_pending_offline_and_delete": true,
     "T070_still_pending": true
+  },
+  "manager_only_upgrade_2ac": {
+    "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:5619057b1c026d9ff545f4090f6c84c9aaef5fc1050604162770c7f4d018830c",
+    "helm_revision": 28,
+    "controller_epoch": 22,
+    "node_status": "ready",
+    "required_runtime_checks": 15,
+    "raw_installation_checks": 16,
+    "paths": {
+      "image": true,
+      "bundle": true,
+      "source-image": true
+    },
+    "workload_identities_preserved": true,
+    "upgrade_receipt_sha256": "539386dafef972122991013f7b03c0e920be301df794dea3df09ea5136763e5b",
+    "actual_owner_cancel": "not_executed",
+    "public_release": false
   }
 }

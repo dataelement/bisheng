@@ -37,3 +37,11 @@ Chart 卸载会删除 admission webhook、服务与 RBAC，以及执行域 Netwo
 完整卸载验收须使用独立 release/installationId、控制与执行 namespace、受限服务身份、合格 PV 和独立平台配置及逻辑存储域；运行真实 SQLite 应用并确认停止与 cleanup 后，才卸载该独立域。共享 backend 的新应用默认节点及 manager/data RPC 地址是全局配置，不能临时改向新 manager 而影响 primary。仅合成 SQLite/PVC 的 Helm 保留检查最多证明存储保留子合同，不算完整平台卸载通过。
 
 源码锚点：`deploy/kubernetes/app-runtime/templates/admission.yaml`、`network.yaml`、`rbac.yaml`、`storage.yaml`、`services.yaml`；`runtime_delivery_coordinator.py:45`、`runtime_control_client.py:21`、`runtime_data_session_service.py:113`。该项保持待验收，不将静态复核记为真实卸载结果。
+
+## T256/T257 manager独立升级：真实189
+
+2ac固定源码的amd64 manager原生构建及UID10001/禁网/只读导入烟测通过；内网仓库digest `5619057b1c026d9ff545f4090f6c84c9aaef5fc1050604162770c7f4d018830c`、config586bdc40…。首轮私有Git checkout umask077产生700目录/600文件，镜像生成但非root import失败；只正规化固定公开构建源码权限，内容和Git clean保持，R2另用标签/日志/结果。保留bad bd2092…及日志，未改产品Dockerfile绕过。
+
+Helm28只更新images.manager，旧Pod30d08ee0…替换为faa48ee8-fd38-4980-a290-4b44ada8d6b4；五应用PodUID、各容器CID、PVC/PV身份全部未变，egress/admission/app-proxy的Pod与容器未重启。descriptor数据/UID、helper/assembler/profile均不变。receipt SHA `539386dafef972122991013f7b03c0e920be301df794dea3df09ea5136763e5b`，before/after SHAefe107e7…/6e7757c1…；不据此声称切换期间所有HTTP请求连续成功。
+
+自然node heartbeat已ready/controller_epoch22，运行期15必需检查和原始安装报告16项分别通过，bundle/image/source-image三路径true；容量仍6784Mi/3125m/5实例，旧r4failed/cleanup pending及原PVC保持。root首轮核查误要求运行期16而assert失败，实际报告无故障；纠正口径后冻结真实ready文件，不改产品。owner取消、inflight重启/释放及其他故障仍待独立实测。

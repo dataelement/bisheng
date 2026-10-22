@@ -176,5 +176,245 @@
     "safe_alternative": "Independent release/installation id, control and execution namespaces, platform configuration and logical storage scope; independently qualified PV and live capability report; stop and cleanup its real SQLite application before uninstall.",
     "shared_backend_limitation": "Coordinator runtime_default_node_id and runtime/data manager_base_url are global configuration; do not redirect the primary backend or reuse its active execution domain.",
     "scope": "No primary uninstall, guard/finalizer removal, manual SQL release or 404-based stop assertion."
+  },
+  "manager_only_cancellation_upgrade_2ac": {
+    "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:5619057b1c026d9ff545f4090f6c84c9aaef5fc1050604162770c7f4d018830c",
+    "manager_config_id": "sha256:586bdc40a1a2b0d2b8f1a1c2485c8da1a8dbb76f2c9eb939be7e5243ab4898ac",
+    "helm_revision": 28,
+    "native_build": {
+      "schema": "f059-native-manager-only/v1",
+      "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
+      "platform": "linux/amd64",
+      "manager_image": {
+        "tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261023-28-r2-amd64",
+        "image_id": "sha256:586bdc40a1a2b0d2b8f1a1c2485c8da1a8dbb76f2c9eb939be7e5243ab4898ac"
+      },
+      "kubernetes_source_sha256": "038b8d95c3efd19ab7d5be2405890a7b21f334c025b2fecda0db50205af824a0",
+      "native_nonroot_isolated_import": {
+        "behavior_simulated": false,
+        "imported_modules": 5,
+        "isolated": true,
+        "kubernetes_source_sha256": "038b8d95c3efd19ab7d5be2405890a7b21f334c025b2fecda0db50205af824a0",
+        "platform": "linux/amd64",
+        "registry_accessed": false,
+        "uid": 10001
+      },
+      "public_push": false,
+      "official_ci_release": false,
+      "helper_assembler_profiles_rebuilt": false,
+      "helper_assembler_profiles_retagged": false,
+      "preceding_manager_reference": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
+      "unrelated_containers_unchanged": true,
+      "network_inventory_unchanged": true,
+      "boundary": "Native manager build plus import/source-byte smoke only; no simulated new cancellation behavior or actual cluster/npm/ARM acceptance claimed."
+    },
+    "source_permissions": {
+      "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
+      "scope": "tracked src/runtime-manager build inputs only",
+      "files": 132,
+      "directories": 10,
+      "previous_file_modes": {
+        "0o600": 132
+      },
+      "regular_modes": "0644/0755 from tracked executable classification",
+      "content_unchanged": true,
+      "git_clean": true,
+      "ownership_changed": false
+    },
+    "private_push": {
+      "egress_admission_helper_assembler_profiles_updated": false,
+      "image": "192.168.106.189:5443/f059/runtime-manager@sha256:5619057b1c026d9ff545f4090f6c84c9aaef5fc1050604162770c7f4d018830c",
+      "local_tag": "e2e-f059/bisheng-runtime-manager:e2e-f059-native-20261023-28-r2-amd64",
+      "manager_image_id": "sha256:586bdc40a1a2b0d2b8f1a1c2485c8da1a8dbb76f2c9eb939be7e5243ab4898ac",
+      "native_smoke": "nonroot_isolated_import_and_fixed_source_bytes",
+      "observed_at": 1792712005.052754,
+      "official_ci_release": false,
+      "platform": "linux/amd64",
+      "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-28",
+      "public_push": false,
+      "purpose": "f059-private-manager-push/v1",
+      "push_log": "/opt/e2e-f059/native-2ac60f808/evidence/private-manager-push-r2.log",
+      "push_retried": false,
+      "registry_manifest_digest": "sha256:5619057b1c026d9ff545f4090f6c84c9aaef5fc1050604162770c7f4d018830c",
+      "single_cli_submission_per_intent": true,
+      "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
+      "tls_verification": true,
+      "transport_attempt_count_verified": false
+    },
+    "upgrade_receipt": {
+      "arm_tested": false,
+      "descriptor_data_uid_unchanged": true,
+      "five_app_pod_container_pvc_pv_identities_unchanged": true,
+      "helm_upgrade_completed": true,
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:5619057b1c026d9ff545f4090f6c84c9aaef5fc1050604162770c7f4d018830c",
+      "new_manager_pod_uid": "faa48ee8-fd38-4980-a290-4b44ada8d6b4",
+      "old_manager_pod_uid": "30d08ee0-f6af-4ab6-ada4-217ce1cee181",
+      "profile_helper_assembler_images_unchanged": true,
+      "proxy_admission_identities_unchanged": true,
+      "public_push": false,
+      "r4_pvc_uid_unchanged": true,
+      "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd"
+    },
+    "post_upgrade_scope": {
+      "apps": [
+        {
+          "containers": [
+            {
+              "container_id": "docker://50dd4e84a4a90f76ffca49a7231f6b2b97c1572cfb56880d94380c53a89d2742",
+              "name": "app"
+            },
+            {
+              "container_id": "docker://e04fdbbfa737eba69847ae1a373401300c37aadd1ec69e71c264b70f4207988d",
+              "name": "data-helper"
+            }
+          ],
+          "name": "app-07560d0f5d6ee4b0d34bd3b26604fd5346754065",
+          "pod_uid": "fcbc7bdd-059e-4ef3-a5bd-cefe4931c38d",
+          "volumes": [
+            {
+              "pv_name": "e2e-f059-production-03",
+              "pv_uid": "00a210b6-82e0-4745-8c68-35c00c877103",
+              "pvc_name": "data-07560d0f5d6ee4b0d34bd3b26604fd5346754065",
+              "pvc_uid": "55f2a8fc-a27d-4878-ada2-44cd5b167736"
+            }
+          ]
+        },
+        {
+          "containers": [
+            {
+              "container_id": "docker://66ec31a474042a32af31f10c73f001813f6dcd0acb81950a5d4edbf9491152cf",
+              "name": "app"
+            },
+            {
+              "container_id": "docker://9e6a1c3539e92eef6ef2c44b1d73795f63b583fc3a1cff2a6f8f7275bafee48c",
+              "name": "data-helper"
+            }
+          ],
+          "name": "app-1eaef29a6764649b429a9f2a90aea27e4afd7752",
+          "pod_uid": "0ad1b4c0-db79-440c-a1f7-4acfba699692",
+          "volumes": [
+            {
+              "pv_name": "e2e-f059-production-05",
+              "pv_uid": "ef38bed0-e5f1-4aea-a80b-77d02cc683e8",
+              "pvc_name": "data-1eaef29a6764649b429a9f2a90aea27e4afd7752",
+              "pvc_uid": "7d6cfde7-c6f3-455f-a443-79a5120fa685"
+            }
+          ]
+        },
+        {
+          "containers": [
+            {
+              "container_id": "docker://11229899c4a32a6c5859912845be91b6b3a4ca204d0137b5080ddbf5cfcc2551",
+              "name": "app"
+            },
+            {
+              "container_id": "docker://a7b142d3e9211a1a278b253f948c6627690dac77ff5b50030e6ea9340c2ebacf",
+              "name": "data-helper"
+            }
+          ],
+          "name": "app-6153b2cdf43a4bbef23a5d0a47e2a916ca8a0082",
+          "pod_uid": "0ca2a71e-b37d-47e0-a2eb-6d125aaa5c86",
+          "volumes": [
+            {
+              "pv_name": "e2e-f059-production-02",
+              "pv_uid": "319a6311-e463-40e0-8dc2-73be07052eb3",
+              "pvc_name": "data-6153b2cdf43a4bbef23a5d0a47e2a916ca8a0082",
+              "pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27"
+            }
+          ]
+        },
+        {
+          "containers": [
+            {
+              "container_id": "docker://a005d5e80729307494d1a09c1bd4ea6c38b78731be38472860659f80ae42bd29",
+              "name": "app"
+            },
+            {
+              "container_id": "docker://1c8ab899452fa33e7c5602cc0a3ee90843081503e255d75cc235c6d325af87d4",
+              "name": "data-helper"
+            }
+          ],
+          "name": "app-8ee02249e6a0d0ba384ce4a22a6b608837c10400",
+          "pod_uid": "2d155f36-bb1d-4e02-9aaf-fb070b999e4f",
+          "volumes": [
+            {
+              "pv_name": "e2e-f059-production-01",
+              "pv_uid": "893fe082-a5a9-4a8c-8810-e818aacaccc2",
+              "pvc_name": "data-8ee02249e6a0d0ba384ce4a22a6b608837c10400",
+              "pvc_uid": "16454f1f-6ef3-490a-a04c-000d336ed7e8"
+            }
+          ]
+        },
+        {
+          "containers": [
+            {
+              "container_id": "docker://1cc2ec55467197ffc5442fae61ccad01742e2c0272aec7f412cf4626b0e872d2",
+              "name": "app"
+            },
+            {
+              "container_id": "docker://7c5cf3792ce67d7db39a344785589edd9432adc0b27215a023dbf388c031ef77",
+              "name": "data-helper"
+            }
+          ],
+          "name": "app-cb038aa8067273280d568cb7ef797dbe91e94927",
+          "pod_uid": "f405a380-5fb9-4a87-84ca-7269175cd7a8",
+          "volumes": [
+            {
+              "pv_name": "e2e-f059-production-04",
+              "pv_uid": "76c022c8-0ddd-43d8-a3f1-97cbf4a8ff8f",
+              "pvc_name": "data-cb038aa8067273280d568cb7ef797dbe91e94927",
+              "pvc_uid": "2dba1346-f6e7-46f2-be8d-05b35290430a"
+            }
+          ]
+        }
+      ],
+      "r4_pvc_uid": "41426a1e-9713-46d5-afa5-e520afcd186b"
+    },
+    "node_ready": {
+      "schema": "f059-manager-cancel-node-ready/v1",
+      "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
+      "node_id": "e2e-f059-node",
+      "status": "ready",
+      "controller_epoch": 22,
+      "required_runtime_checks": 15,
+      "raw_installation_checks": 16,
+      "paths": {
+        "image": true,
+        "bundle": true,
+        "source-image": true
+      },
+      "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
+      "r4_status": "failed",
+      "r4_cleanup_status": "pending",
+      "capacity": {
+        "memory_budget_mb": 8192,
+        "cpu_budget_millicores": 4000,
+        "committed_mb": 6784,
+        "committed_cpu": 3.125,
+        "instances": 5
+      }
+    },
+    "evidence_sha256": {
+      "before.json": "efe107e7474386be25cd6e8eedf5d1818182721529745894c3e73f4582aa6058",
+      "native-manager-result-r2.json": "02ebc584cc5edb68871a20c484ead4cdaf9a04db89cfdffdd4c88e8c17e01590",
+      "after.json": "6e7757c196f873507301b723c711b69e5e977f4e5bee2aaee00554783f62a872",
+      "private-manager-push-r2.json": "a048caffdaf0e82dc687357f65f6e6c08fedcbf26daaf8feb0eae3bd4b01409f",
+      "source-permissions-r2.json": "3f4c2b598bcd6e29a742178e1241fe2b00140cf5ef14808dbac42ddd9b09348a",
+      "receipt.json": "539386dafef972122991013f7b03c0e920be301df794dea3df09ea5136763e5b"
+    },
+    "readiness_proof_sha256": "e208f9c056f0d24413b70090d65c6f555386d22e1ba15dd1d8017642973f46eb",
+    "first_native_attempt": {
+      "outcome": "image built, nonroot import failed due private checkout0700/0600",
+      "image_id": "sha256:bd2092c988c5727e8037a4c2b02daceaa992dd6c04af827412c2b7037e561266",
+      "retained": true,
+      "product_code_changed_to_mask_failure": false
+    },
+    "scope_limits": [
+      "Native import/source-byte smoke does not prove actual owner cancellation",
+      "Physical workload identities unchanged does not prove continuous HTTP availability during upgrade",
+      "Runtime mandatory checks are15; raw installer report has16 including registry-push",
+      "No new ARM/109/public tag/DockerHub release"
+    ]
   }
 }

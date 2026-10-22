@@ -1687,10 +1687,36 @@
     "runtime_skipped": 13,
     "full_runtime_log_sha256": "10eb19fa0b1a40d7e27baabfe36c61d861f0bdb24d84bc759b8604e189f96e7a",
     "l1": "PASS",
-    "deployed": false,
+    "deployed": true,
     "actual_cancellation": "not_executed",
     "arm": "deferred",
-    "public_release": false
+    "public_release": false,
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:5619057b1c026d9ff545f4090f6c84c9aaef5fc1050604162770c7f4d018830c",
+    "helm_revision": 28,
+    "node_ready": {
+      "schema": "f059-manager-cancel-node-ready/v1",
+      "source_revision": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
+      "node_id": "e2e-f059-node",
+      "status": "ready",
+      "controller_epoch": 22,
+      "required_runtime_checks": 15,
+      "raw_installation_checks": 16,
+      "paths": {
+        "image": true,
+        "bundle": true,
+        "source-image": true
+      },
+      "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
+      "r4_status": "failed",
+      "r4_cleanup_status": "pending",
+      "capacity": {
+        "memory_budget_mb": 8192,
+        "cpu_budget_millicores": 4000,
+        "committed_mb": 6784,
+        "committed_cpu": 3.125,
+        "instances": 5
+      }
+    }
   },
   "fullimage_manual_retry_passed": {
     "parent_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-image-capacity-resumed.json",
