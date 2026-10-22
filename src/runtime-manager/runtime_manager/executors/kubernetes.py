@@ -692,6 +692,24 @@ class KubernetesExecutor:
             row.get("node_name", ""),
         )
 
+    def _track_binding(self, row, pod):
+        node_name = pod.get("spec", {}).get("nodeName", "")
+        previous = row.get("node_name", "")
+        if not isinstance(node_name, str) or (previous and node_name != previous):
+            raise ExecutorError("resource_binding_changed")
+        if node_name and not previous:
+            if row["stop_state"] == "confirmed":
+                raise ExecutorError("resource_binding_changed")
+            receipt = self._observation(row, "bind", uid=row["uid"], node_name=node_name)
+            if (receipt.get("resource_ref"), receipt.get("uid"), receipt.get("node_name")) != (
+                row["resource_ref"],
+                row["uid"],
+                node_name,
+            ):
+                raise ExecutorError("resource_binding_receipt_refused")
+            return receipt
+        return row
+
     def _unbound_stop(self, row):
         self._controller()
         creation = self._creation(row)
@@ -734,6 +752,12 @@ class KubernetesExecutor:
             row = self._unbound_stop(row)
             if self._creation(row).get("state") == "not_created":
                 return {"stopped": True, "reason": "not_created"}
+        if row.get("uid"):
+            try:
+                row = self._track_binding(row, self._fresh(row))
+            except KubernetesAPIError:
+                self._observation(row, "stop", operation_id=operation["operation_id"])
+                return {"stopped": False, "reason": "stop_api_unconfirmed"}
         row = self._observation(row, "stop", operation_id=operation["operation_id"])
         observation = request_stop(self.client, self._identity(row))
         return {"stopped": False, "reason": observation.reason}
@@ -768,6 +792,7 @@ class KubernetesExecutor:
                 if exc.status_code != 404:
                     raise
             else:
+                self._track_binding(row, pod)
                 from runtime_manager.k8s_templates import STOP_FINALIZER
 
                 finalizers = pod["metadata"].get("finalizers", [])
@@ -780,6 +805,16 @@ class KubernetesExecutor:
                     )
             evidence = row.get("stop_evidence", {})
             return {"stopped": True, "evidence_kind": evidence.get("evidence_kind", "confirmed"), "exec_ref": exec_ref}
+        if row.get("uid"):
+            try:
+                row = self._track_binding(row, self._fresh(row))
+            except KubernetesAPIError:
+                return {
+                    "stopped": False,
+                    "evidence_kind": "unknown",
+                    "reason": "stop_api_unconfirmed",
+                    "exec_ref": exec_ref,
+                }
         observation = finish_stop(
             self.client,
             self._identity(row),

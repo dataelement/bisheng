@@ -192,6 +192,8 @@ class Platform:
         elif document["action"] == "bind":
             if row["uid"]:
                 assert row["uid"] == document["uid"]
+            if row["node_name"]:
+                assert row["node_name"] == document.get("node_name", "")
             row["uid"] = document["uid"]
             row["node_name"] = document.get("node_name", "")
             row["controller_epoch"] = document["controller_epoch"]
@@ -203,6 +205,7 @@ class Platform:
                 row["stop_state"] = "requested"
         elif document["action"] == "stopped":
             assert document["evidence"]["uid"] == row["uid"]
+            assert document["evidence"]["node_name"] == row["node_name"]
             row["stop_state"] = "confirmed"
             row["stop_evidence"] = copy.deepcopy(document["evidence"])
         elif document["action"] == "cleanup":
@@ -256,6 +259,7 @@ class Cluster:
         self.still_running = False
         self.endpoints_ready = True
         self.fail_prepare = False
+        self.delay_binding = False
 
     def get(self, resource, name):
         if (resource, name) not in self.objects:
@@ -287,6 +291,9 @@ class Cluster:
             if body["status"]["phase"] == "Succeeded":
                 for container in body["status"]["containerStatuses"]:
                     container["state"] = {"terminated": {"exitCode": 0}}
+            if self.delay_binding:
+                body["spec"].pop("nodeName")
+                body["status"] = {"phase": "Pending"}
         elif resource == "services":
             body["spec"]["clusterIP"] = "10.96.0.10"
         elif resource == "persistentvolumeclaims":
@@ -313,10 +320,14 @@ class Cluster:
         if resource == "pods":
             body["metadata"]["deletionTimestamp"] = self.clock.iso()
             if not self.still_running:
-                body["status"] = {
-                    "phase": "Succeeded",
-                    "containerStatuses": [{"name": "app", "state": {"terminated": {"exitCode": 0}}}],
-                }
+                body["status"] = (
+                    {
+                        "phase": "Succeeded",
+                        "containerStatuses": [{"name": "app", "state": {"terminated": {"exitCode": 0}}}],
+                    }
+                    if body["spec"].get("nodeName")
+                    else {"phase": "Pending"}
+                )
         else:
             del self.objects[resource, name]
         return {}
@@ -1461,3 +1472,226 @@ def test_live_other_controller_cannot_close_uncreated_intent(runtime):
     assert not any(
         e[0] in {"create_begin", "create_fence", "not_created", "delete", "patch", "cleanup"} for e in events[marker:]
     )
+
+
+# T219/T220: the real scheduler binds after create/UID registration.
+def _delayed_bound_task(runtime):
+    executor, platform, cluster, _, _, _ = runtime
+    cluster.delay_binding = True
+    row, template, _ = _uncreated_pod(runtime)
+    executor._create(row, template)
+    saved = platform.resource(row["resource_ref"])
+    assert saved["uid"] and not saved["node_name"]
+    pod = cluster.objects["pods", row["name"]]
+    assert pod["status"]["phase"] == "Pending" and not pod["spec"].get("nodeName")
+    pod["spec"]["nodeName"] = "worker-a"
+    pod["metadata"]["resourceVersion"] = str(int(pod["metadata"]["resourceVersion"]) + 1)
+    pod["status"] = {
+        "phase": "Succeeded",
+        "containerStatuses": [{"name": "transfer", "state": {"terminated": {"exitCode": 0}}}],
+    }
+    return saved, pod
+
+
+def test_delayed_scheduler_binding_is_persisted_before_stop_and_proof(runtime, monkeypatch):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    executor, platform, _, operation, events, _ = runtime
+    row, _ = _delayed_bound_task(runtime)
+    original = platform.observe_resource
+    bindings = []
+
+    def observe(ref, body):
+        if body["action"] == "bind":
+            bindings.append((body["uid"], body["node_name"]))
+        return original(ref, body)
+
+    monkeypatch.setattr(platform, "observe_resource", observe)
+    marker = len(events)
+    executor.request_stop(row["resource_ref"], operation)
+    assert executor.confirm_stopped(row["resource_ref"])["stopped"]
+    saved = platform.resource(row["resource_ref"])
+    assert bindings == [(row["uid"], "worker-a")]
+    assert saved["node_name"] == saved["stop_evidence"]["node_name"] == "worker-a"
+    subset = events[marker:]
+    assert next(i for i, e in enumerate(subset) if e[0] == "bind") < next(
+        i for i, e in enumerate(subset) if e[0] == "stop"
+    )
+    assert executor.cleanup(operation)["complete"]
+
+
+def test_confirm_recovers_real_binding_left_empty_by_previous_manager(runtime):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    executor, platform, cluster, operation, _, _ = runtime
+    row, pod = _delayed_bound_task(runtime)
+    executor._observation(row, "stop", operation_id=operation["operation_id"])
+    cluster.delete("pods", row["name"], uid=row["uid"], resource_version=pod["metadata"]["resourceVersion"])
+    assert executor.confirm_stopped(row["resource_ref"])["stopped"]
+    saved = platform.resource(row["resource_ref"])
+    assert saved["node_name"] == saved["stop_evidence"]["node_name"] == "worker-a"
+
+
+def test_prepare_progress_and_cleanup_survive_real_delayed_binding(runtime, monkeypatch):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    from dataclasses import replace
+
+    executor, platform, cluster, operation, _, _ = runtime
+    operation["kind"] = "prepare"
+    delivery = operation["payload"]["resolved_delivery"]
+    operation["payload"].update(delivery={"mode": "bundle"}, profile=delivery["profile"])
+    cluster.delay_binding = True
+    plan = replace(executor._plan(operation, "prepare-download"), helper_env={"MATERIAL_PLAN": '{"phase":"inputs"}'})
+    original = cluster.get
+    observed_pending = False
+
+    def schedule(resource, name):
+        nonlocal observed_pending
+        pod = cluster.objects.get((resource, name))
+        if resource == "pods" and pod and not pod["spec"].get("nodeName"):
+            if observed_pending:
+                pod["spec"]["nodeName"] = "worker-a"
+                pod["metadata"]["resourceVersion"] = str(int(pod["metadata"]["resourceVersion"]) + 1)
+                pod["status"] = {
+                    "phase": "Succeeded",
+                    "containerStatuses": [{"name": "transfer", "state": {"terminated": {"exitCode": 0}}}],
+                }
+            observed_pending = True
+        return original(resource, name)
+
+    monkeypatch.setattr(cluster, "get", schedule)
+    assert executor._phase(operation, "inputs", "prepare-download", {}, plan=plan)["input_key"] == "c" * 64
+    saved = platform.resource(plan.resource_ref)
+    assert saved["node_name"] == "worker-a" and saved["stop_evidence"]["node_name"] == "worker-a"
+    assert operation["result"]["prepare_progress"]["inputs"]["exec_ref"] == plan.resource_ref
+    assert executor.cleanup(operation)["complete"]
+
+
+@pytest.mark.parametrize("method", ["request_stop", "confirm_stopped"])
+@pytest.mark.parametrize("change", ["replacement_uid", "different_node", "cleared_node"])
+def test_binding_refresh_rejects_replacement_or_changed_nonempty_node(runtime, method, change):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    ref = executor.launch(operation)["exec_ref"]
+    row = platform.resource(ref)
+    pod = cluster.objects["pods", row["name"]]
+    if change == "replacement_uid":
+        pod["metadata"]["uid"] = str(uuid4())
+    elif change == "different_node":
+        pod["spec"]["nodeName"] = "worker-b"
+    else:
+        pod["spec"].pop("nodeName")
+    marker = len(events)
+    with pytest.raises(ExecutorError):
+        executor.request_stop(ref, operation) if method == "request_stop" else executor.confirm_stopped(ref)
+    assert not any(e[0] in {"bind", "stop", "stopped", "delete", "patch", "cleanup"} for e in events[marker:])
+    assert platform.resource(ref)["node_name"] == "worker-a"
+
+
+def test_binding_receipt_failure_never_deletes_or_confirms_stop(runtime, monkeypatch):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    executor, platform, _, operation, events, _ = runtime
+    row, _ = _delayed_bound_task(runtime)
+    original = platform.observe_resource
+
+    def refused(ref, body):
+        if body["action"] == "bind":
+            raise PlatformError("platform_unreachable", 503)
+        return original(ref, body)
+
+    monkeypatch.setattr(platform, "observe_resource", refused)
+    marker = len(events)
+    with pytest.raises(PlatformError):
+        executor.request_stop(row["resource_ref"], operation)
+    assert not any(e[0] in {"stop", "stopped", "delete", "patch", "cleanup"} for e in events[marker:])
+    assert not platform.resource(row["resource_ref"])["node_name"]
+
+
+def test_completed_never_scheduled_proof_is_not_rewritten_as_later_binding(runtime):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    executor, platform, _, _, events, _ = runtime
+    row, pod = _delayed_bound_task(runtime)
+    saved = platform.rows[row["resource_ref"]]
+    saved.update(stop_state="confirmed", stop_evidence={"evidence_kind": "never_scheduled", "node_name": ""})
+    pod["metadata"]["deletionTimestamp"] = "2026-10-21T04:00:00+00:00"
+    marker = len(events)
+    with pytest.raises(ExecutorError):
+        executor.confirm_stopped(row["resource_ref"])
+    assert not any(e[0] in {"bind", "stopped", "delete", "patch", "cleanup"} for e in events[marker:])
+    assert not platform.resource(row["resource_ref"])["node_name"]
+
+
+@pytest.mark.parametrize("status", [404, 403, None])
+def test_binding_read_uncertainty_never_deletes_or_confirms(runtime, monkeypatch, status):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, _ = _delayed_bound_task(runtime)
+
+    def unavailable(*_):
+        raise KubernetesAPIError("transport_unavailable" if status is None else "api_refused", status)
+
+    monkeypatch.setattr(cluster, "get", unavailable)
+    marker = len(events)
+    assert not executor.request_stop(row["resource_ref"], operation)["stopped"]
+    assert not executor.confirm_stopped(row["resource_ref"])["stopped"]
+    assert not any(e[0] in {"bind", "stopped", "delete", "patch", "cleanup"} for e in events[marker:])
+    assert not platform.resource(row["resource_ref"])["node_name"]
+
+
+@pytest.mark.parametrize("field", ["uid", "node_name", "resource_ref"])
+def test_changed_binding_receipt_never_permits_stop_effect(runtime, monkeypatch, field):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    executor, platform, _, operation, events, _ = runtime
+    row, _ = _delayed_bound_task(runtime)
+    original = platform.observe_resource
+
+    def changed(ref, body):
+        result = original(ref, body)
+        if body["action"] == "bind":
+            result[field] = "changed"
+        return result
+
+    monkeypatch.setattr(platform, "observe_resource", changed)
+    marker = len(events)
+    with pytest.raises(ExecutorError, match="resource_binding_receipt_refused"):
+        executor.request_stop(row["resource_ref"], operation)
+    assert not any(e[0] in {"stop", "stopped", "delete", "patch", "cleanup"} for e in events[marker:])
+
+
+def test_lost_binding_receipt_resumes_same_uid_stop_without_rebinding(runtime, monkeypatch):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    executor, platform, _, operation, events, _ = runtime
+    row, _ = _delayed_bound_task(runtime)
+    original = platform.observe_resource
+    lost = False
+
+    def loss(ref, body):
+        nonlocal lost
+        result = original(ref, body)
+        if body["action"] == "bind" and not lost:
+            lost = True
+            raise PlatformError("platform_unreachable", 503)
+        return result
+
+    monkeypatch.setattr(platform, "observe_resource", loss)
+    marker = len(events)
+    with pytest.raises(PlatformError):
+        executor.request_stop(row["resource_ref"], operation)
+    assert not any(e[0] in {"stop", "stopped", "delete", "patch"} for e in events[marker:])
+    assert platform.resource(row["resource_ref"])["node_name"] == "worker-a"
+    executor.request_stop(row["resource_ref"], operation)
+    assert executor.confirm_stopped(row["resource_ref"])["stopped"]
+    assert len([e for e in events[marker:] if e[0] == "bind"]) == 1
+
+
+def test_never_scheduled_stop_does_not_invent_a_node_binding(runtime):
+    """覆盖 AC: AC-33、AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    cluster.delay_binding = True
+    row, template, _ = _uncreated_pod(runtime)
+    executor._create(row, template)
+    marker = len(events)
+    executor.request_stop(row["resource_ref"], operation)
+    result = executor.confirm_stopped(row["resource_ref"])
+    assert result["stopped"] and result["evidence_kind"] == "never_scheduled"
+    saved = platform.resource(row["resource_ref"])
+    assert saved["node_name"] == saved["stop_evidence"]["node_name"] == ""
+    assert not any(e[0] == "bind" for e in events[marker:])
