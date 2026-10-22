@@ -9,12 +9,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import NAMESPACE_URL, uuid4, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import httpx
 import pytest
 
 from runtime_manager.config import Config
+from runtime_manager.executors.protocol import ExecutorError
 from runtime_manager.k8s_client import KubernetesAPIError
 from runtime_manager.k8s_config import KubernetesConfig
 from runtime_manager.k8s_templates import RESOURCE_LABEL, STOP_FINALIZER, production_name
@@ -127,7 +128,10 @@ class Platform:
             "protected_since_creation": True,
             "binding_policy_verified": True,
             "template": copy.deepcopy(document["template"]),
-            "observed_state": {},
+            "spec_digest": "a" * 64,
+            "observed_state": {"creation": {"version": 1, "state": "unattempted"}}
+            if document["template"]["kind"] == "Pod"
+            else {},
             "controller_epoch": document["controller_epoch"],
         }
         previous = self.rows.get(row["resource_ref"])
@@ -151,7 +155,41 @@ class Platform:
         self._fence({key: document[key] for key in ("holder_id", "controller_epoch")})
         self.events.append((document["action"], resource_ref))
         row = self.rows[resource_ref]
-        if document["action"] == "bind":
+        creation = row.get("observed_state", {}).get("creation", {})
+        if document["action"] == "create_begin":
+            assert row["kind"] == "Pod" and row["uid"] is None and row["stop_requested_at"] is None
+            assert creation == {"version": 1, "state": "unattempted"}
+            assert str(UUID(document["create_attempt_id"])) == document["create_attempt_id"]
+            row["observed_state"]["creation"] = {
+                "version": 1,
+                "state": "started",
+                "create_attempt_id": document["create_attempt_id"],
+                "controller_epoch": document["controller_epoch"],
+            }
+        elif document["action"] == "create_rejected":
+            assert row["uid"] is None and creation["state"] == "started"
+            assert creation["create_attempt_id"] == document["create_attempt_id"]
+            assert creation["controller_epoch"] == document["controller_epoch"] and document["http_status"] == 403
+            creation.update(state="rejected", http_status=403)
+        elif document["action"] == "create_fence":
+            assert row["uid"] is None and creation.get("state") in {"unattempted", "rejected"}
+            creation.update(outcome=creation["state"], state="fenced")
+            row["stop_requested_at"] = row["stop_requested_at"] or self.clock.iso()
+            row["stop_state"] = "requested"
+            row["controller_epoch"] = document["controller_epoch"]
+        elif document["action"] == "not_created":
+            assert row["uid"] is None and creation.get("state") in {"fenced", "not_created"}
+            assert document["evidence"] == {
+                "evidence_kind": "not_created",
+                "namespace": row["namespace"],
+                "name": row["name"],
+                "observed_at": self.clock.iso(),
+                "api_status": 404,
+            }
+            creation["state"] = "not_created"
+            row["stop_state"] = "confirmed"
+            row["stop_evidence"] = copy.deepcopy(document["evidence"])
+        elif document["action"] == "bind":
             if row["uid"]:
                 assert row["uid"] == document["uid"]
             row["uid"] = document["uid"]
@@ -169,6 +207,9 @@ class Platform:
             row["stop_evidence"] = copy.deepcopy(document["evidence"])
         elif document["action"] == "cleanup":
             assert document["uid"] == row["uid"]
+            assert row["uid"] or (
+                creation.get("state") == "not_created" and row["stop_evidence"]["evidence_kind"] == "not_created"
+            )
             row["cleanup_state"] = "complete"
         return copy.deepcopy(row)
 
@@ -1098,3 +1139,325 @@ def test_recovered_controller_only_cleans_an_expired_prepare_without_starting_it
     assert platform.operations[operation["operation_id"]]["result"]["cleanup_complete"] is True
     assert platform.operations[operation["operation_id"]]["result"]["stopped"] is True
     assert not platform.rows and not cluster.objects
+
+
+# T205/T206: creation rejection is distinct from a missing formerly-created UID.
+def _uncreated_pod(runtime, *, purpose="prepare-download"):
+    from runtime_manager.k8s_templates import pod_template
+
+    executor, _, _, operation, _, _ = runtime
+    plan = executor._plan(operation, purpose)
+    template = pod_template(plan)
+    row = executor._intent(operation, plan, template, plan.resource_ref)
+    return row, template, plan
+
+
+def test_pod_create_attempt_is_committed_before_post(runtime, monkeypatch):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, _, events, _ = runtime
+    row, template, _ = _uncreated_pod(runtime)
+    original = cluster.create
+
+    def create(resource, body):
+        saved = platform.resource(row["resource_ref"])["observed_state"]["creation"]
+        assert saved["state"] == "started" and saved["create_attempt_id"]
+        return original(resource, body)
+
+    monkeypatch.setattr(cluster, "create", create)
+    executor._create(row, template)
+    begin = next(i for i, e in enumerate(events) if e[0] == "create_begin")
+    post = next(i for i, e in enumerate(events) if e[:2] == ("create", "pods"))
+    assert begin < post
+
+
+def test_explicit_create_403_can_close_uncreated_pod_and_scratch(runtime, monkeypatch):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, template, plan = _uncreated_pod(runtime)
+    executor._volume(operation, plan)
+    original = cluster.create
+
+    def refused(resource, body):
+        if resource == "pods":
+            raise KubernetesAPIError("k8s_api_refused", 403)
+        return original(resource, body)
+
+    monkeypatch.setattr(cluster, "create", refused)
+    with pytest.raises(KubernetesAPIError):
+        executor._create(row, template)
+    assert platform.resource(row["resource_ref"])["observed_state"]["creation"]["state"] == "rejected"
+    assert executor.cleanup(operation) == {"complete": True}
+    saved = platform.resource(row["resource_ref"])
+    assert saved["uid"] is None and saved["stop_state"] == "confirmed"
+    assert saved["stop_evidence"]["evidence_kind"] == "not_created" and saved["cleanup_state"] == "complete"
+    assert not cluster.objects
+    assert not any(e[:2] in {("delete", "pods"), ("patch", "pods"), ("stopped", row["resource_ref"])} for e in events)
+    fence = next(i for i, e in enumerate(events) if e[0] == "create_fence")
+    proof = next(i for i, e in enumerate(events) if e[0] == "not_created")
+    scratch_delete = next(i for i, e in enumerate(events) if e[:2] == ("delete", "persistentvolumeclaims"))
+    assert fence < proof < scratch_delete
+
+
+@pytest.mark.parametrize("status", [None, 409, 500, 429, 400, 401, 422])
+def test_uncertain_or_unapproved_create_outcome_never_closes_missing_pod(runtime, monkeypatch, status):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, template, plan = _uncreated_pod(runtime)
+    executor._volume(operation, plan)
+
+    def uncertain(*_):
+        raise KubernetesAPIError("transport_unavailable" if status is None else "k8s_api_refused", status)
+
+    monkeypatch.setattr(cluster, "create", uncertain)
+    with pytest.raises(KubernetesAPIError):
+        executor._create(row, template)
+    assert platform.resource(row["resource_ref"])["observed_state"]["creation"]["state"] == "started"
+    assert executor.cleanup(operation)["complete"] is False
+    assert not any(e[0] in {"create_fence", "not_created", "stopped", "cleanup", "delete", "patch"} for e in events)
+    assert any(kind == "persistentvolumeclaims" for kind, _ in cluster.objects)
+
+
+@pytest.mark.parametrize("state", ["unattempted", "rejected", "fenced"])
+def test_new_controller_resumes_only_proven_uncreated_cleanup(runtime, state, monkeypatch):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, clock = runtime
+    row, _, _ = _uncreated_pod(runtime)
+    creation = platform.rows[row["resource_ref"]]["observed_state"]["creation"]
+    creation.update(state=state)
+    if state != "unattempted":
+        creation.update(create_attempt_id=str(uuid4()), controller_epoch=1, http_status=403)
+    if state == "fenced":
+        creation["outcome"] = "rejected"
+    clock.sleep(31)
+    monkeypatch.setattr(cluster, "create", lambda *_: pytest.fail("cleanup must not POST"))
+    assert executor.cleanup(operation)["complete"]
+    assert platform.resource(row["resource_ref"])["uid"] is None and executor.controller_epoch == 2
+    assert len([e for e in events if e[0] == "create_fence"]) == (state != "fenced")
+
+
+@pytest.mark.parametrize(
+    "creation", [{}, {"version": 1, "state": "started"}, {"version": True, "state": "unattempted"}]
+)
+def test_legacy_unknown_and_started_missing_intents_cannot_retry_or_cleanup(runtime, monkeypatch, creation):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, template, _ = _uncreated_pod(runtime)
+    platform.rows[row["resource_ref"]]["observed_state"] = {"creation": creation} if creation else {}
+    row = platform.resource(row["resource_ref"])
+    monkeypatch.setattr(cluster, "create", lambda *_: pytest.fail("unknown intent must not be re-posted"))
+    with pytest.raises(ExecutorError, match="pod_creation_unconfirmed"):
+        executor._create(row, template)
+    assert executor.cleanup(operation)["complete"] is False
+    assert not any(
+        e[0] in {"create_begin", "create_fence", "not_created", "cleanup", "delete", "patch"} for e in events
+    )
+
+
+@pytest.mark.parametrize("creation_state", ["started", "rejected", "legacy"])
+def test_fresh_existing_unbound_pod_uses_uid_stop_instead_of_noncreation(runtime, creation_state):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, template, _ = _uncreated_pod(runtime)
+    created = cluster.create("pods", template)
+    platform.rows[row["resource_ref"]]["observed_state"] = (
+        {} if creation_state == "legacy" else {"creation": {"version": 1, "state": creation_state}}
+    )
+    assert executor.cleanup(operation)["complete"]
+    saved = platform.resource(row["resource_ref"])
+    assert saved["uid"] == created["metadata"]["uid"]
+    assert saved["stop_evidence"]["evidence_kind"] == "kubelet_terminal"
+    assert any(e[:2] == ("delete", "pods") for e in events)
+    assert not any(e[0] in {"create_fence", "not_created"} for e in events)
+
+
+def test_noncreation_proof_never_removes_finalizer_from_reappearing_object(runtime):
+    """覆盖 AC: AC-49、AC-52."""
+    from runtime_manager.executors.protocol import ExecutorError
+
+    executor, platform, cluster, operation, events, _ = runtime
+    row, template, _ = _uncreated_pod(runtime)
+    assert executor.cleanup(operation)["complete"]
+    cluster.create("pods", template)
+    marker = len(events)
+    with pytest.raises(ExecutorError):
+        executor.confirm_stopped(row["resource_ref"])
+    assert not any(e[0] in {"bind", "delete", "patch", "cleanup", "stopped"} for e in events[marker:])
+    assert platform.resource(row["resource_ref"])["uid"] is None
+
+
+def test_create_receipt_loss_does_not_send_pod_post(runtime, monkeypatch):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, _, _, _ = runtime
+    row, template, _ = _uncreated_pod(runtime)
+    original = platform.observe_resource
+
+    def loss(ref, document):
+        result = original(ref, document)
+        if document["action"] == "create_begin":
+            raise PlatformError("platform_unreachable", 503)
+        return result
+
+    monkeypatch.setattr(platform, "observe_resource", loss)
+    monkeypatch.setattr(cluster, "create", lambda *_: pytest.fail("unacknowledged begin must not POST"))
+    with pytest.raises(PlatformError):
+        executor._create(row, template)
+    assert platform.resource(row["resource_ref"])["observed_state"]["creation"]["state"] == "started"
+
+
+def test_rejection_receipt_loss_keeps_uncertainty(runtime, monkeypatch):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, template, _ = _uncreated_pod(runtime)
+    original = platform.observe_resource
+
+    def loss(ref, document):
+        if document["action"] == "create_rejected":
+            raise PlatformError("platform_unreachable", 503)
+        return original(ref, document)
+
+    monkeypatch.setattr(platform, "observe_resource", loss)
+    monkeypatch.setattr(cluster, "create", lambda *_: (_ for _ in ()).throw(KubernetesAPIError("refused", 403)))
+    with pytest.raises(PlatformError):
+        executor._create(row, template)
+    assert executor.cleanup(operation)["complete"] is False
+    assert not any(e[0] in {"create_fence", "not_created", "cleanup"} for e in events)
+
+
+def test_uncertain_fresh_read_after_fence_cannot_persist_noncreation(runtime, monkeypatch):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, _, _ = _uncreated_pod(runtime)
+    original = cluster.get
+
+    def read(resource, name):
+        if (
+            resource == "pods"
+            and platform.resource(row["resource_ref"])["observed_state"]["creation"]["state"] == "fenced"
+        ):
+            raise KubernetesAPIError("transport_unavailable")
+        return original(resource, name)
+
+    monkeypatch.setattr(cluster, "get", read)
+    with pytest.raises(KubernetesAPIError):
+        executor.cleanup(operation)
+    assert not any(e[0] in {"not_created", "cleanup", "delete", "patch"} for e in events)
+
+
+def test_unknown_second_pod_blocks_scratch_cleanup(runtime):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    first, _, plan = _uncreated_pod(runtime)
+    executor._volume(operation, plan)
+    second, _, _ = _uncreated_pod(runtime, purpose="prepare-upload")
+    platform.rows[second["resource_ref"]]["observed_state"] = {}
+    assert executor.cleanup(operation)["complete"] is False
+    assert platform.resource(first["resource_ref"])["stop_evidence"]["evidence_kind"] == "not_created"
+    assert any(kind == "persistentvolumeclaims" for kind, _ in cluster.objects)
+    assert not any(e[0] in {"delete", "patch", "cleanup"} for e in events)
+
+
+@pytest.mark.parametrize(
+    "field", ["resource_ref", "operation_id", "spec_digest", "uid", "state", "attempt", "epoch", "version"]
+)
+def test_invalid_create_begin_receipt_never_sends_post(runtime, monkeypatch, field):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, _, _, _ = runtime
+    row, template, _ = _uncreated_pod(runtime)
+    original = platform.observe_resource
+
+    def changed(ref, document):
+        result = original(ref, document)
+        if document["action"] == "create_begin":
+            creation = result["observed_state"]["creation"]
+            if field in {"resource_ref", "operation_id", "spec_digest", "uid"}:
+                result[field] = "changed"
+            elif field == "state":
+                creation["state"] = "rejected"
+            elif field == "attempt":
+                creation["create_attempt_id"] = str(uuid4())
+            elif field == "epoch":
+                creation["controller_epoch"] += 1
+            else:
+                creation["version"] = True
+        return result
+
+    monkeypatch.setattr(platform, "observe_resource", changed)
+    monkeypatch.setattr(cluster, "create", lambda *_: pytest.fail("invalid creation receipt must not POST"))
+    with pytest.raises(ExecutorError, match="pod_creation_receipt_refused"):
+        executor._create(row, template)
+
+
+def test_lost_create_response_recovers_real_uid_without_second_post(runtime, monkeypatch):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, template, _ = _uncreated_pod(runtime)
+    original = cluster.create
+
+    def lost(resource, body):
+        original(resource, body)
+        raise KubernetesAPIError("transport_unavailable")
+
+    monkeypatch.setattr(cluster, "create", lost)
+    with pytest.raises(KubernetesAPIError):
+        executor._create(row, template)
+    uid = cluster.objects["pods", row["name"]]["metadata"]["uid"]
+    monkeypatch.setattr(cluster, "create", lambda *_: pytest.fail("must recover created UID without another POST"))
+    assert executor._create(platform.resource(row["resource_ref"]), template)["metadata"]["uid"] == uid
+    assert executor.cleanup(operation)["complete"]
+    assert len([e for e in events if e[:2] == ("create", "pods")]) == 1
+    assert not any(e[0] in {"create_fence", "not_created"} for e in events)
+
+
+@pytest.mark.parametrize("action", ["create_fence", "not_created"])
+def test_lost_noncreation_receipt_resumes_durable_fence_without_post(runtime, monkeypatch, action):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, _, _ = _uncreated_pod(runtime)
+    original = platform.observe_resource
+    lost = False
+
+    def loss(ref, document):
+        nonlocal lost
+        result = original(ref, document)
+        if document["action"] == action and not lost:
+            lost = True
+            raise PlatformError("platform_unreachable", 503)
+        return result
+
+    monkeypatch.setattr(platform, "observe_resource", loss)
+    monkeypatch.setattr(cluster, "create", lambda *_: pytest.fail("cleanup must not create"))
+    with pytest.raises(PlatformError):
+        executor.cleanup(operation)
+    assert executor.cleanup(operation)["complete"]
+    assert len([e for e in events if e[0] == "create_fence"]) == 1
+    assert len([e for e in events if e[0] == "not_created"]) == 1
+    assert platform.resource(row["resource_ref"])["uid"] is None
+
+
+def test_foreign_object_cannot_be_bound_or_closed_as_uncreated(runtime):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, cluster, operation, events, _ = runtime
+    row, template, _ = _uncreated_pod(runtime)
+    cluster.create("pods", template)
+    cluster.objects["pods", row["name"]]["metadata"]["labels"][RESOURCE_LABEL] = str(uuid4())
+    marker = len(events)
+    with pytest.raises(ExecutorError, match="resource_uid_or_scope_mismatch"):
+        executor.cleanup(operation)
+    assert not any(
+        e[0] in {"bind", "create_fence", "not_created", "delete", "patch", "cleanup"} for e in events[marker:]
+    )
+    assert platform.resource(row["resource_ref"])["uid"] is None
+
+
+def test_live_other_controller_cannot_close_uncreated_intent(runtime):
+    """覆盖 AC: AC-49、AC-52."""
+    executor, platform, _, operation, events, clock = runtime
+    _uncreated_pod(runtime)
+    clock.sleep(31)
+    platform.claim_controller("other-live-holder", platform.epoch)
+    marker = len(events)
+    with pytest.raises(PlatformError, match="controller_lease_held"):
+        executor.cleanup(operation)
+    assert not any(
+        e[0] in {"create_begin", "create_fence", "not_created", "delete", "patch", "cleanup"} for e in events[marker:]
+    )
