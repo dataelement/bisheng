@@ -14,7 +14,7 @@ def test_data_helper_has_only_target_app_and_disposable_output(tmp_path):
     body = service.payload("app-a", "rows", {"table": "data"}, output, "sha256:" + "a" * 64, "job")
     assert body["HostConfig"]["NetworkMode"] == "none"
     assert body["HostConfig"]["Binds"] == [
-        "/host/data/apps/app-a/db:/app-data/apps/app-a/db:ro",
+        "/host/data/apps/app-a/db:/app-data/apps/app-a/db:rw",
         "/host/data/data-jobs/job:/app-data/exports:rw",
     ]
     assert body["Env"] == ["PYTHONDONTWRITEBYTECODE=1"]

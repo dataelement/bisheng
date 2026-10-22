@@ -59,7 +59,10 @@ class DataExecutor:
                 "Tmpfs": {"/tmp": "rw,nosuid,nodev,noexec,size=32m"},
                 "LogConfig": {"Type": "json-file", "Config": {"max-size": "1m", "max-file": "1"}},
                 "Binds": [
-                    f"{host_path(self.config, self.config.app_data_dir(app_id))}:/app-data/apps/{app_id}/db:{'rw' if action == 'update' else 'ro'}",
+                    # WAL readers may create/lock sidecars even with SQL mode=ro.
+                    # The trusted helper sees only this app; AppDbService keeps
+                    # read actions on read-only SQLite connections.
+                    f"{host_path(self.config, self.config.app_data_dir(app_id))}:/app-data/apps/{app_id}/db:rw",
                     f"{host_path(self.config, output)}:/app-data/exports:rw",
                 ],
             },
