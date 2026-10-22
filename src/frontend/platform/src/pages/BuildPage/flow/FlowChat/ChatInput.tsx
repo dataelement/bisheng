@@ -1,46 +1,42 @@
 // @ts-strict-ignore
-import { Button, Textarea, notification } from '@bisheng/ui';
+import { ConversationComposer } from '@bisheng/chat';
+import { notification } from '@bisheng/ui';
 
 
 
 import { locationContext } from "@/contexts/locationContext";
-import { Outlined } from "bisheng-icons";
 import { useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFileLoading } from "../hooks/useFileLoading";
-// import GuideQuestions from "./GuideQuestions";
 // import { useMessageStore } from "./messageStore";
 import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
-import { FlowTooltip as Tip } from "@/pages/BuildPage/flow/FlowTooltip";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { fileAcceptToInputAccept,normalizeFileAccept } from "@/util/fileAcceptUtils";
 import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import DragDropOverlay from "./DragDropOverlay";
-import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 import { useFileDropAndPaste } from "./useFileDropAndPaste";
-const GuideQuestionsAny = GuideQuestions as any;
 export const FileTypes = {
     ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.OFD', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
     IMAGE: ['.PNG', '.JPEG', '.JPG', '.BMP'],
     FILE: ['.PDF', '.OFD', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
     MEDIA: ['.MP3', '.WAV', '.M4A', '.AAC', '.FLAC', '.OGG', '.MP4', '.MOV', '.AVI', '.MKV', '.WEBM'],
 }
-export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBeforSend, onLoad }) {
+export default function ChatInput({ autoRun, wsUrl, onBeforSend, onLoad }) {
 
-    const { t } = useTranslation()
+    const eventTarget = useMessageStore(state => state.eventTarget)
+    const { t } = useTranslation(['bs', 'shared'])
     const { appConfig } = useContext(locationContext)
     const [inputLock, setInputLock] = useState({ locked: true, reason: '' })
-    const questionsRef = useRef(null)
     const inputNodeIdRef = useRef('') // 当前输入框节点id
     const messageIdRef = useRef('') // 当前输入框节点messageId
     const [accepts, setAccepts] = useState('*') // 接受文件类型
     const [uploadLock, setUploadLock] = useState(false) // 上传锁
-    const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+    const { data: linsightConfig } = useLinsightConfig();
     const { isLoading: audioOpening } = useAudioStore()
-    const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
+    const [showWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
     const __store: any = useMessageStore() as any
     const {
         messages,
@@ -54,12 +50,11 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         streamWsMsg,
         insetSeparator,
         destory,
-        insetNodeRun,
-        setShowGuideQuestion
+        insetNodeRun, setQuestions, setInputLocked
     } = __store
+    useEffect(() => { setInputLocked(inputLock.locked); }, [inputLock.locked, setInputLocked]);
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
-    const continueRef = useRef(false)
     // 停止状态
     const [stop, setStop] = useState({
         show: true,
@@ -145,11 +140,8 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         await createWebSocket()
         sendWsMsg(wsMsg)
         // 滚动聊天到底
-        const messageDom = document.getElementById('message-panne')
-        if (messageDom) {
-            messageDom.scrollTop = messageDom.scrollHeight;
-        }
-        questionsRef.current.clear()
+
+        setQuestions([])
     }
     const sendWsMsg = async (msg) => {
         try {
@@ -299,7 +291,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             }, 60);
             return
         } else if (data.category === 'guide_question') {
-            return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
+            return setQuestions(data.message.guide_question.filter(q => q))
         } else if (data.category === 'stream_msg') {
             streamWsMsg(data)
         } else if (data.category === 'end_cover' && data.type === 'end_cover') {
@@ -384,28 +376,15 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                 }
             })
         }
-        document.addEventListener('inputFormEvent', handleSendForm)
-        document.addEventListener('outputMsgEvent', handleOutPutEvent)
-        document.addEventListener('userResendMsgEvent', handleCustomEvent)
+        eventTarget.addEventListener('inputFormEvent', handleSendForm)
+        eventTarget.addEventListener('outputMsgEvent', handleOutPutEvent)
+        eventTarget.addEventListener('userResendMsgEvent', handleCustomEvent)
         return () => {
-            document.removeEventListener('inputFormEvent', handleSendForm)
-            document.removeEventListener('outputMsgEvent', handleOutPutEvent)
-            document.removeEventListener('userResendMsgEvent', handleCustomEvent)
+            eventTarget.removeEventListener('inputFormEvent', handleSendForm)
+            eventTarget.removeEventListener('outputMsgEvent', handleOutPutEvent)
+            eventTarget.removeEventListener('userResendMsgEvent', handleCustomEvent)
         }
     }, [inputLock.locked, showWhenLocked])
-    // 点击引导词
-    const handleClickGuideWord = (message) => {
-        if (inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
-        inputRef.current.value = message
-        handleSendClick()
-    }
-    // auto input height
-    const handleTextAreaHeight = (e) => {
-        const textarea = e.target
-        textarea.style.height = 'auto'
-        textarea.style.height = textarea.scrollHeight + 'px'
-        // setInputEmpty(textarea.value.trim() === '')
-    }
     // stop click
     // const handleStopClick = () => {
     //     if (stop.disable) return
@@ -468,66 +447,16 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             inputFilesRef.current?.upload(files);
         }
     });
-    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
-        {isDragging && <DragDropOverlay />}
-        <div className={`relative pr-4 ${clear && 'pl-9'}`}>
-            {/* 引导问题 */}
-            <GuideQuestionsAny
-                ref={questionsRef}
-                locked={inputLock.locked}
-                onClick={handleClickGuideWord}
-            />
-            {/* restart */}
-            <div className="flex absolute left-0 top-3 z-10">
-                <Tip side={`${version === 'v2' ? 'right' : 'top-right'}`} content={t("rerunWorkflow", { ns: "flow" })}>
-                    <Button className="rounded-full" disabled={restarted} variant="text" size="medium" onClick={handleRestartClick} color="default" iconOnly><Outlined.Refresh size={18} /></Button>
-                </Tip>
-            </div>
-            {/* form switch */}
-            <div className="flex absolute left-3 top-4 z-10">
-                {
-                    form && <div
-                        className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                    // onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><Outlined.Upload size={16} className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></Outlined.Upload></div>
-                }
-            </div>
-            {/* 语音转文字 */}
-            <div className={` ${!inputLock.locked && uploadLock && 'mr-4'}`}>
-                {linsightConfig?.asr_model?.id && <SpeechToTextComponent disabled={inputLock.locked} onChange={handleSpeechRecognition} />}
-            </div>
-            {/* 附件 */}
-            {!inputLock.locked && uploadLock && <ChatFiles
-                ref={inputFilesRef}
-                accepts={accepts}
-                disabled={audioOpening}
-                v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'}
-                onChange={loadingChange} />}
-            {/* send */}
-            <div className="flex gap-2 absolute right-7 top-4 z-10">
-                <div
-                    id="bs-send-btn"
-                    className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
-                    onClick={() => { !inputLock.locked && !fileUploading && !audioOpening && handleSendClick() }}>
-                    <Outlined.Send size={16} className={`${inputLock.locked || fileUploading || audioOpening ? 'text-muted-foreground' : 'text-foreground'}`} />
-                </div>
-            </div>
-            {/* stop & 重置 */}
-            <div className="absolute w-full flex justify-center left-0 bottom-16">
-                {!stop.show && <Button className="rounded-full bg-[#fff] dark:bg-[#1B1B1B]" variant="outlined" disabled={restarted} onClick={handleRestartClick} color="default">
-                    <Outlined.Refresh className="mr-1" size={16} />
-                    {t('chat.runNewWorkflow')}
-                </Button>
-                }
-            </div>
-            {/* question */}
-            <Textarea id="bs-send-input" ref={inputRef} rows={1} style={{ height: 56 }} disabled={inputLock.locked} onInput={handleTextAreaHeight} onPaste={handlePaste} placeholder={placholder} onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        !inputLock.locked && handleSendClick()
-                    }
-                }} textareaClassName={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#131415] text-gray-800" + (form && ' pl-10')}></Textarea>
-        </div>
-        <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>
-    </div>
-};
+    return <div className="absolute bottom-0 w-full z-10">
+        <ConversationComposer inputRef={inputRef} canExecute inputDisabled={inputLock.locked}
+            busy={fileUploading || audioOpening} hasAttachments={getFileIds().length > 0}
+            showRestart={!stop.show} restartDisabled={restarted}
+            labels={{ attach: t('shared:app_chat.attach'), send: t('shared:app_chat.send'), stop: t('shared:app_chat.stop'), restart: t('chat.runNewWorkflow') }}
+            placeholder={placholder} hint={appConfig.dialogTips} onSend={handleSendClick} onRestart={handleRestartClick}
+            onAttach={!inputLock.locked && uploadLock ? () => inputFilesRef.current?.openPicker() : undefined} attachmentDisabled={audioOpening}
+            onPaste={handlePaste} overlay={isDragging ? <DragDropOverlay /> : undefined}
+            voice={linsightConfig?.asr_model?.id ? <SpeechToTextComponent inline disabled={inputLock.locked} onChange={handleSpeechRecognition} /> : undefined}
+            attachments={!inputLock.locked && uploadLock ? <ChatFiles ref={inputFilesRef} accepts={accepts}
+                disabled={audioOpening} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} /> : undefined} />
+    </div>;
+}

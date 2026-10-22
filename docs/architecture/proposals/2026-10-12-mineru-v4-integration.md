@@ -79,6 +79,8 @@ knowledges:
 
 `initdb_config.yaml` 中加入默认禁用的 `mineru_v4` 示例块。既有安装由 `ConfigService.merge_missing_config()` 向 `knowledges` 补入缺失的子块，不覆盖旧值；实际切换需更新 DB 配置中的 `loader_provider`。读取路径有约 100 秒 Redis 缓存，部署验证必须确认最终生效值。`KnowledgeConf.image_parser_enabled` 增加 `mineru_v4` 判断；`_build_pdf_loader()` 增加一条显式分支。旧 `mineru` 节点和默认提供方不变。
 
+用户可见的配置说明和错误提示统一标识为 **MinerU V4**，例如 `MinerU V4 parse job timed out`。`/v1` 仅表示 HTTP 接口版本，不用于用户提示中的产品版本名称。
+
 ## 5. V1 请求生命周期
 
 ```text

@@ -2,7 +2,7 @@
 import { Button } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import MessagePanne from "@/components/bs-comp/chatComponent/MessagePanne";
-import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { MessageStoreProvider as AssistantMessageStoreProvider, useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 import { Tooltip } from "@bisheng/ui";
@@ -11,14 +11,13 @@ import { getAssistantDetailApi } from "@/controllers/API/assistant";
 import { getDeleteFlowApi } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import ChatMessages from "@/pages/BuildPage/flow/FlowChat/ChatMessages";
-import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
-import { useAssistantStore } from "@/store/assistantStore";
+import { MessageStoreProvider as WorkflowMessageStoreProvider, useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { AppNumType } from "@/types/app";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
-export default function AppChatDetail() {
+function AppChatDetailContent() {
     const { fid, cid, type: typeStr } = useParams()
     const type = Number(typeStr)
     // console.log('fid, cid :>> ', fid, cid);
@@ -26,7 +25,7 @@ export default function AppChatDetail() {
 
     const loading = false;
     const title = t('log.detailedSession');
-    const { assistantState, setAssistantDetail, destroy } = useAssistantStore()
+    const [assistantState, setAssistantDetail] = useState({ name: '', logo: '' })
     const { loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
     const {
         loadHistoryMsg: loadFlowHistoryMsg,
@@ -35,7 +34,8 @@ export default function AppChatDetail() {
         clearMsgs: clearFlowMsgs } = useFlowMessageStore()
 
     useEffect(() => {
-        type === AppNumType.ASSISTANT && captureAndAlertRequestErrorHoc(getAssistantDetailApi(fid, 'v1').then(setAssistantDetail))
+        let active = true
+        type === AppNumType.ASSISTANT && captureAndAlertRequestErrorHoc(getAssistantDetailApi(fid, 'v1').then(detail => { if (active) setAssistantDetail(detail) }))
 
         type === AppNumType.FLOW ? loadFlowHistoryMsg(fid, cid, {
             appendHistory: true,
@@ -47,11 +47,11 @@ export default function AppChatDetail() {
         changeChatId(cid)
         changeFlowChatId(cid)
         return () => {
+            active = false
             clearMsgs()
             clearFlowMsgs()
-            type === AppNumType.ASSISTANT && destroy()
         }
-    }, [])
+    }, [fid, cid, type])
 
     const logo = useAppAvatar(cid, type, assistantState)
 
@@ -71,7 +71,7 @@ export default function AppChatDetail() {
             <div className="h-[calc(100vh-132px-var(--license-banner-h,0px))]">
                 {type === AppNumType.FLOW
                     ? <ChatMessages logo={logo} debug useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
-                    : <MessagePanne logo={logo} debug useName='' guideWord=''
+                    : <MessagePanne chat={assistantState} logo={logo} debug useName='' guideWord=''
                         loadMore={() => loadMoreHistoryMsg(fid, true)}
                     ></MessagePanne>
                 }
@@ -99,4 +99,8 @@ const useAppAvatar = (cid, flowType, assistantState) => {
     return flowType === AppNumType.ASSISTANT ?
         <AppAvator id={assistantState.name} flowType={flowType} url={assistantState.logo} className="size-5 min-w-5"></AppAvator> :
         <AppAvator id={title} flowType={flowType} url={logo} className="size-5 min-w-5"></AppAvator>
+}
+export default function AppChatDetail() {
+    const { fid, cid, type } = useParams();
+    return <AssistantMessageStoreProvider key={`${fid}:${cid}:${type}`}><WorkflowMessageStoreProvider><AppChatDetailContent /></WorkflowMessageStoreProvider></AssistantMessageStoreProvider>;
 }

@@ -1,17 +1,20 @@
 // @ts-strict-ignore
-import { getChatHistory } from '@/controllers/API';
+import { startAssistantForHost, assistantStreamForHost } from '@bisheng/chat/core';
 import { ChatMessageType } from '@/types/chat';
 import { formatDate } from '@/util/utils';
-import cloneDeep from 'lodash-es/cloneDeep';
-import { create } from 'zustand';
-import { normalizeCitationItems } from './citationUtils';
+import { createStore } from 'zustand/vanilla';
+import { createHistoryAdapter } from '@/components/bs-comp/appChat/historyAdapter';
+import { createMessageStoreScope } from '@/components/bs-comp/appChat/createMessageStoreScope';
 
 /**
  * 会话消息管理
  */
 
 type State = {
+    eventTarget: EventTarget,
+    historyGeneration: number,
     running: boolean,
+    inputLocked: boolean,
     /**
      * 会话 ID
      * 变更会触发 ws建立，解锁滚动
@@ -29,8 +32,7 @@ type State = {
 }
 
 type Actions = {
-    loadHistoryMsg: (flowid: string, chatId: string, data: { appendHistory: boolean, lastMsg: string }) => Promise<void>;
-    loadMoreHistoryMsg: (flowid: string, appendHistory: boolean) => Promise<void>;
+    setInputLocked: (locked: boolean) => void;
     destory: () => void;
     createSendMsg: (inputs: any, inputKey?: string) => void;
     createWsMsg: (data: any) => void;
@@ -46,67 +48,15 @@ type Actions = {
 }
 
 
-const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
-    const correctedJsonString = (str: string) => str
-        // .replace(/\\([\s\S])|(`)/g, '\\\\$1$2') // 转义反斜线和反引号
-        .replace(/\n/g, '\\n')                  // 转义换行符
-        .replace(/\r/g, '\\r')                  // 转义回车符
-        .replace(/\t/g, '\\t')                  // 转义制表符
-        .replace(/'/g, '"');                    // 将单引号替换为双引号
-    const newData = data.filter(item =>
-        ['answer', 'question', 'processing', 'system', 'report', 'tool', 'knowledge', 'divider', 'flow', 'reasoning_answer'].includes(item.category)
-    )
-    return newData.map(item => {
-        // let count = 0
-        let { message, files, is_bot, intermediate_steps, ...other } = item
-        try {
-            message = message && message[0] === '{' ? JSON.parse(message) : message || ''
-        } catch (e) {
-            // 未考虑的情况暂不处理
-            console.error('消息 to JSON error :>> ', e);
-        }
 
-        // hack
-        let chatKey = undefined
-        if (typeof message !== 'string') {
-            // 优先 input
-            if ('input' in message) {
-                chatKey = 'input'
-            } else {
-                chatKey = Object.keys(message)[0]
-            }
-        }
-
-        return {
-            ...other,
-            chatKey,
-            end: true,
-            files: files ? JSON.parse(files) : [],
-            isSend: !is_bot,
-            message,
-            thought: intermediate_steps,
-            citations: normalizeCitationItems(other),
-            noAccess: true
-        }
-    })
-}
-
-let currentChatId = ''
 const runLogsTypes = ['tool', 'flow', 'knowledge']
 
-const mergeStreamText = (current: unknown, incoming: unknown) => {
-    const currentText = typeof current === 'string' ? current : String(current || '')
-    const incomingText = typeof incoming === 'string' ? incoming : String(incoming || '')
-
-    if (!incomingText) return currentText
-    if (!currentText) return incomingText
-
-    // 兼容后端发送完整快照和增量片段两种流式协议
-    return incomingText.startsWith(currentText) ? incomingText : currentText + incomingText
-}
-
-export const useMessageStore = create<State & Actions>((set, get) => ({
+export const createMessageStore = () => {
+const store = createStore<State & Actions>((set, get) => ({
+    eventTarget: new EventTarget(),
+    historyGeneration: 0,
     running: false,
+    inputLocked: false,
     chatId: '',
     messages: [],
     hisMessages: [],
@@ -114,44 +64,6 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     showGuideQuestion: false,
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
-    },
-    async loadHistoryMsg(flowid, chatId, { appendHistory, lastMsg }) {
-        const res = await getChatHistory(flowid, chatId, 30, 0)
-        const msgs = handleHistoryMsg(res)
-        currentChatId = chatId
-        const hisMessages = appendHistory ? [] : msgs.reverse()
-        if (hisMessages.length) {
-            hisMessages.push({
-                ...bsMsgItem,
-                id: Math.random() * 1000000,
-                category: 'divider',
-                message: lastMsg,
-            })
-        }
-        set({
-            historyEnd: false,
-            messages: appendHistory ? msgs.reverse() : [],
-            hisMessages
-        })
-    },
-    async loadMoreHistoryMsg(flowid, appendHistory) {
-        if (get().running) return // 会话进行中禁止加载more历史
-        if (get().historyEnd) return // 没有更多历史纪录
-        const chatId = get().chatId
-        const prevMsgs = get().messages
-        // 最后一条消息id不存在，忽略 loadmore
-        if (!prevMsgs[0]?.id) return
-        const res = await getChatHistory(flowid, chatId, 10, prevMsgs[0]?.id || 0)
-        // 过滤非同一会话消息
-        if (res[0]?.chat_id !== currentChatId) {
-            return console.warn('loadMoreHistoryMsg chatId not match, ignore')
-        }
-        const msgs = handleHistoryMsg(res)
-        if (msgs.length) {
-            set({ [appendHistory ? 'messages' : 'hisMessages']: [...msgs.reverse(), ...prevMsgs] })
-        } else {
-            set({ historyEnd: true })
-        }
     },
     /**
      * A tool card only closes when its `end` frame arrives. Lose one — a
@@ -172,12 +84,11 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         })
     },
     clearMsgs() {
-        setTimeout(() => {
-            set({ hisMessages: [], messages: [], historyEnd: true })
-        }, 0);
+        set({ historyGeneration: get().historyGeneration + 1, hisMessages: [], messages: [], historyEnd: true });
     },
     destory() {
-        set({ chatId: '', messages: [] })
+        set({
+            historyGeneration: get().historyGeneration + 1, chatId: '', messages: [] })
     },
     createSendMsg(inputs, inputKey) {
         console.log('change createSendMsg', inputs, inputKey);
@@ -199,156 +110,12 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
     // start
     createWsMsg(data) {
-        console.log('change createWsMsg');
-        set((state) => {
-            const newChat = cloneDeep(state.messages);
-            newChat.push({
-                isSend: false,
-                message: runLogsTypes.includes(data.category) ? JSON.parse(data.message) : '',
-                chatKey: '',
-                thought: data.intermediate_steps || '',
-                category: data.category || '',
-                files: [],
-                end: false,
-                user_name: '',
-                extra: data.extra,
-                citations: normalizeCitationItems(data),
-                reasoning_log: ''
-            })
-            return { messages: newChat }
-        })
+        set({ messages: startAssistantForHost(get().messages, data, get().chatId) as unknown as ChatMessageType[] });
     },
-    // stream end
-    updateCurrentMessage(wsdata, cover = false) {
-        // console.log( wsdata.chat_id, get().chatId);
-        // if (wsdata.end) {
-        //     debugger
-        // }
-        console.log('change updateCurrentMessage');
-        const messages = get().messages
-        const isRunLog = runLogsTypes.includes(wsdata.category);
-        // run log类型存在嵌套情况，使用 extra 匹配 currentMessage; 否则取最近
-        let currentMessageIndex = 0
-        for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].isSend) break;
-            if (isRunLog && messages[i].extra === wsdata.extra) {
-                currentMessageIndex = i;
-                break;
-            } else if (!isRunLog && !runLogsTypes.includes(messages[i].category)) {
-                currentMessageIndex = i;
-                break;
-            } else if (wsdata.type === 'end_cover' && messages[i].category === 'tool') {
-                currentMessageIndex = i;
-                break;
-            }
-        }
-        const currentMessage = messages[currentMessageIndex]
-        if (!currentMessage) return
-        // deepseek
-        let message = ''
-        let reasoning_log = currentMessage.reasoning_log
-        if (isRunLog) {
-            message = JSON.parse(wsdata.message)
-        } else if (typeof wsdata.message !== 'string' && wsdata.message && 'reasoning_content' in wsdata.message) {
-            message = mergeStreamText(currentMessage.message, wsdata.message.content)
-            reasoning_log = mergeStreamText(reasoning_log, wsdata.message.reasoning_content)
-        } else {
-            message = mergeStreamText(currentMessage.message, wsdata.message)
-        }
-
-        // 敏感词特殊处理
-        if (wsdata.type === 'end_cover' && wsdata.category === 'tool') {
-            messages.forEach((msg) => {
-                msg.end = true // 闭合所有会话
-            })
-            cover = false
-        }
-        // wsdata.messageId only carries the real DB id on the end branch (set by
-        // the ChatInput end handler). When present it MUST overwrite any temp id
-        // assigned during streaming — otherwise like/telemetry calls keep using
-        // the temp id and the backend silently drops the audit record.
-        const realMessageId = !isRunLog && wsdata.messageId
-        const newCurrentMessage = {
-            ...currentMessage,
-            ...wsdata,
-            id: realMessageId || currentMessage.id || (isRunLog ? wsdata.extra : undefined),
-            message,
-            reasoning_log,
-            thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
-            files: wsdata.files || [],
-            category: wsdata.category || '',
-            source: wsdata.source,
-            citations: normalizeCitationItems(wsdata) || currentMessage.citations || null
-        }
-        // Fallback: assign a recognisable temp id so React keys stay unique while
-        // streaming, without polluting downstream calls that need a real DB id.
-        if (!newCurrentMessage.id) {
-            newCurrentMessage.id = 'tmp-' + Math.random().toString(36).slice(2, 10)
-        }
-
-        messages[currentMessageIndex] = newCurrentMessage
-        // 会话特殊处理，兼容后端的缺陷
-        if (!isRunLog) {
-            // start - end 之间没有内容删除load
-            if (newCurrentMessage.end && !(newCurrentMessage.files.length || newCurrentMessage.thought || newCurrentMessage.message)) {
-                messages.pop()
-            }
-            // 无 messageid 删除
-            // if (newCurrentMessage.end && !newCurrentMessage.id) {
-            //     messages.pop()
-            // }
-            // 删除重复消息
-            const prevMessage = messages[currentMessageIndex - 1];
-
-            // hack 
-            if (wsdata.type === 'end_cover' && !prevMessage.isSend) {
-                cover = true
-            }
-
-            // 有思考不覆盖 只覆盖message,保留思考
-            if (prevMessage?.reasoning_log) {
-                if ((prevMessage
-                    && prevMessage.message === newCurrentMessage.message
-                    && prevMessage.thought === newCurrentMessage.thought)
-                    || cover) {
-                    const removedMsg = messages.pop()
-                    prevMessage.message = removedMsg.message
-                }
-            } else {
-                if ((prevMessage
-                    && prevMessage.message === newCurrentMessage.message
-                    && prevMessage.thought === newCurrentMessage.thought)
-                    || cover) {
-                    const removedMsg = messages.pop()
-                    // 使用最后一条的信息作为准确信息
-                    Object.keys(prevMessage).forEach((key) => {
-                        prevMessage[key] = removedMsg[key]
-                    })
-                }
-            }
-
-        }
-        // Safety net: when the backend emits a real DB message_id (typically on
-        // end / end_cover for `answer`), force-stamp it onto the latest non-runLog
-        // bot message that still carries a temp id. This guards against the
-        // cover/pop branches above swallowing the id.
-        const dbId = wsdata?.messageId
-        if (dbId && !isRunLog) {
-            for (let i = messages.length - 1; i >= 0; i--) {
-                const m = messages[i]
-                if (m?.isSend) break
-                if (runLogsTypes.includes(m.category)) continue
-                const idStr = String(m.id ?? '')
-                const idMissingOrTemp =
-                    !m.id || idStr.startsWith('tmp-') || idStr.startsWith('u-')
-                if (idMissingOrTemp) {
-                    m.id = dbId
-                }
-                break
-            }
-        }
-        set((state) => ({ messages: [...messages] }))
+    updateCurrentMessage(data, cover = false) {
+        set({ messages: assistantStreamForHost(get().messages, data, get().chatId, cover) as unknown as ChatMessageType[] });
     },
+    setInputLocked(inputLocked) { set({ inputLocked }); },
     changeChatId(chatId) {
         set((state) => ({ chatId }))
     },
@@ -387,7 +154,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             }]
         }))
     }
-}))
+}));
+return Object.assign(store, { services: createHistoryAdapter(store, 'assistant') });
+};
+export const { MessageStoreProvider, useMessageStore } = createMessageStoreScope(createMessageStore);
 
 
 const bsMsgItem = {

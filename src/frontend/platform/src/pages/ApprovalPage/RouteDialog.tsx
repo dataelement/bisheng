@@ -93,18 +93,9 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
           <div className="rounded-lg border border-border bg-gray-50 dark:bg-gray-50/[0.06] p-3 space-y-3">
             <div className="text-xs font-medium text-muted-foreground">{t("approvalPage.matchConditionHint")}</div>
             <div className="flex items-center gap-2">
-              <select
-                value={condField}
-                onChange={(e) => handleFieldChange(e.target.value)}
-                className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none"
-              >
-                <option value="">{t("approvalPage.noCondition")}</option>
-                {conditionFields.map((f) => (
-                  <option key={f} value={f}>
-                    {CONDITION_FIELD_META[f] ? t(CONDITION_FIELD_META[f].label, { defaultValue: f }) : f}
-                  </option>
-                ))}
-              </select>
+              <Select {...selectLabels} aria-label={t("approvalPage.matchConditionHint")} value={condField || '__none__'} className="min-w-0 flex-1"
+                options={[{ value: '__none__', label: t("approvalPage.noCondition") }, ...conditionFields.filter(Boolean).map(field => ({ value: field, label: CONDITION_FIELD_META[field] ? t(CONDITION_FIELD_META[field].label, { defaultValue: field }) : field }))]}
+                onChange={value => handleFieldChange(value === '__none__' ? '' : String(value ?? ''))} />
               {condField && (
                 <>
                   <span className="text-xs text-muted-foreground">=</span>
@@ -124,18 +115,10 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
                         />
                       </div>
                     ) : (
-                      <select
-                        value={condValue}
-                        onChange={(e) => setCondValue(e.target.value)}
-                        className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none"
-                      >
-                        <option value="">{t("approvalPage.pleaseSelect")}</option>
-                        {allRoleValues.map((v) => (
-                          <option key={v.value} value={v.value}>
-                            {v.label}
-                          </option>
-                        ))}
-                      </select>
+                      <Select {...selectLabels} aria-label={fieldMeta ? t(fieldMeta.label, { defaultValue: condField }) : condField}
+                        value={condValue || null} className="min-w-0 flex-1" allowClear
+                        placeholder={t("approvalPage.pleaseSelect")} options={allRoleValues.filter(v => v.value != null && v.value !== '')}
+                        onChange={value => setCondValue(String(value ?? ''))} />
                     )
                   ) : (
                     <Input value={condValue} onChange={(e) => setCondValue(e.target.value)} placeholder={t("approvalPage.inputConditionValue")} />
@@ -151,30 +134,17 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
           {/* Route type */}
           <label className="block text-sm text-muted-foreground">
             {t("approvalPage.routeTypeLabel")}
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
-            >
-              <option value="pass">{t("approvalPage.routeTypePassFull")}</option>
-              <option value="flow">{t("approvalPage.routeTypeFlowFull")}</option>
-            </select>
+            <Select {...selectLabels} aria-label={t("approvalPage.routeTypeLabel")} value={type} className="mt-1"
+              options={[{ value: 'pass', label: t("approvalPage.routeTypePassFull") }, { value: 'flow', label: t("approvalPage.routeTypeFlowFull") }]}
+              onChange={value => setType(String(value ?? 'flow'))} />
           </label>
           {type === "flow" && (
             <label className="block text-sm text-muted-foreground">
               {t("approvalPage.bindFlow")}
-              <select
-                value={flowId}
-                onChange={(e) => setFlowId(e.target.value)}
-                className={`mt-1 block h-10 w-full rounded-lg border bg-background px-3 text-sm text-foreground outline-none ${!flowId ? "border-red-400 dark:border-red-500/60" : "border-border"}`}
-              >
-                <option value="">{t("approvalPage.selectFlow")}</option>
-                {flows.map((f) => (
-                  <option key={f.id} value={String(f.id)}>
-                    {f.flow_name || f.flow_code}
-                  </option>
-                ))}
-              </select>
+              <Select {...selectLabels} aria-label={t("approvalPage.bindFlow")} value={flowId || null} className="mt-1" allowClear
+                status={!flowId ? 'error' : 'default'} placeholder={t("approvalPage.selectFlow")}
+                options={flows.filter(flow => flow.id != null).map(flow => ({ value: String(flow.id), label: flow.flow_name || flow.flow_code || '' }))}
+                onChange={value => setFlowId(String(value ?? ''))} />
               {!flowId && (
                 <p className="mt-1 text-xs text-red-500 dark:text-red-400">{t("approvalPage.flowRequiredHint")}</p>
               )}

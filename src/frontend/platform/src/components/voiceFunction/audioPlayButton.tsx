@@ -10,11 +10,12 @@ import { useAudioPlayerStore } from './audioPlayerStore';
 
 interface AudioPlayButtonProps {
   messageId: string;
+  compact?: boolean;
   msg?: string;
   version?: string;
 }
 
-export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps) => {
+export const AudioPlayComponent = ({ messageId, msg = '', compact = false }: AudioPlayButtonProps) => {
   const [error, setError] = useState('');
   const { t } = useTranslation('flow')
   const [version] = useState(window.chat_version || 'v1');
@@ -110,12 +111,14 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
       <button
         onClick={handlePlay}
         disabled={isThisLoading}
+        className={compact ? "inline-flex items-center justify-center text-text-3" : undefined}
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isThisLoading ? (
-          <Outlined.Loading size={20} color="#9ca3af" className={'mt-0.5 mr-1 animate-spin'} />
+          <Outlined.Loading size={compact ? 14 : 20} color={compact ? undefined : "#9ca3af"} className={compact ? "animate-spin" : "mt-0.5 mr-1 animate-spin"} />
         ) : (
-          <Outlined.VolumeNotice size={20} color="#9ca3af" className={`cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary`} />
+          compact ? (isPlaying ? <Outlined.PlayerPause size={14} /> : <Outlined.VolumeNotice size={14} />)
+            : <Outlined.VolumeNotice size={20} color="#9ca3af" className="cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary" />
 
         )}
       </button>

@@ -67,7 +67,7 @@ export const enum ActionType {
     SKILL_FORM_SUBMIT = 'skill_form_submit'
 }
 
-export const useWebSocket = (helpers) => {
+export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: boolean } = {}) => {
     const { showToast } = useToast();
     const [submitData, setSubmitData] = useRecoilState(submitDataState)
     const [, setAppConversations] = useRecoilState(appConversationsState)
@@ -119,6 +119,7 @@ export const useWebSocket = (helpers) => {
 
     // 连接WebSocket
     const connect = (callBack) => {
+        if (!canExecute) return
         const replacingExistingSocket = !!websocket
         if (websocket) {
             if (!callBack) {
@@ -295,7 +296,7 @@ export const useWebSocket = (helpers) => {
         if (helpers.flow.flow_type !== 10) {
             if (Array.isArray(data) && data.length) return
             if (data.type === 'start') {
-                const _data = SkillMethod.getStartParam(data, helpers.chatId)
+                const _data = helpers.flow.flow_type === 5 ? data : SkillMethod.getStartParam(data, helpers.chatId)
                 helpers.message.createMsg(helpers.chatId, _data)
             } else if (data.type === 'stream') {
                 helpers.message.skillStreamMsg(helpers.chatId, data)
@@ -336,6 +337,7 @@ export const useWebSocket = (helpers) => {
         }
     }
     useEffect(() => {
+        if (!canExecute) return
         connect()
 
         return () => {
@@ -350,9 +352,10 @@ export const useWebSocket = (helpers) => {
                 }
             }
         }
-    }, [helpers.chatId, helpers.running])
+    }, [helpers.chatId, helpers.running, canExecute])
 
     const sendWsMsg = async (msg) => {
+        if (!canExecute) return
         try {
             if (websocket && websocket.readyState === WebSocket.OPEN) {
                 websocket.send(JSON.stringify(msg))
@@ -371,7 +374,7 @@ export const useWebSocket = (helpers) => {
 
     // 监听submitData变化，发送消息（必须在当前会话调用）
     useEffect(() => {
-        if (submitData
+        if (canExecute && submitData
             && (submitData.action === 'skill_input' || websocket && websocket.readyState === WebSocket.OPEN)) {
             const action = submitData.action
 

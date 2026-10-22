@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import type { WorkflowFileFieldProps } from '@bisheng/chat';
+import type { ReactNode } from 'react';
 
 import { FileSearch2, Loader2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -10,6 +12,20 @@ import { uploadFile, uploadFileWithProgress } from "~/api/apps";
 import useLocalize from "~/hooks/useLocalize";
 import { normalizeSuffixList } from "../fileAcceptUtils";
 
+interface InputFileComponentProps {
+    renderControl?: (props: WorkflowFileFieldProps) => ReactNode;
+    value?: string;
+    onChange: (name: string) => void;
+    disabled?: boolean;
+    suffixes?: string | readonly string[];
+    fileTypes?: unknown;
+    placeholder?: string;
+    onFileChange: (value: unknown) => void;
+    editNode?: boolean;
+    isSSO?: boolean;
+    multiple?: boolean;
+    flow?: unknown;
+}
 export default function InputFileComponent({
     value,
     onChange,
@@ -21,8 +37,9 @@ export default function InputFileComponent({
     editNode = false,
     isSSO = false,
     multiple = false,
-    flow
-}) {
+    flow,
+    renderControl,
+}: InputFileComponentProps) {
     const t = useLocalize()
     const [myValue, setMyValue] = useState(value);
     const [loading, setLoading] = useState(false);
@@ -44,7 +61,7 @@ export default function InputFileComponent({
     const acceptAttr = suffixList.join(",");
 
     function checkFileType(fileName: string): boolean {
-        return suffixList.some((suffix) => fileName.endsWith(suffix));
+        return suffixList.length === 0 || suffixList.some((suffix) => fileName.toLowerCase().endsWith(suffix.trim().toLowerCase()));
     }
 
     useEffect(() => {
@@ -87,9 +104,7 @@ export default function InputFileComponent({
 
                 return setLoading(false);
             }
-            // Check if the file type is correct
-            // if (file && checkFileType(file.name)) {
-            // Upload the file
+            // Types are validated by the picker handler before an upload starts.
             isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
                 setLoading(false);
                 
@@ -117,19 +132,10 @@ export default function InputFileComponent({
                     console.error("Error occurred while uploading file");
                     setLoading(false);
                 });
-            // } else {
-            //   // Show an error if the file type is not allowed
-            //   setErrorData({
-            //     title:
-            //       "请选择有效文件。只允许使用这些文件类型：",
-            //     list: fileTypes,
-            //   });
-            //   setLoading(false);
-            // }
         }
     };
 
-    const batchUpload = (_files: FileList | null) => {
+    const batchUpload = (_files: readonly File[] | null) => {
         {
             setLoading(true);
 
@@ -147,7 +153,7 @@ export default function InputFileComponent({
                     showToast({ message: errorMsgs.join('\n'), status: 'warning' });
 
 
-                    // 文件都不符合要求 结束上传
+                    // Stop when every selected file exceeds the size limit.
                     if (errorMsgs.length === _files.length) {
                         return setLoading(false);
                     }
@@ -198,16 +204,27 @@ export default function InputFileComponent({
     };
 
     const handleFilesPicked = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const picked = event.target.files;
-        if (multiple) {
-            batchUpload(picked);
-        } else {
-            singleUpload(picked?.[0]);
-        }
-        // A persistent input keeps its value, and re-picking the same file would
-        // then fire no change event at all. Clear it so a second attempt works.
+        const picked = Array.from(event.target.files ?? []);
+        // Snapshot the files before resetting the picker, including rejected selections.
         event.target.value = "";
+        if (disabled || loading || !picked.length) return;
+        const allowed = picked.filter(file => checkFileType(file.name));
+        if (allowed.length !== picked.length) {
+            showToast({ message: t('com_ui_upload_file_type_error'), status: 'warning' });
+        }
+        if (!allowed.length) return;
+        if (multiple) {
+            batchUpload(allowed);
+        } else {
+            singleUpload(allowed[0]);
+        }
     };
+
+    if (renderControl) return <>
+        <input ref={inputRef} type="file" className="hidden" accept={acceptAttr} multiple={multiple}
+            disabled={disabled || loading} onChange={handleFilesPicked} />
+        {renderControl({ value: myValue, placeholder, disabled, loading, onClick: handleButtonClick })}
+    </>;
 
     return (
         <div className={disabled ? "input-component-div" : "w-full"}>

@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { MessageStoreProvider as AssistantMessageStoreProvider } from '@/components/bs-comp/chatComponent/messageStore';
 import { Button, toast } from '@bisheng/ui';
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
@@ -21,7 +22,7 @@ import Setting from "./Setting";
 import TestChat from "./TestChat";
 import { useAutoDescription } from "./useAutoDescription";
 
-export default function EditAssistant() {
+function EditAssistantContent() {
     const { t } = useTranslation()
     const { id: assisId } = useParams()
     const navigate = useNavigate()
@@ -220,4 +221,8 @@ const useBeforeUnload = (changed, checking) => {
     }, [checking, changed])
 
     return useBlocker(changed);
+}
+
+export default function EditAssistant() {
+    return <AssistantMessageStoreProvider><EditAssistantContent /></AssistantMessageStoreProvider>;
 }

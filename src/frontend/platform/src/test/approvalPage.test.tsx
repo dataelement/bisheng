@@ -240,7 +240,8 @@ describe("ApprovalPage", () => {
 
     const nameInput = screen.getByPlaceholderText(copy("subjectSearch.routeExample"));
     await user.type(nameInput, "Test branch");
-    await user.selectOptions(screen.getByRole("combobox", { name: /绑定审批流程/ }), "12");
+    await user.click(screen.getByRole("combobox", { name: copy("approvalPage.bindFlow") }));
+    await user.click(await screen.findByRole("option", { name: "Menu approval flow A" }));
 
     await user.click(screen.getByRole("button", { name: copy("skillManage.form.save") }));
 

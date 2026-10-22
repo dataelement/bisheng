@@ -8,6 +8,7 @@ import { getAsrWebSocketUrl } from "../../../../shared/voice/url";
 import { useAudioPlayerStore, useAudioStore } from "./audioPlayerStore";
 
 interface SpeechToTextProps {
+  inline?: boolean;
   disabled?: boolean;
   realtime?: boolean;
   modelId?: string;
@@ -94,15 +95,15 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
   };
 
   const label = t(recording ? "voiceInput.pause" : "voiceInput.start");
-  return (
-    <div className="absolute right-12 top-5">
+  const control = (
       <Button
         type="button"
-        size="small"
+        size={props.inline ? "medium" : "small"}
         iconOnly
-        variant="text"
-        color="default"
-        className="h-6 w-6"
+        shape={props.inline ? "circle" : "square"}
+        variant={props.inline ? (recording ? "outlined" : "solid") : "text"}
+        color={props.inline && !recording ? "primary" : "default"}
+        className={props.inline ? undefined : "h-6 w-6"}
         disabled={!recording && (props.disabled || busy)}
         aria-label={label}
         title={label}
@@ -112,8 +113,8 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
       >
         {recording ? <Outlined.PlayerPause /> : <Outlined.Microphone />}
       </Button>
-    </div>
   );
+  return props.inline ? control : <div className="absolute right-12 top-5">{control}</div>;
 }
 
 export default SpeechToTextComponent;
