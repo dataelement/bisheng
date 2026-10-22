@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -41,9 +42,21 @@ class Platform:
     def fact(self, operation, sequence, phase, **kwargs):
         assert sequence == self.op["fact_sequence"] + 1
         self.op.update(fact_sequence=sequence, stage=phase)
+        detail = deepcopy(kwargs.get("detail", {}))
+        self.op["result"] = detail
         if phase in {"completed", "failed", "cancelled", "timed_out"}:
             self.op["status"] = phase
-        self.facts.append((phase, kwargs.get("detail", {})))
+            self.op["cleanup_status"] = "complete" if detail.get("cleanup_complete") else "pending"
+            self.op["failure"] = (
+                {
+                    key: detail[key]
+                    for key in ("reason", "failed_stage", "diagnostic_tail", "maintenance", "data_may_have_changed")
+                    if key in detail
+                }
+                if phase != "completed"
+                else {}
+            )
+        self.facts.append((phase, detail))
 
 
 class Docker:
@@ -334,3 +347,213 @@ def test_preflight_records_starting_before_readiness_failure(tmp_path, monkeypat
     assert failure["reason"] == "readiness_timeout"
     assert failure["failed_stage"] == "starting"
     assert failure["cleanup_complete"] is True
+
+
+@pytest.mark.parametrize(
+    ("kind", "stage", "reason", "expected_status", "maintenance", "changed"),
+    [
+        ("prepare", "preparing", "preparation_phase_failed", "failed", False, False),
+        ("deploy", "migrating", "migration_failed", "failed", True, True),
+        ("restore", "starting", "restore_failed", "failed", True, True),
+        ("deploy", "preparing", "operation_cancelled", "cancelled", False, False),
+        ("prepare", "preparing", "operation_timeout", "timed_out", False, False),
+    ],
+)
+def test_cleanup_retries_preserve_first_failure_but_refresh_stop_result(
+    tmp_path, kind, stage, reason, expected_status, maintenance, changed
+):
+    """覆盖 AC: AC-49、AC-52、AC-63."""
+    platform = Platform(kind)
+    platform.op.update(status="running", stage=stage)
+    if kind == "deploy":
+        platform.op["payload"]["migration_plan"] = [{"op": "alter_table"}]
+    outcomes = iter([False, False, True])
+    runtime = SimpleNamespace(cleanup=lambda _: {"complete": next(outcomes)})
+    executor = OperationExecutor(Config(data_root=tmp_path), platform=platform, runtime=runtime)
+    tail = "storage-guard:\nverified\ntransfer:\nruntime helper failed (TypeError)"
+    try:
+        executor._failure(platform.op, None, ExecutionError(reason, tail=tail))
+        first = deepcopy(platform.op["failure"])
+        assert first == {
+            "reason": reason,
+            "failed_stage": stage,
+            "diagnostic_tail": tail,
+            "maintenance": maintenance,
+            "data_may_have_changed": changed,
+        }
+        executor._failure(platform.op, None, ExecutionError("cleanup_retry_without_original_tail"))
+        assert platform.op["failure"] == first
+        assert not platform.facts[-1][1]["stopped"] and not platform.facts[-1][1]["cleanup_complete"]
+        executor._failure(platform.op, None, ExecutionError("another_cleanup_attempt", tail="different later tail"))
+        assert platform.op["failure"] == first
+        assert platform.facts[-1][1]["stopped"] and platform.facts[-1][1]["cleanup_complete"]
+        assert [phase for phase, _ in platform.facts] == [expected_status] * 3
+        assert platform.op["status"] == expected_status and platform.op["cleanup_status"] == "complete"
+    finally:
+        executor.close()
+
+
+@pytest.mark.parametrize("complete", [False, True])
+@pytest.mark.parametrize("tail", ["", "original bounded diagnostic"])
+def test_terminal_cleanup_preserves_false_flags_and_empty_diagnostic(tmp_path, complete, tail):
+    """覆盖 AC: AC-49、AC-52、AC-63."""
+    platform = Platform("prepare")
+    failure = {
+        "reason": "first_failure",
+        "failed_stage": "preparing",
+        "diagnostic_tail": tail,
+        "maintenance": False,
+        "data_may_have_changed": False,
+    }
+    platform.op.update(status="failed", stage="failed", failure=deepcopy(failure))
+    runtime = SimpleNamespace(cleanup=lambda _: {"complete": complete, "stopped": True})
+    executor = OperationExecutor(Config(data_root=tmp_path), platform=platform, runtime=runtime)
+    try:
+        executor._failure(platform.op, None, ExecutionError("later_reason", tail="new diagnostic must not replace"))
+        assert platform.op["failure"] == failure
+        assert platform.facts[-1][1]["stopped"] is complete
+        assert platform.facts[-1][1]["cleanup_complete"] is complete
+    finally:
+        executor.close()
+
+
+def test_expired_diagnostic_is_not_resurrected_during_cleanup_retry(tmp_path):
+    """覆盖 AC: AC-49、AC-52、AC-63."""
+    platform = Platform("prepare")
+    failure = {
+        "reason": "original_failure",
+        "failed_stage": "preparing",
+        "maintenance": False,
+        "data_may_have_changed": False,
+    }
+    platform.op.update(status="failed", stage="failed", failure=deepcopy(failure))
+    executor = OperationExecutor(
+        Config(data_root=tmp_path), platform=platform, runtime=SimpleNamespace(cleanup=lambda _: {"complete": False})
+    )
+    try:
+        executor._failure(platform.op, None, ExecutionError("retry", tail="do not restore an expired tail"))
+        assert platform.op["failure"] == failure
+        assert "diagnostic_tail" not in platform.facts[-1][1]
+    finally:
+        executor.close()
+
+
+def test_cleanup_exception_keeps_original_maintenance_failure_and_pending_state(tmp_path):
+    """覆盖 AC: AC-49、AC-52、AC-63."""
+    platform = Platform("deploy")
+    failure = {
+        "reason": "migration_failed",
+        "failed_stage": "migrating",
+        "diagnostic_tail": "first failure",
+        "maintenance": True,
+        "data_may_have_changed": True,
+    }
+    platform.op.update(status="failed", stage="failed", failure=deepcopy(failure))
+
+    def unknown(_):
+        raise RuntimeError("unconfirmed writer")
+
+    executor = OperationExecutor(
+        Config(data_root=tmp_path), platform=platform, runtime=SimpleNamespace(cleanup=unknown)
+    )
+    try:
+        executor._failure(platform.op, None, ExecutionError("retry"))
+        assert platform.op["failure"] == failure
+        assert platform.op["cleanup_status"] == "pending" and platform.op["status"] == "failed"
+        assert not platform.facts[-1][1]["stopped"] and not platform.facts[-1][1]["cleanup_complete"]
+    finally:
+        executor.close()
+
+
+def test_reconcile_terminal_cleanup_keeps_diagnostic_without_resubmitting(tmp_path, monkeypatch):
+    """覆盖 AC: AC-49、AC-52、AC-63."""
+    platform = Platform("prepare")
+    failure = {
+        "reason": "preparation_phase_failed",
+        "failed_stage": "preparing",
+        "diagnostic_tail": "first transfer TypeError",
+        "maintenance": False,
+        "data_may_have_changed": False,
+    }
+    platform.op.update(status="failed", stage="failed", cleanup_status="pending", failure=deepcopy(failure))
+    platform.plan = lambda: [deepcopy(platform.op)]
+    calls = []
+    executor = OperationExecutor(
+        Config(data_root=tmp_path),
+        platform=platform,
+        runtime=SimpleNamespace(cleanup=lambda op: calls.append(op["operation_id"]) or {"complete": True}),
+    )
+    monkeypatch.setattr(executor, "cleanup_data_workers", lambda: None)
+    monkeypatch.setattr(executor, "heartbeat", lambda: None)
+    monkeypatch.setattr(executor, "submit", lambda *_: pytest.fail("terminal operation must not be resubmitted"))
+    try:
+        executor.reconcile()
+        assert calls == ["operation-a"] and platform.op["failure"] == failure
+        assert platform.facts[-1][0] == "failed" and platform.op["cleanup_status"] == "complete"
+    finally:
+        executor.close()
+
+
+def test_unknown_terminal_legacy_build_remains_held_without_cleanup(tmp_path):
+    """覆盖 AC: AC-49、AC-52、AC-63."""
+    platform = Platform("prepare")
+    failure = {
+        "reason": "legacy_build_stop_unconfirmed",
+        "failed_stage": "preparing",
+        "diagnostic_tail": "original diagnostic",
+    }
+    platform.op.update(
+        status="failed",
+        stage="failed",
+        cleanup_status="pending",
+        failure=deepcopy(failure),
+        payload={"legacy_build_state": "started"},
+    )
+    runtime = SimpleNamespace(cleanup=lambda _: pytest.fail("unknown daemon build must not be reclaimed"))
+    executor = OperationExecutor(Config(data_root=tmp_path), platform=platform, runtime=runtime)
+    try:
+        executor._failure(platform.op, None, ExecutionError("retry"))
+        assert platform.op["failure"] == failure and platform.op["cleanup_status"] == "pending"
+        assert not platform.facts
+    finally:
+        executor.close()
+
+
+def test_completed_cleanup_does_not_create_failure_or_restart_operation(tmp_path):
+    """覆盖 AC: AC-49、AC-52、AC-63."""
+    platform = Platform("preview")
+    platform.op.update(status="completed", stage="completed", cleanup_status="pending", failure={})
+    executor = OperationExecutor(
+        Config(data_root=tmp_path), platform=platform, runtime=SimpleNamespace(cleanup=lambda _: {"complete": True})
+    )
+    try:
+        executor._failure(platform.op, None, ExecutionError("synthetic_cleanup_reason", tail="not a new failure"))
+        assert platform.op["status"] == "completed" and platform.op["failure"] == {}
+        assert platform.facts == [("completed", {"stopped": True, "cleanup_complete": True})]
+    finally:
+        executor.close()
+
+
+def test_cleanup_retry_never_reuses_stale_stop_or_cleanup_flags(tmp_path):
+    """覆盖 AC: AC-49、AC-52、AC-63."""
+    platform = Platform("prepare")
+    platform.op.update(
+        status="failed",
+        stage="failed",
+        cleanup_status="pending",
+        failure={"reason": "first_failure", "failed_stage": "preparing", "stopped": True, "cleanup_complete": True},
+    )
+    executor = OperationExecutor(
+        Config(data_root=tmp_path), platform=platform, runtime=SimpleNamespace(cleanup=lambda _: {"complete": False})
+    )
+    try:
+        executor._failure(platform.op, None, ExecutionError("retry"))
+        assert platform.op["status"] == "failed" and platform.op["cleanup_status"] == "pending"
+        assert platform.facts[-1][1] == {
+            "reason": "first_failure",
+            "failed_stage": "preparing",
+            "stopped": False,
+            "cleanup_complete": False,
+        }
+    finally:
+        executor.close()

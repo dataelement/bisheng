@@ -301,21 +301,23 @@ class OperationExecutor:
                 else "failed"
             )
         )
+        failure = {
+            "reason": reason,
+            "diagnostic_tail": str(getattr(exc, "tail", ""))[-16384:],
+            "failed_stage": current["stage"],
+            "maintenance": operation["kind"] in {"deploy", "restore", "migrate"}
+            and current["stage"] in {"maintenance", "snapshot_confirmed", "migrating", "starting", "ready"},
+            "data_may_have_changed": current["stage"] in {"migrating", "starting", "ready"}
+            and bool(operation["payload"].get("migration_plan") or operation["kind"] == "restore"),
+        }
+        if current["status"] in TERMINAL:
+            # Cleanup progress must not replace the original failure or revive expired diagnostics.
+            failure = {key: value for key, value in current.get("failure", {}).items() if key in failure}
         try:
             self.report(
                 operation,
                 phase,
-                detail={
-                    "reason": reason,
-                    "diagnostic_tail": str(getattr(exc, "tail", ""))[-16384:],
-                    "stopped": stopped,
-                    "cleanup_complete": complete,
-                    "failed_stage": current["stage"],
-                    "maintenance": operation["kind"] in {"deploy", "restore", "migrate"}
-                    and current["stage"] in {"maintenance", "snapshot_confirmed", "migrating", "starting", "ready"},
-                    "data_may_have_changed": current["stage"] in {"migrating", "starting", "ready"}
-                    and bool(operation["payload"].get("migration_plan") or operation["kind"] == "restore"),
-                },
+                detail={**failure, "stopped": stopped, "cleanup_complete": complete},
             )
         except Exception as report_error:
             logger.error(
