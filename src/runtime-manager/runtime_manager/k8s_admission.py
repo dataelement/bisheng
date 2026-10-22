@@ -562,6 +562,9 @@ class AdmissionPolicy:
             _deny("admission_force_delete_refused")
 
     def _terminal_stopped(self, obj):
+        return STOP_FINALIZER in obj.get("metadata", {}).get("finalizers", []) and self._terminal_status(obj)
+
+    def _terminal_status(self, obj):
         meta, spec, status = obj.get("metadata", {}), obj.get("spec", {}), obj.get("status", {})
         if (
             obj.get("kind") != "Pod"
@@ -570,7 +573,6 @@ class AdmissionPolicy:
             or not meta["resourceVersion"]
             or meta.get("namespace") != self.namespace
             or not spec.get("nodeName")
-            or STOP_FINALIZER not in meta.get("finalizers", [])
             or not _protected(obj, self.revision)
             or status.get("phase") not in _TERMINAL
             or status.get("reason") in {"NodeLost", "Unknown"}
@@ -607,14 +609,42 @@ class AdmissionPolicy:
     def _terminal_delete(self, req, obj):
         meta, opts = obj.get("metadata", {}), req.get("options") or {}
         cond = opts.get("preconditions", {})
-        return bool(
+        if not (
             meta.get("deletionTimestamp")
             and meta.get("name") == req.get("name")
-            and self._terminal_stopped(obj)
+            and self._terminal_status(obj)
             and cond.get("uid") == meta.get("uid")
             and ("resourceVersion" not in cond or cond["resourceVersion"] == meta["resourceVersion"])
             and type(opts.get("gracePeriodSeconds")) is int
             and 0 <= opts["gracePeriodSeconds"] <= 30
+        ):
+            return False
+        if STOP_FINALIZER in meta.get("finalizers", []):
+            return self._terminal_stopped(obj)
+        # Removing the finalizer does not necessarily remove a Pod whose old
+        # deletion grace is still positive. Only the bound kubelet may finish
+        # that same UID with DELETE 0 after a fresh persisted stop authorization.
+        if opts["gracePeriodSeconds"] != 0:
+            return False
+        ref = meta.get("labels", {}).get(RESOURCE_LABEL)
+        if not isinstance(ref, str) or not ref or len(ref) > 63:
+            return False
+        try:
+            plan = self.plan_reader(ref)
+        except Exception:
+            _deny("admission_plan_unavailable")
+        if not isinstance(plan, dict) or (
+            plan.get("resource_ref"),
+            plan.get("namespace"),
+            plan.get("name"),
+            plan.get("kind"),
+            plan.get("uid"),
+        ) != (ref, self.namespace, meta["name"], "Pod", meta["uid"]):
+            _deny("admission_plan_scope_refused")
+        return (
+            plan.get("stop_state") == "confirmed"
+            and plan.get("stop_confirmed") is True
+            and plan.get("allow_delete") is True
         )
 
     def _service(self, obj, plan):
