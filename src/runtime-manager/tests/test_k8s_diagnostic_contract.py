@@ -74,6 +74,12 @@ def diagnostic(tmp_path):
     executor.config = SimpleNamespace(build_index_url="", build_extra_index_url="", build_npm_registry="")
     operation = {
         "operation_id": plan.operation_id,
+        "app_id": plan.app_id,
+        "node_id": plan.node_id,
+        "generation": plan.generation,
+        "owner_epoch": plan.owner_epoch,
+        "kind": "prepare",
+        "status": "running",
         "deadline": datetime.fromtimestamp(1792555200 + 1800, UTC).isoformat(),
         "payload": {"runtime_env": {"BISHENG_APP_TOKEN": "fixture-business-secret"}},
     }
