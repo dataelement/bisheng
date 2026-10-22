@@ -14,13 +14,14 @@ VITE_PROXY_TARGET=http://localhost:8180 pnpm start -- --host 0.0.0.0  # commerci
 Both apps extend `../config/` for TypeScript, ESLint, PostCSS and Vite proxy helpers. Shared dependency versions are managed by the workspace catalog. See `../config/README.md`.
 
 ## Tech Stack
-Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + **Zustand** + React Context + **react-query v3** + react-i18next + react-router-dom v6 + **@xyflow/react** + axios (wrapped in `@/controllers/request.ts`)
+Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + **Zustand** + React Context + **@tanstack/react-query v4 (4.44.0, workspace catalog)** + react-i18next + react-router-dom v6 + **@xyflow/react** + axios (wrapped in `@/controllers/request.ts`)
 
 ## Mandatory Rules (platform-specific — common hard rules in root §4)
 - **Path Aliases**: `@/` → `src/`.
 - **HTTP Requests**: wrapper is `@/controllers/request.ts`; API modules in `@/controllers/API/`.
+- **Server request cache**: Use `@tanstack/react-query` from the workspace catalog. Query keys are arrays; keep cache invalidation/removal keys consistent. Manual/disabled query spinners use `isInitialLoading`. HTTP still goes through the wrapped API layer.
 - **State Management**: Zustand stores in `@/store/` (cross-page); React Context (`@/contexts/`) for UI-scoped state (alerts, theme, tabs).
-- **Frozen deps (lint-enforced via `no-restricted-imports`; existing usage suppressed)**: `react-query` v3 (unmaintained; @tanstack migration pending, ledger #6) — new data fetching uses the API Layer Pattern below; `xlsx` / `xlsx-populate` (vulnerable / duplicated, ledger #7); `react-color`, `react-beautiful-dnd` (deprecated, ledger #8). Do not add new imports of any of these.
+- **Frozen deps (lint-enforced via `no-restricted-imports`; existing usage suppressed)**: `xlsx` / `xlsx-populate` (vulnerable / duplicated, ledger #7); `react-color`, `react-beautiful-dnd` (deprecated, ledger #8). Do not add new imports of any of these.
 - **UI Components**: Buttons, input fields (incl. InputNumber), notices, selection controls, Select, Dropdown, Slider, tags/badges, tooltips and tabs import directly from `@bisheng/ui`; no platform compatibility wrappers or primitive re-exports. Every shared `Select` gets `{...useSelectLabels()}` (`@/components/bs-comp/formFields/useSelectLabels`) for its localized copy. Business compositions live in `@/components/bs-comp/formFields/` and use shared primitives. Other families remain Radix-based in `@/components/bs-ui/`. The old `bs-ui/select` (index / multi / cascader) survives only where the shared Select cannot express the panel — cascading pickers, tabs inside the panel, swatch-only or thumbnail+delete options, the workflow variable picker — do not add new callers. Shared tokens and the Tailwind preset are loaded by platform.
 - **Icons**: Prefer `bisheng-icons`. Existing icon implementations may be retained when no suitable equivalent is available.
 - **Workflow editor**: `@xyflow/react` (**not** `react-flow-renderer`); nodes in `src/pages/BuildPage/flow/FlowNode/`. (Legacy skill editor + `src/CustomNodes/` were removed with the skill module.)

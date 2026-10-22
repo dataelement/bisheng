@@ -10,7 +10,7 @@ import { notification, Select } from '@bisheng/ui';
 
 import { useEffect, useId, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useQueryClient } from "react-query"
+import { useQueryClient } from "@tanstack/react-query"
 
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 import { getTenantsApi } from "@/controllers/API/tenant"

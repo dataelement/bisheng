@@ -17,7 +17,7 @@ import { Tooltip as Tip } from "@bisheng/ui";
 import type React from "react";
 import { useContext,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation,useQueryClient } from "react-query";
+import { useMutation,useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { DashboardsQueryKey } from "../../hook";
 import { Dashboard } from "../../types/dataConfig";

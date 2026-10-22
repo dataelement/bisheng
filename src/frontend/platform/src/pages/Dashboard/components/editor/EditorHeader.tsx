@@ -16,7 +16,7 @@ import { Tag } from "@bisheng/ui";
 
 import { useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation,useQueryClient } from "react-query";
+import { useMutation,useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { DashboardQueryKey,DashboardsQueryKey,usePublishDashboard } from "../../hook";
 import { ChartType,Dashboard } from "../../types/dataConfig";

@@ -19,7 +19,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useModel } from "..";
 import { ModelManagement } from "@/pages/BuildPage/bench/ModelManagement";
 import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
@@ -340,7 +340,8 @@ export default function WorkbenchModel({ onBack }) {
 export function useLinsightConfig() {
     return useQuery({
         queryKey: ["linsightModelEnvelope"],
-        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelEnvelope()),
+        // Retain the existing handled-error fallback; v4 cannot cache undefined.
+        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelEnvelope()).then(env => env ?? null),
         select: (env) => {
             // F022: backend returns {data, inherited_from_root, fallback_blocked}.
             // Hand the destructured shape back so the component can render the
