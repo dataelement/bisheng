@@ -27,3 +27,9 @@
 706b13861固定源码的amd64镜像原生构建/导入烟测通过，内网digest `ae93f837a58529eee86f85bbd79f46801a9e068ab7c84babe35292209c97ad41`，Helm15三个控制服务升级完成，descriptor UID/data及helper/profile/app-proxy不变。正常对账将原Pod节点补齐，保存同UID的kubelet_terminal停止证明，三条资源账本cleanupcomplete且逐项APIabsent；证据SHA `dc8150cce9cf728a02e90d8b09673a1b025a57fb450389e088a14900fbecb733`。没有直接清理finalizer/PVC或SQL改状态。
 
 同应用第三次正常发布已明确接受，deployment `8070bb448ebe4f0182142ed25bf16038`，version `7e064c50b23348e59666a158404ef229`；旧journal/header保持，续办记录追加，不重放unknown。完整业务验收继续中。
+
+### 第三次失败：可选锁合同和诊断覆盖
+
+prepare `e36537609ef047748674e5172885dddd` 的inputs成功，resolve失败；两个Pod都按真实UID完成kubelet_terminal及正常清理，5条资源账本cleanupcomplete/APIabsent，proof SHA `aa2d35fff5a9c63a46542dff75c1497d564ea30db6846687a4fae66598488cee`。首个failed fact3明确保留preparing/transfer TypeError；清理重试fact4将投影覆盖为failed/空tail，原fact仍在。
+
+189无网络、无凭据原生helper复现：相同已知源码包省略lock成功，仅改lock:null即在k8s_helper.resolve_download写os.environ处TypeError。T221–T224规范化可选锁并保留首次诊断，已本地回归通过；未回填历史。后续采用独立k189r6完整场景batch，r4/r5原journal和追加链保持，完整业务仍未通过。

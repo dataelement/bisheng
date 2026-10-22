@@ -1,7 +1,7 @@
 {
   "schema": "f059-platform-evidence/v1",
   "recorded_at": "2026-10-22T16:38:15.286537+00:00",
-  "state": "in_progress-third-normal-publish-accepted",
+  "state": "in_progress_optional_lock_fixed_new_delivery_pending",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
@@ -164,7 +164,32 @@
       "deployment_id": "8070bb448ebe4f0182142ed25bf16038",
       "version_id": "7e064c50b23348e59666a158404ef229",
       "accepted": true,
-      "business_acceptance": "pending"
+      "business_acceptance": "pending",
+      "operation_id": "e36537609ef047748674e5172885dddd",
+      "status": "failed",
+      "stage": "precheck_build",
+      "failure_code": 16227,
+      "reason": "preparation_phase_failed",
+      "actual_failed_phase": "resolve",
+      "completed_prepare_stages": [
+        "inputs"
+      ],
+      "cleanup_status": "complete",
+      "all_five_resources_api_absent": true,
+      "cleanup_proof_sha256": "aa2d35fff5a9c63a46542dff75c1497d564ea30db6846687a4fae66598488cee",
+      "root_cause": "optional dependencies.lock:null assigned to os.environ caused TypeError; native isolated A/B confirmed",
+      "diagnostic_facts": [
+        {
+          "sequence": 3,
+          "failed_stage": "preparing",
+          "tail": "runtime helper failed (TypeError)"
+        },
+        {
+          "sequence": 4,
+          "failed_stage": "failed",
+          "tail": ""
+        }
+      ]
     }
   ],
   "material_ingress": {

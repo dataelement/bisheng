@@ -3175,3 +3175,83 @@ T200测试先行ad8d028b7：真实BundleDelivery/SourceImageDelivery、register_
 **结果**：PASS；真实189停止确认和发布闭环待验证。
 
 T219/T220真实闭环补证：189的原UID停止确认、账本node首次补齐及三资源正常清理已通过；新manager镜像706b/Helm15，fresh proof SHA dc8150cc…；不替代整体平台发布、升级或故障验收。
+
+## Task Review: T221 — 可选依赖锁空值及安装接续合同
+
+**文件**：`src/runtime-manager/tests/test_k8s_helper.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 2 | 命名规范 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 3 | 序列化约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 4 | 数据库约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 5 | 前端约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 6 | 信息泄漏 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 7 | 设计同步 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+
+**元数据验证**：文件范围/配对测试/前向依赖PASS；AC完整标注。
+
+**验证**：helper24配对先红后绿、相关318通过；operations31及相邻246通过；主树全runtime1410passed/13skip。非法锁类型在副作用前拒绝，环境恢复不变；终态首次诊断保留而stopped/cleanup取本轮真实结果，过期tail不复活。Ruff/格式/逐文件架构守卫通过。
+
+**结果**：PASS；不回填历史失败，新镜像原生与业务验收另记。
+
+## Task Review: T222 — 可选依赖锁空值规范化
+
+**文件**：`src/runtime-manager/runtime_manager/k8s_helper.py`、`src/runtime-manager/runtime_manager/k8s_prepare.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 2 | 命名规范 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 3 | 序列化约定 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 4 | 数据库约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 5 | 前端约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 6 | 信息泄漏 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 7 | 设计同步 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+
+**元数据验证**：文件范围/配对测试/前向依赖PASS；AC完整标注。
+
+**验证**：helper24配对先红后绿、相关318通过；operations31及相邻246通过；主树全runtime1410passed/13skip。非法锁类型在副作用前拒绝，环境恢复不变；终态首次诊断保留而stopped/cleanup取本轮真实结果，过期tail不复活。Ruff/格式/逐文件架构守卫通过。
+
+**结果**：PASS；不回填历史失败，新镜像原生与业务验收另记。
+
+## Task Review: T223 — 终态清理重试保留原始失败诊断
+
+**文件**：`src/runtime-manager/tests/test_operations_v2.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 2 | 命名规范 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 3 | 序列化约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 4 | 数据库约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 5 | 前端约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 6 | 信息泄漏 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 7 | 设计同步 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+
+**元数据验证**：文件范围/配对测试/前向依赖PASS；AC完整标注。
+
+**验证**：helper24配对先红后绿、相关318通过；operations31及相邻246通过；主树全runtime1410passed/13skip。非法锁类型在副作用前拒绝，环境恢复不变；终态首次诊断保留而stopped/cleanup取本轮真实结果，过期tail不复活。Ruff/格式/逐文件架构守卫通过。
+
+**结果**：PASS；不回填历史失败，新镜像原生与业务验收另记。
+
+## Task Review: T224 — 清理重试保留首次失败事实
+
+**文件**：`src/runtime-manager/runtime_manager/operations.py`
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 2 | 命名规范 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 3 | 序列化约定 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 4 | 数据库约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 5 | 前端约定 | N/A | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 6 | 信息泄漏 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+| 7 | 设计同步 | PASS | 既有helper/操作边界修复；无backend/API/DDL/权限变动，设计已同步。 |
+
+**元数据验证**：文件范围/配对测试/前向依赖PASS；AC完整标注。
+
+**验证**：helper24配对先红后绿、相关318通过；operations31及相邻246通过；主树全runtime1410passed/13skip。非法锁类型在副作用前拒绝，环境恢复不变；终态首次诊断保留而stopped/cleanup取本轮真实结果，过期tail不复活。Ruff/格式/逐文件架构守卫通过。
+
+**结果**：PASS；不回填历史失败，新镜像原生与业务验收另记。

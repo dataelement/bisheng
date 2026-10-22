@@ -1,24 +1,24 @@
 {
   "feature": "F059",
-  "recorded_at": "2026-10-22T16:38:15.287192+00:00",
-  "validated_source_commit": "706b138614f029c52d7be49bbc50453e847f0fd4",
+  "recorded_at": "2026-10-22T16:55:17.950438+00:00",
+  "validated_source_commit": "143606851370d6091b120d348549329b8113c6a6",
   "sdd": {
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 215,
+    "l1_completed": 219,
     "tasks_total": 224,
     "e2e": "in_progress",
     "l2": "not_started"
   },
   "checks": {
     "runtime": {
-      "passed": 1371,
+      "passed": 1410,
       "skipped": 13,
       "exit_code": 0,
-      "source_commit": "706b138614f029c52d7be49bbc50453e847f0fd4",
-      "log": "/private/tmp/f059-delayed-binding-main-runtime.log",
-      "scope": "full runtime including delayed scheduling binding and strict stopped proof; no new ARM run"
+      "source_commit": "143606851370d6091b120d348549329b8113c6a6",
+      "log": "/private/tmp/f059-optional-lock-main-runtime.log",
+      "scope": "full runtime with optional lock and terminal diagnostic retention"
     },
     "backend": {
       "passed": 1723,
@@ -440,12 +440,15 @@
       "app_proxy_unchanged": true
     },
     "optional_lock_null": {
-      "status": "fix_in_progress",
+      "status": "local_fix_passed_native_delivery_pending",
       "native_amd64_ab": "omitted lock succeeded; null lock TypeError at k8s_helper.resolve_download os.environ assignment",
-      "no_network_or_credentials": true
+      "no_network_or_credentials": true,
+      "paired_passed": 24,
+      "related_passed": 318,
+      "first_repro_permission_boundary": "Original private fixture mode0600 refused nonroot read; copied dedicated test-only fixture0444 then A/B ran; original untouched"
     },
     "terminal_failure_diagnostic_retention": {
-      "status": "fix_in_progress",
+      "status": "local_fix_passed_native_delivery_pending",
       "real_facts": [
         {
           "sequence": 3,
@@ -457,7 +460,9 @@
           "failed_stage": "failed",
           "tail": ""
         }
-      ]
+      ],
+      "operations_passed": 31,
+      "related_passed": 246
     }
   },
   "not_executed": [
