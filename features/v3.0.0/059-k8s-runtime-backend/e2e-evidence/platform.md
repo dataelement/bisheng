@@ -87,3 +87,9 @@ r10已真实通过preview-and-approval（审批人访问、其他角色拒绝、
 ## r10停用真实失败与清理修复
 
 首版observe已通过，原续办在POST stop失败后退出；原journal冻结SHA `1cbdb6186bbf211ce9eded309620fae2b57181e571e69a0d37011cbb5370e32a`，失败事件保持。9f57c389…原deadline19:27:30Z已过，app公开状态stopped但旧serve UID a27db53e…仍运行，不能视为物理停用通过。T238/T239修正已闭合历史UID重复停用，本地全runtime1541/13skip；T240/T241补过期stop先终态pending、再精确旧terminal自身cleanup的闭环，后端全app停止guard保持。当前PVC及writer均持有，无手工delete/finalizer/SQL/期限延长。新真实结果另记；旧cycle未完成不补写成功。
+
+## 原停用收尾真实通过与停用数据性能
+
+最终d7/Helm21内网digest b2288f64…三控制服务ready/epoch16，descriptor/helper/profile/report保持。原9f57…按正常对账timed_out/cleanupcomplete，a27…同UID kubelet_terminal且fresh API absent，原PVC4c5…仍Bound，proof SHA `8b15806b82c3d9c095d1f5204f8d7d848b23e603e8003d287c2be7b49eaa2ae6`；原超时不改成功。
+
+私有check尚未创建续办journal或发resume。首次offline rows data4b25…19:48:20创建、19:49:15 ready、动作done，19:49:20期限到、19:49:29清理完成；HTTP失败保持，不把SQL已执行等同响应通过。同8a镜像CPU25m与100m原生隔离导入实测31.699秒与6.9965秒，登记100m离线资源/预占配对，不放宽60秒或改同步互斥。

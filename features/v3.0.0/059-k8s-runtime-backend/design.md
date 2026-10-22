@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理等待缺陷已完成L1修复；r7完整prepare成功并进入probe，但探活总预算将多段init与健康检查混算，启动阶段期限及数据取消新动作闸已通过L1与完整本地集成。r8四init96秒后Ready，终态finalizer移除后删除误拒导致原操作超时；a06/Helm19已正常对账完成4资源清理，失败记录及停止证明保留。开发L1现为236/241，独立r9通过完整prepare/probe及预览启动后，工具漏配公共CA导致入口连接失败，原套件正常cleanup完成；r10通过预览/拒绝/审批后发现维护材料PodUID漏配；249/Helm20修复后owner显式manual-publish同批准版本已正式online，原PVC保留，HTTP/SDK身份与附件/WebSocket正反/SQLite查改导出及owner跨租户边界均经原suite.observe真实通过。原900秒等待自然截止，旧journal保留并以hash关联新journal继续首版停用恢复/更新及其余5场景；完整业务/故障/L2尚未通过，最新状态见[platform.json](./e2e-evidence/platform.json)。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
+**F059 实施进展（完整交付待验收）**：核心执行器、资源/材料账本、owner数据票据、SQLite维护、安全purge、能力探测、Chart、helper/assembler及业务验收工具均已有实现；L1与本地集成见[task-reviews.md](./task-reviews.md)。189已完成专用MySQL迁移、backend/Celery及四运行服务安装，source143同版helper的16项真实能力检查全部通过；材料传输、延迟绑定和同UID正常收尾已有证据。r6四个prepare阶段全部成功，异步清理等待缺陷已完成L1修复；r7完整prepare成功并进入probe，但探活总预算将多段init与健康检查混算，启动阶段期限及数据取消新动作闸已通过L1与完整本地集成。r8四init96秒后Ready，终态finalizer移除后删除误拒导致原操作超时；a06/Helm19已正常对账完成4资源清理，失败记录及停止证明保留。开发L1现为236/245，独立r9通过完整prepare/probe及预览启动后，工具漏配公共CA导致入口连接失败，原套件正常cleanup完成；r10通过预览/拒绝/审批后发现维护材料PodUID漏配；249/Helm20修复后owner显式manual-publish同批准版本已正式online，原PVC保留，HTTP/SDK身份与附件/WebSocket正反/SQLite查改导出及owner跨租户边界均经原suite.observe真实通过。原900秒等待自然截止，旧journal保留并以hash关联新journal继续首版停用恢复/更新及其余5场景；完整业务/故障/L2尚未通过，最新状态见[platform.json](./e2e-evidence/platform.json)。109已有三语言包、平台审批/预览、SDK/OBO、附件、SQLite及source-image的增量通过记录，范围见[docker-regression.md](./docker-regression.md)，不替代尚未执行的故障及恢复场景。完整K8s业务、故障升级、正式CI发行和L2仍待完成；按用户最新指示暂缓新ARM测试。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -291,7 +291,7 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 
 数据helper本地实现补充：data-v1签名输入为固定域`BISHENG-RUNTIME-DATA-V1\n`加canonical JSON（key_id和claims），claims精确绑定version/operation_id/request_id/app_id/exec_ref/pod_uid/actor_ref/action/parameters_sha256/nonce/issued_at/not_after/deadline；受理窗口最长5秒，总deadline不超过签发后60秒且仍受原数据操作期限限制。独立受信helper只加载公钥。卷内跨进程flock串行，started先fsync再创建有界SQLite子进程，子进程完成但done落盘失败仍保留未知；新只读请求查询原ID，不重放写操作。导出在platform目录生成文件、校验摘要后流式返回，不把CSV塞入journal或一次性读入内存。helper本地/HTTP、backend签发与会话、Pod模板与运输已通过本地合同；真实集群尚未验收。
 
-数据会话底层互斥已接线：Repository按node→assignment顺序，对节点内跨租户会话只做聚合计数并发上限2，在同一事务建立data_operation_id和离线helper 128MiB/25m预占；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。上述Service、存储传输、owner签发与Pod运输均已接线并通过本地合同；K8s数据业务实测待完成。
+数据会话底层互斥已接线：Repository按node→assignment顺序，对节点内跨租户会话只做聚合计数并发上限2，在同一事务建立data_operation_id和离线helper 128MiB/100m预占（启动成本实测修正；在线sidecar保持25m）；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。上述Service、存储传输、owner签发与Pod运输均已接线并通过本地合同；K8s数据业务实测待完成。
 
 原AppDataService入口已接选择分发：Docker保持既有RPC；K8s在原owner/参数校验之后，由RuntimeDataSessionService提交内部会话、等待同UID helper就绪、调用后端签发接口并转交X-Runtime-Data-Grant。后台不跨SQL事务等待网络。在线固定原exec_ref/UID，不另起挂卷写入者；离线冷启动与调用共用60秒。manager唤醒响应丢失以已提交状态查询恢复，数据HTTP结果未知不重发。T049已接默认backend签发实现，T045已接Pod运输/清理；K8s owner数据完整E2E尚未完成。
 
@@ -781,3 +781,5 @@ T236/T237已实现：单行可信maintenance+material_secret条件，实际reade
 2026-10-23 T240/T241实施要求：过期stop的终态与物理清理解耦。不能以当前stop空资源推出app无writer；先持久timed_out/pending/stoppedFalse保留active围栏，再fresh同scope，以精确旧terminal操作自身cleanup逐轮停止旧UID。全部资源停止/清理后仍由原backend全app guard验证终态更新；未知回执/换代/换UID持有，不延长期限或执行新迁移/purge/启动。
 
 T240/T241最终实现d7c0cc4fd：首轮独立复算发现503过早failed会阻断恢复，已修订为非终态、不确定且未精确到期的stop保留active fence，后续正常执行重试。只有精确operation_expired/409或checkpoint timeout且fresh deadline到期才进入timed_out收尾；已terminal非timeout首因不改。先pending ACK、fresh同scope、旧terminal owncleanup逐轮、backend最终全writer guard均保留；511相关/1573整套及独立96复审通过，真实189清理另记。
+
+2026-10-23 T242–T245资源参数修正：离线data Pod的data-layout/init与data-helper沿用平台可信tier CPU，新会话tier和真实预占均100m/128MiB；旧冻结tier25m仍生成旧模板，在线serve sidecar及其他helper保持25m。189同一8a镜像25m导入31.699秒、100m导入6.9965秒；实际离线helper运行到ready约35秒与该量级一致。原60秒冷启动/动作/响应、同步cleanup后返回、并发2、UID停止证据及互斥释放均不改变，无新API/网络/镜像依赖；更改资源参数而非延时请求或提前释放数据会话。真实新Pod时间另验。

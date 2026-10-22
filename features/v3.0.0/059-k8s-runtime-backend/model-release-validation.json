@@ -665,28 +665,27 @@
       "build_exit": 0,
       "import_smoke_exit": 0,
       "public_push": false,
-      "manager_image_id": "sha256:32e65744a296d2997f2e3395a6c8a78a035109854bb25beff05cc024a398fd6f",
+      "manager_image_id": "sha256:f391421bb01533856e445af441b022f6999b8de402e621cff83bf7c8f2b9d6eb",
       "platform": "linux/amd64",
-      "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+      "source_revision": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
       "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
       "changed_runtime_files": [
-        "runtime_manager/executors/kubernetes.py",
-        "runtime_manager/k8s_data_executor.py"
+        "runtime_manager/operations.py"
       ],
       "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
-      "preceding_manager_source": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+      "preceding_manager_source": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
       "schema": "f059-native-manager/v1"
     },
     "image": {
-      "manager_image_id": "sha256:32e65744a296d2997f2e3395a6c8a78a035109854bb25beff05cc024a398fd6f",
-      "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
-      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad",
+      "manager_image_id": "sha256:f391421bb01533856e445af441b022f6999b8de402e621cff83bf7c8f2b9d6eb",
+      "source_revision": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
+      "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:b2288f642fbabc7e2ada1ab2fd4d9bd78a6b2ce96c24d59bb51c4d0044f34c82",
       "public_push": false,
-      "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-20"
+      "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-23"
     },
-    "deployed_helm_revision": 18,
-    "source_pack_sha256": "94777ca4f6ba3cadf5f27397eaf31418c4e32643ffbee4a5db6d178fb5e189c7",
-    "source_pack_bytes": 57927492,
+    "deployed_helm_revision": 21,
+    "source_pack_sha256": "88bbcc772bcf14cb5f1e85c8cd42de2f27a9efd57c49463f58c5153e6247b00c",
+    "source_pack_bytes": 57958362,
     "helper_unchanged_source": "143606851370d6091b120d348549329b8113c6a6",
     "new_arm_run": false,
     "public_release": false
@@ -721,6 +720,37 @@
       "changes": [
         "runtime_manager/operations.py"
       ],
+      "helper_unchanged_source": "143606851370d6091b120d348549329b8113c6a6",
+      "new_arm_run": false,
+      "public_release": false
+    },
+    {
+      "native": {
+        "build_exit": 0,
+        "import_smoke_exit": 0,
+        "public_push": false,
+        "manager_image_id": "sha256:32e65744a296d2997f2e3395a6c8a78a035109854bb25beff05cc024a398fd6f",
+        "platform": "linux/amd64",
+        "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+        "preceding_full_bundle_validation_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
+        "changed_runtime_files": [
+          "runtime_manager/executors/kubernetes.py",
+          "runtime_manager/k8s_data_executor.py"
+        ],
+        "boundary": "Native manager build/import only; preceding bundle/SQLite smoke retained separately. No arm/CI public release claim.",
+        "preceding_manager_source": "7816e0bb87cd1b9ea0c82e8c01283cdf2e821a13",
+        "schema": "f059-native-manager/v1"
+      },
+      "image": {
+        "manager_image_id": "sha256:32e65744a296d2997f2e3395a6c8a78a035109854bb25beff05cc024a398fd6f",
+        "source_revision": "a1de5271f5f00cef0cba06d41f09c673a9190525",
+        "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:06bb857f4caa79499a844d16838831c7429dfc7d499e65649f314d96fd390cad",
+        "public_push": false,
+        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-20"
+      },
+      "deployed_helm_revision": 18,
+      "source_pack_sha256": "94777ca4f6ba3cadf5f27397eaf31418c4e32643ffbee4a5db6d178fb5e189c7",
+      "source_pack_bytes": 57927492,
       "helper_unchanged_source": "143606851370d6091b120d348549329b8113c6a6",
       "new_arm_run": false,
       "public_release": false

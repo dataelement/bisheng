@@ -7,7 +7,7 @@
     "design_confirmed": true,
     "tasks_review": "LGTM",
     "l1_completed": 236,
-    "tasks_total": 241,
+    "tasks_total": 245,
     "e2e": "in_progress",
     "l2": "not_started"
   },
@@ -1210,6 +1210,42 @@
       "independent_operations_passed": 96,
       "independent_result": "PASS",
       "report": "/private/tmp/f059-t240-t241-independent-l1.md"
+    },
+    "r10_stop_cleanup_complete": {
+      "schema": "f059-r10-stop-cleanup/v1",
+      "operator_supplied": true,
+      "parent_journal_sha256": "1cbdb6186bbf211ce9eded309620fae2b57181e571e69a0d37011cbb5370e32a",
+      "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+      "version_id": "ba5d47d9369540df9d5219adc72a55bf",
+      "stop_operation_id": "9f57c38992f2428f8fbc4bd3fa037ca4",
+      "status": "timed_out",
+      "reason": "operation_timeout",
+      "cleanup_status": "complete",
+      "namespace": "e2e-f059-apps",
+      "serve_pod_uid": "a27db53e-6f47-4ff3-b455-35ec038ca578",
+      "serve_pod_absent": true,
+      "serve_stop_state": "confirmed",
+      "serve_evidence_kind": "kubelet_terminal",
+      "pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27",
+      "pvc_present": true,
+      "pvc_phase": "Bound",
+      "active_operation_id": "9f57c38992f2428f8fbc4bd3fa037ca4",
+      "generation": 3,
+      "owner_epoch": 1,
+      "observed_at": "2026-10-22T19:47:44.788403+00:00"
+    },
+    "offline_data_cpu_measurement": {
+      "helper_image": "192.168.106.189:5443/f059/runtime-helper@sha256:8a8f92c41e85fdb12e236ba60e37eccc5da2d3462c7ac75a99d5f35d6a83a049",
+      "host": "192.168.106.189",
+      "cpu25m": {
+        "wall_seconds": 31.69858164805919,
+        "cpu_seconds": 0.792588255
+      },
+      "cpu100m": {
+        "wall_seconds": 6.996499706991017,
+        "cpu_seconds": 0.697129728
+      },
+      "boundary": "isolated same-image import measurement, not new K8s Pod acceptance"
     }
   },
   "not_executed": [

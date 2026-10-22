@@ -7,8 +7,8 @@
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:42c6c3c5ba9adb6f6340d0de979e9896d32e81f205f44851c492f50ea4fd7209",
+    "manager_source": "d7c0cc4fd4cd17c76b742902039846a789c7510b",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:b2288f642fbabc7e2ada1ab2fd4d9bd78a6b2ce96c24d59bb51c4d0044f34c82",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
@@ -19,7 +19,7 @@
       "bisheng/app_runtime/domain/services/runtime_data_grant_service.py",
       "bisheng/app_runtime/domain/services/runtime_data_session_service.py"
     ],
-    "helm_revision": 20,
+    "helm_revision": 21,
     "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927"
   },
   "attempts": [
@@ -639,5 +639,44 @@
     "original_resumed_exit": "AssertionError from stop response; no retry",
     "deadline_extended": false,
     "raw_local_evidence": "/private/tmp/f059-r10-stop-expired-before.json"
+  },
+  "r10_stop_cleanup_complete": {
+    "schema": "f059-r10-stop-cleanup/v1",
+    "operator_supplied": true,
+    "parent_journal_sha256": "1cbdb6186bbf211ce9eded309620fae2b57181e571e69a0d37011cbb5370e32a",
+    "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+    "version_id": "ba5d47d9369540df9d5219adc72a55bf",
+    "stop_operation_id": "9f57c38992f2428f8fbc4bd3fa037ca4",
+    "status": "timed_out",
+    "reason": "operation_timeout",
+    "cleanup_status": "complete",
+    "namespace": "e2e-f059-apps",
+    "serve_pod_uid": "a27db53e-6f47-4ff3-b455-35ec038ca578",
+    "serve_pod_absent": true,
+    "serve_stop_state": "confirmed",
+    "serve_evidence_kind": "kubelet_terminal",
+    "pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27",
+    "pvc_present": true,
+    "pvc_phase": "Bound",
+    "active_operation_id": "9f57c38992f2428f8fbc4bd3fa037ca4",
+    "generation": 3,
+    "owner_epoch": 1,
+    "observed_at": "2026-10-22T19:47:44.788403+00:00"
+  },
+  "offline_data_first_attempt": {
+    "operation_id": "4b25b620966c4cb2a1ec0998e8766719",
+    "created_at": "2026-10-22T19:48:20Z",
+    "ready_at": "2026-10-22T19:49:15Z",
+    "deadline": "2026-10-22T19:49:20Z",
+    "cleanup_complete_at": "2026-10-22T19:49:29Z",
+    "status": "timed_out",
+    "data_action_finished": "done",
+    "suite_phase": "private continuation check, before new journal/resume",
+    "fix_tasks": [
+      "T242",
+      "T243",
+      "T244",
+      "T245"
+    ]
   }
 }
