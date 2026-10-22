@@ -282,3 +282,28 @@ def test_file_secret_keys_support_identity_json_and_ca_certificate_without_path_
     assert set(secret["data"]) == {"identity.json", "ca.crt"}
     with pytest.raises(ValueError):
         secret_template(plan, name=plan.material_secret, data={"../outside": b"no"})
+
+
+def test_data_sidecar_gets_public_keys_and_uid_without_app_credentials(plan):
+    import json
+
+    from runtime_manager.k8s_templates import pod_template
+
+    spec = pod_template(plan)["spec"]
+    helper = next(c for c in spec["containers"] if c["name"] == "data-helper")
+    assert helper["command"] == ["python", "-I", "-m", "runtime_manager.k8s_data_helper"]
+    context = json.loads(next(e["value"] for e in helper["env"] if e["name"] == "DATA_CONTEXT"))
+    assert context == {"app_id": plan.app_id, "exec_ref": plan.resource_ref}
+    assert (
+        next(e for e in helper["env"] if e["name"] == "DATA_POD_UID")["valueFrom"]["fieldRef"]["fieldPath"]
+        == "metadata.uid"
+    )
+    assert any(v["name"] == "data-keys" and v["readOnly"] for v in helper["volumeMounts"])
+    assert not any(
+        v["name"] in {"material-auth", "data-keys"}
+        for c in spec["containers"]
+        if c["name"] == "app"
+        for v in c["volumeMounts"]
+    )
+    volume = next(v for v in spec["volumes"] if v["name"] == "data-keys")
+    assert volume["configMap"]["name"] == "runtime-data-public-keys"

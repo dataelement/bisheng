@@ -264,3 +264,25 @@ def test_http_helper_requires_a_grant_and_streams_only_authorized_export(helper)
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv") and b"id,name" in response.content
     assert response.headers["x-content-sha256"] == hashlib.sha256(response.content).hexdigest()
+
+
+def test_helper_control_state_reveals_no_database_or_journal_contents(helper):
+    from fastapi.testclient import TestClient
+
+    from runtime_manager.k8s_data_helper import create_app
+
+    worker, _, _ = helper
+    client = TestClient(create_app(worker))
+    assert client.get("/healthz").json() == {"status": "ok", "key_ids": ["data-key"]}
+    assert client.get("/execution-state").json() == {"idle": True}
+    with worker._locked():
+        assert client.get("/execution-state").json() == {"idle": False}
+
+
+def test_public_key_projection_can_rotate_without_changing_a_serving_pod(helper):
+    from runtime_manager.data_grant import DataGrantError
+
+    worker, _, _ = helper
+    worker.key_loader = lambda: {"next-key": KEY.public_key().public_bytes_raw().hex()}
+    with pytest.raises(DataGrantError):
+        worker.submit(grant(), {})

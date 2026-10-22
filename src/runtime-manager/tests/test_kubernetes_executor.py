@@ -320,6 +320,7 @@ def runtime(tmp_path, monkeypatch):
                     "node_local": True,
                 },
                 "probe_report": {"ready": True, "checks": []},
+                "pod_cidrs": ["10.233.0.0/16"],
                 "capabilities": {
                     "mandatory_isolation": True,
                     "status_protection": True,
@@ -604,3 +605,22 @@ def test_capabilities_report_the_frozen_domain_and_current_api_reachability(runt
 
     monkeypatch.setattr(cluster, "list", unavailable)
     assert executor.capabilities()["orchestration_available"] is False
+
+
+def test_backend_naive_utc_deadlines_do_not_depend_on_manager_timezone(runtime, monkeypatch):
+    import time
+
+    executor, _, _, op, _, clock = runtime
+    original = __import__("os").environ.get("TZ")
+    monkeypatch.setenv("TZ", "Asia/Shanghai")
+    time.tzset()
+    try:
+        op["kind"] = "probe"
+        op["deadline"] = clock.iso(1800).removesuffix("+00:00")
+        assert executor.launch(op)["ready"] is True
+    finally:
+        if original is None:
+            monkeypatch.delenv("TZ", raising=False)
+        else:
+            monkeypatch.setenv("TZ", original)
+        time.tzset()

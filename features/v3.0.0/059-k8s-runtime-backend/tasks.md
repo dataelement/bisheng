@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；82 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 53 / 82 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 55 / 82 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🔲 未开始 | 189 先前仅只读盘点，不能以静态检查代替真实验收 |
 
 ## 开发模式
@@ -455,7 +455,7 @@
   **依赖:** T017、T041、T042
   **配对:** T042
 
-- [ ] **T044** — K8s 在线及停用数据执行：契约与失败用例
+- [x] **T044** — K8s 在线及停用数据执行：契约与失败用例
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_data_executor.py`
   **逻辑/验收**：在线同Pod访问；停用仅在旧UID stopped且空生产位置启动 purpose=data，保留PVC/停用态，不创建业务Service；数据忙/未知拒绝，stop确认后释放预占与互斥，manager不签owner票据；测试只定义输入/结果，不加入实现。
@@ -463,7 +463,7 @@
   **依赖:** T043、T033
   **配对:** T045
 
-- [ ] **T045** — K8s 在线及停用数据执行
+- [x] **T045** — K8s 在线及停用数据执行
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_data_executor.py`、`src/runtime-manager/runtime_manager/api/platform_data.py`
   **逻辑/验收**：在线同Pod访问；停用仅在旧UID stopped且空生产位置启动 purpose=data，保留PVC/停用态，不创建业务Service；数据忙/未知拒绝，stop确认后释放预占与互斥，manager不签owner票据；通过配对测试后完成 L1 task-review。

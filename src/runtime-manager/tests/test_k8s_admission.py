@@ -416,3 +416,20 @@ def test_pod_approved_plan_never_contains_plaintext_environment_credentials(temp
     assert secret not in str(projection)
     assert projection["spec"]["containers"][0]["env"][-1]["value_sha256"]
     assert template["spec"]["containers"][0]["env"][-1]["value"] == secret
+
+
+def test_even_approved_templates_cannot_mount_arbitrary_configmaps(template, plan):
+    from runtime_manager.k8s_admission import template_projection
+
+    template["spec"]["volumes"].append(
+        {
+            "name": "data-keys",
+            "configMap": {
+                "name": "foreign-config",
+                "defaultMode": 292,
+                "items": [{"key": "public-keys.json", "path": "public-keys.json"}],
+            },
+        }
+    )
+    plan["template"] = template_projection(template)
+    assert not allowed(policy(lambda _: plan), request(template))

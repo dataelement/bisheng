@@ -44,10 +44,11 @@ class VolumeDatabase(AppDbService):
 
 
 class DataHelper:
-    def __init__(self, volume, *, app_id, exec_ref, pod_uid, public_keys, clock=time.time):
+    def __init__(self, volume, *, app_id, exec_ref, pod_uid, public_keys, clock=time.time, key_loader=None):
         self.volume = Path(volume).resolve()
         self.app_id, self.exec_ref, self.pod_uid = app_id, exec_ref, pod_uid
         self.public_keys, self.clock = dict(public_keys), clock
+        self.key_loader = key_loader
         for path in (
             self.volume / "business",
             self.volume / "platform",
@@ -125,11 +126,30 @@ class DataHelper:
         finally:
             os.close(descriptor)
 
+    def current_keys(self):
+        keys = self.key_loader() if self.key_loader else self.public_keys
+        if (
+            not isinstance(keys, dict)
+            or not 1 <= len(keys) <= 8
+            or any(not isinstance(key, str) or not 1 <= len(key) <= 64 for key in keys)
+        ):
+            raise DataGrantError("data_public_keys_invalid")
+        return keys
+
+    def execution_state(self):
+        try:
+            with self._locked():
+                return {"idle": True}
+        except DataGrantError as exc:
+            if str(exc) != "data_helper_busy":
+                raise
+            return {"idle": False}
+
     def submit(self, ticket, parameters):
         claims = verify_grant(
             ticket,
             parameters,
-            self.public_keys,
+            self.current_keys(),
             app_id=self.app_id,
             exec_ref=self.exec_ref,
             pod_uid=self.pod_uid,
@@ -276,6 +296,14 @@ def create_app(helper):
 
     application = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
+    @application.get("/healthz")
+    async def health():
+        return {"status": "ok", "key_ids": sorted(helper.current_keys())}
+
+    @application.get("/execution-state")
+    async def execution_state():
+        return await run_in_threadpool(helper.execution_state)
+
     @application.post("/actions")
     async def action(request: Request):
         try:
@@ -329,6 +357,7 @@ def main():
         exec_ref=context["exec_ref"],
         pod_uid=os.environ["DATA_POD_UID"],
         public_keys=keys,
+        key_loader=lambda: json.loads(Path("/run/data/public-keys.json").read_text()),
     )
     uvicorn.run(create_app(helper), host="0.0.0.0", port=8092, access_log=False)
 

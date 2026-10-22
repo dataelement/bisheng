@@ -775,3 +775,26 @@ L1：架构/命名/内部序列化/跨库与租户/敏感信息/设计同步 PAS
 
 **红阶段**：缺Service7 errors；已有业务入口分发1 failed；唤醒丢回复1 failed。最终新会话9项与原owner/审计/数据账本41 passed（`/private/tmp/f059-data-sessions-final.log`），Ruff与逐文件arch-guard通过。
 **元数据**：1/2目标文件、T017/T041/T082依赖、配对先行PASS。**结果：PASS_WITH_NOTES**：签发/网络通过注入合同验证；默认T049签发模块、T045实际Pod数据RPC尚未交付，F059仍不能启用部署验收，后续必须真实联通验证。
+
+## T009/T011/T033/T037/T041 数据Pod与控制状态接线复审
+
+各改动仍在原任务目标文件内：新增sidecar固定入口/公钥投射测试先失败；准入即便收到批准模板也拒绝其他ConfigMap。helper按请求刷新公钥，控制健康/空闲位不返回数据库或journal；实际数据仍验owner票据。共同状态机只准备/等待/清理data会话，不自创owner动作。跨国内TZ测试先复现backend无时区UTC被误读，修复后时间解释统一。
+
+模板/准入74 passed（`/private/tmp/f059-data-sidecar-template-final.log`），helper20 passed（`/private/tmp/f059-data-helper-control-final.log`）；选择/数据/执行器40 passed（`/private/tmp/f059-k8s-data-executor-final.log`）。L1架构/命名/内部序列化/无平台SQL/敏感信息/设计同步PASS，前端N/A。Pod仍为模拟集群；默认owner签发和真实卷/网络未验收。
+
+## Task Review: T044 / T045
+
+**任务**：在线及停用数据执行能力。**文件**：`tests/test_k8s_data_executor.py`；`k8s_data_executor.py`、`api/platform_data.py`。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅runtime侧namespace能力；HTTP数据API不初始化Docker；backend持久互斥替代会死锁的本地app锁 |
+| 2 | 命名/AC | PASS | AC-11、AC-15、AC-33、AC-35、AC-36、AC-43、AC-48、AC-49、AC-50、AC-52 |
+| 3 | 序列化 | PASS | 票据原样转交；app/action/参数/操作ID/UID核对；操作引用拒绝路径穿越；既有数据错误码保留 |
+| 4 | 数据库 | PASS | 在线不创建第二Pod；离线只复用原卷与固定位置，无业务Service/代码/身份；未知停止不释放 |
+| 5 | 前端 | N/A | 外部数据API未变 |
+| 6 | 信息泄漏 | PASS | Pod地址限安装网段；不转发manager私密凭据；响应按块限16MiB，CSV流式校验短缓存；旧票据窗口结束后仍需helper空闲证明；无404/超时强占 |
+| 7 | 设计同步 | PASS | 4.8同步控制空闲位与数据结果区别，公钥/UID及回收语义明确 |
+
+**红阶段**：缺模块7 failed；数据状态机1 failed；补错误码/有界读取/时区/路径查询/缓存回收先分别复现失败。最终14项通过（`/private/tmp/f059-k8s-data-executor-cache-final.log`），最新完整runtime见`/private/tmp/f059-runtime-data-cache-full.log`。Ruff与逐文件arch-guard通过。
+**元数据**：1/2目标文件、T043/T033依赖、配对红阶段PASS。**结果：PASS_WITH_NOTES**：集群/运输边界为模拟集群和HTTP传输测试，默认backend签发T049、SQLite维护T047和189真实验收仍必须完成。

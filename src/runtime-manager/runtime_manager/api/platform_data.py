@@ -1,6 +1,11 @@
 """Existing owner-authorized SQLite protocol, executed with a one-app filesystem view."""
 
 import asyncio
+import base64
+import binascii
+import copy
+import json
+import re
 import shutil
 from threading import Lock
 
@@ -13,10 +18,46 @@ from runtime_manager.appdb import DataBusyError
 from runtime_manager.data_executor import DataExecutor
 
 
+class _KubernetesWorker:
+    def __init__(self, service, operation, ticket):
+        self.service, self.operation, self.ticket = service, operation, ticket
+
+    def call(self, app_id, action, parameters):
+        if app_id != self.operation["app_id"]:
+            raise DataBusyError("Application data scope mismatch")
+        operation = copy.deepcopy(self.operation)
+        operation["data_grant"] = self.ticket
+        return self.service.runtime.data(operation, action, parameters)
+
+
 async def scoped_data(request: Request):
     await authorized(request)
     service = executor()
     app_id = request.path_params["app_id"]
+    if service.config.executor_kind == "kubernetes":
+        try:
+            raw = request.headers.get("X-Runtime-Data-Grant", "")
+            if not raw or len(raw) > 8192:
+                raise ValueError()
+            ticket = json.loads(base64.b64decode(raw, altchars=b"-_", validate=True))
+            if not isinstance(ticket, dict) or set(ticket) != {"key_id", "claims", "signature"}:
+                raise ValueError()
+            operation_id = ticket["claims"]["operation_id"]
+            if not isinstance(operation_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,36}", operation_id):
+                raise ValueError()
+            operation = await asyncio.to_thread(service.platform.operation, operation_id)
+            if (
+                operation["kind"] != "data"
+                or operation["app_id"] != app_id
+                or operation["node_id"] != service.config.node_id
+            ):
+                raise ValueError()
+        except (ValueError, TypeError, KeyError, binascii.Error):
+            raise DataBusyError("Owner data grant is required") from None
+        # The durable backend mutex and helper flock serialize this path. The
+        # operation thread holds the local app lock while awaiting this RPC.
+        yield _KubernetesWorker(service, operation, ticket)
+        return
     scope = await asyncio.to_thread(service.platform.application, app_id)
     if scope.get("node_id") != service.config.node_id:
         raise DataBusyError("Application belongs to a different execution node")

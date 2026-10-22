@@ -58,7 +58,8 @@ def workload_signer(seed: bytes, resource_ref: str) -> Ed25519PrivateKey:
 
 def _seconds(value):
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return (parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed).timestamp()
     except (ValueError, TypeError, AttributeError):
         raise ExecutorError("operation_deadline_invalid") from None
 
@@ -191,6 +192,7 @@ class KubernetesExecutor:
             deadline_seconds=deadline,
             runtime_class=self.document.get("runtime_class", ""),
             pull_secret=self.document.get("pull_secret", ""),
+            data_key_configmap=self.document.get("data_public_keys_configmap", "runtime-data-public-keys"),
         )
 
     def _intent(self, operation, plan, template, reference):
@@ -482,6 +484,10 @@ class KubernetesExecutor:
         return self.client.logs(row["name"], since_time=since_time, tail=tail, container="app")
 
     def cleanup(self, operation):
+        if operation["kind"] == "data" and operation["payload"].get("online"):
+            if self.data_transport is None:
+                return {"complete": False, "reason": "data_transport_unavailable"}
+            return self.data_transport.cleanup_session(operation)
         rows = self.platform.resources(operation["operation_id"])
         for row in rows:
             if row["kind"] == "Pod" and row["stop_state"] != "confirmed":

@@ -69,6 +69,7 @@ class PodPlan:
     deadline_seconds: int | None = None
     runtime_class: str = ""
     pull_secret: str = ""
+    data_key_configmap: str = "runtime-data-public-keys"
     temporary_mb: int = 256
 
     def validate(self):
@@ -101,6 +102,7 @@ class PodPlan:
             self.app_secret,
             self.runtime_class,
             self.pull_secret,
+            self.data_key_configmap,
         ):
             if value and not _NAME.fullmatch(value):
                 raise ValueError("k8s_reference_invalid")
@@ -157,7 +159,7 @@ class PodPlan:
             for k in self.secret_env
         ):
             raise ValueError("k8s_secret_environment_refused")
-        if {"MATERIAL_POD_UID", "PATH"} & self.helper_env.keys():
+        if {"MATERIAL_POD_UID", "DATA_POD_UID", "PATH"} & self.helper_env.keys():
             raise ValueError("k8s_material_uid_literal_refused")
         for env in (self.env, self.helper_env):
             if not isinstance(env, dict) or len(env) > 256:
@@ -227,6 +229,8 @@ def _container(plan, name, *, image=None, command=None, mounts=(), helper=False,
         item["command"] = list(command)
     if name in {"transfer", "material-fetch"}:
         item["env"].append({"name": "MATERIAL_POD_UID", "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}}})
+    if name == "data-helper":
+        item["env"].append({"name": "DATA_POD_UID", "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}}})
     return item
 
 
@@ -383,17 +387,39 @@ def pod_template(plan: PodPlan) -> dict:
             containers.append(app)
         if plan.purpose in PRODUCTION:
             name = "data-helper" if plan.purpose in {"serve", "data"} else "maintenance"
-            containers.append(
-                _container(
-                    plan,
-                    name,
-                    image=plan.helper_image,
-                    command=("python", "-I", "-m", "runtime_manager.k8s_helper", plan.purpose),
-                    mounts=[_mount("data", "/volume")],
-                    helper=True,
-                    env=plan.helper_env,
+            mounts = [_mount("data", "/volume")]
+            environment = plan.helper_env
+            command = ("python", "-I", "-m", "runtime_manager.k8s_helper", plan.purpose)
+            if name == "data-helper":
+                volumes.append(
+                    {
+                        "name": "data-keys",
+                        "configMap": {
+                            "name": plan.data_key_configmap,
+                            "defaultMode": 292,
+                            "items": [{"key": "public-keys.json", "path": "public-keys.json"}],
+                        },
+                    }
                 )
+                mounts.append(_mount("data-keys", "/run/data", readonly=True))
+                environment = {
+                    "DATA_CONTEXT": json.dumps(
+                        {"app_id": plan.app_id, "exec_ref": plan.resource_ref}, sort_keys=True, separators=(",", ":")
+                    )
+                }
+                command = ("python", "-I", "-m", "runtime_manager.k8s_data_helper")
+            container = _container(
+                plan, name, image=plan.helper_image, command=command, mounts=mounts, helper=True, env=environment
             )
+            if name == "data-helper":
+                container["ports"] = [{"name": "data-control", "containerPort": 8092, "protocol": "TCP"}]
+                container["readinessProbe"] = {
+                    "httpGet": {"path": "/healthz", "port": "data-control"},
+                    "periodSeconds": 2,
+                    "timeoutSeconds": 1,
+                    "failureThreshold": 3,
+                }
+            containers.append(container)
     return {"apiVersion": "v1", "kind": "Pod", "metadata": meta, "spec": spec}
 
 

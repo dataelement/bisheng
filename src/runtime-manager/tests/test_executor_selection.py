@@ -182,3 +182,31 @@ def test_wakeup_rejects_executable_payload_fields():
 
     with pytest.raises(ValidationError):
         Wakeup.model_validate({"operation_id": "operation-a", "pod_spec": {"hostNetwork": True}})
+
+
+def test_data_operation_waits_for_owner_rpc_then_cleans_its_own_session(runtime, monkeypatch):
+    executor, platform, driver = runtime
+    platform.op["kind"] = "data"
+    original_fact = platform.fact
+
+    def fact(*args, **kwargs):
+        result = original_fact(*args, **kwargs)
+        if args[2] == "ready":
+            platform.op["payload"]["data_action_finished"] = "done"
+        return result
+
+    monkeypatch.setattr(platform, "fact", fact)
+
+    def data(operation, action, parameters):
+        driver.calls.append(("data", action))
+        if action == "prepare-session":
+            return {"exec_ref": "pod-a", "pod_uid": "uid-a", "online": False}
+        if action == "finish-session":
+            return {"complete": True}
+        pytest.fail("manager must not invent an owner data action")
+
+    monkeypatch.setattr(driver, "data", data)
+    executor.execute("operation-a")
+    assert driver.calls == [("data", "prepare-session"), ("data", "finish-session")]
+    assert [phase for phase, _ in platform.facts] == ["starting", "ready", "completed"]
+    assert platform.facts[-1][1]["stopped"] and platform.facts[-1][1]["cleanup_complete"]

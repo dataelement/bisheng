@@ -37,6 +37,7 @@ class OperationExecutor:
         elif config.executor_kind == "kubernetes":
             from runtime_manager.executors.kubernetes import KubernetesExecutor
             from runtime_manager.k8s_config import KubernetesConfig
+            from runtime_manager.k8s_data_executor import KubernetesDataExecutor
 
             self.runtime = KubernetesExecutor(
                 config,
@@ -45,6 +46,7 @@ class OperationExecutor:
                 clock=clock,
                 checkpoint=self.process_checkpoint,
             )
+            self.runtime.data_transport = KubernetesDataExecutor(self.runtime)
         else:
             self.docker = docker or get_docker_backend()
             self.runtime = DockerExecutor(
@@ -184,6 +186,32 @@ class OperationExecutor:
                         self.report(
                             operation, "completed", detail={"ready": True, "stopped": True, "cleanup_complete": True}
                         )
+                elif kind == "data":
+                    self.report(operation, "starting")
+                    target = self.runtime.data(operation, "prepare-session", {})
+                    self.report(operation, "ready", exec_ref=target["exec_ref"], detail={"data_target": target})
+                    while True:
+                        current = self.checkpoint(operation)
+                        state = current["payload"].get("data_action_finished")
+                        if state:
+                            break
+                        self.clock.sleep(0.1)
+                    if not self.runtime.data(current, "finish-session", {}).get("complete"):
+                        raise ExecutorError("data_action_cleanup_pending")
+                    self.report(
+                        operation,
+                        "completed" if state == "done" else "failed",
+                        detail={
+                            "data_session": True,
+                            "stopped": True,
+                            "cleanup_complete": True,
+                            **(
+                                {}
+                                if state == "done"
+                                else {"reason": "data_result_unknown" if state == "unknown" else "data_action_failed"}
+                            ),
+                        },
+                    )
                 elif kind in {"deploy", "restore", "migrate"}:
                     self._deploy(operation)
                 elif kind in {"stop", "destroy"}:
@@ -321,6 +349,9 @@ class OperationExecutor:
     def cleanup_data_workers(self):
         if self.config.executor_kind == "docker":
             return self.runtime.cleanup_data_workers()
+        transport = getattr(self.runtime, "data_transport", None)
+        if transport is not None:
+            transport.cleanup_exports()
 
     def reconcile(self):
         self.cleanup_data_workers()

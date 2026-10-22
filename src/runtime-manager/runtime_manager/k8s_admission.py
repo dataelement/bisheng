@@ -156,7 +156,13 @@ def _same_identity(a, b):
 
 class AdmissionPolicy:
     def __init__(
-        self, *, namespace: str, manager_username: str, status_policy_revision: str, plan_reader: Callable[[str], dict]
+        self,
+        *,
+        namespace: str,
+        manager_username: str,
+        status_policy_revision: str,
+        plan_reader: Callable[[str], dict],
+        data_key_configmap: str = "runtime-data-public-keys",
     ):
         self.namespace = validate_namespace(namespace)
         if not manager_username.startswith("system:serviceaccount:") or not status_policy_revision:
@@ -164,6 +170,7 @@ class AdmissionPolicy:
         self.manager_username = manager_username
         self.revision = status_policy_revision
         self.plan_reader = plan_reader
+        self.data_key_configmap = validate_namespace(data_key_configmap)
 
     def review(self, review: dict) -> dict:
         uid = ""
@@ -280,8 +287,18 @@ class AdmissionPolicy:
         if not spec.get("containers") or spec.get("ephemeralContainers"):
             _deny("admission_containers_invalid")
         for volume in spec.get("volumes", []):
-            if set(volume) - {"name", "emptyDir", "secret", "persistentVolumeClaim"}:
+            if set(volume) - {"name", "emptyDir", "secret", "persistentVolumeClaim", "configMap"}:
                 _deny("admission_volume_refused")
+            if "configMap" in volume and (
+                volume.get("name") != "data-keys"
+                or volume["configMap"]
+                != {
+                    "name": self.data_key_configmap,
+                    "defaultMode": 292,
+                    "items": [{"key": "public-keys.json", "path": "public-keys.json"}],
+                }
+            ):
+                _deny("admission_public_keys_refused")
         for c in [*spec.get("containers", []), *spec.get("initContainers", [])]:
             security = c.get("securityContext", {})
             if (
