@@ -216,3 +216,58 @@ def test_secret_environment_mapping_cannot_overlap_or_expose_control_fields(plan
 
     with pytest.raises(ValueError):
         pod_template(replace(plan, **change))
+
+
+def test_trusted_helpers_ignore_packages_from_shared_working_directories(plan):
+    from runtime_manager.k8s_templates import pod_template
+
+    for purpose in ("serve", "prepare-download", "prepare-upload", "data"):
+        current = replace(
+            plan,
+            purpose=purpose,
+            pvc_name="" if purpose.startswith("prepare") else plan.pvc_name,
+            scratch_pvc="scratch-a",
+            deadline_seconds=None if purpose == "serve" else 60,
+        )
+        spec = pod_template(current)["spec"]
+        for container in spec["containers"] + spec["initContainers"]:
+            if container["image"] == plan.helper_image:
+                assert container["command"][:3] == ["python", "-I", "-m"]
+
+
+def test_material_pod_uid_comes_from_downward_api_and_never_a_caller_literal(plan):
+    from runtime_manager.k8s_templates import pod_template
+
+    for purpose in ("serve", "prepare-download", "prepare-upload"):
+        current = replace(
+            plan,
+            purpose=purpose,
+            pvc_name="" if purpose.startswith("prepare") else plan.pvc_name,
+            scratch_pvc="scratch-a",
+            deadline_seconds=None if purpose == "serve" else 60,
+        )
+        spec = pod_template(current)["spec"]
+        transfer = next(
+            c
+            for c in spec["initContainers"] + spec["containers"]
+            if any(m["name"] == "material-auth" for m in c["volumeMounts"])
+        )
+        env = next(e for e in transfer["env"] if e["name"] == "MATERIAL_POD_UID")
+        assert env == {"name": "MATERIAL_POD_UID", "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}}}
+    with pytest.raises(ValueError):
+        pod_template(replace(plan, helper_env={"MATERIAL_POD_UID": "caller-value"}))
+
+
+def test_prepare_install_mounts_the_fixed_tool_paths_without_transferring_identity(plan):
+    from runtime_manager.k8s_templates import pod_template
+
+    spec = pod_template(
+        replace(plan, purpose="prepare-install", pvc_name="", scratch_pvc="scratch-a", deadline_seconds=120)
+    )["spec"]
+    worker = spec["containers"][0]
+    mounts = {m["mountPath"]: m for m in worker["volumeMounts"]}
+    assert mounts["/workspace/app"]["subPath"] == "source"
+    assert mounts["/original"]["subPath"] == "original" and mounts["/original"]["readOnly"] is True
+    assert mounts["/materials"]["subPath"] == "materials" and mounts["/materials"]["readOnly"] is True
+    assert mounts["/output"]["subPath"] == "output"
+    assert "material-auth" not in {m["name"] for m in mounts.values()}

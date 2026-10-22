@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeProfile, RuntimeProfileDefault
 from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import (
     RuntimeConflict,
@@ -122,24 +124,88 @@ class RuntimeProfileService:
 
 
 class RuntimeDependencyService:
-    """Persist resolution aliases so code-only releases never re-resolve an input."""
+    """Persist immutable cache aliases and the selection made by each prepare."""
 
-    def __init__(self, repository):
+    def __init__(self, repository, *, clock=datetime.utcnow):
         self.repo = repository
+        self.clock = clock
+
+    async def _operation(self, operation):
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeOperation
+
+        current = await self.repo.get(RuntimeOperation, operation.id, lock=True)
+        if (
+            current is None
+            or (current.tenant_id, current.app_id, current.node_id)
+            != (
+                operation.tenant_id,
+                operation.app_id,
+                operation.node_id,
+            )
+            or current.kind != "prepare"
+            or current.status in {"completed", "failed", "cancelled", "timed_out"}
+            or current.deadline <= self.clock()
+            or current.payload.get("cancel_requested")
+        ):
+            raise RuntimeConflict("dependency_operation_expired")
+        return current
+
+    async def _artifact(self, operation, input_key, artifact_id):
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeArtifact
+
+        artifact = await self.repo.get(RuntimeArtifact, artifact_id)
+        profile = operation.payload.get("profile") or {}
+        if (
+            artifact is None
+            or artifact.state != "verified"
+            or artifact.kind != "dependencies"
+            or (
+                artifact.tenant_id,
+                artifact.app_id,
+            )
+            != (operation.tenant_id, operation.app_id)
+            or artifact.metadata_.get("input_key") != input_key
+            or (profile.get("profile_id") and artifact.metadata_.get("profile_id") != profile["profile_id"])
+            or (profile.get("platform") and artifact.platform != profile["platform"])
+        ):
+            raise RuntimeConflict("dependency_materials_not_verified")
+        return artifact
+
+    async def _remember(self, operation, row):
+        selected = operation.payload.get("dependency_resolution")
+        if selected and (
+            selected.get("input_key") != row.input_key
+            or (selected.get("artifact_id") and selected["artifact_id"] != (row.artifact_id or None))
+        ):
+            raise RuntimeConflict("immutable_dependency_selection")
+        operation.payload = {
+            **operation.payload,
+            "dependency_resolution": {
+                "input_key": row.input_key,
+                "artifact_id": row.artifact_id or None,
+                "state": row.state,
+            },
+        }
+        await self.repo.save(operation)
 
     async def resolve(self, operation, input_key):
         import re
 
         from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeDependencyPlan, RuntimeOperation
 
-        if not re.fullmatch("[0-9a-f]{64}", input_key):
+        if not isinstance(input_key, str) or not re.fullmatch("[0-9a-f]{64}", input_key):
             raise RuntimeConflict("dependency_input_invalid")
         scope = f"{operation.tenant_id}/{operation.app_id}"
         async with self.repo.transaction():
+            operation = await self._operation(operation)
             rows = await self.repo.find(RuntimeDependencyPlan, scope_key=scope, input_key=input_key, lock=True)
             if rows:
                 row = rows[0]
                 if row.artifact_id:
+                    await self._artifact(operation, input_key, row.artifact_id)
+                    if row.state not in {"materials_ready", "verified"}:
+                        raise RuntimeConflict("dependency_materials_not_verified")
+                    await self._remember(operation, row)
                     return {"state": row.state, "artifact_id": row.artifact_id}
                 previous = await self.repo.get(RuntimeOperation, row.operation_id)
                 if (
@@ -158,26 +224,22 @@ class RuntimeDependencyService:
                     operation_id=operation.id,
                 )
             await self.repo.save(row)
+            await self._remember(operation, row)
             return {"state": "claimed", "artifact_id": None}
 
     async def confirm(self, operation, input_key, artifact_id, *, verified=False):
-        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeArtifact, RuntimeDependencyPlan
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeDependencyPlan
 
         async with self.repo.transaction():
+            operation = await self._operation(operation)
             rows = await self.repo.find(
                 RuntimeDependencyPlan,
                 scope_key=f"{operation.tenant_id}/{operation.app_id}",
                 input_key=input_key,
                 lock=True,
             )
-            artifact = await self.repo.get(RuntimeArtifact, artifact_id)
-            if (
-                not rows
-                or artifact is None
-                or artifact.state != "verified"
-                or artifact.kind != "dependencies"
-                or (artifact.tenant_id, artifact.app_id) != (operation.tenant_id, operation.app_id)
-            ):
+            await self._artifact(operation, input_key, artifact_id)
+            if not rows:
                 raise RuntimeConflict("dependency_materials_not_verified")
             row = rows[0]
             if row.artifact_id and row.artifact_id != artifact_id:
@@ -185,8 +247,9 @@ class RuntimeDependencyService:
             if not row.artifact_id and row.operation_id != operation.id:
                 raise RuntimeConflict("dependency_owner_mismatch")
             row.artifact_id = artifact_id
-            row.state = "verified" if verified else "materials_ready"
+            row.state = "verified" if verified or row.state == "verified" else "materials_ready"
             await self.repo.save(row)
+            await self._remember(operation, row)
             return {"state": row.state, "artifact_id": artifact_id}
 
 

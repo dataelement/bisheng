@@ -157,6 +157,8 @@ class PodPlan:
             for k in self.secret_env
         ):
             raise ValueError("k8s_secret_environment_refused")
+        if {"MATERIAL_POD_UID", "PATH"} & self.helper_env.keys():
+            raise ValueError("k8s_material_uid_literal_refused")
         for env in (self.env, self.helper_env):
             if not isinstance(env, dict) or len(env) > 256:
                 raise ValueError("k8s_environment_invalid")
@@ -223,6 +225,8 @@ def _container(plan, name, *, image=None, command=None, mounts=(), helper=False,
     }
     if command:
         item["command"] = list(command)
+    if name in {"transfer", "material-fetch"}:
+        item["env"].append({"name": "MATERIAL_POD_UID", "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}}})
     return item
 
 
@@ -264,7 +268,17 @@ def pod_template(plan: PodPlan) -> dict:
     if plan.purpose in PREPARATION:
         volumes.append({"name": "scratch", "persistentVolumeClaim": {"claimName": plan.scratch_pvc}})
         trusted = plan.purpose in {"prepare-download", "prepare-upload"}
-        mounts = [_mount("scratch", "/work")]
+        mounts = (
+            [_mount("scratch", "/work")]
+            if trusted
+            else [
+                _mount("scratch", "/workspace/app", subpath="source"),
+                _mount("scratch", "/original", subpath="original", readonly=True),
+                _mount("scratch", "/materials", subpath="materials", readonly=True),
+                _mount("scratch", "/output", subpath="output"),
+                _mount("scratch", "/runtime/tools", subpath="tools", readonly=True),
+            ]
+        )
         if trusted:
             volumes.append(
                 {"name": "material-auth", "secret": {"secretName": plan.material_secret, "defaultMode": 256}}
@@ -274,11 +288,11 @@ def pod_template(plan: PodPlan) -> dict:
             plan,
             "transfer" if trusted else "prepare",
             image=plan.helper_image if trusted else plan.image,
-            command=("python", "-m", "runtime_manager.k8s_helper", plan.purpose) if trusted else plan.command,
+            command=("python", "-I", "-m", "runtime_manager.k8s_helper", plan.purpose) if trusted else plan.command,
             mounts=mounts,
             env=plan.helper_env if trusted else {},
         )
-        container["workingDir"] = "/work"
+        container["workingDir"] = "/work" if trusted else "/workspace/app"
         containers.append(container)
     else:
         production = plan.purpose in PRODUCTION
@@ -292,7 +306,7 @@ def pod_template(plan: PodPlan) -> dict:
                 plan,
                 "data-layout",
                 image=plan.helper_image,
-                command=("python", "-m", "runtime_manager.k8s_helper", "data-layout"),
+                command=("python", "-I", "-m", "runtime_manager.k8s_helper", "data-layout"),
                 mounts=[_mount("data", "/volume")],
                 helper=True,
             )
@@ -316,7 +330,7 @@ def pod_template(plan: PodPlan) -> dict:
                         plan,
                         "material-fetch",
                         image=plan.helper_image,
-                        command=("python", "-m", "runtime_manager.k8s_helper", "material-fetch"),
+                        command=("python", "-I", "-m", "runtime_manager.k8s_helper", "material-fetch"),
                         mounts=fetch_mounts,
                         helper=True,
                         env=plan.helper_env,
@@ -374,7 +388,7 @@ def pod_template(plan: PodPlan) -> dict:
                     plan,
                     name,
                     image=plan.helper_image,
-                    command=("python", "-m", "runtime_manager.k8s_helper", plan.purpose),
+                    command=("python", "-I", "-m", "runtime_manager.k8s_helper", plan.purpose),
                     mounts=[_mount("data", "/volume")],
                     helper=True,
                     env=plan.helper_env,

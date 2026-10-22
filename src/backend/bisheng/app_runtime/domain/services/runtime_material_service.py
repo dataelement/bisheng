@@ -24,6 +24,7 @@ from bisheng.app_runtime.domain.models.runtime_delivery import (
     RuntimeArtifact,
     RuntimeAssignment,
     RuntimeDelivery,
+    RuntimeDependencyPlan,
     RuntimeNode,
     RuntimeOperation,
     RuntimeRoute,
@@ -267,6 +268,21 @@ class RuntimeMaterialService:
                 refs[op.payload["source_artifact_id"]] = "source"
             for reference in op.payload.get("delivery", {}).get("dependencies", {}).get("offline_artifacts", []):
                 refs[reference] = "offline"
+            selected = op.payload.get("dependency_resolution") or {}
+            if selected.get("artifact_id"):
+                plans = await self.repo.find(
+                    RuntimeDependencyPlan,
+                    scope_key=f"{op.tenant_id}/{op.app_id}",
+                    input_key=selected.get("input_key", ""),
+                )
+                if (
+                    not plans
+                    or plans[0].artifact_id != selected["artifact_id"]
+                    or plans[0].state not in {"materials_ready", "verified"}
+                    or selected.get("state") not in {"materials_ready", "verified"}
+                ):
+                    _refused("material_dependency_selection_refused")
+                refs[selected["artifact_id"]] = "dependencies"
         if purpose == "restore" and op.payload.get("snapshot_id"):
             refs[op.payload["snapshot_id"]] = "snapshot"
         actions = ["download"] if refs else []
@@ -274,7 +290,7 @@ class RuntimeMaterialService:
             actions += ["upload:compiled", "upload:dependencies"]
         if purpose in {"migrate", "restore", "data"}:
             actions.append("upload:snapshot")
-        profile = frozen.get("profile") or op.payload.get("profile") or {}
+        profile = (op.payload.get("profile") if purpose.startswith("prepare") else frozen.get("profile")) or {}
         for reference, kind in refs.items():
             with bypass_tenant_filter():
                 artifact = await self.repo.get(RuntimeArtifact, reference)
@@ -295,6 +311,15 @@ class RuntimeMaterialService:
                 or not (owned or public)
                 or (artifact.platform and artifact.platform != node.platform)
                 or (kind == "offline" and not artifact.metadata_.get("enabled", True))
+                or (
+                    kind == "dependencies"
+                    and purpose == "prepare-download"
+                    and (
+                        artifact.metadata_.get("input_key")
+                        != (op.payload.get("dependency_resolution") or {}).get("input_key")
+                        or artifact.metadata_.get("profile_id") != profile.get("profile_id")
+                    )
+                )
             ):
                 _refused("material_artifact_refused")
         if not actions:
