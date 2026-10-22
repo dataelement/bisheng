@@ -3,6 +3,7 @@
   "version": "3.0.0-beta4",
   "private": true,
   "dependencies": {
+    "@hello-pangea/dnd": "catalog:",
     "@bisheng/ui": "workspace:*",
     "@bisheng/file-viewers": "workspace:*",
     "@headlessui/react": "^2.0.4",

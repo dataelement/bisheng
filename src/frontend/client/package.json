@@ -33,6 +33,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@hello-pangea/dnd": "catalog:",
     "@ariakit/react": "^0.4.15",
     "@ariakit/react-core": "^0.4.15",
     "@bisheng/file-viewers": "workspace:*",
