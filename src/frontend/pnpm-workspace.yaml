@@ -10,6 +10,7 @@ packages:
 # New shared deps go here; app-specific deps stay in each app's package.json.
 # (Versions seeded from client to avoid any resolution drift on day one.)
 catalog:
+  xlsx: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
   '@tanstack/react-query': 4.44.0
   react: 18.3.1
   react-dom: 18.3.1

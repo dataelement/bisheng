@@ -28,7 +28,7 @@ export default frontendConfig({
       {
         name: 'xlsx',
         message:
-          'xlsx has known vulnerabilities (prototype pollution / ReDoS) and is frozen pending replacement (ledger #7). Do not add new usage.',
+          'Direct xlsx imports remain frozen (ledger #7). Reuse @bisheng/file-viewers for previews; shared SheetJS versions must come from the workspace catalog.',
       },
       {
         name: 'react-color',
