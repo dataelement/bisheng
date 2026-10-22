@@ -3746,6 +3746,241 @@
       "review": "PASS"
     },
     {
+      "id": "T145",
+      "wave": 8,
+      "kind": "测试",
+      "title": "过期 canary 恢复围栏合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_installation.py"
+      ],
+      "logic": "未调度删除中Pod逐UID实测binding拒绝及二次读取；活跃计划/替换/错误拒绝/API不确定/未知状态不释放；停止证据不可跨资源复用。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-48",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T064"
+      ],
+      "pair": "T146",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
+      "id": "T146",
+      "wave": 8,
+      "kind": "实现",
+      "title": "过期 canary 逐资源恢复",
+      "files": [
+        "scripts/verify_k8s_runtime.py"
+      ],
+      "logic": "恢复仅接管自然过期的同UID计划；对未调度Pod获取独立绑定围栏证据，已绑定Pod等待可信终态；按停止确认、finalizer、对象消失、无PVC引用顺序清理。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-48",
+        "AC-49",
+        "AC-55"
+      ],
+      "depends": [
+        "T145"
+      ],
+      "pair": "T145",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
+      "id": "T147",
+      "wave": 8,
+      "kind": "测试",
+      "title": "CNI 身份与能力报告绑定合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_installation.py",
+        "src/runtime-manager/tests/test_k8s_capabilities.py"
+      ],
+      "logic": "Chart描述与admission身份同源；仅变更CNI身份使旧报告失效；只更新probe_report不改变描述摘要。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-55"
+      ],
+      "depends": [
+        "T143"
+      ],
+      "pair": "T148",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
+      "id": "T148",
+      "wave": 8,
+      "kind": "基础设施",
+      "title": "描述纳入 CNI 身份",
+      "files": [
+        "deploy/kubernetes/app-runtime/templates/workloads.yaml"
+      ],
+      "logic": "内部descriptor增加cni_username，与execution.cniUsername及admission ENV同源，不改摘要算法或对外部署API。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-55"
+      ],
+      "depends": [
+        "T147"
+      ],
+      "pair": "T147",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
+      "id": "T149",
+      "wave": 8,
+      "kind": "测试",
+      "title": "租户上下文默认值合同",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_model_contracts.py"
+      ],
+      "logic": "记录已保存模型草稿验证：None默认等待上下文，存储非空有索引；未声明/None/0自动填充，显式租户保留，缺上下文拒绝写入；DM8仅静态。",
+      "acs": [
+        "AC-15",
+        "AC-48",
+        "AC-54",
+        "AC-56"
+      ],
+      "depends": [
+        "T073"
+      ],
+      "pair": "T150",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
+      "id": "T150",
+      "wave": 8,
+      "kind": "基础设施",
+      "title": "运行记录租户默认值修订",
+      "files": [
+        "src/backend/bisheng/app_runtime/domain/models/runtime_delivery.py"
+      ],
+      "logic": "ScopedRuntimeRecord默认None且nullable=False/index=True；复用before_flush上下文注入，不改变既有DB约束，不修改公共Linsight模型。",
+      "acs": [
+        "AC-15",
+        "AC-48",
+        "AC-54",
+        "AC-56"
+      ],
+      "depends": [
+        "T149"
+      ],
+      "pair": "T149",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
+      "id": "T151",
+      "wave": 8,
+      "kind": "测试",
+      "title": "Helm 升级保留 canary 计划合同",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_installation.py"
+      ],
+      "logic": "覆盖升级保留运行中plans/profile_images和首次初始化；缺对象/归属错误/非法数据拒绝，旧无label对象需同release descriptor范围证据。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-40",
+        "AC-55"
+      ],
+      "depends": [
+        "T147"
+      ],
+      "pair": "T152",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
+      "id": "T152",
+      "wave": 8,
+      "kind": "基础设施",
+      "title": "Helm 升级保留恢复计划",
+      "files": [
+        "deploy/kubernetes/app-runtime/templates/services.yaml"
+      ],
+      "logic": "升级只读取同release/namespace的合法canary CM并保留动态计划；初装才初始化；合法旧资源通过descriptor安装范围校验后补标识，不静默重置计划。",
+      "acs": [
+        "AC-19",
+        "AC-20",
+        "AC-30",
+        "AC-40",
+        "AC-55"
+      ],
+      "depends": [
+        "T151"
+      ],
+      "pair": "T151",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
+      "id": "T153",
+      "wave": 8,
+      "kind": "测试",
+      "title": "原生 Docker context 构建合同",
+      "files": [
+        "src/runtime-manager/tests/test_image_release.py"
+      ],
+      "logic": "当前context选择对应docker driver builder，禁止依赖不可用default context；保留host/daemon/image架构一致与原生烟测门禁。",
+      "acs": [
+        "AC-42",
+        "AC-54",
+        "AC-55"
+      ],
+      "depends": [
+        "T123"
+      ],
+      "pair": "T154",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
+      "id": "T154",
+      "wave": 8,
+      "kind": "实现",
+      "title": "原生 context 构建入口",
+      "files": [
+        "scripts/build_runtime_images.sh"
+      ],
+      "logic": "命令级选择当前原生daemon的docker driver builder，不改全局context；同版本构建、离线resolver与烟测通过后生成清单。",
+      "acs": [
+        "AC-42",
+        "AC-54",
+        "AC-55"
+      ],
+      "depends": [
+        "T153"
+      ],
+      "pair": "T153",
+      "command": "",
+      "status": "pending",
+      "review": "NEEDS_FIX"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

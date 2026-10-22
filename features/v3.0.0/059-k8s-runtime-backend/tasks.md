@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；144 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 136 / 144 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；154 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 136 / 154 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -1120,6 +1120,86 @@
   **依赖:** T143
   **配对:** T143
 
+- [ ] **T145** — 过期 canary 恢复围栏合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_installation.py`
+  **逻辑/验收**：未调度删除中Pod逐UID实测binding拒绝及二次读取；活跃计划/替换/错误拒绝/API不确定/未知状态不释放；停止证据不可跨资源复用。
+  **覆盖 AC:** AC-19、AC-20、AC-30、AC-48、AC-49、AC-55
+  **依赖:** T064
+  **配对:** T146
+
+- [ ] **T146** — 过期 canary 逐资源恢复
+  **类型**：实现
+  **文件**：`scripts/verify_k8s_runtime.py`
+  **逻辑/验收**：恢复仅接管自然过期的同UID计划；对未调度Pod获取独立绑定围栏证据，已绑定Pod等待可信终态；按停止确认、finalizer、对象消失、无PVC引用顺序清理。
+  **覆盖 AC:** AC-19、AC-20、AC-30、AC-48、AC-49、AC-55
+  **依赖:** T145
+  **配对:** T145
+
+- [ ] **T147** — CNI 身份与能力报告绑定合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_installation.py`、`src/runtime-manager/tests/test_k8s_capabilities.py`
+  **逻辑/验收**：Chart描述与admission身份同源；仅变更CNI身份使旧报告失效；只更新probe_report不改变描述摘要。
+  **覆盖 AC:** AC-19、AC-20、AC-30、AC-55
+  **依赖:** T143
+  **配对:** T148
+
+- [ ] **T148** — 描述纳入 CNI 身份
+  **类型**：基础设施
+  **文件**：`deploy/kubernetes/app-runtime/templates/workloads.yaml`
+  **逻辑/验收**：内部descriptor增加cni_username，与execution.cniUsername及admission ENV同源，不改摘要算法或对外部署API。
+  **覆盖 AC:** AC-19、AC-20、AC-30、AC-55
+  **依赖:** T147
+  **配对:** T147
+
+- [ ] **T149** — 租户上下文默认值合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_model_contracts.py`
+  **逻辑/验收**：记录已保存模型草稿验证：None默认等待上下文，存储非空有索引；未声明/None/0自动填充，显式租户保留，缺上下文拒绝写入；DM8仅静态。
+  **覆盖 AC:** AC-15、AC-48、AC-54、AC-56
+  **依赖:** T073
+  **配对:** T150
+
+- [ ] **T150** — 运行记录租户默认值修订
+  **类型**：基础设施
+  **文件**：`src/backend/bisheng/app_runtime/domain/models/runtime_delivery.py`
+  **逻辑/验收**：ScopedRuntimeRecord默认None且nullable=False/index=True；复用before_flush上下文注入，不改变既有DB约束，不修改公共Linsight模型。
+  **覆盖 AC:** AC-15、AC-48、AC-54、AC-56
+  **依赖:** T149
+  **配对:** T149
+
+- [ ] **T151** — Helm 升级保留 canary 计划合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_installation.py`
+  **逻辑/验收**：覆盖升级保留运行中plans/profile_images和首次初始化；缺对象/归属错误/非法数据拒绝，旧无label对象需同release descriptor范围证据。
+  **覆盖 AC:** AC-19、AC-20、AC-30、AC-40、AC-55
+  **依赖:** T147
+  **配对:** T152
+
+- [ ] **T152** — Helm 升级保留恢复计划
+  **类型**：基础设施
+  **文件**：`deploy/kubernetes/app-runtime/templates/services.yaml`
+  **逻辑/验收**：升级只读取同release/namespace的合法canary CM并保留动态计划；初装才初始化；合法旧资源通过descriptor安装范围校验后补标识，不静默重置计划。
+  **覆盖 AC:** AC-19、AC-20、AC-30、AC-40、AC-55
+  **依赖:** T151
+  **配对:** T151
+
+- [ ] **T153** — 原生 Docker context 构建合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_image_release.py`
+  **逻辑/验收**：当前context选择对应docker driver builder，禁止依赖不可用default context；保留host/daemon/image架构一致与原生烟测门禁。
+  **覆盖 AC:** AC-42、AC-54、AC-55
+  **依赖:** T123
+  **配对:** T154
+
+- [ ] **T154** — 原生 context 构建入口
+  **类型**：实现
+  **文件**：`scripts/build_runtime_images.sh`
+  **逻辑/验收**：命令级选择当前原生daemon的docker driver builder，不改全局context；同版本构建、离线resolver与烟测通过后生成清单。
+  **覆盖 AC:** AC-42、AC-54、AC-55
+  **依赖:** T153
+  **配对:** T153
+
 - [ ] **T067** — Docker 与平台回归
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/docker-regression.md`、`features/v3.0.0/059-k8s-runtime-backend/docker-regression.json`
@@ -1181,3 +1261,5 @@
 2026-10-22补充登记T109–T134：来自并行代码审查与实际环境准备发现的既有合同遗漏；任务登记晚于部分修复，红绿历史按各日志/agent报告原样记录，不倒填任务时间。正式双架构发行、109/189业务及故障验收保持未完成。
 
 189实际CNI更新走pods/status维护其保留注解，暴露T111/T112原测试遗漏；重开该配对，补同UID/status不变的可信CNI metadata合法路径与伪造终态负例。原拒绝不会改为通配放行。
+
+2026-10-22续办登记T145–T154：用户批准恢复围栏、CNI报告绑定和模型约束；真实环境发现Helm重置计划、原生构建发现context不匹配，补配对任务。模型草稿079e22fce已先保存，红绿历史按实际保留，不倒填。
