@@ -23,7 +23,7 @@ from bisheng.knowledge.rag.pipeline.loader.ppt import BishengPptLoader
 from bisheng.knowledge.rag.pipeline.loader.txt import BishengTextLoader
 from bisheng.knowledge.rag.pipeline.loader.word import BishengWordLoader
 from bisheng.knowledge.rag.pipeline.loader.x_create import XinChuangFormatterLoader
-from bisheng.knowledge.rag.pipeline.types import PipelineConfig, PipelineResult
+from bisheng.knowledge.rag.pipeline.types import ImageStorageContext, PipelineConfig, PipelineResult
 
 FileExtensionMap = {
     "xlsx": {"loader": "_init_excel_loader", "transformers": "_init_excel_transformers"},
@@ -64,11 +64,21 @@ class BaseFilePipeline(BasePipeline):
     hierarchical_file_exts = {"md", "doc", "docx"}
     ppt_page_split_exts = {"ppt", "pptx"}
 
-    def __init__(self, invoke_user_id: int, file_name: str, file_rule: FileProcessBase, **kwargs):
+    def __init__(
+        self,
+        invoke_user_id: int,
+        file_name: str,
+        file_rule: FileProcessBase,
+        split_for_retrieval: bool = True,
+        image_storage: ImageStorageContext | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.invoke_user_id = invoke_user_id
         self.file_name = file_name
         self.file_split_rule = file_rule
+        self.split_for_retrieval = split_for_retrieval
+        self.image_storage = image_storage
 
         self.local_file_path: str | None = getattr(self, "local_file_path", None)
         self.tmp_dir: str | None = getattr(self, "tmp_dir", None)
@@ -142,6 +152,8 @@ class BaseFilePipeline(BasePipeline):
             "file_extension": file_extension or self.file_extension,
             "tmp_dir": self.tmp_dir,
             "image_object_dir": self._get_image_object_dir(),
+            "image_url_builder": self.image_storage.url_builder if self.image_storage else None,
+            "split_for_retrieval": self.split_for_retrieval,
         }
 
     def _get_image_object_dir(self) -> str | None:
@@ -151,7 +163,7 @@ class BaseFilePipeline(BasePipeline):
         bbox-aligned upload path — appropriate for transient pipelines that have no
         durable document_id (e.g., temp parsing).
         """
-        return None
+        return self.image_storage.object_dir if self.image_storage else None
 
     def _excel_header_row_indices(self) -> list[int]:
         """Turn the rule's 1-based header rows (the UI says "第 1 行 到 第 1 行") into the
