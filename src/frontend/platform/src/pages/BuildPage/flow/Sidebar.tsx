@@ -25,7 +25,7 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
 
     return <AccordionItem key={temp.name} value={temp.name + index} className="border-none">
         <AccordionTrigger className="py-2 bisheng-label">
-            <span className="break-all text-left">{temp.is_preset === 1 ? t(`categories.${temp.name}.name`) : temp.name}</span>
+            <span className="break-all text-left">{temp.is_preset === 1 ? t(`categories.${temp.name}.name`, { defaultValue: temp.name }) : temp.name}</span>
         </AccordionTrigger>
         <AccordionContent className="pb-2">
             {
