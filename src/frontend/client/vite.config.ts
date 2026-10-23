@@ -1,3 +1,4 @@
+import { diagramAssetTargets } from '../config/diagramAssets';
 import { createFrontendProxy, frontendEnvDefinitions, createMinioWarning, loadFrontendEnv, resolveApiTarget } from '../config/vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
@@ -228,6 +229,7 @@ export default defineConfig(({ command, mode }) => {
       }),
       viteStaticCopy({
         targets: [
+          ...diagramAssetTargets(),
           {
             src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
             dest: './'

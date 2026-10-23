@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文件预览与引用共享方案</title>
+<style>
+:root{color-scheme:light;--ink:#18243b;--muted:#5d6b80;--line:#dce3ee;--blue:#165dff;--wash:#eef4ff;--paper:#fff;--back:#f5f7fa}
+*{box-sizing:border-box}body{margin:0;background:var(--back);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.8;-webkit-font-smoothing:antialiased}
+main{max-width:960px;margin:32px auto;background:var(--paper);padding:46px 58px 32px;border:1px solid var(--line);border-radius:12px}header{padding-bottom:26px;border-bottom:1px solid var(--line)}.meta{display:flex;justify-content:space-between;gap:16px;color:var(--muted);font-size:13px}.state{color:var(--blue)}h1{font-size:32px;line-height:1.4;letter-spacing:-.5px;margin:22px 0 12px;font-weight:650}header p{margin:0;max-width:42em;color:var(--muted);font-size:17px}.summary{margin-top:20px;display:flex;flex-wrap:wrap;gap:8px 26px;font-size:14px}.summary span:before{content:"✓";color:var(--blue);margin-right:7px}section{padding:26px 0;border-bottom:1px solid var(--line)}h2{font-size:21px;line-height:1.5;margin:0 0 10px;font-weight:600}p{margin:8px 0}.explain{color:var(--muted)}.formats{font-size:14px;padding:12px 16px;background:var(--back);border-radius:6px;margin-top:14px}.formats strong{font-weight:600}.flow{display:flex;align-items:center;gap:10px;margin:16px 0 8px;font-size:14px;flex-wrap:wrap}.flow span{padding:7px 12px;border:1px solid var(--line);border-radius:5px}.flow b{font-weight:400;color:var(--muted)}.flow .selected{border-color:#bfd2ff;background:var(--wash);color:#1744a1}.diagram{display:grid;grid-template-columns:1fr 48px 1fr;align-items:center;gap:8px;margin-top:16px;border-left:3px solid var(--blue);background:var(--wash);padding:18px 20px}.source{font-weight:600}.source small{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-top:2px}.arrow{font-size:24px;color:var(--blue);text-align:center}.destinations{display:grid;gap:8px}.destinations div{background:white;border:1px solid #cbd9f5;padding:7px 12px;border-radius:5px;font-size:14px}.fine{font-size:13px;color:var(--muted);margin-top:10px}.bottom{display:grid;grid-template-columns:1fr 1fr;gap:34px;padding-top:25px}.bottom h2{font-size:18px}.bottom p{font-size:14px;color:var(--muted)}ul{padding-left:19px;margin:8px 0;color:var(--muted);font-size:14px}li{margin:5px 0}footer{padding-top:24px;font-size:12px;color:var(--muted)}strong{font-weight:600}
+@media(max-width:680px){body{background:white}main{margin:0;border:0;border-radius:0;padding:26px 22px}h1{font-size:27px}.meta{font-size:12px}.summary{gap:5px 18px}.bottom{grid-template-columns:1fr;gap:18px}.diagram{grid-template-columns:1fr 28px 1fr;padding:14px 12px;gap:5px}.source{font-size:14px}.destinations div{padding:6px 8px;font-size:13px}}
+@media print{body{background:white;font-size:13px}main{margin:0;max-width:none;border:0;padding:12px}header{padding-bottom:15px}h1{font-size:26px}section{padding:16px 0;break-inside:avoid}.bottom{break-inside:avoid}footer{padding-top:14px}.diagram,.formats{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="meta"><span>毕昇 3.0</span><span class="state">设计已确认 · 开发中</span></div>
+<h1>文件预览与引用共享方案</h1>
+<p>把前后台重复维护的能力抽成公共组件。以后修一处，两端一起生效，展示以 client 为基准。</p>
+<div class="summary"><span>纯前端改造</span><span>保留现有权限</span><span>两端独立部署</span></div>
+</header>
+<section>
+<h2>文件预览，共用展示能力</h2>
+<p>统一加载、展示、缩放和失败处理；前后台继续保留各自的页面入口与工具栏。</p>
+<div class="formats"><strong>已共享：</strong>Excel / CSV<br><strong>本次继续抽离：</strong>DOCX、Markdown、TXT、HTML、图片、PDF、音频与视频</div>
+<p class="explain">PDF 共用绘制、翻页与引用高亮；后台独有的框选、切片编辑和长文档滚动能力继续保留。不增加新的文件格式支持。</p>
+</section>
+<section>
+<h2>引用溯源，共用整条查看链路</h2>
+<p>就是点击回答中的引用编号，查看来源，再打开原文件并定位到引用内容。</p>
+<div class="flow" aria-label="引用查看流程"><span>回答中的 [1]</span><b aria-hidden="true">→</b><span>来源列表</span><b aria-hidden="true">→</b><span class="selected">原文预览与定位</span></div>
+<p class="explain">这三步的公共逻辑统一维护。能看什么仍由现有权限决定；下载取原文件，预览取适合展示的版本。</p>
+</section>
+<section>
+<h2>图表脚本，一份维护，各自复制</h2>
+<p>ECharts、Mermaid 保持现有版本。构建时<strong>直接复制压缩脚本，不重新编译</strong>。</p>
+<div class="diagram" aria-label="公共脚本分别复制到前台与后台产物">
+<div class="source">一份公共脚本<small>ECharts / Mermaid</small></div>
+<div class="arrow" aria-hidden="true">→</div>
+<div class="destinations"><div>复制到前台产物</div><div>复制到后台产物</div></div>
+</div>
+<p class="fine">开发时也读取这份公共来源。部署后两个前端各有自己的文件，互不依赖，不新增资源服务器。</p>
+</section>
+<div class="bottom">
+<div><h2>业务边界保留</h2><p>不改后端、数据库和接口协议；保留后台编辑、只读查看及两端权限和文件地址获取规则。</p></div>
+<div><h2>验收重点</h2><ul><li>两端文件能看、能定位，原文件下载正确。</li><li>后台 PDF 仍能框选和编辑切片。</li><li>快速切换不串文件，无权限不能查看。</li><li>两端独立启动后，图表都能正常显示。</li></ul></div>
+</div>
+<footer>实施顺序：图表资源 → 普通文件预览 → PDF → 引用链路 → 两端联合回归</footer>
+</main>
+</body>
+</html>

@@ -1759,7 +1759,7 @@
   },
   "src/pages/Dashboard/components/charts/BaseChart.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
+      "count": 9
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
@@ -2985,9 +2985,6 @@
     },
     "no-constant-binary-expression": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 5
     },
     "react-hooks/exhaustive-deps": {
       "count": 1

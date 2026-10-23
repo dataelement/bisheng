@@ -1,3 +1,4 @@
+import { diagramAssetTargets } from '../config/diagramAssets';
 import { createFrontendProxy, frontendEnvDefinitions, loadFrontendEnv, resolveApiTarget } from '../config/vite';
 import react from "@vitejs/plugin-react";
 import fs from "fs";
@@ -150,6 +151,7 @@ export default defineConfig(({ command, mode }) => {
       }),
       viteStaticCopy({
         targets: [
+          ...diagramAssetTargets(),
           {
             src: [
               'node_modules/ace-builds/src-min-noconflict/ace.js',

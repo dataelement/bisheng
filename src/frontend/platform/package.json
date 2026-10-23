@@ -5,6 +5,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "catalog:",
     "@bisheng/ui": "workspace:*",
+    "@bisheng/diagram-runtime": "workspace:*",
     "@bisheng/file-viewers": "workspace:*",
     "@headlessui/react": "^2.0.4",
     "@radix-ui/react-accordion": "catalog:",
