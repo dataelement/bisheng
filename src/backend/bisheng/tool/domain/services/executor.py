@@ -220,8 +220,9 @@ class ToolExecutor(BaseTool):
     def _init_api_tool(
         cls, tool: GptsTools, tool_type: GptsToolsType, callbacks: Callbacks = None, **kwargs
     ) -> BaseTool:
+        api_tool_factory = kwargs.pop("api_tool_factory", OpenApiTools.get_api_tool)
         tool_params = cls.parse_api_tool_params(tool, tool_type, **kwargs)
-        tool = OpenApiTools.get_api_tool(tool.tool_key, **tool_params)
+        tool = api_tool_factory(tool.tool_key, **tool_params)
         tool.callbacks = callbacks
         return tool
 

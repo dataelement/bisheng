@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="毕昇客户端模型调用审计一期需求与技术评审：只做审计，不包含安全围栏。">
+<title>客户端模型调用审计 · 一期需求与技术评审</title>
+<style>
+:root{color-scheme:light;--bg:#f6f7f9;--surface:#fff;--soft:#f0f3f6;--ink:#17202a;--muted:#596675;--line:#d7dde4;--blue:#2563a7;--blue-soft:#e7f0fa;--amber:#87550a;--amber-soft:#fff3d9;--green:#247357;--green-soft:#e8f5ef}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:76px}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}a{color:var(--blue);text-underline-offset:3px}button{font:inherit;cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--blue);outline-offset:3px}.shell{max-width:1160px;margin:auto;padding:32px 24px 60px}header{border-bottom:1px solid var(--line);padding-bottom:24px}.eyebrow{font-size:13px;letter-spacing:1px;color:var(--muted)}h1{font-size:30px;font-weight:600;line-height:1.4;margin:10px 0}h2{font-size:22px;line-height:1.5;margin:0 0 14px;font-weight:600}h3{font-size:17px;margin:24px 0 10px;font-weight:600}p{margin:10px 0}ul,ol{padding-left:23px;margin:10px 0}li{margin:5px 0}.lead{font-size:17px;max-width:900px}.meta,.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.meta{color:var(--muted);font-size:13px;margin:16px 0}.badge{border-radius:6px;padding:3px 9px;background:var(--amber-soft);color:var(--amber);font-size:13px}.badge.scope{background:var(--green-soft);color:var(--green)}.actions a,.actions button{border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);padding:7px 13px;text-decoration:none}.actions button.primary{background:var(--blue);color:white;border-color:var(--blue)}nav{position:sticky;top:0;z-index:2;background:var(--bg);display:flex;gap:4px;overflow-x:auto;padding:10px 0;border-bottom:1px solid var(--line);margin-bottom:24px}nav a{white-space:nowrap;padding:6px 11px;border-radius:6px;text-decoration:none;color:var(--muted)}nav a:hover,nav a[aria-current="location"]{background:var(--blue-soft);color:var(--blue)}section{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:28px;margin:20px 0;scroll-margin-top:10px}.num{font-size:13px;color:var(--blue);font-variant-numeric:tabular-nums;margin-right:12px}.muted,figcaption{color:var(--muted);font-size:13px}.callout{border-left:3px solid var(--blue);background:var(--blue-soft);padding:12px 16px;margin:18px 0}.callout.warn{background:var(--amber-soft);border-color:var(--amber}.callout.success{background:var(--green-soft);border-color:var(--green)}.cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}.cols>div{min-width:0}.table-wrap{overflow-x:auto;margin:14px 0}table{width:100%;border-collapse:collapse;text-align:left;font-size:14px}th,td{padding:12px 11px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}th{background:var(--soft);font-weight:500}tbody tr:last-child td{border-bottom:0}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9em;overflow-wrap:anywhere;background:var(--soft);padding:1px 4px;border-radius:3px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);padding:18px;border-radius:6px;line-height:1.65;font-size:13px}.architecture{display:grid;grid-template-columns:1fr 30px 1.4fr 30px 1.2fr;align-items:stretch;gap:8px;margin:20px 0}.node{border:1px solid var(--line);border-radius:8px;padding:18px;background:var(--soft)}.node strong{display:block;margin-bottom:7px}.arrow{align-self:center;text-align:center;font-size:22px;color:var(--blue)}.node p{font-size:14px;margin:5px 0}.caption{display:block;color:var(--muted);font-size:13px}.steps{counter-reset:step;list-style:none;padding:0}.steps li{counter-increment:step;display:grid;grid-template-columns:32px 1fr;gap:10px;margin:14px 0}.steps li::before{content:counter(step);width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--blue-soft);color:var(--blue);font-weight:600}.state-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.state{background:var(--soft);border-radius:7px;padding:14px}.state strong{display:block;color:var(--blue);margin-bottom:5px}summary{cursor:pointer;font-weight:500;padding:10px 0;color:var(--blue)}details{border-top:1px solid var(--line);margin-top:16px}.decision-table td:first-child,.ac-table td:first-child{white-space:nowrap;color:var(--blue);font-variant-numeric:tabular-nums}.decision-table td:nth-child(3){min-width:250px}footer{color:var(--muted);font-size:13px;margin:28px 4px}
+@media(max-width:768px){.shell{padding:20px 16px 40px}section{padding:20px}.cols{grid-template-columns:1fr;gap:10px}.architecture{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.state-grid{grid-template-columns:1fr 1fr}h1{font-size:25px}th,td{padding:10px 8px}}
+@media(max-width:575px){body{font-size:16px}.shell{padding:16px 12px 30px}section{padding:18px 14px}h2{font-size:20px}.lead{font-size:16px}.state-grid{grid-template-columns:1fr}.actions a,.actions button{font-size:14px}nav a{font-size:14px}}
+@media(pointer:coarse){button,.actions a,nav a{min-height:44px;display:inline-flex;align-items:center}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{@page{size:A4;margin:13mm}body{background:white;font-size:10pt}.shell{max-width:none;padding:0}header{padding-bottom:10px}h1{font-size:22pt}h2{font-size:15pt}h3{font-size:12pt}nav,.actions{display:none!important}section{border:0;border-radius:0;padding:12px 0;margin:12px 0}h2,h3{break-after:avoid}tr,.callout,.state{break-inside:avoid}th,td{font-size:9pt;padding:7px}.table-wrap{overflow:visible}.cols{gap:14px}.muted,footer{font-size:9pt}.architecture{grid-template-columns:1fr 20px 1.3fr 20px 1.2fr}.node{padding:10px}.node p{font-size:9pt}details>summary{display:none}details[open]>div,details>div{display:block!important}}
+</style>
+</head>
+<body><div class="shell">
+<header>
+<div class="eyebrow">BISHENG · 客户端模型调用审计</div>
+<h1>一期需求与技术评审</h1>
+<p class="lead">记录谁在什么对话中调用了哪个模型、实际提交了什么、模型返回了什么，并对压缩、分支、用量和留存完整性进行可追溯展示。</p>
+<div class="meta"><span class="badge">评审草案 · 未批准实施</span><span class="badge scope">一期仅审计</span><span>v0.6 · 2026-10-12</span><span>目标版本待定</span></div>
+<div class="actions"><a href="#scope">查看范围</a><a href="#architecture">查看技术方案</a><a href="#decisions">7 项待确认决策</a><button class="primary" type="button" id="print-button">打印 / 保存 PDF</button></div>
+</header>
+<nav aria-label="文档章节"><a href="#scope">范围</a><a href="#requirements">需求</a><a href="#architecture">架构</a><a href="#data">数据</a><a href="#contract">关联契约</a><a href="#reliability">可靠性</a><a href="#acceptance">验收</a><a href="#decisions">待确认</a></nav>
+<main>
+<section id="scope"><h2><span class="num">01</span>一期范围已经收敛</h2>
+<div class="callout success"><strong>唯一目标：</strong>建设客户端模型调用审计。采集边界是模型接口实际接收的全部输入和实际返回的全部输出；不做内容检查、改写或自动处置。D-05 已确认审计故障不使模型调用失败。</div>
+<div class="cols"><div><h3>一期纳入</h3><ul><li>请求元数据、状态、耗时和真实用量关联。</li><li>模型接口实际接收/返回的完整内容：消息、工具字段、多模态载荷或引用及流式片段。</li><li>对话、任务、子任务、修订、分支和客户端重试。</li><li>上下文快照、压缩事件及压缩来源关系。</li><li>正文加密、作用域内去重、过期清理和查看留痕。</li><li>授权查询、正文按需查看和完整性标记；审计侧不自行截断大正文。</li></ul></div><div><h3>一期不纳入</h3><ul><li>敏感词词库、安全围栏、内容风险判定和策略发布。</li><li>基于内容的输入拒绝、流式截断、脱敏、改写、模型替换和自动重试。</li><li>图片 OCR、图像语义、音视频和附件全文解析。</li><li>未进入模型请求的客户端本地工具、文件、屏幕和网络行为。</li><li>全文检索、批量原文导出和自动用户处置。</li><li>为未来安全围栏预设组件归属、接口或算法。</li></ul></div></div>
+<p class="muted">安全围栏后续作为独立需求重新确认目标、误判处理、执行位置、可用性语义和验收标准。本期审计表、API 和采集链路不构成未来方案承诺。</p>
+</section>
+<section id="requirements"><h2><span class="num">02</span>用户价值与使用入口</h2>
+<div class="table-wrap"><table><thead><tr><th>使用者</th><th>建议入口</th><th>核心操作</th></tr></thead><tbody><tr><td>审计员</td><td>审计中心 → 客户端模型调用</td><td>按用户、模型、时间、状态和完整性查询；查看请求和对话关系。</td></tr><tr><td>正文审计员</td><td>请求详情 → 正文</td><td>独立授权后按需读取输入输出；系统记录查看人、时间、对象和结果。</td></tr><tr><td>客户端用户</td><td>原有聊天界面</td><td>审计写入与模型调用解耦；审计故障不改变模型调用结果。</td></tr></tbody></table></div>
+<div class="cols"><div><h3>必须回答的问题</h3><ul><li>谁在何时通过哪个登录会话调用了哪个模型？</li><li>这次请求属于哪个对话、任务和分支？</li><li>实际发送了哪些有序上下文，实际收到了哪些输出？</li><li>正文是否待写入、完整、部分、未采集或已过期？</li><li>真实用量已记录还是未知？</li></ul></div><div><h3>事实边界</h3><ul><li>客户端声明对话和压缩关系，服务端不把声明当作事实证明。</li><li>审计列表显示最近成功写入进度与已知缺口；进度不证明覆盖完整，无审计行不等于无模型调用。</li><li>业务调用明细不能单独证明供应商已经收到请求。</li><li>摘要不能替代原文；原文缺失时必须明确显示。</li><li>用户放入模型输入的疑似凭证按原文留存，仅正文授权者可见。</li></ul></div></div>
+</section>
+<section id="architecture"><h2><span class="num">03</span>架构分工</h2>
+<div class="architecture" aria-label="客户端通过 BiSheng Backend 调用模型并由审计模块写入 SQL">
+<div class="node"><strong>客户端</strong><p>能力协商后提交对话、任务、消息和压缩关联。</p><span class="caption">旧客户端仍可请求级审计</span></div><div class="arrow" aria-hidden="true">→</div>
+<div class="node"><strong>BiSheng Backend</strong><p>现有 DSH 模型 Service 继续负责授权、额度、调用、流式响应和用量。</p><p>Audit Service 旁路采集事实，经 Repository 写入 SQL。</p><span class="caption">不新建第二条模型代理链路</span></div><div class="arrow" aria-hidden="true">⇄</div>
+<div class="node"><strong>共享审计存储</strong><p>SQL 保存索引、引用、上下文边和访问日志；完整加密载荷的位置待容量验证。</p><span class="caption">MySQL / DM8；不依赖本地磁盘</span></div>
+</div>
+<div class="callout"><strong>Gateway 本期不新增审计业务职责。</strong>采集点应位于模型调用接口边界，在请求转换后记录实际输入、在响应规范化前记录输出。受控供应商测试必须核对交换内容；本地发起调用不能被说成供应商已接收。</div>
+<h3>三档审计模式</h3>
+<div class="table-wrap"><table><thead><tr><th>模式</th><th>保存内容</th><th>页面表现</th></tr></thead><tbody><tr><td>OFF</td><td>不新增模型内容审计；既有调用明细与用量逻辑不变。</td><td>不展示新的内容审计记录。</td></tr><tr><td>METADATA</td><td>主体、模型、时间、状态、耗时、用量关联和关联标识。</td><td>可查询调用事实，正文显示“未采集”。</td></tr><tr><td>CONTENT</td><td>METADATA 加模型接口实际接收/返回的完整内容、有序引用和压缩关系。</td><td>在独立正文权限下回放输入输出。</td></tr></tbody></table></div>
+</section>
+<section id="data"><h2><span class="num">04</span>数据、压缩与完整性</h2>
+<div class="state-grid"><div class="state"><strong>PENDING</strong>异步写入中，模型调用可能已完成。</div><div class="state"><strong>COMPLETE</strong>预期范围全部持久化。</div><div class="state"><strong>PARTIAL</strong>只保留到最后确认位置。</div><div class="state"><strong>NOT_CAPTURED</strong>仅元数据模式或采集失败。</div><div class="state"><strong>EXPIRED</strong>内容已按保留期清理。</div></div>
+<p class="muted">完全无审计行时不能展示伪造的 PARTIAL：按请求编号仅可报告“有业务调用明细，审计待写入或缺失，模型接口进入及供应商接收状态未证实”。超时后有模型接口进入证据才算已知缺口；仅有业务明细是待核实候选缺口。阈值由 D-09 确认。</p>
+<h3>核心逻辑对象</h3>
+<div class="table-wrap"><table><thead><tr><th>对象</th><th>职责</th></tr></thead><tbody><tr><td><code>dsh_audit_conversation</code></td><td>租户、用户和客户端对话的稳定聚合。</td></tr><tr><td><code>dsh_audit_request</code></td><td>request_id、主体、模型、任务/分支、业务状态和完整性。</td></tr><tr><td><code>dsh_audit_content</code></td><td>作用域、摘要、加密正文、密钥版本和过期时间。</td></tr><tr><td><code>dsh_audit_content_ref</code></td><td>每次请求实际使用的 stage、channel、角色、顺序和正文引用。</td></tr><tr><td><code>dsh_audit_context_event / edge</code></td><td>压缩、摘要与来源消息关系，保存缺失、过期和冲突状态。</td></tr><tr><td><code>dsh_audit_content_access</code></td><td>正文查看人、目标、时间、结果和理由。</td></tr></tbody></table></div>
+<div class="cols"><div><h3>压缩前后</h3><ul><li>R1 保存 A。</li><li>R2 引用 A，新增 B / C。</li><li>R3 新增摘要 S / D，并记录 S 声明替换 A / B / C。</li><li>旧快照不被摘要覆盖；来源缺失时不补造。</li></ul></div><div><h3>去重与清理</h3><ul><li>只在同租户、同用户、同对话内复用正文。</li><li>无 conversation_id 时仅在单次请求内复用。</li><li>摘要命中仍核对编码、长度和解密内容。</li><li>只有无有效引用的正文才能删除。</li></ul></div></div>
+</section>
+<section id="contract"><h2><span class="num">05</span>客户端关联与兼容</h2>
+<p>服务端通过能力字段 <code>audit_context_versions: [1]</code> 声明支持。新客户端确认能力后才发送可选 <code>audit_context</code>；字段在供应商调用前剥离。旧客户端继续调用并形成请求级记录。</p>
+<pre><code>audit_context
+  version: 1
+  conversation_id: UUID
+  context_revision_id: UUID
+  run_id / parent_run_id: UUID?
+  logical_call_id / branch_id: UUID?
+  messages: MessageRef[]
+  compaction: CompactionRef?</code></pre>
+<div class="table-wrap"><table><thead><tr><th>组合</th><th>预期行为</th></tr></thead><tbody><tr><td>旧客户端 → 新服务端</td><td>保留请求级审计，显示“未关联对话”，不拒绝合法调用。</td></tr><tr><td>新客户端 → 新服务端</td><td>能力协商后上报对话、任务、消息修订和压缩关系。</td></tr><tr><td>新客户端 → 旧服务端</td><td>能力字段缺失则不发送新增字段，不用失败后自动重试模型请求来探测。</td></tr></tbody></table></div>
+<p class="muted"><code>audit_context</code> 是 BiSheng 扩展，不是 OpenAI 标准字段。它不能携带 tenant_id、user_id、session_id 或权限身份。</p>
+</section>
+<section id="reliability"><h2><span class="num">06</span>可靠性、权限与失败语义</h2>
+<div class="callout warn"><strong>D-05 已确认，模型主流程优先：</strong>模型请求和流式响应不等待审计存储写入；审计故障不使调用失败。代价是极端情况下可能完全无记录，须尽力告警和事后对账，不能宣称逐条缺口都实时可见。</div>
+<div class="table-wrap"><table><thead><tr><th>场景</th><th>已确认处理口径</th></tr></thead><tbody><tr><td>请求记录写入失败</td><td>模型调用继续；增加 begin gap 指标和结构化告警，完全未入库时不可查询。</td></tr><tr><td>输出批次写入失败</td><td>有界异步重试；超过预算后标记 PARTIAL/NOT_CAPTURED，模型输出继续。</td></tr><tr><td>流式连接或进程中断</td><td>只展示持久化确认范围；超时回收 RUNNING，不能补造后续正文。</td></tr><tr><td>用量缺失</td><td>标记未知，不按文本长度估算，也不填成零。</td></tr><tr><td>正文密钥不可用</td><td>元数据可查，正文不可用；不输出密文、不降级保存明文。</td></tr><tr><td>访问日志写入失败</td><td>拒绝本次正文读取，不影响普通元数据查询。</td></tr></tbody></table></div>
+<div class="cols"><div><h3>权限（D-06 待确认）</h3><ul><li>一期不做“查看人—被审计用户”逐人授权。</li><li>建议元数据沿 DSH 管理范围：全局超管按所选租户查看，租户管理员仅本租户。</li><li>正文独立授权，默认仅全局超管可看；所有正文读取留痕。</li><li>既有 DSH 操作审计不是只有超管可看，不能直接套作正文权限。</li></ul></div><div><h3>架构法则</h3><ul><li>Endpoint → Service → Repository → DB。</li><li>MySQL / DM8 双库兼容。</li><li>租户隔离自动注入。</li><li>独立正文密钥，不复用 HMAC / License 密钥。</li><li>共享持久化为真相，不使用本地文件队列。</li></ul></div></div>
+</section>
+<section id="acceptance"><h2><span class="num">07</span>验收与交付</h2>
+<ol class="steps"><li><div><strong>确认需求。</strong>D-03 采集边界与 D-05 故障语义已确认；继续确认 D-01、D-02、D-04、D-06、D-07、D-08、D-09 和目标版本。</div></li><li><div><strong>冻结契约。</strong>冻结审计模式、关联对象、完整性状态、保留期、权限动作与 D-09 阈值。</div></li><li><div><strong>先做存储。</strong>完成迁移、完整加密载荷、幂等、清理和 MySQL/DM8 验证，功能保持 OFF。</div></li><li><div><strong>接入调用链。</strong>用受控供应商核对输入输出，并按 D-05 验证异步写入、队列溢出、取消和用量语义。</div></li><li><div><strong>完成查询与权限。</strong>交付管理 API、最近成功写入进度和已知缺口、页面、正文访问日志及越权测试。</div></li><li><div><strong>分档启用。</strong>服务端先发布，从 METADATA 开始，稳定后再决定是否启用 CONTENT。</div></li></ol>
+<p class="muted">下列留存类 AC 仅在对应模式开启且审计事实成功持久化时适用；审计延迟或失败按 AC-17、AC-24、AC-25 验收。</p>
+<details><summary>展开 AC-01 至 AC-27</summary><div class="table-wrap"><table class="ac-table"><thead><tr><th>ID</th><th>验收条件</th></tr></thead><tbody>
+<tr><td>AC-01</td><td>同一登录用户同时使用两个聊天对话时分别聚合，不能按登录会话合并。</td></tr>
+<tr><td>AC-02</td><td>同一对话跨多次调用和重新登录继续使用时保持关联，并保留各请求独立身份。</td></tr>
+<tr><td>AC-03</td><td>模式开启且审计持久化成功时，旧客户端保存请求级记录并标记未关联；不因缺关联信息拒绝调用。</td></tr>
+<tr><td>AC-04</td><td>两个用户提供相同聊天编号时保持隔离，不跨用户读取、合并或复用正文。</td></tr>
+<tr><td>AC-05</td><td>Agent 并行执行子任务时保留父子关系与各自时间，不把完成顺序当作依赖。</td></tr>
+<tr><td>AC-06</td><td>重复正文减少允许作用域内的存储副本，同时保留每次出现、顺序和调用次数。</td></tr>
+<tr><td>AC-07</td><td>压缩请求持久化成功时新增实际发送的摘要与声明来源，不覆盖已留存历史原文。</td></tr>
+<tr><td>AC-08</td><td>多次压缩、消息修订或分支可追溯，并能还原任一完整留存请求的实际上下文。</td></tr>
+<tr><td>AC-09</td><td>压缩来源缺失、未采集或已过期时分别显示，不补造历史内容。</td></tr>
+<tr><td>AC-10</td><td>内容审计开启且持久化完整时，按模型接口实际形态还原完整输入输出，不因大正文自行截断。</td></tr>
+<tr><td>AC-11</td><td>仅元数据模式且写入成功时记录调用事实并标明正文未采集；失败按 AC-17 处理。</td></tr>
+<tr><td>AC-12</td><td>流式输出正常结束且审计写入成功时按接收顺序保存；审计缺失时不得标记完整。</td></tr>
+<tr><td>AC-13</td><td>流式中断且仍有持久化记录时只展示最后确认内容；完全无记录按 AC-17 报缺口。</td></tr>
+<tr><td>AC-14</td><td>图片或附件进入模型接口时留存其实际载荷或引用形式；未发送的客户端本地内容不审计。</td></tr>
+<tr><td>AC-15</td><td>审计记录成功留存时保存业务失败、取消和客户端重试的真实状态；审计故障不自动重试模型。</td></tr>
+<tr><td>AC-16</td><td>审计记录成功留存时关联真实用量；缺失时标记未知，不估算、不改写额度账本。</td></tr>
+<tr><td>AC-17</td><td>审计失败、积压或完全丢失不使模型调用失败、中止或自动重试；不完整记录不能标记完整。</td></tr>
+<tr><td>AC-18</td><td>仅具备元数据权限时，详情、搜索、错误和接口均不得返回正文。</td></tr>
+<tr><td>AC-19</td><td>授权管理员查看本租户其他用户原文应留痕；无正文权限或超出租户范围须拒绝。</td></tr>
+<tr><td>AC-20</td><td>正文到期清理不误删仍被有效请求引用的内容，并展示正文已过期。</td></tr>
+<tr><td>AC-21</td><td>组合时间、用户、模型、状态和完整性过滤时，在授权范围内稳定分页。</td></tr>
+<tr><td>AC-22</td><td>功能关闭或服务端不支持关联字段时，既有客户端和非客户端业务行为保持一致。</td></tr>
+<tr><td>AC-23</td><td>模型调用前校验失败不产生“已调用模型”审计；未发给模型的本地工具结果不审计。</td></tr>
+<tr><td>AC-24</td><td>异步写入时显示最近成功写入进度、积压和已知缺口，进度不证明覆盖完整；有业务调用明细而审计缺失时不能回答“未调用”，超时后区分已知缺口与待核实候选缺口。</td></tr>
+<tr><td>AC-25</td><td>供应商超时或取消时区分本服务发起调用与供应商接收未知；受控供应商对照完整输入输出。</td></tr>
+<tr><td>AC-26</td><td>模型输入中的疑似凭证按原文留存且仅正文授权者可见；传输层凭证不得进入审计或普通日志。</td></tr>
+<tr><td>AC-27</td><td>大正文和队列满载时主流程语义不变，首字和总耗时 P95/P99 不超过 D-09 阈值。</td></tr>
+</tbody></table></div></details>
+</section>
+<section id="decisions"><h2><span class="num">08</span>已确认与待确认决策</h2>
+<div class="table-wrap"><table class="decision-table"><thead><tr><th>编号</th><th>产品选择</th><th>建议口径</th><th>影响</th></tr></thead><tbody>
+<tr><td>D-01</td><td>一期审计哪些入口</td><td>仅客户端经毕昇转发的 Chat Completions。</td><td>接入与回归范围。</td></tr>
+<tr><td>D-02</td><td>开启方式与初始状态</td><td>默认关闭；支持 OFF、METADATA、CONTENT。</td><td>升级后是否自动留存正文。</td></tr>
+<tr><td>D-03（已确认）</td><td>保存哪些内容</td><td>完整保存模型接口实际接收的输入及返回的输出；工具内容仅在进入模型调用时纳入。</td><td>采集边界已确认；不另行截断或解析。</td></tr>
+<tr><td>D-04</td><td>保存多长时间</td><td>正文 30 天，元数据与查看日志 180 天，均为待确认默认值。</td><td>存储、备份和合规成本。</td></tr>
+<tr><td>D-05（已确认）</td><td>审计失败是否影响调用</td><td>模型调用不等待 SQL/MinIO；审计失败有界重试、告警并标记缺口，不让模型调用失败。</td><td>接受可观测审计缺口。</td></tr>
+<tr><td>D-06</td><td>管理入口与授权</td><td>建议不做逐人授权；元数据沿 DSH 管理范围，正文独立授权且默认仅全局超管。</td><td>查看主体与权限 Catalog 待确认。</td></tr>
+<tr><td>D-07</td><td>老客户端兼容</td><td>老客户端保留请求级记录；新客户端能力协商后上报关联。</td><td>旧客户端无法完整还原对话。</td></tr>
+<tr><td>D-08</td><td>正文去重范围</td><td>同租户、同用户、同对话内复用；无对话编号时限于单次请求。</td><td>存储节省与隔离。</td></tr>
+<tr><td>D-09</td><td>异步可见性与性能阈值</td><td>压测后确认元数据/正文可见时效、待写入超时、首字和总耗时 P95/P99 回归上限。</td><td>规格冻结前必须填定数值。</td></tr>
+</tbody></table></div>
+<div class="callout"><strong>评审出口：</strong>D-03、D-05 已确认；其余 7 项待确认后再冻结验收标准。安全围栏不在本轮评审出口内；未来立项时重新评审，不默认复用当前设计。</div>
+<h3>完整文档</h3><p><a href="./spec.md">详细 PRD</a> · <a href="./design.md">完整技术方案</a> · <a href="../client-api.md">既有客户端接口基线</a></p>
+</section>
+</main>
+<footer>本页是评审阅读版，不是产品功能页面。单文件离线可读，无外部运行依赖。仅更新文档，未实施、未部署；挂在 F062 目录不代表纳入已发布 beta2。</footer>
+</div>
+<script>
+(() => {
+  const expanded = [];
+  window.addEventListener('beforeprint', () => document.querySelectorAll('details').forEach(item => { if (!item.open) { expanded.push(item); item.open = true; } }));
+  window.addEventListener('afterprint', () => expanded.splice(0).forEach(item => { item.open = false; }));
+  document.getElementById('print-button').addEventListener('click', () => window.print());
+  const links = Array.from(document.querySelectorAll('nav a'));
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+      if (entry.isIntersecting) links.forEach(link => link.hash === '#' + entry.target.id ? link.setAttribute('aria-current', 'location') : link.removeAttribute('aria-current'));
+    }), {rootMargin: '-80px 0px -60% 0px', threshold: 0});
+    document.querySelectorAll('main section').forEach(section => observer.observe(section));
+  }
+})();
+</script>
+</body></html>

@@ -1,4 +1,4 @@
-import { Button, Input, notification } from '@bisheng/ui';
+import { Button, Input, notification, Tabs } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -20,13 +20,19 @@ import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { InstallPolicySettings } from "./InstallPolicySettings";
+import { WorkbenchMarketSection } from "./WorkbenchMarketSection";
+
 const MAX_UPLOAD = 512 * 1024 * 1024;
 
 export function PluginMarketPage() {
   const { user } = useContext(userContext);
   const { t } = useTranslation("dshMarket");
   if (!canManageWorkbenchConfig(user)) return <div className="p-8">{t("forbidden")}</div>;
-  return <TenantPluginMarket key={`${user.user_id}:${user.tenant_id}`} />;
+  return <Tabs defaultActiveKey="plugins" key={`${user.user_id}:${user.tenant_id}`} className="h-full overflow-auto p-6" aria-label={t("marketSections")} items={[
+    { key: "plugins", label: t("pluginSection"), children: <TenantPluginMarket /> },
+    { key: "workbenches", label: t("workbenchSection"), children: <WorkbenchMarketSection /> },
+  ]} />;
 }
 
 function TenantPluginMarket() {
@@ -112,7 +118,7 @@ function TenantPluginMarket() {
       setChecking(false);
       return;
     }
-    if (!file.name.toLowerCase().endsWith(".zip") || file.size > MAX_UPLOAD) {
+    if (!/\.(?:zip|tgz|tar\.gz)$/i.test(file.name) || file.size > MAX_UPLOAD) {
       setPreviewError(true);
       setChecking(false);
       return;
@@ -169,7 +175,7 @@ function TenantPluginMarket() {
 
   async function uploadFile() {
     if (!file || tenant === null || !preview?.allowed || checking) return;
-    if (!file.name.toLowerCase().endsWith(".zip") || file.size > MAX_UPLOAD) {
+    if (!/\.(?:zip|tgz|tar\.gz)$/i.test(file.name) || file.size > MAX_UPLOAD) {
       notification.open({ type: "error", title: String(t("invalidFile") ?? ''), description: String("") });
       return;
     }
@@ -200,7 +206,7 @@ function TenantPluginMarket() {
   }
 
   return (
-    <main className="h-full overflow-auto p-6 space-y-6">
+    <main className="space-y-6 pt-6">
       <header className="flex items-start justify-between gap-6">
         <div className="space-y-3">
           <h1 className="text-xl font-semibold">{t("title")}</h1>
@@ -210,6 +216,7 @@ function TenantPluginMarket() {
           {t("import")}
         </Button>
       </header>
+      {tenant !== null && <InstallPolicySettings tenant={tenant} />}
       {error && (
         <div role="alert" className="text-red-600 flex items-center gap-3">
           {t("loadFailed")}
@@ -317,7 +324,7 @@ function TenantPluginMarket() {
             <DialogTitle>{t("import")}</DialogTitle>
             <DialogDescription>{t("uploadHint")}</DialogDescription>
           </DialogHeader>
-          <Input type="file" accept=".zip,application/zip" disabled={busy} aria-label={t("import")} onChange={(e) => {
+          <Input type="file" accept=".zip,.tgz,.tar.gz,application/zip,application/gzip" disabled={busy} aria-label={t("import")} onChange={(e) => {
               setPreview(null);
               setFile(e.target.files?.[0] || null);
             }} />

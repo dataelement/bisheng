@@ -11,7 +11,6 @@ import { policyKey, type PolicyDrafts } from "./SubjectPolicyControls";
 import { AccessMembersProvider, useAccessMembers, useDelayedMemberLoading } from "./useAccessMembers";
 import { useUserPolicyDrafts, userDraftOf } from "./useUserPolicyDrafts";
 
-import { ReauthorizeSeat, SeatRestoreContext } from "./ReauthorizeSeat";
 
 type UserDrafts = ReturnType<typeof useUserPolicyDrafts>;
 interface Props {
@@ -50,9 +49,7 @@ function inheritedQuota(
   departments: DshDepartmentPolicy[],
   drafts: PolicyDrafts,
 ): number {
-  const quotas = item.sources
-    .filter((source) => source.subject_type === "ROLE")
-    .map((source) => source.monthly_token_limit);
+  const quotas: number[] = [];
   for (const membership of item.departments) {
     const department = departments.find((entry) => entry.subject_id === membership.id);
     if (department) quotas.push(departmentQuota(department, departments, drafts));
@@ -88,7 +85,7 @@ function MemberRows({
         const entry = users.entries[item.user_id];
         const saved = entry?.saved ?? item;
         const draft = entry?.draft ?? userDraftOf(item);
-        const status = item.access_status ?? "UNAVAILABLE";
+        const status = item.authorized ? "AUTHORIZED" : "UNAUTHORIZED";
         const inherited = inheritedQuota(saved, departments, departmentDrafts);
         const value = draft.enabled ? draft.limit : String(inherited);
         const disabled = saving || Boolean(entry?.operationId);
@@ -138,22 +135,11 @@ function MemberRows({
                 <Tag
                   size="small"
                   dot
-                  color={
-                    status === "AUTHORIZED" || status === "PENDING_LOGIN"
-                      ? "success"
-                      : status === "REVOKED"
-                        ? "danger"
-                        : status === "SEAT_LIMIT_REACHED"
-                          ? "warning"
-                          : "default"
-                  }
+                  color={status === "AUTHORIZED" ? "success" : "default"}
                   className="shrink-0 whitespace-nowrap"
                 >
                   {t("dsh.access_" + status)}
                 </Tag>
-                {status === "REVOKED" && (
-                  <ReauthorizeSeat userId={item.user_id} name={saved.user_name} disabled={saving} />
-                )}
               </div>
               <div className="flex h-9 items-center justify-end">
                 {draft.enabled && (
@@ -345,7 +331,6 @@ function DepartmentPane({ props, selected }: DepartmentPaneProps) {
 
 export function DepartmentAccessTree(props: Props) {
   const { t } = useTranslation();
-  const [seatRevision, setSeatRevision] = useState(0);
   const [selected, setSelected] = useState(props.items[0]?.subject_id ?? 0);
   const roots = useMemo(() => treeOf(props.items), [props.items]);
   const choose = (id: number) => {
@@ -353,10 +338,7 @@ export function DepartmentAccessTree(props: Props) {
     props.onQueryClear();
   };
   return (
-    <SeatRestoreContext.Provider
-      value={{ tenantId: props.tenantId, onRestored: () => setSeatRevision((value) => value + 1) }}
-    >
-      <AccessMembersProvider modelId={props.modelId} refresh={props.refresh + seatRevision}>
+      <AccessMembersProvider modelId={props.modelId} refresh={props.refresh}>
         <div className="flex min-h-full min-w-[880px] text-sm leading-5">
           <nav aria-label={t("dsh.quotaDepartments")} className="w-60 shrink-0 border-r bg-muted/10 p-3 text-[13px]">
             <p className="mb-3 px-2 text-xs font-medium text-muted-foreground">{t("dsh.quotaDepartments")}</p>
@@ -391,6 +373,5 @@ export function DepartmentAccessTree(props: Props) {
           <DepartmentPane props={props} selected={selected} />
         </div>
       </AccessMembersProvider>
-    </SeatRestoreContext.Provider>
   );
 }

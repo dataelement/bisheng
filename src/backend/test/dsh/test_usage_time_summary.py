@@ -233,7 +233,7 @@ async def test_usage_summary_service_authorizes_target_and_selects_granularity()
     reader = AsyncMock(return_value={"message_count": 0})
     service = DshManagementService(
         repository_scope=None,
-        gateway=None,
+        sessions=None,
         authorize=authorize,
         profiles=None,
         policy=None,
@@ -301,7 +301,7 @@ async def test_usage_overview_service_authorizes_tenant_and_forwards_filters():
     )
     service = DshManagementService(
         repository_scope=None,
-        gateway=None,
+        sessions=None,
         authorize=authorize,
         profiles=None,
         policy=None,

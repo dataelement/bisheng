@@ -1,6 +1,6 @@
 [project]
 name = "backend"
-version = "3.0.0-beta4"
+version = "3.0.0-beta6"
 description = "BISHENG backend service"
 readme = "README.md"
 license = "Apache 2.0"
@@ -99,6 +99,7 @@ dependencies = [
     "alembic>=1.17.1",
     "sync>=1.0.0",
     "json-repair>=0.55.0",
+    "jsonschema==4.25.1",
     "arxiv>=2.4.0",
     "simhash>=2.1.2",
     # Previously available transitively; the LangChain 1.x dependency graph no

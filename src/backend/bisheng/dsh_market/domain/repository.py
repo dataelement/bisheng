@@ -4,7 +4,7 @@ from sqlalchemy import false, func, or_, true, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from .models import MarketAudit, MarketDevice, MarketImport, MarketPlugin, MarketVersion, now
+from .models import MarketAudit, MarketDevice, MarketImport, MarketInstallPolicy, MarketPlugin, MarketVersion, now
 
 
 class ConflictError(ValueError):
@@ -14,6 +14,40 @@ class ConflictError(ValueError):
 class MarketRepository:
     def __init__(self, session_factory):
         self.sessions = session_factory
+
+    def install_policy(self, tenant):
+        with self.sessions() as db:
+            row = db.get(MarketInstallPolicy, tenant)
+            return self._install_policy_data(row, tenant)
+
+    @staticmethod
+    def _install_policy_data(row, tenant):
+        if row is None:
+            return {"tenant_id": tenant, "allow_third_party_plugins": False, "allow_third_party_workbenches": False}
+        return row.model_dump()
+
+    def set_install_policy(self, tenant, field, allowed):
+        if field not in {"allow_third_party_plugins", "allow_third_party_workbenches"}:
+            raise ValueError("Unknown installation policy field")
+        with self.sessions() as db:
+            row = db.exec(
+                select(MarketInstallPolicy).where(MarketInstallPolicy.tenant_id == tenant).with_for_update()
+            ).first()
+            if row is None:
+                try:
+                    with db.begin_nested():
+                        row = MarketInstallPolicy(tenant_id=tenant)
+                        db.add(row)
+                        db.flush()
+                except IntegrityError:
+                    row = db.exec(
+                        select(MarketInstallPolicy).where(MarketInstallPolicy.tenant_id == tenant).with_for_update()
+                    ).one()
+            setattr(row, field, allowed)
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            return self._install_policy_data(row, tenant)
 
     def create_import(self, tenant, actor, digest):
         with self.sessions() as db:
@@ -90,11 +124,19 @@ class MarketRepository:
             if plugin
             else []
         )
-        highest = max(versions, key=lambda row: tuple(map(int, row.version.split("."))), default=None)
+        from functools import cmp_to_key
+
+        from .community_bundle import compare_semver
+
+        highest = max(
+            versions,
+            key=cmp_to_key(lambda left, right: compare_semver(left.version, right.version)),
+            default=None,
+        )
         current = next((row for row in versions if row.id == plugin.current_version_id), None) if plugin else None
         same = next((row for row in versions if row.version == meta["version"]), None)
         reason = ""
-        if highest and tuple(map(int, meta["version"].split("."))) < tuple(map(int, highest.version.split("."))):
+        if highest and compare_semver(meta["version"], highest.version) < 0:
             reason = "lower_version"
         elif same and same.digest != digest:
             reason = "version_conflict"

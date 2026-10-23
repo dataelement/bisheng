@@ -52,8 +52,11 @@ from .context_overflow import as_context_overflow
 def _get_user_kwargs(model_config: dict) -> dict:
     user_kwargs = model_config.get("user_kwargs", {})
     if isinstance(user_kwargs, str) and user_kwargs:
-        return json.loads(user_kwargs)
-    return dict(user_kwargs) if user_kwargs else {}
+        user_kwargs = json.loads(user_kwargs)
+    result = dict(user_kwargs) if user_kwargs else {}
+    # A capability declaration is not an SDK constructor parameter.
+    result.pop("reasoning_efforts", None)
+    return result
 
 
 def _assert_ascii_http_header_values(params: dict) -> None:

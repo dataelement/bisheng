@@ -54,24 +54,40 @@ _IS_SUPER_CACHE_TTL_SECONDS = 300
 # These exact method/path pairs own their credential checks. This is not a tenant bypass list.
 DSH_CREDENTIAL_ROUTES = frozenset(
     {
+        ("POST", "/api/v1/dsh/authorizations"),
+        ("POST", "/api/v1/dsh/token"),
+        ("POST", "/api/v1/dsh/logout"),
+        ("POST", "/api/dsh/authorizations"),
+        ("POST", "/api/dsh/token"),
+        ("POST", "/api/dsh/logout"),
+        ("GET", "/api/v1/dsh/profile"),
         ("GET", "/api/v1/dsh/config"),
         ("GET", "/api/v1/dsh/browser-config"),
         ("GET", "/api/v1/dsh/models"),
         ("GET", "/api/v1/dsh/usage"),
         ("GET", "/api/v1/dsh/market/capabilities"),
         ("GET", "/api/v1/dsh/market/catalog"),
+        ("GET", "/api/v1/dsh/market/workbenches"),
         ("POST", "/api/v1/dsh/market/sync"),
         ("POST", "/api/v1/dsh/chat/completions"),
-        ("POST", "/api/v1/internal/dsh/identity/redeem"),
-        ("POST", "/api/v1/internal/dsh/identity/check"),
+        ("POST", "/api/v1/dsh/responses"),
     }
 )
 
 
 def owns_dsh_credential(method: str, path: str) -> bool:
-    return (method, path) in DSH_CREDENTIAL_ROUTES or (
-        method == "GET"
-        and re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path) is not None
+    return (
+        (method, path) in DSH_CREDENTIAL_ROUTES
+        or (method == "POST" and re.fullmatch(r"/api/v1/dsh/tools/[A-Za-z0-9_-]{1,125}/invoke", path) is not None)
+        or (
+            method == "GET"
+            and (
+                re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path)
+                or re.fullmatch(r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}", path)
+                or re.fullmatch(r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path)
+            )
+            is not None
+        )
     )
 
 
@@ -380,7 +396,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
         ip = get_request_ip(request)
         req_path = request.url.path
         dsh_owned = owns_dsh_credential(request.method, req_path)
-        path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/v1/internal/dsh/")) else request.url
+        path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/dsh/", "/api/v1/internal/dsh/")) else request.url
         trace_id_var.set(trace_id)
 
         # Tenant context injection from JWT cookie. Decode the JWT once and
