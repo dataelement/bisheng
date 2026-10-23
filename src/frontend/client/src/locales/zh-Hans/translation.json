@@ -1198,7 +1198,8 @@
     "service_maintenance": "短暂停留一下，马上恢复正常使用",
     "refresh": "刷新重试",
     "unknown_name": "未知应用",
-    "featured": "精选"
+    "featured": "精选",
+    "history_deleted": "历史会话已删除"
   },
   "com_knowledge": {
     "add_new": "新增",
@@ -1634,7 +1635,8 @@
     "filter_file_status": "筛选文件状态",
     "sort_by_size_label": "大小",
     "select_all": "全选",
-    "folder_abnormal": "存在异常"
+    "folder_abnormal": "存在异常",
+    "sensitive_violation_words": "您上传的文件包含违规内容：{{words}}，请修改后重试"
   },
   "com_subscription": {
     "tab_channel": "频道",

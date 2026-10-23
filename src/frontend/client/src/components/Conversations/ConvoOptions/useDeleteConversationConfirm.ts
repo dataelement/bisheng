@@ -1,3 +1,4 @@
+import { showApiError } from "~/api/request";
 import { useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -55,6 +56,7 @@ export function useDeleteConversationConfirm() {
       deleteConvoMutation.mutate(
         { conversationId, thread_id, endpoint, source: 'button' },
         {
+          onError: showApiError,
           onSuccess: () => {
             if (currentConvoId === conversationId || currentConvoId === 'new') {
               newConversation();

@@ -4,6 +4,7 @@ import { Outlined } from 'bisheng-icons';
 import { Select } from '@bisheng/ui';
 import { cn } from '~/utils';
 import { SpaceTag, getSpaceTagsApi } from '~/api/knowledge';
+import { showApiError } from '~/api/request';
 import { useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
 
@@ -51,6 +52,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const debounceTimerRef = useRef<number | null>(null);
+    const tagsRequestRef = useRef(0);
 
     useEffect(() => {
         setScope(isRoot ? 'all' : 'current');
@@ -59,7 +61,12 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     // Fetch space tags from API
     const refreshTags = useCallback(() => {
         if (!spaceId) return;
-        getSpaceTagsApi(spaceId).then(setSpaceTags).catch(() => { });
+        const revision = ++tagsRequestRef.current;
+        void getSpaceTagsApi(spaceId).then(tags => {
+            if (revision === tagsRequestRef.current) setSpaceTags(tags);
+        }).catch(error => {
+            if (revision === tagsRequestRef.current) showApiError(error);
+        });
     }, [spaceId]);
 
     // Reset search state when switching to a different space
@@ -69,6 +76,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         setIsFocused(false);
         setSpaceTags([]);
         refreshTags();
+        return () => { tagsRequestRef.current += 1; };
     }, [spaceId, refreshTags]);
 
     // Handle clicking outside to close the dropdown.

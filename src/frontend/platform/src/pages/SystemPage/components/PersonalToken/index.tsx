@@ -22,7 +22,7 @@ listPersonalTokensApi,
 revokePersonalTokenApi,
 updatePersonalTokenSettingApi,
 } from "@/controllers/API/personalToken";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type { PersonalTokenDataScope,PersonalTokenLedgerItem,PersonalTokenSetting } from "@/types/api/openApi";
 import { useCallback,useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -46,7 +46,7 @@ export function PersonalToken() {
   const items = list.items
 
   const load = useCallback(async () => {
-    const nextSetting = await captureAndAlertRequestErrorHoc(getPersonalTokenSettingApi())
+    const nextSetting = await getPersonalTokenSettingApi()
     if (!nextSetting) return
     setSetting(nextSetting)
     setEnabled(nextSetting.pat_enabled)
@@ -55,7 +55,7 @@ export function PersonalToken() {
   }, [])
 
   useEffect(() => {
-    void load()
+    void load().catch(showApiError)
   }, [load])
 
   const applySetting = (next: PersonalTokenSetting) => {
@@ -68,9 +68,7 @@ export function PersonalToken() {
   const doSave = async () => {
     setSaving(true)
     try {
-      const next = await captureAndAlertRequestErrorHoc(
-        updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays, data_scope: dataScope }),
-      )
+      const next = await updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays, data_scope: dataScope })
       if (!next) return
 
       applySetting(next)
@@ -91,14 +89,14 @@ export function PersonalToken() {
         title: t("openApiManagement.personalToken.tightenConfirmTitle"),
         desc: t("openApiManagement.personalToken.tightenConfirmBody"),
         okTxt: t("openApiManagement.personalToken.tightenConfirmOk"),
-        onOk: (close) => {
+        onOk: async (close) => {
+          await doSave()
           close()
-          void doSave()
         },
       })
       return
     }
-    void doSave()
+    void doSave().catch(showApiError)
   }
 
   const handleRevoke = (item: PersonalTokenLedgerItem) => {
@@ -106,10 +104,10 @@ export function PersonalToken() {
       title: t("openApiManagement.personalToken.revokeConfirmTitle"),
       desc: t("openApiManagement.personalToken.revokeConfirmBody"),
       okTxt: t("openApiManagement.actions.revoke"),
-      onOk: (close) => {
+      onOk: async (close) => {
+        await revokePersonalTokenApi(item.id)
+        await list.reload()
         close()
-        void captureAndAlertRequestErrorHoc(revokePersonalTokenApi(item.id).then(() => true))
-          .then((success) => { if (success) void list.reload() })
       },
     })
   }

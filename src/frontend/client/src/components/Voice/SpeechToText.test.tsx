@@ -75,7 +75,7 @@ test('shows pause as soon as recording starts and start again after it stops', a
   jest.mocked(VoiceSession).mockClear();
   mockVoiceHarness.callbacks = null;
   jest.mocked(useVoiceTarget).mockReturnValue({ version: 'v1' });
-  let release: (value: unknown) => void = () => {};
+  let release: (value: Awaited<ReturnType<typeof getVoiceModels>>) => void = () => {};
   jest.mocked(getVoiceModels).mockReturnValue(new Promise((resolve) => {
     release = resolve;
   }));
@@ -103,7 +103,7 @@ test('shows pause as soon as recording starts and start again after it stops', a
 test('returns to start when the click is cancelled before the session opens', async () => {
   jest.mocked(VoiceSession).mockClear();
   jest.mocked(useVoiceTarget).mockReturnValue({ version: 'v1' });
-  let release: (value: unknown) => void = () => {};
+  let release: (value: Awaited<ReturnType<typeof getVoiceModels>>) => void = () => {};
   jest.mocked(getVoiceModels).mockReturnValue(new Promise((resolve) => {
     release = resolve;
   }));

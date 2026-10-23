@@ -1,6 +1,6 @@
 {
   "name": "bishengchat",
-  "version": "3.0.0-beta4",
+  "version": "3.0.0-beta6",
   "description": "",
   "type": "module",
   "scripts": {
@@ -33,6 +33,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@hello-pangea/dnd": "catalog:",
     "@ariakit/react": "^0.4.15",
     "@ariakit/react-core": "^0.4.15",
     "@bisheng/file-viewers": "workspace:*",
@@ -103,7 +104,6 @@
     "react": "catalog:",
     "react-activation": "^0.13.4",
     "react-avatar-editor": "^13.0.2",
-    "react-beautiful-dnd": "^13.1.1",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "catalog:",
@@ -118,8 +118,7 @@
     "react-speech-recognition": "^3.10.0",
     "react-textarea-autosize": "^8.4.0",
     "react-transition-group": "^4.4.5",
-    "react-virtualized": "^9.22.6",
-    "react-window": "^1.8.11",
+    "react-window": "catalog:",
     "recoil": "^0.7.7",
     "regenerator-runtime": "^0.14.1",
     "rehype-highlight": "^6.0.0",
@@ -138,10 +137,11 @@
     "uuid": "^11.1.0",
     "vite-plugin-html": "catalog:",
     "vite-plugin-static-copy": "catalog:",
-    "xlsx": "^0.18.5",
+    "xlsx": "catalog:",
     "xlsx-populate": "^1.21.0",
     "zod": "^3.22.4",
-    "@bisheng/chat": "workspace:*"
+    "@bisheng/chat": "workspace:*",
+    "@bisheng/api-client": "workspace:*"
   },
   "devDependencies": {
     "@babel/plugin-transform-runtime": "^7.22.15",

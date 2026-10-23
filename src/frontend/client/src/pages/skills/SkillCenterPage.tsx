@@ -1,3 +1,4 @@
+import { isApiError } from '@bisheng/api-client';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
@@ -7,7 +8,7 @@ import { NotificationSeverity } from '~/common';
 import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
 import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { SkillUploadDialog } from '~/components/Skills/SkillUploadDialog';
-import { SkillRequestError, type SkillRecord } from '~/components/Skills/types';
+import { type SkillRecord } from '~/components/Skills/types';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
 import { useLocalize } from '~/hooks';
 import useSelectCopy from '~/hooks/useSelectCopy';
@@ -59,18 +60,11 @@ export function SkillCenterPage() {
     mutation.mutate({ kind: 'toggle', target: skill, enabled }, {
       onError: (error) => {
         setEnabledOverride((prev) => ({ ...prev, [skill.id]: skill.enabled }));
-        // skip403Redirect already toasts the translated business error and rejects
-        // with status_code set. A maintenance overlay covers HTTP 500.
-        const explained = typeof error === 'object' && error !== null && 'status_code' in error
-          && !(error instanceof SkillRequestError);
-        const httpStatus = typeof error === 'object' && error !== null && 'response' in error
-          ? (error as { response?: { status?: number } }).response?.status
-          : undefined;
-        if (explained || httpStatus === 500) return;
-        const message = error instanceof SkillRequestError
+        if (isApiError(error) && (error.presentation !== 'none' || error.kind === 'canceled')) return;
+        const message = isApiError(error)
           ? translateApiErrorMessage({
-            status_code: error.statusCode,
-            status_message: error.statusMessage,
+            status_code: error.status_code,
+            status_message: error.status_message,
             data: error.data,
           })
           : '';
@@ -78,6 +72,7 @@ export function SkillCenterPage() {
           message: message || localize('com_skill_center_error_storage'),
           severity: NotificationSeverity.ERROR,
         });
+        if (isApiError(error)) error.presentation = 'toast';
       },
     });
   };

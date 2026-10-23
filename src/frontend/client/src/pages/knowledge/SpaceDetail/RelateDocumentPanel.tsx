@@ -1,4 +1,5 @@
-import { Tooltip as SharedTooltip } from '@bisheng/ui';
+import { showApiError } from "~/api/request";
+import { Button as RetryButton, Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Loader2, Link2, Search, Check } from "lucide-react";
@@ -135,16 +136,18 @@ export function RelateDocumentPanel({
     const debouncedKeyword = useDebounce(keyword, 300);
 
     // Fetch single-version similarity recommendations (merge-source eligible)
-    const { data: candidates = [], isLoading: candidatesLoading } = useQuery({
+    const { data: candidates = [], isLoading: candidatesLoading, error: candidatesError, refetch: retryCandidates } = useQuery({
         queryKey: ["version-recommendations", fileId],
         queryFn: () => getVersionRecommendationsApi(fileId),
+        onError: showApiError,
         enabled: fileId > 0,
     });
 
     // Fetch search results when debounced keyword is at least 1 char
-    const { data: searchResults = [], isLoading: searchLoading } = useQuery({
+    const { data: searchResults = [], isLoading: searchLoading, error: searchError, refetch: retrySearch } = useQuery({
         queryKey: ["version-source-search", spaceId, debouncedKeyword, fileId],
         queryFn: () => searchVersionSourcesApi(spaceId, debouncedKeyword, fileId),
+        onError: showApiError,
         enabled: debouncedKeyword.length >= 1,
     });
 
@@ -161,11 +164,7 @@ export function RelateDocumentPanel({
             });
             onLinked(response);
         },
-        // The unified request interceptor already toasts api_errors.<code>
-        // (e.g. 18061/18062/18063/18064) when skip403Redirect is set, so the
-        // onError handler is a no-op to avoid a duplicate generic toast that
-        // would overwrite the precise product-spec message.
-        onError: () => undefined,
+        onError: showApiError,
     });
 
     // Dismiss the similar-document flag — user chose not to link this file to any
@@ -179,9 +178,7 @@ export function RelateDocumentPanel({
             });
             onDismissed?.();
         },
-        // The unified request interceptor already toasts api_errors.<code> when
-        // skip403Redirect is set, so onError is a no-op to avoid a duplicate toast.
-        onError: () => undefined,
+        onError: showApiError,
     });
 
     const handleLink = async (targetDoc: { document_id: number; title: string }) => {
@@ -236,6 +233,11 @@ export function RelateDocumentPanel({
                     {candidatesLoading ? (
                         <div className="flex h-16 items-center justify-center border border-border-base bg-[#FAFAFA] rounded-md">
                             <Loader2 className="size-5 animate-spin text-text-3" />
+                        </div>
+                    ) : candidatesError ? (
+                        <div role="alert">
+                            {candidatesError instanceof Error ? candidatesError.message : localize('com_ui_error')}
+                            <RetryButton variant="outlined" onClick={() => void retryCandidates()}>{localize('com_ui_retry')}</RetryButton>
                         </div>
                     ) : candidates.length === 0 ? (
                         <div className="flex h-[72px] items-center justify-center border border-border-base bg-[#FAFAFA] rounded-md">
@@ -298,6 +300,11 @@ export function RelateDocumentPanel({
                             {searchLoading ? (
                                 <div className="flex h-16 items-center justify-center">
                                     <Loader2 className="size-5 animate-spin text-text-3" />
+                                </div>
+                            ) : searchError ? (
+                                <div role="alert">
+                                    {searchError instanceof Error ? searchError.message : localize('com_ui_error')}
+                                    <RetryButton variant="outlined" onClick={() => void retrySearch()}>{localize('com_ui_retry')}</RetryButton>
                                 </div>
                             ) : searchResults.length === 0 ? (
                                 <p className="px-3 py-4 text-[14px] text-text-3">

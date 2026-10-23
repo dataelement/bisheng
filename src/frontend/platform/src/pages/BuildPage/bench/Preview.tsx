@@ -1,6 +1,7 @@
 import { Button } from '@bisheng/ui';
 
 import { Dialog, DialogContent } from "@/components/bs-ui/dialog";
+import { handleUiRequest } from "@/controllers/request";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -18,7 +19,7 @@ export default function Preview({ onBeforView }) {
 
     return (
         <Dialog onOpenChange={setOpen} open={open}>
-            <Button variant="outlined" onClick={handleClick} color="default">
+            <Button variant="outlined" onClick={handleUiRequest(handleClick)} color="default">
                 {t("chatConfig.savePreview")}
             </Button>
             <DialogContent className="max-w-[90vw] h-[90vh]">

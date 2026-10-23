@@ -1206,6 +1206,7 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 | 31 | 列表路径成本取决于候选规模、可见率、业务过滤和继承比例 | 把 joined 的 ID-first 或文件的 candidate-first 机械推广到所有列表 | §3 决策14入口登记 + BENCH-01 业务链路阶段 |
 | 32 | 文件夹本级授权不意味着整个知识空间可见；读取指定文件夹时只要求该容器可见，子项仍逐项执行包含继承的最终判断 | 先校验空间 visible 会使只有某层文件夹权限的账号无法列出或搜索其下级；直接放行全部子项又会越过 CUSTOM 边界 | `KnowledgeSpaceService._require_container_read_permission`，由普通列表与搜索共用；根目录仍校验空间 visible |
 | 33 | 服务账号继承需要每层资源的 `service_account:*` mode/permission_enabled 技术标记；这些标记不授予任何账号资源权限 | 旧数据只有 `user:*` 时会出现空间 visible 成功而子项不可见、上传失败；新增 Grant 不会补齐存量后代的技术标记 | 创建与迁移编译器写入两类主体标记；模型发布脚本 `publish_authorization_model_change.py` 和完整对账脚本 `reconcile_f048_visible_projection.py` 在维护窗口按 CURRENT 模式补齐，保留 CUSTOM 边界；模型已一致也必须补齐并校验后才返回成功 |
+| 34 | 预置工具的历史 `user_id` 可以非空；预置身份只由 `GptsToolsType.is_preset=1` 决定；权限 mirror 为 `CURRENT` 也可能缺失系统 tuples | 把创建者为空作为额外条件会从工作台剔除预置工具，并错误地按 USER 迁移；只修分类或只检查 mirror 不能补齐存量系统授权 | 运行时、迁移、清单与租户复制统一判定；显式系统资源审计读取真实 wildcard `visible/system_use_marker`，仅为有效预置工具经版本围栏和 durable ledger 补缺，保留既有 Grant，拒绝 non-CURRENT；预置工具仍只支持 `visible/use` 并经实际动作鉴权 |
 
 ---
 
@@ -1744,7 +1745,7 @@ migration coordinator 只接收规范化事实，不 import 这些业务 ORM/Rep
 | knowledge_library | `Knowledge.user_id/type` | 当前 `user_id`→protected；其他 direct owner→ordinary |
 | folder / knowledge_file | `KnowledgeFile.user_id/file_type/path` + 所属 `Knowledge.tenant_id` | 当前 `user_id`→protected；其他 direct owner→ordinary；tenant 以根知识库/空间为 canonical，修正历史 child tenant 漂移；父目录已删除的 FAILED 文件由 knowledge adapter 标为 `STALE_FAILED_RESOURCE`，只审计并退休遗留 tuple，不创建资源权限图 |
 | workflow / assistant | `Flow.user_id` / `Assistant.user_id` | 当前 `user_id`→protected；其他 direct owner→ordinary；builtin 走 system allowlist |
-| tool | `GptsTools.user_id/is_preset` | 普通工具当前 `user_id`→protected；其他 owner→ordinary；preset 可为 system-owned |
+| tool | `GptsToolsType.user_id/is_preset` | 仅 `is_preset=1` 判定预置工具并作为 system-owned，历史 `user_id` 非空不影响该判定；普通 API/MCP 工具当前 `user_id`→protected，其他 owner→ordinary |
 | channel | `Channel.user_id` + active channel CREATOR membership | 唯一 CREATOR→protected；若 `user_id` 不同则作为 ordinary owner 保留；缺 CREATOR 可按有效 `user_id` 修复，多个 CREATOR 阻断 |
 | dashboard | `Dashboard.user_id/dashboard_type` | CUSTOM；包括 preset 示例在内，当前 `user_id`→protected，其他 owner→ordinary，不使用 system predicate |
 
@@ -1978,6 +1979,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-10-23 | 工具预置身份仅依据 `is_preset=1`；统一运行时、清单、迁移和租户复制；显式补齐 CURRENT 存量工具缺失的 wildcard 系统授权，保留既有 Grant，并走版本围栏与投影账本 | 用户确认移除历史创建者限制，并修复被旧迁移按 USER 处理的预置工具；仅交付代码与回归，不执行线上数据变更 |
 | 2026-10-22 | 明确纯 RBAC 老环境先在 2.5.x 完成 F006 及验证，再升级到后续版本执行 F048；当前分支不恢复 F006 | 用户选择分阶段升级路径 |
 | 2026-10-22 | F048 迁移退役旧用户组管理员默认 manager 授权；旧 F006 入口已删除，不恢复；成员授权和创建者权限继续保留 | 用户明确新用户组只有成员与创建人，不再为管理员分别授予资源管理权限 |
 | 2026-10-08 | 父子资源按类型与 ID 判定自关联；上传失败逐文件按创建 ledger 撤权并清理镜像、存储对象及业务记录，保留补偿审计和失败恢复边界 | beta3 根目录上传 ID 碰撞及整批权限清理中断 |

@@ -3,6 +3,7 @@ import MultiSelect from "@/components/bs-ui/select/multi";
 import { Tabs } from '@bisheng/ui';
 import { readFileLibDatabase } from "@/controllers/API";
 import { getSelectableKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
+import { showApiError } from "@/controllers/request";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -71,7 +72,7 @@ export default function KnowledgeSelect({
             const opts = res.data.map(el => ({ label: el.name, value: el.id, type: KnowledgeType.FILE }))
             opts.forEach(o => typeByValueRef.current.set(o.value, KnowledgeType.FILE))
             setOptions(_ops => cursor ? [..._ops, ...opts] : opts)
-        })
+        }).catch(showApiError)
     }
 
     // F041: load selectable knowledge spaces (mine + joined + department union).
@@ -80,7 +81,7 @@ export default function KnowledgeSelect({
             allSpacesRef.current = spaces.map(s => ({ label: s.name, value: s.id, type: KnowledgeType.SPACE }))
             allSpacesRef.current.forEach(o => typeByValueRef.current.set(o.value, KnowledgeType.SPACE))
             setSpaceOptions(allSpacesRef.current)
-        })
+        }).catch(showApiError)
     }
     const filterSpaces = (name: string) => {
         const kw = (name || '').toLowerCase()

@@ -2,6 +2,7 @@
 import { notification } from '@bisheng/ui';
 
 import { locationContext } from "@/contexts/locationContext"
+import { showApiError } from "@/controllers/request"
 import {
     getDashboard,
     getDashboards,
@@ -50,9 +51,7 @@ export default function DashboardPage() {
                 old.map(el => el.id === id ? { ...el, title } : el));
             notification.open({ type: "success", description: String(t('renameSuccess') ?? '') })
         },
-        onError: () => {
-            notification.open({ type: "error", description: String(t('renameError') ?? '') })
-        },
+        onError: showApiError,
     })
 
     const setDefaultMutation = useMutation({
@@ -63,8 +62,7 @@ export default function DashboardPage() {
                 old.map(el => ({ ...el, is_default: el.id === id })));
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
         },
-        onError: () => {
-        }
+        onError: showApiError,
     })
 
     const handleRename = (id: string, newTitle: string) => {

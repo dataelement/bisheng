@@ -25,12 +25,18 @@ def _spec(resource_id: str = "6") -> SystemOwnedResourceSpec:
     )
 
 
+def _runtime():
+    runtime = AsyncMock()
+    runtime.missing_system_owned_relations.return_value = ()
+    return runtime
+
+
 async def test_dry_run_reports_missing_without_projecting(monkeypatch) -> None:
     spec = _spec()
     missing = (SystemOwnedResourceState(resource=spec, state="MISSING"),)
     inspect = AsyncMock(return_value=missing)
     monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", inspect)
-    runtime = AsyncMock()
+    runtime = _runtime()
 
     report = await reconcile_system_owned_resources(
         runtime,
@@ -70,7 +76,7 @@ async def test_apply_projects_only_missing_resources(monkeypatch) -> None:
     )
     inspect = AsyncMock(side_effect=(before, after))
     monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", inspect)
-    runtime = AsyncMock()
+    runtime = _runtime()
 
     report = await reconcile_system_owned_resources(
         runtime,
@@ -102,7 +108,7 @@ async def test_non_current_resource_is_never_reinterpreted_as_missing(monkeypatc
         )
     )
     monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", inspect)
-    runtime = AsyncMock()
+    runtime = _runtime()
 
     with pytest.raises(PermissionPublishNotReadyError, match="non-current"):
         await reconcile_system_owned_resources(
@@ -144,7 +150,7 @@ async def test_bootstrap_binds_each_verified_tenant_and_restores_caller(monkeypa
             raise RuntimeError("projection unavailable")
 
     try:
-        runtime = AsyncMock()
+        runtime = _runtime()
         runtime.authorize_system_owned.side_effect = project
         if fail:
             with pytest.raises(RuntimeError, match="projection unavailable"):
@@ -159,3 +165,61 @@ async def test_bootstrap_binds_each_verified_tenant_and_restores_caller(monkeypa
     finally:
         for variable, token in reversed(tokens):
             variable.reset(token)
+
+
+@pytest.mark.parametrize("apply", [False, True])
+@pytest.mark.parametrize("missing", [("visible",), ("system_use_marker",), ("visible", "system_use_marker"), ()])
+async def test_current_resources_are_checked_and_only_missing_system_tuples_repaired(monkeypatch, apply, missing):
+    spec = _spec("902")
+    current = (SystemOwnedResourceState(resource=spec, state="CURRENT", mode="CUSTOM", version=3),)
+    monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", AsyncMock(return_value=current))
+    runtime = _runtime()
+    runtime.missing_system_owned_relations.side_effect = [missing, ()] if apply else [missing]
+
+    report = await reconcile_system_owned_resources(runtime, (spec,), apply=apply, operator_id=7)
+
+    assert report.missing_count == 0
+    assert report.incomplete_count == bool(missing)
+    assert report.missing_tuple_count == len(missing)
+    assert report.before[0].missing_relations == missing
+    assert report.current_count == (1 if apply or not missing else 0)
+    runtime.authorize_system_owned.assert_not_awaited()
+    if apply and missing:
+        runtime.repair_system_owned.assert_awaited_once()
+        kwargs = runtime.repair_system_owned.await_args.kwargs
+        assert kwargs["target"].resource_version == 3
+        assert kwargs["target"].context_version == spec.context_version
+        assert kwargs["actor"].user_id == 7
+    else:
+        runtime.repair_system_owned.assert_not_awaited()
+
+
+async def test_tuple_read_failure_blocks_all_writes_including_missing_modes(monkeypatch):
+    states = (
+        SystemOwnedResourceState(resource=_spec("6"), state="MISSING"),
+        SystemOwnedResourceState(resource=_spec("902"), state="CURRENT", version=3),
+    )
+    monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", AsyncMock(return_value=states))
+    runtime = _runtime()
+    runtime.missing_system_owned_relations.side_effect = RuntimeError("read unavailable")
+
+    with pytest.raises(RuntimeError, match="read unavailable"):
+        await reconcile_system_owned_resources(
+            runtime, tuple(item.resource for item in states), apply=True, operator_id=1
+        )
+
+    runtime.authorize_system_owned.assert_not_awaited()
+    runtime.repair_system_owned.assert_not_awaited()
+
+
+async def test_apply_checks_actual_tuples_again_before_reporting_success(monkeypatch):
+    spec = _spec("902")
+    states = (SystemOwnedResourceState(resource=spec, state="CURRENT", mode="CUSTOM", version=3),)
+    monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", AsyncMock(return_value=states))
+    runtime = _runtime()
+    runtime.missing_system_owned_relations.return_value = ("visible",)
+
+    with pytest.raises(PermissionPublishNotReadyError, match="did not finalize"):
+        await reconcile_system_owned_resources(runtime, (spec,), apply=True, operator_id=1)
+
+    runtime.repair_system_owned.assert_awaited_once()

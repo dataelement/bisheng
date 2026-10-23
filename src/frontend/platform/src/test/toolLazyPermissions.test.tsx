@@ -19,7 +19,8 @@ vi.mock("@/controllers/API/assistant", () => ({
   refreshMcpApi: vi.fn(),
 }))
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: (promise: Promise<unknown>) => promise,
 }))
 

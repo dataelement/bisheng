@@ -9,7 +9,7 @@ import Skeleton from '@/components/bs-ui/skeleton';
 import { Switch } from '@bisheng/ui';
 
 import { getGuestLinkApi, GuestLinkKind, GuestLinkSettings, patchGuestLinkApi } from '@/controllers/API/guestLink';
-import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { showApiError } from '@/controllers/request';
 import { copyText } from '@/utils';
 import { Outlined } from 'bisheng-icons';
 import { useEffect, useMemo, useState } from 'react';
@@ -90,12 +90,12 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
 
   useEffect(() => {
     let cancelled = false
-    captureAndAlertRequestErrorHoc(getGuestLinkApi(kind, appId)).then((data) => {
+    getGuestLinkApi(kind, appId).then((data) => {
       if (!cancelled && data) {
         setSettings(data)
         onAvailabilityChange(Boolean(data.system_guest_access && data.enabled))
       }
-    })
+    }).catch(showApiError)
     return () => {
       cancelled = true
     }
@@ -111,13 +111,13 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
     // The shared Select already debounces onSearch (300ms), so query right away.
     let cancelled = false
     setSearching(true)
-    captureAndAlertRequestErrorHoc(getGuestLinkApi(kind, appId, keyword)).then((data) => {
+    getGuestLinkApi(kind, appId, keyword).then((data) => {
       if (cancelled) return
       setSearching(false)
       if (data) {
         setSearchedCandidates(data.candidates || [])
       }
-    })
+    }).catch(showApiError).finally(() => { if (!cancelled) setSearching(false) })
     return () => {
       cancelled = true
     }
@@ -125,16 +125,18 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
 
   const persist = async (patch: { enabled?: boolean; user_id?: number | null }, previous: GuestLinkSettings) => {
     setSaving(true)
-    const result = await captureAndAlertRequestErrorHoc(patchGuestLinkApi(kind, appId, patch))
-    setSaving(false)
-    if (result === false || !result) {
-      setSettings(previous)
-      onAvailabilityChange(Boolean(previous.system_guest_access && previous.enabled))
-      return
-    }
+    try {
+    const result = await patchGuestLinkApi(kind, appId, patch)
     setSettings(result)
     onAvailabilityChange(Boolean(result.system_guest_access && result.enabled))
     notification.open({ type: 'success', description: String(t('api.guestSaved') ?? '') })
+    } catch (error) {
+      setSettings(previous)
+      onAvailabilityChange(Boolean(previous.system_guest_access && previous.enabled))
+      showApiError(error)
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!settings) {

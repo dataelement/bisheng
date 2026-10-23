@@ -28,20 +28,24 @@ export default frontendConfig({
       {
         name: 'recoil',
         message:
-          'Recoil is archived by Meta and frozen — no new atoms/selectors/imports (ledger #5). Server state goes to @tanstack/react-query; new client-global state awaits the Jotai migration decision.',
+          'Recoil is archived by Meta and frozen — no new atoms/selectors/imports (ledger #5). Server state goes to @tanstack/react-query; new cross-page client state may use Zustand to align with platform. Keep existing Recoil state in place.',
       },
       {
         name: 'react-beautiful-dnd',
         message:
-          'react-beautiful-dnd is deprecated upstream (no React 18 StrictMode support) and frozen; use @hello-pangea/dnd when migrating (ledger #8).',
+          'react-beautiful-dnd was removed (ledger #8). Use @hello-pangea/dnd from the workspace catalog for list sorting.',
       },
       {
         name: 'react-virtualized',
         message:
-          'react-virtualized is frozen — the app standardizes on react-window / @tanstack/react-virtual (ledger #8). Do not add new usage.',
+          'react-virtualized was removed with unreachable input components (ledger #8). Use react-window from the workspace catalog for existing file preview lists.',
       },
     ],
     patterns: [
+      {
+        group: ['react-beautiful-dnd/*', 'react-virtualized/*'],
+        message: 'Removed legacy dependencies (ledger #8). Use catalog list sorting and file preview libraries.',
+      },
       {
         group: ['recoil/*'],
         message:

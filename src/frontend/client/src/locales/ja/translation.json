@@ -1195,7 +1195,8 @@
     "service_maintenance": "少々お待ちください。まもなく通常どおりご利用いただけます。",
     "refresh": "再読み込み",
     "unknown_name": "不明なアプリ",
-    "featured": "おすすめ"
+    "featured": "おすすめ",
+    "history_deleted": "会話履歴を削除しました"
   },
   "com_knowledge": {
     "add_new": "新規追加",
@@ -1630,7 +1631,8 @@
     "filter_file_status": "ファイル状態で絞り込み",
     "sort_by_size_label": "サイズで並べ替え",
     "select_all": "すべて選択",
-    "folder_abnormal": "異常あり"
+    "folder_abnormal": "異常あり",
+    "sensitive_violation_words": "アップロードしたファイルに禁止された内容が含まれています：{{words}}。修正して再試行してください。"
   },
   "com_subscription": {
     "tab_channel": "チャンネル",

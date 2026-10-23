@@ -2,6 +2,7 @@
 /**
  * Direct API calls for the AI chat system.
  */
+import { isApiError, normalizeApiError } from "@bisheng/api-client";
 import http from "~/api/request";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 import { getShareTokenFromPath } from "~/utils/shareToken";
@@ -360,13 +361,11 @@ function citationReasonFromPayload(payload: any): CitationUnresolvedReason {
     return "forbidden";
 }
 
-function throwCitationResolveError(citationId: string, payload: any): never {
+function throwCitationResolveError(citationId: string, payload: unknown, cause: unknown = payload): never {
     const reason = citationReasonFromPayload(payload);
     citationReasonCache[citationId] = reason;
-    const err: any = new Error(reason === "expired" ? "citation expired" : "citation forbidden");
-    err.citationForbidden = reason !== "expired";
-    err.citationExpired = reason === "expired";
-    throw err;
+    const error = normalizeApiError(cause, { message: reason === "expired" ? "citation expired" : "citation forbidden", envelope: payload });
+    throw Object.assign(error, { citationForbidden: reason !== "expired", citationExpired: reason === "expired" });
 }
 
 function citationShareHeaders(): { headers: { "share-token": string } } | undefined {
@@ -401,7 +400,7 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
         }
         const status = error?.status_code || error?.response?.data?.status_code;
         if (status === 404) {
-            throwCitationResolveError(citationId, error?.response?.data ?? error);
+            throwCitationResolveError(citationId, isApiError(error) ? error : error?.response?.data ?? error, error);
         }
         throw error;
     }

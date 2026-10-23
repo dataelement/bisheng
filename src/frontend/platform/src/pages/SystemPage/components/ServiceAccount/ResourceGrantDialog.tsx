@@ -24,7 +24,7 @@ import {
 listServiceAccountGrantableResourcesApi,
 mutateServiceAccountResourceGrantsApi,
 } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type {
 ServiceAccountGrantableResource,
 ServiceAccountResourceGrant,
@@ -95,16 +95,14 @@ export function ResourceGrantDialog({
     setResources([])
     setLoadingResources(true)
     const timer = window.setTimeout(() => {
-      void captureAndAlertRequestErrorHoc(
-        listServiceAccountGrantableResourcesApi(serviceAccountId, {
+      void listServiceAccountGrantableResourcesApi(serviceAccountId, {
           resource_type: resourceType,
           keyword: keyword.trim() || undefined,
-        }),
-      )
+        })
         .then((rows) => {
           if (active && rows) setResources(rows)
         })
-        .finally(() => {
+        .catch(showApiError).finally(() => {
           if (active) setLoadingResources(false)
         })
     }, 250)
@@ -128,16 +126,14 @@ export function ResourceGrantDialog({
     setModelKey(editingGrant.model_key)
     setModels([])
     setLoadingModels(true)
-    void captureAndAlertRequestErrorHoc(
-      getGrantablePermissionModelsApi(
+    void getGrantablePermissionModelsApi(
         editingGrant.resource_type as never,
         editingGrant.resource_id,
-      ),
-    )
+      )
       .then((available) => {
         if (available) setModels(filterPermissionTiers(available))
       })
-      .finally(() => setLoadingModels(false))
+      .catch(showApiError).finally(() => setLoadingModels(false))
   }, [editingGrant, open])
 
   const isGranted = (resource: ServiceAccountGrantableResource) =>
@@ -169,13 +165,13 @@ export function ResourceGrantDialog({
       setModels([])
       setLoadingModels(true)
       try {
-        const available = await captureAndAlertRequestErrorHoc(
-          getGrantablePermissionModelsApi(
+        const available = await getGrantablePermissionModelsApi(
             resource.resource_type as never,
             resource.resource_id,
-          ),
-        )
+          )
         if (available) setModels(filterPermissionTiers(available))
+      } catch (error) {
+        showApiError(error)
       } finally {
         setLoadingModels(false)
       }
@@ -185,22 +181,19 @@ export function ResourceGrantDialog({
   const handleGrant = async () => {
     if (!selectedResources.length || !modelKey) return
     setLoading(true)
+    let completedCount = 0
     try {
       let completed = true
-      let completedCount = 0
       for (const selected of selectedResources) {
-        const context = await captureAndAlertRequestErrorHoc(
-          getResourcePermissionContextApi(
+        const context = await getResourcePermissionContextApi(
             selected.resource_type as never,
             selected.resource_id,
-          ),
-        )
+          )
         if (!context) {
           completed = false
           break
         }
-        const result = await captureAndAlertRequestErrorHoc(
-          mutateServiceAccountResourceGrantsApi(
+        const result = await mutateServiceAccountResourceGrantsApi(
             serviceAccountId,
             selected.resource_type,
             selected.resource_id,
@@ -228,8 +221,7 @@ export function ResourceGrantDialog({
                     },
                   ],
             },
-          ),
-        )
+          )
         if (!result) {
           completed = false
           break
@@ -253,6 +245,10 @@ export function ResourceGrantDialog({
       onOpenChange(false)
       setSelectedResources([])
       setModelKey("")
+    } catch (error) {
+      setSelectedResources(current => current.slice(completedCount))
+      if (completedCount > 0) await onGranted().catch(showApiError)
+      showApiError(error)
     } finally {
       setLoading(false)
     }

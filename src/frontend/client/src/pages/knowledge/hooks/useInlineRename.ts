@@ -1,3 +1,4 @@
+import { showApiError } from "~/api/request";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
@@ -10,7 +11,7 @@ interface UseInlineRenameOptions {
     /** Whether this is a brand-new folder being created inline */
     isCreating: boolean;
     /** Commit rename to parent */
-    onRename: (newName: string) => void;
+    onRename: (newName: string) => void | Promise<void>;
     /** Optional name validator — returns error message or null */
     onValidateName?: (newName: string) => string | null;
     /** Called when an in-progress creation is cancelled (Escape on new folder) */
@@ -34,6 +35,7 @@ export function useInlineRename({
     const localize = useLocalize();
     const [isRenaming, setIsRenaming] = useState(isCreating);
     const [renameValue, setRenameValue] = useState(fileName);
+    const pendingRef = useRef(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const { showToast } = useToastContext();
     // Mirrors isRenaming so a commit can tell it already ran. An outside click
@@ -76,7 +78,7 @@ export function useInlineRename({
     }, [isRenaming, isFolder, fileName]);
 
     const handleRenameSubmit = useCallback(() => {
-        if (!isRenamingRef.current) return;
+        if (!isRenamingRef.current || pendingRef.current) return;
 
         const trimmed = renameValue.trim();
 
@@ -110,8 +112,18 @@ export function useInlineRename({
             }
         }
 
-        onRename(trimmed);
-        stopRenaming();
+        try {
+            const saved = onRename(trimmed);
+            if (saved && typeof saved.then === 'function') {
+                pendingRef.current = true;
+                void saved.then(stopRenaming).catch(error => {
+                    showApiError(error);
+                    inputRef.current?.focus();
+                }).finally(() => { pendingRef.current = false; });
+            } else stopRenaming();
+        } catch (error) {
+            showApiError(error);
+        }
     }, [renameValue, isCreating, fileName, onRename, onValidateName, showToast, stopRenaming]);
 
     // Commit on a click anywhere outside the field. The input's own onBlur can't

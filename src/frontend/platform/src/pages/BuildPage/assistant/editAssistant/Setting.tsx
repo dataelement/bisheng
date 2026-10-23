@@ -315,12 +315,7 @@ export default function Setting() {
             </div>
           </AccordionContent>
         </AccordionItem> */}
-        {/* <TaggingSheet>
-          <Outlined.Plus
-            className="mr-2 text-primary hover:text-primary/80"
-            onClick={(e) => e.stopPropagation()}
-            ></Outlined.Plus>
-        </TaggingSheet> */}
+
       </Accordion>
     </div>
   );

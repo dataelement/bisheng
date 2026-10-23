@@ -9,7 +9,7 @@ import {
   createDepartmentLocalMemberApi,
   getDepartmentAssignableRolesApi,
 } from "@/controllers/API/department"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { handleEncrypt, PWD_RULE } from "@/pages/LoginPage/utils"
 import { copyText } from "@/utils"
 import { useCallback, useEffect, useState } from "react"
@@ -38,13 +38,13 @@ export function CreateLocalMemberDialog({
   const [submitting, setSubmitting] = useState(false)
 
   const loadRoles = useCallback(() => {
-    captureAndAlertRequestErrorHoc(getDepartmentAssignableRolesApi(deptId)).then((list) => {
+    getDepartmentAssignableRolesApi(deptId).then((list) => {
       if (list && list.length > 0) {
         setRoles(list.map((r) => ({ id: r.id, role_name: r.role_name })))
       } else {
         setRoles([])
       }
-    })
+    }).catch(showApiError)
   }, [deptId])
 
   useEffect(() => {
@@ -68,14 +68,12 @@ export function CreateLocalMemberDialog({
     setSubmitting(true)
     try {
       const enc = await handleEncrypt(password)
-      const res = await captureAndAlertRequestErrorHoc(
-        createDepartmentLocalMemberApi(deptId, {
+      const res = await createDepartmentLocalMemberApi(deptId, {
           user_name: userName.trim(),
           person_id: personId.trim(),
           password: enc,
           role_ids: Array.from(selected),
         })
-      )
       if (res) {
         const tip = t("bs:department.localUserCreatedTip", {
           name: res.user_name,
@@ -86,6 +84,8 @@ export function CreateLocalMemberDialog({
         onCreated()
         onClose()
       }
+    } catch (error) {
+      showApiError(error)
     } finally {
       setSubmitting(false)
     }

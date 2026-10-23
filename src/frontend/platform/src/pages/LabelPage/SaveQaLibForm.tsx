@@ -7,7 +7,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogT
 import { InputList } from '@/components/bs-comp/formFields/InputList';
 
 import { generateSimilarQa, updateQa } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AnnotationFormHandle, AnnotationFormProps } from "./annotationTypes";
@@ -88,7 +88,7 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
         }
         const generation = generationRef.current;
         setLoading(true);
-        await captureAndAlertRequestErrorHoc(generateSimilarQa(form.question, form.answer).then(res => {
+        await generateSimilarQa(form.question, form.answer).then(res => {
             if (generation !== generationRef.current) return;
             setForm((prevForm) => {
                 const updatedSimilarQuestions = [...prevForm.similarQuestions];
@@ -98,7 +98,7 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
                     similarQuestions: updatedSimilarQuestions
                 };
             });
-        })).finally(() => { if (generation === generationRef.current) setLoading(false); });
+        }).catch(showApiError).finally(() => { if (generation === generationRef.current) setLoading(false); });
     };
 
 
@@ -130,7 +130,7 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
         const operation = operationRef.current;
         pendingRef.current = true;
         setSaving(true);
-        await captureAndAlertRequestErrorHoc(updateQa('', {
+        await updateQa('', {
             questions: [form.question, ..._similarQuestions],
             answers: [form.answer],
             knowledge_id: form.knowledgeLib[0].value,
@@ -141,7 +141,7 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
                 close();
             }
             await onMarked?.(operation);
-        })).finally(() => {
+        }).catch(showApiError).finally(() => {
             if (generation === generationRef.current) { pendingRef.current = false; setSaving(false); }
         });
     };

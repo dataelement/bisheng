@@ -1,3 +1,5 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
+import { useKnowledgeSpaceLists } from "../hooks/useKnowledgeSpaceLists";
 import {
     ChevronDown,
     Plus,
@@ -5,7 +7,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KnowledgeSpace, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, getDepartmentSpacesApi } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceSortType } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
@@ -182,25 +184,10 @@ export function KnowledgeSpaceSidebar({
     const queryClient = useQueryClient();
 
     // Fetch "my created" space list — re-fetched whenever sort changes
-    const { data: createdSpaces = [], isLoading: isCreatedLoading } = useQuery({
-        queryKey: ["knowledgeSpaces", "mine", createdSortBy],
-        queryFn: () => getMineSpacesApi({ order_by: createdSortBy }),
-        placeholderData: (prev) => prev,
-    });
-
-    // Fetch "joined" space list
-    const { data: joinedSpaces = [], isLoading: isJoinedLoading } = useQuery({
-        queryKey: ["knowledgeSpaces", "joined", joinedSortBy],
-        queryFn: () => getJoinedSpacesApi({ order_by: joinedSortBy }),
-        placeholderData: (prev) => prev,
-    });
-
-    // Fetch department space list
-    const { data: departmentSpaces = [], isLoading: isDepartmentLoading } = useQuery({
-        queryKey: ["knowledgeSpaces", "department", departmentSortBy],
-        queryFn: () => getDepartmentSpacesApi({ order_by: departmentSortBy }),
-        placeholderData: (prev) => prev,
-    });
+    const { mine: { data: createdSpaces = [], isLoading: isCreatedLoading },
+        joined: { data: joinedSpaces = [], isLoading: isJoinedLoading },
+        department: { data: departmentSpaces = [], isLoading: isDepartmentLoading },
+        error: spacesError, retry: retrySpaces } = useKnowledgeSpaceLists({ mineOrder: createdSortBy, joinedOrder: joinedSortBy, departmentOrder: departmentSortBy });
 
     // Filter department spaces out of other sections to avoid duplication
     const departmentSpaceIds = new Set(departmentSpaces.map(s => s.id));
@@ -276,7 +263,7 @@ export function KnowledgeSpaceSidebar({
         // link for one space landed on a different one entirely.
         if (suppressAutoSelect) return;
         if (!activeSpaceId) {
-            if (isCreatedLoading || isJoinedLoading || isDepartmentLoading) return;
+            if (spacesError || isCreatedLoading || isJoinedLoading || isDepartmentLoading) return;
 
             if (departmentSpaces.length > 0) {
                 onSpaceSelect(departmentSpaces[0]);
@@ -286,7 +273,7 @@ export function KnowledgeSpaceSidebar({
                 onSpaceSelect(filteredJoinedSpaces[0]);
             }
         }
-    }, [activeSpaceId, suppressAutoSelect, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
+    }, [activeSpaceId, suppressAutoSelect, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, spacesError, onSpaceSelect]);
 
     // Set a section's sort field to a specific value (chosen from the sort dropdown).
     const setSort = (type: "created" | "joined" | "department", value: SpaceSortType) => {
@@ -483,7 +470,7 @@ export function KnowledgeSpaceSidebar({
                             keep them pinned to the viewport edges even while items
                             horizontally overflow. */}
                         <div className={cn("w-max min-w-full", fillListHeight && "flex min-h-full flex-col")}>
-                            {compactMode ? (
+                            {spacesError ? <ApiRequestFailure error={spacesError} onRetry={retrySpaces} /> : compactMode ? (
                                 /* File-page title dropdown: same 3-section tree as the PC sidebar,
                                    ordered 部门 → 我创建的 → 我加入的. Per-row "..." menus stay hidden
                                    via renderCompactItem so the dropdown only navigates. */

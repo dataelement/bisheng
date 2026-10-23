@@ -9,3 +9,15 @@ The workspace owns shared dependency versions in `pnpm-workspace.yaml` (`catalog
 - `vitest.config.mts`: node-only configuration tests, without the applications' DOM setup. Run `pnpm test:config` at `src/frontend/`.
 
 Keep both dev servers on their documented ports (3001/4001). API and object storage targets are separate; the MinIO target host must match the host used to sign object URLs. Restart Vite after dependency upgrades to discard prebundled modules.
+
+SheetJS is pinned to **0.20.3** in the workspace catalog for client, platform and
+`@bisheng/file-viewers`. Use the official versioned tarball from
+https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz, not the stale npm `xlsx`
+release (0.18.5). The pnpm lockfile records SHA-512 integrity. This release includes
+the fixes for CVE-2023-30533 (prototype pollution, fixed in 0.19.3) and
+CVE-2024-22363 (ReDoS, fixed in 0.20.2). Upgrades must update the catalog and lockfile
+together and rerun `pnpm test:config` plus both production builds. Package source:
+https://docs.sheetjs.com/docs/getting-started/installation/nodejs/.
+
+Keep `xlsx-populate` for the shared viewer's image extraction; this security update
+does not consolidate Excel libraries or change preview behavior.

@@ -13,6 +13,7 @@
  * toolbar stays presentational and easy to unit-test.
  */
 
+import { isApiError } from '@bisheng/api-client';
 import { useCallback, useState, type ComponentType } from 'react';
 import { Download, X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
@@ -21,7 +22,7 @@ import {
     exportMessagesApi,
     triggerBrowserDownload,
 } from '~/api/messageExport';
-import { translateApiErrorMessage } from '~/api/request';
+import { showApiError } from '~/api/request';
 import { Button } from '~/components/ui/Button';
 import { Checkbox } from '@bisheng/ui';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
@@ -101,15 +102,12 @@ export function MessageSelectionToolbar({
                     format,
                 });
                 triggerBrowserDownload(file);
-            } catch (err: any) {
-                showToast({
-                    message:
-                        translateApiErrorMessage({ status_code: err?.status_code, status_message: err?.status_message })
-                        || localize('workstation.messageExport.renderFailed'),
+            } catch (error) {
+                if (isApiError(error)) showApiError(error);
+                else showToast({
+                    message: localize('workstation.messageExport.renderFailed'),
                     severity: NotificationSeverity.WARNING,
                 });
-                // The error envelope is already logged by the axios interceptor;
-                // we surface the user-facing message and leave the trace to it.
             } finally {
                 setExporting(null);
             }

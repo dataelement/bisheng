@@ -110,7 +110,10 @@
     "configureDshPermission": "配置权限",
     "noOnlineDshModels": "暂无已上线的可用模型",
     "visionRetry": "读取或保存失败，重试",
-    "loading": "加载中"
+    "loading": "加载中",
+    "chatModelRequired": "请至少配置一个对话模型",
+    "emptyChatModelRow": "存在未选择模型的对话模型行，请选择模型或删除该行",
+    "workbenchConversationModels": "日常模式/知识空间/订阅对话模型"
   },
   "finetune": {
     "rtServiceManagement": "FT服务管理",

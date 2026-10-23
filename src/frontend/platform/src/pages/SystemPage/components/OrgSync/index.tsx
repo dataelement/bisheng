@@ -11,7 +11,7 @@ TableHeader,
 TableRow,
 } from "@/components/bs-ui/table";
 import { listGatewayOrgSyncLogsApi } from "@/controllers/API/orgSync";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { OrgSyncLog } from "@/types/api/orgSync";
 import { formatIsoDateTime } from "@/util/utils";
 import { useCallback,useEffect,useMemo,useState } from "react";
@@ -51,13 +51,10 @@ export default function OrgSync() {
   const fetchGatewayLogs = useCallback(async (nextPage: number) => {
     setLoading(true)
     setPage(nextPage)
-    await captureAndAlertRequestErrorHoc(
-      listGatewayOrgSyncLogsApi({ page: nextPage, limit: PAGE_SIZE }).then(({ data, total }) => {
+    await listGatewayOrgSyncLogsApi({ page: nextPage, limit: PAGE_SIZE }).then(({ data, total }) => {
         setGatewayLogs(data)
         setGatewayTotal(total)
-      })
-    )
-    setLoading(false)
+      }).catch(showApiError).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {

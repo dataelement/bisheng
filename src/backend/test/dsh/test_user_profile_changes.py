@@ -83,7 +83,7 @@ async def test_actual_sso_rename_persists_profile_intent(user_store, monkeypatch
     assert result.user_name == "SSO Name"
     with Session(user_store) as session:
         assert session.get(User, 20).dsh_profile_version == 1
-        assert session.exec(select(DshAdminOperation)).one().payload["username"] == "SSO Name"
+        assert session.exec(select(DshAdminOperation)).all() == []
 
 
 async def test_primary_department_does_not_enqueue_dsh_profile(user_store, monkeypatch):  # noqa: F811
@@ -153,7 +153,12 @@ async def test_tenant_relocation_calls_atomic_profile_path(user_store, monkeypat
     monkeypatch.setattr(
         module.UserTenantDao, "aactivate_user_tenant", AsyncMock(side_effect=AssertionError("Independent commit"))
     )
-    for name in ("_rewrite_tenant_membership_permissions", "_invalidate_redis_caches", "_write_relocation_audit"):
+    for name in (
+        "_rewrite_tenant_membership_permissions",
+        "_invalidate_redis_caches",
+        "_write_relocation_audit",
+        "_migrate_relocated_personal_token",
+    ):
         monkeypatch.setattr(module.UserTenantSyncService, name, AsyncMock())
     monkeypatch.setattr(module.UserTenantSyncService, "_count_owned_resources", AsyncMock(return_value=0))
     from bisheng.admin.domain.services.tenant_scope import TenantScopeService

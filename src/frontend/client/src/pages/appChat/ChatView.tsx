@@ -1,3 +1,4 @@
+import { isApiError } from '@bisheng/api-client';
 import { useCallback, useMemo, useState } from "react";
 import { useUnactivate } from "react-activation";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -22,7 +23,7 @@ import {
     importMessagesToKnowledgeApi,
     listUploadableSpacesApi,
 } from "~/api/messageExport";
-import { translateApiErrorMessage } from "~/api/request";
+import { showApiError } from "~/api/request";
 import {
     AddToKnowledgeModal,
     type AddToKnowledgeSelection,
@@ -133,13 +134,10 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                 });
                 setImportModalOpen(false);
                 exitSelectionMode();
-            } catch (e: any) {
-                // Surface the backend business message (12065/12066/12067/...)
-                // instead of a generic failure, and never a false "success".
-                showToast({
-                    message:
-                        translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
-                        || localize("workstation.messageExport.renderFailed"),
+            } catch (error) {
+                if (isApiError(error)) showApiError(error);
+                else showToast({
+                    message: localize("workstation.messageExport.renderFailed"),
                     severity: NotificationSeverity.WARNING,
                 });
             }

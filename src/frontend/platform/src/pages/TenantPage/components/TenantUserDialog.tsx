@@ -14,7 +14,7 @@ import {
   listTenantAdminsApi,
   revokeTenantAdminApi,
 } from "@/controllers/API/tenant";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type { Tenant, TenantUser } from "@/types/api/tenant";
 import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useCallback, useEffect, useState } from "react";
@@ -57,7 +57,7 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
     if (rootTenant) return;
     listTenantAdminsApi(tenant.id)
       .then((res) => setAdminIds(new Set(res?.user_ids || [])))
-      .catch(() => setAdminIds(new Set()));
+      .catch(showApiError);
   }, [rootTenant, tenant.id]);
 
   useEffect(() => {
@@ -65,12 +65,10 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
   }, [reloadAdmins]);
 
   const handlePromoteAdmin = (userId: number) => {
-    captureAndAlertRequestErrorHoc(
-      grantTenantAdminApi(tenant.id, userId).then(() => {
+    grantTenantAdminApi(tenant.id, userId).then(() => {
         notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
         reloadAdmins();
-      }),
-    );
+      }).catch(showApiError);
   };
 
   const handleRevokeAdmin = (userId: number) => {
@@ -78,13 +76,11 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
       title: t("tenant.revokeAdmin"),
       desc: t("tenant.confirmRevokeAdmin"),
       onOk: (next: () => void) => {
-        captureAndAlertRequestErrorHoc(
-          revokeTenantAdminApi(tenant.id, userId).then(() => {
+        return revokeTenantAdminApi(tenant.id, userId).then(() => {
             notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
             reloadAdmins();
-          }),
-        );
-        next();
+            next();
+          });
       },
     });
   };

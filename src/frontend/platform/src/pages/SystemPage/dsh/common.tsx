@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 interface ChoiceProps {
     label: string
     value: string
-    options: { value: string; label: string }[]
+    options: { value: string; label: string; disabled?: boolean }[]
     onChange: (value: string) => void
     disabled?: boolean
 }

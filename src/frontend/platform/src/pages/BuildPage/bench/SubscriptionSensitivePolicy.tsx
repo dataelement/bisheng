@@ -9,7 +9,7 @@ import {
     updateSensitiveWordPolicyApi,
     type SensitiveWordType,
 } from "@/controllers/API/sensitiveWordPolicy";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Checkbox, Switch } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
@@ -69,12 +69,11 @@ export const SubscriptionSensitivePolicy = forwardRef<SubscriptionSensitivePolic
                 };
                 setForm(next);
                 setLoaded(true);
-            });
+            }).catch(showApiError);
         }, []);
 
         const savePolicy = async (nextForm: SensitiveForm) => {
-            const res = await captureAndAlertRequestErrorHoc(
-                updateSensitiveWordPolicyApi(
+            const res = await updateSensitiveWordPolicyApi(
                     {
                         enabled: nextForm.isCheck,
                         words_types: toApiWordsType(nextForm.wordsType),
@@ -82,8 +81,7 @@ export const SubscriptionSensitivePolicy = forwardRef<SubscriptionSensitivePolic
                         extra_config: {},
                     },
                     CHANNEL_ARTICLE_POLICY,
-                ),
-            );
+                );
             if (res) {
                 setForm(nextForm);
             }

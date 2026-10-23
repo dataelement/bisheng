@@ -15,7 +15,7 @@ import {
     type KnowledgeSpaceTagLibraryDetail,
     type KnowledgeSpaceTagLibraryListItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { Switch } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
@@ -98,12 +98,16 @@ function TagLibraryDialog({ open, mode, initial, onOpenChange, onSaved }: TagLib
             mode === "edit" && initial
                 ? updateKnowledgeSpaceTagLibraryApi(initial.id, payload)
                 : createKnowledgeSpaceTagLibraryApi({ ...payload });
-        const res = await captureAndAlertRequestErrorHoc(req);
-        setSaving(false);
-        if (!res) return;
+        try {
+        await req;
         notification.open({ type: "success", description: String(t("build.saved") ?? '') });
         onOpenChange(false);
         onSaved();
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const title = mode === "edit" ? t("build.editTagLibrary") : t("build.createTagLibrary");
@@ -177,15 +181,16 @@ export default function KnowledgeSpaceTagLibrarySection({ visible, onToggle }: K
 
     const loadData = useCallback(async () => {
         setLoading(true);
-        const res = await captureAndAlertRequestErrorHoc(
-            getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: LIST_PAGE_SIZE }),
-        );
-        if (res) setRows(res.data || []);
-        setLoading(false);
+        try {
+            const res = await getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: LIST_PAGE_SIZE });
+            setRows(res.data || []);
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
     useEffect(() => {
-        if (visible) loadData();
+        if (visible) void loadData().catch(showApiError);
     }, [visible, loadData]);
 
     const filteredRows = useMemo(() => {
@@ -201,7 +206,7 @@ export default function KnowledgeSpaceTagLibrarySection({ visible, onToggle }: K
     };
 
     const openEdit = async (row: KnowledgeSpaceTagLibraryListItem) => {
-        const detail = await captureAndAlertRequestErrorHoc(getKnowledgeSpaceTagLibraryApi(row.id));
+        const detail = await getKnowledgeSpaceTagLibraryApi(row.id);
         if (!detail) return;
         setDialogMode("edit");
         setEditing(detail);
@@ -212,7 +217,10 @@ export default function KnowledgeSpaceTagLibrarySection({ visible, onToggle }: K
         // Look up the blast radius before showing the confirm dialog so the admin
         // sees exactly how many knowledge spaces will have their auto-tag binding
         // cleared. Falls back to a generic warning if the lookup fails.
-        const usage = await captureAndAlertRequestErrorHoc(getKnowledgeSpaceTagLibraryUsageApi(row.id));
+        const usage = await getKnowledgeSpaceTagLibraryUsageApi(row.id).catch(error => {
+            showApiError(error);
+            return undefined;
+        });
         const count = usage?.count ?? 0;
         const desc =
             count > 0 ? t("build.deleteTagLibraryDescWithCount", { count }) : t("build.deleteTagLibraryDescEmpty");
@@ -223,10 +231,10 @@ export default function KnowledgeSpaceTagLibrarySection({ visible, onToggle }: K
             okTxt: t("build.confirmDelete"),
             canelTxt: t("cancel", { ns: "bs" }),
             async onOk(next) {
-                const res = await captureAndAlertRequestErrorHoc(deleteKnowledgeSpaceTagLibraryApi(row.id));
+                const res = await deleteKnowledgeSpaceTagLibraryApi(row.id);
                 if (res) {
                     notification.open({ type: "success", description: String(t("build.deleted") ?? '') });
-                    loadData();
+                    await loadData();
                 }
                 next?.();
             },
@@ -295,10 +303,10 @@ export default function KnowledgeSpaceTagLibrarySection({ visible, onToggle }: K
                                                 <td className="px-4 py-3">{row.tag_count}</td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-1">
-                                                        <Button variant="text" size="small" iconOnly onClick={() => openEdit(row)} color="default">
+                                                        <Button variant="text" size="small" iconOnly onClick={handleUiRequest(() => openEdit(row))} color="default">
                                                             <Outlined.Edit className="size-4" />
                                                         </Button>
-                                                        <Button variant="text" size="small" iconOnly onClick={() => handleDelete(row)} color="default">
+                                                        <Button variant="text" size="small" iconOnly onClick={handleUiRequest(() => handleDelete(row))} color="default">
                                                             <Outlined.Delete className="size-4" />
                                                         </Button>
                                                     </div>
@@ -318,7 +326,7 @@ export default function KnowledgeSpaceTagLibrarySection({ visible, onToggle }: K
                 mode={dialogMode}
                 initial={editing}
                 onOpenChange={setDialogOpen}
-                onSaved={loadData}
+                onSaved={handleUiRequest(loadData)}
             />
         </div>
     );

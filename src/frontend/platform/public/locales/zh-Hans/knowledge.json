@@ -444,5 +444,10 @@
     "pause": "暂停录音",
     "failed": "语音输入失败，请重试"
   },
-  "fileStatusFilterLabel": "按文件状态筛选：{{value}}"
+  "fileStatusFilterLabel": "按文件状态筛选：{{value}}",
+  "tagEditor": {
+    "addPlaceholder": "请输入要添加的标签，回车保存",
+    "existingTags": "已有标签",
+    "emptyTags": "暂无标签"
+  }
 }

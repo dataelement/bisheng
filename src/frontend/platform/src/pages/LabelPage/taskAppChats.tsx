@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { asRecord, displayText, captureQaOperation, isCurrentQaOperation, type QaOperation } from '@bisheng/chat/core';
-import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { showApiError } from '@/controllers/request';
 import type { AnnotationFormHandle } from './annotationTypes';
 import { Button } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
@@ -92,11 +92,11 @@ function TaskAppChatsContent() {
         qaFormRef.current?.close()
         similarFormRef.current?.close()
         // Session metadata is available without requiring application edit access.
-        void captureAndAlertRequestErrorHoc(getDeleteFlowApi(cid).then(detail => {
+        void getDeleteFlowApi(cid).then(detail => {
             if (sessionRef.current !== session) return
             const info = asRecord(detail)
             setAppInfo({ chatId: cid, name: displayText(info.flow_name), logo: displayText(info.flow_logo) })
-        }))
+        }).catch(showApiError)
         type === AppNumType.FLOW ? loadFlowHistoryMsg(fid, cid, {
             appendHistory: true,
             lastMsg: ""
@@ -147,8 +147,8 @@ function TaskAppChatsContent() {
     }
     const changeMarkStatus = (nextStatus: LabelStatus) => {
         const session = sessionRef.current
-        void captureAndAlertRequestErrorHoc(updateMarkStatusApi({ session_id: cid, task_id: Number(id), status: Number(nextStatus) })
-            .then(() => { if (sessionRef.current === session) setStatus(nextStatus) }))
+        void updateMarkStatusApi({ session_id: cid, task_id: Number(id), status: Number(nextStatus) })
+            .then(() => { if (sessionRef.current === session) setStatus(nextStatus) }).catch(showApiError)
     }
 
     return <div className="flex h-full min-h-0 flex-col">

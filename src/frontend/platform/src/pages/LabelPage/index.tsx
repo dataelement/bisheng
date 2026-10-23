@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { userContext } from "@/contexts/userContext";
 import { getChatOnlineApi } from "@/controllers/API/assistant";
 import { createMarkApi, deleteMarkApi, getMarksApi } from "@/controllers/API/log";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -93,7 +93,7 @@ function CreateModal({ open, setOpen, onSuccess }) {
         if (apps.length > 30) {
             return toast.show({ type: "error", message: String(t('label.maxAppsError') ?? '') })
         }
-        captureAndAlertRequestErrorHoc(createMarkApi({
+        createMarkApi({
             app_list: apps.map(el => el.value),
             user_list: users.map(el => el.value)
         }).then(res => {
@@ -101,7 +101,7 @@ function CreateModal({ open, setOpen, onSuccess }) {
             toast.show({ type: "success", message: String(t('label.createSuccess') ?? '') })
             setOpen(false)
             onSuccess()
-        }))
+        }).catch(showApiError)
     }
 
     return <Dialog open={open} onOpenChange={setOpen}>

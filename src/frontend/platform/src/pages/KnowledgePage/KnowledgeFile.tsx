@@ -32,7 +32,7 @@ import { useTranslation } from "react-i18next";
 import LoadMore from "../../components/bs-comp/loadMore";
 import { userContext } from "../../contexts/userContext";
 import { copyLibDatabase,deleteFileLib,readFileLibDatabase } from "../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { showApiError } from "../../controllers/request";
 import { useInfiniteCursorTable } from "../../util/hook";
 import { FileAbnormalStatusCell } from "./components/FileAbnormalStatusCell";
 
@@ -160,10 +160,10 @@ export default function KnowledgeFile() {
             title: t('prompt'),
             desc: t('lib.confirmDeleteLibrary', { ns: 'bs' }),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteFileLib(id).then(res => {
+                return deleteFileLib(id).then(() => {
                     reload();
-                }));
-                next()
+                    next()
+                });
             },
         })
     }
@@ -251,10 +251,11 @@ export default function KnowledgeFile() {
         doing[elem.id] = true;
 
         try {
-            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id, newName));
+            await copyLibDatabase(elem.id, newName);
             reload();
         } catch (error) {
-            toast.show({ type: 'error', message: String(t('copyFailed') ?? '') });
+            delete doing[elem.id];
+            showApiError(error);
         } finally {
             setCopyLoadingId(null);
             setSelectOpenId(null);

@@ -10,7 +10,6 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { deleteDatasetApi, getFileUrlApi, getPresetFileApi } from "@/controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
 import { useRef } from "react";
@@ -27,10 +26,10 @@ export default function index() {
         bsConfirm({
             desc: t('dataset.confirmDelete'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteDatasetApi(id).then(res => {
+                return deleteDatasetApi(id).then(() => {
                     reload();
-                }));
-                next();
+                    next();
+                });
             },
         });
     };

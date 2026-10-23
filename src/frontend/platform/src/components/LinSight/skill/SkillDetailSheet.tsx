@@ -1,4 +1,4 @@
-import { Button, notification } from '@bisheng/ui';
+import { Button } from '@bisheng/ui';
 import { Segmented, Tag } from "@bisheng/ui";
 // F035: skill detail — bundle file tree on the left, file content on the
 // right. SKILL.md gets a Preview/Source toggle; bundle assets are read-only.
@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { getSkillErrorMessage } from "./skillErrors";
+import { showApiError } from "@/controllers/request";
 
 const FileText = Outlined.File,
     Info = Outlined.Attention,
@@ -116,7 +116,7 @@ export function SkillDetailSheet({ detail, onOpenChange, onEdit, onDelete }: Ski
         skillApi
             .getSkillFile(detail.name, path)
             .then((res) => setAssetCache((prev) => ({ ...prev, [path]: res.content })))
-            .catch((err) => notification.open({ type: "error", description: String(getSkillErrorMessage(err, t) ?? '') }));
+            .catch(showApiError);
     };
 
     if (!detail) return null;

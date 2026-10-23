@@ -4,6 +4,26 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## Diagnostic Scripts
 
+### `measure_dsh_model_audit.py`
+
+Post-development DSH audit timing probe for the **disposable loopback fixture only**.
+Start `python -m test.dsh.audit_local_server --real-stores` first. Supply its
+synthetic administrator/user tokens via `DSH_AUDIT_ADMIN_TOKEN` and
+`DSH_AUDIT_USER_TOKEN`; never use business credentials. The default performs
+read-only preflight. `--apply` sends synthetic requests, measures OFF/METADATA/CONTENT,
+and restores the initial mode. It neither loads application config nor opens DB clients.
+
+```bash
+python scripts/measure_dsh_model_audit.py --base http://127.0.0.1:8786
+python scripts/measure_dsh_model_audit.py --base http://127.0.0.1:8786 --apply --samples 10
+```
+
+JSON output separates first content/response duration, metadata/body visibility,
+and the existing persisted `dsh_model_call` Token baseline. An independent fixture
+model-entered counter supplies the denominator. Small-sample percentiles and process
+peak RSS are observations, not a production SLA; production identity/model/Gateway/DM8
+are outside this fixture. No prompt text or credentials are printed.
+
 ### `diagnose_dm_column_reflection.py`
 
 Read-only comparison of DM8 catalog metadata, SQLAlchemy
@@ -452,13 +472,18 @@ empty.
 
 Audit and repair missing F048 projections for business-verified platform
 resources. The current inventory covers preset tool categories
-(`is_preset=1 AND user_id IS NULL`). Preset dashboards are intentionally
+(`is_preset=1 AND is_delete=0`), regardless of historical `user_id`. Preset dashboards are intentionally
 excluded: they are ordinary resources owned by the first super administrator.
 The reconciler does not infer system ownership from the resource-type
 allowlist alone.
 
-The default dry-run reports missing/non-current modes for those tool
-categories:
+The default dry-run reports missing/non-current modes and checks actual
+`user:*` system tuples at higher consistency for `CURRENT` categories. A
+`CURRENT` mode alone does not prove that system authorization is complete.
+`MISSING_TUPLES` lists missing `visible` / `system_use_marker` relations;
+`incomplete_count` counts affected existing resources and `missing_tuple_count`
+counts their missing relations. `missing_count` counts resources without a mode.
+Dry-run writes no permission modes, operations, grants, or tuples:
 
 ```bash
 export config=config.yaml
@@ -477,16 +502,27 @@ PYTHONPATH=./ .venv/bin/python \
   --operator-id 1
 ```
 
-Apply calls the regular `authorize_system_owned` facade. The resulting mode,
-durable projection operation/tuples, and OpenFGA marker tuples are therefore
-created by the same path as online resource creation. An existing
+Apply calls `authorize_system_owned` for absent modes and `repair_system_owned`
+for `CURRENT` preset tools with missing system relations. The repair only adds
+the missing relations through a durable `RESOURCE_SYSTEM_REPAIR` operation,
+claims the existing resource version, and finalizes the next version after
+OpenFGA verification. Existing Grant/assignee rows, visibility contributions,
+and permission mode are preserved. A second run with complete tuples performs
+no writes; later tuple loss can be repaired at the new resource version. An existing
 non-`CURRENT` mode is a blocker and remains owned by the ordinary
 operation/FAILED_CLOSED recovery scripts.
 
-The general projection-operation reconciler cannot repair this case because a
-freshly seeded resource has no durable operation yet. The visible reconciler
-also cannot repair it because system-owned resources intentionally have no
-Grant/assignee source rows.
+Run this explicit maintenance procedure after deploying the classifier fix to
+repair historical presets migrated as user-owned resources. Restarting the
+service does not repair all existing presets, and resuming a completed F048
+migration does not refresh its frozen resource classification. Review the
+dry-run against the target environment before applying; deploying this code
+alone does not mutate production permissions.
+
+The general projection-operation reconciler cannot invent missing system
+tuples for a historical resource: no operation describing that correction
+exists yet. The visible reconciler only rebuilds ordinary Grant sources;
+system authorization has a separate canonical business predicate.
 
 ### `recover_f048_failed_closed_projection.py`
 
@@ -1155,3 +1191,39 @@ bash scripts/seed_load_test_org.sh --departments 200 --users 50000 --apply
 python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7
 python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7 --apply
 ```
+
+## DSH audit model-name digest backfill
+
+After the `dsh_audit_model_lookup` schema migration and deployment of all new writers,
+run from `src/backend/` using the same `config` environment as the service:
+
+```bash
+python scripts/backfill_dsh_audit_model_names.py --tenant-id 1
+python scripts/backfill_dsh_audit_model_names.py --tenant-id 1 --apply --batch-size 200 --max-batches 20
+```
+
+Dry-run is the default. Repeat per tenant until `has_more=false`; resume with
+`--after-request-id` from the previous output. Rerun from the beginning for a final
+check. Only missing digests are filled; original names and bodies remain unchanged.
+Historical exact-name lookup is incomplete until this operation finishes. No fuzzy
+query fallback or automatic startup backfill is performed.
+
+## DSH audit presentation preparation
+
+Run from `src/backend/` using the live service config. `python scripts/backfill_dsh_audit_presentation.py --tenant-id 1` previews one bounded batch; add `--apply --max-batches 20` to prepare historical presentation statuses and mark conversation projection. Resume with the reported `--after-request-id`, then rerun from the start to catch late rows. The independent audit inspection task projects groups; no model bodies, policy or keys are changed.
+
+## Audit conversation hierarchy
+
+After upgrading all audit writers and preparing legacy audit status/group data,
+run from `src/backend/` using the live service's `config` environment variable:
+
+```bash
+python scripts/prepare_dsh_audit_tree.py --tenant-id 1
+python scripts/prepare_dsh_audit_tree.py --tenant-id 1 --apply --max-steps 100
+```
+
+The default is read-only. Each applied step handles at most 100 records/nodes;
+SQL checkpoints allow rerunning to continue. This rebuilds navigation only and
+never reads model bodies, replays requests, or merges audit/billing records.
+An active background lease returns BUSY; do not override it. Terminal histories
+and tenants currently in OFF mode are also processed by the independent worker.

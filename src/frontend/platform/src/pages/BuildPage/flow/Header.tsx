@@ -14,7 +14,7 @@ import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popove
 import { darkContext } from "@/contexts/darkContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { copyReportTemplate,createWorkFlowVersion,deleteVersion,getVersionDetails,getWorkFlowVersions,onlineWorkflow,onlineWorkflowApi,saveWorkflow,updateVersion } from "@/controllers/API/workflow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
 import { flowVersionCompatible } from "@/util/flowCompatible";
@@ -83,7 +83,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             }))
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
         }
-        await captureAndAlertRequestErrorHoc(saveWorkflow(version.id, {
+        await saveWorkflow(version.id, {
             ...flow,
             name: version.name,
             data: {
@@ -91,21 +91,21 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 edges: flow.edges,
                 viewport: flow.viewport
             }
-        }))
+        })
         setFlow({ ...flow })
         // api请求
-        const res = await captureAndAlertRequestErrorHoc(onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 2 }))
+        const res = await onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 2 })
         if (res === null) {
             toast.show({ type: 'success', message: String(`${version?.name} ${t('hasBeenLaunched')}`) })
             window.history.length > 1 ? window.history.back() : navigate('/build/apps')
         }
     }
     const handleOfflineClick = async () => {
-        const res = await captureAndAlertRequestErrorHoc(onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 1 }))
+        const res = await onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 1 })
         if (res === null) {
             toast.show({ type: 'success', message: String(`${version?.name} ${t('hasBeenOffline')}`) })
             flow.status = 1
-            refrenshVersions()
+            await refrenshVersions()
         }
     }
     const handleSaveClick = async () => {
@@ -115,7 +115,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         }
         // temp
         // localStorage.setItem('flow_tmp', JSON.stringify(flow))
-        const res = await captureAndAlertRequestErrorHoc(saveWorkflow(version.id, {
+        const res = await saveWorkflow(version.id, {
             ...flow,
             name: version.name,
             data: {
@@ -123,7 +123,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 edges: flow.edges,
                 viewport: flow.viewport
             }
-        }))
+        })
         res && toast.show({ type: 'success', message: String(t('changesSaved') ?? '') })
         return res
     }
@@ -181,18 +181,21 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const handleChangeVersion = async (versionId) => {
         setLoading(true)
         // 切换版本UI
-        window.flow_version = Number(versionId)
         // 加载选中版本data
+        try {
         const res = await getVersionDetails(versionId)
+        window.flow_version = Number(versionId)
         // 自动触发 page的 clone flow
         forceUpdateFlow({ ...f, ...res.data })
         toast.show({ type: "success", message: [String(t('switchToVersion', { versionName: res.name }) ?? ''), String("")].filter(Boolean).join('\n') })
-        setLoading(false)
         setFitView()
+        } finally {
+            setLoading(false)
+        }
     }
     const [saveVersionId, setVersionId] = useState('')
     useEffect(() => {
-        saveVersionId && handleChangeVersion(saveVersionId)
+        if (saveVersionId) void handleChangeVersion(saveVersionId).catch(showApiError)
     }, [saveVersionId])
     // new version
     const handleSaveNewVersion = async () => {
@@ -204,9 +207,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             const node = nodes[i];
             await copyReportTemplate(node.data)
         }
-        const res = await captureAndAlertRequestErrorHoc(
-            createWorkFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: { nodes, edges, viewport }, original_version_id: version.id })
-        )
+        const res = await createWorkFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: { nodes, edges, viewport }, original_version_id: version.id })
         toast.show({ type: "success", message: [String(`${t('skills.version', { ns: 'bs' })} v${maxNo} ${t('skills.saveSuccessful', { ns: 'bs' })}`), String("")].filter(Boolean).join('\n') })
         // 更新版本列表
         await refrenshVersions()
@@ -232,7 +233,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     // 离开并保存
     const handleSaveAndClose = async () => {
         if (isOnlineVersion) {
-            handleSaveNewVersion()
+            await handleSaveNewVersion()
             blocker.reset?.()
         } else {
             const res = await handleSaveClick()
@@ -276,11 +277,11 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             {/* Right Section with Options */}
             <div className="header-right flex items-center gap-2">
                 <Notification />
-                <Button variant="outlined" disabled={!canEdit} onClick={handleRunClick} color="default">
+                <Button variant="outlined" disabled={!canEdit} onClick={handleUiRequest(handleRunClick)} color="default">
                     <Filled.PlayerPlay className="size-3.5" />
                     {t('run')}
                 </Button>
-                <Button variant="outlined" disabled={!canEdit || saving} onClick={async () => {
+                <Button variant="outlined" disabled={!canEdit || saving} onClick={handleUiRequest(async () => {
                     if (savingRef.current) return
                     savingRef.current = true
                     setSaving(true)
@@ -295,7 +296,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         savingRef.current = false
                         setSaving(false)
                     }
-                }} color="default">
+                })} color="default">
                     {t('save')}
                 </Button>
                 {
@@ -306,7 +307,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         iconClassName={`ml-0 ${!dark && 'bg-[#fff]'}`}
                         align="end"
                         variant="outline"
-                        onClick={handleSaveNewVersion}
+                        onClick={handleUiRequest(handleSaveNewVersion)}
                         delayDuration={200}
                         buttonTipContent={(
                             <div>
@@ -316,16 +317,16 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         )}
                         dropDown={(
                             <div className=" overflow-y-auto max-h-96 max-h">
-                                <RadioGroup value={version.id + ''} onValueChange={(vid) => {
+                                <RadioGroup value={version.id + ''} onValueChange={handleUiRequest(async (vid) => {
                                     if (isOnlineVersionFun() && hasChanged) return setModelVersionId(vid)
                                     const { edges, nodes, viewport } = flow
-                                    updateVersion(version.id, {
+                                    await updateVersion(version.id, {
                                         name: version.name, description: '', data: {
                                             edges, nodes, viewport
                                         }
                                     })
-                                    handleChangeVersion(vid)
-                                }} className="gap-0">
+                                    await handleChangeVersion(vid)
+                                })} className="gap-0">
                                     {versions.map((vers, index) => (
                                         <div key={vers.id} className="group flex items-center gap-4 px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-b">
                                             <RadioGroupItem value={vers.id + ''} />
@@ -353,12 +354,12 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 }
                 {isOnlineVersion
                     ? (canUnpublish ? (
-                        <Button onClick={handleOfflineClick}>
+                        <Button onClick={handleUiRequest(handleOfflineClick)}>
                             {t('takeOffline')}
                         </Button>
                     ) : null)
                     : (canPublish ? (
-                        <Button onClick={handleOnlineClick}>
+                        <Button onClick={handleUiRequest(handleOnlineClick)}>
                             {t('goOnline')}
                         </Button>
                     ) : null)}
@@ -393,7 +394,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             <ChatTest ref={testRef} />
             {/* 修改应用弹窗 flow&assistant */}
             <CreateApp ref={updateAppModalRef} loca={loca} onSave={(base) => {
-                captureAndAlertRequestErrorHoc(onlineWorkflow({
+                return onlineWorkflow({
                     ...f,
                     ...base,
                     logo: base.viewUrl ? base.logo : '' // When there is no change, the value is empty
@@ -402,7 +403,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     f.description = base.description
                     f.logo = base.logo
                     setFlow({ ...f, ...base })
-                }))
+                })
             }} />
             {/* 上线不可修改提示 */}
             <Dialog open={!!modelVersionId}>
@@ -412,16 +413,16 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         <DialogDescription>{t('currentVersionLaunched')}</DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="mt-4">
-                        <Button onClick={() => {
-                            handleSaveNewVersion()
+                        <Button onClick={handleUiRequest(async () => {
+                            await handleSaveNewVersion()
                             setModelVersionId(0)
-                        }}>
+                        })}>
                             {t('saveAsNewVersion')}
                         </Button>
-                        <Button className="leave" variant="solid" onClick={() => {
-                            handleChangeVersion(modelVersionId)
+                        <Button className="leave" variant="solid" onClick={handleUiRequest(async () => {
+                            await handleChangeVersion(modelVersionId)
                             setModelVersionId(0)
-                        }} color="danger">
+                        })} color="danger">
                             {t('dontSaveAndSwitch')}
                         </Button>
                         <Button variant="outlined" onClick={() => setModelVersionId(0)} color="default">
@@ -438,7 +439,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         <p className="bisheng-label pt-2">{isOnlineVersion ? t('onlineVersionMessage') : t('unsavedChangesMessage')}</p>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button className="leave" onClick={handleSaveAndClose}>
+                        <Button className="leave" onClick={handleUiRequest(handleSaveAndClose)}>
                             {isOnlineVersion ? t('saveAsNewVersion') : t('leaveAndSave')}
                         </Button>
                         <Button variant="solid" onClick={() => blocker.proceed?.()} color="danger">
@@ -494,31 +495,26 @@ const useVersion = (flow) => {
         })
     }
     useEffect(() => {
-        refrenshVersions()
+        void refrenshVersions().catch(showApiError)
     }, [])
     // 修改名字
     const handleChangName = (id, name) => {
-        captureAndAlertRequestErrorHoc(updateVersion(id, { name, description: '', data: null }))
-        // 乐观更新
-        setVersions(versions.map(version => {
-            if (version.id === id) {
-                version.name = name;
-            }
-            return version;
-        }))
+        return updateVersion(id, { name, description: '', data: null }).then(() => {
+            setVersions(versions.map(version => version.id === id ? { ...version, name } : version))
+        })
     }
     const handleDeleteVersion = (version, index) => {
         bsConfirm({
             title: t('prompt'),
             desc: `${t('skills.deleteOrNot')} ${version.name} ${t('skills.version')}?`,
             onOk: (next) => {
-                captureAndAlertRequestErrorHoc(deleteVersion(version.id)).then(res => {
+                return deleteVersion(version.id).then(res => {
                     if (res === null) {
                         // 乐观更新
                         setVersions(versions.filter((_, i) => i !== index))
                     }
+                    next()
                 })
-                next()
             }
         })
     }

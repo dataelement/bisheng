@@ -15,7 +15,7 @@ import {
     deleteLinkApi,
     updateLabelApi
 } from "@/controllers/API/label";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Plus, SquarePen } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -59,14 +59,15 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
         setData(pre => {
             const newData = pre.map(d => d.value === id ? { ...d, selected: !d.selected } : d)
             const cur = newData.find(d => d.value === id)
-            captureAndAlertRequestErrorHoc(
-                (cur.selected ? createLinkApi(id, resource.id, type) : deleteLinkApi(id, resource.id, type)).then(() => {
+            ;(cur.selected ? createLinkApi(id, resource.id, type) : deleteLinkApi(id, resource.id, type)).then(() => {
                     onUpdate({
                         type: cur.selected ? UPDATETYPE.CREATELINK : UPDATETYPE.DELETELINK,
                         data: cur
                     })
+                }).catch(error => {
+                    setData(previous => previous.map(d => d.value === id ? { ...d, selected: !cur.selected } : d))
+                    showApiError(error)
                 })
-            )
             return newData
         })
     }
@@ -91,7 +92,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                 errorRestName(nameRef.current, id)
                 return toast.show({ type: 'warning', message: [String(t('prompt') ?? ''), String(t('tag.labelMaxLength') ?? '')].filter(Boolean).join('\n') })
             }
-            const err = await captureAndAlertRequestErrorHoc(updateLabelApi(id, label.label).then((res: any) => {
+            await updateLabelApi(id, label.label).then((res: any) => {
                 setData(pre => {
                     const newData = pre.map(d => d.value ? d : { ...d, label: res.name, value: res.id })
                     dataRef.current = newData
@@ -102,10 +103,10 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                     data: label
                 })
                 return toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(id ? t('updateSuccess') : t('createSuccess') ?? '')].filter(Boolean).join('\n') })
-            }))
-            if (!err) {
+            }).catch(error => {
                 errorRestName(nameRef.current, id)
-            }
+                showApiError(error)
+            })
         }
     }
 
@@ -115,14 +116,14 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
             desc: t('tag.confirmDeleteLabel', { label: label.label }),
             okTxt: t('confirm'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteLabelApi(label.value).then(() => {
+                return deleteLabelApi(label.value).then(() => {
                     onUpdate({
                         type: UPDATETYPE.DELETELABEL,
                         data: label
                     })
                     toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('deleteSuccess') ?? '')].filter(Boolean).join('\n') })
-                }))
-                next()
+                    next()
+                })
             }
         })
     }

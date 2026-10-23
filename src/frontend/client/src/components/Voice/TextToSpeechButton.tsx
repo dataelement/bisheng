@@ -1,5 +1,8 @@
 "use client"
 
+import { isApiError } from "@bisheng/api-client"
+import { showApiError } from "~/api/request"
+
 import { Outlined } from "bisheng-icons"
 import { readVoiceAudioPath, synthesizeVoice } from "~/api/voice"
 import { NotificationSeverity } from "~/common"
@@ -74,15 +77,8 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
             await playAudio(messageId, () => fetchAudioUrl(text))
         } catch (error) {
             console.error("Failed to play audio:", error)
-            // A backend business error (e.g. TTS synthesis failure, code 10026)
-            // already got its localized toast from the request interceptor
-            // (skip403Redirect path) — only show the generic fallback here for
-            // errors that never reached that path (network failure, malformed
-            // response, etc.), so the user doesn't see two toasts. State reset
-            // on error is handled inside the store.
-            if (!(typeof error === 'object' && error !== null && 'status_code' in error && error.status_code)) {
-                showToast({ message: localize('com_voice.playback_unavailable'), severity: NotificationSeverity.WARNING })
-            }
+            if (isApiError(error)) showApiError(error)
+            else showToast({ message: localize('com_voice.playback_unavailable'), severity: NotificationSeverity.WARNING })
         }
     }
 

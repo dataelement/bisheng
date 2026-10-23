@@ -4,7 +4,7 @@ import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getDepartmentApi } from "@/controllers/API/department";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { DepartmentTreeNode } from "@/types/api/department";
 import { Tabs } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -63,7 +63,7 @@ export default function DepartmentPage() {
 
   const handleCreated = useCallback(() => {
     setCreateOpen(false);
-    void tree.reloadLayer(createParentId);
+    void tree.reloadLayer(createParentId).catch(showApiError);
   }, [tree, createParentId]);
 
   const handleMarkAsTenant = useCallback((deptId: number, deptName: string) => {
@@ -72,7 +72,7 @@ export default function DepartmentPage() {
 
   const handleMounted = useCallback(() => {
     setMountTarget(null);
-    void tree.refreshAll();
+    void tree.refreshAll().catch(showApiError);
   }, [tree]);
 
   // Create / move / archive / restore / rename: refresh affected (loaded) layers
@@ -92,7 +92,7 @@ export default function DepartmentPage() {
 
   const handleDepartmentSettingsChanged = useCallback(
     (removedDeptId?: string) => {
-      handleTreeChange(removedDeptId);
+      void handleTreeChange(removedDeptId).catch(showApiError);
       setMembersRefreshSignal((prev) => prev + 1);
     },
     [handleTreeChange],
@@ -103,7 +103,7 @@ export default function DepartmentPage() {
       setMemberHighlightUserId(userId);
       // The global search row carries the business dept_id; resolve its internal
       // id, then reveal (expand + load) the branch and scroll to it.
-      const detail = await captureAndAlertRequestErrorHoc(getDepartmentApi(primaryDeptDeptId));
+      const detail = await getDepartmentApi(primaryDeptDeptId);
       if (!detail) return;
       await tree.reveal(detail.id);
       const node = tree.getNode(detail.id);
@@ -190,7 +190,7 @@ export default function DepartmentPage() {
                           membersRefreshSignal={membersRefreshSignal}
                           highlightUserId={memberHighlightUserId}
                           onHighlightConsumed={handleMemberHighlightConsumed}
-                          onRequestLocateMember={handleLocateMemberFromGlobal}
+                          onRequestLocateMember={handleUiRequest(handleLocateMemberFromGlobal)}
                         />
                       </div>
                     </>

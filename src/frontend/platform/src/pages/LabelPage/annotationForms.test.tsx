@@ -7,7 +7,7 @@ import type { AnnotationFormHandle } from './annotationTypes'
 
 const mock = vi.hoisted(() => ({ update: vi.fn(), add: vi.fn(), list: vi.fn(), generate: vi.fn(), message: vi.fn() }))
 vi.mock('@/controllers/API', () => ({ updateQa: mock.update, addSimilarQa: mock.add, getQaList: mock.list, generateSimilarQa: mock.generate }))
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p.catch(() => false) }))
+vi.mock('@/controllers/request', async (importOriginal) => ({ ...await importOriginal<typeof import('@/controllers/request')>() }))
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
 const previous = await (() => ({ useToast: () => ({ message: mock.message }) }))();

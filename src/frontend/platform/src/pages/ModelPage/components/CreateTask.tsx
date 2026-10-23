@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { alertContext } from "../../../contexts/alertContext";
 import { getFTServicesApi, getServicesApi } from "../../../controllers/API";
 import { createTaskApi } from "../../../controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 import Combobox from "./Combobox";
 import CreateTaskList from "./CreateTaskList";
 
@@ -68,11 +68,14 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
         console.log('object :>> ', resultRef.current);
         setLoading(true)
         // api
-        const res = await captureAndAlertRequestErrorHoc(createTaskApi(resultRef.current))
-        setLoading(false)
-        if (!res) return
-
+        try {
+        const res = await createTaskApi(resultRef.current)
         onCreate(res.id)
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setLoading(false)
+        }
     }
 
     return <div className="pt-2 h-[calc(100vh-162px-var(--license-banner-h,0px))] px-2 overflow-y-auto">

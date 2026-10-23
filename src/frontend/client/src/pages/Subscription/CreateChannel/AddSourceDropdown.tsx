@@ -1,3 +1,4 @@
+import { ApiRequestFailure } from '~/components/ApiRequestFailure';
 import { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardPortal } from '~/components/ui/HoverCard';
 import { Outlined } from "bisheng-icons";
 import { useState, useEffect, useRef, type MouseEvent } from "react";
@@ -208,7 +209,7 @@ export function AddSourceDropdown({
             setIsExpandedListScrolling(false);
         }, 500);
 
-        if (mgr.viewMode !== "list") return;
+        if (mgr.viewMode !== "list" || mgr.sourceListError) return;
         const el = e.currentTarget;
         const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
         if (nearBottom) {
@@ -373,6 +374,7 @@ export function AddSourceDropdown({
                         onScroll={handleExpandedListScroll}
                         data-scrolling={isExpandedListScrolling ? "true" : "false"}
                     >
+                        {mgr.sourceListError ? <ApiRequestFailure error={mgr.sourceListError} onRetry={mgr.retrySources} /> : null}
                         {mgr.viewMode === "noResultNonUrl" && (
                             <div className="flex min-h-full flex-col items-center justify-center px-4 py-8 text-center">
                                 <div className="mb-4">
@@ -448,9 +450,9 @@ export function AddSourceDropdown({
                         )}
                         {mgr.viewMode === "list" && (
                             <>
-                                {displayList.length === 0 ? (
+                                {displayList.length === 0 ? (!mgr.sourceListError && !mgr.loadingSources && (
                                     <div className="flex min-h-full items-center justify-center p-8 text-center text-[14px] text-text-3">{localize("com_subscription.no_data")}</div>
-                                ) : (
+                                )) : (
                                     <div className="">
                                         {displayList.map((source) => {
                                             const sel = mgr.selectedIds.has(source.id);

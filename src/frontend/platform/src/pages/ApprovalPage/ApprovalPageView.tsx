@@ -1,4 +1,6 @@
-import { Tabs } from "@bisheng/ui";
+import { Alert, Tabs } from "@bisheng/ui";
+import { showApiError } from '@/controllers/request';
+import { isApiError } from '@bisheng/api-client';
 import { ApprovalDialogs } from "./ApprovalDialogs";
 import { ExceptionPanel } from "./ExceptionPanel";
 import { FlowManagementPanel } from "./FlowManagementPanel";
@@ -7,7 +9,9 @@ interface ApprovalPageViewProps {
   controller: ReturnType<typeof useApprovalController>;
 }
 export function ApprovalPageView({ controller }: ApprovalPageViewProps) {
-  const { t, setActiveTab, loadPage, activeTab } = controller;
+  const { t, setActiveTab, loadPage, loadError, activeTab } = controller;
+  const showLoadError = !!loadError && (!isApiError(loadError)
+    || (loadError.kind !== 'canceled' && loadError.presentation !== 'global'));
   return (
     <div className="flex h-full flex-col bg-background-main-content">
       {/* page header */}
@@ -18,7 +22,7 @@ export function ApprovalPageView({ controller }: ApprovalPageViewProps) {
           activeKey={activeTab}
           onChange={(key) => {
             setActiveTab(key as "flow" | "exception");
-            void loadPage();
+            void loadPage().catch(showApiError);
           }}
           items={[
             { key: "flow", label: t("approvalPage.tabFlow") },
@@ -28,6 +32,10 @@ export function ApprovalPageView({ controller }: ApprovalPageViewProps) {
           divider={false}
         />
       </div>
+
+      {showLoadError && <Alert type="error" live
+        description={loadError instanceof Error ? loadError.message : t('api_errors:fallback')}
+        actions={[{ label: t('subjectSearch.retry'), onClick: () => void loadPage().catch(showApiError) }]} />}
 
       <FlowManagementPanel controller={controller} />
 

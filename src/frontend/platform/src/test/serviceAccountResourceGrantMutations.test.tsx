@@ -28,7 +28,8 @@ vi.mock("@/controllers/API/permission", () => ({
   getResourcePermissionContextApi: vi.fn(),
 }))
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: async (request: Promise<unknown>) =>
     request.catch(() => false),
 }))
@@ -163,11 +164,12 @@ describe("service-account grant mutations over HTTP", () => {
     const { user, onOpenChange, onGranted } = await openGrantDialog()
     const submit = screen.getByRole("button", { name: "openApiManagement.grants.confirmGrant" })
     await user.click(submit)
-    await waitFor(() => expect(onGranted).toHaveBeenCalledOnce())
+    await waitFor(() => expect(submit).toBeEnabled())
+    expect(onGranted).not.toHaveBeenCalled()
     expect(onOpenChange).not.toHaveBeenCalled()
     expect(screen.getByRole("checkbox")).toBeChecked()
     expect(submit).toBeEnabled()
-    expect(notification.open).not.toHaveBeenCalled()
+    expect(notification.open).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }))
   })
 
   it("updates the permission tier from the resource list without randomUUID", async () => {

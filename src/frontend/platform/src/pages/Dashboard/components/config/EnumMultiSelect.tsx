@@ -1,4 +1,5 @@
-import { Input, notification } from '@bisheng/ui';
+import { Input } from '@bisheng/ui';
+import { showApiError } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
 import { useCallback,useEffect,useMemo,useRef,useState } from "react";
 
@@ -72,9 +73,7 @@ export function EnumMultiSelect({
         setSearchMode(true)
       }
     } catch (error) {
-      console.error("Failed to load enum values:", error)
-      notification.open({ type: "error", description: String(translationRef.current('filterConditionDialog.toast.fetchEnumFailed') ?? '') })
-      setValues([])
+      showApiError(error)
     } finally {
       currentLoading(false)
     }

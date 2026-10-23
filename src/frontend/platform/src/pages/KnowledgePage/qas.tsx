@@ -27,7 +27,7 @@ TableRow
 } from "../../components/bs-ui/table";
 import { deleteQa,getQaFile,getQaList,updateQaStatus } from "../../controllers/API";
 import { checkResourceActionApi } from "../../controllers/API/permission";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { showApiError } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ImportQa } from "./components/ImportQa";
 
@@ -66,14 +66,14 @@ export default function QasPage() {
                 return;
             }
             const [editResult, deleteResult] = await Promise.all([
-                captureAndAlertRequestErrorHoc(checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'edit' })),
-                captureAndAlertRequestErrorHoc(checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'delete' })),
+                checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'edit' }),
+                checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'delete' }),
             ]);
             if (cancelled) return;
             setCanEditKb(!!editResult?.allowed);
             setCanDeleteKb(!!deleteResult?.allowed);
         };
-        loadPermissions();
+        void loadPermissions().catch(showApiError);
         return () => {
             cancelled = true;
         };
@@ -148,7 +148,7 @@ export default function QasPage() {
                 notification.open({ type: 'warning', description: String(t('someItemsFailedToEnable', { ids: failedIds.join(', ') }) ?? '') });
             }
         } catch (error) {
-            notification.open({ type: 'error', description: String(t('batchEnableOperationFailed') ?? '') });
+            showApiError(error);
         }
     };
 
@@ -187,7 +187,7 @@ export default function QasPage() {
                 notification.open({ type: 'warning', description: String(t('someItemsFailedToDisable', { ids: failedIds.join(', ') }) ?? '') });
             }
         } catch (error) {
-            notification.open({ type: 'error', description: String(t('batchDisableOperationFailed') ?? '') });
+            showApiError(error);
         }
     };
 
@@ -233,10 +233,10 @@ export default function QasPage() {
         bsConfirm({
             desc: t('confirmDeleteSelectedQaData'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteQa([id]).then(res => {
+                return deleteQa([id]).then(() => {
                     reload()
-                }))
-                next()
+                    next()
+                })
             },
         })
     }
@@ -248,15 +248,13 @@ export default function QasPage() {
         bsConfirm({
             desc: t('confirmDeleteSelectedQaData', { count: selectedItems.length }), // Display the total number of selected items
             onOk(next) {
-                captureAndAlertRequestErrorHoc(
-                    deleteQa(selectedItems) // Pass all selected IDs
+                return deleteQa(selectedItems) // Pass all selected IDs
                         .then(res => {
                             reload(); // Refresh all data
                             setSelectedItems([]); // Clear selected items
                             setSelectAll(false);
-                        })
-                );
-                next();
+                            next();
+                        });
             },
         });
     };
@@ -278,7 +276,7 @@ export default function QasPage() {
             await updateQaStatus(id, targetStatus);
             refreshData(item => item.id === id, { status: targetStatus });
         } catch (error) {
-            notification.open({ type: 'error', description: String(error ?? '') });
+            showApiError(error);
             refreshData(item => item.id === id, {
                 status: 3
             });

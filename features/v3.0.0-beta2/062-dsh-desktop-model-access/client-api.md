@@ -1,5 +1,7 @@
 # DSH Desktop 接入 BiSheng：客户端开发与联调接口契约
 
+> **2026-10-14 模型审计可选扩展（待实现与真实联调）**：客户端并行开发请同时阅读 [模型审计客户端接口契约 0.3](./audit-guardrails-proposal/client-api-audit-extension.md) 和 [任务清单](./audit-guardrails-proposal/tasks.md#client-work)。仅在服务端 `GET /dsh/config` 明确公布能力后附加 `conversation_id`、`request_kind`；无能力或无效关联字段不重放模型请求。本扩展不要求升级 `contract_version=0.5.0`，本文其余既有线协议保持不变；此说明不表示当前部署已经支持审计。
+
 > 2026-10-08 唤起协议更新：默认唤起地址改为 `bisheng://login`，仍自动附加当前毕昇 origin 的 `server` 参数。已保存的地址不自动覆盖；已有环境需在“客户端 → 接入设置”保存新地址。
 
 > 2026-09-29 界面名称与地址默认值更新（唤起默认值已按 2026-10-08 修订）：毕昇网站的 DSH / DSH Desktop 文案统一显示为“客户端”（英文 Client，日文 クライアント），接口路径、字段和错误码不变。未保存配置或缺少相应字段时，`launch_url` 默认 `bisheng://login`，`download_url` 默认 `https://www.dshdesktop.com/zh/enterprise/`。已保存的自定义地址保持不变，显式空下载地址仍隐藏下载入口；已有环境如需使用新下载地址，应在“客户端 → 接入设置”中修改并保存。
@@ -316,13 +318,15 @@ Content-Type: application/json
 
 | 项 | 值 |
 |---|---|
-| provider 协议 | PRD 所述 `openai-completions`，本期 API 是 Chat Completions，不是旧 `/completions` 或 Responses API |
+| provider 协议 | 默认 Chat Completions；企业协议扩展可通过 `capabilities.responses: true` 单独协商原生 Responses，见下文 |
 | Base URL | `{BASE}/api/v1/dsh`（SDK 自动补 `/chat/completions`，不得再补 `/v1`） |
 | apiKey / Bearer 来源 | 当前 DSH access token，刷新后同步更新 |
 | models | GET models 返回列表；按模型 id 唯一标识 |
 | 网络发起位置 | 桌面主进程 / dsh 运行时，由企业扩展包调用；不依赖网页跨域读取企业接口 |
 
-登录成功、每次应用启动、用户手动刷新时重新获取列表。收到 `model_not_allowed` 时刷新一次列表并要求重选，不自动替用户切换模型重放原请求。列表失败显示不可用；旧列表可灰显但不能当作权限仍然有效的证据。本期不使用 `/api/v2/models`、`/responses` 或 Anthropic Messages。
+登录成功、每次应用启动、用户手动刷新时重新获取列表。收到 `model_not_allowed` 时刷新一次列表并要求重选，不自动替用户切换模型重放原请求。列表失败显示不可用；旧列表可灰显但不能当作权限仍然有效的证据。不使用 `/api/v2/models` 或 Anthropic Messages。
+
+企业协议扩展增加可选目录 `reasoning: {efforts, defaultEffort?}`、可选能力 `capabilities.responses: true`、Chat `reasoning_effort`、受控会话用途头和 `POST /api/v1/dsh/responses`。原生 Responses 强制无状态、共用企业鉴权/模型授权/准入/结算；旧客户端和未声明 native 能力的模型保持 Chat。管理员通过现有模型高级参数 `config.user_kwargs` 声明 `reasoning_efforts`、可选默认 `reasoning_effort` 和显式 `use_responses_api: true`；后者当前仅 OpenAI 节点可协商。字段、边界及验收以 [enterprise-protocol-spec.md](./enterprise-protocol-spec.md) 和 [enterprise-protocol-design.md](./enterprise-protocol-design.md) 为准。
 
 ## 7. Chat Completions、工具调用与流式处理
 

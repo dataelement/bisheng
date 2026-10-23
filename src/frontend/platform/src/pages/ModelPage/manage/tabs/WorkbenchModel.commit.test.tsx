@@ -1,0 +1,34 @@
+import { normalizeApiError } from '@bisheng/api-client';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { createPlatformQueryClient } from '@/queryClient';
+import WorkbenchModel from './WorkbenchModel';
+const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), notice: vi.fn(), toast: vi.fn(), translate: (key: string) => key }));
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: mocks.translate }) }));
+vi.mock('@/controllers/API/finetune', () => ({ getLinsightModelEnvelope: mocks.load, updateLinsightModelConfig: mocks.save }));
+vi.mock('@/controllers/request', () => ({ showApiError: mocks.notice }));
+vi.mock('@/pages/ModelPage/manage', () => ({ useModel: () => ({ llmOptions: [], embeddings: [], asrModel: [], ttsModel: [] }) }));
+vi.mock('@bisheng/ui', async importOriginal => {
+  const actual = await importOriginal<typeof import('@bisheng/ui')>();
+  return { ...actual, toast: { show: mocks.toast } };
+});
+vi.mock('@/pages/BuildPage/bench/ModelManagement', () => ({ ModelManagement: () => null }));
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
+it('acknowledges a committed write once when the following refresh fails', async () => {
+  const failure = normalizeApiError({ status_code: 25001 }, { message: 'refresh unavailable' });
+  mocks.load.mockResolvedValueOnce({ data: { models: [{ id: '9', displayName: 'Chat' }], embedding_model: { id: '1' } } }).mockRejectedValue(failure);
+  mocks.save.mockResolvedValue(undefined);
+  const client = createPlatformQueryClient();
+  render(<QueryClientProvider client={client}><WorkbenchModel onBack={vi.fn()} /></QueryClientProvider>);
+  const save = await screen.findByRole('button', { name: 'model.save' });
+  await waitFor(() => expect(save).toBeEnabled());
+  fireEvent.click(save);
+  await waitFor(() => expect(mocks.load).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(save).toBeEnabled());
+  expect(mocks.save).toHaveBeenCalledTimes(1);
+  expect(mocks.toast).toHaveBeenCalledWith({ type: 'success', message: 'model.saveSuccess' });
+  expect(mocks.notice).toHaveBeenCalledWith(failure);
+  expect(client.getQueryData(['linsightModelEnvelope'])).toMatchObject({ data: { embedding_model: { id: '1' } } });
+  client.clear();
+});

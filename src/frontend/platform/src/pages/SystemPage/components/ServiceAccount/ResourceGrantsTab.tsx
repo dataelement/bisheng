@@ -22,7 +22,7 @@ listServiceAccountKeysApi,
 listServiceAccountResourceGrantsApi,
 mutateServiceAccountResourceGrantsApi,
 } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import type {
 ApiKeyItem,
 ServiceAccountResourceGrant,
@@ -73,12 +73,8 @@ export function ResourceGrantsTab({
     setLoadingData(true)
     try {
       const [grantRows, keyRows] = await Promise.all([
-        captureAndAlertRequestErrorHoc(
-          listServiceAccountResourceGrantsApi(serviceAccountId),
-        ),
-        captureAndAlertRequestErrorHoc(
-          listServiceAccountKeysApi(serviceAccountId),
-        ),
+        listServiceAccountResourceGrantsApi(serviceAccountId),
+        listServiceAccountKeysApi(serviceAccountId),
       ])
       if (grantRows) setGrants(grantRows)
       if (keyRows) setKeys(keyRows)
@@ -88,7 +84,7 @@ export function ResourceGrantsTab({
   }, [serviceAccountId])
 
   useEffect(() => {
-    void load()
+    void load().catch(showApiError)
   }, [load])
 
   const filteredGrants = useMemo(() => {
@@ -130,18 +126,15 @@ export function ResourceGrantsTab({
       for (const group of Object.values(groups)) {
         if (!group?.length) continue
         const resource = group[0]
-        const context = await captureAndAlertRequestErrorHoc(
-          getResourcePermissionContextApi(
+        const context = await getResourcePermissionContextApi(
             resource.resource_type as never,
             resource.resource_id,
-          ),
-        )
+          )
         if (!context) {
           completed = false
           break
         }
-        const result = await captureAndAlertRequestErrorHoc(
-          mutateServiceAccountResourceGrantsApi(
+        const result = await mutateServiceAccountResourceGrantsApi(
             serviceAccountId,
             resource.resource_type,
             resource.resource_id,
@@ -155,8 +148,7 @@ export function ResourceGrantsTab({
                 expected_assignee_version: grant.assignee_version,
               })),
             },
-          ),
-        )
+          )
         if (!result) {
           completed = false
           break
@@ -167,6 +159,9 @@ export function ResourceGrantsTab({
       }
       await load()
       return completed
+    } catch (error) {
+      await load().catch(showApiError)
+      throw error
     } finally {
       setLoading(false)
     }
@@ -179,15 +174,12 @@ export function ResourceGrantsTab({
     if (targetModelKey === grant.model_key) return
     setUpdatingGrantId(grant.assignee_id)
     try {
-      const context = await captureAndAlertRequestErrorHoc(
-        getResourcePermissionContextApi(
+      const context = await getResourcePermissionContextApi(
           grant.resource_type as never,
           grant.resource_id,
-        ),
-      )
+        )
       if (!context) return
-      const result = await captureAndAlertRequestErrorHoc(
-        mutateServiceAccountResourceGrantsApi(
+      const result = await mutateServiceAccountResourceGrantsApi(
           serviceAccountId,
           grant.resource_type,
           grant.resource_id,
@@ -204,8 +196,7 @@ export function ResourceGrantsTab({
               },
             ],
           },
-        ),
-      )
+        )
       if (!result) return
       notification.open({ type: "success", title: String(t("openApiManagement.grants.change") ?? ''), description: String(t("openApiManagement.feedback.grantUpdated") ?? '') })
       await load()
@@ -351,7 +342,7 @@ export function ResourceGrantsTab({
                           updatingGrantId === grant.assignee_id
                         }
                         onChange={(value) => {
-                          if (value != null) void handleTierChange(grant, String(value))
+                          if (value != null) void handleTierChange(grant, String(value)).catch(showApiError)
                         }}
                         aria-label={t(
                           "openApiManagement.grants.changeTierFor",
@@ -461,8 +452,8 @@ export function ResourceGrantsTab({
             if (!open) setRevokeGrant(null)
           }}
           onRevokeAllOpenChange={setRevokeAllOpen}
-          onConfirmGrant={() => void handleConfirmRevoke()}
-          onConfirmAll={() => void handleConfirmRevokeAll()}
+          onConfirmGrant={handleUiRequest(handleConfirmRevoke)}
+          onConfirmAll={handleUiRequest(handleConfirmRevokeAll)}
         />
       </div></SharedTooltipProvider>
   )

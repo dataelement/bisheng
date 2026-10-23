@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 
 
 import { createTempApi } from '@/controllers/API';
-import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { showApiError } from '@/controllers/request';
 
 export default function CreateTemp({ flow, open, type, setOpen, onCreated }) {
     const { t } = useTranslation();
@@ -44,14 +44,12 @@ export default function CreateTemp({ flow, open, type, setOpen, onCreated }) {
         if (description.length > 200) errorlist.push(t('build.descriptionTooLong', { labelName }));
         if (errorlist.length) toast.show({ type: 'error', message: errorlist.filter(Boolean).join('\n') });
 
-        captureAndAlertRequestErrorHoc(
-            createTempApi({ ...data, flow_id: flow.id }, type)
+        createTempApi({ ...data, flow_id: flow.id }, type)
                 .then(() => {
                     setOpen(false);
                     toast.show({ type: 'success', message: String(t('build.templateCreatedSuccessfully') ?? '') });
                     onCreated?.();
-                })
-        );
+                }).catch(showApiError);
     };
 
     return (

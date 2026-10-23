@@ -416,8 +416,5 @@ export async function uploadChatFile(v, file: File, onProgress): Promise<any> {
 export async function checkAppEditPermission(flowId, flowType) {
     return await axios.get(`/api/v1/workflow/write/auth`, {
         params: { flow_id: flowId, flow_type: flowType }
-    }).catch(e => {
-        // console.error('error :>> ', e);
-        // location.href = __APP_ENV__.BASE_URL + '/404';
     });
 }

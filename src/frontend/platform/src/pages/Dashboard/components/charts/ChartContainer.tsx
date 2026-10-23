@@ -90,7 +90,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
         </h3>}
         <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/ept-${component.type}.png`} className="max-w-60 max-h-full" />
         <div className='flex size-full absolute justify-center items-center'>
-          <span className="text-sm bg-gray-50/80 px-2 py-1 text-primary truncate">{t('noDataInChart')}</span>
+          <span className="text-sm bg-gray-50/80 px-2 py-1 text-primary truncate">{t(error ? 'operationFailed' : 'noDataInChart')}</span>
         </div>
       </div>
     );

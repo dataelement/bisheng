@@ -660,11 +660,11 @@ export function previewFileSplitApi(
             .catch((err) => {
                 console.error('preview 轮询请求失败', err);
 
-                if (originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+                if (err?.kind === 'canceled' || originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
                     return;
                 }
                 isFinished = true;
-                emitError({ message: '文档解析失败' });
+                onEvent('error', err);
             });
     };
 
@@ -696,11 +696,11 @@ export function previewFileSplitApi(
         .catch((err) => {
             console.error('preview 请求失败', err);
 
-            if (originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
+            if (err?.kind === 'canceled' || originAxios.isCancel?.(err) || err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {
                 return;
             }
             isFinished = true;
-            emitError({ message: '文档解析失败' });
+            onEvent('error', err);
         });
 
     return () => {
