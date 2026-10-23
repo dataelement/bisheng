@@ -1,0 +1,2 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+PASS actual grant removal closes existing WebSocket within5s {"closed_after_seconds": 4.028708160854876, "close_code": 4403, "new_http_status": 403, "owner_still_serving": true}

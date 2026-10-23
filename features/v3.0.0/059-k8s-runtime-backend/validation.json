@@ -6,10 +6,10 @@
     "spec_confirmed": true,
     "design_confirmed": true,
     "tasks_review": "LGTM",
-    "l1_completed": 258,
-    "tasks_total": 263,
+    "l1_completed": 268,
+    "tasks_total": 272,
     "e2e": "in_progress",
-    "l2": "not_started"
+    "l2": "development_integration_review_completed_full_delivery_pending"
   },
   "checks": {
     "runtime": {
@@ -2099,5 +2099,27 @@
     "tools_tar_sha256": "ed9411c81aa3bf4014c3995c66529fbf1bc854384707b1d90445a10121b37663",
     "readers": "new public failure operation reverse linkage and exact v1/v2 preview cleanup gates reviewed; no DB backfill",
     "ddl_observer": "first candidate e77 rejected before execution: actual kubectl1.28.15 has no resource-version flag; replacement pending; no migration attempted"
+  },
+  "development_integration_2026_10_23": {
+    "target_branch": "feat/3.0.0-vibe",
+    "target_base": "4aa9ce69b2830b81162fe631b9c801057c40ee8b",
+    "implementation_source": "cda8dccf26298af91a1df277dcd1a49787b6b444",
+    "f086_source": "667546bb77eeb366e66a13d544d122ef24811e35",
+    "authorization": "user requests development closeout, merge and push; no full-suite rerun",
+    "scope": "development integration only; historical checks retain their original source/date",
+    "code_review": "see code-review.md",
+    "full_delivery_accepted": false,
+    "public_image_release_executed": false,
+    "arm_validation": "deferred by user",
+    "dm8_validation": "static only"
+  },
+  "historical_sdd_before_development_integration": {
+    "spec_confirmed": true,
+    "design_confirmed": true,
+    "tasks_review": "LGTM",
+    "l1_completed": 258,
+    "tasks_total": 263,
+    "e2e": "in_progress",
+    "l2": "not_started"
   }
 }

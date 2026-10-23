@@ -1,7 +1,7 @@
 {
   "feature": "F086",
-  "date": "2026-10-20",
-  "scope": "implementation, native two-architecture container checks and dedicated Docker platform journeys; full acceptance incomplete",
+  "date": "2026-10-21",
+  "scope": "checkpoint plus uncommitted multi-tenant bootstrap fix; Docker multi-tenant, representative failure and legacy upgrade acceptance; full gates incomplete",
   "baseline_sha": "4aa9ce69b2830b81162fe631b9c801057c40ee8b",
   "branch": "codex/086-vibe-runtime-delivery",
   "runtime_code_changed": true,
@@ -11,11 +11,10 @@
   "design_review": "confirmed; implementation details synchronized",
   "tasks_review": "LGTM (same-agent declaration review)",
   "task_counts": {
-    "local_verified": 79,
-    "native_verified": 7,
-    "total": 89,
+    "local_verified": 84,
+    "native_verified": 8,
+    "total": 94,
     "pending_integration": [
-      "T053",
       "T055",
       "T056"
     ]
@@ -135,7 +134,7 @@
     "cached_images_retained": true,
     "original_business_container_ids_unchanged": 26
   },
-  "e2e_gate": "Docker core journeys passed; DM8, multi-tenant fresh install, full failure matrix and official release remain pending",
+  "e2e_gate": "Key Docker/upgrade journeys and dual-native GitHub test release passed; DM8 live deferred by user; exhaustive faults, full offline installation and final feature review remain pending",
   "code_review": "NEEDS_FIX: remaining integration/release gates, not an unqualified delivery declaration",
   "review_input_hashes_verified": {
     "vibe-app-open-source-technical-design.md": "2fb280efb649aae0c6430b3cc418078e559cef8734e3e30fa402a1575a447c52",
@@ -151,7 +150,9 @@
     "pushed": false,
     "merged": false,
     "primary_unrelated_changes_preserved": true,
-    "snapshot_date": "2026-10-20"
+    "snapshot_date": "2026-10-20",
+    "runtime_test_release_commit": "755d4456e50c015a3fa88da0c0c35ab53bbd1650",
+    "runtime_test_release_tag": "v3.0.0-test-vibe"
   },
   "implementation_task_file_coverage_complete": true,
   "note": "SQLite transactions, ASGI and mocked external ports prove local contracts only. Skipped tests and written CI workflows are not runtime or release evidence.",
@@ -171,6 +172,97 @@
     "request": "提交推送代码先",
     "branch": "codex/086-vibe-runtime-delivery",
     "scope": "Commit and push current implementation, documentation and sanitized validation evidence; acceptance/release gates remain pending",
-    "merge_authorized": false
+    "merge_authorized": false,
+    "commit_sha": "5131b81194a5fa390593e58d822bcbde52b6ca64",
+    "remote_sha_verified": true
+  },
+  "followup_2026_10_21": {
+    "request": "继续推进剩余验收，先处理多租户启动问题，补齐故障和升级场景的验证",
+    "code_status": "uncommitted follow-up fixes; generic F048 changes require release-line-first landing before a later commit",
+    "bootstrap_regression": {
+      "before_failed": 3,
+      "before_passed": 7,
+      "after_passed": 56,
+      "after_failed": 0
+    },
+    "fresh_multi_tenant_startup": "passed: 18 system resources and natural first-admin registration",
+    "live_owner_foreign_tests": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "acceptance_in_progress": false,
+    "evidence_dir": "e2e-evidence/2026-10-21-docker",
+    "evidence_files": 56,
+    "verified_journeys": [
+      "fresh multi-tenant startup and natural first-admin registration",
+      "ordinary child-tenant owner publication and approval",
+      "six live owner/nonowner/foreign checks",
+      "probe cancellation and timeout",
+      "Node install-hook cancellation and compile timeout",
+      "SIGKILL manager during probe and resume same operation",
+      "object PUT succeeded but SQL snapshot confirmation failed; retry same approval",
+      "DDL committed then startup failed; risk flag and data retained; compatible roll forward",
+      "real visitor Grant removal closes WS within5s",
+      "backend unavailable closes existing WS within5s",
+      "SQL-injected egress revoke closes existing CONNECT within5s",
+      "manager restart preserves existing WS/CONNECT and 32 new HTTP/SDK checks",
+      "real v1 publication, dry-run, pre-import rollback, idempotent import and v2 rebind; history/pending/legacy attachment retained"
+    ],
+    "websocket_permission_revoke_seconds": 4.028708160854876,
+    "websocket_backend_unavailable_seconds": 4.013150930404663,
+    "connect_policy_revoke_seconds": 1.266052007675171,
+    "cleanup": {
+      "applications": 7,
+      "reservations_released": 23,
+      "snapshots_purged": 3,
+      "test_stack_removed": true,
+      "original_containers_full_ids_unchanged": 26
+    },
+    "remaining": [
+      "exhaustive fault matrix including unknown Engine build stop and node loss",
+      "full customer offline installation and complete SDK/model/retrieval combinations",
+      "official CI and image/profile publication",
+      "pre-existing backend/frontend quality gates"
+    ]
+  },
+  "dm8_acceptance": {
+    "user_decision_date": "2026-10-21",
+    "scope": "static model/type/default/constraint/index/tenant/migration review only",
+    "live_test_deferred": true,
+    "live_test_is_current_blocker": false,
+    "central_regression_still_required_for_runtime_claim": true,
+    "tables": 15,
+    "static_review": "passed after BIGINT range fix",
+    "related_regression_passed": 28,
+    "migration_head": "f086_runtime_byte_counters",
+    "new_migration_live_execution": false,
+    "report": "model-review.md"
+  },
+  "image_publication": {
+    "implementation": "workflow and build scripts complete; runner portability fixed in 755d4456e5",
+    "official_github_run": "passed",
+    "run_url": "https://github.com/dataelement/bisheng/actions/runs/39567381522",
+    "tag": "v3.0.0-test-vibe",
+    "commit": "755d4456e50c015a3fa88da0c0c35ab53bbd1650",
+    "dockerhub_release": "test release published, seven image families for each native architecture",
+    "catalog_and_service_indexes": "published; artifact metadata observed in GitHub UI",
+    "platform_catalog_import": "not performed",
+    "dispatch_pushes_images": true,
+    "109_public_service_images": "passed after proxy download and docker load; original 27 containers unchanged",
+    "evidence": "e2e-evidence/2026-10-21-ci-release/README.md"
+  },
+  "development_integration_2026_10_23": {
+    "target_branch": "feat/3.0.0-vibe",
+    "target_base": "4aa9ce69b2830b81162fe631b9c801057c40ee8b",
+    "implementation_source": "cda8dccf26298af91a1df277dcd1a49787b6b444",
+    "f086_source": "667546bb77eeb366e66a13d544d122ef24811e35",
+    "authorization": "user requests development closeout, merge and push; no full-suite rerun",
+    "scope": "development integration only; historical checks retain their original source/date",
+    "code_review": "see code-review.md",
+    "full_delivery_accepted": false,
+    "public_image_release_executed": false,
+    "arm_validation": "deferred by user",
+    "dm8_validation": "static only"
   }
 }

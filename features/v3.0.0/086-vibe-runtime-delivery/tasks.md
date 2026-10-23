@@ -2,8 +2,8 @@
 **关联**：[spec.md](./spec.md) · [design.md](./design.md) · [验证](./validation.json)。基线4aa9ce69，分支codex/086-vibe-runtime-delivery。
 ## 状态
 - spec、design已获确认；tasks已按实际文件重新核对。
-- 86/89项完成实现及对应合同/原生验证；其余保留未完成。勾选不表示对应AC已取得部署证明。
-- T053、T055、T056仍保留未完成。2026-10-21用户要求“提交推送代码先”，授权将当前阶段实现提交并推送到功能分支；完整验收与合并门继续保留。
+- 92/94项完成实现及对应合同/原生验证；其余保留未完成。勾选不表示对应AC已取得部署证明。
+- T055、T056仍保留未完成；T053已由2026-10-21测试发行实跑关闭。2026-10-21用户要求“提交推送代码先”，授权将当前阶段实现提交并推送到功能分支；完整验收与合并门继续保留。
 ## 开发及范围说明
 测试与实现任务保留原ID，并以补充任务登记拆解时遗漏的协调器、句柄、临时数据helper、审计、CI脚本和安装文档；每项至多两个文件。基础设施依赖同域Repository/服务。新增表走model discovery；回退保留表/数据，先停控制写入。Celery复用原任务tenant headers→ContextVar，不引入第二Engine控制入口。
 补充任务是本次增量接线，不改变已确认的Docker/开源/平台存储/单写SQLite边界。Python/Node用冻结argv，未增加无必要entrypoint；目录为CI真实生成JSON；专用runtime-images工作流不覆盖backend工作流。实际运行与未验证情况见task-reviews。
@@ -333,9 +333,9 @@
   **覆盖 AC**：AC-01、AC-03、AC-04、AC-05、AC-18、AC-52、AC-54、AC-56、AC-58
   **依赖**：T049、T050、T051
 
-- [ ] **T053**：CI/Release双架构交付
+- [x] **T053**：CI/Release双架构交付
   **类型**：实现；**文件**：`.github/workflows/runtime-images.yml`
-  **逻辑/验收**：独立runtime-images工作流，amd64/arm64原生构建、真实容器级烟测、不可覆盖标签，双侧成功后发布目录与服务索引；不改backend已有CI。工作流源码已完成，真实运行尚未执行。
+  **逻辑/验收**：独立runtime-images工作流，amd64/arm64原生构建、真实容器级烟测、不可覆盖标签，双侧成功后发布目录与服务索引；不改backend已有CI。测试Tag v3.0.0-test-vibe已实跑成功，双原生构建/集成、架构标签、服务索引和目录已发布；见e2e-evidence/2026-10-21-ci-release。
   **覆盖 AC**：AC-54、AC-55、AC-56、AC-57
   **依赖**：T052
 
@@ -349,7 +349,7 @@
 
 - [ ] **T055**：API E2E与故障证据
   **类型**：测试；**文件**：`src/backend/test/e2e/test_e2e_f086_runtime_delivery.py`、`features/v3.0.0/086-vibe-runtime-delivery/e2e-checklist.md`
-  **逻辑/验收**：生成显式启用的部署级权限API用例及完整人工发布/故障/双架构清单；本地6skip只证明门控，不代表验收通过。真实平台E2E、MySQL/DM8与双架构必须补齐后才能完成。
+  **逻辑/验收**：生成显式启用的部署级权限API用例及完整人工发布/故障/双架构清单；六项live权限已通过；真实平台关键旅程、MySQL和双原生架构已取得证据，剩余故障/离线/发行门保留。用户确认DM8本轮只做模型静态审查，实测留中央回归。
   **覆盖 AC**：AC-01、AC-02、AC-03、AC-04、AC-05、AC-06、AC-07、AC-08、AC-09、AC-10、AC-11、AC-12、AC-13、AC-14、AC-15、AC-16、AC-17、AC-18、AC-19、AC-20、AC-21、AC-22、AC-23、AC-24、AC-25、AC-26、AC-27、AC-28、AC-29、AC-30、AC-31、AC-32、AC-33、AC-34、AC-35、AC-36、AC-37、AC-38、AC-39、AC-40、AC-41、AC-42、AC-43、AC-44、AC-45、AC-46、AC-47、AC-48、AC-49、AC-50、AC-51、AC-52、AC-53、AC-54、AC-55、AC-56、AC-57、AC-58、AC-59、AC-60、AC-61、AC-62、AC-63
   **依赖**：T054、T038、T040
 
@@ -565,6 +565,44 @@
 
 ## 交付门
 
-未完成的真实原生镜像构建、双架构CI、平台E2E和MySQL/DM8集成不得用mock、skip或文档代替。前端lint和两项backend权限基线失败单独记录，不能宣称全仓绿灯。
+未执行的真实运行不得用mock、skip或文档代替；DM8按用户确认的静态审查口径处理，实测留中央回归。前端lint和两项backend权限基线失败单独记录，不能宣称全仓绿灯。
 
 真实 SQL 补充验收：T005 增加 opt-in 专用库用例；MySQL 同步竞争曾暴露重复键快照读与首次归属间隙锁两项缺陷，修复后通过。仅MySQL实测，DM8及平台完整 E2E 不因此勾选。
+
+### Wave 2026-10-21：多租户启动验收修复
+
+- [x] **T090**：后台租户上下文执行边界
+  **类型**：实现；**文件**：`src/backend/bisheng/core/context/tenant.py`、`src/backend/test/tenant/test_tenant_execution_scope.py`
+  **逻辑/验收**：绑定已验证目标租户，临时收窄visible set并清除继承的admin override/bypass，嵌套、异常和并发均恢复原上下文。组合回归56 passed；109全新multi_tenant.enabled=true启动与真实首管理员注册通过。
+  **覆盖 AC**：AC-61、AC-62
+  **依赖**：无
+
+- [x] **T091**：系统资源启动投影租户绑定
+  **类型**：实现；**文件**：`src/backend/bisheng/permission/application/system_resource_reconcile.py`、`src/backend/test/permission/test_f048_system_resource_reconcile.py`
+  **逻辑/验收**：每个系统资源投影使用其可信tenant_id执行，保留原权限授权入口，不以全局bypass规避过滤。组合回归56 passed；109全新multi_tenant.enabled=true启动与真实首管理员注册通过。
+  **覆盖 AC**：AC-61、AC-62
+  **依赖**：T090
+
+- [x] **T092**：首次管理员仪表盘投影上下文
+  **类型**：实现；**文件**：`src/backend/bisheng/api/services/f048_preset_dashboard_bootstrap.py`、`src/backend/test/permission/test_f048_preset_dashboard_bootstrap.py`
+  **逻辑/验收**：首次自然注册及启动对账的预置dashboard owner投影显式绑定Root租户；已有owner与投影的幂等逻辑保持。组合回归56 passed；109全新multi_tenant.enabled=true启动与真实首管理员注册通过。
+  **覆盖 AC**：AC-61、AC-62
+  **依赖**：T090
+
+通用 F048 启动修复已按授权先进入 release line `9d156f261c`，F059 经 `98fbba032` 正常继承；本次只收回 F086 的历史文档/证据，不覆盖后续公共代码。spec/design 业务决策未偏离。
+
+### Wave 2026-10-21：DM8静态审查与字节边界
+
+- [x] **T093**：字节计数范围与模型规范检查
+  **类型**：实现；**文件**：`src/backend/bisheng/app_runtime/domain/models/runtime_delivery.py`、`src/backend/test/app_runtime/test_runtime_model_contracts.py`
+  **逻辑/验收**：size_bytes和offset使用BigInteger，覆盖15表JsonType/时间默认/租户/唯一约束和索引静态检查，符合2GiB材料和10GiB快照合同；DM8不连接。
+  **覆盖 AC**：AC-06、AC-35、AC-61
+  **依赖**：T001
+
+- [x] **T094**：已有运行时字节字段扩容迁移
+  **类型**：基础设施；**文件**：`src/backend/bisheng/core/database/alembic/versions/f086_runtime_byte_counters.py`、`src/backend/test/app_runtime/test_runtime_model_contracts.py`
+  **逻辑/验收**：挂接已核对single head merge_vibe_f077_heads，DDL-only INTEGER到BIGINT；新库/已扩容跳过，异常类型失败，降级保留宽列；组合28项回归通过。
+  **覆盖 AC**：AC-06、AC-35、AC-61
+  **依赖**：T093
+
+2026-10-23 开发整合：F086 实现与证据已与 F059 汇合；92/94 不变，T055/T056 的完整离线/剩余故障/最终交付门仍 pending。当前七维开发合入审查已完成（code-review.md），旧审查归档为 code-review-2026-10-21.md。用户明确授权先合入 feat/3.0.0-vibe 并推送；此授权不表示全 AC 或当前版本正式镜像发行完成。

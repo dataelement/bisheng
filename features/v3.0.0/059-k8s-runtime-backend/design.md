@@ -1,10 +1,10 @@
 # Design: F059 K8s 应用托管执行后端
 
-> **状态：设计已由用户确认，R-D1、R-D2、R-D3 复审通过；进入任务拆解/实施，尚未交付。** spec 已由用户明确回复“确认规格，进入设计”。本文区分基线代码和拟实施设计；不能据本文件宣称 K8s 交付完成。
+> **状态：规格、设计已确认；开发实现及逐任务 L1 已收口，按用户授权先整合开发代码。** 完整离线安装、剩余故障/卸载矩阵及当前版本正式镜像发行仍未全部验收；不能据本文件宣称全部 AC 已交付。当前合入结论见 [code-review.md](./code-review.md)。
 
 **关联**：[spec.md](./spec.md) · [tasks.md](./tasks.md) · [规格评审](./review-evidence.md) · [设计评审](./design-review.md) · [189 盘点](./cluster-preflight.md) · [版本契约](../release-contract.md)
 
-**版本**：v3.0.0；**最后更新**：2026-10-21；**代码基线**：`755d4456e50c015a3fa88da0c0c35ab53bbd1650`。
+**版本**：v3.0.0；**最后更新**：2026-10-23；**设计起始基线**：`755d4456e50c015a3fa88da0c0c35ab53bbd1650`；**本次整合实现基线**：`cda8dccf26298af91a1df277dcd1a49787b6b444`。
 
 ## 1. 目标与非目标
 
@@ -117,7 +117,11 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成265/269。T258–T263保护报告与心跳一致性修复已通过1757/13skip runtime、1944/19skip三个后端模块，189已部署R29/source f886 manager与两文件backend修复，实际epoch24/current及旧保护历史核对通过。五种交付模式原v1/v2证据保持；新增r11 Python已完成发布、审批预览、HTTP/WS/SDK/OBO/附件/权限、正常停用、随机SQLite查改CSV与同v1恢复行数据一致，九项独立资源检查通过。T069剩安全删除；T070故障、迁移与独立卸载继续验收。旧r4及旧失信writer保持围栏，不能强制卸载主安装域。T264/T265 CLI 16125→exit14及wheel已完成本地L1；R3 manager停机访问和R12容量前置拒绝已真实通过。ARM、新增109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
+**F059 当前实现与实证（开发整合，完整交付待验收）**：Docker/K8s 执行、平台存储解耦、SQLite 维护、准入与能力报告、Chart、helper/assembler、CI 及 CLI/SDK 物料已接线。原任务 267/271 完成；本次追加同版本 CI 发布串行修复 T274 后为 **268/272**，剩余 T067、T070、T071、T072 是回归、故障/卸载、发行和最终交付汇总门，不表示仍有四块未实现业务代码。
+
+189 最新部署实证为 R32 / Helm32，manager 源码 `0f2db1f9a29213ca94d4596e64b00ad8fcbac528`，amd64 内网镜像 `sha256:bc488d16d3b75ccd30e729d7ef79b0c4591abaa40c0037057697f405d9e4900b`；controller 30→31 的在途 prepare 单次 SIGKILL 续办通过，同原操作/deadline/安装 UID 与 CID，240 秒 hook 自然完成。R31 安全删除、R11 在线/停用 owner 数据与同版本恢复、M2 迁移失败后显式恢复、R3 manager 停机访问、R12 容量前置拒绝已有分项真实证据。五种交付模式的原业务记录保持；后续 probe 的 SQL completed/cleanupcomplete 不扩大为物理清理或批准上线证明。
+
+旧 r4 与历史 false/unknown writer 继续保留围栏，不为合并强清。ARM 与新增 109 按用户优先级暂缓，DM8 仅静态；完整离线安装、剩余故障/独立卸载、跨节点及当前版本公开发行未完成。七维开发合入审查与本轮必要定向验证见 [code-review.md](./code-review.md)、[整合报告](../../../docs/reviews/vibe-development-integration-2026-10-23.md)。历史阶段记录保留其原日期与统计，不作当前状态。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -259,7 +263,7 @@ T225/T226实现：准备全部输出确认后，先在既有`preparing`事实的
 
 **初始化阶段期限（T228/T229）**：launch使用fresh同UID Pod及同一状态快照计算阶段和Ready/Service端点。固定init顺序来自冻结template；首阶段锚点为Pod.creationTimestamp，后续为前一成功init的finishedAt，最后init完成后进入独立健康90秒窗口。无init的完整镜像仅有创建起的健康窗口。已完成阶段也不得超过90秒；至多5秒API/kubelet时钟偏差不使锚点后退。缺失/异常/越序状态不授予Ready，缺失时间拒绝，不以now或running.startedAt续期。每轮及Ready返回前fresh核原操作范围、取消和期限，min原冻结deadline/当前deadline；manager重启、同名新UID、控制器失租不能刷新期限或绕过围栏。observe公开形状不变。最后sleep有界且非负，保留阶段失败诊断。
 
-### 4.7 材料授权与续期（已接线；准备阶段传输已实测，完整续期及正式初始化待验收）
+### 4.7 材料授权与续期（已接线；准备与正式初始化已有实证，完整续期故障矩阵待验）
 
 期限实现：`RuntimeMaterialDelegation.expires_at`在operation/预览中分别是操作/会话的最晚期限；正式deployment-init可为NULL，表示每次重新检查当前归属、批准版本、冻结delivery和同UID，不是永久通行。300秒传输票据仍有独立期限，不能独立续期。该表已在189专用测试平台完成扩展迁移并实际读写，尚未完成客户发行交付；模型声明可空，不改已发布迁移或做数据回填。
 
@@ -301,11 +305,11 @@ manager 只提交 helper ready 的 UID/内部目标事实；backend 重新检查
 
 恢复先保护当前数据库并确认其快照，再下载目标快照、校验、离线替换，fsync 后提交事实。启动失败保留 data_may_have_changed 和维护状态；不自动用旧备份覆盖新数据。预检和预览只初始化独立空库。
 
-数据helper本地实现补充：data-v1签名输入为固定域`BISHENG-RUNTIME-DATA-V1\n`加canonical JSON（key_id和claims），claims精确绑定version/operation_id/request_id/app_id/exec_ref/pod_uid/actor_ref/action/parameters_sha256/nonce/issued_at/not_after/deadline；受理窗口最长5秒，总deadline不超过签发后60秒且仍受原数据操作期限限制。独立受信helper只加载公钥。卷内跨进程flock串行，started先fsync再创建有界SQLite子进程，子进程完成但done落盘失败仍保留未知；新只读请求查询原ID，不重放写操作。导出在platform目录生成文件、校验摘要后流式返回，不把CSV塞入journal或一次性读入内存。helper本地/HTTP、backend签发与会话、Pod模板与运输已通过本地合同；真实集群尚未验收。
+数据helper本地实现补充：data-v1签名输入为固定域`BISHENG-RUNTIME-DATA-V1\n`加canonical JSON（key_id和claims），claims精确绑定version/operation_id/request_id/app_id/exec_ref/pod_uid/actor_ref/action/parameters_sha256/nonce/issued_at/not_after/deadline；受理窗口最长5秒，总deadline不超过签发后60秒且仍受原数据操作期限限制。独立受信helper只加载公钥。卷内跨进程flock串行，started先fsync再创建有界SQLite子进程，子进程完成但done落盘失败仍保留未知；新只读请求查询原ID，不重放写操作。导出在platform目录生成文件、校验摘要后流式返回，不把CSV塞入journal或一次性读入内存。helper本地/HTTP、backend签发与会话、Pod模板与运输已通过本地合同；R11 已真实验证在线与停用 owner 数据请求、编辑、CSV 及恢复一致性；完整异常矩阵仍待验。
 
-数据会话底层互斥已接线：Repository按node→assignment顺序，对节点内跨租户会话只做聚合计数并发上限2，在同一事务建立data_operation_id和离线helper 128MiB/100m预占（启动成本实测修正；在线sidecar保持25m）；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。上述Service、存储传输、owner签发与Pod运输均已接线并通过本地合同；K8s数据业务实测待完成。
+数据会话底层互斥已接线：Repository按node→assignment顺序，对节点内跨租户会话只做聚合计数并发上限2，在同一事务建立data_operation_id和离线helper 128MiB/100m预占（启动成本实测修正；在线sidecar保持25m）；不改serving active_operation_id/generation/owner_epoch。生命周期提交和claim双向检查该归属，期限过期或结果未知不释放。仅terminal且cleanup_complete的同一data操作才能释放互斥。K8s正式serve Pod的128MiB/25m sidecar加入应用预占，Docker预算保持原值。上述Service、存储传输、owner签发与Pod运输均已接线；R11 的在线/停用数据业务与 M2 显式快照恢复已有真实证据，未覆盖的故障分支保持待验。
 
-原AppDataService入口已接选择分发：Docker保持既有RPC；K8s在原owner/参数校验之后，由RuntimeDataSessionService提交内部会话、等待同UID helper就绪、调用后端签发接口并转交X-Runtime-Data-Grant。后台不跨SQL事务等待网络。在线固定原exec_ref/UID，不另起挂卷写入者；离线冷启动与调用共用60秒。manager唤醒响应丢失以已提交状态查询恢复，数据HTTP结果未知不重发。T049已接默认backend签发实现，T045已接Pod运输/清理；K8s owner数据完整E2E尚未完成。
+原AppDataService入口已接选择分发：Docker保持既有RPC；K8s在原owner/参数校验之后，由RuntimeDataSessionService提交内部会话、等待同UID helper就绪、调用后端签发接口并转交X-Runtime-Data-Grant。后台不跨SQL事务等待网络。在线固定原exec_ref/UID，不另起挂卷写入者；离线冷启动与调用共用60秒。manager唤醒响应丢失以已提交状态查询恢复，数据HTTP结果未知不重发。T049已接默认backend签发实现，T045已接Pod运输/清理；K8s owner 数据主链路已在 R11 通过，全部故障与卸载组合尚未完成。
 
 数据Pod运输已本地接线：正式Pod的data-helper与离线purpose=data使用固定`runtime_manager.k8s_data_helper`入口，公钥只投射到helper，Pod UID来自Downward API；准入只允许安装者指定的公钥ConfigMap。在线按原UID复用，helper不可用不回退到第二挂卷Pod；离线先复用已登记PVC并确认旧写入者已停止，不为查看数据创建新卷或Service。调用目标只能是安装描述的pod_cidrs内、同一资源UID的8092端口。v2数据API转交owner票据，使用后台持久互斥和卷内flock，不再抢操作线程持有的本地app锁。
 
@@ -414,6 +418,8 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 
 | 反直觉事实 | 如果不知道会怎样 | 在哪处理 |
 | --- | --- | --- |
+| manager 重启时旧 holder 租约未到期，正常 409 不属于业务失败 | 错误进入业务失败清理并在自然交接后杀掉原在途安装 | `operations.py` 在 claim/执行及业务失败处理前取得 controller；T272/T273 与 R32 同 UID/CID 续办实证 |
+| CI 并发锁若按 ref 分组，而发布标签只按版本产生 | 不同入口同时发布同一版本，存在性检查不能阻止检查后覆盖竞争 | `.github/workflows/runtime-images.yml` 按 `inputs.version || github.ref_name` 分组；仅约束此仓库工作流，仓库外写入仍需权限/不可变策略 |
 | v2预检容量拒绝为16125而legacy为16226 | CLI若只登记legacy码将容量不足显示为未知错误并exit19 | `bisheng_cli/errors.py`两码映射既有EXIT_CAPACITY；实际分发wheel及manifest已同步，T264/T265已实现 |
 | 原 Protocol 是 Docker API 形状，目录逻辑散落在多个模块 | 加 K8s 文件后仍然访问 manager 本机路径或 Docker | 新 `executors/`；原 operations/preparer/data API 统一依赖能力接口 |
 | RWO 是单节点挂载，不是单 Pod 或进程写锁 | 同节点新旧应用或维护并发写生产库 | `executors/kubernetes.py`、资源账本、停止确认及固定生产位置准入 |
@@ -444,7 +450,7 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 
 ### 6.1 执行能力与现有 HTTP 合同
 
-以下Python能力接口与data的K8s运输层均已接线并通过本地合同，真实owner数据行程待验收；backend不import manager包，DTO JSON是进程间合同：
+以下Python能力接口与data的K8s运输层均已接线；本地合同及 R11 真实 owner 数据行程通过，剩余故障矩阵独立记录。backend不import manager包，DTO JSON是进程间合同：
 
 ```python
 class RuntimeExecutor(Protocol):
@@ -841,3 +847,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 
 
 2026-10-23 在途重启控制器准入（T272/T273）：189单次SIGKILL后的新进程在旧holder租约尚未到期时收到正常409/controller_lease_held；该异常错误进入业务_failure，错误处理跨到自然到期后取得新epoch并清理原安装。真实双执行器与后端Service最小复现已区分于模板/epoch资源复用问题。按4.6既有续办合同，在operation claim/执行和业务失败处理之前核当前K8s控制器租约；拒绝当前动作，原操作/阶段事实/资源和deadline保持，下一轮正常对账再试。不放宽后端围栏，不改Docker、冻结模板、原失败记录或截止时间；本地4行准入门及定向配对/独立L1已完成；189 R32同在途prepare经一次SIGKILL/controller30→31、原安装同UID/CID自然240秒完成、原deadline/阶段结果保持、资源自然清理已通过；见fault-upgrade的R32定向证据。
+
+2026-10-23 开发整合修订：刷新 R32/268-of-272 当前快照、owner 数据与初始化实证；已知坑同步控制器交接与 CI 发布锁。按用户先开发收尾合并并推送的授权执行，未改变规格、存储/安全合同或未验事项。

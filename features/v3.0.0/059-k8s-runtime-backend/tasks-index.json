@@ -7120,6 +7120,29 @@
       "command": "",
       "status": "pending",
       "review": "pending"
+    },
+    {
+      "id": "T274",
+      "wave": 8,
+      "kind": "基础设施",
+      "title": "同版本镜像发布入口串行",
+      "files": [
+        ".github/workflows/runtime-images.yml",
+        "src/runtime-manager/tests/test_image_release.py"
+      ],
+      "logic": "按实际release标识共享同仓库发布并发锁；保留外部写入与正式发行边界。",
+      "acs": [
+        "AC-39",
+        "AC-54",
+        "AC-56"
+      ],
+      "depends": [
+        "T065"
+      ],
+      "pair": null,
+      "command": "python -m pytest -q tests/test_image_release.py::test_ci_keeps_native_gate_and_immutable_digest_indexes",
+      "status": "complete",
+      "review": "PASS"
     }
   ]
 }

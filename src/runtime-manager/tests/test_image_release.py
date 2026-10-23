@@ -138,6 +138,9 @@ def test_helper_installs_trusted_package_and_assembler_uses_pinned_toolchain():
 def test_ci_keeps_native_gate_and_immutable_digest_indexes():
     workflow = (ROOT / ".github/workflows/runtime-images.yml").read_text()
     assert "ubuntu-22.04-arm" in workflow and "needs: native" in workflow
+    # A release shares one publication lock across tag and manual/ref entry points.
+    assert "group: runtime-images-${{ inputs.version || github.ref_name }}" in workflow
+    assert "cancel-in-progress: false" in workflow
     assert "setup-qemu" not in workflow
     assert "runtime-release.json" in workflow
     assert "RUNTIME_PUBLISH: '1'" in workflow

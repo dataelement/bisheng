@@ -1,4 +1,4 @@
-# F086 真实部署验收记录（2026-10-20）
+# F086 真实部署验收记录（更新至2026-10-21）
 
 **Docker 主链路通过；完整 SDD 交付门仍有未完成项。** 本记录保存2026-10-20验收时的工作树结果，基线 `4aa9ce69b2830b81162fe631b9c801057c40ee8b`。验收当时没有提交、推送、合并或发布 Docker Hub 镜像。
 
@@ -56,7 +56,7 @@ backend 测试镜像复用主机缓存层，并按当前 `uv.lock` 执行 `uv sy
 
 测试驱动器自身还修正了审批task_id/显示名字段、预览尾斜杠、等待current_version_id切换、/actions/stop路由、预先分配version_id与正式版本记录的区别，以及HTTP/1.1回显握手；这些不登记为产品缺陷。源码包、镜像与预览的参数均按真实API调整，未绕过审批、owner检查或内容校验。
 
-## 4. 仍未完成的交付门
+## 4. 2026-10-20的未完成项（当前进展见第8节）
 
 - DM8真实驱动、DDL、唯一约束、并发/savepoint及业务事务切换；已向用户请求独立测试schema。
 - 新装多租户启动问题与完整跨租户/OpenFGA部署旅程；已有SQL/ASGI跨租户检查不替代该证明。
@@ -88,4 +88,77 @@ backend 测试镜像复用主机缓存层，并按当前 `uv.lock` 执行 `uv sy
 
 本机ARM64测试执行体均已回收，socket proxy及control网络已移除；189未创建任何测试资源。[ARM64清理结果](e2e-evidence/2026-10-20-docker/evidence/arm64-cleanup.json)。
 
-上述为2026-10-20验收收尾状态；2026-10-21按用户授权提交、推送阶段性成果，未进入合并或公共镜像发行。继续验收需要DM8专用环境；正式发行还需要在获授权的仓库工作流执行T053。T055的其他剩余场景详见第4节，不因本次清理而视为完成。
+上述为2026-10-20验收收尾快照；2026-10-21阶段成果已提交推送，后续验收和清理见第8节。未进入合并或公共镜像发行。
+
+## 8. 2026-10-21：多租户修复、故障及存量升级
+
+基于已推送检查点 `5131b81194a5fa390593e58d822bcbde52b6ca64` 继续验收；本次代码修复尚未提交。109重新创建独立测试栈和全新数据库，始终开启 `multi_tenant.enabled=true`，不使用单租户回退。backend/worker挂载本次源码，manager通过socket proxy操作同一测试Engine；没有对原业务服务做部署或修改。
+
+### 8.1 多租户启动根因与修复
+
+`PermissionActor.current_tenant_id` 只是业务参数，并不会设置SQL过滤读取的ContextVar。无HTTP中间件的初始化/首管理员回调调用F048投影时因此抛出 `Missing tenant context`。新增 `tenant_execution_scope` 绑定已验证目标租户，同时将visible set收窄为该租户、清除继承的admin scope和bypass；异常、嵌套及并发后恢复原上下文。系统资源和preset dashboard仍通过原F048 facade授权，没有授予额外权限或修改全局过滤器。
+
+修复前新增回归3 failed/7 passed；修复后包含租户过滤和owner投影的组合集合56 passed。109全新多租户启动观测到18项系统资源初始化、首次管理员注册登录通过。初始容器随后因升级演练被替换，启动值以[明确标注的现场观察](e2e-evidence/2026-10-21-docker/quality-and-startup-observation.json)保留，不冒充归档的完整启动日志。通过正式部门挂载与成员API建立两个子租户，在租户2使用普通owner的SAK发布、真实子租户审批人批准并上线；普通非owner位于租户2，外租户用户位于租户3。
+
+[六项live权限测试](e2e-evidence/2026-10-21-docker/logs/live-boundaries.log)全部通过、无skip：owner可读快照和运行状态；同租户非owner及外租户用户不能读/恢复；普通owner不能修改全局运行环境。首次子租户没有审批人导致审批异常，按正常管理API授予专用审批人后由该审批人重试，没有绕过审批或直接写权限表。
+
+### 8.2 实际故障结果
+
+| 场景 | 实际结果 | 证据 |
+| --- | --- | --- |
+| 探活中取消 | owner正式取消接口；cancelled、cleanup complete、无审批，全部预占released | [取消/超时](e2e-evidence/2026-10-21-docker/cancel-timeout-results.json) |
+| 探活任务超时 | 缩短专用SQL操作deadline；上层先返回超时，随后确认manager timed_out和清理，不能以首个超时响应冒充释放 | [超时确认](e2e-evidence/2026-10-21-docker/logs/timeout-confirm.log) |
+| 安装钩子中取消 | 真实禁网Node resolve容器已运行慢postinstall后取消；无审批、临时容器及scratch回收、预占released | [安装取消](e2e-evidence/2026-10-21-docker/install-cancel-result.json) |
+| 前端编译中超时 | 真实compile容器执行慢build脚本后缩短deadline；timed_out、cleanup complete、无审批、预占released | [编译超时](e2e-evidence/2026-10-21-docker/compile-timeout-result.json) |
+| 探活中杀manager | SIGKILL专用manager，原probe容器ID保持；重启接续同operation，一次审批，随后回收probe | [重启结果](e2e-evidence/2026-10-21-docker/restart-probe-result.json)、[容器前ID](e2e-evidence/2026-10-21-docker/restart-probe-before-ids.txt)、[后ID](e2e-evidence/2026-10-21-docker/restart-probe-after-ids.txt) |
+| MinIO成功、SQL确认失败 | 专用触发器只拒绝该应用snapshot变verified；对象真实存在但confirmed_at为空，生产新表不存在、旧数据保留、入口503；保留唯一未确认本地备份 | [快照故障与重试](e2e-evidence/2026-10-21-docker/snapshot-confirmation-fault.json)、[备份哈希](e2e-evidence/2026-10-21-docker/protected-backup-facts.json) |
+| 同审批重试上线 | 移除专用触发器，通过manual-publish重试，同一审批确认快照并完成迁移，版本2返回200 | [重试](e2e-evidence/2026-10-21-docker/logs/snapshot-fault-confirm.log) |
+| DDL后新实例退出 | probe使用隔离库通过；正式库DDL已提交后按测试数据条件退出。operation标记maintenance及data_may_have_changed=true，新表和业务数据都保留，没有自动恢复旧库。版本4兼容更新后仍读到production-marker | [DDL后启动故障](e2e-evidence/2026-10-21-docker/migration-startup-failure.json) |
+| 访问者撤权 | 真实Grant API添加viewer、建立WS、再移除grant，4.03秒关闭，后续HTTP403，owner仍200 | [WS撤权](e2e-evidence/2026-10-21-docker/ws-permission-revoke.json) |
+| backend不可用 | 已建立WS在4.01秒关闭，后续HTTP503；恢复专用backend | [WS故障](e2e-evidence/2026-10-21-docker/ws-backend-failclosed.json) |
+| 出站策略撤销 | 在真实应用内用自身凭据建立CONNECT，通过专用SQL注入撤销其唯一策略；1.27秒关闭，新CONNECT407，上游backend保持运行。该项不是公开Grant API撤权 | [CONNECT撤销](e2e-evidence/2026-10-21-docker/connect-policy-revoke.json) |
+| manager不可用的独立性 | 停止超过旧3秒缓存窗口并重启，17秒观察中既有WS保持，32次新HTTP/SDK检查均成功；既有CONNECT跨故障仍可发送HTTP请求。原应用容器未更换 | [WS/HTTP/SDK](e2e-evidence/2026-10-21-docker/manager-existing-connections.json)、[CONNECT](e2e-evidence/2026-10-21-docker/logs/manager-connect.log) |
+
+快照及启动失败时，App.state仍反映旧版本online，不应据此判定入口健康；SQL运行路由进入维护、入口实际503，并由owner操作详情提供维护/数据风险。上述断言明确检查了入口和operation，而非仅检查App.state。
+
+### 8.3 真实存量升级与导入前回退
+
+使用基线 `4aa9ce69` 的旧manager源码和原MinIO依赖，在协议1兼容发布链路实际构建、审批、上线版本101；SDK0.1.1在旧附件接口完成读写，并持久保存测试附件。再提交版本102，停止manager后批准，得到当前101仍服务、approved pending102的真实记录。该过程没有直接插入AppVersion或伪造审批。
+
+维护窗口切换新协议，读取真实Engine/desired-state库存，执行正式 `scripts/upgrade_vibe_runtime.py` dry-run；随后在导入前恢复旧manager/代理，原容器、当前101、pending102与SDK均通过。回退只证明该协议1应用在导入前的回退窗口，不声明旧manager可以管理bundle版本。
+
+再次切换协议2，以实时库存SHA256和maintenance确认执行正式CLI导入；重复调用返回already_imported。随后通过正式rebind接口使用原镜像重建，仍运行101、pending102保留；两条历史版本的冻结业务字段及terminal_state逐项一致，仅排除可变update_time。旧容器已回收，旧附件经SDK0.1.1从新backend endpoint读取成功，无源码重新提交、无新审批、无代码回滚覆盖数据库。
+
+证据：[真实库存](e2e-evidence/2026-10-21-docker/upgrade-inventory.json)、[dry-run](e2e-evidence/2026-10-21-docker/upgrade-dry-run.json)、[回退](e2e-evidence/2026-10-21-docker/logs/upgrade-rollback-check.log)、[首次导入](e2e-evidence/2026-10-21-docker/upgrade-first-apply.json)、[幂等重复](e2e-evidence/2026-10-21-docker/upgrade-apply.json)、[版本核对](e2e-evidence/2026-10-21-docker/upgrade-rebind-result.json)、[旧附件](e2e-evidence/2026-10-21-docker/logs/upgrade-retained-attachment.log)。
+
+准备过程中纠正了驱动器的rows.values字段、异步清理等待、待审批与approved pending字段的区别，以及重建服务后nginx DNS刷新。测试工具纯Python依赖离线提供给驱动器，没有改动服务依赖。曾尝试把SDK源码内置应用包，被既有密钥扫描识别为命中；保留扫描规则，改用内网wheel索引供应正式SDK及依赖后重发。上述不登记为F086产品修复。
+
+### 8.4 清理、审查及当前仍缺事项
+
+7个专用应用通过owner正式停用/删除，23条容量预占全released，3项snapshot全purged；task/previews工作区均为空。专用服务、网络、库/对象数据、配置备份和生成凭据已回收；26个原业务容器完整ID前后一致且仍运行，没有重启或替换。缓存镜像保留。
+
+[删除事实](e2e-evidence/2026-10-21-docker/deletion-followup.json)、[工作区](e2e-evidence/2026-10-21-docker/scratch-cleanup-facts.json)、[环境清理](e2e-evidence/2026-10-21-docker/docker-cleanup.json)。证据白名单及逐文件SHA256见[证据目录](e2e-evidence/2026-10-21-docker/README.md)。
+
+多租户启动、六项live权限、上述关键故障与真实旧应用升级/导入前回退已补验。本次未发现需要更改manager/代理产品代码的新问题；产品修复只涉及六个启动上下文实现/测试文件。通用F048修复仍未提交，后续需先落当前release line再合入派生分支。
+
+T053、T055、T056继续保留未完成，剩余项收窄为：
+
+- DM8真实测试经用户确认本轮暂缓；已完成模型/约束静态审查并修复BIGINT范围，不再以缺测试schema阻塞当前Feature。真实驱动/事务留中央回归。
+- 全部阶段/异常组合的完整矩阵，尤其Engine build请求已发出但是否停止不可确认时的保守预占、旧执行节点失联/物理故障、上传ACK丢失及多进程接管全部组合。现有取消/超时/杀进程证据不冒充穷举通过。
+- 完整客户平台断网新装、SDK20MiB边界和全部模型/检索权限组合；本次验证不能替代既有模块的全部验收。
+- GitHub双原生工作流、受保护发行标签、多架构服务索引、Docker Hub正式镜像/官方profile目录尚未实际发行。
+- 既有backend两项permission_runtime初始化失败和前端lint基线失败仍按第4、5节的历史结果保留，未将无关变更纳入修复。
+
+K8s仍归F059；189未新增任何资源。当前不是完整Feature可合并声明，也未再次提交、推送、合并或公开发布镜像。
+
+## 9. 2026-10-21验收口径调整与模型审查
+
+用户明确本轮不做DM8真实测试，按现有模型规范与约束静态核查。15表检查通过；修复材料size_bytes和transfer offset的INTEGER溢出，新增BIGINT DDL-only扩容revision。组合28项回归通过、Alembic单head；新revision没有进行真实数据库升级，不能沿用旧schema E2E结果称其已实测。DM8实测不再是当前验收阻塞，兼容目标及中央回归安排保留。详细结果、证据边界和正式CI工作内容见[模型审查与发行说明](./model-review.md)。本轮没有触发公开镜像推送或客户部署。
+
+## 10. 2026-10-21 GitHub测试发行与公开镜像验证
+
+用户要求测试v3.0.0-test-vibe并明确授权更新该Tag。首轮失败仅因runner缺少rg，755d4456e5将两处改成系统grep，保留已有镜像拒绝和注册表异常拒绝。随后[Runtime delivery images](https://github.com/dataelement/bisheng/actions/runs/39567381522)三job全部成功（6m25s）；原backend/frontend CI同时成功（7m34s）。两原生架构各7镜像、原生禁网/复用/SQLite/前端/扩展集成、服务多架构索引及runtime-profiles artifact已发布。
+
+109通过准备机代理下载及docker load验证本次公开amd64镜像默认CMD；manager/proxy健康200，代理UID10001，manager经socket proxy读Engine成功，未授权控制403/旧入口410、平台不可达入口503。无服务host端口及socket挂载。测试资源回收，原27容器完整ID不变。T053关闭，当前92/94；T055/T056仍未完成。
+
+此测试Tag固定755d4456e5，不含未提交的backend多租户/BIGINT变更；本次不证明新迁移执行、完整平台目录导入、完整断网新装或全部故障矩阵。三份artifact元数据从GitHub页面核对，没有把本地未下载的目录写成导入成功。详情与原始公开镜像结果见[e2e-evidence/2026-10-21-ci-release](./e2e-evidence/2026-10-21-ci-release/README.md)。本节更新此前各节“尚未发行”的阶段状态。

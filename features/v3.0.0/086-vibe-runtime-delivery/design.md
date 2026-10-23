@@ -2,9 +2,9 @@
 
 **关联**：[spec.md](./spec.md) · [Discovery](./discovery.md) · [版本合同](../release-contract.md)。[tasks.md](./tasks.md) 已拆解并自审通过。
 
-**版本/日期**：v3.0.0 / 2026-10-20。**状态**：设计已获用户“确认”（2026-10-20），进入分波实施；代码进入集成验收；已执行和未执行的检查以 validation.json、task-reviews.md 为准。
+**版本/日期**：v3.0.0 / 2026-10-23。**状态**：设计已确认，Docker 实现已完成并与 F059 开发代码整合；完整交付验收未结束。已执行和未执行的检查以 validation.json、task-reviews.md、code-review.md 为准。
 
-**代码基线**：`origin/feat/3.0.0-vibe@4aa9ce69b2830b81162fe631b9c801057c40ee8b`；工作分支 `codex/086-vibe-runtime-delivery`。§4.1 的“基线”指该提交；其余合同已按本工作树实现同步。基础镜像最初拉取失败，用户提供代理后已完成Docker主链路、MySQL同步竞争和amd64/arm64原生镜像/禁网容器验证；DM8、完整离线平台新装、剩余故障/升级及正式发行未完成，K8s仍归F059。真实结果见[live-validation.md](./live-validation.md)。
+**代码基线**：`origin/feat/3.0.0-vibe@4aa9ce69b2830b81162fe631b9c801057c40ee8b`；工作分支 `codex/086-vibe-runtime-delivery`。§4.1 的“基线”指该提交；其余合同已按本工作树实现同步。基础镜像最初拉取失败，用户提供代理后已完成Docker主链路、MySQL同步竞争和amd64/arm64原生镜像/禁网容器验证；DM8按用户确认仅做模型静态审查；旧测试 Tag `v3.0.0-test-vibe@755d4456e5` 已实际发行且有 109 启动证据；完整离线平台新装、剩余故障组合及包含后续 F059 修复的当前版本正式发行未完成。K8s 实现由 F059 承担并已在本次开发整合继承，详见其 design.md。真实结果见[live-validation.md](./live-validation.md)。
 
 **规格门**：第二轮 spec 自审通过，用户“修复这4个问题，更新spec并重新评审，通过后继续推进SDD流程”的条件授权已满足。design 已另获用户“确认”；后续不重复请求已完成阶段的确认。
 
@@ -148,7 +148,7 @@ flowchart LR
 
 Repository 唯一承担新增 ORM 查询和 UoW；创建操作以 savepoint 处理竞争唯一键，准入汇总在节点锁下执行，route/实例/版本终态通过原 AppStateService/VersionService 在同一平台事务提交。node plan 在 SQL 过滤历史终态，不能先截取一万行历史再在 Python 过滤，否则新任务会饿死。
 
-遵循 backend AGENTS 的新表 model discovery 建表合同，本轮不为整张新表另外写 Alembic revision，也不变更历史表。真实 MySQL/DM8 初始化、唯一约束和并发仍需集成验收。数据导入使用 dry-run 工具，不进入 migration 或 API lifespan；回退先停止协议2写入并保留新表/产物，不能 drop 后直接重启旧控制器争抢生产卷。
+遵循 backend AGENTS 的新表 model discovery 建表合同，不为整张新表另写create-table revision。对已有F086表的size_bytes/offset扩容则用f086_runtime_byte_counters revision，由INTEGER改BIGINT，以匹配2GiB材料/10GiB快照；新库直接建立BIGINT，旧库DDL-only扩容，downgrade保留宽类型避免截断。MySQL并发已验；用户确认DM8本轮只核对模型/约束，真实验证留中央回归，不作为当前Feature门。数据导入使用 dry-run 工具，不进入 migration 或 API lifespan；回退先停止协议2写入并保留新表/产物，不能 drop 后直接重启旧控制器争抢生产卷。
 
 ### 4.4 发布描述、运行组合与环境配置
 
@@ -375,6 +375,7 @@ Compose 的 Engine 控制网络为 internal 的 `runtime-control`，只有 manag
 
 | 事实 | 忽略后的结果 | 本轮处理位置 |
 | --- | --- | --- |
+| Actor DTO 的tenant_id不绑定SQL过滤ContextVar；启动/首管理员回调没有HTTP tenant middleware | 新库多租户启动或首管理员投影失败；继承超管override还会使SQL作用域错误 | core.context.tenant.tenant_execution_scope；system_resource_reconcile与preset_dashboard_bootstrap逐资源绑定并恢复全部租户ContextVar |
 | Engine 的 bind 路径在宿主解释 | manager /app-data 有代码但应用看到空目录，SQLite 初始化到错误盘 | manager config/launch adapter 与安装自检；§4.5 |
 | 没挂 socket 仍能经 proxy 创建高权限容器 | 把 manager 当普通低权限 API，与入口合并后扩大宿主攻击面 | socket-proxy 控制网与 payload 白名单；§3.3、§4.10 |
 | manager 重启不停止容器，但路由现状仍依赖它 | 3秒后新请求失败，声称“应用不受重启影响”不成立 | app-proxy RouteClient、platform route Repository；§4.10 |
@@ -575,7 +576,7 @@ uv run pytest test/database/test_alembic_single_head.py test/app_runtime test/ap
 
 ## 8. 后续事项与实施门
 
-- K8s由F059增加executor、bundle材料投递和PVC/网络策略，不假设集群自带构建器/仓库。
+- K8s 的 executor、Pod 内材料物化、PVC/准入/网络策略现由 F059 实现；不是本 F086 的 Docker 验收证据。不假设客户集群自带构建器或仓库。
 - 首轮单Engine固定节点，没有自动HA或跨机迁移；宿主盘损坏按快照RPO恢复。需要集群调度时单独设计存储和硬fencing。
 - 同源应用前端浏览器隔离尚未增强；不扩张现有受审批信任边界。独立应用域方案需后续产品/安全评审。
 - 不新建管理页面；profile、补包和恢复通过明确权限的API/工具交付，防止UI范围扩大拖延首轮。
@@ -595,3 +596,19 @@ uv run pytest test/database/test_alembic_single_head.py test/app_runtime test/ap
 ### 2026-10-20 运行验收修订
 
 预检及预览在启动前保存starting事实；失败映射保留发布业务阶段，details包含operation_id、reason、runtime_stage、maintenance与data_may_have_changed，不用终态failed覆盖precheck_probe。Docker完整镜像、v1兼容构建和错端口拒绝已补验；正式发行与剩余运行门见live-validation.md。
+
+### 2026-10-21 多租户启动修订
+
+新增tenant_execution_scope只绑定经过业务验证的目标租户，不提供授权豁免。系统资源与预置dashboard投影保留F048 facade授权入口，SQL会话显式采用单租户可见集，并清除继承的管理范围/bypass；异常、嵌套及async任务完成后恢复原值。组合56项回归与109全新多租户环境启动、首管理员注册和子租户发布已通过。完整剩余验收以live-validation及后续证据为准；通用修复的release-line落地尚待提交阶段处理。
+
+2026-10-21真实验收补充：安装/编译/探活中断、快照SQL确认屏障、DDL后数据风险、代理硬期限与manager独立性、原协议1升级/导入前回退/幂等导入/rebind均已执行；历史AppVersion、approved pending及SDK0.1.1旧附件保留。明确App.state旧版本online不能替代maintenance路由/operation/真实入口检查。细节与未验组合统一见live-validation §8。
+
+2026-10-21模型审查修订：15表类型/共享默认/发现/租户/唯一约束及索引静态通过；字节计数改BigInteger并补单head守卫迁移。该变更不改变API或存储上限，修复既有合同的可表示范围。参见model-review.md；新增revision仅静态验证，未执行真实DB升级。
+
+### CI runner可移植性补充（2026-10-21）
+
+GitHub原生runner不保证安装ripgrep；镜像存在性及服务索引的错误识别使用系统grep -Eqi。缺标签允许构建；已有标签拒绝覆盖；认证或网络错误继续失败，不将其当成缺标签。v3.0.0-test-vibe实跑关闭发行验证门；完整平台离线安装与目录导入另行验收。
+
+### 2026-10-23 开发整合
+
+公共租户修复已先进入发布线并由 F059 继承；BIGINT 修复保留原迁移并显式汇合父链，保留 K8s 后续 tenant=None/资源 UID 约束。manager/app-proxy/egress-proxy 及 SDK/平台存储合同保持。测试 Tag 只证明旧 F086 版本发行，不证明当前 F059 镜像已发行；新完整验收门仍在。当前七维代码合入审查见 code-review.md。

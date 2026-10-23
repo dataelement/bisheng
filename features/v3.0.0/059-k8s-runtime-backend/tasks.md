@@ -9,9 +9,9 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；269 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 265 / 269 完成；详见 task-reviews.md |
-| E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；272 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | ✅ 开发实现收口 | 268 / 272 完成；四项剩余为交付验收/汇总门，见 task-reviews.md |
+| E2E/L2审查 | 🟡 分项 E2E 已执行；开发合入 L2 完成 | R32 在途重启、R31 删除、R11 数据和 M2 恢复已有真实证据；完整交付仍待验，见 code-review.md |
 
 ## 开发模式
 
@@ -2391,3 +2391,14 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T272/T273 L1闭合：旧7例4红3绿；主树新配对+操作执行/准备取消直接关联首轮123绿、1旧stop异常边界断言失败。仅适配该夹具并保留整op不变/旧writer不动，最窄13例全绿（0.17s），没有再跑全量。4行K8s前置门，无backend/template/Docker改动。独立L1 489710ae…两项AC/文件清单备注已补，Ruff/格式/逐文件架构门通过。267/271，189新镜像和在途重启复验待做。
 
 2026-10-23 租约交接验收收尾：修复0f2db1f9a的R32原生/私有镜像与Helm32已部署；同在途fe9a prepare经唯一manager SIGKILL、controller30→31、原安装同UID/CID自然240.006秒完成，原deadline与inputs/resolve结果保持，8资源自然清理和预约释放，原应用保持。正常后续probe也completed/cleanupcomplete并创建1版本。仅此次定向回归及只读证据核对，未重复全量。267/271，T070其余矩阵/正式CI/L2不提前勾选。
+
+### 开发整合收尾（2026-10-23）
+
+- [x] **T274** — 同版本镜像发布入口串行
+  **类型**：基础设施
+  **文件**：`.github/workflows/runtime-images.yml`、`src/runtime-manager/tests/test_image_release.py`
+  **逻辑/验收**：并发组与实际 RUNTIME_RELEASE 同源，跨 ref 的 manual/version 与同名 Tag 共享锁；保留 cancel-in-progress=false。现有定向契约先失败、修复后 1 passed；不声称仓库外写入也受该锁控制。
+  **覆盖 AC:** AC-39、AC-54、AC-56
+  **依赖:** T065
+
+**本次整合口径**：268/272。T067、T070、T071、T072 保留 pending；其中七维开发合入审查已完成，T072 的全交付 AC/发行汇总仍未闭合。依用户授权先合开发并推送，不把整合等同全部验收或正式发行。当前状态见 code-review.md 及 docs/reviews/vibe-development-integration-2026-10-23.md。

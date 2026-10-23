@@ -47,14 +47,14 @@ backend 两项失败在未改基线复现；frontend lint 95错误/1警告的归
 
 - 文件：[test_runtime_delivery_repository.py](../../../src/backend/test/app_runtime/test_runtime_delivery_repository.py)、[test_runtime_delivery_database.py](../../../src/backend/test/app_runtime/test_runtime_delivery_database.py)
 - 结果：本地任务合同完成；运行边界见验证汇总。
-- 证据：Repository本地21项回归、真实MySQL同步竞争5项通过；DM8仍待环境。
+- 证据：Repository本地21项回归、真实MySQL同步竞争5项通过；DM8原先待环境；用户2026-10-21确认本轮只做模型静态审查，已通过，实测留中央回归。
 - AC：AC-06、AC-34、AC-35、AC-36、AC-37、AC-39、AC-50、AC-61、AC-63。
 
 ### T006 平台操作/容量Repository
 
 - 文件：[runtime_delivery_repository.py](../../../src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py)
 - 结果：本地任务合同完成；运行边界见验证汇总。
-- 证据：Repository本地21项回归、真实MySQL同步竞争5项通过；DM8仍待环境。
+- 证据：Repository本地21项回归、真实MySQL同步竞争5项通过；DM8原先待环境；用户2026-10-21确认本轮只做模型静态审查，已通过，实测留中央回归。
 - AC：AC-06、AC-34、AC-35、AC-36、AC-37、AC-39、AC-50、AC-61、AC-63。
 
 ### T007 版本2服务身份与重放保护合同与失败测试
@@ -637,3 +637,55 @@ backend 两项失败在未改基线复现；frontend lint 95错误/1警告的归
 - 结果：本地任务合同完成；运行边界见验证汇总。
 - 证据：接口/字段/目录按工作树同步，输入评审文档哈希保持。
 - AC：AC-49、AC-50。
+
+## 2026-10-21 多租户启动增量审查
+
+### T090 后台租户上下文执行边界
+
+- 范围：`src/backend/bisheng/core/context/tenant.py`、`src/backend/test/tenant/test_tenant_execution_scope.py`。
+- AC：AC-61、AC-62。
+- L1：PASS；绑定已验证目标租户，临时收窄visible set并清除继承的admin override/bypass，嵌套、异常和并发均恢复原上下文。
+- 证据：修复前新增回归3 failed/7 passed，修复后包含租户过滤/owner投影的组合回归56 passed；六个Python文件Ruff与arch-guard通过。109真实新库多租户启动初始化18项系统资源，首管理员注册成功。
+
+### T091 系统资源启动投影租户绑定
+
+- 范围：`src/backend/bisheng/permission/application/system_resource_reconcile.py`、`src/backend/test/permission/test_f048_system_resource_reconcile.py`。
+- AC：AC-61、AC-62。
+- L1：PASS；每个系统资源投影使用其可信tenant_id执行，保留原权限授权入口，不以全局bypass规避过滤。
+- 证据：修复前新增回归3 failed/7 passed，修复后包含租户过滤/owner投影的组合回归56 passed；六个Python文件Ruff与arch-guard通过。109真实新库多租户启动初始化18项系统资源，首管理员注册成功。
+
+### T092 首次管理员仪表盘投影上下文
+
+- 范围：`src/backend/bisheng/api/services/f048_preset_dashboard_bootstrap.py`、`src/backend/test/permission/test_f048_preset_dashboard_bootstrap.py`。
+- AC：AC-61、AC-62。
+- L1：PASS；首次自然注册及启动对账的预置dashboard owner投影显式绑定Root租户；已有owner与投影的幂等逻辑保持。
+- 证据：修复前新增回归3 failed/7 passed，修复后包含租户过滤/owner投影的组合回归56 passed；六个Python文件Ruff与arch-guard通过。109真实新库多租户启动初始化18项系统资源，首管理员注册成功。
+
+该次审查只覆盖新增修复；T053、T055、T056仍开放，不据此宣称全Feature可合并。
+
+## 模型静态审查增量（用户确认DM8实测暂缓）
+
+### T093 字节计数范围与模型规范检查
+
+- L1：PASS；size_bytes和offset使用BigInteger，覆盖15表JsonType/时间默认/租户/唯一约束和索引静态检查，符合2GiB材料和10GiB快照合同；DM8不连接。
+- 文件：`src/backend/bisheng/app_runtime/domain/models/runtime_delivery.py`、`src/backend/test/app_runtime/test_runtime_model_contracts.py`。
+- AC：AC-6、AC-35、AC-61。
+- 证据：model-review.md / model-review.json / model-review-tests.txt；没有连接真实DM8或执行新revision的真实升级。
+
+### T094 已有运行时字节字段扩容迁移
+
+- L1：PASS；挂接已核对single head merge_vibe_f077_heads，DDL-only INTEGER到BIGINT；新库/已扩容跳过，异常类型失败，降级保留宽列；组合28项回归通过。
+- 文件：`src/backend/bisheng/core/database/alembic/versions/f086_runtime_byte_counters.py`、`src/backend/test/app_runtime/test_runtime_model_contracts.py`。
+- AC：AC-6、AC-35、AC-61。
+- 证据：model-review.md / model-review.json / model-review-tests.txt；没有连接真实DM8或执行新revision的真实升级。
+
+## 2026-10-21 测试发行增量审查：T053 / T077
+
+- L1：PASS，同一代理复核，无独立代理评审。范围仅.github/workflows/runtime-images.yml与scripts/build_runtime_images.sh两处grep替换，commit 755d4456e5；无服务接口/权限/数据模型变更。分层、数据库、前端约定不适用；命名、无凭据泄露、设计同步通过，前置T052/T047已完成。
+- shell与YAML语法通过；真实脚本guard的缺标签/已存在/认证失败三个隔离分支通过，现有镜像合同2 passed。已有标签拒绝为本地受控Registry结果验证，未额外重跑公开发行去覆盖既有标签。
+- [GitHub原生发行](https://github.com/dataelement/bisheng/actions/runs/39567381522)三job成功；两架构各7镜像、应用包原生集成、多架构服务索引和catalog成功。109公开服务镜像隔离启动/访问检查通过，原27服务容器不变，测试资源已回收。
+- T053关闭；当前92/94，T055/T056仍开放。正式生产版本、完整断网新装、所有故障组合、平台目录导入不据此声称完成。证据：e2e-evidence/2026-10-21-ci-release/。
+
+## 2026-10-23 开发整合定向复核
+
+用户明确授权先收尾开发、合入并推送 feat/3.0.0-vibe，避免全量回归。F059 T274（infra，两文件）CI同版本跨入口并发锁：新增现有契约断言先1失败，实际key修正后1通过；Ruff/format/架构门通过。两个模型/测试冲突逐hunk保留F059后续tenant/UID语义，与原实现相同，定向模型合同17通过（DM8仅静态）。新WT配置缺失的收集错误已用现有本地测试配置解决，不记作产品失败。三条独立L2分工代码无HIGH，设计D1定向复审关闭，开发合入PASS_WITH_WARNINGS。完整交付门保持pending；无全量或远端重验。详见code-review.md与整合报告。

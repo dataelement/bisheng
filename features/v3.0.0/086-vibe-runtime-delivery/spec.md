@@ -194,3 +194,7 @@
 - [SDD 流程](../../../docs/SDD-Guide.md)
 - [架构宪法](../../../docs/constitution.md)
 - [F054](../054-app-domain-runtime/spec.md)、[F055](../055-app-publish-pipeline/spec.md)、[F057](../057-bisheng-sdk/spec.md)、[F059](../059-k8s-runtime-backend/spec.md)
+
+## 2026-10-21验收口径补充
+
+用户确认本Feature暂不进行DM8真实测试，当前以模型定义、共享方言类型/默认值、键/长度/唯一约束/索引、租户注册及迁移规范审查作为DM8检查范围。AC-61的兼容目标保留；按constitution C2将真实DM8驱动/DDL/事务验证留中央回归，不将模型静态通过称为DM8实测通过，也不再以专用DM8环境作为当前Feature阻塞。

@@ -3581,3 +3581,7 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 T272/T273真实续验：R32实际源码/镜像/Pod identity固定后，189同原prepare在途SIGKILL恢复并自然完成，原deadline/输入结果/安装UID-CID/正常清理与容量均通过，未再跑任何全量测试。详细证据见e2e-evidence/fault-upgrade.json的inflight_manager_sigkill_189_r32_lease_handoff；只关闭本租约交接缺陷，不扩大为整个T070/L2通过。
 
 189在途续办独立最终窄审a89f59ae…通过；私有manager发行/升级独立审证133fd983…通过。仅记录本次实际窄范围，不关闭T070其余子项或正式CI/L2。
+
+## 2026-10-23 开发整合定向复核
+
+用户明确授权先收尾开发、合入并推送 feat/3.0.0-vibe，避免全量回归。F059 T274（infra，两文件）CI同版本跨入口并发锁：新增现有契约断言先1失败，实际key修正后1通过；Ruff/format/架构门通过。两个模型/测试冲突逐hunk保留F059后续tenant/UID语义，与原实现相同，定向模型合同17通过（DM8仅静态）。新WT配置缺失的收集错误已用现有本地测试配置解决，不记作产品失败。三条独立L2分工代码无HIGH，设计D1定向复审关闭，开发合入PASS_WITH_WARNINGS。完整交付门保持pending；无全量或远端重验。详见code-review.md与整合报告。
