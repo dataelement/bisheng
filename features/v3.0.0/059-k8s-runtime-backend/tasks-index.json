@@ -6903,20 +6903,20 @@
       ],
       "logic": "真实维护/执行链覆盖同UID PVC异步删除、已持久purge结果接管及期限/取消/控制权/UID/API拒绝配对。",
       "acs": [
-        "AC-33",
         "AC-35",
         "AC-46",
         "AC-49",
         "AC-50",
-        "AC-52"
+        "AC-52",
+        "AC-55"
       ],
       "depends": [
         "T267"
       ],
       "pair": "T269",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "pytest -q tests/test_k8s_purge_cleanup.py",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T269",
@@ -6928,12 +6928,12 @@
       ],
       "logic": "仅将K8s purge_volume_cleanup_pending纳入原期限内的既有清理等待，不放宽UID/停止/控制权，也不重建已确认purge helper。",
       "acs": [
-        "AC-33",
         "AC-35",
         "AC-46",
         "AC-49",
         "AC-50",
-        "AC-52"
+        "AC-52",
+        "AC-55"
       ],
       "depends": [
         "T268"

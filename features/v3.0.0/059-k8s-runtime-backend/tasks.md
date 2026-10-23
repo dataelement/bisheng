@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；267 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 260 / 267 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 261 / 267 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2151,11 +2151,11 @@
 
 ### 销毁 PVC 异步收尾（T268/T269）
 
-- [ ] **T268** — 真实销毁 PVC 异步删除配对
+- [x] **T268** — 真实销毁 PVC 异步删除配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_purge_cleanup.py`
   **逻辑/验收**：真实维护/执行链覆盖purge结果已持久而同UID PVC删除尚未结束；自然404后才确认清理和完成，接管复用结果不重复helper；原期限、取消、控制权或UID变化及API不确定均不提前完成，不放宽停止与清理围栏。
-  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **覆盖 AC:** AC-35、AC-46、AC-49、AC-50、AC-52、AC-55
   **依赖:** T267
   **配对:** T269
 
@@ -2163,7 +2163,7 @@
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/operations.py`
   **逻辑/验收**：仅将K8s purge_volume_cleanup_pending作为既有清理等待状态，在原操作期限与每轮fresh checkpoint/控制租约内继续；复用已持久purge结果，权限/换UID/其他异常保持拒绝，不改变Docker或backend协议。
-  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **覆盖 AC:** AC-35、AC-46、AC-49、AC-50、AC-52、AC-55
   **依赖:** T268
   **配对:** T268
 

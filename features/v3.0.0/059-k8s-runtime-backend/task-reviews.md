@@ -3534,3 +3534,7 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 | 7 | 设计同步 | PASS | 4.8销毁链与修订记录同步，D1/D5不变 |
 
 **元数据**：operations.py单文件；T266红例先于实现合入，14严格绿及独立相邻149绿；依赖/配对PASS。主树runtime全部选择1720pass/13skip和51个测试环境失败：缺省Helm临时路径已消失；显式现有helm3.16.4后安装模块121pass，剩21loopback绑定被沙箱拒绝，获授权重跑21pass/121deselected（1.12s）。1771个唯一测试逐项覆盖；不把初次失败抹去或称一次全量命令绿。Ruff/check format no-cache及两文件arch-guard/diffcheck通过。首次状态更新脚本cwd错误没有写文件，随后修正绝对路径同步标记；无产品范围变化。仍须R30原生构建/真实删除复验，T072未执行。
+
+## Task Review: T268 — PVC 异步销毁配对
+
+**结果：PASS。** 仅新增245行测试文件，完整AC-35、AC-46、AC-49、AC-50、AC-52、AC-55元数据、范围/命名和T267依赖通过。真实OperationExecutor→维护/数据执行器→PlatformClient.fact/实际backend schema及私有SQLite purge，Kube与账本I/O替身；同UID PVC DELETE后仍存在、自然404、持久结果后崩溃接管不重复helper与原期限/取消/围栏/权限/API未知均有实质配对。旧686bf有效期限版12红4绿；主树固定551f操作源码后16绿，独立217相邻绿。原0.25秒夹具不满足PodPlan最小有效期限，已单独改为合法2秒、保持原期限自然到期及预期不变，原失败日志保留。仅测试L1通过，不证明R31实际部署/销毁。
