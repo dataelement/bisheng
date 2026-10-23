@@ -12,13 +12,17 @@ beforeAll(() => {
 
 const mockSetSkills = jest.fn();
 const mockSkills = [{ name: 'research' }];
+let mockAvailableSkills = mockSkills;
+jest.mock('~/store', () => ({ __esModule: true, default: { selectedAgentTools: 'tools' } }));
+jest.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mockAvailableSkills }) }));
+jest.mock('~/api/linsight', () => ({ getSelectableSkills: jest.fn() }));
 jest.mock('react-router-dom', () => ({ useNavigate: () => jest.fn() }));
 jest.mock('recoil', () => ({
   useRecoilValue: () => ({}),
-  useRecoilState: () => {
+  useRecoilState: (atom) => {
     const React = jest.requireActual('react');
-    const [skills, setSkills] = React.useState(mockSkills);
-    const update = React.useCallback((value) => { mockSetSkills(value); setSkills(value); }, []);
+    const [skills, setSkills] = React.useState(atom === 'skills' ? mockSkills : []);
+    const update = React.useCallback((value) => { if (atom === 'skills') mockSetSkills(value); setSkills(value); }, [atom]);
     return [skills, update];
   },
 }));
@@ -77,7 +81,7 @@ function props() {
     onSend: jest.fn(), onStop: jest.fn(), onScrollToBottom: jest.fn(), onToggleTaskMode: jest.fn(),
   };
 }
-beforeEach(() => mockSetSkills.mockClear());
+beforeEach(() => { mockSetSkills.mockClear(); mockAvailableSkills = mockSkills; });
 
 test('new chat offers setup, established chat hides setup while preserving context', () => {
   const input = props();
@@ -198,4 +202,15 @@ test('ordinary chat exposes skill selection to users with task mode access', () 
   expect(screen.queryByRole('button', { name: 'skills' })).toBeNull();
   view.rerender(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} onToggleTaskMode={onToggleTaskMode} />);
   expect(screen.getByRole('button', { name: 'skills' })).toBeInTheDocument();
+});
+
+
+test('account availability removes a selected skill while the picker stays closed', () => {
+  const input = props();
+  const view = render(<AiChatInput {...input} />);
+  expect(screen.getByText('/research')).toBeInTheDocument();
+  mockAvailableSkills = [];
+  view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
+  expect(mockSetSkills).toHaveBeenCalledWith([]);
+  expect(screen.queryByText('/research')).toBeNull();
 });
