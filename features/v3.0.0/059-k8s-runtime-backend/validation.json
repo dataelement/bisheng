@@ -2045,5 +2045,59 @@
     "wrapper_sha256": "278524bd53ee8455ff7c4f6af4e97ca7c67b127a22b4ce40d6a2129320b1e240",
     "first_launch_failure": "script not started due to public source file permission; evidence/intent absent; original log retained; subsequent one business POST only",
     "not_claimed": "reserved candidate version ID is not an app_version row; no public CLI against this deployment yet"
+  },
+  "controlled_stops_for_migration": {
+    "state": "business_completed_physical_proof_pending",
+    "purpose": "free two temporary acceptance slots using only healthy dedicated apps",
+    "r11": {
+      "app_id": "43baa81d168a45bfa5e53ffbd04f48fd",
+      "version_id": "a5a4faade83743a487803bd6080246bf",
+      "generation": 4,
+      "stop_operation_id": "8d71c051adf14478806cb7feb19e1dca",
+      "owner_delete_online": 16104,
+      "nonowner_delete": 16105,
+      "foreign_delete": 16101,
+      "denial_sql_seed_sha256": "f3a8b7c02c7fa2958128ad02b0cfbf5a45216dbc2e30915279311c6368a67a74",
+      "denials_root_proof_sha256": "c723fc4260246d0e778210d4a89a183560910811e4a1e794b0cc2dcfc92d9c68",
+      "journal_remote": "/opt/e2e-f059/evidence/r11-safe-delete-r1-stages.jsonl",
+      "journal_sha256_at_stop_complete": "ce139f1d3f095940dbf9bf238ad0fb7d4304a82719e4ccde4ab86c2202268401",
+      "baseline_sha256": "29380b67b735bcf49c8a5a963fa20af645609da2d801ec55cca5a7c6b49fdc60",
+      "storage_manifest_sha256": "1f96333e47c8454059f65d190d30780689f6cf3a561f1408c8064be4e5097e4c",
+      "snapshot_samples": 0,
+      "attachment_object_samples": 0,
+      "pv_pre_stop": "e2e-f059-production-06",
+      "pv_uid_pre_stop": "3959377d-57ff-4f53-8536-7578e3af13fe"
+    },
+    "fullimage": {
+      "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+      "version_id": "77d42f56f77f4287b63574b9fd81b0ab",
+      "generation": 5,
+      "stop_operation_id": "dc0317f0220246b7b0adbc83cfd292ba",
+      "pre_stop_serve_uid": "fcbc7bdd-059e-4ef3-a5bd-cefe4931c38d",
+      "pre_stop_protection": [
+        true,
+        true
+      ],
+      "journal_remote": "/opt/e2e-f059/evidence/fullimage-single-stop-r1.jsonl",
+      "journal_sha256_at_stop_complete": "ab985cc7097bb960946cffbe32d1a3c503b82713243b318ad90ebc764e978d84"
+    },
+    "boundary": "one normal stop per app; no delete/data/restore; original parents retained; old false/unknown apps untouched; no capacity release claimed without independent exact-UID physical and reservation proof"
+  },
+  "m2_material_preparation": {
+    "state": "prepared_not_published",
+    "slug": "e2e-f059-migrate-k189m2",
+    "manifest_sha256": "b7660cd97e537d49cf40018c22ad1934648aae7e4662f2c2c72cf4f16b9232eb",
+    "freeze_sha256": "d01c708557c96bd9ab90e035e3e2fcfa3cfe0088b0383aafaed19769ef228af5",
+    "v1": {
+      "sha256": "09807c39b6ada07f11bc1ba4867edcc2c2a0cb96b6a39452145415ca932f6fb4",
+      "bytes": 1235
+    },
+    "v2": {
+      "sha256": "49d450226b8e5bc9766ad0c4366882e347cd69609a8839209c0fa8c49311ed8d",
+      "bytes": 1237
+    },
+    "tools_tar_sha256": "ed9411c81aa3bf4014c3995c66529fbf1bc854384707b1d90445a10121b37663",
+    "readers": "new public failure operation reverse linkage and exact v1/v2 preview cleanup gates reviewed; no DB backfill",
+    "ddl_observer": "first candidate e77 rejected before execution: actual kubectl1.28.15 has no resource-version flag; replacement pending; no migration attempted"
   }
 }

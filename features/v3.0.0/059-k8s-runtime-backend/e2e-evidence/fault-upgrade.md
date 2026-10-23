@@ -59,3 +59,9 @@ Python应用a4a566…的单次正常停用d675d583ebb34e68b4756fe8852ff91d在原
 恢复新manager UID59ace601-5974-487f-8eaf-095a6b13f015、epoch25，源码/镜像/backend两文件、descriptor及current/v1双保护独立确认；6Pod/7PVC/CID/卷投影不变。旧三false/新二true保持，旧Python held仅controller_epoch24→25正常重对账，没有追认停止或释放。主证明b397e367…、独立部署3825ca37…、inventory8184a040…完整SHA与路径见JSON。
 
 此前R2在任何down前被裸根308拒绝；真实slash200/SDK200/WS成功后最窄修正私有工具，原失败不覆盖。该成功不替代在途操作重启、取消、响应丢失、真实DDL/恢复及独立卸载；T070仍pending。
+
+## m2前置：两个健康专用应用正常停用（物理证明待采）
+
+R11安全删除权限配对真实16105/16101/online owner16104，每次fresh原v1/approval12/gen3/resume保持；独立纯SELECT销毁前后均0且无活动操作。随后R11唯一stop8d71…/gen4与健康fullimage唯一stopdc0317…/gen5均已completed/cleanupcomplete。两应用保留原卷，未执行delete/data/restore，旧false/unknown不动。容量释放须待同UID停止/APIabsence/PVC/PV及预约独立证明，不由公开stopped推断。R11此时附件对象/snapshot均零样本，不能将空清单冒作非空清理验证。
+
+m2已在新目录生成并冻结NULL→NOTNULL应用包（v1 09807c39…/1235B，v2 49d45022…/1237B），尚未发布。私有快照reader修正实际operation.deployment_id为空的关联，另经精确公开failure.operation_id证明，不改库。首版DDL观察器使用189不支持的--resource-version，被真实CLI解析阶段拒绝；尚未运行真实观察或迁移，不以31项假CLI/隔离SQLite测试替代兼容性。新原生list→watch接线待复审。
