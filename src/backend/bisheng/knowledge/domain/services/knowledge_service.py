@@ -1693,6 +1693,13 @@ class KnowledgeService(KnowledgeUtils):
             db_file.md5 = md5_
             return db_file
 
+        from bisheng.knowledge.domain.services.knowledge_file_organization_service import (
+            KnowledgeFileOrganizationService,
+        )
+
+        organization_id = KnowledgeFileOrganizationService.uploader_organization_sync(
+            login_user.user_id, tenant_id=int(knowledge.tenant_id)
+        )
         # Insert new data, upload the original file tominio
         db_file = KnowledgeFile(
             knowledge_id=knowledge.id,
@@ -1705,6 +1712,7 @@ class KnowledgeService(KnowledgeUtils):
             user_name=login_user.user_name,
             original_uploader_id=login_user.user_id,
             original_knowledge_id=knowledge.id,
+            belonging_organization_id=organization_id,
             updater_id=login_user.user_id,
             updater_name=login_user.user_name,
             **file_kwargs if file_kwargs else {},

@@ -1,4 +1,4 @@
-"""基于登录事实计算期间去重人数和截至期末的累计参与率。"""
+"""基于登录事实计算登录人天数、历史去重人数和截至期末的参与率。"""
 
 from __future__ import annotations
 
@@ -39,6 +39,17 @@ def day_of(value: Any) -> date:
 
 def midnight(day: date) -> int:
     return int(datetime.combine(day, time.min, CHINA).timestamp() * 1000)
+
+
+def login_day_key(source: dict) -> tuple[int, date]:
+    """按北京时间构造登录人天键, 避免同日重复登录被重复计数。"""
+    try:
+        user, day = int(source["user_id"]), day_of(source["timestamp"])
+        if user <= 0:
+            raise ValueError("user_id")
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise LoginParticipationDataError() from exc
+    return user, day
 
 
 def period(day: date, granularity: str) -> tuple[date, date]:
@@ -221,24 +232,19 @@ class LoginPopulation:
             period(selection.end, self.granularity)
         self.fields = [dim.field for dim in dimensions if dim.field not in TIME_FIELDS]
         self.firsts: dict[tuple, dict[int, date]] = defaultdict(dict)
-        self.active: dict[tuple, set[int]] = defaultdict(set)
+        self.logins: dict[tuple, set[tuple[int, date]]] = defaultdict(set)
 
     def add(self, source: dict) -> None:
         if source.get("metric_source") != "participation" or source.get("logged_in") is not True:
             return
-        try:
-            day, user = day_of(source["timestamp"]), int(source["user_id"])
-            if user <= 0:
-                raise ValueError("user_id")
-        except (KeyError, TypeError, ValueError, OverflowError) as exc:
-            raise LoginParticipationDataError() from exc
+        user, day = login_day_key(source)
         if day > self.selection.end:
             return
         for key in dimension_keys(source, self.fields):
             self.firsts[key][user] = min(day, self.firsts[key].get(user, day))
             if self.selection.contains(day):
                 bucket = period(day, self.granularity)[0] if self.granularity else None
-                self.active[key, bucket].add(user)
+                self.logins[key, bucket].add((user, day))
 
     def rows(self, metric: str, *, active_rows: list[list] | None = None) -> list[list]:
         if metric == "participation_rate":
@@ -267,13 +273,14 @@ class LoginPopulation:
                     if self.selection.contains(max(start, bucket or start) + timedelta(days=offset))
                 ]
                 if selected_days:
-                    numerator = len(self.active.get((key, bucket), ()))
+                    logins = self.logins.get((key, bucket), ())
                     denominator = bisect_right(first_days, selected_days[-1])
                     if metric == "active_employee_count":
                         value = denominator
                     elif metric == "logged_in_employee_count":
-                        value = numerator
+                        value = len(logins)
                     else:
+                        numerator = len({user for user, _ in logins})
                         value = numerator / denominator if denominator else 0.0
                     row = list(key)
                     if self.time_index is not None:

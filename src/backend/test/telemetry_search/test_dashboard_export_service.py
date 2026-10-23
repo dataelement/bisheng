@@ -224,10 +224,18 @@ async def test_export_all_groups_rows_by_outer_dimension(monkeypatch, service_mo
     monkeypatch.setattr(export_module, "_upload_excel", AsyncMock(return_value="https://minio/all.xlsx"))
 
     service = export_module.DashboardExportService(request=None, login_user=login_user)
-    url = await service.export_component_all(dashboard_id=1, component_id="comp-1")
+    from bisheng.telemetry_search.domain.schemas.component import DimensionQueryFilter, TimeFilter
+
+    time_filters = [TimeFilter(type="recent_days", mode="dynamic", recentDays=7)]
+    dimension_filters = [DimensionQueryFilter(fieldId="uploader_user_name", values=["张三"])]
+    url = await service.export_component_all(
+        dashboard_id=1, component_id="comp-1", time_filters=time_filters, dimension_filters=dimension_filters,
+    )
 
     assert url == "https://minio/all.xlsx"
     assert sorted(captured_sheets) == [("部门A", 2), ("部门B", 1)]
+    assert _query_mock.await_args.kwargs["time_filters"] == time_filters
+    assert _query_mock.await_args.kwargs["dimension_filters"] == dimension_filters
 
 
 async def test_export_all_row_limit_exceeded(monkeypatch, service_module):
@@ -281,6 +289,28 @@ async def test_export_all_no_dimensions_configured_uses_single_sheet(monkeypatch
     await service.export_component_all(dashboard_id=1, component_id="comp-1")
 
     assert captured_frames == [("Sheet1", 3)]
+
+
+async def test_export_all_rejects_truncated_scan_across_multiple_sheets(monkeypatch, service_module):
+    export_module, dashboard_module = service_module
+    monkeypatch.setattr(export_module, "EXPORT_ROW_LIMIT_PER_SHEET", 2)
+    detail = _detail(
+        columns=[("file_name", "文件名"), ("belonging_department_name", "所属部门")],
+        rows=[
+            {"file_name": "a.pdf", "belonging_department_name": "部门A"},
+            {"file_name": "b.pdf", "belonging_department_name": "部门B"},
+            {"file_name": "c.pdf", "belonging_department_name": "部门B"},
+        ],
+    )
+    login_user, _ = _patch_common(
+        monkeypatch, dashboard_module, dashboard=_dashboard(), component=_component(), detail=detail,
+    )
+    upload = AsyncMock()
+    monkeypatch.setattr(export_module, "_upload_excel", upload)
+    service = export_module.DashboardExportService(request=None, login_user=login_user)
+    with pytest.raises(DashboardExportLimitExceededError):
+        await service.export_component_all(dashboard_id=1, component_id="comp-1")
+    upload.assert_not_awaited()
 
 
 async def test_upload_excel_returns_a_browser_reachable_link_not_the_internal_minio_host(monkeypatch):

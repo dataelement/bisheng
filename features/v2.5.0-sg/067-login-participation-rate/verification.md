@@ -40,3 +40,19 @@ Status: MANUAL_VERIFY_REQUIRED（本地实现和回归完成，真实 ES 及部�
 - 当前数据是自然日事实，仅支持日及以上粒度。含时间的 OR/NOT、无法解析的时间条件，以及同时用多个时间维度分组会明确报错，避免产生没有唯一截止点的分母。
 - “实际登录人数”在周/月/整段区间从人员日计数变为期间人数；“全员总数”“实际登录次数”保持原含义。
 - 已保存组件的数字格式不会被覆盖；旧组件若仍以小数显示，可在组件中选百分比。新建指标默认百分比格式。
+
+## 2026-10-23 累积登录人数口径修正
+
+用户明确要求同人同日去重、跨日累加，取代此前将“实际登录人数 / 累积登录人数”在整段按用户去重的口径。REQ-03、AC-02、AC-05 和 T004 已同步更新。参与度仍为活跃用户数 / 全员有效用户数，不采用本次修改后的登录人天数作为分子。
+
+| Evidence | Code State | Command / Step | Result | Scope |
+|---|---|---|---|---|
+| E-007 | 新口径测试已更新，查询和导出尚未修正 | `.venv/bin/python -m pytest test/telemetry_search/test_login_participation.py test/telemetry_search/test_user_participation_formula.py -q --disable-warnings --tb=short` | FAIL（exit 1）：11 failed、33 passed；7 天登录 5 天实际为 1，期望 5，导出跨日仅一行 | 原问题可执行复现；图表和导出双路径 |
+| E-008 | 查询和导出改为用户与日期组合去重 | 同 E-007 命令 | PASS（exit 0）：44 passed，0.37 秒 | 同日 5 次计 1、跨天计 5；日/周/月/年/整段；非连续日期；两个数据集；参与度 0.5 保持不变 |
+| E-009 | T004 最终行为代码及日期边界测试 | `.venv/bin/python -m pytest test/telemetry_search -q --disable-warnings --tb=short` | PASS（exit 0）：180 passed、1 warning，2.48 秒 | 用户统计与图表、导出服务/API 相关模块回归；AC-02/03/04/05 |
+| E-010 | 同 E-009 | `TZ=UTC .venv/bin/python -m pytest test/telemetry_search/test_login_participation.py -q --disable-warnings --tb=short` | PASS（exit 0）：33 passed，0.34 秒 | 服务器 UTC 时仍按北京时间；秒/毫秒时间戳同日去重，旧记录缺少或错误 local_date 时从 timestamp 推导 |
+| E-011 | T004 四个受影响 Python 文件 | `.venv/bin/ruff check` 四个文件；`bash scripts/arch-guard.sh` 相同文件；`git diff --check` | PASS（exit 0） | 静态与架构约束检查 |
+
+AC-01 的历史分母回归随 E-009 再次通过。新增导出仅对累积登录人数按用户和自然日去重，携带用户 ID、用户名和日期；活跃人数、有效人数及参与度导出保留按用户去重。
+
+本次没有修改或补写数据库 / ES 登录事实，没有提交、推送或部署。浏览器真实 ES 端到端及生产数据对账为 NOT_RUN：本次仅在本地执行服务层与图表/导出入口回归。生效依赖部署后端；无需迁移或重建索引。回退本次查询和导出代码即可恢复旧行为。期间集合现在保留去重登录人天，内存随所选范围的登录人天数增长，真实环境性能未验证。

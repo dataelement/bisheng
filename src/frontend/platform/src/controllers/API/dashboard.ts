@@ -2,7 +2,8 @@
 
 import { generateUUID } from "@/components/bs-ui/utils";
 import { resolvePivotColumnLabels } from "@/pages/Dashboard/components/charts/pivotColumnAliases";
-import { ChartType, Dashboard, DashboardComponent, LayoutItem, TimeRangeMode, TimeRangeType } from "@/pages/Dashboard/types/dataConfig";
+import { ChartType, Dashboard, DashboardComponent, LayoutItem } from "@/pages/Dashboard/types/dataConfig";
+import { componentQueryFilters } from "@/pages/Dashboard/utils/componentQueryFilters";
 import {
     mergePersonDedupValues,
     resolveGroupDimensionIndex,
@@ -393,29 +394,13 @@ export async function queryChartData(params: {
 }): Promise<QueryDataResponse> {
     const { component, useId, dashboardId, queryParams = [] } = params;
 
-    const dimensionFilters = queryParams.flatMap(
-        param => param.dimensionFilters || []
-    );
+    const { timeFilters, dimensionFilters } = componentQueryFilters(queryParams);
 
     const resData = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
         dashboard_id: dashboardId,
         component_data: useId ? undefined : component,
         component_id: useId ? component.id : undefined,
-        time_filters: queryParams
-            .filter(p => p.queryComponentParams || (p.queryConditions && p.queryConditions.hasDefaultValue)) // all
-            .map(({ queryComponentParams: p, queryConditions: q }) => {
-                if (p) {
-                    return {
-                        type: p.shortcutKey ? TimeRangeType.RECENT_DAYS : TimeRangeType.CUSTOM,
-                        mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
-                        recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
-                        startDate: p.startTime,
-                        endDate: p.endTime,
-                    }
-                } else if (q) {
-                    return q.defaultValue
-                }
-            }),
+        time_filters: timeFilters,
         dimension_filters: dimensionFilters,
     });
 

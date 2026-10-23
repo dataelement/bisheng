@@ -7,6 +7,7 @@ import { exportComponentAll, exportComponentDetail } from "@/controllers/API/das
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { componentQueryFilters } from "../../utils/componentQueryFilters"
 
 interface UseComponentExportArgs {
   dashboardId: string
@@ -31,6 +32,10 @@ export function useComponentExport({
   const { t } = useTranslation("dashboard")
   const { toast } = useToast()
   const savedDashboard = useEditorDashboardStore(state => state.savedDashboard)
+  const queryParams = useEditorDashboardStore(state => state.chartRefreshTriggers?.[componentId]?.queryParams)
+  const appliedFilters = componentQueryFilters(queryParams)
+  const exportTimeFilters = timeFilters ?? appliedFilters.timeFilters
+  const exportDimensionFilters = dimensionFilters ?? appliedFilters.dimensionFilters
   const [exportingDetailKey, setExportingDetailKey] = useState<string | null>(null)
   const [exportingAll, setExportingAll] = useState(false)
 
@@ -58,8 +63,8 @@ export function useComponentExport({
         componentId,
         dimensionField,
         dimensionValue,
-        timeFilters,
-        dimensionFilters,
+        timeFilters: exportTimeFilters,
+        dimensionFilters: exportDimensionFilters,
       })
       downloadFile(file_url)
     } catch (error) {
@@ -77,8 +82,8 @@ export function useComponentExport({
       const { file_url } = await exportComponentAll({
         dashboardId,
         componentId,
-        timeFilters,
-        dimensionFilters,
+        timeFilters: exportTimeFilters,
+        dimensionFilters: exportDimensionFilters,
       })
       downloadFile(file_url)
     } catch (error) {

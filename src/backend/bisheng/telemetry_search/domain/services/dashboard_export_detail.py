@@ -35,6 +35,7 @@ from ..repositories.implementations.dataset_repository_impl import DashboardData
 from ..schemas.component import AggregationType, ComponentDataConfig, DimensionQueryFilter, TimeFilter
 from ..schemas.query_builder import AggsTypeEnum, FilterExpression
 from .component import DataQueryService
+from .login_participation import login_day_key
 from .user_metric_definitions import USER_STAT_DATASETS
 
 # Per-dataset "which one is this" columns, in display order. These are read straight off
@@ -269,6 +270,7 @@ async def query_detail_rows(
 
     if dataset_code == "mid_knowledge_space_content_stat" and metric_config and metric_config.field in DOCUMENT_METRICS:
         from bisheng.core.context.tenant import get_current_tenant_id
+
         from .knowledge_document_reader import document_reader, split_time_filters
 
         clauses, start, end = split_time_filters(filters)
@@ -307,10 +309,20 @@ async def query_detail_rows(
             history=metric_config.field == "active_employee_count",
         )
 
+    daily_login_metric = (
+        dataset_code in USER_STAT_DATASETS and metric_config is not None
+        and metric_config.field == "logged_in_employee_count"
+    )
     identity_columns = [
         DetailColumn(field=field, label=label)
         for field, label in DETAIL_IDENTITY_COLUMNS.get(dataset_code, [])
     ]
+    if daily_login_metric:
+        identity_columns.extend([
+            DetailColumn(field="user_id", label="用户ID"),
+            DetailColumn(field="user_name", label="用户名"),
+            DetailColumn(field="local_date", label="登录日期"),
+        ])
     value_column = _value_column(data_config, metric_config)
     columns = _ordered_unique(
         [*identity_columns, *_dimension_columns(data_config), *([value_column] if value_column else [])]
@@ -332,7 +344,13 @@ async def query_detail_rows(
         preserve_order=False,
     ):
         source = hit.get("_source") or {}
-        if deduplicate_field:
+        if daily_login_metric:
+            key = login_day_key(source)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            source = {**source, "local_date": key[1].isoformat()}
+        elif deduplicate_field:
             key = _source_value(source, deduplicate_field)
             if key in seen_keys:
                 continue

@@ -379,6 +379,11 @@
 
 ## 实际偏差记录
 
+- [x] T025-EXPORT-FILTERED 表格一键导出筛选后的全部明细：复用 AC-10，常显表格入口、统一查询/导出筛选转换、补齐跨组超限保护。
+  _Requirements: EXP-REQ-01, EXP-REQ-02, EXP-REQ-03, EXP-REQ-04_；_Acceptance: EXP-AC-01, EXP-AC-02, EXP-AC-03_；_Verification: 前端 React/Hook/API 定向回归，后端明细/服务相关模块回归及静态检查，证据写入 verification.md_；_Boundary: 不改权限、统计语义、数据库和生产环境；保留同工作区此前登录指标修正_
+
+- 2026-10-23：按用户截图和明确指令修复既有整表导出入口和运行时筛选透传，复用已确认 AC-10，不重走新功能发现确认或创建分支；现有导出上限不扩大，超限拒绝生成部分文件。
+
 > 完成后，在此记录实现与 spec.md 的偏差，供后续参考。
 
 - **偏差 1**: T009（`uploader_company/office/squad` 维度注册）计划要新增三个 `DimensionConfig`，

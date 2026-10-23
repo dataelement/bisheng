@@ -22,6 +22,15 @@ from bisheng.open_endpoints.domain.services.filelib_sync_service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def organization_lookup(monkeypatch):
+    from bisheng.knowledge.domain.services.knowledge_file_organization_service import KnowledgeFileOrganizationService
+
+    lookup = AsyncMock(return_value=81)
+    monkeypatch.setattr(KnowledgeFileOrganizationService, "uploader_organization", lookup)
+    return lookup
+
+
 def _rule() -> DeveloperTokenFileSyncRule:
     return DeveloperTokenFileSyncRule.model_validate(
         {
@@ -104,7 +113,7 @@ async def test_sync_delegates_to_sync_from_staged_file():
 
 
 @pytest.mark.asyncio
-async def test_sync_from_staged_file_writes_endpoint_and_trigger_metadata():
+async def test_sync_from_staged_file_writes_endpoint_and_trigger_metadata(organization_lookup):
     knowledge_file = KnowledgeFile(
         id=9,
         knowledge_id=8,
@@ -147,6 +156,8 @@ async def test_sync_from_staged_file_writes_endpoint_and_trigger_metadata():
     assert knowledge_file.user_metadata["filelib_sync_trigger"] == "scheduled"
     assert "filelib_sync_target_fallback" not in (knowledge_file.user_metadata or {})
     assert result.file_id == 9
+    assert knowledge_file.belonging_organization_id == 81
+    organization_lookup.assert_awaited_once_with(2, tenant_id=1)
 
 
 @pytest.mark.asyncio

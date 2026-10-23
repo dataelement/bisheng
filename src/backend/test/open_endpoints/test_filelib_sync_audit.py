@@ -394,3 +394,6 @@ async def test_inspection_batch_audit_records_responsible_person_id(writer_name:
     assert kwargs["action"] == action
     assert kwargs["metadata"]["responsible_person_id"] == "EMP002"
     assert "责任人ID: EMP002" in kwargs["note"]
+
+
+pytestmark = pytest.mark.usefixtures("stub_file_organization_lookup")

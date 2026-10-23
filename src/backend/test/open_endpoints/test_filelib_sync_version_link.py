@@ -328,3 +328,6 @@ async def test_complete_pending_filelib_sync_version_link_calls_link_service():
     mock_update.assert_called_once()
     assert FILELIB_SYNC_PENDING_VERSION_LINK_KEY not in (db_file.user_metadata or {})
     assert db_file.user_metadata["filelib_sync_version_linked"]["target_document_id"] == 7001
+
+
+pytestmark = pytest.mark.usefixtures("stub_file_organization_lookup")

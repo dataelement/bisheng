@@ -7,6 +7,10 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
 
 def test_new_uploaded_file_initializes_original_origin(tmp_path, monkeypatch):
+    from bisheng.knowledge.domain.services.knowledge_file_organization_service import KnowledgeFileOrganizationService
+
+    organization_resolver = MagicMock(return_value=81)
+    monkeypatch.setattr(KnowledgeFileOrganizationService, "uploader_organization_sync", organization_resolver)
     upload_path = tmp_path / "document.pdf"
     upload_path.write_bytes(b"document")
     stored_files = []
@@ -66,3 +70,5 @@ def test_new_uploaded_file_initializes_original_origin(tmp_path, monkeypatch):
     assert stored_files == [result]
     assert result.original_uploader_id == 501
     assert result.original_knowledge_id == 10
+    assert result.belonging_organization_id == 81
+    organization_resolver.assert_called_once_with(501, tenant_id=7)

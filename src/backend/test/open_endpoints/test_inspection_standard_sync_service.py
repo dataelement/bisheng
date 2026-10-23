@@ -263,3 +263,5 @@ def test_filelib_sync_service_validate_file_name_rejects_extensionless_safely():
         FilelibSyncService._validate_file_name("README")
     assert "file format is not supported" in str(exc_info.value.message)
 
+
+pytestmark = pytest.mark.usefixtures("stub_file_organization_lookup")

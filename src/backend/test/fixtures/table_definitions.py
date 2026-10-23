@@ -436,6 +436,7 @@ CREATE TABLE IF NOT EXISTS knowledgefile (
     updater_name VARCHAR(255),
     original_uploader_id INTEGER,
     original_knowledge_id INTEGER,
+    belonging_organization_id INTEGER,
     reference_document_id INTEGER,
     entry_type VARCHAR(24),
     entry_status VARCHAR(16),
