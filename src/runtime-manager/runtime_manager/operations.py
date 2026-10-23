@@ -261,6 +261,10 @@ class OperationExecutor:
                                 self._wait_cleanup(operation, lambda previous=previous: self.runtime.cleanup(previous))
                     if kind == "destroy" and body.get("purge_volume"):
                         self.checkpoint(operation)
+                        if self.config.executor_kind == "kubernetes":
+                            # Maintenance progress reuses the durable phase, never the internal admission stage.
+                            self.report(operation, "maintenance")
+                            self.checkpoint(operation)
                         self.runtime.data(operation, "purge", {})
                     self.report(operation, "completed", detail={"stopped": True, "cleanup_complete": True})
                 else:
