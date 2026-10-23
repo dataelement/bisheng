@@ -127,8 +127,10 @@ def test_restart_after_delete_ack_uses_saved_result_without_another_helper(destr
 def test_pending_cleanup_preserves_deadline_cancel_and_scope(destroy, monkeypatch, change):
     """F059 AC-46, AC-49, AC-55: the original operation bounds every cleanup retry."""
     clock = destroy.kube.clock
+    started = clock.time()
     if change == "deadline":
-        destroy.operation["deadline"] = clock.iso(0.25)
+        # A task Pod requires a positive whole-second activeDeadlineSeconds.
+        destroy.operation["deadline"] = clock.iso(2)
     initial, changed = copy.deepcopy(destroy.operation), []
 
     def tick(case, _row, _key, _count):
@@ -159,7 +161,11 @@ def test_pending_cleanup_preserves_deadline_cancel_and_scope(destroy, monkeypatc
         else "execution_fence_mismatch"
     )
     assert current["status"] == expected and current["failure"]["reason"] == reason
-    assert key in destroy.cluster.objects and clock.time() - snapshots[0][0] <= 1
+    assert key in destroy.cluster.objects
+    if change == "deadline":
+        assert clock.time() == started + 2
+    else:
+        assert clock.time() - snapshots[0][0] <= 1
     if change != "shortened-deadline":
         assert current["deadline"] == initial["deadline"]
 
