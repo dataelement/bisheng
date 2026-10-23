@@ -788,12 +788,33 @@ importers:
 
   packages/file-viewers:
     dependencies:
+      '@bisheng/ui':
+        specifier: workspace:*
+        version: link:../ui
+      bisheng-icons:
+        specifier: 'catalog:'
+        version: 0.2.36(react@18.3.1)
+      dompurify:
+        specifier: 'catalog:'
+        version: 3.4.17
+      mammoth:
+        specifier: 1.12.0
+        version: 1.12.0
       react:
         specifier: '>=18'
         version: 18.3.1
       react-i18next:
         specifier: '>=13'
         version: 15.7.4(i18next@24.2.3(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+      react-markdown:
+        specifier: ^9.0.1
+        version: 9.1.0(@types/react@18.3.31)(react@18.3.1)
+      rehype-highlight:
+        specifier: ^6.0.0
+        version: 6.0.0
+      remark-gfm:
+        specifier: ^4.0.0
+        version: 4.0.1
       xlsx:
         specifier: 'catalog:'
         version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz

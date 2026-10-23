@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { PlatformImagePreview } from '@/components/bs-comp/preview/DocumentPreview';
+import { usePreviewLocale } from '@bisheng/file-viewers/locale';
 import FileView from "@/components/bs-comp/FileView";
 import { Outlined } from "bisheng-icons";
 
@@ -40,6 +42,7 @@ export default function PreviewFile({
   previewErrorMessage?: string;
 }) {
   const { t } = useTranslation('knowledge')
+  const previewLocale = usePreviewLocale();
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
   const selectedChunkDistanceFactor = useKnowledgeStore((state) => state.selectedChunkDistanceFactor);
@@ -254,7 +257,7 @@ export default function PreviewFile({
           <img
             className="size-52 block"
             src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
-          <p>此文件类型不支持预览</p>
+          <p>{previewLocale.unsupported}</p>
         </div>
       </div>
       case 'pdf':
@@ -279,11 +282,7 @@ export default function PreviewFile({
       case 'jpg':
       case 'jpeg':
       case 'bmp': return (
-        <img
-          className="border"
-          src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)}
-          alt="预览图片"
-        />
+        <PlatformImagePreview filePath={url} />
       );
       case 'xlsx':
       case 'xls':
@@ -311,7 +310,7 @@ export default function PreviewFile({
 
     Array.from(labelsMap.values()).forEach((item) => {
       if (typeof labelTextRef.current[item.id] === 'string') {
-        return alert('文件已失效，请上传新文件后重试');
+        return alert(previewLocale.fileExpired);
       }
 
       if (item.active) {

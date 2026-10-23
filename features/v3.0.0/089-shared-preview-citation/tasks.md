@@ -56,10 +56,10 @@ Interfaces: `PreviewResource {originalUrl:string;previewUrl:string;fileName?:str
 Files: 新建 `packages/file-viewers/src/viewers/{DocxViewer,MarkdownViewer,TextViewer,HtmlViewer,ImageViewer,MediaViewer}.tsx`、格式选择/locale/组件tests和lazy子入口；两端知识库对应组件与引用预览宿主改公共消费；依赖从现有包移到所属包（不升级）。
 Interfaces: 各视图 `PreviewViewerProps {resource:PreviewResource;zoomLevel?:number;locale:PreviewLocale;onError?:(error:unknown)=>void}`；`PreviewLocale`含loading/failed/empty/各预览名称等宿主三语言值。`MediaViewer`额外transcript资源；已有Excel接口不变。
 覆盖 AC: AC-01、AC-02、AC-03、AC-04、AC-05、AC-07、AC-08、AC-19、AC-20。
-- [ ] 写组件测试：DOCX清洗保留表格图片、Markdown代码无多余换行、TXT按文本显示、HTML沙箱、图片错误、媒体original播放/preview转写；测试切换与加载失败不串状态。
-- [ ] RED后基于client实现提取，以薄适配保留宿主缩放/布局和已存在动作；迁移依赖版本按lockfile解析值记录。
-- [ ] 两端相关预览/Excel现有测试 + 新组件测试 + 共享包types/lint，期望PASS。
-- [ ] 提交 `refactor(preview): share document image and media viewers`。
+- [x] 写组件测试：DOCX清洗保留表格图片、Markdown代码无多余换行、TXT按文本显示、HTML沙箱、图片错误、媒体original播放/preview转写；测试切换与加载失败不串状态。
+- [x] RED后基于client实现提取，以薄适配保留宿主缩放/布局和已存在动作；迁移依赖版本按lockfile解析值记录。
+- [x] 两端相关预览/Excel现有测试 + 新组件测试 + 共享包types/lint，期望PASS。
+- [x] 提交 `refactor(preview): share document image and media viewers`。
 
 ### Task 4: PDF公共绘制与编辑适配
 

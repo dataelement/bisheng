@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { PlatformImagePreview } from '@/components/bs-comp/preview/DocumentPreview';
 import { Button, toast } from '@bisheng/ui';
 import FileView from "@/components/bs-comp/FileView";
 import { Outlined } from "bisheng-icons";
@@ -248,9 +249,7 @@ const ParagraphEdit = ({
             case 'png':
             case 'jpg':
             case 'jpeg':
-            case 'bmp': return <img
-                className="border"
-                src={previewFileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
+            case 'bmp': return <PlatformImagePreview filePath={previewFileUrl} />
             default:
                 return <div className="flex justify-center items-center h-full text-gray-400">
                     <div className="text-center">
@@ -390,7 +389,7 @@ export const convertJsonData = (inputObj: Record<string, any>) => {
 
         return finalResult
     } catch (error) {
-        console.error('数据转换错误:', error)
+        console.error('Preview data conversion failed:', error)
         return []
     }
 }

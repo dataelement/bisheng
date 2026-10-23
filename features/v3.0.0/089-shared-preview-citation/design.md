@@ -2,7 +2,7 @@
 
 关联：[spec.md](spec.md) · [discovery.md](discovery.md)。版本 v3.0.0；更新于 2026-10-23。
 
-状态：规格及设计已确认，实施中。Task 1 图表资源/loader 已落地，其他部分仍为拟实施方案。基线 `feat/3.0.0` / `38395b198`。
+状态：规格及设计已确认，实施中。Task 1–3 图表资源、文件生命周期、安全 HTML 和非 PDF 格式视图已落地；PDF 与引用仍在实施。基线 `feat/3.0.0` / `38395b198`。
 
 ## 1. 目标与非目标
 
@@ -115,6 +115,7 @@
 - PDF 使用文档级 `sessionId`，页面绘制提供 `pageIndex`（统一 0 起）、原始宽高、显示宽高、scale、容器 ref 和 overlay 插槽。PDF.js getPage 是 1 起，仅在公共内核转换；旧后台及历史引用输入在宿主适配边界标准化，禁止凭数值大小猜测页码。
 - PDF bbox 类型定义归 `file-viewers/types`；chat 仅 type-only 引用或导出，file-viewers 不反向依赖 chat，防止公共包环依赖。
 - bbox 保留 `page` + `[x1,y1,x2,y2]` 既有语义，按 document viewport 显式换算。后台旧 `onPageChange(offset,height,paperSize,scale)` 在适配层据共享指标恢复原合同，`onSelectLabel` 仍传原 label id/active，不转换成新写入格式。
+- 转写文本的底部留白由宿主传入：client 保留 114px 为 AI dock 留位，后台使用 16px；不把客户端页面布局强加给后台。
 - 默认只读视口提供 zoom、targetPage、targetBBox、highlightBboxes 及 currentPage 回调；编辑能力只通过后台 overlay 暴露。文字/FreeText 批注层是公共渲染能力，编辑操作仍由后台管理。
 - PDF document loading task、page render task、observer、定时器及对象 URL 由创建者销毁；切换/卸载先失效再清理，旧回调不可更新新实例。每个文档会话渲染错误只提示一次，正常取消不提示；重开文件产生新会话。
 - workerSrc/cmaps 由宿主资源 base 显式传入，继续固定现有 pdfjs 版本；公共模块 import 时不设置全局 workerSrc。
@@ -131,7 +132,7 @@
 ### 5.3 HTML、DOCX、Markdown 与安全
 
 - HTML 复用 client `sandboxedHtml` 的隔离策略与内存 storage shim；提取 helper 后原制品入口可转接共用，保持 doctype 在最前、iframe 能获焦，不开放 allow-same-origin。
-- DOCX 沿用 mammoth，渲染前复用现有 sanitizeHtml 策略，兼容后台既有输出内容；Markdown 沿用 client 文件预览的受控插件链，不套用会话特殊协议。新增依赖仅移动既有依赖到所属 workspace 包，不升级版本；mammoth 两端已有不同声明，实施时以 lockfile 已安装的 client 实际解析版本冻结并统一，写入依赖记录，不另拉新版本。
+- DOCX 沿用 mammoth，渲染前复用现有 sanitizeHtml 策略，兼容后台既有输出内容；Markdown 沿用 client 文件预览的受控插件链，不套用会话特殊协议。新增依赖仅移动既有依赖到所属 workspace 包，不升级版本；mammoth 两端已有不同声明，已核对 client 实际解析为 1.12.0，公共包固定此版本，没有升级或另拉新版本。
 - shared Markdown 禁止恢复全局“每个换行加两个换行”的预处理；代码块/图表原文及复制内容保持原样。高亮库/语言注册保持既有分包边界，生产验证 TDZ 回归。
 
 ### 5.4 图表加载与复制合同

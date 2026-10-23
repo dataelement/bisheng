@@ -2782,47 +2782,7 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/FilePreview/RichKnowledgePreview.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/pages/knowledge/FilePreview/index.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/viewers/DocxViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/viewers/HtmlViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/viewers/MarkdownViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/viewers/TextViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }

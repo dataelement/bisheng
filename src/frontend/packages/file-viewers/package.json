@@ -10,7 +10,19 @@
     ".": "./src/index.ts",
     "./html": "./src/html/sandboxedHtml.ts",
     "./resource": "./src/usePreviewResource.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./docx": "./src/viewers/DocxViewer.tsx",
+    "./text": "./src/viewers/TextViewer.tsx",
+    "./markdown": "./src/viewers/MarkdownViewer.tsx",
+    "./html-viewer": "./src/viewers/HtmlViewer.tsx",
+    "./image": "./src/viewers/ImageViewer.tsx",
+    "./media": "./src/viewers/MediaViewer.tsx",
+    "./media-player": "./src/viewers/MediaPlayer.tsx",
+    "./transcript": "./src/viewers/MediaTranscriptTabs.tsx",
+    "./locale": "./src/usePreviewLocale.ts",
+    "./viewer-types": "./src/viewerTypes.ts",
+    "./sanitize": "./src/html/sanitizeHtml.ts",
+    "./formats": "./src/formats.ts"
   },
   "scripts": {
     "lint": "eslint .",
@@ -23,7 +35,14 @@
   },
   "dependencies": {
     "xlsx": "catalog:",
-    "xlsx-populate": "^1.21.0"
+    "xlsx-populate": "^1.21.0",
+    "mammoth": "1.12.0",
+    "dompurify": "catalog:",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "rehype-highlight": "^6.0.0",
+    "bisheng-icons": "catalog:",
+    "@bisheng/ui": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "catalog:",
