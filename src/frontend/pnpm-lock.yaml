@@ -793,7 +793,7 @@ importers:
         version: 18.3.1
       react-i18next:
         specifier: '>=13'
-        version: 15.7.4(i18next@24.2.3(typescript@5.9.3))(react@18.3.1)(typescript@5.9.3)
+        version: 15.7.4(i18next@24.2.3(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       xlsx:
         specifier: 'catalog:'
         version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
@@ -801,12 +801,27 @@ importers:
         specifier: ^1.21.0
         version: 1.21.0
     devDependencies:
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.2(@testing-library/dom@10.4.2)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: 'catalog:'
         version: 18.3.31
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 18.3.7(@types/react@18.3.31)
+      jsdom:
+        specifier: ^25.0.0
+        version: 25.0.1(canvas@2.11.2)
+      react-dom:
+        specifier: ^18.2.0
+        version: 18.3.1(react@18.3.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@20.19.43)(jiti@2.7.0)(jsdom@25.0.1(canvas@2.11.2))(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.49.0)
 
   packages/locales: {}
 
@@ -19103,13 +19118,14 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
       typescript: 5.9.3
 
-  react-i18next@15.7.4(i18next@24.2.3(typescript@5.9.3))(react@18.3.1)(typescript@5.9.3):
+  react-i18next@15.7.4(i18next@24.2.3(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3):
     dependencies:
       '@babel/runtime': 7.29.7
       html-parse-stringify: 3.0.1
       i18next: 24.2.3(typescript@5.9.3)
       react: 18.3.1
     optionalDependencies:
+      react-dom: 18.3.1(react@18.3.1)
       typescript: 5.9.3
 
   react-is@16.13.1: {}

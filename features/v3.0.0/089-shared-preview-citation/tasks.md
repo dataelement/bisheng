@@ -46,10 +46,10 @@ Interfaces: `loadDiagramLibrary(kind:'echarts'|'mermaid', options:{baseUrl:strin
 Files: 新建 `packages/file-viewers/src/{types.ts,usePreviewResource.ts,usePreviewResource.test.tsx,html/sandboxedHtml.ts,html/sandboxedHtml.test.ts}`；调整原types（保留既有Excel类型）、public exports；client sandboxedHtml转接。
 Interfaces: `PreviewResource {originalUrl:string;previewUrl:string;fileName?:string;fileType?:string}`；`PreviewPdfBBox {page:number;bbox:[number,number,number,number]}`；`usePreviewResource<T>(key:string, load:(signal:AbortSignal)=>Promise<T>):{status:'loading'|'ready'|'error';data?:T;error?:unknown}`；`buildSandboxedSrcDoc(html:string):string`/sandbox属性保持已有语义。
 覆盖 AC: AC-04、AC-08、AC-12、AC-13、AC-19。
-- [ ] 写真实hook异步顺序测试：A→B→A、卸载、取消、失败重开；HTML测试doctype保留、shim先于用户脚本、无同源授权。
-- [ ] RED后提取client安全helper和可取消加载；校验返回受当前key/代次控制，不把异常转成原始提示。
-- [ ] 运行file-viewers单worker测试、strict types；原client sandboxedHtml现有测试回归，期望PASS。
-- [ ] 提交 `refactor(preview): share resource lifecycle and HTML sandbox`。
+- [x] 写真实hook异步顺序测试：A→B→A、卸载、取消、失败重开；HTML测试doctype保留、shim先于用户脚本、无同源授权。
+- [x] RED后提取client安全helper和可取消加载；校验返回受当前key/代次控制，不把异常转成原始提示。
+- [x] 运行file-viewers单worker测试、strict types；原client sandboxedHtml现有测试回归，期望PASS。
+- [x] 提交 `refactor(preview): share resource lifecycle and HTML sandbox`。
 
 ### Task 3: 非PDF视图与两端文件预览接入
 

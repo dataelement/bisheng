@@ -44,3 +44,12 @@ export interface ResolvedImage {
   image: ExtractedImage;
   anchor: ImageAnchor;
 }
+
+/** Authorized resource addresses; downloads use the original, rendering may use a derivative. */
+export interface PreviewResource {
+  originalUrl: string;
+  previewUrl: string;
+  fileName?: string;
+  fileType?: string;
+}
+export interface PreviewPdfBBox { page: number; bbox: [number, number, number, number] }
