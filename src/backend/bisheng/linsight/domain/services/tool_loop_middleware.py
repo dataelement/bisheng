@@ -323,7 +323,10 @@ def _corrective_hint(tool_name: str | None) -> str:
         )
     if tool_name:
         return (
-            f"⚠️ 你已连续多次调用 {tool_name} 失败。请检查工具参数（尤其是必填项是否完整），修正后再试；"
+            # Name the causes the error text itself reports: on 2026-10-23 (svid 4c85fb69)
+            # the misses were wrong paths, and "check required fields" pointed away from them.
+            f"⚠️ 你已连续多次调用 {tool_name} 失败。请先读上面报错里给出的原因再修正："
+            "报文件不存在时核对路径，报参数错误时补全必填项；"
             "不要重复完全相同的错误调用。若无法修正，请换一种方式完成该步骤。"
         )
     return "⚠️ 你已连续多次工具调用失败。请修正参数后再试，不要重复相同的错误调用。"
