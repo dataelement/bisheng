@@ -28,6 +28,7 @@
 | **AppAccessLog**（托管应用访问记录：谁 / 哪个应用 / 何时 / 哪个租户；**一次进入一条**、不记请求级明细、只记 `allow` 判定；独立业务日志表 `app_access_log`，不是 `audit_log` 动作） | F054-app-domain-runtime | AC-38 / design D14-B。写入方唯一 = backend 内部授权端点 `entry_authz_service.authorize_entry`（fire-and-forget），app-proxy 不连库；合并窗口 = Redis `app_access:{app_id}:{user_id}` TTL，取 `app_runtime.access_log_merge_window_seconds`、**默认 1800s（F056 design D7 / spec 决议-2 定义）**；查询面归 **F056**（AC-24 / AC-34，经 `AppAccessLogDao.alist_page` 按应用 / 访问用户 / 时间范围分页），本表只提供 DAO 不开 HTTP 端点；租户隔离靠 `_TENANT_AWARE_MODEL_MODULES` 登记 + 写入时显式落应用的 `tenant_id`。2026-09-16 登记 |
 | **ResourceTier**（资源档位，三档预置、平台超管可调规格与启用状态） | F055-app-publish-pipeline | GOV-03 档位实体 + 系统管理「资源档位」tab + 发布选档 / 入快照 / 上线终检；F054 只读（把档位映射为容器 / Pod 资源上限）；F056 只读（列表展示） |
 | **「应用发布」审批场景预置**（审批中心既有 ApprovalScenario 对象上的一条平台预置流程 + 新建租户同步落库钩子） | F055-app-publish-pipeline | GOV-02。审批场景 / 分支 / 节点 / 或签对象归审批模块（F025），F055 只拥有该场景的预置写入、`tenant_admin` 审批人来源修正与 Root 租户回退超管、新建租户 seed 钩子 |
+| **应用密钥资产（第三方值与引用名，2026-10-23 增量规格草稿）** | F055-app-publish-pipeline（旧 Owner 不变，修订待确认） | owner 录入的外部值，不是平台自签发 ApiCredential；值加密保存，引用变更随发布必审；F054/F059/F086 消费受限启动配置，F056 只读无值审计，F057 不新增密钥读取能力 |
 | **AppManifest**（应用包声明文件 `bisheng-app.yaml` 的对外形态：名称 / 描述 / 图标 / `runtime` / 端口 / 档位 / 能力声明 / 应用数据表结构 / 出站域名白名单） | F055-app-publish-pipeline | 发布输入的权威 = 管线校验方（F055 spec 范围边界 RT-04 段）；F053 CLI（打包 / `dev` 启动依据）与 F054 运行时（`runtime` / 端口 / 域名白名单）按同一形态**消费**、不各自定义；能力声明是其子集（RT-04） |
 | **ModelCallRecord**（逐条模型调用记录：密钥 / 服务账号 / 资源归属人 / 应用 / subject / 模型 / 时间 / token 数；本版不做聚合账单） | F051-model-protocol-gateway | GOV-04 事件清单「模型调用记录」；F051 写入（含被拒调用的审计事件），F056 查询面只读；托管应用运行期经 F051 调用时应用与 subject 维度由 F055 注入契约带出；用量同时计入平台既有 token 用量口径（同一账本） |
 | **ShareLink**（既有分享链接对象；本版增量 = 撤销写入 + 有效期强制生效 + share-token 会话执行主体） | **F049-openapi-auth-baseline**（⚠️ share-token 会话执行主体 beta2 F053 不采纳、vibe 实现归档，本行写增量待产品重议，见迁移方案 §5） | F049 spec §4 决议-1 / 决议-6 i：两个免登录分享页改走 share_link 通道，两个 WS 端点接受 share-token；本 Feature 拥有本版对该对象的写行为增量，不拥有其既有创建 / 读取行为 |
@@ -233,3 +234,9 @@ F086 首轮只实现 Docker 开源交付闭环；后续 K8s 工作继续在 F059
 ## Vibe 开发整合状态（2026-10-23）
 
 F086/F059 实现汇合到 `feat/3.0.0-vibe`。F059 原 267/271，加同版本 CI 并发锁 T274 后为 268/272；F086 为 92/94。上节 80 项为设计确认时的历史任务数，非当前任务数。189 已有 R32 在途重启、R31 删除、R11 owner 数据、M2 显式恢复等分项实证；代码 L2 审查通过并保留验收警示。依据用户明确要求先开发收尾、合并推送，未改变 Owner/INV/规格，也未把完整离线、剩余故障/卸载、ARM、当前版本正式发行及最终交付门标为完成。详见 [整合报告](../../docs/reviews/vibe-development-integration-2026-10-23.md)。
+
+## Vibe 治理与安全收尾规格（2026-10-23 草稿）
+
+本轮继续 F054/F055/F056 的原业务归属，不新建并列 Owner、不修改 INV。F055 AC-54、AC-56 及原 Discovery N4 排除项依已定 PRD 修订；F056 AC-34 对齐已定方案 A；F054 补两项安全 AC。用户明确确认预检和审批预览不注入真实应用密钥值。SDK 仅同步“不新增密钥模块”的既有公开面，不扩展其 API。
+
+新引用名随发布必审；值修改不改批准代码/依赖/运行环境组合，不创建新版本或审批。历史 AppVersion 不持久化密钥值；宿主隔离和 OBO 修复保持当前权限顺序与数据单写约束。当前只完成 Discovery 与规格草稿，规格/设计须分别确认；旧设计与任务不代表此次修订已实现。详见 [本轮规格评审](../../docs/reviews/vibe-governance-closeout-spec-review-2026-10-23.md)。

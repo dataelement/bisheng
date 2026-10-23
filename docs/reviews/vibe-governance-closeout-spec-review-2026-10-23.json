@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-23",
+  "baseline": "5f2541f4bc483c24624fede9031c88c4ec6f58f4",
+  "branch": "codex/vibe-governance-closeout",
+  "discovery_confirmed": true,
+  "preview_secret_values": "empty; explicitly confirmed by user",
+  "spec_confirmed": false,
+  "design_started": false,
+  "implementation_started": false,
+  "new_ac_count": 48,
+  "changed_ac_count": 4,
+  "features": {
+    "F054": {
+      "file": "features/v3.0.0/054-app-domain-runtime/spec.md",
+      "new_ac_count": 8,
+      "total_ac_count": 73,
+      "modified_ac_ids": [],
+      "sha256": "d74400e3e8ae6055b558aaa32710acd1dd09d4e6ebfa99b254b4fbd4c32389e9",
+      "spec_user_confirmed": false
+    },
+    "F055": {
+      "file": "features/v3.0.0/055-app-publish-pipeline/spec.md",
+      "new_ac_count": 24,
+      "total_ac_count": 89,
+      "modified_ac_ids": [
+        "AC-54",
+        "AC-56"
+      ],
+      "sha256": "46d8a527db7828428594cebaf7a67b330cbf07feae8a7acf2a3c7bd88684cdfc",
+      "spec_user_confirmed": false
+    },
+    "F056": {
+      "file": "features/v3.0.0/056-app-square-governance/spec.md",
+      "new_ac_count": 16,
+      "total_ac_count": 61,
+      "modified_ac_ids": [
+        "AC-26",
+        "AC-34"
+      ],
+      "sha256": "fc7555d057b0a3dd63da65a826eb8f95d380f6ce71be33ebc7dd42618c0690af",
+      "spec_user_confirmed": false
+    }
+  },
+  "review": {
+    "kind": "same-agent sdd-review spec",
+    "current_checklist_items": 10,
+    "result": "LGTM",
+    "unresolved_high": 0,
+    "unresolved_medium": 0
+  },
+  "product_tests_executed": false,
+  "full_suite_executed": false,
+  "remote_mutations": false
+}

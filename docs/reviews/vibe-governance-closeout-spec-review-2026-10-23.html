@@ -1,0 +1,261 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vibe 收尾增量规格评审 · 2026-10-23</title><style>*{box-sizing:border-box}body{margin:0;color:#202b3a;background:#f4f6f8;font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}nav,main{max-width:1150px;margin:auto}nav{padding:24px;display:flex;flex-wrap:wrap;gap:5px 18px;font-size:13px}main{background:white;border:1px solid #dce4ed;border-radius:10px;padding:30px;margin-bottom:36px}h1{font-size:27px}h2{font-size:21px;margin-top:30px;padding-top:8px;border-top:1px solid #dde4ed;scroll-margin-top:10px}h3{font-size:17px}a{color:#1655a7;text-decoration:none}a:hover{text-decoration:underline}table{border-collapse:collapse;width:100%;font-size:13px;margin:15px 0}td,th{padding:9px 12px;border:1px solid #dce4ed;vertical-align:top;overflow-wrap:anywhere}th{background:#edf2f8;text-align:left}li{margin:10px 0}code{font:13px/1.6 ui-monospace,Menlo,monospace;background:#eef2f7;padding:2px 4px;overflow-wrap:anywhere}strong{font-weight:650}hr{border:0;border-top:2px solid #bccbdd;margin:36px 0}@media(max-width:760px){main{border:0;border-radius:0;padding:16px}nav{padding:16px}h1{font-size:23px}table{display:block;overflow-x:auto}td,th{min-width:140px}}@media print{@page{size:A4;margin:16mm}body{font-size:10pt;background:white}nav{display:none}main{border:0;padding:0;max-width:none}h1{font-size:18pt}h2{font-size:14pt;break-after:avoid}h3{break-after:avoid}table{display:table;font-size:8pt}thead{display:table-header-group}tr{break-inside:avoid}code{font-size:8pt}a{color:inherit}}</style></head><body><nav aria-label="目录"><a href="#section-1">Vibe 治理与安全收尾 · 增量规格评审</a><a href="#section-2">1. 当前阶段与结论</a><a href="#section-3">2. 修订范围</a><a href="#section-5">3. 核心业务边界</a><a href="#section-9">4. 十项自审</a><a href="#section-11">5. AC 追溯</a><a href="#section-12">6. 后续必要定向验证范围</a><a href="#section-13">7. 供确认的文件</a><a href="#section-14">附录：48 条新增规格全文</a><a href="#section-15">F054 新增验收标准</a><a href="#section-16">F055 新增验收标准</a><a href="#section-17">F056 新增验收标准</a></nav><main><h1 id="section-1">Vibe 治理与安全收尾 · 增量规格评审</h1>
+<p>日期：2026-10-23；基线 <code>feat/3.0.0-vibe@5f2541f4bc483c24624fede9031c88c4ec6f58f4</code>；工作分支 <code>codex/vibe-governance-closeout</code>。</p>
+<h2 id="section-2">1. 当前阶段与结论</h2>
+<p><strong>Discovery 已确认；三个 Owner 的增量 spec 草稿已完成，按当前 sdd-review/spec-checklist 的 10 项自审通过。当前等待规格确认，尚未进入设计或编码。</strong></p>
+<p>用户已要求收尾四项功能，沿用 2026-10-09 的产品决议，并在本轮明确确认：<strong>预检和审批预览不注入真实密钥值，只给声明变量名与空值；真实值仅进入已批准的正式运行实例。</strong> 对应用自身因空值导致的启动失败，继续按正常探活失败处理。</p>
+<p>本次只编写需求与验收标准，保留原业务 Owner、原 AC 编号和原章节引用。规格确认后分别更新三份 design 并提交设计评审；依据 AGENTS.md §6 与 SDD-Guide §3，设计仍需单独确认，不能把“继续收尾”或本轮 Discovery 的确认替代两个后续确认点。</p>
+<h2 id="section-3">2. 修订范围</h2>
+<table>
+<thead>
+<tr>
+<th>Owner</th>
+<th>需求差额</th>
+<th>本次修订</th>
+<th style="text-align:right">修订后 AC 总数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F054</td>
+<td>T098 宿主访问隔离；T099 OBO 配置错误时入口拒绝</td>
+<td>新增 8 条，原 AC 不改号、不改文</td>
+<td style="text-align:right">73</td>
+</tr>
+<tr>
+<td>F055</td>
+<td>应用密钥最小版</td>
+<td>新增 24 条；改写 AC-54、AC-56，替换旧 N4 的排除项与延期决议</td>
+<td style="text-align:right">89</td>
+</tr>
+<tr>
+<td>F056</td>
+<td>应用运行记录三子视图与导出</td>
+<td>新增 16 条；改写 AC-26、AC-34，对齐掩码边界和既定方案 A</td>
+<td style="text-align:right">61</td>
+</tr>
+</tbody>
+</table>
+<p>合计 <strong>48 条新增 AC、4 条旧 AC 修订</strong>。F057 只移除一个“密钥尚待 PRD-2”的过期示例，仍明确不新增 SDK 密钥读取或管理入口。release-contract 只登记第三方应用密钥归 F055，不新增并列 Owner、不修改现有 INV。</p>
+<h3 id="section-4">旧条款为何需要修订</h3>
+<ul>
+<li><strong>F055 AC-54</strong>：平台模型/知识库底层配置仍在原管理面；允许 owner 在发布 tab 管理本应用的第三方值，不把它误当平台管理员凭据配置。</li>
+<li><strong>F055 AC-56</strong>：从“密钥引用即拒绝”改为“合法引用允许、缺值警告、实际明文仍被扫描拦截”。</li>
+<li><strong>F056 AC-26</strong>：平台自签发凭据保留现有掩码；外部应用密钥的审计只记录引用名和动作，不输出其值或字符片段。</li>
+<li><strong>F056 AC-34</strong>：从旧单列表筛选描述改为既定的同一审计页新增 tab、三个子视图，操作类列表保持独立。</li>
+</ul>
+<h2 id="section-5">3. 核心业务边界</h2>
+<h3 id="section-6">应用密钥</h3>
+<ul>
+<li>只有目标应用的自然人 owner 可维护值；管理员只有其租户范围的引用名/状态只读，审批人仅能读其有权审阅版本的引用与缺值信息。</li>
+<li>名字集合由批准的版本声明决定，值是应用私有资产。保存值不改代码版本或审批；新增/移除声明引用名仍随发布必审。预存一个名字的值不能绕过发布审批。</li>
+<li>正式启动只注入该批准版本声明的名字与当前有效值；预检/预览为空。缺值本身不阻断发布，也不跳过实际启动健康检查。</li>
+<li>在线使用中的值保存后刷新该应用；已下线应用不因此上线。保存成功但刷新失败必须分别显示，不假称新值已生效、不隐式恢复旧值或覆盖数据库。</li>
+<li>并发、维护中和未知结果有明确成功/冲突边界；保留单写、原操作期限、代码/依赖/运行环境组合与 SQLite 数据。</li>
+<li>值不回显、不进源码/产物/审批/快照/审计；名称不能覆盖平台身份或执行环境的保留配置。平台不承诺自动消除应用代码主动输出自己所持秘密的所有情况。</li>
+</ul>
+<h3 id="section-7">应用运行记录</h3>
+<ul>
+<li>复用既有管理后台审计页，新增模型调用、能力调用、应用访问三子视图，并提供相同筛选范围的全量导出。</li>
+<li>管理员才可查询；租户管理员限本租户，平台超管全局/目标租户视图遵守现有上下文。角色、筛选候选、分页、导出都不能成为跨租户旁路。</li>
+<li>服务账号调用与应用调用都可追溯；访问者未知和 token 未记录按实际缺失显示，不假造 owner 或零值。</li>
+<li>已删除/吊销对象仍按历史 ID/快照追溯；历史缺少字段不能靠当前同名对象猜测。分页/导出稳定，错误与合法空列表区分。</li>
+<li>原业务写入 Owner 不变；查询面不伪造旧事件、不把高频明细塞入操作审计列表。</li>
+</ul>
+<h3 id="section-8">两项历史安全待办</h3>
+<ul>
+<li>阻止应用绕过出口直连宿主数据库、backend、对象存储和管理端口，同时保留代理、统一入口、探活及合法回包。附件已通过 backend 处理，不能为旧“附件端口”说明放开整个 backend。</li>
+<li>支持的网络地址族必须均获保护；安装/应用不可确认时不得报告环境隔离可用或放行新部署。规则幂等且不改无关宿主策略。</li>
+<li>正式和预览的 OBO 配置缺失/空白/同 JWT 配置时均拒绝进入，不能下发无 OBO 的匿名降级材料；仍保持原登录、租户、存在性和权限判定顺序。启动诊断不输出值。</li>
+</ul>
+<h2 id="section-9">4. 十项自审</h2>
+<p>审查对象为此次增量和受其影响的旧范围/旧决议，不能据此声称三个历史 Feature 的全部实现或旧验收通过。依据为当前 PRD 的 GOV-04、GOV-05、NFR-2，F054 的 T098/T099、release-contract 的领域归属及 INV，和 constitution C1–C8。</p>
+<table>
+<thead>
+<tr>
+<th>当前 checklist 检查项</th>
+<th>结果</th>
+<th>依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. 产品场景覆盖</td>
+<td>PASS</td>
+<td>管理、声明、审批、注入、生效、查询和安全拒绝均有明确 AC</td>
+</tr>
+<tr>
+<td>2. 边界/失败路径</td>
+<td>PASS</td>
+<td>缺值、自身启动失败、并发、停用、刷新失败、删除对象、失权及查询失败已覆盖</td>
+</tr>
+<tr>
+<td>3. 范围边界</td>
+<td>PASS</td>
+<td>不做通用 Vault、自动轮换、跨应用共享、SDK 明文读取、聚合账单或 owner 审计页</td>
+</tr>
+<tr>
+<td>4. AC 唯一可追溯</td>
+<td>PASS</td>
+<td>三份定义数 73/89/61；新增 48，旧编号不变；静态核对已留存</td>
+</tr>
+<tr>
+<td>5. 可测试性</td>
+<td>PASS</td>
+<td>可观察的允许/拒绝、空值/真实值、状态、审计与数据不变；没有把“友好/合理”当条件</td>
+</tr>
+<tr>
+<td>6. EARS</td>
+<td>PASS</td>
+<td>全部新增 AC 均使用 THE SYSTEM SHALL 和相应条件</td>
+</tr>
+<tr>
+<td>7. 错误码边界</td>
+<td>PASS</td>
+<td>不预占新码；原 16230 拒绝旧行为在修订说明中识别，具体落码留设计</td>
+</tr>
+<tr>
+<td>8. Owner 边界</td>
+<td>PASS</td>
+<td>F055 写密钥、F054 负责入口/生命周期、F056 只读面；其余模块为已有消费者</td>
+</tr>
+<tr>
+<td>9. 不变量/铁律</td>
+<td>PASS</td>
+<td>外部值不冒充平台自签发凭据；发布必审、私有作用域、隔离/单写、存储与权限边界保持</td>
+</tr>
+<tr>
+<td>10. What/How 分离</td>
+<td>PASS</td>
+<td>未选数据库表结构、路由、加密算法、刷新编排或防火墙命令；细节进入待写 design</td>
+</tr>
+</tbody>
+</table>
+<h3 id="section-10">自审修正</h3>
+<p>首轮核对修正：审计表的写入方列明确为 F055；旧 AC-26 的平台凭据掩码规则与应用外部值规则分开；新增 owner/运维/管理员用户故事，并给旧 tasks 的状态增加“本次增量未确认”限定。复审无未关闭 high/medium。</p>
+<p><strong>当前 spec-checklist 的逐项结果：LGTM。</strong> 这是同一代理的规格自审，不是独立代理评审、代码审查或运行验证。</p>
+<h2 id="section-11">5. AC 追溯</h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>规格条款</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>宿主隔离/部署幂等/失败拒绝</td>
+<td>F054 AC-66、AC-67、AC-68、AC-69</td>
+</tr>
+<tr>
+<td>OBO 正式/预览/启动诊断/正常行为</td>
+<td>F054 AC-70、AC-71、AC-72、AC-73</td>
+</tr>
+<tr>
+<td>密钥角色与元数据/保密</td>
+<td>F055 AC-66、AC-67、AC-68、AC-80、AC-84</td>
+</tr>
+<tr>
+<td>声明审批、正式注入、预检预览空值、缺值</td>
+<td>F055 AC-56、AC-69、AC-70、AC-71、AC-72、AC-73</td>
+</tr>
+<tr>
+<td>生效、停用、失败与并发</td>
+<td>F055 AC-74、AC-75、AC-76、AC-77、AC-89</td>
+</tr>
+<tr>
+<td>输入、审计、资产、未引用值、兼容与 SDK</td>
+<td>F055 AC-78、AC-79、AC-81、AC-82、AC-83、AC-85、AC-86、AC-87、AC-88</td>
+</tr>
+<tr>
+<td>三子视图、筛选与记录语义</td>
+<td>F056 AC-34、AC-46、AC-47、AC-48、AC-49、AC-50</td>
+</tr>
+<tr>
+<td>分页、租户、权限、历史及切换</td>
+<td>F056 AC-51、AC-52、AC-53、AC-54、AC-55</td>
+</tr>
+<tr>
+<td>导出、错误、安全元数据及原审计</td>
+<td>F056 AC-26、AC-56、AC-57、AC-58、AC-59、AC-60、AC-61</td>
+</tr>
+</tbody>
+</table>
+<h2 id="section-12">6. 后续必要定向验证范围</h2>
+<p>这是设计前的验证范围约束，不是提前生成的开发任务或“已经通过”的测试。</p>
+<ul>
+<li>后端：密钥 owner/非owner/管理员/跨租户配对；声明/值不同步的正反例；查询与导出的同范围权限及历史数据；OBO 有效/无效配置配对。</li>
+<li>执行层：正式注入与预检/预览空值配对；并发保存/失败刷新不覆盖后写配置；不迁移或覆盖生产 SQLite；隔离允许/拒绝配对。</li>
+<li>前端：发布密钥区的掩码/缺值/失败/确认；三子视图筛选/空态/失败/导出；跨租户视图切换不保留陈旧结果。只测新增和受影响路径。</li>
+<li>实际环境：在既有专用 Docker/K8s 环境增量验证新行为，不重复原完整安装/依赖/故障矩阵；必要检查先只读盘点。ARM 暂缓，DM8 静态。</li>
+</ul>
+<p>当前阶段仅文档与静态编号检查，没有执行产品测试、SSH、Docker/K8s 修改、公开推送或镜像发行。</p>
+<h2 id="section-13">7. 供确认的文件</h2>
+<ul>
+<li><a href="../../features/v3.0.0/054-app-domain-runtime/spec.md">F054 安全增量 spec</a></li>
+<li><a href="../../features/v3.0.0/055-app-publish-pipeline/spec.md">F055 应用密钥增量 spec</a></li>
+<li><a href="../../features/v3.0.0/056-app-square-governance/spec.md">F056 运行记录增量 spec</a></li>
+<li><a href="./vibe-governance-closeout-discovery-2026-10-23.md">Discovery 与本轮确认</a></li>
+<li><a href="./vibe-governance-closeout-spec-review-2026-10-23.json">结构化规格快照</a></li>
+<li><a href="./vibe-governance-closeout-spec-review-2026-10-23.html">离线评审稿</a></li>
+</ul>
+<p>确认本轮增量 spec 后，将继续设计与设计自审并提交单独确认；不会重复要求已经确认的 Discovery 边界。</p>
+<hr>
+<h1 id="section-14">附录：48 条新增规格全文</h1>
+<h2 id="section-15">F054 新增验收标准</h2>
+<ul>
+<li><strong>AC-66</strong> — WHERE 使用受支持的 Docker 单机或 legacy systemd 托管形态, THE SYSTEM SHALL 阻止应用绕过受控出口新建到宿主平台服务的连接，包括经应用网络网关和宿主发布地址访问数据库、backend、对象存储及宿主管理端口；应用经受控出口使用已授权的 SDK、模型和附件能力应继续可用，不因附件业务在 backend 而放开该宿主服务的全部接口。</li>
+<li><strong>AC-67</strong> — WHEN 宿主访问隔离生效, THE SYSTEM SHALL 保持统一入口的 HTTP、WebSocket、受控探活及其合法返回流量可用，且不得阻断平台其他业务网络；由应用主动建立的禁止连接不能冒充合法返回流量取得放行。</li>
+<li><strong>AC-68</strong> — WHEN 安装重复执行、运行服务重启或模块卸载, THE SYSTEM SHALL 分别保持隔离规则幂等有效，或只撤销本模块拥有的隔离规则；不得复制出重复放行规则、清空宿主全局策略或改变无关服务规则。</li>
+<li><strong>AC-69</strong> — IF 必需的宿主隔离无法应用、无法确认，或已启用的网络地址族未获得同等保护, THEN THE SYSTEM SHALL 明确报告该运行环境隔离不可用并拒绝把它作为可发布环境；不得只告警后放行，亦不得把未知旧写入者的强制删除当作修复隔离的方法。</li>
+<li><strong>AC-70</strong> — IF 工场运行时已启用且 OBO 签发配置缺失、仅为空白或与平台会话签名配置相同, THEN THE SYSTEM SHALL 对原本有权进入的正式应用访问返回“本环境配置不完整，请联系平台管理员”状态，不转发到应用、不下发可用身份材料，也不留成功访问记录。</li>
+<li><strong>AC-71</strong> — IF 预览访问发生相同 OBO 配置错误, THEN THE SYSTEM SHALL 同样拒绝进入预览；正式与预览入口都须保留既有登录、存在性、跨租户、访问权限及运行层未部署的判定顺序，不能借配置错误暴露调用者本来无权得知的应用信息。</li>
+<li><strong>AC-72</strong> — WHEN backend 启动且工场运行时已启用, THE SYSTEM SHALL 对上述 OBO 配置错误记录不含任何密钥值的错误诊断；运行时层未部署时不制造已启用该层的假象，正常访问仍遵守原未部署提示。</li>
+<li><strong>AC-73</strong> — WHERE OBO 使用正确且独立的签发配置, THE SYSTEM SHALL 保持现有正式/预览授权、身份注入、防伪头、短时凭据、撤权及 SDK/OBO 调用行为，并以允许与拒绝的配对验证证明本次收紧没有引入匿名降级。</li>
+</ul>
+<h2 id="section-16">F055 新增验收标准</h2>
+<ul>
+<li><strong>AC-66</strong> — WHEN 目标应用的自然人 owner 录入、修改或删除应用密钥值, THE SYSTEM SHALL 仅对该 owner 开放相应业务操作；租户管理员、非 owner 平台超管、审批人、普通成员、服务账号及个人访问令牌不得因管理身份、拥有 app:manage 或知道应用标识而取得该写权限。</li>
+<li><strong>AC-67</strong> — WHEN 查看应用详情页发布 tab 的应用密钥区, THE SYSTEM SHALL 向 owner 展示引用名、固定掩码、已录入/缺少值状态及最近修改时间，并区分批准版本、待审批版本和未被当前版本引用的已存值；本租户管理员只能查看引用名和状态，审批人仅在其有权审阅的审批单内查看该版本的引用与缺值提示。</li>
+<li><strong>AC-68</strong> — THE SYSTEM SHALL 加密保存应用密钥值；录入后不存在查询明文、导出明文或用界面掩码还原值的能力；应用管理、版本、审批、日志、错误和审计的任何平台输出均不含密钥值、其片段或可复用的访问凭据。</li>
+<li><strong>AC-69</strong> — WHEN 新增或删除应用版本声明中的引用名, THE SYSTEM SHALL 将其作为能力声明变更随发布审批生效并在审批摘要中展示引用名；录入、替换或删除一个值不会擅自修改任何版本的声明，也不产生发布审批单。</li>
+<li><strong>AC-70</strong> — WHEN 已批准的正式版本启动、恢复或重建, THE SYSTEM SHALL 只把该版本明确声明的引用名注入为同名应用环境变量，使用当时已成功保存的值；未声明的值、其他应用的值与其他租户的值不得进入该实例，代码、依赖和运行环境的批准组合保持不变。</li>
+<li><strong>AC-71</strong> — WHEN 执行构建、依赖准备、静态扫描、预检启动或审批期预览, THE SYSTEM SHALL 不注入任何真实应用密钥值；预检启动和审批预览只获得该版本声明的变量名及空值，不能借复用已上线实例或材料取得生产值。（2026-10-23 用户明确确认）</li>
+<li><strong>AC-72</strong> — IF 声明引用缺少已录入值, THEN THE SYSTEM SHALL 在 CLI deploy、发布 tab 和对应审批单显示引用名与缺值状态，且不因缺值本身拒绝提交或生成审批单；仍须执行原启动/探活检查，应用自身因空值无法启动时按原失败流程处理，不跳过真实健康校验。</li>
+<li><strong>AC-73</strong> — WHEN 缺值的正式引用被启动或 owner 经影响确认删除仍被在线版本引用的值, THE SYSTEM SHALL 使该变量为空；删除值不等于删除版本引用名，界面仍可显示缺少值并允许 owner 补录，删除必须清楚提示对在线应用的影响。</li>
+<li><strong>AC-74</strong> — WHEN owner 保存在线正式版本正在使用的密钥值变更, THE SYSTEM SHALL 保存后刷新该应用实例使最新值生效，不创建新代码版本或审批单，不触发表结构迁移或覆盖 SQLite 数据，不改变其他应用的实例或密钥。</li>
+<li><strong>AC-75</strong> — WHEN owner 为已下线、草稿或尚未上线的版本保存值，或修改未被在线版本引用的值, THE SYSTEM SHALL 保持原应用状态且不擅自上线或无关重启；此后按原审批/上线动作启动时使用最新有效值。</li>
+<li><strong>AC-76</strong> — IF 值已保存但使其生效的实例更新失败, THEN THE SYSTEM SHALL 明确区分“值已保存”和“应用更新失败”，保持可诊断的执行结果并提供符合原生命周期约束的重试；不得谎报已生效、静默恢复旧值或回滚代码/业务数据。</li>
+<li><strong>AC-77</strong> — WHEN 密钥保存并发发生，或与发布切换、停用、迁移、恢复、删除发生冲突, THE SYSTEM SHALL 明确成功顺序或拒绝冲突请求；已拒绝请求不得改变旧值，旧执行不得覆盖更新成功的配置，未知执行结果不得自动重复发起数据维护或绕过单写保护。</li>
+<li><strong>AC-78</strong> — IF 引用名无效、重复或企图覆盖平台身份、平台通道、应用启动、语言运行环境及代理隔离所需的保留变量, THEN THE SYSTEM SHALL 在提交声明或保存值时明确拒绝并指出相应字段，不截断或静默替换名称。</li>
+<li><strong>AC-79</strong> — WHEN owner 保存合法值, THE SYSTEM SHALL 保留其 Unicode、换行及特殊字符的原始语义，使应用读取到同一值而不执行其中内容；空字符串不能被标为已录入，超过已公布输入限制时明确拒绝，未编辑的掩码不能被当成新值提交。</li>
+<li><strong>AC-80</strong> — WHERE 不同应用或租户使用相同引用名, THE SYSTEM SHALL 分别维护各自的值与状态；对不存在或无权限的应用作查询/写入时，须遵守原应用存在性和租户拒绝语义，不通过状态、列表、错误或掩码泄漏另一作用域的信息。</li>
+<li><strong>AC-81</strong> — WHEN 应用密钥值成功录入、修改或删除, THE SYSTEM SHALL 由本业务写入应用、引用名、操作者、动作、时间和结果的审计，不记录值；应用运行期凭据的签发/回收仍由原凭据 Owner 留痕，并须携带受信的应用关联供治理面追溯。</li>
+<li><strong>AC-82</strong> — THE SYSTEM SHALL 使真实应用密钥值不进入源码压缩包、版本快照、依赖缓存、构建产物、数据库快照、审批内容或应用附件；受限的正式执行交付可获得其必需的值，但普通查询者、预检执行体、代理和材料传输身份不得因此取得密钥管理能力。</li>
+<li><strong>AC-83</strong> — WHEN 应用停用、进程重启、代码升级、移除某版本引用或准备环境缓存被回收, THE SYSTEM SHALL 保留仍在平台存储中的密钥资产而不再向未声明的版本注入；仅 owner 明确删除值或按原 owner 应用删除流程清理相应密钥，历史无值审计仍可追溯。</li>
+<li><strong>AC-84</strong> — WHEN 查看能力声明和审批摘要, THE SYSTEM SHALL 展示该版本的引用名及对应缺值提示而不展示值；只有有效审批关系、owner 或原声明只读权限允许的访问者可见其授权范围内的信息，不能把审批人的有限审阅权限变成密钥管理权限。</li>
+<li><strong>AC-85</strong> — WHEN owner 通过密钥区保存一个未被正式版本引用的合法名值, THE SYSTEM SHALL 把它保持为未生效的应用私有配置；正式运行只以审批过的声明决定注入范围，不能靠预存一个新名字绕过引用新增的审批。</li>
+<li><strong>AC-86</strong> — WHERE 使用 Docker 或 K8s 执行后端, THE SYSTEM SHALL 对密钥权限、空值、预检/预览隔离、正式启动及保存后生效提供相同业务行为；实例重建、缓存恢复或执行器切换不得使旧值覆盖最新成功保存值。</li>
+<li><strong>AC-87</strong> — THE SYSTEM SHALL 保持 SDK 的原有公开能力边界，应用从标准环境读取业务密钥；不新增 SDK 密钥读取/管理入口，不将应用密钥变为可用于平台登录、平台管理或其他应用认证的凭据。</li>
+<li><strong>AC-88</strong> — WHEN 无应用密钥声明的既有应用升级或按原交付模式运行, THE SYSTEM SHALL 保持原发布、访问及依赖行为；声明使用应用密钥但目标执行形态不能兑现安全注入时，应明确拒绝所缺能力而不忽略声明或把真实值降级写入代码。</li>
+<li><strong>AC-89</strong> — WHEN 页面保存、缺值加载或实例更新请求失败, THE SYSTEM SHALL 结束相应等待并显示正确失败状态，保留用户尚未提交的本地编辑；不产生成功通知、不回填密钥明文，且不能通过重试误把掩码或过期页面状态覆盖已保存配置。</li>
+</ul>
+<h2 id="section-17">F056 新增验收标准</h2>
+<ul>
+<li><strong>AC-46</strong> — WHEN 有权管理员进入已部署工场运行时层的既有审计页, THE SYSTEM SHALL 提供模型调用、应用能力调用、应用访问三个可独立选择的运行记录子视图，实际请求真实记录；原系统操作与原应用使用记录入口和既有筛选保持可用。</li>
+<li><strong>AC-47</strong> — WHEN 管理员在任一运行记录子视图筛选, THE SYSTEM SHALL 支持时间范围、应用以及有意义的访问用户条件；模型调用还可按调用密钥筛选，并显示密钥掩码而非明文；无效时间范围、非法分页与跨租户筛选值须明确拒绝，不忽略后返回更宽范围。</li>
+<li><strong>AC-48</strong> — WHEN 查询模型调用, THE SYSTEM SHALL 展示时间、调用归属（服务账号或应用）、模型、已记录 token 数及调用结果，并在有当前访问者信息时展示其身份；不以 app_id 非空为前提漏掉合法服务账号调用，也不把未记录 token 数伪造为零或把匿名/未知访问者替换为 owner。</li>
+<li><strong>AC-49</strong> — WHEN 查询应用能力调用, THE SYSTEM SHALL 展示时间、应用、能力、以谁的名义调用、结果及已有的可用耗时/数量信息；调用归属与访问者归属分别展示，不把两种身份混成一个操作者。</li>
+<li><strong>AC-50</strong> — WHEN 查询应用访问, THE SYSTEM SHALL 展示访问用户、应用与访问时间，并保持原“一次进入/合并窗口”的记录语义；不能把已有聚合访问记录宣称为每条 HTTP 请求或因查询重新生成访问事件。</li>
+<li><strong>AC-51</strong> — WHEN 在相同筛选范围内分页、刷新或导出运行记录, THE SYSTEM SHALL 对相同时间的记录提供稳定顺序，不因并发新增导致同一次导出重复、漏掉已选历史记录或无限延长；分页与总数均只反映有权查看的筛选结果。</li>
+<li><strong>AC-52</strong> — WHERE 多租户开启, THE SYSTEM SHALL 使租户管理员只能查询本租户；平台超管全局视图可显式选择有权租户，切到目标租户视图后按该目标上下文呈现；前端隐藏筛选不是服务端授权，调用者自报其他租户、应用或密钥标识不能扩大查询或导出范围。</li>
+<li><strong>AC-53</strong> — IF owner、普通用户、审批人、服务账号或个人访问令牌不具有原治理面规定的管理员身份, THEN THE SYSTEM SHALL 拒绝其运行记录查询、筛选候选与导出；拥有应用使用、管理或审批权限不自动赋予审计访问权。</li>
+<li><strong>AC-54</strong> — WHEN 应用、密钥或访问用户已删除、吊销或重命名, THE SYSTEM SHALL 仍允许有权管理员按历史标识追溯已保存记录；优先使用已有名称快照，历史缺字段时显示标识或未知，不从另一租户或新同名对象补造历史身份。</li>
+<li><strong>AC-55</strong> — WHEN 切换记录类别、租户视图或筛选条件, THE SYSTEM SHALL 同步复位不再适用的筛选和分页，不显示前一个租户/类别的过期返回内容；其后的导出必须使用当前明确选中的授权范围与筛选。</li>
+<li><strong>AC-56</strong> — WHEN 管理员导出运行记录, THE SYSTEM SHALL 导出当前筛选条件下受授权的全部记录而非当前页，列含与该子视图对应的追溯信息；导出受理及交付遵守与查询相同的当前角色/租户约束，失权不能继续取得新内容。</li>
+<li><strong>AC-57</strong> — IF 运行记录加载或导出失败, THEN THE SYSTEM SHALL 展示失败并结束等待，不能把失败表示为成功空列表、成功下载或沿用旧租户结果；合法无记录、历史字段缺失和服务失败须能被区分。</li>
+<li><strong>AC-58</strong> — THE SYSTEM SHALL 使运行记录查询、导出、错误及筛选候选仅包含已获准的审计元数据，不包含密钥值、OBO/会话凭据、应用环境全文、模型请求正文或知识检索正文；密钥只显示既有掩码。</li>
+<li><strong>AC-59</strong> — WHEN 按对象应用筛选操作审计, THE SYSTEM SHALL 能找到由 F055 及凭据 Owner 留下的应用密钥变更和应用运行期凭据签发/回收记录；应用关联须来自原业务目标，不能依靠审计查看者传入 app_id 伪造或补写历史事件。</li>
+<li><strong>AC-60</strong> — WHEN 导出包含用户可控名称或其他文本字段的表格文件, THE SYSTEM SHALL 保留可读文本而不把其作为可执行公式；导出不得携带隐藏敏感列，历史空值不得使导出失败或被替换为其他租户内容。</li>
+<li><strong>AC-61</strong> — WHERE 工场运行时层未部署, THE SYSTEM SHALL 不展示应用运行记录入口并对相应查询/导出遵循原层禁用语义，原操作审计继续可用；本次不新增聚合计费账单、owner 自助审计页或跨租户授权方式。</li>
+</ul>
+</main></body></html>
