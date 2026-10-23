@@ -252,6 +252,8 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
         "改用资源归属人是该应用 owner 的那把密钥。",
     ),
 }
+# Runtime v2 keeps the existing runtime code; its capacity remedy is unchanged.
+ERROR_HINTS[16125] = ERROR_HINTS[16226]
 
 ERROR_EXIT_CODES: dict[int, int] = {
     26001: EXIT_AUTH,
@@ -278,6 +280,7 @@ ERROR_EXIT_CODES: dict[int, int] = {
     26031: EXIT_DEFECT,
     16101: EXIT_LOCAL_INVALID,
     16121: EXIT_UNREACHABLE,
+    16125: EXIT_CAPACITY,
     16201: EXIT_LOCAL_INVALID,
     16202: EXIT_LOCAL_INVALID,
     16203: EXIT_LOCAL_INVALID,
