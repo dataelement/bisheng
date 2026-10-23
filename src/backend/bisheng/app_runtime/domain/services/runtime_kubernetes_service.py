@@ -12,7 +12,7 @@ import ipaddress
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from bisheng.app_runtime.domain.models.runtime_delivery import (
     RuntimeAssignment,
@@ -206,7 +206,30 @@ class RuntimeKubernetesService:
                 return False
         return True
 
-    def _validate_template(self, body, op, node, domain):
+    async def _restore_serve_allowed(self, op):
+        snapshot_id = op.payload.get("snapshot_id")
+        if (
+            op.kind != "restore"
+            or op.payload.get("resume_after_restore") is not True
+            or op.stage not in {"starting", "ready", "serving"}
+            or not isinstance(snapshot_id, str)
+            or not snapshot_id
+        ):
+            return False
+        facts = await self.repo.find(RuntimeExecutionFact, operation_id=op.id)
+        detail = max(facts, key=lambda fact: fact.sequence).detail if facts else None
+        if not isinstance(detail, dict) or not isinstance(detail.get("maintenance_progress"), dict):
+            return False
+        progress = detail["maintenance_progress"].get("restore")
+        if not isinstance(progress, dict) or not isinstance(progress.get("result"), dict):
+            return False
+        return (
+            progress.get("exec_ref") == str(uuid5(NAMESPACE_URL, "bisheng-maintenance:" + op.id + ":restore"))
+            and progress.get("parameters_digest") == content_digest({"snapshot_id": snapshot_id})
+            and progress["result"].get("restored_snapshot_id") == snapshot_id
+        )
+
+    def _validate_template(self, body, op, node, domain, *, restore_serve=False):
         template = _projection(body["template"])
         kind, purpose = template.get("kind"), body["purpose"]
         if (
@@ -214,7 +237,7 @@ class RuntimeKubernetesService:
             or not isinstance(purpose, str)
             or kind not in _KINDS
             or template.get("apiVersion") != "v1"
-            or purpose not in _PURPOSES.get(op.kind, set())
+            or (purpose not in _PURPOSES.get(op.kind, set()) and not (restore_serve and purpose == "serve"))
         ):
             raise RuntimeConflict("resource_kind_or_purpose_refused")
         if (body["cluster_id"], body["namespace"]) != tuple(domain):
@@ -349,7 +372,9 @@ class RuntimeKubernetesService:
             node, domain = await self._node(identity.node_id)
             if not await self._active(op, now):
                 raise RuntimeConflict("resource_operation_expired")
-            template, name, kind, policy = self._validate_template(body, op, node, domain)
+            # Only durable completion of this restore can authorize its serving resources.
+            restore_serve = body["purpose"] == "serve" and await self._restore_serve_allowed(op)
+            template, name, kind, policy = self._validate_template(body, op, node, domain, restore_serve=restore_serve)
             row = RuntimeExecutionResource(
                 id=body["resource_ref"],
                 tenant_id=op.tenant_id,
