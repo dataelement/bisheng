@@ -39,8 +39,8 @@
 | **运行路由 / 出站策略只读投影**（跨进程持久读模型，F086 新增） | F086-vibe-runtime-delivery（spec/design已确认，实施与集成验收中） | 从有效期望和归属正确的执行事实形成；授权仍归 F048/F054，代理不取得管理权限，平台不复制执行引擎编排逻辑 |
 
 | **RuntimeHostIsolationReport**（2026-10-23 设计待确认：Docker 宿主隔离的独立、短期证明） | F054-app-domain-runtime | 安装侧产生、平台持久保存，新部署验证；不接管 F086 节点/操作所有权，不改变 F059 CNI 摘要算法 |
-| **AppSecretValue / AppSecretState / AppSecretMutation**（2026-10-23 设计待确认：应用密钥值、配置修订及幂等刷新意图） | F055-app-publish-pipeline | 应用当前私有资产；仅声明进入版本；F054/F059/F086 通过协议消费，不能复制秘密主数据；不是平台 ApiCredential |
-| **RuntimeAuditQuerySnapshot / RuntimeAuditExport**（2026-10-23 设计待确认：管理员的临时受权查询/导出产物） | F056-app-square-governance | 申请者私有、受租户过滤、有限保留；只消费 F051/F054/F055 的运行事实，不改其写入权 |
+| **AppSecretConfig**（F055 手动生效规格已确认；单表加密配置设计待确认，取代旧三表自动刷新） | F055-app-publish-pipeline | 应用当前私有资产；仅声明进入版本；F054/F059/F086 通过协议消费，不能复制秘密主数据；不是平台 ApiCredential |
+| **RuntimeAuditQuerySnapshot / RuntimeAuditExport**（2026-10-23 设计待确认：管理员的临时受权查询/导出产物） | F056-app-square-governance | 申请者私有、受租户过滤；QuerySnapshot 仅冻结条件、Export 私有分块完整导出，下载保留期从 ready 起算，无行数/90 天硬上限；只消费 F051/F054/F055 事实，不改写入权 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service

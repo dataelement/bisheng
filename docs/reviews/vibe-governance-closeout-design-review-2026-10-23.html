@@ -1,337 +1,79 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vibe 治理收尾 · 增量设计评审</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:#172b40;background:#f3f5f8;font:15px/1.8 system-ui,-apple-system,"PingFang SC",sans-serif}header{background:#122b43;color:white;padding:32px max(24px,calc((100vw - 1180px)/2))}header p{color:#cfdeeb;margin-bottom:0}nav{position:sticky;top:0;background:#fff;border-bottom:1px solid #d4dce6;padding:12px 24px;z-index:2;display:flex;gap:18px;flex-wrap:wrap}nav a{font-weight:600}main{max-width:1228px;margin:22px auto;padding:26px;background:#fff;border:1px solid #e0e5eb;border-radius:8px}a{color:#1764a4;text-decoration:none}a:hover{text-decoration:underline}h1{font-size:27px;line-height:1.4}h2{font-size:22px;margin-top:38px;border-bottom:1px solid #dbe3eb;padding-bottom:7px}h3{font-size:18px;margin-top:25px}h1,h2,h3,section{scroll-margin-top:100px}blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid #4389bc;background:#eef5fb}blockquote p{margin:3px 0}p{overflow-wrap:anywhere}table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;display:block;overflow-x:auto}th,td{border:1px solid #d8e1ea;padding:10px 12px;vertical-align:top;min-width:100px}th{background:#edf3f9;text-align:left}tr:nth-child(even){background:#fafcfe}code{background:#eef2f6;border-radius:3px;padding:2px 4px;font:13px/1.7 ui-monospace,Menlo,monospace;overflow-wrap:anywhere}pre{background:#132b40;color:#eaf3fa;padding:18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere}pre code{background:none;color:inherit}section.design{margin-top:48px;padding-top:28px;border-top:5px solid #204e72}.flow{display:flex;align-items:stretch;gap:22px;margin:20px 0;flex-wrap:wrap}.flow span{position:relative;flex:1;min-width:145px;background:#eaf3fa;border:1px solid #99bbd4;border-radius:6px;padding:14px;text-align:center}.flow span:not(:last-child):after{content:'→';position:absolute;right:-20px;top:30%;color:#39749d}details{border:1px solid #dbe3eb;padding:10px 15px;margin:12px 0}summary{cursor:pointer;color:#365d7b}footer{margin:24px;color:#526a80;text-align:center}@media(max-width:650px){body{font-size:14px}main{margin:8px;padding:14px}header{padding:22px 16px}h1{font-size:23px}nav{padding:10px 14px;gap:10px;font-size:13px}.flow{flex-direction:column;gap:20px}.flow span:not(:last-child):after{content:'↓';right:50%;top:auto;bottom:-24px}td,th{padding:8px;min-width:110px}section.design{margin-top:30px}}@media print{@page{size:A4 landscape;margin:14mm}body{background:#fff;color:#000;font-size:10pt}header{background:none;color:#000;padding:0}header p{color:#333}nav{position:static;background:none;padding:8px 0}main{border:0;margin:0;padding:0;max-width:none}table{display:table;font-size:8.5pt;overflow:visible}th,td{min-width:0;word-break:break-word;padding:5px}thead{display:table-header-group}tr{break-inside:avoid}h1,h2,h3{break-after:avoid}section.design{break-before:page}a{color:#000}pre{background:#f0f0f0;color:#000}details{display:none}.flow span{background:#fff}footer{font-size:9pt}}</style></head><body><header><h1>Vibe 应用 · 治理收尾设计评审</h1><p>F054 安全 · F055 应用密钥 · F056 运行记录 | 2026-10-23 | 规格已确认，设计待确认</p></header><nav><a href="#review-h1">评审摘要</a><a href="#f054">F054 安全设计</a><a href="#f055">F055 密钥设计</a><a href="#f056">F056 运行记录设计</a></nav><main><h1 id="review-h1">Vibe 治理收尾 · 增量设计评审</h1>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vibe 治理收尾 · 当前正式设计</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:#172b40;background:#f3f5f8;font:15px/1.8 system-ui,-apple-system,"PingFang SC",sans-serif}header{background:#122b43;color:white;padding:32px max(24px,calc((100vw - 1180px)/2))}header p{color:#cfdeeb;margin-bottom:0}nav{position:sticky;top:0;background:#fff;border-bottom:1px solid #d4dce6;padding:12px 24px;z-index:2;display:flex;gap:18px;flex-wrap:wrap}nav a{font-weight:600}main{max-width:1228px;margin:22px auto;padding:26px;background:#fff;border:1px solid #e0e5eb;border-radius:8px}a{color:#1764a4;text-decoration:none}a:hover{text-decoration:underline}h1{font-size:27px;line-height:1.4}h2{font-size:22px;margin-top:38px;border-bottom:1px solid #dbe3eb;padding-bottom:7px}h3{font-size:18px;margin-top:25px}h1,h2,h3,section{scroll-margin-top:100px}blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid #4389bc;background:#eef5fb}blockquote p{margin:3px 0}p{overflow-wrap:anywhere}table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;display:block;overflow-x:auto}th,td{border:1px solid #d8e1ea;padding:10px 12px;vertical-align:top;min-width:100px}th{background:#edf3f9;text-align:left}tr:nth-child(even){background:#fafcfe}code{background:#eef2f6;border-radius:3px;padding:2px 4px;font:13px/1.7 ui-monospace,Menlo,monospace;overflow-wrap:anywhere}pre{background:#132b40;color:#eaf3fa;padding:18px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere}pre code{background:none;color:inherit}section.design{margin-top:48px;padding-top:28px;border-top:5px solid #204e72}.flow{display:flex;align-items:stretch;gap:22px;margin:20px 0;flex-wrap:wrap}.flow span{position:relative;flex:1;min-width:145px;background:#eaf3fa;border:1px solid #99bbd4;border-radius:6px;padding:14px;text-align:center}.flow span:not(:last-child):after{content:'→';position:absolute;right:-20px;top:30%;color:#39749d}details{border:1px solid #dbe3eb;padding:10px 15px;margin:12px 0}summary{cursor:pointer;color:#365d7b}footer{margin:24px;color:#526a80;text-align:center}@media(max-width:650px){body{font-size:14px}main{margin:8px;padding:14px}header{padding:22px 16px}h1{font-size:23px}nav{padding:10px 14px;gap:10px;font-size:13px}.flow{flex-direction:column;gap:20px}.flow span:not(:last-child):after{content:'↓';right:50%;top:auto;bottom:-24px}td,th{padding:8px;min-width:110px}section.design{margin-top:30px}}@media print{@page{size:A4 landscape;margin:14mm}body{background:#fff;color:#000;font-size:10pt}header{background:none;color:#000;padding:0}header p{color:#333}nav{position:static;background:none;padding:8px 0}main{border:0;margin:0;padding:0;max-width:none}table{display:table;font-size:8.5pt;overflow:visible}th,td{min-width:0;word-break:break-word;padding:5px}thead{display:table-header-group}tr{break-inside:avoid}h1,h2,h3{break-after:avoid}section.design{break-before:page}a{color:#000}pre{background:#f0f0f0;color:#000}details{display:none}.flow span{background:#fff}footer{font-size:9pt}}</style></head><body><header><h1>Vibe 治理收尾 · 当前正式设计</h1><p>F055简化通过；F054/F056仍待修 · 未编码</p></header><nav><a href="#summary-1">当前评审</a><a href="#f054">F054</a><a href="#f055">F055</a><a href="#f056">F056</a></nav><main><blockquote><strong>后续状态：用户已确认F055简化设计，进入实施。</strong> 以下为设计评审记录，不代表实现/E2E已完成。</blockquote><h1 id="summary-1">Vibe 治理收尾 · 当前设计评审</h1>
 <blockquote>
-<p>2026-10-23 · 设计评审稿 · <strong>等待用户单独确认</strong>。规格已确认；此次增量未编码、未执行产品测试/远端变更。</p>
+<p><strong>F055 单表/用户确认重建设计：LGTM、独立 PROCEED，待用户设计确认。</strong> 三份设计整体仍有 F054 B1（宿主隔离恢复）和 F056 S1（binding回收审计）未关闭；不能以本次F055结论宣称全部设计已通过。</p>
 </blockquote>
-<h2 id="review-h2">1. 评审入口与阶段</h2>
+<h2 id="summary-2">1. 当前入口与范围</h2>
+<p>用户已确认 F055 手动生效修订规格，92条AC；保存不重启、差异提示、用户确认后复用部署流程。正式设计已覆盖旧三表自动方案。原规格确认和新规格确认的批准hash分别保留。</p>
 <table>
 <thead>
 <tr>
 <th>Feature</th>
-<th>设计</th>
-<th>本轮范围</th>
+<th>当前情况</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>F054</td>
-<td><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/054-app-domain-runtime/design.md">运行时与安全设计</a></td>
-<td>宿主 INPUT/FORWARD 隔离、OBO 无效拒绝</td>
+<td>用户确认重建/运行快照的消费合同已同步；自身宿主隔离 B1 仍待修、设计未确认</td>
 </tr>
 <tr>
 <td>F055</td>
-<td><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/055-app-publish-pipeline/design.md">应用密钥设计</a></td>
-<td>加密值资产、声明审批、同版本配置刷新</td>
+<td>单表配置、保存零执行、运行值比较、确认冻结及重建；本轮24项与独立架构复审通过，未编码</td>
 </tr>
 <tr>
 <td>F056</td>
-<td><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/056-app-square-governance/design.md">运行记录设计</a></td>
-<td>三类查询、历史筛选、受权导出、操作事件关联</td>
+<td>运行记录查询/导出设计保留，实际binding回收的审计producer S1仍待修、设计未确认</td>
 </tr>
 </tbody>
 </table>
-<p>代码事实基线 <code>5f2541f4bc483c24624fede9031c88c4ec6f58f4</code>；规格获确认提交 <code>dda16a6502908ba8d58cff61dc350c0213b86c19</code>，用户原文“确认规格，进入设计”。确认内容 hash 保留在规格评审 JSON 的 approved_sha256。本次只改文档：更新三份 design、记录 spec 确认、限定旧 tasks 历史状态、登记实现资产，没有新增任务复选框或勾选历史待办。</p>
-<p>按 AGENTS.md §6、SDD-Guide §3 与 sdd-review，<strong>此次确认只针对设计</strong>，确认后才做增量任务拆解、tasks 自审、逐任务实现/定向验证、E2E 和 L2。阶段门禁不是技术阻塞。</p>
-<h2 id="review-h3">2. 需要重点评审的选择</h2>
+<ul>
+<li><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/docs/reviews/vibe-app-secrets-manual-apply-design-review-2026-10-23.md">本轮 F055 简化设计评审</a></li>
+<li><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/docs/reviews/vibe-app-secrets-manual-apply-architecture-final-2026-10-23.md">本轮独立复审</a></li>
+<li><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/docs/reviews/vibe-governance-closeout-design-round3-review-2026-10-23.md">上轮三份设计的问题</a></li>
+<li><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/docs/reviews/vibe-app-secrets-simplification-2026-10-23.md">此前简化提案（历史，规格已确认）</a></li>
+</ul>
+<h2 id="summary-3">2. 新旧方案对比</h2>
 <table>
 <thead>
 <tr>
-<th>选择</th>
-<th>方案</th>
-<th>取舍</th>
+<th>事项</th>
+<th>当前正式设计</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>密钥保存</td>
-<td>平台 DB 加密当前值，版本只存名称；只接受自然人 owner 会话写入</td>
-<td>不给管理员、审批人、SAK/PAT 开写值入口；部署 key 丢失需维护恢复</td>
+<td>数据</td>
+<td>一张AppSecretConfig，执行/幂等/路由复用RuntimeOperation等既有资产</td>
 </tr>
 <tr>
-<td>值生效</td>
-<td>新 revision / 持久 intent；同版本 deploy 的 config_refresh 用途</td>
-<td>不走同版本 shortcut、DDL、备份恢复或新审批；未知 writer 保持阻塞</td>
+<td>保存</td>
+<td>配置+审计短事务，无manager调用，无自动重启</td>
 </tr>
 <tr>
-<td>预检/预览</td>
-<td>名称对应空值，构建/preparer 无真实值</td>
-<td>应用必须第三方 key 才能启动时仍可能探活失败；不伪造预检成功</td>
+<td>生效</td>
+<td>用户明确确认后重建当前运行版本，保留原镜像/档位/数据</td>
 </tr>
 <tr>
-<td>记录读取</td>
-<td>三现有专表只读适配，新“应用运行”页签</td>
-<td>旧系统审计权限不直接继承到新管理员数据面</td>
+<td>差异</td>
+<td>实际运行值与最新保存值比较；未引用/A→B→A不误报，缺上下文unknown</td>
 </tr>
 <tr>
-<td>导出一致性</td>
-<td>≤10,000 行固定 ID 选择集，90 天时间预算、10 分钟产物</td>
-<td>超限要求缩小条件；不承诺无限数据集快照；文件经认证 backend 下载</td>
+<td>执行衔接</td>
+<td>既有auto_commit、精确maintenance转换、局部锁图、session-aware凭据producer</td>
 </tr>
 <tr>
-<td>宿主隔离</td>
-<td>root 安装侧维护 INPUT + FORWARD；独立短期报告驱动新部署准入</td>
-<td>30 秒复核/60 秒过期；不增加 manager root/NET_ADMIN；暂不支持 IPv6/rootless</td>
-</tr>
-<tr>
-<td>OBO</td>
-<td>配置无效拒绝新入口；启动脱敏诊断；allow 身份不缓存</td>
-<td>增加授权 RPC，需定向量测；保留路由缓存；既有 WS 不逐帧重鉴权</td>
+<td>保护</td>
+<td>owner会话写、加密存储、预检/预览空值、保留变量与日志保护；部署key轮换仅运维</td>
 </tr>
 </tbody>
 </table>
-<p>没有新增商业化逻辑；runtime-manager、代理仍开源独立进程，架构边界不回到 Gateway 商业方案。</p>
-<h2 id="review-h4">3. 自审结果</h2>
-<p>采用仓库 <strong>sdd-review design 的 24 项清单</strong>，由同一 agent 自审，非独立多 agent/L2 代码审查。三份设计各检查 24 项，复审结果：</p>
-<pre><code>LGTM
-</code></pre>
-<p>本轮先修正以下设计问题，再复审；不存在以“计划中”代替遗漏项通过的情况：</p>
-<table>
-<thead>
-<tr>
-<th>已修订项</th>
-<th>修订后合同</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>旧 allow 缓存可跨过 OBO 配置失效</td>
-<td>新 HTTP/WS 握手重新授权，route 缓存独立</td>
-</tr>
-<tr>
-<td>只记 last_request_id 不足以长期识别重放</td>
-<td>新 AppSecretMutation 持久唯一 request_id + HMAC，无值摘要泄漏</td>
-</tr>
-<tr>
-<td>校验错误可能回显非法 secret input</td>
-<td>专属错误白名单过滤 input/ctx/raw body</td>
-</tr>
-<tr>
-<td>DB 默认 collation 可能合并大小写不同 env 名</td>
-<td>用公开 name_key 摘要查重，原名精确比较，不用单库 collation</td>
-</tr>
-<tr>
-<td>导出并发写入/全局任务租户不清</td>
-<td>有限精确选择集；作业属于申请者工作租户，global 是授权过滤范围</td>
-</tr>
-<tr>
-<td>新设计资产未登记归属</td>
-<td>release-contract 登记 F054/F055/F056 新资产；不复制原 owner</td>
-</tr>
-</tbody>
-</table>
-<h3 id="review-h5">3.1 逐项复审</h3>
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>检查</th>
-<th>F054</th>
-<th>F055</th>
-<th>F056</th>
-<th>证据</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>1</td>
-<td>目标简明</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§1</td>
-</tr>
-<tr>
-<td>2</td>
-<td>非目标明确</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§1 / §8</td>
-</tr>
-<tr>
-<td>3</td>
-<td>本功能约束</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§2</td>
-</tr>
-<tr>
-<td>4</td>
-<td>Constitution Check 引用与门禁</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§2；release-contract 新资产登记</td>
-</tr>
-<tr>
-<td>5</td>
-<td>关键决策</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§3（D 编号保留）</td>
-</tr>
-<tr>
-<td>6</td>
-<td>备选、选定与原因</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§3；F054 D6/D12、F055 D17–D20、F056 D12–D15</td>
-</tr>
-<tr>
-<td>7</td>
-<td>重新考虑触发条件</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>各决策末句 / §8</td>
-</tr>
-<tr>
-<td>8</td>
-<td>具体证据</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§4.1 / 下方源码证据表</td>
-</tr>
-<tr>
-<td>9</td>
-<td>主数据流</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§4.1 图与文字</td>
-</tr>
-<tr>
-<td>10</td>
-<td>字段与 JSON 契约</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§4.4</td>
-</tr>
-<tr>
-<td>11</td>
-<td>模块做什么 / 不做什么</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§4.3</td>
-</tr>
-<tr>
-<td>12</td>
-<td>现状与拟实现区分</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>页首 / §4.1</td>
-</tr>
-<tr>
-<td>13</td>
-<td>反直觉事实</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§5</td>
-</tr>
-<tr>
-<td>14</td>
-<td>坑的后果</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§5 表</td>
-</tr>
-<tr>
-<td>15</td>
-<td>处理文件或函数</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§4.3 / §5</td>
-</tr>
-<tr>
-<td>16</td>
-<td>Outgoing HTTP/Python/数据</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§4.4 / §6.1</td>
-</tr>
-<tr>
-<td>17</td>
-<td>Incoming 服务/配置/二进制</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§6.2</td>
-</tr>
-<tr>
-<td>18</td>
-<td>依赖破坏风险</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§6.1 / §6.2</td>
-</tr>
-<tr>
-<td>19</td>
-<td>测试层次与范围</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§7；只定向、不全量</td>
-</tr>
-<tr>
-<td>20</td>
-<td>可操作手验入口/命令/身份</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§7；真实环境尚未执行</td>
-</tr>
-<tr>
-<td>21</td>
-<td>后续边界与不做理由</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>§8</td>
-</tr>
-<tr>
-<td>22</td>
-<td>修订历史</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>末节，保留旧基线引用</td>
-</tr>
-<tr>
-<td>23</td>
-<td>规格一致 / AC 追溯</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>下方 52 条映射（48 新增、4 修订）</td>
-</tr>
-<tr>
-<td>24</td>
-<td>tasks 偏差认知回写</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>PASS</td>
-<td>当前基线覆盖历史过期叙述；旧任务状态限定为历史，增量尚未拆任务</td>
-</tr>
-</tbody>
-</table>
-<h2 id="review-h6">4. 规格追溯（逐条）</h2>
-<p>下表每个 ID 均按 Feature 完整书写；规格条款原文不再改写。设计为拟实现 How，不代表 AC 已通过。Markdown 与 HTML 均从同一份设计源生成。</p>
+<h2 id="summary-4">3. 规格增量逐条追溯</h2>
+<p>共55条当前增量条款：原48新增+4修订，另新增AC-90、AC-91、AC-92；本次又修订其中6条。不代表实现/测试通过；F054 AC-66、AC-68、AC-69仍关联B1，F055 AC-81及F056 AC-59的运行凭据回收部分仍关联S1。</p>
 <table>
 <thead>
 <tr>
 <th>Feature / AC</th>
-<th>确认条款摘要</th>
+<th>当前条款</th>
 <th>设计落点</th>
 </tr>
 </thead>
@@ -379,7 +121,7 @@
 <tr>
 <td>F055 AC-54</td>
 <td>THE SYSTEM SHALL 使平台模型、知识库的底层账号与连接配置继续只在原管理面维护；owner 可在应用详情页发布 tab 维护本应用调用第三方系统所需的应用密钥，但不能借此修改平台通道、服务身份或执行环境的安全配置。（2026-10-09 GOV-05 决议对 Discovery N4 的修订）</td>
-<td>D3 / §4.4④</td>
+<td>D3 / §4.4⑤</td>
 </tr>
 <tr>
 <td>F055 AC-56</td>
@@ -394,12 +136,12 @@
 <tr>
 <td>F055 AC-67</td>
 <td>WHEN 查看应用详情页发布 tab 的应用密钥区, THE SYSTEM SHALL 向 owner 展示引用名、固定掩码、已录入/缺少值状态及最近修改时间，并区分批准版本、待审批版本和未被当前版本引用的已存值；本租户管理员只能查看引用名和状态，审批人仅在其有权审阅的审批单内查看该版本的引用与缺值提示。</td>
-<td>D15 / §4.4②⑤</td>
+<td>D20 / §4.4①②⑥</td>
 </tr>
 <tr>
 <td>F055 AC-68</td>
 <td>THE SYSTEM SHALL 加密保存应用密钥值；录入后不存在查询明文、导出明文或用界面掩码还原值的能力；应用管理、版本、审批、日志、错误和审计的任何平台输出均不含密钥值、其片段或可复用的访问凭据。</td>
-<td>D17 / D20 / §4.4①④</td>
+<td>D17 / D20 / §4.4⑤</td>
 </tr>
 <tr>
 <td>F055 AC-69</td>
@@ -408,13 +150,13 @@
 </tr>
 <tr>
 <td>F055 AC-70</td>
-<td>WHEN 已批准的正式版本启动、恢复或重建, THE SYSTEM SHALL 只把该版本明确声明的引用名注入为同名应用环境变量，使用当时已成功保存的值；未声明的值、其他应用的值与其他租户的值不得进入该实例，代码、依赖和运行环境的批准组合保持不变。</td>
-<td>D18 / §4.4③</td>
+<td>WHEN 已批准的正式版本启动、恢复或经用户确认重建, THE SYSTEM SHALL 只把该版本明确声明的引用名注入为同名应用环境变量，使用本次启动操作受理时选定的已保存配置；未声明的值、其他应用的值与其他租户的值不得进入该实例，代码、依赖和运行环境的批准组合保持不变。</td>
+<td>§4.4③</td>
 </tr>
 <tr>
 <td>F055 AC-71</td>
 <td>WHEN 执行构建、依赖准备、静态扫描、预检启动或审批期预览, THE SYSTEM SHALL 不注入任何真实应用密钥值；预检启动和审批预览只获得该版本声明的变量名及空值，不能借复用已上线实例或材料取得生产值。（2026-10-23 用户明确确认）</td>
-<td>D3 / D13 / §4.1 / §4.4③</td>
+<td>§2 / §4.1 / §4.4③⑤</td>
 </tr>
 <tr>
 <td>F055 AC-72</td>
@@ -423,73 +165,73 @@
 </tr>
 <tr>
 <td>F055 AC-73</td>
-<td>WHEN 缺值的正式引用被启动或 owner 经影响确认删除仍被在线版本引用的值, THE SYSTEM SHALL 使该变量为空；删除值不等于删除版本引用名，界面仍可显示缺少值并允许 owner 补录，删除必须清楚提示对在线应用的影响。</td>
-<td>§4.4②③⑤</td>
+<td>WHEN owner 删除仍被在线版本引用的密钥值, THE SYSTEM SHALL 在确认删除影响后仅清除已保存的值，保留版本引用名，不自动改变或停止当前实例；界面提示运行实例仍可能使用旧值。下一次正式启动或用户确认重建时该引用注入为空，仍可由 owner 补录。</td>
+<td>§4.4②⑥</td>
 </tr>
 <tr>
 <td>F055 AC-74</td>
-<td>WHEN owner 保存在线正式版本正在使用的密钥值变更, THE SYSTEM SHALL 保存后刷新该应用实例使最新值生效，不创建新代码版本或审批单，不触发表结构迁移或覆盖 SQLite 数据，不改变其他应用的实例或密钥。</td>
-<td>D18 / §4.4③</td>
+<td>WHEN owner 新增、修改或删除应用密钥值, THE SYSTEM SHALL 仅保存配置，不自动停止、启动或重建应用实例；在线应用使用的值与最新保存值不一致时显示未生效变更，是否现在重建由 owner 显式确认。用户取消或仅关闭提示时运行实例保持不变。</td>
+<td>D18 / §4.4②⑥</td>
 </tr>
 <tr>
 <td>F055 AC-75</td>
 <td>WHEN owner 为已下线、草稿或尚未上线的版本保存值，或修改未被在线版本引用的值, THE SYSTEM SHALL 保持原应用状态且不擅自上线或无关重启；此后按原审批/上线动作启动时使用最新有效值。</td>
-<td>§4.4③</td>
+<td>D18 / §4.4③</td>
 </tr>
 <tr>
 <td>F055 AC-76</td>
-<td>IF 值已保存但使其生效的实例更新失败, THEN THE SYSTEM SHALL 明确区分“值已保存”和“应用更新失败”，保持可诊断的执行结果并提供符合原生命周期约束的重试；不得谎报已生效、静默恢复旧值或回滚代码/业务数据。</td>
-<td>D19 / §4.4③⑤</td>
+<td>IF owner 已确认的配置重建失败, THEN THE SYSTEM SHALL 保留已保存配置，明确区分“配置已保存”和“实例重建失败”，按实际运行状态显示未生效或无法确认，并允许遵守原生命周期约束的再次确认重试；不得谎报新配置已生效、自动重试重建、静默恢复旧值或回滚代码/业务数据。</td>
+<td>D18 / §4.4③⑥</td>
 </tr>
 <tr>
 <td>F055 AC-77</td>
-<td>WHEN 密钥保存并发发生，或与发布切换、停用、迁移、恢复、删除发生冲突, THE SYSTEM SHALL 明确成功顺序或拒绝冲突请求；已拒绝请求不得改变旧值，旧执行不得覆盖更新成功的配置，未知执行结果不得自动重复发起数据维护或绕过单写保护。</td>
-<td>D19 / §4.4③</td>
+<td>WHEN 配置保存并发发生, THE SYSTEM SHALL 明确保存次序或拒绝过期编辑，已拒绝请求不得改变已存值；WHEN 保存与部署、停用、迁移、恢复、删除并发发生, THE SYSTEM SHALL 保持已有执行的配置选择及单写约束，旧执行结果不得覆盖最新保存配置，后保存内容未进入当前实例时保留差异提示；未知执行结果不得自动重复发起数据维护或重建。</td>
+<td>D19 / §4.4①③</td>
 </tr>
 <tr>
 <td>F055 AC-78</td>
 <td>IF 引用名无效、重复或企图覆盖平台身份、平台通道、应用启动、语言运行环境及代理隔离所需的保留变量, THEN THE SYSTEM SHALL 在提交声明或保存值时明确拒绝并指出相应字段，不截断或静默替换名称。</td>
-<td>§2 / §4.4④</td>
+<td>§2 / §4.4⑤</td>
 </tr>
 <tr>
 <td>F055 AC-79</td>
 <td>WHEN owner 保存合法值, THE SYSTEM SHALL 保留其 Unicode、换行及特殊字符的原始语义，使应用读取到同一值而不执行其中内容；空字符串不能被标为已录入，超过已公布输入限制时明确拒绝，未编辑的掩码不能被当成新值提交。</td>
-<td>§2 / D20 / §4.4④</td>
+<td>§2 / D20</td>
 </tr>
 <tr>
 <td>F055 AC-80</td>
 <td>WHERE 不同应用或租户使用相同引用名, THE SYSTEM SHALL 分别维护各自的值与状态；对不存在或无权限的应用作查询/写入时，须遵守原应用存在性和租户拒绝语义，不通过状态、列表、错误或掩码泄漏另一作用域的信息。</td>
-<td>§2 / §4.4①②</td>
+<td>§4.4①②</td>
 </tr>
 <tr>
 <td>F055 AC-81</td>
 <td>WHEN 应用密钥值成功录入、修改或删除, THE SYSTEM SHALL 由本业务写入应用、引用名、操作者、动作、时间和结果的审计，不记录值；应用运行期凭据的签发/回收仍由原凭据 Owner 留痕，并须携带受信的应用关联供治理面追溯。</td>
-<td>D12 / §4.4① / §4.3</td>
+<td>§4.4① / §6.1（回收审计S1仍待修）</td>
 </tr>
 <tr>
 <td>F055 AC-82</td>
 <td>THE SYSTEM SHALL 使真实应用密钥值不进入源码压缩包、版本快照、依赖缓存、构建产物、数据库快照、审批内容或应用附件；受限的正式执行交付可获得其必需的值，但普通查询者、预检执行体、代理和材料传输身份不得因此取得密钥管理能力。</td>
-<td>D6 / D17 / §4.4③④</td>
+<td>§4.1 / §4.4③⑤</td>
 </tr>
 <tr>
 <td>F055 AC-83</td>
 <td>WHEN 应用停用、进程重启、代码升级、移除某版本引用或准备环境缓存被回收, THE SYSTEM SHALL 保留仍在平台存储中的密钥资产而不再向未声明的版本注入；仅 owner 明确删除值或按原 owner 应用删除流程清理相应密钥，历史无值审计仍可追溯。</td>
-<td>D10 / §4.4①</td>
+<td>§4.4①③</td>
 </tr>
 <tr>
 <td>F055 AC-84</td>
 <td>WHEN 查看能力声明和审批摘要, THE SYSTEM SHALL 展示该版本的引用名及对应缺值提示而不展示值；只有有效审批关系、owner 或原声明只读权限允许的访问者可见其授权范围内的信息，不能把审批人的有限审阅权限变成密钥管理权限。</td>
-<td>D7 / D14 / §4.4⑤</td>
+<td>D7 / §4.4⑥</td>
 </tr>
 <tr>
 <td>F055 AC-85</td>
 <td>WHEN owner 通过密钥区保存一个未被正式版本引用的合法名值, THE SYSTEM SHALL 把它保持为未生效的应用私有配置；正式运行只以审批过的声明决定注入范围，不能靠预存一个新名字绕过引用新增的审批。</td>
-<td>§4.4②③⑤</td>
+<td>D19 / §4.4④</td>
 </tr>
 <tr>
 <td>F055 AC-86</td>
-<td>WHERE 使用 Docker 或 K8s 执行后端, THE SYSTEM SHALL 对密钥权限、空值、预检/预览隔离、正式启动及保存后生效提供相同业务行为；实例重建、缓存恢复或执行器切换不得使旧值覆盖最新成功保存值。</td>
-<td>D18 / D19 / §4.4③</td>
+<td>WHERE 使用 Docker 或 K8s 执行后端, THE SYSTEM SHALL 对密钥权限、空值、预检/预览隔离、配置保存、差异提示及用户确认重建提供相同业务行为；实例重建、缓存恢复或执行器切换不得覆盖最新保存配置，也不得把使用旧配置的实例误报为已使用最新值。</td>
+<td>§4.4③ / §7</td>
 </tr>
 <tr>
 <td>F055 AC-87</td>
@@ -504,7 +246,22 @@
 <tr>
 <td>F055 AC-89</td>
 <td>WHEN 页面保存、缺值加载或实例更新请求失败, THE SYSTEM SHALL 结束相应等待并显示正确失败状态，保留用户尚未提交的本地编辑；不产生成功通知、不回填密钥明文，且不能通过重试误把掩码或过期页面状态覆盖已保存配置。</td>
-<td>D20 / §4.4⑤ / §7</td>
+<td>D20 / §4.4⑥</td>
+</tr>
+<tr>
+<td>F055 AC-90</td>
+<td>WHEN 查看在线应用的密钥配置, THE SYSTEM SHALL 根据当前实际运行实例使用的声明和取值与最新已保存配置判断差异，只展示有差异的引用名及状态，不展示明文；修改未被运行版本引用的值不提示该实例需要重建，值修改后恢复为原值时不再误报该项差异。没有运行实例时显示下次启动使用最新配置，无法确认运行配置时明确显示未知而非已一致。</td>
+<td>D19 / §4.4④</td>
+</tr>
+<tr>
+<td>F055 AC-91</td>
+<td>WHEN owner 主动选择使已保存配置生效, THE SYSTEM SHALL 在明确告知影响当前运行实例及可能短暂中断后要求确认；只有确认才重建当前已批准的运行版本，不创建代码版本或审批单、不启动待审批或待运行的新版本、不改变资源档位、不触发表结构迁移或覆盖 SQLite 数据。已停止应用不得因保存或差异提示自行上线，仍须原重新上线动作。</td>
+<td>D18 / §4.4②③⑥</td>
+</tr>
+<tr>
+<td>F055 AC-92</td>
+<td>WHEN 配置重建被确认受理, THE SYSTEM SHALL 使用用户确认的当前运行版本及已保存配置；确认后版本或配置已变化时，须明确拒绝过期确认并要求重新核对。操作受理后再保存的配置不被该在途实例自动采用，不影响已受理操作的取值；完成后仍按真实使用配置显示未生效变更，重复确认不得创建重复在途实例。</td>
+<td>§4.4②③④</td>
 </tr>
 <tr>
 <td>F056 AC-26</td>
@@ -598,88 +355,19 @@
 </tr>
 </tbody>
 </table>
-<h2 id="review-h7">5. 固定基线源码核查</h2>
-<p>以下为已读代码证据，不等于新增设计已实现。链接固定在代码事实 SHA，避免后续行号漂移改变证据。</p>
-<table>
-<thead>
-<tr>
-<th>实现事实</th>
-<th>路径 / 符号</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>OBO 空返回后 formal/preview 仍可 allow</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py">src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py</a> · <code>_issue_obo_token / authorize_entry</code></td>
-</tr>
-<tr>
-<td>现有防火墙只覆盖 FORWARD/DOCKER-USER</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/runtime-manager/runtime_manager/egress.py">src/runtime-manager/runtime_manager/egress.py</a> · <code>firewall_rules / iptables_commands / _firewall_check</code></td>
-</tr>
-<tr>
-<td>旧 secret 引用被广泛拒绝</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/app_publish/domain/services/manifest_validator.py">src/backend/bisheng/app_publish/domain/services/manifest_validator.py</a> · <code>_reject_secret_references</code></td>
-</tr>
-<tr>
-<td>capabilities 尚无 secret schema</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/app_publish/domain/schemas/app_manifest.py">src/backend/bisheng/app_publish/domain/schemas/app_manifest.py</a> · <code>CapabilityDeclaration</code></td>
-</tr>
-<tr>
-<td>sealed_env 复用与同版本快速返回</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/app_runtime/domain/services/runtime_delivery_coordinator.py">src/backend/bisheng/app_runtime/domain/services/runtime_delivery_coordinator.py</a> · <code>inject_environment / deploy</code></td>
-</tr>
-<tr>
-<td>操作的 generation/owner/claim 围栏</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py">src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py</a> · <code>claim / commit_route</code></td>
-</tr>
-<tr>
-<td>K8s 已有执行专属 Secret 引用</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/runtime-manager/runtime_manager/k8s_templates.py">src/runtime-manager/runtime_manager/k8s_templates.py</a> · <code>secret_env / secretKeyRef</code></td>
-</tr>
-<tr>
-<td>模型表已有查询/导出但不带新管理员入口</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/open_api/domain/repositories/model_call_record_repository.py">src/backend/bisheng/open_api/domain/repositories/model_call_record_repository.py</a> · <code>alist / aiter_export</code></td>
-</tr>
-<tr>
-<td>能力记录写入表</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/app_publish/domain/models/capability_call_record.py">src/backend/bisheng/app_publish/domain/models/capability_call_record.py</a> · <code>AppCapabilityCallRecord</code></td>
-</tr>
-<tr>
-<td>访问表缺历史 app 名称列</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/database/models/app_access_log.py">src/backend/bisheng/database/models/app_access_log.py</a> · <code>AppAccessLog</code></td>
-</tr>
-<tr>
-<td>现有操作审计权限比新 runtime 查询更宽</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/api/services/audit_log.py">src/backend/bisheng/api/services/audit_log.py</a> · <code>_resolve_audit_groups / _get_audit_tenant_scope</code></td>
-</tr>
-<tr>
-<td>凭据审计尚缺可信 app 关联</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/backend/bisheng/open_api/domain/services/credential_service.py">src/backend/bisheng/open_api/domain/services/credential_service.py</a> · <code>_audit</code></td>
-</tr>
-<tr>
-<td>平台页当前只有两个日志页签</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/frontend/platform/src/pages/LogPage/index.tsx">src/frontend/platform/src/pages/LogPage/index.tsx</a> · <code>Tabs</code></td>
-</tr>
-<tr>
-<td>应用发布页已有 settingsSlot</td>
-<td><a href="https://github.com/dataelement/bisheng/blob/5f2541f4bc483c24624fede9031c88c4ec6f58f4/src/frontend/platform/src/pages/BuildPage/hostedApp/tabs/PublishTab.tsx">src/frontend/platform/src/pages/BuildPage/hostedApp/tabs/PublishTab.tsx</a> · <code>PublishTabProps</code></td>
-</tr>
-</tbody>
-</table>
-<h2 id="review-h8">6. 验证范围与接下来</h2>
-<p>本轮已做：静态调用/字段核对、设计清单复审、完整 52 条 AC 映射、确认规格正文未变、链接/章节交叉引用/离线 HTML 静态一致性检查；页面视觉与布局检查结果另写 review JSON。没有运行 backend/runtime 全量测试，也没有远端部署、Docker/K8s E2E、DM8 实测或镜像发行。</p>
-<p>设计确认后按依赖拆任务：先模型/迁移/契约和配对测试；再 secret 存储/正式用途/配置刷新，OBO 和宿主隔离；新管理员读面/导出/页面。只对实际修改路径执行必要 red→green、L1、定向 E2E，完成后再 L2；不重跑无关全量回归。ARM 和现有正式发行待办继续保留。</p>
-<p>本 HTML 附三份设计全文，来自当前 canonical Markdown；所有图示/样式在本文件中，离线可读。旧章节编号与 D 编号保留；早期坑编号/细分契约历史引用明确转到 dda16a6 快照，不再以过期 MVP 状态作为当前事实。</p>
-<section id="f054" class="design"><h1 id="f054-p0-h1">Design: 托管应用运行时与安全收尾</h1>
+<h2 id="summary-5">4. 证据与阶段</h2>
+<p>本轮只进行设计和源码静态核对，没有产品测试、远端部署或公开发行。当前产品源码与HEAD无未提交差异，设计hash见本轮JSON。源码基线5f2541f4，当前HEAD7b9027101；不能把设计中的新入口当作已有实现。</p>
+<p>规格已确认，F055设计待单独确认；F054/F056问题另待修，不提前拆任务/勾选。以下三份设计按当前文件全文展示，Mermaid源码保留，HTML流程预览离线可读，不依赖CDN。</p>
+<section class="design" id="f054"><h1 id="F054-part0-1">Design: 托管应用运行时与安全收尾</h1>
 <blockquote>
 <p><strong>2026-10-23 设计评审稿，待用户单独确认。</strong> 规格已确认，本文新增设计尚未实现。
 现状基线：<code>5f2541f4bc483c24624fede9031c88c4ec6f58f4</code>；增量规格确认提交：<code>dda16a6502908ba8d58cff61dc350c0213b86c19</code>。旧版 D1–D15 编号保留，内容按当前代码刷新；历史任务的行号、坑编号和 MVP 后置说法不作为当前实现状态。</p>
 <p>What：<a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/054-app-domain-runtime/spec.md">spec.md</a>（73 条 AC）；流水账：<a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/054-app-domain-runtime/tasks.md">tasks.md</a>；不变量：<a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/release-contract.md">release-contract.md</a>。本轮只补 AC-66、AC-67、AC-68、AC-69、AC-70、AC-71、AC-72、AC-73，对应历史 T098 / T099，不重开 F059 / F086 验收。</p>
 </blockquote>
-<h2 id="f054-p0-h2">1. 目标与非目标</h2>
-<p>保持统一应用入口、平台身份注入、持久化数据和独立编排边界，补齐 Docker 应用访问宿主服务的隔离，以及 OBO 配置不完整时的入口拒绝。为 F055 密钥配置刷新提供与现有部署一致的执行围栏。</p>
+<h2 id="F054-part0-2">1. 目标与非目标</h2>
+<p>保持统一应用入口、平台身份注入、持久化数据和独立编排边界，补齐 Docker 应用访问宿主服务的隔离，以及 OBO 配置不完整时的入口拒绝。为 F055 用户确认的配置重建提供现有部署执行与受限运行环境只读协议。</p>
 <p>非目标：商业授权、重写 manager、重新实现 F059 Kubernetes、扩大第三方 egress 白名单、密钥管理页面或运行记录查询（分别归 F055 / F056）；不在 backend 中运行防火墙命令或容器 SDK。</p>
-<h2 id="f054-p0-h3">2. 关键约束</h2>
+<h2 id="F054-part0-3">2. 关键约束</h2>
 <ul>
 <li>领域真相由 backend 数据库持有；manager 经内部认证下载代码/上传快照，不直连 MinIO。附件已迁 backend。源码、依赖、启动参数由已冻结交付描述决定；本轮不改镜像构建路线。</li>
 <li>Docker Engine 仅由 manager 经 socket proxy 访问；K8s 由独立 manager 使用受限 ServiceAccount 操作。没有挂 socket 不意味着编排 API 权限很小。</li>
@@ -688,45 +376,45 @@
 <li>宿主规则变更只操作自有链/表，不能清空 INPUT/FORWARD/DOCKER-USER，也不能修改其他网络的全局默认策略。</li>
 <li>Constitution Check：遵守 <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/docs/constitution.md">constitution.md</a> C1–C8。新增隔离报告由 Repository 落库（C1/C8）；租户对象、权限入口沿用 C3/C4；新字段/迁移用通用类型（C2），错误码沿用 161 段（C5）；HMAC 与 OBO 分开配置（C6）。本轮无铁律例外。</li>
 </ul>
-<h2 id="f054-p0-h4">3. 方案对比与选定</h2>
-<h3 id="f054-p0-h5">D1：独立 manager + backend 持久意图</h3>
+<h2 id="F054-part0-4">3. 方案对比与选定</h2>
+<h3 id="F054-part0-5">D1：独立 manager + backend 持久意图</h3>
 <p>保留独立进程；选用 F086 的持久 RuntimeOperation、执行事实与路由投影，而非 backend 直接控制 Docker。证据是 <code>runtime_operation_service.py</code>、<code>runtime_delivery_repository.py</code> 的租约/代次/操作围栏；仅 HTTP 一次性命令无法恢复响应丢失。若执行协议整体升级再评估，不增加并列状态机。</p>
-<h3 id="f054-p0-h6">D2：Docker 经 socket proxy，K8s 经受限 API</h3>
+<h3 id="F054-part0-6">D2：Docker 经 socket proxy，K8s 经受限 API</h3>
 <p>当前 Docker 配置已经是 socket proxy，不再采用旧设计的“先直挂 docker.sock”。通用代理限制 API 面但不是业务授权器；manager 仍持有高权限编排面。拒绝把三种代理与 backend 合并来省进程。只有权限模型改变且验证隔离等价时重议。</p>
-<h3 id="f054-p0-h7">D3：交付模式服从 F086 / F059</h3>
+<h3 id="F054-part0-7">D3：交付模式服从 F086 / F059</h3>
 <p>当前有 bundle、完整 image、source-image，支持 Python 3.11 / Node 20 / static，不再是首发 Python 模板单一路线。选用已冻结 delivery/profile/digest；拒绝运行中重新选择可变默认镜像。依赖缓存、离线交付和 K8s 组装的详细契约分别见 <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/086-vibe-runtime-delivery/design.md">F086 design</a>、<a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/059-k8s-runtime-backend/design.md">F059 design</a>。新增运行时时再评估。</p>
-<h3 id="f054-p0-h8">D4：自愈与切流复用现有围栏</h3>
-<p>探活成功才提交路由；旧写入者确认停止才允许新的 SQLite 写入者；恢复沿用原操作、deadline、资源 UID，不以重启为理由无限延长。禁止只用容器名判定安全。底座证据见 F059 既有验收；本轮配置刷新只复用这些机制。引入多实例数据模型时重议。</p>
-<h3 id="f054-p0-h9">D5：app-proxy 保持独立入口</h3>
+<h3 id="F054-part0-8">D4：自愈与切流复用现有围栏</h3>
+<p>探活成功才提交路由；旧写入者确认停止才允许新的 SQLite 写入者；恢复沿用原操作、deadline、资源 UID，不以重启为理由无限延长。禁止只用容器名判定安全。底座证据见 F059 既有验收；本轮用户确认重建只复用这些机制。引入多实例数据模型时重议。</p>
+<h3 id="F054-part0-9">D5：app-proxy 保持独立入口</h3>
 <p>nginx → app-proxy → backend 授权与路由投影 → 应用，支持 HTTP/WebSocket；不改为代理向 manager 查路由。proxy 持有 entry 只读角色，不持编排或数据库凭据。若统一入口基础设施替换再评估。</p>
-<h3 id="f054-p0-h10">D6：OBO 配置失效时 fail closed（本轮变更）</h3>
+<h3 id="F054-part0-10">D6：OBO 配置失效时 fail closed（本轮变更）</h3>
 <p>选用现有 <code>unavailable</code> 决策并新增 <code>reason=identity_config_incomplete</code>，不增加可放行的“匿名降级”。<code>entry_authz_service</code> 提供同一 <code>obo_configuration_status()</code> 校验器：值缺失、全空白、与 JWT secret 相同均无效；<strong>校验不 trim 后再签名</strong>，实际有效值原样用于签名与验证。正式入口完成登录、应用存在、租户、可见范围、下线/维护判定后，在 <code>_identity_material</code> 前检查；预览完成会话、预览归属与应用/租户核验后同样检查。任一无效返回拒绝，不生成身份头、OBO、allow 访问记录。</p>
 <p>app-proxy 的 <code>BackendAuthzClient</code> / preview 授权客户端不再缓存含身份材料的 allow 决策：每个新的 HTTP 请求和 WebSocket 握手到 backend 重新判定，避免 backend 配置失效后旧 allow 缓存继续放行。路由缓存与拒绝缓存维持独立；已经建立的 WebSocket 不承诺逐帧重鉴权。此取舍增加授权 RPC，定向验证请求数与延迟，不把“保留有效配置行为”理解为继续缓存旧身份。若未来有可信配置 epoch 推送协议，再评估恢复 allow 缓存。</p>
 <p>签发器自身再防御性校验并返回显式失败，调用者不可把失败当缺省可选值；验证器亦拒绝无效配置。请求期间以同一配置快照完成检查/签发，避免动态刷新间隙。应用运行时开启时，FastAPI lifespan 输出一次脱敏 ERROR（字段名和失败原因，不含值），<strong>不终止整个平台进程</strong>，入口保持拒绝；开关关闭不产生“已启用”或误报。选择此方案而非整站启动失败，因为 spec 要求关闭运行时/其他平台能力不被连带停用。若未来 OBO 采用非对称签名，再重新审查发行/验证契约。</p>
-<h3 id="f054-p0-h11">D7：拒绝页面沿用既有契约</h3>
-<p>app-proxy 对 <code>unavailable</code> 渲染既有不可用页并使用已有状态码/本地化方式；对配置原因给通用“应用暂不可用”提示，排障细节只给管理员日志/状态。禁止把签名配置、应用环境、内部 URL 回显。无需新建前端视觉模式。新增状态码需先检查 nginx error_page 合同。</p>
-<h3 id="f054-p0-h12">D8：领域与列表投影保持兼容</h3>
+<h3 id="F054-part0-11">D7：拒绝页面沿用既有契约</h3>
+<p>app-proxy 对 <code>unavailable</code> 保留既有不可用页与状态码；当 backend 已完成原登录、对象存在、租户、访问权限和运行层开关判定后，消费可信 <code>reason=identity_config_incomplete</code>，正式/预览均显示 <strong>“本环境配置不完整，请联系平台管理员”</strong>（三语同义）。该提示不显示配置值、字段值、内部 URL 或真实应用环境；无权者仍得到原来的登录/不存在/无权限等决策，不靠浏览器参数切换到此提示。无需新视觉模式；沿用不可用页模板只增加此原因对应文案。新增状态码需先检查 nginx error_page 合同。</p>
+<h3 id="F054-part0-12">D8：领域与列表投影保持兼容</h3>
 <p>App / AppVersion / AppInstance 继续分别表达业务状态、冻结版本、运行观察；构建/广场列表通过既有 UNION 第三支表达 <code>flow_type=35</code>、<code>app_state</code>，不为新安全项改列表含义。若新增状态，需同时审查两个 SPA 的白名单。</p>
-<h3 id="f054-p0-h13">D9：权限走已验证业务目标</h3>
+<h3 id="F054-part0-13">D9：权限走已验证业务目标</h3>
 <p>应用身份、owner、租户与资源状态先由业务服务核实，业务动作走 F048 统一入口；manager 与代理不自行查 OpenFGA。管理员的通用 shortcut 不能扩大 F055 的 natural owner-only 密钥写权限。新增管理动作时重审 Catalog，而非手写 role_access。</p>
-<h3 id="f054-p0-h14">D10：SQLite 与平台存储解耦</h3>
+<h3 id="F054-part0-14">D10：SQLite 与平台存储解耦</h3>
 <p>Docker 绑定本地持久目录，K8s 用已验收独占 PVC；manager 执行本地 backup/迁移，经 backend 存取快照。应用附件走 backend 存储接口；manager 不读平台 MinIO 配置，也不需要独立 MinIO 实例/新桶。升级代码不等于恢复数据库；恢复必须显式选快照。存储拓扑变化时重议单写入者证明。</p>
-<h3 id="f054-p0-h15">D11：容量与资源档位</h3>
-<p>沿用平台档位与持久 reservation；释放依赖停止证据，不以超时自动当作已停。密钥刷新同版本重启依然需要执行资源预算，不绕过准入。并发拓扑改变时重审预算。</p>
-<h3 id="f054-p0-h16">D12：宿主 INPUT + FORWARD 的同源隔离（本轮变更）</h3>
+<h3 id="F054-part0-15">D11：容量与资源档位</h3>
+<p>沿用平台档位与持久 reservation；释放依赖停止证据，不以超时自动当作已停。用户确认的配置重建依然需要执行资源预算，不绕过准入。并发拓扑改变时重审预算。</p>
+<h3 id="F054-part0-16">D12：宿主 INPUT + FORWARD 的同源隔离（本轮变更）</h3>
 <p><strong>否决</strong>仅补 DOCKER-USER（不覆盖 INPUT）、只看 <code>--internal</code>（不证明宿主入口关闭）、在 manager 容器里加 NET_ADMIN（作用域错误且扩大权限）、允许整个 backend 端口给附件（附件也应经 egress）。选定：保留 egress 唯一出口，安装侧 root 工具维护宿主自有规则，backend 持有短时有效的独立隔离证明，新部署消费证明。</p>
 <p>现有 <code>runtime_manager.egress</code> 已有规则渲染和 CLI，扩展同一规则模型，不另写两套白名单。具体安装、报告和准入合同见 §4.4。已建立连接也不能用宽泛 <code>ESTABLISHED</code> 一律放过，必须区分应用响应与应用主动发起。真实宿主配对探测是依据，命令存在不等于隔离成立。若后续采用经过验证的 eBPF/专用网络插件，可替换证明生产方，不能取消拒绝边界。</p>
-<h3 id="f054-p0-h17">D13：详情页扩展点</h3>
+<h3 id="F054-part0-17">D13：详情页扩展点</h3>
 <p>保留发布 / 版本 / 数据 / 日志页壳与命名 slot。F055 密钥管理放既有 settingsSlot，不为安全项新增管理菜单。壳变更时需检查三个 Feature 消费者。</p>
-<h3 id="f054-p0-h18">D14：运行日志与访问记录分开</h3>
+<h3 id="F054-part0-18">D14：运行日志与访问记录分开</h3>
 <p>stdout/stderr 是调试日志；backend 入口 allow 产生合并窗口访问记录；F056 的读接口不创造新访问事件。保留既有合并窗口实现/配置，本轮不改频率。安全拒绝不计成功访问；日志包含配置原因但不含身份材料。若审计语义变更，应先改规格。</p>
-<h3 id="f054-p0-h19">D15：收尾边界与交付声明</h3>
+<h3 id="F054-part0-19">D15：收尾边界与交付声明</h3>
 <p>旧 MVP “后置”不再表示未实现：F086、F059 已有实现/证据，本轮只修改与安全/密钥刷新直接相关的接口。历史未完成验收不自动勾选，ARM、完整离线安装和正式镜像发行不冒充本轮完成。只在本轮 AC 定向证据成立后更新相应任务。</p>
-<h2 id="f054-p0-h20">4. 系统现状（接手必读）</h2>
-<h3 id="f054-p0-h21">4.1 数据流与实现状态</h3>
+<h2 id="F054-part0-20">4. 系统现状（接手必读）</h2>
+<h3 id="F054-part0-21">4.1 数据流与实现状态</h3>
 <p><strong>已实现</strong>：backend 保存应用/版本/操作/路由/存储绑定；Celery 调发布管线；manager 拉取持久计划、编排 Docker/K8s、上报事实；app-proxy/egress 只读投影。<code>RuntimeDeliveryCoordinator.inject_environment</code> 使用加密 sealed_env 保存可恢复执行环境；K8s 已用操作专属 Secret + <code>secretKeyRef</code>，并非把平台 token 放 ConfigMap。</p>
-<p><strong>尚未实现的本轮设计</strong>：INPUT 规则与可信证明、OBO 无效时拒绝、新配置刷新适配。现有 <code>egress.firewall_rules</code> 仅渲染 FORWARD/DOCKER-USER 规则；<code>_firewall_check</code> 主要检测后端存在。现有 <code>_issue_obo_token</code> 返回空时两个入口仍允许，是 T099 真缺口。</p>
-<div class="flow" aria-label="F054 主链路"><span>浏览器 / nginx</span><span>app-proxy</span><span>backend 授权 / OBO Gate</span><span>路由投影</span><span>应用 → egress → 平台</span></div><details><summary>流程图源码（与 Markdown 一致）</summary><pre>```mermaid
+<p><strong>尚未实现的本轮设计</strong>：INPUT 规则与可信证明、OBO 无效时拒绝、用户确认重建与运行快照只读适配。现有 <code>egress.firewall_rules</code> 仅渲染 FORWARD/DOCKER-USER 规则；<code>_firewall_check</code> 主要检测后端存在。现有 <code>_issue_obo_token</code> 返回空时两个入口仍允许，是 T099 真缺口。</p>
+<div class="flow"><span>入口授权</span><span>OBO配置判断</span><span>平台路由</span><span>应用；宿主证明准入</span></div><details><summary>流程图源码（与 Markdown 一致）</summary><pre>```mermaid
 flowchart LR
   Browser --&gt; Nginx --&gt; Proxy[app-proxy]
   Proxy --&gt; Auth[backend entry authorization]
@@ -738,14 +426,14 @@ flowchart LR
   Installer[host root installer / verifier] --&gt; Firewall[owned INPUT and FORWARD rules]
   Installer --&gt; Report[backend host isolation report]
   Report --&gt; Admission[new Docker deployment admission]
-```</pre></details><h3 id="f054-p7700-h1">4.2 既有公共合同（保留原编号语义）</h3>
+```</pre></details><h3 id="F054-part2-1">4.2 既有公共合同（保留原编号语义）</h3>
 <p><strong>① runtime-manager 意图 RPC</strong>：旧 <code>POST /v1/intents/{build,deploy,stop}</code> 兼容通道与当前持久 v2 通道不可混淆。当前 backend <code>RuntimeDeliveryCoordinator</code> 创建 RuntimeOperation、wake manager；manager 以 node/role HMAC 从 <code>/api/v1/internal/app-runtime/v2/nodes/plan</code>、<code>operations/{id}</code> 拉取并 claim、上报 facts。冻结字段见 F086/F059，public caller 不可注入 sealed_env/runtime_env。旧 code_object_key 直读 MinIO 的设计不再使用。</p>
 <p><strong>② backend 状态动作 / 读口</strong>：<code>AppStateService.{publish,manual_publish,stop,resume,delete,stage_version}</code> 仍是 F055 的领域入口；<code>GET /api/v1/apps</code>、<code>/{id}</code>、<code>/{id}/instance</code>、<code>/{id}/versions</code>、<code>/{id}/logs</code>，PATCH 元信息与 actions 路由保持。版本列表只读，不提供绕过审批的直接切版本；<code>AppMetaService.update_meta</code> 为管线与页面共用。runtime-status 只供有权管理员；owner/租户范围由读服务决定，不拿 UI can 标志当后端权限。</p>
 <p><strong>③ app-proxy 注入头</strong>：<code>X-BiSheng-User-Id/User-Name/Tenant-Id/Dept-Id/Dept-Name/Dept-Path/Subject-Kind/App-Id/Access-Token/Request-Id</code>；姓名/部门等非 ASCII 值用现有 percent-encoding；入站 header lower + 下划线→连字符归一后剥离整个 x-bisheng 等价类。X-Forwarded-Prefix/Proto/Host 由 proxy 覆盖，不信客户端。OBO 现已有消费者，不能继续引用旧“可无 token 放行”例外。</p>
 <p><strong>④ manifest 消费</strong>：形态归 F055；runtime/port/tier/database/egress/delivery/startup 由当前 schema 冻结后进入执行，见 F055 design §4.2③。新增业务 secret 名仅消费可信 formal 环境，不允许任何运行形态覆盖保留名。</p>
 <p><strong>⑤ 环境变量</strong>：<code>BISHENG_APP_DB_URL</code>、应用 base path、平台/模型/storage endpoint 与 operation-bound 凭据仍按 F086/F059 注入；本轮不改已有公开 SDK 变量名。正式、preview、probe 的身份/数据空间不可混用，构建进程不取得正式环境。</p>
 <p><strong>⑥ SQLite / 日志</strong>：DB URL 指向运行实例的 <code>/data/app.db</code>；Docker bind 与 K8s 独占 PVC 的宿主/集群映射由执行层持有。日志 <code>tail/since/keyword</code>、状态和数据动作先验 owner/租户；backend 只传意图，manager 执行备份/数据维护，经 backend 传快照。</p>
-<h3 id="f054-p7700-h2">4.3 关键模块职责</h3>
+<h3 id="F054-part2-2">4.3 关键模块职责</h3>
 <table>
 <thead>
 <tr>
@@ -777,7 +465,7 @@ flowchart LR
 </tr>
 <tr>
 <td><code>RuntimeOperationService</code> / <code>RuntimeDeliveryCoordinator</code></td>
-<td>部署、恢复、配置刷新准入和原有围栏</td>
+<td>部署、恢复、用户确认重建准入和原有围栏</td>
 <td>不拥有 F055 密钥配置资产</td>
 </tr>
 <tr>
@@ -792,9 +480,9 @@ flowchart LR
 </tr>
 </tbody>
 </table>
-<h3 id="f054-p7700-h3">4.4 本轮增量字段与接口合同（拟实现）</h3>
+<h3 id="F054-part2-3">4.4 本轮增量字段与接口合同（拟实现）</h3>
 <p><strong>① 入口</strong>：正式 <code>/apps/{slug}</code>、预览 <code>/apps/_preview/{session}/...</code> 保留现有 app-proxy → backend 内部 HMAC 协议；拒绝体仅 <code>decision=unavailable, reason=identity_config_incomplete</code> 与已允许返回的最小上下文；不得带 <code>inject_headers</code>、<code>obo_token</code>、<code>obo_expires_at</code> 或 target。登录/不存在/跨租户/无权限/停用仍先返回对应旧决策，不因配置错误暴露对象存在。</p>
-<p><strong>② 操作与身份</strong>：RuntimeOperation 的 <code>scope_key/idempotency_key/generation/owner_epoch/deadline</code> 继续约束生命周期；K8s 额外 controller epoch、UID 与数据 writer 围栏。内部 HMAC 角色按 manager / entry / egress 隔离，传输受 TLS/受控网络保护；HMAC 只认证请求，不提供加密。F055 新刷新语义见其设计 §4.4③。</p>
+<p><strong>② 操作与身份</strong>：RuntimeOperation 的 <code>scope_key/idempotency_key/generation/owner_epoch/deadline</code> 继续约束生命周期；K8s 额外 controller epoch、UID 与数据 writer 围栏。内部 HMAC 角色按 manager / entry / egress 隔离，传输受 TLS/受控网络保护；HMAC 只认证请求，不提供加密。F055 手动重建语义见其设计 §4.4③：保存不创建操作；rebuild_current 复用既有 deploy，running_environment_snapshot 只向受限内部调用提供当前正式环境 DTO；不写 F055 配置或 applied 状态。</p>
 <p><strong>③ 宿主规则合同（拟新增）</strong>：</p>
 <table>
 <thead>
@@ -829,8 +517,8 @@ flowchart LR
 <p><strong>④ 隔离证明（拟新增）</strong>：安装工具与只验证的 systemd oneshot/timer 位于宿主，30 秒刷新，60 秒过期；首次安装、宿主重启、dockerd 重启后先验证再放行新部署。持续验证不授予 manager root/NET_ADMIN，不运行在 backend。工具复用现有 Python Engine HTTP 客户端；需要宿主 root、相应 iptables/nft 二进制与受控 Engine API，不要求 docker CLI。</p>
 <p>新增 <code>RuntimeHostIsolationReport</code>（F054 所有，平台级节点表）：<code>id,node_id,engine_id,network_id,config_digest,rule_digest,revision,checked_at,valid_until,status,checks</code>，通用 JsonType；checks 仅结构与探测结果，不能含环境/用户流量。<code>POST /api/v1/internal/app-runtime/host-isolation-reports</code> 只接受独立、限定 node 的 <code>host-isolation</code> 服务角色；manager/entry/egress 无上报权。服务端分配接收时间、限制 TTL、递增 revision/nonce、验证节点与 engine/config 绑定，不信客户端自报无限有效期；重放/倒退拒绝。独立报告表避免 manager heartbeat 覆盖证明；不改 F059 现有摘要算法。</p>
 <p>生产方为 root 安装脚本，信任边界是客户宿主管理员；不声称防住 root 伪造。报告只在<strong>规则读回匹配 + 实际 canary 允许/拒绝配对</strong>均成功后标 pass：无业务凭据/PVC 的受限 canary 在 app 网络，测试直连宿主网关、宿主服务地址、published address 被拒绝，同时入口 HTTP/WS/探活响应与经 egress 的平台 API 可达。所有探测端点由管理员固定，拒绝把请求参数当任意扫描目标；canary 有 UID/ID、期限和自有标签，未知资源不强删。</p>
-<p>backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 刷新）的 create/claim/提交服务路由前验证新鲜证明及冻结配置一致性；失败给缺能力原因。stop/destroy/清理仍允许，既有应用不强制删除。证明过期时在途操作不发布新路由，可恢复地等待至原 deadline；不能绕过旧 writer 停止确认。安装报告通过不代替实际业务 API 的权限检查。</p>
-<h2 id="f054-p7700-h4">5. 已知坑 / 反直觉事实</h2>
+<p>backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 用户确认重建）的 create/claim/提交服务路由前验证新鲜证明及冻结配置一致性；失败给缺能力原因。stop/destroy/清理仍允许，既有应用不强制删除。证明过期时在途操作不发布新路由，可恢复地等待至原 deadline；不能绕过旧 writer 停止确认。安装报告通过不代替实际业务 API 的权限检查。</p>
+<h2 id="F054-part2-4">5. 已知坑 / 反直觉事实</h2>
 <table>
 <thead>
 <tr>
@@ -888,8 +576,8 @@ flowchart LR
 </tbody>
 </table>
 <p>旧坑编号的历史引用按 <code>dda16a6</code> 的本文件读取；不把其中过期的“尚无 OBO 消费者/manager 直连 MinIO”继续当现状。</p>
-<h2 id="f054-p7700-h5">6. 对外契约与依赖</h2>
-<h3 id="f054-p7700-h6">6.1 我提供给别人的（Outgoing）</h3>
+<h2 id="F054-part2-5">6. 对外契约与依赖</h2>
+<h3 id="F054-part2-6">6.1 我提供给别人的（Outgoing）</h3>
 <table>
 <thead>
 <tr>
@@ -910,7 +598,7 @@ flowchart LR
 <td>放宽空 token 或共享 JWT secret 会破坏身份边界</td>
 </tr>
 <tr>
-<td>持久操作围栏 + F055 配置刷新适配点</td>
+<td>持久操作围栏 + F055 用户确认重建/受限运行快照</td>
 <td>F055、Docker/K8s manager</td>
 <td>generation/operation payload 缺失时应显式拒绝，不能旧版静默忽略</td>
 </tr>
@@ -921,7 +609,7 @@ flowchart LR
 </tr>
 </tbody>
 </table>
-<h3 id="f054-p7700-h7">6.2 我依赖别人的（Incoming）</h3>
+<h3 id="F054-part2-7">6.2 我依赖别人的（Incoming）</h3>
 <table>
 <thead>
 <tr>
@@ -934,7 +622,7 @@ flowchart LR
 <tr>
 <td>F086 持久操作 / F059 controller 与 writer 围栏</td>
 <td>HTTP、DB 与执行事实</td>
-<td>旧 manager 不支持刷新 revision 时拒绝</td>
+<td>旧 manager 不支持确认重建/敏感输出协议时拒绝</td>
 </tr>
 <tr>
 <td>Docker Engine / socket proxy；宿主 iptables-restore 或 nft；systemd timer</td>
@@ -958,17 +646,17 @@ flowchart LR
 </tr>
 </tbody>
 </table>
-<h2 id="f054-p7700-h8">7. 测试与可观测</h2>
+<h2 id="F054-part2-8">7. 测试与可观测</h2>
 <ul>
 <li>单元/模拟只覆盖变化：INPUT/FORWARD 双后端渲染、方向、幂等、失败恢复、未知 family；证明角色/过期/重放/配置改变与部署拒绝配对；正式/预览三种坏配置与有效配置的决策、无身份/无成功访问副作用；proxy 曾获 allow 后 backend 改坏配置的下一次请求/WS 握手拒绝，route 缓存不干扰此 Gate。</li>
-<li>集成只验证新表/租户无关节点范围、迁移单 head、manager 配置刷新复用围栏。DM8 仅类型/约束/迁移静态审查，不写成 DM8 真测。</li>
+<li>集成只验证新表/租户无关节点范围、迁移单 head、manager 用户确认重建复用围栏。DM8 仅类型/约束/迁移静态审查，不写成 DM8 真测。</li>
 <li>真实 E2E：在授权专用 Docker 环境先保存自有规则前后差异，执行 canary 直连宿主拒绝 + HTTP/WebSocket/探活 + 经 egress SDK/模型/附件允许；重跑、重启、精确卸载对其他网络无影响。OBO 使用已授权自然人 owner/可见非 owner/不可见/跨租户配对，正式与审批预览都验证。不得把失败的 TCP 连接当“防火墙拒绝”而不先证明目标监听可达。</li>
 <li>定向命令（编码后按实际文件名执行）：<code>cd src/runtime-manager &amp;&amp; uv run pytest tests/test_egress.py</code>；<code>cd src/backend &amp;&amp; uv run pytest test/app_runtime/test_entry_authz.py</code>（补充测试以最终任务命名为准）。手动入口 <code>/apps/{slug}</code> 与 <code>/apps/_preview/{session}/</code>，运维 <code>python -m runtime_manager.egress firewall --print</code> 先看差异，再由 root 在专用宿主安装；未确认设计前不执行变更。</li>
 <li>可观测：<code>identity_config_incomplete</code>、<code>host_isolation_missing/stale/mismatch/failed</code>、node/operation/canary ID、规则 revision；不记录密钥、token、会话或完整环境。失效不刷屏，状态面保留当前失败原因。</li>
 </ul>
-<h2 id="f054-p7700-h9">8. 后续改进 / 不打算做的事</h2>
+<h2 id="F054-part2-9">8. 后续改进 / 不打算做的事</h2>
 <p>本轮不支持 Docker IPv6/rootless 网络；检测即拒绝，不默认为安全。不新增通用宿主防火墙产品；验证工具只覆盖托管子网。K8s CNI/跨节点/ARM 扩展留在原 Feature 的待验清单，不借安全收尾宣称全部通过。完整设计确认后拆增量任务，保留 T098/T099 原证据与关联。</p>
-<h2 id="f054-p7700-h10">修订历史</h2>
+<h2 id="F054-part2-10">修订历史</h2>
 <table>
 <thead>
 <tr>
@@ -978,6 +666,16 @@ flowchart LR
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>2026-10-23（二次修订）</td>
+<td>按 AC-70 修正 OBO 配置不完整提示；保持原授权顺序和正式/预览同源</td>
+<td>用户要求修订后复审，尚待设计确认</td>
+</tr>
+<tr>
+<td>2026-10-23（简化协议同步）</td>
+<td>F055保存不重启；消费用户确认重建与当前运行快照协议，不增加F055结果双写</td>
+<td>用户已确认F055修订规格；F054自身设计未确认，B1仍待修</td>
+</tr>
 <tr>
 <td>2026-10-23</td>
 <td>刷新 F086/F059 后的当前快照；补 INPUT 隔离证明、OBO 拒绝设计；保持 D1–D15 与 §1–§8 编号</td>
@@ -990,93 +688,92 @@ flowchart LR
 </tr>
 </tbody>
 </table>
-</section><section id="f055" class="design"><h1 id="f055-p0-h1">Design: 应用发布管线与应用密钥管理</h1>
+</section><section class="design" id="f055"><h1 id="F055-part0-1">Design: 应用发布管线与应用密钥管理</h1>
 <blockquote>
-<p><strong>2026-10-23 增量设计评审稿，待单独确认。</strong> 用户已确认 spec；新增设计未编码。
-现状基线 <code>5f2541f4bc483c24624fede9031c88c4ec6f58f4</code>；规格确认提交 <code>dda16a6502908ba8d58cff61dc350c0213b86c19</code>。保留 D1–D16 编号并刷新已失效的 MVP 描述，新增 D17–D20；旧任务的历史测试/行号不是本轮交付证据。</p>
-<p><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/055-app-publish-pipeline/spec.md">spec.md</a>（89 条 AC）· <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/055-app-publish-pipeline/tasks.md">tasks.md</a> · <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/release-contract.md">release-contract.md</a>。本轮覆盖新增 AC-66 至 AC-89，以及已确认修订 AC-54、AC-56；应用密钥归 F055，绝非新的 ApiCredential。</p>
+<p><strong>2026-10-23 简化设计评审稿，待用户单独确认，未编码。</strong> 用户已确认 92 条 AC 的手动生效规格；源码基线 <code>5f2541f4bc483c24624fede9031c88c4ec6f58f4</code>。D1–D20 与 §1–§8 保持编号；正文覆盖旧三表/自动生效设计，不沿用历史设计的确认状态。</p>
+<p><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/055-app-publish-pipeline/spec.md">spec.md</a> · <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/055-app-publish-pipeline/tasks.md">tasks.md</a> · <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/release-contract.md">release-contract.md</a>。主导质量属性：无意外停机、秘密隔离、运行配置与保存配置可辨识。F054 B1、F056 S1 的既有发现仍待修，不由本文宣称关闭。</p>
 </blockquote>
-<h2 id="f055-p0-h2">1. 目标与非目标</h2>
-<p>为已有发布/审批/运行管线补齐 owner 私有应用密钥：仅保存名称引用进版本，值加密存平台数据库，已审批正式实例按当前值注入。值变化可靠刷新同版本实例，预检和审批预览只注入声明名与空值。</p>
+<h2 id="F055-part0-2">1. 目标与非目标</h2>
+<p>为已有发布/审批/运行管线补齐 owner 私有应用密钥：仅保存名称引用进版本，值加密存平台数据库，已审批正式实例按当前值注入。保存值不触发重启；页面提示当前实例与最新保存配置的差异，owner 确认后才复用部署流程重建当前版本。预检和审批预览只注入声明名与空值。</p>
 <p>非目标：第三方 Vault/KMS 托管、第三方凭据有效性探测、密钥 SDK/CLI 管理、商业限额、平台模型供应商密钥编辑、批量应用重启。F054 管生命周期执行，F056 管管理员运行记录查询，不复制这两个领域。</p>
-<h2 id="f055-p0-h3">2. 关键约束</h2>
+<h2 id="F055-part0-3">2. 关键约束</h2>
 <ul>
 <li>预检、构建、依赖安装、前端编译、扫描、审批预览均不得取得真实值；预览身份和隔离存储原有规则仍有效，不以“无应用业务密钥”取消正常权限检查。</li>
 <li>值只由同租户应用 natural owner 经平台会话修改；管理员、超管、审批人、SAK、PAT 均不能替 owner 写。权限 shortcut 不代替这个业务前置。</li>
-<li>声明属于冻结版本并需审批；值属于应用当前配置，改值/删值不创建版本或审批。已有已上线版本与待审批版本可并存，刷新只能运行已批准当前版本。</li>
+<li>声明属于冻结版本并需审批；值属于应用当前配置，改值/删值不创建版本或审批，也不自动创建运行操作。手动重建只能运行确认时的已批准当前版本，不能借机启动 pending_version。</li>
 <li>字段边界（拟定实现常量）：每应用最多 64 项；名称 ASCII <code>[A-Za-z_][A-Za-z0-9_]{0,127}</code>，区分大小写且精确匹配；值 UTF-8 不超过 16 KiB，整组不超过 128 KiB，禁止 NUL（无法放入进程 env），支持 Unicode/换行/空格/特殊字符且原样传递。空字符串表示缺失；全空格值不自动 trim 成空。</li>
 <li>遵守 <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/docs/constitution.md">constitution.md</a> C1–C8，不复制全局铁律。Constitution Check：新 Model/Repository/Service/Endpoint 分层；tenant_id 默认 None、非空、索引且注册自动注入；通用 LargeText/JsonType 和迁移单 head；仅 162 段新增错误码；平台持久 DB 为权威；不向 backend 引入容器 SDK。无例外。</li>
 </ul>
-<h2 id="f055-p0-h4">3. 方案对比与选定</h2>
-<h3 id="f055-p0-h5">D1：同步接收 + Celery 阶段机</h3>
+<h2 id="F055-part0-4">3. 方案对比与选定</h2>
+<h3 id="F055-part0-5">D1：同步接收 + Celery 阶段机</h3>
 <p>保留同步鉴权/安全解包/manifest 校验，异步扫描、准备交付、探活、审批。拒绝把整条分钟级管线放 HTTP 请求或把失败尝试写成已发布版本。现有 <code>AppDeployment</code> 与 worker 已接线；管线可并行分支真正出现时再重议。</p>
-<h3 id="f055-p0-h6">D2：源码快照由平台保存</h3>
+<h3 id="F055-part0-6">D2：源码快照由平台保存</h3>
 <p>backend 拥有私有对象存储与代码引用，manager 经受限传输 API 获取。拒绝 manager 直读 MinIO 或通过临时本地文件在 API/worker 间共享；现有 runtime_artifact_service 已提供传输协议。交付物类型改变时重新评估。</p>
-<h3 id="f055-p0-h7">D3：manifest 严格校验，新增引用而非值</h3>
+<h3 id="F055-part0-7">D3：manifest 严格校验，新增引用而非值</h3>
 <p><code>CapabilityDeclaration</code> 增加 <code>secrets: list[SecretRef]</code>，<code>SecretRef={name: str}</code> 且 extra=forbid，旧 manifest 不带该字段仍通过。采用与 models/knowledge_bases 同处的声明入口而非任意 <code>env</code> 字典；没有平台 issued scope，<code>derive_scopes</code> 不因 secrets 新增开放 API 权限。</p>
 <p>当前 <code>_reject_secret_references</code> 会泛化拒绝 secret/token 等键，必须只豁免合法 <code>capabilities.secrets[*].name</code> 子树，其他位置仍禁明文/不支持的引用形状；全源码扫描继续先于构建。<code>is_empty</code>、部署适配、预览、摘要/diff、CLI 校验与提示、审批审读都同步识别名称。若未来支持外部 secret provider，另改规格与 schema，不接受 <code>vault://...</code> 偷渡。</p>
-<h3 id="f055-p0-h8">D4：fail-fast 阶段结果保留</h3>
+<h3 id="F055-part0-8">D4：fail-fast 阶段结果保留</h3>
 <p>沿用 <code>{stage,code,message,details,hints}</code> 失败形状；缺值是 warning，不单凭缺值拒绝发布。应用自身无法启动则正常探活失败，不跳过 Gate。不得将第三方 key 的值放进 details/hints。若发布阶段拆服务再评估传输合同。</p>
-<h3 id="f055-p0-h9">D5：明文扫描继续阻断</h3>
+<h3 id="F055-part0-9">D5：明文扫描继续阻断</h3>
 <p>合法声明名不视作密钥明文；实际源文件/打包内容仍扫描、只返回文件/行号/规则，不返回匹配值。密钥不进源码或依赖缓存，不能为“用户确实需要 key”放宽扫描。新检测模式只更新规则与配对用例。</p>
-<h3 id="f055-p0-h10">D6：版本只保存声明快照</h3>
+<h3 id="F055-part0-10">D6：版本只保存声明快照</h3>
 <p>版本仍在预检通过后建立；只冻结 secret 名称，不保存值/密文/可还原引用令牌。运行时注入值不写入 <code>AppVersion.injections</code>，否则历史版本会变成密钥仓库。未来需要配置历史恢复时需另立规格。</p>
-<h3 id="f055-p0-h11">D7：审批场景保持现有强制入口</h3>
+<h3 id="F055-part0-11">D7：审批场景保持现有强制入口</h3>
 <p>仍经统一审批场景/outbox；审读只提供声明名称和按调用时状态计算的缺失提示。审批人不获得 owner 密钥管理能力；声明增删需审批，值修改不触发审批。已有审批规则与申请人过滤保持。改变审批权限时必须读 approval-module skill，不在本次重写中心引擎。</p>
-<h3 id="f055-p0-h12">D8：既有审批基建修复不重做</h3>
+<h3 id="F055-part0-12">D8：既有审批基建修复不重做</h3>
 <p>早期审批解析/seed/通知回退已落地，本轮只核对真实调用点。拒绝把历史设计“阻塞前置”重做成新任务。只有本轮定向用例暴露回归时再改。</p>
-<h3 id="f055-p0-h13">D9：上线前终检与容量准入</h3>
+<h3 id="F055-part0-13">D9：上线前终检与容量准入</h3>
 <p>冻结交付、当前应用状态、审批结果与容量仍是前置；正式环境在 <strong>执行前</strong>由 backend 生成并封装，不能由调用者透传 runtime_env。manager 不自行判断“审批过”；信任操作的可信用途和版本绑定。执行协议变化时重议。</p>
-<h3 id="f055-p0-h14">D10：撤回 / 删除取消保持幂等</h3>
-<p>沿用已有终态守卫和持久取消；新密钥刷新也遵守停止/删除围栏。删除应用成功后清除密钥值，审计按既有留存保留；删除未知/清理失败时不抢先把数据与身份当已释放。领域销毁协议改变时重审清理顺序。</p>
-<h3 id="f055-p0-h15">D11：档位为平台资产</h3>
-<p>资源档位继续独立管理、停用不删；密钥刷新使用已批准版本档位，不按页面可变选择重算代码/资源配置。支持动态扩缩容时另审。</p>
-<h3 id="f055-p0-h16">D12：操作审计与运行记录分层</h3>
+<h3 id="F055-part0-14">D10：撤回 / 删除取消保持幂等</h3>
+<p>沿用已有终态守卫和持久取消；用户确认的密钥配置重建也遵守停止/删除围栏。删除应用成功后清除密钥值，审计按既有留存保留；删除未知/清理失败时不抢先把数据与身份当已释放。领域销毁协议改变时重审清理顺序。</p>
+<h3 id="F055-part0-15">D11：档位为平台资产</h3>
+<p>资源档位继续独立管理、停用不删；用户确认重建使用当前运行操作冻结的资源预算，不因全局档位配置已改变而重算。支持动态扩缩容时另审。</p>
+<h3 id="F055-part0-16">D12：操作审计与运行记录分层</h3>
 <p>生命周期/声明/密钥变更进入操作审计；模型、能力、访问记录各有现存专表。密钥事件只能含 app/ref/actor/action/time/result；API key 事件仍可含原有 key_mask，不混用两种掩码。审计模式改变时与 F056 共同审查。</p>
-<h3 id="f055-p0-h17">D13：已有能力总线与运行凭据保持</h3>
+<h3 id="F055-part0-17">D13：已有能力总线与运行凭据保持</h3>
 <p><code>runtime_capability_env</code>、<code>AppRuntimeCredentialService</code>、模型面/检索 OBO 已实现，不再“本轮后置”。应用业务密钥无新 SDK API；<code>os.environ</code> / <code>process.env</code> 原样读取。预检/预览继续没有正式 app credential，但有隔离存储环境。真实密钥不能混进模型供应商平台配置。新增平台能力时才扩 scope。</p>
-<h3 id="f055-p0-h18">D14：审批侧使用当前页面</h3>
+<h3 id="F055-part0-18">D14：审批侧使用当前页面</h3>
 <p>以现有审批详情/审读页实际入口为准，不恢复过期弹窗设计；仅增名称/缺失提示和差异展示，不新增审批操作。若现有布局没有可用组件，跟随现存审读样式，不改设计系统。</p>
-<h3 id="f055-p0-h19">D15：发布面复用现有 settingsSlot</h3>
+<h3 id="F055-part0-19">D15：发布面复用现有 settingsSlot</h3>
 <p>F055 的 <code>AppSecretSettings</code> 加进应用详情的 settingsSlot，与档位/能力并列；查询与持久操作状态由 hook 管理，store 不发 HTTP。natural owner 可编辑，其余有查看资格者仅看名称/缺失；审批人只走审读数据。失败必须 catch 并终止等待，防止新 request 拒绝 Promise 后 UI 卡住。</p>
-<h3 id="f055-p0-h20">D16：当前交付边界</h3>
-<p>现有发布、预览、结构演进、模型/知识能力与三交付模式已有代码；本轮只补密钥与所需 runtime 刷新，不借此重做 F086/F059。旧任务状态与当前证据分开。未来非本轮能力见 §8。</p>
-<h3 id="f055-p0-h21">D17：加密当前值 + 应用级配置修订（新增）</h3>
-<p>否决把值写 YAML/版本/镜像、仅哈希（运行需要取回）、复用 ApiCredential（归属/用途不同）、复用源码中固定 Fernet key。选定应用私有 DB 资产，F055 独立 cipher 适配使用部署已有 <code>app_runtime.runtime_payload_key</code>，密文封装带 <code>tenant_id/app_id/name/domain=app-secret-v1</code> 并在解密后核对防串行替换。明文只在授权写请求和正式执行内存中存在；不做明文读取接口。</p>
-<p>使用该部署密钥而非再分发另一套 key，减少离线安装步骤；业务与运行 payload 用不同 envelope domain。值存密文，request 幂等摘要使用部署密钥派生 HMAC，不能存容易枚举的普通值哈希。部署 key 缺失/不可解密时拒绝写/正式启动，不能当作“缺值”注入空。轮换目前是显式维护操作（备份旧 key、暂停写、重加密全部未清理密文及 resumable payload、验证后切换）；直接改 key 会破坏恢复，文档必须说明。未来引入 KMS/在线轮换时重新设计 key id 与轮换协议。</p>
-<h3 id="f055-p0-h22">D18：值刷新复用 deploy，新增明确用途与修订号（新增）</h3>
-<p>否决直接 Docker restart（env 不变）、修改版本 injections（破坏快照）、再跑发布管线（误触审批/DDL）、复用旧 sealed_env（陈旧值）。选定 <code>kind=deploy</code> + 内部 <code>purpose=config_refresh</code>，同一 frozen delivery/version/profile/digest，新的 operation ID 与配置 revision；manager 明确声明支持此 purpose/revision，不支持则保存状态中返回能力缺失，不静默按普通升级执行。</p>
-<p>上线刷新先持久保存后异步执行；使用既有停止确认、reservation、UID、controller lease、探活和切路由，SQLite 不拷贝、不 restore、不 migrate，空 migration_plan 且禁止恢复快照参数。不能走 <code>deploy()</code> 现有“同版本 serving 直接返回”捷径，不能走会计算 DDL 的普通上线分支。旧实例必须按原协议 retire/stop 并持久证明后交接，不能为了同版本替换绕过 <code>owner_operation_in_progress</code>。未来支持热加载配置必须有应用协议与独立规格，本轮不做。</p>
-<h3 id="f055-p0-h23">D19：持久 guard 与失败重试（新增）</h3>
-<p>每应用配置状态行是配置写、正式上线/恢复、维护、停用/删除共同的短事务协调点：先锁 guard，核实 owner/状态/revision，登记操作归属，事务提交后才做网络操作。拒绝 Redis 单锁、进程内锁和持有数据库事务等容器探活。已有应用补建 guard 必须利用唯一约束处理并发首建；所有入口在锁既有操作/assignment 前进入 guard，禁止反向回锁造成死锁。底层 generation/UID 围栏仍保留，guard 不是替代。</p>
-<p>既有普通 serving 实例不是冲突；真正冲突是未完成的发布/恢复/维护/刷新/停止/删除或未知 writer。遇冲突在写入前拒绝，内容/审计成功事件不变；活动审批单本身不阻止保存值。已保存但唤醒失败仍有持久操作，重启由 backend 的持久 intent 扫描器（复用既有周期协调入口、各进程以 DB 租约/CAS 竞争）恢复，不能仅注册在某个 API lifespan 或依赖单机路径；未知 writer 不重跑 DDL、不强删。刷新失败不回滚保存值或偷偷部署旧代码；显式重试使用同一失败配置 revision 的新 attempt，原操作未确认清理前不得启动下一次。后续需并发批处理时再评估队列合并。</p>
-<h3 id="f055-p0-h24">D20：输入草稿与固定掩码（新增）</h3>
+<h3 id="F055-part0-20">D16：当前交付边界</h3>
+<p>现有发布、预览、结构演进、模型/知识能力与三交付模式已有代码；本轮只补密钥与用户确认的 runtime 重建，不借此重做 F086/F059。旧任务状态与当前证据分开。未来非本轮能力见 §8。</p>
+<h3 id="F055-part0-21">D17：一张加密配置表，执行状态复用既有账本</h3>
+<p>否决三张密钥专表及配置独立 applied 状态机：原方案为自动生效维护值、状态和 mutation 意图，但用户已明确保存不重建；现有 RuntimeOperation 已持有幂等、冻结环境、执行事实和失败结果，重复维护会增加双写。选定 <code>AppSecretConfig</code> 每应用一行，整组键值映射加密存储；配置 revision 只防旧页面覆盖，不表示运行实例已经采用。</p>
+<p>使用既有 <code>app_runtime.runtime_payload_key</code>，密文 envelope 校验 <code>tenant_id/app_id/domain=app-secret-config-v1</code>。整组映射有大小上限，名称在解密后按原大小写精确比较，无须逐名称摘要/专有 collation。不存业务值普通哈希，不另建 AppSecretState、AppSecretMutation、配置专属扫描器或 ConfigurationApplyPort。平台固定部署 key 要与数据备份；误改或缺失明确失败，不降级为缺值；更换仅作运维说明，不开发轮换工具/UI。将来确有跨应用共享或历史值恢复需求才重新审查，不能在本版预建。</p>
+<h3 id="F055-part0-22">D18：保存与用户确认重建分离，复用 deploy 执行器</h3>
+<p>否决保存后自动重启、Docker restart（环境不会更新）、再走发布预检/审批/DDL，以及专用配置执行引擎。保存事务只写加密配置、revision 和既有审计，不调用 manager。用户另行确认后，经 F054 <code>rebuild_current</code> 公共应用入口受理 <code>kind=deploy,purpose=config_restart</code>，以新的 RuntimeOperation 重建同一冻结 delivery/profile/镜像/档位。</p>
+<p>该入口不是原 <code>deploy()</code> 原样直调：需要绕过同版本 serving 快速返回、拒绝串接其他 purpose 的 active deploy，并固定空 migration_plan、禁 snapshot/restore。旧 writer 停止确认、预占、探活、切路由、清理和故障续办均用现有机制。失败后不由 recover 自动再创建 config_restart/替代 deploy；只能用户重新核对并确认新 attempt。续办已受理 operation 和 deadline 不算再次用户动作。未来有应用热加载协议时再讨论免重建，不在本版实现。</p>
+<h3 id="F055-part0-23">D19：以当前路由所绑定的冻结环境判断差异</h3>
+<p>否决“revision 不同就要重启”、单独持久 dirty 标志、每次改值清空已生效状态和额外值摘要历史库。当前 RuntimeRoute/AppInstance 决定使用哪次正式 operation，backend 受限读取其 sealed_env，仅比较当前批准声明的名和值与最新配置。后保存未引用项不会误报；A→B→A 与实际运行值相同会消除差异。比较结果只含变量名、same/different/unknown 及安全状态，没有新旧值。</p>
+<p>保存允许发生在已受理重建期间；本次 operation 的环境一经冻结不变，后续保存仍作为最新配置保留，切路由只提交运行事实、不回写配置。请求丢失复用 RuntimeOperation 的 scope/key/request_digest；不为保存维护历史请求 HMAC。执行上下文缺失、解密失败或路由变化无法取得一致视图时报告 unknown，不能猜已一致。未来若现有执行上下文不再保留而产品要求永久历史配置比较，再另审数据需求。</p>
+<h3 id="F055-part0-24">D20：输入草稿与固定掩码（新增）</h3>
 <p>不返回值、不允许“查看明文”。列表只显示固定 <code>••••••</code>，不与密码框输入绑定；点击替换打开空的输入草稿，初值绝不放掩码。值控件用已落地 Input/Textarea，换行值不通过单行组件截断；写成功后清空内存草稿，失败保留当前未提交草稿。关闭/换应用/退出清理，不写 URL/localStorage/query cache/埋点。避免使用带请求体自动回显的通用错误日志；secret endpoint 的请求校验异常只返回字段位置/规则，过滤 Pydantic input/ctx/raw body，确保非法值也不会被校验错误回显或写日志。</p>
 <p>取 current shared UI docs 的字体/色彩/多端/输入框规范，Button/Input/Textarea/Tabs 使用 status=done 的组件；Select 尚为 draft，筛选跟随当前页面已存在模式，不另造。表单/确认对话框用当前发布页已有实现；不改组件样式、不新增库。未来需要设计师定义新交互时再申请视觉评审。</p>
-<h2 id="f055-p0-h25">4. 系统现状（接手必读）</h2>
-<h3 id="f055-p0-h26">4.1 数据流与实现状态</h3>
-<p><strong>已实现</strong>：接收包 → 源码快照 → 扫描/结构预检 → manager prepare/probe → 版本/审批 → 正式 deploy；SQLite 备份/迁移由 manager 执行、对象数据由 backend 管；F086 RuntimeDeliveryCoordinator 已生成加密 sealed_env；K8s executor 已创建执行专属 Secret。缺口是 schema 拒绝 secret ref、没有值资产/管理 API/刷新用途。</p>
-<div class="flow" aria-label="F055 主链路"><span>owner 写值 / CAS</span><span>DB 加密 + revision + intent</span><span>manager 同版本配置刷新</span><span>停止围栏 / 启动 / 探活</span><span>提交路由与 applied_revision</span></div><details><summary>流程图源码（与 Markdown 一致）</summary><pre>```mermaid
+<h2 id="F055-part0-25">4. 系统现状（接手必读）</h2>
+<h3 id="F055-part0-26">4.1 数据流与实现状态</h3>
+<p><strong>已实现</strong>：接收包 → 代码快照 → 扫描/结构预检 → manager prepare/probe → 版本/审批 → 正式 deploy；backend 持有对象数据，manager 管 SQLite；RuntimeOperation 已持久保存 sealed_env，RuntimeRoute 标记当前运行 operation，K8s 已有执行专属 Secret。<strong>本轮未实现</strong>：合法 secret 声明、加密配置资产、管理 API/差异投影、用户确认的同版本重建分支及敏感输出合同。</p>
+<div class="flow"><span>保存配置，不执行</span><span>比较运行值</span><span>用户确认</span><span>既有deploy与路由提交</span></div><details><summary>流程图源码（与 Markdown 一致）</summary><pre>```mermaid
 sequenceDiagram
   participant Owner
   participant Backend
   participant DB
   participant Manager
-  participant App
-  Owner-&gt;&gt;Backend: PUT secret, expected_revision, request_id
-  Backend-&gt;&gt;DB: authorize owner; lock guard; save encrypted value + audit + revision + intent
-  DB--&gt;&gt;Backend: committed
-  Backend--&gt;&gt;Owner: saved_revision; apply_state=pending; operation_id
-  Backend-&gt;&gt;Manager: wake durable config_refresh deployment
-  Manager-&gt;&gt;Backend: claim exact version + revision
-  Backend--&gt;&gt;Manager: restricted runtime env from sealed current revision
-  Manager-&gt;&gt;App: fence/stop old writer; start same delivery; health check
-  Manager-&gt;&gt;Backend: execution facts with revision and UID
-  Backend-&gt;&gt;DB: commit route; CAS applied_revision; release guard
-  Owner-&gt;&gt;Backend: GET metadata and apply status
-  Backend--&gt;&gt;Owner: names/missing/state only
-```</pre></details><p>预检/预览：<code>capabilities.secrets</code> → backend 只生成 <code>{NAME:&quot;&quot;}</code> → probe/preview；不调用解密值函数。正式启动：批准版本声明 → 当前值快照 → seal → 受限 operation → manager → 正式进程环境；构建/preparer/helper 永不接收真实值。</p>
-<h3 id="f055-p9061-h1">4.2 既有公共合同（保留原编号语义）</h3>
+  Owner-&gt;&gt;Backend: save secret + expected_revision
+  Backend-&gt;&gt;DB: encrypted config + revision + audit only
+  Backend--&gt;&gt;Owner: saved; computed differences; no restart
+  Owner-&gt;&gt;Backend: confirm rebuild: request_id + expected version/config/route
+  Backend-&gt;&gt;DB: existing operation + frozen env in one short UoW
+  Backend--&gt;&gt;Owner: operation_id
+  Backend-&gt;&gt;Manager: wake existing durable deployment
+  Manager-&gt;&gt;Backend: claim operation and receive frozen environment
+  Manager-&gt;&gt;Manager: stop proof; same delivery; health check
+  Manager-&gt;&gt;Backend: ready execution fact
+  Backend-&gt;&gt;DB: existing instance and route commit
+  Owner-&gt;&gt;Backend: read config and running-operation difference
+  Backend--&gt;&gt;Owner: same / different / unknown, names only
+```</pre></details><p>保存路径没有 manager 调用。预检/预览只生成 <code>{NAME:&quot;&quot;}</code>，不调用正式解密协议；正式部署/重新上线在当次受理中选最新保存配置，已受理操作和进程原地重启使用其冻结环境，不因新保存值改写。</p>
+<h3 id="F055-part2-1">4.2 既有公共合同（保留原编号语义）</h3>
 <p><strong>① 管线接收与轮询</strong>：<code>/api/v2/apps</code> 由 router_rpc 单一 <code>verify_open_api_access</code> 与端点 <code>open_api_scope(&quot;app:manage&quot;,modes=(&quot;S&quot;,))</code> 保护；本次不把秘密管理挂 v2。</p>
 <table>
 <thead>
@@ -1111,144 +808,203 @@ sequenceDiagram
 <p><strong>⑥ 审计</strong>：app.release.* 事件族保持；app/version/deployment 关联来自业务事实，事件枚举、后端可见白名单/命名空间、前端 actions/i18n 三语同步。新 app.secret.* 是值动作元数据，不带秘密片段。</p>
 <p><strong>⑦ 通知</strong>：发布/审批事件经现有 outbox 与通知适配触达；action_code 与接收者权限由真实场景决定。密钥值不进入通知正文、detail_snapshot 或前端消息 payload。</p>
 <p><strong>⑧ 错误码</strong>：沿用现有 162 模块与 frontend api_errors 唯一文案；16207 运行时关闭、16223 档位无效、16225 审批场景不可用、16226 容量不足、16228 探活失败语义不混用。原 16230 泛拒绝 secret reference 必须收窄为不支持/非法形状，合法 ref 可发布；模型面仍使用 265xx，不翻译成非模型 162xx。</p>
-<h3 id="f055-p9061-h2">4.3 关键模块职责</h3>
+<h3 id="F055-part2-2">4.3 关键模块职责</h3>
 <table>
 <thead>
 <tr>
-<th>模块 / 预期文件</th>
+<th>模块 / 拟新增落点</th>
 <th>做什么</th>
 <th>不做什么</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>app_publish/domain/models/app_secret.py</code>、Repository、Service、v1 endpoint（新增）</td>
-<td>加密当前值、owner-only、CAS、审计事务、状态投影</td>
-<td>不持编排权限、不返回明文</td>
+<td>F055 <code>domain/models/app_secret_config.py</code>、Repository、AppSecretService、v1 endpoint</td>
+<td>单表加密配置、owner 权限、revision CAS、审计、差异投影</td>
+<td>不编排、不创建自动重建意图、不返回明文</td>
 </tr>
 <tr>
-<td><code>manifest_validator.py</code>、<code>schemas/app_manifest.py</code></td>
-<td>名称声明 schema、保留项/大小校验、精确扫描豁免</td>
-<td>不加载值/远程 secret URI</td>
+<td>F055 <code>application/runtime_secrets.py</code> 公共协议与组合根</td>
+<td><code>formal_snapshot</code> / <code>preview_environment</code>、配置清理；内部环境 DTO</td>
+<td>不暴露 ORM、不自行切路由、不授予管理权限</td>
 </tr>
 <tr>
-<td><code>runtime_delivery_coordinator.py</code> / <code>runtime_operation_service.py</code></td>
-<td>可信 formal/purpose、revision env、同版本刷新</td>
-<td>不在版本中存值、不重复迁移</td>
+<td>manifest/schema/CLI/审批摘要</td>
+<td>合法 secrets 名称、保留名、缺值提示</td>
+<td>不加载或携带值</td>
 </tr>
 <tr>
-<td>manager <code>operations.py</code> / Docker/K8s executor / admission</td>
-<td>检查用途/revision，按现有停止/探活/路由事实执行</td>
-<td>不直读平台 DB/MinIO/secret 管理 API</td>
+<td>F054 AppStateService / RuntimeDeliveryCoordinator</td>
+<td><code>rebuild_current</code> 受理、环境冻结、既有 deploy 执行与提交</td>
+<td>不写 F055 配置表/已生效结果，不迁移数据</td>
 </tr>
 <tr>
-<td>backend reconciler / publish status adapter</td>
-<td>恢复提交后未唤醒的 intent，展示保存与应用状态</td>
-<td>不把超时视为已停止</td>
+<td>manager Docker/K8s executor / admission</td>
+<td>用途/敏感名校验，创建实例、停止证明、探活及事实</td>
+<td>不读平台 DB/MinIO、不管理最新配置、不因保存而重启</td>
 </tr>
 <tr>
-<td><code>BuildPage/hostedApp/publish/AppSecretSettings.tsx</code> 与 hook（新增）</td>
-<td>现有 slot 内的管理区、短时内存草稿</td>
-<td>store 不请求，cache 不存值</td>
+<td>现有 node-plan/协调入口</td>
+<td>续办已有操作，读取原期限及冻结环境</td>
+<td>不扫描配置差异来创建操作，不自动重试失败手动重建</td>
 </tr>
 <tr>
-<td>F056 操作审计读侧 / credential owner</td>
-<td>查询 secret 事件；凭据签发撤销由其 owner 写可信 app 关联</td>
-<td>不从查看者参数补写历史关联</td>
+<td>AppSecretSettings 与 hook</td>
+<td>空草稿、固定掩码、保存、差异、确认、既有操作进度</td>
+<td>store 不请求、缓存不存值、不自动确认</td>
+</tr>
+<tr>
+<td>F056 / 凭据 Owner</td>
+<td>查询配置事件；S1 的真实 binding 回收事件另待补齐</td>
+<td>不从查看者参数伪造回收事实</td>
 </tr>
 </tbody>
 </table>
-<h3 id="f055-p9061-h3">4.4 本轮增量字段与接口合同（拟实现）</h3>
-<p><strong>① 持久模型（拟新增，均由 Repository 处理）</strong></p>
-<table>
-<thead>
-<tr>
-<th>模型</th>
-<th>字段 / 约束</th>
-<th>生命周期</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>AppSecretValue</code> / <code>app_secret_value</code></td>
-<td>UUID id；tenant_id 默认 None/NOT NULL/索引；app_id；name（保留原大小写）；name_key（公开名称 UTF-8 的 SHA-256，统一小写 hex）；value_ciphertext LargeText；updated_by/time；唯一 <code>(tenant_id,app_id,name_key)</code>；不存明文摘要</td>
-<td>停用/升级/声明移除保留；owner 显式删值或应用销毁清除</td>
-</tr>
-<tr>
-<td><code>AppSecretState</code> / <code>app_secret_state</code></td>
-<td>app_id 主键；tenant_id 同上；revision；applied_revision；active_operation_id；apply_state；safe_failure_code；last_request_id / HMAC digest</td>
-<td>与应用同生命周期；新应用创建、旧应用首用唯一约束补建</td>
-</tr>
-<tr>
-<td><code>AppSecretMutation</code> / <code>app_secret_mutation</code></td>
-<td>UUID、tenant_id 非空/索引、app_id、request_id、request_hmac、action/ref、saved_revision、operation_id、safe_result/time；唯一 <code>(app_id,request_id)</code>，无明文值/普通值哈希</td>
-<td>幂等返回与待执行 intent；不得只记最后一次 request_id，历史重放仍须识别</td>
-</tr>
-<tr>
-<td>现有 <code>RuntimeOperation.payload</code></td>
-<td>非秘密 <code>purpose,secret_revision,expected_current_version_id,approved_declaration_digest</code>；秘密只在既有 sealed_env</td>
-<td>操作按原 diagnostic TTL 清理；不得扩散到 delivery/artifact/version</td>
-</tr>
-<tr>
-<td>审计</td>
-<td>app.secret.set/delete/apply/retry，app/ref/actor/revision/operation/result/time，无值、无值长度/末位</td>
-<td>与现有操作审计保留一致</td>
-</tr>
-</tbody>
-</table>
-<p>所有 tenant 模型加入租户发现导入列表并验证 API/Celery 角色都初始化；无上下文写入拒绝。DM8 保留唯一约束和非空，不用 JSON 条件查密钥。name_key 为公开名称摘要，不是值摘要；用其查重/精确索引，解密绑定后再比较原名，避免 MySQL 默认大小写不敏感 collation 错把 <code>KEY</code> 与 <code>Key</code> 合并；不引入单库专属 collation。迁移从编码时唯一 Alembic head 接续，新模型/索引名称长度在两库允许范围内。</p>
-<p>值写事务还写结构化审计（Repository 使用同一 session），不采用“已保存后审计丢失而无证据”。拒绝请求只写脱敏失败诊断；若审计事务失败，值和 intent 一起回滚。runtime 应用结果以持久执行事实可补记，补记按 operation/action 去重；不因下游页面读取而制造事件。</p>
-<p><strong>② 平台会话 API（拟新增，挂 F055 v1_router）</strong></p>
+<h3 id="F055-part2-3">4.4 本轮增量字段与接口合同（拟实现）</h3>
+<p><strong>① 单个持久配置模型</strong></p>
+<p><code>AppSecretConfig</code> / <code>app_secret_config</code>：app_id 主键（与 App.id 同型）、tenant_id 默认 None/NOT NULL/索引、revision 非负整数、values_ciphertext 用通用 LargeText、updated_by/updated_at。密文内容为 envelope 与有界 entries 映射：<code>name -&gt; {value,updated_by,updated_at}</code>，保留每项最近修改时间而不增加表。最后一项删除后保留空配置行/revision，避免 revision 重置导致旧页面误写；应用真正删除后由既有持久 cleanup 调 F055 公共 <code>delete_for_app</code> 幂等清除，失败保留既有 cleanup 待办；历史无值审计不删除。</p>
+<p>未建行表示 revision=0、空配置。save Repository 用同一短事务加载受权 App 并锁定，再按 app_id 锁配置/处理唯一约束首建；禁止在该事务调用 manager、锁节点/operation 或持有锁探活。与 App 删除的最终状态写入序列化：已删除不能再保存；先置业务不可写状态再清理配置，不允许清理后重新写入孤儿配置。每个接受的保存/删除使 revision+1；旧 expected_revision 拒绝，不自动覆写。配置与本业务审计由 AppSecretConfigRepository 使用同一个显式 AsyncSession 追加，事务失败一起回滚；复用既有 AuditLog 表及字段约定，不另建表。现有 AuditLogDao.ainsert_v2 自开 session 并 commit，不能调用它宣称同事务，也不为本功能新加 DAO 入口。</p>
+<p>新模型登记租户发现与 API/worker 导入，缺上下文写入拒绝；DM8 仅通用类型/约束/迁移静态检查。迁移从唯一 Alembic head 接续。应用停用、版本升级、声明移除不删资产；名称精确比较、Unicode/空白/换行按 §2 处理，空值不标为已录入。</p>
+<p><strong>② 会话 API（拟新增）</strong></p>
 <table>
 <thead>
 <tr>
 <th>方法 / 路径</th>
-<th>请求</th>
-<th>响应（data 部分） / 权限</th>
+<th>入参</th>
+<th>返回 / 副作用</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>GET <code>/api/v1/apps/{id}/secrets</code></td>
 <td>无值参数</td>
-<td><code>revision,applied_revision,apply_state,operation_id,items:[{name,present,mask,updated_at,approved_reference,pending_reference}]</code>；natural owner 可见私有存储名，tenant admin 仅获有资格读取的声明名/状态，不暴露未引用私有项；非 owner 不显示 mask/修改者信息</td>
+<td><code>{revision,updated_at,items:[{name,present,mask,updated_at,approved_reference,pending_reference}],runtime:{comparison,saved_revision,running_operation_id,running_version_id,route_epoch,changed_names,rebuild_operation}}</code>；comparison=same/different/unknown/not_running，失败原因安全枚举</td>
 </tr>
 <tr>
 <td>PUT <code>/api/v1/apps/{id}/secrets/{name}</code></td>
-<td><code>{value,expected_revision,request_id}</code></td>
-<td><code>{saved_revision,apply_state,operation_id}</code>；仅 owner；不回传 value</td>
+<td><code>{value,expected_revision}</code></td>
+<td><code>{revision,present,updated_at}</code>，只保存+审计；没有 operation_id、自动 pending 或后台唤醒</td>
 </tr>
 <tr>
 <td>DELETE 同路径</td>
-<td><code>{expected_revision,request_id,confirm_online_impact}</code></td>
-<td>同上；仅删值，不改声明；在线引用时须确认</td>
+<td><code>{expected_revision,confirm_online_impact}</code></td>
+<td>同上；删除保存值，不改声明/当前实例；线上引用先说明当前实例仍可能持旧值</td>
 </tr>
 <tr>
-<td>POST <code>/api/v1/apps/{id}/secrets/apply</code></td>
-<td><code>{expected_revision,request_id}</code></td>
-<td>重试当前已保存配置，不能指定旧值/旧版本；owner-only</td>
+<td>POST <code>/api/v1/apps/{id}/secrets/rebuild</code></td>
+<td><code>{request_id,expected_version_id,expected_config_revision,expected_route_epoch,confirm_restart:true}</code></td>
+<td><code>{operation_id,status}</code>，owner 明确确认后转 F054 <code>rebuild_current</code>；accepted 不表示已就绪</td>
 </tr>
 </tbody>
 </table>
-<p>同租户先验证业务对象，再验证登录自然人 owner；不把 super shortcut 变 owner。无资格者同一错误，不暴露存在性；跨租户过滤不能变成空成功。request_id 对每应用/动作唯一，由 AppSecretMutation 唯一约束和请求 HMAC 识别；相同参数重复返回原结果，不同参数重用拒绝；revision CAS 失败不写入。不允许客户端提交 ciphertext/runtime_env/sealed_env/tenant_id/actor_id。错误用现有业务响应 envelope 与新增 162 段占用检查后的类型/三语文案；不在设计提前猜未占用编号。</p>
-<p><strong>③ 刷新与并发合同（拟新增）</strong></p>
+<p>同租户先查业务对象及原可读规则，再验证平台会话的自然人 owner；super shortcut 不变为 owner。tenant admin 只见有资格读取的声明名/状态，不见未引用私有项和 owner mask/修改者；审批人只走批准范围的审读数据，不复用 owner 管理接口。写/重建均拒绝 SAK、PAT、非 owner。无权/不存在按原业务拒绝语义，不泄漏其他租户。公开请求不能传 env、ciphertext、purpose、node、tenant 或任意执行资源。</p>
+<p>保存不设独立 request_id 历史表：网络结果不明时刷新安全元数据核对，不自动重复 PUT、不凭一个 revision 推断值内容已成功；显示结果待核对，owner 需要时重新提交。重建才用已有 RuntimeOperation 幂等：先做当前会话/业务归属核验，再按 scope=<code>tenant/app</code> 和 <code>secret-rebuild:request_id</code> 查原操作，核对原确认字段摘要；同参返回原操作，异参拒绝，不能因当前配置/版本已变化而先拒绝历史同参重放。新 attempt 才检查当前预期条件；新 attempt 需新确认，不复活原失败操作。摘要只含非秘密确认参数，不存业务值摘要。</p>
+<p>新增错误按 162 占用检查分配，三语文案同步；不在设计猜编号。Pydantic input/ctx/body、埋点及错误日志不回显值。保存与操作都用既有响应 envelope，前端 catch/finally 结束等待。</p>
+<p><strong>③ 与现有部署的最小衔接</strong></p>
 <ol>
-<li>Guard 短事务核对 App 状态、版本、已冻结交付、活动 mutation/data_operation、节点能力、request_id/revision，再保存值和持久 mutation intent；创建执行失败时 intent 仍可恢复为显式 saved_not_applied，不丢失保存事实。若 online 且该名被当前批准版本引用，配置 revision+1、apply_state=pending，持久创建刷新意图；否则仅保存且 apply_state=not_required，不自动上线。更新未引用项无需重启；online 且有效注入子集不变时可同步确认新 revision 的 applied 状态，不伪造新实例；多个请求冲突直接拒绝，不先写后告知忙。</li>
-<li>所有正式启动/恢复从同一受锁状态读取当前 revision，生成 <code>sealed_env</code>；恢复一个仍在途的操作使用其冻结 revision。该操作活跃时禁止新值变更，避免旧执行覆盖新配置。只有操作已终结且停止/清理确认后，后续恢复新建操作才读最新值。<strong>不能</strong>把旧 sealed_env 一直带到新 operation。</li>
-<li><code>inject_environment</code> 增加可信 purpose / revision 参数；probe/preview 不可指定 formal，且即使旧 payload/injections 含同名值也剔除，以空值覆盖。正式校验版本确已批准、声明摘要一致，只解密声明中的名；缺项为空，解密错误为配置失败。平台保留名检查在 backend 和 manager 双侧执行。</li>
-<li>F054 Coordinator 新增 <code>refresh_configuration</code>，复用 deploy 执行器但跳过同版本快速返回和 schema 计算；清晰冻结 <code>migration_plan=[]</code>、不允许 snapshot/restore，保留 current/pending 指针、版本终态、档位、代码/依赖/profile。既有普通 deploy 的恢复行为不因此变化。</li>
-<li>manager 与 backend 在 claim、执行和路由提交核对 secret_revision / operation fencing；commit_runtime_delivery 的刷新分支不重标版本、不清 pending，只更新实例与配置 applied_revision。路由/实例/状态写入与 applied_revision 尽量同事务，通过应用域适配协议完成，不从 F054 跨层操作 F055 ORM。提交响应丢失从持久事实恢复，不能再跑 DDL。</li>
-<li>Docker 用 Engine 环境数组；K8s 复用已有 operation 专属 Secret + <code>secretKeyRef</code>，现有 serve/preview/probe用途校验同步：真实业务值仅 serve，preparer/assembler/data helper 没有这个 Secret。Secret 命名绑定 operation/revision，清理需确认不被活跃/未知 Pod 使用。K8s admission、descriptor 允许新增 env 名但保留保留项/长度/用途边界。</li>
-<li>refresh failure 区分 <code>saved_not_applied,failed,unknown</code>。探活失败不宣称生效；旧 writer 若已停止则保持安全不可用，不以新值自动修改旧实例/恢复旧代码。只有可信成功事实才推进 applied_revision；未知执行不释放 guard、不向 owner 展示“重试可强制覆盖”。停止后下一次正式恢复用最新保存值。</li>
-<li>离线旧 manager 能力缺失时不先改线上引用值：write 前准入明确拒绝并提示升级。停止应用或未引用值可保存，不暗中调用旧 manager。无需本轮发布新 tag；后续部署时 backend/manager/Chart 必须匹配支持版本。</li>
+<li>F055 公共 <code>formal_snapshot(app,approved_version,expected_revision?,session)</code> 在 caller 的短事务中返回 <code>{revision,env,sensitive_env_names,declaration_digest}</code>；F055 Repository 显式使用传入 AsyncSession，只读/flush，不自行 commit，不依赖另一 Repository 的 ContextVar。调用方验证用途、批准版本和租户，provider 再验证输入绑定，只取声明子集；没有值为空，坏密文/缺 key 为失败，不伪装缺值。<code>preview_environment(declaration)</code> 只生成空值，不读配置密文。</li>
+<li>F054 <code>rebuild_current</code> 不能把 node→已存在 operation 当作既有统一锁序：claim/fact 实际先锁 operation 再 node，ready commit 还会先锁 App 再进入 node/route。新受理选择先锁 App，再依次锁 node、assignment、route、配置；对已存在的 operation（含 origin 和冲突检查）只作非锁定读取，绝不在持有 App/node 后回锁这些行。只允许锁/更新本事务新插入、尚未发布给任何 manager 的新 operation；幂等重放在这些运行锁前通过只读查找返回，不对旧 operation 再执行 admit。save 只锁 App→配置，不获取运行锁；配置锁拿到后不能回取 App/node/operation。受理事务核验 online/current version/route epoch、当前真实 frozen delivery/profile/tier、没有维护/生命周期冲突或未知 writer（包括已受理尚未 claim 的非终态操作，不只看 assignment 当前指针）；选当前 route 对应执行的 tier 预算，不重新解析可能已被管理员修改的档位数值。冻结参数、容量预占、新 RuntimeOperation 与 sealed_env 在同一个既有 UoW 提交；失败整次回滚。未冻结环境的半操作不对 manager 可领取。网络唤醒在提交后，丢唤醒由原 node plan 发现，不新增配置扫描器。</li>
 </ol>
-<p><strong>④ 名称、平台变量与输出保护</strong></p>
+<p>受理锁集合与现有路径的关系（仅约束本次新分支，不声称底座所有入口已有同一全序）：</p>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>会等待的已有行</th>
+<th>不允许的新增等待边</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>save</td>
+<td>App → AppSecretConfig</td>
+<td>不等待 node/operation</td>
+</tr>
+<tr>
+<td>新 rebuild 受理</td>
+<td>App → node → assignment → route → config</td>
+<td>不锁任何已存在 operation；node 后不再取 App；仅本事务私有的新 op 可由 create/admit 自锁</td>
+</tr>
+<tr>
+<td>现有 claim/fact</td>
+<td>自身 operation → node → assignment/route</td>
+<td>本次适配不在持 node 后获取 App；ready fact 的事务先结束，再调用 commit</td>
+</tr>
+<tr>
+<td>ready commit</td>
+<td>自身 operation → App → node/assignment → route</td>
+<td>本次不在持 App 后回锁 origin operation；旧 writer 状态/事实只读，既有停止/容量协议不改</td>
+</tr>
+</tbody>
+</table>
+<p>同 app 的受理受 App 行串行，既有 node/assignment 围栏仍控制执行；活动冲突读取以拒绝/后续精确 origin 与代次检查保守处理，不把快照里暂未出现的 queued op 当作唯一安全证明。实现阶段用两个真实 SQL session 覆盖与 claim、maintenance fact、ready commit 的交错，不以单进程锁 mock 代替。若实际 helper 引入表外锁/独立 session，必须先修正此局部调用，不将上表当全仓已验证事实。</p>
+<ol start="3">
+<li>
+<p>现有 create 会拒绝 caller sealed_env，因此由受信 <code>inject_environment</code> 在同一 UoW 装配 seal，不把 env 放进公开 OperationInput。持久非秘密字段为 <code>purpose=config_restart,auto_commit=true,secret_config_revision,sensitive_env_names,approved_declaration_digest,origin_operation_id,origin_exec_ref,origin_route_epoch</code> 以及既有 expected_app/current/pending 等围栏；秘密只在 sealed_env。普通新部署/恢复也要从其受理快照装配，不留“先创建操作、之后读任意最新值”的窗口。
+<strong>同事务环境生产者，不复用独立提交方法冒充原子性</strong>：现有 <code>inject_environment → AppRuntimeCredentialService.stage → CredentialService.issue</code> 会通过 CredentialRepository 和 HostedAppSubjectDAO 自开事务提交，签发审计也独立提交。新增受理路径由凭据 Owner 提供显式 <code>stage_in_transaction(...,session)</code> 公共服务入口：受信主体解析/首次创建、ApiCredential/委托子项、RuntimeCredentialBinding、签发审计都使用 caller 的同一个 AsyncSession，只 flush、不 commit；原无 session 的签发入口保持原行为。返回 token DTO 从本事务已 flush 的数据构建，不调用另开 session 的 <code>_to_item</code>/delegate 查询去读未提交行，不在提交前发 Redis/消息/外部回调。seal、任何 flush 或最终提交失败时，候选主体/凭据/binding/审计/op/预占均回滚；原幂等重放先返回已有操作，不再次签发。该新增协议只补本次受理所需的 producer，不宣称修复历史回收审计 S1，也不重写全部签发流程。</p>
+</li>
+<li>
+<p><code>deploy()</code> 普通同版本快速返回保持原语义；只对显式确认的 config_restart 路径创建新实例。active deploy 的查询/复用必须校验 purpose 和冻结请求，普通发布不得接管 config_restart，反之亦然；冲突复用既有忙/unknown 拒绝。重建固定 <code>migration_plan=[]</code>、不允许 snapshot/restore、<code>preserve_pending_version=true</code>，不调用 schema_evolution_service；源 version/delivery/profile/digest 和原执行 tier 不变，不重建镜像、不创建代码版本、不触发审批。</p>
+</li>
+<li>
+<p>manager 明确声明支持 config_restart 与敏感输出协议，否则重建拒绝并提示升级；保存仍可独立完成。按既有停止证明→新实例→探活→ready 事实执行。Docker 用 Engine Env，K8s 复用执行专属 Secret/secretKeyRef，Secret 只供 serve，helper/preparer/assembler 无真实值。不能仅 docker restart，也不通过 shell 插值。</p>
+</li>
+<li>
+<p><strong>本操作自身的 maintenance 路由转换</strong>：原 manager <code>_deploy</code> 在停止旧 writer 前会上报 maintenance，backend <code>fact</code> 调 <code>RuntimeProjectionService.block</code> 会递增 route_epoch；因此不能在 ready 时仍要求原 epoch 原样不变。新增该 purpose 的受围栏投影适配：在同一既有 fact/UoW 中核验 op 的有效归属和冻结 origin route（id/version/operation/exec_ref/epoch），再幂等消费 maintenance 事实、变更路由；在该 RuntimeOperation.payload 记录非秘密 <code>maintenance_transition={fact_sequence,route_id,before_epoch,after_epoch}</code>。同一 sequence 重放只返回原事实/转换收据，不再修改当前路由（即使后来已经 serving）；没有重复 block/递增。新的 maintenance 事实若已有转换，只能验证同一尚在途的维护状态，不能追加任意 epoch 或把新路由再封回旧维护态。ready 提交只接受未变的原 route，或本操作这条事实导致的精确 after_epoch、maintenance 状态及原 route 身份，不能用“epoch 更大即可”放行。其他 stop/delete/切流或不同操作造成的改变仍拒绝；不把网络封入口当作 writer 停止证明。该记录只是既有维护事实到路由投影的幂等消费，不是密钥 applied 状态、额外表或新配置成功回执。</p>
+</li>
+<li>
+<p><code>commit_runtime_delivery</code> 为该 purpose 保留 current/pending 指针和原版本终态，只更新原有实例/route/credential/storage 投影；不调用 mark_runtime_online 重标版本，不写 F055 表或 applied receipt。原 expected state/current/pending/UID/代次校验不放宽，origin route 只允许上条证明的自身维护转换；审批或停用等改变关键指针时按既有冲突清理，不能覆盖新指针。保存配置变化不作为拒绝提交的条件：受理后 revision 可以继续增加，本次仍按被冻结环境完成，页面保留真实差异。</p>
+</li>
+<li>
+<p><strong>明确的异步 ready→commit 消费者</strong>：受理冻结 <code>auto_commit=true</code>，由现有 <code>RuntimeOperationService.fact</code> 在 ready 事实事务完成后调用 <code>AppStateService.commit_runtime_delivery</code> 的 config_restart 分支，不依赖一个已返回的 HTTP handler 等待。manager 仍按原协议等 serving；首次 commit 回滚时，持久 ready 事实保留，ready 上报的同参重放也必须再次尝试同一提交，不能因 fact 已存在而跳过 auto_commit。提交前 backend 进程退出由 manager 的原 operation/node-plan ready 续办触发原事实重报；不创建新操作、延长期限或配置专用调度器。manager/backend 都恢复不了则按原 deadline 显式失败，不挂成永久 pending。该消费者本身先结束 op→node 的 fact 事务，再进入 op→App 的 commit 事务，不跨两段持锁。</p>
+</li>
+</ol>
+<p>route/实例沿既有 UoW 原子提交。DB 回滚则只重试原 ready 提交；响应丢失或 serving/completed 重放，检查既有 op/route/exec_ref 的一致性即可返回原结果，不再增加配置结果双写。未知结果不再创建 operation/执行 DDL，不把已变更的 route 归为旧结果成功。差异仅从实际当前路由计算，不从某个成功回包推导。
+9. 用户请求受理后可以继续保存；既有 operation 的 sealed_env 不替换。手动重建失败/取消/超时后，<code>RuntimeDeliveryCoordinator.recover</code> 与其他调度入口都读取现有 op.purpose/status，不把它自动转换成 recover deploy 再试；同一在途操作仍可按原期限续办/清理。旧 writer 未确认停止或 cleanup 未完成时，拒绝用户新 attempt；终态不等于已停。stop 可按原协议取消并清理，不授权强删。正常新版本发布、用户重新上线和独立崩溃自愈仍按各自既有生命周期；保存本身不会触发它们。</p>
+<p><strong>④ 差异计算合同</strong></p>
+<p>F055 查询服务消费 F054 公开 <code>running_environment_snapshot(app_id)</code> 只读协议，返回经租户/当前正式路由校验的内部 DTO（版本声明、operation/exec_ref/route_epoch、受限运行 env）；不从 F055 跨域查询 runtime ORM、不调用 manager inspect，不把 env 放进响应。生产方为 F054 route/operation Repository，权限在调用前由业务服务确认。</p>
+<p>在短时一致读取中选取 current App/version、route 与对应 operation 的 sealed_env；重新确认 route identity 未变化后才报告 same/different。最新配置在本次读的 revision 上比较声明子集，未引用项忽略，缺项归一为空；不作值 trim/编码转换。A→B→A 归为 same；仅配置 revision 增长不能归 different。若无运行实例，not_running；已有执行但快照缺失/无法解密、状态未知或 route 变化不能安全比较，unknown 并给安全原因，不返回空集合冒充 same。读后再发生保存属于下一次查询，响应含所观察 revision/route epoch；前端丢弃旧请求并在保存/操作终态刷新。</p>
+<p>运行上下文已由 operation 持有；只读服务不能返回任意历史 operation 的明文环境。日志及比较需要的受限上下文按现有操作留存管理；清理后不额外复制秘密历史，比较可用性退化为 unknown。changed_names 仅包含调用者有资格读取的当前声明名；审批人看版本缺值，不读生产差异。</p>
+<p><strong>⑤ 名称、平台变量与输出保护</strong></p>
 <p>保留 <code>BISHENG_*</code>、<code>RTM_*</code>、<code>KUBERNETES_*</code>、<code>MINIO_*</code>、<code>OPENAI_*</code>、<code>HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY</code>（含小写），及 <code>PATH/HOME/LD_*/PYTHONPATH/PYTHONHOME/NODE_OPTIONS/PORT/HOST</code>、启动器实际保留项，统一 deny policy、两侧测试锁定。禁止别名覆盖平台身份、模型通道、启动/依赖路径或出口；后续新增平台注入名必须同改 policy。</p>
-<p>平台不打印写请求体/环境/引擎创建请求，错误只含 ref 与安全原因；runtime status/diagnostic 递归白名单序列化，禁 raw inspect/Secret 内容，日志下载不得拼接 env。应用本身拿到值后可主动输出/外传，平台不能承诺防恶意 owner 应用；平台生成的日志不含值，应用日志走现有授权且对已知值原文做脱敏，不能把“脱敏已知字符串”宣传为防所有编码泄漏。客户端埋点不得读取密钥输入。</p>
-<p><strong>⑤ 前端/CLI/审读</strong></p>
-<p>应用页显示“应用密钥”，列名称、已配置/未配置、更新时间、当前版本引用/待审批版本引用/未引用。编辑用空草稿；删除说明引用仍保留、下次注入为空、线上将刷新；保存与生效分开显示（已保存，正在生效/生效失败/状态未知）。同应用 revision 变化刷新元数据，不用旧页面草稿静默覆盖；成功后查询状态，不以 HTTP 成功当作实例就绪。权限/应用切换清理输入与旧结果；失败保留未提交草稿且不误提示成功。</p>
+<p>平台不打印写请求体/环境/引擎创建请求，错误只含 ref 与安全原因；runtime status/diagnostic 递归白名单序列化，禁 raw inspect/Secret 内容，日志下载不得拼接 env。客户端埋点不得读取密钥输入。</p>
+<p><strong>operation 绑定的敏感项合同</strong>：backend 从已批准版本的 <code>capabilities.secrets</code> 生成 <code>sensitive_env_names</code>（只含名），与 revision/declaration_digest 一起冻结在可信 operation；值仍只在 sealed_env。普通客户端不能提交或修改该集合。manager 从这一 operation 的 runtime_env 取这些名的值构建内存 <code>SensitiveValues</code>，不从“当前保存值”代替历史执行值；除原有平台 token/代理凭据规则外，这些业务值不受名称启发式或最短长度限制，空值忽略，短值/普通名一样处理。跨重启从受限 operation 重新取值，不能把敏感值清单写本地状态、日志、材料、query cache 或普通 JSON 诊断。</p>
+<table>
+<thead>
+<tr>
+<th>生产 / 消费路径</th>
+<th>必须处理的点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>backend 正式环境装配 → manager</td>
+<td>只为批准 formal operation 产生敏感名与真实值；probe/preview 为名称+空值，build/preparer/helper 无真实值；旧 manager/legacy 路径不能消费此合同则在注入前报缺能力</td>
+</tr>
+<tr>
+<td><code>container_runner.redact</code> 与 Docker 正式日志 <code>api/platform_observe.logs</code></td>
+<td>共同接收 SensitiveValues；按原执行绑定值处理，不再只猜 KEY/TOKEN，不允许因值短而跳过</td>
+</tr>
+<tr>
+<td>K8s <code>executors/kubernetes._diagnostic/logs</code> 与 API 日志出口</td>
+<td>init/serve 日志、waiting/失败信息、正式日志统一使用同一脱敏器，不遗漏 K8s Secret 中注入的普通名称</td>
+</tr>
+<tr>
+<td>legacy <code>api/readonly._redactions</code> / 日志输出</td>
+<td>同步消费执行绑定的敏感集合；没有可信集合时不能把新密钥应用降级走旧启发式；无密钥旧应用仍保留原行为</td>
+</tr>
+<tr>
+<td>manager <code>operations.report/_failure</code> → backend <code>RuntimeOperationService.fact</code></td>
+<td>manager 在 diagnostic_tail/错误输出发出前脱敏；backend 按同一 op 的 sealed_env + 敏感名再次处理，再截断/持久化；用户状态/下载只见已处理文本</td>
+</tr>
+</tbody>
+</table>
+<p>脱敏统一采用最长值优先的一次匹配，覆盖重叠值、Unicode 和整个多行值；<strong>先脱敏，再按长度截断/分行/关键字筛选</strong>。分块读取须保留最长敏感值长度所需的边界上下文，不能先对每块独立 replace；Engine/Pod API 已截断或缺失上下文、无法安全判断的片段整段省略并返回安全说明，不回退原文。敏感材料缺失/不可解密时，受影响日志/诊断不返回 raw tail；运维只得到引用名/原因和安全元数据。日志留存期间必须保留对应执行的受限脱敏上下文；清理后不再提供无法保护的原始历史输出。</p>
+<p>这保护平台日志/故障信息出口，不承诺阻止拿到值的应用主动编码、拆分外传或写入自己的业务数据；不增加独立“日志脱敏产品”或新的审计正文采集能力。</p>
+<p><strong>⑥ 前端/CLI/审读</strong></p>
+<p>应用页显示“应用密钥”，列名称、配置状态、每项更新时间与批准/待审批/未引用。保存只提示“已保存”；另一区域根据 comparison 显示“运行配置与最新保存配置不一致”、差异名或“无法确认”。无运行实例显示“下次启动使用最新配置”。提供“重建使配置生效”动作及独立确认，说明重建当前版本可能短暂中断，取消不发执行请求；保存按钮、删除确认和关闭表单都不能触发重建。操作进度消费既有 RuntimeOperation；失败保留配置和真实运行状态，需再次确认才试。删除说明当前实例可能继续持旧值；不显示新旧值。PUT 成功刷新安全元数据，不以旧 revision/HTTP 成功判生效。编辑空草稿、固定 mask 不作输入值，冲突保留未提交草稿；关闭/换应用/退出清理内存，过期异步响应丢弃。</p>
 <p>CLI 不接收值、不提供写密钥命令；manifest 带合法名称可部署，预检/状态提示缺值但不输出任何现存值。审读仅声明名/缺失/差异，由服务端按会话资格构建；不用 owner GET 列表给审批人凑数据。新增文案同时交付 zh-Hans/en/ja（含错误码），不新增中文硬编码。</p>
-<h2 id="f055-p9061-h4">5. 已知坑 / 反直觉事实</h2>
+<h2 id="F055-part2-4">5. 已知坑 / 反直觉事实</h2>
 <table>
 <thead>
 <tr>
@@ -1259,97 +1015,127 @@ sequenceDiagram
 </thead>
 <tbody>
 <tr>
-<td><code>inject_environment</code> 已有 sealed_env 就 return</td>
-<td>值变更后旧值仍被复用</td>
-<td>Coordinator 的 revision 校验和新 operation</td>
+<td>保存值不会改变容器已有环境；docker restart 也不更新 Env</td>
+<td>保存后误报生效</td>
+<td>AppSecretSettings 状态 + F054 rebuild_current</td>
 </tr>
 <tr>
-<td>同版本 deploy 已 serving 直接返回</td>
-<td>UI 显示保存，实际没有刷新</td>
-<td>新 <code>refresh_configuration</code> 分支</td>
+<td>原 deploy 同版本 serving 直接返回</td>
+<td>用户确认却没有实际重建</td>
+<td>Coordinator 显式 config_restart 分支</td>
 </tr>
 <tr>
-<td>普通 deploy 会重新算 migration_plan</td>
-<td>改个 key 误触数据库维护</td>
-<td>purpose 强约束、空 plan、负向测试</td>
+<td>普通 deploy 重新算 schema/tier</td>
+<td>改变量触发 DDL或变档</td>
+<td>空 migration_plan、原执行 tier/冻结 delivery，负向用例</td>
 </tr>
 <tr>
-<td>普通 App 管理员 shortcut 不是 owner 语义</td>
-<td>管理员越权修改个人第三方 key</td>
-<td>F055 business owner 前置 + 平台会话</td>
+<td>配置 revision 不同可能只改了未引用项，A→B→A 也会递增</td>
+<td>误报重建、制造停机</td>
+<td>F055 compare + F054 running_environment_snapshot</td>
 </tr>
 <tr>
-<td>能力模型 <code>is_empty</code> / scope 推导目前不知道 secrets</td>
-<td>只有 secrets 的包被忽略或错误增加 API 权限</td>
-<td>manifest/schema/derive_scopes 配对测试</td>
+<td>原 stage/issue/subject 和审计会自行 commit</td>
+<td>seal失败仍遗留候选凭据，外层回滚是假原子</td>
+<td>凭据Owner显式session的stage_in_transaction及全部producer同UoW</td>
 </tr>
 <tr>
-<td>环境值不能通过 shell 插值传递</td>
-<td>换行/美元/反引号被解释或泄漏</td>
-<td>Docker Env 数组 / K8s Secret；不拼命令</td>
+<td>accepted 后没有 HTTP 等待者，普通deploy靠 wait→commit</td>
+<td>实例ready后一直等serving至超时</td>
+<td>auto_commit=true + fact 的持久ready消费/重报</td>
 </tr>
 <tr>
-<td>有了 K8s Secret 不代表集群管理员看不到</td>
-<td>错误承诺绝对保密</td>
-<td>原有 RBAC、受限投影、管理员信任边界</td>
+<td>claim/fact 是op→node，commit还要App</td>
+<td>错把node→已有op/先node后App引入互等</td>
+<td>§4.4③局部锁集合，无回锁旧op；两会话交错验证</td>
 </tr>
 <tr>
-<td>保存成功不等于部署成功</td>
-<td>假成功、重试覆盖、旧结果污染</td>
-<td>revision/apply_state 与 request_id</td>
+<td>原 create 和 inject_environment 是两次调用</td>
+<td>受理与冻结之间读到后来值</td>
+<td>同一受理 UoW封装冻结，manager 不领取无环境操作</td>
 </tr>
 <tr>
-<td>预检缺值 warning 不代表应用能无 key 启动</td>
-<td>为了过预检跳探活</td>
-<td>原健康 Gate，不伪造成功</td>
+<td>原 recover 会自动创建另一 deploy</td>
+<td>手动失败后未经确认再重建</td>
+<td>recover/plan 消费 purpose/status，原操作只续办清理</td>
 </tr>
 <tr>
-<td>删声明不等于删值；删值不等于撤销第三方 key</td>
-<td>用户误以为外部 key 已吊销</td>
-<td>明确 UI 说明，外部服务吊销由 owner 负责</td>
+<td>原 active deploy 查找不区分用途</td>
+<td>发布串接手动重建、误改版本状态</td>
+<td>Coordinator active 查找和 commit 分支</td>
+</tr>
+<tr>
+<td>单表只记整组 updated_at 不能表达逐项最近修改</td>
+<td>违背 AC-67</td>
+<td>加密 entries 保存逐项元数据，不新增表</td>
+</tr>
+<tr>
+<td>maintenance 由本操作自己推进 route_epoch</td>
+<td>ready误拒或直接放宽epoch会接受别人的切流</td>
+<td>fact→projection 的受围栏幂等转换及commit精确验证</td>
+</tr>
+<tr>
+<td>当前 route 指向的环境才是运行事实</td>
+<td>新值保存或旧结果回包误标最新已生效</td>
+<td>公开只读快照 + 路由绑定核对，缺上下文 unknown</td>
+</tr>
+<tr>
+<td>普通管理员 shortcut 不等于 natural owner</td>
+<td>管理员越权改第三方值</td>
+<td>F055 business owner + 平台会话</td>
+</tr>
+<tr>
+<td>日志先截断再脱敏会泄漏短值/跨行值</td>
+<td>错误输出泄露配置</td>
+<td>§4.4⑤ 全出口操作绑定敏感集合</td>
+</tr>
+<tr>
+<td>删保存值不是第三方凭据撤销，也不是清空现有实例</td>
+<td>owner 误以为旧值已不可用</td>
+<td>删除提示；显式重建，第三方撤销由 owner 执行</td>
 </tr>
 </tbody>
 </table>
-<p>历史坑编号及早期 MVP 推导见 <code>dda16a6</code> 的本文件；当前身份/存储/执行路线以本文为准。</p>
-<h2 id="f055-p9061-h5">6. 对外契约与依赖</h2>
-<h3 id="f055-p9061-h6">6.1 我提供给别人的（Outgoing）</h3>
+<p>历史 MVP 与三表方案只保留在历史评审/提交中；当前接手按本文。F054 B1、F056 S1 独立待办不由本设计覆盖。</p>
+<h2 id="F055-part2-5">6. 对外契约与依赖</h2>
+<h3 id="F055-part2-6">6.1 我提供给别人的（Outgoing）</h3>
 <table>
 <thead>
 <tr>
 <th>契约</th>
 <th>消费者</th>
-<th>风险</th>
+<th>破坏风险</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>原 deploy/deploy-limits/deployment-status、发布状态、diff/审读/preview API</td>
-<td>F053 CLI、平台/审批界面</td>
-<td>旧包无 secrets 字段必须兼容；未知字段不能全放开</td>
+<td>原 deploy/limits/status、发布/审读/预览</td>
+<td>CLI、平台、审批</td>
+<td>合法旧包不能因新 secrets 规则失效；预检空值继续真实探活</td>
 </tr>
 <tr>
-<td><code>capabilities.secrets:[{name}]</code> 与缺失 warning</td>
-<td>manifest 消费者、审批、F054/F059/F086</td>
-<td>引用改动需审批，值不入快照</td>
+<td><code>capabilities.secrets:[{name}]</code> + 缺值提示</td>
+<td>F053/F054/F059/F086</td>
+<td>名称变更审批；值永不写版本/材料</td>
 </tr>
 <tr>
-<td><code>resolve_formal_secret_env(app, approved_version, revision)</code> / <code>preview_secret_env(declaration)</code>（拟新增应用服务协议）</td>
-<td>F054 Coordinator，内部 Python 调用</td>
-<td>调用方不得自行传 <code>formal=true</code> 绕过批准检查；返回值不得进入通用诊断</td>
+<td>F055 public formal_snapshot / preview_environment / delete_for_app</td>
+<td>F054 组合根及生命周期</td>
+<td>显式 session 与用途校验；秘密 DTO 不可进通用响应或日志</td>
 </tr>
 <tr>
-<td><code>configuration guard</code> / applied-result 回调协议</td>
-<td>生命周期、维护、自动恢复、删除路径</td>
-<td>任一漏接会破坏 CAS；不能只保护 UI PUT</td>
+<td>secrets GET/PUT/DELETE/rebuild + runtime comparison</td>
+<td>AppSecretSettings/hook</td>
+<td>保存零编排副作用；取消零执行；非 owner 不取得私有值/管理权</td>
 </tr>
 <tr>
-<td><code>app.secret.*</code> 元数据审计 + mask 类型区分</td>
-<td>F056</td>
-<td>增 action 需事件枚举、后端白名单、前端映射和三语同步</td>
+<td>app.secret.set/delete 与 app.secret.rebuild 元数据</td>
+<td>F056 操作审计读侧</td>
+<td>action 枚举/后端白名单/前端筛选/三语 lockstep；无值无末位</td>
 </tr>
 </tbody>
 </table>
-<h3 id="f055-p9061-h7">6.2 我依赖别人的（Incoming）</h3>
+<h3 id="F055-part2-7">6.2 我依赖别人的（Incoming）</h3>
 <table>
 <thead>
 <tr>
@@ -1360,45 +1146,57 @@ sequenceDiagram
 </thead>
 <tbody>
 <tr>
-<td>平台部署拥有的 runtime_payload_key / Fernet；DB</td>
-<td>配置 + Python</td>
-<td>丢 key 不可恢复，不能退回固定源码 key</td>
+<td>固定 runtime_payload_key、平台 DB/审计持久表</td>
+<td>配置/Python</td>
+<td>丢 key 不能恢复；审计事务失败则保存回滚，不回退源码 key</td>
 </tr>
 <tr>
-<td>F054/F059/F086 的持久 operation、传输认证、generation/UID/route 提交</td>
-<td>HTTP + Python application protocol</td>
-<td>同版本快速返回、旧 sealed_env、未知 writer 都必须显式适配</td>
+<td>F054 rebuild_current、running_environment_snapshot；F086 RuntimeOperation/route</td>
+<td>内部应用协议和受限 DTO</td>
+<td>当前代码需要新增分支/只读导出；不能跨层查 ORM或把公共端点变 env 读取接口</td>
 </tr>
 <tr>
-<td>K8s 已有 Secret/RBAC/admission 与 Docker Engine Env</td>
-<td>运行基础设施</td>
-<td>API 可 inspect 的管理员仍在信任边界，应用不能读其他 Secret</td>
+<td>凭据Owner新增stage_in_transaction及session-aware下游Repository</td>
+<td>显式AsyncSession</td>
+<td>主体/凭据/委托/binding/审计任一仍自行commit就破坏受理原子性；不能跨session读未提交行</td>
 </tr>
 <tr>
-<td>F048 verified target / 自然人会话与租户上下文</td>
-<td>Python protocol</td>
-<td>SAK/PAT 的 resource owner 映射不等于当前人类会话</td>
+<td>既有 node-plan、stop proof、容量、ready提交、cleanup</td>
+<td>持久执行协议</td>
+<td>漏用途判断会自动重试或执行DDL；未知 writer 不交接</td>
 </tr>
 <tr>
-<td>平台共享 UI 与包裹 request，三语 locales</td>
-<td>TS</td>
-<td>不能吞 Promise 拒绝、不能写假成功/空 SelectItem</td>
+<td>K8s Secret/RBAC/admission、Docker Engine Env</td>
+<td>执行基础设施</td>
+<td>旧 manager 缺能力拒绝重建；拥有编排 API 的管理员在信任边界</td>
+</tr>
+<tr>
+<td>平台会话/Permission application/tenant context</td>
+<td>可信身份协议</td>
+<td>SAK/PAT 的资源归属不等于自然人 owner</td>
+</tr>
+<tr>
+<td>UI 字体/色彩/多端/输入/确认规范、包裹 request/三语</td>
+<td>TS/组件</td>
+<td>Button/Input/Textarea/Confirm 用 done 组件；Modal/Select draft 不自造视觉模式，按已有发布页交互；窄屏遵规范</td>
 </tr>
 </tbody>
 </table>
-<h2 id="f055-p9061-h8">7. 测试与可观测</h2>
+<p>§4.4 的公开协议由各 owner 提供，组合根装配；F054不导入 F055 ORM，F055 不查询 F054 ORM。部署 API 权限与平台数据配置保持进程边界，没有 constitution 例外。</p>
+<h2 id="F055-part2-8">7. 测试与可观测</h2>
 <ul>
-<li>新增定向单元：schema 合法/非法 ref、精确扫描豁免、保留名/长度/NUL/空值/Unicode 原样；加解密与串 app/tenant 校验、缺 key/坏密文；owner 允许与管理员/超管/审批人/SAK/PAT/跨租户拒绝；CAS/幂等/事务失败无写入。</li>
-<li>操作集成：formal 真值 vs probe/preview 空值；同版本 shortcut 不生效、migration/restore 不可触发；publish/stop/delete/data maintenance 并发、manager 重启、响应丢失、旧事实与未知 writer；旧 manager 能力缺失。只覆盖本轮改动路径，复用已有 F059 围栏用例，不跑所有 runtime/backend。</li>
-<li>前端定向：固定 mask 不提交、失败保留草稿/结束等待、saved vs applied、旧请求不覆盖、新 revision 冲突、权限切换清理。沿用共享组件，不做视觉改版。</li>
-<li>E2E 必须走真实业务入口：owner 在 <code>/build/apps/{id}</code> 发布设置创建测试密钥；预检/审批预览读取空，批准正式实例收到值；在线替换保持相同版本/delivery/SQLite 数据，记录 revision+新实例；停用更新不自动上线、恢复读最新；失败只标已保存未生效，重试不迁移。测试应用仅返回“值是否匹配”布尔值/摘要测试哨兵，不回显真实秘密。</li>
-<li>编码后可执行 <code>cd src/backend &amp;&amp; uv run pytest test/app_publish/test_app_secret_service.py test/app_publish/test_app_secret_runtime.py</code>（拟新增载体）；UI 运行对应文件 Jest。先完成有意义的 red→green 与 L1，再补真实 Docker/K8s 定向 E2E；未执行的不写通过。</li>
-<li>结构化观测仅 app/ref/revision/operation/purpose/state/reason/duration；拒绝 body/env/raw inspect 日志。DM8 仅 model/迁移静态核查；必要 lint/arch-guard/单 head 只对改动验证。</li>
+<li>单元定向：密文绑定/坏 key/缺上下文/保留名/Unicode与多行；owner允许和管理员/超管/审批人/SAK/PAT/跨租户拒绝；保存无 manager 调用、无 RuntimeOperation；CAS 旧编辑拒绝、事务/审计回滚、最后项删除不重置 revision。声明/预览空值、短值/普通名/重叠/多行/分块日志保护覆盖各输出。</li>
+<li>差异定向：当前 route 与 frozen env 精确绑定；只改未引用项、A→B→A、缺值与空值、无实例、坏密文、快照丢失、路由变化分别 same/different/not_running/unknown。不得依赖普通值摘要或新增 applied 表。</li>
+<li>部署定向：取消不建操作；确认过期拒绝；原同参重放在后续改值/换版本后仍返回同一 op、异参拒绝；同版本真的重建、tier/profile/digest 不变、pending 指针不变、无 DDL/restore/构建；本操作maintenance精确转换允许、重复fact不增epoch、其他操作的epoch改变拒绝。受理冻结/凭据签发后seal或flush/最终commit失败，全链候选资产均回滚；已有请求不重复签发。两真实SQL会话覆盖App/node/assignment/op/route交错；ready首次提交失败后同fact重报提交、backend在ready后退出原operation续办；丢唤醒原计划恢复，丢响应不重建第二次；在途继续保存，完成仍显示真实差异。用途不串接、失败不被 recover 自动再试、unknown writer 不覆盖；复用底座围栏用例，不全量跑。</li>
+<li>前端定向：空草稿/固定mask/失败保留输入；保存只提示已保存；差异提示含名不含值；独立确认及取消；过期响应丢弃、PUT冲突不覆盖、操作状态失败结束等待；采用现有组件和三语，无新视觉设计。</li>
+<li>Docker/K8s 各一次最小 E2E：owner 在 <code>/build/apps/{id}</code> 保存哨兵，记录容器/Pod UID 不变；确认前访问仍读旧配置；确认后新UID、原代码/档位/PVC及SQLite数据不变、哨兵匹配。预检/审批预览为空；失败不自动再启，用户再次确认才试；测试应用只返回是否匹配，不回显密钥。</li>
+<li>编码后命令：<code>cd src/backend &amp;&amp; uv run pytest test/app_publish/test_app_secret_service.py test/app_publish/test_app_secret_runtime.py</code>（拟新增）；UI只跑 AppSecretSettings 对应测试，runtime只跑修改的用途/日志相关文件。必要 Ruff/arch-guard/单head 定向检查；DM8 仅模型/迁移静态。当前全部为计划，未执行。</li>
+<li>可观测只含 app/ref/revision/op/purpose/comparison/安全原因/耗时；不采写请求体、env、Secret inspect、普通值摘要。保存与重建分别计动作，GET比较不制造业务事件。</li>
 </ul>
-<h2 id="f055-p9061-h9">8. 后续改进 / 不打算做的事</h2>
-<p>不做外部 Vault、key 自动轮换、实时热加载、密钥版本历史恢复、批量更新；当前用同一部署加密 key 的维护成本已说明，后续有合规要求再独立设计。原应用和三交付模式保持兼容；静态应用无服务端进程时不能承诺注入到浏览器或编译产物，明确“该运行形态不支持业务密钥”，保留原静态运行路径。</p>
-<p>三份增量设计单独获确认后才拆任务。正式 CI 镜像/tag、ARM 与既有未完成离线验收仍在原清单，不自动完成。</p>
-<h2 id="f055-p9061-h10">修订历史</h2>
+<h2 id="F055-part2-9">8. 后续改进 / 不打算做的事</h2>
+<p>不做自动配置生效、配置独立状态机、值历史库、外部 Vault、部署 key 轮换工具、热加载、SDK 明文读取或批量重启。只在真实新增产品需求出现时重新审查，不预建表/调度器。当前执行上下文缺失时比较可为 unknown；K8s Secret 不防有权集群管理员，应用自行编码外传不在平台日志脱敏保证内。静态前端不能注入浏览器/编译产物，声明使用却不能安全注入时明确拒绝，不暗中放宽。</p>
+<p>设计仍需用户单独确认后才拆任务/编码；F054 B1、F056 S1 未关闭，ARM、完整离线与正式镜像发行保持原待办，不由本设计审查替代。</p>
+<h2 id="F055-part2-10">修订历史</h2>
 <table>
 <thead>
 <tr>
@@ -1408,6 +1206,16 @@ sequenceDiagram
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>2026-10-23（手动生效简化）</td>
+<td>单表配置；保存零执行；按当前冻结环境比较；显式确认复用原部署；移除自动状态/独立请求/回执与写回协议</td>
+<td>用户已确认修订规格；新增设计尚未确认/编码</td>
+</tr>
+<tr>
+<td>2026-10-23（二次修订，已由简化方案替代）</td>
+<td>明确固定部署 key 与运维边界、执行敏感项全链路、同一 UoW 生效与响应丢失/部分结果恢复</td>
+<td>用户要求修订并复审；未新增轮换功能，尚未编码</td>
+</tr>
 <tr>
 <td>2026-10-23</td>
 <td>刷新现有能力/存储/运行协议；新增 D17–D20、四组密钥合同、同版本配置刷新与定向验收设计</td>
@@ -1420,62 +1228,66 @@ sequenceDiagram
 </tr>
 </tbody>
 </table>
-</section><section id="f056" class="design"><h1 id="f056-p0-h1">Design: 应用广场、治理与运行记录查询</h1>
+</section><section class="design" id="f056"><h1 id="F056-part0-1">Design: 应用广场、治理与运行记录查询</h1>
 <blockquote>
 <p><strong>2026-10-23 增量设计评审稿，待用户确认，未编码。</strong> 现状基线 <code>5f2541f4bc483c24624fede9031c88c4ec6f58f4</code>；规格确认提交 <code>dda16a6502908ba8d58cff61dc350c0213b86c19</code>。保留 D1–D11 与 §1–§8 编号，新增 D12–D15；历史 MVP“查询全后置”已不适用于现有操作审计。</p>
 <p><a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/056-app-square-governance/spec.md">spec.md</a>（61 条 AC）· <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/056-app-square-governance/tasks.md">tasks.md</a> · <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/features/v3.0.0/release-contract.md">release-contract.md</a>。本次新增 AC-46 至 AC-61，修订 AC-26、AC-34；不接管模型/能力/访问记录的业务写入者。</p>
 </blockquote>
-<h2 id="f056-p0-h2">1. 目标与非目标</h2>
+<h2 id="F056-part0-2">1. 目标与非目标</h2>
 <p>保留应用广场和统一授权交互，在现有“审计日志”页增加“应用运行”页签，查询/导出模型调用、能力调用和应用访问三类既有数据；让现有操作审计能够按应用找到密钥变更与凭据签发/撤销事件。</p>
 <p>非目标：计费结算、全链路 tracing 产品、日志全文搜索、把 runtime stdout 当审计、重算历史身份/Token、为每次页面查询生成业务访问事件、给 owner 或开放 API 凭据授予管理员日志读取能力。</p>
-<h2 id="f056-p0-h3">2. 关键约束</h2>
+<h2 id="F056-part0-3">2. 关键约束</h2>
 <ul>
 <li>管理员级运行记录只接受自然人平台会话：租户管理员只查有效当前租户；全局超管无 admin-scope 时可明确选全局/目标租户，有 scope 时锁定该租户。部门管理员/只有 log 菜单的角色/应用 owner 不能因此取得此新读面。</li>
 <li>现有系统操作审计拥有更宽的菜单/管理范围规则，<strong>不直接复用其 <code>_resolve_audit_groups</code> 当新接口权限</strong>；保留旧接口行为。</li>
 <li>三类记录并不等于三类成功操作：无 app_id 的服务账号模型调用仍应显示；访问记录是入口 allow 合并窗口，不能展示为每个 HTTP 请求；缺历史字段用 ID/未知，不回填当前无关名称/用户。</li>
-<li>列表默认最近 7 天，UTC ISO8601 带时区传输/规范化，start≤end、最大查询区间 90 天（可缩小筛选）；limit 1–100；导出最多 10,000 行，超出明确拒绝要求缩小筛选，禁止静默截断。窗口/上限是实现资源预算，不更改持久留存。</li>
+<li>列表默认最近 7 天，可选择任意合法自定义区间或全部已留存时间；UTC ISO8601 带时区传输/规范化，start≤end；limit 1–100。<strong>不设 90 天查询或 10,000 行导出总量上限</strong>，导出覆盖所选条件下全部受授权记录。内部每批例如 500 行、worker 并发/租约和按字节输出分块仅控制资源，不变成用户可导出总量限制。</li>
 <li>Constitution Check：遵守 <a href="file:///Users/zhangguoqing/works/bisheng/.worktrees/vibe-app-integration/docs/constitution.md">constitution.md</a> C1–C8。新读侧 Model/Repository/Service/Endpoint 分层；租户自动上下文不手拼通用 tenant 条件；全局超管进入显式审计 scope；通用索引/类型无 JSON_EXTRACT；模块错误码 163 段登记后使用；导出在受限对象存储不放 API 本地盘；无铁律例外。</li>
 </ul>
-<h2 id="f056-p0-h4">3. 方案对比与选定</h2>
-<h3 id="f056-p0-h5">D1：广场继续现有 UNION 与批量权限</h3>
+<h2 id="F056-part0-4">3. 方案对比与选定</h2>
+<h3 id="F056-part0-5">D1：广场继续现有 UNION 与批量权限</h3>
 <p>不新建平行应用列表后在前端拼接。托管应用 <code>flow_type=35</code>、slug/app_state 已随列表下发，批量可见性继续走 F048；单卡补拉权限造成 N+1 且越过通用策略。新资源类型/统一列表协议改变时再议。</p>
-<h3 id="f056-p0-h6">D2：卡片整页访问稳定入口</h3>
+<h3 id="F056-part0-6">D2：卡片整页访问稳定入口</h3>
 <p>保留跳转 <code>/apps/{slug}</code>，不嵌 iframe、不拼 client <code>/workspace</code> base；统一登录/WS/身份均在入口。切换域名模型时再评审链接生成。</p>
-<h3 id="f056-p0-h7">D3：广场动作与可见范围仍由通用权限驱动</h3>
+<h3 id="F056-part0-7">D3：广场动作与可见范围仍由通用权限驱动</h3>
 <p><code>app</code> 适用动作集与广场 use 筛选保留，不把“能看到卡片”作为运行记录管理员权限。二者属于不同业务目标。动作 Catalog 改变时审查消费者。</p>
-<h3 id="f056-p0-h8">D4：管理权限仍复用 PermissionDialog</h3>
+<h3 id="F056-part0-8">D4：管理权限仍复用 PermissionDialog</h3>
 <p>构建卡片与发布页 VisibilityScopeSection 用同一交互/API；不为了审计页再建授权入口。当前 request 拒绝错误已需 catch，异步失败不能留 loading。组件契约变更时复核两个入口。</p>
-<h3 id="f056-p0-h9">D5：仅 owner 可见继续按 protected grant 区分</h3>
+<h3 id="F056-part0-9">D5：仅 owner 可见继续按 protected grant 区分</h3>
 <p>非 protected 授权行为空才表示无额外放行；默认 owner 行不应算外部授权。不从空列表误推断“无人有权限”。权限返回 schema 改变时重审。</p>
-<h3 id="f056-p0-h10">D6：可见范围变更由真实写路径审计</h3>
+<h3 id="F056-part0-10">D6：可见范围变更由真实写路径审计</h3>
 <p>仍在统一授权 mutation 后按资源回调写 <code>app.visibility_change</code>，不从前端补写。查询/导出仅消费事实。新增授权写入口时必须核对回调是否覆盖。</p>
-<h3 id="f056-p0-h11">D7：访问记录写 F054、读 F056</h3>
+<h3 id="F056-part0-11">D7：访问记录写 F054、读 F056</h3>
 <p><code>entry_authz_service</code> 已写合并窗口访问事实，不再“写读一起顺延”。保留既有合并窗口及其测试，本轮只补稳定读/导出适配，不按请求量补记历史访问。日后产品需要 PV/会话分析另立语义。</p>
-<h3 id="f056-p0-h12">D8：runtime 关闭明确隐藏与拒绝</h3>
+<h3 id="F056-part0-12">D8：runtime 关闭明确隐藏与拒绝</h3>
 <p>新页签和新列表/候选/导出接口都读取实际 <code>app_runtime_enabled</code>；关闭时后端给部署开关错误，不把空列表当安全机制。旧系统操作审计照常可用。开关语义变更时再议。</p>
-<h3 id="f056-p0-h13">D9：下线应用仍可进广场</h3>
+<h3 id="F056-part0-13">D9：下线应用仍可进广场</h3>
 <p>广场对托管应用白名单保持 online/stopped，不带草稿/待上线/删除；历史日志则不能以这组存活状态过滤，否则删除后记录消失。是否显示已删除资源是两个读面的不同合同。</p>
-<h3 id="f056-p0-h14">D10：广场名称搜索与日志候选分开</h3>
+<h3 id="F056-part0-14">D10：广场名称搜索与日志候选分开</h3>
 <p>不拿可见应用广场列表当审计候选；它缺已删除资源、范围也不同。日志名称搜索基于受限审计记录/可信历史映射，只在当前管理员 scope 生效。若统一搜索服务支持历史治理数据再替换。</p>
-<h3 id="f056-p0-h15">D11：当前查询交付范围</h3>
+<h3 id="F056-part0-15">D11：当前查询交付范围</h3>
 <p>现有 <code>api/v1/audit.py</code> 与 <code>api/services/audit_log.py</code> 已有系统操作审计、target_app_id 与导出；LogPage 仍只有“应用使用/系统操作”两页签。本轮加第三页签与三子视图，不重做旧审计或重写广场。真正已落地必须以实际调用点而非 tasks 计数判断。</p>
-<h3 id="f056-p0-h16">D12：三专表适配成管理员读服务（新增）</h3>
+<h3 id="F056-part0-16">D12：三专表适配成管理员读服务（新增）</h3>
 <p>否决运行期高频记录塞普通 AuditLog、查日志文本推导、另造统一大表/回写历史。选定 F056 的 <code>RuntimeAuditQueryService</code> 调三个 Repository 适配器：现有 ModelCallRecordRepository（F051 写）、AppCapabilityCallRecord（F055 写）、AppAccessLog（F054 写）。现有模型读库有 bypass+手动 tenant 模式，新入口改用明确 <code>AuthorizedRuntimeAuditScope</code>，旧调用兼容由 owner 控制，不向客户端暴露 <code>tenant_id=None</code> 作为全局授权。</p>
 <p>共享过滤/分页/导出规格，但不同视图字段保留语义；服务账号模型调用不强制 inner join App。证据是现有三种表字段不一致，只有模型表已有 cursor/export，能力表只有 insert，访问表已有旧 page DAO。新建读 Repository，不加新 DAO 入口或让 Service 写 SQL。未来跨类型关联检索成为真实需求才考虑物化统一索引。</p>
-<h3 id="f056-p0-h17">D13：固定查询快照与游标（新增）</h3>
-<p>否决仅按秒级 create_time 排序、offset 导出、无上界无限扫描。选 <code>(event_time DESC,id DESC)</code> keyset + 首次查询冻结 watermark_id / upper_time；所有页与导出共享过滤摘要、scope、snapshot。每页/导出都重新验证管理员资格。既有裸 base64 cursor 解码失败会被忽略，新接口必须显式拒绝。</p>
-<p>为并发追加与回填得到精确有限集合，首次查询采用 Repository 的短只读一致性事务按该范围取 <strong>有序 ID 选择集</strong>：最多 10,001 个，超过则标 <code>exportable=false</code>，列表仍可按 watermark keyset 查看；可导出的选择集上限 10,000。选择集写 backend 私有对象存储，数据库 QuerySnapshot 保存 digest/筛选/scope/过期时间；Redis 可做缓存，不能是唯一权威。可导出的分页按冻结 ID 集读取，不会混入查询后提交、旧时间戳或乱序写入的新记录。超过 10,000 的普通列表只能承诺 watermark 范围全序 keyset，导出先缩小条件重新建精确集合；UI 明示，不声称无限大小数据库快照。</p>
-<p>选择有限 ID 集而非跨 HTTP 长事务，是为了避免占连接/事务并支持多副本；现有表为追加事实，写方不就地修改，读取不反向写。历史清理删除时，结果明确提示快照失效，不能静默缺行。90 天仍过大时用户缩小时间；不做全租户永久报表。未来超过该预算有确定需求，再做专用异步分析仓储。</p>
-<h3 id="f056-p0-h18">D14：受权导出产物（新增）</h3>
-<p>否决公开 presigned URL、前端只导当前页、异步任务用提交时权限永久放行。采用有限快照生成 CSV 文件、DB 任务状态、MinIO 私有对象；创建、执行、交付均重验当前会话角色/scope，下载经认证 backend 流式返回，永不返回绕过权限的对象 URL。10 分钟过期并回收对象/快照。</p>
-<p>导出请求只传 snapshot_id，服务端从不可变选择集取行，不接受一组可扩权的重新过滤。CSV 仅白名单字段，字符串移除危险控制前缀后，如首有效字符为 <code>= + - @</code> 或 tab/CR/LF，前置单引号，再标准 CSV 转义；数字列按数值输出，null 显示空/未知；测试逗号、引号、换行、空白绕过公式与 Unicode。CSV 逃逸不能当秘密过滤器。对象存储/worker 不可用时任务失败，不制造空文件成功。未来超大导出再审任务资源池。</p>
-<h3 id="f056-p0-h19">D15：可信应用关联的操作审计（新增）</h3>
+<h3 id="F056-part0-17">D13：稳定列表与一次导出的固定读取视图（修订）</h3>
+<p>否决仅按秒级时间排序、offset 翻页、开放式追随新日志的无限导出，以及把 10,000 行/90 天预算当产品限制。列表采用 <code>(event_time DESC,id DESC)</code> keyset，首次查询固定 filter/scope 摘要、upper_time 与当前可见最大 id 的 watermark，cursor 绑定该选择条件；未知时间单独排序并以 id 决胜，不能在 NULL 比较上丢页；all 保留未知时间行，recent7d/custom 不能判入区间的未知时间行不伪造时间，筛选语义明确说明。新请求严格校验 cursor，不把解码失败当第一页。</p>
+<p>列表只保存短时 <code>RuntimeAuditQuerySnapshot</code> <strong>条件元数据</strong>并返回第一页；不为了列表先收集所有 ID，不依赖 MinIO 才能看数据。刷新/改变条件重新选择范围。列表与随后导出共享冻结的条件、watermark 和权限；并发写入下不额外承诺两个不同读取时点的数据库成员集合完全相等。导出会展示其实际选取时点及最终行数，不把导出完成数冒充此前列表的即时统计。</p>
+<p><strong>完整导出在后台的一次受权读取视图中完成</strong>：任务受理时冻结 QuerySnapshot 的过滤/范围，source-owner Repository 在 worker 开始扫描时打开一条、范围有界的 ORM SELECT 只读一致游标，按稳定顺序流式输出全部匹配记录。该语句的读视图固定、watermark 固定；后续新增/回填提交不能把本次扫描变成无限流。每批最多 500 行处理/输出，但一直扫描至该读取视图 EOF，不能达到某行数后拒绝或截断。无资格/跨租户条件在源 SELECT 构造/执行时仍走自动租户过滤或显式授权的全局 Repository，而不是把多租户约束留给 CSV 写入端。</p>
+<p>source Repository 提供 <code>stream_export(scope, frozen_filter, watermark, batch_size)</code>，持有只读 source session/游标至本 attempt 扫描结束；任务进度写入用另一短事务 session，不在源读取事务中写状态。底层必须采用真正流式/受限 fetchmany，不用 <code>all()/fetchall()</code> 把整表搬进内存；MySQL/DM8 由各 source-owner 适配其固定读视图游标/事务，定向检查驱动的实际缓冲和语句范围，不能仅设置 yield_per 就宣称有界。占用一个后台读连接/读视图至扫描结束是此方案的显式成本，以导出 worker 并发、可观测持续时间及运维取消控制，不在 HTTP 请求保持长事务，也不转成 90 天/行数硬门槛。</p>
+<p>worker 崩溃后无法恢复数据库游标读视图，因此未 ready 的 attempt <strong>整次只读重建</strong>，不拿旧游标偏移接新视图造成漏/重；同一冻结条件与 watermark 下重新开启读视图，显示新的 selection_started_at。旧 attempt 从未交付字节，只保留待清理私有分块；只有一次完整扫描的 manifest 才能原子发布为 ready。ready 后的文件成员与字节固定，重复下载不会重新查事实表。若历史清理/读取故障导致不能完整输出，显式失败，不标空文件或部分文件成功。</p>
+<h3 id="F056-part0-18">D14：受权异步导出与不可变分块产物（修订）</h3>
+<p>否决公开 presigned URL、前端只导当前页、提交时授权永久放行。选用后台固定读取视图 → 标准 CSV → MinIO 私有不可变分块 + 有序 manifest；backend 认证下载按 manifest 依次流式拼接为一个 CSV，不暴露对象 URL。CSV 标题/BOM 只在首块，每个分块在完整行边界收束。任务状态为 pending/running/ready/failed/expired；总记录数不设产品上限。</p>
+<p>任务通过 DB 租约/epoch 取得单一输出权；对象 key 绑定 job/attempt/epoch/part_no，上传确认后短事务登记分块及累计行数。ready 的 CAS 必须同时校验当前 lease/epoch、同一 source read-view attempt 已 EOF、全部分块已确认且 manifest 有序/完整。旧 worker 只能遗留未引用的私有对象，不能覆盖新 attempt 或把任务标 ready；响应丢失重查持久 ready/manifest，不能追加重复 CSV 行。失败或重启按 D13 从头读取新 attempt，不拼接不同读视图的分块。</p>
+<p>受理、worker 开始/每批和 ready 发布、状态读取、下载开始/受限块之间都核验当前自然人管理员资格与保存的 scope。失权或无法确认即取消交付/停止任务，不使用提交时缓存永久授权；已交付字节无法收回。条件快照未被任务引用时 10 分钟过期；任务受理后其冻结条件由任务持有，不因排队/扫描超过 10 分钟被清理。<strong>下载保留期从 ready_at 开始计算 10 分钟</strong>，未完成 attempt 由租约/取消和终态 GC 管理，不能用该保留期限制记录总量或扫描时长。</p>
+<p>CSV 仅白名单字段；危险公式文本前置单引号后按标准 CSV 转义，测试空白/控制字符绕过、逗号、引号、换行与 Unicode；数值按数值，null 不替成其他主体。对象/worker/source 不可用时明确失败，GC 只删没有活跃 lease/ready manifest 引用的本任务对象；就绪产物到期/取消清理有 durable 状态，不依赖本地盘。未来确需更高吞吐再独立调度，不改变完整导出的规格。</p>
+<h3 id="F056-part0-19">D15：可信应用关联的操作审计（新增）</h3>
 <p>F055 负责写 app.secret.*；凭据 owner 在签发/撤销时从持久 <code>ApiCredential.subject_kind/subject_id</code> 与可信 hosted-app 归属映射计算 target_app_id，不取查看者传的 app_id；SAK/PAT 的资源 owner 不等于 app 归属，不能把该人的所有 key 自动关联给某应用。</p>
 <p>现有 CredentialService._audit 只写 credential_id/subject/scopes/key_mask，需要补可信关联；历史记录只能在原始可信字段足以确定时通过只读关联查询，不补写历史“现在属于”。不增加第三方业务密钥末位/长度，API key 原有前缀/末位 mask 继续保留。若普通凭据没有可信 app 绑定，明确不相关，不硬凑。后续新 credential owner 需提供同一审计关联协议。</p>
-<h2 id="f056-p0-h20">4. 系统现状（接手必读）</h2>
-<h3 id="f056-p0-h21">4.1 数据流与实现状态</h3>
+<h2 id="F056-part0-20">4. 系统现状（接手必读）</h2>
+<h3 id="F056-part0-21">4.1 数据流与实现状态</h3>
 <p><strong>已实现</strong>：广场第三类型、两处权限 UI、可见范围审计、系统操作日志查询与应用筛选；模型表/能力表/访问表真实写入路径。<strong>本轮未实现</strong>：管理员 RuntimeAuditQueryService、新 endpoint/候选/稳定导出、新第三页签、可信凭据关联补齐、访问 app 名称快照。</p>
-<div class="flow" aria-label="F056 主链路"><span>管理员会话 / scope</span><span>三表读适配</span><span>固定有限 ID 选择集</span><span>私有 CSV 产物</span><span>backend 重验后下载</span></div><details><summary>流程图源码（与 Markdown 一致）</summary><pre>```mermaid
+<div class="flow"><span>管理员范围</span><span>三类源记录</span><span>冻结条件/流式导出</span><span>私有文件认证下载</span></div><details><summary>流程图源码（与 Markdown 一致）</summary><pre>```mermaid
 flowchart LR
   UI[LogPage / Application runtime] --&gt; API[F056 session API]
   API --&gt; Scope[server verified admin scope]
@@ -1483,12 +1295,15 @@ flowchart LR
   Query --&gt; M[ModelCallRecord repository]
   Query --&gt; C[Capability record repository]
   Query --&gt; A[Access record repository]
-  Query --&gt; Snapshot[finite immutable selection]
-  Snapshot --&gt; Job[authorized export worker]
-  Job --&gt; Store[private object storage]
+  Query --&gt; Snapshot[frozen filters and watermark]
+  Snapshot --&gt; Job[authorized worker: stream one fixed read view]
+  Job --&gt; M
+  Job --&gt; C
+  Job --&gt; A
+  Job --&gt; Store[immutable CSV chunks and manifest]
   Store --&gt; Download[backend authenticated download]
   Download --&gt; Check[current role and scope check]
-```</pre></details><h3 id="f056-p7048-h1">4.2 既有公共合同（保留原广场/审计语义）</h3>
+```</pre></details><h3 id="F056-part2-1">4.2 既有公共合同（保留原广场/审计语义）</h3>
 <table>
 <thead>
 <tr>
@@ -1523,7 +1338,7 @@ flowchart LR
 </tr>
 </tbody>
 </table>
-<h3 id="f056-p7048-h2">4.3 关键模块职责</h3>
+<h3 id="F056-part2-2">4.3 关键模块职责</h3>
 <table>
 <thead>
 <tr>
@@ -1540,8 +1355,8 @@ flowchart LR
 </tr>
 <tr>
 <td>三个 source-owner Repository 读适配协议</td>
-<td>返回白名单快照/ID 选择集，保持事件语义</td>
-<td>不从通用 Service 跨层 ORM 查询</td>
+<td>返回白名单列表页与固定读视图流式 export；持有源只读 session，保持事件语义</td>
+<td>不从通用 Service 跨层 ORM 查询，不 fetchall，不在源事务写任务状态</td>
 </tr>
 <tr>
 <td><code>open_api/.../credential_service.py:_audit</code> 与其可信 app resolver</td>
@@ -1566,7 +1381,7 @@ flowchart LR
 </tbody>
 </table>
 <p>实施前确认 F056 现有代码归属：当前主要在 <code>api/services/audit_log.py</code> 与通用列表模块，新增读服务<strong>拟建立</strong> <code>bisheng/app_governance/{api,domain}</code>，仅管理本 Feature 读侧，不迁移旧广场/权限代码，不重构通用审计。名称不代表新 feature/domain owner；release-contract 仍由 F056 认领。</p>
-<h3 id="f056-p7048-h3">4.4 本轮增量字段与接口合同（拟实现）</h3>
+<h3 id="F056-part2-3">4.4 本轮增量字段与接口合同（拟实现）</h3>
 <p><strong>① 拟新增会话 API</strong>：挂 F056 路由 <code>/api/v1/app-runtime-audit</code>；读取者必须通过平台 session dependency，不能走 <code>/api/v2</code>。</p>
 <table>
 <thead>
@@ -1579,8 +1394,8 @@ flowchart LR
 <tbody>
 <tr>
 <td>GET <code>/records/{kind}</code></td>
-<td>kind=model/capability/access；start_time/end_time/app_id/visitor_id；model 额外 credential_id；tenant_id 仅缩小可信 scope；cursor/limit；响应 <code>{items,next_cursor,snapshot_id,matched_count,matched_count_lower_bound,exportable}</code></td>
-<td>参数 extra/非法范围/不支持筛选报错，不静默忽略；有限精确集合 matched_count=count；超上限 matched_count=null/lower_bound=10001，页面显示超过上限而非伪造精确计数；均在 scope 下，不泄漏全局总量</td>
+<td>kind=model/capability/access；time_range=recent7d/custom/all（默认 recent7d）；custom 提供 start_time/end_time；app_id/visitor_id，model 额外 credential_id；tenant_id 只缩小 scope；cursor/limit；响应 <code>{items,next_cursor,snapshot_id,matched_count}</code></td>
+<td>custom 范围无 90 天上限；all 对已留存时间不加下界；非法/不适用筛选明确拒绝。统计仅在受权范围，尚未计算可为 null，不用 10001 冒充总量；无因记录数而不可导出的标志</td>
 </tr>
 <tr>
 <td>GET <code>/candidates/{kind}</code></td>
@@ -1590,12 +1405,12 @@ flowchart LR
 <tr>
 <td>POST <code>/exports</code></td>
 <td><code>{snapshot_id,request_id}</code> → <code>{export_id,status}</code></td>
-<td>快照属于同一调用者/有效 scope、未过期、可完整导出；幂等 request_id</td>
+<td>条件快照属于同一调用者/当前合法 scope、未过期，复制条件到任务；不因行数/历史跨度拒绝；幂等 request_id</td>
 </tr>
 <tr>
 <td>GET <code>/exports/{id}</code></td>
-<td>pending/running/ready/failed/expired + safe_reason</td>
-<td>重验权限、任务属于当前调用者且 scope 仍合法</td>
+<td>status + safe_reason、attempt、selection_started_at、processed_rows、ready_at/expires_at、ready 后 final_count</td>
+<td>重验资格与 scope；processed_rows 是当前 attempt 进度而非精确总量，重试从 0 开始，不报告部分成功</td>
 </tr>
 <tr>
 <td>GET <code>/exports/{id}/download</code></td>
@@ -1633,8 +1448,9 @@ flowchart LR
 </tbody>
 </table>
 <p>不输出 model prompt/completion、检索 chunks/正文/targets 原始 payload、secret/env/cookies/OBO/token/任意 metadata。仅为新 access 记录新增 app_name_snapshot（128 字符 nullable）与写入参数，不重写合并窗口；历史不从当前名称回填。模型表已有 actor_name/model_name 快照，能力表已有 app_name；不为方便前端用 mandatory live join 丢掉已删除/撤销记录。</p>
-<p><strong>③ QuerySnapshot / RuntimeAuditExport（拟新增）</strong>：两个申请者私有、可清理的实体：<code>RuntimeAuditQuerySnapshot</code> / <code>RuntimeAuditExport</code>。UUID；tenant_id 默认 None/NOT NULL/索引，取服务端确认的申请者当前有效工作租户，<strong>不把被查询的全局 scope 当作 NULL tenant_id</strong>；creator_user_id、scope_mode（tenant/global）/scope_tenant_id、kind、normalized_filter JsonType、filter_digest、watermark、selection_object_key/digest/count、status、expires_at；export 另含 snapshot_id、request_id、output_object_key、safe_failure，唯一 <code>(creator_user_id,request_id)</code>。global 是经超管核验的过滤范围，不是共享导出对象；每次读取仍要求申请者本人、作业 tenant 上下文及当前 scope 合法。worker 按持久作业的 tenant_execution_scope 注册租户过滤，读取跨租户原始事实时才进入授权的全局 source Repository；不能用 nullable tenant 绕过自动注入。对象键由后端随机 ID 生成，客户端不能提交 key。</p>
-<p>普通 list 即使不可导出也有短时 query token（filter/scope/watermark），不无限落地大选择集。可导出快照、任务、内容均 10 分钟期限，重复生成以 request_id 和唯一约束去重，失败/过期按定时清理账本删自有对象；worker 崩溃可从 DB 状态与租约恢复，不依赖本地文件。</p>
+<p><strong>③ QuerySnapshot / RuntimeAuditExport（拟新增）</strong>：仍为两个申请者私有实体，不新增永久审计大表或全量 ID 选集副本。<code>RuntimeAuditQuerySnapshot</code> 保存 UUID、tenant_id（默认 None/NOT NULL/索引）、creator_user_id、scope_mode/scope_tenant_id、kind、normalized_filter JsonType、filter_digest、watermark、created_at/expires_at；只含条件，不含事实正文或完整 ID 集。tenant_id 取服务端确认的申请者有效工作租户，global 是经超管核验的过滤范围，不以 NULL tenant 绕过自动过滤。</p>
+<p><code>RuntimeAuditExport</code> 保存同样的申请者/租户/scope、复制的冻结条件和 watermark、snapshot_id、request_id、status、attempt/selection_started_at、lease_holder/epoch/until、processed_rows、final_count、manifest_object_key/digest、ready_at/download_expires_at、safe_failure；唯一 <code>(creator_user_id,request_id)</code>。分块对象包含 part_no/行数/字节数/hash，由最终不可变 manifest 收束；任务进度是可重建状态，不需要另建一张事实记录表。对象 key 全部服务端生成，客户端不能指定。</p>
+<p>worker 按持久任务 tenant_execution_scope 初始化租户过滤，只有源数据读取在已授权的 global source Repository 中 bypass；后台每批重验申请者当前资格，不能只信任务里旧角色。源只读扫描与任务短写事务分开；领取/重试/ready/GC 以数据库 CAS 和租约处理多进程。未引用条件快照 10 分钟清理，受理后由 job 保留冻结条件，下载到期从 ready 算起；失败/取消且无活跃 lease 的孤儿块可回收，活跃扫描不删。</p>
 <p><strong>④ Scope / Cursor 安全</strong>：</p>
 <ul>
 <li><code>AuthorizedRuntimeAuditScope</code> 仅由服务端权限适配生成；自然人角色来自可信登录态与权限 application 协议当前核验，不信请求角色/租户。旧审计允许 log-menu 的逻辑不复用到此处。</li>
@@ -1642,7 +1458,7 @@ flowchart LR
 <li>cursor 是服务端签名/摘要校验的 <code>{version,kind,scope_digest,filter_digest,snapshot_id,last_event_time,last_id,expires_at}</code>，不包含明文凭据。切租户/视图/筛选不能重用；解码/签名/过期错明确拒绝而非回第一页。</li>
 <li>每次 list/candidates/export/status/download 都重验角色/范围；后台任务实际执行时再验提交者资格。无法确认权限 fail closed；不是仅靠 JWT 缓存角色永久允许。已交付字节不可收回，失权后不开始新下载或继续交付后续 chunk；不承诺撤回浏览器已收到的文件。</li>
 </ul>
-<h2 id="f056-p7048-h4">5. 已知坑 / 反直觉事实</h2>
+<h2 id="F056-part2-4">5. 已知坑 / 反直觉事实</h2>
 <table>
 <thead>
 <tr>
@@ -1668,9 +1484,9 @@ flowchart LR
 <td>严格签名 cursor + time,id 全序</td>
 </tr>
 <tr>
-<td>写入有 write-behind，event_time 不等于插入完成时间</td>
-<td>时间上界不能独立保证精确导出</td>
-<td>有界快照 ID 集</td>
+<td>写入有 write-behind，event_time 不等于提交时间</td>
+<td>列表与随后导出不同读时点不一定同成员；恢复旧游标会混读视图</td>
+<td>固定条件/watermark，导出单一读视图，崩溃 attempt 从头只读重建，ready 才发布</td>
 </tr>
 <tr>
 <td>live app/credential 内连接会丢删除/撤销行</td>
@@ -1705,8 +1521,8 @@ flowchart LR
 </tbody>
 </table>
 <p>历史坑编号见 <code>dda16a6</code> 本文件；旧 300/1800 秒勘误不覆盖当前代码配置，本轮不改窗口。</p>
-<h2 id="f056-p7048-h5">6. 对外契约与依赖</h2>
-<h3 id="f056-p7048-h6">6.1 我提供给别人的（Outgoing）</h3>
+<h2 id="F056-part2-5">6. 对外契约与依赖</h2>
+<h3 id="F056-part2-6">6.1 我提供给别人的（Outgoing）</h3>
 <table>
 <thead>
 <tr>
@@ -1738,7 +1554,7 @@ flowchart LR
 </tr>
 </tbody>
 </table>
-<h3 id="f056-p7048-h7">6.2 我依赖别人的（Incoming）</h3>
+<h3 id="F056-part2-7">6.2 我依赖别人的（Incoming）</h3>
 <table>
 <thead>
 <tr>
@@ -1775,19 +1591,19 @@ flowchart LR
 </tr>
 </tbody>
 </table>
-<h2 id="f056-p7048-h8">7. 测试与可观测</h2>
+<h2 id="F056-part2-8">7. 测试与可观测</h2>
 <ul>
 <li>数据/权限定向：三表正常与空 app_id、null Token/subject；同秒/跨页/晚到写入/删除快照失效；租户 admin/超管 scoped 与 unscoped 允许，owner/log 菜单/部门 admin/审批人/SAK/PAT/foreign filter 拒绝；候选、导出、下载同样配对，角色变化后失败。</li>
-<li>导出定向：同 snapshot 列表/导出集合完全一致，超过上限明确拒绝，重复 request_id 不创建重复任务；权限在提交/执行/下载/流式块间撤销；worker 重启、MinIO 失败、过期、CSV 注入/Unicode/引号/换行；任何错误不返回成功文件。</li>
+<li>导出定向：超过 10,000 行、超过 90 天和全部已留存时间都完整导出；同一成功读取视图的结果和文件完全一致，后台新增/回填不把扫描变无限流；进度批次/内存有界；重复 request_id 不创建重复任务。源扫描中崩溃从头新 attempt、不拼接混合读视图；ready 提交丢响应不重复追加；旧 epoch 不发布，GC 不删活跃对象。权限在提交/执行/下载/分块间撤销；MinIO/source 失败不交付部分文件；下载 TTL 从 ready 起；CSV 注入/Unicode/引号/换行负向验证。</li>
 <li>前端：保留两个旧页签，新第三页签里三子视图；选择器无空 ID；filter/kind/tenant 改变 reset cursor，query key 含 scope/type/filter，AbortController/请求序号丢弃旧结果；新错误态与空态分离；导出绑定当前 snapshot 并清楚显示范围/行数，失败结束等待、不显示“已下载”。</li>
 <li>UI 取当前共享 docs 的 Input/Button/Tabs 等 status=done 组件，表格/筛选沿用当前 <code>LogPage/systemLog</code> 及其选择器模式。filter 在窄屏换行、表格横向滚动，不引入新视觉模式/库；多端、字体/色彩按当前规范，三语同交付，不手改生成的 api_errors。</li>
-<li>E2E 走新会话 API + 实际 LogPage 人工清单：授权测试租户 A/B、tenant admin、global super、ordinary owner；产生模型/能力/allow 记录，选同一 snapshot 查/导；删除测试 app/撤销 key 后仍查历史；验证 secret 审计没值、无 app 的 SA 模型记录不消失。runtime 关闭新面拒绝，旧系统操作仍可查。</li>
+<li>E2E 走新会话 API + 实际 LogPage 人工清单：授权测试租户 A/B、tenant admin、global super、ordinary owner；产生模型/能力/allow 记录，按同一受权条件查/导，明确显示实际导出时点/最终数；大于 10,000 行和 90 天范围不被硬拒绝；删除测试 app/撤销 key 后仍查历史；验证 secret 审计没值、无 app 的 SA 模型记录不消失。runtime 关闭新面拒绝，旧系统操作仍可查。</li>
 <li>编码后定向命令：<code>cd src/backend &amp;&amp; uv run pytest test/app_governance/test_runtime_audit_query.py test/app_governance/test_runtime_audit_export.py</code>（拟新增）；只跑 <code>LogPage/runtime</code> 对应 Jest 文件。复用旧 audit 测试中修改路径的最小集合，不全量重跑；必要 Ruff/arch-guard/迁移 head 单独验证。DM8 仅静态。</li>
 <li>指标/日志：query kind、规范筛选摘要、scope、actor、行数、导出状态/过期/失败码；不记原始秘密/URL token/body。查询不伪造模型/能力/访问业务事实。</li>
 </ul>
-<h2 id="f056-p7048-h9">8. 后续改进 / 不打算做的事</h2>
-<p>不补造历史 app 名/subject/凭据关联；不在本轮建立日志仓库或计费数据模型。90 天筛选与 10,000 行导出限制明确提示，后续有真实大规模需求再专门设计异步分析，不用本地 CSV 临时文件绕过多节点。原 ARM/跨节点/正式镜像发行验收仍保留，不宣称新列表测试证明这些能力。</p>
-<h2 id="f056-p7048-h10">修订历史</h2>
+<h2 id="F056-part2-9">8. 后续改进 / 不打算做的事</h2>
+<p>不补造历史 app 名/subject/凭据关联；不建立日志仓库或计费模型；只实现当前审计条件下的完整异步导出，以批次/并发/租约控制资源，不设置 90 天或 10,000 行产品门槛。长导出的一致读视图占用和驱动缓冲必须在定向检查中量化，不以本地临时文件绕过多节点。原 ARM/跨节点/正式镜像发行验收仍保留，不宣称新列表测试证明这些能力。</p>
+<h2 id="F056-part2-10">修订历史</h2>
 <table>
 <thead>
 <tr>
@@ -1797,6 +1613,11 @@ flowchart LR
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>2026-10-23（二次修订）</td>
+<td>去除导出总量/时间硬限制；条件元数据与后台单一读取视图分离；私有分块 ready 原子发布、重启从头只读重建</td>
+<td>用户要求修订并复审；规格 AC 未变，尚未编码</td>
+</tr>
 <tr>
 <td>2026-10-23</td>
 <td>刷新已实现广场/操作审计；新增 D12–D15、三视图/稳定导出/权限合同</td>
@@ -1809,4 +1630,4 @@ flowchart LR
 </tr>
 </tbody>
 </table>
-</section></main><footer>离线评审稿 · canonical Markdown 为 How 唯一来源 · 未实施 / 未部署</footer></body></html>
+</section></main></body></html>

@@ -7,7 +7,7 @@
 
 ## 1. 目标与非目标
 
-保持统一应用入口、平台身份注入、持久化数据和独立编排边界，补齐 Docker 应用访问宿主服务的隔离，以及 OBO 配置不完整时的入口拒绝。为 F055 密钥配置刷新提供与现有部署一致的执行围栏。
+保持统一应用入口、平台身份注入、持久化数据和独立编排边界，补齐 Docker 应用访问宿主服务的隔离，以及 OBO 配置不完整时的入口拒绝。为 F055 用户确认的配置重建提供现有部署执行与受限运行环境只读协议。
 
 非目标：商业授权、重写 manager、重新实现 F059 Kubernetes、扩大第三方 egress 白名单、密钥管理页面或运行记录查询（分别归 F055 / F056）；不在 backend 中运行防火墙命令或容器 SDK。
 
@@ -36,7 +36,7 @@
 
 ### D4：自愈与切流复用现有围栏
 
-探活成功才提交路由；旧写入者确认停止才允许新的 SQLite 写入者；恢复沿用原操作、deadline、资源 UID，不以重启为理由无限延长。禁止只用容器名判定安全。底座证据见 F059 既有验收；本轮配置刷新只复用这些机制。引入多实例数据模型时重议。
+探活成功才提交路由；旧写入者确认停止才允许新的 SQLite 写入者；恢复沿用原操作、deadline、资源 UID，不以重启为理由无限延长。禁止只用容器名判定安全。底座证据见 F059 既有验收；本轮用户确认重建只复用这些机制。引入多实例数据模型时重议。
 
 ### D5：app-proxy 保持独立入口
 
@@ -52,7 +52,7 @@ app-proxy 的 `BackendAuthzClient` / preview 授权客户端不再缓存含身�
 
 ### D7：拒绝页面沿用既有契约
 
-app-proxy 对 `unavailable` 渲染既有不可用页并使用已有状态码/本地化方式；对配置原因给通用“应用暂不可用”提示，排障细节只给管理员日志/状态。禁止把签名配置、应用环境、内部 URL 回显。无需新建前端视觉模式。新增状态码需先检查 nginx error_page 合同。
+app-proxy 对 `unavailable` 保留既有不可用页与状态码；当 backend 已完成原登录、对象存在、租户、访问权限和运行层开关判定后，消费可信 `reason=identity_config_incomplete`，正式/预览均显示 **“本环境配置不完整，请联系平台管理员”**（三语同义）。该提示不显示配置值、字段值、内部 URL 或真实应用环境；无权者仍得到原来的登录/不存在/无权限等决策，不靠浏览器参数切换到此提示。无需新视觉模式；沿用不可用页模板只增加此原因对应文案。新增状态码需先检查 nginx error_page 合同。
 
 ### D8：领域与列表投影保持兼容
 
@@ -68,7 +68,7 @@ Docker 绑定本地持久目录，K8s 用已验收独占 PVC；manager 执行本
 
 ### D11：容量与资源档位
 
-沿用平台档位与持久 reservation；释放依赖停止证据，不以超时自动当作已停。密钥刷新同版本重启依然需要执行资源预算，不绕过准入。并发拓扑改变时重审预算。
+沿用平台档位与持久 reservation；释放依赖停止证据，不以超时自动当作已停。用户确认的配置重建依然需要执行资源预算，不绕过准入。并发拓扑改变时重审预算。
 
 ### D12：宿主 INPUT + FORWARD 的同源隔离（本轮变更）
 
@@ -94,7 +94,7 @@ stdout/stderr 是调试日志；backend 入口 allow 产生合并窗口访问记
 
 **已实现**：backend 保存应用/版本/操作/路由/存储绑定；Celery 调发布管线；manager 拉取持久计划、编排 Docker/K8s、上报事实；app-proxy/egress 只读投影。`RuntimeDeliveryCoordinator.inject_environment` 使用加密 sealed_env 保存可恢复执行环境；K8s 已用操作专属 Secret + `secretKeyRef`，并非把平台 token 放 ConfigMap。
 
-**尚未实现的本轮设计**：INPUT 规则与可信证明、OBO 无效时拒绝、新配置刷新适配。现有 `egress.firewall_rules` 仅渲染 FORWARD/DOCKER-USER 规则；`_firewall_check` 主要检测后端存在。现有 `_issue_obo_token` 返回空时两个入口仍允许，是 T099 真缺口。
+**尚未实现的本轮设计**：INPUT 规则与可信证明、OBO 无效时拒绝、用户确认重建与运行快照只读适配。现有 `egress.firewall_rules` 仅渲染 FORWARD/DOCKER-USER 规则；`_firewall_check` 主要检测后端存在。现有 `_issue_obo_token` 返回空时两个入口仍允许，是 T099 真缺口。
 
 ```mermaid
 flowchart LR
@@ -132,7 +132,7 @@ flowchart LR
 | `bisheng/main.py:lifespan` | 运行时开启时输出脱敏启动诊断 | 不因此阻塞整个平台 |
 | `runtime_manager/egress.py` + 新 host verifier CLI / unit | 同源渲染、宿主安装、只读验证、配对 canary 报告 | 不持有应用真实密钥，不清全局防火墙 |
 | `app_runtime` 新 host isolation Repository/Service/Endpoint | 验证独立角色、保存证明、节点准入读取 | 不执行宿主命令、不访问 Engine |
-| `RuntimeOperationService` / `RuntimeDeliveryCoordinator` | 部署、恢复、配置刷新准入和原有围栏 | 不拥有 F055 密钥配置资产 |
+| `RuntimeOperationService` / `RuntimeDeliveryCoordinator` | 部署、恢复、用户确认重建准入和原有围栏 | 不拥有 F055 密钥配置资产 |
 | app-proxy / egress-proxy | 入口/出口数据面、受限投影；入口 allow 不缓存身份 | 不签 OBO、不自行上线 |
 | `app_storage_service` / backend 对象存储适配 | 源码/附件/快照传输授权 | 不替 manager 执行 SQLite 迁移 |
 
@@ -140,7 +140,7 @@ flowchart LR
 
 **① 入口**：正式 `/apps/{slug}`、预览 `/apps/_preview/{session}/...` 保留现有 app-proxy → backend 内部 HMAC 协议；拒绝体仅 `decision=unavailable, reason=identity_config_incomplete` 与已允许返回的最小上下文；不得带 `inject_headers`、`obo_token`、`obo_expires_at` 或 target。登录/不存在/跨租户/无权限/停用仍先返回对应旧决策，不因配置错误暴露对象存在。
 
-**② 操作与身份**：RuntimeOperation 的 `scope_key/idempotency_key/generation/owner_epoch/deadline` 继续约束生命周期；K8s 额外 controller epoch、UID 与数据 writer 围栏。内部 HMAC 角色按 manager / entry / egress 隔离，传输受 TLS/受控网络保护；HMAC 只认证请求，不提供加密。F055 新刷新语义见其设计 §4.4③。
+**② 操作与身份**：RuntimeOperation 的 `scope_key/idempotency_key/generation/owner_epoch/deadline` 继续约束生命周期；K8s 额外 controller epoch、UID 与数据 writer 围栏。内部 HMAC 角色按 manager / entry / egress 隔离，传输受 TLS/受控网络保护；HMAC 只认证请求，不提供加密。F055 手动重建语义见其设计 §4.4③：保存不创建操作；rebuild_current 复用既有 deploy，running_environment_snapshot 只向受限内部调用提供当前正式环境 DTO；不写 F055 配置或 applied 状态。
 
 **③ 宿主规则合同（拟新增）**：
 
@@ -158,7 +158,7 @@ flowchart LR
 
 生产方为 root 安装脚本，信任边界是客户宿主管理员；不声称防住 root 伪造。报告只在**规则读回匹配 + 实际 canary 允许/拒绝配对**均成功后标 pass：无业务凭据/PVC 的受限 canary 在 app 网络，测试直连宿主网关、宿主服务地址、published address 被拒绝，同时入口 HTTP/WS/探活响应与经 egress 的平台 API 可达。所有探测端点由管理员固定，拒绝把请求参数当任意扫描目标；canary 有 UID/ID、期限和自有标签，未知资源不强删。
 
-backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 刷新）的 create/claim/提交服务路由前验证新鲜证明及冻结配置一致性；失败给缺能力原因。stop/destroy/清理仍允许，既有应用不强制删除。证明过期时在途操作不发布新路由，可恢复地等待至原 deadline；不能绕过旧 writer 停止确认。安装报告通过不代替实际业务 API 的权限检查。
+backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 用户确认重建）的 create/claim/提交服务路由前验证新鲜证明及冻结配置一致性；失败给缺能力原因。stop/destroy/清理仍允许，既有应用不强制删除。证明过期时在途操作不发布新路由，可恢复地等待至原 deadline；不能绕过旧 writer 停止确认。安装报告通过不代替实际业务 API 的权限检查。
 
 
 ## 5. 已知坑 / 反直觉事实
@@ -185,14 +185,14 @@ backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 刷新�
 |---|---|---|
 | 现有 App 状态动作、内部路由/entry 协议 | F055/F056、app-proxy | 改状态/错误决策会破坏显示和转发 |
 | OBO 合法配置才签发；TTL/aud/app/tenant 绑定维持现有值 | F051 模型面、F055 能力总线、SDK | 放宽空 token 或共享 JWT secret 会破坏身份边界 |
-| 持久操作围栏 + F055 配置刷新适配点 | F055、Docker/K8s manager | generation/operation payload 缺失时应显式拒绝，不能旧版静默忽略 |
+| 持久操作围栏 + F055 用户确认重建/受限运行快照 | F055、Docker/K8s manager | generation/operation payload 缺失时应显式拒绝，不能旧版静默忽略 |
 | 独立宿主隔离报告与节点能力原因 | 部署/运维/状态查询 | 把 manager heartbeat 当隔离证明会扩大信任面 |
 
 ### 6.2 我依赖别人的（Incoming）
 
 | 依赖 | 形式 | 风险 |
 |---|---|---|
-| F086 持久操作 / F059 controller 与 writer 围栏 | HTTP、DB 与执行事实 | 旧 manager 不支持刷新 revision 时拒绝 |
+| F086 持久操作 / F059 controller 与 writer 围栏 | HTTP、DB 与执行事实 | 旧 manager 不支持确认重建/敏感输出协议时拒绝 |
 | Docker Engine / socket proxy；宿主 iptables-restore 或 nft；systemd timer | 宿主安装条件 | 无法证明 INPUT 或 family 时阻止新部署 |
 | Redis nonce；平台 DB；部署密钥与 OBO 独立配置 | 基础服务 | 不可达或配置失效不能新发身份/伪造 pass |
 | F048 PermissionService 统一授权入口 | Python application protocol | 不绕过 verified target 或复刻 OpenFGA |
@@ -201,7 +201,7 @@ backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 刷新�
 ## 7. 测试与可观测
 
 - 单元/模拟只覆盖变化：INPUT/FORWARD 双后端渲染、方向、幂等、失败恢复、未知 family；证明角色/过期/重放/配置改变与部署拒绝配对；正式/预览三种坏配置与有效配置的决策、无身份/无成功访问副作用；proxy 曾获 allow 后 backend 改坏配置的下一次请求/WS 握手拒绝，route 缓存不干扰此 Gate。
-- 集成只验证新表/租户无关节点范围、迁移单 head、manager 配置刷新复用围栏。DM8 仅类型/约束/迁移静态审查，不写成 DM8 真测。
+- 集成只验证新表/租户无关节点范围、迁移单 head、manager 用户确认重建复用围栏。DM8 仅类型/约束/迁移静态审查，不写成 DM8 真测。
 - 真实 E2E：在授权专用 Docker 环境先保存自有规则前后差异，执行 canary 直连宿主拒绝 + HTTP/WebSocket/探活 + 经 egress SDK/模型/附件允许；重跑、重启、精确卸载对其他网络无影响。OBO 使用已授权自然人 owner/可见非 owner/不可见/跨租户配对，正式与审批预览都验证。不得把失败的 TCP 连接当“防火墙拒绝”而不先证明目标监听可达。
 - 定向命令（编码后按实际文件名执行）：`cd src/runtime-manager && uv run pytest tests/test_egress.py`；`cd src/backend && uv run pytest test/app_runtime/test_entry_authz.py`（补充测试以最终任务命名为准）。手动入口 `/apps/{slug}` 与 `/apps/_preview/{session}/`，运维 `python -m runtime_manager.egress firewall --print` 先看差异，再由 root 在专用宿主安装；未确认设计前不执行变更。
 - 可观测：`identity_config_incomplete`、`host_isolation_missing/stale/mismatch/failed`、node/operation/canary ID、规则 revision；不记录密钥、token、会话或完整环境。失效不刷屏，状态面保留当前失败原因。
@@ -214,5 +214,7 @@ backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 刷新�
 
 | 日期 | 变化 | 依据 |
 |---|---|---|
+| 2026-10-23（二次修订） | 按 AC-70 修正 OBO 配置不完整提示；保持原授权顺序和正式/预览同源 | 用户要求修订后复审，尚待设计确认 |
+| 2026-10-23（简化协议同步） | F055保存不重启；消费用户确认重建与当前运行快照协议，不增加F055结果双写 | 用户已确认F055修订规格；F054自身设计未确认，B1仍待修 |
 | 2026-10-23 | 刷新 F086/F059 后的当前快照；补 INPUT 隔离证明、OBO 拒绝设计；保持 D1–D15 与 §1–§8 编号 | 用户确认增量规格；静态核对基线代码，尚未实现/部署 |
 | 2026-08-17～18 | 初版与早期 MVP 修订 | 历史正文见 `dda16a6`；历史测试不充当本轮证据 |
