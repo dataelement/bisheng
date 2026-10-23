@@ -114,6 +114,14 @@ class UnifiedPolicyRepository:
         except IntegrityError as error:
             raise DshOperationConflictError() from error
 
+    def initialize_model_visibility(self, model_id: int, actor: int) -> dict:
+        """Give a newly created dialogue model its tenant-wide initial grant."""
+        self.memberships._lock_tenant()
+        existing = self.visibility(model_id)
+        if existing["version"]:
+            return existing
+        return self.save_visibility(model_id, actor, ModelVisibilityInput(version=0, everyone=True))
+
     def save_visibility(self, model_id: int, actor: int, value: ModelVisibilityInput) -> dict:
         tenant = require_tenant()
         # Serialize create and update, including the initially absent policy.
