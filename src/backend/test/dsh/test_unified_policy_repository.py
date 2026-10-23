@@ -40,9 +40,15 @@ def test_nested_department_and_role_use_one_personal_allowance(store):
         assert repo.effective(21).allowed_model_ids == [8]
         assert repo.effective(21).monthly_token_limit == 0
         repo.save_rule(PolicySubject(kind="USER", id=20), 20, CreditRuleInput(version=0, monthly_credits="0"))
-        assert repo.effective(20).monthly_token_limit == 0
+        assert repo.effective(20).monthly_token_limit == 800_000_000
         assert repo.effective(20).allowed_model_ids == [7, 8]
         assert len(session.exec(select(UnifiedPolicyAudit)).all()) == 5
+        repo.save_rule(PolicySubject(kind="USER", id=20), 20, CreditRuleInput(version=1, monthly_credits="10000"))
+        assert repo.effective(20).monthly_token_limit == 10_000_000_000
+        repo.save_rule(
+            PolicySubject(kind="USER", id=20), 20, CreditRuleInput(version=2, monthly_credits="10000", enabled=False)
+        )
+        assert repo.effective(20).monthly_token_limit == 800_000_000
 
 
 def test_conflict_keeps_committed_rule_and_other_tenant_private(store):

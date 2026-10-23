@@ -67,13 +67,12 @@ class CreditRuleInput(BaseModel):
 
 
 def effective_token_limit(*, user_id: int, departments: set[int], roles: set[int], rules: list[dict]) -> int:
-    """An enabled personal rule overrides inherited rules, including zero."""
+    """Use the highest enabled allowance across matching users, departments and roles."""
     memberships = {"USER": {user_id}, "DEPARTMENT": departments, "ROLE": roles}
     matching = [
         rule for rule in rules if rule["enabled"] and rule["subject_id"] in memberships.get(rule["subject_type"], set())
     ]
-    personal = [rule for rule in matching if rule["subject_type"] == "USER"]
-    return max((rule["monthly_token_limit"] for rule in personal or matching), default=0)
+    return max((rule["monthly_token_limit"] for rule in matching), default=0)
 
 
 def credit_balance(*, limit: int, used: int | None) -> dict:
