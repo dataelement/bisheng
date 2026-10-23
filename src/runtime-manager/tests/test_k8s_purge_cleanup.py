@@ -1,4 +1,4 @@
-"""F059 AC-35, AC-46, AC-49, AC-50, AC-52, AC-55: asynchronous PVC purge.
+"""覆盖 AC: AC-35、AC-46、AC-49、AC-50、AC-52、AC-55.
 
 The real operation/maintenance/helper/fact-schema chain uses the existing scoped
 Kubernetes I/O doubles. This is not deployed kubelet or backend SQL evidence.
