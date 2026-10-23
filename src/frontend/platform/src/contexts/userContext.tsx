@@ -1,12 +1,14 @@
 // @ts-strict-ignore
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
+import { hasDesktopLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
 import { getUserInfo, logoutApi } from "../controllers/API/user";
-import { captureAndAlertRequestErrorHoc, requestInterceptor } from "../controllers/request";
+import { captureAndAlertRequestErrorHoc, markSessionKickAck, requestInterceptor } from "../controllers/request";
 import { User } from "../types/api/user";
 
 type userContextType = {
@@ -111,21 +113,40 @@ export function UserProvider({ children }: { children: ReactNode }) {
             window.url_error = error;
         }
 
-        // 异地登录强制退出
+        // Kicked off by another device: acknowledge-only confirm, then logout.
         requestInterceptor.remoteLoginFuc = (msg) => {
-            logoutApi().then(_ => {
+            const finishLogout = () => {
                 const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL')
                 localStorage.removeItem('isLogin')
+                localStorage.removeItem('ws_token')
+                localStorage.removeItem('UUR_INFO')
                 if (thirdPartyLogoutUrl) {
                     window.location.href = thirdPartyLogoutUrl
                     return
                 }
                 setUser(null)
-            })
-
-            toast({
-                description: msg.split(`\n`),
-                variant: 'error'
+                const base = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '')
+                const path = (location.pathname.replace(base, '') || '/')
+                const onLoginPage = path === '/' || path === '/admin-login'
+                // Reloading the login page re-fires /user/info with the old cookie
+                // and pops the dialog again. Stay put when already there.
+                if (!onLoginPage) {
+                    window.location.href = `${base}/`
+                }
+            }
+            bsConfirm({
+                title: i18next.t('sessionKickedTitle'),
+                desc: msg,
+                okTxt: i18next.t('gotIt'),
+                hideCancel: true,
+                showClose: false,
+                onOk: (next) => {
+                    markSessionKickAck()
+                    logoutApi().catch(() => undefined).finally(() => {
+                        next()
+                        finishLogout()
+                    })
+                },
             })
         }
         // 获取用户信息
@@ -138,7 +159,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
             // if (user_id) loadComponents();
             // 是否有访问后台权限
-            if (/^(\/\w+)?\/chat/.test(location.pathname)) return // 排除免登陆
+            if (/^(\/\w+)?\/chat/.test(location.pathname)) return
+            // Desktop consent is available to ordinary platform identities.
+            if (location.pathname === '/desktop-login' || hasDesktopLoginReturnTo()) return
 
             const BASE_URL = __APP_ENV__.BASE_URL
 
@@ -207,6 +230,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     '/filelib': 'knowledge',
                     '/dataset': 'dataset',
                     '/model/management': 'model',
+                    '/dsh': 'sys',
                     '/evaluation': 'evaluation',
                     '/label': 'mark_task',
                     '/log': 'log',

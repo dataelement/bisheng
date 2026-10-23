@@ -1067,6 +1067,22 @@ DELETE，不重放已满足的 visible/action tuple；完整 AFTER verify 后才
 `FINALIZED + CURRENT(target_version)` 收口。超过 90 个 terminal correction、外部业务 scope、
 scope/version/operation 不匹配继续转人工分析。重复传入 `FINALIZED` operation 只验证并跳过。
 
+#### 知识空间上传失败补偿
+
+新文件的根目录 parent 是 `knowledge_space:<id>`，资源身份由类型和 ID 共同确定；
+`knowledge_space:348 → knowledge_file:348` 合法。文件/目录 adapter 的鉴权与生命周期
+校验仅在 parent 类型和 ID 均等于资源自身时拒绝自关联，目录祖先环路校验保持不变。
+
+批量上传异常按文件独立补偿，不能先加载整批权限镜像：失败项及后续项可能从未创建权限。
+`rollback_created` 使用原 `RESOURCE_CREATE` 的幂等键查找冻结 ledger；不存在即无需撤权，
+存在则在相同 Store/model 下先收敛原操作，再投影其完整逆操作 `RESOURCE_CREATE_ROLLBACK`。
+补偿仅接受初始版本（0→1）的文件/目录，保留版本、parent 和 operation fence；已被修改或
+处于 FAILED_CLOSED 的资源继续阻断，不盲目删除。逆操作必须 FINALIZED 后才删除该租户资源
+的 Grant/assignee/visible source/mode 镜像；operation/tuple ledger 保留用于审计和幂等重试。
+随后清理原文件对象、文档版本与业务文件记录。单项补偿失败保留其业务记录并记录异常，
+继续处理其他文件；返回原上传异常。基础设施故障或 FAILED_CLOSED 仍需恢复后重试补偿，
+不承诺在外部服务不可用时完成跨存储原子回滚。
+
 #### Mode switch
 
 - 只有 folder / knowledge_file 开放 mode draft/apply；knowledge_space 与 knowledge_library
@@ -1150,6 +1166,10 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 ---
 
 ## 5. 已知坑 / 反直觉事实
+
+- 不同资源表的数字 ID 可以相同；只比较 parent_id/resource_id 会把合法根目录上传误判为自关联。
+- 上传失败项可能没有权限镜像。整批先加载镜像再删除会令一个缺失项阻断所有已创建权限的清理；
+  上传补偿须逐文件基于创建 ledger 撤销，且不能在权限撤销失败的 finally 中硬删业务记录。
 
 | # | 事实 | 不知道会怎样 | 处理位置 |
 |---|---|---|---|
@@ -1951,6 +1971,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-10-08 | 父子资源按类型与 ID 判定自关联；上传失败逐文件按创建 ledger 撤权并清理镜像、存储对象及业务记录，保留补偿审计和失败恢复边界 | beta3 根目录上传 ID 碰撞及整批权限清理中断 |
 | 2026-09-14 | 修正指定文件夹列表/搜索的容器鉴权，补充服务账号多级继承、编辑者/所有者动作、CUSTOM 隔断、撤权与历史标记修复回归 | v2 服务账号访问知识空间与独立授权文件夹的排查 |
 | 2026-08-13 | 对单槽浅层 visible、inactive 既有授权保持、删除零引用门禁、旧系统单次迁移、列表路径、契约/依赖/测试/可观测执行 24 项 Design 接手测试与 Constitution Check；复审 LGTM，停在 Design ★ | `/sdd-review ... design` |
 | 2026-08-13 | 将模型 `active` 收窄为“是否可用于新增/变更授权”：停用不影响已有 Grant；删除必须先撤销或替换全部绑定，并在引用/source projection/live tuple 清零后完成。可见执行关系改为单槽浅层 `visible`，移除 A/B 槽、switch、双写和 Catalog 4-tuple 切换；保留来源引用计数、ledger、reconcile 与旧系统单次迁移 | 用户确认界面语义“关闭后不能再用它授权，已有授权不受影响；删除必须先清理绑定关系” |

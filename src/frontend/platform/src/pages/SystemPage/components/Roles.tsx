@@ -58,6 +58,7 @@ import {
   formatRoleQuotaGb,
   parseRoleQuota,
   ROLE_QUOTA_DEFAULT_CHANNEL,
+  ROLE_QUOTA_DEFAULT_SPACE_CREATE,
   RoleQuotaState,
   serializeRoleQuotaSnapshot,
   validateRoleQuota,
@@ -136,6 +137,7 @@ export default function Roles() {
       { defaultWidth: 280, minWidth: 200 },
       { defaultWidth: 140, minWidth: 100 },
       { defaultWidth: 120, minWidth: 90 },
+      { defaultWidth: 160, minWidth: 120 },
       { defaultWidth: 100, minWidth: 80 },
       { defaultWidth: 160, minWidth: 120 },
       { defaultWidth: 170, minWidth: 140 },
@@ -434,6 +436,13 @@ export default function Roles() {
       t("system.unlimited")
     )
 
+  const formatSpaceCreationLimit = (el: ROLE) =>
+    formatRoleQuotaCount(
+      (el.quota_config || {}).knowledge_space,
+      ROLE_QUOTA_DEFAULT_SPACE_CREATE,
+      t("system.unlimited")
+    )
+
   const hasUnsavedEditChanges = useMemo(() => {
     if (!editOpen || !initialEditSnapshot) return false
     const current = buildEditSnapshot({
@@ -528,7 +537,7 @@ export default function Roles() {
                 />
               </TableHead>
               <TableHead {...rc.getThProps(4)}>
-                {t("system.userCount")}
+                {t("system.spaceCreateQuotaLimit")}
                 <ColumnResizeHandle
                   columnIndex={4}
                   lastColumn={4 === roleLastResizeColIndex}
@@ -536,7 +545,7 @@ export default function Roles() {
                 />
               </TableHead>
               <TableHead {...rc.getThProps(5)}>
-                {t("system.creator")}
+                {t("system.userCount")}
                 <ColumnResizeHandle
                   columnIndex={5}
                   lastColumn={5 === roleLastResizeColIndex}
@@ -544,7 +553,7 @@ export default function Roles() {
                 />
               </TableHead>
               <TableHead {...rc.getThProps(6)}>
-                {t("createTime")}
+                {t("system.creator")}
                 <ColumnResizeHandle
                   columnIndex={6}
                   lastColumn={6 === roleLastResizeColIndex}
@@ -552,16 +561,24 @@ export default function Roles() {
                 />
               </TableHead>
               <TableHead {...rc.getThProps(7)}>
-                {t("system.changeTime")}
+                {t("createTime")}
                 <ColumnResizeHandle
                   columnIndex={7}
                   lastColumn={7 === roleLastResizeColIndex}
                   startResize={rc.startResize}
                 />
               </TableHead>
+              <TableHead {...rc.getThProps(8)}>
+                {t("system.changeTime")}
+                <ColumnResizeHandle
+                  columnIndex={8}
+                  lastColumn={8 === roleLastResizeColIndex}
+                  startResize={rc.startResize}
+                />
+              </TableHead>
               <TableHead
-                style={rc.getThProps(8).style}
-                className={cname(rc.getThProps(8).className, "text-right")}
+                style={rc.getThProps(9).style}
+                className={cname(rc.getThProps(9).className, "text-right")}
               >
                 {t("operations")}
               </TableHead>
@@ -570,7 +587,7 @@ export default function Roles() {
           <TableBody>
             {roles.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-gray-400">
+                <TableCell colSpan={10} className="text-center text-gray-400">
                   {t("build.empty")}
                 </TableCell>
               </TableRow>
@@ -592,9 +609,12 @@ export default function Roles() {
                   <TableCell {...rc.getTdProps(3)} className="whitespace-nowrap tabular-nums">
                     {formatChannelCreationLimit(el)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(4)}>{el.user_count ?? "-"}</TableCell>
+                  <TableCell {...rc.getTdProps(4)} className="whitespace-nowrap tabular-nums">
+                    {formatSpaceCreationLimit(el)}
+                  </TableCell>
+                  <TableCell {...rc.getTdProps(5)}>{el.user_count ?? "-"}</TableCell>
                   <TableCell
-                    {...rc.getTdProps(5)}
+                    {...rc.getTdProps(6)}
                     className={cname(
                       "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-muted-foreground"
                     )}
@@ -602,13 +622,13 @@ export default function Roles() {
                   >
                     {creatorLabel(el)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(6)} className="whitespace-nowrap tabular-nums">
+                  <TableCell {...rc.getTdProps(7)} className="whitespace-nowrap tabular-nums">
                     {fmtTime(el.create_time)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(7)} className="whitespace-nowrap tabular-nums">
+                  <TableCell {...rc.getTdProps(8)} className="whitespace-nowrap tabular-nums">
                     {fmtTime(el.update_time)}
                   </TableCell>
-                  <TableCell {...rc.getTdProps(8)} className="text-right">
+                  <TableCell {...rc.getTdProps(9)} className="text-right">
                     {el.is_readonly ? (
                       <span className="text-sm text-muted-foreground">&mdash;</span>
                     ) : (

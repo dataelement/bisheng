@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import time
+from collections.abc import AsyncIterator
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
@@ -21,6 +24,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveE
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
 from bisheng.open_api.domain.context import get_current_open_api_principal
+from bisheng.open_api.domain.http_status import openai_stream_error
 from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_api.domain.services.credential_watcher import watch_websocket_credential
 from bisheng.open_api.domain.services.session_subject_service import session_subject_from_principal
@@ -30,10 +34,39 @@ from bisheng.utils import get_request_ip
 router = APIRouter(prefix="/assistant", tags=["OpenAPI", "Assistant"])
 
 
+def _assistant_id_from_model(model: str) -> str:
+    """`model` carries the assistant ID; a malformed ID is a 400 field error."""
+    try:
+        return UUID(model).hex
+    except (TypeError, ValueError, AttributeError):
+        raise RequestValidationError(
+            [
+                {
+                    "type": "uuid_parsing",
+                    "loc": ("body", "model"),
+                    "msg": "Input should be a valid UUID (the assistant ID)",
+                    "input": model,
+                }
+            ]
+        ) from None
+
+
+async def _stream_with_error_event(stream: AsyncIterator[str]) -> AsyncIterator[str]:
+    """Follow the OpenAI streaming error convention when the stream fails midway:
+    send one `data: {"error": {...}}` event, then `data: [DONE]`."""
+    try:
+        async for item in stream:
+            yield item
+    except Exception as exc:
+        logger.opt(exception=True).error("assistant streaming failed")
+        yield f"data: {json.dumps(openai_stream_error(exc), ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+
 @router.post("/chat/completions")
 @open_api_scope("assistant:invoke", session=True)
 async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompletionReq):
-    assistant_id = UUID(req_data.model).hex
+    assistant_id = _assistant_id_from_model(req_data.model)
     logger.info(
         "act=assistant_chat_completions assistant_id={} stream={} ip={}",
         req_data.model,
@@ -52,7 +85,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
             operator=operator,
         )
         if completion.stream is not None:
-            return StreamingResponse(completion.stream, media_type="text/event-stream")
+            return StreamingResponse(_stream_with_error_event(completion.stream), media_type="text/event-stream")
         return completion.payload
     except Exception:
         logger.opt(exception=True).error("assistant completion failed")

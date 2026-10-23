@@ -15,7 +15,9 @@ import {
   getCitationDocumentFileType,
   getCitationDocumentName,
   getCitationDocumentUrl,
+  isFilePreviewCitation,
   isRagCitation,
+  isTempCitation,
   normalizeCitationType,
   resolveCitationDownloadUrl,
   toAbsolutePreviewUrl,
@@ -116,7 +118,7 @@ function CitationReferenceCard({
   const type = preview?.type || item.data.type;
   const isWeb = normalizeCitationType(type) === 'web';
   const title = preview?.title || localize('com_message.source_untitled');
-  const canOpenDocument = !!detail && isRagCitation(detail, type);
+  const canOpenDocument = !!detail && isFilePreviewCitation(detail, type);
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
 
   const nameRowTextClass =
@@ -280,7 +282,7 @@ export default function CitationReferencesDrawer({
     if (!detail) {
       return true;
     }
-    return isRagCitation(detail) && !getCitationDocumentUrl(detail);
+    return (isRagCitation(detail) || isTempCitation(detail)) && !getCitationDocumentUrl(detail);
   }, []);
 
   const shouldAutoResolveCitationDetail = useCallback((citationId?: string, detail?: ChatCitation | null) => {
@@ -362,7 +364,10 @@ export default function CitationReferencesDrawer({
         }));
         return detail;
       })
-      .catch((error) => {
+      .catch((error: any) => {
+        if (error?.citationForbidden || error?.citationExpired) {
+          return null;
+        }
         console.error('Failed to load citation detail:', error);
         setErrorMap((current) => ({ ...current, [citationId]: true }));
         return null;
@@ -485,7 +490,9 @@ export default function CitationReferencesDrawer({
 
     const nextPreview = {
       detail: latestDetail,
-      locateChunk: false,
+      itemId: item.data.itemId,
+      itemIds: item.itemIds?.length ? item.itemIds : item.data.itemId ? [item.data.itemId] : undefined,
+      locateChunk: true,
     };
 
     if (isDesktopInlinePanel) {

@@ -25,7 +25,10 @@ from bisheng.brand.api.router import router as brand_router
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
+from bisheng.commercial_license.api.router import router as commercial_license_router
 from bisheng.department.api.router import router as department_router
+from bisheng.dsh.api.router import router as dsh_router
+from bisheng.dsh_market.api.router import router as dsh_market_router
 from bisheng.evaluation.api.router import router as evaluation_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
@@ -56,6 +59,7 @@ from bisheng.open_endpoints.api.router import (
 from bisheng.org_sync.api.endpoints.relink import router as relink_router
 from bisheng.org_sync.api.router import router as org_sync_router
 from bisheng.permission.api.router import router as permission_router
+from bisheng.public_endpoints.api.endpoints.guest_link import router as guest_link_router
 from bisheng.role.api.router import router as role_router
 from bisheng.sensitive_word.api.router import router as sensitive_word_policy_router
 from bisheng.share_link.api.router import router as share_link_router
@@ -65,9 +69,9 @@ from bisheng.tenant.api.router import router as tenant_router
 from bisheng.user_group.api.router import router as user_group_router
 from bisheng.workstation.api.endpoints.conversation_export import router as conversation_export_router
 
-router = APIRouter(
-    prefix="/api/v1",
-)
+router = APIRouter(prefix="/api/v1")
+router.include_router(dsh_market_router)
+router.include_router(dsh_router)
 router.include_router(chat_router)
 router.include_router(endpoints_router)
 router.include_router(knowledge_router)
@@ -103,12 +107,14 @@ router.include_router(message_router)
 router.include_router(department_router)
 router.include_router(user_group_router)
 router.include_router(permission_router)
+router.include_router(guest_link_router)
 router.include_router(role_router)
 router.include_router(org_sync_router)
 router.include_router(sso_sync_router)
 router.include_router(relink_router)
 router.include_router(tenant_router)
 router.include_router(citation_router)
+router.include_router(commercial_license_router)
 router.include_router(admin_router)
 router.include_router(approval_router)
 router.include_router(brand_router)

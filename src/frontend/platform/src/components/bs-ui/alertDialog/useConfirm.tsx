@@ -13,6 +13,8 @@ interface ConfirmParams {
     canelTxt?: string
     okTxt?: string
     showClose?: boolean
+    /** Acknowledge-only: hide Cancel so the user has a single way out. */
+    hideCancel?: boolean
     onClose?: () => void
     onCancel?: () => void
     onOk?: (next) => void
@@ -24,9 +26,11 @@ function ConfirmWrapper() {
 
     const [open, setOpen] = useState(false)
     const paramRef = useRef(null)
+    const settledRef = useRef(false)
 
     openFn = (params: ConfirmParams) => {
         paramRef.current = params
+        settledRef.current = false
         setOpen(true)
     }
 
@@ -35,33 +39,48 @@ function ConfirmWrapper() {
         setOpen(false)
     }
 
-    const handleCancelClick = () => {
-        paramRef.current?.onCancel?.()
-        close()
-    }
-
     const handleOkClick = () => {
+        if (settledRef.current) return
+        settledRef.current = true
         paramRef.current?.onOk
             ? paramRef.current?.onOk?.(close)
             : close()
     }
 
+    const handleCancelClick = () => {
+        if (paramRef.current?.hideCancel) {
+            handleOkClick()
+            return
+        }
+        paramRef.current?.onCancel?.()
+        close()
+    }
+
     if (!paramRef.current) return null
-    const { title, desc, okTxt, canelTxt, showClose = true } = paramRef.current
+    const { title, desc, okTxt, canelTxt, showClose = true, hideCancel = false } = paramRef.current
 
     return (
-        <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!next && paramRef.current?.hideCancel) {
+                    handleOkClick()
+                    return
+                }
+                setOpen(next)
+            }}
+        >
             <AlertDialogContent>
                 <AlertDialogHeader className="relative">
                     <div><TipIcon /></div>
-                    {showClose && <X onClick={close} className="absolute right-0 top-[-0.5rem] cursor-pointer text-gray-400 hover:text-gray-600"></X>}
+                    {showClose && <X onClick={hideCancel ? handleOkClick : close} className="absolute right-0 top-[-0.5rem] cursor-pointer text-gray-400 hover:text-gray-600"></X>}
                     <AlertDialogTitle>{title}</AlertDialogTitle>
-                    <AlertDialogDescription className="text-popover-foreground">
+                    <AlertDialogDescription className="whitespace-pre-line text-popover-foreground">
                         {desc}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel onClick={handleCancelClick} className="px-11">{canelTxt}</AlertDialogCancel>
+                    {!hideCancel && <AlertDialogCancel onClick={handleCancelClick} className="px-11">{canelTxt}</AlertDialogCancel>}
                     <AlertDialogAction onClick={handleOkClick} className="px-11">{okTxt}</AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

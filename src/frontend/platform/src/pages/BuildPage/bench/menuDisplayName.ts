@@ -1,3 +1,5 @@
+import i18next from "i18next";
+
 // 工作台四个模块的「菜单显示名称」共用长度规则。
 // 客户端侧边栏只有 64px 宽、10px 字号，所以按显示宽度而不是字符数来限：
 // 全角(CJK / 全角标点 / emoji)计 2 个单位，半角计 1 个，上限 8 个单位
@@ -28,3 +30,33 @@ export const clampMenuName = (value: string): string => {
     }
     return result;
 };
+
+/** i18n keys of each module's default menu name (bs namespace) */
+export type DefaultMenuNameKey = 'bench.home' | 'bench.knowledgeSpace' | 'bench.subscribe' | 'bench.appCenter';
+
+// Every locale folder platform ships; only the active one is loaded up front.
+const MENU_NAME_LANGUAGES = ['zh-Hans', 'en-US', 'ja'];
+
+// Case and spacing don't make a name custom: "apps" / "Knowledge Space" still mean the default.
+const comparable = (value: string): string => value.replace(/\s+/g, '').toLowerCase();
+
+/**
+ * Value to persist for a menu name. A blank name, or one equal to the module's
+ * default name in any shipped language, is stored as '' so the client shows its
+ * localized default instead of freezing one language. This also clears names
+ * that older versions saved by pre-filling the default.
+ */
+export async function toStoredMenuName(value: string, defaultKey: DefaultMenuNameKey): Promise<string> {
+    const name = (value || '').trim();
+    if (!name) return '';
+    try {
+        await i18next.loadLanguages(MENU_NAME_LANGUAGES);
+    } catch {
+        // A locale that fails to load just isn't compared; the name is kept as typed.
+    }
+    const target = comparable(name);
+    const isDefault = MENU_NAME_LANGUAGES.some(
+        (lng) => comparable(i18next.getFixedT(lng, 'bs')(defaultKey)) === target,
+    );
+    return isDefault ? '' : name;
+}

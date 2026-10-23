@@ -2,6 +2,16 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+
+def _make_dm_conn(column: dict | None) -> MagicMock:
+    conn = MagicMock()
+    conn.dialect.name = "dm"
+    conn.execute.return_value.mappings.return_value.first.return_value = column
+    return conn
+
+
 # ---------------------------------------------------------------------------
 # LargeText
 # ---------------------------------------------------------------------------
@@ -74,12 +84,13 @@ class TestTableExists:
         with patch("bisheng.core.database.dialect_helpers.inspect", return_value=insp):
             assert table_exists(conn, "no_table") is False
 
-    def test_returns_false_on_exception(self):
+    def test_raises_when_all_case_candidates_fail(self):
         from bisheng.core.database.dialect_helpers import table_exists
 
         conn = MagicMock()
         with patch("bisheng.core.database.dialect_helpers.inspect", side_effect=Exception("boom")):
-            assert table_exists(conn, "any") is False
+            with pytest.raises(Exception, match="boom"):
+                table_exists(conn, "any")
 
 
 # ---------------------------------------------------------------------------
@@ -115,12 +126,45 @@ class TestColumnExists:
         with patch("bisheng.core.database.dialect_helpers.inspect", return_value=insp):
             assert column_exists(conn, "flow", "visibility") is False
 
-    def test_returns_false_on_exception(self):
+    def test_raises_when_reflection_fails(self):
         from bisheng.core.database.dialect_helpers import column_exists
 
         conn = MagicMock()
-        with patch("bisheng.core.database.dialect_helpers.inspect", side_effect=Exception):
-            assert column_exists(conn, "flow", "col") is False
+        with patch(
+            "bisheng.core.database.dialect_helpers.inspect",
+            side_effect=Exception("reflection denied"),
+        ):
+            with pytest.raises(Exception, match="reflection denied"):
+                column_exists(conn, "flow", "col")
+
+    def test_dm_reads_visible_catalog_without_inspector(self):
+        from bisheng.core.database.dialect_helpers import column_exists
+
+        conn = _make_dm_conn(
+            {
+                "COLUMN_NAME": "metadata_fields",
+                "DATA_TYPE": "TEXT",
+                "DATA_LENGTH": 2147483647,
+                "CHAR_LENGTH": 2147483647,
+                "NULLABLE": "Y",
+            }
+        )
+        with patch("bisheng.core.database.dialect_helpers.inspect") as inspector:
+            assert column_exists(conn, "knowledge", "metadata_fields") is True
+
+        inspector.assert_not_called()
+        statement, params = conn.execute.call_args.args
+        sql = str(statement)
+        assert "SYS.ALL_TAB_COLUMNS" in sql
+        assert "SYS.SYSCOLUMNS" not in sql
+        assert "CURRENT_SCHEMA" in sql
+        assert params == {"table_name": "knowledge", "column_name": "metadata_fields"}
+
+    def test_dm_returns_false_when_visible_catalog_has_no_column(self):
+        from bisheng.core.database.dialect_helpers import column_exists
+
+        conn = _make_dm_conn(None)
+        assert column_exists(conn, "knowledge", "missing") is False
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +228,20 @@ class TestGetColumnType:
         with patch("bisheng.core.database.dialect_helpers.inspect", return_value=insp):
             assert get_column_type(conn, "tbl", "missing") is None
 
+    def test_dm_uses_catalog_data_type(self):
+        from bisheng.core.database.dialect_helpers import get_column_type
+
+        conn = _make_dm_conn(
+            {
+                "COLUMN_NAME": "message",
+                "DATA_TYPE": "CLOB",
+                "DATA_LENGTH": 2147483647,
+                "CHAR_LENGTH": None,
+                "NULLABLE": "Y",
+            }
+        )
+        assert get_column_type(conn, "permission_migration_item", "message") == "clob"
+
 
 # ---------------------------------------------------------------------------
 # is_column_nullable
@@ -217,6 +275,21 @@ class TestIsColumnNullable:
         conn = MagicMock()
         with patch("bisheng.core.database.dialect_helpers.inspect", return_value=insp):
             assert is_column_nullable(conn, "tbl", "no_col") is False
+
+    @pytest.mark.parametrize(("nullable", "expected"), [("Y", True), ("N", False)])
+    def test_dm_uses_catalog_nullable_flag(self, nullable, expected):
+        from bisheng.core.database.dialect_helpers import is_column_nullable
+
+        conn = _make_dm_conn(
+            {
+                "COLUMN_NAME": "tenant_id",
+                "DATA_TYPE": "INT",
+                "DATA_LENGTH": 4,
+                "CHAR_LENGTH": None,
+                "NULLABLE": nullable,
+            }
+        )
+        assert is_column_nullable(conn, "auditlog", "tenant_id") is expected
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +378,20 @@ class TestGetVersionNumLength:
         conn = MagicMock()
         with patch("bisheng.core.database.dialect_helpers.inspect", return_value=insp):
             assert get_version_num_length(conn) is None
+
+    def test_dm_uses_catalog_character_length(self):
+        from bisheng.core.database.dialect_helpers import get_version_num_length
+
+        conn = _make_dm_conn(
+            {
+                "COLUMN_NAME": "version_num",
+                "DATA_TYPE": "VARCHAR",
+                "DATA_LENGTH": 255,
+                "CHAR_LENGTH": 128,
+                "NULLABLE": "N",
+            }
+        )
+        assert get_version_num_length(conn) == 128
 
 
 # ---------------------------------------------------------------------------

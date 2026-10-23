@@ -23,12 +23,21 @@ def test_daily_chat_openapi_contract_is_narrow():
     schema = app.openapi()
     operation = schema["paths"]["/api/v2/workstation/chat/completions"]["post"]
     request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
-    component_name = request_schema["$ref"].rsplit("/", 1)[-1]
-    properties = schema["components"]["schemas"][component_name]["properties"]
+    # F073: one endpoint, two bodies — daily (default) and task (run_mode="task").
+    components = [ref["$ref"].rsplit("/", 1)[-1] for ref in request_schema["oneOf"]]
+    assert components == ["OpenDailyChatCompletionReq", "OpenTaskSubmitReq"]
+    daily = schema["components"]["schemas"]["OpenDailyChatCompletionReq"]["properties"]
+    task = schema["components"]["schemas"]["OpenTaskSubmitReq"]["properties"]
 
-    assert "files" in properties
-    assert "task_mode" not in properties
-    assert "use_knowledge_base" not in properties
+    assert "files" in daily
+    assert "task_mode" not in daily
+    assert "use_knowledge_base" not in daily
+    # Daily mode accepts an explicit run_mode="daily"; omitting it means daily too.
+    assert daily["run_mode"]["const"] == "daily" or daily["run_mode"].get("enum") == ["daily"]
+    assert daily["run_mode"]["default"] == "daily"
+    assert {"run_mode", "execution", "text", "model"} <= set(task)
+    assert "conversationId" not in task
+    assert "use_knowledge_base" not in task and "personal_knowledge_enabled" not in task
 
 
 def test_generated_customer_contract_matches_registered_v2_http_routes():

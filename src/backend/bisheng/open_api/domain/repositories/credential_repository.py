@@ -255,12 +255,15 @@ class CredentialRepository:
 
     @classmethod
     async def touch_last_used(cls, credential_id: int, *, used_at: datetime) -> bool:
-        async with get_async_db_session() as session:
-            row = (await session.exec(select(ApiCredential).where(ApiCredential.id == credential_id))).first()
-            if row is None:
-                return False
-            row.last_used_at = used_at
-            row.update_time = used_at
-            session.add(row)
-            await session.commit()
+        # Called from bearer validation, before the request's tenant context is
+        # bound; the primary key already pins the row, so skip the tenant filter.
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                row = (await session.exec(select(ApiCredential).where(ApiCredential.id == credential_id))).first()
+                if row is None:
+                    return False
+                row.last_used_at = used_at
+                row.update_time = used_at
+                session.add(row)
+                await session.commit()
         return True

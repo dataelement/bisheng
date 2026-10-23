@@ -20,7 +20,7 @@ from bisheng.linsight.domain.schemas.skill_schema import (
 )
 from bisheng.linsight.domain.services.skill_service import SkillService
 from bisheng.linsight.domain.services.skill_store import (
-    MAX_UNPACKED_SIZE,
+    resolve_skill_unpacked_limit,
     resolve_skill_upload_limit,
     slugify_pinyin,
 )
@@ -89,12 +89,13 @@ async def slugify_skill_name(
 async def get_upload_limit(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Declared before /{name} so the literal path is not swallowed by the name route."""
     max_size = await resolve_skill_upload_limit()
+    max_unpacked = await resolve_skill_unpacked_limit()
     return resp_200(
         data={
             "max_size_bytes": max_size,
             "max_size_mb": max_size // (1024 * 1024),
-            "max_unpacked_bytes": MAX_UNPACKED_SIZE,
-            "max_unpacked_mb": MAX_UNPACKED_SIZE // (1024 * 1024),
+            "max_unpacked_bytes": max_unpacked,
+            "max_unpacked_mb": max_unpacked // (1024 * 1024),
         }
     )
 

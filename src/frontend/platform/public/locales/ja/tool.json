@@ -16,6 +16,10 @@
       "name": "インターネット検索",
       "desc": "インターネット情報を検索し、異なる検索エンジンを使って結果を返します。現在、Bing、博查、Jina 深層検索、SerpApi、Tavilyがサポートされています。"
     },
+    "Image View": {
+      "name": "画像表示",
+      "desc": "モデル管理の視覚モデルで文書内の画像を確認します"
+    },
     "Dalle3绘画": {
       "name": "Dalle3絵画",
       "desc": "OpenAIのテキストから画像生成モデル"
@@ -157,6 +161,10 @@
       "params": {
         "query": "Bing検索で調べるクエリ"
       }
+    },
+    "image_view": {
+      "name": "画像表示",
+      "desc": "文書内の画像を確認し、質問に合う画像を判断します"
     },
     "dalle_image_generator": {
       "name": "Dalle3絵画",
@@ -387,6 +395,8 @@
   "fieldCannotBeEmpty": "{{label}}は空にできません",
   "jinaApiKeyLabel": "Jina API Key",
   "siliconflowApiKeyLabel": "SiliconFlow API Key",
+  "imageViewModelLabel": "視覚モデル",
+  "imageViewNoVisualModel": "視覚モデルとして指定されたモデルがありません。ワークベンチのモデルで視覚スイッチを先にオンにしてください。",
   "uploadFile": "ファイルをアップロード",
   "个人知识库": "個人ナレッジベース"
 }

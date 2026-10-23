@@ -1,4 +1,4 @@
-# openpyxl 速查（BiSheng 适配）
+# openpyxl 速查
 
 可直接抄的片段。所有代码假定在**构建脚本**里（`scratch/build_sheet.py`），由代码执行器用
 `subprocess.run([sys.executable, "scratch/build_sheet.py"])` 跑。

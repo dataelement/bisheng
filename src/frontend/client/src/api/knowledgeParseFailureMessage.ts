@@ -49,6 +49,7 @@ function resolve10954Message(parsed: Record<string, unknown>, errorData: Record<
   if (
     statusMessage.includes("only supports aliyun/qwen")
     || statusMessage.includes("knowledge media transcription only supports")
+    || statusMessage.includes("does not support asr provider")
   ) {
     return translateKnowledgeMedia("media_asr_provider_unsupported");
   }

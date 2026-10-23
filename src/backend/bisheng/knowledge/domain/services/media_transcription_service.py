@@ -1,11 +1,14 @@
+import glob
 import os
+import pickle
+import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
-from dashscope.audio.asr import Recognition, RecognitionResult
 from loguru import logger
+from redis.exceptions import RedisError
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeMediaNoRecognizableAudioError,
@@ -18,9 +21,25 @@ from bisheng.common.errcode.server import (
     AsrProviderDeletedError,
     NoAsrModelConfigError,
 )
-from bisheng.llm.domain.const import LLMModelType, LLMServerType
+from bisheng.core.ai.base import ASRTranscript
+from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.llm.domain.const import LLMModelType
+from bisheng.llm.domain.llm.asr import BishengASR, is_asr_provider_supported
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
 from bisheng.llm.domain.services.llm import LLMService
+from bisheng.utils.util import calculate_md5
+from bisheng.utils.async_utils import run_async_safe
+
+# Standard /audio/transcriptions takes the whole file in one request (OpenAI caps
+# it at 25 MB, gateways often lower). 5 minutes of 16k mono wav is ~9.6 MB.
+CHUNK_SECONDS = 300
+
+# Knowledge-base preview and ingest each run the whole pipeline, and every split
+# rule tweak in preview reruns it, so one upload used to hit the ASR model
+# several times. Keep the result as long as the preview chunk cache lives.
+TRANSCRIPT_CACHE_TTL_SECONDS = 86400
+TRANSCRIPT_CACHE_ERRORS = (RedisError, OSError, ValueError, TypeError, KeyError, pickle.UnpicklingError)
 
 
 @dataclass
@@ -39,11 +58,19 @@ class TranscriptResult:
     model_name: str
 
 
-class KnowledgeMediaTranscriptionService:
-    """Knowledge-base specific media transcription service.
+@dataclass
+class AudioChunk:
+    path: str
+    offset_ms: int
+    duration_ms: int | None
 
-    This service intentionally does not use the existing BaseASRClient path
-    because that path preserves legacy workbench behavior.
+
+class KnowledgeMediaTranscriptionService:
+    """Audio/video file transcription shared by knowledge base, knowledge space
+    and daily-mode attachments (every BaseFilePipeline media loader).
+
+    Provider calls go through the same ASR clients as workbench voice input;
+    this service owns the file-level flow: convert, chunk, transcribe, stitch.
     """
 
     @classmethod
@@ -58,19 +85,26 @@ class KnowledgeMediaTranscriptionService:
             raise KnowledgeMediaTranscriptionError(msg="Media file does not exist")
 
         model_info, server_info = cls._resolve_asr_model(tenant_id)
-        api_key = cls._resolve_api_key(server_info, model_info)
+        cls._resolve_api_key(server_info, model_info)
+
+        cache_key = cls._transcript_cache_key(media_path, tenant_id, model_info, server_info)
+        cached = cls._load_cached_transcript(cache_key)
+        if cached is not None:
+            logger.info(
+                "knowledge media transcript cache hit file={} model={}", source_file_name, model_info.model_name
+            )
+            return cached
+
         duration_ms = cls._probe_media_duration_ms(media_path)
         wav_path = cls._convert_to_wav(media_path)
+        chunk_dir = tempfile.mkdtemp(prefix="asr_chunks_")
         try:
-            segments = cls._call_aliyun_asr(
-                wav_path,
-                api_key=api_key,
-                model_name=model_info.model_name,
-                media_duration_ms=duration_ms,
-            )
+            chunks = cls._split_wav(wav_path, chunk_dir, media_duration_ms=duration_ms)
+            segments = cls._transcribe_chunks(model_info, server_info, chunks)
         finally:
             if os.path.exists(wav_path):
                 os.remove(wav_path)
+            shutil.rmtree(chunk_dir, ignore_errors=True)
 
         text = "\n".join(segment.text for segment in segments if segment.text).strip()
         if not text:
@@ -81,13 +115,61 @@ class KnowledgeMediaTranscriptionService:
             model_name=model_info.model_name,
             segments=segments,
         )
-        return TranscriptResult(
+        result = TranscriptResult(
             text=text,
             markdown=markdown,
             segments=segments,
             model_id=model_info.id,
             model_name=model_info.model_name,
         )
+        cls._save_cached_transcript(cache_key, result)
+        return result
+
+    @staticmethod
+    def _transcript_cache_key(
+        media_path: str,
+        tenant_id: int | None,
+        model_info: LLMModel,
+        server_info: LLMServer,
+    ) -> str:
+        # Any edit to the model or its provider (endpoint, key, model name) bumps
+        # update_time, so a changed configuration never reuses an old transcript.
+        tenant = tenant_id if tenant_id is not None else get_current_tenant_id()
+        model_version = getattr(model_info.update_time, "isoformat", lambda: "")()
+        server_version = getattr(server_info.update_time, "isoformat", lambda: "")()
+        return (
+            f"knowledge_media_transcript:{tenant or 0}:{model_info.id}:{model_version}:{server_version}:"
+            f"{calculate_md5(media_path)}"
+        )
+
+    @staticmethod
+    def _load_cached_transcript(cache_key: str) -> TranscriptResult | None:
+        try:
+            cached = get_redis_client_sync().get(cache_key)
+            if not cached:
+                return None
+            return TranscriptResult(
+                text=cached["text"],
+                markdown=cached["markdown"],
+                segments=[TranscriptSegment(**segment) for segment in cached["segments"]],
+                model_id=cached["model_id"],
+                model_name=cached["model_name"],
+            )
+        except TRANSCRIPT_CACHE_ERRORS:
+            # Best-effort: a cache failure only costs a fresh transcription.
+            logger.opt(exception=True).warning("knowledge media transcript cache read failed key={}", cache_key)
+            return None
+
+    @staticmethod
+    def _save_cached_transcript(cache_key: str, result: TranscriptResult) -> None:
+        # Stored as plain dicts rather than pickled dataclasses so a renamed or
+        # moved class never turns cached entries into unreadable blobs.
+        payload = asdict(result)
+        try:
+            get_redis_client_sync().set(cache_key, payload, expiration=TRANSCRIPT_CACHE_TTL_SECONDS)
+        except TRANSCRIPT_CACHE_ERRORS:
+            # Best-effort: the transcript is already produced; next run just re-transcribes.
+            logger.opt(exception=True).warning("knowledge media transcript cache write failed key={}", cache_key)
 
     @classmethod
     def _resolve_asr_model(cls, tenant_id: int | None) -> tuple[LLMModel, LLMServer]:
@@ -106,9 +188,9 @@ class KnowledgeMediaTranscriptionService:
             raise AsrProviderDeletedError()
         if not model_info.online:
             raise AsrModelOfflineError(server_name=server_info.name, model_name=model_info.model_name)
-        if server_info.type != LLMServerType.QWEN.value:
+        if not is_asr_provider_supported(server_info.type):
             raise KnowledgeMediaTranscriptionError(
-                msg=f"Knowledge media transcription only supports Aliyun/Qwen ASR, got {server_info.type}"
+                msg=f"Knowledge media transcription does not support ASR provider {server_info.type}"
             )
         return model_info, server_info
 
@@ -165,54 +247,111 @@ class KnowledgeMediaTranscriptionService:
         )
 
     @classmethod
-    def _call_aliyun_asr(
+    def _split_wav(cls, wav_path: str, chunk_dir: str, *, media_duration_ms: int | None) -> list[AudioChunk]:
+        """Cut the wav into CHUNK_SECONDS pieces; short media stays one chunk."""
+        if media_duration_ms is not None and media_duration_ms <= CHUNK_SECONDS * 1000:
+            return [AudioChunk(path=wav_path, offset_ms=0, duration_ms=media_duration_ms)]
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            wav_path,
+            "-f",
+            "segment",
+            "-segment_time",
+            str(CHUNK_SECONDS),
+            "-c",
+            "copy",
+            os.path.join(chunk_dir, "chunk_%05d.wav"),
+        ]
+        try:
+            subprocess.run(command, capture_output=True, check=True)
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
+            logger.warning("ffmpeg audio chunking failed: {}", stderr[-1000:])
+            raise KnowledgeMediaTranscriptionError(msg="Media audio extraction failed") from exc
+
+        chunk_paths = sorted(glob.glob(os.path.join(chunk_dir, "chunk_*.wav")))
+        if not chunk_paths:
+            raise KnowledgeMediaTranscriptionError(msg="Media audio extraction failed")
+
+        chunks: list[AudioChunk] = []
+        offset_ms = 0
+        for path in chunk_paths:
+            duration_ms = cls._probe_media_duration_ms(path)
+            chunks.append(AudioChunk(path=path, offset_ms=offset_ms, duration_ms=duration_ms))
+            # Offsets come from measured chunk lengths; the nominal length is only a
+            # fallback when ffprobe is unavailable.
+            offset_ms += duration_ms if duration_ms is not None else CHUNK_SECONDS * 1000
+        return chunks
+
+    @classmethod
+    def _transcribe_chunks(
         cls,
-        wav_path: str,
-        *,
-        api_key: str,
-        model_name: str,
-        media_duration_ms: int | None = None,
+        model_info: LLMModel,
+        server_info: LLMServer,
+        chunks: list[AudioChunk],
     ) -> list[TranscriptSegment]:
-        recognition = Recognition(
-            model=model_name,
-            format="wav",
-            sample_rate=16000,
-            callback=None,
-        )
-        result: RecognitionResult = recognition.call(wav_path, api_key=api_key)
-        if result.status_code != 200:
-            raise KnowledgeMediaTranscriptionError(
-                msg=f"ASR request failed: {result.code} {result.message}"
-            )
+        # Loaders run synchronously (Celery threads, asyncio.to_thread); the ASR
+        # clients are async. A long recording legitimately takes many minutes.
+        return run_async_safe(cls._atranscribe_chunks(model_info, server_info, chunks), timeout=None)
 
-        raw_sentences = result.get_sentence() or []
+    @classmethod
+    async def _atranscribe_chunks(
+        cls,
+        model_info: LLMModel,
+        server_info: LLMServer,
+        chunks: list[AudioChunk],
+    ) -> list[TranscriptSegment]:
+        client = await BishengASR.init_asr_client(model_info=model_info, server_info=server_info)
         segments: list[TranscriptSegment] = []
-        for sentence in raw_sentences:
-            if not isinstance(sentence, dict):
-                continue
-            text = str(sentence.get("text") or "").strip()
-            if not text:
-                continue
-            segments.append(
-                TranscriptSegment(
-                    text=text,
-                    begin_time=cls._coerce_time_value(sentence.get("begin_time")),
-                    end_time=cls._coerce_time_value(sentence.get("end_time")),
-                )
-            )
-        if segments:
-            return cls._normalize_segments(segments, media_duration_ms=media_duration_ms)
+        try:
+            for index, chunk in enumerate(chunks):
+                try:
+                    transcript = await client.transcribe_file(chunk.path)
+                except Exception as exc:
+                    logger.exception(
+                        "knowledge media ASR failed on chunk {}/{} model={}",
+                        index + 1,
+                        len(chunks),
+                        model_info.model_name,
+                    )
+                    message = str(exc)
+                    if not message.lower().startswith("asr request failed"):
+                        message = f"ASR request failed: {message}"
+                    raise KnowledgeMediaTranscriptionError(msg=message) from exc
 
-        # No sentences recognized. Only fall back to an explicit plain-text field
-        # on the output payload; never stringify the response object itself —
-        # that would store the raw JSON envelope (status_code/request_id/...) as
-        # the transcript and make silent media look successfully transcribed.
-        output = getattr(result, "output", None)
-        if isinstance(output, dict):
-            fallback_text = str(output.get("text") or "").strip()
-            if fallback_text:
-                return [TranscriptSegment(text=fallback_text)]
-        return []
+                chunk_segments = cls._normalize_segments(
+                    cls._segments_from_transcript(transcript),
+                    media_duration_ms=chunk.duration_ms,
+                )
+                for segment in chunk_segments:
+                    if segment.begin_time is not None:
+                        segment.begin_time += chunk.offset_ms
+                    if segment.end_time is not None:
+                        segment.end_time += chunk.offset_ms
+                segments.extend(chunk_segments)
+        finally:
+            await client.aclose()
+        return segments
+
+    @classmethod
+    def _segments_from_transcript(cls, transcript: ASRTranscript) -> list[TranscriptSegment]:
+        segments = [
+            TranscriptSegment(
+                text=segment.text,
+                begin_time=cls._coerce_time_value(segment.begin_ms),
+                end_time=cls._coerce_time_value(segment.end_ms),
+            )
+            for segment in transcript.segments
+            if segment.text.strip()
+        ]
+        if segments:
+            return segments
+        # Provider returned plain text only: keep it, without a timeline.
+        text = transcript.text.strip()
+        return [TranscriptSegment(text=text)] if text else []
 
     @staticmethod
     def _coerce_time_value(value: Any) -> float | None:
@@ -250,8 +389,7 @@ class KnowledgeMediaTranscriptionService:
             end_time = cls._scale_timestamp(segment.end_time, multiplier)
             if begin_time is not None and end_time is not None and end_time < begin_time:
                 logger.warning(
-                    "ASR segment end_time precedes begin_time; clamping end_time. "
-                    "begin_time={} end_time={} text={}",
+                    "ASR segment end_time precedes begin_time; clamping end_time. begin_time={} end_time={} text={}",
                     begin_time,
                     end_time,
                     segment.text[:80],
@@ -325,9 +463,7 @@ class KnowledgeMediaTranscriptionService:
         try:
             result = subprocess.run(command, capture_output=True, check=True)
         except FileNotFoundError:
-            logger.warning(
-                "ffprobe is not installed; ASR timestamp normalization will not use media duration"
-            )
+            logger.warning("ffprobe is not installed; ASR timestamp normalization will not use media duration")
             return None
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""

@@ -17,9 +17,17 @@ import store from "~/store";
  * Hook for single-file Q&A chat in a knowledge space.
  * @param spaceId - Knowledge space ID; empty string disables the hook.
  * @param fileId  - File ID within the space; empty string disables the hook.
+ * @param model   - The surface's own model selection (see useSurfaceModel).
+ *                  Omitted, it falls back to the shared `chatModel` atom, which
+ *                  is what the pre-isolation callers relied on.
  */
-export default function useFileChat(spaceId: string, fileId: string) {
-    const chatModel = useRecoilValue(store.chatModel);
+export default function useFileChat(
+    spaceId: string,
+    fileId: string,
+    model?: { id: number; name: string },
+) {
+    const sharedChatModel = useRecoilValue(store.chatModel);
+    const chatModel = model ?? sharedChatModel;
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
     const [isLoading, setIsLoading] = useState(false);

@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import {
     Table,
@@ -168,11 +168,18 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     const { appConfig } = useContext(locationContext);
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
+    const [searchParams] = useSearchParams()
     const { toast } = useToast()
 
     const { setEditable } = useKnowledgeStore();
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
-        readFileByLibDatabase({ ...param, id, name: param.keyword })
+    const initialAbnormalFilter = searchParams.get('fileStatus') === 'abnormal'
+    const initialStatusFilters = initialAbnormalFilter ? [3, 6, 7] : []
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable(
+        {
+            cancelLoadingWhenReload: true,
+            ...(initialAbnormalFilter ? { status: initialStatusFilters } : {}),
+        },
+        (param) => readFileByLibDatabase({ ...param, id, name: param.keyword })
     )
     const [metadataOpen, setMetadataOpen] = useState(false);
     const [webLinkOpen, setWebLinkOpen] = useState(false);
@@ -182,8 +189,8 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     const [selectedFileObjs, setSelectedFileObjs] = useState<Array<Record<string, any>>>([]);
     const [isAllSelected, setIsAllSelected] = useState(false);
 
-    const [selectedFilters, setSelectedFilters] = useState<number[]>([]);
-    const [tempFilters, setTempFilters] = useState<number[]>([]);
+    const [selectedFilters, setSelectedFilters] = useState<number[]>(initialStatusFilters);
+    const [tempFilters, setTempFilters] = useState<number[]>(initialStatusFilters);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [metadataFields, setMetadataFields] = useState<Array<{ field_name: string; field_type: string }>>([]);
     useEffect(() => {
@@ -620,6 +627,19 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                                                 <span className="size-[6px] rounded-full bg-red-500"></span>
                                                                 <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
                                                                     {t("parseFailed")}
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    },
+                                                    {
+                                                        value: 6,
+                                                        label: 'Timeout',
+                                                        color: 'text-red-500',
+                                                        icon: (
+                                                            <div className="flex items-center gap-2 mt-2">
+                                                                <span className="size-[6px] rounded-full bg-red-500"></span>
+                                                                <span className="font-[500] text-[14px] text-red-500 leading-[100%]">
+                                                                    {t("timeout")}
                                                                 </span>
                                                             </div>
                                                         )

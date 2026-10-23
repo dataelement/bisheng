@@ -338,11 +338,15 @@ def test_empty_retry_count_resets_on_new_human_turn():
 
 
 def test_system_prompt_contains_filled_questions_example():
-    """The ③ few-shot must survive in the rendered prompt (both KB variants) so the
-    model has a copy-pasteable structured-questions template to anchor on."""
+    """The ③ few-shot must survive in the rendered prompt (both KB variants), but as
+    prose rather than a literal call: weaker models (qwen-max) copied the old
+    ``questions=[{...}]`` block verbatim into the reply text instead of calling
+    ask_user, so no clarify card was ever raised."""
     from bisheng.linsight.domain.services.agent_factory import _build_linsight_system_prompt
 
     for has_kb in (True, False):
         prompt = _build_linsight_system_prompt(has_knowledge_base=has_kb)
-        assert "正确示例" in prompt
-        assert '"multiple": true' in prompt
+        assert "【示例】" in prompt
+        assert "交付格式（多选" in prompt
+        assert "questions=[" not in prompt
+        assert '{"question"' not in prompt

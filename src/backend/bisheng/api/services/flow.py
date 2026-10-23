@@ -40,6 +40,7 @@ from bisheng.permission.application.business_authorization import (
     require_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
 
@@ -424,6 +425,7 @@ class FlowService(BaseService):
         MessageSessionDao.update_session_info_by_flow(
             flow_info.name, flow_info.description, flow_info.logo, flow_info.id, flow_info.flow_type
         )
+        delete_app_guest_link("workflow", str(flow_info.id))
         return True
 
     @staticmethod

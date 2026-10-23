@@ -95,3 +95,8 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
         JSON_CONTAINS / JSON_EXTRACT, so it stays DM8-compatible.
         """
         pass
+
+    @abstractmethod
+    async def find_channels_referencing_source(self, source_id: str) -> list[Channel]:
+        """Return current-tenant channels referencing the source."""
+        pass

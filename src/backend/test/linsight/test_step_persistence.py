@@ -191,6 +191,87 @@ async def test_thinking_delta_flushes_after_interval(monkeypatch):
     assert store["history"][0]["output"] == "abc"
 
 
+async def test_final_thinking_segment_reaches_db_on_status_update(monkeypatch):
+    """A run whose last step is a short thinking segment then ends: the deltas
+    after the first must still reach the DB (was: only "The" survived a reload)."""
+    mgr, store = _make_manager(monkeypatch)
+    updates = []
+
+    async def fake_update(task_id, **kwargs):
+        updates.append(kwargs)
+        if "history" in kwargs:
+            store["history"] = kwargs["history"]
+            store["db_writes"] += 1
+        return LinsightExecuteTask(
+            id=task_id,
+            session_version_id="svid",
+            task_type=ExecuteTaskTypeEnum.SINGLE,
+            status=kwargs.get("status", ExecuteTaskStatusEnum.IN_PROGRESS),
+            history=store["history"],
+        )
+
+    from bisheng.linsight.domain.services import state_message_manager as smm
+
+    monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_by_id", fake_update)
+
+    await mgr.add_execution_task_step("t1", _thinking("c9", "The"))  # first delta -> flush
+    await mgr.add_execution_task_step("t1", _thinking("c9", " report is ready."))  # throttled
+    assert store["db_writes"] == 1
+
+    await mgr.update_execution_task_status("t1", status=ExecuteTaskStatusEnum.SUCCESS)
+
+    assert updates[-1]["history"][0]["output"] == "The report is ready."
+    assert updates[-1]["status"] == ExecuteTaskStatusEnum.SUCCESS
+    # Nothing left to flush afterwards.
+    assert mgr._pending_history == {}
+
+
+async def test_session_info_write_flushes_pending_history(monkeypatch):
+    """Terminal paths save the session info before announcing it; by then every
+    task's throttled history must be in the DB."""
+    mgr, store = _make_manager(monkeypatch)
+    from bisheng.linsight.domain.services import state_message_manager as smm
+
+    await mgr.add_execution_task_step("t1", _thinking("c9", "The"))
+    await mgr.add_execution_task_step("t1", _thinking("c9", " end"))
+    assert store["db_writes"] == 1
+
+    order = []
+
+    async def fake_insert_one(model):
+        order.append(("session", store["history"][0]["output"]))
+
+    monkeypatch.setattr(smm.LinsightSessionVersionDao, "insert_one", fake_insert_one)
+    pipe = MagicMock()
+    pipe.set = AsyncMock()
+    pipe.execute = AsyncMock()
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=pipe)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    mgr._redis_client.async_pipeline = MagicMock(return_value=ctx)
+
+    session = MagicMock()
+    session.model_dump.return_value = {}
+    await mgr.set_session_version_info(session)
+
+    assert store["db_writes"] == 2
+    assert order == [("session", "The end")]
+    assert mgr._pending_history == {}
+
+
+async def test_flushed_step_clears_pending_history(monkeypatch):
+    mgr, store = _make_manager(monkeypatch)
+
+    await mgr.add_execution_task_step("t1", _thinking("c1", "a"))
+    await mgr.add_execution_task_step("t1", _thinking("c1", "b"))  # throttled -> pending
+    assert "t1" in mgr._pending_history
+
+    await mgr.add_execution_task_step("t1", _tool("c2", "end", output="r"))  # flushes everything
+    assert "t1" not in mgr._pending_history
+    await mgr.flush_pending_history()
+    assert store["db_writes"] == 2
+
+
 # ---------------------------------------------------------------------------
 # Problem 2: session-level pseudo task row
 # ---------------------------------------------------------------------------

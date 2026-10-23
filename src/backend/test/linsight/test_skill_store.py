@@ -1,6 +1,7 @@
 """F035 Track D — SkillStore / slugify / frontmatter / zip unit tests (TD-3)."""
 
 import io
+import struct
 import zipfile
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from bisheng.linsight.domain.services import skill_store as skill_store_module
 from bisheng.linsight.domain.services.skill_store import (
     SKILL_MD,
+    BundleTooLargeError,
     SkillStore,
     bundle_content_hash,
     compose_skill_md,
@@ -26,6 +28,30 @@ def _zip_bytes(entries: dict[str, bytes]) -> bytes:
         for path, content in entries.items():
             zf.writestr(path, content)
     return buf.getvalue()
+
+
+def _zip_bytes_no_utf8_flag(entries: dict[str | bytes, bytes], encoding: str = "utf-8") -> bytes:
+    """Pack names as raw ``encoding`` bytes with ZIP's UTF-8 flag (bit 11) clear.
+
+    ``zipfile`` sets that flag whenever it encodes a non-ASCII name itself, so each
+    name goes in as an equal-length ASCII placeholder (flag stays clear) and the
+    placeholder bytes are substituted afterwards — a length-preserving swap that
+    needs no header surgery. This is the shape macOS Finder's "Compress" emits for
+    UTF-8 names, and Chinese Windows' built-in zip for GBK ones.
+    """
+    substitutions: list[tuple[bytes, bytes]] = []
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+        for idx, (path, content) in enumerate(entries.items()):
+            target = path.encode(encoding) if isinstance(path, str) else path
+            placeholder = f"__ph{idx}".encode().ljust(len(target), b"_")
+            assert len(placeholder) == len(target), "placeholder must match the real name's byte length"
+            substitutions.append((placeholder, target))
+            zf.writestr(zipfile.ZipInfo(placeholder.decode("ascii")), content)
+    raw = buf.getvalue()
+    for placeholder, target in substitutions:
+        raw = raw.replace(placeholder, target)
+    return raw
 
 
 SKILL_MD_TEXT = (
@@ -121,6 +147,98 @@ class TestUnpackZip:
             unpack_zip_bytes(b"not a zip at all")
 
 
+def _understate_declared_size(archive: bytes, name: str, declared: int) -> bytes:
+    """Rewrite ``name``'s uncompressed size in the central directory (header offset 24)."""
+    raw = bytearray(archive)
+    pos = raw.find(b"PK\x01\x02")
+    while pos != -1:
+        name_len = struct.unpack_from("<H", raw, pos + 28)[0]
+        if bytes(raw[pos + 46 : pos + 46 + name_len]) == name.encode():
+            struct.pack_into("<I", raw, pos + 24, declared)
+        pos = raw.find(b"PK\x01\x02", pos + 4)
+    return bytes(raw)
+
+
+class TestUnpackZipSizeCap:
+    """The unpacked cap is enforced from declared sizes, before anything inflates."""
+
+    def _bomb(self, size: int) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(SKILL_MD, b"x")
+            zf.writestr("assets/bomb.bin", b"\0" * size)
+        return buf.getvalue()
+
+    def test_over_cap_refused_before_any_entry_is_decompressed(self, monkeypatch):
+        data = self._bomb(2 * 1024 * 1024)
+        assert len(data) < 64 * 1024  # a small archive that inflates 30x+
+
+        def _no_read(*_args, **_kwargs):
+            raise AssertionError("an entry was decompressed before the size check")
+
+        monkeypatch.setattr(zipfile.ZipFile, "read", _no_read)
+        with pytest.raises(BundleTooLargeError, match="exceeds"):
+            unpack_zip_bytes(data, max_unpacked=1024 * 1024)
+
+    def test_at_cap_accepted(self):
+        files = unpack_zip_bytes(self._bomb(1024), max_unpacked=1024 + 1)
+        assert len(files["assets/bomb.bin"]) == 1024
+
+    def test_understated_declared_size_is_an_invalid_archive_not_a_bypass(self):
+        """Lying about the size cannot smuggle more bytes past the cap.
+
+        ``zipfile`` stops at the declared size and the CRC check fails; that must
+        surface as a ValueError (→ 11051), not an uncaught BadZipFile (→ 500).
+        """
+        data = _understate_declared_size(self._bomb(2 * 1024 * 1024), "assets/bomb.bin", 16)
+        with pytest.raises(ValueError, match="corrupted zip archive"):
+            unpack_zip_bytes(data, max_unpacked=1024 * 1024)
+
+    def test_default_cap_is_the_hard_ceiling(self, monkeypatch):
+        monkeypatch.setattr(skill_store_module, "MAX_UNPACKED_CEILING", 4)
+        with pytest.raises(BundleTooLargeError):
+            unpack_zip_bytes(_zip_bytes({SKILL_MD: b"0123456789"}))
+
+
+class TestUnpackZipNameEncoding:
+    """Chinese filenames must survive archives that mislabel their name encoding.
+
+    macOS Finder writes UTF-8 names without ZIP's UTF-8 flag, so ``zipfile`` reads
+    them back as CP437 mojibake. SKILL.md then points at ``references/外评检索指引.md``
+    while the bundle stores ``references/σñûΦ»äµúÇτ┤óµîçσ╝Ò.md`` and the agent's read
+    misses every reference file.
+    """
+
+    def test_macos_finder_utf8_names_recovered(self):
+        files = unpack_zip_bytes(_zip_bytes_no_utf8_flag({SKILL_MD: b"x", "references/外评检索指引.md": b"y"}))
+        assert set(files) == {SKILL_MD, "references/外评检索指引.md"}
+
+    def test_wrapper_dir_stripped_under_mojibake_names(self):
+        """The wrapper-strip runs on decoded names, so a Chinese-named tree still flattens."""
+        files = unpack_zip_bytes(
+            _zip_bytes_no_utf8_flag({"my-skill/SKILL.md": b"x", "my-skill/references/分析师保留规则.md": b"y"})
+        )
+        assert set(files) == {SKILL_MD, "references/分析师保留规则.md"}
+
+    def test_gbk_names_recovered(self):
+        """Chinese Windows' built-in zip writes GBK names, also without the flag."""
+        files = unpack_zip_bytes(
+            _zip_bytes_no_utf8_flag({SKILL_MD: b"x", "references/电力报告.md": b"y"}, encoding="gbk")
+        )
+        assert set(files) == {SKILL_MD, "references/电力报告.md"}
+
+    def test_real_cp437_names_kept(self):
+        """Bytes that decode as neither UTF-8 nor GBK stay on zipfile's CP437 reading."""
+        # 0x81 is an invalid UTF-8 start byte and an incomplete GBK sequence before 0x20.
+        files = unpack_zip_bytes(_zip_bytes_no_utf8_flag({SKILL_MD.encode(): b"x", b"a\x81 b.md": b"y"}))
+        assert set(files) == {SKILL_MD, "aü b.md"}
+
+    def test_flagged_utf8_archive_unaffected(self):
+        """Well-formed archives (the flag set — what zipfile, zip(1) and 7-Zip emit) are untouched."""
+        files = unpack_zip_bytes(_zip_bytes({SKILL_MD: b"x", "references/外评检索指引.md": b"y"}))
+        assert set(files) == {SKILL_MD, "references/外评检索指引.md"}
+
+
 class TestSkillStore:
     @pytest.fixture
     def store(self, tmp_path):
@@ -207,11 +325,31 @@ class TestSkillStore:
 
     def test_materializing_an_oversized_object_is_refused(self, store, tmp_path, monkeypatch):
         ref = store.write_bundle(1, "demo-skill", {SKILL_MD: b"x"})
-        monkeypatch.setattr(skill_store_module, "MAX_UNPACKED_SIZE", 4)
+        monkeypatch.setattr(skill_store_module, "MAX_UNPACKED_CEILING", 4)
         store.minio.store[(store.minio.bucket, ref.object_key)] = _zip_bytes({SKILL_MD: b"0123456789"})
         cold = SkillStore(root=tmp_path / "cold2", minio=store.minio)
         with pytest.raises(ValueError, match="exceeds"):
             cold.read_text(1, "demo-skill", ref.content_hash)
+
+    def test_write_and_materialize_check_the_ceiling_not_the_setting(self, store, tmp_path, monkeypatch):
+        """A bundle accepted under a larger setting stays usable after an admin lowers it.
+
+        The configured cap is an ingress rule (upload / GitHub import). Re-publishing on
+        edit and fetching back on a cold node must only answer to the hard ceiling.
+        """
+
+        async def _tiny_setting(self):
+            return type("Conf", (), {"skill_unpacked_max_size_mb": 1, "skill_upload_max_size_mb": 1})()
+
+        monkeypatch.setattr(type(skill_store_module.bisheng_settings), "aget_linsight_conf", _tiny_setting)
+        big = {SKILL_MD: b"x", "assets/a.bin": b"y" * (2 * 1024 * 1024)}
+        ref = store.write_bundle(1, "demo-skill", big)
+        cold = SkillStore(root=tmp_path / "cold3", minio=store.minio)
+        assert cold.read_bytes(1, "demo-skill", ref.content_hash, "assets/a.bin") == big["assets/a.bin"]
+
+        monkeypatch.setattr(skill_store_module, "MAX_UNPACKED_CEILING", 1024)
+        with pytest.raises(BundleTooLargeError):
+            store.write_bundle(1, "demo-skill", big)
 
     def test_bundle_requires_skill_md(self, store):
         with pytest.raises(ValueError, match="SKILL.md"):

@@ -130,7 +130,11 @@ class AuthJwt:
     def __init__(self, req: Request = None, res: Response = None):
         self.req = req
         self.res = res
-        self.jwt_secret = settings.jwt_secret
+        # Deferred import: jwt_secret pulls the config table DAO, which must not
+        # load before the database package is initialised.
+        from bisheng.user.domain.services.jwt_secret import resolve_jwt_secret
+
+        self.jwt_secret = resolve_jwt_secret()
         self.cookie_conf = settings.cookie_conf
         self._access_cookie_key = "access_token_cookie"
         self._encode_algorithm = "HS256"
@@ -602,6 +606,20 @@ class LoginUser(BaseModel):
         if login_user.is_admin():
             return login_user
         await cls.assert_effective_web_menu_contains(login_user.user_id, "model")
+        return login_user
+
+    @classmethod
+    async def get_app_creator_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
+        """Admit super admins or users whose effective web_menu grants ``create_app``.
+
+        Mirrors the gate on the build page: the "new app" entry is hidden for
+        everyone else, and the create endpoints must refuse them too rather
+        than trust the UI (NVDB F068 — hidden button, open API).
+        """
+        login_user = await cls.get_login_user(auth_jwt)
+        if login_user.is_admin():
+            return login_user
+        await cls.assert_effective_web_menu_contains(login_user.user_id, WebMenuResource.CREATE_APP.value)
         return login_user
 
     @classmethod

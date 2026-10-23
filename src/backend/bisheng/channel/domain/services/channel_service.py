@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from hashlib import sha256
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -404,52 +404,17 @@ class ChannelService:
             for info_source in information_sources
         ]
         if new_rows:
-            await self.channel_info_source_repository.batch_add(new_rows)
+            await self.channel_info_source_repository.upsert_metadata(new_rows)
         return new_rows
 
-    async def reconcile_information_subscriptions(self) -> dict:
-        """Reconcile information-service subscriptions for the current tenant.
-
-        The desired subscription set is the union of every channel's ``source_list``;
-        the materialized view is the ``channel_info_source`` table. This converges the two
-        (and the external information service) on the eventual-consistency path:
-
-        - ``current - desired`` (orphans): unsubscribe at the information service + delete row.
-        - ``desired - current`` (missing): subscribe + fetch metadata + insert row
-          (heals subscribes that were missed or failed on the synchronous hot path).
-
-        Per-source failures are isolated (logged + counted) so one bad source never aborts
-        the rest; the next run retries it. Must run inside the target tenant's context — the
-        ``channel`` / ``channel_info_source`` queries are tenant-scoped automatically.
-
-        Returns ``{"to_sub", "to_unsub", "failed"}`` for observability.
-        """
-        bisheng_information_client = await get_bisheng_information_client()
-        desired = await self.channel_repository.find_all_referenced_source_ids()
-        current_rows = await self.channel_info_source_repository.find_all()
-        current = {row.id for row in current_rows}
-
-        to_unsub = current - desired
-        to_sub = desired - current
-        failed = 0
-
-        for source_id in to_unsub:
-            try:
-                await bisheng_information_client.unsubscribe_information_source([source_id])
-                await self.channel_info_source_repository.delete_by_ids([source_id])
-            except Exception:
-                logger.exception("reconcile: failed to unsubscribe information source %s", source_id)
-                failed += 1
-
-        for source_id in to_sub:
-            try:
-                await bisheng_information_client.subscribe_information_source([source_id])
-                await self._sync_channel_info_source_metadata(bisheng_information_client, [source_id])
-            except Exception:
-                logger.exception("reconcile: failed to subscribe information source %s", source_id)
-                failed += 1
-
-        return {"to_sub": len(to_sub), "to_unsub": len(to_unsub), "failed": failed}
+    async def _best_effort_sync_channel_info_source_metadata(self, source_ids: list[str]) -> None:
+        if not source_ids:
+            return
+        try:
+            client = await get_bisheng_information_client()
+            await self._sync_channel_info_source_metadata(client, list(dict.fromkeys(source_ids)))
+        except Exception:
+            logger.exception("Failed to refresh public information source metadata")
 
     async def create_channel(
         self,
@@ -499,33 +464,15 @@ class ChannelService:
             if len(existing_channels) >= effective:
                 raise ChannelCreateLimitExceededError(quota=effective)
 
-        bisheng_information_client = await get_bisheng_information_client()
         if channel_data.source_list:
             # Role/tenant quota on deduped subscribed info sources (`info_source_subscribe`,
-            # default 200; 0 = adding sources prohibited). Checked before the external
-            # subscribe call so a limit error aborts creation without side effects,
-            # mirroring the channel-count gate above.
+            # default 200; 0 = adding sources prohibited). Checked before the channel is
+            # persisted so a limit error aborts creation without side effects, mirroring
+            # the channel-count gate above. No subscribe call happens here any more —
+            # the reconcile worker converges the information service asynchronously.
             await QuotaService.check_info_source_subscribe_limit(
                 login_user.user_id, login_user.tenant_id, channel_data.source_list, login_user=login_user
             )
-            # A source already present in the local channel_info_source table has been
-            # subscribed before. The row and the information-service subscription share a
-            # lifecycle (both created on first subscribe, both removed together by the
-            # daily reconcile), so a present row means "already subscribed" — we skip
-            # re-subscribing it. Only sources missing from the table are new subscriptions.
-            existing_sources = await self.channel_info_source_repository.find_by_ids(channel_data.source_list)
-            existing_source_ids = {source.id for source in existing_sources}
-            missing_source_ids = [
-                sid for sid in dict.fromkeys(channel_data.source_list) if sid not in existing_source_ids
-            ]
-
-            if missing_source_ids:
-                # Subscribe the not-yet-subscribed sources BEFORE persisting the channel.
-                # The subscribe call enforces the API-key source-count limit (19007); doing
-                # it first guarantees that a limit error aborts creation instead of leaving
-                # an orphaned channel / membership / OpenFGA owner tuple.
-                await bisheng_information_client.subscribe_information_source(missing_source_ids)
-                await self._sync_channel_info_source_metadata(bisheng_information_client, missing_source_ids)
 
         channel_model = Channel(
             name=channel_data.name,
@@ -677,6 +624,8 @@ class ChannelService:
                     status="failed",
                     error_code=exc.code if isinstance(exc, BaseErrorCode) else 500,
                 )
+
+        await self._best_effort_sync_channel_info_source_metadata(channel_model.source_list or [])
 
         if channel_data.creation_request_id is None and channel_data.initial_permissions is None:
             return channel_model
@@ -1905,8 +1854,6 @@ class ChannelService:
             action="edit",
         )
 
-        bisheng_information_client = await get_bisheng_information_client()
-
         # 3. Update channel information
         if req.name is not None:
             channel.name = req.name
@@ -1927,7 +1874,6 @@ class ChannelService:
         # Track if source_list changed for updating latest_article_update_time
         source_list_changed = False
         if req.source_list is not None:
-            # Calculate the difference between old and new source lists to minimize calls to bisheng_information_client
             old_sources = set(channel.source_list or [])
             new_sources = set(req.source_list)
             to_add_sources = list(new_sources - old_sources)
@@ -1948,16 +1894,6 @@ class ChannelService:
                     to_add_sources,
                     login_user=login_user,
                 )
-                # Subscribe only sources not already subscribed (missing from
-                # channel_info_source). Already-subscribed sources are skipped.
-                existing_add = await self.channel_info_source_repository.find_by_ids(to_add_sources)
-                existing_add_ids = {source.id for source in existing_add}
-                missing_add = [sid for sid in to_add_sources if sid not in existing_add_ids]
-                if missing_add:
-                    await bisheng_information_client.subscribe_information_source(missing_add)
-            # Removed sources are NOT unsubscribed here: unsubscription is deferred to
-            # the daily reconcile, which unsubscribes a source only once no channel
-            # references it (avoids over-unsubscribing sources shared by other channels).
 
             channel.source_list = req.source_list
 
@@ -1976,21 +1912,7 @@ class ChannelService:
             await self.update_channels_latest_article_time([channel])
 
         if channel.source_list:
-            # Sync information sources to local database
-            existing_sources = await self.channel_info_source_repository.find_by_ids(channel.source_list)
-            existing_source_ids = {source.id for source in existing_sources}
-            missing_source_ids = [sid for sid in channel.source_list if sid not in existing_source_ids]
-
-            new_channel_info_sources = await self._sync_channel_info_source_metadata(
-                bisheng_information_client, missing_source_ids
-            )
-            if new_channel_info_sources:
-                from bisheng.worker.information.article import sync_information_article
-
-                for one in new_channel_info_sources:
-                    # Sync articles for the new information source one hour later
-                    exec_time = datetime.now() + timedelta(hours=1)
-                    sync_information_article.apply_async(args=(one.id,), eta=exec_time)
+            await self._best_effort_sync_channel_info_source_metadata(channel.source_list)
 
         # Replace knowledge-sync config atomically if caller provided one.
         if req.knowledge_sync is not None:

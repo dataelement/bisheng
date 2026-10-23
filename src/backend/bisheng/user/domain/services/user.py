@@ -66,6 +66,86 @@ PASSWORD_STRENGTH_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W
 
 
 class UserService:
+    @staticmethod
+    def _dsh_enabled() -> bool:
+        configuration = getattr(settings, "dsh", {})
+        return configuration.get("enabled") is True if isinstance(configuration, dict) else bool(configuration.enabled)
+
+    @classmethod
+    def _persist_profile_in_session(cls, session, changed: User) -> User:
+        from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
+
+        user, profile_changed = UserDshProfileRepository.apply_detached_changes(session, changed)
+        if cls._dsh_enabled() and profile_changed:
+            cls._record_profile_in_session(session, user)
+        return UserDshProfileRepository.detach(session, user)
+
+    @staticmethod
+    def _record_profile_in_session(session, user: User):
+        from bisheng.dsh.domain.services.profile import DshProfileService
+        from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
+
+        snapshot = UserDshProfileRepository.bump_snapshot(session, user)
+        if snapshot is not None:
+            DshProfileService.record_change(session, snapshot)
+        return snapshot
+
+    @classmethod
+    def persist_profile_update(cls, changed: User, *, session_scope=None) -> User:
+        """Persist existing-user changes and DSH profile intent in the same transaction."""
+        from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
+
+        with (session_scope or UserDshProfileRepository.transaction)() as session:
+            return cls._persist_profile_in_session(session, changed)
+
+    @classmethod
+    async def apersist_profile_update(cls, changed: User) -> User:
+        async with get_async_db_session() as session:
+            user = await session.run_sync(lambda sync: cls._persist_profile_in_session(sync, changed))
+            await session.commit()
+            return user
+
+    @classmethod
+    async def activate_tenant_with_profile(cls, user_id: int, tenant_id: int):
+        """Keep the existing membership/JWT commit boundary and add its profile intent."""
+        from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
+
+        async with get_async_db_session() as session:
+
+            def activate(sync):
+                user = UserDshProfileRepository.activate_tenant(sync, user_id, tenant_id)
+                cls._record_profile_in_session(sync, user)
+
+            await session.run_sync(activate)
+            await session.commit()
+
+    @staticmethod
+    async def batch_dsh_profiles(user_ids: list[int]) -> dict[int, dict]:
+        from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
+
+        async with get_async_db_session() as session:
+            return await session.run_sync(lambda sync: UserDshProfileRepository.batch_snapshot(sync, user_ids))
+
+    @classmethod
+    async def scan_dsh_profiles(cls, *, after_user_id: int = 0, limit: int = 100):
+        """Read a bounded authoritative cursor page for monotonic projection repair."""
+        from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
+
+        if not cls._dsh_enabled():
+            return {"items": [], "next_user_id": after_user_id, "has_more": False}
+        async with get_async_db_session() as session:
+
+            def scan(sync):
+                ids = UserDshProfileRepository.cursor_ids(sync, after_user_id=after_user_id, limit=limit)
+                snapshots = UserDshProfileRepository.batch_snapshot(sync, ids)
+                return {
+                    "items": list(snapshots.values()),
+                    "next_user_id": ids[-1] if ids else after_user_id,
+                    "has_more": len(ids) == limit,
+                }
+
+            return await session.run_sync(scan)
+
     @classmethod
     async def ainvalidate_jwt_after_account_disabled(cls, user_id: int) -> None:
         """禁用账号后立刻让已签发的 JWT 失效（F012 ``token_version``），并清理管理端 scope 缓存。"""

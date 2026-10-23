@@ -582,7 +582,8 @@
       },
       "code_output": {
         "label": "出参"
-      }
+      },
+      "disabledHint": "代码节点当前已禁用，工作流运行到此节点会失败。需由管理员在系统配置中开启 workflow.code_node_enabled。"
     },
     "condition": {
       "name": "条件分支",

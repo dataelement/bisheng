@@ -12,7 +12,7 @@ import { isGlobalSuperUser } from "./permissions";
 import { ScopeBanner } from "./SystemConfigBanners";
 import AssisModel from "./tabs/AssisModel";
 import EvaluationModel from "./tabs/EvaluationModel";
-import KnowledgeModle from "./tabs/KnowledgeModel";
+import { KnowledgeModel } from "./tabs/KnowledgeModel";
 import WorkflowModel from "./tabs/WorkflowModel";
 import WorkbenchModel from "./tabs/WorkbenchModel";
 
@@ -148,7 +148,7 @@ export default function SystemModelConfig({
                         <WorkbenchModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} ttsModel={ttsModel} onBack={onBack}></WorkbenchModel>
                     </TabsContent>
                     <TabsContent value="knowledge">
-                        <KnowledgeModle llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} onBack={onBack}></KnowledgeModle>
+                        <KnowledgeModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} onBack={onBack}></KnowledgeModel>
                     </TabsContent>
                     <TabsContent value="assis">
                         <AssisModel llmOptions={llmOptions} onBack={onBack}></AssisModel>

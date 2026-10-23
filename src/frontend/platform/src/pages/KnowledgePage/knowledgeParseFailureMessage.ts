@@ -50,6 +50,7 @@ function resolve10954Message(
   if (
     statusMessage.includes("only supports aliyun/qwen")
     || statusMessage.includes("knowledge media transcription only supports")
+    || statusMessage.includes("does not support asr provider")
   ) {
     return t("mediaAsrProviderUnsupported", { ns: "knowledge" });
   }
@@ -108,7 +109,10 @@ function resolveKnownExceptionMessage(message: string, t: TranslateFn): string |
   if (normalized.includes("api key is missing")) {
     return t("mediaAsrApiKeyMissing", { ns: "knowledge" });
   }
-  if (normalized.includes("knowledge media transcription only supports")) {
+  if (
+    normalized.includes("knowledge media transcription only supports")
+    || normalized.includes("does not support asr provider")
+  ) {
     return t("mediaAsrProviderUnsupported", { ns: "knowledge" });
   }
   if (normalized.includes("asr request failed")) {

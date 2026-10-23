@@ -1,11 +1,18 @@
 import json
+from typing import Any
 
 from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    annotate_rag_documents_with_citations,
+    cache_citation_registry_items,
+    collect_rag_citation_registry_items,
+)
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain.share_fallback import (
     get_model_by_id_with_share_fallback,
 )
@@ -42,6 +49,11 @@ class SearchKnowledgeBase(BaseTool):
     # that id would reach ``KnowledgeDao.query_by_id`` directly and leak another
     # tenant's / unauthorised KB content.
     allowed_knowledge_ids: set[str] | None = None
+    # F069: per-run citation scope (LinsightCitationScope). Every registered hit is
+    # reported so the completion audit can count sources seen in BOTH the main
+    # graph and the researcher sub-graph (they share this tool instance). None
+    # keeps the pre-F069 behaviour.
+    citation_scope: Any | None = None
 
     def _run(self, query: str, knowledge_id: str | None = None, **kwargs) -> str:
         """Use the tool."""
@@ -85,14 +97,47 @@ class SearchKnowledgeBase(BaseTool):
             )
 
     async def base_search(self, vector_client, query: str, k: int, **kwargs) -> str:
+        knowledge_id = kwargs.pop("knowledge_id", None)
+        knowledge_name = kwargs.pop("knowledge_name", "") or ""
         documents = await vector_client.asimilarity_search(query, k=k, **kwargs)
         if not documents:
             # "没有找到相关的知识内容"
             return '{"状态": "无结果", "错误信息":"没有找到相关的知识内容"}'
-        result = {"状态": "成功", "结果": [one.page_content for one in documents]}
-        result = json.dumps(result, ensure_ascii=False, indent=2)
+        try:
+            for document in documents:
+                metadata = dict(document.metadata or {})
+                if knowledge_id is not None:
+                    metadata.setdefault("knowledge_id", knowledge_id)
+                if knowledge_name:
+                    metadata.setdefault("knowledge_name", knowledge_name)
+                metadata.setdefault("access_scope", "per_user")
+                document.metadata = metadata
+            annotated = annotate_rag_documents_with_citations(documents)
+            items = collect_rag_citation_registry_items(annotated)
+            await cache_citation_registry_items(items)
+            handles: dict[str, str] = {}
+            if self.citation_scope is not None:
+                await self.citation_scope.record_seen(items)
+                if getattr(self.citation_scope, "enabled", False):
+                    from bisheng.citation.domain.services.citation_handle_service import assign_handles
 
-        return result
+                    handles = await assign_handles(self.citation_scope, items)
+            formatted = [KnowledgeUtils.format_retrieved_chunk(doc, knowledge_name) for doc in annotated]
+            if handles:
+                # F069 P1: the model sees a short handle instead of the registry key.
+                # format_retrieved_chunk itself is shared platform-wide and untouched;
+                # an allocation failure (empty mapping) keeps the F047 shape.
+                from bisheng.citation.domain.services.citation_handle_service import swap_chunk_id_for_handle
+
+                formatted = [swap_chunk_id_for_handle(chunk, handles) for chunk in formatted]
+            return json.dumps({"状态": "成功", "结果": formatted}, ensure_ascii=False, indent=2)
+        except Exception:
+            logger.opt(exception=True).warning("search_knowledge_base citation annotate failed; returning bare chunks")
+            return json.dumps(
+                {"状态": "成功", "结果": [one.page_content for one in documents]},
+                ensure_ascii=False,
+                indent=2,
+            )
 
     async def search_knowledge(self, query: str, knowledge_id: int, limit: int) -> str:
         knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
@@ -108,4 +153,10 @@ class SearchKnowledgeBase(BaseTool):
             # "Configured by the Knowledge BaseembeddingModel does not exist or has been deleted"
             raise Exception("Configured by the Knowledge BaseembeddingModel does not exist or has been deleted")
         milvus_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(0, knowledge=knowledge_info)
-        return await self.base_search(milvus_client, query, limit)
+        return await self.base_search(
+            milvus_client,
+            query,
+            limit,
+            knowledge_id=knowledge_id,
+            knowledge_name=knowledge_info.name or "",
+        )

@@ -12,10 +12,12 @@ from pydantic import BaseModel, Field, SkipValidation, field_validator
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
     annotate_rag_documents_with_citations,
+    annotate_temp_documents_with_citations,
     annotate_web_results_with_citations,
     cache_citation_registry_items,
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
+    collect_temp_citation_registry_items,
     collect_web_citation_registry_items,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
@@ -47,6 +49,7 @@ class WorkflowCitationToolWrapper(BaseTool):
     tool: BaseTool
     citation_registry_items: list[CitationRegistryItemSchema] = Field(default_factory=list, exclude=True)
     kb_name_by_id: dict[str, str] = Field(default_factory=dict, exclude=True)
+    temp_source_by_document_id: dict[str, str] = Field(default_factory=dict, exclude=True)
 
     @classmethod
     def wrap(cls, tool: BaseTool) -> BaseTool:
@@ -55,6 +58,7 @@ class WorkflowCitationToolWrapper(BaseTool):
             description=tool.description,
             args_schema=tool.args_schema,
             tool=tool,
+            temp_source_by_document_id=getattr(tool, "temp_source_by_document_id", None) or {},
         )
 
     def _is_web_search_tool(self) -> bool:
@@ -91,14 +95,30 @@ class WorkflowCitationToolWrapper(BaseTool):
 
     def _format_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
-        source_documents = annotate_rag_documents_with_citations(source_documents)
-        self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
+        if getattr(self.tool, "ephemeral_source", False):
+            source_map = self.temp_source_by_document_id or getattr(self.tool, "temp_source_by_document_id", {}) or {}
+            from bisheng.workflow.common.knowledge import RagUtils
+
+            RagUtils.backfill_temp_source_paths(source_documents, source_map)
+            source_documents = annotate_temp_documents_with_citations(source_documents)
+            self._extend_citation_registry_items(collect_temp_citation_registry_items(source_documents))
+        else:
+            source_documents = annotate_rag_documents_with_citations(source_documents)
+            self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
         return self._dump_knowledge_chunks(source_documents)
 
     async def _aformat_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
-        source_documents = annotate_rag_documents_with_citations(source_documents)
-        await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
+        if getattr(self.tool, "ephemeral_source", False):
+            source_map = self.temp_source_by_document_id or getattr(self.tool, "temp_source_by_document_id", {}) or {}
+            from bisheng.workflow.common.knowledge import RagUtils
+
+            RagUtils.backfill_temp_source_paths(source_documents, source_map)
+            source_documents = annotate_temp_documents_with_citations(source_documents)
+            await self._aextend_citation_registry_items(collect_temp_citation_registry_items(source_documents))
+        else:
+            source_documents = annotate_rag_documents_with_citations(source_documents)
+            await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
         return self._dump_knowledge_chunks(source_documents)
 
     def _dump_knowledge_chunks(self, source_documents: list) -> str:
@@ -307,12 +327,8 @@ class AgentNode(BaseNode):
 
     @staticmethod
     def _wrap_citation_tool(tool: BaseTool) -> BaseTool:
-        # F054: an ephemeral source (workflow input-node upload) is left
-        # unwrapped, so no citation is registered for it and no badge appears.
-        # Its chunks cannot resolve back to a real file, and a badge that opens
-        # onto nothing is worse than no badge (design §3 decision 6).
-        if getattr(tool, "ephemeral_source", False):
-            return tool
+        # F062: ephemeral_source still marks a temp-kb tool, but the wrapper
+        # now registers those chunks as citation_type=temp instead of skipping.
         if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
             return WorkflowCitationToolWrapper.wrap(tool)
         return tool
@@ -379,30 +395,40 @@ class AgentNode(BaseNode):
                 tool_init_params = {
                     "name": f"{knowledge_id.split('.')[-1].replace('#', '')}_knowledge_{index}",
                     "description": description,
-                    "vector_retriever": self.init_file_milvus(file_metadata_list[0]),
-                    "elastic_retriever": self.init_file_es(file_metadata_list[0]),
+                    "vector_retriever": self.init_file_milvus(file_metadata_list),
+                    "elastic_retriever": self.init_file_es(file_metadata_list),
                     "llm": self._llm,
                     **knowledge_retriever,
                 }
                 tmp_file_tool = ToolExecutor.init_tmp_knowledge_tool_sync(**tool_init_params)
+                object.__setattr__(
+                    tmp_file_tool,
+                    "temp_source_by_document_id",
+                    {
+                        str(row.get("document_id")): row.get("source_url") or row.get("file_path")
+                        for row in file_metadata_list
+                        if isinstance(row, dict) and row.get("document_id")
+                    },
+                )
                 tools.append(tmp_file_tool)
         return tools
 
-    def init_file_milvus(self, file_metadata: dict) -> BaseRetriever:
+    def init_file_milvus(self, file_metadata_list: list | dict) -> BaseRetriever:
         """Initialize the temporary file selected by the usermilvus"""
         embeddings = LLMService.get_knowledge_default_embedding(self.user_id, tenant_id=self.tenant_id)
         if not embeddings:
             raise Exception("No default configuredembeddingModels")
-        file_ids = [file_metadata["document_id"]]
+        rows = file_metadata_list if isinstance(file_metadata_list, list) else [file_metadata_list]
+        file_ids = [row["document_id"] for row in rows if isinstance(row, dict) and row.get("document_id")]
         collection_name = self.get_milvus_collection_name(embeddings.model_id)
         vector_client = KnowledgeRag.init_milvus_vectorstore(collection_name=collection_name, embeddings=embeddings)
         return vector_client.as_retriever(search_kwargs={"expr": f"document_id in {file_ids}"})
 
-    def init_file_es(self, file_metadata: dict):
+    def init_file_es(self, file_metadata_list: list | dict):
+        rows = file_metadata_list if isinstance(file_metadata_list, list) else [file_metadata_list]
+        file_ids = [row["document_id"] for row in rows if isinstance(row, dict) and row.get("document_id")]
         es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=self.tmp_collection_name)
-        return es_client.as_retriever(
-            search_kwargs={"filter": [{"term": {"metadata.document_id": file_metadata["document_id"]}}]}
-        )
+        return es_client.as_retriever(search_kwargs={"filter": [{"terms": {"metadata.document_id": file_ids}}]})
 
     def _init_sql_address(self) -> str:
         """Inisialisasi SQL Database Address"""

@@ -12,7 +12,8 @@
  *   }
  *
  * - "stream" events: accumulate content + reasoning_content
- * - "end" event:    finalize with the full accumulated text
+ * - "end" event:    finalize with the persisted answer (falls back to the
+ *                   accumulated text when the event carries none)
  */
 import { useEffect, useRef } from "react";
 import { SSE } from "sse.js";
@@ -79,10 +80,16 @@ export default function useStreamChatSSE(
                 const data = JSON.parse(e.data);
 
                 if (data.type === "end") {
-                    // Stream complete — skip content (it's the full duplicate),
-                    // send final accumulated text plus the real persisted answer id
-                    // (backend end event) so the caller can swap out the temporary
-                    // placeholder id and feedback/like targets the right row.
+                    // Stream complete. The end event carries the answer as
+                    // persisted, after the backend dropped citation markers it
+                    // could not back — prefer it over the raw streamed text, or
+                    // those markers render as broken badges until a reload.
+                    // Also hand over the real persisted answer id so the caller
+                    // can swap out the temporary placeholder id.
+                    const finalContent = data?.message?.content;
+                    if (typeof finalContent === "string") {
+                        contentText = finalContent;
+                    }
                     onFinal(buildFullText(), data?.message?.message_id);
                     onEnd();
                     return;

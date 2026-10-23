@@ -39,6 +39,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     CITATION_END_MARKER,
     CITATION_PROMPT_RULES,
     CITATION_START_MARKER,
+    ensure_citation_rules,
 )
 
 DEFAULT_SYSTEM_PROMPT = "You are a professional AI assistant helping users analyze and discuss articles."
@@ -111,7 +112,7 @@ async def test_registration_caches_the_item_for_later_resolve():
 def test_citation_rules_are_appended_to_the_default_system_prompt():
     """The channel default prompt teaches no markers, so without this the model
     never emits one and no badge can ever appear."""
-    prompt = ChannelChatService.apply_citation_rules(DEFAULT_SYSTEM_PROMPT)
+    prompt = ensure_citation_rules(DEFAULT_SYSTEM_PROMPT)
 
     assert prompt.startswith(DEFAULT_SYSTEM_PROMPT)
     assert CITATION_PROMPT_RULES in prompt
@@ -121,13 +122,13 @@ def test_citation_rules_are_not_appended_twice():
     """An admin prompt that already teaches the markers is left alone."""
     already = DEFAULT_SYSTEM_PROMPT + "\n" + CITATION_PROMPT_RULES
 
-    assert ChannelChatService.apply_citation_rules(already) == already
+    assert ensure_citation_rules(already) == already
 
 
 def test_citation_rules_are_appended_to_a_custom_admin_prompt_too():
     custom = "你是某频道的专属助手。"
 
-    prompt = ChannelChatService.apply_citation_rules(custom)
+    prompt = ensure_citation_rules(custom)
 
     assert prompt.startswith(custom)
     assert CITATION_PROMPT_RULES in prompt
@@ -270,6 +271,18 @@ async def test_persist_failure_does_not_raise():
         new=AsyncMock(side_effect=RuntimeError("db down")),
     ):
         await ChannelChatService.save_article_citations(items, message_id=77, chat_id="chat-1", flow_id="doc-9")
+
+
+def test_citation_key_survives_truncation_of_a_long_article():
+    """The endpoint decorates the article, then the stream truncates it to
+    max_chunk_size. A key appended at the end was cut off for every long
+    article, so the model had nothing to cite."""
+    key = "articlesearch_abc:0"
+    decorated = ChannelChatService.decorate_article_content("正文" * 20000, key)
+
+    truncated = ChannelChatService._truncate_article_content(decorated, 15000)
+
+    assert f"citation_key: {key}" in truncated
 
 
 def test_prompt_building_without_a_citation_key_is_unchanged():

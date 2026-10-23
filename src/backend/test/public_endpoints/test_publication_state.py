@@ -93,13 +93,13 @@ async def test_load_published_resource_raises_the_visitor_facing_error(lookups) 
     lookups.flow = OFFLINE_FLOW
     with pytest.raises(PublicApplicationOfflineError) as offline:
         await guest_policy._load_published_resource("workflow", "id-1")
-    assert offline.value.code == 26102
+    assert offline.value.code == 26402
     assert offline.value.http_status == 404
 
     lookups.flow = None
     with pytest.raises(PublicLinkInvalidError) as missing:
         await guest_policy._load_published_resource("workflow", "id-1")
-    assert missing.value.code == 26101
+    assert missing.value.code == 26401
     assert missing.value.http_status == 404
 
 

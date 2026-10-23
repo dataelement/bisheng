@@ -503,3 +503,19 @@ def test_build_turns_agent_answer_strips_citations_from_events_text():
     assert '' not in turns[0].answers[0]
     assert 'knowledgesearch' not in turns[0].answers[0]
     assert turns[0].answers[0] == '答  完'
+
+
+
+
+def test_build_turns_drops_unresolved_handles_from_answers_only():
+    """F072 AC-15: an [Sn] the session table never knew does not reach the
+    exported answer; a user who typed [S1] in a question keeps it."""
+    session = _make_session(flow_type=FlowType.WORKSTATION.value, flow_name='')
+    answer = "结论一。\ue200knowledgesearch_ab12cd34:0\ue202结论二。[S99] 编号 [3] 保留"
+    msgs = [
+        _make_chat_message(1, 'question', '数组[S1]怎么用'),
+        _make_chat_message(2, 'answer', answer, parent_msg_id=1, sender='DeepSeek v3.2'),
+    ]
+    turns = ConversationExportService._build_turns(msgs, session, user_name='Admin')
+    assert turns[0].user_query == '数组[S1]怎么用'
+    assert turns[0].answers == ['结论一。结论二。 编号 [3] 保留']

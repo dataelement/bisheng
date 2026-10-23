@@ -324,7 +324,7 @@ MCP（Model Context Protocol）集成模块位于 `src/backend/bisheng/mcp_manag
 | 客户端 | 文件 | 传输协议 | 核心参数 |
 |--------|------|---------|---------|
 | `SseClient` | `clients/sse.py` | Server-Sent Events | `url` |
-| `StdioClient` | `clients/stdio.py` | 标准输入/输出 | `command`, `args` |
+| `StdioClient` | `clients/stdio.py` | 标准输入/输出（**已禁用**，工厂抛 15025） | `command`, `args` |
 | `StreamableClient` | `clients/streamable.py` | Streamable HTTP | `url` |
 
 `BaseMcpClient` 提供两个核心方法：
@@ -386,7 +386,7 @@ LangChain StructuredTool
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `enable_stdio` | `true` | 是否启用 STDIO 类型的 MCP 客户端 |
+| `enable_stdio` | `false`（冻结） | STDIO 类型 MCP 已禁用；配置写成 `true` 也不会生效。创建、测试、刷新、执行一律 15025 |
 
 ## 相关文档
 

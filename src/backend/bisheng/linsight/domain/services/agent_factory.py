@@ -23,22 +23,30 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, Any
 
 from json_repair import json_repair
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, tool
+from langchain_core.tools.base import ArgsSchema
 from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt
+from loguru import logger
+from pydantic import Field as PydanticField
+from pydantic import SkipValidation
 
 from bisheng.common.services.config_service import settings
 from bisheng.linsight.domain.services.binary_content_guard import (
     CODE_INTERPRETER_TOOL,
     build_binary_guards,
 )
+from bisheng.linsight.domain.services.invalid_tool_call_middleware import (
+    build_invalid_tool_call_repair_middleware,
+)
 from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
 from bisheng.linsight.domain.services.tool_loop_middleware import build_tool_loop_breaker_middleware
+from bisheng.linsight.domain.services.unattended_run import caller_instructions, is_unattended_run
 from bisheng.llm.domain.services import LLMService
 
 # --- Subagent (researcher) tool blacklist (design #1 §4.3 / §5.1, decision 4) ---
@@ -80,7 +88,7 @@ __KB_RESEARCH_LINE__
 - 中间产物（草稿、笔记、原始检索摘录）只写入工作区 scratch/ 目录，绝不写 output/。最终交付物的撰写与拼装由主智能体负责，不归你管。
 - 你**没有** ask_user 工具，也不得以任何方式向用户提问；遇到信息不足时基于已掌握的资料给出最佳结论并说明不确定性，而不是停下来等待澄清。
 - 调用方（主智能体）只能看到你的**最后一条消息**。因此请把蒸馏后的结论（含关键事实、出处/来源标识、必要的不确定性说明）作为最后一条消息完整回传，不要把结论只留在中间步骤里。
-
+__CITATION_HANDOFF_LINE__
 请全程使用与任务描述一致的语言（默认简体中文）——这**包括你的思考与推理过程（thinking）**、调研旁白与最终回传，绝不允许“用英文思考、再用中文回传”。"""
 
 # Chinese system prompt for the Linsight task-mode agent (design §2.4). Kept
@@ -122,29 +130,27 @@ __SKILL_EXEC_LINE____KB_EXEC_LINE__
 __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定。
 
 3. 【产出交付物】按用户在澄清时选择的输出格式产出，markdown 是唯一规范源：
-__SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。图表/图片一律用 markdown 图片语法 `![说明](相对路径)` 引用（如 `![季节性走势](output/charts/x.png)`）；不要在 markdown 里写 `<div>`/`<img>`/`<table>` 等原始 HTML 标签——markdown 预览不渲染原始 HTML，会以纯文本泄漏。（HTML 交付物走 3b，不受此约束。）
+__SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。图表/图片一律用 markdown 图片语法 `![说明](相对路径)` 引用（如 `![季节性走势](output/charts/x.png)`）；不要在 markdown 里写 `<div>`/`<img>`/`<table>` 等原始 HTML 标签——markdown 预览不渲染原始 HTML，会以纯文本泄漏。（HTML 交付物走 3b，不受此约束。）__CITATION_DELIVERABLE_LINE__
    - 3b（仅当选了 html）：write_file 写 output/<name>.html（完整自包含 HTML，内联样式，无外部脚本/CDN）。
    - 3c（仅当选了 docx）：export_docx(source_path="output/<name>.md")，必须在 3a 之后。
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
    最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
    **禁止**在未调用 write_file 写入 output/ 的情况下，在回复中声称「已保存为 xxx.md / 已写入 xxx」——用户界面只会展示真实写入 output/ 的交付物；口头提及的文件名无法被预览或下载。
+   **重新生成必须覆盖写入**：若 output/ 里已有上一轮交付物，且用户要求重新生成、覆盖、更新或再出一份报告，必须再次调用 write_file（或 edit_file）写入新内容。只读旧文件、把未改动的旧稿当成本轮交付、或仅用文字收尾声称「已更新」，都是错误的。
 
 4. 【收尾】用 1-2 句话概括交付物的核心内容或结论（例如“已梳理出近一年的市场变化并给出三条关键建议”）；不要复述文件名、工作区路径（如 output/…）或“已完成”之类的状态字样——完成状态与可下载的文件由界面单独呈现，正文里无需重复。
 
 # 如何填写 ask_user（仅第 0 步触发时）
 
 - reason：一句话说明为何需要先确认，使用与用户输入一致的语言。
-- questions：1-3 个（**不能为空数组**），按“对结果影响最大”优先排序（任务范围/目标 > 输出格式/形态 > 其它细节）。每个形如：{"question": "完整问题文本", "options": [...], "multiple": false}
+- questions：1-3 个（**不能为空数组**），按“对结果影响最大”优先排序（任务范围/目标 > 输出格式/形态 > 其它细节）。questions 是一个对象数组，每个对象有三个字段：question（字符串，完整问题文本）、options（字符串数组，预设选项）、multiple（布尔值，true 为多选）。
   - 每个问题**必须给 2-4 个具体预设选项**（options），每项是一个简短的选项文案（纯字符串），优先让用户点选；只有该信息天然无法预设选项（如“请输入你的身高”）时，才把该问题的 options 留空走开放输入——但问题本身仍要写出来，不能整个 questions 留空。
   - 多选问题（multiple=true，如输出格式）：用户可勾选多项。
   - 收集“输出格式”用一个多选问题，选项含 markdown / html / docx / pdf。
+  - reason / question / options 文本里**不要出现英文双引号 `"`**（它会破坏工具调用的 JSON 参数，整次澄清会直接失效）；需要引用词语时用中文引号「」或“”。每个键只写一次（例如 multiple 不要重复）。
 - 一次性把所有要问的问完。不要罗列工具或能力限制，也不要预先解释工作流。
-- 【正确示例】questions 必须是这样的 JSON 数组（照此结构直接填——切勿把问题写进 reason，也切勿把数组序列化成字符串）：
-  questions=[
-    {"question": "你想构建哪一类 agent？", "options": ["对话/工具调用型（LLM Agent）", "自动化流程/任务编排型", "检索增强问答型（RAG）"], "multiple": false},
-    {"question": "主要落地场景或用途是？", "options": ["客服答疑", "数据分析与报告", "内容创作", "研发/代码辅助"], "multiple": false},
-    {"question": "希望的交付格式？", "options": ["markdown", "html", "docx", "pdf"], "multiple": true}
-  ]
+- questions 作为 ask_user 的参数值传入：不要把数组序列化成字符串，也不要把问题写进 reason。
+- 【示例】用户只说「帮我做一个 agent」时，可以问 3 个问题：agent 类型（单选：对话/工具调用型、自动化流程/任务编排型、检索增强问答型）；主要落地场景（单选：客服答疑、数据分析与报告、内容创作、研发/代码辅助）；交付格式（多选：markdown、html、docx、pdf）。
 
 # 默认假设（无需追问，缺失时直接采用）
 - 输出格式：默认仅 markdown；仅当用户明确选择才追加 html / docx / pdf，不要擅自猜测。
@@ -242,10 +248,105 @@ class _LanguageTailMiddleware(AgentMiddleware):
         return await handler(self._append(request))
 
 
+# F069 P0: the citation requirement restated at the TAIL of the system message.
+# citation.yaml is appended to the kernel prompt (~37% into the assembled system
+# message) and then buried under ~7k chars of deepagents framework prompts; in
+# the two audited runs both models had stopped following it by the time they
+# wrote the report. This tail sits right before the language directive (which
+# stays the absolute tail — it self-describes as "language only"). Gated on the
+# same has_kb/has_web condition as _with_citation_rules.
+_CITATION_DELIVERABLE_LINE_ZH = (
+    "正文中凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 逐字复制来源标识并用引用标记包裹。"
+)
+# F069 P1 wording under the short-handle contract (scope.enabled). Both wordings
+# are kept so the kill switch can revert the whole prompt side in lockstep.
+_CITATION_DELIVERABLE_LINE_HANDLES_ZH = (
+    "正文中凡依据检索资料写出的事实、数字、引文，在该句或该段末尾写来源编号，如 [S3] 或 [S3][S7]。"
+)
+
+_LINSIGHT_CITATION_TAIL_ZH = """# 来源标注（与上文 Citation Rules 同一要求，不改变其它任何要求）
+
+写 output/ 下的 markdown 交付物和最终回复时，凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 的格式逐字复制检索结果里的来源标识（知识库 `<chunk_id>`、联网 `citation_key`）并用引用标记包裹；一句用了多条资料就把多个标识放在同一组标记里。"""
+
+
+_LINSIGHT_CITATION_TAIL_HANDLES_ZH = """# 来源编号（与上文「来源编号」同一要求，不改变其它任何要求）
+
+写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号 [Sn]，多条写 [S3][S7]；编号取自检索结果或本轮来源表。"""
+
+
+class _CitationTailMiddleware(_LanguageTailMiddleware):
+    """Same mechanics as the language tail; a separate instance so the language
+    directive text stays untouched and remains the absolute tail. langchain
+    asserts middleware names are unique, hence the distinct ``name``."""
+
+    @property
+    def name(self) -> str:
+        return "LinsightCitationTail"
+
+
+# F073: unattended runs (Open API submissions). Nobody is online to answer, so
+# the clarify step, the ask_user fill-in rules and the ask_user tool line are
+# replaced/removed together with the tool itself (prompt ⟺ tool lockstep, see
+# linsight/AGENTS.md). Each marker is asserted so a template edit that moves
+# them fails loudly in tests instead of silently leaving ask_user advertised.
+_CLARIFY_STEP_START = "0. 【先澄清，再动手】"
+_CLARIFY_STEP_END = "1. 【规划】"
+_ASK_USER_RULES_START = "# 如何填写 ask_user（仅第 0 步触发时）"
+_ASK_USER_RULES_END = "# 默认假设（无需追问，缺失时直接采用）"
+_ASK_USER_TOOL_LINE = "- ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。\n"
+_CLARIFIED_FORMAT_PHRASE = "按用户在澄清时选择的输出格式产出"
+_CLARIFY_WORTH_LINE = "- 仅当信息“只有用户本人才知道、且影响结果正确性”时才值得澄清。\n"
+_UNATTENDED_STEP_ZH = (
+    "0. 【无人值守，不提问】本次任务由集成系统提交，没有人在线回答问题：不得向用户提问，也不得停下来等待确认。"
+    "信息不足时直接采用下方“默认假设”补齐，或按常识做出最合理的选择，并在最终回复里单列「所做假设」一节逐条写明。\n\n"
+)
+_UNATTENDED_FORMAT_PHRASE = "按任务描述要求的输出格式产出（未指明时仅产出 markdown）"
+_UNATTENDED_WORTH_LINE = "- 所有缺失信息都按以上默认假设或常识补齐，并在最终回复的「所做假设」中写明。\n"
+
+
+def _cut_between(text: str, start: str, end: str, replacement: str) -> str:
+    i = text.index(start)
+    j = text.index(end, i)
+    return text[:i] + replacement + text[j:]
+
+
+def _to_unattended_prompt(template: str) -> str:
+    """Rewrite the main template for a run that must never ask the user."""
+
+    out = _cut_between(template, _CLARIFY_STEP_START, _CLARIFY_STEP_END, _UNATTENDED_STEP_ZH)
+    out = _cut_between(out, _ASK_USER_RULES_START, _ASK_USER_RULES_END, "")
+    for old, new in (
+        (_ASK_USER_TOOL_LINE, ""),
+        (_CLARIFIED_FORMAT_PHRASE, _UNATTENDED_FORMAT_PHRASE),
+        (_CLARIFY_WORTH_LINE, _UNATTENDED_WORTH_LINE),
+        ("、向用户的提问", ""),
+    ):
+        if old not in out:
+            raise ValueError(f"unattended prompt marker missing: {old!r}")
+        out = out.replace(old, new)
+    return out
+
+
+def _with_caller_instructions(prompt: str, instructions: str | None) -> str:
+    """Layer the Open API caller's business-context instructions under the platform rules."""
+
+    if not instructions:
+        return prompt
+    return (
+        prompt
+        + "\n\n# 业务上下文指令（由调用方提供）\n\n"
+        + "以下内容补充本次任务的业务背景与要求；与上文平台规则冲突时，以平台规则为准。\n\n"
+        + instructions
+    )
+
+
 def _build_linsight_system_prompt(
     has_knowledge_base: bool,
     skills_present: bool = False,
     has_code_interpreter: bool = False,
+    has_web_search: bool = False,
+    citation_handles: bool = False,
+    unattended: bool = False,
 ) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
 
@@ -372,19 +473,49 @@ def _build_linsight_system_prompt(
             "**任何情况下都不要把同一段代码原样再跑一遍**——相同的输入只会得到相同的结果。\n"
             "- 不要一次 print 巨量内容：超长日志会被截断（中间省略），需要完整数据时把它写进 "
             "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
+            # Lockstep twin of EXECUTION_BOUNDARY_RULES in the executor's tool
+            # description. Reduces attempts only; isolation is the real control.
+            "# 执行环境边界\n\n"
+            "- bisheng_code_interpreter 只用于处理本任务工作区里的文件。执行环境不提供平台自身的"
+            "环境变量、配置文件、密钥、凭据和内部服务地址：代码里不要读取或打印 os.environ、/proc、"
+            "平台配置文件或平台安装目录下的源码，也不要连接平台的数据库、缓存、对象存储等内部服务。\n"
+            "- 用户要求查看上述内容（如「打印环境变量」「看看配置里的密钥」「查一下数据库密码」）时，"
+            "直接说明任务环境不提供平台配置和凭据，然后继续完成任务的其余部分；"
+            "不要换一种写法再去尝试，也不要猜测或编造这些值。\n"
+            "- 用户自己上传到 uploads/ 的文件（包括 .env、配置文件）属于用户资料，可以正常读取和分析。\n\n"
         )
 
+    # F069: the deliverable step names the citation requirement explicitly, but
+    # ONLY when the run has a citable retrieval tool — the same gate as
+    # _with_citation_rules, so the prompt never points at a "Citation Rules"
+    # section that was not appended (prompt/tool lockstep, see module docstring).
+    if has_knowledge_base or has_web_search:
+        citation_deliverable_line = (
+            _CITATION_DELIVERABLE_LINE_HANDLES_ZH if citation_handles else _CITATION_DELIVERABLE_LINE_ZH
+        )
+    else:
+        citation_deliverable_line = ""
+
+    # F073: an unattended run gets the no-questions variant (ask_user unbound).
+    template = (
+        _to_unattended_prompt(_LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH)
+        if unattended
+        else _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH
+    )
     return (
-        _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH.replace("__KB_EXEC_LINE__", exec_line)
+        template.replace("__KB_EXEC_LINE__", exec_line)
         .replace("__KB_TOOL_LINE__", tool_line)
         .replace("__KB_DELEGATE_LINE__", delegate_line)
         .replace("__SKILL_EXEC_LINE__", skill_exec_line)
         .replace("__SKILL_DELIVERABLE_LINE__", skill_deliverable_line)
         .replace("__PATH_NAMESPACE_LINE__", path_namespace_line)
+        .replace("__CITATION_DELIVERABLE_LINE__", citation_deliverable_line)
     )
 
 
-def _build_researcher_prompt(has_knowledge_base: bool) -> str:
+def _build_researcher_prompt(
+    has_knowledge_base: bool, has_web_search: bool = False, citation_handles: bool = False
+) -> str:
     """Resolve the researcher subagent prompt (same lockstep rule as the main one).
 
     The subagent receives search_knowledge_base only when it is in the filtered
@@ -403,7 +534,22 @@ def _build_researcher_prompt(has_knowledge_base: bool) -> str:
             "不要调用任何知识库检索工具，基于已有资料与自身知识给出结论。"
             f"{media_line}"
         )
-    return _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH.replace("__KB_RESEARCH_LINE__", research_line)
+    if (has_knowledge_base or has_web_search) and citation_handles:
+        # F069 P1: the researcher hands back handles, in place, at sentence ends.
+        citation_handoff = (
+            "- 检索结果中的来源编号（如 S3）必须原样出现在你的最后一条消息里的对应句末，写作 [S3]，"
+            "供主智能体写入报告正文；不要改写成参考文献列表或来源名称。\n"
+        )
+    elif has_knowledge_base or has_web_search:
+        citation_handoff = (
+            "- 检索结果中的来源标识（知识库 `<chunk_id>`、联网 `citation_key`）必须**原样**出现在你的"
+            "最后一条消息里，供主智能体写入报告正文；不要改写、翻译或改成参考文献列表。\n"
+        )
+    else:
+        citation_handoff = ""
+    return _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH.replace("__KB_RESEARCH_LINE__", research_line).replace(
+        "__CITATION_HANDOFF_LINE__", citation_handoff
+    )
 
 
 def _loads_tolerant(s: str) -> object | None:
@@ -653,6 +799,7 @@ async def ask_user(
             {"question": "问题标题", "options": ["选项1", "选项2"], "multiple": false}。
             options 为空表示开放式自由输入；multiple=true 表示多选。仅当确实没有任何
             结构化问题、只需给一句总体说明时，才省略 questions。
+            文本内不要使用英文双引号（会破坏 JSON 参数），需要引用时用中文引号「」/“”。
 
     Returns:
         用户的回答文本。
@@ -685,6 +832,156 @@ async def ask_user(
     return interrupt({"reason": reason, "params": {"tool_calls": tool_calls}})
 
 
+def _is_web_search_tool(tool: object) -> bool:
+    return getattr(tool, "name", None) == "web_search" or getattr(tool, "tool_name", None) == "web_search"
+
+
+def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False) -> str:
+    """Append the citation rules when the run actually has a citable tool.
+
+    ``handles=False``: the shared citation.yaml backstop (real U+E200 markers,
+    verbatim ids) that daily chat / knowledge space / channel also teach.
+    ``handles=True`` (F069 P1, ``scope.enabled``): the short [Sn] contract from
+    citation_handles.yaml instead — the write boundary turns the handles back
+    into markers, so the downstream contract is unchanged. The gate stays here:
+    no KB / web tool → nothing to cite → no rules.
+    """
+    if not enabled or not prompt:
+        return prompt
+    if handles:
+        from bisheng.citation.domain.services.citation_handle_service import ensure_handle_rules
+
+        return ensure_handle_rules(prompt)
+    from bisheng.citation.domain.services.citation_prompt_helper import ensure_citation_rules
+
+    return ensure_citation_rules(prompt)
+
+
+async def _annotate_web_search_items(output: Any) -> tuple[Any, list]:
+    """Annotate a web_search JSON list with citation keys.
+
+    Returns ``(annotated_output, registry_items)``; a non-JSON / non-list payload
+    is passed through untouched with an empty item list.
+    """
+    from bisheng.citation.domain.services.citation_prompt_helper import (
+        annotate_web_results_with_citations,
+        cache_citation_registry_items,
+        collect_web_citation_registry_items,
+    )
+
+    if not isinstance(output, str):
+        return output, []
+    try:
+        results = json.loads(output)
+    except json.JSONDecodeError:
+        return output, []
+    if not isinstance(results, list):
+        return output, []
+    annotated = annotate_web_results_with_citations(results)
+    items = collect_web_citation_registry_items(annotated)
+    # Hand back the snippet-level items, not what the cache returns: the cache
+    # groups them per page and those records carry no ``key`` / ``itemId``, so a
+    # handle would map to a bare ``websearch_xxx`` that no marker parser accepts.
+    await cache_citation_registry_items(items)
+    return json.dumps(annotated, ensure_ascii=False), list(items)
+
+
+async def _annotate_web_search_output(output: Any) -> Any:
+    annotated, _items = await _annotate_web_search_items(output)
+    return annotated
+
+
+class _LinsightWebCitationWrapper(BaseTool):
+    """Register web_search hits into the citation runtime cache (F047).
+
+    F069: when a per-run ``scope`` (LinsightCitationScope) is bound, every hit is
+    also reported to it so the completion audit can count the sources this run
+    has seen — inside the researcher sub-graph too, which reuses this instance.
+    """
+
+    name: str
+    description: str
+    args_schema: Annotated[ArgsSchema | None, SkipValidation()] = PydanticField(default=None)
+    tool: BaseTool
+    scope: Any = None
+
+    @classmethod
+    def wrap(cls, inner: BaseTool, scope: Any = None) -> BaseTool:
+        return cls(
+            name=inner.name,
+            description=inner.description,
+            args_schema=inner.args_schema,
+            tool=inner,
+            scope=scope,
+        )
+
+    def _run(self, *args, **kwargs):
+        return "not supported in sync mode, please use async version"
+
+    async def _arun(self, config=None, **kwargs):
+        # ToolNode's default error handling re-raises anything but an argument
+        # validation error, so one search timeout or upstream 5xx would abort the
+        # whole run. Hand the failure to the model as the tool result instead; it
+        # can retry with another query or finish with what it already has.
+        try:
+            output = await self.tool.ainvoke(kwargs, config=config)
+        except Exception as e:
+            logger.warning(f"web_search failed, returning the error to the model: {e!r}")
+            return f"联网搜索失败：{e}"
+        try:
+            annotated, items = await _annotate_web_search_items(output)
+            if self.scope is not None and items:
+                await self.scope.record_seen(items)
+                if getattr(self.scope, "enabled", False):
+                    annotated = await _rewrite_web_results_with_handles(self.scope, annotated, items)
+            return annotated
+        except Exception:
+            logger.opt(exception=True).warning("web_search citation annotate failed; returning bare result")
+            return output
+
+
+async def _rewrite_web_results_with_handles(scope: Any, annotated: Any, items: list) -> Any:
+    """F069 P1: show the model ``"ref": "S7"`` instead of the registry key.
+
+    Allocation failure (empty mapping) keeps the F047 shape untouched so the
+    model still has a citable id.
+    """
+    from bisheng.citation.domain.services.citation_handle_service import (
+        assign_handles,
+        rewrite_web_results_with_handles,
+    )
+
+    handles = await assign_handles(scope, items)
+    return rewrite_web_results_with_handles(annotated, handles, getattr(scope, "entries", None))
+
+
+def _wrap_linsight_web_citation_tools(tools: Sequence, scope: Any = None) -> list:
+    wrapped = []
+    for tool_obj in tools:
+        if _is_web_search_tool(tool_obj) and isinstance(tool_obj, BaseTool):
+            wrapped.append(_LinsightWebCitationWrapper.wrap(tool_obj, scope=scope))
+        else:
+            wrapped.append(tool_obj)
+    return wrapped
+
+
+def _bind_linsight_citation_scope(tools: Sequence, scope: Any) -> list:
+    """Attach the run's citation scope to every retrieval tool (F069).
+
+    Knowledge-base tools get the scope as a field; web_search tools are wrapped
+    with it. The researcher sub-agent later receives the SAME instances via
+    ``_subagent_tools``, so its retrieval is counted as well.
+    """
+    if scope is not None:
+        for tool_obj in tools:
+            if hasattr(tool_obj, "citation_scope"):
+                try:
+                    tool_obj.citation_scope = scope
+                except Exception:
+                    logger.opt(exception=True).warning("failed to bind citation scope to tool")
+    return _wrap_linsight_web_citation_tools(tools, scope=scope)
+
+
 def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
     """Filter the main-graph tool list down to the researcher subagent's subset.
 
@@ -705,7 +1002,13 @@ def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
     return [t for t in tools if t.name not in _SUBAGENT_TOOL_DENY and t.name not in _KNOWN_HITL_TOOL_NAMES]
 
 
-def _build_researcher_subagent(tools: Sequence[BaseTool]) -> dict:
+def _researcher_source_middleware(citation_scope) -> list:
+    from bisheng.linsight.domain.services.citation_source_middleware import LinsightCitationSourceMiddleware
+
+    return [LinsightCitationSourceMiddleware(citation_scope, is_subagent=True)]
+
+
+def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool = False) -> dict:
     """Build the single MVP researcher subagent spec (deepagents ``SubAgent``).
 
     Design #1 §4.1 (MVP = one researcher) / §4.2 (decision 1: same-name override).
@@ -728,13 +1031,18 @@ def _build_researcher_subagent(tools: Sequence[BaseTool]) -> dict:
     """
     sub_tools = _subagent_tools(tools)
     has_kb = any(t.name == _KB_TOOL_NAME for t in sub_tools)
+    has_web = any(_is_web_search_tool(t) for t in sub_tools)
     return {
         "name": "general-purpose",
         "description": (
             "用于隔离的调研/分析子任务：在独立上下文中多轮检索与阅读资料，"
             "返回蒸馏后的、有出处的结构化摘要。它不能向用户提问，也不负责最终交付物的撰写与拼装。"
         ),
-        "system_prompt": _build_researcher_prompt(has_kb),
+        "system_prompt": _with_citation_rules(
+            _build_researcher_prompt(has_kb, has_web_search=has_web, citation_handles=citation_handles),
+            has_kb or has_web,
+            handles=citation_handles,
+        ),
         "tools": sub_tools,
     }
 
@@ -749,6 +1057,7 @@ async def create_linsight_agent(
     checkpointer=None,
     skills_present: bool = False,
     turn_budget_sink: dict | None = None,
+    citation_scope=None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -766,6 +1075,8 @@ async def create_linsight_agent(
         turn_budget_sink: mutable dict the MAIN graph's resilience middleware flags
             when the run had to wrap up early on its turn budget, so the caller can
             tell the user. Main graph only — a subagent landing early is internal.
+        citation_scope: F069 ``LinsightCitationScope`` of this run; bound to the
+            retrieval tools so the completion audit knows which sources were seen.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -773,6 +1084,13 @@ async def create_linsight_agent(
     from deepagents import create_deep_agent
 
     svid = svid or session_model.id
+    tools = _bind_linsight_citation_scope(list(tools or []), citation_scope)
+    # F073: Open API runs are unattended — no ask_user, no clarify step.
+    unattended = is_unattended_run(session_model)
+    hitl_tools = [] if unattended else [ask_user]
+    # F069 P1: the whole prompt side (rules text, deliverable line, tail,
+    # researcher handoff) follows the session's citation contract in lockstep.
+    citation_handles = bool(citation_scope is not None and getattr(citation_scope, "enabled", False))
     model, supports_vision = await _resolve_model(session_model, model_id)
 
     if backend is None:
@@ -804,11 +1122,28 @@ async def create_linsight_agent(
     # those into file/audio/video content blocks — a hard 400 on most endpoints, a
     # client-side ValueError for video, and silent mojibake for docx/xlsx.
     has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
+    # Advertise search_knowledge_base in the system prompt IFF it is actually in
+    # `tools` (init_linsight_tools injects it only when the user selected a KB /
+    # knowledge space). Keeps the prompt and the bound tool list in lockstep so the
+    # model is never told to call a tool that isn't there (root cause of the
+    # "knowledge_id: Field required" error when no KB is selected). Computed here
+    # because the citation tail middleware below needs the same gate.
+    has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
+    has_web = any(_is_web_search_tool(t) for t in tools)
     middlewares: list = [
         build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
     ]
+    # F069 P1: per-turn source table (+ one-shot "add the handles" nudge after a
+    # handle-less output/*.md write). awrap_model_call only — never wrap_tool_call
+    # (design decision 5). Gated like the rules: citable tool AND handle contract.
+    if citation_handles and (has_kb or has_web):
+        from bisheng.linsight.domain.services.citation_source_middleware import LinsightCitationSourceMiddleware
+
+        middlewares.append(
+            LinsightCitationSourceMiddleware(citation_scope, budget_sink=turn_budget_sink, is_subagent=False)
+        )
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
     # bundles were copied into the workspace /skills/ subtree before this call (see
@@ -837,6 +1172,11 @@ async def create_linsight_agent(
             )
         )
 
+    # F069: citation requirement restated right before the language tail, only
+    # when a citable retrieval tool is bound (same gate as the rules themselves).
+    citation_tail_text = _LINSIGHT_CITATION_TAIL_HANDLES_ZH if citation_handles else _LINSIGHT_CITATION_TAIL_ZH
+    if has_kb or has_web:
+        middlewares.append(_CitationTailMiddleware(citation_tail_text))
     # Language directive LAST in the stack so it appends AFTER every framework
     # middleware prompt (write_todos / filesystem / task / skills) — the absolute
     # tail of the system message, the strongest position to keep the model
@@ -862,15 +1202,31 @@ async def create_linsight_agent(
     # _SUBAGENT_TOOL_DENY as belt-and-suspenders — deliverable export stays in the
     # main graph. init_linsight_export_tools returns [] for a non-writable backend
     # (e.g. the test FakeWorkspaceBackend), so the tools never surface when unusable.
+    from bisheng.citation.domain.services.citation_export_service import build_export_user
     from bisheng.tool.domain.langchain.linsight_export import init_linsight_export_tools
 
-    export_tools = init_linsight_export_tools(backend)
+    # F069 P2: the task owner is the exporter for in-run docx/pdf deliverables;
+    # the references section is permission-filtered under that identity.
+    export_user = await build_export_user(
+        getattr(session_model, "user_id", None), getattr(session_model, "tenant_id", None)
+    )
+    export_tools = init_linsight_export_tools(backend, export_user=export_user)
+    # Invalid tool-call repair (after_model). Appended LAST on purpose: after_model
+    # hooks run in REVERSE middleware order, so this one sees the model output
+    # first and the tool-loop breaker / TodoList hooks then see the repaired call.
+    # It appends no system prompt, so the language tail above stays the tail.
+    # ``tools`` = the exact list bound below, for the repaired-key sanity check.
+    middlewares.append(
+        build_invalid_tool_call_repair_middleware(tools=[*tools, *hitl_tools, *export_tools], is_subagent=False)
+    )
     # The researcher subagent is a separate subgraph: the main-graph middleware
     # above does NOT wrap its internal model calls, so it carries its OWN
     # resilience instance (is_subagent=True) which DEGRADES a content-filter /
     # exhausted-transient step to a synthetic reply — letting the parent task
     # continue with the remaining steps (Layer B partial-result win).
-    researcher = _build_researcher_subagent(tools)
+    researcher = _build_researcher_subagent(tools, citation_handles=citation_handles)
+    researcher_tools = researcher.get("tools") or []
+    researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_search_tool(t) for t in researcher_tools)
     researcher["middleware"] = [
         build_resilience_middleware(linsight_conf, is_subagent=True),
         # Same tool-loop breaker on the subagent's own graph (its tool calls run in
@@ -882,29 +1238,41 @@ async def create_linsight_agent(
         # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
         # carries over; revisit if it is ever added to that deny list.
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
+        # F069 P1: the researcher gets the source table too (no nudge — it does
+        # not write deliverables).
+        *(_researcher_source_middleware(citation_scope) if (citation_handles and researcher_citable) else []),
+        # F069: same citation tail on the researcher's own stack, same gate.
+        *([_CitationTailMiddleware(citation_tail_text)] if researcher_citable else []),
         # Same tail language directive on the subagent's own stack (last -> after
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.
         _LanguageTailMiddleware(_LINSIGHT_LANGUAGE_DIRECTIVE_ZH),
+        # Same invalid-call repair on the subagent's own graph (see the main-graph
+        # note above for why it goes last).
+        build_invalid_tool_call_repair_middleware(tools=researcher.get("tools"), is_subagent=True),
     ]
-    # Advertise search_knowledge_base in the system prompt IFF it is actually in
-    # `tools` (init_linsight_tools injects it only when the user selected a KB /
-    # knowledge space). Keeps the prompt and the bound tool list in lockstep so the
-    # model is never told to call a tool that isn't there (root cause of the
-    # "knowledge_id: Field required" error when no KB is selected).
-    has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the
     # prompt never points at an "Available Skills" section that does not exist.
     return create_deep_agent(
         model=model,
-        tools=[*tools, ask_user, *export_tools],
-        system_prompt=_build_linsight_system_prompt(
-            has_kb,
-            skills_present=skills_advertised,
-            # Gates the hard "no export_docx/export_pdf" rule: only meaningful
-            # when the skill's script route can actually run in this session.
-            has_code_interpreter=has_code_interpreter,
+        tools=[*tools, *hitl_tools, *export_tools],
+        system_prompt=_with_caller_instructions(
+            _with_citation_rules(
+                _build_linsight_system_prompt(
+                    has_kb,
+                    skills_present=skills_advertised,
+                    # Gates the hard "no export_docx/export_pdf" rule: only meaningful
+                    # when the skill's script route can actually run in this session.
+                    has_code_interpreter=has_code_interpreter,
+                    has_web_search=has_web,
+                    citation_handles=citation_handles,
+                    unattended=unattended,
+                ),
+                has_kb or has_web,
+                handles=citation_handles,
+            ),
+            caller_instructions(session_model),
         ),
         middleware=middlewares,
         subagents=[researcher],

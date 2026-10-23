@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "test_only": true,
+  "source": "license-issuer-contract.md",
+  "verification_jwks": {
+    "keys": [
+      {
+        "kty": "RSA",
+        "kid": "fixture-only-key-1",
+        "alg": "RS256",
+        "use": "sig",
+        "n": "8JzEpL21kx-1j2v34nrUnVS9y4MvjY5F7ZYF4hncaUeeGbrWKz3aztjWIdsXduscKuS61c1Zbl-yJS6rUhYJ9qqxs3NoKqvfrdate8K1-uom-VwZUfkLvwoOr_Kby_MbtA3N7Ut7_oeADIxF46PlrSJA5edTEggHRQCBl1EHrLh75RyhKL4sI5siFZ_2GgBMxgLtcsCGfeg1jsD4vCkEydpWq3d52aCvFsqckOK-hNZZNVyhQ0uX2O8EUlDtiY2q6G6qMXlx9vDND8IkK13OY4opgZTKCIsBb6yBCWYMaDPw1kocWE-EAqHgX0iuPeAXUGEPEuz8vfp39ZGIYy-NIQ",
+        "e": "AQAB"
+      }
+    ]
+  },
+  "decoded_valid_payload": {
+    "schema_version": 1,
+    "iss": "bisheng-license-issuer",
+    "aud": "bisheng-gateway:dsh",
+    "jti": "license_fixture_001",
+    "installation_id": "installation_fixture_001",
+    "iat": 1788919200,
+    "nbf": 1788919200,
+    "exp": 1789005600,
+    "legacy_binding": {
+      "name": "Fixture Customer",
+      "version": "pro",
+      "expireDay": "2025-05-25",
+      "finger": "fixture-fingerprint"
+    },
+    "capabilities": {
+      "dsh": {
+        "enabled": true,
+        "seat_limit": 10
+      }
+    }
+  },
+  "vectors": [
+    {
+      "name": "valid_pro",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoxfQ.uE8xjttbQoRMdqJMYPmpoB7XLEtmQY2VctNbN_GYzv8uBZrC_tQUZPXmWZYoLvv83axTcTC-UMPjYtP6etZF04mmGICRa-Z0zDh69peyf7oCh4tNEmnH7EXJ2zY0wYWYtV9y6lFDRIbsCVv7kXQQHWUicVB9z_jheA7t2Svduu0iyCUSXfXO5jYtiBFf92Et9YHVPCACrxz7w_OudGXanD_zsNngApeVBYARUtwmT5nAKFB61JzQvzNbZFSrgbI3P2h_GzB8P2-uW6JgZ4Mk8LyXtdkLLZ-bZd0B-yxmlkz9UFVqxrraK9eZxkHxy6jDybBwKKpm3gWJOd9ll1BEdw"
+      },
+      "expected": "active"
+    },
+    {
+      "name": "expired_trial_valid_dsh",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "trial",
+        "expireDay": "2020-01-01",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDIwLTAxLTAxIiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InRyaWFsIn0sIm5iZiI6MTc4ODkxOTIwMCwic2NoZW1hX3ZlcnNpb24iOjF9.4UF78aqvw2OA7JwIUBLAKH1NBydQ4ABLelYcOuI_-dyUvU6NbgctmHoo1dC8R4G5Ou6D_WsuLsjiuzQtuZ2RYvgr8L93wWxO-7pqtn9BlEdhtUaj0-XrOfgfeFNIzElUPzXeGbkKyj6rI5odp-gur5l6Kyk1s_XFi4mzPD_MXLwzw4hzuAC0iSqz7MuBwLHbUdK-1HjmOBjyYcfRjiBIk9w_KvtlUFe2eLYtH3yMrfVsWVCaAJ9KEzOHpLGZLpoEQsQjM-JVsoHyqouNaHFN9G1lZDKS_7gHh-oWCeWh_Ci5hYdoIE58PRshY_iY8X-Gf0sSwJUbMI9qL84Yf3iTBA"
+      },
+      "expected": "active"
+    },
+    {
+      "name": "expired",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODg5MTkyMDAsImlhdCI6MTc4ODkxOTE4MCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkxOTAsInNjaGVtYV92ZXJzaW9uIjoxfQ.RC5KW4Z4QUrxyuQfBR3xcDPodHOe0uEb-u7jIcHIsUtYlm4LWKvjkZmQNKjJZbA060Q_s9JtdFWoC3kffWSDU8OxNTjguxxaxOQr4mHeAqe6NhdTa_tKZedtQ5pYx9pn3U4aS5Wiz82MBtE6WKXeP5HoIihZrylqT7VOg3dpHVvKJpz4pUCxjAQZx5KmIQe1jEe6k27kXCgpiv077e5eCqRPfKL8w8pw-ESMj3MV8-fWUvSGTvhAkCghhTV59LuoE53y-oLnm-zDYLkROHE0rkpHI5uJ5eXRWjP_K_juGcDexL2IBRaagjG1Q2CQKO4HTMwkimXHMYAj40dbJM-YrA"
+      },
+      "expected": "license_expired"
+    },
+    {
+      "name": "not_yet_valid",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyNjAsInNjaGVtYV92ZXJzaW9uIjoxfQ.CQRHWci71ca0L9RRTBU21I8dkRZaeLD87-8ln8ZXNAEo-AhZ87XTf5Fg1gbrszhQiPs3fDccHtrfiuBevXpMQ0iSPwUHT6YNnjHWk4S_tJ2xsRxSBtywehnKers46xfs_O8Te4545BeAJvJbPq1RTIxJH2rK6ehI5tjO-SHCnlcGYoq_SoKmx9GM8fyMeFeHyeSE2_XwTh5sJJB0tj-TsyjIE2VE1aEaI3Za6Qd2bmeVeKjUIxr1TcdgLqbOadmbgOaY4lOJ_rN-TpwdqiO02V4iaND9cXf4cnVxgruHGyBT4aFVxDWvC37fNFL3depzZ977jqp3lH3CZLPRC7_dpw"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "wrong_instance",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiZGlmZmVyZW50LWluc3RhbmNlIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoxfQ.sPTYvvo0UJ1vqX8E4m_qM3Dd1siQS6hF-VJbHnM73qMinRA5NCEOlkqVuAHgWZdS_SyZN9LBR4EVRBpeO6CyW6zxPAVlALToY0AKF5fSW9uPUmrYQPF8ue4HdK3e-4a1lJ1cDwGT70n-wp07IxSfIfqe3pmWOJ5P45vKEkrOHF9kE-BkvTR-czGmaAtMfVACScN3vzY8RrQi4t7ZkofpR0F7gfSZOtSTjU2SsW5pXmegDNbccSc7TS_Q8k3zHQCxPEBfPbf2BPlEH7ZAxV_QrRSpiBaC48loYAn0eLphN9PtNjR9rFt684Ramj5_RrNM-b00rQa6lcM6Va5SuhhLaA"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "unknown_schema",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoyfQ.YXVfQFpZv-TYV7hs4sG0k4IasQwV8PeUjVvsmCbFvd7v4o85f7zNx_TVLcx8nYnXiS2tJW5V9S-l7XNNuhhT6sAl1yOAmQQ-1tq9417ouS-VxKBX28O38Ccvnb0Keak9_Vw7tYM8M2hDaJtiy-lVFLHHy2rtJ6fP76I8mSH3ocvtTlZnK-dQyfk8lvExpzqMttHZNscQDqBwcWXpo99uVyBrBPhmZXLhWt8DqVZgvJMmYBpbmmPHa5Hn6NapBUi0cwb6ORojq0xGm-Rxm7eINJMsKIzNS2J3hN4kFXeSXpW--LURBxgvBp4tiAeEB29hzKv6dhIaSPsVtHpaUi7uVQ"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "wrong_audience",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJvdGhlciIsImNhcGFiaWxpdGllcyI6eyJkc2giOnsiZW5hYmxlZCI6dHJ1ZSwic2VhdF9saW1pdCI6MTB9fSwiZXhwIjoxNzg5MDA1NjAwLCJpYXQiOjE3ODg5MTkyMDAsImluc3RhbGxhdGlvbl9pZCI6Imluc3RhbGxhdGlvbl9maXh0dXJlXzAwMSIsImlzcyI6ImJpc2hlbmctbGljZW5zZS1pc3N1ZXIiLCJqdGkiOiJsaWNlbnNlX2ZpeHR1cmVfMDAxIiwibGVnYWN5X2JpbmRpbmciOnsiZXhwaXJlRGF5IjoiMjAyNS0wNS0yNSIsImZpbmdlciI6ImZpeHR1cmUtZmluZ2VycHJpbnQiLCJuYW1lIjoiRml4dHVyZSBDdXN0b21lciIsInZlcnNpb24iOiJwcm8ifSwibmJmIjoxNzg4OTE5MjAwLCJzY2hlbWFfdmVyc2lvbiI6MX0.mC0e3nAIRitv3NywfqMvODO0HkydFZ9BuG_J5Iy2ZNpnZU2udUzeSP3HA7l3Z2xGVgNGz7J5vaxImbbeB5AuRgIDvs2NzP-3rrg4InMFX_AEIIwiHQNLjgj68AEUo9Riy3TH4IEaYxm0qop219UBZIR-pdmE5YAvtxbn3TV0f3EgeY8qdsLhWbzTCeAhDn1nunu_7deAlvbpLff61-P3BCfZjipfq0BSNbRxskNk2Semzu4nXW6YqqTuoildl0lilnvjGSnMOisE8EDqSSFNY0fgTuz7JE3reCqVpp4NkB_P6EebylYLv0RoWysBVqB8VfVbn8xNSiINsK9_5ANNkA"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "invalid_limit_-1",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjotMX19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoxfQ.Qjl2lhcMK-MNoXL35BH5bHmOWR8zaioPmcahZ8AktQWNQCL6bIR3E0xOAmZg4cCc2X249sDV0zkbUjz0jQQ390TqkSfydr9CQHgRyLDdXkEgk-XVQLlZl0gSRFj03da1A2Ih2Y3DcJPlGP0jxU28xz76lRYcsWjZx7fndUGMAIW1fZscc4KhxYbqqQYveBqjZLWa62_PpJEtj2KImjDfJu3GjXzq3EN0Se_ynPMXIagIlHYV6jZqvu55pbp0pqTqC6L24lQVMJQ8DgDp1Bvi6yhgYHZI3idwr1ETjud55Jhi0PFUGqEpism7_31EN22rDb3iKlegtj1PFuUFCjA5oQ"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "invalid_limit_True",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0Ijp0cnVlfX0sImV4cCI6MTc4OTAwNTYwMCwiaWF0IjoxNzg4OTE5MjAwLCJpbnN0YWxsYXRpb25faWQiOiJpbnN0YWxsYXRpb25fZml4dHVyZV8wMDEiLCJpc3MiOiJiaXNoZW5nLWxpY2Vuc2UtaXNzdWVyIiwianRpIjoibGljZW5zZV9maXh0dXJlXzAwMSIsImxlZ2FjeV9iaW5kaW5nIjp7ImV4cGlyZURheSI6IjIwMjUtMDUtMjUiLCJmaW5nZXIiOiJmaXh0dXJlLWZpbmdlcnByaW50IiwibmFtZSI6IkZpeHR1cmUgQ3VzdG9tZXIiLCJ2ZXJzaW9uIjoicHJvIn0sIm5iZiI6MTc4ODkxOTIwMCwic2NoZW1hX3ZlcnNpb24iOjF9.qhaA9VVHInX_AXDSvzDKN-86jxZ0ThZVjyjvNTwYqF7KEBSOtHNB7bI92Ya6jMMi9vDy9ZDJFCwTZJNJlsQTWveduC82ulsCl92RBzMbvikUczqUQ8KH8wkHvGRjfj4p4N6v0jgI6mapAOoftF5-fUtGnHVu-8XynSYwItnD_KvumJwd2p_SVlb93-9DAoNGwYj6KMOoZRFRE9bXnae8ZfOmrAOoKnD0ojs3_huTTXvblA239eXbQkH6y07Q-OlBMKZsxDrQ9BYn2h2-9rbinOl6rT2NhF8-f6c-CrxDSkcmsrYZwKIPc1IjlRoMS-cGEEpTJDHSPnfCai9NfESArQ"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "invalid_limit_10.5",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMC41fX0sImV4cCI6MTc4OTAwNTYwMCwiaWF0IjoxNzg4OTE5MjAwLCJpbnN0YWxsYXRpb25faWQiOiJpbnN0YWxsYXRpb25fZml4dHVyZV8wMDEiLCJpc3MiOiJiaXNoZW5nLWxpY2Vuc2UtaXNzdWVyIiwianRpIjoibGljZW5zZV9maXh0dXJlXzAwMSIsImxlZ2FjeV9iaW5kaW5nIjp7ImV4cGlyZURheSI6IjIwMjUtMDUtMjUiLCJmaW5nZXIiOiJmaXh0dXJlLWZpbmdlcnByaW50IiwibmFtZSI6IkZpeHR1cmUgQ3VzdG9tZXIiLCJ2ZXJzaW9uIjoicHJvIn0sIm5iZiI6MTc4ODkxOTIwMCwic2NoZW1hX3ZlcnNpb24iOjF9.tN7mY6Oobvf08dnMiDQMJeCyaPORcANBtQpZeXrvBMAGetx60kUVWFyQK4NdjpqvZCuM06CdTaRUv2U7gt40hkO7JCbgZkrBFuQ8Rv7psuHQrhQQ7HGqiwDbpk5rXS7EFwJ4aQPNPj6WCK68ix7_Sl8WKzOJ9MZZi661d_T6eHicdj4XRQc5H1NkoD7iw5Bd62lwbhEmw_dBdur0ZHbaTCmJmFoT2BDd3JVqM9oZPwBAXFfTTkfNE9zBmLu61vCBGLd46Tcimc3x79tM38N6j9M6QMbQwjleBGcARr6Zq5-K0pKSbLDxsZLRbj4F1v1Hjg7XKAkeEZz1ZlZXD5Ju5w"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "disabled_entitlement",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjpmYWxzZSwic2VhdF9saW1pdCI6MTB9fSwiZXhwIjoxNzg5MDA1NjAwLCJpYXQiOjE3ODg5MTkyMDAsImluc3RhbGxhdGlvbl9pZCI6Imluc3RhbGxhdGlvbl9maXh0dXJlXzAwMSIsImlzcyI6ImJpc2hlbmctbGljZW5zZS1pc3N1ZXIiLCJqdGkiOiJsaWNlbnNlX2ZpeHR1cmVfMDAxIiwibGVnYWN5X2JpbmRpbmciOnsiZXhwaXJlRGF5IjoiMjAyNS0wNS0yNSIsImZpbmdlciI6ImZpeHR1cmUtZmluZ2VycHJpbnQiLCJuYW1lIjoiRml4dHVyZSBDdXN0b21lciIsInZlcnNpb24iOiJwcm8ifSwibmJmIjoxNzg4OTE5MjAwLCJzY2hlbWFfdmVyc2lvbiI6MX0.URAiqOzJa11tXARGuM99r6Rxd6u7YB5F5cT6mIx1yu8FOmcYsyrxiBw_Hy5zQTlY2tptxr8OQyZA9AEGgCWmMzXmn8mwNn_8cJfpYKyfWOh4PxA-jDRZKy9dPKfKy94KgkGfl8eKJNSr3EETDdoRgrc-cyLuh0ZuXHQZy-3jNChCTMMa6A9Wi8x1BeVnvPvFV2-ElGnzUZHvje78KRTeOP0WxHr5oi5n7F0mwvq2kH96JjjvUfYNqAhlP6Ihg6DYhVj2Rr7rYST-XDBr0SbNPILgavjSaK0UhtCjiAb9yQyz_61_1weH0iQFGSr3yqFeacjaDYHUzLrOAU8Qy9ra0w"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "legacy_field_changed",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Other Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoxfQ.uE8xjttbQoRMdqJMYPmpoB7XLEtmQY2VctNbN_GYzv8uBZrC_tQUZPXmWZYoLvv83axTcTC-UMPjYtP6etZF04mmGICRa-Z0zDh69peyf7oCh4tNEmnH7EXJ2zY0wYWYtV9y6lFDRIbsCVv7kXQQHWUicVB9z_jheA7t2Svduu0iyCUSXfXO5jYtiBFf92Et9YHVPCACrxz7w_OudGXanD_zsNngApeVBYARUtwmT5nAKFB61JzQvzNbZFSrgbI3P2h_GzB8P2-uW6JgZ4Mk8LyXtdkLLZ-bZd0B-yxmlkz9UFVqxrraK9eZxkHxy6jDybBwKKpm3gWJOd9ll1BEdw"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "legacy_missing_vs_null",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "extra": null,
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoxfQ.uE8xjttbQoRMdqJMYPmpoB7XLEtmQY2VctNbN_GYzv8uBZrC_tQUZPXmWZYoLvv83axTcTC-UMPjYtP6etZF04mmGICRa-Z0zDh69peyf7oCh4tNEmnH7EXJ2zY0wYWYtV9y6lFDRIbsCVv7kXQQHWUicVB9z_jheA7t2Svduu0iyCUSXfXO5jYtiBFf92Et9YHVPCACrxz7w_OudGXanD_zsNngApeVBYARUtwmT5nAKFB61JzQvzNbZFSrgbI3P2h_GzB8P2-uW6JgZ4Mk8LyXtdkLLZ-bZd0B-yxmlkz9UFVqxrraK9eZxkHxy6jDybBwKKpm3gWJOd9ll1BEdw"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "untrusted_kid",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6InVudHJ1c3RlZCIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoxfQ.qREZpwFb9Dw5rbPOhmazz2ZsRHzOnM2QISulDgacgnArXifWG-Flu-yNhbGzKa_6pX05_NVh_A8qSf3dGjnhe9kVZAD05i28UcCBGH6GeUB9kTiyNviR2Kw2tq2hH23MSE-P_Xn--HW7Rw-qE3L08RzbjoqkG48nKc1aTpZjldvnfSjm-dR4THIQaDS8R2iAOxGPmZAVcniIDkqny_bWu4vfngZ5pUzs6pJAIvqmH9fJ1YzCcldALZR9xnOKTUkxUfj3StXwzCdfqFvIlIi_R5_Jd5FJhv7i5kuYJhQtYLCL8Ewnk3CRjWANG0HcLRaW-LHfa9iOI0cACeJFVSiozQ"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "tampered_signature",
+      "now": 1788919200,
+      "installation_id": "installation_fixture_001",
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoiaW5zdGFsbGF0aW9uX2ZpeHR1cmVfMDAxIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoxfQ.uU8xjttbQoRMdqJMYPmpoB7XLEtmQY2VctNbN_GYzv8uBZrC_tQUZPXmWZYoLvv83axTcTC-UMPjYtP6etZF04mmGICRa-Z0zDh69peyf7oCh4tNEmnH7EXJ2zY0wYWYtV9y6lFDRIbsCVv7kXQQHWUicVB9z_jheA7t2Svduu0iyCUSXfXO5jYtiBFf92Et9YHVPCACrxz7w_OudGXanD_zsNngApeVBYARUtwmT5nAKFB61JzQvzNbZFSrgbI3P2h_GzB8P2-uW6JgZ4Mk8LyXtdkLLZ-bZd0B-yxmlkz9UFVqxrraK9eZxkHxy6jDybBwKKpm3gWJOd9ll1BEdw"
+      },
+      "expected": "license_invalid"
+    }
+  ],
+  "legacy_without_extension": [
+    {
+      "name": "Fixture Customer",
+      "version": "pro",
+      "expireDay": "2025-05-25",
+      "finger": "fixture-fingerprint"
+    },
+    {
+      "version": "trial",
+      "expireDay": "2020-01-01"
+    }
+  ],
+  "release_gates": {
+    "real_vendor_sample": "pending",
+    "target_legacy_binary": "pending",
+    "legacy_rsa_segment_compatibility": "pending"
+  }
+}

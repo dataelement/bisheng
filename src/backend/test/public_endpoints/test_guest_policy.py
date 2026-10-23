@@ -82,7 +82,7 @@ async def test_public_execution_sets_and_resets_strict_identity(monkeypatch) -> 
         assert (resource_type, resource_id) == ("workflow", "flow-1")
         return resource
 
-    async def load_operator(tenant_id):
+    async def load_operator(tenant_id, resource_type=None, resource_id=None):
         assert tenant_id == 23
         return operator
 
@@ -154,7 +154,7 @@ async def test_guest_actor_never_inherits_an_ambient_actor(monkeypatch) -> None:
     async def load_resource(_resource_type, _resource_id):
         return resource
 
-    async def load_operator(_tenant_id):
+    async def load_operator(_tenant_id, resource_type=None, resource_id=None):
         return operator
 
     async def is_tenant_admin(_user_id, _tenant_id):
@@ -234,5 +234,5 @@ async def test_operator_liveness_fails_closed(guest_config, operator_identity, b
         auth_module.UserRoleDao.aget_user_roles = original
 
     assert caught.value.http_status == 403
-    assert caught.value.code == 26103
+    assert caught.value.code == 26403
     assert resolved == []

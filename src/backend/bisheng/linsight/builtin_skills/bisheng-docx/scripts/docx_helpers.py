@@ -1,4 +1,4 @@
-"""python-docx helpers for building .docx inside the BiSheng code interpreter.
+"""python-docx helpers for building .docx inside the platform code interpreter.
 
 Use from a build script:
 

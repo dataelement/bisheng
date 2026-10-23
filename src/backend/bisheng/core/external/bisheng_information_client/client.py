@@ -1,5 +1,5 @@
-from enum import Enum
-from typing import Callable, Optional
+from collections.abc import Callable
+from enum import StrEnum
 
 import httpx
 from aiohttp import ClientTimeout
@@ -20,11 +20,12 @@ from bisheng.core.external.bisheng_information_client.response_schema import (
     CrawlWebsiteResponse,
     InformationArticlesResponse,
     InformationSourceResponse,
+    InformationSubscriptionItem,
 )
 from bisheng.core.external.http_client.client import AsyncHttpClient
 
 
-class BusinessType(str, Enum):
+class BusinessType(StrEnum):
     """Business types for information sources."""
 
     WECHAT = "wechat"
@@ -49,8 +50,8 @@ class InformationSourceSubscribeError(Exception):
     pass
 
 
-class BishengInformationClient(object):
-    def __init__(self, http_client: Optional[AsyncHttpClient], get_conf: Callable[[], IntelligenceCenterConf]):
+class BishengInformationClient:
+    def __init__(self, http_client: AsyncHttpClient | None, get_conf: Callable[[], IntelligenceCenterConf]):
         self.http_client = http_client
         self._get_conf = get_conf
 
@@ -59,13 +60,13 @@ class BishengInformationClient(object):
         return self._get_conf()
 
     @staticmethod
-    def _build_timeout(conf: IntelligenceCenterConf) -> Optional[ClientTimeout]:
+    def _build_timeout(conf: IntelligenceCenterConf) -> ClientTimeout | None:
         timeout = (conf.kwargs or {}).get("timeout")
         if timeout:
             return ClientTimeout(total=timeout)
         return None
 
-    def _build_request_options(self) -> tuple[str, dict, Optional[ClientTimeout]]:
+    def _build_request_options(self) -> tuple[str, dict, ClientTimeout | None]:
         conf = self.conf
         return conf.base_url.rstrip("/"), {"X-API-Key": conf.api_key}, self._build_timeout(conf)
 
@@ -93,7 +94,7 @@ class BishengInformationClient(object):
         default_error_message: str,
         *,
         include_parse_errors: bool = False,
-        unknown_error_handler: Optional[Callable[[dict], None]] = None,
+        unknown_error_handler: Callable[[dict], None] | None = None,
     ) -> None:
         code = response_body.get("code", -1)
         if code == 200:
@@ -121,7 +122,7 @@ class BishengInformationClient(object):
         default_error_message: str,
         *,
         include_parse_errors: bool = False,
-        unknown_error_handler: Optional[Callable[[dict], None]] = None,
+        unknown_error_handler: Callable[[dict], None] | None = None,
     ) -> dict:
         if response.status_code != 200:
             raise BishengInformationServiceError(
@@ -179,7 +180,7 @@ class BishengInformationClient(object):
         return information_source_data
 
     async def search_information_sources(
-        self, query: str, business_type: Optional[BusinessType] = None, page: int = 1, page_size: int = 20
+        self, query: str, business_type: BusinessType | None = None, page: int = 1, page_size: int = 20
     ) -> tuple[list[InformationSourceResponse], int]:
         """Search information sources by keyword."""
         base_url, headers, timeout = self._build_request_options()
@@ -259,6 +260,64 @@ class BishengInformationClient(object):
             unknown_error_handler=lambda _: self._raise_subscribe_error(response, "unsubscribe from"),
         )
 
+    async def subscribe_one(self, source_id: str) -> None:
+        """Subscribe exactly one source so each failure has a clear boundary."""
+        await self.subscribe_information_source([source_id])
+
+    async def unsubscribe_one(self, source_id: str) -> None:
+        """Unsubscribe exactly one source so each failure has a clear boundary."""
+        await self.unsubscribe_information_source([source_id])
+
+    async def list_all_subscriptions(self, page_size: int = 100) -> list[InformationSubscriptionItem]:
+        """Read and validate the complete remote subscription snapshot."""
+        if page_size <= 0:
+            raise ValueError("page_size must be positive")
+        page = 1
+        expected_total: int | None = None
+        items: list[InformationSubscriptionItem] = []
+        seen_ids: set[str] = set()
+        while True:
+            base_url, headers, timeout = self._build_request_options()
+            endpoint = f"{base_url}/information/subscriptions"
+            response = await self.http_client.get(
+                endpoint,
+                headers=headers,
+                params={"page": page, "PageSize": page_size},
+                timeout=timeout,
+            )
+            body = self._handle_response(response, "Failed to list information subscriptions")
+            response_page = int(body.get("currentPage", page))
+            response_page_size = int(body.get("PageSize", page_size))
+            total = int(body.get("totalCount", 0))
+            if response_page != page or response_page_size <= 0:
+                raise BishengInformationServiceError(msg="Incomplete information subscription snapshot: invalid page")
+            if expected_total is None:
+                expected_total = total
+            elif total != expected_total:
+                raise BishengInformationServiceError(
+                    msg="Incomplete information subscription snapshot: totalCount changed"
+                )
+            page_items = [InformationSubscriptionItem.model_validate(item) for item in body.get("data", [])]
+            for item in page_items:
+                if item.id in seen_ids:
+                    raise BishengInformationServiceError(
+                        msg="Incomplete information subscription snapshot: duplicate source id"
+                    )
+                seen_ids.add(item.id)
+                items.append(item)
+            if len(items) >= expected_total:
+                break
+            if not page_items:
+                raise BishengInformationServiceError(
+                    msg="Incomplete information subscription snapshot: page ended before totalCount"
+                )
+            page += 1
+        if len(items) != expected_total:
+            raise BishengInformationServiceError(
+                msg="Incomplete information subscription snapshot: unique count does not match totalCount"
+            )
+        return items
+
     async def crawl_website(self, url: str) -> CrawlWebsiteResponse:
         """Crawl a website by URL."""
         base_url, headers, timeout = self._build_request_options()
@@ -279,7 +338,7 @@ class BishengInformationClient(object):
         self,
         information_id: str,
         return_information: bool = False,
-        min_create_time: int = None,
+        min_create_time: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> InformationArticlesResponse:
@@ -302,4 +361,36 @@ class BishengInformationClient(object):
             information=response_body.get("data", {}).get("information"),
             articles=response_body.get("data", {}).get("articles", []),
             total=response_body.get("totalCount", 0),
+            current_page=response_body.get("currentPage", page),
+            page_size=response_body.get("PageSize", page_size),
+        )
+
+    async def get_information_articles_page(
+        self,
+        information_id: str,
+        *,
+        return_information: bool = False,
+        min_create_time: int | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> InformationArticlesResponse:
+        """Asynchronously read one validated article page."""
+        base_url, headers, timeout = self._build_request_options()
+        endpoint = f"{base_url}/information/articles/{information_id}"
+        params = {
+            "return_information": return_information,
+            "page": page,
+            "page_size": page_size,
+        }
+        if min_create_time is not None:
+            params["min_create_time"] = min_create_time
+        response = await self.http_client.get(endpoint, headers=headers, params=params, timeout=timeout)
+        response_body = self._handle_response(response, "Failed to get information articles")
+        data = response_body.get("data", {})
+        return InformationArticlesResponse(
+            information=data.get("information"),
+            articles=data.get("articles", []),
+            total=response_body.get("totalCount", 0),
+            current_page=response_body.get("currentPage", page),
+            page_size=response_body.get("PageSize", page_size),
         )

@@ -1,11 +1,13 @@
 // @ts-strict-ignore
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { render, screen } from "@/test/test-utils";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import SystemPage from "@/pages/SystemPage";
+
+beforeEach(() => vi.clearAllMocks());
 
 // Stub the heavy children — we only assert which tab triggers render.
 vi.mock("@/pages/SystemPage/components/Config", () => ({
@@ -71,6 +73,10 @@ const SERVICE_ACCOUNT = "openApiManagement.serviceAccount.title";
 const PERSONAL_TOKEN = "openApiManagement.personalToken.title";
 
 describe("SystemPage tab visibility (PRD §3.3)", () => {
+  it("keeps DSH management out of system settings", () => {
+    renderWithUser({ role: "admin", user_id: 1 });
+    expect(screen.queryByRole("tab", { name: "dsh.title" })).toBeNull();
+  });
   it("global super admin sees org/userGroup/role/orgSync/system/theme; legacy user table hidden", () => {
     renderWithUser({ role: "admin", user_id: 1 });
     expect(screen.getByText(ORG)).toBeInTheDocument();

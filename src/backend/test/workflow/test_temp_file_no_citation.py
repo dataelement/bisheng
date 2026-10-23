@@ -1,27 +1,19 @@
-"""F054 T004 — workflow temp files must stop producing citation badges.
+"""F062 T013 — workflow temp knowledge base IS registered as citation_type=temp.
 
-A file uploaded into a workflow input node lands in a scratch vector
-collection whose ``document_id`` is a random UUID and whose ``knowledge_id``
-is the workflow id — neither is an integer, so the RAG citation payload can
-never resolve one to a real knowledge file. The badge therefore rendered, hovered
-with a name, and opened onto nothing. That is worse than no badge at all, so the
-source registration is cut off at two levels (design §3 decision 6):
-
-- A: the temp-file retrieval tool is marked ephemeral at creation, and the agent
-     node's citation wrapper skips it.
-- B: a guard in the registry refuses to treat a document as citable when it
-     carries a document id that is not an integer — defence in depth for any
-     other path that might feed such documents in later.
-
-RED until T007/T008 land.
+Replaces F054 T004 / AC-16 / AC-17: ephemeral retrieval tools are wrapped
+again, but the wrapper records tempsearch_ keys rather than rag keys.
+UUID documents still must not be treated as citable RAG.
 """
 
 from langchain_core.documents import Document
 from langchain_core.tools import BaseTool
 
+from bisheng.citation.domain.schemas.citation_schema import CitationType
 from bisheng.citation.domain.services.citation_prompt_helper import (
     _is_citable_rag_document,
     annotate_rag_documents_with_citations,
+    annotate_temp_documents_with_citations,
+    collect_temp_citation_registry_items,
 )
 from bisheng.workflow.nodes.agent.agent import AgentNode, WorkflowCitationToolWrapper
 
@@ -49,8 +41,6 @@ class _StubWebSearchTool(BaseTool):
 
 
 def _temp_file_document() -> Document:
-    """Shaped like what the input node writes: UUID document id, workflow id as
-    the knowledge id."""
     return Document(
         page_content="临时文件正文",
         metadata={
@@ -62,15 +52,12 @@ def _temp_file_document() -> Document:
     )
 
 
-# --------------------------------------------------------------------------- #
-# Layer A — the agent node does not wrap an ephemeral retrieval tool
-# --------------------------------------------------------------------------- #
-
-
-def test_ephemeral_tool_is_not_wrapped_for_citations():
+def test_ephemeral_tool_is_wrapped_for_temp_citations():
     tool = _StubKnowledgeTool(knowledge_retriever_tool=object(), ephemeral_source=True)
 
-    assert AgentNode._wrap_citation_tool(tool) is tool
+    wrapped = AgentNode._wrap_citation_tool(tool)
+    assert isinstance(wrapped, WorkflowCitationToolWrapper)
+    assert getattr(wrapped.tool, "ephemeral_source", False) is True
 
 
 def test_regular_knowledge_tool_is_still_wrapped():
@@ -83,7 +70,7 @@ def test_web_search_tool_is_still_wrapped():
     assert isinstance(AgentNode._wrap_citation_tool(_StubWebSearchTool()), WorkflowCitationToolWrapper)
 
 
-def test_a_run_mixing_both_keeps_citations_only_for_the_real_knowledge_base():
+def test_a_run_mixing_both_wraps_ephemeral_and_real_knowledge():
     tools = [
         _StubKnowledgeTool(knowledge_retriever_tool=object(), ephemeral_source=True),
         _StubKnowledgeTool(name="real_kb", knowledge_retriever_tool=object()),
@@ -92,17 +79,13 @@ def test_a_run_mixing_both_keeps_citations_only_for_the_real_knowledge_base():
 
     wrapped = AgentNode._wrap_citation_tools(tools)
 
-    assert not isinstance(wrapped[0], WorkflowCitationToolWrapper)
+    assert isinstance(wrapped[0], WorkflowCitationToolWrapper)
+    assert getattr(wrapped[0].tool, "ephemeral_source", False) is True
     assert isinstance(wrapped[1], WorkflowCitationToolWrapper)
     assert isinstance(wrapped[2], WorkflowCitationToolWrapper)
 
 
-# --------------------------------------------------------------------------- #
-# Layer B — the registry guard rejects non-integer document ids
-# --------------------------------------------------------------------------- #
-
-
-def test_document_with_non_integer_document_id_is_not_citable():
+def test_document_with_non_integer_document_id_is_not_citable_as_rag():
     assert _is_citable_rag_document(_temp_file_document()) is False
 
 
@@ -112,17 +95,16 @@ def test_document_with_integer_document_id_is_still_citable():
     assert _is_citable_rag_document(document) is True
 
 
-def test_document_with_no_document_id_keeps_its_previous_treatment():
-    """Only a *present but unparseable* id is rejected. Documents that simply
-    carry no id fall back to metadata grouping exactly as before, so the four
-    live entry points are untouched (AC-17)."""
-    document = Document(page_content="正文", metadata={"document_name": "a.pdf", "knowledge_id": 1})
-
-    assert _is_citable_rag_document(document) is True
-
-
-def test_annotate_gives_a_temp_file_document_no_citation_key():
+def test_annotate_rag_still_gives_temp_file_no_rag_key():
     annotated = annotate_rag_documents_with_citations([_temp_file_document()])
 
-    assert "citation_key" not in annotated[0].metadata
-    assert "citation_key:" not in annotated[0].page_content
+    assert "citation_key" not in annotated[0].metadata or not str(
+        annotated[0].metadata.get("citation_key", "")
+    ).startswith("knowledgesearch_")
+
+
+def test_annotate_temp_registers_tempsearch_items():
+    annotated = annotate_temp_documents_with_citations([_temp_file_document()])
+    items = collect_temp_citation_registry_items(annotated)
+    assert annotated[0].metadata["citation_key"].startswith("tempsearch_")
+    assert items[0].type == CitationType.TEMP

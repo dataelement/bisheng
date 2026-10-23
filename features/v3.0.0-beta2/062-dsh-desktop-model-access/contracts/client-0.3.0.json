@@ -1,0 +1,653 @@
+{
+  "contract_version": "0.3.0",
+  "base": "https://bisheng.example.com",
+  "source": "client-api.md",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/dsh/config",
+      "request": null,
+      "response": {
+        "http_status": 200,
+        "body": {
+          "enabled": true,
+          "client_id": "dsh-desktop",
+          "contract_version": "0.3.0"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/dsh/authorizations",
+      "request": {
+        "client_id": "dsh-desktop",
+        "redirect_uri": "http://127.0.0.1:49152/dsh/callback",
+        "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        "code_challenge_method": "S256",
+        "state": "N8x6LXw61DPlYNVoKm5rWOj2vbJmZiRK1CPIyw50HBs",
+        "device_name": "Work Mac"
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "auth_id": "auth_01_example",
+          "authorize_url": "https://bisheng.example.com/desktop-login?auth_id=auth_01_example",
+          "expires_in": 300
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/dsh/token",
+      "request": {
+        "grant_type": "identity_ticket",
+        "identity_ticket": "ticket_example_only",
+        "auth_id": "auth_01_example",
+        "code_verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "token_type": "Bearer",
+          "access_token": "access_token_example_only",
+          "expires_in": 300,
+          "refresh_token": "refresh_token_example_only",
+          "refresh_expires_in": 2592000,
+          "session_id": "session_example",
+          "session_expires_at": "2026-10-09T02:00:00Z",
+          "user": {
+            "id": "1001",
+            "username": "demo.user",
+            "display_name": "Demo User"
+          },
+          "tenant": {
+            "id": "1",
+            "name": "Demo Tenant"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/dsh/logout",
+      "request": {
+        "refresh_token": "refresh_token_example_only"
+      },
+      "response": {
+        "http_status": 204,
+        "body": null
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dsh/models",
+      "request": null,
+      "response": {
+        "http_status": 200,
+        "body": {
+          "object": "list",
+          "data": [
+            {
+              "id": "bisheng:42",
+              "object": "model",
+              "created": 1788919200,
+              "owned_by": "bisheng",
+              "display_name": "Enterprise Chat",
+              "capabilities": {
+                "streaming": true,
+                "tools": true,
+                "reasoning_content": false
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dsh/chat/completions",
+      "request": {
+        "model": "bisheng:42",
+        "messages": [
+          {
+            "role": "user",
+            "content": "查询文档 KB-1 的标题"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "lookup_document",
+              "description": "Find a document title",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        ],
+        "tool_choice": "auto",
+        "stream": false,
+        "max_tokens": 1024
+      },
+      "response": {
+        "http_status": 200,
+        "body": {
+          "id": "chatcmpl-example",
+          "object": "chat.completion",
+          "created": 1788919200,
+          "model": "bisheng:42",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                      "name": "lookup_document",
+                      "arguments": "{\"id\":\"KB-1\"}"
+                    }
+                  }
+                ]
+              },
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dsh/usage",
+      "request": null,
+      "response": {
+        "http_status": 200,
+        "body": {
+          "month": "2026-09",
+          "billing_timezone": "Asia/Shanghai",
+          "period_start": "2026-08-31T16:00:00Z",
+          "reset_at": "2026-09-30T16:00:00Z",
+          "used": 1500,
+          "limit": 1000,
+          "remaining": 0,
+          "source": "live",
+          "as_of": "2026-09-09T02:00:00Z",
+          "quota_state": "exhausted"
+        }
+      },
+      "query": {
+        "model": {
+          "required": false,
+          "pattern": "^bisheng:[1-9][0-9]*$",
+          "description": "Select one configured model for independent monthly usage; omitted values are informational totals, never a shared allowance."
+        }
+      }
+    }
+  ],
+  "disabled_config": {
+    "enabled": false
+  },
+  "refresh": {
+    "request": {
+      "grant_type": "refresh_token",
+      "refresh_token": "refresh_token_example_only"
+    },
+    "response": {
+      "token_type": "Bearer",
+      "access_token": "access_token_example_only",
+      "expires_in": 300,
+      "refresh_token": "refresh_token_example_only",
+      "refresh_expires_in": 2592000,
+      "session_id": "session_example",
+      "session_expires_at": "2026-10-09T02:00:00Z",
+      "user": {
+        "id": "1001",
+        "username": "demo.user",
+        "display_name": "Demo User"
+      },
+      "tenant": {
+        "id": "1",
+        "name": "Demo Tenant"
+      }
+    }
+  },
+  "persisted_usage": {
+    "month": "2026-09",
+    "billing_timezone": "Asia/Shanghai",
+    "period_start": "2026-08-31T16:00:00Z",
+    "reset_at": "2026-09-30T16:00:00Z",
+    "used": 1200,
+    "limit": 1000,
+    "remaining": 0,
+    "source": "persisted",
+    "as_of": "2026-09-09T01:59:30Z",
+    "quota_state": "unavailable"
+  },
+  "browser_authorize_response": {
+    "status_code": 200,
+    "status_message": "SUCCESS",
+    "data": {
+      "identity_ticket": "ticket_example_only",
+      "redirect_uri": "http://127.0.0.1:49152/dsh/callback",
+      "state": "N8x6LXw61DPlYNVoKm5rWOj2vbJmZiRK1CPIyw50HBs",
+      "expires_in": 60
+    }
+  },
+  "tool_followup": {
+    "model": "bisheng:42",
+    "messages": [
+      {
+        "role": "user",
+        "content": "查询文档 KB-1 的标题"
+      },
+      {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+              "name": "lookup_document",
+              "arguments": "{\"id\":\"KB-1\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_1",
+        "content": "{\"title\":\"Installation Guide\"}"
+      }
+    ],
+    "stream": false
+  },
+  "tool_chunk_examples": [
+    {
+      "tool_calls": [
+        {
+          "index": 0,
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "lookup_document",
+            "arguments": ""
+          }
+        }
+      ]
+    },
+    {
+      "tool_calls": [
+        {
+          "index": 0,
+          "function": {
+            "arguments": "{\"id\":"
+          }
+        }
+      ]
+    },
+    {
+      "tool_calls": [
+        {
+          "index": 0,
+          "function": {
+            "arguments": "\"KB-1\"}"
+          }
+        }
+      ]
+    }
+  ],
+  "sse_frames": [
+    "{\"id\":\"chatcmpl-example\",\"object\":\"chat.completion.chunk\",\"created\":1788919200,\"model\":\"bisheng:42\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}",
+    "{\"id\":\"chatcmpl-example\",\"object\":\"chat.completion.chunk\",\"created\":1788919200,\"model\":\"bisheng:42\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}",
+    "{\"id\":\"chatcmpl-example\",\"object\":\"chat.completion.chunk\",\"created\":1788919200,\"model\":\"bisheng:42\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}",
+    "{\"id\":\"chatcmpl-example\",\"object\":\"chat.completion.chunk\",\"created\":1788919200,\"model\":\"bisheng:42\",\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":1,\"total_tokens\":11}}",
+    "[DONE]",
+    "{\"error\":{\"message\":\"Upstream connection interrupted\",\"type\":\"upstream_error\",\"code\":\"upstream_error\"},\"request_id\":\"req_example\"}"
+  ],
+  "errors": [
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "invalid request",
+          "type": "invalid_request_error",
+          "code": "invalid_request"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "unsupported parameter",
+          "type": "invalid_request_error",
+          "code": "unsupported_parameter"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "context length exceeded",
+          "type": "invalid_request_error",
+          "code": "context_length_exceeded"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "invalid grant",
+          "type": "authentication_error",
+          "code": "invalid_grant"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "pkce verification failed",
+          "type": "authentication_error",
+          "code": "pkce_verification_failed"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 400,
+      "body": {
+        "error": {
+          "message": "authorization expired",
+          "type": "authentication_error",
+          "code": "authorization_expired"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "invalid access token",
+          "type": "authentication_error",
+          "code": "invalid_access_token"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "invalid refresh token",
+          "type": "authentication_error",
+          "code": "invalid_refresh_token"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "refresh token reused",
+          "type": "authentication_error",
+          "code": "refresh_token_reused"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "session expired",
+          "type": "authentication_error",
+          "code": "session_expired"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 401,
+      "body": {
+        "error": {
+          "message": "session revoked",
+          "type": "authentication_error",
+          "code": "session_revoked"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "seat limit reached",
+          "type": "permission_error",
+          "code": "seat_limit_reached"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "seat revoked",
+          "type": "permission_error",
+          "code": "seat_revoked"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "license invalid",
+          "type": "permission_error",
+          "code": "license_invalid"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "license expired",
+          "type": "permission_error",
+          "code": "license_expired"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "dsh disabled",
+          "type": "permission_error",
+          "code": "dsh_disabled"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "user disabled",
+          "type": "permission_error",
+          "code": "user_disabled"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "tenant unavailable",
+          "type": "permission_error",
+          "code": "tenant_unavailable"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 403,
+      "body": {
+        "error": {
+          "message": "model not allowed",
+          "type": "permission_error",
+          "code": "model_not_allowed"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 409,
+      "body": {
+        "error": {
+          "message": "authorization conflict",
+          "type": "conflict_error",
+          "code": "authorization_conflict"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 429,
+      "body": {
+        "error": {
+          "message": "monthly token limit exceeded",
+          "type": "quota_error",
+          "code": "monthly_token_limit_exceeded"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 429,
+      "body": {
+        "error": {
+          "message": "too many requests",
+          "type": "rate_limit_error",
+          "code": "too_many_requests"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 502,
+      "body": {
+        "error": {
+          "message": "upstream error",
+          "type": "upstream_error",
+          "code": "upstream_error"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 504,
+      "body": {
+        "error": {
+          "message": "upstream timeout",
+          "type": "upstream_error",
+          "code": "upstream_timeout"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 503,
+      "body": {
+        "error": {
+          "message": "authorization unavailable",
+          "type": "service_unavailable_error",
+          "code": "authorization_unavailable"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 503,
+      "body": {
+        "error": {
+          "message": "quota unavailable",
+          "type": "service_unavailable_error",
+          "code": "quota_unavailable"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 503,
+      "body": {
+        "error": {
+          "message": "usage unavailable",
+          "type": "service_unavailable_error",
+          "code": "usage_unavailable"
+        },
+        "request_id": "request_fixture_001"
+      }
+    },
+    {
+      "http_status": 500,
+      "body": {
+        "error": {
+          "message": "internal error",
+          "type": "server_error",
+          "code": "internal_error"
+        },
+        "request_id": "request_fixture_001"
+      }
+    }
+  ],
+  "model_quota_revision": {
+    "date": "2026-09-09",
+    "requires_client_sync": true,
+    "limits_scope": "tenant_user_model_month",
+    "rate_limiting": false,
+    "aggregate_remaining": "sum(max(model_limit - model_used, 0))",
+    "model_usage_path": "/api/v1/dsh/usage?model=bisheng:42"
+  },
+  "missing_usage_success": {
+    "http_status": 200,
+    "usage": {
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null
+    },
+    "stream_ends_with_done": true,
+    "blocks_future_requests": false
+  }
+}

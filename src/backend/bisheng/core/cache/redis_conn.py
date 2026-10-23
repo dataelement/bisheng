@@ -252,6 +252,22 @@ class RedisClient:
         except Exception as e:
             raise e
 
+    async def ahincrby(self, name, key: str, amount: int = 1) -> int:
+        """Atomic HINCRBY (F069 handle allocation)."""
+        try:
+            await self.acluster_nodes(name)
+            return await self.async_connection.hincrby(name, key, amount)
+        except Exception as e:
+            raise e
+
+    async def ahsetnx(self, name, key: str, value: str) -> bool:
+        """Atomic HSETNX; True when the field was created (F069 identity claim)."""
+        try:
+            await self.acluster_nodes(name)
+            return bool(await self.async_connection.hsetnx(name, key, value))
+        except Exception as e:
+            raise e
+
     def hget(self, name, key):
         try:
             self.cluster_nodes(name)

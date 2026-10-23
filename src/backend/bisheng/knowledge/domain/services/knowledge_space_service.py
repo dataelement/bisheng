@@ -329,6 +329,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
             actions=actions,
         )
 
+    async def _has_joined_visibility(
+        self,
+        space_id: int,
+        *,
+        has_content_permission: bool,
+    ) -> bool:
+        if not has_content_permission:
+            return False
+
+        actor = await self._permission_actor()
+        if not actor.super_admin:
+            return True
+
+        # A full-scope super admin may open every space without an actual grant.
+        # The joined state, unlike access authorization, must reflect OpenFGA
+        # visibility so it stays aligned with the square and /joined list.
+        visible_map = await batch_check_business_visible(
+            self.login_user,
+            resource_type="knowledge_space",
+            resource_ids=[space_id],
+            actor=actor,
+        )
+        return visible_map.get(str(space_id), False)
+
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
         space_tid = space.tenant_id
@@ -385,6 +409,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if update_time and update_time >= datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW:
                 return SpaceSubscriptionStatusEnum.REJECTED
         return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
+    @staticmethod
+    def _resolve_effective_subscription_status(
+        subscription_status: SpaceSubscriptionStatusEnum,
+        *,
+        has_visible: bool,
+    ) -> SpaceSubscriptionStatusEnum:
+        """Treat effective visibility as joined without hiding workflow states."""
+        if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and has_visible:
+            return SpaceSubscriptionStatusEnum.SUBSCRIBED
+        return subscription_status
 
     @staticmethod
     def _apply_subscription_flags(
@@ -1537,14 +1572,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_role = UserRoleEnum.CREATOR
             self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         else:
+            has_joined_visibility = await self._has_joined_visibility(
+                space_id,
+                has_content_permission=has_content_permission,
+            )
+            subscription_status = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
             member_info = await SpaceChannelMemberDao.async_find_member(
                 space_id=space.id,
                 user_id=self.login_user.user_id,
             )
             if member_info:
-                self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
+                subscription_status = self._resolve_subscription_status(member_info)
                 if member_info.is_active:
                     result.user_role = member_info.user_role
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=has_joined_visibility,
+            )
+            self._apply_subscription_flags(result, subscription_status)
             if result.user_role is None and has_content_permission:
                 result.user_role = (
                     UserRoleEnum.ADMIN
@@ -2225,10 +2270,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
-            if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and visible_map.get(
-                str(space.id), False
-            ):
-                subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=visible_map.get(str(space.id), False),
+            )
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),
@@ -3527,6 +3572,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(updated_file.knowledge_id)
         return updated_file
 
+    async def _rollback_uploaded_files(
+        self,
+        files: list[KnowledgeFile],
+        *,
+        parent_type: str,
+        parent_id: int,
+    ) -> None:
+        errors = []
+        for row in files:
+            try:
+                # Creation records do not require an existing permission mirror:
+                # the failed file and subsequent files may never have had one.
+                record = self._new_file_permission_record(
+                    row=row, resource_type="knowledge_file", parent_type=parent_type, parent_id=parent_id
+                )
+                adapter = await self._resource_adapter("knowledge_file")
+                await adapter.rollback_created(record=record, actor=await self._permission_actor())
+                if row.object_name:
+                    storage = get_minio_storage_sync()
+                    storage.remove_object_sync(bucket_name=storage.bucket, object_name=row.object_name)
+                expanded_ids = await self._cascade_version_links_on_delete([row.id])
+                await KnowledgeFileDao.adelete_batch(expanded_ids)
+            except Exception as exc:
+                # Keep this business row if compensation is uncertain, but do
+                # not let it prevent cleanup of the other files in the batch.
+                logger.exception("Failed to roll back uploaded knowledge file {}", row.id)
+                errors.append(exc)
+        if errors:
+            raise ExceptionGroup("Knowledge space upload compensation failed", errors)
+
     async def add_file(
         self,
         knowledge_id: int,
@@ -3605,21 +3680,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         created_files = []
 
-        async def cleanup_created_files() -> None:
-            created_file_ids = [created_file.id for created_file in created_files if getattr(created_file, "id", None)]
-            if not created_file_ids:
-                return
-            # Most rollback paths fire before the V1 doc/version rows are
-            # written, so the cascade is a defensive no-op here. Kept for the
-            # case where a partial create leaves stale chain rows.
-            expanded_ids = await self._cascade_version_links_on_delete(created_file_ids)
-            try:
-                await self._cleanup_resource_tuples(
-                    [("knowledge_file", created_file_id) for created_file_id in expanded_ids]
-                )
-            finally:
-                await KnowledgeFileDao.adelete_batch(expanded_ids)
-
         try:
             for one in file_path:
                 db_file = KnowledgeService.process_one_file(
@@ -3635,12 +3695,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     skip_dedup=skip_dedup,
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
+                    if getattr(db_file, "id", None):
+                        created_files.append(db_file)
                     resolved_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)
                     if db_file.file_source != resolved_file_source:
                         db_file.file_source = resolved_file_source
                         db_file = KnowledgeFileDao.update(db_file)
                     if getattr(db_file, "id", None):
-                        created_files.append(db_file)
                         # Plan 2 Task 9: also create a logical document + V1 (primary) for the uploaded file.
                         # This is independent of the version-management switch (D3): the rows always
                         # exist so the file list can be document-driven even when the switch is off.
@@ -3702,9 +3763,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         except Exception:
             try:
-                await cleanup_created_files()
+                await self._rollback_uploaded_files(
+                    created_files, parent_type=parent_type, parent_id=parent_resource_id
+                )
             except Exception as cleanup_exc:
-                logger.warning(f"Failed to cleanup files after knowledge space upload error: {cleanup_exc}")
+                logger.exception("Failed to cleanup files after knowledge space upload error: {}", cleanup_exc)
             raise
         from bisheng.worker.knowledge import scheduler as file_scheduler
 

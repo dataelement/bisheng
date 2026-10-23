@@ -78,6 +78,29 @@ bisheng-milvus-standalone
 └─────────────────┘
 ```
 
+### 代码节点开关
+
+工作流「代码节点」默认关闭，由系统配置控制：
+
+```yaml
+workflow:
+  code_node_enabled: false
+```
+
+该节点会执行用户填写的 Python 代码，当前版本**没有执行沙箱**，代码以后端进程的权限运行，可读取服务器文件、环境变量（含数据库与对象存储凭证）并访问内网。因此开启后，**所有能创建或编辑工作流的用户都等同于持有这台服务器的命令执行权限**——这与其在毕昇中的角色无关，也与是否部署在内网无关。仅在「所有能创建应用的人都可信」的环境下开启。
+
+只有字面量 `true` 视为开启；写成 `"true"`、`1`、`yes` 一律按关闭处理。改动约 100 秒生效，无需重启。
+
+关闭状态下运行到该节点的工作流会失败，失败原因中会指明需开启的配置项；编排页的代码节点上也有常驻提示。
+
+> **升级注意**：存量工作流中的代码节点在管理员开启前不可运行。升级前可用以下语句评估影响面：
+>
+> ```sql
+> SELECT COUNT(*) FROM flow WHERE data LIKE '%"type": "code"%';
+> ```
+
+执行沙箱正在开发中，届时本开关将不再是唯一防线。
+
 ### 密码加密
 
 `config.yaml` 中的 `database_url` 和 `redis_url` 密码字段使用 Fernet 对称加密。加密密钥硬编码在 `src/backend/bisheng/core/config/settings.py` 的 `secret_key` 变量中。Settings 类在加载配置时自动解密：
@@ -102,6 +125,7 @@ bisheng-milvus-standalone
 | `logger_conf` | `LoggerConf` | 日志级别与处理器 |
 | `password_conf` | `PasswordConf` | 密码策略（有效期、错误锁定） |
 | `cookie_conf` | `CookieConf` | JWT Cookie 配置（默认过期 86400s） |
+| `jwt_secret` | `str` | 登录态 JWT 签名密钥。**代码无默认值**（F068）：yaml 配了就用；未配置 / 为空 / 等于历史内置默认值时，首次需要的进程随机生成并写入 `config` 表（键 `jwt_secret`），全部进程共用。轮换：改 yaml 或删该记录后重启，全员重登 |
 | `system_login_method` | `SystemLoginMethod` | 登录方式（商业版标识、多端登录） |
 | `mcp` | `McpConf` | MCP 协议配置 |
 | `information_conf` | `IntelligenceCenterConf` | 情报中心配置 |
@@ -286,6 +310,18 @@ compose 下 `backend` 与 `backend_worker` 恰好 bind-mount 同一个 `/app/dat
 - 配置项 `linsight.skills_root` 已降级为「迁移脚本读取本地遗留 bundle 的来源」，运行期不再使用；
   本地缓存目录由 `linsight.skills_cache_dir` 指定（留空 = 进程缓存目录下的 `linsight_skills`）。
   **不要**把缓存目录指向共享卷。
+
+### v3.0 · 登录态 JWT 签名密钥不再内置（F068）
+
+< v3.0.0-beta2 的代码里带有一个公开的 `jwt_secret` 默认值，默认部署从未覆盖它，任何人都能用它伪造超管登录态（NVDB 报告）。升级后：
+
+| 情况 | 升级后行为 | 用户影响 |
+|------|-----------|---------|
+| `config.yaml` 从未配置 `jwt_secret`（绝大多数） | 首次启动自动生成随机密钥写入 `config.jwt_secret`，所有 api / worker 进程共用 | 全员重新登录一次 |
+| `config.yaml` 配了自己的私有值 | 继续使用 | 无感 |
+| `config.yaml` 抄了老代码里的默认值 | 命中黑名单，等同未配置 | 全员重新登录一次 |
+
+无需手动步骤。个人访问令牌与开放 API 凭据不走这把密钥，不受影响。要主动轮换：改 yaml 的值，或 `DELETE FROM config WHERE key='jwt_secret'` 后重启全部后端进程。
 
 ## 多节点部署
 

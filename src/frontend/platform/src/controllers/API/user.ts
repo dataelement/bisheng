@@ -104,13 +104,13 @@ export async function getRolesByGroupApi(searchkey = "", groupIds: any[]): Promi
  * 获取配置
  */
 export async function getSysConfigApi(): Promise<string> {
-  return await axios.get(`/api/v1/config`);
+  return await axios.get(`/api/v1/settings`);
 }
 /**
  * 更新配置
  */
 export async function setSysConfigApi(data) {
-  return await axios.post(`/api/v1/config/save`, data);
+  return await axios.post(`/api/v1/settings/save`, data);
 }
 // v2.5 角色管理（去用户组绑定）
 export async function getRolesPageApi(params: {

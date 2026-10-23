@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { useRecoilState } from "recoil";
 import { Outlined } from "bisheng-icons";
 import { TextareaAutosize } from "~/components/ui";
 import {
@@ -17,10 +16,13 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { useGetBsConfig, useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import useChannelChat from "~/hooks/useChannelChat";
-import useChatModelMemo from "~/hooks/useChatModelMemo";
+import {
+    readAdminDefaultModelId,
+    type ChatModelOption,
+} from "~/hooks/useChatModelResolution";
+import { useSurfaceModel } from "~/hooks/useSurfaceModel";
 import { useConfirm } from "~/Providers";
 import { cn } from "~/utils";
-import store from "~/store";
 
 interface ArticleAiDockProps {
     /** ES article document id — drives the channel chat. */
@@ -31,6 +33,8 @@ interface ModelSelectProps {
     options?: any[];
     value?: any;
     onChange: (val: string) => void;
+    /** Value repair by AiModelSelect — applied but never remembered. */
+    onAutoChange?: (val: string) => void;
     disabled?: boolean;
 }
 
@@ -100,6 +104,7 @@ function DockInput({
             value={model.value}
             options={model.options}
             onChange={model.onChange}
+            onAutoChange={model.onAutoChange}
         />
     ) : null;
 
@@ -194,7 +199,19 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
     const assistantTitle =
         bsConfig?.subscription?.assistant_name?.trim() ||
         localize("com_subscription.ai_assistant");
-    const [chatModel, setChatModel] = useRecoilState(store.chatModel);
+    // Own model selection, isolated from /c: picking a model here must not
+    // change what the main chat shows (see useSurfaceModel).
+    const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
+    const {
+        model: surfaceModel,
+        selectModel,
+        repairModel,
+    } = useSurfaceModel({
+        userId: user?.id,
+        surfaceKey: 'articleAi',
+        models: (bsConfig?.models || []) as ChatModelOption[],
+        adminDefaultId: readAdminDefaultModelId(workbenchCfg, 'daily'),
+    });
     const [open, setOpen] = useState(false);
     const [inputText, setInputText] = useState("");
     const isH5 = usePrefersMobileLayout();
@@ -260,19 +277,15 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
         stopGenerating,
         clearConversation,
         regenerate,
-    } = useChannelChat(articleDocId);
-
-    useChatModelMemo(user, bsConfig as any);
+    } = useChannelChat(articleDocId, surfaceModel);
 
     const modelOptions = bsConfig?.models;
     const model: ModelSelectProps = {
         options: modelOptions,
-        value: chatModel.id,
+        value: surfaceModel.id,
         disabled: !modelOptions?.length,
-        onChange: (val) => {
-            const m = modelOptions?.find((x) => x.id === val);
-            setChatModel({ id: Number(val), name: m?.displayName || "", manual: true, mode: 'daily' });
-        },
+        onChange: selectModel,
+        onAutoChange: repairModel,
     };
 
     const handleSend = (text: string) => {

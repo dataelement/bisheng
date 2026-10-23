@@ -16,8 +16,8 @@ import {
   getCitationDocumentName,
   getCitationDocumentPreviewUrl,
   getCitationItemBBoxes,
+  isFilePreviewCitation,
   isMediaCitation,
-  isRagCitation,
   isRagCitationMissingPreviewUrl,
   toAbsolutePreviewUrl,
   type CitationPdfBBox,
@@ -28,6 +28,8 @@ declare const __APP_ENV__: any;
 export type CitationDocumentPreviewState = {
   detail: ChatCitation;
   itemId?: string;
+  /** File-level clicks pass every cited chunk so the PDF can highlight them all. */
+  itemIds?: string[];
   locateChunk?: boolean;
 };
 
@@ -258,11 +260,12 @@ export function CitationDocumentPreviewContent({
   const { t } = useTranslation();
   const { effectiveDetail, isResolving } = useResolvedCitationDetail(preview);
 
-  if (!preview || !isRagCitation(effectiveDetail)) {
+  if (!preview || !isFilePreviewCitation(effectiveDetail)) {
     return null;
   }
 
-  const { itemId, locateChunk } = preview;
+  const { itemIds, locateChunk } = preview;
+  const itemId = itemIds?.length ? itemIds : preview.itemId;
   const fileName = getCitationDocumentName(effectiveDetail);
   const isMedia = isMediaCitation(effectiveDetail);
   // A clip renders from the original file (the player), with its transcript —
@@ -318,7 +321,7 @@ export default function CitationDocumentPreviewDrawer({
   const drawerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (!preview || !isRagCitation(effectiveDetail) || !isFullBleedMobile) {
+    if (!preview || !isFilePreviewCitation(effectiveDetail) || !isFullBleedMobile) {
       return;
     }
 
@@ -334,7 +337,7 @@ export default function CitationDocumentPreviewDrawer({
   }, [effectiveDetail, isFullBleedMobile, preview]);
 
   useEffect(() => {
-    if (!preview || !isRagCitation(effectiveDetail) || isFullBleedMobile) {
+    if (!preview || !isFilePreviewCitation(effectiveDetail) || isFullBleedMobile) {
       return;
     }
 
@@ -350,7 +353,7 @@ export default function CitationDocumentPreviewDrawer({
     };
   }, [effectiveDetail, isFullBleedMobile, onClose, preview]);
 
-  if (!preview || !isRagCitation(effectiveDetail)) {
+  if (!preview || !isFilePreviewCitation(effectiveDetail)) {
     return null;
   }
 

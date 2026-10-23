@@ -37,7 +37,10 @@ function resolveKnownErrorKey(message: string) {
     if (normalized.startsWith("web link request failed")) {
         return "com_knowledge.web_link_request_failed";
     }
-    if (normalized.startsWith("knowledge media transcription only supports aliyun/qwen asr")) {
+    if (
+        normalized.startsWith("knowledge media transcription only supports aliyun/qwen asr")
+        || normalized.startsWith("knowledge media transcription does not support asr provider")
+    ) {
         return "com_knowledge.media_asr_provider_unsupported";
     }
     if (normalized.startsWith("asr request failed")) {

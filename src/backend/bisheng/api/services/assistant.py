@@ -38,6 +38,7 @@ from bisheng.permission.application.business_authorization import (
     require_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.user.domain.models.user import UserDao
@@ -300,7 +301,6 @@ class AssistantService(BaseService, AssistantUtils):
             meta_data = share_link.meta_data or {}
             share_assistant_id = str(meta_data.get("flowId") or share_link.resource_id or "")
             has_share_grant = share_assistant_id == str(assistant_id)
-        # Check if you have permission to access the information
         if not has_share_grant and not await check_business_action(
             login_user,
             resource_type="assistant",
@@ -459,6 +459,7 @@ class AssistantService(BaseService, AssistantUtils):
         MessageSessionDao.update_session_info_by_flow(
             assistant.name, assistant.desc, assistant.logo, assistant.id, FlowType.ASSISTANT.value
         )
+        delete_app_guest_link("assistant", str(assistant.id))
         return True
 
     @classmethod

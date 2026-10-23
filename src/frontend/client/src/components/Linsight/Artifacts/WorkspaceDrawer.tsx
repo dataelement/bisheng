@@ -3,6 +3,7 @@
  * titled "Workspace" listing every output artifact; clicking a row switches
  * the right area to the file preview panel (handled by useArtifactsPanel).
  */
+import type { ChatCitation } from '~/api/chatApi';
 import FileIcon from '~/components/ui/icon/File';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/Sheet';
 import { useLocalize } from '~/hooks';
@@ -18,9 +19,11 @@ interface WorkspaceDrawerProps {
     /** Session version — resolves an artifact's MinIO key for the download action. */
     versionId: string;
     onPreview: (file: ArtifactFile) => void;
+    /** F069 P2: `output_result.citations`, so the row's "save as" can bake citations. */
+    citations?: ChatCitation[] | null;
 }
 
-export function WorkspaceDrawer({ open, onOpenChange, files, versionId, onPreview }: WorkspaceDrawerProps) {
+export function WorkspaceDrawer({ open, onOpenChange, files, versionId, onPreview, citations }: WorkspaceDrawerProps) {
     const localize = useLocalize();
 
     // Split into the two product zones: user-uploaded sources vs agent deliverables.
@@ -46,7 +49,7 @@ export function WorkspaceDrawer({ open, onOpenChange, files, versionId, onPrevie
             </span>
             {/* Always-visible worded action at the row's end — same treatment as
                 the delivery card's and workspace panel's rows. */}
-            <SaveAsButton file={file} versionId={versionId} variant="labeled" />
+            <SaveAsButton file={file} versionId={versionId} variant="labeled" citations={citations} />
         </div>
     );
 

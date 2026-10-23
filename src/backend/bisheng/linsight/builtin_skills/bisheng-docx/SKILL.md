@@ -5,7 +5,7 @@ description: >-
   合同初稿、说明书、简历、周报月报等正式文档；把已有内容整理成带标题层级、目录、页码、
   表格和图表的 Word 文件；读取、改写用户上传的 .docx。当用户说到「Word」「文档」「报告」
   「方案」「纪要」「公文」「通知」「说明书」「docx」「写一份 X」「整理成 Word」
-  「导出成 Word」时触发。本技能给出 BiSheng 代码执行器里唯一可行的 python-docx 路径
+  「导出成 Word」时触发。本技能给出当前代码执行器里唯一可行的 python-docx 路径
   （该环境没有 Node/docx-js，中文字体必须显式写 w:eastAsia 才生效），
   内置 GB/T 9704-2012 公文版式为默认档，另有一档给简历宣传稿这类非公文文档；
   还包括目录页码写法、交付前自检与渲染脚本。
@@ -13,10 +13,10 @@ description: >-
   只是把已经写好的回答原样存成 Word、不要求目录页码表格版式的，用 export_docx 更省事。
   如果用户要的是 Excel 表格、PPT 或纯 Markdown，不要用本技能。
 metadata:
-  display-name: Word 文档制作（BiSheng 适配）
+  display-name: Word 文档制作
 ---
 
-# 在 BiSheng 里做 DOCX
+# 制作 DOCX
 
 ## 0. 开工纪律
 

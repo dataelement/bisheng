@@ -1,5 +1,6 @@
 # Define a custom middleware class
 import http.cookies
+import re
 from collections.abc import Iterable
 from time import time
 
@@ -21,6 +22,9 @@ TENANT_CHECK_EXEMPT_PATHS = (
     "/api/v1/user/public_key",
     # A stale login token must not block the captcha request with 19103.
     "/api/v1/user/get_captcha",
+    # Kicked-off sessions still need logout to unset the HttpOnly cookie;
+    # otherwise the login page's /user/info keeps 10604-looping the dialog.
+    "/api/v1/user/logout",
     "/api/v1/user/switch-tenant",
     "/api/v1/user/tenants",
     "/api/v1/env",
@@ -46,6 +50,29 @@ TENANT_CHECK_EXEMPT_PATHS = (
 
 # v2.5.1 F012: Redis TTL for cached is_global_super FGA check.
 _IS_SUPER_CACHE_TTL_SECONDS = 300
+
+# These exact method/path pairs own their credential checks. This is not a tenant bypass list.
+DSH_CREDENTIAL_ROUTES = frozenset(
+    {
+        ("GET", "/api/v1/dsh/config"),
+        ("GET", "/api/v1/dsh/browser-config"),
+        ("GET", "/api/v1/dsh/models"),
+        ("GET", "/api/v1/dsh/usage"),
+        ("GET", "/api/v1/dsh/market/capabilities"),
+        ("GET", "/api/v1/dsh/market/catalog"),
+        ("POST", "/api/v1/dsh/market/sync"),
+        ("POST", "/api/v1/dsh/chat/completions"),
+        ("POST", "/api/v1/internal/dsh/identity/redeem"),
+        ("POST", "/api/v1/internal/dsh/identity/check"),
+    }
+)
+
+
+def owns_dsh_credential(method: str, path: str) -> bool:
+    return (method, path) in DSH_CREDENTIAL_ROUTES or (
+        method == "GET"
+        and re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path) is not None
+    )
 
 
 def _uses_browser_identity(path: str) -> bool:
@@ -148,6 +175,42 @@ async def _validate_token_version(
     return int(current) == int(payload_token_version)
 
 
+async def _validate_current_session_token(user_id: int, token: str) -> bool:
+    """Return True when this JWT is the user's current Redis session.
+
+    ``allow_multi_login=true`` skips the check (every issued JWT stays valid).
+    On config/Redis failure, or when Redis has no session key, we **fail-open**
+    — block only on a confirmed mismatch with a stored token.
+    """
+    if not user_id or not token:
+        return True
+    try:
+        from bisheng.common.services.config_service import settings
+
+        login_method = await settings.aget_system_login_method()
+        if login_method.allow_multi_login:
+            return True
+    except Exception as exc:
+        # Config lookup is best-effort: a miss must not lock users out.
+        logger.debug("allow_multi_login lookup failed for user {}: {}", user_id, exc)
+        return True
+
+    try:
+        from bisheng.core.cache.redis_manager import get_redis_client
+        from bisheng.user.domain.const import USER_CURRENT_SESSION
+
+        redis_client = await get_redis_client()
+        current_token = await redis_client.aget(USER_CURRENT_SESSION.format(user_id))
+    except Exception as exc:
+        # Redis hiccup is best-effort: a miss must not lock users out.
+        logger.debug("current session lookup failed for user {}: {}", user_id, exc)
+        return True
+
+    if not current_token:
+        return True
+    return str(current_token) == token
+
+
 async def _check_is_global_super(
     user_id: int,
     *,
@@ -242,11 +305,12 @@ async def _apply_token_version_and_visible(
     *,
     decoded_subject: dict | None = None,
 ) -> JSONResponse | None:
-    """Enforce token_version + set visible_tenant_ids from a decoded JWT.
+    """Enforce token_version + current-session + set visible_tenant_ids.
 
-    Returns a JSONResponse (401) when the token_version mismatches; None
-    otherwise. ``decoded_subject`` lets the caller share a JWT decode across
-    middleware steps so the same token isn't decoded twice.
+    Returns a JSONResponse (401) when the token_version mismatches or, with
+    ``allow_multi_login=false``, when the JWT is not the Redis current session;
+    None otherwise. ``decoded_subject`` lets the caller share a JWT decode
+    across middleware steps so the same token isn't decoded twice.
     """
     subject = decoded_subject if decoded_subject is not None else _decode_jwt_subject(token)
     if subject is None:
@@ -260,6 +324,17 @@ async def _apply_token_version_and_visible(
             content={
                 "status_code": 19103,
                 "status_message": "token_version mismatch — please re-login",
+                "data": None,
+            },
+        )
+    if user_id and not await _validate_current_session_token(user_id, token):
+        from bisheng.common.errcode.user import UserLoginOfflineError
+
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status_code": UserLoginOfflineError.Code,
+                "status_message": UserLoginOfflineError.Msg,
                 "data": None,
             },
         )
@@ -303,7 +378,9 @@ class CustomMiddleware(BaseHTTPMiddleware):
         else:
             trace_id = trace_id_generator()
         ip = get_request_ip(request)
-        path = request.url
+        req_path = request.url.path
+        dsh_owned = owns_dsh_credential(request.method, req_path)
+        path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/v1/internal/dsh/")) else request.url
         trace_id_var.set(trace_id)
 
         # Tenant context injection from JWT cookie. Decode the JWT once and
@@ -311,9 +388,24 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # the same token isn't decoded twice on the hot path.
         # v2 resolves its API credential and v3 uses its default operator.
         # Browser credentials must not change either channel's identity or errors.
-        token = _extract_http_access_token(request) if _uses_browser_identity(request.url.path) else None
+        token = (
+            _extract_http_access_token(request) if not dsh_owned and _uses_browser_identity(request.url.path) else None
+        )
         decoded_subject = _decode_jwt_subject(token) if token else None
-        tenant_id = _set_tenant_context(token, decoded_subject=decoded_subject)
+        tenant_id = None if dsh_owned else _set_tenant_context(token, decoded_subject=decoded_subject)
+
+        dsh_scope_tokens = []
+        if dsh_owned:
+            from bisheng.core.context import tenant as tenant_context
+
+            dsh_scope_tokens = [
+                tenant_context.current_tenant_id.set(None),
+                tenant_context.set_visible_tenant_ids(None),
+                tenant_context.set_admin_scope_tenant_id(None),
+                tenant_context.set_is_management_api(False),
+                tenant_context._bypass_tenant_filter.set(False),
+                tenant_context._strict_tenant_filter.set(False),
+            ]
 
         req_path = request.url.path
         is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS)
@@ -388,6 +480,8 @@ class CustomMiddleware(BaseHTTPMiddleware):
         finally:
             if bypass_token is not None:
                 _bypass_tenant_filter.reset(bypass_token)
+            for scope_token in reversed(dsh_scope_tokens):
+                scope_token.var.reset(scope_token)
 
 
 class WebSocketLoggingMiddleware:

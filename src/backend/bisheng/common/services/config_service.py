@@ -482,7 +482,7 @@ class ConfigService(Settings):
     def get_cofco_forwarding_conf(self) -> CofcoForwardingConf:
         """Hot-reload E+ forwarding config from DB; fall back to YAML boot value.
 
-        Save via POST /api/v1/config/save invalidates the redis cache and the
+        Save via POST /api/v1/settings/save invalidates the redis cache and the
         next call here picks up the new value without a process restart.
         """
         all_config = self.get_all_config()

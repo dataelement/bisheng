@@ -1,16 +1,13 @@
 import debounce from 'lodash/debounce';
 import { useState, useEffect } from 'react';
 import { useFormContext } from 'react-hook-form';
-import {
-  validateAndParseOpenAPISpec,
-  openapiToFunction,
-  AuthTypeEnum,
-} from '~/types/chat';
+import { AuthTypeEnum } from '~/types/chat';
+import { validateAndParseOpenAPISpec, openapiToFunction } from '~/api/chat/actions';
+import type { ValidationResult } from '~/api/chat/actions';
 import type {
   Action,
   FunctionTool,
   ActionMetadata,
-  ValidationResult,
   AssistantsEndpoint,
 } from '~/types/chat';
 import type { ActionAuthForm, ActionWithNullableMetadata } from '~/common';

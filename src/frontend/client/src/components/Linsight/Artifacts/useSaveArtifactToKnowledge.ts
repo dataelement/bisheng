@@ -17,6 +17,7 @@
  * net for a truncated or permission-denied probe.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ChatCitation } from '~/api/chatApi';
 import {
     addFilesApi,
     searchSpaceChildrenApi,
@@ -135,7 +136,12 @@ async function registerStagedFile(
     }
 }
 
-export function useSaveArtifactToKnowledge(file: ArtifactFile, versionId: string) {
+export function useSaveArtifactToKnowledge(
+    file: ArtifactFile,
+    versionId: string,
+    /** F069 P2: citation seed for baking a markdown deliverable (see SaveAsButton). */
+    citations?: ChatCitation[] | null,
+) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const isStorageBlocked = useStorageQuotaGuard();
@@ -171,7 +177,7 @@ export function useSaveArtifactToKnowledge(file: ArtifactFile, versionId: string
             try {
                 // Original bytes only — the spec stores the source Markdown, never
                 // a pdf/docx conversion.
-                const { blob, fileName } = await fetchArtifactBlob(file, versionId);
+                const { blob, fileName } = await fetchArtifactBlob(file, versionId, { citations });
                 // Size is only knowable once fetched, so guard after the fetch.
                 // The guard reports the reason itself.
                 if (isStorageBlocked(blob.size)) return;
@@ -231,7 +237,7 @@ export function useSaveArtifactToKnowledge(file: ArtifactFile, versionId: string
                 if (mountedRef.current) setSaving(false);
             }
         },
-        [file, versionId, isStorageBlocked, refreshQuota, showToast, localize],
+        [file, versionId, citations, isStorageBlocked, refreshQuota, showToast, localize],
     );
 
     return { pickerOpen, setPickerOpen, openPicker, saveTo, saving };

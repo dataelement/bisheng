@@ -6,6 +6,7 @@
 import { useCallback } from 'react';
 import { Outlined } from 'bisheng-icons';
 import { Badge } from '@bisheng/ui';
+import type { ChatCitation } from '~/api/chatApi';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
@@ -20,9 +21,30 @@ interface ResultSectionProps {
     files: ArtifactFile[];
     versionId: string;
     onPreview: (file: ArtifactFile) => void;
+    /** output_result.citations — sources actually cited in this run */
+    citations?: ChatCitation[] | null;
+    /** Task ChatMessage id, used by /citations/resolve */
+    messageId?: string;
+    /** output_result.citation_audit (F069) — completion-time verdict on whether the
+        run cited the sources it retrieved. Only `uncited` is surfaced to the user. */
+    citationAudit?: CitationAudit | null;
 }
 
-export function ResultSection({ answer, files, versionId, onPreview }: ResultSectionProps) {
+/** Subset of `output_result.citation_audit` the result panel reads. */
+export interface CitationAudit {
+    status?: 'no_sources' | 'cited' | 'uncited' | string;
+    sources_seen?: number;
+}
+
+export function ResultSection({
+    answer,
+    files,
+    versionId,
+    onPreview,
+    citations,
+    messageId,
+    citationAudit,
+}: ResultSectionProps) {
     const localize = useLocalize();
     const resolveArtifactLink = useCallback(
         (href: string) => resolveDeliverableLink(files, href),
@@ -75,7 +97,7 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         column of them read as noise, and this is the only download
                         entry a single-file run has — the exact gap this fixed. */}
                     {!multiple && (
-                        <SaveAsButton file={primaryFile} versionId={versionId} variant="inline" />
+                        <SaveAsButton file={primaryFile} versionId={versionId} variant="inline" citations={citations} />
                     )}
                 </div>
             )}
@@ -90,12 +112,23 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         content={stripWorkspacePaths(answer)}
                         isLatestMessage={true}
                         webContent={false}
+                        citations={citations}
+                        messageId={messageId}
                         resolveArtifactLink={resolveArtifactLink}
                         // Markdown types the callback as (file: unknown) — the resolver
                         // it pairs with only ever yields ArtifactFile values here.
                         onArtifactPreview={onPreview as (file: unknown) => void}
                     />
                 </div>
+            )}
+
+            {/* F069: the run retrieved sources but the report cites none of them.
+                Said plainly instead of leaving the reader to wonder why there are no
+                citation markers; the backend never edits the answer to say this. */}
+            {citationAudit?.status === 'uncited' && (
+                <p data-testid="citation-uncited-note" className="text-[14px] leading-[22px] text-text-3">
+                    {localize('com_linsight_citation_uncited', { 0: String(citationAudit.sources_seen ?? 0) })}
+                </p>
             )}
 
             {/* output files card — dotted background matching ClarifyCard.
@@ -155,7 +188,7 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                                 <span className="truncate">{file.file_name}</span>
                                 <NewTabHint file={file} />
                             </span>
-                            <SaveAsButton file={file} versionId={versionId} variant="labeled" />
+                            <SaveAsButton file={file} versionId={versionId} variant="labeled" citations={citations} />
                         </div>
                     ))}
                 </div>

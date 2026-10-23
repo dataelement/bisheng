@@ -31,7 +31,7 @@ from bisheng.common.errcode.linsight import (
     SkillGitHubUrlInvalidError,
     SkillValidationError,
 )
-from bisheng.linsight.domain.services.skill_store import MAX_UNPACKED_SIZE, SKILL_MD
+from bisheng.linsight.domain.services.skill_store import SKILL_MD, resolve_skill_unpacked_limit
 
 GITHUB_HOSTS = {"github.com", "www.github.com"}
 RAW_HOSTS = {"raw.githubusercontent.com", "codeload.github.com"}
@@ -108,6 +108,7 @@ async def fetch_skill_files(target: GithubTarget) -> dict[str, bytes]:
     """
     files: dict[str, bytes] = {}
     total_size = 0
+    max_unpacked = await resolve_skill_unpacked_limit()
 
     async def walk(client: httpx.AsyncClient, dir_path: str, rel_prefix: str, depth: int) -> None:
         nonlocal total_size
@@ -135,7 +136,7 @@ async def fetch_skill_files(target: GithubTarget) -> dict[str, bytes]:
                 total_size += int(item.get("size") or 0)
                 # Raw file sizes — unpacked semantics, so this shares the upload path's
                 # unpacked limit rather than the (compressed) upload payload limit.
-                if total_size > MAX_UNPACKED_SIZE:
+                if total_size > max_unpacked:
                     raise SkillBundleTooLargeError()
                 files[rel] = await _download_raw(client, item.get("download_url"))
             # symlinks / submodules are intentionally ignored — not portable as bundle assets.
