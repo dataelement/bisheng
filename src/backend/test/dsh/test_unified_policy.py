@@ -27,17 +27,35 @@ def test_membership_changes_and_everyone():
     assert ModelVisibilityInput(version=0, everyone=True).permits(user_id=3, departments=set(), roles=set())
 
 
-def test_personal_zero_overrides_inherited_and_inherited_uses_maximum():
+@pytest.mark.parametrize(
+    "personal,department,role,expected",
+    [
+        (10000, 5000, 8000, 10000),
+        (1000, 5000, 8000, 8000),
+        (1000, 5000, 2000, 5000),
+        (0, 5000, 8000, 8000),
+        (5000, 5000, 5000, 5000),
+    ],
+)
+def test_matching_credit_allowances_use_maximum(personal, department, role, expected):
     rules = [
-        {"subject_type": "DEPARTMENT", "subject_id": 4, "enabled": True, "monthly_token_limit": 500_000_000},
-        {"subject_type": "ROLE", "subject_id": 8, "enabled": True, "monthly_token_limit": 800_000_000},
+        {"subject_type": "USER", "subject_id": 3, "enabled": True, "monthly_token_limit": personal * 1_000_000},
+        {"subject_type": "DEPARTMENT", "subject_id": 4, "enabled": True, "monthly_token_limit": department * 1_000_000},
+        {"subject_type": "ROLE", "subject_id": 8, "enabled": True, "monthly_token_limit": role * 1_000_000},
     ]
-    args = {"user_id": 3, "departments": {4}, "roles": {8}, "rules": rules}
-    assert effective_token_limit(**args) == 800_000_000
-    rules.append({"subject_type": "USER", "subject_id": 3, "enabled": True, "monthly_token_limit": 0})
-    assert effective_token_limit(**args) == 0
-    rules[-1]["enabled"] = False
-    assert effective_token_limit(**args) == 800_000_000
+    assert effective_token_limit(user_id=3, departments={4}, roles={8}, rules=rules) == expected * 1_000_000
+
+
+def test_only_enabled_matching_allowances_contribute():
+    rules = [
+        {"subject_type": "USER", "subject_id": 3, "enabled": False, "monthly_token_limit": 10000},
+        {"subject_type": "USER", "subject_id": 9, "enabled": True, "monthly_token_limit": 20000},
+        {"subject_type": "DEPARTMENT", "subject_id": 4, "enabled": True, "monthly_token_limit": 5000},
+        {"subject_type": "ROLE", "subject_id": 8, "enabled": True, "monthly_token_limit": 8000},
+    ]
+    assert effective_token_limit(user_id=3, departments={4}, roles={8}, rules=rules) == 8000
+    assert effective_token_limit(user_id=3, departments={4}, roles=set(), rules=rules) == 5000
+    assert effective_token_limit(user_id=3, departments=set(), roles=set(), rules=rules) == 0
 
 
 def test_conversion_preserves_small_usage_and_clamps_display_balance():

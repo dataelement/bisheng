@@ -4,21 +4,28 @@ import { Button } from '@/components/bs-ui/button'
 import { Checkbox } from '@/components/bs-ui/checkBox'
 import { Input } from '@/components/bs-ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select'
+import { Tabs, TabsList, TabsTrigger } from '@/components/bs-ui/tabs'
 import { getCreditRules, getPolicySubjects, saveCreditRule, type CreditRule, type PolicySubject, type PolicySubjectOption } from '@/controllers/API/dshUnified'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+type CreditDraft = {
+    subject: PolicySubject | null
+    name: string
+    version: number
+    credits: string
+    enabled: boolean
+    isNew: boolean
+}
+
 export function CreditRulesView() {
     const { t } = useTranslation()
     const [rules, setRules] = useState<CreditRule[]>([])
     const [options, setOptions] = useState<PolicySubjectOption[]>([])
-    const [subject, setSubject] = useState<PolicySubject | null>(null)
-    const [kind, setKind] = useState<PolicySubject['kind']>('DEPARTMENT')
+    const [kind, setKind] = useState<PolicySubject['kind']>('USER')
+    const [draft, setDraft] = useState<CreditDraft | null>(null)
     const [users, setUsers] = useState<DepartmentUserOption[]>([])
-    const [credits, setCredits] = useState('500')
-    const [version, setVersion] = useState(0)
-    const [enabled, setEnabled] = useState(true)
     const [pending, setPending] = useState(false)
     const [loaded, setLoaded] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -32,73 +39,101 @@ export function CreditRulesView() {
             .catch(() => { if (!abort.signal.aborted) setError('dsh.unavailable') })
         return () => abort.abort()
     }, [revision])
-    const select = (next: PolicySubject | null) => {
-        setSubject(next)
-        const rule = rules.find(row => row.subject_type === next?.kind && row.subject_id === next?.id)
-        setVersion(rule?.version ?? 0)
-        setCredits(rule?.monthly_credits ?? '500')
-        setEnabled(rule?.enabled ?? true)
+    const cancel = () => { setDraft(null); setUsers([]); setError(null) }
+    const select = (subject: PolicySubject | null, name: string) => {
+        const rule = rules.find(row => row.subject_type === subject?.kind && row.subject_id === subject?.id)
+        setDraft(old => old && ({ ...old, subject, name, version: rule?.version ?? 0,
+            credits: rule?.monthly_credits ?? old.credits, enabled: rule?.enabled ?? old.enabled }))
     }
     const save = async () => {
-        if (!subject || pending) return
+        if (!draft?.subject || pending) return
         setPending(true); setError(null)
         try {
-            const saved = await saveCreditRule(subject, { version, enabled, monthly_credits: credits })
-            const name = subject.kind === 'USER' ? users[0]?.label : options.find(item => item.kind === subject.kind && item.id === subject.id)?.name
-            setRules(rows => [...rows.filter(row => row.subject_type !== subject.kind || row.subject_id !== subject.id), { ...saved, name }])
-            setVersion(saved.version)
+            const saved = await saveCreditRule(draft.subject, {
+                version: draft.version, enabled: draft.enabled, monthly_credits: draft.credits,
+            })
+            setRules(rows => {
+                const next = { ...saved, name: draft.name }
+                const exists = rows.some(row => row.subject_type === saved.subject_type && row.subject_id === saved.subject_id)
+                return exists ? rows.map(row => row.subject_type === saved.subject_type && row.subject_id === saved.subject_id ? next : row) : [...rows, next]
+            })
+            cancel()
         } catch (reason) { setError(getDshRequestErrorKey(reason) ?? 'dsh.unavailable') }
         finally { setPending(false) }
     }
-    return <section className="space-y-4 rounded-lg border bg-background p-4">
-        <div className="flex items-center justify-between">
-            <h2 className="font-semibold">{t('dsh.unified.credits')}</h2>
-            <Button variant="outline" disabled={pending} onClick={() => { select(null); setRevision(old => old + 1) }}>{t('dsh.refresh')}</Button>
+    const visibleRules = rules.filter(rule => rule.subject_type === kind)
+    const validCredits = !!draft && /^(0|[1-9][0-9]{0,12})(\.[0-9]{1,6})?$/.test(draft.credits)
+    const creditInput = draft && <Input aria-label={t('dsh.unified.monthlyCredits')} className="w-40" inputMode="decimal" disabled={pending}
+        value={draft.credits} onChange={event => setDraft({ ...draft, credits: event.target.value })} />
+    const enabledInput = draft && <Checkbox aria-label={t('dsh.unified.enabled')} disabled={pending} checked={draft.enabled}
+        onCheckedChange={checked => setDraft({ ...draft, enabled: checked === true })} />
+    const actions = <div className="flex items-center justify-end gap-2">
+        <Button disabled={!draft?.subject || !validCredits || pending} onClick={save}>{t(pending ? 'dsh.unified.saving' : 'dsh.unified.save')}</Button>
+        <Button variant="ghost" disabled={pending} onClick={cancel}>{t('dsh.unified.cancel')}</Button>
+    </div>
+    return <section className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+            <Tabs value={kind} onValueChange={value => {
+                if (value === 'USER' || value === 'DEPARTMENT' || value === 'ROLE') { setKind(value); cancel() }
+            }}>
+                <TabsList aria-label={t('dsh.unified.scope')} className="border bg-background p-0">
+                    {(['USER', 'DEPARTMENT', 'ROLE'] as const).map(value => <TabsTrigger key={value} value={value} disabled={pending}
+                        className="h-full rounded-none px-5 text-foreground data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">
+                        {t(value === 'USER' ? 'dsh.unified.userTab' : `dsh.unified.${value}`)}
+                    </TabsTrigger>)}
+                </TabsList>
+            </Tabs>
+            <div className="flex gap-2">
+                <Button variant="outline" disabled={pending} onClick={() => { cancel(); setRevision(old => old + 1) }}>{t('dsh.refresh')}</Button>
+                <Button disabled={pending || !loaded} onClick={() => {
+                    setError(null); setUsers([]); setDraft({ subject: null, name: '', version: 0, credits: '500', enabled: true, isNew: true })
+                }}>{t('dsh.unified.addCredits')}</Button>
+            </div>
         </div>
         <p className="text-sm text-muted-foreground">{t('dsh.unified.ruleHelp')}</p>
         {error && <p role="alert">{t(error)}</p>}
-        {!loaded ? <p role="status">{t('dsh.loading')}</p> : <>
-            <fieldset disabled={pending} className="flex flex-wrap items-end gap-3">
-                <div className="space-y-1 text-sm">
-                    <label htmlFor="credit-rule-kind">{t('dsh.unified.scope')}</label>
-                    <Select disabled={pending} value={kind} onValueChange={value => {
-                        if (value === 'DEPARTMENT' || value === 'ROLE' || value === 'USER') {
-                            setKind(value); select(null); setUsers([])
-                        }
-                    }}>
-                        <SelectTrigger id="credit-rule-kind" className="w-28"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            {(['DEPARTMENT', 'ROLE', 'USER'] as const).map(value => <SelectItem key={value} value={value}>{t(`dsh.unified.${value}`)}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
-                {kind === 'USER' ? <UsersSelect value={users} disabled={pending} onChange={next => {
-                    setUsers(next); select(next[0] ? { kind: 'USER', id: Number(next[0].value) } : null)
-                }} /> : <Select key={kind} disabled={pending} value={subject ? String(subject.id) : ''} onValueChange={value => select({ kind, id: Number(value) })}>
-                    <SelectTrigger aria-label={t('dsh.unified.selectSubject')} className="w-56"><SelectValue placeholder={t('dsh.unified.selectSubject')} /></SelectTrigger>
-                    <SelectContent>
-                        {options.filter(item => item.kind === kind).map(item => <SelectItem key={item.id} value={String(item.id)}>
-                            <span style={{ paddingLeft: item.depth * 16 }}>{item.name}</span>
-                        </SelectItem>)}
-                    </SelectContent>
-                </Select>}
-                <label className="space-y-1 text-sm">{t('dsh.unified.monthlyCredits')}
-                    <Input aria-label={t('dsh.unified.monthlyCredits')} className="w-36" inputMode="decimal" value={credits} onChange={event => setCredits(event.target.value)} />
-                </label>
-                <label className="flex items-center gap-2 py-2 text-sm"><Checkbox disabled={pending} checked={enabled} onCheckedChange={checked => setEnabled(checked === true)} />{t('dsh.unified.enabled')}</label>
-                <Button disabled={!subject || !/^(0|[1-9][0-9]{0,12})(\.[0-9]{1,6})?$/.test(credits) || pending} onClick={save}>{t(pending ? 'dsh.unified.saving' : 'dsh.unified.save')}</Button>
-            </fieldset>
+        {!loaded ? <p role="status">{t('dsh.loading')}</p> : <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-                <thead><tr className="border-b"><th className="py-2">{t('dsh.unified.scope')}</th><th>{t('dsh.unified.monthlyCredits')}</th><th>{t('dsh.unified.enabled')}</th><th /></tr></thead>
-                <tbody>{rules.map(rule => <tr className="border-b" key={`${rule.subject_type}:${rule.subject_id}`}>
-                    <td className="py-2">{t(`dsh.unified.${rule.subject_type}`)} · {rule.name ?? rule.subject_id}</td>
-                    <td>{rule.monthly_credits}</td><td>{t(rule.enabled ? 'dsh.unified.yes' : 'dsh.unified.no')}</td>
-                    <td><Button variant="ghost" disabled={pending} onClick={() => {
-                        setKind(rule.subject_type); setUsers(rule.subject_type === 'USER' ? [{ value: rule.subject_id, label: rule.name || String(rule.subject_id) }] : [])
-                        select({ kind: rule.subject_type, id: rule.subject_id })
-                    }}>{t('dsh.unified.edit')}</Button></td>
-                </tr>)}</tbody>
+                <thead><tr className="border-b">
+                    <th className="py-3 font-medium">{t(kind === 'USER' ? 'dsh.unified.userTab' : `dsh.unified.${kind}`)}</th>
+                    <th className="w-56 font-medium">{t('dsh.unified.monthlyCredits')}</th>
+                    <th className="w-32 font-medium">{t('dsh.unified.enabled')}</th>
+                    <th className="w-40" />
+                </tr></thead>
+                <tbody>
+                    {draft?.isNew && <tr className="border-b">
+                        <td className="py-3 pr-4">
+                            {kind === 'USER' ? <UsersSelect value={users} disabled={pending} lockedValues={visibleRules.map(rule => rule.subject_id)} onChange={(next: DepartmentUserOption[]) => {
+                                setUsers(next); select(next[0] ? { kind: 'USER', id: Number(next[0].value) } : null, next[0]?.label ?? '')
+                            }} /> : <Select disabled={pending} value={draft.subject ? String(draft.subject.id) : ''} onValueChange={value => {
+                                const option = options.find(item => item.kind === kind && item.id === Number(value))
+                                select({ kind, id: Number(value) }, option?.name ?? value)
+                            }}>
+                                <SelectTrigger aria-label={t('dsh.unified.selectSubject')} className="w-64"><SelectValue placeholder={t('dsh.unified.selectSubject')} /></SelectTrigger>
+                                <SelectContent>
+                                    {options.filter(item => item.kind === kind && !visibleRules.some(rule => rule.subject_id === item.id)).map(item => <SelectItem key={item.id} value={String(item.id)}>
+                                        <span style={{ paddingLeft: item.depth * 16 }}>{item.name}</span>
+                                    </SelectItem>)}
+                                </SelectContent>
+                            </Select>}
+                        </td>
+                        <td>{creditInput}</td><td>{enabledInput}</td><td>{actions}</td>
+                    </tr>}
+                    {visibleRules.map(rule => {
+                        const editing = draft && !draft.isNew && draft.subject?.kind === rule.subject_type && draft.subject.id === rule.subject_id
+                        return <tr className="border-b" key={`${rule.subject_type}:${rule.subject_id}`}>
+                            <td className="py-4 pr-4">{rule.name ?? rule.subject_id}</td>
+                            <td>{editing ? creditInput : rule.monthly_credits}</td>
+                            <td>{editing ? enabledInput : t(rule.enabled ? 'dsh.unified.yes' : 'dsh.unified.no')}</td>
+                            <td>{editing ? actions : <div className="flex justify-end"><Button variant="ghost" disabled={pending} onClick={() => {
+                                setError(null); setDraft({ subject: { kind: rule.subject_type, id: rule.subject_id }, name: rule.name ?? String(rule.subject_id),
+                                    credits: rule.monthly_credits, enabled: rule.enabled, version: rule.version, isNew: false })
+                            }}>{t('dsh.unified.edit')}</Button></div>}</td>
+                        </tr>
+                    })}
+                    {visibleRules.length === 0 && !draft?.isNew && <tr><td colSpan={4} className="py-12 text-center text-muted-foreground">{t('dsh.unified.emptyCredits')}</td></tr>}
+                </tbody>
             </table>
-        </>}
+        </div>}
     </section>
 }
