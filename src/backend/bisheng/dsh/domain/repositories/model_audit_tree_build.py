@@ -31,13 +31,21 @@ class AuditTreeBuildRepository(AuditHierarchyRepository):
                 state.active
                 and state.revision == state.published_revision
                 and state.summary_revision == state.published_summary_revision
+                and state.safety_summary_revision == state.published_safety_summary_revision
             ):
                 state.lease_owner, state.lease_until = None, None
                 return {"status": "READY", "has_more": False}
             state.building = str(uuid4())
             state.build_revision, state.build_summary_revision = state.revision, state.summary_revision
+            state.build_safety_summary_revision = state.safety_summary_revision
             state.phase, state.after_key = "COPY", ""
-        elif state.building and state.build_revision != state.revision:
+        elif state.building and (
+            state.build_revision != state.revision
+            or state.build_summary_revision != state.summary_revision
+            or state.build_safety_summary_revision != state.safety_summary_revision
+        ):
+            # Every copied counter belongs to the same locked revision snapshot;
+            # even a status-only or hit-only update invalidates the shadow.
             state.building, state.phase, state.after_key = None, "CLEANUP", ""
             state.lease_owner, state.lease_until = None, None
             self.session.add(state)
@@ -52,7 +60,11 @@ class AuditTreeBuildRepository(AuditHierarchyRepository):
             for group in groups:
                 # Verify copied identities through the existing scoped directory accessor.
                 self.group(group.conversation_key)
-                if group.request_count < 1 or not 0 <= group.abnormal_count <= group.request_count:
+                if (
+                    group.request_count < 1
+                    or not 0 <= group.abnormal_count <= group.request_count
+                    or not 0 <= group.sensitive_hit_count <= group.request_count
+                ):
                     raise ValueError("Invalid source directory counters")
                 self.session.add(
                     Node(
@@ -69,6 +81,7 @@ class AuditTreeBuildRepository(AuditHierarchyRepository):
                         updated_at=group.updated_at,
                         request_count=group.request_count,
                         abnormal_count=group.abnormal_count,
+                        own_sensitive_hit_count=group.sensitive_hit_count,
                     )
                 )
             state.after_key = groups[-1].conversation_key if groups else state.after_key
@@ -112,13 +125,14 @@ class AuditTreeBuildRepository(AuditHierarchyRepository):
                             raise ValueError("Invalid tree ancestor")
                         ancestor.branch_count += node.request_count
                         ancestor.branch_abnormal += node.abnormal_count
+                        ancestor.branch_sensitive_hit_count += node.own_sensitive_hit_count
                         self.session.add(ancestor)
                 self.session.add(node)
             state.after_key = nodes[-1].conversation_key if nodes else state.after_key
             if len(nodes) < limit:
                 state.phase, state.after_key = ("AGGREGATE" if state.phase == "RESOLVE" else "PUBLISH"), ""
         elif state.phase == "PUBLISH":
-            # The locked state row serializes all structure revision changes and publication.
+            # The locked state row serializes all three revision changes and publication.
             readiness = self.readiness()
             if not readiness["status_ready"] or not readiness["name_ready"] or readiness["indexing_pending"]:
                 raise ValueError("Audit facts are not ready for directory publication")
@@ -134,6 +148,7 @@ class AuditTreeBuildRepository(AuditHierarchyRepository):
                     state.build_revision,
                     state.build_summary_revision,
                 )
+                state.published_safety_summary_revision = state.build_safety_summary_revision
                 state.published_at = now
                 state.building, state.phase = None, "CLEANUP"
         elif state.phase == "CLEANUP":
@@ -157,6 +172,7 @@ class AuditTreeBuildRepository(AuditHierarchyRepository):
                 dirty = (
                     state.revision != state.published_revision
                     or state.summary_revision != state.published_summary_revision
+                    or state.safety_summary_revision != state.published_safety_summary_revision
                 )
                 return {"status": "READY" if state.active else "PREPARING", "has_more": dirty}
         self.session.add(state)

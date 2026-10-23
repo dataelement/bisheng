@@ -1,7 +1,10 @@
 import react from "@vitejs/plugin-react-swc";
 import fs from "fs";
 import path from "path";
-import { defineConfig, loadEnv } from "vite";
+import { createRequire } from "node:module";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import { createHtmlPlugin } from 'vite-plugin-html';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import svgr from "vite-plugin-svgr";
@@ -13,6 +16,74 @@ import svgr from "vite-plugin-svgr";
  * 内层网关访问 api或者前端静态资源需要去掉【custom】前缀
  */
 const app_env = { BASE_URL: '' } // /custom
+
+
+/** Compile the public UI preset only inside this feature, preserving the legacy app theme. */
+function dshContentSafetyStyles(): Plugin {
+  const require = createRequire(import.meta.url);
+  const scope = ".dsh-content-safety";
+  const cssFile = path.resolve(__dirname, "src/style/dsh-content-safety.css");
+  const tokensFile = require.resolve("@bisheng/ui/tokens.css");
+  const presetFile = require.resolve("@bisheng/ui/tailwind-preset");
+  const uiDirectory = path.dirname(require.resolve("@bisheng/ui"));
+  const featureDirectory = path.resolve(__dirname, "src/pages/SystemPage/dsh");
+  const preset = require(presetFile) as Partial<import("tailwindcss").Config>;
+  const scopedSelector = (selector: string): string => {
+    if (selector.startsWith(":root")) return selector.replace(":root", scope);
+    // Theme owners live on html; component selectors remain inside the feature.
+    const owner = selector.match(/^(\.dark(?:\.theme-green)?|\.theme-green)(?=\s|$)/);
+    if (owner) return `${owner[0]} ${scope}${selector.slice(owner[0].length)}`;
+    return `${scope} ${selector}`;
+  };
+  return {
+    name: "dsh-content-safety-styles",
+    enforce: "pre",
+    async load(id) {
+      if (id.split("?")[0] !== cssFile) return;
+      this.addWatchFile(tokensFile);
+      this.addWatchFile(presetFile);
+      const tokens = postcss.parse(fs.readFileSync(tokensFile, "utf8"), { from: tokensFile });
+      tokens.walkRules(rule => { rule.selectors = rule.selectors.map(scopedSelector); });
+      const utilities = await postcss([tailwindcss({
+        presets: [preset],
+        content: [`${uiDirectory}/**/*.{ts,tsx}`, `${featureDirectory}/**/*.{ts,tsx}`],
+        important: scope,
+        corePlugins: { preflight: false },
+      })]).process("@tailwind utilities;", { from: cssFile });
+      const animations = new Map<string, string>();
+      utilities.root.walkAtRules(/keyframes$/, rule => {
+        const renamed = `dsh-safety-${rule.params}`;
+        animations.set(rule.params, renamed);
+        rule.params = renamed;
+      });
+      utilities.root.walkDecls(/^(animation|animation-name)$/, declaration => {
+        declaration.value = declaration.value.replace(/[A-Za-z_][\w-]*/g,
+          name => animations.get(name) ?? name);
+      });
+      utilities.root.walkRules(rule => {
+        if (rule.parent?.type === "atrule" && /keyframes$/.test(rule.parent.name)) return;
+        rule.selectors = rule.selectors.map(selector =>
+          selector.includes(scope) ? selector : `${scope} ${selector}`);
+      });
+      // Inherit the shared system font without resetting any controls outside the feature.
+      const families = preset.theme?.fontFamily;
+      const fonts = typeof families === "object" ? families.sans : undefined;
+      const fontFamily = Array.isArray(fonts) && fonts.every(font => typeof font === "string")
+        ? fonts.join(", ") : "inherit";
+      return `${tokens.toString()}\n${scope} { font-family: ${fontFamily}; }\n${utilities.root.toString()}`;
+    },
+    handleHotUpdate({ file, server, modules }) {
+      if (file === tokensFile || file === presetFile || file.startsWith(uiDirectory + path.sep)
+          || file.startsWith(featureDirectory + path.sep)) {
+        const cssModule = server.moduleGraph.getModuleById(cssFile);
+        if (cssModule) {
+          server.moduleGraph.invalidateModule(cssModule);
+          return [...modules, cssModule];
+        }
+      }
+    },
+  };
+}
 
 const commonProxyOptions = {
   changeOrigin: true,
@@ -174,6 +245,8 @@ export default defineConfig(({ command, mode }) => {
         }
       }
     },
+    // Prebundle workspace UI with its own dependency graph; the app pins a different merge version.
+    optimizeDeps: { include: ["@bisheng/ui"] },
     resolve: {
       // Workspace viewers must use the app's initialized i18n hook instance.
       dedupe: ['react-i18next'],
@@ -182,6 +255,7 @@ export default defineConfig(({ command, mode }) => {
       }
     },
     plugins: [
+      dshContentSafetyStyles(),
       react(),
       svgr(),
       createHtmlPlugin({

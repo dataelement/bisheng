@@ -1,4 +1,10 @@
 {
+  "26170": "Check record authentication failed. Contact an administrator.",
+  "26171": "The check record format is invalid. Ask an administrator to check the sending service.",
+  "26172": "The check record conflicts with saved information. Ask an administrator to review it.",
+  "26173": "The check record is older than the retained reporting range and cannot be accepted again.",
+  "26174": "The check record receiving service is temporarily unavailable. Try again later.",
+  "26175": "The check record exceeds the size or item limit and cannot be accepted.",
   "26131": "Invalid audit query. Reapply the filters.",
   "26132": "The audit request is unavailable or outside this tenant scope.",
   "26133": "The original is unavailable. Ask an administrator to check storage and keys.",

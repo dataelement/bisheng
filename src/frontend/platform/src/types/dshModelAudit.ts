@@ -1,3 +1,11 @@
+import type {
+  ContentSafetyState,
+  SafetyDetailsStatus,
+  SafetyStageResults,
+  SafetyStageVersions,
+  SensitiveDirection,
+} from "./dshContentSafety";
+
 export const modelResults = [
   "RUNNING",
   "SUCCEEDED",
@@ -34,8 +42,24 @@ export type AuditUserOption = { user_id: number; user_name: string };
 export type AuditModelOption = { id: number; name: string };
 export type AuditUserPage = { data: AuditUserOption[]; total: number };
 export type ModelAuditRecord = {
+  record_origin?: "MODEL" | "EXTERNAL_SAFETY";
+  model_entered?: boolean | null;
+  model_started_at?: string | null;
+  session_id?: string | null;
+  source_id?: string | null;
+  gateway_request_id?: string | null;
+  content_safety_state?: ContentSafetyState;
+  stage_results?: SafetyStageResults;
+  stage_versions?: SafetyStageVersions;
+  has_sensitive_hit?: boolean;
+  input_sensitive_hit?: boolean;
+  output_sensitive_hit?: boolean;
+  policy_version?: number | null;
+  builtin_digest?: string | null;
+  safety_observed_at?: string | null;
+  details_status?: SafetyDetailsStatus;
   user_name?: string | null;
-  audit_status?: "NORMAL" | "ABNORMAL" | null;
+  audit_status?: "NORMAL" | "ABNORMAL" | "NOT_APPLICABLE" | null;
   status_reasons?: string[];
   status_pending?: boolean;
   request_id: string;
@@ -49,17 +73,17 @@ export type ModelAuditRecord = {
   parent_conversation_id?: string | null;
   context_invalid: boolean;
   association_status: "ASSOCIATED" | "UNASSOCIATED";
-  effective_mode: AuditMode;
+  effective_mode: AuditMode | null;
   started_at: string;
   last_write_at: string | null;
   input_units: number;
   input_bytes: number;
   output_bytes: number;
-  model_result: (typeof modelResults)[number];
-  response_result: (typeof responseResults)[number];
+  model_result: (typeof modelResults)[number] | null;
+  response_result: (typeof responseResults)[number] | null;
   model_error_code?: string | null;
   response_error_code?: string | null;
-  usage_settlement: (typeof settlements)[number];
+  usage_settlement: (typeof settlements)[number] | null;
   content_status: (typeof contentStates)[number];
   usage: {
     input_tokens: number | null;
@@ -70,6 +94,9 @@ export type ModelAuditRecord = {
   } | null;
 };
 export type ModelAuditQuery = {
+  has_sensitive_hit?: boolean;
+  sensitive_direction?: SensitiveDirection;
+  content_safety_state?: ContentSafetyState;
   audit_status?: "NORMAL" | "ABNORMAL";
   tenant_id?: number;
   user_id?: number;
@@ -90,6 +117,9 @@ export type ModelAuditQuery = {
   limit: number;
 };
 export type AuditQueryReadiness = {
+  safety_ready?: boolean;
+  safety_summary_version?: number;
+  safety_summary_as_of?: string | null;
   status_ready: boolean;
   name_ready: boolean;
   indexing_pending: boolean | null;
@@ -101,6 +131,9 @@ export type AuditQueryReadiness = {
   refresh_required?: boolean;
 };
 export type AuditConversation = {
+  has_sensitive_hit?: boolean;
+  sensitive_hit_count?: number;
+  matching_sensitive_hit_count?: number | null;
   conversation_title?: string | null;
   title_event_seq?: number | null;
   user_name?: string | null;
@@ -120,6 +153,9 @@ export type AuditGroupPage = {
   progress: AuditQueryReadiness;
 };
 export type AuditTreeSummary = {
+  sensitive_hit_count?: number | null;
+  has_sensitive_hit?: boolean;
+  safety_ready?: boolean;
   ready: boolean;
   request_count: number | null;
   abnormal_count: number | null;

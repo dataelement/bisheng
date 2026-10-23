@@ -23,6 +23,15 @@ class DshAuditTreeState(SQLModelSerializable, table=True):
     )
     revision: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
     summary_revision: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
+    safety_summary_revision: int = Field(
+        default=0, sa_column=Column(BigInteger, nullable=False, server_default=text("0"))
+    )
+    published_safety_summary_revision: int = Field(
+        default=-1, sa_column=Column(BigInteger, nullable=False, server_default=text("-1"))
+    )
+    build_safety_summary_revision: int = Field(
+        default=0, sa_column=Column(BigInteger, nullable=False, server_default=text("0"))
+    )
     published_revision: int = Field(default=-1, sa_column=Column(BigInteger, nullable=False))
     published_summary_revision: int = Field(default=-1, sa_column=Column(BigInteger, nullable=False))
     build_revision: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
@@ -45,6 +54,9 @@ class DshAuditTreeNode(SQLModelSerializable, table=True):
         Index("ix_dat_parent", "tenant_id", "generation", "parent_key", "listed_at", "conversation_key"),
         Index(
             "ix_dat_user_parent", "tenant_id", "generation", "user_id", "parent_key", "listed_at", "conversation_key"
+        ),
+        Index(
+            "ix_dat_safety", "tenant_id", "generation", "branch_sensitive_hit_count", "listed_at", "conversation_key"
         ),
         Index("ix_dat_build", "tenant_id", "generation", "conversation_key"),
     )
@@ -76,6 +88,13 @@ class DshAuditTreeNode(SQLModelSerializable, table=True):
     abnormal_count: int = Field(sa_column=Column(BigInteger, nullable=False))
     branch_count: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
     branch_abnormal: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
+
+    own_sensitive_hit_count: int = Field(
+        default=0, sa_column=Column(BigInteger, nullable=False, server_default=text("0"))
+    )
+    branch_sensitive_hit_count: int = Field(
+        default=0, sa_column=Column(BigInteger, nullable=False, server_default=text("0"))
+    )
 
 
 class DshAuditTreePath(SQLModelSerializable, table=True):
