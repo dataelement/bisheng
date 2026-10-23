@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from uuid import UUID
 
@@ -32,6 +33,7 @@ REQUIRED_CHECKS = frozenset(
 )
 _REASON = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 _EVIDENCE = {"uid", "control_uid", "resource_version", "profile", "policy_revision", "code", "digest"}
+_PINNED_IMAGE = re.compile(r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}")
 
 
 def descriptor_digest(document):
@@ -43,6 +45,43 @@ def descriptor_digest(document):
             allow_nan=False,
         ).encode()
     ).hexdigest()
+
+
+def protection_baseline_digest(document):
+    return hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in document.items() if key not in {"probe_report", "helper_image"}},
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode()
+    ).hexdigest()
+
+
+def _finite_time(value):
+    if type(value) not in {int, float}:
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def report_validity(document, *, now):
+    """Separate report age from malformed, future or differently scoped input."""
+    raw = document.get("probe_report")
+    if not isinstance(raw, dict):
+        return "unconfirmed"
+    observed = raw.get("observed_at")
+    if (
+        not _finite_time(observed)
+        or not _finite_time(now)
+        or now < observed
+        or raw.get("source") != "cluster-probe"
+        or raw.get("descriptor_digest") != descriptor_digest(document)
+    ):
+        return "unconfirmed"
+    return "current" if now - observed <= 86400 else "report_expired"
 
 
 def _check(raw, name):
@@ -65,14 +104,65 @@ def _check(raw, name):
         return {"name": name, "ok": False, "reason": "invalid_evidence", "evidence": {}}
 
 
+def _verified_protection_rows(document):
+    rows = (document.get("probe_report") or {}).get("checks")
+    if not isinstance(rows, list):
+        return False
+    known = {}
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("name"), str):
+            return False
+        name = row["name"]
+        if name not in REQUIRED_CHECKS:
+            continue
+        if name in known or type(row.get("ok")) is not bool:
+            return False
+        # A negative non-guard result must still carry valid scoped evidence.
+        if not _check({**row, "ok": True}, name)["ok"]:
+            return False
+        known[name] = row
+    return set(known) == REQUIRED_CHECKS and all(
+        known[name]["ok"] for name in ("status-provenance", "binding-delete-fence")
+    )
+
+
+def protection_observation(document, *, now, projected=None):
+    """Report-only uncertainty never asserts that current protection is active."""
+    baseline = protection_baseline_digest(projected if projected is not None else document)
+    state = report_validity(document, now=now)
+    if projected is not None:
+        state = "unconfirmed"
+        old_helper, new_helper = document.get("helper_image"), projected.get("helper_image")
+        original_valid = report_validity(document, now=now) in {"current", "report_expired"}
+        if (
+            baseline == protection_baseline_digest(document)
+            and old_helper != new_helper
+            and isinstance(old_helper, str)
+            and isinstance(new_helper, str)
+            and _PINNED_IMAGE.fullmatch(old_helper)
+            and _PINNED_IMAGE.fullmatch(new_helper)
+            and original_valid
+            and _verified_protection_rows(document)
+        ):
+            # The projected report must still be valid for the old descriptor,
+            # or fresh and positive for the new one. Never hide a new failure.
+            old_scope = {**document, "probe_report": projected.get("probe_report")}
+            if (
+                report_validity(old_scope, now=now) in {"current", "report_expired"}
+                and _verified_protection_rows(old_scope)
+            ) or (report_validity(projected, now=now) == "current" and _verified_protection_rows(projected)):
+                state = "helper_changed"
+    elif state == "report_expired" and not _verified_protection_rows(document):
+        state = "unconfirmed"
+    return {"version": 1, "baseline_digest": baseline, "state": state}
+
+
 def assess_capabilities(document, *, now):
     raw = document.get("probe_report") or {}
-    valid = isinstance(raw, dict)
-    observed = raw.get("observed_at") if valid else None
-    valid = valid and type(observed) in {int, float} and 0 <= now - observed <= 86400
-    valid = (
-        valid and raw.get("source") == "cluster-probe" and raw.get("descriptor_digest") == descriptor_digest(document)
-    )
+    observed = raw.get("observed_at") if isinstance(raw, dict) else None
+    if not _finite_time(observed):
+        observed = None
+    valid = report_validity(document, now=now) == "current"
     rows = raw.get("checks", []) if valid else []
     known = {}
     if isinstance(rows, list):

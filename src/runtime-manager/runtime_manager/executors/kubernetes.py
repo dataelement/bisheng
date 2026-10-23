@@ -106,24 +106,41 @@ class KubernetesExecutor:
             if len(self._seed) != 32:
                 raise ExecutorError("material_issuer_file_invalid")
 
-    def probe_report(self):
-        from runtime_manager.k8s_capabilities import assess_capabilities, descriptor_digest
+    def _probe_state(self):
+        from runtime_manager.k8s_capabilities import (
+            assess_capabilities,
+            descriptor_digest,
+            protection_baseline_digest,
+            protection_observation,
+        )
         from runtime_manager.k8s_config import KubernetesConfigurationError
 
+        now = self.clock.time()
+        original = copy.deepcopy(self.document)
         try:
             fresh = self.settings.descriptor().document
-            if descriptor_digest(fresh) == descriptor_digest(self.document):
+            if descriptor_digest(fresh) == descriptor_digest(original):
                 self.document["probe_report"] = fresh.get("probe_report", {})
+                original["probe_report"] = fresh.get("probe_report", {})
             else:
-                return {
-                    "ready": False,
-                    "checks": [],
-                    "warnings": ["installation_changed_restart_required"],
-                    "paths": {},
-                }
+                return (
+                    {
+                        "ready": False,
+                        "checks": [],
+                        "warnings": ["installation_changed_restart_required"],
+                        "paths": {},
+                    },
+                    protection_observation(original, now=now, projected=fresh),
+                )
         except KubernetesConfigurationError:
-            return {"ready": False, "checks": [], "warnings": ["installation_descriptor_unavailable"], "paths": {}}
-        return assess_capabilities(self.document, now=self.clock.time())
+            return (
+                {"ready": False, "checks": [], "warnings": ["installation_descriptor_unavailable"], "paths": {}},
+                {"version": 1, "baseline_digest": protection_baseline_digest(original), "state": "unconfirmed"},
+            )
+        return assess_capabilities(original, now=now), protection_observation(original, now=now)
+
+    def probe_report(self):
+        return self._probe_state()[0]
 
     def _package_sources(self):
         sources = [
@@ -154,13 +171,14 @@ class KubernetesExecutor:
             available = True
         except KubernetesAPIError:
             available = False
-        report = self.probe_report()
+        report, protection = self._probe_state()
         passed = {check["name"] for check in report.get("checks", []) if check.get("ok")}
         return {
             **capabilities,
             "mandatory_isolation": bool(report["ready"]),
             "status_protection": "status-provenance" in passed,
             "binding_protection": "binding-delete-fence" in passed,
+            "protection_observation": protection,
             "paths": report.get("paths", {}),
             "sandbox": report.get("sandbox", {}),
             "package_sources": self._package_sources(),
