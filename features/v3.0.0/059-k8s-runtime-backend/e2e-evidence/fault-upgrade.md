@@ -103,3 +103,25 @@ SELECT账本六资源全部cleanupcomplete，三个Pod同UID kubelet_terminal停
 原安装UID142037c5…及另两Pod均同UID kubelet_terminal停止，六资源自然API缺席、容量released，原四应用CID/restart与M2恢复Pod UID保持；未强制清理。故障后的owner取消工具仅做新绑定前置检查即拒绝，未提交cancel；原failed/意图/unknown结果均保留。七份脱敏证据及独立NOT_PASSED报告5c8ec11f…摘要见JSON。
 
 根因验证只围绕该链：真实backend Service/SQLite证明旧租约未到期对新holder的409/controller_lease_held不会改变prepare，epoch更换和相同模板本身可复用；真实OperationExecutor＋KubernetesExecutor最小复现证明该暂态拒绝进入业务_failure，错误处理跨自然到期后拿到新epoch并误清理正在安装的原Pod，runtime.prepare甚至尚未进入。实际故障窗只统计到10次lease_held标记，不单凭计数宣称抓到首个进程内异常。登记T272/T273，将开工前控制器准入移出业务失败处理范围；不改模板/后端围栏、不吞任意异常、不延长原deadline。修复与新操作复验尚未完成。
+
+
+## R32 租约交接定向复验：189通过
+
+按用户最新范围，只验证租约交接及同一在途准备操作，未重跑全量/安装探测/整组业务。修复源码0f2db1f9a与实际manager镜像bc488d16…/config86230f…已由installation的R32记录固定，其他模块保持。
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 故障提交 | 对精确旧manager CID仅一次SIGKILL，CLI已ACK，无取消/审批/上线操作 |
+| 控制器交接 | 同manager Pod UID2919607c…，restart0→1、新CID，epoch30→31；25.77秒恢复 |
+| 原在途操作 | fe9a00424af44176811354d01be141f0/同dep b58853b2…/gen1/owner1，原deadline 2026-10-23T07:22:07不变 |
+| 原安装进程 | 同Pod UID6959dd58…、同CID873910bd…，重启后仍running，未重建安装Pod |
+| 自然完成 | 精确原CID的BEGIN 07:13:15.897→END 07:17:15.903，240.006186秒；没有owner cancel |
+| 操作结果 | prepare completed/cleanupcomplete，inputs/resolve结果SHA原样保留，install/upload进度齐，未出现失败fact |
+| 清理与容量 | 同UID kubelet终态后8资源自然API缺席，预约released；原四应用CID/restart与M2 UID保持 |
+| 后续正常发布 | 同发布probe87225ca3…也completed/cleanupcomplete，创建1版本；不把它当作正式生产上线或probe物理清理证明 |
+
+实际kill至恢复窗口匹配到6个固定controller_lease_held日志标记，确认经历旧租约等待；计数不是唯一请求数，也不替代UID/事实证明。派生交叉证明逐项断言同op/原deadline/原安装UID与CID/原阶段结果/终态与清理，完整SHA见JSON；原c0fe失败与unknown观察记录保留，未重放或复活。
+
+私有比较器首轮在本机Python3.10解析9位Docker时间时拒绝，尚未写结果；r2仅截取到微秒再核同一组原始证据，未改平台或再次远端运行。此次通过只关闭T070的租约交接/在途重启子项，其他故障矩阵、独立卸载及正式交付门仍保留原状态。
+
+独立最终窄审PASS：`/private/tmp/f059-prepare-sigkill-r4-independent-evidence.md`，SHA `a89f59ae73a2b54a91b550b3497bcf467c1d46609e2a65dec912571c304202a2`。原始11份与第12份派生comparison清单逐摘要一致；仅本租约交接和准备续办，不替代其余故障矩阵或生产上线。

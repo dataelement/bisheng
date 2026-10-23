@@ -49,7 +49,7 @@
   },
   "not_executed": [
     "189 init faults; additional UID replacement/unknown-writer injection beyond held legacy safety negatives",
-    "successful in-flight manager restart recovery (first actual attempt failed) and response loss",
+    "response loss",
     "full uninstall retention in independent install/platform-storage domain",
     "NodeLost or cross-node fencing"
   ],
@@ -1214,5 +1214,102 @@
       "findings": "Real executors reproduce lease-held rejection entering business failure cleanup across lease expiry. Backend lease refusal leaves operation unchanged. Actual window has 10 lease-held matches; first in-process exception was not logged and is not independently asserted from count alone. T272/T273 tracks startup authority gate."
     },
     "boundary": "One precise kill only. Same Pod/container restart and epoch29 do not prove preparation recovery; observer caught state errors, not 71 verified HTTP failures. No owner cancel submitted after failed binding precheck; original failed operation is retained."
+  },
+  "inflight_manager_sigkill_189_r32_lease_handoff": {
+    "state": "PASS_targeted_lease_handoff_only",
+    "source_commit": "0f2db1f9a29213ca94d4596e64b00ad8fcbac528",
+    "image": "192.168.106.189:5443/f059/runtime-manager@sha256:bc488d16d3b75ccd30e729d7ef79b0c4591abaa40c0037057697f405d9e4900b",
+    "manager_config_id": "sha256:86230f7a09ee50970c1667710b0b03c8768b92f56697c833e1ad3fcf6bcf4396",
+    "helm_revision": 32,
+    "app_id": "09672c6de8bb4b24b06f265836c00e04",
+    "deployment_id": "b58853b2b5fa44548b2b98ef7d5ad065",
+    "prepare_operation_id": "fe9a00424af44176811354d01be141f0",
+    "original_deadline": "2026-10-23T07:22:07",
+    "manager_pod_uid": "2919607c-bf80-428c-bcd6-a31779803ce0",
+    "manager_same_pod_restart_count": [
+      0,
+      1
+    ],
+    "controller_epochs": [
+      30,
+      31
+    ],
+    "single_kill_cli_acknowledged": true,
+    "kill_to_recovery_seconds": 25.76693606376648,
+    "same_install_pod_uid": "6959dd58-beca-4153-af70-7c7794f014f7",
+    "same_install_cid": "873910bdd56f15d78c8ff30c44593ba6fec1c1d6cd8fe1fe2260595f74e04ea2",
+    "natural_hook_events": [
+      {
+        "kind": "BEGIN",
+        "timestamp": "2026-10-23T07:13:15.897148927Z"
+      },
+      {
+        "kind": "END",
+        "timestamp": "2026-10-23T07:17:15.903334995Z"
+      }
+    ],
+    "natural_hook_elapsed_seconds": 240.006186,
+    "owner_cancel_submitted": false,
+    "original_input_and_resolve_result_hashes_preserved": true,
+    "prepare_terminal": {
+      "app_id": "09672c6de8bb4b24b06f265836c00e04",
+      "cleanup_status": "complete",
+      "deadline": "2026-10-23 07:22:07",
+      "deployment_id": "b58853b2b5fa44548b2b98ef7d5ad065",
+      "failure": {},
+      "generation": 1,
+      "id": "fe9a00424af44176811354d01be141f0",
+      "kind": "prepare",
+      "owner_epoch": 1,
+      "stage": "completed",
+      "status": "completed"
+    },
+    "prepare_resource_count": 8,
+    "prepare_resources_naturally_absent": 8,
+    "same_uid_stopped_before_absence": true,
+    "reservation_released": true,
+    "followup_probe": {
+      "cleanup_status": "complete",
+      "deadline": "2026-10-23 07:27:49",
+      "id": "87225ca3770a4f1cb6aa4f2e7b2bb57f",
+      "kind": "probe",
+      "stage": "completed",
+      "status": "completed"
+    },
+    "formal_versions": 1,
+    "unrelated_original_application_cohort_unchanged": true,
+    "force_cleanup": false,
+    "lease_handoff_window": {
+      "counts": {
+        "/controllers/claim": 21,
+        "/controllers/renew": 3,
+        "controller_epoch_conflict": 0,
+        "controller_lease_held": 6,
+        "controller_lease_lost": 0,
+        "resource_intent_conflict": 0
+      },
+      "schema": "f059-controller-restart-log-count/v1",
+      "scope": "backend logs 1792739603..1792739631, only fixed match counts; absence does not prove absence of an error"
+    },
+    "independent_review": {
+      "status": "PASS_targeted_lease_handoff_only",
+      "path": "/private/tmp/f059-prepare-sigkill-r4-independent-evidence.md",
+      "sha256": "a89f59ae73a2b54a91b550b3497bcf467c1d46609e2a65dec912571c304202a2"
+    },
+    "evidence_sha256": {
+      "fault-restart-k189m2-r4.json": "7c1769650cc3e13d77719d7b285bd52168f297fb000c7ed6a1b23ffc5d7ebc41",
+      "manager-prepare-sigkill-k189m2-r4.json": "0b8eab44036619265e778225fe58d57d749558220543d18878ada2220e83e21f",
+      "manager-prepare-sigkill-k189m2-r4.json.result.json": "04cd97d5e7f457fb3f3fcfab7faa39f591af0c98bd3c3ffe46dc4a6bd7c31cbd",
+      "prepare-hook-complete-k189m2-r4.json": "1a0d744ec0df1c3adb0eac53d9f9b700ec9c6f42bc4130f5c07e67133f28d8f0",
+      "prepare-hook-k189m2-r4.json": "7df3f6699e94d0be6caf744f914eab774f77a8c9abc0a5b56fdc314f2f6de33b",
+      "prepare-install-k189m2-r4.json": "4248afa05457ab324d6c15b792cdf3b359120811b7d1a6b87de00d0afa2d6867",
+      "prepare-restart-r4-after-recovery-sql.json": "ceb0a9dbefc883dbcc8367db98366bf5f9fd2d58bfb8ccb4a5de69676122807d",
+      "prepare-restart-r4-comparison.json": "14730c2e2c4b0f2f36fe559e24e25618cdaf5e4724834a147744a0e60b74d50c",
+      "prepare-restart-r4-controller-log-count.json": "b51400390b4d16a32aaeaa2b947a88c48ac20969c9dc5c15a2505cf76327ce40",
+      "prepare-restart-r4-final-sql.json": "1e24506e6054a0da0b404cf8e91df30235df7e44ee684d6ce591a7d3df5ab4e1",
+      "prepare-restart-r4-physical.json": "acbef8749a5e3ed7c27d9bbf89246cf01bfbe166dc20cb9fcf1bcc3fed2e97f4",
+      "prepare-restart-r4-terminal-sql.json": "dbcedc4c421730459faf060b27037f4cba57efb3c013508d2128b81be4ef1cee"
+    },
+    "boundary": "Latest user requested only lease-handoff regression and this 189 in-flight restart. No whole-suite, installer probe or full-business rerun; no operator approval/production-route action. Prepare resource absence does not prove probe physical absence. Prior failed c0fe remains; other T070 matrix, ARM, extra109, public CI and L2 not marked complete."
   }
 }

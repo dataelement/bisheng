@@ -77,3 +77,12 @@ dedc安装器通过独立r2 wrapper真实执行，exit0；完整16/16检查通�
 T258–T263的生产源码 `f8863f3763285435a5df01fc150400838bdb3f0a` 已完成189原生amd64构建及隔离导入烟测，仅推送专用内网仓库；manager固定digest `0b4bd3e66c1d7c49fe00046c83277dab8b6dbd0628f201abf3192d70dd67ddad`。专用backend/worker仅两个保护源文件按旧哈希备份、原CID重启；新字节哈希复核通过。Helm29升级后manager新UID `fae606c4-3e51-4efa-ba00-a7ce9163de3f`，原UID实际缺席；自然接管epoch24、ready、sticky保护合同v1/current及两guard true。host描述符与Pod投射的完整/保护摘要一致，保护基线 `9006c20349b46e6a60af9d7e2ccdc45f4e4efae5606f58cde88b69bd0b9ad3ff`。
 
 独立fresh核对：旧三个bundle的false/false保持，source/image的true/true保持；四个Running及一个held终态的Pod/CID/PVC/PV身份未变，旧stop仍timed_out/cleanup pending，r4 unknown-create原PVC保持。没有回填历史保护、移除finalizer或释放旧预占。helper/assembler/profile2、代理/准入及描述符数据/UID未变；此次不是重跑16项安装探测、ARM或公开CI发行。新单Python应用的发布/停用/离线数据/恢复仍需单独实测，不能以部署ready代替。结构化证据见JSON的 `protection_report_r29_deployment`。
+
+
+## R32 租约交接修复部署（2026-10-23）
+
+固定manager源码 `0f2db1f9a29213ca94d4596e64b00ad8fcbac528`，唯一生产差异是operations.py开工前4行控制器准入；Kubernetes executor、Dockerfile/锁/其他发行输入未变。189原生amd64构建、实际UID10001/禁网/只读导入及精确源码摘要烟测通过。专用仓库单次私有推送、TLS校验manifest/config：digest `bc488d16d3b75ccd30e729d7ef79b0c4591abaa40c0037057697f405d9e4900b`，config `86230f7a09ee50970c1667710b0b03c8768b92f56697c833e1ad3fcf6bcf4396`。
+
+Helm32仅更新manager；新Pod UID2919607c…/controller30 ready，现有5个应用Pod、6个PVC/PV、descriptor/其他3代理身份完整保持，业务SQL及node配置前后投影相同。复用原有效探测报告，只做当前descriptor/双保护/readiness核对，没有重跑安装探测或全量业务。后端仍是单文件38a/c06f…与此前独立修复组合，不声称整个平台统一来自0f2；其他镜像与profile保留其原始provenance。
+
+七份raw摘要见JSON r32_manager_only_deployment。此节只证明修复镜像部署；在途重启和原hook自然完成另见fault-upgrade。ARM、追加109和公开CI/tag继续暂缓。

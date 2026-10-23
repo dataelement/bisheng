@@ -3577,3 +3577,7 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 - 测试：私有新7例旧代码4fail/3pass，红日志SHA3e6a8c7ba492d7b0b1f23d95e185a53f34a2f9a2a50ad2163e4f6d879a67272e。主树新配对+test_operations_v2+test_k8s_prepare_cancellation直接关联123pass/1fail；仅既有controller故障用例需适配异常传播，并新增整op不变断言。随后仅新配对＋该6例13pass/0.17s，未重跑全量。日志/private/tmp/f059-t272-t273-targeted-green-r1.log与-r2.log保留。
 - 独立L1：/private/tmp/f059-t272-t273-independent-l1.md，SHA489710ae0e65291f4faf09295800b60ee6f353c0b3df23b17d9899b459f31021；无产品阻断，两项测试AC标注/第二测试文件清单已由root补齐。Ruff、format、逐文件arch-guard及diff检查通过。
 - 边界：仅本地定向修复闭合，不宣称189新镜像/在途续办通过，不覆盖原NOT_PASSED记录，不替代T070其余场景或L2。
+
+T272/T273真实续验：R32实际源码/镜像/Pod identity固定后，189同原prepare在途SIGKILL恢复并自然完成，原deadline/输入结果/安装UID-CID/正常清理与容量均通过，未再跑任何全量测试。详细证据见e2e-evidence/fault-upgrade.json的inflight_manager_sigkill_189_r32_lease_handoff；只关闭本租约交接缺陷，不扩大为整个T070/L2通过。
+
+189在途续办独立最终窄审a89f59ae…通过；私有manager发行/升级独立审证133fd983…通过。仅记录本次实际窄范围，不关闭T070其余子项或正式CI/L2。

@@ -1,6 +1,6 @@
 {
   "schema": "f059-installation-evidence/v1",
-  "state": "passed_current_0d5_exact_code_and_descriptor",
+  "state": "passed_current_r32_manager_only_deployment",
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "kubernetes": "v1.28.15",
@@ -172,17 +172,16 @@
     "plans_sha256": "9e7ec0ea64f0d822146dd9463877396e67ceabca7fea2e791bb6b4778f0c66ae"
   },
   "current_candidate": {
-    "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
-    "corrective_commit": "20175cad9cb453734d42ee8a03c0be0594a6f3a0",
-    "all_build_inputs_equal": true,
-    "helm_revision": 26,
+    "source_revision": "0f2db1f9a29213ca94d4596e64b00ad8fcbac528",
+    "source_scope": "runtime-manager only; backend/complementary images retain their separately recorded revisions",
+    "helm_revision": 32,
     "images": {
       "manager": {
-        "image_id": "sha256:c3a5255e893973935e26c7f48adcc218f0bb14bd4b522fd8eaea75a35aabc659",
-        "image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
+        "image_id": "sha256:86230f7a09ee50970c1667710b0b03c8768b92f56697c833e1ad3fcf6bcf4396",
+        "image": "192.168.106.189:5443/f059/runtime-manager@sha256:bc488d16d3b75ccd30e729d7ef79b0c4591abaa40c0037057697f405d9e4900b",
         "native_smoke": true,
-        "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
-        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-26"
+        "source_revision": "0f2db1f9a29213ca94d4596e64b00ad8fcbac528",
+        "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-32"
       },
       "assembler-public-ca": {
         "image_id": "sha256:ddc11511399ae6f3f9689a076a8cc6bb5c6b8db34bb194d892603fe20264f19e",
@@ -199,219 +198,19 @@
         "private_tag": "192.168.106.189:5443/f059/runtime-helper:20261023-26"
       }
     },
+    "manager_pod_name": "runtime-manager-595cfcbdbb-l7gfr",
+    "manager_pod_uid": "2919607c-bf80-428c-bcd6-a31779803ce0",
+    "controller_epoch_at_upgrade": 30,
     "descriptor_uid_unchanged": true,
     "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
-    "report": {
-      "artifacts": {
-        "image-cri": [
-          {
-            "image_id": "docker-pullable://192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
-            "image_ref": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
-            "platform": "linux/amd64",
-            "resource_version": "3210500",
-            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
-          },
-          {
-            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
-            "image_ref": "192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
-            "platform": "linux/amd64",
-            "resource_version": "3210580",
-            "uid": "59700080-23f0-4f62-b936-1eb55c204619"
-          },
-          {
-            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9",
-            "image_ref": "192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9",
-            "platform": "linux/amd64",
-            "resource_version": "3210640",
-            "uid": "13e7a9bd-e028-4d41-92d3-85f9ac10231c"
-          },
-          {
-            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
-            "image_ref": "192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
-            "platform": "linux/amd64",
-            "resource_version": "3210699",
-            "uid": "17cb59e9-853c-4fde-a836-b3b68ffdb78b"
-          },
-          {
-            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-node-preparer-ca@sha256:27b13ce9a57c59f9724001d5a69ede5029a6c6709a702a55fba435a77f77e666",
-            "image_ref": "192.168.106.189:5443/f059/app-node-preparer-ca@sha256:27b13ce9a57c59f9724001d5a69ede5029a6c6709a702a55fba435a77f77e666",
-            "platform": "linux/amd64",
-            "resource_version": "3210762",
-            "uid": "f7c5cd7e-aa0a-4d6d-a376-056cc3d75760"
-          },
-          {
-            "image_id": "docker-pullable://192.168.106.189:5443/f059/app-static-ca@sha256:2f0311da8b281f35437fcf26b47c8249f8d86f98227a28bb231cd472071ee218",
-            "image_ref": "192.168.106.189:5443/f059/app-static-ca@sha256:2f0311da8b281f35437fcf26b47c8249f8d86f98227a28bb231cd472071ee218",
-            "platform": "linux/amd64",
-            "resource_version": "3210823",
-            "uid": "5c70978a-c45c-491e-94a6-a7c00df3ffe0"
-          }
-        ]
-      },
-      "checks": [
-        {
-          "evidence": {
-            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
-          },
-          "name": "admission-create",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "69ee7246-6a93-4b57-8d1d-85dc28d6f9a2"
-          },
-          "name": "binding-delete-fence",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "digest": "sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
-            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
-          },
-          "name": "image-cri",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "code": "control_side_tls",
-            "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
-          },
-          "name": "material-tls",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
-          },
-          "name": "namespace-budget",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "fa3704cd-5fab-4599-9544-a01c2df6894c"
-          },
-          "name": "network-direct-denied",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "96eee51b-be86-4850-a5a4-0cf4e1e4e413"
-          },
-          "name": "network-dns-denied",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "65176307-19f1-4fc9-9a84-c36062d6fbc7"
-          },
-          "name": "network-egress-allowed",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
-          },
-          "name": "network-ingress",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
-          },
-          "name": "no-exec",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "code": "control_side_authenticated_api",
-            "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
-          },
-          "name": "platform-capabilities",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
-          },
-          "name": "rbac-namespace",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "digest": "sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
-            "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
-          },
-          "name": "registry-push",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
-          },
-          "name": "restricted-psa",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "policy_revision": "v1",
-            "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
-          },
-          "name": "status-provenance",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        },
-        {
-          "evidence": {
-            "uid": "e12512c5-ecf2-4bec-a703-7204eebcc37e"
-          },
-          "name": "storage-sqlite",
-          "observed_at": 1792705007.306199,
-          "ok": true,
-          "reason": "verified"
-        }
-      ],
-      "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
-      "observed_at": 1792705007.306199,
-      "source": "cluster-probe"
-    },
-    "report_sha256": "6720eaf4938302d5ad5c7e01b8b1972627dbf5f7c4b1e92d5db83ec838e92ec6",
+    "backend_service_source_sha256": "c06fb408033f4d77c767924908209e92fd06650d7275bac2cb6cba15442327ce",
+    "backend_source_revision_claimed": false,
     "report_reused_for_exact_descriptor": true,
     "new_probe_claimed": false,
-    "report_age_seconds_at_restore": 1548.6708028316498,
-    "state": "passed",
-    "backend_node_state": "ready",
-    "controller_epoch": 21,
-    "withdrawn_d7_report_sha256": "35c968ac1a297e65ff59257c05aef86bf3eaddf555f347f9eb992bacd61ae9bf",
-    "withdrawn_d7_checks_passed": 16
+    "state": "passed_manager_only_deployment",
+    "evidence_reference": "r32_manager_only_deployment",
+    "controller_epoch_after_inflight_restart": 31,
+    "manager_restart_count_after_inflight_restart": 1
   },
   "remaining": [
     "Business and fault/upgrade acceptance are separate T069/T070; no cross-node claim",
@@ -2225,6 +2024,248 @@
       "controller_epoch": 19,
       "next_candidate": "d7f7c2e10ab9805d41120d19e32d102310b06654",
       "next_candidate_installation": "pending"
+    },
+    {
+      "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+      "corrective_commit": "20175cad9cb453734d42ee8a03c0be0594a6f3a0",
+      "all_build_inputs_equal": true,
+      "helm_revision": 26,
+      "images": {
+        "manager": {
+          "image_id": "sha256:c3a5255e893973935e26c7f48adcc218f0bb14bd4b522fd8eaea75a35aabc659",
+          "image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
+          "native_smoke": true,
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "private_tag": "192.168.106.189:5443/f059/runtime-manager:20261023-26"
+        },
+        "assembler-public-ca": {
+          "image_id": "sha256:ddc11511399ae6f3f9689a076a8cc6bb5c6b8db34bb194d892603fe20264f19e",
+          "image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9",
+          "native_smoke": true,
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "private_tag": "192.168.106.189:5443/f059/runtime-assembler-ca:20261023-26"
+        },
+        "helper": {
+          "image_id": "sha256:9cd5d3e1331f4b8c81c6335c4e3034e1eb9c63b94f1968e9dc4357180c2296a9",
+          "image": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+          "native_smoke": true,
+          "source_revision": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
+          "private_tag": "192.168.106.189:5443/f059/runtime-helper:20261023-26"
+        }
+      },
+      "descriptor_uid_unchanged": true,
+      "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
+      "report": {
+        "artifacts": {
+          "image-cri": [
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+              "image_ref": "192.168.106.189:5443/f059/runtime-helper@sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+              "platform": "linux/amd64",
+              "resource_version": "3210500",
+              "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
+              "image_ref": "192.168.106.189:5443/f059/app-python-ca@sha256:b632d5192bd370c5690aee2c2cc192954522dd0cd44ab0f5c8be050a3e033263",
+              "platform": "linux/amd64",
+              "resource_version": "3210580",
+              "uid": "59700080-23f0-4f62-b936-1eb55c204619"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9",
+              "image_ref": "192.168.106.189:5443/f059/app-python-preparer-ca@sha256:7d4d46ca19fa0a5ae71f177f81a45df58dc3d3a676d4c536615a9376673d55e9",
+              "platform": "linux/amd64",
+              "resource_version": "3210640",
+              "uid": "13e7a9bd-e028-4d41-92d3-85f9ac10231c"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
+              "image_ref": "192.168.106.189:5443/f059/app-node-ca@sha256:533c8eb5040441e9420969ff0b305b45572ea58b80d345c27893dd9edc4a2763",
+              "platform": "linux/amd64",
+              "resource_version": "3210699",
+              "uid": "17cb59e9-853c-4fde-a836-b3b68ffdb78b"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-node-preparer-ca@sha256:27b13ce9a57c59f9724001d5a69ede5029a6c6709a702a55fba435a77f77e666",
+              "image_ref": "192.168.106.189:5443/f059/app-node-preparer-ca@sha256:27b13ce9a57c59f9724001d5a69ede5029a6c6709a702a55fba435a77f77e666",
+              "platform": "linux/amd64",
+              "resource_version": "3210762",
+              "uid": "f7c5cd7e-aa0a-4d6d-a376-056cc3d75760"
+            },
+            {
+              "image_id": "docker-pullable://192.168.106.189:5443/f059/app-static-ca@sha256:2f0311da8b281f35437fcf26b47c8249f8d86f98227a28bb231cd472071ee218",
+              "image_ref": "192.168.106.189:5443/f059/app-static-ca@sha256:2f0311da8b281f35437fcf26b47c8249f8d86f98227a28bb231cd472071ee218",
+              "platform": "linux/amd64",
+              "resource_version": "3210823",
+              "uid": "5c70978a-c45c-491e-94a6-a7c00df3ffe0"
+            }
+          ]
+        },
+        "checks": [
+          {
+            "evidence": {
+              "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+            },
+            "name": "admission-create",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "69ee7246-6a93-4b57-8d1d-85dc28d6f9a2"
+            },
+            "name": "binding-delete-fence",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "digest": "sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+              "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+            },
+            "name": "image-cri",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "code": "control_side_tls",
+              "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+            },
+            "name": "material-tls",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+            },
+            "name": "namespace-budget",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "fa3704cd-5fab-4599-9544-a01c2df6894c"
+            },
+            "name": "network-direct-denied",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "96eee51b-be86-4850-a5a4-0cf4e1e4e413"
+            },
+            "name": "network-dns-denied",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "65176307-19f1-4fc9-9a84-c36062d6fbc7"
+            },
+            "name": "network-egress-allowed",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+            },
+            "name": "network-ingress",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
+            },
+            "name": "no-exec",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "code": "control_side_authenticated_api",
+              "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+            },
+            "name": "platform-capabilities",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "ffeedf5f-6001-477a-881a-67c33432248c"
+            },
+            "name": "rbac-namespace",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "digest": "sha256:5906c51814e24a63356dc69fb5c1dd332bb4eb91b70cf65d41594aefc0841c85",
+              "uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b"
+            },
+            "name": "registry-push",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+            },
+            "name": "restricted-psa",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "policy_revision": "v1",
+              "uid": "647df6e5-68b6-4780-9a61-726f7ab0baa5"
+            },
+            "name": "status-provenance",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          },
+          {
+            "evidence": {
+              "uid": "e12512c5-ecf2-4bec-a703-7204eebcc37e"
+            },
+            "name": "storage-sqlite",
+            "observed_at": 1792705007.306199,
+            "ok": true,
+            "reason": "verified"
+          }
+        ],
+        "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
+        "observed_at": 1792705007.306199,
+        "source": "cluster-probe"
+      },
+      "report_sha256": "6720eaf4938302d5ad5c7e01b8b1972627dbf5f7c4b1e92d5db83ec838e92ec6",
+      "report_reused_for_exact_descriptor": true,
+      "new_probe_claimed": false,
+      "report_age_seconds_at_restore": 1548.6708028316498,
+      "state": "passed",
+      "backend_node_state": "ready",
+      "controller_epoch": 21,
+      "withdrawn_d7_report_sha256": "35c968ac1a297e65ff59257c05aef86bf3eaddf555f347f9eb992bacd61ae9bf",
+      "withdrawn_d7_checks_passed": 16
     }
   ],
   "registry_upstream_dedc_real_validation": {
@@ -2700,6 +2741,44 @@
       "private-manager-push-r29.json": "f847472be23826f75157b7b1704051495be26c63bf06753f183bc9db39c54ca7",
       "backend-receipt.json": "cbbbe0fe5f909a1d0ea4c140b06cf0660e7ccb280ff2da8ee297356d27c4ea04",
       "manager-after.json": "f78415da83ebbae3b33f2b21deedbe83eeb2f2b28e992e2c611bcd80855d417f"
+    }
+  },
+  "r32_manager_only_deployment": {
+    "state": "PASS_deployment_only",
+    "source_commit": "0f2db1f9a29213ca94d4596e64b00ad8fcbac528",
+    "private_image": "192.168.106.189:5443/f059/runtime-manager@sha256:bc488d16d3b75ccd30e729d7ef79b0c4591abaa40c0037057697f405d9e4900b",
+    "config_id": "sha256:86230f7a09ee50970c1667710b0b03c8768b92f56697c833e1ad3fcf6bcf4396",
+    "operations_sha256": "8a016c611b63d8ddce6033d04f2e55e1aff9f47f74a924df2654758f20d3ea11",
+    "unchanged_kubernetes_sha256": "592d342d202c25bda6c76edddac73dc92a1e1fd631ff9fabeee3c66d69f41581",
+    "native_nonroot_uid": 10001,
+    "business_and_node_projection_unchanged": true,
+    "cluster_comparison": {
+      "app_pod_count": 5,
+      "baseline_inventory_unchanged": true,
+      "manager_deployment_uid_retained": true,
+      "manager_uid_replaced": true,
+      "non_manager_controls_unchanged": true,
+      "pv_count": 6,
+      "pvc_count": 6
+    },
+    "report_current": true,
+    "controller_epoch": 30,
+    "official_ci_release": false,
+    "public_push": false,
+    "evidence_sha256": {
+      "native-manager-result-r32.json": "80f6e650869bc09c4fb6341137db67b0b56870f87062485043c9ab41fbe4d24d",
+      "private-manager-push-r32.json": "482f916fbfc84ed47d922f459ae785538faac35b00445fb56d3269d6771cb312",
+      "r32-cluster-after-r1.json": "7cdb88118bfa0e38e4add4b5ea2a0917176dad911eb63de6d7980b8056821712",
+      "r32-cluster-before-r1.json": "5f45fde8f0252b0564044f4a32b0bf8335bf212602e45d35fc9f03a2cdfc2c49",
+      "r32-ready-r1.json": "4bfa85f97b1e608ec9da4bdeded1cfc1f0ff15640ce43612b182fa2be0be2be4",
+      "r32-sql-after-r1.json": "f1f15788abf746fd1f6a09c5bcc1a3892eba545d83457dab68dc9142899d77f7",
+      "r32-sql-before-r1.json": "a93d1008e32ba8503debbde20be64ff520ac9a365e4333a0b47c06f02032ee5d"
+    },
+    "boundary": "One manager-only upgrade and read-only current-report verification; no new installer probes, ARM, whole-suite or whole-business rerun; in-flight restart final completion recorded separately in fault-upgrade.json.",
+    "independent_review": {
+      "status": "PASS_manager_delivery_only",
+      "path": "/private/tmp/f059-r32-manager-delivery-independent.md",
+      "sha256": "133fd983a2ff09a675d90d2d6cee2334295ac887d1a13147d2adf12c7a3f9ad5"
     }
   }
 }

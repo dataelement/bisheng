@@ -2389,3 +2389,5 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T272/T273登记：189单次SIGKILL已ACK且同manager Pod重启、epoch28→29，但c0fe prepare真实failed/execution_failed并自然清理。真实Service租约探针与双执行器最小复现证实旧lease held暂态拒绝进入业务_failure、跨自然到期后误清理；不改模板或backend，不将容器恢复记为续办通过。活跃265/271，原失败与取消未发出的预检记录保留。仅配对和相关链路验证。
 
 2026-10-23 T272/T273 L1闭合：旧7例4红3绿；主树新配对+操作执行/准备取消直接关联首轮123绿、1旧stop异常边界断言失败。仅适配该夹具并保留整op不变/旧writer不动，最窄13例全绿（0.17s），没有再跑全量。4行K8s前置门，无backend/template/Docker改动。独立L1 489710ae…两项AC/文件清单备注已补，Ruff/格式/逐文件架构门通过。267/271，189新镜像和在途重启复验待做。
+
+2026-10-23 租约交接验收收尾：修复0f2db1f9a的R32原生/私有镜像与Helm32已部署；同在途fe9a prepare经唯一manager SIGKILL、controller30→31、原安装同UID/CID自然240.006秒完成，原deadline与inputs/resolve结果保持，8资源自然清理和预约释放，原应用保持。正常后续probe也completed/cleanupcomplete并创建1版本。仅此次定向回归及只读证据核对，未重复全量。267/271，T070其余矩阵/正式CI/L2不提前勾选。

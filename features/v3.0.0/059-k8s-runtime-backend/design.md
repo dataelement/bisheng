@@ -840,4 +840,4 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 验收现状：R31 Helm31与backend c06fb408实际部署通过；正常升级保持原应用/卷与SQL业务投影。T069安全删除经唯一owner业务请求、durable purge、同UID停止/PVC自然清理/PV Retain/SQLite缺席闭合，独立L1后265/269。全AC子句边界及T070/发行/L2保留；按用户要求仅定向测试修复和相邻链。
 
 
-2026-10-23 在途重启控制器准入（T272/T273）：189单次SIGKILL后的新进程在旧holder租约尚未到期时收到正常409/controller_lease_held；该异常错误进入业务_failure，错误处理跨到自然到期后取得新epoch并清理原安装。真实双执行器与后端Service最小复现已区分于模板/epoch资源复用问题。按4.6既有续办合同，在operation claim/执行和业务失败处理之前核当前K8s控制器租约；拒绝当前动作，原操作/阶段事实/资源和deadline保持，下一轮正常对账再试。不放宽后端围栏，不改Docker、冻结模板、原失败记录或截止时间；本地4行准入门及定向配对/独立L1已完成；189新镜像复验尚待完成。
+2026-10-23 在途重启控制器准入（T272/T273）：189单次SIGKILL后的新进程在旧holder租约尚未到期时收到正常409/controller_lease_held；该异常错误进入业务_failure，错误处理跨到自然到期后取得新epoch并清理原安装。真实双执行器与后端Service最小复现已区分于模板/epoch资源复用问题。按4.6既有续办合同，在operation claim/执行和业务失败处理之前核当前K8s控制器租约；拒绝当前动作，原操作/阶段事实/资源和deadline保持，下一轮正常对账再试。不放宽后端围栏，不改Docker、冻结模板、原失败记录或截止时间；本地4行准入门及定向配对/独立L1已完成；189 R32同在途prepare经一次SIGKILL/controller30→31、原安装同UID/CID自然240秒完成、原deadline/阶段结果保持、资源自然清理已通过；见fault-upgrade的R32定向证据。
