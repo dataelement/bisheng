@@ -14,6 +14,7 @@ from redis.exceptions import RedisError
 from starlette.websockets import WebSocketDisconnect
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.dsh.api.dependencies import desktop_principal
 from bisheng.dsh.api.endpoints.mobile import mobile_service, router
 from bisheng.dsh.api.router import router as dsh_router
 from bisheng.dsh.domain.services.mobile_access import MobileAccessService
@@ -86,12 +87,28 @@ async def stop(task):
         await task
 
 
+def _dependency_calls(route):
+    return [dependency.call for dependency in route.dependant.dependencies]
+
+
 def test_routes_are_mounted_without_dsh_route_class():
     paths = {route.path for route in dsh_router.routes}
     assert "/dsh/mobile/bind" in paths
     assert "/dsh/mobile/attach" in paths
     mobile = next(route for route in dsh_router.routes if route.path == "/dsh/mobile/bind")
     assert type(mobile).__name__ == "APIRoute"
+
+
+def test_registration_uses_desktop_credential_and_listing_uses_website_login():
+    by_path = {route.path: route for route in router.routes}
+    for path in ("/dsh/mobile/bind", "/dsh/mobile/unbind"):
+        calls = _dependency_calls(by_path[path])
+        assert desktop_principal in calls
+        assert UserPayload.get_login_user not in calls
+    for path in ("/dsh/mobile/desktops", "/dsh/mobile/desktops/{desktop_id}/rpc"):
+        calls = _dependency_calls(by_path[path])
+        assert UserPayload.get_login_user in calls
+        assert desktop_principal not in calls
 
 
 def test_http_contract_uses_bare_responses():
@@ -103,7 +120,11 @@ def test_http_contract_uses_bare_responses():
     async def current_user():
         return user()
 
+    async def current_desktop():
+        return SimpleNamespace(user_id="7", tenant_id="3")
+
     app.dependency_overrides[UserPayload.get_login_user] = current_user
+    app.dependency_overrides[desktop_principal] = current_desktop
     with TestClient(app) as client:
         assert client.post("/api/v1/dsh/mobile/bind", json=[]).status_code == 400
         assert client.post("/api/v1/dsh/mobile/bind", json={"desktopId": 12, "attachSecret": SECRET}).status_code == 400

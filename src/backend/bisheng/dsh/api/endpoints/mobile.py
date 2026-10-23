@@ -5,6 +5,8 @@ from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocket
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.dsh.api.dependencies import desktop_principal
+from bisheng.dsh.domain.services.access import DshPrincipal
 from bisheng.dsh.domain.services.mobile_access import MobileAccessService, MobileResult
 from bisheng.dsh.infrastructure.mobile_access import MobileAccessStore
 
@@ -25,25 +27,25 @@ async def mobile_service() -> MobileAccessService:
 @router.post("/dsh/mobile/bind")
 async def bind(
     request: Request,
-    user: UserPayload = Depends(UserPayload.get_login_user),
+    principal: DshPrincipal = Depends(desktop_principal),
     service: MobileAccessService = Depends(mobile_service),
 ):
     body = await _object_body(request)
     if body is None:
         return _invalid()
-    return _respond(await service.bind(user, body))
+    return _respond(await service.bind(_desktop_account(principal), body))
 
 
 @router.post("/dsh/mobile/unbind")
 async def unbind(
     request: Request,
-    user: UserPayload = Depends(UserPayload.get_login_user),
+    principal: DshPrincipal = Depends(desktop_principal),
     service: MobileAccessService = Depends(mobile_service),
 ):
     body = await _object_body(request)
     if body is None:
         return _invalid()
-    return _respond(await service.unbind(user, body))
+    return _respond(await service.unbind(_desktop_account(principal), body))
 
 
 @router.get("/dsh/mobile/desktops")
@@ -89,6 +91,18 @@ def _respond(result: MobileResult):
             media_type=result.media_type or "application/json",
         )
     return JSONResponse(status_code=result.status, content=result.body)
+
+
+class _DesktopAccount:
+    """Registration stores integer account ids. Desktop tokens carry decimal strings."""
+
+    def __init__(self, user_id: int, tenant_id: int):
+        self.user_id = user_id
+        self.tenant_id = tenant_id
+
+
+def _desktop_account(principal: DshPrincipal) -> _DesktopAccount:
+    return _DesktopAccount(user_id=int(principal.user_id), tenant_id=int(principal.tenant_id))
 
 
 def _invalid() -> JSONResponse:
