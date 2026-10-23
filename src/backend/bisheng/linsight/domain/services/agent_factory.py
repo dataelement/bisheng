@@ -38,6 +38,7 @@ from pydantic import Field as PydanticField
 from pydantic import SkipValidation
 
 from bisheng.common.services.config_service import settings
+from bisheng.linsight.domain.services.base_prompt import LinsightBasePromptMiddleware
 from bisheng.linsight.domain.services.binary_content_guard import (
     CODE_INTERPRETER_TOOL,
     build_binary_guards,
@@ -1375,6 +1376,8 @@ async def create_linsight_agent(
         # and a context overflow it re-raises is compressed and retried here.
         *_summarization(model, backend, context_window),
         build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
+        # Main graph only: the researcher keeps its own prompt (see base_prompt.py).
+        LinsightBasePromptMiddleware(),
         # F087: a `task` call whose subagent stayed over the context window after
         # compression comes back as a tool result instead of failing the task.
         SubagentContextOverflowMiddleware(researcher_resilience, context_window),
