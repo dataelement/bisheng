@@ -6840,8 +6840,8 @@
       ],
       "pair": "T264",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T072",

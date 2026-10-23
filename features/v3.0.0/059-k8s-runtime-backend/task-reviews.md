@@ -3498,3 +3498,19 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 | 文件/依赖/配对 | PASS | 两指定文件，T261已完成，T265尚未合流 |
 
 主树cdb9a1343独立红例3 failed/55 passed（0.49s），均为16125实际exit19与应有14差异；legacy16226及未知19999配对绿。日志`/private/tmp/f059-cli-capacity-root-red.log`。仅测试L1 PASS；不把预期红例当功能已修复。
+
+## Task Review: T265
+
+**类型**：实现。**文件**：`bisheng_cli/errors.py`、实际backend分发CLI wheel及manifest。
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构 | PASS | 独立CLI表映射，无backend/runtime导入 |
+| 2 | 命名 | PASS | 既有ERROR_HINTS/ERROR_EXIT_CODES，复用EXIT_CAPACITY |
+| 3 | 序列化 | PASS | human/JSON均保留原平台16125，未知19999仍19 |
+| 4 | 数据库 | N/A | 无DDL/SQL变化 |
+| 5 | 前端 | N/A | 无UI变化 |
+| 6 | 信息泄漏 | PASS | 配对验证synthetic key脱敏，无新凭据输出 |
+| 7 | 设计同步 | PASS | §4.3、§5与修订历史同步两容量码及实际wheel分发 |
+
+**元数据**：指定五文件、T264先完成、依赖与配对PASS。root主树0ff595428独立完整CLI391passed（5.86s），日志`/private/tmp/f059-cli-capacity-root-full.log`；独立ZIP读取确认errors.py等于源码、manifest只cli.sha256变化、SDK摘要保持。原pack_cli_wheel.sh离线干净venv烟测及作者RECORD验证见`/private/tmp/f059-cli-capacity-l1.md`。wheel SHA739d58c34a4f9eb4833c21ecec60936ef78bf1a48ce0b050b0d86a810b0e3e39。**结果：PASS**；189未部署新wheel，不冒称远端CLI验收。

@@ -16,7 +16,7 @@
 
 ## 未完成项
 
-当前R29 manager-only升级保留Pod/CID/PVC/profile及旧false/unknown拒绝保持已经真实通过，见installation的R29记录。新R11正常stop/离线数据/resume已通过，见platform的R11记录。189初始化失败、取消、响应丢失、在途manager重启、迁移失败/快照恢复、独立安装域完整卸载和最终清理仍待完成；保留的旧unknown写入者负例不替代全部故障注入。私有工具本地测试只证明工具行为。单节点结果不能代表NodeLost跨节点围栏；T070保持pending。
+当前R29 manager-only升级保留Pod/CID/PVC/profile及旧false/unknown拒绝保持已经真实通过，见installation的R29记录。新R11正常stop/离线数据/resume已通过，见platform的R11记录。R3空闲manager停机访问已真实通过（见下）；189初始化失败、取消、响应丢失、在途manager重启、迁移失败/快照恢复、独立安装域完整卸载和最终清理仍待完成；保留的旧unknown写入者负例不替代全部故障注入。私有工具本地测试只证明工具行为。单节点结果不能代表NodeLost跨节点围栏；T070保持pending。
 
 ## 109 实际迁移基线（尚未v2/恢复）
 
@@ -51,3 +51,11 @@ Helm28只更新images.manager，旧Pod30d08ee0…替换为faa48ee8-fd38-4980-a29
 Python应用a4a566…的单次正常停用d675d583ebb34e68b4756fe8852ff91d在原900秒后自然timed_out/operation_timeout，cleanup pending；离线driver在等待停用600秒处失败退出，未编辑数据库、未恢复上线。Pod0ca2a71e…同UID已删除中/Failed、全部init/app/helper terminated，但资源历史status/binding标志均false，分类器与backend继续拒绝确认。finalizer、PVC、容量保留，无手工SQL或强制清理。
 
 只读五应用cohort：旧Python/Node/static均false/false，后创建source/image仍true/true，node当前ready且两项保护true。不能据此归因最近manager-only升级；首次绑定时是否为true及具体触发心跳缺历史证据。真实本地assessment→manager heartbeat→backend Service→SQLite事务五例证明TTL/helper变化会触发不可逆清零，实际guard失败与报告失效被混用。T258–T261按design4.5细化；不将修正上线视作旧false恢复。原失败journal与脱敏快照SHA见JSON。
+
+## R11/R3 manager停机访问连续性：189真实通过
+
+同R29 f886镜像，受限单次UID/RV CAS将manager 1→0→1；实际旧UID缺席15.931秒，5个完整轮次开始于停机后5秒之外且在up意图之前完成，owner HTTP、SDK identity/OBO、新owner WS和nonowner/foreign HTTP/WS拒绝均通过。原WS与精确原app UID/CID中的CONNECT连接贯穿停机，不重连；未证明长HTTP响应流或SDK远端模型调用。120秒原总预算、15秒最小停机保持，未使用恢复兜底。
+
+恢复新manager UID59ace601-5974-487f-8eaf-095a6b13f015、epoch25，源码/镜像/backend两文件、descriptor及current/v1双保护独立确认；6Pod/7PVC/CID/卷投影不变。旧三false/新二true保持，旧Python held仅controller_epoch24→25正常重对账，没有追认停止或释放。主证明b397e367…、独立部署3825ca37…、inventory8184a040…完整SHA与路径见JSON。
+
+此前R2在任何down前被裸根308拒绝；真实slash200/SDK200/WS成功后最窄修正私有工具，原失败不覆盖。该成功不替代在途操作重启、取消、响应丢失、真实DDL/恢复及独立卸载；T070仍pending。

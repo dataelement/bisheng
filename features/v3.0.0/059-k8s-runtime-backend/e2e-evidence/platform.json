@@ -223,7 +223,6 @@
     "root_cause_of_r5_failure": "not yet concluded from this ingress check alone"
   },
   "not_verified": [
-    "preapproval capacity negative",
     "safe delete after later tests",
     "fault and independent uninstall acceptance"
   ],
@@ -1980,5 +1979,117 @@
         "cleanup_state": "pending"
       }
     ]
+  },
+  "manager_outage_r11_r3": {
+    "state": "passed_real_189_amd64",
+    "source_commit": "f8863f3763285435a5df01fc150400838bdb3f0a",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:0b4bd3e66c1d7c49fe00046c83277dab8b6dbd0628f201abf3192d70dd67ddad",
+    "old_manager_uid": "fae606c4-3e51-4efa-ba00-a7ce9163de3f",
+    "new_manager_uid": "59ace601-5974-487f-8eaf-095a6b13f015",
+    "controller_epoch": 25,
+    "down_seconds": 15.931488990783691,
+    "qualified_rounds_after_cache": 5,
+    "original_total_budget_seconds": 120,
+    "recovery_used": false,
+    "http_owner_new_requests": "passed",
+    "sdk_identity_obo": "passed; not remote model/retrieval/attachment proof",
+    "persistent_websocket": "same connection echo passed",
+    "new_owner_websocket": "passed",
+    "nonowner_foreign_http_ws": "all exact refusals passed",
+    "connect": "same stream/socket/fd/TLS object passed before/during/after",
+    "long_http_response_stream": "not tested",
+    "inventory": {
+      "pods": 6,
+      "pvcs": 7,
+      "same_uid_cid_volume_projection": true
+    },
+    "old_history": "old three false and newer two true retained; old Python held row reattested controller_epoch24->25 without changing flags/stop state; not repaired or released",
+    "independent_post_protection": "current/v1/status=true/binding=true; source/backend bytes/descriptor/namespace verified",
+    "evidence": {
+      "k8s-manager-outage-k189r11-r3-orchestrated-r29.jsonl": {
+        "local": "/private/tmp/f059-r11-outage-r3-live-evidence/k8s-manager-outage-k189r11-r3-orchestrated-r29.jsonl",
+        "remote": "/opt/e2e-f059/evidence/k8s-manager-outage-k189r11-r3-orchestrated-r29.jsonl",
+        "sha256": "b397e367c68e363604f68e8ae7ca257d4f9c410775fa84a994b8fdd39409724c"
+      },
+      "k8s-manager-outage-k189r11-r3-restored.json": {
+        "local": "/private/tmp/f059-r11-outage-r3-live-evidence/k8s-manager-outage-k189r11-r3-restored.json",
+        "remote": "/opt/e2e-f059/evidence/k8s-manager-outage-k189r11-r3-restored.json",
+        "sha256": "850d35de909bd48d4a7358b560e363a8c5943426c750d1dc9bc1c19c726e89ab"
+      },
+      "r11-outage-r3-after-inventory.json": {
+        "local": "/private/tmp/f059-r11-outage-r3-live-evidence/r11-outage-r3-after-inventory.json",
+        "remote": "/opt/e2e-f059/evidence/r11-outage-r3-after-inventory.json",
+        "sha256": "8184a040651be3693328de4bb55a22b2b1cf69bb23dc85157b75820fad23c29a"
+      },
+      "k8s-manager-outage-k189r11-r3-orchestrated-r29.jsonl.control.jsonl": {
+        "local": "/private/tmp/f059-r11-outage-r3-live-evidence/k8s-manager-outage-k189r11-r3-orchestrated-r29.jsonl.control.jsonl",
+        "remote": "/opt/e2e-f059/evidence/k8s-manager-outage-k189r11-r3-orchestrated-r29.jsonl.control.jsonl",
+        "sha256": "226a8464d8d9bc34aff653831d40ba57502e61ee5f54ecfc47456aeab42eb4a6"
+      },
+      "r29-post-outage-r11-r3-deployment-ready.json": {
+        "local": "/private/tmp/f059-r11-outage-r3-live-evidence/r29-post-outage-r11-r3-deployment-ready.json",
+        "remote": "/opt/e2e-f059/evidence/r29-post-outage-r11-r3-deployment-ready.json",
+        "sha256": "3825ca3769010269b14781086b2de1a6f03c3e37fa8a639035c5b70cc2f6251b"
+      },
+      "k8s-manager-outage-k189r11-r3.jsonl": {
+        "local": "/private/tmp/f059-r11-outage-r3-live-evidence/k8s-manager-outage-k189r11-r3.jsonl",
+        "remote": "/opt/e2e-f059/evidence/k8s-manager-outage-k189r11-r3.jsonl",
+        "sha256": "b7810f9e0e7f23dec84b1b95f24f86629af47ee70ccc985800783354819b2773"
+      }
+    },
+    "tools": {
+      "package_sha256": "58619c767f0477cf9c233b72d170343b942e983eba262126d70892b3c7afc445",
+      "post_collector_sha256": "f7007b5447bb4f3d7a8ad692b83ad73e1673e3268c8da4a642b362742c8b303e",
+      "post_inventory_collector_sha256": "6f7e4f30f8b35d05a67451bdd72231455f24333d1c1135961cb77f587c6b9fe4",
+      "independent_local_tests": 67
+    },
+    "prior_r2_failure": {
+      "reason": "r11_preflight_failed: root bare URL308 while canonical slash200",
+      "down_attempted": false,
+      "retained": true,
+      "diagnostic_bare": 308,
+      "diagnostic_slash": 200,
+      "diagnostic_sdk": 200,
+      "diagnostic_ws_echo": true
+    },
+    "boundary": "manager-only idle outage and access continuity; not in-flight operation replay, application crash recovery, cross-node fencing or full T070 acceptance"
+  },
+  "preapproval_capacity_r12_r2": {
+    "state": "passed_real_189_amd64",
+    "source_commit": "f8863f3763285435a5df01fc150400838bdb3f0a",
+    "app_id": "f1b1120c33d047ffa3326010ce33d786",
+    "deployment_id": "1846e6b9b5884c9995ea237c9544ec4a",
+    "candidate_version_id": "5a589c6a622a41cdb4f0bedb1ab7e994",
+    "failure_code": 16125,
+    "failure_stage": "precheck_build",
+    "failure_details": {},
+    "app_state": "draft",
+    "counts": {
+      "approvals": 0,
+      "operations": 0,
+      "reservations": 0,
+      "resources": 0,
+      "versions": 0
+    },
+    "r11_final_identity": "same online app/v1/gen3/resume operation",
+    "capacity_before_after": {
+      "memory_mb": 7936,
+      "cpu_millicores": 3650,
+      "instances": 5
+    },
+    "public_journal": {
+      "remote": "/opt/e2e-f059/evidence/k189r12-preapproval-capacity-r2/journal.json",
+      "local": "/private/tmp/f059-r12-r2-live-journal.json",
+      "sha256": "2a22bc734ebeacd445f1e06c9f82926c32b8eb0f1d2d5600edae02592fcd297b"
+    },
+    "select_only_ledger": {
+      "local": "/private/tmp/f059-r12-r2-ledger-proof.json",
+      "sha256": "9fca1b242e786ab35a3825c54219b3dc98be3e33b869c73f09293b1790f9f12e",
+      "collector_sha256": "62fdd0c4d99ecf9302469771c44b1bafa47dd8b30bc0c3fdaa1f89eb15ee9417"
+    },
+    "tool_sha256": "16e96e8343b3ad6625060a6e22578a6a6f80d603c22875561520127cdcb4b541",
+    "wrapper_sha256": "278524bd53ee8455ff7c4f6af4e97ca7c67b127a22b4ce40d6a2129320b1e240",
+    "first_launch_failure": "script not started due to public source file permission; evidence/intent absent; original log retained; subsequent one business POST only",
+    "not_claimed": "reserved candidate version ID is not an app_version row; no public CLI against this deployment yet"
   }
 }

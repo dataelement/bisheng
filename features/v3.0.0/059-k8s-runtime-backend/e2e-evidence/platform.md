@@ -185,3 +185,9 @@ R29下新app `43baa81d168a45bfa5e53ffbd04f48fd`、v1 `a5a4faade83743a487803bd608
 独立metadata-only/API核对九项全通过：PVC UID `e72126ff-98c8-40b0-84d9-25b6b75aa0d0`保持；原serve UID `c96eedd4-44a6-45c1-888e-b282ce695128`有同UID持久停止证据且cleanupcomplete；恢复serve UID `999cf346-e483-439c-90bd-621d39152a9c`为当前对象，gen3、双连续保护true。只读观察SHA `80b98d038e860c6fe0593e4e5831ae8ee329a9f46237abe48ef0fe14c37cf93d`，不冒称重新观察了kubelet终态全过程或跨节点恢复。
 
 驱动r2在首次业务发包前修正真实CookieJar角色识别，并沿既有900秒共享预算；两个只读启动包装路径错误及原r1均保留，不重写为产品失败/通过。最终业务execute exit0。T069仍待容量前置负例和安全删除；T070故障/独立卸载、L2及公开发行仍未完成，256/261保持。ARM与新增109继续暂缓。
+
+## R12 审批前容量拒绝：189真实通过
+
+单次新slug发布在真实v2预检返回16125/precheck_build/details={}，未产生审批或正式版本。收到的version_id仅候选编号。完成前fresh确认R11仍原online/v1/gen3/resume，容量前后7936Mi/3650m/5不变。独立backend租户2纯SELECT确认该app的operation/resource/reservation/app_version/approval全部0，应用draft/current/pending为空；证据与SHA见JSON。
+
+首个工具启动因cap-drop后公开文件不可读而在Python启动前失败，未有发布意图；修正新tools物料可读权限后才发生唯一业务提交。旧日志保留，不重发未知请求。CLI 16125映射及wheel已本地验证，尚未远端部署该wheel。安全删除与其余故障验收保持pending。
