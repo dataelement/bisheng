@@ -50,9 +50,9 @@
   "not_executed": [
     "189 cancel/init faults; additional UID replacement/unknown-writer injection beyond held legacy safety negatives",
     "in-flight manager restart and response loss",
-    "migration failure with same-operation snapshot confirmation and explicit restore",
     "full uninstall retention in independent install/platform-storage domain",
-    "NodeLost or cross-node fencing"
+    "NodeLost or cross-node fencing",
+    "successful explicit restore after T271 fixed backend, same-restore protective upload and data/route verification"
   ],
   "boundary": "local fixture/HTTP proxy preparations do not count as deployed fault proof; T070 remains pending",
   "migration_v1_baseline": {
@@ -944,5 +944,48 @@
     "tools_tar_sha256": "ed9411c81aa3bf4014c3995c66529fbf1bc854384707b1d90445a10121b37663",
     "readers": "new public failure operation reverse linkage and exact v1/v2 preview cleanup gates reviewed; no DB backfill",
     "ddl_observer": "first candidate e77 rejected before execution: actual kubectl1.28.15 has no resource-version flag; replacement pending; no migration attempted"
+  },
+  "actual_migration_and_first_restore_189": {
+    "state": "migration_failure_verified_restore_startup_failed",
+    "app_id": "3d76a877d2b24f13bb2d3498d926efd3",
+    "failed_deploy_operation_id": "8aba1b5c7a37425393a7e9d5e6ff259c",
+    "ddl_container_id": "01554c7e7e7116f610d1785bfe27152e3fcc318d3c4c62ac07d2faa97e561c4e",
+    "ddl_failure_proof_sha256": "e80a1f989b1ca85c40f02c83186584f8fc471111d3164c2d15883b21bd3ad2bb",
+    "snapshot_id": "dbae5da6ab5e42328db992dd39ddde5f",
+    "snapshot_sha256": "eaf3653e07e30d65b89436bf09dda2fc2794a6ab91a8f5a71ed7af9d6f1dd03b",
+    "snapshot_size_bytes": 16384,
+    "snapshot_baseline_rows_verified_before_restore": true,
+    "first_restore_operation_id": "4d858a521f714fc598c565e10e9dc19c",
+    "first_restore_generation": 3,
+    "first_restore_status": "failed",
+    "first_restore_cleanup": "complete",
+    "first_restore_failure_stage": "starting",
+    "first_restore_helper_completed_and_stopped": true,
+    "restored_serving_rows_and_route_verified": false,
+    "failure_evidence_sha256": "016b125aa42fd5f4dbd2e718075629b2b683ffe09d977dca02bb82f5d40a743c",
+    "old_request_replayed": false,
+    "failed_operation_relabelled": false,
+    "private_evidence_root": "/opt/e2e-f059/evidence/e2e-f059-migration-k189m2-accepted-r30"
+  },
+  "development_closeout_20261023": {
+    "tasks_complete": 264,
+    "tasks_total": 269,
+    "backend_source_commit": "38a7002335bdf5c7c3aa4e13e93d32d6d8150c81",
+    "backend_service_sha256": "c06fb408033f4d77c767924908209e92fd06650d7275bac2cb6cba15442327ce",
+    "backend_app_runtime_tests": {
+      "passed": 1174,
+      "skipped": 19,
+      "log_sha256": "79892a3c7b3f97cf8942ce283eddb11b9ac70217a4753aebb7e51404594b228e"
+    },
+    "independent_paired_and_neighbor_tests_passed": 170,
+    "second_independent_contract_tests_passed": 45,
+    "manager_source_commit": "6c9694f0ffb6adf4722b9fa711851172b3efdc64",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:981bf135375a8c8728735fa13b04ee9b5c8e096c25210a72f44fdd6be003becf",
+    "native_platform": "linux/amd64",
+    "native_nonroot_import_uid": 10001,
+    "manager_deployed_verified": false,
+    "public_release": false,
+    "arm": "deferred_by_user",
+    "l2": "pending"
   }
 }

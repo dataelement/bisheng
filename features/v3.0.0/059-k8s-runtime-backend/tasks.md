@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；269 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 262 / 269 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 264 / 269 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2169,19 +2169,19 @@
 
 ### 恢复后的服务注册（T270/T271）
 
-- [ ] **T270** — 恢复后的服务实例注册配对
+- [x] **T270** — 恢复后的服务实例注册配对
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_restore_resume.py`
   **逻辑/验收**：真实SQLite/Service和实际manager模板验证在线恢复后serve注册；仅已确认restore结果和resume=true可继续，restore-only/坏参数/阶段/代际/租约/UID/未停止写入者拒绝。
-  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **覆盖 AC:** AC-05、AC-13、AC-15、AC-47、AC-48、AC-49、AC-50、AC-52
   **依赖:** T269
   **配对:** T271
 
-- [ ] **T271** — 接通显式恢复后的服务实例注册
+- [x] **T271** — 接通显式恢复后的服务实例注册
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`
   **逻辑/验收**：仅为resume_after_restore=true且同操作恢复结果已持久的合法启动阶段接通serve，复用已有资源冻结/租约/旧writer停止保护；不改材料、路由、SDK、schema或Docker。
-  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **覆盖 AC:** AC-05、AC-13、AC-15、AC-47、AC-48、AC-49、AC-50、AC-52
   **依赖:** T270
   **配对:** T270
 
@@ -2359,3 +2359,5 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T268/T269 L1闭合：有效期限旧12红4绿，固定operations.py 551f…新16绿、独立217相邻绿、完整runtime1787passed/13skip（34.00s）；首轮不合法期限夹具1fail/1786pass和初始runner错误保留。仅K8s精确purge_volume_cleanup_pending复用既有_wait_cleanup；原checkpoint/期限/取消/租约/UID/API拒绝及Docker保持。活跃262/267、123测试；R31真实部署/删除复验尚未执行，ARM/追加109/公开发行暂缓。
 
 2026-10-23 T270/T271登记：M2真实迁移8aba1b5c…/gen2在migrating失败，精确同CID DDL NOTNULL证据及snapshot_confirmed/confirmed upload已独立核对。显式restore4d858a52…/gen3的helper恢复及保护快照结果已持久，随后starting资源注册POST409，操作failed/cleanupcomplete，未创建servePod。原接口body错误未留存；部署源_validate_template对restore+serve首门拒绝，可静态/真实Service复现。既有材料serve和ready自动提交路由已支持restore，登记最小入口修复；不复活失败或重发原请求。活跃262/269、124测试任务，R31源码包已准备未构建/部署，ARM/追加109/公开发行暂缓。
+
+2026-10-23 T270/T271开发收尾：实际manager模板→真实SQLite资源/材料→ready自动提交App/route配对已通过。生产38a700233/c06fb408…只接通同restore持久结果和严格resume=true的serve入口；未改材料/路由/schema/Docker。root完整app_runtime 1174pass/19skip，独立170pass及另一代理45pass，Ruff/格式/架构门通过。初次缺config、空JWT配置及True→1未持久的夹具失败保留；attached row显式dirty并fresh type断言修正测试，不放宽产品门。活跃264/269、124测试任务；T067/T069/T070/T071/T072仍pending，真实恢复/删除另验，ARM/新增109/公开发行暂缓。

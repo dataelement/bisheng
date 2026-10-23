@@ -6953,9 +6953,11 @@
       ],
       "logic": "真实SQLite/Service和实际manager模板验证在线恢复后serve注册；仅已确认restore结果和resume=true可继续，restore-only/坏参数/阶段/代际/租约/UID/未停止写入者拒绝。",
       "acs": [
-        "AC-33",
-        "AC-35",
-        "AC-46",
+        "AC-05",
+        "AC-13",
+        "AC-15",
+        "AC-47",
+        "AC-48",
         "AC-49",
         "AC-50",
         "AC-52"
@@ -6965,8 +6967,8 @@
       ],
       "pair": "T271",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T271",
@@ -6978,9 +6980,11 @@
       ],
       "logic": "仅为resume_after_restore=true且同操作恢复结果已持久的合法启动阶段接通serve，复用已有资源冻结/租约/旧writer停止保护；不改材料、路由、SDK、schema或Docker。",
       "acs": [
-        "AC-33",
-        "AC-35",
-        "AC-46",
+        "AC-05",
+        "AC-13",
+        "AC-15",
+        "AC-47",
+        "AC-48",
         "AC-49",
         "AC-50",
         "AC-52"
@@ -6990,8 +6994,8 @@
       ],
       "pair": "T270",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T072",

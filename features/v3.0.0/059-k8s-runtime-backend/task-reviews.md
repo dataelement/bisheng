@@ -3544,3 +3544,21 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 **结果：PASS。** operations.py单文件新增既有清理协议适配，只将明确的`ExecutorError("purge_volume_cleanup_pending")`转换为等待；其他异常原样传播。每轮既有fresh checkpoint/控制租约与原deadline不重置，持久维护结果复用，Docker仍原直调。无平台数据库/存储/权限Owner转移、无DTO/schema/迁移/UI/凭据或新日志，英文代码符合命名与信息泄漏约定；design既有销毁实现记录已同步。T268先完成，依赖/配对及两文件架构门、Ruff no-cache/格式/diffcheck通过。
 
 主树完整`HELM_BIN=/private/tmp/f059-installer-tools/helm ... pytest -p no:cacheprovider -q tests`一次1787passed/13skipped（34.00s），日志`/private/tmp/f059-t269-root-runtime-full-r2.log`；首轮1failed/1786passed为无效0.25秒期限夹具，改2秒后重测，未改产品期限或删除失败记录。独立217相邻及16精确配对通过；独立报告`/private/tmp/f059-t268-t269-c-independent-l1.md` SHA097eb21e78b898889187cb18bcea4ce8fe9d1de230ed0c5f9047a0726788f28e，作者报告f941a3c5…另存。以上为本地与模拟证据，真实新镜像销毁另验，T069/T070/T072未勾选。
+
+## Task Review: T270 — 恢复后的服务实例注册配对
+
+**结果：PASS。** 单一新测试文件及完整AC-05、AC-13、AC-15、AC-47、AC-48、AC-49、AC-50、AC-52 header/任务索引一致；T269前置完成，测试先于T271。真实manager Pod/Service/Secret模板、真实SQLite资源账本、材料委托以及ready→AppState→route事务；覆盖严格resume布尔、最新持久事实/snapshot/digest/UUID5 helper ref、阶段、版本/pending漂移、租约/代际/冻结镜像/PVC及旧writer停止拒绝。旧6c969首轮12fail/33pass日志cfbc7e42…保留；True→1的SQLAlchemy JSON相等抑制更新经fresh读取定位，夹具改为attached row显式dirty并断言落库类型，不改拒绝预期。无新依赖或权限模拟放行。
+
+## Task Review: T271 — 仅持久恢复完成后允许 serve
+
+| # | 检查项 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构 | PASS | 单backend Service通过既有Repository读取最新fact，不接K8s/MinIO，不移动Owner |
+| 2 | 命名 | PASS | 私有_restore_serve_allowed与内部kw，外部body不允许传放行标志 |
+| 3 | 序列化 | PASS | 不改schema；恢复结果/参数摘要/helper ref必须同操作，非bool拒绝 |
+| 4 | 数据库 | PASS | 无模型/DDL/迁移；复用资源事务的全app旧Pod停止/cleanup门 |
+| 5 | 前端 | N/A | 无UI文件 |
+| 6 | 信息泄漏 | PASS | 无凭据或新日志输出，新增代码注释英文 |
+| 7 | 设计同步 | PASS | 实施现状同步；材料授权、路由提交、停止围栏及Docker合同不变 |
+
+生产提交38a7002335bdf5c7c3aa4e13e93d32d6d8150c81，文件SHA c06fb408033f4d77c767924908209e92fd06650d7275bac2cb6cba15442327ce。配对T270先闭合；root完整app_runtime **1174passed/19skipped**（37.93s），日志/private/tmp/f059-t271-root-backend-r4.log SHA79892a3c7b3f97cf8942ce283eddb11b9ac70217a4753aebb7e51404594b228e。独立170pass（8.88s）及另一代理45pass（3.27s），Ruff no-cache/format/逐路径架构门/diffcheck通过。初次缺config与空配置JWT初始化造成环境失败另存，57项定向重跑通过；未把初次失败覆盖为绿色。以上为本地证据；189首个restore仍failed，新的真实恢复/删除成功不能由L1推断。
