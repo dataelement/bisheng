@@ -14,6 +14,7 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from sqlalchemy.orm.attributes import flag_modified
 
 from bisheng.app_runtime.domain.models.runtime_delivery import (
     RuntimeArtifact,
@@ -252,7 +253,18 @@ async def test_restore_only_or_nonboolean_resume_never_registers_serve(restoring
     case.op.payload = {**case.op.payload, "resume_after_restore": value}
     if value == "missing":
         case.op.payload.pop("resume_after_restore")
-    await case.repo.save(case.op)
+    # True == 1 must not let JSON dirty detection leave the old boolean in SQL.
+    async with case.repo.transaction() as session:
+        stored = await case.repo.get(type(case.op), case.op.id, lock=True)
+        stored.payload = copy.deepcopy(case.op.payload)
+        flag_modified(stored, "payload")
+        await session.flush()
+    case.op = await case.repo.get(type(case.op), case.op.id)
+    if value == "missing":
+        assert "resume_after_restore" not in case.op.payload
+    else:
+        actual = case.op.payload["resume_after_restore"]
+        assert type(actual) is type(value) and actual == value
     with pytest.raises(RuntimeConflict):
         await case.service.register_resource(MANAGER, body(case))
     assert await case.repo.get(RuntimeExecutionResource, REF) is None
