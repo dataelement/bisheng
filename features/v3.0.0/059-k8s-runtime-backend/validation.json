@@ -1687,5 +1687,62 @@
     "upgrade_receipt_sha256": "539386dafef972122991013f7b03c0e920be301df794dea3df09ea5136763e5b",
     "actual_owner_cancel": "not_executed",
     "public_release": false
+  },
+  "protection_report_correction": {
+    "schema": "f059-protection-regression-delta/v1",
+    "baseline_production_sha": "1b018c15b71d8caeca98e51e945839938641525e",
+    "candidate_production_sha": "f8863f3763285435a5df01fc150400838bdb3f0a",
+    "same_new_backend_test_count": 51,
+    "mcp_installed_shared": "1.27.1",
+    "mcp_private_lock_override": "1.30.0",
+    "baseline": {
+      "passed": 2748,
+      "failed": 150,
+      "skipped": 19,
+      "errors": 18,
+      "seconds": 90.14
+    },
+    "candidate": {
+      "passed": 2784,
+      "failed": 114,
+      "skipped": 19,
+      "errors": 18,
+      "seconds": 91.43
+    },
+    "introduced_failure_or_error_count": 0,
+    "resolved_pair_count": 36,
+    "unchanged_open_api_failures": 114,
+    "unchanged_open_api_errors": 18,
+    "direct_three_modules": {
+      "passed": 1944,
+      "skipped": 19,
+      "seconds": 81.11
+    },
+    "runtime_all": {
+      "passed": 1757,
+      "skipped": 13,
+      "seconds": 35.27
+    },
+    "sha256": {
+      "f059-protection-all-four-baseline.log": "db54a5d3331b84740ec2fa7cc6dc361fcb4193b09b0915b8f844d84800db1726",
+      "f059-protection-corrected-backend.log": "b236e931f66fa671b848e7ac8a64da4f0e99fa958ceba918724f964fc3d42d61",
+      "f059-protection-final-three-modules.log": "16758d529d2d2ef2f1b9790c827586bcaee98d15a24d280ec509bcb3db07b92a",
+      "f059-protection-final-runtime.log": "fb49ac4ae85e0bb26f23f9e084352f40563fca9a8e251fc99c3204629092f6d7"
+    },
+    "boundary": "Old open_api auth/schema/fixture issues were verified with the same combined selection and locked temporary dependency; they are not fixed or counted passed. No production environment validation is implied.",
+    "independent_l1": {
+      "f059-t260-t261-independent-l1.md": "4062b44ceab088b80c716aab8bf6675d75eb887e6af3138a8d83d3a812ce3c32",
+      "f059-t258-t259-t262-t263-independent-l1.md": "26ef6ad85616d2ef32fcc4166df266eaf02656d8b52b2d1b5b0d7e1a76cee3fb"
+    },
+    "tasks": [
+      "T258",
+      "T259",
+      "T260",
+      "T261",
+      "T262",
+      "T263"
+    ],
+    "old_false_restored": false,
+    "new_189_deployed": false
   }
 }

@@ -3462,3 +3462,27 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 | 7 | 设计同步 | PASS | design4.6及现状已同步 |
 
 元数据：文件范围PASS、T256已完成、T255依赖PASS。读取失败不接受成功结果，outer failure仍须fresh范围与正常同UID清理；未放宽停止/容量释放条件，不延长原期限。独立报告 `/private/tmp/f059-t257-independent-l1.md` SHA83dbd6c9bf858330b97960e83d42c18db15e0891edf5b9f829cec25fc5d9142c。以上是本地模拟/静态，不是189真实取消或容量释放证明。
+
+## Task Review: T258/T259 — 报告未知与历史保护
+
+**结果：PASS。** 新97例通过，原旧实现91缺元数据红、strict JSON时间5红/1绿；不将这些当独立现场故障数。实际assessment/Kube config投射/OperationExecutor，只有外部list/时钟为受控输入。所有15check完整、TTL边界、仅helper允许、坏/新失败guard优先、其他descriptor变更及cold mismatch均核对；原descriptor摘要不改。state只描述当前report，不授予连续来源。两生产文件和声明测试范围通过，T257/T258依赖通过；原子Kube辅助方法修正在T259同owner目标内。
+
+## Task Review: T260/T261 — 历史标志与当前确认
+
+**结果：PASS。** 51真实SQLite/Service配对旧36fail/15pass→51pass；独立51pass2.28s。服务端黏性版本/最后基线不可被body、缺失、畸形或legacy positive清除；初始unknown不能享例外，actualfailed/基线变化仍失信；报告未知只保留历史原值，未回填false。首次stop在同锁事务要求当前对应guard精确true；旧历史失败校验顺序/已确认幂等/not_created独立路径/容量finalizer顺序不变。文件范围、完整AC与T257→T260配对依赖PASS。
+
+## Task Review: T262/T263 — 一次心跳快照
+
+**结果：PASS。** 真实调用层在旧双读下7fail/4pass，固定实现11pass；独立合并新配对108pass。heartbeat_snapshot一次读取同时生成capabilities/probe，下一心跳再自然刷新；快照失败不降级重试，Docker分支保持，旧fake fallback可达。调用者operations.py单文件范围与T262依赖PASS；Kube方法属T259两个原目标内。
+
+| # | 检查项 | 实现任务结果 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 架构 | PASS | manager报告、backend权威事实/事务边界保持 |
+| 2 | 命名 | PASS | 使用明确内部观察/快照与固定reason |
+| 3 | 序列化 | PASS | 只扩内部capabilities JSON；严格JSON坏时间null；不改对外deploy接口 |
+| 4 | 数据库 | PASS/N/A | backend沿既有事务/JSON/锁，无新DDL；runtime不读平台DB |
+| 5 | 前端 | N/A | 无UI变更 |
+| 6 | 信息泄漏 | PASS | 无凭据/原始环境/异常正文输出 |
+| 7 | 设计同步 | PASS | design4.5观察、黏性字段、snapshot及当前stop已同步 |
+
+独立后端报告`/private/tmp/f059-t260-t261-independent-l1.md` SHA4062b44ceab088b80c716aab8bf6675d75eb887e6af3138a8d83d3a812ce3c32；runtime报告`/private/tmp/f059-t258-t259-t262-t263-independent-l1.md` SHA26ef6ad85616d2ef32fcc4166df266eaf02656d8b52b2d1b5b0d7e1a76cee3fb。作者报告03687327…/a69145f5…/55ea648b…另保留。最终源码f8863f376：完整runtime1757/13skip35.27s；运行/发布/SDK三模块1944/19skip81.11s。四模块同选择baseline差异比较零新增失败/错误，36新配对由红转绿；114 open_api旧失败和18fixture错误不记通过，不在本修复扩scope。原环境MCP1.27.1不符项目>=1.27.2，按uv.lock1.30只在临时target覆盖，不改共享venv。以上为本地/模拟与真实SQLite，未冒充189新部署、恢复或停止事实；已有旧false仍held。

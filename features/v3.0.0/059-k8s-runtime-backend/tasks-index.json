@@ -6477,8 +6477,8 @@
       ],
       "pair": "T259",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T259",
@@ -6506,8 +6506,8 @@
       ],
       "pair": "T258",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T260",
@@ -6534,8 +6534,8 @@
       ],
       "pair": "T261",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T261",
@@ -6563,8 +6563,8 @@
       ],
       "pair": "T260",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T262",
@@ -6590,8 +6590,8 @@
       ],
       "pair": "T263",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T263",
@@ -6617,8 +6617,8 @@
       ],
       "pair": "T262",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T067",

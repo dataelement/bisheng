@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；261 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 250 / 261 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 256 / 261 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2062,7 +2062,7 @@
 
 ### 报告失效与连续保护修正（T258–T261）
 
-- [ ] **T258** — 报告失效与保护基线的runtime配对
+- [x] **T258** — 报告失效与保护基线的runtime配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_protection_report.py`、`src/runtime-manager/tests/test_k8s_capabilities.py`
   **逻辑/验收**：真实能力计算覆盖TTL/helper-only未知、保护字段变化、坏/重复证据、cold restart和真实failed；旧实现先红，保留readiness fail-closed及原descriptor摘要。
@@ -2070,7 +2070,7 @@
   **依赖:** T257
   **配对:** T259
 
-- [ ] **T259** — runtime分别报告readiness和保护观察
+- [x] **T259** — runtime分别报告readiness和保护观察
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/k8s_capabilities.py`、`src/runtime-manager/runtime_manager/executors/kubernetes.py`
   **逻辑/验收**：新增严格版本化protection_observation与排除仅report/helper的基线摘要；仅两种可证明report-only未知不推导历史gap，当前能力仍false；其他不确定继续unconfirmed。
@@ -2078,7 +2078,7 @@
   **依赖:** T258
   **配对:** T258
 
-- [ ] **T260** — 平台历史保护与当前停止确认配对
+- [x] **T260** — 平台历史保护与当前停止确认配对
   **类型**：测试
   **文件**：`src/backend/test/app_runtime/test_runtime_protection_report.py`
   **逻辑/验收**：真实SQLite事务覆盖同基线未知重复心跳/恢复、真实failed不可逆、基线变化/协议降级/无首次基线拒绝、当前保护未知不得确认停止及旧false不恢复。
@@ -2086,7 +2086,7 @@
   **依赖:** T257
   **配对:** T261
 
-- [ ] **T261** — 平台保留报告未知的历史事实并阻止当前释放
+- [x] **T261** — 平台保留报告未知的历史事实并阻止当前释放
   **类型**：实现
   **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`、`src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py`
   **逻辑/验收**：仅可信旧同基线+严格report-only元数据保留历史标记，节点blocked；实际失败/基线变更仍降级。首次停止须当前对应保护true，已确认幂等与not_created不变；不回填旧false。
@@ -2097,7 +2097,7 @@
 
 ### 心跳快照一致性（T262/T263）
 
-- [ ] **T262** — 热刷新跨次读取的心跳一致性配对
+- [x] **T262** — 热刷新跨次读取的心跳一致性配对
   **类型**：测试
   **文件**：`src/runtime-manager/tests/test_k8s_protection_heartbeat.py`
   **逻辑/验收**：实际OperationExecutor与Kube executor组合，expired→fresh/current→failed投射序列先红后绿；单次心跳同一descriptor/check快照，下次自然刷新，strict JSON与旧fake/Docker兼容。
@@ -2105,7 +2105,7 @@
   **依赖:** T259
   **配对:** T263
 
-- [ ] **T263** — 心跳使用一次完整能力和报告快照
+- [x] **T263** — 心跳使用一次完整能力和报告快照
   **类型**：实现
   **文件**：`src/runtime-manager/runtime_manager/operations.py`
   **逻辑/验收**：Kube提供原子heartbeat_snapshot，既有capabilities兼容；OperationExecutor优先一次快照提交，原Docker和无新方法的fake接口保持。矛盾输入仍由backend拒绝，不以宽容矛盾报告代替修复。
@@ -2265,3 +2265,5 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T258–T261登记：本地真实方法/SQLite五例复现报告TTL或helper变化可清零历史保护；189旧三bundle为false，新source/image仍true。首个触发心跳未知，不能归因最近manager升级。Python离线停用d675已自然timed_out且cleanup pending，保留UID/finalizer/PVC/预占。增量细化4.5，不新增历史恢复或物理fencing，旧false不修；活跃250/259、119测试任务。ARM及新增109继续暂缓。
 
 2026-10-23 T262/T263登记：静态真实调用者核对发现单次心跳先capabilities后probe_report会两次读投射，报告热刷新可产生expired+ready矛盾并永久失信。改一次snapshot而不放宽backend矛盾输入拒绝；Kube辅助方法在T259目标内，调用者独立T263。250/261、120测试任务；仍无ARM/新增109。
+
+2026-10-23 T258–T263 L1闭合：runtime97报告+11原子心跳新配对，独立108通过；backend51真实SQLite配对旧36红→51绿，独立51通过。完整runtime1757/13skip，后端运行/发布/SDK三模块1944/19skip；MCP按锁文件1.30临时覆盖，不改共享venv。四模块同选择原生产基线150fail/18error→新114fail/18error，差异36全为新配对，零新增；其余open_api鉴权/模式/fixture历史问题保留。源码f8863f376，256/261完成、120测试任务。189旧false不修，正式镜像/真实新停用另验，无ARM/109/公开发行。
