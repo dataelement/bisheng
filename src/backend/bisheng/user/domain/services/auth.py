@@ -176,6 +176,11 @@ class AuthJwt:
         if auth_from == "request":
             if not token:
                 token = self.req.cookies.get(self._access_cookie_key)
+            # Phone clients send the website JWT as Bearer and do not store the access cookie.
+            if not token and self.req is not None:
+                authorization = (self.req.headers.get("Authorization") or "").strip()
+                if authorization.lower().startswith("bearer "):
+                    token = authorization[7:].strip() or None
         elif auth_from == "websocket":
             if websocket:
                 token = websocket.cookies.get(self._access_cookie_key)

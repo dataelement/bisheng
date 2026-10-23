@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from bisheng.dsh.api.endpoints.admin import router as admin_router
 from bisheng.dsh.api.endpoints.identity import router as identity_router
 from bisheng.dsh.api.endpoints.local_auth import router as local_auth_router
+from bisheng.dsh.api.endpoints.mobile import router as mobile_router
 from bisheng.dsh.api.endpoints.model_audit_admin import router as model_audit_router
 from bisheng.dsh.api.endpoints.model_audit_title import router as model_audit_title_router
 from bisheng.dsh.api.endpoints.models import router as model_router
@@ -25,3 +26,4 @@ router.include_router(settings_router)
 router.include_router(model_audit_router)
 router.include_router(model_audit_title_router)
 router.include_router(tool_router)
+router.include_router(mobile_router)
