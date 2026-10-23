@@ -1,4 +1,4 @@
-"""Covers F059 AC-33, AC-35, AC-46, AC-49, AC-50, AC-52.
+"""覆盖 AC: AC-33、AC-35、AC-46、AC-49、AC-50、AC-52.
 
 Run the real operation/data/maintenance chain through PlatformClient.fact and
 FastAPI validation of the actual backend schema. Only control persistence and
