@@ -49,6 +49,17 @@ def test_16225_and_16226_map_to_different_codes_and_different_next_step() -> Non
     assert scene.next_step != capacity.next_step
 
 
+@pytest.mark.parametrize("code", [16125, 16226])
+def test_v2_and_legacy_capacity_failures_have_the_same_next_action(code: int) -> None:
+    """F059 T264 — coverage AC-02, AC-08: capacity stays actionable and redacted."""
+    err = _err(code, f"Insufficient runtime capacity {FAKE_KEY}", details={"key": FAKE_KEY})
+    legacy = _err(16226)
+    assert err.exit_code == EXIT_CAPACITY == 14
+    assert err.code == code
+    assert (err.message, err.next_step) == (legacy.message, legacy.next_step)
+    assert FAKE_KEY not in render_human(err)
+
+
 def test_16231_and_16230_are_precheck_failures_with_the_fix_in_the_manifest() -> None:
     for code in (16230, 16231):
         err = _err(code)
