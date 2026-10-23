@@ -6844,6 +6844,56 @@
       "review": "PASS"
     },
     {
+      "id": "T266",
+      "wave": 8,
+      "kind": "测试",
+      "title": "真实销毁事实阶段配对",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_destroy_fact_contract.py"
+      ],
+      "logic": "真实OperationExecutor进入K8s销毁链，经实际ExecutionFactInput校验复现admitted事实422；验证合法非终态进度在purge前持久、同操作结果入账后才清理PVC、失败不提前完成、已有进度重启不重复执行，Docker保持。",
+      "acs": [
+        "AC-33",
+        "AC-35",
+        "AC-46",
+        "AC-49",
+        "AC-50",
+        "AC-52"
+      ],
+      "depends": [
+        "T263"
+      ],
+      "pair": "T267",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T267",
+      "wave": 8,
+      "kind": "实现",
+      "title": "销毁前持久化合法维护阶段",
+      "files": [
+        "src/runtime-manager/runtime_manager/operations.py"
+      ],
+      "logic": "K8s显式销毁在执行purge前记录既有合法维护阶段，使维护结果可持久化并用于PVC删除准入；不放宽backend阶段schema、不把admitted映射为completed、不改变停止围栏或Docker路径。",
+      "acs": [
+        "AC-33",
+        "AC-35",
+        "AC-46",
+        "AC-49",
+        "AC-50",
+        "AC-52"
+      ],
+      "depends": [
+        "T266"
+      ],
+      "pair": "T266",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T072",
       "wave": 9,
       "kind": "审查",

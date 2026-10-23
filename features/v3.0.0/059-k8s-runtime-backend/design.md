@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成258/263。T258–T263保护报告与心跳一致性修复已通过1757/13skip runtime、1944/19skip三个后端模块，189已部署R29/source f886 manager与两文件backend修复，实际epoch24/current及旧保护历史核对通过。五种交付模式原v1/v2证据保持；新增r11 Python已完成发布、审批预览、HTTP/WS/SDK/OBO/附件/权限、正常停用、随机SQLite查改CSV与同v1恢复行数据一致，九项独立资源检查通过。T069剩安全删除；T070故障、迁移与独立卸载继续验收。旧r4及旧失信writer保持围栏，不能强制卸载主安装域。T264/T265 CLI 16125→exit14及wheel已完成本地L1；R3 manager停机访问和R12容量前置拒绝已真实通过。ARM、新增109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
+**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成258/265。T258–T263保护报告与心跳一致性修复已通过1757/13skip runtime、1944/19skip三个后端模块，189已部署R29/source f886 manager与两文件backend修复，实际epoch24/current及旧保护历史核对通过。五种交付模式原v1/v2证据保持；新增r11 Python已完成发布、审批预览、HTTP/WS/SDK/OBO/附件/权限、正常停用、随机SQLite查改CSV与同v1恢复行数据一致，九项独立资源检查通过。T069剩安全删除；T070故障、迁移与独立卸载继续验收。旧r4及旧失信writer保持围栏，不能强制卸载主安装域。T264/T265 CLI 16125→exit14及wheel已完成本地L1；R3 manager停机访问和R12容量前置拒绝已真实通过。ARM、新增109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -824,3 +824,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 T264/T265登记：既有v2容量错误16125在CLI未映射，仅补既有容量语义与实际wheel分发；平台错误码、发布阶段、依赖及设计决策不变。同步R29与r11实际进展，未将其余故障验收列为通过。
 
 2026-10-23 T264/T265完成：0ff595428本地CLI391项及wheel/manifest/SDK独立核对通过。189 R3 manager真实无实例15.931秒，5轮超缓存访问/权限、原WS及CONNECT通过，恢复epoch25/新UID且6Pod/7PVC保持；R12容量负例真实16125、审批/版本/操作/资源/预约均0。保留早期308工具失败和权限启动失败；不据此认定在途重启、迁移或完整卸载已验收。
+
+2026-10-23 销毁协议细化（T266/T267）：K8s owner destroy从内部admitted进入实际维护前，必须记录既有合法维护阶段；维护结果事实经平台接收后才允许PVC清理。189首次R11删除以422失败，旧结果保留、不宣称purge/PVC删除通过；不扩展公开事实阶段、不改变D1/D5或停止证明。ARM及新增109按用户口径暂缓。

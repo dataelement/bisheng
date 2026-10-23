@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；263 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 258 / 263 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；265 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 258 / 265 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2131,6 +2131,24 @@
   **依赖:** T264
   **配对:** T264
 
+### 销毁维护事实协议（T266/T267）
+
+- [ ] **T266** — 真实销毁事实阶段配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_destroy_fact_contract.py`
+  **逻辑/验收**：真实OperationExecutor进入K8s销毁链，经实际ExecutionFactInput校验复现admitted事实422；验证合法非终态进度在purge前持久、同操作结果入账后才清理PVC、失败不提前完成、已有进度重启不重复执行，Docker保持。
+  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **依赖:** T263
+  **配对:** T267
+
+- [ ] **T267** — 销毁前持久化合法维护阶段
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/operations.py`
+  **逻辑/验收**：K8s显式销毁在执行purge前记录既有合法维护阶段，使维护结果可持久化并用于PVC删除准入；不放宽backend阶段schema、不把admitted映射为completed、不改变停止围栏或Docker路径。
+  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **依赖:** T266
+  **配对:** T266
+
 ### Wave 9
 
 - [ ] **T072** — L2 代码审查及交付核对
@@ -2295,3 +2313,5 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T264/T265 L1闭合：主树3红/55绿→完整CLI391passed（5.86s），源码与分发wheel完全一致、manifest仅CLI摘要变更、SDK不变。源0ff595428，未部署该wheel。189 R3真实manager无实例15.931秒，超缓存窗口5完整成功轮、原WS/CONNECT不换连接，恢复新UID59ace601…/epoch25及6Pod/7PVC/旧保护历史独立核对通过。R12单次发布真实16125/precheck_build/无审批版本，SQL五类账本零行且容量7936/3650/5不变。258/263完成，T069尚缺安全删除，T070仍缺其余故障/迁移/独立卸载；ARM/新增109/公开发行继续暂缓。
 
 2026-10-23 迁移前置：R11三删除拒绝及事后SQL不变已通过，R11 gen4 stop8d71…与fullimage gen5 stopdc0317…业务completed/cleanupcomplete；物理证明/预约/PVC保留待独立采集，未delete。m2源码包已冻结未发布；快照关联/预览采集私有工具已修正，DDL首版CLI旗标现场不支持已拒绝，不冒认迁移通过。258/263不变。
+
+2026-10-23 T266/T267登记：189 R11正常DELETE只发一次，destroy ab3004b3bb4b4cd29b83d214c4241232 failed/cleanupcomplete，purge Pod同UID停止闭合、预约释放，App仍stopped且PVC保留。manager真实POST facts422；KubernetesMaintenance沿用admitted，而ExecutionFactInput不接受该内部阶段。原fake未经过实际schema，登记真实边界配对及既有合法维护阶段修正。活跃258/265、122测试任务；首次请求未知记录保留，不重发。ARM/新增109仍暂缓。

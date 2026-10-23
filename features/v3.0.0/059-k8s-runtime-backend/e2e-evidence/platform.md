@@ -191,3 +191,9 @@ R29下新app `43baa81d168a45bfa5e53ffbd04f48fd`、v1 `a5a4faade83743a487803bd608
 单次新slug发布在真实v2预检返回16125/precheck_build/details={}，未产生审批或正式版本。收到的version_id仅候选编号。完成前fresh确认R11仍原online/v1/gen3/resume，容量前后7936Mi/3650m/5不变。独立backend租户2纯SELECT确认该app的operation/resource/reservation/app_version/approval全部0，应用draft/current/pending为空；证据与SHA见JSON。
 
 首个工具启动因cap-drop后公开文件不可读而在Python启动前失败，未有发布意图；修正新tools物料可读权限后才发生唯一业务提交。旧日志保留，不重发未知请求。CLI 16125映射及wheel已本地验证，尚未远端部署该wheel。安全删除与其余故障验收保持pending。
+
+## 2026-10-23 停用资源核对与删除失败
+
+R11（37资源/13预约）和完整镜像（26资源/9预约）停止后只读SQL＋manager元数据实采通过：全部Pod持久停止证据与API缺席闭合，全部预约released，生产PVC同UID保留，历史scratch清理完成。独立PV投影核PV06/03仍Retain，未删PV/重绑磁盘。采集摘要见platform.json。
+
+随后R11单次owner DELETE失败：真实destroy `ab3004b3bb4b4cd29b83d214c4241232` failed/cleanupcomplete，purge helper UID `2b6d5264-2e61-4f91-9db2-ead9faf61e59`停止关闭、destroy预约释放，但没有持久purge成功事实，App仍stopped、生产PVC保留。manager facts返回422，内部admitted阶段不在实际ExecutionFactInput中；T266/T267修复中。原未知回执保留，未重发；不将通用failure flags当作数据未变化证明，不宣称删除成功。快照/附件对象样本0的清理未获非空证明。
