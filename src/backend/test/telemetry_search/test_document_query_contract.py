@@ -139,6 +139,28 @@ async def test_export_over_limit_fails_instead_of_truncating(setup):
         )
 
 
+async def test_detail_export_includes_all_documents_beyond_pivot_display_limit(setup):
+    _, load = setup
+    load.return_value = DocumentStatistics([
+        {
+            "knowledge_identity": f"document:{index}", "file_id": index,
+            "timestamp": ts("2026-09-01") / 1000, "uploader_department_name": "生产部",
+        }
+        for index in range(1, 602)
+    ], {})
+    detail = await dashboard_export_detail.query_detail_rows(
+        dataset_code=INDEX,
+        data_config=ComponentDataConfig(
+            dimensions=[{"fieldId": "uploader_department_name"}],
+            metrics=[{"fieldId": "total_file_count"}],
+            resultLimit={"limitType": "limited", "limit": 1},
+        ),
+        row_limit=50_000,
+    )
+    assert len(detail.rows) == 601
+    assert {row["knowledge_identity"] for row in detail.rows} == {f"document:{index}" for index in range(1, 602)}
+
+
 async def test_dynamic_filter_uses_china_day_boundaries(setup):
     from datetime import datetime
 

@@ -148,6 +148,10 @@ async def test_linked_version_inherits_target_document_original_origin(
         original_uploader_id=502,
         original_knowledge_id=9,
     )
+    target_file = await async_db_session.get(KnowledgeFile, 100)
+    target_file.belonging_organization_id = 81
+    async_db_session.add(target_file)
+    await async_db_session.commit()
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
         "KnowledgeAuditTelemetryService.audit_link_file_version",
@@ -163,6 +167,7 @@ async def test_linked_version_inherits_target_document_original_origin(
     linked_file = await svc.knowledge_file_repo.find_by_id(101)
     assert linked_file.original_uploader_id == 501
     assert linked_file.original_knowledge_id == 8
+    assert linked_file.belonging_organization_id == 81
 
 
 @pytest.mark.asyncio

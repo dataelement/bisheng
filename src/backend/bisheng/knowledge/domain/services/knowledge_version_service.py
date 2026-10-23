@@ -508,6 +508,7 @@ class KnowledgeVersionService:
             target_primary_kf.original_knowledge_id = int(target_primary_kf.knowledge_id)
         current_kf.original_uploader_id = target_primary_kf.original_uploader_id
         current_kf.original_knowledge_id = target_primary_kf.original_knowledge_id
+        current_kf.belonging_organization_id = target_primary_kf.belonging_organization_id
 
         # Capture the original document before moving the unique physical-file
         # relationship. The version row itself must be migrated, not copied:
@@ -1711,6 +1712,7 @@ class KnowledgeVersionService:
         # Promote-before-demote: an interruption mid-flow leaves the chain
         # with two primaries (recoverable) instead of none (which would hide
         # every file from the UI while still blocking dup uploads).
+        source_kf.belonging_organization_id = current_kf.belonging_organization_id
         old_primary = await self.version_repo.find_primary(target_doc_id)
 
         next_no = await self.version_repo.next_version_no(target_doc_id)

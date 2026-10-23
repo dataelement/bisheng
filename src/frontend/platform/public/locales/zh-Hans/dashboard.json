@@ -149,6 +149,7 @@
   "componentExport": {
     "exportDetail": "导出该分类明细",
     "exportAll": "导出",
+    "exportAllDetails": "导出全部明细",
     "exportFailed": "导出失败，请稍后重试",
     "saveBeforeExport": "请先保存看板后再导出"
   },

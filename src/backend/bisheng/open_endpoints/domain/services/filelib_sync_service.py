@@ -298,6 +298,13 @@ class FilelibSyncService:
             created_file.updater_id = owner_user_id
             created_file.updater_name = owner_user_name
             created_file.original_uploader_id = owner_user_id
+            from bisheng.knowledge.domain.services.knowledge_file_organization_service import (
+                KnowledgeFileOrganizationService,
+            )
+
+            created_file.belonging_organization_id = await KnowledgeFileOrganizationService.uploader_organization(
+                owner_user_id, tenant_id=int(created_file.tenant_id or self.login_user.tenant_id)
+            )
             # 元数据记下外部文件号, 解析出的部门, 责任人, 入口和令牌. department 无论是否兜底都会写.
             user_metadata = {
                 **(created_file.user_metadata or {}),

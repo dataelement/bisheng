@@ -123,6 +123,10 @@ class DashboardExportService:
         if not detail.rows:
             raise DashboardExportEmptyError()
 
+        # 明细扫描达到上限时不能通过拆分工作表将部分结果误当作完整导出。
+        if len(detail.rows) > EXPORT_ROW_LIMIT_PER_SHEET:
+            raise DashboardExportLimitExceededError()
+
         # Sheets still split on the chart's outermost dimension, so the workbook keeps the
         # same shape as before — only each sheet's contents changed from one aggregated row
         # per category to the records that make up that category.

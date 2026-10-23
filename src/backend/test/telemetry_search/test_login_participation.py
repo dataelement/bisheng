@@ -76,9 +76,9 @@ RECORDS = [
 @pytest.mark.parametrize(
     "granularity, expected",
     [
-        (None, [(None, 2 / 3, 2, 3)]),
-        ("month", [("2026-08-01", 1 / 2, 1, 2), ("2026-09-01", 1 / 3, 1, 3)]),
-        ("year", [("2026-01-01", 2 / 3, 2, 3)]),
+        (None, [(None, 2 / 3, 3, 3, 2)]),
+        ("month", [("2026-08-01", 1 / 2, 2, 2, 1), ("2026-09-01", 1 / 3, 1, 3, 1)]),
+        ("year", [("2026-01-01", 2 / 3, 3, 3, 2)]),
     ],
 )
 def test_period_deduplication_and_historical_denominator(granularity, expected):
@@ -86,12 +86,44 @@ def test_period_deduplication_and_historical_denominator(granularity, expected):
     for source in RECORDS:
         population.add(source)
     counts = population.rows("logged_in_employee_count")
-    rates = population.rows("participation_rate", active_rows=counts)
-    assert [row[-1] for row in rates] == pytest.approx([value for _, value, _, _ in expected])
-    assert [row[-1] for row in counts] == [count for _, _, count, _ in expected]
-    assert [row[-1] for row in population.rows("active_employee_count")] == [total for _, _, _, total in expected]
+    rates = population.rows("participation_rate", active_rows=[
+        [*row[:-1], active] for row, (_, _, _, _, active) in zip(counts, expected, strict=True)
+    ])
+    assert [row[-1] for row in rates] == pytest.approx([value for _, value, _, _, _ in expected])
+    assert [row[-1] for row in counts] == [count for _, _, count, _, _ in expected]
+    assert [row[-1] for row in population.rows("active_employee_count")] == [total for _, _, _, total, _ in expected]
     if granularity:
-        assert [row[0] for row in rates] == [midnight(date.fromisoformat(day)) for day, _, _, _ in expected]
+        assert [row[0] for row in rates] == [midnight(date.fromisoformat(day)) for day, _, _, _, _ in expected]
+
+
+@pytest.mark.parametrize("granularity, expected", [(None, [5]), ("day", [1, 1, 1, 1, 1, 0, 0]), ("week", [2, 3])])
+def test_cumulative_logins_count_user_days_within_selected_week(granularity, expected):
+    population = LoginPopulation(
+        [time_dimension(granularity)] if granularity else [],
+        LoginSelection(date_filters("2026-08-01", "2026-08-07")),
+    )
+    for day in range(1, 6):
+        for _ in range(5):
+            population.add(record(1, f"2026-08-{day:02d}", login_count=5))
+    population.add(record(1, "2026-07-31"))
+    population.add(record(1, "2026-08-08"))
+    population.add(record(2, "2026-08-01", logged_in=False))
+    population.add(record(3, "2026-08-01", metric_source="active_user"))
+    assert [row[-1] for row in population.rows("logged_in_employee_count")] == expected
+
+
+def test_cumulative_logins_use_only_selected_non_contiguous_china_days():
+    population = LoginPopulation([], LoginSelection([
+        FilterExpression(bool_operator="must", filters=[TermsOp(
+            field="local_date", value=["2026-08-01", "2026-08-03"],
+        )]),
+    ]))
+    population.add(record(1, "2026-08-01"))
+    population.add(record(1, "2026-08-02"))
+    population.add(record(1, "2026-08-02", timestamp=midnight(date(2026, 8, 2)) // 1000 - 1))
+    population.add(record(1, "2026-08-03"))
+    population.add(record(2, "2026-08-03"))
+    assert population.rows("logged_in_employee_count") == [[3]]
 
 
 def test_daily_cumulative_population_zero_days_and_zero_denominator():
@@ -242,7 +274,7 @@ async def test_chart_entry_point_shares_snapshot_and_formats_china_month(monkeyp
     )
     result = await service.query_telemetry_data()
     assert result.dimensions == [["2026-08"], ["2026-09"]]
-    assert result.value == [[1.0, 1, 2], [1 / 3, 1, 3]]
+    assert result.value == [[1.0, 2, 2], [1 / 3, 1, 3]]
     assert len(scans) == 1
 
 
@@ -250,10 +282,11 @@ async def test_chart_entry_point_shares_snapshot_and_formats_china_month(monkeyp
     ("participation_rate", False), ("active_user_count", False),
     ("logged_in_employee_count", False), ("active_employee_count", True),
 ])
-async def test_month_drilldown_exports_unique_login_users(monkeypatch, field, history):
+@pytest.mark.parametrize("dataset_code", ["mid_user_increment", "mid_user_daily_participation"])
+async def test_month_drilldown_exports_unique_login_users(monkeypatch, field, history, dataset_code):
     from bisheng.telemetry_search.domain.services import dashboard_export_detail as detail
 
-    dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == "mid_user_increment")
+    dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == dataset_code)
 
     class Session:
         async def __aenter__(self):
@@ -276,6 +309,10 @@ async def test_month_drilldown_exports_unique_login_users(monkeypatch, field, hi
     async def scan(*_args, **kwargs):
         queries.append(kwargs["query"]["query"])
         yield {"_source": record(1, "2026-08-01", user_name="张三")}
+        yield {"_source": record(
+            1, "2026-08-01", user_name="张三", login_count=5,
+            timestamp=midnight(date(2026, 8, 1)) + 60_000, local_date="2026-07-31",
+        )}
         yield {"_source": record(1, "2026-08-02", user_name="张三")}
         if history:
             yield {"_source": record(2, "2026-07-02", user_name="李四")}
@@ -284,7 +321,7 @@ async def test_month_drilldown_exports_unique_login_users(monkeypatch, field, hi
 
     monkeypatch.setattr(detail, "async_scan", scan)
     result = await detail.query_detail_rows(
-        dataset_code="mid_user_increment",
+        dataset_code=dataset_code,
         data_config=ComponentDataConfig(
             metrics=[{"fieldId": field}],
             dimensions=[{"fieldId": "timestamp", "timeGranularity": "month"}],
@@ -292,7 +329,10 @@ async def test_month_drilldown_exports_unique_login_users(monkeypatch, field, hi
         dimension_filters=[{"fieldId": "timestamp", "values": ["2026-08"]}],
         row_limit=100,
     )
-    assert len(result.rows) == (2 if history else 1)
+    assert len(result.rows) == (2 if history or field == "logged_in_employee_count" else 1)
+    if field == "logged_in_employee_count":
+        assert {row["local_date"] for row in result.rows} == {"2026-08-01", "2026-08-02"}
+        assert "local_date" in {column.field for column in result.columns}
     query_text = str(queries[0])
     bounds = next(item["range"]["timestamp"] for item in queries[0]["bool"]["filter"] if "range" in item)
     assert ("gte" not in bounds) is history

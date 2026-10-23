@@ -150,6 +150,7 @@
   "componentExport": {
     "exportDetail": "Export category detail",
     "exportAll": "Export",
+    "exportAllDetails": "Export all details",
     "exportFailed": "Export failed, please try again later",
     "saveBeforeExport": "Save the dashboard before exporting"
   },

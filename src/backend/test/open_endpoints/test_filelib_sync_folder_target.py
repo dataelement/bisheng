@@ -281,3 +281,6 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
         "replaced_file_id",
         "tags",
     }
+
+
+pytestmark = pytest.mark.usefixtures("stub_file_organization_lookup")

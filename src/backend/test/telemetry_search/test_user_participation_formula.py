@@ -98,6 +98,30 @@ async def test_direct_ratio_query_uses_active_user_aggregation(user_statistics):
     assert len(user_statistics[1]) == 1
 
 
+@pytest.mark.parametrize("dataset", ["mid_user_increment", "mid_user_daily_participation"])
+async def test_seven_day_chart_counts_five_login_days_without_changing_participation(user_statistics, monkeypatch, dataset):
+    async def records(index, query, fields):
+        yield record(2, "2026-07-31", primary_department_name="A")
+        for day in range(1, 6):
+            for _ in range(5):
+                yield record(1, f"2026-08-{day:02d}", login_count=5, primary_department_name="A")
+        yield record(1, "2026-08-08", primary_department_name="A")
+        yield record(3, "2026-08-01", logged_in=False, primary_department_name="A")
+
+    monkeypatch.setattr(login_participation, "read_login_records", records)
+    monkeypatch.setattr(component.SearchEngineService, "search", AsyncMock(return_value=[[1]]))
+    service = query(
+        ["logged_in_employee_count", "active_user_count", "active_employee_count", "participation_rate"],
+        dataset=dataset,
+    )
+    service.data_config.time_filter = TimeFilter(
+        mode="fixed", startDate=midnight(date(2026, 8, 1)) // 1000,
+        endDate=midnight(date(2026, 8, 7)) // 1000 + 86399,
+    )
+    result = await service.query_telemetry_data()
+    assert result.value == [[5, 1, 2, 0.5]]
+
+
 async def test_ratio_does_not_hide_active_query_failure(user_statistics, monkeypatch):
     monkeypatch.setattr(
         component.SearchEngineService, "search", AsyncMock(side_effect=RuntimeError("active query failed"))

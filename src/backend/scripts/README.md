@@ -4,6 +4,31 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## General Database Scripts
 
+### `backfill_knowledge_file_organization.py`
+
+补齐门户知识库文件的 `belonging_organization_id` 空值。版本文档统一取**当前主版本上传人的当前唯一有效主组织**，同时补齐各版本及发布、分享入口；无版本链的普通文件取自身上传人。只用上传人 `user_id`，不改用原始上传人，也不按发布路径、科室绑定或团队创建人推导存量归属。
+
+```bash
+# 在 src/backend 执行。必须已完成 f118_file_belonging_organization 迁移。
+# 示例租户为1；默认只读，所有报告必须使用新路径。
+.venv/bin/python scripts/backfill_knowledge_file_organization.py \
+  --tenant-id 1 --output /tmp/file-org-plan.jsonl
+# 可增加 --space-id 或 --file-id 缩小种子范围，整份文档仍会展开到所有版本/入口。
+# 审核计划后，在维护窗口执行同一计划，写入前会重新校验。
+.venv/bin/python scripts/backfill_knowledge_file_organization.py \
+  --plan /tmp/file-org-plan.jsonl --apply --output /tmp/file-org-write.jsonl
+# 回退先预览；确认需要回退后再增加 --apply，并另换新的输出文件名。
+.venv/bin/python scripts/backfill_knowledge_file_organization.py \
+  --rollback /tmp/file-org-write.jsonl --output /tmp/file-org-rollback-preview.jsonl
+```
+
+- 仅补空值。某个版本或入口已有非空值且与推导结果不同，整份文档跳过。上传人没有唯一有效主组织、链路损坏、跨租户、不支持的旧发布引用或分发在途时跳过并记录原因；文件夹、收藏引用和投影墓碑不处理。软删除的正常版本仍随文档处理。
+- 预览支持 `--batch-size`（默认200）、`--limit`、`--start-after-id`。游标与限制针对扫描种子，不是改动行数；一个文档会展开全部版本和业务入口。未启用自动租户过滤的环境仍逐行复核租户，不写入其他租户；扫描计数可能包含被排除的其他租户种子。
+- 计划绑定数据库地址/库名摘要及租户，执行不允许再修改范围或直接扫描写入；逐组锁定、重新计算组织并比较计划快照，漂移时跳过。只写组织列并显式保留原更新时间，不改上传人、更新人、解析状态、权限或ES/Milvus索引。
+- JSONL报告独占创建、权限0600。写前意图和提交前读回结果会fsync落盘，提交后记确认。回退只清空本次从NULL补入且记录未漂移的值；已有非空值永不清理。提交未确认的组列为 `commit_outcome_unknown`，不盲目回退；末尾中断残片不会被当成已提交记录。
+- 必须在维护窗口暂停相关上传、移动、编辑、发布/分享、版本切换和组织同步；脚本不停止服务，也不取得全局维护锁。各文档独立提交，中断或失败前的成功组保留，以写入报告定向回退。未知提交结果需保留日志人工核对，不能直接视为全部回滚。
+- 容器临时目录会随重建丢失；正式操作应使用持久化路径保存计划和写入日志。退出码：0正常结束（预览可能含跳过），3实际执行有跳过需核对，2参数/报告错误，1数据库或执行失败，130人工中断。
+
 ### `backfill_dashboard_original_organizations.py`
 
 补齐指定租户看板现有文件统计的“原始上传库、原始所属公司/部门/科室/班组”空值。复用当前投影规则；原始库ID缺失回退当前库并单独计数。原始组织按原始库当前组织映射，不能恢复首次上传时的组织历史。已有非空值不同则整条跳过；不写数据库、不新增统计记录、不改历史事件和计数，也不更新索引结构。

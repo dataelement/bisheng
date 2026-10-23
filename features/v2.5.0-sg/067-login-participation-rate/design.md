@@ -6,7 +6,9 @@
 
 支持时间和自然日，以及现有人员/部门维度；同一嵌套对象的维度保持配对。含时间的 OR/NOT 等不能唯一确定累计截止点的筛选显式拒绝。按日事实不支持小时粒度。无时间筛选截止今天；图表中的时间范围裁剪只作用分子和展示区间。日期按北京时间自然日，周一开始一周。
 
-保留 participation_rate 和 logged_in_employee_count 字段标识，通过 calculation 路由新算法；默认百分比格式。两个已有用户数据集的初始化配置同时更新，正常应用启动刷新配置。实际登录人数和参与率共用去重事实；导出沿用原明细扫描，通过指标的 cardinality 配置按用户去重。
+保留 participation_rate 和 logged_in_employee_count 字段标识，通过 calculation 路由新算法；默认百分比格式。两个已有用户数据集的初始化配置同时更新，正常应用启动刷新配置。2026-10-23 修正：`login_participation.py` 的期间集合保留 `(user_id, 北京日期)`，累积登录人数取集合大小，累计分母仍按每用户首次登录日计算；参与率仍使用 `query_active_users` 的期间去重人数。`dashboard_export_detail.py` 仅对该指标按用户和北京时间日期组合去重，并补充登录日期列以便核对；其他指标继续按用户去重。日期从 timestamp 推导，兼容缺失 local_date 的旧记录。
+
+验证在 `test_login_participation.py` 覆盖同日重复、跨天累加、各时间粒度、非连续日期、旧数据集入口及导出明细；`test_user_participation_formula.py` 固定独立的活跃人数与历史分母，保证参与度未误用人天数。无需修改登录采集、前端字段标识、数据库或 ES 事实。回退本次查询与导出代码即可恢复原口径。
 
 ## 边界
 

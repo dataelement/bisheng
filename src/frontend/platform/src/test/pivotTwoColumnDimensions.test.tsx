@@ -20,7 +20,10 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
 
 vi.mock("@/store/dashboardStore", () => ({
   useComponentEditorStore: () => ({ updateEditingComponent: vi.fn() }),
-  useEditorDashboardStore: () => ({ refreshChart: vi.fn() }),
+  useEditorDashboardStore: (selector?: (state: any) => unknown) => {
+    const state = { refreshChart: vi.fn(), savedDashboard: null, chartRefreshTriggers: {} }
+    return selector ? selector(state) : state
+  },
 }))
 
 const stackDimensions = [

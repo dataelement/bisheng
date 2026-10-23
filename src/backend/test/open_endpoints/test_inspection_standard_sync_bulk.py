@@ -33,7 +33,7 @@ SINGLE_REQUEST_DEPT_COUNT = 10
 SINGLE_REQUEST_RECORDS_PER_DEPT = 2000
 
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.usefixtures("stub_file_organization_lookup")]
 
 
 def _fixed_rule(**target_overrides) -> DeveloperTokenFileSyncRule:

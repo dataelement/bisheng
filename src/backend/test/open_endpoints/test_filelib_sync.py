@@ -1186,3 +1186,6 @@ async def test_sync_orchestration_skips_business_domain_when_dynamic_resolution_
 
 def test_external_file_id_is_not_reserved_by_sync_service():
     assert not hasattr(FilelibSyncService, "_reserve_external_file_id")
+
+
+pytestmark = pytest.mark.usefixtures("stub_file_organization_lookup")
