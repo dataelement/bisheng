@@ -118,3 +118,11 @@
 - Synced `feat/bisheng-work-120-main@fd153d685` before the change.
 - Chat exposes the enabled skill picker to users with task-mode access while composing ordinary chat. Selecting a skill retains the selection and activates task mode; further skill selection keeps task mode active. Switching back to ordinary chat clears task skills and keeps the picker available.
 - Ten focused composer tests and the client production build passed. Deployed client build to 3006 release `chat-skill-auto-mode-20261022`, preserving the current backend and admin files. Desktop Chat loads this client; visual acceptance remains with the user.
+
+## 2026-10-23：客户端管理拆分积分设置与用量
+
+- 基于共同分支 `feat/bisheng-work-120-main@448fbad77`，将原“积分与使用数据”拆成“积分设置”和“用量”两个独立页签。默认显示积分设置，已有 `?tab=usage` 链接直接进入用量；按用户、部门及时间筛选归属用量页。
+- 积分配置、分配优先级及保存接口沿用现有实现，本次调整页面组织和中英日页签文案。
+- 自动化：页面导航、设置与积分保存共 12 项测试通过；平台 550 个严格类型文件、变更文件 lint、生产构建通过。全量 lint 存在 8 个基线文件的 95 项既有错误；全量 i18n 校验与 `448fbad77` 基线输出一致（日文 12 个缺失键与 9 个后端错误码翻译缺失）。
+- 部署：3006 管理前端发布为 `credit-usage-tabs-20261023-r2`，基于并行更新后的 `skills-unified-20261023-111837` 保留其后端和 Chat 客户端。仅重建前端容器，旧发布目录保留用于回滚。管理端入口 SHA-256：`eddd88a6389b10263602affba649ede2cc26b36ff1f2dd5752df5c5c77465259`。
+- 浏览器验收：3006 当前管理员登录态下，两页签均加载真实数据；用量筛选与图表独立显示；返回积分页时筛选栏收起。实际积分配置调整由用户继续体验。

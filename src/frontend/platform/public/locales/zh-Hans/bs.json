@@ -3258,7 +3258,8 @@
     "unified": {
       "overview": "积分与使用数据",
       "models": "模型权限",
-      "credits": "积分配置",
+      "credits": "积分设置",
+      "usage": "用量",
       "visibility": "可见范围",
       "searchRole": "搜索角色…",
       "canUse": "可使用",

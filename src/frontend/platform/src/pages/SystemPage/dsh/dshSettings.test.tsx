@@ -21,11 +21,14 @@ beforeEach(() => {
 })
 
 describe('DSH deployment and business settings', () => {
-    it('opens credit allocation and usage together on the home section', async () => {
+    it('opens credit settings by default and displays usage in its own section', async () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
-        render(<DshManagement />)
+        const { rerender } = render(<DshManagement />)
         expect(await screen.findByText('credit-content')).toBeInTheDocument()
+        expect(screen.queryByText('usage-content')).toBeNull()
+        rerender(<DshManagement section="usage" />)
         expect(screen.getByText('usage-content')).toBeInTheDocument()
+        expect(screen.queryByText('credit-content')).toBeNull()
     })
     it('opens the shared model permissions section', async () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })

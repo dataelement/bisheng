@@ -18,7 +18,7 @@ interface DshManagementProps {
     usageToolbarTarget?: HTMLDivElement | null
 }
 
-export function DshManagement({ section = 'usage', usageToolbarTarget }: DshManagementProps) {
+export function DshManagement({ section = 'credits', usageToolbarTarget }: DshManagementProps) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
@@ -28,7 +28,8 @@ export function DshManagement({ section = 'usage', usageToolbarTarget }: DshMana
     return <div className="flex h-full min-h-0 flex-col px-6 py-5">
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}
-            {activeSection === 'usage' && <div className="space-y-6"><CreditRulesView /><PolicyView toolbarTarget={usageToolbarTarget} /></div>}
+            {activeSection === 'credits' && <CreditRulesView />}
+            {activeSection === 'usage' && <PolicyView toolbarTarget={usageToolbarTarget} />}
             {activeSection === 'model-audit' && <ModelAuditPanel />}
             {activeSection === 'operations' && <AuditHistory revision={0} />}
             {activeSection === 'access' && <SettingsPanel settings={config} canEdit={user?.role === 'admin' || !!user?.is_global_super} />}
