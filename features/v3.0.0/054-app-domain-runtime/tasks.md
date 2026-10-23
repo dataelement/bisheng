@@ -1,8 +1,8 @@
 # Tasks: 托管应用领域模型与运行时（compose 形态 + 统一入口）
 
-> **2026-10-23 增量 SDD 进行中**：本轮新增/修订 spec 仍待用户确认，旧任务完成和旧评审状态不等于此次增量已获确认。spec 确认后更新设计，设计另行确认后再补任务与编码；不提前勾选既有安全待办或新增实现。仅执行必要定向验证，不跑全量测试。[本轮规格评审](../../../docs/reviews/vibe-governance-closeout-spec-review-2026-10-23.md)。
+> **2026-10-23 增量 SDD**：用户已确认本轮规格；增量设计待单独确认。旧任务与旧评审状态仅描述历史批次；不代表本次增量已拆任务、编码或验收。本轮只做必要定向验证，不跑全量测试。旧任务的行号、计数和实现阶段为历史记录，当前实现快照以 design.md 为准。
 
-**关联规格**: [spec.md](./spec.md)（65 条 AC，What 的唯一真相）· [design.md](./design.md)（How 的唯一真相，D1–D15 / 坑 1–32 / §4.2 契约 / §7 测试策略）
+**关联规格**: [spec.md](./spec.md)（73 条 AC；已确认）· [design.md](./design.md)（D1–D15；本轮设计待单独确认；新接口合同 §4.4）
 **版本**: v3.0.0
 **裁剪基准**: [mvp-114-path.md](../mvp-114-path.md) **§6 MVP-核心（预算受限版）** —— Wave 1–3 全部为 `[MVP-核心]`；Wave 4 = `[MVP-114]` 纵切紧随项（design §8 优先级 1–3）；Wave 5 = release 必做项。**后置 ≠ 裁掉**（spec 决议-3 对出站白名单已明确要求）
 **代码事实口径**: 本文所有 `文件:行号` 沿用 design.md（`3.0-vibe` HEAD `b63a320f2`，2026-08-17 由四份探查笔记 E1–E4 核实；路径以 `src/backend/bisheng/` 为根，前端另注 `platform/` = `src/frontend/platform/src/`、`client/` = `src/frontend/client/src/`，仓根路径显式写出）。行号会漂移、符号名不会——落地前以符号名重定位。
@@ -13,8 +13,8 @@
 
 | 步骤 | 状态 | 备注 |
 |------|------|------|
-| spec.md | ✅ 已评审 | 2026-08-17 定稿（65 AC，同日独立审查 28 条已修订；决议-1～8） |
-| design.md | ✅ 已评审 | 2026-08-17 初版 + 同日独立审查 16 条修订；接手时的第一入口 |
+| spec.md | ✅ 本轮增量已确认 | 2026-10-23 用户明确确认；批准内容 hash 见规格评审 JSON |
+| design.md | 🔲 本轮增量待确认 | 2026-10-23 更新设计并自审；不得沿用旧设计确认进入编码 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；`/sdd-review tasks` 独立审查 16 条已修订（补 7 个测试任务 T082a/T084a/T086a/T087a/T089a/T090a/T094a + 可观测任务 T097） |
 | 实现 | 🚧 进行中 | Wave 1（T001–T017）· Wave 2 runtime-manager（T018–T031）与 app-proxy（T036–T045）· **Wave 2 backend 入口判定（T032–T035）** · **Wave 3 领域服务与 API（T046–T057）** · **Wave 3 构建页第三类型（T058–T061）** · **Wave 3 platform 前端（T062–T070）** 已完成；`uv run pytest test/app_runtime test/app_publish` = **484 passed / 7 skipped / 1 xfailed**（其中 `test/app_runtime` 单独 229 passed / 7 skipped；总数与 T057 那批的 346 不可直接相比——F055 同期在并发补测试）；`test/workflow/test_flow_dao_tenant_isolation.py` 7 → 8 例全绿，`test/api` 20 例全绿。platform `pnpm lint` + `pnpm typecheck` 全绿，前端单测 3 文件 16 例全通过（`src/test/hostedApp{Api,State,CardComponent}.test.*`）。余 T072 / T074（部分）/ T075（**T071** 于 2026-09-10 按代码证据核实并勾选）。**2026-08-19 收口批**：勾上 **T073**（nginx 仓内两份同构，实现早于勾选）；**T074 标 🟡 部分完成不勾**——compose 形态此前有三个真缺陷（app-proxy 环境变量名全错 / `bisheng-apps` 网络无人创建 / bind 路径用了容器坐标系），配置面已修正并新增 `docker/verify-app-runtime-compose.sh` 静态契约守卫 + `.github/workflows/app-runtime-quality.yml`，但**没有任何人真的用 compose 起过这两个 service**，逐条见该任务的实际偏差记录。⚠️ **这三个缺陷全部符合同一模式：systemd 形态恰好正确，所以掩盖了 compose 形态**——114 是 systemd，在 114 跑通不能证明 compose 跑得通，凡「两种部署形态」的任务都要分别验。**T062–T070 的联调与 E2E 仍未做**（后端契约现已齐备，可以开跑）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4；逐条偏差见各任务的「实际偏差记录」与文末汇总 |
 

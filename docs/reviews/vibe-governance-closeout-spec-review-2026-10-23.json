@@ -4,8 +4,8 @@
   "branch": "codex/vibe-governance-closeout",
   "discovery_confirmed": true,
   "preview_secret_values": "empty; explicitly confirmed by user",
-  "spec_confirmed": false,
-  "design_started": false,
+  "spec_confirmed": true,
+  "design_started": true,
   "implementation_started": false,
   "new_ac_count": 48,
   "changed_ac_count": 4,
@@ -16,7 +16,9 @@
       "total_ac_count": 73,
       "modified_ac_ids": [],
       "sha256": "d74400e3e8ae6055b558aaa32710acd1dd09d4e6ebfa99b254b4fbd4c32389e9",
-      "spec_user_confirmed": false
+      "spec_user_confirmed": true,
+      "approved_sha256": "d74400e3e8ae6055b558aaa32710acd1dd09d4e6ebfa99b254b4fbd4c32389e9",
+      "current_sha256_after_status_update": "1da2a0126379d1e469278ab1212b2ed710d9bbc9abdafa0beda15dddab299be4"
     },
     "F055": {
       "file": "features/v3.0.0/055-app-publish-pipeline/spec.md",
@@ -27,7 +29,9 @@
         "AC-56"
       ],
       "sha256": "46d8a527db7828428594cebaf7a67b330cbf07feae8a7acf2a3c7bd88684cdfc",
-      "spec_user_confirmed": false
+      "spec_user_confirmed": true,
+      "approved_sha256": "46d8a527db7828428594cebaf7a67b330cbf07feae8a7acf2a3c7bd88684cdfc",
+      "current_sha256_after_status_update": "cf8591704198dbd5cd7131c4bd4dfcf964b60aef7e8d2a0c3fc0c2911f35c70c"
     },
     "F056": {
       "file": "features/v3.0.0/056-app-square-governance/spec.md",
@@ -38,7 +42,9 @@
         "AC-34"
       ],
       "sha256": "fc7555d057b0a3dd63da65a826eb8f95d380f6ce71be33ebc7dd42618c0690af",
-      "spec_user_confirmed": false
+      "spec_user_confirmed": true,
+      "approved_sha256": "fc7555d057b0a3dd63da65a826eb8f95d380f6ce71be33ebc7dd42618c0690af",
+      "current_sha256_after_status_update": "ddceb74c25e8a8f0a4ee858c997b32204f9150804d8a73f76ce27b9045d150a1"
     }
   },
   "review": {
@@ -50,5 +56,7 @@
   },
   "product_tests_executed": false,
   "full_suite_executed": false,
-  "remote_mutations": false
+  "remote_mutations": false,
+  "spec_confirmation_commit": "dda16a6502908ba8d58cff61dc350c0213b86c19",
+  "spec_confirmation_reply": "确认规格，进入设计"
 }

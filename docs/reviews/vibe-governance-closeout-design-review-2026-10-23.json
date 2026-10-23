@@ -1,0 +1,110 @@
+{
+  "date": "2026-10-23",
+  "branch": "codex/vibe-governance-closeout",
+  "code_baseline": "5f2541f4bc483c24624fede9031c88c4ec6f58f4",
+  "spec_confirmation_commit": "dda16a6502908ba8d58cff61dc350c0213b86c19",
+  "spec_confirmed": true,
+  "design_confirmed": false,
+  "implementation_started": false,
+  "incremental_tasks_created": false,
+  "product_tests_executed": false,
+  "full_suite_executed": false,
+  "remote_mutations": false,
+  "review": {
+    "kind": "same-agent sdd-review design",
+    "items_per_feature": 24,
+    "features": 3,
+    "result": "LGTM",
+    "unresolved_high": 0,
+    "unresolved_medium": 0,
+    "corrected_findings": 6
+  },
+  "coverage": {
+    "F054": {
+      "66": "D12 / §4.4③④",
+      "67": "D12 / §4.4③",
+      "68": "§4.4③④ / §7",
+      "69": "§2 / §4.4④",
+      "70": "D6 / §4.4①",
+      "71": "D6 / §4.4①",
+      "72": "D6 / §4.3",
+      "73": "D6 / §6.1 / §7"
+    },
+    "F055": {
+      "54": "D3 / §4.4④",
+      "56": "D3 / D5",
+      "66": "§2 / §4.4②",
+      "67": "D15 / §4.4②⑤",
+      "68": "D17 / D20 / §4.4①④",
+      "69": "D6 / D7 / §4.4⑤",
+      "70": "D18 / §4.4③",
+      "71": "D3 / D13 / §4.1 / §4.4③",
+      "72": "D4 / §7",
+      "73": "§4.4②③⑤",
+      "74": "D18 / §4.4③",
+      "75": "§4.4③",
+      "76": "D19 / §4.4③⑤",
+      "77": "D19 / §4.4③",
+      "78": "§2 / §4.4④",
+      "79": "§2 / D20 / §4.4④",
+      "80": "§2 / §4.4①②",
+      "81": "D12 / §4.4① / §4.3",
+      "82": "D6 / D17 / §4.4③④",
+      "83": "D10 / §4.4①",
+      "84": "D7 / D14 / §4.4⑤",
+      "85": "§4.4②③⑤",
+      "86": "D18 / D19 / §4.4③",
+      "87": "D13 / §4.4⑤",
+      "88": "D3 / §4.4③ / §8",
+      "89": "D20 / §4.4⑤ / §7"
+    },
+    "F056": {
+      "26": "D15 / §4.4②",
+      "34": "D11 / §7",
+      "46": "D11 / D12 / §4.1",
+      "47": "§2 / §4.4①④",
+      "48": "D12 / §4.4②",
+      "49": "§4.4②",
+      "50": "D7 / §4.4②",
+      "51": "D13 / §4.4①③④",
+      "52": "§2 / §4.4④",
+      "53": "§2 / D12 / §4.4④",
+      "54": "D10 / §4.4②",
+      "55": "§7",
+      "56": "D13 / D14 / §4.4①④",
+      "57": "D14 / §7",
+      "58": "§4.4②",
+      "59": "D15 / §4.3 / §6.1",
+      "60": "D14 / §4.4② / §7",
+      "61": "D8 / §4.4① / §7"
+    }
+  },
+  "features": {
+    "F054": {
+      "design_file": "features/v3.0.0/054-app-domain-runtime/design.md",
+      "sha256": "71c7dd43cb35832e547f4893d092d52fb60bbf69e37c9fe58ab24bc5cce54cb3",
+      "spec_current_sha256": "1da2a0126379d1e469278ab1212b2ed710d9bbc9abdafa0beda15dddab299be4"
+    },
+    "F055": {
+      "design_file": "features/v3.0.0/055-app-publish-pipeline/design.md",
+      "sha256": "d66add116486204bb2bfd653f8fa87d59c42b1472aa36835003e298af7bc5ef0",
+      "spec_current_sha256": "cf8591704198dbd5cd7131c4bd4dfcf964b60aef7e8d2a0c3fc0c2911f35c70c"
+    },
+    "F056": {
+      "design_file": "features/v3.0.0/056-app-square-governance/design.md",
+      "sha256": "375bf364e0a585f66eac7015e0d8ef33a9b48fefbc8d0ce0a437cabf903f0644",
+      "spec_current_sha256": "ddceb74c25e8a8f0a4ee858c997b32204f9150804d8a73f76ce27b9045d150a1"
+    }
+  },
+  "checks": {
+    "markdown_html_same_design_source": true,
+    "cross_reference_sweep": "PASS: sections 1–8, 4.1/4.2/4.3 and decision numbering retained; new contracts 4.4; historical pit/line refs explicitly point to dda16a6",
+    "local_links": "PASS",
+    "visual_layout": "NOT VERIFIED: browser policy rejected file: protocol; no alternative browser/HTTP workaround attempted",
+    "spec_ac_unchanged": true,
+    "offline_assets": "PASS: no external assets/scripts",
+    "html_toc": "PASS",
+    "responsive_print_styles": "static PASS; not visually rendered",
+    "canonical_design_sha256_match": true
+  }
+}
