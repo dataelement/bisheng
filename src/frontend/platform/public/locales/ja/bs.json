@@ -3259,6 +3259,7 @@
       "overview": "クレジットと使用状況",
       "models": "モデル権限",
       "credits": "クレジット設定",
+      "usage": "使用状況",
       "visibility": "公開範囲",
       "visibilityHelp": "Chat と Work で公開範囲を共有します。許可されたメンバーはモデルを選択し、個人クレジットを使用します。",
       "modelSettings": "モデル権限と倍率",

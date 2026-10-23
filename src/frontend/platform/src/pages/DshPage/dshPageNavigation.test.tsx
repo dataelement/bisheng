@@ -60,12 +60,20 @@ describe('DshPage navigation', () => {
 
         const tablist = screen.getByRole('tablist', { name: 'dsh.title' })
         expect(tablist.closest('.px-2')).toBeTruthy()
-        expect(screen.getAllByRole('tab')).toHaveLength(5)
+        expect(screen.getAllByRole('tab')).toHaveLength(6)
         expect(screen.queryByRole('tab', { name: 'dsh.operations' })).toBeNull()
-        expect(screen.getByRole('tab', { name: 'dsh.unified.overview' })).toHaveAttribute(
+        expect(screen.getByRole('tab', { name: 'dsh.unified.usage' })).toHaveAttribute(
             'data-state',
             'active',
         )
+
+        expect(screen.getByTestId('dsh-section')).toHaveTextContent('usage')
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'dsh.unified.credits' }), {
+            button: 0,
+            ctrlKey: false,
+        })
+        expect(screen.getByTestId('location')).toHaveTextContent('/dsh?tab=credits')
+        expect(screen.getByTestId('dsh-section')).toHaveTextContent('credits')
 
         expect(screen.queryByRole('tab', { name: 'dsh.modelAudit' })).toBeNull()
         fireEvent.mouseDown(screen.getByRole('tab', { name: 'dsh.auditTab' }), {
@@ -106,9 +114,9 @@ describe('DshPage navigation', () => {
             </MemoryRouter>,
         )
         expect(screen.queryByRole('tab', { name: 'dsh.operations' })).toBeNull()
-        expect(screen.getByRole('tab', { name: 'dsh.unified.overview' })).toHaveAttribute('data-state', 'active')
-        expect(screen.getByTestId('dsh-section')).toHaveTextContent('usage')
-        expect(resolveDshSection('?tab=operations')).toBe('usage')
+        expect(screen.getByRole('tab', { name: 'dsh.unified.credits' })).toHaveAttribute('data-state', 'active')
+        expect(screen.getByTestId('dsh-section')).toHaveTextContent('credits')
+        expect(resolveDshSection('?tab=operations')).toBe('credits')
         expect(resolveDshSection('?tab=operations', ['access'])).toBe('access')
     })
 })

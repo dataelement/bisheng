@@ -3313,7 +3313,8 @@
     "unified": {
       "overview": "Credits and usage",
       "models": "Model permissions",
-      "credits": "Credit allowances",
+      "credits": "Credit settings",
+      "usage": "Usage",
       "visibility": "Visibility",
       "searchRole": "Search roles…",
       "canUse": "Can use",
