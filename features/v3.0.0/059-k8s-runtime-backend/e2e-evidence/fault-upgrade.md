@@ -65,3 +65,13 @@ Python应用a4a566…的单次正常停用d675d583ebb34e68b4756fe8852ff91d在原
 R11安全删除权限配对真实16105/16101/online owner16104，每次fresh原v1/approval12/gen3/resume保持；独立纯SELECT销毁前后均0且无活动操作。随后R11唯一stop8d71…/gen4与健康fullimage唯一stopdc0317…/gen5均已completed/cleanupcomplete。两应用保留原卷，未执行delete/data/restore，旧false/unknown不动。容量释放须待同UID停止/APIabsence/PVC/PV及预约独立证明，不由公开stopped推断。R11此时附件对象/snapshot均零样本，不能将空清单冒作非空清理验证。
 
 m2已在新目录生成并冻结NULL→NOTNULL应用包（v1 09807c39…/1235B，v2 49d45022…/1237B），尚未发布。私有快照reader修正实际operation.deployment_id为空的关联，另经精确公开failure.operation_id证明，不改库。首版DDL观察器使用189不支持的--resource-version，被真实CLI解析阶段拒绝；尚未运行真实观察或迁移，不以31项假CLI/隔离SQLite测试替代兼容性。新原生list→watch接线待复审。
+
+## M2 真实迁移失败与首轮显式恢复
+
+原v2两次请求（未确认schema拒16229、明确确认后接受）只各发一次；原观察器工具超时保留parent `f07ef54c…`，新的accepted续验从同一待审批v2继续，硬拒绝deploy端点。新watch真实初始ADDED/存活进程证明后，预览四资源正常停止/清理、逐项API缺席证明 `1992d949…`，approval14正常执行。
+
+部署 `a9e809d78cf749a0bf4f4a8b8b3f8989` /操作 `8aba1b5c7a37425393a7e9d5e6ff259c` /gen2真实16228/publishing失败，失败阶段migrating、maintenance/dataMayChanged真且cleanupcomplete。只读观察器从精确Pod UID `41905459-4212-4e23-aec8-2591a14c0762` /容器CID读到`sqlite3.IntegrityError` NOTNULL完整调用链，日志摘要 `e39c7853…`、绑定DDL证明 `e80a1f98…`，原冻结校验器独立通过（结果370e6699…），不以阶段标记代替执行DDL。
+
+同操作snapshot_confirmed事实seq3、verified快照 `dbae5da6ab5e42328db992dd39ddde5f`（16384B，SHA `eaf3653e…`）及完整confirmed上传由backend纯SELECT证明；通过backend现有存储端口导出，原NULL与随机基线行/摘要14608a29…及SQLite integrity在恢复前纯检查通过。私有恢复脚本只修正transfer真实36位UUID兼容，原脚本/错误检查和数据不改，平台代码未因此改动。
+
+首次显式owner restore（含非owner/跨租户拒绝配对）只发一次，接受 `4d858a521f714fc598c565e10e9dc19c` /gen3。维护helper UID `e9b0cef2-a8de-4bea-b8ee-ae969bea5af0`成功、同UID停止清理完成，恢复及保护快照结果入库；后续starting阶段POST资源登记409导致failed/cleanupcomplete，尚未证明恢复后的行和路由。静态及Service配对定位restore+serve未接入资源白名单，T270/T271修复中。原请求不重放、不自动回滚、不改failed为completed。快照去重返回同artifact，不能用新增数量证明或否认保护备份；仍须按同restore的confirmed上传核对。

@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；267 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 262 / 267 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；269 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 262 / 269 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2167,6 +2167,24 @@
   **依赖:** T268
   **配对:** T268
 
+### 恢复后的服务注册（T270/T271）
+
+- [ ] **T270** — 恢复后的服务实例注册配对
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_restore_resume.py`
+  **逻辑/验收**：真实SQLite/Service和实际manager模板验证在线恢复后serve注册；仅已确认restore结果和resume=true可继续，restore-only/坏参数/阶段/代际/租约/UID/未停止写入者拒绝。
+  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **依赖:** T269
+  **配对:** T271
+
+- [ ] **T271** — 接通显式恢复后的服务实例注册
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_kubernetes_service.py`
+  **逻辑/验收**：仅为resume_after_restore=true且同操作恢复结果已持久的合法启动阶段接通serve，复用已有资源冻结/租约/旧writer停止保护；不改材料、路由、SDK、schema或Docker。
+  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **依赖:** T270
+  **配对:** T270
+
 ### Wave 9
 
 - [ ] **T072** — L2 代码审查及交付核对
@@ -2339,3 +2357,5 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T268/T269登记：R30 manager源码686bf6830、内网digest6e528c88…已实际升级，5appPod/8PVC与PV及业务投影保持，epoch25→26。R11第二次独立owner DELETE生成gen6 destroy75437b15…；purge结果purged=true已持久，随后PVC异步DELETE仍可GET被误判purge_volume_cleanup_pending，操作failed/cleanupcomplete，App仍stopped。不得宣称数据保留或删除成功；新未知回执保留不重放。活跃260/267、123测试任务；ARM/新增109/公开发行暂缓。
 
 2026-10-23 T268/T269 L1闭合：有效期限旧12红4绿，固定operations.py 551f…新16绿、独立217相邻绿、完整runtime1787passed/13skip（34.00s）；首轮不合法期限夹具1fail/1786pass和初始runner错误保留。仅K8s精确purge_volume_cleanup_pending复用既有_wait_cleanup；原checkpoint/期限/取消/租约/UID/API拒绝及Docker保持。活跃262/267、123测试；R31真实部署/删除复验尚未执行，ARM/追加109/公开发行暂缓。
+
+2026-10-23 T270/T271登记：M2真实迁移8aba1b5c…/gen2在migrating失败，精确同CID DDL NOTNULL证据及snapshot_confirmed/confirmed upload已独立核对。显式restore4d858a52…/gen3的helper恢复及保护快照结果已持久，随后starting资源注册POST409，操作failed/cleanupcomplete，未创建servePod。原接口body错误未留存；部署源_validate_template对restore+serve首门拒绝，可静态/真实Service复现。既有材料serve和ready自动提交路由已支持restore，登记最小入口修复；不复活失败或重发原请求。活跃262/269、124测试任务，R31源码包已准备未构建/部署，ARM/追加109/公开发行暂缓。
