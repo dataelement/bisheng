@@ -6939,9 +6939,9 @@
         "T268"
       ],
       "pair": "T268",
-      "command": "",
-      "status": "pending",
-      "review": "pending"
+      "command": "HELM_BIN=/private/tmp/f059-installer-tools/helm pytest -q tests",
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T072",

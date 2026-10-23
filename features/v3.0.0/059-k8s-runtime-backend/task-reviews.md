@@ -3538,3 +3538,9 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 ## Task Review: T268 — PVC 异步销毁配对
 
 **结果：PASS。** 仅新增245行测试文件，完整AC-35、AC-46、AC-49、AC-50、AC-52、AC-55元数据、范围/命名和T267依赖通过。真实OperationExecutor→维护/数据执行器→PlatformClient.fact/实际backend schema及私有SQLite purge，Kube与账本I/O替身；同UID PVC DELETE后仍存在、自然404、持久结果后崩溃接管不重复helper与原期限/取消/围栏/权限/API未知均有实质配对。旧686bf有效期限版12红4绿；主树固定551f操作源码后16绿，独立217相邻绿。原0.25秒夹具不满足PodPlan最小有效期限，已单独改为合法2秒、保持原期限自然到期及预期不变，原失败日志保留。仅测试L1通过，不证明R31实际部署/销毁。
+
+## Task Review: T269 — 原期限内等待 PVC 清理
+
+**结果：PASS。** operations.py单文件新增既有清理协议适配，只将明确的`ExecutorError("purge_volume_cleanup_pending")`转换为等待；其他异常原样传播。每轮既有fresh checkpoint/控制租约与原deadline不重置，持久维护结果复用，Docker仍原直调。无平台数据库/存储/权限Owner转移、无DTO/schema/迁移/UI/凭据或新日志，英文代码符合命名与信息泄漏约定；design既有销毁实现记录已同步。T268先完成，依赖/配对及两文件架构门、Ruff no-cache/格式/diffcheck通过。
+
+主树完整`HELM_BIN=/private/tmp/f059-installer-tools/helm ... pytest -p no:cacheprovider -q tests`一次1787passed/13skipped（34.00s），日志`/private/tmp/f059-t269-root-runtime-full-r2.log`；首轮1failed/1786passed为无效0.25秒期限夹具，改2秒后重测，未改产品期限或删除失败记录。独立217相邻及16精确配对通过；独立报告`/private/tmp/f059-t268-t269-c-independent-l1.md` SHA097eb21e78b898889187cb18bcea4ce8fe9d1de230ed0c5f9047a0726788f28e，作者报告f941a3c5…另存。以上为本地与模拟证据，真实新镜像销毁另验，T069/T070/T072未勾选。

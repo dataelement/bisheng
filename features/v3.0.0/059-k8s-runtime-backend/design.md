@@ -830,3 +830,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 T266/T267本地L1完成：真实ASGI/schema14严格配对及runtime1771唯一测试分批核对（环境失败日志保留）；K8s显式destroy增加maintenance ACK/fresh checkpoint，Docker和schema保持。189仍R29，真实删除复验不由本地绿代替。
 
 2026-10-23 T268/T269：R30真实销毁已成功保存purge结果；PVC删除为异步，首个DELETE后同UID仍可GET不是最终失败。在既有原期限/取消/控制权围栏内仅等待明确的purge_volume_cleanup_pending，并复用已持久结果而不重复执行helper；未知API结果、换UID或失去权限不转换成完成。正常404后仍需原cleanup_operation_id及backend清理准入。不新增API、存储或恢复语义。
+
+2026-10-23 T268/T269 L1完成：仅OperationExecutor新增精确pending适配，复用原_wait_cleanup而非另开期限循环，KubernetesMaintenance已有结果可用于重复观察PVC而不重复purge helper。完整runtime1787/13skip及独立217/16配对通过；R31原生交付与新正常销毁复验另记。

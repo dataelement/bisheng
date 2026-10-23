@@ -109,6 +109,18 @@ class OperationExecutor:
                 return
             self.clock.sleep(0.5)
 
+    def _wait_purge_cleanup(self, operation):
+        def purge():
+            try:
+                self.runtime.data(operation, "purge", {})
+            except ExecutorError as exc:
+                if str(exc) != "purge_volume_cleanup_pending":
+                    raise
+                return {"complete": False}
+            return {"complete": True}
+
+        self._wait_cleanup(operation, purge)
+
     def _prepared_delivery(self, operation):
         current = self.checkpoint(operation)
         saved = current.get("result", {})
@@ -265,7 +277,9 @@ class OperationExecutor:
                             # Maintenance progress reuses the durable phase, never the internal admission stage.
                             self.report(operation, "maintenance")
                             self.checkpoint(operation)
-                        self.runtime.data(operation, "purge", {})
+                            self._wait_purge_cleanup(operation)
+                        else:
+                            self.runtime.data(operation, "purge", {})
                     self.report(operation, "completed", detail={"stopped": True, "cleanup_complete": True})
                 else:
                     raise ExecutionError("operation_kind_unsupported")
