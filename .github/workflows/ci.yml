@@ -20,7 +20,7 @@ jobs:
     # if: startsWith(github.event.ref, 'refs/tags')
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Get version
         id: get_version
@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-22.04-arm
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Get version
         id: get_version
@@ -124,7 +124,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Get version
         id: get_version
@@ -166,7 +166,7 @@ jobs:
     runs-on: ubuntu-22.04-arm
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Get version
         id: get_version
