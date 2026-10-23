@@ -1,4 +1,4 @@
-"""F059 AC-07、AC-30、AC-31、AC-35、AC-40、AC-48、AC-49、AC-52、AC-55.
+"""F059 覆盖 AC: AC-07、AC-30、AC-31、AC-35、AC-40、AC-48、AC-49、AC-52、AC-55.
 
 Real SQLite heartbeat/resource transitions; no mocked protection services or cluster.
 """
@@ -200,6 +200,9 @@ async def test_report_only_exemption_requires_every_bound_condition(coordination
         {"version": 1, "baseline_digest": "A" * 64, "state": "current"},
         {"version": 1, "baseline_digest": "bad", "state": "current"},
         {"version": 1, "baseline_digest": BASELINE, "state": "other"},
+        {"version": 1, "baseline_digest": BASELINE, "state": []},
+        {"version": 1, "baseline_digest": BASELINE, "state": {}},
+        [],
         {"version": 1, "baseline_digest": BASELINE, "state": "current", "extra": True},
     ],
 )
