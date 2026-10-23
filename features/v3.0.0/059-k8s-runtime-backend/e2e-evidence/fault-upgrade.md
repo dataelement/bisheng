@@ -16,7 +16,7 @@
 
 ## 未完成项
 
-当前R29 manager-only升级保留Pod/CID/PVC/profile及旧false/unknown拒绝保持已经真实通过，见installation的R29记录。新R11正常stop/离线数据/resume已通过，见platform的R11记录。R3空闲manager停机访问已真实通过（见下）；189初始化失败、取消、响应丢失、在途manager重启、迁移失败/快照恢复、独立安装域完整卸载和最终清理仍待完成；保留的旧unknown写入者负例不替代全部故障注入。私有工具本地测试只证明工具行为。单节点结果不能代表NodeLost跨节点围栏；T070保持pending。
+当前R29 manager-only升级保留Pod/CID/PVC/profile及旧false/unknown拒绝保持已经真实通过，见installation的R29记录。新R11正常stop/离线数据/resume已通过，见platform的R11记录。R3空闲manager停机访问已真实通过（见下）；189初始化失败、响应丢失、在途manager重启、独立安装域完整卸载和最终清理仍待完成；取消及M2迁移失败/快照恢复的后续实际结果见本文末尾；保留的旧unknown写入者负例不替代全部故障注入。私有工具本地测试只证明工具行为。单节点结果不能代表NodeLost跨节点围栏；T070保持pending。
 
 ## 109 实际迁移基线（尚未v2/恢复）
 
@@ -85,3 +85,12 @@ m2已在新目录生成并冻结NULL→NOTNULL应用包（v1 09807c39…/1235B�
 同操作SQL与元数据证明restore helper UIDadfd7678…已confirmed/cleanupcomplete，随后同名位置只有serve UIDbfd5c5b3…/gen4/Running；不得把同名新Pod存在说成旧helper未清理。原PVC UID8e9e3c90…/production07及PV身份保持，单个当前Pod。SQL证明6a2aa7de…、物理证明733863da…；独立审证52e77506…确认业务/保护绑定，未声称独立本地重新检查未下载的SQLite本体。
 
 首次私有second-r1工具在读取v2状态时误用Cookie，被鉴权拒绝；新restore intent尚未生成且journal==parent，经只读确认后保留旧文件。仅修验收工具改走既有owner publish-status，新目录second-r2；未因此改平台、重放未知请求或跑全量回归。T070仍待其余故障与独立卸载，ARM/追加109/公开发行暂缓。
+
+
+## R31 真实准备中取消：189通过
+
+新Node草稿09672c6d…的唯一发布ad7c654e…绑定prepare c29cfb53…/gen1；同一安装Pod UIDba740781…的精确CRI Docker CID经四项标签与二次Pod读取确认，实际npm根postinstall BEGIN与十次WAIT、无END，240秒hook已运行54.85秒时提交owner取消。非owner与跨租户GET/cancel均精确16105；owner意图持久化后仅POST一次。公开取消完成发生于BEGIN后100.81秒，早于自然结束；最终cancelled/operation_cancelled/cleanupcomplete，发布16227/precheck_build、无审批和正式版本。
+
+SELECT账本六资源全部cleanupcomplete，三个Pod同UID kubelet_terminal停止事实；随后物理集合与账本逐ref/kind/UID精确一致、六项自然404，预约released。原四应用Pod/CID/restart与恢复后M2 Pod UID保持；未强删、改finalizer或手工释放。草稿保留用于后续已知终态的新发布，不把历史取消请求重放。
+
+五份原始脱敏文件摘要及完整ID见JSON；独立L1 `77e4d874…` 通过。验收工具仅修复v2 Bearer请求被登录Cookie覆盖和提交意图防重放，六项定向测试通过，不改产品、未跑全量回归。各调用有300秒总预算但分阶段无持久全局期限；本次submit意图至公开取消完成实际165.72秒，之后SQL/物理取证不冒作300秒内观测。仅关闭T070取消子项，初始化/响应丢失/在途SIGKILL/独立卸载仍待验收。

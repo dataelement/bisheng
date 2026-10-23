@@ -2365,3 +2365,5 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T069业务流程闭合：R31真实升级及healthy fullimage唯一owner删除、持久purge/同UID停止、PVC自然清理/PV Retain、SQLite文件缺席通过，独立L1 b8b0b9eb…；265/269。T070及全AC未实测子句按platform.json边界保留，未将业务流程PASS当全feature完成；后续按用户要求仅定向回归。
 
 2026-10-23 T070子项：M2新restore6cd6/gen4真实完成，原行/NULL摘要、v1路由、pending清理、同操作confirmed保护上传及backend导出完整性、helper停止→单正式Pod/原PVC身份已核；原failed和工具未发包鉴权失败均保留。T070其余故障/卸载仍pending，不扩大为全AC通过。
+
+2026-10-23 T070取消子项：R31真实Node240秒npm hook在54.85秒精确UID/CID运行时owner单次取消，非owner/foreign16105；cancelled/cleanupcomplete、无审批正式版本、三Pod同UID终态及全部六资源自然清理/容量释放/原应用保持。独立L1 77e4d874…通过；265/269不变，T070仍pending。后续仅定向验证在途manager重启等剩余场景，不重复全量回归。

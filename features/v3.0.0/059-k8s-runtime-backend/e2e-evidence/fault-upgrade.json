@@ -48,7 +48,7 @@
     "record_retained": true
   },
   "not_executed": [
-    "189 cancel/init faults; additional UID replacement/unknown-writer injection beyond held legacy safety negatives",
+    "189 init faults; additional UID replacement/unknown-writer injection beyond held legacy safety negatives",
     "in-flight manager restart and response loss",
     "full uninstall retention in independent install/platform-storage domain",
     "NodeLost or cross-node fencing"
@@ -1036,5 +1036,84 @@
       "production_code_changed": false,
       "resolution": "use existing owner-cookie publish-status read model; new journal preserves failed check"
     }
+  },
+  "actual_cancel_189_r31": {
+    "host": "192.168.106.189",
+    "state": "PASS_subitem_only",
+    "manager_source_commit": "6c9694f0ffb6adf4722b9fa711851172b3efdc64",
+    "manager_digest": "sha256:981bf135375a8c8728735fa13b04ee9b5c8e096c25210a72f44fdd6be003becf",
+    "accepted": {
+      "app_id": "09672c6de8bb4b24b06f265836c00e04",
+      "deployment_id": "ad7c654e465444fabb7508360e7a1b41",
+      "version_id": "f317d0d0ff834b139480e4b4b3297689"
+    },
+    "fixture_id": "bf6c774b4afe452abb4e016e94975eaa",
+    "operation": {
+      "app_id": "09672c6de8bb4b24b06f265836c00e04",
+      "cleanup_status": "complete",
+      "deployment_id": "ad7c654e465444fabb7508360e7a1b41",
+      "failure": {
+        "failed_stage": "preparing",
+        "reason": "operation_cancelled"
+      },
+      "generation": 1,
+      "id": "c29cfb5329ed413891dd59c00eb42bde",
+      "kind": "prepare",
+      "owner_epoch": 1,
+      "stage": "cancelled",
+      "status": "cancelled"
+    },
+    "hook": {
+      "app_id": "09672c6de8bb4b24b06f265836c00e04",
+      "container_id": "caaed421f81cb7ba8294d2f6f98bc865c8ce68beb2256a5bcca3f42a76b56d35",
+      "container_running": true,
+      "elapsed_seconds": 54.84896492958069,
+      "fixture_id": "bf6c774b4afe452abb4e016e94975eaa",
+      "hook_end_seen": false,
+      "hook_started_at": "2026-10-23T06:10:02.430113233Z",
+      "hook_wait_events": 10,
+      "namespace": "e2e-f059-apps",
+      "observed_at": 1792735856.90735,
+      "operation_id": "c29cfb5329ed413891dd59c00eb42bde",
+      "pod_identity_rechecked": true,
+      "pod_name": "task-afbd56e1bffacd21394e485fef01411a1d7a9702",
+      "pod_uid": "ba740781-ede3-48a9-8d3a-7c1f30b6d2a1",
+      "resource_ref": "1a1974b8-d1fc-58cc-a6ce-46fff42e5a0b",
+      "schema": "f059-cancel-hook-running/v1",
+      "scratch_pvc": [
+        "scratch-28ddf458c216281ae7ac37febbbaa0d802bf524b"
+      ],
+      "secret_volume": false,
+      "service_account_token": false
+    },
+    "permission_denial": {
+      "nonowner_get_cancel": 16105,
+      "foreign_get_cancel": 16105
+    },
+    "formal_versions": 0,
+    "natural_cleanup": {
+      "resources": 6,
+      "pods_same_uid_kubelet_terminal": 3,
+      "all_api_absent": true,
+      "reservation_released": true,
+      "force_cleanup": false,
+      "original_four_apps_unchanged": true,
+      "restored_m2_pod_uid_unchanged": true
+    },
+    "submit_intent_to_public_cancel_complete_seconds": 165.71845626831055,
+    "evidence_sha256": {
+      "cancel-k189m2-r2-cleanup.json": "8e848a7239ab3284b094d8a29101720aed83194ff5a3cecca5e9af6e491fc0a6",
+      "cancel-k189m2-r2-physical.json": "a474460d793b59e6368ca1dc47d9d81c530f3ff2c5f15a1f995123552154f0df",
+      "fault-cancel-k189m2-r2.json": "43516c2a8e85fc2a2b0b532cfc29bbdd7a5180ade3fdc1470d70a0e911c1e152",
+      "prepare-hook-k189m2-r2.json": "258f2879f6c41557dd92ceb51ade855848337457e0763cd0655d64ab7b5912ad",
+      "prepare-install-k189m2-r2.json": "9a156c8b16fd7650f614daa2b5efdfceea201fc3b6fde26483eeb844f900f9e6"
+    },
+    "private_root": "/opt/e2e-f059/evidence",
+    "independent_l1": {
+      "path": "/private/tmp/f059-t070-cancel-k189m2-r2-independent-l1.md",
+      "sha256": "77e4d8741023e1d05b10e7f93b8980971589b90eb7cde939b6b6f29701bfa3c4",
+      "result": "PASS"
+    },
+    "boundary": "Actual prepare cancellation only; separate action invocations have no persisted global deadline; later SQL/physical collection not claimed inside 300s. Draft retained with zero formal versions. No in-flight SIGKILL, init failure, response loss, unknown-writer or uninstall proof from this run."
   }
 }
