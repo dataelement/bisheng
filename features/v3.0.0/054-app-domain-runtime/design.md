@@ -94,7 +94,7 @@ stdout/stderr 是调试日志；backend 入口 allow 产生合并窗口访问记
 
 **已实现**：backend 保存应用/版本/操作/路由/存储绑定；Celery 调发布管线；manager 拉取持久计划、编排 Docker/K8s、上报事实；app-proxy/egress 只读投影。`RuntimeDeliveryCoordinator.inject_environment` 使用加密 sealed_env 保存可恢复执行环境；K8s 已用操作专属 Secret + `secretKeyRef`，并非把平台 token 放 ConfigMap。
 
-**尚未实现的本轮设计**：INPUT 规则与可信证明、OBO 无效时拒绝、用户确认重建与运行快照只读适配。现有 `egress.firewall_rules` 仅渲染 FORWARD/DOCKER-USER 规则；`_firewall_check` 主要检测后端存在。现有 `_issue_obo_token` 返回空时两个入口仍允许，是 T099 真缺口。
+**尚未实现的本轮安全增量**：INPUT 规则与可信证明、OBO 无效时拒绝。F055 用户确认重建与运行快照公共适配已在 `a5c7722b9` 编码并完成定向本地检查，尚未真实部署验收。现有 `egress.firewall_rules` 仅渲染 FORWARD/DOCKER-USER 规则；`_firewall_check` 主要检测后端存在。现有 `_issue_obo_token` 返回空时两个入口仍允许，是 T099 真缺口。
 
 ```mermaid
 flowchart LR
@@ -152,13 +152,13 @@ flowchart LR
 | 动态地址 | installer 通过 Engine 网络检查冻结 network ID / bridge / 子网 / egress IP、端口、宿主网关/发布地址。代理 IP 变化立即使旧配置证明不匹配，重新安装校验；不在 L3 中放行 hostname 或不受限端口 |
 | 不支持 | IPv6/未知 family、Docker rootless/不可确认 bridge、不可识别防火墙后端先报告缺能力；不静默省略一部分网络。K8s 使用 F059 的 CNI 证明，不套用宿主 Docker 规则 |
 
-**④ 隔离证明（拟新增）**：安装工具与只验证的 systemd oneshot/timer 位于宿主，30 秒刷新，60 秒过期；首次安装、宿主重启、dockerd 重启后先验证再放行新部署。持续验证不授予 manager root/NET_ADMIN，不运行在 backend。工具复用现有 Python Engine HTTP 客户端；需要宿主 root、相应 iptables/nft 二进制与受控 Engine API，不要求 docker CLI。
+**④ 隔离证明与持续收敛（拟新增）**：安装工具与 systemd oneshot/timer 位于宿主，30 秒刷新，60 秒过期；首次安装、宿主重启、dockerd 重启后先验证再放行新部署。定时 unit 不仅验证：发现自有规则漂移后，在同一宿主独占锁下重建自有规则、读回并执行允许/拒绝 canary 配对；仅完全通过才重新签发 pass。恢复失败时由宿主工具针对该 node/network 的受管应用执行网络隔离；不能确认隔离时，通过受控 Engine API 停止这些应用执行体并读回状态，报告失败及资源 ID。禁止扩大到无本模块标签的业务容器，禁止因停止请求已发出就记录停止证明。backend 消费失败证明阻止新执行/路由，manager 沿原生命周期协议确认已停止或隔离的旧实例；未知 writer 不释放容量或删除 PVC/数据。manager 不获得 root/NET_ADMIN，宿主修复不运行在 backend。工具复用现有 Python Engine HTTP 客户端；需要宿主 root、相应 iptables/nft 二进制与受控 Engine API，不要求 docker CLI。
 
 新增 `RuntimeHostIsolationReport`（F054 所有，平台级节点表）：`id,node_id,engine_id,network_id,config_digest,rule_digest,revision,checked_at,valid_until,status,checks`，通用 JsonType；checks 仅结构与探测结果，不能含环境/用户流量。`POST /api/v1/internal/app-runtime/host-isolation-reports` 只接受独立、限定 node 的 `host-isolation` 服务角色；manager/entry/egress 无上报权。服务端分配接收时间、限制 TTL、递增 revision/nonce、验证节点与 engine/config 绑定，不信客户端自报无限有效期；重放/倒退拒绝。独立报告表避免 manager heartbeat 覆盖证明；不改 F059 现有摘要算法。
 
 生产方为 root 安装脚本，信任边界是客户宿主管理员；不声称防住 root 伪造。报告只在**规则读回匹配 + 实际 canary 允许/拒绝配对**均成功后标 pass：无业务凭据/PVC 的受限 canary 在 app 网络，测试直连宿主网关、宿主服务地址、published address 被拒绝，同时入口 HTTP/WS/探活响应与经 egress 的平台 API 可达。所有探测端点由管理员固定，拒绝把请求参数当任意扫描目标；canary 有 UID/ID、期限和自有标签，未知资源不强删。
 
-backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 用户确认重建）的 create/claim/提交服务路由前验证新鲜证明及冻结配置一致性；失败给缺能力原因。stop/destroy/清理仍允许，既有应用不强制删除。证明过期时在途操作不发布新路由，可恢复地等待至原 deadline；不能绕过旧 writer 停止确认。安装报告通过不代替实际业务 API 的权限检查。
+backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 用户确认重建）的 create/claim/提交服务路由前验证新鲜证明及冻结配置一致性；失败给缺能力原因。stop/destroy/清理仍允许，既有应用不强制删除；其持续隔离由上述宿主 unit 恢复/隔离闭环负责，不能仅拒绝新部署却让存量实例继续直连宿主。证明过期时在途操作不发布新路由，可恢复地等待至原 deadline；不能绕过旧 writer 停止确认。安装报告通过不代替实际业务 API 的权限检查。
 
 
 ## 5. 已知坑 / 反直觉事实
@@ -218,3 +218,7 @@ backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 用户�
 | 2026-10-23（简化协议同步） | F055保存不重启；消费用户确认重建与当前运行快照协议，不增加F055结果双写 | 用户已确认F055修订规格；F054自身设计未确认，B1仍待修 |
 | 2026-10-23 | 刷新 F086/F059 后的当前快照；补 INPUT 隔离证明、OBO 拒绝设计；保持 D1–D15 与 §1–§8 编号 | 用户确认增量规格；静态核对基线代码，尚未实现/部署 |
 | 2026-08-17～18 | 初版与早期 MVP 修订 | 历史正文见 `dda16a6`；历史测试不充当本轮证据 |
+
+### 2026-10-24 剩余设计问题复审
+
+F054-B1 修订：宿主 unit 为规则漂移的实际消费者，先修复并配对验证，失败则仅隔离/停止受管执行体并上报；backend 不承担宿主 root 行为，也不把网络隔离冒充 SQLite writer 停止证明。长尾的多防火墙外部重载竞态、不可识别防火墙后端和非支持网络形态列入提测限制，不能标 pass 或静默放行。F055 用户确认重建与运行快照已编码，当前尚未进行真实部署验证；本设计的宿主隔离/OBO 安全增量仍待单独确认。

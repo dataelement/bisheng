@@ -17,6 +17,10 @@
     },
     "additional_preview_adapter": {
       "passed": 1
+    },
+    "confirmation_replay_after_lock_recheck": {
+      "passed": 1,
+      "note": "re-run of existing case, not an additional unique test"
     }
   },
   "static_checks": {
@@ -48,5 +52,6 @@
     "all AC acceptance passed",
     "F054/F056 implementation complete",
     "merge/push/tag/release"
-  ]
+  ],
+  "source_commit": "a5c7722b9"
 }

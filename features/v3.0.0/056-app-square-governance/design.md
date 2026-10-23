@@ -96,7 +96,9 @@ CSV 仅白名单字段；危险公式文本前置单引号后按标准 CSV 转�
 
 F055 负责写 app.secret.*；凭据 owner 在签发/撤销时从持久 `ApiCredential.subject_kind/subject_id` 与可信 hosted-app 归属映射计算 target_app_id，不取查看者传的 app_id；SAK/PAT 的资源 owner 不等于 app 归属，不能把该人的所有 key 自动关联给某应用。
 
-现有 CredentialService._audit 只写 credential_id/subject/scopes/key_mask，需要补可信关联；历史记录只能在原始可信字段足以确定时通过只读关联查询，不补写历史“现在属于”。不增加第三方业务密钥末位/长度，API key 原有前缀/末位 mask 继续保留。若普通凭据没有可信 app 绑定，明确不相关，不硬凑。后续新 credential owner 需提供同一审计关联协议。
+现有 CredentialService._audit 只写 credential_id/subject/scopes/key_mask，需要补可信关联。补充实际生产者：正式切换和候选终结当前在 RuntimeProjectionService 中将 binding 从 staged/active 改为 revoked，并不经过 _audit。改由凭据 Owner 的公开 `revoke_runtime_binding(session, binding, operation, reason)` 协议，在调用者原事务中锁定 binding、只在真实状态改变时撤销并追加 `open_api.api_key.revoke` 审计。应用关联从绑定的 app/credential 与 hosted-app 主体映射交叉核验获得，不接受查询者提供的归属；审计带 app_id、credential_id、operation_id、reason，事件不带业务环境变量值。以同一 binding 的状态转移作为去重围栏，重复切换/终结不重复记事件；失败回滚状态与审计，不新增审计补偿服务或独立数据库提交。切换撤旧、停止/删除、失败候选清理都调用该协议；签发使用已新增的显式 session 入口，签发审计也带可信 app 关联。
+
+历史记录只能在原始可信字段足以确定时通过只读关联查询；不补写历史“现在属于”。不增加第三方业务密钥末位/长度，API key 原有前缀/末位 mask 继续保留。若普通凭据没有可信 app 绑定，明确不相关，不硬凑。后续新 credential owner 需提供同一审计关联协议。
 
 ## 4. 系统现状（接手必读）
 
@@ -243,3 +245,7 @@ worker 按持久任务 tenant_execution_scope 初始化租户过滤，只有源�
 | 2026-10-23（二次修订） | 去除导出总量/时间硬限制；条件元数据与后台单一读取视图分离；私有分块 ready 原子发布、重启从头只读重建 | 用户要求修订并复审；规格 AC 未变，尚未编码 |
 | 2026-10-23 | 刷新已实现广场/操作审计；新增 D12–D15、三视图/稳定导出/权限合同 | 用户确认规格，静态代码核查；未实现/部署 |
 | 2026-08-17 起 | 早期广场与治理设计 | 旧正文见 `dda16a6`；历史任务证据不改写 |
+
+### 2026-10-24 剩余设计问题复审
+
+F056-S1 修订：运行绑定的真实撤销生产者由凭据 Owner 公共协议消费，同 session 状态转移与审计，以状态 CAS/行锁去重；查询层不能补造历史事实。保留列表/异步导出的主链路，低概率的外部存储瞬断与 worker 任意指令点崩溃组合列为后续故障验收；权限失效、跨租户拒绝、CSV 安全和完整导出仍属于主功能，不因缩减测试而放宽。实现尚未开始，仍待单独确认本修订设计。
