@@ -146,7 +146,9 @@ def test_legacy_fake_runtime_keeps_explicit_callable_fallback(snapshot):
         probe_report=probe_report,
     )
     manager = OperationExecutor(
-        Config(executor_kind="kubernetes", protocol_version=2), platform=SimpleNamespace(heartbeat=sent.append), runtime=runtime
+        Config(executor_kind="kubernetes", protocol_version=2),
+        platform=SimpleNamespace(heartbeat=sent.append),
+        runtime=runtime,
     )
     try:
         manager.heartbeat()
