@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；265 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 260 / 265 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；267 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 260 / 267 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2149,6 +2149,24 @@
   **依赖:** T266
   **配对:** T266
 
+### 销毁 PVC 异步收尾（T268/T269）
+
+- [ ] **T268** — 真实销毁 PVC 异步删除配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_purge_cleanup.py`
+  **逻辑/验收**：真实维护/执行链覆盖purge结果已持久而同UID PVC删除尚未结束；自然404后才确认清理和完成，接管复用结果不重复helper；原期限、取消、控制权或UID变化及API不确定均不提前完成，不放宽停止与清理围栏。
+  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **依赖:** T267
+  **配对:** T269
+
+- [ ] **T269** — 等待已受理 PVC 删除的正常收尾
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/operations.py`
+  **逻辑/验收**：仅将K8s purge_volume_cleanup_pending作为既有清理等待状态，在原操作期限与每轮fresh checkpoint/控制租约内继续；复用已持久purge结果，权限/换UID/其他异常保持拒绝，不改变Docker或backend协议。
+  **覆盖 AC:** AC-33、AC-35、AC-46、AC-49、AC-50、AC-52
+  **依赖:** T268
+  **配对:** T268
+
 ### Wave 9
 
 - [ ] **T072** — L2 代码审查及交付核对
@@ -2317,3 +2335,5 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T266/T267登记：189 R11正常DELETE只发一次，destroy ab3004b3bb4b4cd29b83d214c4241232 failed/cleanupcomplete，purge Pod同UID停止闭合、预约释放，App仍stopped且PVC保留。manager真实POST facts422；KubernetesMaintenance沿用admitted，而ExecutionFactInput不接受该内部阶段。原fake未经过实际schema，登记真实边界配对及既有合法维护阶段修正。活跃258/265、122测试任务；首次请求未知记录保留，不重发。ARM/新增109仍暂缓。
 
 2026-10-23 T266/T267 L1闭合：真实schema/ASGI/操作链独立11红3绿→14绿；4行K8s destroy合法维护阶段与ACK后fresh checkpoint。主树全runtime选择1720pass/13skip，51例缺测试Helm路径；明确HELM_BIN后安装模块121pass，剩21例需本地loopback权限，授权后21pass，全部1771唯一测试逐项覆盖。Ruff/no-cache、format、逐文件架构门通过。源1532e115e，本地260/265、122测试；189仍R29，R30原生manager镜像/部署/删除复验待完成，未公开push/tag/ARM/新增109。
+
+2026-10-23 T268/T269登记：R30 manager源码686bf6830、内网digest6e528c88…已实际升级，5appPod/8PVC与PV及业务投影保持，epoch25→26。R11第二次独立owner DELETE生成gen6 destroy75437b15…；purge结果purged=true已持久，随后PVC异步DELETE仍可GET被误判purge_volume_cleanup_pending，操作failed/cleanupcomplete，App仍stopped。不得宣称数据保留或删除成功；新未知回执保留不重放。活跃260/267、123测试任务；ARM/新增109/公开发行暂缓。

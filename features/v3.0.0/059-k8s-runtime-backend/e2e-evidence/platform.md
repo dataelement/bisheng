@@ -2,7 +2,7 @@
 
 结论：**尚未通过完整业务验收**。当前优先189 K8s；arm新增验证暂停。详见[结构化证据](./platform.json)。
 
-当前R29下新Python单v1的发布、预览审批、HTTP/WebSocket、SDK/OBO/附件、停用SQLite编辑导出及恢复数据一致性已真实通过，九项独立物理核对也通过；详见文末R11记录。T069仍待容量前置负例和安全删除，故障与独立卸载另行验收。下文按时间保留旧批次现场，不把旧“待验”快照当成当前结果。
+历史R29下新Python单v1的发布、预览审批、HTTP/WebSocket、SDK/OBO/附件、停用SQLite编辑导出及恢复数据一致性已真实通过，九项独立物理核对也通过；详见文末R11记录。T069仍待容量前置负例和安全删除，故障与独立卸载另行验收。下文按时间保留旧批次现场，不把旧“待验”快照当成当前结果。
 
 | 现场步骤 | 真实结果 | 限制 |
 | --- | --- | --- |
@@ -197,3 +197,11 @@ R29下新app `43baa81d168a45bfa5e53ffbd04f48fd`、v1 `a5a4faade83743a487803bd608
 R11（37资源/13预约）和完整镜像（26资源/9预约）停止后只读SQL＋manager元数据实采通过：全部Pod持久停止证据与API缺席闭合，全部预约released，生产PVC同UID保留，历史scratch清理完成。独立PV投影核PV06/03仍Retain，未删PV/重绑磁盘。采集摘要见platform.json。
 
 随后R11单次owner DELETE失败：真实destroy `ab3004b3bb4b4cd29b83d214c4241232` failed/cleanupcomplete，purge helper UID `2b6d5264-2e61-4f91-9db2-ead9faf61e59`停止关闭、destroy预约释放，但没有持久purge成功事实，App仍stopped、生产PVC保留。manager facts返回422，内部admitted阶段不在实际ExecutionFactInput中；T266/T267修复中。原未知回执保留，未重发；不将通用failure flags当作数据未变化证明，不宣称删除成功。快照/附件对象样本0的清理未获非空证明。
+
+## R30 实际升级与第二次删除（尚未通过）
+
+固定源码 `686bf68300a5869cfd260833b05448851986e50b` 原生 amd64 构建、隔离导入烟测及内网推送通过；manager镜像digest `6e528c88300f0730486a8d81a1aa4df63caa0fe2e74d8faa2e5a6f68a0e32711`。Helm30只替换manager，新UID `d5570cfb-d8be-4614-bded-cbf58241df6b`，旧UID缺席，epoch26/ready/current/双保护true。5个应用Pod、8个PVC/PV、descriptor及非manager服务身份不变，业务白名单账本相等；两个历史资源仅controller_epoch25→26。该投影不含诊断字段；正常node_plan GET可能清理过期diagnostic，已在r2采集证明明确，不能称严格SQL无写。
+
+R11删除前fresh纯SELECT及元数据核对19个历史Pod均有同UID持久停止证据、所有38资源按保留PVC/已清理资源分组验证、预约全部released。默认业务check通过后只发一次新的owner DELETE（不重放旧请求），新destroy `75437b15cb7b4abba06a2c7cc492fbc4` /gen6。此次合法maintenance事实及 `purge.result.purged=true` 已入库；随后PVC删除尚未结束时抛 `purge_volume_cleanup_pending`，最终failed/cleanupcomplete，App仍stopped。原请求异常/未知日志保留。数据已经purge，不能宣称仍保留，也不能将持久purge事实当作业务删除及PVC清理成功；登记T268/T269继续修复原期限内异步等待。
+
+ARM、追加109与公开发行均未执行。T069/T070保持未完成，所有历史失败记录保留。

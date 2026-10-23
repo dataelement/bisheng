@@ -1,14 +1,14 @@
 {
   "schema": "f059-platform-evidence/v1",
   "recorded_at": "2026-10-23T03:26:12.039221+00:00",
-  "state": "r29_single_v1_business_and_physical_loop_passed_remaining_acceptance",
+  "state": "r30_upgrade_passed_delete_pvc_wait_fix_pending",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "f8863f3763285435a5df01fc150400838bdb3f0a",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:0b4bd3e66c1d7c49fe00046c83277dab8b6dbd0628f201abf3192d70dd67ddad",
+    "manager_source": "686bf68300a5869cfd260833b05448851986e50b",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:6e528c88300f0730486a8d81a1aa4df63caa0fe2e74d8faa2e5a6f68a0e32711",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
@@ -19,7 +19,7 @@
       "bisheng/app_runtime/domain/services/runtime_data_grant_service.py",
       "bisheng/app_runtime/domain/services/runtime_data_session_service.py"
     ],
-    "helm_revision": 29,
+    "helm_revision": 30,
     "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
     "backend_data_cpu_source": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
     "backend_data_cpu_files": [
@@ -2186,5 +2186,43 @@
     "reclaim_policy": "Retain",
     "historical_scratch_pvc_absent": true,
     "boundary": "Before later destroy attempt. Fullimage remained stopped; no PV deletion/rebinding/host data cleanup."
+  },
+  "r30_manager_upgrade": {
+    "source_commit": "686bf68300a5869cfd260833b05448851986e50b",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:6e528c88300f0730486a8d81a1aa4df63caa0fe2e74d8faa2e5a6f68a0e32711",
+    "manager_config_id": "sha256:378636d305375fa81bdd08ca020262f429ad17de5f89910d40e4ca4a930dee1a",
+    "manager_uid": "d5570cfb-d8be-4614-bded-cbf58241df6b",
+    "old_manager_uid_absent": "59ace601-5974-487f-8eaf-095a6b13f015",
+    "controller_epoch": 26,
+    "app_pod_count": 5,
+    "pvc_count": 8,
+    "business_projection_unchanged": true,
+    "descriptor_and_nonmanager_components_unchanged": true,
+    "resource_epochs_reattested": 2,
+    "projection_boundary": "Whitelisted business fields exclude diagnostic_tail/fact.detail/diagnostics_until. Normal node_plan GET may prune expired diagnostics.",
+    "ready_r2_sha256": "5f3beda15e73136a0225265c68db49518d0afa4cbf8d1279776d011768f8435e",
+    "private_dir": "/opt/e2e-f059/evidence",
+    "public_push": false,
+    "arm_tested": false
+  },
+  "r11_second_delete": {
+    "app_id": "43baa81d168a45bfa5e53ffbd04f48fd",
+    "operation_id": "75437b15cb7b4abba06a2c7cc492fbc4",
+    "generation": 6,
+    "owner_epoch": 1,
+    "status": "failed",
+    "cleanup_status": "complete",
+    "reason": "purge_volume_cleanup_pending",
+    "purge_result_persisted": true,
+    "purged": true,
+    "purge_exec_ref": "cce8d34b-2ea5-587b-9a09-5ebee2879a15",
+    "app_state": "stopped",
+    "business_delete_passed": false,
+    "physical_cleanup_passed": false,
+    "request_replayed": false,
+    "follow_up": [
+      "T268",
+      "T269"
+    ]
   }
 }

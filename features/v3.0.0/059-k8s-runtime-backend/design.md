@@ -828,3 +828,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 销毁协议细化（T266/T267）：K8s owner destroy从内部admitted进入实际维护前，必须记录既有合法维护阶段；维护结果事实经平台接收后才允许PVC清理。189首次R11删除以422失败，旧结果保留、不宣称purge/PVC删除通过；不扩展公开事实阶段、不改变D1/D5或停止证明。ARM及新增109按用户口径暂缓。
 
 2026-10-23 T266/T267本地L1完成：真实ASGI/schema14严格配对及runtime1771唯一测试分批核对（环境失败日志保留）；K8s显式destroy增加maintenance ACK/fresh checkpoint，Docker和schema保持。189仍R29，真实删除复验不由本地绿代替。
+
+2026-10-23 T268/T269：R30真实销毁已成功保存purge结果；PVC删除为异步，首个DELETE后同UID仍可GET不是最终失败。在既有原期限/取消/控制权围栏内仅等待明确的purge_volume_cleanup_pending，并复用已持久结果而不重复执行helper；未知API结果、换UID或失去权限不转换成完成。正常404后仍需原cleanup_operation_id及backend清理准入。不新增API、存储或恢复语义。
