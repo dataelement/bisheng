@@ -2125,8 +2125,8 @@
 
 - [ ] **T265** — CLI 兼容 v2 容量不足并同步分发 wheel
   **类型**：实现
-  **文件**：`src/bisheng-cli/bisheng_cli/errors.py`、`src/backend/bisheng/dev_toolkit/artifacts/bisheng_cli-3.0.0-py3-none-any.whl`
-  **逻辑/验收**：仅将既有16125映射EXIT_CAPACITY并复用容量提示；不改backend返回码或对外协议。重建实际分发目录的wheel，校验源码与wheel errors.py一致，并运行CLI相关回归。
+  **文件**：`src/bisheng-cli/bisheng_cli/errors.py`、`src/backend/bisheng/dev_toolkit/artifacts/bisheng_cli-3.0.0-py3-none-any.whl`、`src/backend/bisheng/dev_toolkit/artifacts/manifest.json`
+  **逻辑/验收**：仅将既有16125映射EXIT_CAPACITY并复用容量提示；不改backend返回码或对外协议。按现有pack_cli_wheel.sh重建实际分发目录的wheel并同步manifest.cli.sha256，SDK物料不变，校验源码与wheel errors.py一致，并运行CLI相关回归。
   **覆盖 AC:** AC-02、AC-08
   **依赖:** T264
   **配对:** T264
