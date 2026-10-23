@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；263 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 256 / 263 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 257 / 263 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2115,7 +2115,7 @@
 
 ### CLI 容量错误兼容（T264/T265）
 
-- [ ] **T264** — CLI v2 容量错误码配对
+- [x] **T264** — CLI v2 容量错误码配对
   **类型**：测试
   **文件**：`src/bisheng-cli/tests/test_errors.py`、`src/bisheng-cli/tests/test_command_deploy_wait.py`
   **逻辑/验收**：通过真实 error_from_platform 和 deploy failure 处理复现 v2 16125 被降为 exit19；覆盖16125与既有16226均为exit14、其他未知码继续降级，验证脱敏输出及原响应语义。

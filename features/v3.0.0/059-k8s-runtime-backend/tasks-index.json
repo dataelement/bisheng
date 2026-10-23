@@ -6817,8 +6817,8 @@
       ],
       "pair": "T265",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T265",

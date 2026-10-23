@@ -3486,3 +3486,15 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 | 7 | 设计同步 | PASS | design4.5观察、黏性字段、snapshot及当前stop已同步 |
 
 独立后端报告`/private/tmp/f059-t260-t261-independent-l1.md` SHA4062b44ceab088b80c716aab8bf6675d75eb887e6af3138a8d83d3a812ce3c32；runtime报告`/private/tmp/f059-t258-t259-t262-t263-independent-l1.md` SHA26ef6ad85616d2ef32fcc4166df266eaf02656d8b52b2d1b5b0d7e1a76cee3fb。作者报告03687327…/a69145f5…/55ea648b…另保留。最终源码f8863f376：完整runtime1757/13skip35.27s；运行/发布/SDK三模块1944/19skip81.11s。四模块同选择baseline差异比较零新增失败/错误，36新配对由红转绿；114 open_api旧失败和18fixture错误不记通过，不在本修复扩scope。原环境MCP1.27.1不符项目>=1.27.2，按uv.lock1.30只在临时target覆盖，不改共享venv。以上为本地/模拟与真实SQLite，未冒充189新部署、恢复或停止事实；已有旧false仍held。
+
+## Task Review: T264
+
+**类型**：测试。**文件**：`src/bisheng-cli/tests/test_errors.py`、`src/bisheng-cli/tests/test_command_deploy_wait.py`。
+
+| 检查项 | 结果 | 说明 |
+| --- | --- | --- |
+| 命名与 AC | PASS | 显式AC-02、AC-08；真实translator和CLI轮询，不mock核心映射 |
+| 前端 | N/A | 无UI变更 |
+| 文件/依赖/配对 | PASS | 两指定文件，T261已完成，T265尚未合流 |
+
+主树cdb9a1343独立红例3 failed/55 passed（0.49s），均为16125实际exit19与应有14差异；legacy16226及未知19999配对绿。日志`/private/tmp/f059-cli-capacity-root-red.log`。仅测试L1 PASS；不把预期红例当功能已修复。
