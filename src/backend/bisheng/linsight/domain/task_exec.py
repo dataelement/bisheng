@@ -1109,6 +1109,7 @@ class LinsightWorkflowTask:
             session_model.tenant_id,
             getattr(session_model, "skills", None),
             strict=is_unattended_run(session_model),
+            user_id=session_model.user_id,
         )
         if skills.failed:
             await self._push_skill_load_failure(session_model.id, skills.failed)

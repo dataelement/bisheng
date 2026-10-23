@@ -17,6 +17,8 @@ import { useRecoilValue, useRecoilState } from "recoil";
 import store from "~/store";
 import { buildChatAccept, isFileNameAccepted } from "~/common/chatAccept";
 import { taskModeSkillsState } from "~/store/linsight";
+import { useQuery } from '@tanstack/react-query';
+import { getSelectableSkills } from '~/api/linsight';
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 import { skillCenterPreviewEnabled } from "~/components/Skills/types";
@@ -201,6 +203,15 @@ const AiChatInput = memo(
 
         // Skills belong to the current draft, shared by the landing and conversation inputs.
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
+        const skillCatalog = useQuery({ queryKey: ['linsightSelectableSkills'], queryFn: getSelectableSkills,
+            enabled: taskMode && !isLingsi, refetchOnWindowFocus: true, staleTime: 0 });
+        useEffect(() => {
+            if (!skillCatalog.data) return;
+            const allowed = new Set(skillCatalog.data.map(skill => skill.name));
+            const next = dailySkills.filter(skill => allowed.has(skill.name));
+            if (next.length !== dailySkills.length) setDailySkills(next);
+        }, [skillCatalog.data, dailySkills, setDailySkills]);
+
         const [selectedTools, setSelectedTools] = useRecoilState(store.selectedAgentTools);
 
         // True while an IME composition is in flight — see handleKeyDown.

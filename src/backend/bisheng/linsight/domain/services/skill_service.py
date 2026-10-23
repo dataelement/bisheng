@@ -128,7 +128,9 @@ class SkillService:
         self,
         store: SkillStore | None = None,
         owner_projection: LinsightSkillOwnerProjectionPort | None = None,
+        personal_owner: int | None = None,
     ):
+        self.personal_owner = personal_owner
         self.store = store or SkillStore()
         self._owner_projection = owner_projection or _ConfiguredOwnerProjection()
 
@@ -141,8 +143,10 @@ class SkillService:
         )
         return PageData(data=[SkillBrief.from_model(s) for s in skills], total=total)
 
-    async def get_selectable(self) -> list[SkillSelectable]:
-        skills = await LinsightSkillDao.list_enabled()
+    async def get_selectable(self, user_id=None) -> list[SkillSelectable]:
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+        skills = [row for row, _ in await UserSkillsService(user_id).records()]
         return [
             SkillSelectable(
                 name=s.name,
@@ -153,8 +157,10 @@ class SkillService:
             for s in skills
         ]
 
-    async def get_runtime_catalog(self) -> list[SkillRuntimeEntry]:
-        # Shared with Chat provisioning: enabled skills in the current tenant.
+    async def get_runtime_catalog(self, user_id=None) -> list[SkillRuntimeEntry]:
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+        skills = [row for row, _ in await UserSkillsService(user_id).records()]
         return [
             SkillRuntimeEntry(
                 id=skill.id,
@@ -164,15 +170,17 @@ class SkillService:
                 default_checked=bool(skill.default_checked),
                 content_hash=skill.content_hash,
             )
-            for skill in await LinsightSkillDao.list_enabled()
+            for skill in skills
         ]
 
-    async def get_runtime_bundle(self, tenant_id: int, skill_id: int, version: str) -> bytes:
+    async def get_runtime_bundle(self, tenant_id: int, skill_id: int, version: str, user_id=None) -> bytes:
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
         async def authorized():
             skill = next(
                 (
                     row
-                    for row in await LinsightSkillDao.list_enabled()
+                    for row, _ in await UserSkillsService(user_id).records()
                     if row.id == skill_id and row.tenant_id == tenant_id
                 ),
                 None,
@@ -323,7 +331,7 @@ class SkillService:
     # ----------------------------------------------------------- internals --
     async def _get_or_404(self, name: str) -> LinsightSkill:
         skill = await LinsightSkillDao.get_by_name(name)
-        if not skill:
+        if not skill or (skill.source == "personal" and skill.created_by != self.personal_owner):
             # built-in names also land here: 404 without leaking existence (design §7.5).
             raise SkillNotFoundError()
         return skill
@@ -401,6 +409,8 @@ class SkillService:
         existing = await LinsightSkillDao.get_by_name(name)
         if existing and existing.id != exclude_id:
             raise SkillNameDuplicateError()
+        if self.personal_owner is not None:
+            return
         existing = await LinsightSkillDao.get_by_display_name(display_name)
         if existing and existing.id != exclude_id:
             raise SkillNameDuplicateError()
@@ -435,7 +445,7 @@ class SkillService:
             display_name=display_name,
             description=description,
             enabled=True,
-            source=SKILL_SOURCE_MANUAL,
+            source="personal" if self.personal_owner is not None else SKILL_SOURCE_MANUAL,
             object_path=ref.object_key,
             content_hash=ref.content_hash,
             size=ref.size,

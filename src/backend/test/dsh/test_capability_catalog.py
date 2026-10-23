@@ -32,6 +32,10 @@ def make_service(monkeypatch, rows):
         _skills=AsyncMock(return_value={}),
         call_tool=AsyncMock(return_value='{"available": 85, "demo_data": true}'),
     )
+    from bisheng.linsight.domain.services.user_skills import UserSkillsService
+    async def records(self, available_only=True):
+        return [(skill, True) for skill in (await work._skills()).values()]
+    monkeypatch.setattr(UserSkillsService, "records", records)
     return CapabilityCatalogService(SimpleNamespace(tenant_id=2, user_id=7), work), work
 
 

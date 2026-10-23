@@ -9,6 +9,8 @@ import { getSkillScope } from '~/api/skillCenter';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { QueryKeys } from '~/types/chat';
 import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
+import { SkillCenterPane } from '~/pages/skills/SkillCenterPane';
+import { useSkillCenter } from '~/components/Skills/useSkillCenter';
 import { SkillListSkeleton } from '~/pages/skills/SkillList';
 import { CapabilityDetail } from './CapabilityDetail';
 import { CAPABILITY_TABS, capabilityCounts, filterCapabilities } from './catalog';
@@ -24,6 +26,8 @@ export function CapabilityCenterPage() {
   const t = (key: string) => localize(`com_capability_center.${key}`);
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState('');
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const skillCenter = useSkillCenter();
   const requested = params.get('type');
   const active = CAPABILITY_TABS.find(tab => tab === requested) ?? 'all';
   const identity = useQuery(['capability-center', 'scope', user?.id], () => getSkillScope(String(user?.id)), { enabled: !!user?.id, staleTime: 0, retry: false });
@@ -40,6 +44,7 @@ export function CapabilityCenterPage() {
   });
   const items = catalog.data ?? [];
   const counts = capabilityCounts(items);
+  counts.skill = (skillCenter.platform.data?.length ?? 0) + (skillCenter.personal.data?.length ?? 0);
   const filtered = filterCapabilities(items, active, search, false);
   const selected = items.find(item => item.id === params.get('capability'));
   const displayName = (item: Capability) => item.trial ? t(`scenario_${item.trial.scenario}`) : item.name;
@@ -53,13 +58,14 @@ export function CapabilityCenterPage() {
     <ModuleHomeHeader title={t('title')}>
       <SearchInput className="w-48 min-[576px]:w-64" value={search} onChange={event => setSearch(event.target.value)} onClear={() => setSearch('')} placeholder={t('search')} aria-label={t('search')} />
     </ModuleHomeHeader>
-    <div className={`${MODULE_HOME_COLUMN} mt-4 shrink-0`}>
-      <Tabs size="large" variant="neutral" activeKey={active} items={CAPABILITY_TABS.map(tab => ({ key: tab, label: t(tab), badge: counts[tab] }))}
+    <div className={`${MODULE_HOME_COLUMN} mt-4 flex shrink-0 items-center justify-between gap-4`}>
+      <Tabs className="min-w-0 flex-1" size="large" variant="neutral" activeKey={active} items={CAPABILITY_TABS.map(tab => ({ key: tab, label: t(tab), badge: counts[tab] }))}
         onChange={key => { const next = new URLSearchParams(); next.set('type', key); setParams(next, { replace: true }); }} />
+      {active === 'skill' && <Button disabled={!identity.data} onClick={() => setUploadOpen(true)}><Outlined.Plus />{localize('com_skill_center_upload')}</Button>}
     </div>
     <main className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
       <div className={`${MODULE_HOME_COLUMN} flex flex-1 flex-col pb-3 pt-4`}>
-        {(identity.isError || catalog.isError) ? <StateView title={t('failed')} description={t('retry_hint')} action={<Button color="default" variant="outlined" onClick={() => { void identity.refetch(); void catalog.refetch(); }}>{t('retry')}</Button>} />
+        {active === 'skill' ? <SkillCenterPane search={search} uploadOpen={uploadOpen} onUploadOpenChange={setUploadOpen} /> : (identity.isError || catalog.isError) ? <StateView title={t('failed')} description={t('retry_hint')} action={<Button color="default" variant="outlined" onClick={() => { void identity.refetch(); void catalog.refetch(); }}>{t('retry')}</Button>} />
         : (identity.isLoading || catalog.isLoading) ? <SkillListSkeleton />
         : filtered.length ? <ul className="flex w-full flex-col">
           {filtered.map(item => <li key={item.id} className="relative flex w-full items-center gap-4 border-b-[0.5px] border-border-base px-2 py-3 transition-colors hover:bg-fill-1">

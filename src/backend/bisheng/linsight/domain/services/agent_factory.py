@@ -1165,6 +1165,8 @@ async def create_linsight_agent(
     # active_skills config is threaded.
     skills_advertised = bool(skills_present and file_dir)
     if skills_advertised:
+        from bisheng.linsight.domain.services.skill_availability_middleware import SkillAvailabilityMiddleware
+        middlewares.append(SkillAvailabilityMiddleware(session_model.user_id, getattr(session_model, "skills", None) or []))
         from deepagents.backends.filesystem import FilesystemBackend
         from deepagents.middleware.skills import SkillsMiddleware
 
@@ -1256,6 +1258,9 @@ async def create_linsight_agent(
         # note above for why it goes last).
         build_invalid_tool_call_repair_middleware(tools=researcher.get("tools"), is_subagent=True),
     ]
+    if skills_advertised:
+        researcher["middleware"].append(SkillAvailabilityMiddleware(session_model.user_id, getattr(session_model, "skills", None) or []))
+
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the
     # prompt never points at an "Available Skills" section that does not exist.

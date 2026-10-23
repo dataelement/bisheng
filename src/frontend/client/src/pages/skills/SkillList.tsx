@@ -1,4 +1,4 @@
-import { Switch, Tag, Tooltip } from '@bisheng/ui';
+import { Switch, Tag } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import type { ReactNode } from 'react';
 import type { CenterSkill, PersonalSkill } from '~/components/Skills/types';
@@ -18,7 +18,7 @@ interface SkillRowProps {
   /** Id of the skill whose toggle is being saved — its switch shows the spinner. */
   pendingId?: string;
   onSelect: (skill: CenterSkill) => void;
-  onToggle: (skill: PersonalSkill, enabled: boolean) => void;
+  onToggle: (skill: CenterSkill, enabled: boolean) => void;
 }
 
 function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
@@ -42,11 +42,11 @@ function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
       </span>
       <div className="pointer-events-none min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
-          <h3 className={cn('min-w-0 truncate text-body font-medium', personal?.enabled === false ? 'text-text-3' : 'text-text-1')}>
+          <h3 className={cn('min-w-0 truncate text-body font-medium', skill.enabled === false ? 'text-text-3' : 'text-text-1')}>
             {skill.displayName}
           </h3>
           <DemoTag id={demoKey(skill)} className="shrink-0" />
-          {personal?.enabled === false && (
+          {skill.enabled === false && (
             <Tag className="shrink-0">{localize('com_skill_center_disabled_tag')}</Tag>
           )}
         </div>
@@ -61,25 +61,9 @@ function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
           {new Date(personal.updatedAt).toLocaleDateString()}
         </time>
       )}
-      {personal ? (
-        <Switch
-          size="small"
-          className="relative z-[1] shrink-0"
-          checked={personal.enabled}
-          loading={pendingId === personal.id}
-          disabled={pendingId !== undefined && pendingId !== personal.id}
-          aria-label={switchLabel}
-          onCheckedChange={(enabled) => onToggle(personal, enabled)}
-        />
-      ) : (
-        // Enterprise skills are maintained by the enterprise and always on; the wrapper
-        // keeps the tooltip reachable, a disabled button fires no pointer events.
-        <Tooltip content={localize('com_skill_center_platform_always_on')}>
-          <span className="relative z-[1] flex shrink-0 items-center">
-            <Switch size="small" checked disabled aria-label={switchLabel} />
-          </span>
-        </Tooltip>
-      )}
+      <Switch size="small" className="relative z-[1] shrink-0" checked={skill.enabled}
+        loading={pendingId === skill.id} disabled={pendingId !== undefined && pendingId !== skill.id}
+        aria-label={switchLabel} onCheckedChange={enabled => onToggle(skill, enabled)} />
     </li>
   );
 }

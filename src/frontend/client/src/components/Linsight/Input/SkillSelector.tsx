@@ -102,9 +102,17 @@ export function SkillSelector({ selected, onChange, layout }: SkillSelectorProps
     const { data: skills = [], isFetching } = useQuery({
         queryKey: ['linsightSelectableSkills'],
         queryFn: getSelectableSkills,
-        refetchOnWindowFocus: false,
+        refetchOnWindowFocus: true,
+        staleTime: 0,
         refetchOnReconnect: false,
     });
+
+    useEffect(() => {
+        if (isFetching) return;
+        const allowed = new Set(skills.map(skill => skill.name));
+        const next = selected.filter(skill => allowed.has(skill.name));
+        if (next.length !== selected.length) onChange(next);
+    }, [skills, selected, onChange, isFetching]);
 
     const filtered = useMemo(() => {
         const kw = keyword.trim().toLowerCase();

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Button, Switch, Tooltip } from '@bisheng/ui';
+import { Button, Switch } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { ActionMenuContent, ActionMenuDivider, ActionMenuItem } from '~/components/ActionMenu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '~/components/ui/Dialog';
@@ -8,6 +8,7 @@ import { useLocalize } from '~/hooks';
 import { DemoTag } from '~/mock/demo/DemoTag';
 import { isDemoId } from '~/mock/demo/ids';
 import { SkillError, type CenterSkill, type PersonalSkill } from './types';
+import { downloadPersonalSkill } from '~/api/skillCenter';
 import { useSkillCenter } from './useSkillCenter';
 
 interface SkillDetailsProps {
@@ -15,7 +16,7 @@ interface SkillDetailsProps {
   /** The on / off switch is being saved. */
   toggling?: boolean;
   onClose: () => void;
-  onToggle: (skill: PersonalSkill, enabled: boolean) => void;
+  onToggle: (skill: CenterSkill, enabled: boolean) => void;
   onUpdate: (skill: PersonalSkill) => void;
 }
 
@@ -35,8 +36,9 @@ function SectionTitle({ children }: { children: ReactNode }) {
 }
 
 /** Hand the uploaded file back to the user under its original name. */
-function downloadSkillFile(skill: PersonalSkill) {
-  const url = URL.createObjectURL(skill.file);
+async function downloadSkillFile(skill: PersonalSkill) {
+  const file = skill.resourceId ? await downloadPersonalSkill(skill) : skill.file;
+  const url = URL.createObjectURL(file);
   const link = document.createElement('a');
   link.href = url;
   link.download = skill.fileName;
@@ -89,19 +91,8 @@ export function SkillDetails({ skill, toggling = false, onClose, onToggle, onUpd
             </div>
             <p className="mt-0.5 truncate text-caption text-text-3">{skill.name}</p>
           </div>
-          {personal ? (
-            <Switch
-              className="shrink-0"
-              checked={personal.enabled}
-              loading={toggling}
-              aria-label={switchLabel}
-              onCheckedChange={(enabled) => onToggle(personal, enabled)}
-            />
-          ) : (
-            <Tooltip content={localize('com_skill_center_platform_always_on')}>
-              <span className="flex shrink-0 items-center"><Switch checked disabled aria-label={switchLabel} /></span>
-            </Tooltip>
-          )}
+          <Switch className="shrink-0" checked={skill.enabled} loading={toggling}
+            aria-label={switchLabel} onCheckedChange={enabled => onToggle(skill, enabled)} />
           {personal && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -111,7 +102,7 @@ export function SkillDetails({ skill, toggling = false, onClose, onToggle, onUpd
               </DropdownMenuTrigger>
               <ActionMenuContent>
                 {stored && <ActionMenuItem icon={<Outlined.Upload />} label={localize('com_skill_center_update')} onSelect={() => onUpdate(personal)} />}
-                <ActionMenuItem icon={<Outlined.Download />} label={localize('com_ui_download')} onSelect={() => downloadSkillFile(personal)} />
+                <ActionMenuItem icon={<Outlined.Download />} label={localize('com_ui_download')} onSelect={() => { void downloadSkillFile(personal).catch(() => setError('storage')); }} />
                 {stored && <>
                   <ActionMenuDivider />
                   <ActionMenuItem danger icon={<Outlined.Delete />} label={localize('com_skill_center_delete')} onSelect={() => setConfirmDelete(true)} />
@@ -151,7 +142,7 @@ export function SkillDetails({ skill, toggling = false, onClose, onToggle, onUpd
                 <ul className="mt-2 max-h-48 overflow-y-auto text-caption text-text-3">{personal.files.map((file) => <li key={file} className="break-all py-1">{file}</li>)}</ul>
               </details>
             )}
-            <p className="text-caption text-text-3">{localize('com_skill_center_preview_notice')}</p>
+
           </> : <p className="rounded-xl bg-fill-1 p-4 text-body-sm text-text-3">{localize('com_skill_center_platform_note')}</p>}
         </div>
       </DialogContent>

@@ -173,7 +173,7 @@ class LinsightSkillDao:
         page: int = 1,
         page_size: int = 10,
     ) -> tuple[list[LinsightSkill], int]:
-        statement = select(LinsightSkill)
+        statement = select(LinsightSkill).where(LinsightSkill.source != "personal")
         if keyword:
             pattern = f"%{keyword}%"
             statement = statement.where(

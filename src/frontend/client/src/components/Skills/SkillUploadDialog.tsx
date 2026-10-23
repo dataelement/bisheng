@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Outlined } from 'bisheng-icons';
-import { Button, Tag } from '@bisheng/ui';
+import { Button } from '@bisheng/ui';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '~/components/ui/Dialog';
 import { useLocalize } from '~/hooks';
 import { parseSkillFile } from './parseSkill';
@@ -67,10 +67,10 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
       <DialogContent close={false} className="max-h-[90dvh] max-w-[560px] gap-5 overflow-y-auto rounded-xl border-border-base bg-bg-page max-[575px]:h-dvh max-[575px]:max-h-dvh max-[575px]:rounded-none">
         <div className="flex items-center justify-between gap-3">
           <DialogTitle>{localize(target ? 'com_skill_center_update' : 'com_skill_center_upload')}</DialogTitle>
-          <Tag color="warning">{localize('com_skill_center_preview')}</Tag>
+
         </div>
         <DialogDescription className="text-body-sm text-text-3">
-          {localize('com_skill_center_preview_notice')}
+          {localize('com_skill_center_add_note')}
         </DialogDescription>
         {target && <p className="text-body-sm text-text-2">{localize('com_skill_center_replacing', { name: target.displayName })}</p>}
         <input ref={input} type="file" accept=".md,.zip,.skill" className="hidden" onChange={(event) => { void choose(event.target.files); event.target.value = ''; }} />

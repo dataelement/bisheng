@@ -18,7 +18,7 @@ export interface SidebarEntry {
 }
 
 /** Default row order of the module area; 首页 is the 新建对话 row above it. */
-const MODULE_ORDER: Exclude<WorkbenchNavSection, 'home'>[] = ['knowledge', 'channel', 'apps', 'skills'];
+const MODULE_ORDER: Exclude<WorkbenchNavSection, 'home'>[] = ['knowledge', 'channel', 'apps'];
 
 /** The nav shows at most this many rows — 新建对话 counts as one; the rest go under 更多. */
 const MAX_VISIBLE_ROWS = 4;

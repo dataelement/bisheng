@@ -37,9 +37,9 @@ class WorkCapabilitiesService:
         return {tool.id: tool for tool in tools if tool.id not in disabled}
 
     async def _skills(self):
-        from bisheng.linsight.domain.models.linsight_skill import LinsightSkillDao
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
 
-        return {skill.id: skill for skill in await LinsightSkillDao.list_enabled()}
+        return {skill.id: skill for skill, _ in await UserSkillsService(self.user.user_id).records()}
 
     async def publish(self, kind: str, resource_id: int, enabled: bool):
         raise HTTPException(410, "Capabilities follow resource permissions; manage the resource directly")

@@ -58,9 +58,11 @@ class CapabilityCatalogService:
                     }
                 )
         usable_tool_ids = {row["resource_id"] for row in rows if row["ready"]}
-        for record in (await self.work._skills()).values():
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+        for record, enabled in await UserSkillsService(self.user.user_id).records(False):
             skill = self.work._skill_info(record)
-            ready = True
+            ready = enabled
             if ready:
                 try:
                     bundle = await asyncio.to_thread(self.work._read_bundle, record)

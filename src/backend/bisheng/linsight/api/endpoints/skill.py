@@ -77,14 +77,14 @@ async def list_skills(
 async def selectable_skills(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
-    return resp_200(await SkillService().get_selectable())
+    return resp_200(await SkillService().get_selectable(login_user.user_id))
 
 
 @router.get("/runtime/catalog", summary="Skills available to the current user's runtime")
 async def runtime_skill_catalog(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
-    return resp_200(await SkillService().get_runtime_catalog())
+    return resp_200(await SkillService().get_runtime_catalog(login_user.user_id))
 
 
 @router.get("/runtime/{skill_id}/bundle", summary="Authorized versioned skill bundle")
@@ -93,7 +93,7 @@ async def runtime_skill_bundle(
     version: str = Query(..., pattern=r"^[a-f0-9]{64}$"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Response:
-    bundle = await SkillService().get_runtime_bundle(_current_tenant_id(), skill_id, version)
+    bundle = await SkillService().get_runtime_bundle(_current_tenant_id(), skill_id, version, login_user.user_id)
     return Response(
         bundle,
         media_type="application/zip",
