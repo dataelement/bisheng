@@ -1,17 +1,18 @@
 import { cname } from "@/components/bs-ui/utils";
-import { BookOpenCheck, BookOpenTextIcon, Bot, Brain, Code2, FileDown, FileSearch, FlagTriangleRight, Hammer, Home, Keyboard, MessagesSquareIcon, Split } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { BookOpenCheck,Bot,Brain,Code2,FlagTriangleRight,Keyboard,MessagesSquareIcon,Split } from "lucide-react";
 export const Icons = {
-    'start': Home,
+    'start': Outlined.Home,
     'input': Keyboard,
     'output': MessagesSquareIcon,
     'code': Code2,
     'llm': Brain,
-    'rag': BookOpenTextIcon,
-    'qa_retriever': FileSearch,
+    'rag': Outlined.BookOpenText,
+    'qa_retriever': Outlined.FileSearch,
     'agent': Bot,
     'end': FlagTriangleRight,
     'condition': Split,
-    'report': FileDown,
+    'report': Outlined.Download,
     'knowledge_retriever':BookOpenCheck
 }
 export const Colors = {
@@ -36,10 +37,10 @@ export default function NodeLogo({ type, className = '', colorStr = '' }) {
     if (type === 'tool') {
         const keys = Object.keys(Colors)
         const _colorKey = keys[parseInt(colorStr.charCodeAt(0) + '', 16) % keys.length]
-        return <div className={cname(`${Colors[_colorKey]} p-[5px] rounded-md dark:text-gray-600`, className)}><Hammer size={14} /></div>
+        return <div className={cname(`${Colors[_colorKey]} p-[5px] rounded-md dark:text-gray-600`, className)}><Outlined.Hammer size={14} /></div>
     }
 
-    const IconComp = Icons[type] || Hammer
+    const IconComp = Icons[type] || Outlined.Hammer
     const color = Colors[type] || 'text-gray-950'
     return <div className={cname(`${color} dark:text-gray-600 ${['input', 'output'].includes(type) && 'text-[#fff] dark:text-[#fff]'} p-[5px] rounded-md`, className)}><IconComp size={14} /></div>
 };

@@ -20,7 +20,7 @@
  *
  * Both are comfort only. The backend refuses either way.
  */
-import { Button } from "@/components/bs-ui/button"
+import { Button } from "@bisheng/ui"
 import type { HostedAppDetail } from "@/controllers/API/hostedApp"
 import { userContext } from "@/contexts/userContext"
 import { useContext } from "react"

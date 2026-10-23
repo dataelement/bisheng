@@ -171,6 +171,17 @@ async def authorize_entry(
             "user_id": user_id,
         }
 
+    if settings.app_runtime.runtime_protocol_version == 2:
+        from bisheng.app_runtime.domain.services.runtime_operation_service import RuntimeOperationService
+
+        route = await RuntimeOperationService().route(f"app:{app.id}")
+        if route["decision"] != "allow":
+            return {
+                "decision": DECISION_UNAVAILABLE,
+                "reason": "runtime_maintenance",
+                "app_id": app.id,
+                "user_id": user_id,
+            }
     user_name, subject_kind = await _user_facts(user_id, subject)
     material = await _identity_material(
         app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id

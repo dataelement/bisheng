@@ -1,0 +1,2 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+PASS manager restart preserves existing WS and new HTTP/SDK {"existing_websocket": "survived", "new_http_and_sdk_checks": 32, "duration_seconds": 17}

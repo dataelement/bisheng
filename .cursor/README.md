@@ -8,7 +8,7 @@
 |-------------|--------|------|
 | `.claude/settings.json` | `.cursor/hooks.json` | Agent 钩子配置 |
 | `.claude/hooks/` | `.cursor/hooks/` | 钩子脚本 |
-| `.claude/skills/` | `.cursor/skills/` | 项目级 Agent Skills |
+| `.claude/skills/` | `.cursor/skills/`（软链接） | 项目级 Agent Skills，唯一原件在 `.claude/skills/` |
 
 ## Hooks
 
@@ -26,13 +26,13 @@
 
 ## Skills
 
-从 `.claude/skills/` 同步，命令用法不变：
+`.cursor/skills` 是指向 `../.claude/skills` 的软链接（`.agents/skills` 同理），三处读到的是同一份文件，命令用法不变：
 
 | Skill | 触发 |
 |-------|------|
 | `sdd-review` | `/sdd-review <feature_dir> <spec\|design\|tasks>` |
 | `task-review` | `/task-review <feature_dir> <task_id>` |
-| `code-review` | `/code-review --base <branch>` |
+| `sdd-code-review` | `/sdd-code-review --base <branch>` |
 | `e2e-test` | `/e2e-test [feature_dir]` |
 | `approval-module` | 审批相关改动前自动加载 |
 | `i18n-localizer` | 模块国际化 |
@@ -40,9 +40,8 @@
 
 ## 维护
 
-更新 Skill 或 Hook 时，建议同时维护 `.claude/` 与 `.cursor/` 两份，或从 `.claude/` 复制后做格式适配。
+Skill 只改 `.claude/skills/` 下的原件，不要在 `.cursor/skills` 或 `.agents/skills` 里另建副本；新增 Skill 放进 `.claude/skills/` 后三处自动可见。
 
-```bash
-cp -R .claude/skills/* .cursor/skills/
-# 然后检查 hooks 脚本是否需要同步
-```
+Hooks 仍是两份（事件名与输出格式不同），改 `.claude/hooks/` 时检查 `.cursor/hooks/` 是否需要同步。
+
+Windows 检出需要 `git config core.symlinks true`（并具备创建符号链接的权限），否则软链接会变成一个只含路径文本的普通文件。

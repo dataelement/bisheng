@@ -66,7 +66,9 @@ ENTRY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config = get_config()
-    if not config.backend_secret or not config.manager_secret:
+    if not config.backend_secret or not (
+        config.route_secret if config.protocol_version == 2 else config.manager_secret
+    ):
         # Loud, but not fatal: the process still starts and renders its
         # fail-closed page, which is a better failure mode on a half-configured
         # host than a crash loop that takes /apps/* to 502.

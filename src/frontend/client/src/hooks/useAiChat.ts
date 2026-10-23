@@ -641,6 +641,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 // the backend materializes exactly those (empty = none). Omitted
                 // outside task mode (the daily chain ignores it).
                 skills: taskMode ? dailyTaskSkills.map((s) => s.name) : [],
+                skill_ids: taskMode ? dailyTaskSkills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])) : [],
             };
 
             // Correlation key for the user (question) message. Starts as the

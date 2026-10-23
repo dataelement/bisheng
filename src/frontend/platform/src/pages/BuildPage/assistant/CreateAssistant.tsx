@@ -1,14 +1,16 @@
 // @ts-strict-ignore
-import { AssistantIcon } from "@/components/bs-icons";
+import { Button, Input, Textarea } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
 import Avator from "@/components/bs-ui/input/avator";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { LoadIcon } from "../../../components/bs-icons/loading";
-import { Button } from "../../../components/bs-ui/button";
-import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../../components/bs-ui/dialog";
-import { Input, Textarea } from "../../../components/bs-ui/input";
+
+
+import { DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "../../../components/bs-ui/dialog";
+
 import { createAssistantsApi } from "../../../controllers/API/assistant";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
@@ -44,6 +46,7 @@ ${t('build.exampleTwo')}
                 return '';
             case 'roleAndTasks':
                 if (value.length < 20) return t('build.forBetter');
+                if (value.length > 1000) return t('build.descMaxLength');
                 return '';
             default:
                 return '';
@@ -79,6 +82,8 @@ ${t('build.exampleTwo')}
     // Handle form submission
     const navigate = useNavigate()
     const handleSubmit = async (e) => {
+        if ((String((formData.name) ?? '').length > 50) || (String((formData.roleAndTasks) ?? '').length > 1000)) return;
+
         e.preventDefault();
         const isValid = validateForm();
 
@@ -112,34 +117,26 @@ ${t('build.exampleTwo')}
         <div className="flex flex-col gap-8 py-6">
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantAvatar')}</label>
-                <Avator value={formData.url} className="mt-2" onChange={uploadAvator}><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                <Avator value={formData.url} className="mt-2" onChange={uploadAvator}><Outlined.Application className="bg-primary w-9 h-9 rounded-sm" /></Avator>
                 {/* {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>} */}
             </div>
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantName')}<span className="bisheng-tip">*</span></label>
-                <Input id="name" name="name" maxLength={50} showCount placeholder={t('build.giveAssistantName')} className="mt-2" value={formData.name} onChange={handleChange} />
+                <Input id="name" name="name" maxLength={50} showCount placeholder={t('build.giveAssistantName')} value={formData.name} onChange={handleChange} className={"mt-2"} />
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
             </div>
             <div className="">
                 <label htmlFor="roleAndTasks" className="bisheng-label">{t('build.whatWant')}</label>
-                <Textarea
-                    id="roleAndTasks"
-                    name="roleAndTasks"
-                    placeholder={t('build.forExample')}
-                    maxLength={1000}
-                    className="mt-2 min-h-32"
-                    value={formData.roleAndTasks}
-                    onChange={handleChange}
-                />
+                <Textarea id="roleAndTasks" name="roleAndTasks" placeholder={t('build.forExample')} maxLength={1000} value={formData.roleAndTasks} onChange={handleChange} textareaClassName={"mt-2 min-h-32"} showCount />
                 {errors.roleAndTasks && <p className="bisheng-tip mt-1">{errors.roleAndTasks}</p>}
             </div>
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ url: '', name: '', roleAndTasks: '' })}>{t('cancle')}</Button>
+                <Button variant="outlined" type="button" onClick={() => setFormData({ url: '', name: '', roleAndTasks: '' })} color="default">{t('cancle')}</Button>
             </DialogClose>
-            <Button disabled={loading} type="submit" className="px-11" onClick={handleSubmit}>
-                {loading && <LoadIcon className="mr-2" />}
+            <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.roleAndTasks) ?? '').length > 1000)) || (loading)} type="submit" onClick={handleSubmit}>
+                {loading && <Outlined.Loading className="animate-spin mr-2" />}
                 {t('build.create')}</Button>
         </DialogFooter>
     </DialogContent>

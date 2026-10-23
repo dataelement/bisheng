@@ -1,12 +1,14 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
+import { Button } from '@bisheng/ui';
+
 import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
-import { GripVertical, Maximize2, Minus, X } from "lucide-react";
-import { forwardRef, useContext, useImperativeHandle, useState, useRef, useEffect } from "react";
+import { Outlined } from "bisheng-icons";
+import { cloneDeep } from "lodash-es";
+import { GripVertical,Minus } from "lucide-react";
+import { forwardRef,useContext,useEffect,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import ChatPane from "./ChatPane";
-import { cloneDeep } from "lodash-es";
 
 // ref
 export const ChatTest = forwardRef((props, ref) => {
@@ -85,18 +87,8 @@ export const ChatTest = forwardRef((props, ref) => {
             <div className="flex justify-between items-center bg-background-main px-4 py-1">
                 <span className="text-sm font-bold">{t('workflowPreview')}</span>
                 <div className="flex gap-2">
-                    <Button
-                        size="icon"
-                        variant="outline"
-                        className="rounded-md shadow-md size-4 p-0.5"
-                        onClick={() => setSmall(!small)}
-                    >{small ? <Maximize2 /> : <Minus />}</Button>
-                    <Button
-                        size="icon"
-                        variant="destructive"
-                        className="rounded-md shadow-md size-4 p-0.5"
-                        onClick={handleClose}
-                    ><X /></Button>
+                    <Button size="medium" variant="outlined" className="rounded-md shadow-md size-4 p-0.5" onClick={() => setSmall(!small)} color="default" iconOnly>{small ? <Outlined.FullScreen size={16} /> : <Minus />}</Button>
+                    <Button size="medium" variant="solid" className="rounded-md shadow-md size-4 p-0.5" onClick={handleClose} color="danger" iconOnly><Outlined.Close size={16} /></Button>
                 </div>
             </div>
             <div className={`h-[calc(100vh-28px-var(--license-banner-h,0px))] relative overflow-y-auto ${small ? 'hidden' : ''}`} onKeyDown={(e) => e.stopPropagation()}>

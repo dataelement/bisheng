@@ -4,6 +4,7 @@ from datetime import datetime
 from time import perf_counter
 from typing import TYPE_CHECKING
 
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from langchain_classic.memory import ConversationBufferWindowMemory
 from loguru import logger
@@ -1091,34 +1092,43 @@ class WorkFlowService(BaseService):
         )
 
         node_data = BaseNodeData(**node_data.get("data", {}))
-        base_callback = BaseCallback()
-        graph_state = GraphState()
-        graph_state.history_memory = ConversationBufferWindowMemory(k=10)
-        node = NodeFactory.instance_node(
-            node_type=node_data.type,
-            node_data=node_data,
-            user_id=login_user.user_id,
-            workflow_id=workflow_info.id,
-            workflow_name=workflow_info.name,
-            graph_state=graph_state,
-            target_edges=None,
-            max_steps=233,
-            callback=base_callback,
-        )
-        if node_data.type == NodeType.CODE.value:
-            node.handle_input({"code_input": [{"key": k, "value": v, "type": "input"} for k, v in node_input.items()]})
-        elif node_data.type == NodeType.TOOL.value:
-            user_input = {}
-            for k, v in node_input.items():
-                user_input[k] = v
-            node.handle_input(user_input)
-        else:
-            for key, val in node_input.items():
-                graph_state.set_variable_by_str(key, val)
 
-        exec_id = generate_uuid()
-        result = node._run(exec_id)
-        log_data = node.parse_log(exec_id, result)
+        def _run_node():
+            # Nodes are sync and some reach async services through run_async_safe
+            # (a tool node builds its tool that way), which refuses to run on the
+            # request's event loop. In a worker thread it hops back to the loop.
+            base_callback = BaseCallback()
+            graph_state = GraphState()
+            graph_state.history_memory = ConversationBufferWindowMemory(k=10)
+            node = NodeFactory.instance_node(
+                node_type=node_data.type,
+                node_data=node_data,
+                user_id=login_user.user_id,
+                workflow_id=workflow_info.id,
+                workflow_name=workflow_info.name,
+                graph_state=graph_state,
+                target_edges=None,
+                max_steps=233,
+                callback=base_callback,
+            )
+            if node_data.type == NodeType.CODE.value:
+                node.handle_input(
+                    {"code_input": [{"key": k, "value": v, "type": "input"} for k, v in node_input.items()]}
+                )
+            elif node_data.type == NodeType.TOOL.value:
+                user_input = {}
+                for k, v in node_input.items():
+                    user_input[k] = v
+                node.handle_input(user_input)
+            else:
+                for key, val in node_input.items():
+                    graph_state.set_variable_by_str(key, val)
+
+            exec_id = generate_uuid()
+            result = node._run(exec_id)
+            return node.parse_log(exec_id, result)
+
+        log_data = await run_in_threadpool(_run_node)
         res = []
         for one_batch in log_data:
             ret = []

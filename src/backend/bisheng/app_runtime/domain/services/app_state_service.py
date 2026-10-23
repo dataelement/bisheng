@@ -194,7 +194,12 @@ class AppStateService:
         if not won:
             raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action="stop")
 
-        await orchestrator_client.stop(app_id=app_id)
+        if settings.app_runtime.runtime_protocol_version == 2:
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            await RuntimeDeliveryCoordinator().stop(app)
+        else:
+            await orchestrator_client.stop(app_id=app_id)
         await cls._set_instance_phase(app_id, PHASE_STOPPED, tenant_id=app.tenant_id)
         await cls._audit(AppAuditAction.STOP, app, actor, version_id=app.current_version_id, reason="stopped by user")
         # Post-hook, after the audit: an administrator stopping someone else's
@@ -231,7 +236,12 @@ class AppStateService:
         # Assets first: a row that says "deleted" while the volume survives is
         # invisible garbage; a purged volume with the row still present is a
         # visible, retryable failure.
-        await orchestrator_client.destroy(app_id=app_id, purge_volume=True)
+        if settings.app_runtime.runtime_protocol_version == 2:
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            await RuntimeDeliveryCoordinator().stop(app, destroy=True, purge_volume=True)
+        else:
+            await orchestrator_client.destroy(app_id=app_id, purge_volume=True)
 
         # The audit remark names who actually deleted it: an administrator may
         # now delete an app whose owner is gone (_require_deleter).
@@ -296,6 +306,33 @@ class AppStateService:
         version_id = cls._pick_version(app)
         version = await cls._load_version(app_id, version_id)
         tier = await cls._resolve_tier(version.tier_id)
+        if settings.app_runtime.runtime_protocol_version == 2:
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            try:
+                deployed = await RuntimeDeliveryCoordinator().deploy(app, version, tier)
+            except AppCapacityInsufficientError:
+                return await cls._park(
+                    app,
+                    actor,
+                    version_id=version.id,
+                    shortage_state=None if app.state == AppState.ONLINE.value else shortage_state,
+                    reason="capacity_exhausted",
+                    detail={"stage": "admission"},
+                )
+            except AppProbeFailedError as exc:
+                return await cls._park(
+                    app,
+                    actor,
+                    version_id=version.id,
+                    shortage_state=None if app.state == AppState.ONLINE.value else shortage_state,
+                    reason="execution_failed",
+                    detail={"stage": "deploy", "code": exc.code, **exc.kwargs},
+                )
+            await cls._audit(audit_action, app, actor, version_id=version.id, reason="started", detail=deployed)
+            if audit_action == AppAuditAction.RESUME:
+                await cls._resume_notice(app, actor)
+            return ActionResult(app_id=app.id, state=AppState.ONLINE.value, version_id=version.id, detail=deployed)
 
         if audit_action is AppAuditAction.RESUME and app.pending_version_id:
             # F055 AC-36 with AC-42. An approval that landed while the application
@@ -397,7 +434,7 @@ class AppStateService:
             # AC-43). Publish and manual publish are F055's pipeline — their
             # messages come from the approval engine and F055 itself, and a
             # second copy from here would double them (spec 决议-11).
-            await notify_owner_of_admin_state_change(app=app, actor=actor, action="resume")
+            await cls._resume_notice(app, actor)
         return ActionResult(
             app_id=app_id,
             state=AppState.ONLINE.value,
@@ -602,6 +639,68 @@ class AppStateService:
             actor_id,
         )
         return won
+
+    @staticmethod
+    async def _resume_notice(app, actor):
+        await notify_owner_of_admin_state_change(app=app, actor=actor, action="resume")
+
+    @classmethod
+    async def commit_runtime_delivery(cls, repository, operation, ready):
+        """Single owner transaction: F054 state, F055 version and F086 projections."""
+        from bisheng.app_publish.domain.services.version_service import VersionService
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeOperation
+        from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
+        from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
+        from bisheng.database.models.app import App
+
+        async with repository.transaction() as session:
+            op = await repository.get(RuntimeOperation, operation.id, lock=True)
+            if op.stage == "serving":
+                return
+            app = await repository.get(App, op.app_id, lock=True)
+            expected = op.payload
+            if (
+                app is None
+                or app.tenant_id != op.tenant_id
+                or (app.state, app.current_version_id, app.pending_version_id)
+                != (
+                    expected["expected_app_state"],
+                    expected.get("expected_current_version_id"),
+                    expected.get("expected_pending_version_id"),
+                )
+            ):
+                raise RuntimeConflict("application_state_changed")
+            if op.version_id not in {app.current_version_id, app.pending_version_id}:
+                raise RuntimeConflict("runtime_version_not_approved")
+            from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeDelivery
+
+            deliveries = await repository.find(RuntimeDelivery, app_id=app.id, version_id=op.version_id)
+            if not deliveries or deliveries[0].content != op.payload.get("resolved_delivery"):
+                raise RuntimeConflict("runtime_delivery_not_frozen")
+            if not is_transition_allowed(app.state, AppState.ONLINE.value):
+                raise RuntimeConflict("illegal_application_transition")
+            won = await AppDao.aupdate_state_cas(
+                session,
+                app.id,
+                from_states=(app.state,),
+                to_state=AppState.ONLINE.value,
+                current_version_id=op.version_id,
+                pending_version_id=app.pending_version_id if op.payload.get("preserve_pending_version") else None,
+            )
+            if not won:
+                raise RuntimeConflict("application_state_changed")
+            await VersionService.mark_runtime_online(repository, app.id, op.version_id)
+            await AppInstanceDao.aupsert(
+                session,
+                app.id,
+                tenant_id=app.tenant_id,
+                version_id=op.version_id,
+                phase=PHASE_RUNNING,
+                exec_ref=ready["result"]["exec_ref"],
+                health="ready",
+                started_at=datetime.now(),
+            )
+            await RuntimeProjectionService(repository).activate(op, ready)
 
     @staticmethod
     async def _set_instance_phase(

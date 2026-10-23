@@ -1,8 +1,9 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import React, { forwardRef } from 'react';
 import { useWatch } from 'react-hook-form';
 import type { Control } from 'react-hook-form';
-import { TooltipAnchor } from '~/components/ui';
+
 import { SendIcon } from '~/components/svg';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
@@ -16,10 +17,7 @@ const SubmitButton = React.memo(
   forwardRef((props: { disabled: boolean, isLingsi: boolean }, ref: React.ForwardedRef<HTMLButtonElement>) => {
     const localize = useLocalize();
     return (
-      <TooltipAnchor
-        description={localize('com_nav_send_message')}
-        render={
-          <button
+      <SharedTooltip  content={localize('com_nav_send_message')}  ><button
             ref={ref}
             aria-label={localize('com_nav_send_message')}
             id="send-button"
@@ -34,9 +32,7 @@ const SubmitButton = React.memo(
             <span className="flex items-center justify-center" data-state="closed">
               <SendIcon size={18} />
             </span>
-          </button>
-        }
-      ></TooltipAnchor>
+          </button></SharedTooltip>
     );
   }),
 );

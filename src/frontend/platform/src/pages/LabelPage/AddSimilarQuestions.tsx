@@ -1,21 +1,23 @@
 // @ts-strict-ignore
+import { Button, Input, toast } from '@bisheng/ui';
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { LoadingIcon } from "@/components/bs-icons/loading";
-import { Button } from "@/components/bs-ui/button";
-import { Checkbox } from "@/components/bs-ui/checkBox";
+
+import { Checkbox } from "@bisheng/ui";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { addSimilarQa, getQaList } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { AnnotationFormHandle, AnnotationFormProps } from "./annotationTypes";
 
-const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
+const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ onMarked }, ref) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [knowledgeLib, setKnowledgeLib] = useState([]);
@@ -50,7 +52,7 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
         );
     };
 
-    const { message } = useToast();
+
     const handleSubmit = async () => {
         const errors = [];
         if (knowledgeLib.length === 0) {
@@ -61,17 +63,14 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
         }
         if (errors.length > 0) {
             setError(true);
-            return message({ variant: 'warning', description: errors });
+            return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') });
         }
 
         captureAndAlertRequestErrorHoc(addSimilarQa({
             ids: selectedItems,
             question: qRef.current
-        }).then(res => {
-            message({
-                variant: 'success',
-                description: t('log.addSuccess')
-            });
+        }).then(() => {
+            toast.show({ type: 'success', message: String(t('log.addSuccess') ?? '') });
             onMarked?.()
             close();
         }));
@@ -122,7 +121,7 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
                                     {datalist.map((el) => (
                                         <TableRow key={el.id}>
                                             <TableCell className="font-medium">
-                                                <Checkbox checked={selectedItems.includes(el.id)} onCheckedChange={() => handleCheckboxChange(el.id)} />
+                                                <Checkbox size="small" aria-label={String(el.questions)} checked={selectedItems.includes(el.id)} onCheckedChange={() => handleCheckboxChange(el.id)} />
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 <div className="max-w-[360px] whitespace-nowrap text-ellipsis overflow-hidden">{el.questions}</div>
@@ -154,10 +153,10 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
                         </div>
                     </div>
                     <DialogFooter>
-                        <DialogClose>
-                            <Button variant="outline" className="px-11" type="button" onClick={close}>{t('log.cancel')}</Button>
+                        <DialogClose asChild>
+                            <Button variant="outlined" type="button" onClick={close} color="default">{t('log.cancel')}</Button>
                         </DialogClose>
-                        <Button type="submit" className="px-11" onClick={handleSubmit}>{t('log.confirm')}</Button>
+                        <Button type="submit" onClick={handleSubmit}>{t('log.confirm')}</Button>
                     </DialogFooter>
                 </div>
             </DialogContent>

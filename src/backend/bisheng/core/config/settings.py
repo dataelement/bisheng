@@ -285,6 +285,13 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.commercial_license.tasks.refresh_etl_license",
                 "schedule": 3600.0,
             }
+        # v3.0.0-beta3 F076: one child task per tenant deletes personal skill
+        # objects that no skill row still points at. No new YAML key.
+        if "dispatch_personal_skill_orphan_sweep" not in self.beat_schedule:
+            self.beat_schedule["dispatch_personal_skill_orphan_sweep"] = {
+                "task": "bisheng.worker.linsight.personal_skill_sweep.dispatch_personal_skill_orphan_sweep",
+                "schedule": crontab.from_string("10 4 * * *"),
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
@@ -414,6 +421,11 @@ class KnowledgeQAFilterConf(BaseModel):
 class LinsightConf(BaseModel):
     """Inspiration Configuration"""
 
+    # F087 removed tool_buffer, file_content_length, max_file_num,
+    # max_knowledge_num, retry_temperature and max_file_content_num: nothing read
+    # them since the deepagents migration. Deployed configs may still carry them;
+    # BaseModel ignores unknown keys, so those configs keep loading.
+
     debug: bool = Field(default=False, description="Whether to opendebugMode")
     citation_handles_enabled: bool = Field(
         default=True,
@@ -424,9 +436,6 @@ class LinsightConf(BaseModel):
             "per-turn source table together to the verbatim-id contract (citation.yaml). A session "
             "keeps the contract it started with (pinned in its handle table)."
         ),
-    )
-    tool_buffer: int = Field(
-        default=100000, description="Maximum Tool Execution Historytoken, you need to summarize your history after"
     )
     max_steps: int = Field(
         default=2500,
@@ -503,24 +512,8 @@ class LinsightConf(BaseModel):
         description="Max number of model-call steps that may be gracefully skipped (content-filter / "
         "exhausted-transient) within a single task before it fails cleanly. Bounds runaway degradation.",
     )
-    max_file_num: int = Field(
-        default=5, description="BuatSOPJampromptThe number of user-uploaded file information placed in the"
-    )
-    max_knowledge_num: int = Field(
-        default=20, description="BuatSOPJampromptThe amount of knowledge base information placed in the"
-    )
     waiting_list_url: str = Field(default=None, description="waiting list Jump link")
     default_temperature: float = Field(default=0, description="Default Temperature at Model Request")
-    retry_temperature: float = Field(
-        default=1, description="reactModejsonModel temperature when retrying after parsing failure"
-    )
-    file_content_length: int = Field(
-        default=5000,
-        description="The number of characters to read the contents of the file when splitting subtasks, which will be truncated when exceeded",
-    )
-    max_file_content_num: int = Field(
-        default=3, description="Number of files to read when subtasking, in reverse order by modification time"
-    )
     skills_root: str = Field(
         default="data/linsight_skills",
         description="LEGACY: the pre-object-storage on-disk skill root. Skill bundles now live in object "
@@ -877,22 +870,13 @@ class SandboxConf(BaseModel):
     ``SANDBOX_ENABLE_UID_ISOLATION``), not here.
 
     Env overlay uses ``BS_SANDBOX_CONF__<FIELD>`` (double underscore), e.g.
-    ``BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN``. There is no ``deploy_mode`` /
-    ``orchestrator`` field — replica discovery is the hostname pattern only.
+    ``BS_SANDBOX_CONF__ENDPOINTS``. Runners are that explicit URL list only.
+    There is no hostname scan and no ``deploy_mode`` / ``orchestrator`` field.
     """
 
     model_config = ConfigDict(extra="ignore")
 
-    endpoints: list[str] = Field(
-        default_factory=list, description="Explicit runner URLs; non-empty skips DNS discovery"
-    )
-    discover_host_pattern: str = Field(default="code-runner-{n}", description="Hostname pattern with {n} placeholder")
-    discover_index_start: int = Field(default=1, description="First replica index (compose=1, k8s=0)")
-    discover_max: int = Field(default=32, description="Stop scanning after this many consecutive indices")
-    discover_ttl_s: int = Field(
-        default=60, description="Background refresh interval for discovered runner URLs (seconds)"
-    )
-    discover_port: int = Field(default=8080, description="Runner HTTP port used with discovered hostnames")
+    endpoints: list[str] = Field(default_factory=list, description="Runner URLs, one per replica. Empty means no pool.")
     token: str = Field(default="", description="Shared runner auth token; override via BS_SANDBOX_CONF__TOKEN")
     pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
     default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
@@ -908,9 +892,9 @@ class SandboxConf(BaseModel):
 
     # --- type=local isolation (LocalExecutor) ---
     local_isolation: str = Field(
-        default="off",
-        description="type=local child processes: 'uid' runs them as a throwaway uid in a private run dir; "
-        "'off' keeps the legacy same-user execution",
+        default="uid",
+        description="type=local child processes. Default 'uid' runs them as a throwaway uid in a private "
+        "run dir. Set 'off' (or an empty string) to keep the legacy same-user execution",
     )
     local_run_root: str = Field(default="/tmp/bisheng-local-run", description="Parent dir of per-run dirs")
     local_rlimit_as_bytes: int = Field(default=2 * 1024**3, description="RLIMIT_AS of the child")

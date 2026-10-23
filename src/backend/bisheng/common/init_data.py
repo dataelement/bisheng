@@ -560,46 +560,67 @@ async def _ensure_web_fetch_tool(session) -> bool:
     return True
 
 
-async def _project_root_web_fetch_tool() -> None:
-    """Project the root tenant's web fetch tool type as a system-owned resource.
-
-    Uses the fresh-install inventory spec; only a missing projection is written.
-    """
-    from bisheng.api.services.f048_system_resource_bootstrap import load_system_owned_resource_inventory
-    from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
-    from bisheng.permission.application.access import get_f048_runtime
-    from bisheng.permission.application.system_resource_reconcile import (
-        SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
-        reconcile_system_owned_resources,
-    )
+async def _web_fetch_tool_types_by_tenant() -> dict[int, int]:
+    """Map each tenant that has the web fetch tool to its tool type id."""
+    from bisheng.core.context.tenant import bypass_tenant_filter
 
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
-            tool = (
+            rows = (
                 await session.exec(
-                    select(GptsTools).where(
+                    select(GptsTools.tenant_id, GptsTools.type).where(
                         GptsTools.tool_key == WEB_FETCH_TOOL_KEY,
-                        GptsTools.tenant_id == DEFAULT_TENANT_ID,
                         GptsTools.is_delete == 0,
                     )
                 )
-            ).first()
-    if tool is None:
+            ).all()
+    return {int(tenant_id): int(type_id) for tenant_id, type_id in rows if tenant_id and type_id}
+
+
+async def _project_web_fetch_tool_types() -> None:
+    """Project every tenant's web fetch tool type that has no permission projection yet.
+
+    One read finds the gaps, so a healthy startup writes nothing. Each missing
+    projection is written in its own tenant context: the projection repository
+    is tenant-filtered and startup has no tenant context of its own.
+    """
+    from bisheng.api.services.f048_system_resource_bootstrap import load_system_owned_resource_inventory
+    from bisheng.core.context.tenant import current_tenant_id
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+    from bisheng.permission.application.system_resource_reconcile import (
+        SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+        inspect_system_owned_resources,
+        reconcile_system_owned_resources,
+    )
+
+    type_by_tenant = await _web_fetch_tool_types_by_tenant()
+    if not type_by_tenant:
         return
     inventory = await load_system_owned_resource_inventory()
     specs = tuple(
-        spec
-        for spec in inventory.resources
-        if spec.tenant_id == DEFAULT_TENANT_ID and spec.resource_id == str(tool.type)
+        spec for spec in inventory.resources if type_by_tenant.get(spec.tenant_id) == int(spec.resource_id)
     )
-    if not specs:
+    missing = [state.resource for state in await inspect_system_owned_resources(specs) if state.state == "MISSING"]
+    if not missing:
         return
-    await reconcile_system_owned_resources(
-        await get_f048_runtime(),
-        specs,
-        apply=True,
-        operator_id=SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+    components = (await get_f048_process_runtime()).components
+    await components.marker.wait_until_ready(
+        timeout_seconds=float(settings.openfga.recent_consistency_window_seconds) + 5.0,
     )
+    for spec in missing:
+        token = current_tenant_id.set(spec.tenant_id)
+        try:
+            await reconcile_system_owned_resources(
+                components.facade,
+                (spec,),
+                apply=True,
+                operator_id=SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+            )
+            logger.info("Projected the web fetch tool type for tenant {}", spec.tenant_id)
+        except Exception:
+            logger.exception("Failed to project the web fetch tool type for tenant {}", spec.tenant_id)
+        finally:
+            current_tenant_id.reset(token)
 
 
 async def _tenants_missing_web_fetch_tool() -> list[int]:
@@ -628,28 +649,36 @@ async def _tenants_missing_web_fetch_tool() -> list[int]:
 async def _sync_web_fetch_tool() -> None:
     """Make the web fetch tool usable everywhere after an upgrade (F085).
 
-    Runs on every startup and only fills gaps, so a failed attempt heals on the
-    next start. A failure is logged and never stops the startup.
+    Runs on every startup and only fills gaps: child tenants without the tool
+    get a copy, then every tool type without a permission projection gets one.
+    The projection check looks at projections, not rows, so a copy whose
+    projection failed is still repaired on the next start. A failure is logged
+    and never stops the startup.
     """
+    from bisheng.core.context.tenant import current_tenant_id
+
+    if getattr(getattr(settings, "multi_tenant", None), "enabled", False):
+        try:
+            tenant_ids = await _tenants_missing_web_fetch_tool()
+        except Exception:
+            logger.exception("Failed to list tenants missing the web fetch tool")
+            tenant_ids = []
+        from bisheng.workstation.domain.services import WorkStationService
+
+        for tenant_id in tenant_ids:
+            # The copy projects the copied types too, which needs a tenant context.
+            token = current_tenant_id.set(tenant_id)
+            try:
+                await WorkStationService.acopy_root_builtin_tools_to_tenant(tenant_id)
+            except Exception:
+                logger.exception("Failed to copy the web fetch tool to tenant {}", tenant_id)
+            finally:
+                current_tenant_id.reset(token)
     if settings.openfga.enabled:
         try:
-            await _project_root_web_fetch_tool()
+            await _project_web_fetch_tool_types()
         except Exception:
-            logger.exception("Failed to project the root web fetch tool; non-admin users cannot use it yet")
-    if not getattr(getattr(settings, "multi_tenant", None), "enabled", False):
-        return
-    try:
-        tenant_ids = await _tenants_missing_web_fetch_tool()
-    except Exception:
-        logger.exception("Failed to list tenants missing the web fetch tool")
-        return
-    from bisheng.workstation.domain.services import WorkStationService
-
-    for tenant_id in tenant_ids:
-        try:
-            await WorkStationService.acopy_root_builtin_tools_to_tenant(tenant_id)
-        except Exception:
-            logger.exception("Failed to copy the web fetch tool to tenant {}", tenant_id)
+            logger.exception("Failed to project the web fetch tool; non-admin users cannot use it yet")
 
 
 def upload_preset_minio_file():

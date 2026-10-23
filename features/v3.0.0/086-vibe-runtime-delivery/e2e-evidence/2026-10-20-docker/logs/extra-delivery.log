@@ -1,0 +1,11 @@
+image online through nginx/app-proxy
+image owner cleanup complete
+legacy submitted 0f135ac5eece4cd1a8d3091926a87f2c
+legacy online through nginx/app-proxy
+legacy owner cleanup complete
+bad-port submitted 0cd5d431d8124a84bcab7c0becaa393d
+Traceback (most recent call last):
+  File "/tmp/e2e-f086-extra/run.py", line 56, in <module>
+    assert status['status']=='failed' and not status.get('version_id') and not status.get('approval'),status
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'deployment_id': '0cd5d431d8124a84bcab7c0becaa393d', 'app_id': '56e7f26a33884f6eb0cc526e394fc8c2', 'version_id': '57f7239c130b49f4a52638b7555c687d', 'version_no': None, 'stage': 'failed', 'status': 'failed', 'failure': {'code': 16124, 'hints': [], 'stage': 'failed', 'details': {}, 'message': '应用执行失败'}, 'approval': None, 'app_state': 'draft', 'entry_url': 'http://nginx:3001/apps/e2e-f086-bad-port', 'scan_result': {'hits': [], 'blocked': False, 'skipped': [], 'files_scanned': 1, 'files_skipped': 0}}

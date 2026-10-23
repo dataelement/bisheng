@@ -1,20 +1,10 @@
 import { Outlined } from "bisheng-icons";
 
 import { FileStatus, SortDirection, SortType } from "~/api/knowledge";
-import { Checkbox } from "~/components";
+import { Checkbox, Dropdown, DropdownGroup, DropdownItem, Select } from '@bisheng/ui';
 import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
-import {
-    ActionMenuCheckboxItem,
-    ActionMenuContent,
-    ActionMenuItem,
-    actionMenuLabelClassName,
-    actionMenuSectionLabelClassName,
-} from "~/components/ActionMenu";
 import { useLocalize } from "~/hooks";
+import useSelectCopy from "~/hooks/useSelectCopy";
 import { cn } from "~/utils";
 import { CompoundSearchInput, type SearchParams } from "./CompoundSearchInput";
 
@@ -92,6 +82,7 @@ export function FileListToolbar({
     onSelectAll,
 }: FileListToolbarProps) {
     const localize = useLocalize();
+    const selectCopy = useSelectCopy();
     const filterActive = statusFilter.length > 0;
 
     return (
@@ -105,7 +96,7 @@ export function FileListToolbar({
         >
             <Checkbox
                 aria-label={localize("com_knowledge.select_all")}
-                className={SELECTION_CHECKBOX_CLASS}
+                className={`peer ${(SELECTION_CHECKBOX_CLASS) || ''}`}
                 checked={isIndeterminate ? "indeterminate" : isAllSelected}
                 disabled={!hasSelectableFiles}
                 onCheckedChange={onSelectAll}
@@ -123,87 +114,70 @@ export function FileListToolbar({
                 {showFilter && (
                     <>
                         <ToolbarDivider />
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                        {/* A multiple Select whose picks are shown by the button
+                            itself (tinted while any status is filtered). */}
+                        <Select
+                            {...selectCopy}
+                            multiple
+                            options={STATUS_FILTER_OPTIONS.map((option) => ({
+                                value: option.value,
+                                label: localize(option.labelKey),
+                                group: localize("com_knowledge.filter_file_status"),
+                            }))}
+                            value={statusFilter}
+                            onChange={(next) => {
+                                for (const option of STATUS_FILTER_OPTIONS) {
+                                    const checked = next.includes(option.value);
+                                    if (checked !== statusFilter.includes(option.value)) {
+                                        onFilterStatus(option.value, checked);
+                                    }
+                                }
+                            }}
+                            aria-label={localize("com_knowledge.filter_file_status")}
+                            trigger={
                                 <button
                                     type="button"
+                                    aria-label={localize("com_knowledge.filter")}
                                     className={cn(TOOLBAR_BUTTON_CLASS, filterActive && "text-blue-500")}
                                 >
                                     <Outlined.Filter className="size-4 shrink-0" />
                                     {localize("com_knowledge.filter")}
                                 </button>
-                            </DropdownMenuTrigger>
-                            {/* 120px wide, 8px padding, 32px rows spaced 4px apart, 12px
-                                panel radius (Figma 13198:78111 — the dropdown-panel radius
-                                the 圆角规范 calls for). Past 240px the list scrolls inside
-                                instead of running down the viewport. */}
-                            <ActionMenuContent
-                                align="center"
-                                width={120}
-                                // min-w-0 is required: the shared content base sets
-                                // min-w-[8rem] (128px), which would otherwise win over
-                                // the 120px width.
-                                className="max-h-[240px] min-w-0 gap-1 overflow-y-auto rounded-xl"
-                            >
-                                <div className={actionMenuSectionLabelClassName}>
-                                    {localize("com_knowledge.filter_file_status")}
-                                </div>
-                                {STATUS_FILTER_OPTIONS.map((option) => (
-                                    <ActionMenuCheckboxItem
-                                        key={option.value}
-                                        checked={statusFilter.includes(option.value)}
-                                        onCheckedChange={(checked) => onFilterStatus(option.value, checked)}
-                                        onSelect={(e) => e.preventDefault()}
-                                    >
-                                        <span className={actionMenuLabelClassName}>
-                                            {localize(option.labelKey)}
-                                        </span>
-                                    </ActionMenuCheckboxItem>
-                                ))}
-                            </ActionMenuContent>
-                        </DropdownMenu>
+                            }
+                        />
                     </>
                 )}
 
                 <ToolbarDivider />
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <button type="button" className={TOOLBAR_BUTTON_CLASS}>
-                            <Outlined.Sort className="size-4 shrink-0" />
-                            {localize("com_knowledge.sort")}
-                        </button>
-                    </DropdownMenuTrigger>
-                    {/* Same panel as the filter menu: 120px, centred on the trigger,
-                        32px rows, 12px radius, scrolls past 240px. The active field's
-                        direction sits in the trailing slot the filter uses for its check. */}
-                    <ActionMenuContent
-                        align="center"
-                        width={120}
-                        className="max-h-[240px] min-w-0 gap-1 overflow-y-auto rounded-xl"
-                    >
-                        <div className={actionMenuSectionLabelClassName}>
-                            {localize("com_knowledge.sort_field")}
-                        </div>
-                        {SORT_OPTIONS.map((option) => (
-                            <ActionMenuItem
-                                key={option.value}
-                                className="rounded-lg"
-                                onClick={() => onSort(option.value)}
-                            >
-                                <span className={actionMenuLabelClassName}>
+                {/* The active field's direction sits in the trailing slot. */}
+                <Dropdown
+                    align="end"
+                    panelClassName="max-h-[240px] overflow-y-auto"
+                    menu={
+                        <DropdownGroup label={localize("com_knowledge.sort_field")}>
+                            {SORT_OPTIONS.map((option) => (
+                                <DropdownItem
+                                    key={option.value}
+                                    onSelect={() => onSort(option.value)}
+                                    shortcut={sortBy === option.value ? (
+                                        <span className="flex size-4 items-center justify-center text-primary">
+                                            {sortDirection === SortDirection.ASC
+                                                ? <Outlined.ArrowUp className="size-4" />
+                                                : <Outlined.ArrowDown className="size-4" />}
+                                        </span>
+                                    ) : undefined}
+                                >
                                     {localize(option.labelKey)}
-                                </span>
-                                {sortBy === option.value && (
-                                    <span className="ml-auto flex size-4 shrink-0 items-center justify-center text-primary">
-                                        {sortDirection === SortDirection.ASC
-                                            ? <Outlined.ArrowUp className="size-4" />
-                                            : <Outlined.ArrowDown className="size-4" />}
-                                    </span>
-                                )}
-                            </ActionMenuItem>
-                        ))}
-                    </ActionMenuContent>
-                </DropdownMenu>
+                                </DropdownItem>
+                            ))}
+                        </DropdownGroup>
+                    }
+                >
+                    <button type="button" className={TOOLBAR_BUTTON_CLASS}>
+                        <Outlined.Sort className="size-4 shrink-0" />
+                        {localize("com_knowledge.sort")}
+                    </button>
+                </Dropdown>
 
                 {showViewToggle && (
                     <>

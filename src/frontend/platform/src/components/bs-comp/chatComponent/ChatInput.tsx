@@ -1,24 +1,27 @@
 // @ts-strict-ignore
-import { ClearIcon } from "@/components/bs-icons/clear";
-import { FormIcon } from "@/components/bs-icons/form";
-import { SendIcon } from "@/components/bs-icons/send";
-import { Button } from "@/components/bs-ui/button";
-import { Textarea } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Button, Textarea, notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
+
+
+
+
+
 import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { locationContext } from "@/contexts/locationContext";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { formatDate } from "@/util/utils";
-import { CirclePause } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+
+import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useVoiceDraft } from "@/hooks/useVoiceDraft";
 import GuideQuestions from "./GuideQuestions";
-import { isBlockingChatError, resolveChatErrorMessage } from "./chatErrorMessage";
+import { isBlockingChatError,resolveChatErrorMessage } from "./chatErrorMessage";
 import { useMessageStore } from "./messageStore";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
-    const { toast } = useToast()
+
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
 
@@ -31,7 +34,12 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
     const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, closeDanglingRunLogs, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
-    const inputRef = useRef(null)
+    const inputRef = useRef<HTMLTextAreaElement>(null)
+    const voice = useVoiceDraft(inputRef, '', (value) => {
+        if (!inputRef.current) return
+        inputRef.current.value = value
+        inputRef.current.dispatchEvent(new Event('input', { bubbles: true }))
+    })
     const continueRef = useRef(false)
     // 停止状态
     const [stop, setStop] = useState({
@@ -73,6 +81,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }, [])
 
     const handleSendClick = async () => {
+        if (voice.busy) return
         // 解除锁定状态下 form 按钮开放的状态
         setShowWhenLocked(false)
         // 关闭引导词
@@ -112,11 +121,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
             wsRef.current.send(JSON.stringify(msg))
         } catch (error) {
-            toast({
-                title: 'There was an error sending the message',
-                variant: 'error',
-                description: error.message
-            });
+            notification.open({ type: 'error', title: String('There was an error sending the message'), description: String(error.message ?? '') });
         }
     }
 
@@ -150,10 +155,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
                     if (data.category === 'error') {
                         const errorMsg = resolveChatErrorMessage(data.message, t)
-                        toast({
-                            variant: 'error',
-                            description: errorMsg
-                        })
+                        notification.open({ type: 'error', description: String(errorMsg ?? '') })
                         updateCurrentMessage({
                             type: 'end_cover',
                             category: 'tool',
@@ -265,6 +267,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     // 触发发送消息事件（重试、表单）
     useEffect(() => {
         const handleCustomEvent = (e) => {
+            if (voice.busy) return
             if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
             const { send, message } = e.detail
             inputRef.current.value = message
@@ -274,10 +277,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         return () => {
             document.removeEventListener('userResendMsgEvent', handleCustomEvent)
         }
-    }, [inputLock.locked, showWhenLocked])
+    }, [inputLock.locked, showWhenLocked, voice.busy])
 
     // 点击引导词
     const handleClickGuideWord = (message) => {
+        if (voice.busy) return
         if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
         inputRef.current.value = message
         handleSendClick()
@@ -291,25 +295,13 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         // setInputEmpty(textarea.value.trim() === '')
     }
 
-    const handleSpeechRecognition = (text) => {
-        console.log('text', text);
-
-        if (!showWhenLocked && inputLock.locked) return;
-        if (!inputRef.current) return;
-
-        // 将识别结果追加到当前输入框内容后
-        const currentValue = inputRef.current.value;
-        inputRef.current.value = currentValue + text;
-
-        // 触发input事件以更新UI（如自动调整高度）
-        const event = new Event('input', { bubbles: true, cancelable: true });
-        inputRef.current.dispatchEvent(event);
-    };
-
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
         <div className={`relative ${clear && 'pl-9'}`}>
             {/* 语音转文字 */}
-            {linsightConfig?.asr_model?.id && <SpeechToTextComponent disabled={inputLock.locked} onChange={handleSpeechRecognition} />}
+            {linsightConfig?.asr_model?.id && <SpeechToTextComponent
+                key={chatId} {...voice.props} disabled={inputLock.locked}
+                realtime={!!linsightConfig.asr_model.realtime} modelId={linsightConfig.asr_model.id}
+            />}
             {/* form */}
             {
                 formShow && <div className="relative">
@@ -331,7 +323,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => { !inputLock.locked && onClickClear?.() }}
-                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
+                    ><Outlined.Delete className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></Outlined.Delete></div>
                 }
             </div>
             {/* form switch */}
@@ -340,7 +332,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
+                    ><Outlined.Upload size={32} className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></Outlined.Upload></div>
                 }
             </div>
             {/* send */}
@@ -359,20 +351,18 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         id="bs-send-btn"
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
                         onClick={() => { !inputLock.locked && handleSendClick() }}>
-                        <SendIcon className={`${inputLock.locked || audioOpening ? 'text-muted-foreground' : 'text-foreground'}`} />
+                        <Outlined.Send className={`${inputLock.locked || audioOpening || voice.busy ? 'text-muted-foreground' : 'text-foreground'}`} />
                     </div>
                 }
             </div>
             {/* stop autogen等待输入时专用*/}
             <div className="absolute w-full flex justify-center bottom-32">
-                {autogenStop && <Button
-                    className="rounded-full"
-                    variant="outline" onClick={() => {
+                {autogenStop && <Button className="rounded-full" variant="outlined" onClick={() => {
                         if (stop.disable) return
                         setStop({ show: true, disable: true });
                         setAutogenStop(false)
                         sendWsMsg({ "action": "stop" });
-                    }}><CirclePause className="mr-2" />Stop</Button>}
+                    }} color="default"><Outlined.PlayerPause className="mr-2" />Stop</Button>}
             </div>
             {/* question */}
             <Textarea
@@ -381,16 +371,16 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 rows={1}
                 style={{ height: 56 }}
                 disabled={inputLock.locked}
-                onInput={handleTextAreaHeight}
+                onInput={(event) => { voice.handleEdit(event.currentTarget.value); handleTextAreaHeight(event) }}
+                onCompositionStart={voice.compositionStart}
+                onCompositionEnd={voice.compositionEnd}
                 placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
-                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
+                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                         event.preventDefault();
                         !inputLock.locked && handleSendClick()
                     }
-                }}
-            ></Textarea>
+                }} textareaClassName={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}></Textarea>
         </div>
         <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>
     </div>

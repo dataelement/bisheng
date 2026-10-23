@@ -45,6 +45,7 @@ MIGRATED_RESOURCE_TYPES: frozenset[str] = frozenset(
         # while the DB already carries `app` scope rows fails the whole release
         # (not just hosted apps).
         "app",
+        "linsight_skill",
     }
 )
 
@@ -61,6 +62,7 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
             "channel",
             "dashboard",
             "app",
+            "linsight_skill",
         }
     ),
     "create_folder": frozenset({"knowledge_space", "folder"}),

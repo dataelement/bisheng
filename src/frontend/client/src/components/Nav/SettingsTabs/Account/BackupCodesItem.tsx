@@ -1,18 +1,10 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import React, { useState } from 'react';
 import { RefreshCcw, ShieldX } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TBackupCode, TRegenerateBackupCodesResponse, type TUser } from '~/types/chat';
-import {
-  OGDialog,
-  OGDialogContent,
-  OGDialogTitle,
-  OGDialogTrigger,
-  Button,
-  Label,
-  Spinner,
-  TooltipAnchor,
-} from '~/components';
+import { OGDialog, OGDialogContent, OGDialogTitle, OGDialogTrigger, Button, Label, Spinner } from '~/components';
 import { useRegenerateBackupCodesMutation } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
@@ -128,15 +120,7 @@ const BackupCodesItem: React.FC = () => {
                           <span className="text-sm font-medium text-text-secondary">
                             #{index + 1}
                           </span>
-                          <TooltipAnchor
-                            description={
-                              code.usedAt ? new Date(code.usedAt).toLocaleDateString() : ''
-                            }
-                            disabled={!isUsed}
-                            focusable={false}
-                            className={isUsed ? 'cursor-pointer' : 'cursor-default'}
-                            render={
-                              <span
+                          <SharedTooltip  content={code.usedAt ? new Date(code.usedAt).toLocaleDateString() : ''}  ><div disabled={!isUsed} className={isUsed ? 'cursor-pointer' : 'cursor-default'}  ><span
                                 className={`rounded-full px-3 py-1 text-sm font-medium ${
                                   isUsed
                                     ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
@@ -144,9 +128,7 @@ const BackupCodesItem: React.FC = () => {
                                 }`}
                               >
                                 {isUsed ? localize('com_ui_used') : localize('com_ui_not_used')}
-                              </span>
-                            }
-                          />
+                              </span></div></SharedTooltip>
                         </div>
                       </motion.div>
                     );

@@ -107,6 +107,7 @@ class AppAuditAction(StrEnum):
     #: Data-tab table export (AC-56): a whole table left the platform as a file,
     #: which is worth a row of its own even though nothing changed.
     DATA_EXPORT = "app.data_export"
+    DATA_RESTORE = "app.data_restore"
     #: F056: who may see this application changed. Lives here rather than in a
     #: private F056 constant because this enum is what the lockstep test walks —
     #: an action defined elsewhere would never be checked against the whitelist

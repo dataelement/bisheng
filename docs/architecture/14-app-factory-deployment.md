@@ -1,5 +1,7 @@
 # 应用工场部署与配置
 
+> F086 protocol v2 安装说明见 [runtime-manager/OPERATIONS.md](../../src/runtime-manager/OPERATIONS.md)。下文原协议1、本地策略和 manager 直连存储的配置属于升级输入，不能直接作为 v2 安装配置；最终验收状态以 [F086 validation](../../features/v3.0.0/086-vibe-runtime-delivery/validation.json) 为准。
+
 > 面向运维 / 实施。**这一层默认不安装**——不装它，平台其余部分与 v2.x 完全一致。
 > 本文覆盖"从零把它装起来"的全过程：装什么、配什么、怎么验、装错了什么症状。
 >

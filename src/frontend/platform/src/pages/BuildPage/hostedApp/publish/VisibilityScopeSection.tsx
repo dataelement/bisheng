@@ -18,7 +18,7 @@
  * - **No react-query.** v3 is frozen by lint in this app; the neighbouring
  *   `useQuery` calls are legacy, not a pattern to copy.
  */
-import { Button } from "@/components/bs-ui/button"
+import { Button } from "@bisheng/ui"
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog"
 import {
   getResourcePermissionContextApi,

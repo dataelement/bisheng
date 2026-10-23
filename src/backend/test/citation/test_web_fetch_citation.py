@@ -55,6 +55,8 @@ def test_fetched_page_becomes_one_web_source():
     item = items[0]
     assert item.type == CitationType.WEB
     assert item.itemId == FETCHED_PAGE_ITEM_ID
+    # remark-directive in the client reads ":<letter>..." as a directive; keep it numeric.
+    assert FETCHED_PAGE_ITEM_ID.isdigit()
     assert item.key == page["citation_key"]
     assert page["citation_key"].startswith("websearch_")
     payload = item.sourcePayload
@@ -110,13 +112,13 @@ def test_url_searched_and_fetched_gets_one_marker_for_the_fetched_page():
     url = "https://example.com/report-source"
     entries = [
         {"type": "web", "key": "websearch_aaaa0001:1", "url": url, "urls": [url]},
-        {"type": "web", "key": "websearch_bbbb0002:page", "url": url, "urls": [url]},
+        {"type": "web", "key": f"websearch_bbbb0002:{FETCHED_PAGE_ITEM_ID}", "url": url, "urls": [url]},
     ]
 
     marked = attach_web_url_markers(f"See {url} for details.", entries)
 
     assert marked.count("\ue200") == 1
-    assert "websearch_bbbb0002:page" in marked
+    assert f"websearch_bbbb0002:{FETCHED_PAGE_ITEM_ID}" in marked
 
 
 def test_handle_rewrite_accepts_a_single_page():

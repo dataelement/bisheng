@@ -75,7 +75,7 @@ def test_container_pool_params_come_from_sandbox_conf_not_extra(monkeypatch: pyt
     import bisheng_langchain.gpts.tools.code_interpreter.factory as factory_mod
 
     conf = SandboxConf(endpoints=["http://pool:8080"], token="pool-token")
-    monkeypatch.setattr(factory_mod, "settings", type("S", (), {"sandbox_conf": conf})())
+    monkeypatch.setattr(factory_mod, "load_sandbox_conf", lambda: conf)
     tool = _get_native_code_interpreter(
         minio={},
         type="container",

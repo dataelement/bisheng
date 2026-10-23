@@ -1,10 +1,12 @@
 // @ts-strict-ignore
-import { LoadIcon } from "@/components/bs-icons/loading";
-import { Button } from "@/components/bs-ui/button";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
+import { Button, Select } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { downloadFile } from "@/util/utils";
-import { Check, ChevronsRightIcon, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronsRightIcon } from "lucide-react";
+import { useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
@@ -51,7 +53,7 @@ export default function RunLog({ node, children }) {
                     } else if (item.key === 'output_msg') {
                         label = item.key
                     } else if (item.key === 'error') {
-                        label = item.key
+                        label = t('nodeLogError')
                     } else {
                         label = t(`node.${node.type}.${item.key}.label`)
                     }
@@ -132,7 +134,7 @@ export default function RunLog({ node, children }) {
 
     if (state === Status.loading) return (
         <div className='bisheng-node-top flex items-center'>
-            <LoadIcon className="text-primary mr-2" />
+            <Outlined.Loading size={16} className="animate-spin text-primary mr-2" />
             <span className='text-sm text-primary'>{t('running')}</span>
         </div>
     );
@@ -140,7 +142,7 @@ export default function RunLog({ node, children }) {
     if (state === Status.success) return (
         <div className='bisheng-node-top flex justify-between bg-[#E6FBF1] dark:bg-[#303134]'>
             <div className='flex items-center gap-2 text-sm'>
-                <div className='rounded-full w-4 h-4 bg-[#00C78C] text-gray-50 flex items-center justify-center'><Check size={14} /></div>
+                <div className='rounded-full w-4 h-4 bg-[#00C78C] text-gray-50 flex items-center justify-center'><Outlined.Check size={14} /></div>
                 <span>{t('runSuccess')}</span>
             </div>
             {!noLog && <Log type={node.type} name={node.name} data={data} />}
@@ -150,7 +152,7 @@ export default function RunLog({ node, children }) {
     return (
         <div className='bisheng-node-top flex justify-between bg-[#FCEAEA] dark:bg-[#303134]'>
             <div className='flex items-center gap-2 text-sm'>
-                <div className='rounded-full w-4 h-4 bg-[#F04438] text-gray-50 flex items-center justify-center'><X size={14} /></div>
+                <div className='rounded-full w-4 h-4 bg-[#F04438] text-gray-50 flex items-center justify-center'><Outlined.Close size={14} /></div>
                 <span>{t('runFailed')}</span>
             </div>
             {!noLog && <Log type={node.type} name={node.name} data={data} />}
@@ -164,6 +166,7 @@ const Log = ({ type, name, data }) => {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
     const { t } = useTranslation('flow')
+    const selectLabels = useSelectLabels()
     const [currentIndex, setCurrentIndex] = useState(0)
     // key
     const currentData = useMemo(() =>
@@ -171,6 +174,8 @@ const Log = ({ type, name, data }) => {
     )
 
     const handleClickOutside = (event) => {
+        // The round picker's listbox is portaled to <body>; a pick there is not "outside".
+        if (event.target instanceof Element && event.target.closest('[role="listbox"]')) return;
         if (ref.current && !ref.current.contains(event.target)) {
             setOpen(false);
         }
@@ -205,22 +210,17 @@ const Log = ({ type, name, data }) => {
                             <NodeLogo type={type} colorStr={name} />
                             <span className="truncate block">{name}</span>
                         </div>
-                        <X size={18} className="cursor-pointer" onClick={() => setOpen(false)} />
+                        <Outlined.Close size={18} className="cursor-pointer" onClick={() => setOpen(false)} />
                     </div>
                     {data.length > 1 && <div className="mb-2">
-                        <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
-                            <SelectTrigger className="w-[180px]">
-                                {/* <SelectValue /> */}
-                                <span>{t('roundRunResult', { index: currentIndex + 1 })}</span>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    {
-                                        data.map((_, index) => <SelectItem key={index} value={index + ""}>{t('roundRunResult', { index: index + 1 })}</SelectItem>)
-                                    }
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+                        <Select
+                            {...selectLabels}
+                            options={data.map((_, index) => ({ value: String(index), label: t('roundRunResult', { index: index + 1 }) }))}
+                            value={String(currentIndex)}
+                            onChange={(val) => { if (val != null) setCurrentIndex(Number(val)) }}
+                            aria-label={t('runResults')}
+                            className="nodrag w-[180px]"
+                        />
                     </div>}
                     <div className="">
                         {currentData.map((item) => item.type === 'file' ?
@@ -254,7 +254,7 @@ export const ResultFile = ({ title, name, fileUrl }: { title: string, name: stri
                 className="w-full h-12 p-2 block text-muted-foreground dark:bg-black"
             />
 
-            <Button onClick={handleDownload} className="h-6 mt-2">
+            <Button onClick={handleDownload} className="mt-2" size="small">
                 {t('downloadFullContent')}
             </Button>
         </div>

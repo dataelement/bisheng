@@ -115,6 +115,9 @@ class Config:
     manager_base: str = "http://127.0.0.1:8091"
     backend_secret: str = ""
     manager_secret: str = ""
+    protocol_version: int = 1
+    route_key_id: str = ""
+    route_secret: str = ""
     signature_header: str = "X-Signature"
 
     # --- caches (D6 / D5.1; two independent knobs on purpose) -------------
@@ -168,6 +171,9 @@ def load_config() -> Config:
         manager_base=_env_str("APP_PROXY_MANAGER_BASE", "http://127.0.0.1:8091") or "http://127.0.0.1:8091",
         backend_secret=_env_str("APP_PROXY_BACKEND_SECRET"),
         manager_secret=_env_str("APP_PROXY_MANAGER_SECRET"),
+        protocol_version=int(_env_str("APP_PROXY_PROTOCOL_VERSION", "1")),
+        route_key_id=_env_str("APP_PROXY_ROUTE_KEY_ID"),
+        route_secret=_env_str("APP_PROXY_ROUTE_SECRET"),
         signature_header=_env_str("APP_PROXY_SIGNATURE_HEADER", "X-Signature") or "X-Signature",
         authz_ttl_seconds=_env_float("APP_PROXY_AUTHZ_TTL_SECONDS", 3.0),
         route_ttl_seconds=_env_float("APP_PROXY_ROUTE_TTL_SECONDS", 3.0),

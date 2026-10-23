@@ -26,11 +26,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
 } from '~/components/ui';
+import { Dropdown, DropdownItem } from '@bisheng/ui';
 import { useDeleteFilesFromTable } from '~/hooks/Files';
 import { TrashIcon, Spinner } from '~/components/svg';
 import useLocalize from '~/hooks/useLocalize';
@@ -119,33 +116,25 @@ export default function DataTableFile<TData, TValue>({
           </div>
           <div className="flex w-full flex-row gap-x-3">
             {' '}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="ml-auto border border-border-medium">
-                  <ListFilter className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="z-[1001] dark:border-gray-700 dark:bg-gray-850"
-              >
-                {table
-                  .getAllColumns()
-                  .filter((column) => column.getCanHide())
-                  .map((column) => {
-                    return (
-                      <DropdownMenuCheckboxItem
-                        key={column.id}
-                        className="cursor-pointer capitalize dark:text-white dark:hover:bg-gray-800"
-                        checked={column.getIsVisible()}
-                        onCheckedChange={(value) => column.toggleVisibility(Boolean(value))}
-                      >
-                        {localize(contextMap[column.id])}
-                      </DropdownMenuCheckboxItem>
-                    );
-                  })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Dropdown
+              align="end"
+              menu={table
+                .getAllColumns()
+                .filter((column) => column.getCanHide())
+                .map((column) => (
+                  <DropdownItem
+                    key={column.id}
+                    checked={column.getIsVisible()}
+                    onCheckedChange={(value) => column.toggleVisibility(Boolean(value))}
+                  >
+                    {localize(contextMap[column.id])}
+                  </DropdownItem>
+                ))}
+            >
+              <Button variant="outline" className="ml-auto border border-border-medium">
+                <ListFilter className="h-4 w-4" />
+              </Button>
+            </Dropdown>
             <Input
               placeholder={localize('com_files_filter')}
               value={(table.getColumn('filename')?.getFilterValue() as string | undefined) ?? ''}

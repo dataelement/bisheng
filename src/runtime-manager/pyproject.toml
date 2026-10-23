@@ -8,17 +8,17 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
+    "cryptography==50.0.2",
     "jinja2>=3.1",
     "pydantic>=2.7",
     # Docker SDK is imported lazily inside runtime_manager.docker_backend so the
     # unit test suite (fake backend) never needs a daemon or the SDK installed.
     "docker>=7.1",
-    # Same pattern for the attachment store (runtime_manager.storage): the SDK
-    # is imported inside the MinIO adapter only, the suite runs on a fake.
-    "minio>=7.2",
+
 ]
 
 [project.optional-dependencies]
+legacy-storage = ["minio>=7.2"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

@@ -13,7 +13,7 @@
  * cancels the dialog gets `false`, which is not an error.
  */
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { notification } from "@bisheng/ui"
 import {
   deleteHostedAppApi,
   getHostedAppErrorMessage,
@@ -86,25 +86,25 @@ export function useHostedAppActions(options: UseHostedAppActionsOptions = {}) {
         // `ok: false` is a handled outcome, not a transport failure: the app was
         // parked for capacity or failed to start, and `reason` explains it.
         if (result && result.ok === false) {
-          toast({
+          notification.open({
             title: t("prompt"),
-            variant: "warning",
+            type: "warning",
             description:
               result.reason || t("hostedApp.actions.capacityShortage"),
           })
         } else {
-          toast({
+          notification.open({
             title: t("prompt"),
-            variant: "success",
+            type: "success",
             description: t(`hostedApp.actions.done.${kind}`),
           })
         }
         onChanged?.(kind, result)
         return true
       } catch (error) {
-        toast({
+        notification.open({
           title: t("prompt"),
-          variant: "error",
+          type: "error",
           description:
             getHostedAppErrorMessage(error) || t("hostedApp.actions.failed"),
         })

@@ -1,9 +1,9 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { changeCurrentVersion } from "@/controllers/API/flow";
 import { changeWorkflowCurrentVersion } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppNumType } from "@/types/app";
+import { Select, Tooltip } from "@bisheng/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -22,7 +22,10 @@ interface SelectCompProps {
 
 const SelectComp = ({ value, onChange, data, disabled = false }: SelectCompProps) => {
 
-    const handleChange = (id) => {
+    const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+
+    const handleChange = (id: string) => {
         const request = data.flow_type === AppNumType.FLOW
             ? changeWorkflowCurrentVersion
             : changeCurrentVersion
@@ -30,20 +33,23 @@ const SelectComp = ({ value, onChange, data, disabled = false }: SelectCompProps
         onChange?.(id)
     }
 
-    return <Select value={value} onValueChange={handleChange} disabled={disabled}>
-        <SelectTrigger className="w-[120px] h-6">
-            <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-            {
-                data.version_list.length ?
-                    data.version_list.map(version => (
-                        <SelectItem key={version.id} value={String(version.id)}>{version.name}</SelectItem>
-                    ))
-                    : <SelectItem value={'0'}>v0</SelectItem>
-            }
-        </SelectContent>
-    </Select>
+    const options = data.version_list.length
+        ? data.version_list
+            .filter(version => version.id != null && version.id !== '')
+            .map(version => ({ value: String(version.id), label: version.name }))
+        : [{ value: '0', label: 'v0' }]
+
+    return <Select
+        {...selectLabels}
+        aria-label={t('skills.version')}
+        size="small"
+        className="w-[120px]"
+        options={options}
+        value={value || null}
+        disabled={disabled}
+        // Re-picking the current version must not re-send the switch request.
+        onChange={(v) => { if (v != null && String(v) !== value) handleChange(String(v)) }}
+    />
 }
 
 export default function CardSelectVersion(
@@ -54,16 +60,9 @@ export default function CardSelectVersion(
 
     const { t } = useTranslation()
 
-    if (showPop) return <TooltipProvider>
-        <Tooltip>
-            <TooltipTrigger>
-                <SelectComp {...props} value={value} onChange={setValue} />
-            </TooltipTrigger>
-            <TooltipContent>
+    if (showPop) return <Tooltip  content={<>
                 <p className="text-[white]">{t('skills.chooseOnline')}</p>
-            </TooltipContent>
-        </Tooltip>
-    </TooltipProvider>
+             </>}><span className="inline-flex" tabIndex={0}><SelectComp {...props} value={value} onChange={setValue} /></span></Tooltip>
 
 
     return <SelectComp {...props} value={value} disabled={!showPop} />

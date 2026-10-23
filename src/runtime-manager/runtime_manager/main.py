@@ -1,23 +1,10 @@
 """FastAPI composition root.
 
-Binds ``127.0.0.1:8091`` (design §4.2 ⑧). Never published to the outside: on
-114 it is a host systemd unit (``bisheng-runtime-manager.service``), in the
-compose form a service on the internal network with no port mapping. Callers
-are the platform backend (intent RPC) and the app-proxy (route lookups), both
-authenticated with the shared HMAC secret.
-
-``/healthz`` is the deliberate exception to the HMAC rule: systemd / smoke
-scripts must be able to answer "is the process up" without holding the secret.
-It reports process liveness only and leaks nothing about hosted apps — whether
-the *orchestration backend* is reachable is a separate, authenticated answer
-(``GET /v1/runtime/status``), because that one is operational intelligence.
-
-The lifespan owns exactly one background thing: the reconcile loop (D4). It
-starts with a full alignment pass, which is what makes a manager restart adopt
-whatever is already running instead of disturbing it (AC-22 / AC-50). Startup
-never fails on a sick daemon — the apps are up and the loop retries — because a
-manager that refuses to boot while dockerd is restarting takes the read side
-(status / logs / route) down with it.
+Protocol v2 has one platform-backed reconciliation loop; protocol v1 retains the
+legacy local-state loop only for compatibility. Read-only route and egress
+projections live on backend, so they do not depend on manager liveness. The
+manager API is internal, authenticated with independent platform-control HMAC.
+Only /healthz is public liveness; orchestration readiness is authenticated.
 """
 
 from __future__ import annotations
@@ -28,7 +15,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from runtime_manager import __version__
-from runtime_manager.api import appdb, intents, readonly, routes, storage
+from runtime_manager.api import (
+    appdb,
+    intents,
+    operations,
+    platform_data,
+    platform_observe,
+    readonly,
+    routes,
+    storage,
+    upgrade,
+)
 from runtime_manager.config import get_config
 from runtime_manager.reconciler import ReconcileLoop, recovery_budget_seconds
 
@@ -48,11 +45,17 @@ def get_reconcile_loop() -> ReconcileLoop | None:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(_: FastAPI, config=None):
     global _reconcile_loop
-    config = get_config()
+    config = config or get_config()
     if config.reconcile_enabled:
-        _reconcile_loop = ReconcileLoop(config)
+        if config.protocol_version == 2:
+            from runtime_manager.api.operations import executor
+            from runtime_manager.operations import PlatformReconcileLoop
+
+            _reconcile_loop = PlatformReconcileLoop(executor())
+        else:
+            _reconcile_loop = ReconcileLoop(config)
         _reconcile_loop.start()
         logger.info(
             "reconcile loop started (every %ss; unattended recovery budget %ss)",
@@ -67,22 +70,34 @@ async def lifespan(_: FastAPI):
             _reconcile_loop = None
 
 
-app = FastAPI(
-    title="BiSheng runtime manager",
-    version=__version__,
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
-    lifespan=lifespan,
-)
+def create_app(config=None):
+    settings = config or get_config()
 
-app.include_router(intents.router)
-app.include_router(routes.router)
-app.include_router(readonly.router)
-app.include_router(storage.router)
-app.include_router(appdb.router)
+    @asynccontextmanager
+    async def configured_lifespan(application):
+        async with lifespan(application, config=config):
+            yield
+
+    application = FastAPI(
+        title="BiSheng runtime manager",
+        version=__version__,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+        lifespan=configured_lifespan,
+    )
+    application.include_router(operations.router)
+    application.include_router(platform_data.router)
+    application.include_router(platform_observe.router)
+    if settings.executor_kind == "docker":
+        for router in (upgrade.router, intents.router, routes.router, readonly.router, storage.router, appdb.router):
+            application.include_router(router)
+
+    @application.get("/healthz")
+    async def healthz():
+        return {"status": "ok", "version": __version__}
+
+    return application
 
 
-@app.get("/healthz")
-async def healthz() -> dict[str, str]:
-    return {"status": "ok", "version": __version__}
+app = create_app()

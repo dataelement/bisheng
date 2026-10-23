@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { updateToolApi } from "@/controllers/API/tools";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -22,7 +22,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [open, setOpen] = useState(false);
     const { t } = useTranslation();
     const [formData, setFormData] = useState(null)
-    const { message } = useToast();
+
     // {
     //     provider: 'openai',
     //     openai_api_key: '',

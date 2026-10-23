@@ -85,11 +85,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       name: {{ include "bisheng.fullname" . }}
       key: sandboxToken
       {{- end }}
-- name: BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN
-  value: {{ .Values.sandbox.discoverHostPattern | quote }}
-- name: BS_SANDBOX_CONF__DISCOVER_INDEX_START
-  value: {{ .Values.sandbox.discoverIndexStart | quote }}
-- name: BS_SANDBOX_CONF__DISCOVER_TTL_S
-  value: {{ .Values.sandbox.discoverTtlS | quote }}
+- name: BS_SANDBOX_CONF__ENDPOINTS
+  value: {{ .Values.sandbox.endpoints | toJson | quote }}
 {{- end }}
 {{- end }}

@@ -14,7 +14,7 @@
  * app). Ordering is server-side with the row key as tiebreaker, so paging
  * never repeats or skips a row.
  */
-import { Button } from "@/components/bs-ui/button"
+import { Button } from "@bisheng/ui"
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import {
   Table,
@@ -28,7 +28,7 @@ import {
   ColumnResizeHandle,
   useResizableColumns,
 } from "@/components/bs-ui/table/useResizableColumns"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { notification } from "@bisheng/ui"
 import { cname } from "@/components/bs-ui/utils"
 import {
   getHostedAppErrorCode,
@@ -213,8 +213,8 @@ export function DataTab({ appId, appName }: DataTabProps) {
       const blob = await exportHostedAppTableApi(appId, selected)
       saveBlob(blob, exportFileName(appName, selected))
     } catch (error) {
-      toast({
-        variant: "error",
+      notification.open({
+        type: "error",
         description: getHostedAppErrorMessage(error) || t("hostedApp.data.exportFailed"),
       })
     } finally {

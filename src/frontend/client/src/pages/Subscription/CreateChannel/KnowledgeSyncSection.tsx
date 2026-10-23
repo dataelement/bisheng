@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 /**
  * KnowledgeSyncSection — v2.5 Module D configuration UI.
  *
@@ -17,7 +18,8 @@
  */
 import { ChevronDown, ChevronUp, PlusSquare } from "lucide-react";
 import { useMemo, useState, type RefObject } from "react";
-import { Switch, TooltipAnchor } from "~/components/ui";
+
+import { Switch } from '@bisheng/ui';
 import type {
     KnowledgeSyncConfig,
     KnowledgeSyncSpaceItem,
@@ -255,26 +257,24 @@ export default function KnowledgeSyncSection({
             <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                     <span className="text-[14px] font-medium text-text-1">
-                        {localize?.("com_subscription.sync_to_knowledge_space") ||
-                            "同步至知识空间"}
+                        {localize?.("com_subscription.sync_to_knowledge_space")}
                     </span>
                     <span className="text-[14px] font-normal text-text-3">
-                        {localize?.("com_subscription.sync_to_knowledge_space_hint") ||
-                            "该频道下的内容会自动同步到知识空间"}
+                        {localize?.("com_subscription.sync_to_knowledge_space_hint")}
                     </span>
                 </div>
                 <Switch
                     size="small"
                     checked={mainEnabled}
                     onCheckedChange={setMainEnabled}
-                    className="shrink-0"
+                    className="peer shrink-0"
                 />
             </div>
 
             {mainEnabled && (
                 <div className="mt-3 rounded-md border border-border-base text-text-1 bg-[#fbfbfb]">
                     <div className="px-4 py-3 text-[14px] font-medium">
-                        {mainChannelName || localize?.("com_subscription.main_channel") || "频道名称"}
+                        {mainChannelName || localize?.("com_subscription.main_channel")}
                     </div>
                     <div className="space-y-1 px-2 pb-2">
                         {draft.main.spaces.map((s) => (
@@ -308,8 +308,7 @@ export default function KnowledgeSyncSection({
                                     (noSubChannels ? "text-text-4" : "text-text-1")
                                 }
                             >
-                                {localize?.("com_subscription.per_sub_channel_sync") ||
-                                    "为每个子频道单独设置"}
+                                {localize?.("com_subscription.per_sub_channel_sync")}
                             </span>
                             <span
                                 className={
@@ -317,33 +316,23 @@ export default function KnowledgeSyncSection({
                                     (noSubChannels ? "text-text-4" : "text-text-3")
                                 }
                             >
-                                {localize?.("com_subscription.per_sub_channel_sync_hint") ||
-                                    "该子频道下的内容会自动同步到知识空间"}
+                                {localize?.("com_subscription.per_sub_channel_sync_hint")}
                             </span>
                         </div>
                         {noSubChannels ? (
-                            <TooltipAnchor
-                                description={
-                                    localize?.("com_subscription.create_sub_channel_first") ||
-                                    "请先创建子频道"
-                                }
-                                side="top"
-                                className="shrink-0"
-                            >
-                                <Switch
+                            <SharedTooltip  content={localize?.("com_subscription.create_sub_channel_first")} side="top"  ><div className="shrink-0"  ><Switch className="peer"
                                     size="small"
                                     checked={!noSubChannels && subModeActive}
                                     disabled={noSubChannels}
                                     onCheckedChange={setSubMode}
-                                />
-                            </TooltipAnchor>
+                                /></div></SharedTooltip>
                         ) : (
                             <Switch
                                 size="small"
                                 checked={!noSubChannels && subModeActive}
                                 disabled={noSubChannels}
                                 onCheckedChange={setSubMode}
-                                className="shrink-0"
+                                className="peer shrink-0"
                             />
                         )}
                     </div>
@@ -399,7 +388,7 @@ export default function KnowledgeSyncSection({
                                                     <span>
                                                         {localize?.(
                                                             "com_subscription.add_knowledge_space",
-                                                        ) || "添加知识空间"}
+                                                        )}
                                                     </span>
                                                 </button>
                                             </div>

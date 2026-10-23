@@ -158,6 +158,7 @@
   "cannotBeEmpty": "{{label}} cannot be empty",
   "editReportTemplate": "Edit Report Template",
   "nodeErrorMessage": "{{nodeName}} node error: {{varNameCn}} is invalid.",
+  "nodeLogError": "Failure reason",
   "required": "Required",
   "isRequired": "Is Required",
   "documentKnowledgeBase": "Document Knowledge",
@@ -602,5 +603,9 @@
         "label": "Output Variable"
       }
     }
-  }
+  },
+  "rerunWorkflow": "Run again",
+  "type": "Type",
+  "valueType": "Value type",
+  "selectDbType": "Select a database type"
 }

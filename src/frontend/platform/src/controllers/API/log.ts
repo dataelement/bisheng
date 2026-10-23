@@ -3,7 +3,7 @@ import { paramsSerializer } from ".";
 import axios from "../request";
 import type { AuditAppOption, AuditRow } from "@/types/api/audit";
 
-// 获取操作过组下资源的所有用户
+// Fetch users who operated on resources in the selected group.
 export async function getOperatorsApi(): Promise<[]> {
     return await axios.get('/api/v1/audit/operators')
 }
@@ -252,6 +252,7 @@ export const V2_ACTIONS: string[] = [
     'app.meta_update',
     'app.data_row_edit',
     'app.data_export',
+    'app.data_restore',
     // F056 governance.
     'app.visibility_change',
     // F055 resource-tier admin surface (system page "resource tiers" tab).

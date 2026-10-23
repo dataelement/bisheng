@@ -229,6 +229,15 @@ class VersionService:
     # -- the single latch -------------------------------------------------
 
     @classmethod
+    async def mark_runtime_online(cls, repository, app_id, version_id):
+        """F086 supplies the platform UoW so route and version latch share a commit."""
+        async with repository.transaction() as session:
+            version = await AppVersionDao.aget(session, app_id, version_id)
+            if version is None or version.terminal_state in {TERMINAL_STATE_REJECTED, TERMINAL_STATE_WITHDRAWN}:
+                raise ValueError("runtime version is not approved for activation")
+            await AppVersionDao.amark_terminal(session, app_id, version_id, TERMINAL_STATE_ONLINE)
+
+    @classmethod
     async def mark_terminal_state(cls, app_id: str, version_id: str, terminal_state: str) -> bool:
         """Latch the approval outcome. The **only** authorised UPDATE of ``app_version``.
 

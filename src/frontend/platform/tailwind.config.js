@@ -1,14 +1,10 @@
 /** @type {import('tailwindcss').Config} */
-const { fontFamily } = require("tailwindcss/defaultTheme");
+const plugin = require('tailwindcss/plugin');
 
-import plugin from "tailwindcss/plugin";
-
-// ! Check if removing the other module.exports made sense
 module.exports = {
-  darkMode: ["class"],
+  presets: [require('@bisheng/ui/tailwind-preset')],
   content: [
-    "app/**/*.{ts,tsx}",
-    "components/**/*.{ts,tsx}",
+    "../packages/ui/src/**/*.{ts,tsx}",
     "./index.html",
     "./src/**/*.{js,ts,tsx,jsx}",
     // packages/file-viewers is source-shipped and consumed by both apps: its
@@ -22,7 +18,6 @@ module.exports = {
     "bg-status-red",
     "bg-status-yellow",
   ],
-  important: true,
   theme: {
     container: {
       center: true,
@@ -102,7 +97,6 @@ module.exports = {
         "chat-bot-icon": "var(--chat-bot-icon)",
         "chat-user-icon": "var(--chat-user-icon)",
         "black-button": "hsl(var(--black-button))",
-        white: "var(--white)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input)/0.15)",
         ring: "hsl(var(--ring))",
@@ -137,14 +131,6 @@ module.exports = {
           foreground: "hsl(var(--card-foreground))",
         },
       },
-      borderRadius: {
-        lg: `var(--radius)`,
-        md: `calc(var(--radius) - 2px)`,
-        sm: "calc(var(--radius) - 4px)",
-      },
-      fontFamily: {
-        sans: ["var(--font-sans)", ...fontFamily.sans],
-      },
     },
   },
 
@@ -155,16 +141,6 @@ module.exports = {
     }),
     plugin(function ({ addUtilities }) {
       addUtilities({
-        ".scrollbar-hide": {
-          /* IE and Edge */
-          "-ms-overflow-style": "none",
-          /* Firefox */
-          "scrollbar-width": "none",
-          /* Safari and Chrome */
-          "&::-webkit-scrollbar": {
-            display: "none",
-          },
-        },
         ".truncate-multiline": {
           display: "-webkit-box",
           "-webkit-line-clamp":

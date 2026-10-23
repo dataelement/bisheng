@@ -1,8 +1,9 @@
+import { Button } from '@bisheng/ui';
 import { PenLine } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/ui/accordion";
-import { Button } from "../../components/bs-ui/button";
+
 import {
     Dialog,
     DialogContent,
@@ -13,7 +14,7 @@ import {
     DialogTrigger,
 } from "../../components/bs-ui/dialog";
 import { Label } from "../../components/bs-ui/label";
-import { Switch } from "../../components/bs-ui/switch";
+import { Switch } from '@bisheng/ui';
 import { TemplateVariableType } from "../../types/api";
 import { FlowType } from "../../types/flow";
 import { classNames } from "../../utils";
@@ -63,7 +64,7 @@ const Item = ({ name, data }: { name: string, data: TemplateVariableType }) => {
                     }
                 </div>
             </div>
-            <Switch id="airplane-mode" checked={data.l2} onCheckedChange={handleSwitch} />
+            <Switch className="peer" id="airplane-mode" checked={data.l2} onCheckedChange={handleSwitch} />
         </div>
     );
 };
@@ -171,7 +172,7 @@ export default function L2ParamsModal({ data: flow, open, setOpen, onSave }: { d
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button className="mt-3 rounded-full" onClick={() => { setOpen(false); onSave() }} type="submit" >{t('flow.saveConfig')}</Button>
+                    <Button className="mt-3 rounded-full" onClick={() => { setOpen(false); onSave() }} type="submit">{t('flow.saveConfig')}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

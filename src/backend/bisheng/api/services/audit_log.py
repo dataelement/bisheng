@@ -1136,6 +1136,21 @@ class AuditLogService:
         )
 
     @classmethod
+    def update_sandbox_conf(cls, user: UserPayload, ip_address: str, note: str):
+        """Audit a sandbox address or token change. Note lists field names only."""
+        logger.info(f"act=update_sandbox_conf user={user.user_name} ip={ip_address} note={note}")
+        cls._system_log(
+            user,
+            ip_address,
+            [],
+            EventType.UPDATE_SANDBOX_CONF,
+            ObjectType.TOOL,
+            "sandbox_endpoint",
+            "sandbox_endpoint",
+            note,
+        )
+
+    @classmethod
     def update_tool(cls, user: UserPayload, ip_address: str, group_ids: list[int], tool_type: GptsToolsType):
         logger.info(f"act=update_tool user={user.user_name} ip={ip_address} tool_type_id={tool_type.id}")
 

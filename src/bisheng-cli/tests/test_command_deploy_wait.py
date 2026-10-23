@@ -33,11 +33,13 @@ from bisheng_cli.commands.deploy import (
 from bisheng_cli.errors import (
     EXIT_APPROVAL_EXCEPTION,
     EXIT_CANCELLED,
+    EXIT_CAPACITY,
     EXIT_OK,
     EXIT_PENDING_ONLINE,
     EXIT_PRECHECK_FAILED,
     EXIT_REJECTED,
     EXIT_SECRET_FOUND,
+    EXIT_UNKNOWN_CODE,
     EXIT_WAIT_TIMEOUT,
     EXIT_WITHDRAWN,
 )
@@ -184,6 +186,28 @@ def test_any_failed_stage_stops_polling_and_exits_nonzero(
     assert code == EXIT_PRECHECK_FAILED
     # Two polls, then stop — the third response was never fetched.
     assert mock.paths_called().count(POLL) == 2
+
+
+@pytest.mark.parametrize("platform_code", [16125, 16226, 19999])
+@pytest.mark.parametrize("json_output", [False, True])
+def test_preapproval_capacity_failure_keeps_raw_code_and_unknown_fallback(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path, platform_code: int, json_output: bool
+) -> None:
+    """F059 T264 — coverage AC-02, AC-08: real deploy polling preserves the failure contract."""
+    failure = failure_tuple("precheck_build", platform_code, "Insufficient runtime capacity")
+    failed = deployment(stage="precheck_build", status="failed", failure=failure)
+    mock = _mock([failed, _waiting()])
+    argv = (["--json"] if json_output else []) + ["deploy", str(sample_project), "--wait"]
+    code, out, err = _run(argv, monkeypatch=monkeypatch, mock=mock)
+    expected = EXIT_UNKNOWN_CODE if platform_code == 19999 else EXIT_CAPACITY
+    assert code == expected
+    assert mock.paths_called().count(POLL) == 1
+    assert FAKE_KEY not in out + err
+    if json_output:
+        assert _events(out)[-1]["failure"] == failure
+    else:
+        assert str(platform_code) in err
+        assert ("未登记" if platform_code == 19999 else "容量不足") in err
 
 
 def test_failure_tuple_passed_through_untouched_in_json(

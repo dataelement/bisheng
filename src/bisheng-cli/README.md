@@ -242,3 +242,18 @@ bash scripts/pack_cli_wheel.sh
 并把产物（`src/backend/bisheng/dev_toolkit/artifacts/` 下的 wheel 与 `manifest.json`）**一起提交**。后端镜像的构建上下文只有 `./src/backend/`，`src/bisheng-cli/` 不在镜像里 —— 不提交产物，平台分发的就还是上一版 wheel，而且没有任何提示。该脚本自带「装进干净 venv 后 import 生产入口」的冒烟：源码树里跑 pytest 永远看不见「依赖解析到新版本后 import 期就崩」这一类问题，因为它测的是开发环境已经解析好的那组版本。
 
 两条依赖（`httpx` / `PyYAML`）**都带上界**。CLI 的分发路径是开发者机器上的 `pip install <wheel>`，`uv.lock` 在那条路径上完全不参与解析 —— 能约束它的只有 wheel metadata 里的上界。放宽上界是一次显式决定（先跑通打包脚本的冒烟），不是顺手升。
+
+## Create a runtime v2 application
+
+`bisheng init example-app --runtime python3.11` creates a manifest v2 application
+bundle. `node20` and `static` are also supported. Its startup argv is explicit;
+publish with the ordinary `bisheng deploy` command. The platform must have runtime
+v2 and an imported default runtime profile. Existing manifest v1 projects remain
+supported without automatic conversion. Private offline material IDs must be
+imported by the application owner before being declared in the manifest.
+
+
+F086 的私有离线依赖由当前应用自然人 owner 通过 backend 管理接口导入并绑定。
+之后相同 profile/平台的发布自动消费已授权材料，普通 SAK 发布无需取得补包管理权限。
+显式在清单中选择私有 `offline_artifacts` 仍要求 owner；`enabled` 只改变未来发布。
+基础镜像替换、完全离线交付和故障处理见 [runtime-manager/OPERATIONS.md](../runtime-manager/OPERATIONS.md)。

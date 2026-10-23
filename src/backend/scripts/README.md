@@ -1200,3 +1200,14 @@ bash scripts/seed_load_test_org.sh --departments 200 --users 50000 --apply
 python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7
 python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7 --apply
 ```
+
+## Vibe runtime v2 deployment bindings
+
+`upgrade_vibe_runtime.py` uses authenticated scope APIs only. Export a signed manager
+`/v2/upgrade/inventory` during the maintenance window, review its SHA256, then run
+dry-run first with `BISHENG_MANAGEMENT_TOKEN`, `--inventory`, `--base-url` and
+`--report`. `--apply` additionally requires `--acknowledge-maintenance` and
+`--expected-inventory-sha256`. The backend rechecks live Engine facts. After import,
+use `POST /api/v1/apps/{app_id}/runtime/upgrade/rebind` to rebuild the current frozen
+image with backend storage; pending approved versions are preserved. Do not restore
+an older SQLite database as part of a code rollback.

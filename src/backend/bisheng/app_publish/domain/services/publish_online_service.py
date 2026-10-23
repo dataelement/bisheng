@@ -248,7 +248,10 @@ class PublishOnlineService:
         """
         deployment = await cls._deployment_ref(payload_snapshot, app)
         try:
-            await schema_evolution_service.migrate_for_release(app.id, version.manifest)
+            from bisheng.common.services.config_service import settings
+
+            if settings.app_runtime.runtime_protocol_version != 2:
+                await schema_evolution_service.migrate_for_release(app.id, version.manifest)
         except AppSchemaMigrationFailedError as error:
             return await cls._settle_schema_failure(
                 app, version, deployment, payload_snapshot, error=error, instance_id=instance_id
@@ -466,7 +469,7 @@ class PublishOnlineService:
             owner_user_id=int(app.owner_user_id or 0),
             business_name=str(payload_snapshot.get("app_name") or app.name),
             instance_id=int(instance_id or 0),
-            reason_kind="iteration_failed",
+            reason_kind="deploy_failed" if (result.detail or {}).get("maintenance") else "iteration_failed",
             reason=result.reason,
         )
         logger.info(
@@ -486,6 +489,14 @@ class PublishOnlineService:
         """Failure tuple for a release that did not go up while the app stayed up."""
         detail = result.detail if isinstance(result.detail, dict) else {}
         capacity = PublishOnlineService._is_capacity(result)
+        if detail.get("maintenance"):
+            return {
+                "stage": STAGE_PUBLISHING,
+                "code": CODE_STARTUP_PROBE_FAILED,
+                "message": "应用上线失败, 当前处于维护状态, 请核查数据迁移和快照",
+                "details": {"reason": "maintenance_failed", **detail},
+                "hints": ["查看本次操作及快照, 确认数据库状态后再恢复服务", "代码回滚不会自动恢复数据库"],
+            }
         return {
             "stage": STAGE_PUBLISHING,
             "code": CODE_CAPACITY_INSUFFICIENT if capacity else CODE_STARTUP_PROBE_FAILED,

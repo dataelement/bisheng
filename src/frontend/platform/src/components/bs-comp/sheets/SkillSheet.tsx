@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { Button, SearchInput } from '@bisheng/ui';
 import { useState } from "react";
 import { readOnlineFlows } from "../../../controllers/API/flow";
 import { FlowType } from "../../../types/flow";
 import { useTable } from "../../../util/hook";
-import { Button } from "../../bs-ui/button";
-import { SearchInput } from "../../bs-ui/input";
+
+
 import {
   Sheet,
   SheetContent,
@@ -47,12 +48,7 @@ export default function SkillSheet({ select, children, onSelect }) {
         <div className="flex h-full" onClick={(e) => e.stopPropagation()}>
           <div className="w-fit p-6">
             <SheetTitle>{t("build.addSkill")}</SheetTitle>
-            <SearchInput
-              value={keyword}
-              placeholder={t("build.search")}
-              className="my-6"
-              onChange={handleSearch}
-            />
+            <SearchInput value={keyword} placeholder={t("build.search")} onChange={handleSearch} className={"my-6"} />
             <Button className="w-full text-slate-50" onClick={toCreateFlow}>
               {t("build.createSkill")}
             </Button>
@@ -71,15 +67,11 @@ export default function SkillSheet({ select, children, onSelect }) {
                   footer={
                     <div className="flex justify-end">
                       {select.some((_) => _.id === flow.id) ? (
-                        <Button size="sm" className="h-6" disabled>
+                        <Button size="small" disabled>
                           {t("build.added")}
                         </Button>
                       ) : (
-                        <Button
-                          size="sm"
-                          className="h-6"
-                          onClick={() => onSelect(flow)}
-                        >
+                        <Button size="small" onClick={() => onSelect(flow)}>
                           {t("build.add")}
                         </Button>
                       )}

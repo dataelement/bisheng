@@ -1,4 +1,5 @@
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { notification } from '@bisheng/ui';
+
 import { userContext } from "@/contexts/userContext"
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
 import { useCallback, useContext, useEffect, useRef, useState } from "react"
@@ -247,11 +248,7 @@ export function useResourceActions(
       setActions(result.actions)
       setLoading(false)
       if (result.hasError) {
-        toast({
-          title: translateRef.current("dialog.title"),
-          variant: "error",
-          description: translateRef.current("error.checkFailed"),
-        })
+        notification.open({ type: "error", title: String(translateRef.current("dialog.title") ?? ''), description: String(translateRef.current("error.checkFailed") ?? '') })
       }
     })
 

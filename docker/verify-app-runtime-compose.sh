@@ -35,8 +35,8 @@ PROFILE="app-runtime"
 # 「整层不装」是产品明确支持的形态（GOV-10 / AC-59）：不带 --profile 起来时这两个
 # service 根本不创建，平台其余部分零变化。这个不等式一旦被破坏（比如有人顺手把
 # profiles 删了），默认装机就会多起两个容器并要求配密钥。
-EXPECTED_SERVICES_WITHOUT_PROFILE=11
-EXPECTED_SERVICES_WITH_PROFILE=15
+EXPECTED_SERVICES_WITHOUT_PROFILE=13
+EXPECTED_SERVICES_WITH_PROFILE=17
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; BOLD='\033[1m'; RESET='\033[0m'
 

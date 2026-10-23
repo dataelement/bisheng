@@ -2,15 +2,8 @@ import TextareaAutosize from 'react-textarea-autosize';
 import { ImageDetail, imageDetailNumeric, imageDetailValue } from '~/types/chat';
 import type { ValueType } from '@rc-component/mini-decimal';
 import type { TModelSelectProps } from '~/common';
-import {
-  Input,
-  Label,
-  Switch,
-  Slider,
-  HoverCard,
-  InputNumber,
-  HoverCardTrigger,
-} from '~/components/ui';
+import { Input, Label, Slider, HoverCard, InputNumber, HoverCardTrigger } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { cn, defaultTextProps, optionText } from '~/utils/';
 import { useLocalize, useDebouncedInput } from '~/hooks';
 import OptionHover from './OptionHover';
@@ -298,7 +291,7 @@ export default function Settings({
                   checked={resendFiles ?? true}
                   onCheckedChange={(checked: boolean) => setResendFiles(checked)}
                   disabled={readonly}
-                  className="flex"
+                  className="peer flex"
                 />
                 <OptionHover endpoint={optionEndpoint ?? ''} type="resend" side={ESide.Bottom} />
               </HoverCardTrigger>

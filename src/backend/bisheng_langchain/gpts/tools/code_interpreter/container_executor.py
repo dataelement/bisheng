@@ -22,7 +22,6 @@ from bisheng.common.errcode.sandbox import (
     SandboxUnreachableError,
 )
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import path_namespace_rules
-from bisheng_langchain.gpts.tools.code_interpreter.discover import shared_discoverer
 from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LOCAL_DESCRIPTION, LocalExecutor
 
 _LEASE_FIELDS = ("session_id", "lease_token", "lease_expires_at")
@@ -43,8 +42,8 @@ def _is_timeout(exc: BaseException) -> bool:
 class ContainerExecutor(LocalExecutor):
     """Lease a runner replica, tar the working dir, exec, copy-out.
 
-    Non-empty ``endpoints`` skip DNS. Otherwise ``discoverer`` / hostname pattern
-    expansion supplies the pool (T016). Sticky binds skip rediscovery.
+    The pool is the explicit ``endpoints`` list. An empty list is unreachable.
+    Sticky binds keep the URL chosen for this executor.
     """
 
     supports_retained_run = False
@@ -69,28 +68,6 @@ class ContainerExecutor(LocalExecutor):
         self.pool_acquire_timeout_s = float(
             kwargs.get("pool_acquire_timeout_s") or getattr(conf, "pool_acquire_timeout_s", None) or _ACQUIRE_TIMEOUT
         )
-        self.discover_host_pattern = kwargs.get("discover_host_pattern") or getattr(
-            conf, "discover_host_pattern", "code-runner-{n}"
-        )
-        self.discover_index_start = int(
-            kwargs.get("discover_index_start")
-            if kwargs.get("discover_index_start") is not None
-            else getattr(conf, "discover_index_start", 1)
-        )
-        self.discover_max = int(
-            kwargs.get("discover_max") if kwargs.get("discover_max") is not None else getattr(conf, "discover_max", 32)
-        )
-        self.discover_ttl_s = float(
-            kwargs.get("discover_ttl_s")
-            if kwargs.get("discover_ttl_s") is not None
-            else getattr(conf, "discover_ttl_s", 60)
-        )
-        self.discover_port = int(
-            kwargs.get("discover_port")
-            if kwargs.get("discover_port") is not None
-            else getattr(conf, "discover_port", 8080)
-        )
-        self.discoverer = kwargs.get("discoverer")
         self.client = kwargs.get("client")
         self.copy_in_bytes = 0
         self._bound_url: str | None = None
@@ -154,19 +131,7 @@ class ContainerExecutor(LocalExecutor):
         self._release()
 
     def _replica_urls(self) -> list[str]:
-        if self.endpoints:
-            return list(self.endpoints)
-        if self.discoverer is None:
-            # Same worker process / same scan params → one TTL cache. A new
-            # ContainerExecutor per workflow code node must not rescan DNS.
-            self.discoverer = shared_discoverer(
-                discover_host_pattern=self.discover_host_pattern,
-                discover_index_start=self.discover_index_start,
-                discover_max=self.discover_max,
-                discover_ttl_s=self.discover_ttl_s,
-                discover_port=self.discover_port,
-            )
-        return self.discoverer.urls()
+        return list(self.endpoints)
 
     def _ensure_lease(self) -> None:
         if self.keep_session and self._session_id and self._bound_url:

@@ -67,6 +67,10 @@
     "时间": {
       "name": "時間",
       "desc": "現在の時間を取得"
+    },
+    "网页读取": {
+      "name": "ウェブ読み取り",
+      "desc": "指定した URL のウェブページ本文を読み取ります。読み取りエンジンを設定でき、現在は DeepSeek に対応しています。"
     }
   },
   "tools": {
@@ -354,6 +358,13 @@
       "name": "現在の時間",
       "desc": "現在の時間を取得します。タイムゾーンが指定されていない場合、UTC+8の時間が使用されます。",
       "params": {}
+    },
+    "web_fetch": {
+      "name": "ウェブ読み取り",
+      "desc": "ウェブページを 1 件読み取り、タイトルと Markdown 本文を返します。",
+      "params": {
+        "url": "読み取るウェブページの完全な URL（http または https で始まるもの）"
+      }
     }
   },
   "addMcpServer": "MCPサーバーを追加",
@@ -363,7 +374,22 @@
   "executionModeLabel": "コード実行方式",
   "executionLocalLabel": "ローカル隔離実行",
   "executionContainerLabel": "サンドボックス実行",
-  "executionContainerHint": "接続設定はシステム設定で管理します。ここでは入力しません。",
+  "executionContainerHint": "各サンドボックス副本のアドレスとアクセス令牌を記入してください。ロードバランサのアドレスだけを記入しないでください。",
+  "sandboxAddressLabel": "サンドボックスのアドレス",
+  "sandboxAddressPlaceholder": "副本ごとに 1 行。例: http://10.0.0.1:8080",
+  "sandboxAddressHint": "副本ごとに 1 行で記入し、ロードバランサのアドレスだけを記入しないでください。アドレスは http または https で始まり、ホスト名と正しいポートが必要です。保存後およそ 60 秒以内、または次の実行から有効です。開いているアシスタントは再接続せず、次のターンで新しいアドレスを使います。実行中の Linsight タスクは、そのタスクが終わるまで以前の副本を使い続けます。",
+  "sandboxTokenLabel": "アクセス令牌",
+  "sandboxTokenPlaceholder": "空欄のときはデプロイ設定の令牌を使います。マスクは変更しない意味です。",
+  "sandboxSourcePage": "ページ設定",
+  "sandboxSourceDeployment": "デプロイ設定",
+  "sandboxSourceDefault": "既定値",
+  "sandboxDeploymentAddress": "デプロイ設定のアドレス",
+  "sandboxTestConnection": "接続をテスト",
+  "sandboxTestOk": "接続できます",
+  "sandboxTestUnreachable": "到達できません",
+  "sandboxTestTokenRejected": "令牌が拒否されました",
+  "sandboxTestBusy": "副本がビジーです",
+  "sandboxTestScope": "結果はこのプラットフォームのサービスプロセスがサンドボックスに届き、令牌が受け入れられるかだけを示します。他のプロセスを代表せず、コードも実行しません。",
   "executionE2bLabel": "E2Bサンドボックス実行",
   "serviceProviderLabel": "サービスプロバイダ",
   "providerPrivateLabel": "自己ホスティング",

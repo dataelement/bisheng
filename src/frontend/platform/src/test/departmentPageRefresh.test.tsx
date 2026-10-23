@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import DepartmentPage from "@/pages/DepartmentPage";
 import {
   getDepartmentApi,
@@ -26,13 +27,6 @@ vi.mock("@/components/bs-comp/department", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/components/bs-comp/department")>();
   return { ...actual, LazyDepartmentTree: () => <div data-testid="lazy-tree" /> };
 });
-
-vi.mock("@/components/bs-ui/tabs", () => ({
-  Tabs: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  TabsContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  TabsList: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  TabsTrigger: ({ children }: { children: React.ReactNode }) => <button type="button">{children}</button>,
-}));
 
 vi.mock("@/pages/DepartmentPage/components/MemberTable", () => ({
   MemberTable: ({ membersRefreshSignal }: { membersRefreshSignal: number }) => (
@@ -84,7 +78,9 @@ describe("DepartmentPage member refresh", () => {
     await screen.findByText("Root");
     expect(screen.getByTestId("members-refresh-signal")).toHaveTextContent("0");
 
+    await userEvent.click(screen.getByRole("tab", { name: "bs:department.settings" }));
     fireEvent.click(screen.getByRole("button", { name: "save department settings" }));
+    await userEvent.click(screen.getByRole("tab", { name: "bs:department.members" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("members-refresh-signal")).toHaveTextContent("1");

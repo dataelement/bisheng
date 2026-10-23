@@ -16,7 +16,7 @@
  */
 import CardComponent from "@/components/bs-comp/cardComponent"
 import AppAvator from "@/components/bs-comp/cardComponent/avatar"
-import { Badge } from "@/components/bs-ui/badge"
+import { Tag } from "@bisheng/ui"
 import {
   Select,
   SelectContent,
@@ -236,9 +236,9 @@ export function HostedAppCard({
               {t(stateI18nKey(state))}
             </span>
           )}
-          <Badge className="py-0 px-1 rounded-none rounded-br-md bg-[#6366f1]">
+          <Tag size="small">
             {t("hostedApp.typeName")}
-          </Badge>
+          </Tag>
         </div>
       }
     />

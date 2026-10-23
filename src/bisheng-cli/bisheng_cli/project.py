@@ -8,7 +8,8 @@ catches the failure that is worth catching locally (a wasted upload) without
 creating a second, drifting copy of the schema. Adding a default value here is
 how "it passed locally but the platform rejected it" gets manufactured.
 
-**It does not write the manifest.** The app identity lives beside it in
+**It never rewrites an existing manifest.** The explicit init command only
+creates a new bundle scaffold; validation remains platform-owned. The app identity lives beside it in
 `.bisheng/app.json` instead — a file the CLI owns end to end, which is committed
 to git (so a team shares one app) yet structurally excluded from the upload
 package (so it never reaches the platform). Those two facts are independent.
@@ -175,3 +176,53 @@ def require_app_id(root: Path, base_url: str, explicit: str | None) -> str:
         exit_code=EXIT_USAGE,
         next_step=f"用 --app-id 显式指定，或在曾经 deploy 过的项目目录下执行（标识存放在 {STATE_DIR}/{APP_REF_NAME}）。",
     )
+
+
+def initialize_project(path: Path, runtime: str = "python3.11") -> dict[str, Any]:
+    """Create a new scaffold atomically with respect to pre-existing file names."""
+    root = Path(path).expanduser().resolve()
+    if runtime not in {"python3.11", "node20", "static"}:
+        raise CliError("Unsupported scaffold runtime", exit_code=EXIT_LOCAL_INVALID)
+    manifest = {"manifest_version": 2, "name": root.name or "application", "runtime": runtime, "port": 8080}
+    if runtime == "python3.11":
+        command = ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+        files = {
+            "main.py": 'from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get("/")\ndef home():\n    return {"status": "ok"}\n',
+            "requirements.txt": "fastapi\nuvicorn\nbisheng-sdk==0.1.1\n",
+        }
+    elif runtime == "node20":
+        command = ["node", "server.js"]
+        package = {"name": "bisheng-app", "version": "1.0.0", "private": True, "scripts": {"start": "node server.js"}}
+        lock = {
+            "name": "bisheng-app",
+            "version": "1.0.0",
+            "lockfileVersion": 3,
+            "packages": {"": {"name": "bisheng-app", "version": "1.0.0"}},
+        }
+        files = {
+            "package.json": json.dumps(package, indent=2) + "\n",
+            "package-lock.json": json.dumps(lock, indent=2) + "\n",
+            "server.js": 'require("http").createServer((req,res)=>{res.end("Application ready");}).listen(Number(process.env.PORT||8080),"0.0.0.0");\n',
+        }
+    else:
+        command = ["nginx", "-g", "daemon off;"]
+        files = {
+            "index.html": '<!doctype html><html><head><meta charset="utf-8"><title>Application</title></head><body>Application ready</body></html>\n'
+        }
+    manifest["delivery"] = {"mode": "bundle", "startup": {"command": command}}
+    files[MANIFEST_NAME] = yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True)
+    conflicts = [name for name in files if (root / name).exists()]
+    if conflicts:
+        raise CliError("Project files already exist: " + ", ".join(conflicts), exit_code=EXIT_LOCAL_INVALID)
+    root.mkdir(parents=True, exist_ok=True)
+    for name, content in files.items():
+        with (root / name).open("x", encoding="utf-8") as output:
+            output.write(content)
+    return {"path": str(root), "runtime": runtime, "manifest_version": 2, "delivery_mode": "bundle"}
+
+
+def run_init(args, emitter) -> int:
+    result = initialize_project(Path(args.path), args.runtime)
+    emitter.info("Created application bundle project: " + result["path"])
+    emitter.result("init", ok=True, exit_code=0, data=result)
+    return 0

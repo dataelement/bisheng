@@ -1,10 +1,12 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import MessagePanne from "@/components/bs-comp/chatComponent/MessagePanne";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { LoadingIcon } from "@/components/bs-icons/loading";
-import { Button } from "@/components/bs-ui/button";
-import ShadTooltip from "@/components/ShadTooltipComponent";
+
+import { Tooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { getAssistantDetailApi } from "@/controllers/API/assistant";
 import { getDeleteFlowApi } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -12,7 +14,6 @@ import ChatMessages from "@/pages/BuildPage/flow/FlowChat/ChatMessages";
 import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
 import { AppNumType } from "@/types/app";
-import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
@@ -61,13 +62,9 @@ export default function AppChatDetail() {
         <div className="bg-background-login px-4">
             <div className="flex justify-between items-center py-4">
                 <div className="flex items-center">
-                    <ShadTooltip content={t('back')} side="top">
-                        <Button
-                            className="w-[36px] px-2 rounded-full"
-                            variant="outline"
-                            onClick={() => window.history.back()}
-                        ><ArrowLeft className="side-bar-button-size" /></Button>
-                    </ShadTooltip>
+                    <Tooltip content={t('back')} side="top">
+                        <Button size="medium" aria-label={t('back')} variant="outlined" onClick={() => window.history.back()} color="default" iconOnly><Outlined.ArrowLeft size={16} /></Button>
+                    </Tooltip>
                     <span className=" text-gray-700 text-sm font-black pl-4">{title}</span>
                 </div>
             </div>

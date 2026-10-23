@@ -183,6 +183,37 @@ class AppRuntimeCredentialService:
         return issued.plaintext
 
     @classmethod
+    async def stage(cls, app_id, *, operation, scopes=(), repository):
+        """Mint a candidate identity without invalidating the serving generation."""
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeCredentialBinding
+
+        app = await load_subject_app(app_id)
+        if app is None or app.id != operation.app_id or app.tenant_id != operation.tenant_id:
+            raise AppRuntimeSubjectUnavailableError(app_id=app_id, reason="app_missing")
+        requested = CredentialService.validate_scopes(list(scopes))
+        if DELEGATE_SCOPE_CODE in requested:
+            raise OpenApiDelegateConfigurationInvalidError()
+        subject = await cls._ensure_subject(app_id)
+        issued = await CredentialService.issue(
+            tenant_id=app.tenant_id,
+            subject_kind=SUBJECT_KIND_HOSTED_APP,
+            subject_id=int(subject.id),
+            request=KeyIssueRequest(name=cls._credential_name(app), scopes=requested, expires_at=None),
+            created_by=None,
+            audit_operator=SYSTEM_AUDIT_OPERATOR,
+        )
+        await repository.save(
+            RuntimeCredentialBinding(
+                tenant_id=app.tenant_id,
+                app_id=app_id,
+                version_id=operation.version_id,
+                operation_id=operation.id,
+                credential_id=issued.id,
+            )
+        )
+        return issued.plaintext
+
+    @classmethod
     async def revoke(cls, app_id: str, *, reason: str = REVOKE_REASON_SUBJECT_DELETED) -> int:
         """Revoke every live runtime credential of one application; return how many.
 
@@ -275,6 +306,11 @@ async def resolve_hosted_app(row: ApiCredential) -> OpenApiPrincipal:
         # starts working again the moment the application resumes.
         raise OpenApiCredentialInvalidError()
 
+    from bisheng.app_runtime.domain.repositories.runtime_credential_repository import is_serving_credential
+
+    if not await is_serving_credential(app.id, row.id):
+        raise OpenApiCredentialInvalidError()
+
     return OpenApiPrincipal(
         credential_id=row.id,
         actor_kind=SUBJECT_KIND_HOSTED_APP,
@@ -312,6 +348,10 @@ def assert_hosted_app_executable(credential: ApiCredential, snapshot: OpenApiExe
         ).first()
         app = session.exec(select(App).where(App.id == subject.app_id)).first() if subject is not None else None
     if app is None or app.state != AppState.ONLINE.value:
+        raise OpenApiCredentialInvalidError()
+    from bisheng.app_runtime.domain.repositories.runtime_credential_repository import is_serving_credential_sync
+
+    if not is_serving_credential_sync(app.id, credential.id):
         raise OpenApiCredentialInvalidError()
     if int(app.tenant_id or 0) != int(credential.tenant_id or 0) or int(app.tenant_id or 0) != int(snapshot.tenant_id):
         raise OpenApiCredentialInvalidError()

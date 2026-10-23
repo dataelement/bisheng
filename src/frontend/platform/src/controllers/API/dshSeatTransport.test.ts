@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-vi.mock('@/components/bs-ui/toast/use-toast', () => ({ toast: vi.fn() }))
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({ toast: vi.fn() }))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 import request from '@/controllers/request'
 import { commandDshSeat, isDshSeatLimitReached, saveDshSubjectPolicy } from './dsh'
 

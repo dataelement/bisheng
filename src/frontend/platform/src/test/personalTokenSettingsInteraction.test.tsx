@@ -1,5 +1,4 @@
 import userEvent from "@testing-library/user-event"
-import type { InputHTMLAttributes } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   getPersonalTokenSettingApi,
@@ -10,7 +9,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { PersonalToken } from "@/pages/SystemPage/components/PersonalToken"
 import { render, screen, waitFor } from "@/test/test-utils"
 import type { PersonalTokenSetting } from "@/types/api/openApi"
-import { message } from "@/components/bs-ui/toast/use-toast"
+import { toast } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { revokePersonalTokenApi } from "@/controllers/API/personalToken"
 
@@ -33,13 +32,16 @@ vi.mock("@/components/bs-icons", () => ({
   LoadIcon: () => <span data-testid="loading-icon" />,
 }))
 
-vi.mock("@/components/bs-ui/input", () => ({
-  Input: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-}))
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   message: vi.fn(),
-}))
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 
 const initialSetting: PersonalTokenSetting = {
   deployment_enabled: true,
@@ -100,13 +102,9 @@ describe("personal-token tenant settings interaction", () => {
     pending.resolve({ ...initialSetting, pat_enabled: true, effective_enabled: true })
 
     await waitFor(() => expect(saveButton).toBeEnabled())
-    // No locationContext provider here, so the component sees a single-tenant
-    // deployment and reports with the tenant-free key; the tenancy switch
-    // itself is covered by openApiManagementTenantCopy.test.tsx.
-    expect(message).toHaveBeenCalledWith({
-      title: "prompt",
-      variant: "success",
-      description: "openApiManagement.personalToken.settingsSavedSingle",
+    expect(toast.show).toHaveBeenCalledWith({
+      type: "success",
+      message: "prompt\nopenApiManagement.personalToken.settingsSavedSingle",
     })
   })
 
@@ -120,7 +118,7 @@ describe("personal-token tenant settings interaction", () => {
 
     expect(captureAndAlertRequestErrorHoc).toHaveBeenCalledTimes(2)
     await waitFor(() => expect(saveButton).toBeEnabled())
-    expect(message).not.toHaveBeenCalled()
+    expect(toast.show).not.toHaveBeenCalled()
   })
 
   it("renders localized permission names instead of raw scope codes", async () => {

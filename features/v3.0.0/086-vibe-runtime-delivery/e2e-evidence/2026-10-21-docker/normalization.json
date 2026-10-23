@@ -1,0 +1,15 @@
+{
+  "change": "trim trailing spaces/tabs and ensure newline; no payload/test assertion changes",
+  "files": [
+    {
+      "file": "docker-cleanup.json",
+      "original_sha256": "4df80e8bb9764aef0b0f64383cb37e8b6ef88b7dd590276844d6d4511b8594ac",
+      "normalized_sha256": "4ac5d21a57bf5240186cfea43323bf1d6a05727986010cc6d9c28da8e0c9d147"
+    },
+    {
+      "file": "logs/bootstrap-before.log",
+      "original_sha256": "043a40fe4c5c9163fdf523a6df1fbab9febdb076af746f96b98eb08a03ffc67f",
+      "normalized_sha256": "e5836e984b153c35bed972ea87ea851b4d24bf056ce97d1afa8fde5c6a802360"
+    }
+  ]
+}

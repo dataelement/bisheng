@@ -41,7 +41,7 @@ proxy therefore gets an identity per principal, carried in the ordinary
 application, no per-container IP bookkeeping that goes stale the moment the
 reconciler recreates an instance with a new bridge address.
 
-The policy is a file (``{data_root}/egress/policy.json``) rather than an API
+Protocol v1 policy is a file (``{data_root}/egress/policy.json``) rather than an API
 call, so that a restart — or a crash — of the manager cannot take every hosted
 application's outbound traffic with it. The proxy re-reads it when its mtime
 changes and keeps serving the last good copy if it ever cannot.

@@ -1,12 +1,11 @@
 """``app`` is a first-class F048 resource type — all eight registration points.
 
-The failure mode this file exists for is ``linsight_skill``: registered in the
-authorization model, in ``FIXED_CUSTOM_TYPES`` and in the frontend union, but
-**not** in the Catalog scope map, **not** in the resource registry and **not**
-in ``GRANT_SUBJECT_RESOURCE_TYPES``. The result is a resource that can be
-created and whose owner is projected, while every
-``check_business_action("linsight_skill", ...)`` raises
-``InvalidCatalogActionError`` — i.e. the entry path denies everyone, forever
+The failure mode this file exists for is partial registration: appearing in
+the authorization model and owner projection without the full Catalog and
+resource adapter route. The inherited release line now registers
+``linsight_skill``; it is no longer a valid negative fixture. A partially
+registered resource can have an owner projected while its Catalog action
+checks fail — the entry path then denies everyone
 (design pit 32). Half a registration looks fine in a diff and fails only at
 runtime, so each of the eight points gets its own assertion here.
 
@@ -304,6 +303,17 @@ async def test_grant_subjects_five_endpoints_accept_app(
 
     monkeypatch.setattr(grant_subjects, "_authorized_scope", _scope)
     monkeypatch.setattr(grant_subjects.grant_subject_service, service_name, _service)
+    count_name = {
+        "list_candidate_users": "count_candidate_users",
+        "list_candidate_user_groups": "count_candidate_user_groups",
+    }.get(service_name)
+    if count_name:
+
+        async def _count(*args, **count_kwargs):
+            called["count"] = (args, count_kwargs)
+            return 0
+
+        monkeypatch.setattr(grant_subjects.grant_subject_service, count_name, _count)
 
     endpoint = getattr(grant_subjects, endpoint_name)
     response = await endpoint(resource_type="app", resource_id="app-1", login_user=object(), **kwargs)
@@ -311,6 +321,9 @@ async def test_grant_subjects_five_endpoints_accept_app(
     assert called["scope"] == ("app", "app-1")
     assert "service" in called, f"{endpoint_name} stopped before reaching the candidate service"
     assert response.status_code == 200
+    if count_name:
+        assert "count" in called
+        assert response.data == {"data": [], "total": 0}
 
 
 @pytest.mark.parametrize(("endpoint_name", "service_name", "kwargs"), _GRANT_SUBJECT_ENDPOINTS)
@@ -432,19 +445,21 @@ async def test_fga_unavailable_denies_not_allows(fga_down) -> None:
         )
 
 
-def test_linsight_skill_style_half_registration_would_fail() -> None:
-    """Regression guard against copying the ``linsight_skill`` shape (design pit 32).
+def test_app_uses_complete_registration_instead_of_owner_projection() -> None:
+    """The app contract requires Catalog, registry and picker participation.
 
-    ``linsight_skill`` is in the owner-projection list *only* — it appears in no
-    Catalog scope and in no grant-subject gate. If a future refactor ever moves
-    ``app`` onto that path, these three assertions fail together and say why.
+    The release line has since registered linsight_skill. Use the hosted app's
+    positive contract instead of freezing another resource's historical gap.
+    The unknown-type endpoint tests above retain the negative type-gate checks.
     """
+    from bisheng.api.services.f048_permission_runtime import build_f048_resource_composition
     from bisheng.core.openfga.authorization_model_f048 import OWNER_PROJECTION_RESOURCE_TYPES
 
-    assert "app" not in OWNER_PROJECTION_RESOURCE_TYPES, "app needs the full adapter route, not owner projection"
-    # The reference failure, kept explicit so the contrast is readable.
-    assert "linsight_skill" not in CATALOG_MIGRATED_TYPES
-    assert "linsight_skill" not in GRANT_SUBJECT_RESOURCE_TYPES
+    assert "app" not in OWNER_PROJECTION_RESOURCE_TYPES
+    assert "app" in CATALOG_MIGRATED_TYPES
+    assert "app" in GRANT_SUBJECT_RESOURCE_TYPES
+    adapters, registry = build_f048_resource_composition(SimpleNamespace())
+    assert "app" in adapters and "app" in registry._ports
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,7 @@
+admin registration 200 200 SUCCESS
+admin login 200
+owner registration 200 200 SUCCESS
+owner login 200
+nonowner registration 200 200 SUCCESS
+nonowner login 200
+Dedicated test identities saved; credentials not emitted

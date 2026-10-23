@@ -1,4 +1,5 @@
-import { Button } from "@/components/bs-ui/button"
+import { Button, Input, notification } from '@bisheng/ui';
+
 import {
   Dialog,
   DialogContent,
@@ -6,9 +7,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
+
 import { Label } from "@/components/bs-ui/label"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+
 import { TreeDepartmentSelect } from "@/components/bs-comp/department"
 import DepartmentUsersSelect, {
   DepartmentUserOption,
@@ -37,19 +38,11 @@ export function CreateDepartmentDialog({
 
   const handleSubmit = useCallback(() => {
     if (!name || name.length < 2 || name.length > 50) {
-      toast({
-        title: t("prompt"),
-        description: t("bs:department.nameLength"),
-        variant: "error",
-      })
+      notification.open({ type: "error", title: String(t("prompt") ?? ''), description: String(t("bs:department.nameLength") ?? '') })
       return
     }
     if (parentId === null) {
-      toast({
-        title: t("prompt"),
-        description: t("bs:department.selectParent"),
-        variant: "error",
-      })
+      notification.open({ type: "error", title: String(t("prompt") ?? ''), description: String(t("bs:department.selectParent") ?? '') })
       return
     }
     setLoading(true)
@@ -65,11 +58,7 @@ export function CreateDepartmentDialog({
       setLoading(false)
       // captureAndAlertRequestErrorHoc 在接口失败时返回 false（不是 null）
       if (res === false) return
-      toast({
-        title: t("prompt"),
-        description: t("bs:department.create"),
-        variant: "success",
-      })
+      notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.create") ?? '') })
       onCreated()
     })
   }, [name, parentId, adminSelectValue, onCreated, t])
@@ -97,12 +86,7 @@ export function CreateDepartmentDialog({
           {/* Department name */}
           <div className="space-y-2">
             <Label>{t("bs:department.name")} *</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t("bs:department.nameRequired")}
-              maxLength={50}
-            />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("bs:department.nameRequired")} maxLength={50} showCount />
           </div>
 
           {/* Department admins (optional) — 与部门设置页相同的多选搜索 */}
@@ -122,7 +106,7 @@ export function CreateDepartmentDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outlined" onClick={onClose} color="default">
             {t("cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={loading}>

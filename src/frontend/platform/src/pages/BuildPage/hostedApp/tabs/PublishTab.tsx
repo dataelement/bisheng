@@ -20,8 +20,8 @@
  * that goes nowhere, since `/apps` is not in the vite proxy, and a QR code that
  * scans to nowhere.
  */
-import { Button } from "@/components/bs-ui/button"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { Button } from "@bisheng/ui"
+import { notification } from "@bisheng/ui"
 import type {
   HostedAppDetail,
   HostedAppInstance,
@@ -123,9 +123,9 @@ export function PublishTab({
 
   const handleCopy = async () => {
     await copyText(app.entry_url)
-    toast({
+    notification.open({
       title: t("prompt"),
-      variant: "success",
+      type: "success",
       description: t("hostedApp.publish.copied"),
     })
   }

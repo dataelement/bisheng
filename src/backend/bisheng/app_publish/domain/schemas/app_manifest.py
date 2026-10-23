@@ -31,9 +31,9 @@ Design decisions worth not re-litigating:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 #: Runtime templates this platform can build. A **local copy** of
 #: runtime-manager's ``GET /v1/runtime/status.supported_runtimes``, on purpose:
@@ -51,7 +51,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 SUPPORTED_RUNTIMES: tuple[str, ...] = ("python3.11", "node20", "static")
 
 #: Highest ``manifest_version`` this platform understands.
-SUPPORTED_MANIFEST_VERSION = 1
+SUPPORTED_MANIFEST_VERSION = 2
 
 #: Icon constraints (design D12 / §4.2 ③). Oversized or odd-format icons are
 #: skipped with a hint rather than failing the publish — an icon is metadata,
@@ -144,12 +144,71 @@ class EgressDeclaration(BaseModel):
     domains: list[str] = Field(default_factory=list)
 
 
+class DependencyInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    lock: str | None = None
+    offline_artifacts: list[str] = Field(default_factory=list)
+    install_inputs: list[str] = Field(default_factory=list)
+
+    @field_validator("lock")
+    @classmethod
+    def relative_lock(cls, value):
+        if value is not None:
+            from pathlib import PurePosixPath
+
+            if (
+                not value
+                or "\\" in value
+                or PurePosixPath(value).is_absolute()
+                or any(part in {"", ".", ".."} for part in value.split("/"))
+            ):
+                raise ValueError("lock must be a safe package-relative path")
+        return value
+
+
+class StartupInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command: list[str] | None = Field(default=None, min_length=1, max_length=128)
+
+    @field_validator("command")
+    @classmethod
+    def valid_argv(cls, value):
+        if value is not None and any(not arg or "\x00" in arg or len(arg) > 4096 for arg in value):
+            raise ValueError("invalid startup command")
+        return value
+
+
+class BundleDelivery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["bundle"] = "bundle"
+    profile: str | None = None
+    dependencies: DependencyInput = Field(default_factory=DependencyInput)
+    startup: StartupInput = Field(default_factory=StartupInput)
+
+
+class ImageDelivery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["image"]
+    image: str = Field(pattern=r"^(?:[A-Za-z0-9._/:-]+@)?sha256:[0-9a-f]{64}$")
+    startup: StartupInput = Field(default_factory=StartupInput)
+
+
+class SourceImageDelivery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["source-image"]
+    startup: StartupInput = Field(default_factory=StartupInput)
+
+
+DeliveryInput = Annotated[BundleDelivery | ImageDelivery | SourceImageDelivery, Field(discriminator="mode")]
+
+
 class AppManifest(BaseModel):
     """The parsed ``bisheng-app.yaml``. Unknown keys are an error, not a warning."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     manifest_version: int = Field(default=1, ge=1)
+    delivery: DeliveryInput | None = None
     name: str = Field(min_length=1, max_length=64)
     description: str | None = Field(default=None, max_length=500)
     icon: str | None = Field(default=None, max_length=256, description="Package-relative path to the icon file")
@@ -160,6 +219,36 @@ class AppManifest(BaseModel):
     capabilities: CapabilityDeclaration = Field(default_factory=CapabilityDeclaration)
     database: DatabaseDeclaration = Field(default_factory=DatabaseDeclaration)
     egress: EgressDeclaration = Field(default_factory=EgressDeclaration)
+
+    @model_validator(mode="before")
+    @classmethod
+    def versioned_delivery(cls, document):
+        if not isinstance(document, dict):
+            return document
+        document = dict(document)
+        version = document.get("manifest_version", 1)
+        if version == 1:
+            if "delivery" in document:
+                raise ValueError("delivery requires manifest_version 2")
+        elif version == 2:
+            delivery = document.get("delivery")
+            if delivery is None:
+                document["delivery"] = {"mode": "bundle"}
+            elif isinstance(delivery, dict):
+                document["delivery"] = {"mode": "bundle", **delivery}
+        else:
+            raise ValueError("unsupported manifest_version")
+        return document
+
+    @property
+    def delivery_mode(self) -> str:
+        return self.delivery.mode if self.delivery is not None else "source-image"
+
+    def model_dump(self, **kwargs):
+        result = super().model_dump(**kwargs)
+        if self.manifest_version == 1:
+            result.pop("delivery", None)
+        return result
 
 
 def egress_domains_of(manifest: dict[str, Any] | None) -> list[str]:

@@ -1,13 +1,14 @@
 // @ts-strict-ignore
+import { Button, Select, toast } from '@bisheng/ui';
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import UsersSelect from "@/components/bs-comp/selectComponent/Users";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
-import MultiSelect from "@/components/bs-ui/select/multi";
+import { FilterIcon } from "@/components/bs-icons/filter";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { userContext } from "@/contexts/userContext";
 import { getChatOnlineApi } from "@/controllers/API/assistant";
 import { createMarkApi, deleteMarkApi, getMarksApi } from "@/controllers/API/log";
@@ -67,31 +68,37 @@ const useAppsOptions = () => {
 function CreateModal({ open, setOpen, onSuccess }) {
     const { t } = useTranslation()
 
+    const selectLabels = useSelectLabels()
     const { options, unmarkedMap, reload, loadMore, search } = useAppsOptions()
     const [apps, setApps] = useState([])
     const [users, setUsers] = useState([])
+
+    // Keep the selected apps' labels known even when the current page/search result lacks them
+    const appOptions = useMemo(() => {
+        const merged = [...options]
+        apps.forEach(app => {
+            if (!merged.some(o => o.value === app.value)) merged.push(app)
+        })
+        return merged
+            .filter(o => o.value != null && o.value !== '')
+            .map(o => ({ value: o.value, label: o.label }))
+    }, [options, apps])
 
     const count = useMemo(() => {
         return apps.reduce((pre, cur) => pre + unmarkedMap[cur.value], 0)
     }, [apps, unmarkedMap])
 
-    const { message } = useToast()
+
     const handleCreate = () => {
         if (apps.length > 30) {
-            return message({
-                variant: "error",
-                description: t('label.maxAppsError')
-            })
+            return toast.show({ type: "error", message: String(t('label.maxAppsError') ?? '') })
         }
         captureAndAlertRequestErrorHoc(createMarkApi({
             app_list: apps.map(el => el.value),
             user_list: users.map(el => el.value)
         }).then(res => {
             if (!res) return
-            message({
-                variant: "success",
-                description: t('label.createSuccess')
-            })
+            toast.show({ type: "success", message: String(t('label.createSuccess') ?? '') })
             setOpen(false)
             onSuccess()
         }))
@@ -105,18 +112,19 @@ function CreateModal({ open, setOpen, onSuccess }) {
             <div className="flex flex-col gap-4 py-2">
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('label.selectAppsToLabel')}</label>
-                    <MultiSelect
-                        contentClassName=" max-w-[630px]"
+                    <Select
+                        {...selectLabels}
                         multiple
-                        value={apps}
-                        options={options}
+                        showSearch
+                        aria-label={t('label.selectAppsToLabel')}
+                        value={apps.map(app => app.value)}
+                        options={appOptions}
                         placeholder={t('label.selectPlaceholder')}
-                        searchPlaceholder={t('label.searchAppsPlaceholder')}
-                        onChange={setApps}
-                        onLoad={reload}
+                        onChange={(_values, selectedOptions) => setApps(selectedOptions.map(o => ({ label: o.label, value: o.value })))}
+                        onOpenChange={(isOpen) => { if (isOpen) reload() }}
                         onSearch={search}
-                        onScrollLoad={loadMore}
-                    ></MultiSelect>
+                        onLoadMore={loadMore}
+                    />
                 </div>
                 {count ? <p className="text-sm text-gray-500">{t('label.unmarkedConversationCount')}: {count}</p> : null}
                 <div className="">
@@ -129,27 +137,28 @@ function CreateModal({ open, setOpen, onSuccess }) {
                 </div>
             </div>
             <DialogFooter>
-                <DialogClose>
-                    <Button
-                        variant="outline"
-                        className="px-11"
-                        type="button"
-                        onClick={() => setOpen(false)}
-                    >{t('label.cancel')}</Button>
+                <DialogClose asChild>
+                    <Button variant="outlined" type="button" onClick={() => setOpen(false)} color="default">{t('label.cancel')}</Button>
                 </DialogClose>
-                <Button
-                    type="submit"
-                    className="px-11"
-                    disabled={apps.length === 0 || users.length === 0}
-                    onClick={handleCreate}
-                >{t('label.create')}</Button>
+                <Button type="submit" disabled={apps.length === 0 || users.length === 0} onClick={handleCreate}>{t('label.create')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>
 }
 
+const TASK_STATUS_OPTIONS = [
+    { labelKey: 'label.all', value: '0' },
+    { labelKey: 'label.notStarted', value: '1' },
+    { labelKey: 'label.completed', value: '2' },
+    { labelKey: 'label.inProgress', value: '3' },
+]
+
 export default function Tasks() {
     const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+    const [statusFilter, setStatusFilter] = useState<string | null>(null)
+    const statusOptions = TASK_STATUS_OPTIONS.map(o => ({ value: o.value, label: t(o.labelKey) }))
+    const statusFilterLabel = statusOptions.find(o => o.value === statusFilter)?.label ?? t('label.all')
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
 
@@ -187,13 +196,21 @@ export default function Tasks() {
                             <TableHead>
                                 <div className="flex items-center w-[144px]">
                                     {t('label.taskStatus')}
-                                    <TableHeadEnumFilter options={[
-                                        { label: t('label.all'), value: '0' },
-                                        { label: t('label.notStarted'), value: '1' },
-                                        { label: t('label.completed'), value: '2' },
-                                        { label: t('label.inProgress'), value: '3' },
-                                    ]}
-                                        onChange={(v) => filterData({ status: Number(v) })} />
+                                    <Select
+                                        {...selectLabels}
+                                        options={statusOptions}
+                                        value={statusFilter}
+                                        onChange={(v) => {
+                                            if (v == null) return
+                                            setStatusFilter(String(v))
+                                            filterData({ status: Number(v) })
+                                        }}
+                                        trigger={
+                                            <button type="button" className="outline-none" aria-label={`${t('label.taskStatus')}: ${statusFilterLabel}`}>
+                                                <FilterIcon className={statusFilter ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
+                                            </button>
+                                        }
+                                    />
                                 </div>
                             </TableHead>
                             <TableHead>{t('label.creationTime')}</TableHead>
@@ -210,10 +227,10 @@ export default function Tasks() {
                                 <TableCell>{task.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{task.create_user}</TableCell>
                                 <TableCell className="break-all">{
-                                    (task.mark_process || []).map(name => <p>{name}</p>)
+                                    (task.mark_process || []).map((name, index) => <p key={index}>{name}</p>)
                                 }</TableCell>
                                 <TableCell className="text-right">
-                                    <Link to={`/label/${task.id}`}><Button variant="link" className="px-0 pl-4" >{t('label.view')}</Button></Link>
+                                    <Button asChild size="small" variant="link"><Link to={`/label/${task.id}`}>{t('label.view')}</Link></Button>
                                 </TableCell>
                             </TableRow>
                         ))}

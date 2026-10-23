@@ -278,7 +278,17 @@ class ManagerRouteClient(HmacClient):
 
     peer = "manager"
 
-    def __init__(self, *args, ttl_seconds: float = 3.0, clock: Callable[[], float] = time.monotonic, **kwargs):
+    def __init__(
+        self,
+        *args,
+        ttl_seconds: float = 3.0,
+        clock: Callable[[], float] = time.monotonic,
+        protocol_version=1,
+        key_id="",
+        **kwargs,
+    ):
+        self.protocol_version = protocol_version
+        self.key_id = key_id
         super().__init__(*args, **kwargs)
         self.cache: TTLCache[dict] = TTLCache(ttl_seconds, clock=clock)
 
@@ -304,7 +314,19 @@ class ManagerRouteClient(HmacClient):
                 return {**cached, "cache_hit": True}
 
         path = f"/v1/previews/{app_id}/route" if preview else f"/v1/apps/{app_id}/route"
-        response = await self._send("GET", path)
+        if self.protocol_version == 2:
+            from app_proxy.platform_protocol import signed_headers
+
+            prefix = "previews" if preview else "apps"
+            path = f"/api/v1/internal/app-runtime/v2/routes/{prefix}/{app_id}"
+            try:
+                response = await self._http().get(
+                    path, headers=signed_headers("GET", path, b"", key_id=self.key_id, secret=self.secret)
+                )
+            except (httpx.HTTPError, ValueError) as exc:
+                raise InternalRpcError("backend", "route projection unavailable") from exc
+        else:
+            response = await self._send("GET", path)
         if response.status_code == 404:
             return None
         if response.status_code == 409 and self._is_deploying(response):
@@ -317,6 +339,23 @@ class ManagerRouteClient(HmacClient):
             payload = self._unwrap(response.json())
         except ValueError as exc:
             raise InternalRpcError(self.peer, f"non-JSON response: {exc}")
+        if self.protocol_version == 2:
+            if isinstance(payload, dict) and payload.get("decision") == "transition":
+                payload = {"phase": ROUTE_PHASE_STARTING}
+                self.cache.set(key, payload)
+                return {**payload, "cache_hit": False}
+            import ipaddress
+
+            try:
+                target = payload["target"]
+                host = ipaddress.ip_address(target["host"])
+                port = int(target["port"])
+                if host.is_loopback or host.is_link_local or not host.is_private or not 1 <= port <= 65535:
+                    raise ValueError()
+                address = f"[{host}]" if host.version == 6 else str(host)
+                payload = {**payload, "upstream": f"http://{address}:{port}"}
+            except (ValueError, KeyError, TypeError):
+                raise InternalRpcError("backend", "invalid route target") from None
         if not isinstance(payload, dict) or not payload.get("upstream"):
             raise InternalRpcError(self.peer, "response has no upstream field")
 
@@ -347,8 +386,10 @@ def build_clients(config: Config | None = None) -> tuple[BackendAuthzClient, Man
         ttl_seconds=config.authz_ttl_seconds,
     )
     manager = ManagerRouteClient(
-        config.manager_base,
-        config.manager_secret,
+        config.backend_base if config.protocol_version == 2 else config.manager_base,
+        config.route_secret if config.protocol_version == 2 else config.manager_secret,
+        protocol_version=config.protocol_version,
+        key_id=config.route_key_id,
         signature_header=config.signature_header,
         timeout=config.internal_timeout_seconds,
         ttl_seconds=config.route_ttl_seconds,

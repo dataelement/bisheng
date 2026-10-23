@@ -1,23 +1,14 @@
 """Process configuration — environment variables only, no platform config.yaml.
 
-The manager knows nothing about the platform database, OpenFGA or tenants
-(design §4.3). Everything it needs arrives either in the intent payload or in
-one of the ``RTM_*`` environment variables below, so a deployment can move the
-process to another host without touching the platform.
+Protocol v2 consumes scoped operations, immutable profiles, capacity and route facts
+from backend APIs. It holds no platform database or MinIO credentials. The local
+configuration describes physical execution paths, service identities, package
+sources and limits. Protocol v1 configuration below remains a compatibility
+surface for a planned maintenance-window upgrade.
 
-Shared with the backend (design §4.2 ⑧ / K10): exactly one value, the HMAC
-secret. ``RTM_HMAC_SECRET`` has to equal ``settings.app_runtime.manager_hmac_secret``
-or every intent is answered 401, which the backend folds into 16121.
-
-**Everything else here has one source and it is this file's environment.**
-Capacity admission, the data root and the build's package index are decisions
-only this process can make — it is the one that can see the host — so the
-platform holds no copy of them. It used to: ``AppRuntimeConf`` declared
-matching ``reserve_mb`` / ``overcommit_ratio`` / ``build_reserve_mb`` /
-``data_root`` / ``build_index_url`` fields that nothing read, and the
-deployment guide sent operators to edit them, where editing them changed
-nothing. If you find yourself adding a backend-side twin for one of these,
-that is the thing to avoid.
+Inbound platform control identity, outbound manager identity, entry routing and
+egress policy identities are distinct. Backend/worker share the deployment's
+payload encryption key; applications receive none of those keys.
 
 ``RTM_HOST_DATA_ROOT`` exists because ``HostConfig.Binds`` is resolved by the
 **dockerd that creates the container**, not by this process. In the systemd
@@ -48,7 +39,7 @@ in a way no health check can see.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 DEFAULT_HOST = "127.0.0.1"
@@ -186,8 +177,23 @@ class Config:
     port: int = DEFAULT_PORT
     hmac_secret: str = ""
     signature_header: str = "X-Signature"
+    node_id: str = ""
+    platform_key_id: str = ""
+    platform_secret: str = field(default="", repr=False)
+    platform_ca_file: Path | None = None
+    material_issuer_key_file: Path | None = field(default=None, repr=False)
+    inbound_key_id: str = ""
+    inbound_secret: str = field(default="", repr=False)
+    task_timeout_seconds: int = 1800
+    cleanup_seconds: int = 900
+    protocol_version: int = 1
+    image_pull_policy: str = "if-not-present"
+    data_helper_image: str = ""
+    data_helper_uid: int = 10001
+    data_helper_gid: int = 10001
 
     # --- orchestration backend -------------------------------------------
+    executor_kind: str = "docker"
     docker_host: str = ""
     network: str = DEFAULT_NETWORK
 
@@ -357,6 +363,15 @@ class Config:
             return self.app_facing_base_url.rstrip("/")
         return f"http://{self.host}:{self.port}"
 
+    def __post_init__(self):
+        for path in (self.platform_ca_file, self.material_issuer_key_file):
+            if path is not None and (not isinstance(path, Path) or not path.is_absolute()):
+                raise ValueError("runtime_identity_path_invalid")
+        if self.executor_kind not in {"docker", "kubernetes"}:
+            raise ValueError("runtime_executor_invalid")
+        if self.executor_kind == "kubernetes" and self.protocol_version != 2:
+            raise ValueError("kubernetes_requires_protocol_v2")
+
     def with_overrides(self, **kwargs) -> Config:
         return replace(self, **kwargs)
 
@@ -368,6 +383,19 @@ def load_config() -> Config:
         port=_env_int("RTM_PORT", DEFAULT_PORT),
         hmac_secret=_env_str("RTM_HMAC_SECRET"),
         signature_header=_env_str("RTM_SIGNATURE_HEADER", "X-Signature") or "X-Signature",
+        node_id=_env_str("RTM_NODE_ID"),
+        platform_key_id=_env_str("RTM_PLATFORM_KEY_ID"),
+        platform_secret=_env_str("RTM_PLATFORM_SECRET"),
+        platform_ca_file=Path(value) if (value := _env_str("RTM_PLATFORM_CA_FILE")) else None,
+        material_issuer_key_file=Path(value) if (value := _env_str("RTM_MATERIAL_ISSUER_KEY_FILE")) else None,
+        inbound_key_id=_env_str("RTM_INBOUND_KEY_ID"),
+        inbound_secret=_env_str("RTM_INBOUND_SECRET"),
+        task_timeout_seconds=_env_int("RTM_TASK_TIMEOUT_SECONDS", 1800),
+        cleanup_seconds=_env_int("RTM_CLEANUP_SECONDS", 900),
+        protocol_version=_env_int("RTM_PROTOCOL_VERSION", 1),
+        image_pull_policy=_env_str("RTM_IMAGE_PULL_POLICY", "if-not-present"),
+        data_helper_image=_env_str("RTM_DATA_HELPER_IMAGE"),
+        executor_kind=_env_str("RTM_EXECUTOR", "docker"),
         docker_host=_env_str("RTM_DOCKER_HOST"),
         network=_env_str("RTM_NETWORK", DEFAULT_NETWORK) or DEFAULT_NETWORK,
         data_root=Path(_env_str("RTM_DATA_ROOT", DEFAULT_DATA_ROOT) or DEFAULT_DATA_ROOT),
@@ -392,7 +420,9 @@ def load_config() -> Config:
         image_retention=_env_int("RTM_IMAGE_RETENTION", 2),
         build_timeout_seconds=_env_int("RTM_BUILD_TIMEOUT_SECONDS", 1800),
         retire_grace_seconds=_env_int("RTM_RETIRE_GRACE_SECONDS", 30),
-        reconcile_interval_seconds=_env_int("RTM_RECONCILE_INTERVAL_SECONDS", 15),
+        reconcile_interval_seconds=_env_int(
+            "RTM_RECONCILE_INTERVAL_SECONDS", 5 if _env_int("RTM_PROTOCOL_VERSION", 1) == 2 else 15
+        ),
         reconcile_enabled=_env_bool("RTM_RECONCILE_ENABLED", True),
         probe_timeout_seconds=_env_int("RTM_PROBE_TIMEOUT_SECONDS", 90),
         probe_interval_seconds=_env_float("RTM_PROBE_INTERVAL_SECONDS", 1.0),

@@ -432,5 +432,11 @@
   "maxChunkSize": "最大分割長",
   "hfFilterTooltip": "解析時にヘッダーとフッターの内容を自動的にフィルタリングします",
   "qa": {},
-  "legacyFormatNotSupported": "旧形式のファイルはプレビューできません"
+  "legacyFormatNotSupported": "旧形式のファイルはプレビューできません",
+  "voiceInput": {
+    "start": "録音を開始",
+    "pause": "録音を停止",
+    "failed": "音声入力に失敗しました。もう一度お試しください。"
+  },
+  "fileStatusFilterLabel": "ファイルの状態で絞り込み：{{value}}"
 }

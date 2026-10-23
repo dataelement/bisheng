@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Button, Input } from '@bisheng/ui';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { ArrowDownUp, Plus, X } from "lucide-react";
 import { useContext, useState } from 'react';
@@ -6,10 +7,10 @@ import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 import { alertContext } from '../../contexts/alertContext';
 import { generateUUID } from '../../utils';
-import { Button } from '../bs-ui/button';
+
 import { DialogContent, DialogFooter } from '../bs-ui/dialog';
-import { Input } from '../bs-ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../bs-ui/tabs';
+
+import { Tabs } from '@bisheng/ui';
 
 export default function VarDialog({ data, onSave, onClose }) {
 
@@ -71,38 +72,24 @@ export default function VarDialog({ data, onSave, onClose }) {
 
     const VariablesName = <div>
         <label className='text-sm text-gray-500'>{t('flow.variableName')}：</label>
-        <Input value={item.name} className='mt-2' onChange={(e) => setItem(prevItem => ({
+        <Input value={item.name} onChange={(e) => setItem(prevItem => ({
             ...prevItem,
             name: e.target.value
-        }))} />
+        }))} className={"mt-2"} />
     </div>
 
     return (<DialogContent className="sm:max-w-[425px]">
-        <Tabs defaultValue={item.type}
-            className="w-full"
-            onValueChange={(t) => setItem(prevItem => ({
+        <Tabs defaultActiveKey={item.type} className="w-full" onChange={(t) => setItem(prevItem => ({
                 ...prevItem,
                 type: t
-            }))} >
-            <TabsList className="">
-                <TabsTrigger value="text" className="roundedrounded-xl">{t('flow.text')}</TabsTrigger>
-                <TabsTrigger value="select">{t('flow.dropdown')}</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="text">
-                {VariablesName}
-                <div>
+            }))} items={[{ key: "text", label: <>{t('flow.text')}</>, children: <div >{VariablesName}<div>
                     <label className='text-sm text-gray-500'>{t('flow.maxLength')}：</label>
-                    <Input value={item.maxLength} className='mt-2' onChange={(e) => setItem(prevItem => ({
+                    <Input value={item.maxLength} onChange={(e) => setItem(prevItem => ({
                         ...prevItem,
                         maxLength: e.target.value
-                    }))} />
-                </div>
-            </TabsContent>
-            <TabsContent value="select" className='pb-10 px-2 max-h-80 overflow-y-auto scrollbar-hide'>
-                {VariablesName}
-                <label className='text-sm text-gray-500'>{t('flow.options')}：</label>
-                <DragDropContext onDragEnd={handleDragEnd}>
+                    }))} className={"mt-2"} />
+                </div></div> },
+{ key: "select", label: <>{t('flow.dropdown')}</>, children: <div className='pb-10 px-2 max-h-80 overflow-y-auto scrollbar-hide'>{VariablesName}<label className='text-sm text-gray-500'>{t('flow.options')}：</label><DragDropContext onDragEnd={handleDragEnd}>
                     <Droppable droppableId="list" direction="vertical" >
                         {(provide) => (
                             <div  {...provide.droppableProps} ref={provide.innerRef}>
@@ -114,7 +101,7 @@ export default function VarDialog({ data, onSave, onClose }) {
                                                 style={snapshot.isDragging ? {
                                                     ...provided.draggableProps.style, position: 'relative', left: 0, top: 0
                                                 } : provided.draggableProps.style}>
-                                                <Input value={option.value} className={errors[index] && 'border-red-400'} onChange={(e) => handleChangeOptionValue(e.target.value, index)} />
+                                                <Input value={option.value} onChange={(e) => handleChangeOptionValue(e.target.value, index)} className={errors[index] && 'border-red-400'} />
                                                 <button onClick={() => {
                                                     setItem((old) => {
                                                         const newItem = cloneDeep(old);
@@ -136,20 +123,17 @@ export default function VarDialog({ data, onSave, onClose }) {
                             </div>
                         )}
                     </Droppable>
-                </DragDropContext>
-                <button onClick={() =>
+                </DragDropContext><button onClick={() =>
                     setItem(prevItem => ({
                         ...prevItem,
                         options: [...prevItem.options, { key: generateUUID(4), value: "" }]
                     }))
                 }>
                     <Plus className={"h-4 w-4 mt-2 hover:text-accent-foreground"} />
-                </button>
-            </TabsContent>
-        </Tabs>
+                </button></div> }]} />
         <DialogFooter>
-            <Button className='px-8' variant='outline' size='sm' onClick={() => onClose(false)}>{t('cancel')}</Button>
-            <Button className='px-8' onClick={handleSave} size='sm'>{t('save')}</Button>
+            <Button className='px-8' variant="outlined" size="small" onClick={() => onClose(false)} color="default">{t('cancel')}</Button>
+            <Button className='px-8' onClick={handleSave} size="small">{t('save')}</Button>
         </DialogFooter>
         <div className='flex mt-4 justify-end gap-4'>
         </div>

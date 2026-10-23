@@ -1,11 +1,13 @@
-import { SubjectSearchStatus } from "../selectComponent/SubjectSearchStatus"
-import { SearchInput } from "@/components/bs-ui/input"
-import { DepartmentTreeNode } from "@/types/api/department"
-import { cn } from "@/utils"
-import { Building2, ChevronDown, ChevronRight, Loader2 } from "lucide-react"
-import { ReactNode, useMemo } from "react"
-import { useTranslation } from "react-i18next"
-import { LazyDepartmentTree as LazyTreeController } from "./useLazyDepartmentTree"
+import { SearchInput } from '@bisheng/ui';
+
+import { DepartmentTreeNode } from "@/types/api/department";
+import { cn } from "@/utils";
+import { Outlined } from "bisheng-icons";
+import { SubjectSearchStatus } from "../selectComponent/SubjectSearchStatus";
+
+import { ReactNode,useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { LazyDepartmentTree as LazyTreeController } from "./useLazyDepartmentTree";
 
 /** Per-level indent (px), so parent/child nesting reads at a glance. */
 const TREE_INDENT_PER_LEVEL = 22
@@ -87,19 +89,19 @@ function Row({ node, depth, searchMode, props }: RowProps) {
           }}
         >
           {isLoading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            <Outlined.Loading className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
           ) : node.has_children ? (
             isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              <Outlined.Down className="h-3.5 w-3.5 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <Outlined.Right className="h-3.5 w-3.5 text-muted-foreground" />
             )
           ) : (
             <span className="block h-3.5 w-3.5" aria-hidden />
           )}
         </span>
         {renderRowPrefix?.(node)}
-        <Building2
+        <Outlined.City
           className={cn(
             "mr-1.5 h-4 w-4 shrink-0",
             node.is_tenant_root ? "text-primary" : "text-muted-foreground"
@@ -141,11 +143,7 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
   return (
     <div className={cn("flex flex-1 flex-col overflow-hidden", className)}>
       {showSearch && (
-        <SearchInput
-          placeholder={searchPlaceholder ?? t("bs:subjectSearch.departmentPlaceholder")}
-          className="mb-2"
-          {...controller.searchInputProps}
-        />
+        <SearchInput placeholder={searchPlaceholder ?? t("bs:subjectSearch.departmentPlaceholder")} {...controller.searchInputProps} className={"mb-2"} />
       )}
       <div
         className="flex-1 overflow-y-auto"
@@ -159,7 +157,7 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
       >
         {controller.searchTooLong || controller.searchFailed ? <SubjectSearchStatus tooLong={controller.searchTooLong} failed={controller.searchFailed} onRetry={controller.retrySearch} /> : busy ? (
           <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Outlined.Loading className="mr-2 h-4 w-4 animate-spin" />
             {t("loading", { defaultValue: "加载中" })}
           </div>
         ) : roots.length === 0 ? (

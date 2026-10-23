@@ -36,7 +36,10 @@ vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
 }))
 
 const toastMock = vi.hoisted(() => vi.fn())
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({ toast: toastMock }))
+vi.mock("@bisheng/ui", async () => {
+  const actual = await vi.importActual<typeof import("@bisheng/ui")>("@bisheng/ui")
+  return { ...actual, notification: { ...actual.notification, open: toastMock } }
+})
 
 function tier(overrides: Partial<ResourceTierAdminItem>): ResourceTierAdminItem {
   return {

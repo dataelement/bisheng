@@ -13,8 +13,8 @@
  * the entire detail page.
  */
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker"
-import { Button } from "@/components/bs-ui/button"
-import { SearchInput } from "@/components/bs-ui/input"
+import { Button } from "@bisheng/ui"
+import { SearchInput } from "@bisheng/ui"
 import {
   Select,
   SelectContent,
@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/bs-ui/select"
-import { Switch } from "@/components/bs-ui/switch"
+import { Switch } from "@bisheng/ui"
 import {
   getHostedAppErrorCode,
   getHostedAppErrorMessage,

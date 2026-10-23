@@ -34,6 +34,10 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerDaoPermissionLoader,
     KnowledgeFileDaoPermissionLoader,
 )
+from bisheng.linsight.domain.services.f048_skill_permission import (
+    F048SkillPermissionAdapter,
+    SkillDaoPermissionLoader,
+)
 from bisheng.linsight.domain.services.skill_service import (
     configure_linsight_skill_owner_projection,
 )
@@ -178,6 +182,10 @@ def build_f048_resource_composition(
         loader=AppDaoPermissionLoader(runtime),
         permission=runtime,
     )
+    skill = F048SkillPermissionAdapter(
+        loader=SkillDaoPermissionLoader(runtime),
+        permission=runtime,
+    )
     adapters: dict[str, object] = {
         "workflow": application,
         "assistant": application,
@@ -194,6 +202,7 @@ def build_f048_resource_composition(
         # check_business_action with RuntimeError("F048 resource registry is
         # not configured") — far from this file.
         "app": hosted_app,
+        "linsight_skill": skill,
     }
     registry = ResourceAuthorizationRegistry()
     for resource_type in (
@@ -215,6 +224,7 @@ def build_f048_resource_composition(
     registry.register("tool", tool)
     registry.register("dashboard", dashboard)
     registry.register("app", hosted_app)
+    registry.register("linsight_skill", skill)
     return adapters, registry
 
 

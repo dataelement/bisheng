@@ -1,17 +1,18 @@
+import { Outlined } from "bisheng-icons";
 import { useState } from "react";
-import { Globe2 } from "lucide-react";
+
 import i18next from "i18next";
-import { BookOpenIcon } from "@/components/bs-icons/bookOpen";
+
 import { type FileType } from "@/components/bs-icons/file";
 import { cname } from "@/components/bs-ui/utils";
 import type { ChatCitation } from "@/controllers/API";
 import {
-  buildCitationDocumentPreview,
-  getCitationDocumentFileType,
-  getCitationDocumentName,
-  normalizeCitationType,
-  type CitationPreview,
-  type CitationReferenceItem,
+buildCitationDocumentPreview,
+getCitationDocumentFileType,
+getCitationDocumentName,
+normalizeCitationType,
+type CitationPreview,
+type CitationReferenceItem,
 } from "./citationUtils";
 
 export type CitationSourceIconData = {
@@ -167,7 +168,7 @@ function WebSourceIcon({
   const [imageFailed, setImageFailed] = useState(false);
 
   if (!icon.faviconUrl || imageFailed) {
-    return <Globe2 className={cname("size-4 text-[#7C3AED]", iconClassName)} />;
+    return <Outlined.Earth className={cname("size-4 text-[#7C3AED]", iconClassName)} />;
   }
 
   return (
@@ -323,7 +324,7 @@ export function CitationSourceIcon({
       {icon.type === "web" ? (
         <WebSourceIcon icon={icon} iconClassName={iconClassName} />
       ) : ragIconVariant === "knowledge" ? (
-        <BookOpenIcon className={cname("size-4 text-[#86909C]", iconClassName)} />
+        <Outlined.BookOpenText className={cname("size-4 text-[#86909C]", iconClassName)} />
       ) : (
         <CitationFileTypeIcon fileType={icon.fileType || "txt"} className={iconClassName} />
       )}

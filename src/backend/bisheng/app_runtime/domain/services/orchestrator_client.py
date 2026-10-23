@@ -344,6 +344,10 @@ class OrchestratorClient:
         op: str,
         as_bytes: bool = False,
     ) -> Any:
+        if settings.app_runtime.runtime_protocol_version == 2 and (
+            op.startswith("db_") or op in {"status", "logs", "runtime_status"}
+        ):
+            return await self._v2_request(method, path, json=json, params=params, op=op, as_bytes=as_bytes)
         base_url, secret = self._config()
         if not secret:
             logger.error("app_runtime.orchestrator op={} rejected: manager_hmac_secret is empty (fail-closed)", op)
@@ -388,6 +392,33 @@ class OrchestratorClient:
             reason="transport_error",
             detail=str(last_error),
         )
+
+    async def _v2_request(self, method, path, *, json, params, op, as_bytes):
+        from bisheng.app_runtime.domain.services.runtime_protocol import canonical_json, signed_headers
+
+        cfg = settings.app_runtime
+        base_url, _ = self._config()
+        path = path.replace("/v1/", "/v2/", 1)
+        request = httpx.Request(method, base_url + path, params=params)
+        raw = canonical_json(json) if json is not None else b""
+        headers = signed_headers(
+            method, str(request.url), raw, key_id=cfg.runtime_control_key_id, secret=cfg.runtime_control_secret
+        )
+        if json is not None:
+            headers["Content-Type"] = "application/json"
+        try:
+            async with httpx.AsyncClient(
+                timeout=max(45, _TIMEOUTS.get(op, _DEFAULT_TIMEOUT))
+                if op.startswith("db_")
+                else _TIMEOUTS.get(op, _DEFAULT_TIMEOUT),
+                transport=self._transport,
+                trust_env=False,
+                follow_redirects=False,
+            ) as client:
+                response = await client.request(method, request.url, content=raw, headers=headers)
+            return self._unwrap(response, op=op, as_bytes=as_bytes)
+        except httpx.HTTPError as exc:
+            raise AppOrchestratorUnavailableError(msg="运行管理器暂不可用") from exc
 
     @staticmethod
     def _encode(payload: dict[str, Any] | None) -> bytes:

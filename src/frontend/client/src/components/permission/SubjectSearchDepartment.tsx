@@ -1,5 +1,5 @@
 import { SubjectIdentity } from "./SubjectIdentity";
-import { Checkbox } from "~/components/ui/Checkbox";
+import { Checkbox } from '@bisheng/ui';
 import { Button, SearchInput, Tag } from "@bisheng/ui";
 import {
   getDepartmentChildren,
@@ -310,7 +310,7 @@ function DepartmentRow({
         )}
         <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
           <Checkbox
-            className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+            className="peer border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
             checked={isChecked}
             disabled={isDisabled}
             onClick={(e) => e.stopPropagation()}

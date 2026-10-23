@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { Input } from '@bisheng/ui';
 import { useEffect, useRef } from "react";
 import { KeyPairListComponentType } from "../../types/components";
 
 import cloneDeep from "lodash-es/cloneDeep";
 import { classNames } from "../../util/utils";
-import { Input } from "../bs-ui/input";
+
 import { Plus, X } from "lucide-react";
 
 export default function KeypairListComponent({
@@ -55,34 +56,19 @@ export default function KeypairListComponent({
                 return Object.keys(obj).map((key, idx) => {
                     return (
                         <div key={idx} className="flex w-full gap-2">
-                            <Input
-                                id={"keypair" + index}
-                                type="text"
-                                value={key.trim()}
-                                className={classNames(
-                                    editNode ? "input-edit-node" : "",
-                                    duplicateKey ? "input-invalid" : ""
-                                )}
-                                placeholder="Type key..."
-                                onChange={(event) => handleChangeKey(event, index)}
-                                onKeyDown={(e) => {
+                            <Input id={"keypair" + index} type="text" value={key.trim()} placeholder="Type key..." onChange={(event) => handleChangeKey(event, index)} onKeyDown={(e) => {
                                     if (e.ctrlKey && e.key === "Backspace") {
                                         e.preventDefault();
                                         e.stopPropagation();
                                     }
-                                }}
-                            />
+                                }} className={classNames(
+                                    editNode ? "input-edit-node" : "",
+                                    duplicateKey ? "input-invalid" : ""
+                                )} />
 
-                            <Input
-                                id={"keypair" + (index + 100).toString()}
-                                type="text"
-                                value={obj[key]}
-                                className={editNode ? "input-edit-node" : ""}
-                                placeholder="Type a value..."
-                                onChange={(event) =>
+                            <Input id={"keypair" + (index + 100).toString()} type="text" value={obj[key]} placeholder="Type a value..." onChange={(event) =>
                                     handleChangeValue(event.target.value, index)
-                                }
-                            />
+                                } className={editNode ? "input-edit-node" : ""} />
 
                             {index === ref.current.length - 1 ? (
                                 <button

@@ -13,8 +13,8 @@
  * every empty string it touches.
  */
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Button } from "@bisheng/ui"
+import { Checkbox } from "@bisheng/ui"
 import {
   Dialog,
   DialogContent,
@@ -23,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
+import { Input } from "@bisheng/ui"
 import {
   getHostedAppErrorCode,
   getHostedAppErrorMessage,

@@ -63,6 +63,7 @@ class EventType(Enum):
 
     ADD_TOOL = "add_tool"  # Add Widget
     UPDATE_TOOL = "update_tool"
+    UPDATE_SANDBOX_CONF = "update_sandbox_conf"
     DELETE_TOOL = "delete_tool"
 
     USER_LOGIN = "user_login"  # Login Pengguna
@@ -263,6 +264,7 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "app.meta_update",
     "app.data_row_edit",
     "app.data_export",
+    "app.data_restore",
     # F056 governance (design D6 / K3). Written by the visibility-change audit
     # hook that `app_runtime` registers on the F048 grant mutation path — the
     # permission module itself never learns the `app.` namespace.
@@ -366,10 +368,10 @@ class AuditLogDao(AuditLogBase):
         cls,
         group_ids: list[int],
         operator_ids: list[int] = 0,
-        start_time: datetime = None,
-        end_time: datetime = None,
-        system_id: str = None,
-        event_type: str = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+        system_id: str | None = None,
+        event_type: str | None = None,
         page: int = 0,
         limit: int = 0,
         tenant_scope: int | None = None,

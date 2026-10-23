@@ -48,6 +48,11 @@ def compute_signature(method: str, path: str, raw_body: bytes, secret: str) -> s
 async def verify_hmac(request: Request) -> None:
     """FastAPI dependency enforcing HMAC on every ``/v1/**`` route."""
     config = get_config()
+    if config.protocol_version == 2:
+        # All v1 mutations, including row edits, use the fenced v2 data port.
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=410, detail={"reason": "runtime_protocol_upgrade_required"})
     secret = config.hmac_secret
     if not secret:
         logger.error(

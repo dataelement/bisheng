@@ -12,7 +12,7 @@
  * switch is off" from "the switch is on but the layer is unreachable" without a
  * session — the link may well have arrived by QR code on someone's phone.
  */
-import { Button } from "@/components/bs-ui/button"
+import { Button } from "@bisheng/ui"
 import { getAppConfig } from "@/controllers/API"
 import { PackageOpen } from "lucide-react"
 import { useEffect, useState } from "react"

@@ -113,3 +113,49 @@ async def test_non_current_resource_is_never_reinterpreted_as_missing(monkeypatc
         )
 
     runtime.authorize_system_owned.assert_not_awaited()
+
+
+@pytest.mark.parametrize("fail", [False, True])
+async def test_bootstrap_binds_each_verified_tenant_and_restores_caller(monkeypatch, fail):
+    from dataclasses import replace
+
+    from bisheng.core.context import tenant
+
+    resources = (_spec("6"), replace(_spec("16"), tenant_id=2))
+    missing = tuple(SystemOwnedResourceState(resource=one, state="MISSING") for one in resources)
+    current = tuple(SystemOwnedResourceState(resource=one, state="CURRENT") for one in resources)
+    monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", AsyncMock(side_effect=[missing, current]))
+    initial = [
+        (tenant.current_tenant_id, None),
+        (tenant.visible_tenant_ids, frozenset({99})),
+        (tenant._admin_scope_tenant_id, 99),
+        (tenant._bypass_tenant_filter, False),
+    ]
+    tokens = [(variable, variable.set(value)) for variable, value in initial]
+    observed = []
+
+    async def project(**kwargs):
+        target = kwargs["target"]
+        assert tenant.get_current_tenant_id() == target.tenant_id
+        assert tenant.get_visible_tenant_ids() == frozenset({target.tenant_id})
+        assert not tenant.is_tenant_filter_bypassed()
+        observed.append(target.tenant_id)
+        if fail:
+            raise RuntimeError("projection unavailable")
+
+    try:
+        runtime = AsyncMock()
+        runtime.authorize_system_owned.side_effect = project
+        if fail:
+            with pytest.raises(RuntimeError, match="projection unavailable"):
+                await reconcile_system_owned_resources(runtime, resources, apply=True, operator_id=1)
+        else:
+            await reconcile_system_owned_resources(runtime, resources, apply=True, operator_id=1)
+            assert observed == [1, 2]
+        assert tenant.get_current_tenant_id() == 99
+        assert tenant.current_tenant_id.get() is None
+        assert tenant.get_visible_tenant_ids() == frozenset({99})
+        assert not tenant.is_tenant_filter_bypassed()
+    finally:
+        for variable, token in reversed(tokens):
+            variable.reset(token)

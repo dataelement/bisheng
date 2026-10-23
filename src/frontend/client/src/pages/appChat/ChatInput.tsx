@@ -1,7 +1,8 @@
 // @ts-strict-ignore
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
-import { Button, SendIcon, Textarea } from "~/components";
+import { Button, SendIcon } from "~/components";
+import { Textarea } from '@bisheng/ui';
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
 import { useVoiceModels } from "~/hooks/useVoice";
@@ -91,8 +92,8 @@ export default function ChatInput({ readOnly, v }) {
                     }
                 </div>
 
-                {/* 
-                    stop & 重置 
+                {/*
+                    stop & 重置
                     is工作流 & 未展示停止按钮 & 没有错误消息
                 */}
                 <div className="absolute w-full flex justify-center left-0 -top-14">
@@ -123,7 +124,9 @@ export default function ChatInput({ readOnly, v }) {
                         }
                     }}
                     placeholder={placholder}
-                    className={"resize-none bg-transparent border-none p-4 pr-10 text-md min-h-24 max-h-80 scrollbar-hide"}
+                    borderless
+                    className="w-full"
+                    textareaClassName="resize-none p-4 pr-10 text-md min-h-24 max-h-80 scrollbar-hide"
                 ></Textarea>
                 </div>
                 <p className="text-center text-sm pt-2 pb-4 text-gray-400">{bishengConfig?.dialog_tips}</p>

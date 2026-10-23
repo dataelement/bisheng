@@ -1,10 +1,11 @@
 // @ts-strict-ignore
-import { WorkflowNode, WorkflowNodeParam } from "@/types/flow";
+import { WorkflowNode,WorkflowNodeParam } from "@/types/flow";
 import CodeInputItem from "./component/CodeInputItem";
 import CodeOutputItem from "./component/CodeOutputItem";
 import CodePythonItem from "./component/CodePythonItem";
 import ConditionItem from "./component/ConditionItem";
 import FileTypeSelect from "./component/FileTypeSelect";
+import GlobalVarItem from "./component/GlobalVarItem";
 import HistoryNumItem from "./component/HistoryNumItem";
 import ImagePromptItem from "./component/ImagePromptItem";
 import InputFormItemNew from "./component/InputFormItem";
@@ -18,16 +19,15 @@ import ModelItem from "./component/ModelItem";
 import OutputItem from "./component/OutputItem";
 import ReportItem from "./component/ReportItem";
 import RetrievalWeightSlider from "./component/RetrievalWeightSlider";
-import SliderItem, { SwitchSliderItem } from "./component/SliderItem";
+import SliderItem,{ SwitchSliderItem } from "./component/SliderItem";
 import SqlConfigItem from "./component/SqlConfigItem";
 import SwitchItem from "./component/SwitchItem";
 import TextAreaItem from "./component/TextAreaItem";
 import ToolItem from "./component/ToolItem";
 import VarItem from "./component/VarItem";
-import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
+import VarSelectItem,{ VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
-import GlobalVarItem from "./component/GlobalVarItem";
 
 export default function Parameter({
     node,
@@ -184,7 +184,7 @@ export default function Parameter({
             return <InputItem char type='number' data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix}
             />;
         case 'code_input':
-            return <CodeInputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix}
+            return <CodeInputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} i18nPrefix={i18nPrefix}
             />;
         case 'code':
             return <CodePythonItem data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix}

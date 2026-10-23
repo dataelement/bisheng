@@ -41,6 +41,12 @@ class DockerBackend(Protocol):
 
     def ping(self) -> bool: ...
 
+    def api_version(self) -> dict[str, Any]: ...
+    def info(self) -> dict[str, Any]: ...
+    def container_stats(self, container: str) -> dict[str, Any]: ...
+    def inspect_image(self, reference: str) -> dict[str, Any]: ...
+    def pull_image(self, reference: str) -> None: ...
+
     def create_container(self, name: str, payload: dict[str, Any]) -> str: ...
 
     def start_container(self, container: str) -> None: ...
@@ -72,7 +78,9 @@ class DockerBackend(Protocol):
 
     def list_networks(self, name: str | None = None) -> list[dict[str, Any]]: ...
 
-    def container_logs(self, container: str, tail: int | str = "all", since: int | None = None) -> str: ...
+    def container_logs(
+        self, container: str, tail: int | str = "all", since: int | None = None, *, timestamps: bool = True
+    ) -> str: ...
 
 
 class _RealDockerBackend:
@@ -93,6 +101,25 @@ class _RealDockerBackend:
             except Exception as exc:  # pragma: no cover - daemon down
                 raise BackendUnavailableError(f"cannot reach the orchestration backend: {exc}")
         return self._api
+
+    def api_version(self) -> dict[str, Any]:
+        return self._client().version()
+
+    def info(self) -> dict[str, Any]:
+        return self._client().info()
+
+    def container_stats(self, container: str) -> dict[str, Any]:
+        # Admission needs memory usage, not a two-sample CPU rate. Waiting for
+        # two cycles per existing container makes the node heartbeat expire.
+        return self._client().stats(container, stream=False, one_shot=True)
+
+    def inspect_image(self, reference: str) -> dict[str, Any]:
+        return self._client().inspect_image(reference)
+
+    def pull_image(self, reference: str) -> None:
+        if "@sha256:" not in reference:
+            raise BackendUnavailableError("only immutable approved images may be pulled")
+        self._client().pull(reference)
 
     def ping(self) -> bool:
         try:
@@ -157,8 +184,10 @@ class _RealDockerBackend:
         # that makes every publish fail on a fresh host.
         return self._client().networks(names=[name] if name else None)
 
-    def container_logs(self, container: str, tail: int | str = "all", since: int | None = None) -> str:
-        raw = self._client().logs(container, stdout=True, stderr=True, tail=tail, since=since, timestamps=True)
+    def container_logs(
+        self, container: str, tail: int | str = "all", since: int | None = None, *, timestamps: bool = True
+    ) -> str:
+        raw = self._client().logs(container, stdout=True, stderr=True, tail=tail, since=since, timestamps=timestamps)
         if isinstance(raw, bytes):
             return raw.decode("utf-8", errors="replace")
         return str(raw)
@@ -183,6 +212,7 @@ SOCKET_PROXY_PERMISSIONS: dict[str, tuple[str, ...]] = {
         "list_containers",
         "remove_container",
         "container_logs",
+        "container_stats",
     ),
     # ``/containers/{id}/start`` and ``/stop`` are gated separately from
     # ``CONTAINERS`` by the proxy, and separately from each other.
@@ -191,7 +221,9 @@ SOCKET_PROXY_PERMISSIONS: dict[str, tuple[str, ...]] = {
     # ``POST /build``.
     "BUILD": ("build_image",),
     # ``/images/*`` — the retention sweep and its ``list`` half.
-    "IMAGES": ("list_images", "remove_image"),
+    "IMAGES": ("list_images", "remove_image", "inspect_image", "pull_image"),
+    "INFO": ("info",),
+    "VERSION": ("api_version",),
     # ``GET /networks`` — read only; the application network is created by the
     # deployment, never by this process.
     "NETWORKS": ("list_networks",),
@@ -205,6 +237,7 @@ SOCKET_PROXY_PERMISSIONS: dict[str, tuple[str, ...]] = {
         "remove_container",
         "build_image",
         "remove_image",
+        "pull_image",
     ),
 }
 
@@ -218,11 +251,8 @@ SOCKET_PROXY_PERMISSIONS: dict[str, tuple[str, ...]] = {
 #: what the reconciler must own (contracts §8: exited ⇒ ``start``, never a
 #: restart that loses the daemon's backoff).
 #:
-#: ``VERSION`` is off and that is a real decision, not an omission: ``docker-py``
-#: only calls ``GET /version`` when it is constructed with ``version="auto"``,
-#: and :class:`_RealDockerBackend` deliberately does not. If anyone ever adds
-#: that argument, every call will start failing 403 at construction — the flag,
-#: not the argument, is where the fix belongs.
+#: Docker SDK 7 resolves an omitted version with GET /version. Keep the
+#: read-only handshake available rather than pinning an API newer than a site's daemon.
 SOCKET_PROXY_DENIED: tuple[str, ...] = (
     "ALLOW_RESTARTS",
     "AUTH",
@@ -232,7 +262,6 @@ SOCKET_PROXY_DENIED: tuple[str, ...] = (
     "EVENTS",
     "EXEC",
     "GRPC",
-    "INFO",
     "NODES",
     "PLUGINS",
     "SECRETS",
@@ -241,7 +270,6 @@ SOCKET_PROXY_DENIED: tuple[str, ...] = (
     "SWARM",
     "SYSTEM",
     "TASKS",
-    "VERSION",
     "VOLUMES",
 )
 

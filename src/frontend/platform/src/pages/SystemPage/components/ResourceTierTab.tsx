@@ -1,7 +1,7 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
-import { Input, Textarea } from "@/components/bs-ui/input"
+import { Tag, notification } from "@bisheng/ui"
+import { Button } from "@bisheng/ui"
+import { Input, Textarea } from "@bisheng/ui"
 import {
   Table,
   TableBody,
@@ -10,7 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/bs-ui/table"
-import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
   listResourceTiersApi,
   type ResourceTierAdminItem,
@@ -94,10 +93,10 @@ export function ResourceTierTab() {
         if (!updated) return
         setRows((current) => current.map((item) => (item.code === updated.code ? updated : item)))
         setEditingCode((current) => (current === row.code ? null : current))
-        toast({
+        notification.open({
           title: t("hostedApp.tierAdmin.title"),
           description: t(feedbackKey),
-          variant: "success",
+          type: "success",
         })
       })
       .finally(() => setBusyCode(null))
@@ -116,17 +115,17 @@ export function ResourceTierTab() {
   const buildPatch = (row: ResourceTierAdminItem): ResourceTierPatch | null => {
     const name = draft.name.trim()
     if (!name) {
-      toast({ title: t("prompt"), description: t("hostedApp.tierAdmin.validation.name"), variant: "error" })
+      notification.open({ title: t("prompt"), description: t("hostedApp.tierAdmin.validation.name"), type: "error" })
       return null
     }
     const cpu = parsePositiveInt(draft.cpu)
     if (cpu === null) {
-      toast({ title: t("prompt"), description: t("hostedApp.tierAdmin.validation.cpu"), variant: "error" })
+      notification.open({ title: t("prompt"), description: t("hostedApp.tierAdmin.validation.cpu"), type: "error" })
       return null
     }
     const memory = parsePositiveInt(draft.memory)
     if (memory === null) {
-      toast({ title: t("prompt"), description: t("hostedApp.tierAdmin.validation.memory"), variant: "error" })
+      notification.open({ title: t("prompt"), description: t("hostedApp.tierAdmin.validation.memory"), type: "error" })
       return null
     }
     const description = draft.description.trim() || null
@@ -193,9 +192,9 @@ export function ResourceTierTab() {
             <div className="flex items-center gap-2">
               <span>{row.name}</span>
               {row.is_default && (
-                <Badge variant="gray" title={t("hostedApp.tierAdmin.defaultHint")}>
+                <span title={t("hostedApp.tierAdmin.defaultHint")}><Tag size="small">
                   {t("hostedApp.tierAdmin.defaultTag")}
-                </Badge>
+                </Tag></span>
               )}
             </div>
           )}
@@ -240,9 +239,9 @@ export function ResourceTierTab() {
           )}
         </TableCell>
         <TableCell>
-          <Badge variant={row.enabled ? "outline" : "secondary"}>
+          <Tag size="small">
             {t(row.enabled ? "hostedApp.tierAdmin.status.enabled" : "hostedApp.tierAdmin.status.disabled")}
-          </Badge>
+          </Tag>
         </TableCell>
         <TableCell>{row.in_use_app_count}</TableCell>
         <TableCell className="text-right">

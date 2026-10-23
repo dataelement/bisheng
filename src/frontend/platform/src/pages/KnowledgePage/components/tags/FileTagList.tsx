@@ -1,8 +1,9 @@
 import { truncateString } from "@/util/utils";
-import { PenLine } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+
+import type { KnowledgeTagItem } from "@/controllers/API/knowledgeTags";
 import { useTranslation } from "react-i18next";
 import KnowledgeTagSelect from "./KnowledgeTagSelect";
-import type { KnowledgeTagItem } from "@/controllers/API/knowledgeTags";
 
 const FILE_TAG_DISPLAY_MAX_LENGTH = 18;
 
@@ -48,7 +49,7 @@ export default function FileTagList({
                         onClick={(e) => e.stopPropagation()}
                         title={t('addTag')}
                     >
-                        <PenLine size={16} />
+                        <Outlined.Write size={16} />
                     </button>
                 </KnowledgeTagSelect>
             )}

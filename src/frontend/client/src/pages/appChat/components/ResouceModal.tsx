@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { CircleHelp, Import } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +8,7 @@ import { Dialog, DialogContent } from "~/components";
 import FileViewPanne from "~/components/PreviewFile";
 import { sanitizeHtml } from "~/utils/sanitizeHtml";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { downloadFile } from "~/utils";
 
 // 顶部答案区
@@ -37,7 +38,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
         msg && loadData()
     }, [])
 
-    // add 
+    // add
     useEffect(() => {
         const handleclick = (e) => {
             if (e.target.tagName === 'SPAN') {
@@ -53,7 +54,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
     </div>
 }
 
-// 
+//
 let timer: any = null
 const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen = false, closeDialog }:
     { chatId: string, words: string[], data: any, onClose: any, fullScreen: boolean, onAdd: any, children: any, closeDialog: () => void }) => {
@@ -138,16 +139,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                 <div className="mb-4 text-sm font-bold space-x-1 hidden sm:block">
                     <div className="flex">
                         <span>{t('com_source_modal_filter_labels')}</span>
-                        <TooltipProvider delayDuration={100}>
-                            <Tooltip>
-                                <TooltipTrigger>
-                                    <CircleHelp className="w-4 h-4" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p className="w-[170px] break-words">{t('com_source_modal_filter_labels_tip')}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <SharedTooltipProvider delayDuration={100}><SharedTooltip  content={<><p className="w-[170px] break-words">{t('com_source_modal_filter_labels_tip')}</p></>} ><button type="button" ><CircleHelp className="w-4 h-4" /></button></SharedTooltip></SharedTooltipProvider>
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-2 text-sm">
@@ -173,38 +165,14 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                             <p className="text-sm break-all">{_file.fileName}</p>
                             <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                                 {
-                                    _file.parse_type === 'uns' && _file.fileUrl && <Tooltip delayDuration={200}>
-                                        <TooltipTrigger >
-                                            <a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
+                                    _file.parse_type === 'uns' && _file.fileUrl && <SharedTooltip  content={<><div className=" max-w-96 text-left break-all whitespace-normal">{t('com_source_modal_download_layered_pdf')}</div></>} ><button type="button" ><a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
                                                 <Import className="text-blue-500" size={22} strokeWidth={1.5}></Import>
-                                            </a>
-                                        </TooltipTrigger>
-
-                                        <TooltipContent
-                                            className={`text-sm shadow-md`}
-                                            avoidCollisions={false}
-                                            sticky="always"
-                                        >
-                                            <div className=" max-w-96 text-left break-all whitespace-normal">{t('com_source_modal_download_layered_pdf')}</div>
-                                        </TooltipContent>
-                                    </Tooltip>
+                                            </a></button></SharedTooltip>
                                 }
                                 {
-                                    _file.originUrl && <Tooltip delayDuration={200}>
-                                        <TooltipTrigger >
-                                            <a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
+                                    _file.originUrl && <SharedTooltip  content={<><div className=" max-w-96 text-left break-all whitespace-normal">{t('com_source_modal_download_original')}</div></>} ><button type="button" ><a href="javascript:;" onClick={(event) => { downloadFile(changeMinioUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
                                                 <Import className="text-blue-500" size={22} strokeWidth={1.5}></Import>
-                                            </a>
-                                        </TooltipTrigger>
-
-                                        <TooltipContent
-                                            className={`text-sm shadow-md`}
-                                            avoidCollisions={false}
-                                            sticky="always"
-                                        >
-                                            <div className=" max-w-96 text-left break-all whitespace-normal">{t('com_source_modal_download_original')}</div>
-                                        </TooltipContent>
-                                    </Tooltip>
+                                            </a></button></SharedTooltip>
                                 }
                             </div>
                             <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>

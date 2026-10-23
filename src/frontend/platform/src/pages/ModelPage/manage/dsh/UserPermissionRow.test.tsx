@@ -162,7 +162,7 @@ describe('staged user authorization', () => {
             monthly_token_limit: 0,
         })
         await waitFor(() => expect(input()).toBeEnabled())
-        expect(screen.getByText('dsh.authorized')).toHaveClass('whitespace-nowrap')
+        expect(screen.getByText('dsh.authorized').parentElement).toHaveClass('whitespace-nowrap')
     })
     it('saves a cleared quota as zero on explicit save', async () => {
         renderUser({ direct_enabled: true })
