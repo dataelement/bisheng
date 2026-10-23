@@ -13,6 +13,7 @@ from runtime_manager.executors.kubernetes import KubernetesExecutor
 from runtime_manager.k8s_capabilities import REQUIRED_CHECKS, descriptor_digest
 from runtime_manager.k8s_client import KubernetesAPIError
 from runtime_manager.k8s_config import KubernetesConfig
+from runtime_manager.operations import OperationExecutor
 
 HELPER = "example.invalid/helper@sha256:" + "a" * 64
 NEW_HELPER = "example.invalid/helper@sha256:" + "b" * 64
@@ -327,3 +328,27 @@ def test_current_api_unavailability_does_not_change_individual_protection_result
     result = observation(runtime, "current", ready=True)
     assert result["orchestration_available"] is False
     assert result["status_protection"] is result["binding_protection"] is True
+
+
+@pytest.mark.parametrize("observed_at", [float("nan"), float("inf"), -float("inf"), True, "invalid", None])
+def test_invalid_observed_time_is_safe_on_the_real_manager_heartbeat_wire(runtime, observed_at):
+    document = copy.deepcopy(runtime.document)
+    document["probe_report"]["observed_at"] = observed_at
+    project(runtime, document)
+    sent = []
+
+    def capture(body):
+        sent.append(json.loads(json.dumps(body, allow_nan=False)))
+
+    manager = SimpleNamespace(
+        config=runtime.executor.config,
+        runtime=runtime.executor,
+        platform=SimpleNamespace(heartbeat=capture),
+    )
+    OperationExecutor.heartbeat(manager)
+    assert len(sent) == 1
+    assert sent[0]["probe_report"]["ready"] is False
+    assert sent[0]["probe_report"]["observed_at"] is None
+    assert sent[0]["capabilities"]["protection_observation"]["state"] == "unconfirmed"
+    assert sent[0]["capabilities"]["status_protection"] is False
+    assert sent[0]["capabilities"]["binding_protection"] is False
