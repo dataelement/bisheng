@@ -10,7 +10,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
 | tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；269 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 264 / 269 完成；详见 task-reviews.md |
+| 实现/任务评审 | 🟡 实施中 | 265 / 269 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2038,7 +2038,7 @@
   **覆盖 AC:** AC-03、AC-12、AC-13、AC-14、AC-16、AC-19、AC-20、AC-21、AC-22、AC-23、AC-30、AC-31、AC-32、AC-33、AC-34、AC-39、AC-42、AC-54、AC-55
   **依赖:** T065
 
-- [ ] **T069** — 真实平台发布审批及数据验收
+- [x] **T069** — 真实平台发布审批及数据验收
   **类型**：测试
   **文件**：`features/v3.0.0/059-k8s-runtime-backend/e2e-evidence/platform.json`、`features/v3.0.0/059-k8s-runtime-backend/e2e-evidence/platform.md`
   **逻辑/验收**：首发/更新/容量不足前后阶段、bundle三语言/完整镜像/source-image、审批预览、owner与非owner、SDK/OBO/附件、停用查改导出和恢复删除。记录HTTP及SQL操作/PVCUID/材料与镜像摘要。
@@ -2361,3 +2361,7 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T270/T271登记：M2真实迁移8aba1b5c…/gen2在migrating失败，精确同CID DDL NOTNULL证据及snapshot_confirmed/confirmed upload已独立核对。显式restore4d858a52…/gen3的helper恢复及保护快照结果已持久，随后starting资源注册POST409，操作failed/cleanupcomplete，未创建servePod。原接口body错误未留存；部署源_validate_template对restore+serve首门拒绝，可静态/真实Service复现。既有材料serve和ready自动提交路由已支持restore，登记最小入口修复；不复活失败或重发原请求。活跃262/269、124测试任务，R31源码包已准备未构建/部署，ARM/追加109/公开发行暂缓。
 
 2026-10-23 T270/T271开发收尾：实际manager模板→真实SQLite资源/材料→ready自动提交App/route配对已通过。生产38a700233/c06fb408…只接通同restore持久结果和严格resume=true的serve入口；未改材料/路由/schema/Docker。root完整app_runtime 1174pass/19skip，独立170pass及另一代理45pass，Ruff/格式/架构门通过。初次缺config、空JWT配置及True→1未持久的夹具失败保留；attached row显式dirty并fresh type断言修正测试，不放宽产品门。活跃264/269、124测试任务；T067/T069/T070/T071/T072仍pending，真实恢复/删除另验，ARM/新增109/公开发行暂缓。
+
+2026-10-23 T069业务流程闭合：R31真实升级及healthy fullimage唯一owner删除、持久purge/同UID停止、PVC自然清理/PV Retain、SQLite文件缺席通过，独立L1 b8b0b9eb…；265/269。T070及全AC未实测子句按platform.json边界保留，未将业务流程PASS当全feature完成；后续按用户要求仅定向回归。
+
+2026-10-23 T070子项：M2新restore6cd6/gen4真实完成，原行/NULL摘要、v1路由、pending清理、同操作confirmed保护上传及backend导出完整性、helper停止→单正式Pod/原PVC身份已核；原failed和工具未发包鉴权失败均保留。T070其余故障/卸载仍pending，不扩大为全AC通过。

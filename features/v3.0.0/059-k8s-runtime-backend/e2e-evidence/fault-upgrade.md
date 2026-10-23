@@ -75,3 +75,13 @@ m2已在新目录生成并冻结NULL→NOTNULL应用包（v1 09807c39…/1235B�
 同操作snapshot_confirmed事实seq3、verified快照 `dbae5da6ab5e42328db992dd39ddde5f`（16384B，SHA `eaf3653e…`）及完整confirmed上传由backend纯SELECT证明；通过backend现有存储端口导出，原NULL与随机基线行/摘要14608a29…及SQLite integrity在恢复前纯检查通过。私有恢复脚本只修正transfer真实36位UUID兼容，原脚本/错误检查和数据不改，平台代码未因此改动。
 
 首次显式owner restore（含非owner/跨租户拒绝配对）只发一次，接受 `4d858a521f714fc598c565e10e9dc19c` /gen3。维护helper UID `e9b0cef2-a8de-4bea-b8ee-ae969bea5af0`成功、同UID停止清理完成，恢复及保护快照结果入库；后续starting阶段POST资源登记409导致failed/cleanupcomplete，尚未证明恢复后的行和路由。静态及Service配对定位restore+serve未接入资源白名单，T270/T271修复中。原请求不重放、不自动回滚、不改failed为completed。快照去重返回同artifact，不能用新增数量证明或否认保护备份；仍须按同restore的confirmed上传核对。
+
+## M2 第二次显式恢复：189真实通过
+
+新journal以旧4d/gen3已知failed/cleanupcomplete为前置，只对新gen3→4发一次owner POST；nonowner/foreign各精确16105且状态不变。新restore6cd6f833513f41f6980c2fc4e66688da完成completed/cleanupcomplete，App继续current v1、pendingNone、原失败v2及approval14执行记录保持。原NULL与随机nonce行摘要14608a29…完全一致，真实入口health读到v1与同组数据；原parent5676945e…及migration_restore字段逐对象保持。
+
+保护快照按本restore的confirmed upload db502ccf-34f9-4772-93ee-5a8a1edfe5dc确认（offset=size），对应dedup artifact dbae5da6…/16384B/SHAeaf3653e…；原producer仍8aba，不改归属来凑证明。backend现有存储端口实际下载后校摘要/大小/SQLite integrity，独立observe acceptance_complete=true。正式journal4191fe7b…、绑定2e469112…、导出回执1a502951…完整SHA见JSON；不输出行/nonce或凭据。
+
+同操作SQL与元数据证明restore helper UIDadfd7678…已confirmed/cleanupcomplete，随后同名位置只有serve UIDbfd5c5b3…/gen4/Running；不得把同名新Pod存在说成旧helper未清理。原PVC UID8e9e3c90…/production07及PV身份保持，单个当前Pod。SQL证明6a2aa7de…、物理证明733863da…；独立审证52e77506…确认业务/保护绑定，未声称独立本地重新检查未下载的SQLite本体。
+
+首次私有second-r1工具在读取v2状态时误用Cookie，被鉴权拒绝；新restore intent尚未生成且journal==parent，经只读确认后保留旧文件。仅修验收工具改走既有owner publish-status，新目录second-r2；未因此改平台、重放未知请求或跑全量回归。T070仍待其余故障与独立卸载，ARM/追加109/公开发行暂缓。

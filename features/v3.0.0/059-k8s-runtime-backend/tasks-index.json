@@ -6731,8 +6731,8 @@
       ],
       "pair": null,
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T070",

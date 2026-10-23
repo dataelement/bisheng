@@ -51,8 +51,7 @@
     "189 cancel/init faults; additional UID replacement/unknown-writer injection beyond held legacy safety negatives",
     "in-flight manager restart and response loss",
     "full uninstall retention in independent install/platform-storage domain",
-    "NodeLost or cross-node fencing",
-    "successful explicit restore after T271 fixed backend, same-restore protective upload and data/route verification"
+    "NodeLost or cross-node fencing"
   ],
   "boundary": "local fixture/HTTP proxy preparations do not count as deployed fault proof; T070 remains pending",
   "migration_v1_baseline": {
@@ -968,7 +967,7 @@
     "private_evidence_root": "/opt/e2e-f059/evidence/e2e-f059-migration-k189m2-accepted-r30"
   },
   "development_closeout_20261023": {
-    "tasks_complete": 264,
+    "tasks_complete": 265,
     "tasks_total": 269,
     "backend_source_commit": "38a7002335bdf5c7c3aa4e13e93d32d6d8150c81",
     "backend_service_sha256": "c06fb408033f4d77c767924908209e92fd06650d7275bac2cb6cba15442327ce",
@@ -983,9 +982,59 @@
     "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:981bf135375a8c8728735fa13b04ee9b5c8e096c25210a72f44fdd6be003becf",
     "native_platform": "linux/amd64",
     "native_nonroot_import_uid": 10001,
-    "manager_deployed_verified": false,
+    "manager_deployed_verified": true,
     "public_release": false,
     "arm": "deferred_by_user",
     "l2": "pending"
+  },
+  "actual_migration_restore_189_gen4": {
+    "state": "passed",
+    "actual_execution": true,
+    "app_id": "3d76a877d2b24f13bb2d3498d926efd3",
+    "previous_failed_restore_operation_id": "4d858a521f714fc598c565e10e9dc19c",
+    "operation_id": "6cd6f833513f41f6980c2fc4e66688da",
+    "generation": 4,
+    "status": "completed",
+    "cleanup_status": "complete",
+    "owner_single_restore_post": true,
+    "denied_nonowner_and_foreign_code": 16105,
+    "current_version_id": "385c7cf5116b4f55bae10a85853926f8",
+    "pending_version_id": null,
+    "failed_v2_and_approval_14_preserved": true,
+    "baseline_rows_sha256": "14608a29de2527a501fa0f18362fee2272ce18bd093a5d83274adad203ab1f4e",
+    "null_and_nonce_rows_verified": true,
+    "entry_route_version": "1",
+    "protection_snapshot_id": "dbae5da6ab5e42328db992dd39ddde5f",
+    "protection_snapshot_sha256": "eaf3653e07e30d65b89436bf09dda2fc2794a6ab91a8f5a71ed7af9d6f1dd03b",
+    "protection_snapshot_size_bytes": 16384,
+    "same_restore_confirmed_upload_id": "db502ccf-34f9-4772-93ee-5a8a1edfe5dc",
+    "snapshot_deduplicated": true,
+    "original_producer_operation_id_retained": "8aba1b5c7a37425393a7e9d5e6ff259c",
+    "backend_export_sqlite_integrity": "ok",
+    "one_current_pod": true,
+    "restore_helper_uid": "adfd7678-76ae-431c-8f5d-e228c1f7e46f",
+    "restore_helper_stopped_and_cleaned": true,
+    "serving_pod_uid": "bfd5c5b3-aa3d-4b28-9ef8-184ecdb8781f",
+    "stable_pvc_uid": "8e9e3c90-7c93-4a3a-94ed-422054b30e67",
+    "persistent_volume_identity_preserved": true,
+    "prior_parent_and_failed_restore_unmodified": true,
+    "automatic_rollback": false,
+    "automatic_cleanup": false,
+    "evidence_sha256": {
+      "journal": "4191fe7b24825d0002136d641fffa63926b70f48a4fb520bdfdc6a882a9484f5",
+      "protected_snapshot_binding": "2e46911291eda8609a5d6dcb14058813e3bfbfc47ee5b80305229e52ade07f02",
+      "snapshot_export_receipt": "1a5029519e928a4c1876c1ea8534566eb0fb23a24d8ea1f76cdb368c25ffaf33",
+      "operation_sql": "6a2aa7de6f68c05dca8fe575310b6aaeccd596fec24f8e5c6c2276feba17e5d2",
+      "physical": "733863da8f6bdb2e0c2ca7eb1eda8852e43e3e6805be682c6c0d6b2dbd10c07c",
+      "independent_review": "52e7750627fa602226800ec4b44968ed5416b0f61784dafb6d195ad2c35f3f1a"
+    },
+    "private_evidence_root": "/opt/e2e-f059/evidence/e2e-f059-migration-k189m2-restore-second-r2",
+    "tool_only_failed_attempt": {
+      "reason": "v2_deployment_get_refused",
+      "new_restore_intent_recorded": false,
+      "journal_equal_to_parent": true,
+      "production_code_changed": false,
+      "resolution": "use existing owner-cookie publish-status read model; new journal preserves failed check"
+    }
   }
 }

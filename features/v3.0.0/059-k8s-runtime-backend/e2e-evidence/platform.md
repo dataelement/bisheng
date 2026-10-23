@@ -205,3 +205,13 @@ R11（37资源/13预约）和完整镜像（26资源/9预约）停止后只读SQ
 R11删除前fresh纯SELECT及元数据核对19个历史Pod均有同UID持久停止证据、所有38资源按保留PVC/已清理资源分组验证、预约全部released。默认业务check通过后只发一次新的owner DELETE（不重放旧请求），新destroy `75437b15cb7b4abba06a2c7cc492fbc4` /gen6。此次合法maintenance事实及 `purge.result.purged=true` 已入库；随后PVC删除尚未结束时抛 `purge_volume_cleanup_pending`，最终failed/cleanupcomplete，App仍stopped。原请求异常/未知日志保留。数据已经purge，不能宣称仍保留，也不能将持久purge事实当作业务删除及PVC清理成功；登记T268/T269继续修复原期限内异步等待。
 
 ARM、追加109与公开发行均未执行。T069/T070保持未完成，所有历史失败记录保留。
+
+## R31 真实升级与安全删除：T069业务流程通过
+
+R31 manager/source6c9694f0f、镜像digest981bf135…已原生amd64构建并在专用Helm31上线。新Pod UID56193f9b-0595-404f-a54a-0d62f0adf820、epoch28、ready/current/双保护true；backend恢复入口为独立source38a700233/c06fb408文件，保持混合源码事实。升级前后4appPod/7PVC及对应PV、descriptor/三个非manager服务身份和SQL business/node精确一致，epoch27→28及资源控制epoch变动独立列出；此处清单是升级时点，非删除后的当前数量。比较proof SHA89e95bb0…，原始引用逐SHA核对。
+
+健康fullimage ec6229…在原stop gen5后，owner唯一DELETE实际66.906734秒成功，详情精确16101、列表无appid/slug。新destroy f5ecf6bafaad4e77b4765b06ccc9eada/gen6已completed/completed/cleanupcomplete，seq3持久purged=true；purge ref d30a4232-ea42-5b70-9f3a-715a2a48c9d7及UID74b984da-7970-496b-80e2-4634bcb7bf11同kubelet证据闭合、Pod自然缺席。原PVC55f2…清理完成/自然404，旧创建op未改，cleanup_operation_id指向本次destroy；10预约released。
+
+原PV production03/UID00a210b6…保持Retain、Released和旧claim UID；宿主目录保留，app.db/wal/shm均不存在。7storage binding revoked且限定prefix为空，snapshot样本0；不冒称非空快照/附件删除。原R11两次失败和数据已purge事实保留，未复活/重发/强删finalizer。正式物理r2字段sqlite_files_present=false，r1误名字段未覆盖历史。SQL proof2fa86783…、物理proof1b919830…及唯一intent完整SHA见JSON。
+
+独立窄L1 b8b0b9eb…确认T069明确业务流程PASS，现265/269任务完成；全AC矩阵仍保留AC-02页面/CLI/MCP开关、AC-17完整档位矩阵、AC-18资源超限故障、AC-37审计通知CLI及AC-45完整缓存失效矩阵的证据边界。T070、追加109、正式发行和L2不由本项替代。后续只做定向验证，不重复完整业务/单测回归。

@@ -1,14 +1,14 @@
 {
   "schema": "f059-platform-evidence/v1",
-  "recorded_at": "2026-10-23T03:26:12.039221+00:00",
-  "state": "r30_upgrade_passed_delete_pvc_wait_fix_pending",
-  "accepted": false,
+  "recorded_at": "2026-10-23T06:01:01.733248+00:00",
+  "state": "t069_business_workflow_passed_fault_acceptance_pending",
+  "accepted": true,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "686bf68300a5869cfd260833b05448851986e50b",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:6e528c88300f0730486a8d81a1aa4df63caa0fe2e74d8faa2e5a6f68a0e32711",
+    "manager_source": "6c9694f0ffb6adf4722b9fa711851172b3efdc64",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:981bf135375a8c8728735fa13b04ee9b5c8e096c25210a72f44fdd6be003becf",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
@@ -19,7 +19,7 @@
       "bisheng/app_runtime/domain/services/runtime_data_grant_service.py",
       "bisheng/app_runtime/domain/services/runtime_data_session_service.py"
     ],
-    "helm_revision": 30,
+    "helm_revision": 31,
     "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
     "backend_data_cpu_source": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
     "backend_data_cpu_files": [
@@ -30,7 +30,9 @@
     "backend_protection_sources": {
       "src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py": "2aeb4eccb208e6deba9f34acaf7b0f2e0db57e8e5fae6fa9b3ce638eec6d875c",
       "src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py": "866efa5e8feebd838a804b60a3ec7f0d49c9edd2d8fb0e690c7f08c7a8197fe3"
-    }
+    },
+    "backend_restore_service_source": "38a7002335bdf5c7c3aa4e13e93d32d6d8150c81",
+    "backend_restore_service_sha256": "c06fb408033f4d77c767924908209e92fd06650d7275bac2cb6cba15442327ce"
   },
   "attempts": [
     {
@@ -223,50 +225,18 @@
     "root_cause_of_r5_failure": "not yet concluded from this ingress check alone"
   },
   "not_verified": [
-    "safe delete after later tests",
-    "fault and independent uninstall acceptance"
+    "remaining fault and independent uninstall acceptance",
+    "AC-02: page/CLI/MCP/switch presentation not newly observed in this batch",
+    "AC-17: complete tier-change timing matrix not newly observed",
+    "AC-18: workload resource-limit fault remains in fault acceptance",
+    "AC-37: CLI/audit/notification chain not separately proven by these API events",
+    "AC-45: complete cache-reuse/invalidation input matrix not separately proven"
   ],
-  "boundary": "Python and Node v1/v2 access and stop/resume passed; the complete business suite remains in progress. No cross-node/ARM/formal CI/public release claim.",
-  "next_batch": {
-    "name": "k189r10",
-    "cases": 6,
-    "profile_revision": 2,
-    "source_revision": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
-    "runner_sha256": "ba5b766e3afbbfa4c4b6f170e3c32c288fccbad58dfc91c498484bb66cf4ac3c",
-    "wrapper_sha256": "b1eaf522e7a10b6a54911e8d46124e44d0b91b6f5713d24b0981edda3a072047",
-    "stage": "platform",
-    "automatic_finally_cleanup": false,
-    "result": "python_v1_online_and_observe_passed_continuation_running",
-    "new_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10.json",
-    "apps_at_start": {
-      "e2e-f059-python-bundle-k189r10": {
-        "deployment_id": "d3b8870c2897480b9bb65fc6a1e7c41e",
-        "runtime": "python3.11",
-        "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
-        "version_id": "ba5d47d9369540df9d5219adc72a55bf",
-        "mode": "bundle"
-      }
-    },
-    "entry_tls_preflight": {
-      "http_status": 200,
-      "verified_tls": true,
-      "explicit_public_ca": true
-    },
-    "explicit_public_ca_env": "F059_E2E_CA_FILE=/run/f059-ca.pem",
-    "production_runtime_and_image_unchanged": true,
-    "manager_updated_mid_batch": true,
-    "maintenance_fix_source": "249d5fc85b2ed08db88c93b7676ced73fdb8ee7b",
-    "initial_failed_operation": "d9729fe5c905480bbfd2cf796f344a97",
-    "production_pvc_uid": "4c5b459c-25c6-45ce-9000-370131477d27",
-    "manual_one_shot_phase": "verified",
-    "manual_one_shot_receipt": "/opt/e2e-f059/evidence/k189r10-manual-publish-once.json",
-    "new_deploy_operation": "20d42a22ce414ceda571038d10363ce8",
-    "original_suite_result": "natural_900_second_wait_expired_before_manual_recovery",
-    "continuation_journal": "/opt/e2e-f059/evidence/k8s-platform-k189r10-resumed.json",
-    "continuation_script_sha256": "a61be39364416261f9e5df8770e146f4bef943d28266f1e6943e73631b661bc0",
-    "parent_sha256": "3a2961d24f6428cc4ee268e166372c7cc404237079441985f837ea4788f773f5",
-    "manual_receipt_sha256": "299c8b4816a248611c4ae114cb414eaf528324eb362106bafef312a1678f8a55"
-  },
+  "boundary": "T069 five delivery modes and defined publication/data/deletion business workflow passed with actual 189 evidence. This is not all-AC, fault/uninstall, cross-node, ARM or formal public-CI acceptance.",
+  "next_batch": [
+    "targeted remaining K8s faults and independent uninstall retention",
+    "final L2 and delivery gaps; ARM/additional109/public issue remain deferred"
+  ],
   "historical_batches": [
     {
       "name": "k189r6",
@@ -2224,5 +2194,102 @@
       "T268",
       "T269"
     ]
+  },
+  "accepted_scope": "T069 explicit business workflow only",
+  "feature_acceptance_complete": false,
+  "r31_manager_upgrade": {
+    "actual_execution": true,
+    "arm_tested": false,
+    "backend_service_sha256": "c06fb408033f4d77c767924908209e92fd06650d7275bac2cb6cba15442327ce",
+    "business_unchanged": true,
+    "cluster_comparison": {
+      "app_pod_count": 4,
+      "baseline_inventory_unchanged": true,
+      "manager_deployment_uid_retained": true,
+      "manager_uid_replaced": true,
+      "non_manager_controls_unchanged": true,
+      "pv_count": 7,
+      "pvc_count": 7
+    },
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:981bf135375a8c8728735fa13b04ee9b5c8e096c25210a72f44fdd6be003becf",
+    "manager_pod_uid": "56193f9b-0595-404f-a54a-0d62f0adf820",
+    "manager_source_commit": "6c9694f0ffb6adf4722b9fa711851172b3efdc64",
+    "new_controller_epoch": 28,
+    "node_projection_unchanged": true,
+    "old_controller_epoch": 27,
+    "platform_get_may_prune_expired_diagnostics": true,
+    "proof_files_sha256": {
+      "r31-cluster-after-r1.json": "867447e9f25681a7d8e739745fafda47cb4565a505935eda8425cb6a3fe1edfe",
+      "r31-cluster-before-r2.json": "fd2f91a1c2cc86069b39fb031204b1070a1fc1caf035b62b039d8e747f64de73",
+      "r31-ready-r1.json": "fe2f0add7421933661ef613149518e0f2e98aca32179f92eb14f5edbd7aeb23d",
+      "r31-sql-after-r1.json": "5d3a45561dcf2fe5827ea01b3eeb560471a8d0f58800373b0d784abe6edcfc8a",
+      "r31-sql-before-r1.json": "ad1caa3ed35c7de633f0c774c42d4aca528887a75d69848fe6d1dcb68454f245"
+    },
+    "public_release": false,
+    "resource_controller_epoch_changes": [
+      {
+        "after": 28,
+        "before": 27,
+        "resource_ref": "21bfa140-b850-5935-8e4c-f8fcec73049c"
+      },
+      {
+        "after": 28,
+        "before": 27,
+        "resource_ref": "bc542b2d-20ed-5128-b587-204897e4e484"
+      }
+    ],
+    "schema": "f059-r31-upgrade-comparison/v1"
+  },
+  "r31_safe_delete": {
+    "actual_execution": true,
+    "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+    "tenant_id": 2,
+    "generation": 6,
+    "operation": {
+      "cleanup_status": "complete",
+      "generation": 6,
+      "id": "f5ecf6bafaad4e77b4765b06ccc9eada",
+      "kind": "destroy",
+      "stage": "completed",
+      "status": "completed"
+    },
+    "purge_helper": {
+      "id": "d30a4232-ea42-5b70-9f3a-715a2a48c9d7",
+      "uid": "74b984da-7970-496b-80e2-4634bcb7bf11",
+      "stop_state": "confirmed",
+      "cleanup_state": "complete"
+    },
+    "purged": true,
+    "owner_single_delete": true,
+    "delete_ack_seconds": 66.906734,
+    "detail_business_code": 16101,
+    "list_absent": true,
+    "all_app_pods_closed_and_absent": true,
+    "all_reservations_released": true,
+    "storage_binding_prefixes_empty": 7,
+    "snapshot_sample_count": 0,
+    "nonempty_snapshot_or_attachment_cleanup_proven": false,
+    "stable_pvc_absent": true,
+    "retained_pv": {
+      "name": "e2e-f059-production-03",
+      "old_claim_uid": "55f2a8fc-a27d-4878-ada2-44cd5b167736",
+      "phase": "Released",
+      "reclaim_policy": "Retain",
+      "uid": "00a210b6-82e0-4745-8c68-35c00c877103"
+    },
+    "sqlite_files_present": {
+      "app.db": false,
+      "app.db-shm": false,
+      "app.db-wal": false
+    },
+    "automatic_retry": false,
+    "force_cleanup": false,
+    "evidence_sha256": {
+      "intent_journal": "45ff9210552ed147d19faf529c17a4572ca2de21b64ffd36bcc994816a264ffe",
+      "sql_result": "2fa86783d64687ba877e8f7df04973ad75c5feb99e2ba980d8a22a2bc885cbd1",
+      "physical_result": "1b9198300e8b6c04e4fc01550b14e4b87144af1b7fa195f745063d4e7579753e"
+    },
+    "private_evidence_root": "/opt/e2e-f059/evidence",
+    "independent_l1_sha256": "b8b0b9eb972855feb6c7c2e59a889028938bbcad8dfce6ce9f272aa0b4bd7fd2"
   }
 }

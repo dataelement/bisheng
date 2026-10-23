@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成264/269。T258–T263保护报告与心跳一致性修复已通过1757/13skip runtime、1944/19skip三个后端模块，189已部署R29/source f886 manager与两文件backend修复，实际epoch24/current及旧保护历史核对通过。五种交付模式原v1/v2证据保持；新增r11 Python已完成发布、审批预览、HTTP/WS/SDK/OBO/附件/权限、正常停用、随机SQLite查改CSV与同v1恢复行数据一致，九项独立资源检查通过。T069剩安全删除；T070故障、迁移与独立卸载继续验收。旧r4及旧失信writer保持围栏，不能强制卸载主安装域。T264/T265 CLI 16125→exit14及wheel已完成本地L1；R3 manager停机访问和R12容量前置拒绝已真实通过。ARM、新增109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
+**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成265/269。T258–T263保护报告与心跳一致性修复已通过1757/13skip runtime、1944/19skip三个后端模块，189已部署R29/source f886 manager与两文件backend修复，实际epoch24/current及旧保护历史核对通过。五种交付模式原v1/v2证据保持；新增r11 Python已完成发布、审批预览、HTTP/WS/SDK/OBO/附件/权限、正常停用、随机SQLite查改CSV与同v1恢复行数据一致，九项独立资源检查通过。T069剩安全删除；T070故障、迁移与独立卸载继续验收。旧r4及旧失信writer保持围栏，不能强制卸载主安装域。T264/T265 CLI 16125→exit14及wheel已完成本地L1；R3 manager停机访问和R12容量前置拒绝已真实通过。ARM、新增109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -836,3 +836,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 T270/T271：在线应用显式restore以当前v1冻结交付，resume_after_restore/auto_commit均true；manager先确认同操作restore维护结果并关闭helper，再以serve启动。backend资源入口仅开放该显式路径，校验原snapshot参数与已持久结果和合法启动阶段；仅数据恢复仍不允许serve。复用同代际/控制租约、冻结模板和全app旧writer停止证明。材料serve授权及ready→commit_runtime_delivery→清pending/路由激活既有链不另造API。真实首轮恢复失败保留，不延长或复活该操作。
 
 2026-10-23 开发收尾补记：T266–T269实际销毁阶段与PVC异步等待均已L1；T270/T271为在线restore接通同操作持久结果后的serve资源入口，仍按原deadline、严格resume=true、latest fact snapshot/digest/helper ref及全app旧writer停止保护。现有材料与ready/route提交不变。完整backend1174pass/19skip，manager1787pass/13skip；R31原生amd64构建/内网digest981bf135…已取得，source6c9694f0f，backend单文件独立source38a700233/c06fb408。首次真实restore4d858a52/gen3仍failed，需部署后新显式恢复验收；未公开发行、ARM暂缓。
+
+2026-10-23 验收现状：R31 Helm31与backend c06fb408实际部署通过；正常升级保持原应用/卷与SQL业务投影。T069安全删除经唯一owner业务请求、durable purge、同UID停止/PVC自然清理/PV Retain/SQLite缺席闭合，独立L1后265/269。全AC子句边界及T070/发行/L2保留；按用户要求仅定向测试修复和相邻链。
