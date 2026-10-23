@@ -30,7 +30,7 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
     conversation?.title != null && String(conversation.title).trim() !== ''
       ? String(conversation.title).trim()
       : localize('com_ui_new_chat');
-  // Title + share are merged into MobileNav on H5；应用内对话在 768–1023 同样走合并顶栏，避免与 AppRoot 悬浮钮重复一行。
+  // Merge title and share into MobileNav on mobile and compact app-chat layouts.
   if (isNarrowViewport || (isAppChatRoute && isAppChatCompact)) {
     return null;
   }
@@ -85,9 +85,6 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
             </button>
           )}
         </div>
-      </div>
-      <div className="dsh-chat-section-row">
-        <span className="dsh-chat-section-label">{localize('dshChat.conversationSection')}</span>
       </div>
     </div>
   );

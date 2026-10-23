@@ -105,25 +105,19 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 .dsh-chat-hero .dsh-composer-submit:hover:enabled { background:#7aaaff; }
 .dsh-chat-hero .dsh-chat-composer .dsh-composer-editor { min-height:52px; }
 .dsh-chat-surface .dsh-composer-toolbar .input-bottom-left { flex:1 1 auto; gap:12px; overflow:visible; }
-/* Harness conversation header: 10px inset, 30px title, 10px gap, 25px section. */
-.dsh-chat-section-row { display:none; }
+/* Conversation header: 10px top inset and a single 30px title row. */
 .dsh-chat-surface .dsh-chat-header {
   box-sizing:border-box;
   display:grid;
   grid-template-columns:minmax(0,1fr);
-  grid-template-rows:30px 25.5px;
-  row-gap:10px;
+  grid-template-rows:30px;
   flex:none;
-  height:76px;
+  height:40px;
   padding:10px 20px 0 28px;
-  border-bottom:.5px solid rgb(var(--border-base));
   background:rgb(var(--bg-page));
   color:rgb(var(--text-1));
 }
 .dsh-chat-surface .dsh-chat-header-row { height:30px; }
-.dsh-chat-surface .dsh-chat-section-row { display:flex; align-items:flex-start; }
-.dsh-chat-section-label { position:relative; padding-bottom:9px; font-size:13px; font-weight:500; line-height:16px; color:rgb(var(--brand-500)); }
-.dsh-chat-section-label::after { content:""; position:absolute; height:2px; bottom:-1px; inset-inline:0; border-radius:2px; background:currentColor; }
 /* The first message owns the 16px top inset, shared with Harness. */
 .dsh-chat-surface .dsh-chat-message-scroll { padding-top:16px; scrollbar-width:thin; }
 .dsh-chat-surface .dsh-chat-content { padding-top:0; padding-bottom:16px; }
