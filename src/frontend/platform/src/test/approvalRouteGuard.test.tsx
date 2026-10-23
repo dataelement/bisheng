@@ -1,5 +1,5 @@
 import { RouteDialog } from '@/pages/ApprovalPage/RouteDialog';
-import { render, screen, waitFor } from '@/test/test-utils';
+import { render, screen, selectOption, waitFor } from '@/test/test-utils';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -12,7 +12,10 @@ describe('mandatory approval after the page split', () => {
     const onConfirm = vi.fn();
     render(<RouteDialog open initial={initial} flows={[]} conditionFields={[]} allowPassRoute={false}
       onClose={vi.fn()} onConfirm={onConfirm} />);
+    await userEvent.click(screen.getByLabelText('approvalPage.routeTypeLabel'));
+    expect(await screen.findByRole('option', { name: 'approvalPage.routeTypeFlowFull' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'approvalPage.routeTypePassFull' })).toBeNull();
+    await userEvent.keyboard('{Escape}');
     expect(screen.getByText('approvalPage.routeTypeMandatoryHint')).toBeInTheDocument();
     const save = screen.getByRole('button', { name: 'approvalPage.save' });
     expect(save).toBeDisabled();
@@ -20,10 +23,11 @@ describe('mandatory approval after the page split', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('keeps automatic approval available for the other existing scenarios', () => {
+  it('keeps automatic approval available for the other existing scenarios', async () => {
     render(<RouteDialog open initial={initial} flows={[]} conditionFields={[]}
       onClose={vi.fn()} onConfirm={vi.fn()} />);
-    expect(screen.getByRole('option', { name: 'approvalPage.routeTypePassFull' })).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('approvalPage.routeTypeLabel'));
+    expect(await screen.findByRole('option', { name: 'approvalPage.routeTypePassFull' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'approvalPage.save' })).toBeEnabled();
   });
 
@@ -31,8 +35,7 @@ describe('mandatory approval after the page split', () => {
     const onConfirm = vi.fn();
     render(<RouteDialog open initial={initial} flows={[{ id: 12, flow_name: 'Reviewed flow', flow_code: 'reviewed' }]}
       conditionFields={[]} allowPassRoute={false} onClose={vi.fn()} onConfirm={onConfirm} />);
-    const option = screen.getByRole('option', { name: 'Reviewed flow' });
-    await userEvent.selectOptions(option.parentElement as HTMLSelectElement, '12');
+    await selectOption('approvalPage.bindFlow', 'Reviewed flow');
     await userEvent.click(screen.getByRole('button', { name: 'approvalPage.save' }));
     await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({
       route_name: initial.route_name, route_type: 'flow', flow_definition_id: 12, match_config: {},

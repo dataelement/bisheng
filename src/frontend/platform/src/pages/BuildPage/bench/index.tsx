@@ -7,7 +7,7 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
 import { getDailyConfigApi, getLinsiConfigApi, setDailyConfigApi, setLinsiConfigApi } from "@/controllers/API";
 import { getToolsApi } from "@/controllers/API/tools";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
@@ -166,9 +166,9 @@ export const useChatConfig = (
         setConfigMeta(null);
         Promise.all([
             getDailyConfigApi(),
-            getToolsApi("default").catch(() => []),
+            getToolsApi("default"),
 
-            getLinsiConfigApi().catch(() => null),
+            getLinsiConfigApi(),
         ]).then(([res, toolsRes, linsightRes]) => {
             const { data: cfg, meta } = resolveConfigEnvelope<any>(res);
             setConfigMeta(meta);
@@ -274,7 +274,7 @@ export const useChatConfig = (
                     recommendedApps: Array.isArray(cfg.recommendedApps) ? cfg.recommendedApps : prev.recommendedApps,
                 };
             });
-        });
+        }).catch(showApiError);
     }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
@@ -511,9 +511,7 @@ export const useChatConfig = (
             tab_display_name: (formData.linsightConfig.tab_display_name || "").trim(),
         };
 
-        captureAndAlertRequestErrorHoc(
-            Promise.all([setDailyConfigApi(dataToSave), setLinsiConfigApi(linsightToSave)]),
-        ).then((res) => {
+        await Promise.all([setDailyConfigApi(dataToSave), setLinsiConfigApi(linsightToSave)]).then((res) => {
             if (res) {
                 setConfigMeta({
                     inherited_from_root: false,

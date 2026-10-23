@@ -1,3 +1,4 @@
+import { showApiError } from "~/api/request";
 /**
  * Channel article chat hook — sends questions in the context of a specific article.
  * Uses the stream-format SSE endpoint (shared with file/folder chat).
@@ -32,9 +33,21 @@ export default function useChannelChat(
     const chatModel = model ?? sharedChatModel;
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
+    const [historyError, setHistoryError] = useState<unknown>(null);
+    const [historyReload, setHistoryReload] = useState(0);
+    const [isClearing, setIsClearing] = useState(false);
+    const clearingRef = useRef<object | null>(null);
+    const retryHistory = () => setHistoryReload(value => value + 1);
     const [isLoading, setIsLoading] = useState(false);
     const [sseSubmission, setSseSubmission] =
         useState<StreamChatSSESubmission | null>(null);
+
+    const resourceKey = JSON.stringify([articleDocId]);
+    const resourceRef = useRef({ key: resourceKey });
+    if (resourceRef.current.key !== resourceKey) {
+        resourceRef.current = { key: resourceKey };
+        clearingRef.current = null;
+    }
 
     const messagesRef = useRef<ChatMessage[]>([]);
     messagesRef.current = messages;
@@ -45,18 +58,16 @@ export default function useChannelChat(
     // --- Load chat history on mount or when articleDocId changes ---
     useEffect(() => {
         if (!articleDocId) return;
+        let active = true;
+        setHistoryError(null);
+        setIsClearing(false);
         setIsLoading(true);
         getChannelChatHistory(articleDocId)
-            .then((msgs) => {
-                setMessages(msgs);
-            })
-            .catch((err) => {
-                console.error("[ChannelChat] Failed to load history:", err);
-            })
-            .finally(() => {
-                setIsLoading(false);
-            });
-    }, [articleDocId]);
+            .then(msgs => { if (active) setMessages(msgs); })
+            .catch(error => { if (active) setHistoryError(error); })
+            .finally(() => { if (active) setIsLoading(false); });
+        return () => { active = false; };
+    }, [articleDocId, historyReload]);
 
     // --- Helper: build SSE submission for stream-format ---
     const buildSubmission = useCallback(
@@ -126,7 +137,7 @@ export default function useChannelChat(
     // --- Send a message ---
     const sendMessage = useCallback(
         (text: string, _files?: any[] | null) => {
-            if (!text.trim() || isStreaming || !articleDocId) return;
+            if (clearingRef.current || !text.trim() || isStreaming || !articleDocId) return;
 
             const userMessageId = v4();
             const userMessage: ChatMessage = {
@@ -174,19 +185,29 @@ export default function useChannelChat(
 
     // --- Clear conversation (local + server) ---
     const clearConversation = useCallback(() => {
+        if (clearingRef.current) return;
         stopGenerating();
-        setMessages([]);
         if (articleDocId) {
-            clearChannelChat(articleDocId).catch((err) => {
-                console.error("[ChannelChat] Failed to clear history:", err);
+            const operation = {};
+            clearingRef.current = operation;
+            setIsClearing(true);
+            const resource = resourceRef.current;
+            void clearChannelChat(articleDocId).then(() => {
+                if (resourceRef.current === resource) setMessages([]);
+            }).catch(showApiError).finally(() => {
+                if (clearingRef.current === operation) {
+                    clearingRef.current = null;
+                    setIsClearing(false);
+                }
             });
         }
+
     }, [stopGenerating, articleDocId]);
 
     // --- Regenerate (resend last user message) ---
     const regenerate = useCallback(
         (parentMessageId: string) => {
-            if (isStreaming || !articleDocId) return;
+            if (clearingRef.current || isStreaming || !articleDocId) return;
 
             const parentMsg = messagesRef.current.find(
                 (m) => m.messageId === parentMessageId
@@ -219,6 +240,9 @@ export default function useChannelChat(
     );
 
     return {
+        historyError,
+        isClearing,
+        retryHistory,
         messages,
         conversationId: "",
         title: "",

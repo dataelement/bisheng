@@ -96,6 +96,9 @@ interface OutgoingAttachment {
 }
 
 export default function useAiChat(initialConversationId: string = "new", isLingsi: boolean = false, shareToken: string = "") {
+    const [historyError, setHistoryError] = useState<unknown>(null);
+    const [historyReload, setHistoryReload] = useState(0);
+    const retryHistory = () => setHistoryReload(value => value + 1);
     const localize = useLocalize();
     const { showToast } = useToastContext();
     // --- Local state ---
@@ -398,6 +401,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // streaming end we'd refetch and overwrite the just-streamed messages,
     // causing a visible flash on the first reply of a new chat.)
     useEffect(() => {
+        setHistoryError(null);
         if (isStreaming) return;
         if (!conversationId || conversationId === "new") {
             return;
@@ -415,17 +419,21 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // Returns ChatMessage[] with category + structured fields (reasoning,
         // tool_calls, steps, thinking_segments) already expanded; legacy
         // regenerate siblings are pre-collapsed server-side.
+        let active = true;
         getAgentMessages(conversationId, shareToken || undefined)
             .then((msgs) => {
+                if (!active) return;
                 setMessages(msgs);
                 setIsLoading(false);
             })
             .catch((err) => {
-                console.error("Failed to load messages:", err);
+                if (!active) return;
+                setHistoryError(err);
                 setIsLoading(false);
             });
+        return () => { active = false; };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
-    }, [conversationId, shareToken]);
+    }, [conversationId, shareToken, historyReload]);
 
     // Load the conversation's stored name. The history endpoints return messages
     // only, so opening an existing conversation by URL (deep link or share link)
@@ -1289,6 +1297,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     );
 
     return {
+        historyError,
+        isClearing: false,
+        retryHistory,
         // State
         messages,
         // Legacy alias — kept null to maintain the old destructuring shape

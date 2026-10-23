@@ -17,7 +17,7 @@ import {
   restoreDepartmentApi,
   updateDepartmentApi,
 } from "@/controllers/API/department";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly";
 import type { DepartmentAdmin, DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department";
 
@@ -112,7 +112,7 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
       setVisibleRootResolved(true);
       return;
     }
-    captureAndAlertRequestErrorHoc(getDepartmentChildrenApi(null)).then((roots) => {
+    getDepartmentChildrenApi(null).then((roots) => {
       if (cancelled) return;
       const visibleRoot = Array.isArray(roots) && roots.some((n) => n.id === dept.id);
       setIsVisibleRootDept(visibleRoot);
@@ -126,7 +126,7 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
         setParentDisplayName("-");
         return;
       }
-      captureAndAlertRequestErrorHoc(getDepartmentPathTreeApi(dept.parent_id!)).then((res) => {
+      return getDepartmentPathTreeApi(dept.parent_id!).then((res) => {
         if (cancelled) return;
         const pruned = (res as DepartmentSearchResult | null) ?? null;
         let cur = pruned?.roots?.[0];
@@ -137,7 +137,7 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
         }
         setParentDisplayName(name);
       });
-    });
+    }).catch(showApiError);
     return () => {
       cancelled = true;
     };
@@ -146,6 +146,7 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    baselineRef.current = null;
     setApplyDefaultRolesToExisting(false);
     Promise.all([
       getDepartmentAdminsApi(dept.dept_id),
@@ -171,11 +172,7 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
           parentId: pid,
         };
       })
-      .catch(() => {
-        if (!cancelled) {
-          notification.open({ type: "error", title: String(t("prompt") ?? ''), description: String(t("bs:department.settingsLoadFailed") ?? '') });
-        }
-      })
+      .catch(error => { if (!cancelled) showApiError(error) })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -227,7 +224,7 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
   }, [hasUnsavedSettingsChanges, restoreBaseline, t]);
 
   const handleGlobalSave = useCallback(async () => {
-    if (!canEditPermissions) return;
+    if (!canEditPermissions || !baselineRef.current) return;
     if (canEditName && (!name || name.length < 2 || name.length > 50)) {
       notification.open({ type: "error", title: String(t("prompt") ?? ''), description: String(t("bs:department.nameLength") ?? '') });
       return;
@@ -270,11 +267,9 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
       }
 
       if (parentChanged) {
-        const moveRes = await captureAndAlertRequestErrorHoc(moveDepartmentApi(dept.dept_id, nextParentId));
-        if (moveRes === null || moveRes === false) return;
+        await moveDepartmentApi(dept.dept_id, nextParentId);
       }
-      const res = await captureAndAlertRequestErrorHoc(updateDepartmentApi(dept.dept_id, body));
-      if (res === null || res === false) return;
+      await updateDepartmentApi(dept.dept_id, body);
       notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("saved") ?? '') });
       setApplyDefaultRolesToExisting(false);
       const nextAdmins = await getDepartmentAdminsApi(dept.dept_id).catch(() => null);
@@ -311,11 +306,9 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
       title: t("bs:department.delete"),
       desc: t("bs:department.confirmDelete"),
       onOk: (next) => {
-        captureAndAlertRequestErrorHoc(deleteDepartmentApi(dept.dept_id)).then((res) => {
-          if (res !== false && res !== "canceled") {
+        return deleteDepartmentApi(dept.dept_id).then(() => {
             notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("deleteSuccess") ?? '') });
             onChanged();
-          }
           next();
         });
       },
@@ -327,11 +320,9 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
       title: t("bs:department.permanentDelete"),
       desc: t("bs:department.confirmPermanentDelete"),
       onOk: (next) => {
-        captureAndAlertRequestErrorHoc(purgeDepartmentApi(dept.dept_id)).then((res) => {
-          if (res !== false && res !== "canceled") {
+        return purgeDepartmentApi(dept.dept_id).then(() => {
             notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("deleteSuccess") ?? '') });
             onChanged(dept.dept_id);
-          }
           next();
         });
       },
@@ -343,11 +334,9 @@ export function useDepartmentSettingsController({ dept, onChanged, onMarkAsTenan
       title: t("bs:department.restore"),
       desc: t("bs:department.confirmRestore"),
       onOk: (next) => {
-        captureAndAlertRequestErrorHoc(restoreDepartmentApi(dept.dept_id)).then((res) => {
-          if (res !== false && res !== "canceled") {
+        return restoreDepartmentApi(dept.dept_id).then(() => {
             notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("save") + t("success")) });
             onChanged();
-          }
           next();
         });
       },

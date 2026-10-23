@@ -10,7 +10,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 
 import { changePasswordApi, loggedChangePasswordApi } from "../../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { handleUiRequest } from "../../controllers/request";
 import { PWD_RULE, handleEncrypt } from "./utils";
 
 export const ResetPwdPage = () => {
@@ -52,10 +52,9 @@ export const ResetPwdPage = () => {
         const encryptNewPwd = await handleEncrypt(newPwd);
 
         console.log(state);
-        const res = await captureAndAlertRequestErrorHoc(
-            state
+        const res = await (state
                 ? changePasswordApi(account, encryptCurrentPwd, encryptNewPwd)
-                : loggedChangePasswordApi(encryptCurrentPwd, encryptNewPwd),
+                : loggedChangePasswordApi(encryptCurrentPwd, encryptNewPwd)
         );
         if (res === null) {
             toast.show({ type: "success", message: [String(`${t("prompt")}`), ([t("resetPassword.passwordResetSuccess")]).filter(Boolean).join('\n')].filter(Boolean).join('\n') });
@@ -99,7 +98,7 @@ export const ResetPwdPage = () => {
                         <div className="grid">
                             <PasswordInput size="large" id="confirmNewPassword" ref={confirmPwdRef} placeholder={t("resetPassword.confirmNewPassword")} className={"dark:bg-login-input"} revealLabel={t('sharedUi.showPassword')} hideLabel={t('sharedUi.hidePassword')} />
                         </div>
-                        <Button size="large" className="mt-[32px]" onClick={handleResetPassword}>
+                        <Button size="large" className="mt-[32px]" onClick={handleUiRequest(handleResetPassword)}>
                             {t("resetPassword.resetButton")}
                         </Button>
                     </div>

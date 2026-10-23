@@ -671,7 +671,7 @@
     "shareToChildrenTip": "オンにすると、子テナントはこのプロバイダーのモデルを利用できますが、設定の閲覧や変更はできません。",
     "getApiKey": "{{provider}} の API キーを取得",
     "formatExample": "形式の例：{{example}}",
-    "streamingAsrHint": "リアルタイム音声認識は paraformer-realtime-v2、paraformer-realtime-v1、qwen3-asr-flash-realtime に対応しています。保存して接続テストを実行後、ワークベンチの ASR モデルとして選択してください。",
+    "streamingAsrHint": "リアルタイム音声認識は paraformer-realtime-v2、qwen3-asr-flash-realtime に対応しています。保存して接続テストを実行後、ワークベンチの ASR モデルとして選択してください。",
     "fileAsrHint": "ファイル認識です。録音全体をアップロードしてから文字起こしします。",
     "speechCredentials": "リアルタイム音声認識設定",
     "providerSilicon": "SiliconFlow",
@@ -996,6 +996,7 @@
     "blindOverwriteOk": "このまま保存"
   },
   "build": {
+    "editPermissionRequired": "編集権限が必要です",
     "create": "作成",
     "assistant": "アシスタント",
     "workflow": "ワークフロー",
@@ -3574,6 +3575,7 @@
     "close": "閉じる",
     "maskedFile": "マスクされたファイル.msk",
     "notFoundTitle": "ページが見つかりません",
-    "notFoundDescription": "アクセスしたページは存在しないか、削除されています。"
+    "notFoundDescription": "アクセスしたページは存在しないか、削除されています。",
+    "recommendedAppLimit": "おすすめのアプリは最大{{max}}件まで設定できます。"
   }
 }

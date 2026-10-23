@@ -1,3 +1,4 @@
+import { showApiError } from "~/api/request";
 import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { NoPermissionIllustration } from "~/components/illustrations";
@@ -215,12 +216,8 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
             queryClient.invalidateQueries({ queryKey: ["channelPreviewDetail", channelId] });
             queryClient.invalidateQueries({ queryKey: ["channelPreviewArticles", channelId] });
             onSubscriptionChanged?.();
-        } catch (e: any) {
-            const msg =
-                e?.response?.data?.status_message ||
-                e?.message ||
-                localize("com_subscription.subscribe_failed_retry");
-            showToast({ message: msg, severity: NotificationSeverity.WARNING });
+        } catch (error) {
+            showApiError(error);
         } finally {
             setSubscribing(false);
         }

@@ -1,10 +1,12 @@
 import { useContext } from "react";
 import { locationContext } from "@/contexts/locationContext";
 import { approverSourceLabel } from "./approverSources";
-import { Alert, Button } from '@bisheng/ui';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { Alert, Button, Select } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { listApprovalNodesApi } from "@/controllers/API/approval";
+import { handleUiRequest, showApiError } from '@/controllers/request';
 import { Switch, Tag, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { ApproverSource } from "./approvalMetadata";
@@ -17,6 +19,7 @@ interface FlowManagementPanelProps {
 }
 export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
   const { appConfig } = useContext(locationContext);
+  const selectLabels = useSelectLabels();
   const {
     activeTab,
     t,
@@ -80,12 +83,12 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                     onKeyDown={(event) => {
                       if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                         event.preventDefault();
-                        void selectScenario(s.id);
+                        void selectScenario(s.id).catch(showApiError);
                       }
                     }}
                     key={s.id}
 
-                    onClick={() => void selectScenario(s.id)}
+                    onClick={() => void selectScenario(s.id).catch(showApiError)}
                     className={`group relative w-full rounded-lg border px-3 py-3 text-left transition-colors ${
                       active
                         ? "border-primary/30 bg-primary/5"
@@ -253,40 +256,34 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
 
                     {/* flow selector + actions row */}
                     <div className="mb-4 flex items-center gap-3">
-                      <select
-                        value={selectedFlowId ?? ""}
-                        onChange={async (e) => {
-                          const id = Number(e.target.value) || null;
+                      <Select {...selectLabels} aria-label={t("approvalPage.selectFlow")} value={selectedFlowId ?? null} allowClear
+                        placeholder={t("approvalPage.selectFlow")} className="w-64 max-w-full"
+                        options={flows.filter(flow => flow.id != null).map(flow => ({ value: flow.id, label: flow.flow_name || flow.flow_code || '' }))}
+                        onChange={handleUiRequest(async (value) => {
+                          const id = Number(value) || null;
                           if (isNodeEditMode && isNodeDirty) {
                             bsConfirm({
                               title: t("approvalPage.discardChangesTitle"),
                               desc: t("approvalPage.switchFlowDiscardDesc"),
                               onOk: async (next) => {
+                                const nextNodes = id ? await listApprovalNodesApi(id) : [];
                                 setIsNodeEditMode(false);
                                 setDraftNodes([]);
                                 setIsNodeDirty(false);
                                 setSelectedFlowId(id);
-                                setNodes(id ? await listApprovalNodesApi(id) : []);
+                                setNodes(nextNodes);
                                 next();
                               },
                             });
                             return;
                           }
+                          const nextNodes = id ? await listApprovalNodesApi(id) : [];
                           setIsNodeEditMode(false);
                           setDraftNodes([]);
                           setIsNodeDirty(false);
                           setSelectedFlowId(id);
-                          setNodes(id ? await listApprovalNodesApi(id) : []);
-                        }}
-                        className="h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
-                      >
-                        <option value="">{t("approvalPage.selectFlow")}</option>
-                        {flows.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.flow_name || f.flow_code}
-                          </option>
-                        ))}
-                      </select>
+                          setNodes(nextNodes);
+                        })} />
                       {selectedFlow && <StatusBadge enabled={selectedFlow.is_active} />}
                       <div className="ml-auto flex items-center gap-2">
                         {isNodeEditMode ? (
@@ -403,23 +400,18 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                                         >
                                           <Outlined.Down size={14} />
                                         </ActionBtn>
-                                        <select
-                                          value={node.node_mode ?? "or"}
-                                          disabled={!isNodeEditMode}
-                                          onChange={(e) => {
+                                        <Select {...selectLabels} aria-label={t("approvalPage.nodeModeLabel")} size="small"
+                                          value={node.node_mode ?? 'or'} disabled={!isNodeEditMode}
+                                          options={[{ value: 'or', label: t("approvalPage.nodeModeOr") }, { value: 'and', label: t("approvalPage.nodeModeAnd") }]}
+                                          onChange={(value) => {
                                             if (!isNodeEditMode) return;
                                             setDraftNodes((prev) =>
                                               prev.map((n) =>
-                                                n.id === node.id ? { ...n, node_mode: e.target.value } : n,
+                                                n.id === node.id ? { ...n, node_mode: String(value ?? 'or') } : n,
                                               ),
                                             );
                                             setIsNodeDirty(true);
-                                          }}
-                                          className="h-7 rounded border border-border bg-background px-2 text-xs text-foreground outline-none"
-                                        >
-                                          <option value="or">{t("approvalPage.nodeModeOr")}</option>
-                                          <option value="and">{t("approvalPage.nodeModeAnd")}</option>
-                                        </select>
+                                          }} />
                                         <ActionBtn
                                           label={t("approvalPage.edit")}
                                           disabled={!isNodeEditMode}

@@ -7,7 +7,7 @@ const mock = vi.hoisted(() => ({ create: vi.fn().mockResolvedValue({ id: 1 }), r
 vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: { role: 'admin' } }) }))
 vi.mock('@/controllers/API/assistant', () => ({ getChatOnlineApi: vi.fn().mockResolvedValue({ list: [{ id: 'app-1', name: 'App', count: 5 }], nextCursor: null }) }))
 vi.mock('@/controllers/API/log', () => ({ createMarkApi: mock.create, getMarksApi: vi.fn(), deleteMarkApi: vi.fn() }))
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p }))
+vi.mock('@/controllers/request', async (importOriginal) => ({ ...await importOriginal<typeof import('@/controllers/request')>() }))
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
 const previous = await (() => ({ useToast: () => ({ message: vi.fn() }) }))();

@@ -18,7 +18,7 @@ import { Switch } from "@bisheng/ui";
 import { ModelFieldHint } from "../ModelFieldHint";
 import { Tooltip as Tip } from "@bisheng/ui";
 import { getKnowledgeModelEnvelope, updateKnowledgeModelConfig } from "@/controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -61,9 +61,11 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 };
 
 
-const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) => {
+export const PromptDialog = ({ value, onChange, onSave, label, children }) => {
     const { t } = useTranslation('model')
     const [open, setOpen] = useState(false)
+    const [saving, setSaving] = useState(false)
+    const savingRef = useRef(false)
     const modifyNotSavedRef = useRef(false)
     const [textValue, setTextValue] = useState(value)
     useEffect(() => {
@@ -87,7 +89,24 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) =
     }
 
 
-    return <Dialog open={open} onOpenChange={setOpen}>
+    const handleSave = async () => {
+        if (savingRef.current) return;
+        savingRef.current = true;
+        setSaving(true);
+        try {
+            await onSave(textValue);
+            modifyNotSavedRef.current = false;
+            onChange(textValue);
+            setOpen(false);
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            savingRef.current = false;
+            setSaving(false);
+        }
+    };
+
+    return <Dialog open={open} onOpenChange={(next) => { if (!savingRef.current) setOpen(next); }}>
         <DialogTrigger>
             {children}
         </DialogTrigger>
@@ -103,13 +122,8 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) =
                     }} rows={16} textareaClassName={"mt-1"} />
             </div>
             <DialogFooter>
-                <Button variant="outlined" type="button" onClick={handleCancel} color="default">{t('model.cancel')}</Button>
-                <Button disabled={false} type="submit" onClick={() => {
-                    modifyNotSavedRef.current = false
-                    onSave(textValue)
-                    setOpen(false)
-                    onChange(textValue)
-                }}>
+                <Button disabled={saving} variant="outlined" type="button" onClick={handleCancel} color="default">{t('model.cancel')}</Button>
+                <Button disabled={saving} type="submit" onClick={() => { void handleSave(); }}>
                     {t('model.save')}
                 </Button>
             </DialogFooter>
@@ -235,25 +249,29 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             auto_tag_prompt: autoTagPrompt
         }
         setSaveLoad(true)
-        await captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig(data).then(res => {
-            lastSaveFormDataRef.current = data
-            setUnavailableModelFields([])
-            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') })
-        }))
-        setSaveLoad(false)
+        try {
+            await updateKnowledgeModelConfig(data);
+            lastSaveFormDataRef.current = data;
+            setUnavailableModelFields([]);
+            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') });
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setSaveLoad(false);
+        }
     };
 
     // Persist a single prompt edit (abstract or auto-tag) without going
     // through the main save flow, mirroring the existing per-prompt save
     // semantics. Caller passes the patch keyed by the backend field name.
     const handleSavePrompt = (patch: { abstract_prompt?: string; auto_tag_prompt?: string }) => {
-        captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig({
+        return updateKnowledgeModelConfig({
             ...lastSaveFormDataRef.current,
             ...patch,
         }).then(res => {
             lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...patch }
             toast.show({ type: 'success', message: String(t('model.promptSaved') ?? '') })
-        }))
+        })
     }
 
     if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -364,7 +382,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             />
             <div className="mt-10 text-center space-x-6">
                 <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
-                <Button disabled={saveload} onClick={handleSave}>
+                <Button disabled={saveload || !config} onClick={handleSave}>
                     {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>

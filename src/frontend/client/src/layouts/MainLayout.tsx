@@ -179,17 +179,6 @@ function Sidebar({
         closeDrawerOnNavigate: true,
       },
       {
-        // 技能 has no menu key of its own yet: it rides on 首页's grant, behind the
-        // deployment's preview switch (see ~/components/Skills/types).
-        section: 'skills' as const,
-        to: hasPlugin('home') || !menuApprovalMode ? skillCenterPath : '/menu-unavailable?plugin=home',
-        icon: <Outlined.Skill />,
-        activeIcon: <Outlined.Skill />,
-        label: skillCenterLabel,
-        isActive: pathname.startsWith(skillCenterPath),
-        closeDrawerOnNavigate: true,
-      },
-      {
         section: 'knowledge' as const,
         // Mobile is list-page-first: the menu always opens the space list (/knowledge),
         // never the last-visited file page. Desktop keeps last-path restoration.
@@ -218,6 +207,17 @@ function Sidebar({
         activeIcon: <Filled.Application />,
         label: menuNames.apps,
         isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps') || menuUnavailablePlugin === 'apps',
+        closeDrawerOnNavigate: true,
+      },
+      {
+        // 技能 has no menu key of its own yet: it rides on 首页's grant, behind the
+        // deployment's preview switch (see ~/components/Skills/types).
+        section: 'skills' as const,
+        to: hasPlugin('home') || !menuApprovalMode ? skillCenterPath : '/menu-unavailable?plugin=home',
+        icon: <Outlined.Skill />,
+        activeIcon: <Outlined.Skill />,
+        label: skillCenterLabel,
+        isActive: pathname.startsWith(skillCenterPath),
         closeDrawerOnNavigate: true,
       },
     ].filter((l) => {

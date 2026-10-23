@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from '@bisheng/ui';
 import type * as pdfjsLib from "pdfjs-dist";
 import { useLocalize } from "~/hooks";
 import type { CitationPdfBBox } from "~/components/Chat/Messages/Content/citationUtils";
@@ -21,6 +22,9 @@ export function PdfViewer({
     onCurrentPageChange,
 }: PdfViewerProps) {
     const localize = useLocalize();
+    const renderFailureMessage = localize('com_knowledge.load_pdf_failed');
+    const reportedDocumentRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+    const currentDocumentRef = useRef(pdfDoc);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
     const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
@@ -29,6 +33,11 @@ export function PdfViewer({
     // Measured width of the scroll viewport — used to fit-to-width when a PDF
     // page is wider than the container (e.g., a 1440px page in a 640px panel).
     const [containerWidth, setContainerWidth] = useState(0);
+
+    useEffect(() => {
+        currentDocumentRef.current = pdfDoc;
+        return () => { currentDocumentRef.current = null; };
+    }, [pdfDoc]);
 
     const getPageNumber = useCallback((page: number) => {
         if (!pdfDoc) return Math.max(1, page);
@@ -87,9 +96,8 @@ export function PdfViewer({
                 }));
 
                 const ctx = canvas.getContext("2d");
-                if (ctx) {
-                    await page.render({ canvasContext: ctx, viewport }).promise;
-                }
+                if (!ctx) throw new Error('Canvas context unavailable');
+                await page.render({ canvasContext: ctx, viewport }).promise;
             } finally {
                 renderingPages.current.delete(pageNum);
             }
@@ -120,9 +128,14 @@ export function PdfViewer({
     useEffect(() => {
         if (!pdfDoc) return;
         for (let i = 1; i <= pdfDoc.numPages; i++) {
-            renderPage(i);
+            void renderPage(i).catch((error: unknown) => {
+                if (currentDocumentRef.current !== pdfDoc || reportedDocumentRef.current === pdfDoc) return;
+                if (error && typeof error === 'object' && 'name' in error && error.name === 'RenderingCancelledException') return;
+                reportedDocumentRef.current = pdfDoc;
+                toast.error(renderFailureMessage);
+            });
         }
-    }, [pdfDoc, zoomLevel, containerWidth, renderPage]);
+    }, [pdfDoc, zoomLevel, containerWidth, renderPage, renderFailureMessage]);
 
     // Scroll to target page
     useEffect(() => {

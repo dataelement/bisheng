@@ -3,7 +3,7 @@ import { Button, Input } from '@bisheng/ui';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { ArrowDownUp, Plus, X } from "lucide-react";
 import { useContext, useState } from 'react';
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from 'react-i18next';
 import { alertContext } from '../../contexts/alertContext';
 import { generateUUID } from '../../utils';
@@ -119,7 +119,7 @@ export default function VarDialog({ data, onSave, onClose }) {
                                         )}
                                     </Draggable>
                                 )}
-                                {/* {provide.placeholder} */}
+                                {provide.placeholder}
                             </div>
                         )}
                     </Droppable>

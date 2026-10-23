@@ -9,7 +9,7 @@
 | Path | Project | Stack |
 |------|---------|-------|
 | `src/backend/` | FastAPI + Celery Workers + Linsight Worker | Python 3.11+, uv, SQLModel, LangGraph |
-| `src/frontend/platform/` | Admin / builder UI | Vite 6 + **Zustand** + react-query v3 + bs-ui |
+| `src/frontend/platform/` | Admin / builder UI | Vite 6 + **Zustand** + @tanstack/react-query v4 + bs-ui |
 | `src/frontend/client/` | End-user chat UI (`/workspace` base path) | Vite 6 + **Recoil** + react-query v4 (@tanstack) + shadcn/ui |
 
 **Runtime topology** (full picture → `docs/architecture/01-architecture-overview.md`):
@@ -38,7 +38,7 @@ Middleware (MySQL / Redis / Milvus / ES / MinIO / OpenFGA): integration tests ru
 ## 4. Frontend Rules (P0)
 
 Two React apps that **must not be mixed**. Per-app rules auto-load from each sub-project's `AGENTS.md`:
-- `src/frontend/platform/AGENTS.md` — Admin/builder UI (Zustand, react-query v3, bs-ui, `@/`)
+- `src/frontend/platform/AGENTS.md` — Admin/builder UI (Zustand, @tanstack/react-query v4, bs-ui, `@/`)
 - `src/frontend/client/AGENTS.md` — End-user chat UI (Recoil, react-query v4, shadcn, `~/`)
 
 **Design specs & component library — mandatory entry for ANY UI work (new pages AND edits to existing ones):**
@@ -53,6 +53,7 @@ Two React apps that **must not be mixed**. Per-app rules auto-load from each sub
 - Named exports for components (`export function`); no default exports. Minimize `any` — if unavoidable, `// eslint-disable-next-line` + a one-line reason.
 - **Never** `import axios` directly — use the wrapped request module. (store must not call HTTP = constitution **C7**)
 - **Never** introduce new UI or state-management libraries.
+- **Shared list infrastructure**: list sorting uses `@hello-pangea/dnd` and file-preview virtualization uses `react-window`, both pinned in the workspace catalog. Do not reintroduce `react-beautiful-dnd` or `react-virtualized`. Client's existing `react-dnd` remains for its distinct drag/drop use cases; it is not replaced by the list-sorting library. Keep file-upload drop handling on its existing single owner.
 - All code comments in English.
 - 403 handled automatically by response interceptors — never add 403 branches in business code.
 - **A Radix `<SelectItem>` must never receive an empty-string `value`** — it throws and takes the whole page down with it. Any selector rendering a backend list has to filter out rows whose id is `null` or `''` before mapping them to items. Do not rely on the backend to sanitize: older backend versions do send such rows, and the crash surfaces to the user as a blank page rather than an empty dropdown.

@@ -13,7 +13,7 @@ import {
   searchGlobalMembersApi,
 } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { Building2, ChevronDown, ChevronRight, Loader2, User as UserIcon, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -134,7 +134,7 @@ export default function DepartmentUsersSelect({
       } catch (error) {
         // Never expose unvalidated candidates or retry indefinitely from render.
         setDeptUsersMap((prev) => ({ ...prev, [did]: [] }))
-        await captureAndAlertRequestErrorHoc(Promise.reject(error))
+        showApiError(error)
       } finally {
         setLoadingDeptIds((prev) => {
           const next = new Set(prev)

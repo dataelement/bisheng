@@ -676,7 +676,7 @@
     "shareToChildrenTip": "开启后，子租户可以使用这个服务提供商下的模型，但不能查看或修改它的配置。",
     "getApiKey": "获取{{provider}} API Key",
     "formatExample": "格式示例：{{example}}",
-    "streamingAsrHint": "实时语音识别支持 paraformer-realtime-v2、paraformer-realtime-v1 和 qwen3-asr-flash-realtime。保存并检测成功后，在工作台模型配置中选择该 ASR 模型。",
+    "streamingAsrHint": "实时语音识别支持 paraformer-realtime-v2 和 qwen3-asr-flash-realtime。保存并检测成功后，在工作台模型配置中选择该 ASR 模型。",
     "fileAsrHint": "整段识别。上传完整音频后再转写。",
     "speechCredentials": "实时语音识别配置",
     "providerSilicon": "硅基流动",
@@ -1002,6 +1002,7 @@
     "blindOverwriteOk": "仍然保存"
   },
   "build": {
+    "editPermissionRequired": "无编辑权限",
     "create": "创建",
     "assistant": "助手",
     "workflow": "工作流",
@@ -3574,6 +3575,7 @@
     "close": "关闭",
     "maskedFile": "是真的马赛克.msk",
     "notFoundTitle": "页面不存在",
-    "notFoundDescription": "您访问的页面不存在或已被移除。"
+    "notFoundDescription": "您访问的页面不存在或已被移除。",
+    "recommendedAppLimit": "平台最多支持配置{{max}}个推荐应用"
   }
 }

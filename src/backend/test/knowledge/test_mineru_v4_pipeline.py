@@ -81,7 +81,7 @@ def test_explicit_new_provider_with_missing_address_fails(tmp_path):
     pipeline = _pipeline(tmp_path)
     config = KnowledgeConf(loader_provider="mineru_v4")
     with patch("bisheng.knowledge.rag.base_file_pipeline.settings", SimpleNamespace(get_knowledge=lambda: config)):
-        with pytest.raises(MineruV4Error, match="URL"):
+        with pytest.raises(MineruV4Error, match=r"^MinerU V4 API root URL is missing$"):
             pipeline._init_pdf_loader()
 
 

@@ -18,7 +18,7 @@
     "react-i18next": ">=13"
   },
   "dependencies": {
-    "xlsx": "^0.18.5",
+    "xlsx": "catalog:",
     "xlsx-populate": "^1.21.0"
   },
   "devDependencies": {

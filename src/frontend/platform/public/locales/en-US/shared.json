@@ -38,5 +38,57 @@
       "changeRemoved": "Removed file",
       "changeModified": "Modified file"
     }
+  },
+  "app_chat": {
+    "citation": {
+      "badge_aria": "{{source}} citation {{index}}",
+      "loading": "Loading source details...",
+      "no_detail": "No source details",
+      "no_permission": "You do not have permission to view this source",
+      "no_snippet": "No excerpt available",
+      "source_expired": "This source is no longer available",
+      "source_temp_kb": "Temporary knowledge base",
+      "untitled": "Citation {{index}}",
+      "source_web": "Web page",
+      "source_article": "Article",
+      "source_document": "Document"
+    },
+    "page": "p. {{0}}",
+    "chunk": "para. {{0}}",
+    "document_preview": "Document preview",
+    "source_document": "Policy document",
+    "source_web": "Web page",
+    "copy_code": "Copy code",
+    "copied": "Copied!",
+    "chart": "Chart",
+    "code": "Code",
+    "download": "Download",
+    "loading": "Loading...",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
+    "diagram_failed": "Chart could not be loaded. You can view its code.",
+    "send": "Send",
+    "stop": "Stop",
+    "restart": "Run again",
+    "copy": "Copy",
+    "attachment_download": "Click to download",
+    "attachment_unavailable": "File unavailable",
+    "close": "Close",
+    "image_preview": "Image preview",
+    "timestamp_format": "MM-dd HH:mm",
+    "run": {
+      "used": "Used",
+      "using": "Using",
+      "searched": "Searched",
+      "searching": "Searching",
+      "offline": "Offline",
+      "flowDeleted": "The skill has been deleted and the name cannot be retrieved",
+      "toolDeleted": "The tool has been deleted and the name cannot be retrieved",
+      "knowledgeDeleted": "The knowledge base has been deleted and the name cannot be retrieved",
+      "thinking": "Thinking",
+      "done": "Done",
+      "interrupted": "The tool call returned no result (the session ended)"
+    },
+    "attach": "Attach file"
   }
 }

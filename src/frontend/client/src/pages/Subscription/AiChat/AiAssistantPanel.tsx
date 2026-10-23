@@ -1,3 +1,4 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { useLocalize } from "~/hooks";
 /**
@@ -109,6 +110,9 @@ export function AiAssistantPanel({
         conversationId: activeConvoId,
         title: chatTitle,
         isLoading,
+        historyError,
+        isClearing,
+        retryHistory,
         isStreaming,
         sendMessage,
         stopGenerating,
@@ -252,7 +256,7 @@ export function AiAssistantPanel({
             </div>
 
             {/* Messages Area */}
-            <AiChatMessages
+            {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                 messages={messages}
                 conversationId={activeConvoId}
                 title={chatTitle}
@@ -267,14 +271,14 @@ export function AiAssistantPanel({
                 emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}
-            />
+            />)}
 
             {/* Input Area */}
             <div className="px-2">
                 <AiChatInput
                     size="mini"
                     features={features}
-                    disabled={allowModelSelect ? !bsConfig?.models?.length : false}
+                    disabled={Boolean(historyError) || isLoading || isClearing || (allowModelSelect ? !bsConfig?.models?.length : false)}
                     placeholder={localize("com_subscription.input_question_placeholder")}
                     isStreaming={isStreaming}
                     isParsingMedia={isParsingMedia}

@@ -1,4 +1,6 @@
-import { notification } from '@bisheng/ui';
+import { Alert, notification } from '@bisheng/ui';
+import { showApiError } from '@/controllers/request';
+import { isApiError } from '@bisheng/api-client';
 // src/pages/BuildPage/bench/ToolsConfig.tsx
 //
 
@@ -41,6 +43,8 @@ export default function ToolsConfig({ tools, onChange }: Props) {
     const [activeToolTab, setActiveToolTab] = useState<ToolCategory>("builtin");
     const [toolSearchTerm, setToolSearchTerm] = useState("");
     const [showToolSelector, setShowToolSelector] = useState(true);
+    const [loadErrors, setLoadErrors] = useState<Partial<Record<ToolCategory, unknown>>>({});
+    const [loadingCategory, setLoadingCategory] = useState<ToolCategory | null>(null);
     const [toolsData, setToolsData] = useState<Record<ToolCategory, any[]>>({
         builtin: [],
         api: [],
@@ -49,12 +53,19 @@ export default function ToolsConfig({ tools, onChange }: Props) {
 
     const fetchTools = async (category: ToolCategory) => {
         if (toolsData[category].length) return;
+        setLoadingCategory(category);
         try {
             const bucket = category === "builtin" ? "default" : category === "api" ? "custom" : "mcp";
             const res: any = await getToolsApi(bucket);
             setToolsData((prev) => ({ ...prev, [category]: res || [] }));
-        } catch {
-            notification.open({ type: "error", description: String(t("bench.fetchToolsFailed", { type: category }) ?? '') });
+            setLoadErrors((prev) => ({ ...prev, [category]: null }));
+        } catch (error) {
+            if (!isApiError(error) || (error.kind !== 'canceled' && error.presentation !== 'global')) {
+                setLoadErrors((prev) => ({ ...prev, [category]: error }));
+            }
+            showApiError(error);
+        } finally {
+            setLoadingCategory((current) => current === category ? null : current);
         }
     };
 
@@ -192,6 +203,10 @@ export default function ToolsConfig({ tools, onChange }: Props) {
             <div className="mt-2">
                 <ToolSelectorContainer
                     toolsData={toolsData}
+                    loading={loadingCategory === activeToolTab}
+                    loadErrorContent={loadErrors[activeToolTab] ? <Alert type="error" live
+                        description={t('bench.fetchToolsFailed', { type: activeToolTab })}
+                        actions={[{ label: t('build.retry'), onClick: () => void fetchTools(activeToolTab) }]} /> : null}
                     selectedTools={tools}
                     toggleTool={toggleTool}
                     removeTool={removeTool}

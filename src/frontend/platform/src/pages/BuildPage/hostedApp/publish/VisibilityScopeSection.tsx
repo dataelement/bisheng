@@ -15,8 +15,8 @@
  *   `/403`, so firing the request for a non-manager would throw the user out of
  *   the detail page instead of showing them a quiet section. The gate is
  *   comfort only — the backend 403 is the actual boundary.
- * - **No react-query.** v3 is frozen by lint in this app; the neighbouring
- *   `useQuery` calls are legacy, not a pattern to copy.
+ * - Local state remains owned by this section; API failures are handled at
+ *   its effect and dialog-event boundaries through the shared request layer.
  */
 import { Button } from "@bisheng/ui"
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog"
@@ -25,7 +25,7 @@ import {
   getResourcePermissionGrantsApi,
   type PermissionGrantAssignee,
 } from "@/controllers/API/permission"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import type { HostedAppDetail } from "@/controllers/API/hostedApp"
 import { AlertTriangle } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
@@ -47,27 +47,24 @@ export function VisibilityScopeSection({ app }: VisibilityScopeSectionProps) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const context = await captureAndAlertRequestErrorHoc(
-      getResourcePermissionContextApi("app", app.app_id),
-    )
-    const manage = !!context?.can_manage_permission
-    setCanManage(manage)
-    if (!manage) {
-      setGrants([])
-      setHasMore(false)
+    setCanManage(null)
+    setGrants([])
+    setHasMore(false)
+    try {
+      const context = await getResourcePermissionContextApi("app", app.app_id)
+      const manage = !!context?.can_manage_permission
+      setCanManage(manage)
+      if (!manage) return
+      const page = await getResourcePermissionGrantsApi("app", app.app_id)
+      setGrants(page?.data ?? [])
+      setHasMore(!!page?.has_more)
+    } finally {
       setLoading(false)
-      return
     }
-    const page = await captureAndAlertRequestErrorHoc(
-      getResourcePermissionGrantsApi("app", app.app_id),
-    )
-    setGrants(page?.data ?? [])
-    setHasMore(!!page?.has_more)
-    setLoading(false)
   }, [app.app_id])
 
   useEffect(() => {
-    load()
+    void load().catch(showApiError)
   }, [load])
 
   const showBanner = isOwnerOnly(app.state, grants)
@@ -121,7 +118,7 @@ export function VisibilityScopeSection({ app }: VisibilityScopeSectionProps) {
           // Re-read instead of updating optimistically: changing who can see an
           // application is a rare, deliberate act, and one round trip buys a
           // summary that is certainly right.
-          if (!next) load()
+          if (!next) void load().catch(showApiError)
         }}
         resourceType="app"
         resourceId={app.app_id}

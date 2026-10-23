@@ -14,12 +14,12 @@ import { RadioGroup, Radio as RadioGroupItem } from "@bisheng/ui";
 import { getAssistantModelEnvelope, updateAssistantModelConfig } from "@/controllers/API/finetune";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { useSystemConfigEnvelope } from "../useSystemConfigEnvelope";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import uniqBy from "lodash-es/uniqBy";
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ModelSelect } from "./KnowledgeModel";
 
 
@@ -186,14 +186,14 @@ export default function AssisModel({ llmOptions, onBack }) {
             return toast.show({ type: 'error', message: String(t('model.assistantInferenceModelRepetition') ?? '') })
         }
 
-        captureAndAlertRequestErrorHoc(updateAssistantModelConfig(form).then(res => {
+        void updateAssistantModelConfig(form).then(() => {
             toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') })
             // The root QueryClient sets refetchOnMount: false globally, so
             // invalidateQueries only marks the entry stale and the workbench
             // dropdown still serves cached data on next mount. removeQueries
             // drops the cache entirely, forcing a fresh fetch on next read.
-            queryClient.removeQueries('QueryAssistantModelsKey')
-        }));
+            queryClient.removeQueries({ queryKey: ['QueryAssistantModelsKey'] })
+        }).catch(showApiError);
     };
 
     if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -271,7 +271,7 @@ export default function AssisModel({ llmOptions, onBack }) {
             </div>
             <div className="mt-10 text-center space-x-6">
                 <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
-                <Button onClick={handleSave}>{t('model.save')}</Button>
+                <Button disabled={!config} onClick={handleSave}>{t('model.save')}</Button>
             </div>
         </div>
     );

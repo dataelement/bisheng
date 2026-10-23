@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { shouldRetryApiError } from '@bisheng/api-client';
 import { Button, Cascader, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
@@ -15,11 +16,11 @@ import {
 import { ModelFieldHint } from "../ModelFieldHint";
 import { getLinsightModelEnvelope, updateLinsightModelConfig } from "@/controllers/API/finetune";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useModel } from "..";
 import { ModelManagement } from "@/pages/BuildPage/bench/ModelManagement";
 import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
@@ -108,11 +109,19 @@ export default function WorkbenchModel({ onBack }) {
                 chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
             };
 
-            // 提交更新并通过 refetch 获取最新配置（无需再次调用 getLinsightModelConfig）
-            const response = await captureAndAlertRequestErrorHoc(updateLinsightModelConfig(data));
-            const updatedConfig = await refetchConfig();
+            await updateLinsightModelConfig(data);
+            lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...data };
+            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') });
+            let updatedConfig;
+            try {
+                updatedConfig = await refetchConfig({ throwOnError: true });
+            } catch (refreshError) {
+                // The write committed. Keep the accepted form and report only the failed refresh.
+                showApiError(refreshError);
+                return;
+            }
 
-            // 直接使用 refetch 返回的最新数据更新状态
+            // Apply refreshed data only when the refresh succeeds.
             const newConfig = updatedConfig.data;
             setForm({
                 sourceModelId: newConfig?.embedding_model?.id || null,
@@ -136,11 +145,9 @@ export default function WorkbenchModel({ onBack }) {
                 knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
                 models: newConfig?.models || [],
             };
-            if (response !== false) {
-                toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') });
-            }
         } catch (err) {
-            toast.show({ type: 'error', message: String(t('model.saveFailed') ?? '') });
+            showApiError(err);
+            throw err;
         } finally {
             setSaveLoad(false);
         }
@@ -157,14 +164,14 @@ export default function WorkbenchModel({ onBack }) {
         if (form.models.some(model => String(model.description ?? "").length > 50)) return;
         const errors = [];
         if (!form.models.length) {
-            errors.push('请至少配置一个对话模型');
+            errors.push(t('model.chatModelRequired'));
         }
         // Reject blank rows: a model without an id serializes to `{ id: '' }`,
         // which reaches the client model picker as <SelectItem value="">
         // (empty string) and crashes the whole page in Radix. Force the admin
         // to pick a model or remove the empty row before saving.
         if (form.models.some((model) => !model.id)) {
-            errors.push('存在未选择模型的对话模型行，请选择模型或删除该行');
+            errors.push(t('model.emptyChatModelRow'));
         }
         if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
             errors.push(t('model.workVectorModel') + t('bs:required'));
@@ -182,18 +189,17 @@ export default function WorkbenchModel({ onBack }) {
                 okTxt: t('model.confirm'),
                 canelTxt: t('model.cancel'),
                 onOk(next) {
-                    submitConfig().then(next);
+                    return submitConfig().then(next);
                 },
                 onCancel() { }
             });
         } else {
-            submitConfig();
+            void submitConfig().catch(showApiError);
         }
     };
 
     useEffect(() => {
         if (error) {
-            toast.show({ type: 'error', message: String(t('model.fetchConfigFailed') ?? '') });
             return;
         }
 
@@ -242,7 +248,7 @@ export default function WorkbenchModel({ onBack }) {
                 </div>
             )}
             <div>
-                <h3 className="bisheng-label mb-2">日常模式/知识空间/订阅对话模型</h3>
+                <h3 className="bisheng-label mb-2">{t('model.workbenchConversationModels')}</h3>
                 <ModelManagement
                     ref={modelRefs}
                     models={form.models}
@@ -328,7 +334,7 @@ export default function WorkbenchModel({ onBack }) {
             />
             <div className="mt-10 text-center space-x-6">
                 <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
-                <Button disabled={saveload} onClick={handleSave}>
+                <Button disabled={saveload || !linsightConfig} onClick={handleSave}>
                     {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>
@@ -340,7 +346,8 @@ export default function WorkbenchModel({ onBack }) {
 export function useLinsightConfig() {
     return useQuery({
         queryKey: ["linsightModelEnvelope"],
-        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelEnvelope()),
+        queryFn: () => getLinsightModelEnvelope({ showError: false }),
+        onError: showApiError,
         select: (env) => {
             // F022: backend returns {data, inherited_from_root, fallback_blocked}.
             // Hand the destructured shape back so the component can render the
@@ -362,7 +369,7 @@ export function useLinsightConfig() {
                 fallback_blocked: !!env?.fallback_blocked,
             };
         },
-        retry: 1,
+        retry: (failureCount, error) => shouldRetryApiError(error) && failureCount < 1,
     });
 }
 

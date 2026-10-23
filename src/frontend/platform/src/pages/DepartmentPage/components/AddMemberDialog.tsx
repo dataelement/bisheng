@@ -16,7 +16,7 @@ import { Label } from "@/components/bs-ui/label";
 
 import { addDepartmentMembersApi } from "@/controllers/API/department";
 import { getUsersApi } from "@/controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Checkbox } from "@bisheng/ui";
 import { useCallback,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -61,18 +61,13 @@ export function AddMemberDialog({ deptId, onAdded, onClose }: AddMemberDialogPro
       return
     }
     setLoading(true)
-    captureAndAlertRequestErrorHoc(
-      addDepartmentMembersApi(deptId, {
+    addDepartmentMembersApi(deptId, {
         user_ids: Array.from(selectedIds),
         is_primary: isPrimary,
-      })
-    ).then((res) => {
-      setLoading(false)
-      if (res !== null) {
+      }).then(() => {
         notification.open({ type: "success", title: String(t("bs:department.addMember") ?? ''), description: "" })
         onAdded()
-      }
-    })
+    }).catch(showApiError).finally(() => setLoading(false))
   }, [deptId, selectedIds, isPrimary, onAdded, t])
 
   return (

@@ -14,6 +14,8 @@ interface SandboxEndpointFieldsProps {
   tokenSource: string
   deploymentAddress: string
   testing: boolean
+  tested: boolean
+  error: string
   results: SandboxProbeResult[]
   onAddressChange: (value: string) => void
   onTokenChange: (value: string) => void
@@ -40,6 +42,8 @@ export function SandboxEndpointFields({
   tokenSource,
   deploymentAddress,
   testing,
+  tested,
+  error,
   results,
   onAddressChange,
   onTokenChange,
@@ -83,16 +87,31 @@ export function SandboxEndpointFields({
       </div>
       <div>
         <Button type="button" variant="outline" disabled={testing} onClick={onTest}>
-          {t("sandboxTestConnection")}
+          {testing ? t("sandboxTestRunning") : t("sandboxTestConnection")}
         </Button>
+        {error ? (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        {!testing && !error && tested && results.length === 0 ? (
+          <p role="status" className="mt-2 text-sm">
+            {t("sandboxTestEmpty")}
+          </p>
+        ) : null}
+        {results.length > 0 ? (
+          <div className="mt-2">
+            <p className="text-sm font-medium">{t("sandboxTestResult")}</p>
+            <ul className="mt-1 space-y-1 text-sm">
+              {results.map((item) => (
+                <li key={item.url} className={item.status === "ok" ? undefined : "text-destructive"}>
+                  {item.url} — {t(STATUS_KEYS[item.status] || "sandboxTestUnreachable")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <p className="text-muted-foreground mt-2 text-xs">{t("sandboxTestScope")}</p>
-        <ul className="mt-2 space-y-1 text-sm">
-          {results.map((item) => (
-            <li key={item.url}>
-              {item.url} — {t(STATUS_KEYS[item.status] || "sandboxTestUnreachable")}
-            </li>
-          ))}
-        </ul>
       </div>
     </div>
   )

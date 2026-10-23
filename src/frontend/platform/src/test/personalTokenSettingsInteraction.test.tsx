@@ -5,7 +5,7 @@ import {
   listPersonalTokensApi,
   updatePersonalTokenSettingApi,
 } from "@/controllers/API/personalToken"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { PersonalToken } from "@/pages/SystemPage/components/PersonalToken"
 import { render, screen, waitFor } from "@/test/test-utils"
 import type { PersonalTokenSetting } from "@/types/api/openApi"
@@ -24,8 +24,9 @@ vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: vi.fn(),
 }))
 
-vi.mock("@/controllers/request", () => ({
-  captureAndAlertRequestErrorHoc: vi.fn(),
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
+  showApiError: vi.fn(),
 }))
 
 vi.mock("@/components/bs-icons", () => ({
@@ -64,13 +65,6 @@ describe("personal-token tenant settings interaction", () => {
     vi.clearAllMocks()
     vi.mocked(getPersonalTokenSettingApi).mockResolvedValue(initialSetting)
     vi.mocked(listPersonalTokensApi).mockResolvedValue({ data: [], total: 0 })
-    vi.mocked(captureAndAlertRequestErrorHoc).mockImplementation(async (request) => {
-      try {
-        return await request
-      } catch {
-        return undefined
-      }
-    })
   })
 
   it("locks the settings while saving and reports success", async () => {
@@ -109,14 +103,15 @@ describe("personal-token tenant settings interaction", () => {
   })
 
   it("delegates a failed save to the shared error interaction and unlocks the settings", async () => {
-    vi.mocked(updatePersonalTokenSettingApi).mockRejectedValue(new Error("save failed"))
+    const error = new Error("save failed")
+    vi.mocked(updatePersonalTokenSettingApi).mockRejectedValue(error)
     const user = userEvent.setup()
 
     render(<PersonalToken />)
     const saveButton = await screen.findByRole("button", { name: "save" })
     await user.click(saveButton)
 
-    expect(captureAndAlertRequestErrorHoc).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(showApiError).toHaveBeenCalledWith(error))
     await waitFor(() => expect(saveButton).toBeEnabled())
     expect(toast.show).not.toHaveBeenCalled()
   })

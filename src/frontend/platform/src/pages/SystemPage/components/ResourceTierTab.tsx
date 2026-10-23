@@ -16,7 +16,7 @@ import {
   type ResourceTierPatch,
   updateResourceTierApi,
 } from "@/controllers/API/hostedApp"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { Loader2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -75,7 +75,7 @@ export function ResourceTierTab() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const list = await captureAndAlertRequestErrorHoc(listResourceTiersApi())
+      const list = await listResourceTiersApi()
       if (list) setRows(list)
     } finally {
       setLoading(false)
@@ -83,12 +83,12 @@ export function ResourceTierTab() {
   }, [])
 
   useEffect(() => {
-    void load()
+    void load().catch(showApiError)
   }, [load])
 
   const applyPatch = (row: ResourceTierAdminItem, patch: ResourceTierPatch, feedbackKey: string) => {
     setBusyCode(row.code)
-    void captureAndAlertRequestErrorHoc(updateResourceTierApi(row.code, patch))
+    void updateResourceTierApi(row.code, patch)
       .then((updated) => {
         if (!updated) return
         setRows((current) => current.map((item) => (item.code === updated.code ? updated : item)))
@@ -99,6 +99,7 @@ export function ResourceTierTab() {
           type: "success",
         })
       })
+      .catch(showApiError)
       .finally(() => setBusyCode(null))
   }
 

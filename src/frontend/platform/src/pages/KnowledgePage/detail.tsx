@@ -3,7 +3,7 @@ import { Outlined } from "bisheng-icons";
 
 
 import { checkResourceActionApi } from "@/controllers/API/permission";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate,useParams } from "react-router-dom";
@@ -31,15 +31,9 @@ export default function FilesPage() {
                 return;
             }
             const [result, editResult, deleteResult] = await Promise.all([
-                captureAndAlertRequestErrorHoc(
-                    checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'visible' })
-                ),
-                captureAndAlertRequestErrorHoc(
-                    checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' })
-                ),
-                captureAndAlertRequestErrorHoc(
-                    checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'delete' })
-                ),
+                checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'visible' }),
+                checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' }),
+                checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'delete' }),
             ]);
             const allowed = !!result?.allowed;
             setCanEditKb(!!editResult?.allowed);
@@ -50,7 +44,7 @@ export default function FilesPage() {
                 navigate('/filelib');
             }
         };
-        guardByPermission();
+        void guardByPermission().catch(showApiError).finally(() => setPermissionChecked(true));
     }, [knowledgeId]);
 
     const onPreview = (id: string) => {

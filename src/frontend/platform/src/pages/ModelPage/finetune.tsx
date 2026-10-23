@@ -5,7 +5,6 @@ import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/bs-ui/table";
 import { alertContext } from "../../contexts/alertContext";
 import { deleteTaskApi, getTasksApi } from "../../controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useDebounce, useTable } from "../../util/hook";
 import CreateTask from "./components/CreateTask";
 import FinetuneDetail, { BadgeView } from "./components/FinetuneDetail";
@@ -41,7 +40,7 @@ export const Finetune = () => {
 
     // del
     const handleDeleteTask = async () => {
-        const res = await captureAndAlertRequestErrorHoc(deleteTaskApi(taskId))
+        const res = await deleteTaskApi(taskId)
         if (res !== null) return
 
         setSuccessData({ title: t('deleteSuccess') })

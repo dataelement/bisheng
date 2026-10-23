@@ -5,6 +5,7 @@ module.exports = {
   presets: [require('@bisheng/ui/tailwind-preset')],
   content: [
     "../packages/ui/src/**/*.{ts,tsx}",
+    "../packages/chat/src/**/*.{ts,tsx}",
     "./index.html",
     "./src/**/*.{js,ts,tsx,jsx}",
     // packages/file-viewers is source-shipped and consumed by both apps: its

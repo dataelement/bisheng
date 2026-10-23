@@ -5,7 +5,7 @@ import { ChartType, type DashboardComponent } from '../../types/dataConfig'
 import { useComponentConfigController } from './ComponentConfigDrawer'
 import { FULL_DEFAULT_STYLE_CONFIG } from './dashboardStyleDefaults'
 
-vi.mock('react-query', () => ({ useQuery: () => ({ data: [], isLoading: false }) }))
+vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: [], isLoading: false }) }))
 afterEach(() => { cleanup(); useComponentEditorStore.setState({ editingComponent: null, hasChange: false }) })
 it('keeps existing graph fields, result limits and chart data during controller extraction', async () => {
     const component: DashboardComponent = { id: 'chart-1', dashboard_id: 'board-1', title: 'Chart', type: ChartType.Bar, dataset_code: 'dataset-1', create_time: '', update_time: '', style_config: FULL_DEFAULT_STYLE_CONFIG,

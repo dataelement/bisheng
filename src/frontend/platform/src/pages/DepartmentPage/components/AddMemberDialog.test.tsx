@@ -6,7 +6,7 @@ import { AddMemberDialog } from './AddMemberDialog'
 
 vi.mock('@/components/bs-comp/selectComponent/useSubjectSearch', () => ({ useSubjectSearch: () => ({ rows: [{ user_id: 7, user_name: 'Tester' }], keyword: 'Tester', setKeyword: vi.fn(), status: 'ready', loading: false, hasMore: false }) }))
 vi.mock('@/controllers/API/department', () => ({ addDepartmentMembersApi: vi.fn(async () => ({})) }))
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (promise: Promise<unknown>) => promise }))
+vi.mock('@/controllers/request', async (importOriginal) => ({ ...await importOriginal<typeof import('@/controllers/request')>() }))
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 it.each([1, 0])('keeps numeric affiliation %s in the member payload', async (affiliation) => {

@@ -1,5 +1,5 @@
-import { act, renderHook } from '@testing-library/react';
-import { createRef, useState } from 'react';
+import { act, render, renderHook } from '@testing-library/react';
+import { createRef, useRef, useState } from 'react';
 import { it, expect } from 'vitest';
 import { useVoiceDraft } from '../../../client/src/hooks/Input/useVoiceDraft';
 
@@ -55,6 +55,28 @@ it('pauses realtime recognition when the dictated text is edited', () => {
   });
   expect(result.current.voice.props.stopSignal).toBe(signal + 1);
   expect(result.current.text).toBe('Old hello!');
+});
+
+it('leaves the caret after the dictated text when recording starts mid-sentence', () => {
+  let voice: ReturnType<typeof useVoiceDraft> | null = null;
+  function Field() {
+    const ref = useRef<HTMLTextAreaElement>(null);
+    const [text, setText] = useState('prefix suffix');
+    voice = useVoiceDraft(ref, text, setText);
+    return <textarea ref={ref} value={text} onChange={() => undefined} />;
+  }
+  render(<Field />);
+  const textarea = document.querySelector('textarea');
+  if (!textarea) throw new Error('textarea missing');
+  textarea.focus();
+  textarea.setSelectionRange(7, 7);
+  act(() => {
+    voice?.props.onRecordingStart();
+    voice?.props.onChange('hello');
+  });
+  expect(textarea.value).toBe('prefix hellosuffix');
+  expect(textarea.selectionStart).toBe(12);
+  expect(textarea.selectionEnd).toBe(12);
 });
 
 it('pauses recognition when text is added after the dictated span', () => {

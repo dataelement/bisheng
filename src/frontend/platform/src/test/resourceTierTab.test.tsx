@@ -16,12 +16,14 @@ import { ResourceTierTab } from "@/pages/SystemPage/components/ResourceTierTab"
 const apiMocks = vi.hoisted(() => ({
   listResourceTiersApi: vi.fn(),
   updateResourceTierApi: vi.fn(),
+  showApiError: vi.fn(),
 }))
 
 vi.mock("@/controllers/API/hostedApp", () => apiMocks)
 
 vi.mock("@/controllers/request", () => ({
   captureAndAlertRequestErrorHoc: (promise: Promise<unknown>) => promise,
+  showApiError: apiMocks.showApiError,
 }))
 
 /** Record every confirm and let the test decide when to press OK. */
@@ -184,4 +186,30 @@ describe("ResourceTierTab (F055 AC-45 / AC-47)", () => {
     render(<ResourceTierTab />)
     expect(await screen.findByText("hostedApp.tierAdmin.empty")).toBeInTheDocument()
   })
+  it("ends loading and reports a rejected initial list", async () => {
+    const error = new Error("tier list unavailable")
+    apiMocks.listResourceTiersApi.mockRejectedValueOnce(error)
+    render(<ResourceTierTab />)
+    await waitFor(() => expect(apiMocks.showApiError).toHaveBeenCalledWith(error))
+    expect(screen.queryByText("hostedApp.tierAdmin.loading")).toBeNull()
+  })
+
+  it("keeps an edit and releases its pending lock after a rejected update", async () => {
+    const error = new Error("tier update unavailable")
+    apiMocks.updateResourceTierApi.mockRejectedValueOnce(error)
+    const user = userEvent.setup()
+    render(<ResourceTierTab />)
+    const row = await screen.findByTestId("tier-row-standard")
+    await user.click(within(row).getByText(EDIT))
+    const cpu = within(row).getByLabelText("hostedApp.tierAdmin.columns.cpu")
+    await user.clear(cpu)
+    await user.type(cpu, "1500")
+    await user.click(within(row).getByText(SAVE))
+    pressOk()
+    await waitFor(() => expect(apiMocks.showApiError).toHaveBeenCalledWith(error))
+    expect(within(row).getByText(SAVE)).toBeEnabled()
+    expect(cpu).toHaveValue("1500")
+    expect(toastMock).not.toHaveBeenCalledWith(expect.objectContaining({ type: "success" }))
+  })
+
 })

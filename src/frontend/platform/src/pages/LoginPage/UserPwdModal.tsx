@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 
 
 import { resetPasswordApi } from "@/controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest } from "@/controllers/request";
 import { handleEncrypt, PWD_RULE } from "./utils";
 
 interface UserPwdModalProps {
@@ -47,7 +47,7 @@ const UserPwdModal = forwardRef<UserPwdModalRef, UserPwdModalProps>((props, ref)
         if (errors.length) return toast.show({ type: "error", message: [String(t("prompt") ?? ''), errors.filter(Boolean).join('\n')].filter(Boolean).join('\n') });
 
         const cryptPwd = await handleEncrypt(passwordRef.current.value);
-        const res = await captureAndAlertRequestErrorHoc(resetPasswordApi(userIdRef.current, cryptPwd));
+        const res = await resetPasswordApi(userIdRef.current, cryptPwd);
         if (res === null) {
             toast.show({ type: "success", message: [String(`${t("prompt")}`), ([t("resetPassword.adminResetSuccess")]).filter(Boolean).join('\n')].filter(Boolean).join('\n') });
             setEditShow(false);
@@ -77,7 +77,7 @@ const UserPwdModal = forwardRef<UserPwdModalRef, UserPwdModalProps>((props, ref)
                             {t("cancle")}
                         </Button>
                     </DialogClose>
-                    <Button type="button" onClick={handleSubmit}>
+                    <Button type="button" onClick={handleUiRequest(handleSubmit)}>
                         {t("confirmButton")}
                     </Button>
                 </DialogFooter>

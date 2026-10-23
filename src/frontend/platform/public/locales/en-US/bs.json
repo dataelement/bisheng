@@ -835,7 +835,7 @@
     "shareToChildrenTip": "When on, child tenants can use the models of this provider but cannot view or change its configuration.",
     "getApiKey": "Get a {{provider}} API key",
     "formatExample": "Example: {{example}}",
-    "streamingAsrHint": "Streaming speech recognition supports paraformer-realtime-v2, paraformer-realtime-v1 and qwen3-asr-flash-realtime. Save and test the model, then select it as the workbench ASR model.",
+    "streamingAsrHint": "Streaming speech recognition supports paraformer-realtime-v2 and qwen3-asr-flash-realtime. Save and test the model, then select it as the workbench ASR model.",
     "fileAsrHint": "File recognition. Upload the full recording, then transcribe it.",
     "speechCredentials": "Real-time speech recognition",
     "providerSilicon": "SiliconFlow",
@@ -1012,6 +1012,7 @@
     "1008": "The current assistant or skill is not online, and direct conversation is not possible."
   },
   "build": {
+    "editPermissionRequired": "Edit permission required",
     "create": "Create",
     "assistant": "Assistant",
     "workflow": "Workflow",
@@ -3629,6 +3630,7 @@
     "close": "Close",
     "maskedFile": "Masked file.msk",
     "notFoundTitle": "Page not found",
-    "notFoundDescription": "The page you are trying to access does not exist or has been removed."
+    "notFoundDescription": "The page you are trying to access does not exist or has been removed.",
+    "recommendedAppLimit": "At most {{max}} recommended apps can be configured."
   }
 }

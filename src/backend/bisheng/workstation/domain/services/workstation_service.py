@@ -1063,7 +1063,9 @@ class WorkStationService(BaseService):
             system_types = tuple(child_type_by_name.values())
         if not settings.openfga.enabled:
             return result
-        invalid_types = tuple(row for row in system_types if row.id is None or row.user_id is not None)
+        invalid_types = tuple(
+            row for row in system_types if row.id is None or row.is_preset != ToolPresetType.PRESET.value
+        )
         if invalid_types:
             raise RuntimeError("copied preset tool category does not satisfy the system-owned predicate")
         specs = tuple(

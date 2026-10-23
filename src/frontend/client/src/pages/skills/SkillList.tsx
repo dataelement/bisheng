@@ -11,6 +11,17 @@ export type SkillSort = 'recent' | 'name';
 /** Enterprise sample rows are keyed by name (the id is derived); personal ones by id. */
 const byName = (left: SkillRecord, right: SkillRecord) => left.displayName.localeCompare(right.displayName);
 
+function updatedAt(skill: SkillRecord): number {
+  const parsed = Date.parse(skill.updatedAt);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/** Newest change first. A shared timestamp keeps the later row ahead. */
+const byRecent = (left: SkillRecord, right: SkillRecord) => {
+  const delta = updatedAt(right) - updatedAt(left);
+  return delta !== 0 ? delta : right.id - left.id;
+};
+
 interface SkillRowProps {
   skill: SkillRecord;
   /** Id of the skill whose toggle is being saved — its switch shows the spinner. */
@@ -105,10 +116,9 @@ interface SkillListProps extends Omit<SkillRowProps, 'skill'> {
  */
 export function SkillList({ skills, sort, createdCount, providedCount, createdEmptyHint, ...rowProps }: SkillListProps) {
   const localize = useLocalize();
-  const created = skills
-    .filter((skill) => skill.source === 'personal')
-    .sort(sort === 'name' ? byName : byName);
-  const provided = skills.filter((skill) => skill.source === 'platform').sort(byName);
+  const compare = sort === 'name' ? byName : byRecent;
+  const created = skills.filter((skill) => skill.source === 'personal').sort(compare);
+  const provided = skills.filter((skill) => skill.source === 'platform').sort(compare);
 
   return (
     <div className="flex w-full flex-col gap-6">

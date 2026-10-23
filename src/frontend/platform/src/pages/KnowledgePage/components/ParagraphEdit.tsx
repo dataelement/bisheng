@@ -6,7 +6,7 @@ import { Outlined } from "bisheng-icons";
 
 
 import { getFileBboxApi,getFilePathApi,getKnowledgeChunkApi,updateChunkApi,updatePreviewChunkApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Crosshair } from "lucide-react";
 import React,{ useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import { useTranslation } from "react-i18next";
@@ -118,12 +118,11 @@ const ParagraphEdit = ({
         }) : updateChunkApi({
             knowledge_id: Number(id), file_id: fileId, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
         })
-        await captureAndAlertRequestErrorHoc(promise.then(res => {
+        await promise.then(() => {
             toast.show({ type: 'success', message: String(t('editSuccess') ?? '') })
             onClose()
             onChange(_value)
-        }))
-        setLoading(false)
+        }).catch(showApiError).finally(() => setLoading(false))
     }
 
     const labels = useMemo(() => {

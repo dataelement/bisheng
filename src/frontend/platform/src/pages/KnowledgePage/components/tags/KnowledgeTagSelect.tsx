@@ -10,7 +10,7 @@ getKnowledgeTagsApi,
 KnowledgeTagItem,
 setFileTagsApi
 } from "@/controllers/API/knowledgeTags";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { truncateString } from "@/util/utils";
 import { Outlined } from "bisheng-icons";
 
@@ -61,16 +61,10 @@ export default function KnowledgeTagSelect({
 
     const fetchTags = async () => {
         if (!numericKnowledgeId) return;
-        const response = await captureAndAlertRequestErrorHoc(
-            getKnowledgeTagsApi(numericKnowledgeId, {
+        const response = await getKnowledgeTagsApi(numericKnowledgeId, {
                 page: 1,
                 limit: 100
-            })
-        );
-
-        if (!response || response === 'canceled') {
-            return;
-        }
+            });
 
         setTags(response.data ?? []);
     };
@@ -79,7 +73,7 @@ export default function KnowledgeTagSelect({
         if (!open) return;
         setInputValue("");
         syncSelectedTags();
-        fetchTags();
+        void fetchTags().catch(showApiError);
     }, [open, numericKnowledgeId]);
 
     useEffect(() => {
@@ -133,13 +127,7 @@ export default function KnowledgeTagSelect({
             return;
         }
 
-        const result = await captureAndAlertRequestErrorHoc(
-            createKnowledgeTagApi(numericKnowledgeId, tagName)
-        );
-
-        if (!result || result === 'canceled') {
-            return;
-        }
+        const result = await createKnowledgeTagApi(numericKnowledgeId, tagName);
 
         const newTag = result as KnowledgeTagItem;
         setTags(prev => [newTag, ...prev.filter(tag => tag.id !== newTag.id)]);
@@ -150,15 +138,16 @@ export default function KnowledgeTagSelect({
     const handleDeleteTag = async (tag: KnowledgeTagItem) => {
         if (deletingTagId !== null) return;
         setDeletingTagId(tag.id);
-        const result = await captureAndAlertRequestErrorHoc(deleteKnowledgeTagApi(numericKnowledgeId, tag.id));
-        if (result === false || result === 'canceled') {
-            setDeletingTagId(null);
-            return;
-        }
+        try {
+        await deleteKnowledgeTagApi(numericKnowledgeId, tag.id);
         setTags(prev => prev.filter(item => item.id !== tag.id));
         setSelectedTagIds(prev => prev.filter(id => id !== tag.id));
         notification.open({ type: 'success', description: String(t('tagDeleted') ?? '') });
-        setDeletingTagId(null);
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setDeletingTagId(null);
+        }
     };
 
     const selectedTags = useMemo(
@@ -168,9 +157,9 @@ export default function KnowledgeTagSelect({
 
     const handleSave = async () => {
         setLoading(true);
+        try {
         const payloadTagIds = [...selectedTagIds];
-        const result = await captureAndAlertRequestErrorHoc(
-            isBatch
+        await (isBatch
                 ? batchAddFileTagsApi({
                     knowledge_id: numericKnowledgeId,
                     file_ids: fileIds,
@@ -182,12 +171,13 @@ export default function KnowledgeTagSelect({
                     tag_ids: payloadTagIds
                 })
         );
-        setLoading(false);
-        if (result === false || result === 'canceled') {
-            return;
-        }
         onUpdate();
         handleOpenChange(false);
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -200,7 +190,7 @@ export default function KnowledgeTagSelect({
             >
                 <DialogHeader className="px-6 py-4">
                     <DialogTitle className="text-[16px] font-medium leading-6 text-[#212121]">
-                        编辑标签
+                        {t('editTag')}
                     </DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col gap-4 px-6 pb-3">
@@ -239,10 +229,10 @@ export default function KnowledgeTagSelect({
                             onKeyDown={(event) => {
                                 if (event.key === "Enter") {
                                     event.preventDefault();
-                                    void handleCreateTag(inputValue.trim());
+                                    void handleCreateTag(inputValue.trim()).catch(showApiError);
                                 }
                             }}
-                            placeholder={selectedTags.length === 0 && !inputValue ? "请输入要添加的标签，回车保存" : ""}
+                            placeholder={selectedTags.length === 0 && !inputValue ? t('tagEditor.addPlaceholder') : ""}
                             className="min-h-[22px] min-w-[120px] flex-1 bg-transparent text-sm leading-[22px] text-[#212121] outline-none placeholder-[#86909c]"
                         />
                         <span className="absolute right-3 top-0 flex h-full items-center text-[14px] leading-[22px] text-[#999]">
@@ -251,10 +241,10 @@ export default function KnowledgeTagSelect({
                     </div>
 
                     <div className="flex flex-col gap-2 pt-1">
-                        <div className="text-[14px] font-medium leading-5 text-[#212121]">已有标签</div>
+                        <div className="text-[14px] font-medium leading-5 text-[#212121]">{t('tagEditor.existingTags')}</div>
                         <div className="flex flex-wrap gap-1">
                             {tags.length === 0 && (
-                                <span className="text-[12px] text-[#86909c]">暂无标签</span>
+                                <span className="text-[12px] text-[#86909c]">{t('tagEditor.emptyTags')}</span>
                             )}
                             {tags.map((tag) => {
                                 const isSelected = selectedTagIds.includes(tag.id);
@@ -293,7 +283,7 @@ export default function KnowledgeTagSelect({
                         className="h-8 rounded-[6px] border border-[#d9d9d9] bg-white px-4 text-[14px] font-normal text-[#1d2129] transition-colors hover:bg-[#f7f8fa]"
                         onClick={() => handleOpenChange(false)}
                     >
-                        取消
+                        {t('bs:cancel')}
                     </button>
                     <button
                         type="button"
@@ -301,7 +291,7 @@ export default function KnowledgeTagSelect({
                         onClick={() => void handleSave()}
                         disabled={loading || !isEditable}
                     >
-                        确认
+                        {t('bs:confirmButton')}
                     </button>
                 </div>
             </DialogContent>

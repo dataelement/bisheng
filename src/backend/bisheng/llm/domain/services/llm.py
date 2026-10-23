@@ -1702,8 +1702,8 @@ class LLMService:
             inherited_from_root=inherited,
         )
         if config.asr_model and config.asr_model.id:
-            model, _server = await BishengASR.get_model_server_info(int(config.asr_model.id))
-            config.asr_model.realtime = bool(model and model.model_type == LLMModelType.ASR_RT.value)
+            model, server = await BishengASR.get_model_server_info(int(config.asr_model.id))
+            config.asr_model.realtime = BishengASR.uses_realtime(model, server)
         return config, inherited, blocked
 
     @classmethod
@@ -1731,15 +1731,17 @@ class LLMService:
         model_info = await LLMDao.aget_model_by_id(int(workbench_llm.asr_model.id))
         if not model_info:
             raise AsrModelConfigDeletedError.http_exception()
-        asr_client = await cls.get_bisheng_asr(
-            model_id=int(workbench_llm.asr_model.id),
-            app_id=ApplicationTypeEnum.ASR.value,
-            app_name=ApplicationTypeEnum.ASR.value,
-            app_type=ApplicationTypeEnum.ASR,
-            user_id=login_user.user_id,
-        )
         try:
+            asr_client = await cls.get_bisheng_asr(
+                model_id=int(workbench_llm.asr_model.id),
+                app_id=ApplicationTypeEnum.ASR.value,
+                app_name=ApplicationTypeEnum.ASR.value,
+                app_type=ApplicationTypeEnum.ASR,
+                user_id=login_user.user_id,
+            )
             return await asr_client.ainvoke(file.file)
+        except BaseErrorCode:
+            raise
         except Exception as e:
             # Provider-level recognition failure (rate limit, auth, an audio
             # format the model will not take) — surface as a dedicated business

@@ -17,6 +17,7 @@ module.exports = {
     './src/**/*.{js,jsx,ts,tsx}',
     '../packages/ui/src/**/*.{ts,tsx}',
     '../packages/file-viewers/src/**/*.{ts,tsx}',
+    '../packages/chat/src/**/*.{ts,tsx}',
   ],
   theme: {
     // fontFamily: {

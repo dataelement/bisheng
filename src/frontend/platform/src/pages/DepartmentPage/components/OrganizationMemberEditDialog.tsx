@@ -25,7 +25,7 @@ import {
   getDepartmentMemberEditFormApi,
   type DepartmentMemberEditForm,
 } from "@/controllers/API/department"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { handleUiRequest, showApiError } from "@/controllers/request"
 import type { DepartmentMember, DepartmentTreeNode } from "@/types/api/department"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -75,9 +75,7 @@ export function OrganizationMemberEditDialog({
     if (!member) return
     setLoading(true)
     try {
-      const data = await captureAndAlertRequestErrorHoc(
-        getDepartmentMemberEditFormApi(deptId, member.user_id)
-      )
+      const data = await getDepartmentMemberEditFormApi(deptId, member.user_id)
       if (!data) {
         notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.memberEditLoadFailed") ?? '') })
         return
@@ -120,7 +118,7 @@ export function OrganizationMemberEditDialog({
   }, [deptId, member, t])
 
   useEffect(() => {
-    if (open && member) void load()
+    if (open && member) void load().catch(showApiError)
     if (!open) resetLocal()
   }, [open, member, load, resetLocal])
 
@@ -128,9 +126,7 @@ export function OrganizationMemberEditDialog({
     async (deptInternalId: number | null, node: DepartmentTreeNode | null) => {
       if (deptInternalId == null || !node) return
       setPrimaryDeptInternalId(deptInternalId)
-      const rows = await captureAndAlertRequestErrorHoc(
-        getDepartmentAssignableRolesApi(node.dept_id)
-      )
+      const rows = await getDepartmentAssignableRolesApi(node.dept_id)
       const list = Array.isArray(rows) ? rows : []
       setPrimaryAssignableList(list.map((r: { id: number; role_name: string }) => ({
         id: r.id,
@@ -202,13 +198,7 @@ export function OrganizationMemberEditDialog({
     bsConfirm({
       desc: t("bs:department.deleteLocalMemberConfirm"),
       onOk: async (close) => {
-        const chk = await captureAndAlertRequestErrorHoc(
-          checkDepartmentMemberDeleteApi(deptId, member.user_id)
-        )
-        if (chk === false) {
-          close()
-          return
-        }
+        const chk = await checkDepartmentMemberDeleteApi(deptId, member.user_id)
         if (chk?.has_assets) {
           const c = chk.counts
           notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.deleteLocalMemberBlocked", {
@@ -219,13 +209,7 @@ export function OrganizationMemberEditDialog({
           close()
           return
         }
-        const delRes = await captureAndAlertRequestErrorHoc(
-          deleteDepartmentLocalMemberApi(deptId, member.user_id)
-        )
-        if (delRes === false) {
-          close()
-          return
-        }
+        await deleteDepartmentLocalMemberApi(deptId, member.user_id)
         notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.deleteLocalMemberDone") ?? '') })
         onSaved()
         onClose()
@@ -256,12 +240,9 @@ export function OrganizationMemberEditDialog({
     setSaving(true)
     try {
       if (form.edit_mode === "affiliate") {
-        const res = await captureAndAlertRequestErrorHoc(
-          applyDepartmentMemberEditApi(deptId, member.user_id, {
+        await applyDepartmentMemberEditApi(deptId, member.user_id, {
             context_role_ids: Array.from(ctxRoles),
           })
-        )
-        if (res === false) return
       } else {
         const affiliate_roles = (form.affiliate_rows ?? []).map((row) => ({
           dept_id: row.dept_id,
@@ -281,14 +262,13 @@ export function OrganizationMemberEditDialog({
           primary_role_ids: Array.from(primaryRoles),
           affiliate_roles,
         }
-        const res = await captureAndAlertRequestErrorHoc(
-          applyDepartmentMemberEditApi(deptId, member.user_id, body)
-        )
-        if (res === false) return
+        await applyDepartmentMemberEditApi(deptId, member.user_id, body)
       }
       notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.memberEditSaved") ?? '') })
       onSaved()
       onClose()
+    } catch (error) {
+      showApiError(error)
     } finally {
       setSaving(false)
     }
@@ -400,7 +380,7 @@ export function OrganizationMemberEditDialog({
                         className="mt-1"
                         modal={false}
                         value={primaryDeptInternalId}
-                        onChange={(id, node) => void handlePrimaryDeptChange(id, node)}
+                        onChange={handleUiRequest(handlePrimaryDeptChange)}
                         placeholder={t("bs:department.memberEditPrimaryPlaceholder")}
                       />
                     ) : (

@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { captureQaOperation, type QaOperation } from '@bisheng/chat/core';
 import { Button, Input, Textarea, toast } from '@bisheng/ui';
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 
@@ -6,8 +7,8 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogT
 import { InputList } from '@/components/bs-comp/formFields/InputList';
 
 import { generateSimilarQa, updateQa } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { showApiError } from "@/controllers/request";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AnnotationFormHandle, AnnotationFormProps } from "./annotationTypes";
 
@@ -29,11 +30,25 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
         answer: false
     });
 
-    const idRef = useRef('');
+    const operationRef = useRef<Readonly<QaOperation>>();
+    const generationRef = useRef(0);
+    const pendingRef = useRef(false);
+    const [saving, setSaving] = useState(false);
+    useEffect(() => () => {
+        generationRef.current += 1;
+        pendingRef.current = false;
+        operationRef.current = undefined;
+    }, []);
 
     useImperativeHandle(ref, () => ({
-        open(id, qa) {
-            idRef.current = id;
+        close,
+        open(_id, qa, operation) {
+            generationRef.current += 1;
+            pendingRef.current = false;
+            operationRef.current = operation ? captureQaOperation(operation) : undefined;
+            setSaving(false);
+            setLoading(false);
+            setError({ knowledgeLib: false, question: false, answer: false });
             setOpen(true);
             const { q, a } = qa;
             setForm({
@@ -71,8 +86,10 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
         if (!form.question) {
             return toast.show({ type: 'warning', message: String(t('log.enterQuestion') ?? '') });
         }
+        const generation = generationRef.current;
         setLoading(true);
-        captureAndAlertRequestErrorHoc(generateSimilarQa(form.question, form.answer).then(res => {
+        await generateSimilarQa(form.question, form.answer).then(res => {
+            if (generation !== generationRef.current) return;
             setForm((prevForm) => {
                 const updatedSimilarQuestions = [...prevForm.similarQuestions];
                 updatedSimilarQuestions.splice(updatedSimilarQuestions.length - 1, 0, ...res.questions);
@@ -81,12 +98,12 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
                     similarQuestions: updatedSimilarQuestions
                 };
             });
-            setLoading(false);
-        }));
+        }).catch(showApiError).finally(() => { if (generation === generationRef.current) setLoading(false); });
     };
 
 
     const handleSubmit = async () => {
+        if (pendingRef.current) return;
         const isKnowledgeLibEmpty = form.knowledgeLib.length === 0;
         const isQuestionEmpty = !form.question.trim();
         const isAnswerEmpty = !form.answer.trim();
@@ -109,20 +126,32 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
             return toast.show({ type: 'warning', message: String(t('log.max1000CharsForAnswer') ?? '') });
         }
 
-        captureAndAlertRequestErrorHoc(updateQa('', {
+        const generation = generationRef.current;
+        const operation = operationRef.current;
+        pendingRef.current = true;
+        setSaving(true);
+        await updateQa('', {
             questions: [form.question, ..._similarQuestions],
             answers: [form.answer],
             knowledge_id: form.knowledgeLib[0].value,
             source: 2
-        }).then(() => {
-            toast.show({ type: 'success', message: String(t('log.saveSuccess') ?? '') });
-            onMarked?.()
-        }));
-        close();
+        }).then(async () => {
+            if (generation === generationRef.current) {
+                toast.show({ type: 'success', message: String(t('log.saveSuccess') ?? '') });
+                close();
+            }
+            await onMarked?.(operation);
+        }).catch(showApiError).finally(() => {
+            if (generation === generationRef.current) { pendingRef.current = false; setSaving(false); }
+        });
     };
 
     const close = () => {
-        idRef.current = '';
+        generationRef.current += 1;
+        pendingRef.current = false;
+        operationRef.current = undefined;
+        setSaving(false);
+        setLoading(false);
         setForm({ ...DEFAULT_FORM });
         setOpen(false);
         setError({
@@ -173,7 +202,7 @@ const SaveQaLibForm = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ o
                     <DialogClose asChild>
                         <Button variant="outlined" type="button" onClick={close} color="default">{t('log.cancel')}</Button>
                     </DialogClose>
-                    <Button type="submit" onClick={handleSubmit}>{t('log.confirm')}</Button>
+                    <Button type="submit" loading={saving} disabled={saving} onClick={handleSubmit}>{t('log.confirm')}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

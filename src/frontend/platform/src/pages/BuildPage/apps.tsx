@@ -22,7 +22,6 @@ import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@
 import { deleteFlowFromDatabase, getAppsApi, getFlowApi } from "@/controllers/API/flow";
 import type { HostedAppActionResult } from "@/controllers/API/hostedApp";
 import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/controllers/API/workflow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppNumType, AppType } from "@/types/app";
 import { locationContext } from "@/contexts/locationContext";
 import { HostedAppCard } from "./HostedAppCard";
@@ -250,15 +249,12 @@ export default function Apps() {
         setCopyingId(item.id);
         try {
             if (item.flow_type === AppNumType.ASSISTANT) {
-                const detail = await captureAndAlertRequestErrorHoc(getAssistantDetailApi(String(item.id), 'v1'));
+                const detail = await getAssistantDetailApi(String(item.id), 'v1');
                 if (!detail) return;
                 const newName = `${detail.name}-${generateUUID(5)}`;
-                const created = await captureAndAlertRequestErrorHoc(
-                    createAssistantsApi(newName, detail.prompt || '', detail.logo || '')
-                );
+                const created = await createAssistantsApi(newName, detail.prompt || '', detail.logo || '');
                 if (!created?.id) return;
-                await captureAndAlertRequestErrorHoc(
-                    saveAssistanttApi({
+                await saveAssistanttApi({
                         ...detail,
                         id: created.id,
                         name: newName,
@@ -267,12 +263,11 @@ export default function Apps() {
                         knowledge_list: (detail.knowledge_list || []).map((k: { id: number }) => k.id),
                         guide_question: (detail.guide_question || []).filter(Boolean),
                         logo: detail.logo || '',
-                    })
-                );
+                    });
                 reload();
                 return;
             }
-            const flow = await captureAndAlertRequestErrorHoc(getFlowApi(String(item.id)));
+            const flow = await getFlowApi(String(item.id));
             if (!flow) return;
             if (item.flow_type === AppNumType.FLOW) {
                 const payload = JSON.parse(JSON.stringify(flow)) as typeof flow;
@@ -284,9 +279,7 @@ export default function Apps() {
                     }
                 }
                 delete (payload as any).id;
-                const res = await captureAndAlertRequestErrorHoc(
-                    createWorkflowApi(payload.name, payload.description || '', payload.logo || '', payload)
-                );
+                const res = await createWorkflowApi(payload.name, payload.description || '', payload.logo || '', payload);
                 if (res?.id) {
                     reload();
                     navigate(`/flow/${res.id}`);
@@ -313,14 +306,14 @@ export default function Apps() {
         if (checked && !canPublish(data.id)) return;
         if (!checked && !canUnpublish(data.id)) return;
         if (data.flow_type === 5) {
-            return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 2 : 1)).then(res => {
+            return changeAssistantStatusApi(data.id, checked ? 2 : 1).then(res => {
                 if (res === null) {
                     refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
                 }
                 return res
             })
         } else if (data.flow_type === 10) {
-            return captureAndAlertRequestErrorHoc(onlineWorkflow(data, checked ? 2 : 1)).then(res => {
+            return onlineWorkflow(data, checked ? 2 : 1).then(res => {
                 if (res) {
                     refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
                 }
@@ -362,8 +355,7 @@ export default function Apps() {
             okTxt: t('delete'),
             onOk(next) {
                 const promise = data.flow_type == 5 ? deleteAssistantApi(data.id) : deleteFlowFromDatabase(data.id)
-                captureAndAlertRequestErrorHoc(promise.then(reload));
-                next()
+                return promise.then(() => { reload(); next() });
             }
         })
     }
@@ -374,7 +366,7 @@ export default function Apps() {
             return navigate(`/build/apps/${data.id}`)
         }
         if (!data.write) {
-            return notification.open({ type: 'warning', description: t('build.noEditPermission') })
+            return notification.open({ type: 'warning', description: String(t('build.editPermissionRequired')) })
         }
         if (data.flow_type === 5) {
             navigate(`/assistant/${data.id}`, { state: { flow: data } })
@@ -496,7 +488,7 @@ export default function Apps() {
                                     showSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
                                     canSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
                                     showCopy={canCreateApp && canRead(item.id)}
-                                    onCopy={canCreateApp && canRead(item.id) ? handleCopyApp : undefined}
+                                    onCopy={canCreateApp && canRead(item.id) ? handleUiRequest(handleCopyApp) : undefined}
                                     headSelecter={(
                                         item.version_list?.length ? <CardSelectVersion
                                             showPop={item.status !== 2}

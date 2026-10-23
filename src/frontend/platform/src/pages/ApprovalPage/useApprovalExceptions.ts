@@ -1,4 +1,5 @@
 import { notification } from '@bisheng/ui';
+import { showApiError } from '@/controllers/request';
 
 import {
   cancelApprovalExceptionApi,
@@ -25,7 +26,7 @@ export function useApprovalExceptions({ loadPage }: ApprovalExceptionsOptions) {
       notification.open({ type: "success", title: String(t("approvalPage.hint") ?? ''), description: String(t("approvalPage.genericOperateSuccess") ?? '') });
       await loadPage();
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericOperateFailed")) });
+      showApiError(e);
     }
   };
 
@@ -57,8 +58,13 @@ export function useApprovalExceptions({ loadPage }: ApprovalExceptionsOptions) {
     try {
       const detail = await getApprovalInstanceDetailForAdminApi(item.instance_id);
       setInstanceDetailCache((prev) => ({ ...prev, [id]: detail }));
-    } catch {
-      // silently ignore; timeline will show empty state
+    } catch (error) {
+      showApiError(error);
+      setExpandedProgressIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     } finally {
       setLoadingProgressId(null);
     }
@@ -77,7 +83,7 @@ export function useApprovalExceptions({ loadPage }: ApprovalExceptionsOptions) {
       setCancelReason("");
       await loadPage();
     } catch (e) {
-      notification.open({ type: "error", title: String(t("approvalPage.hint") ?? ''), description: String(e || t("approvalPage.genericOperateFailed")) });
+      showApiError(e);
     }
   };
 

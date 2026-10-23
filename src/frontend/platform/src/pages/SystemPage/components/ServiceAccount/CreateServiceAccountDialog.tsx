@@ -15,7 +15,7 @@ DialogTitle,
 import { Label } from "@/components/bs-ui/label";
 
 import { createServiceAccountApi } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -51,13 +51,11 @@ export function CreateServiceAccountDialog({
 
     setLoading(true)
     try {
-      const account = await captureAndAlertRequestErrorHoc(
-        createServiceAccountApi({
+      const account = await createServiceAccountApi({
           name: name.trim(),
           description: description.trim() || null,
           resource_owner_user_id: owners[0].value,
-        }),
-      )
+        })
       if (!account) return
       setName("")
       setDescription("")
@@ -65,6 +63,8 @@ export function CreateServiceAccountDialog({
       onOpenChange(false)
       notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.create") ?? ''), description: String(t("openApiManagement.feedback.created") ?? '') })
       onCreated(account.id)
+    } catch (error) {
+      showApiError(error)
     } finally {
       setLoading(false)
     }

@@ -10,6 +10,7 @@ import {
     Button,
 } from "~/components/ui";
 import { useToastContext } from "~/Providers";
+import { showApiError } from '~/api/request';
 import {
     SpaceTag,
     getSpaceTagsApi,
@@ -63,9 +64,7 @@ export function EditTagsModal({
         setSelectedTagIds(new Set(initialTagIds));
         getSpaceTagsApi(spaceId)
             .then(setSpaceTags)
-            .catch(() => {
-                showToast({ message: localize("com_knowledge.fetch_tags_failed"), status: "warning" });
-            });
+            .catch(showApiError);
     }, [isOpen, spaceId]);
 
     // Toggle a space tag selection
@@ -87,7 +86,7 @@ export function EditTagsModal({
 
     // Commit the current input as a tag (creating it in the space if new, or
     // selecting the existing one). Shared by the Enter key and by Save, so that
-    // clicking 确认 with un-entered text still captures it.
+    // clicking Confirm with un-entered text still captures it.
     //
     // Returns whether it's safe to proceed, plus the committed tag id — callers
     // that immediately read tag ids need it because setSelectedTagIds is async
@@ -133,8 +132,8 @@ export function EditTagsModal({
             // Invalidate shared cache so search dropdown updates
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
             return { ok: true, tagId: newTag.id };
-        } catch {
-            showToast({ message: localize("com_knowledge.create_tag_failed"), status: "warning" });
+        } catch (error) {
+            showApiError(error);
             return { ok: false };
         }
     };
@@ -148,7 +147,7 @@ export function EditTagsModal({
 
     // Save: update file tags via API
     const handleSave = async () => {
-        // First turn any un-entered input into a tag so 确认 captures it.
+        // First turn any un-entered input into a tag so Confirm captures it.
         const committed = await commitInput();
         if (!committed.ok) return; // validation/creation failed — let the user fix it
 
@@ -176,8 +175,8 @@ export function EditTagsModal({
             // Invalidate shared spaceTags cache so search dropdown picks up new tags
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
             onClose(true);
-        } catch {
-            showToast({ message: localize("com_knowledge.tag_save_failed"), status: "warning" });
+        } catch (error) {
+            showApiError(error);
         } finally {
             setLoading(false);
         }
@@ -196,8 +195,8 @@ export function EditTagsModal({
             });
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
             showToast({ message: localize("com_knowledge.delete_tag_success"), status: "success" });
-        } catch {
-            showToast({ message: localize("com_knowledge.delete_tag_failed"), status: "warning" });
+        } catch (error) {
+            showApiError(error);
         } finally {
             setDeletingTagId(null);
         }

@@ -38,5 +38,57 @@
       "changeRemoved": "删除的文件",
       "changeModified": "修改过的文件"
     }
+  },
+  "app_chat": {
+    "citation": {
+      "badge_aria": "{{source}}引用 {{index}}",
+      "loading": "加载溯源详情...",
+      "no_detail": "暂无溯源详情",
+      "no_permission": "暂无权限查看该来源",
+      "no_snippet": "暂无内容摘要",
+      "source_expired": "来源已失效",
+      "source_temp_kb": "临时知识库",
+      "untitled": "引用 {{index}}",
+      "source_web": "网页",
+      "source_article": "文章",
+      "source_document": "文档"
+    },
+    "page": "第 {{0}} 页",
+    "chunk": "第 {{0}} 段",
+    "document_preview": "文档预览",
+    "source_document": "政策文件",
+    "source_web": "网页",
+    "copy_code": "复制代码",
+    "copied": "已复制！",
+    "chart": "图表",
+    "code": "代码",
+    "download": "下载",
+    "loading": "加载中…",
+    "zoom_in": "放大",
+    "zoom_out": "缩小",
+    "diagram_failed": "图表加载失败，可查看代码",
+    "send": "发送",
+    "stop": "停止",
+    "restart": "重新运行",
+    "copy": "复制",
+    "attachment_download": "点击下载",
+    "attachment_unavailable": "文件不可用",
+    "close": "关闭",
+    "image_preview": "图片预览",
+    "timestamp_format": "MM 月 dd 日 HH:mm",
+    "run": {
+      "used": "已使用",
+      "using": "正在使用",
+      "searched": "已搜索",
+      "searching": "正在搜索",
+      "offline": "已下线",
+      "flowDeleted": "技能已被删除，无法获取技能名",
+      "toolDeleted": "工具已被删除，无法获取工具名",
+      "knowledgeDeleted": "知识库已被删除，无法获取知识库名",
+      "thinking": "思考中",
+      "done": "完成",
+      "interrupted": "工具调用未返回结果（会话已结束）"
+    },
+    "attach": "添加附件"
   }
 }

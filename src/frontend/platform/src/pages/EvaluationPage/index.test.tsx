@@ -6,7 +6,7 @@ import EvaluationPage from './index'
 const mock = vi.hoisted(() => ({ reload: vi.fn(), download: vi.fn(), remove: vi.fn().mockResolvedValue({}), url: vi.fn().mockResolvedValue({ url: 'result.csv' }) }))
 vi.mock('@/components/bs-comp/FileView', () => ({ checkSassUrl: (url: string) => url }))
 vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({ bsConfirm: ({ onOk }: { onOk: (next: () => void) => void }) => onOk(vi.fn()) }))
-vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p }))
+vi.mock('@/controllers/request', async (importOriginal) => ({ ...await importOriginal<typeof import('@/controllers/request')>() }))
 vi.mock('@/controllers/API/evaluate', () => ({ getEvaluationApi: vi.fn(), getEvaluationUrlApi: mock.url, deleteEvaluationApi: mock.remove }))
 vi.mock('@/util/utils', () => ({ downloadFile: mock.download }))
 vi.mock('@/util/hook', () => ({ useTable: () => ({ page: 1, pageSize: 20, total: 3, loading: false, setPage: vi.fn(), reload: mock.reload, data: [

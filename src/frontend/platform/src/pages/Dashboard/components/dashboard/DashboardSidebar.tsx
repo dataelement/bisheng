@@ -8,6 +8,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
 import { userContext } from "@/contexts/userContext";
+import { showApiError } from "@/controllers/request";
 import { copyDashboard,createDashboard,deleteDashboard } from "@/controllers/API/dashboard";
 import { useMiniDebounce } from "@/util/hook";
 import { generateUniqueName } from "@/util/utils";
@@ -17,7 +18,7 @@ import { Tooltip as Tip } from "@bisheng/ui";
 import type React from "react";
 import { useContext,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation,useQueryClient } from "react-query";
+import { useMutation,useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { DashboardsQueryKey } from "../../hook";
 import { Dashboard } from "../../types/dataConfig";
@@ -82,9 +83,7 @@ export function DashboardSidebar({
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             navigator(`/dashboard/${res.id}`)
         },
-        onError: (msg: string) => {
-            notification.open({ type: "error", description: String(msg ?? '') })
-        },
+        onError: showApiError,
     })
     const handleCreate = () => {
         if (dashboards.length >= 20) {
@@ -104,9 +103,7 @@ export function DashboardSidebar({
             // jump to new dashboard
             navigator(`/dashboard/${newDashboard.id}`)
         },
-        onError: () => {
-            notification.open({ type: "error", description: String(t('copyFailed') ?? '') })
-        },
+        onError: showApiError,
     })
     const handleDuplicate = (dashboard: Dashboard) => {
         if (dashboards.length >= 20) {
@@ -138,9 +135,7 @@ export function DashboardSidebar({
                 onSelect(null)
             }
         },
-        onError: () => {
-            notification.open({ type: "error", description: String("delete error") })
-        },
+        onError: showApiError,
     })
     const handleDelete = (id: string) => {
         const dashboard = dashboards.find((d) => d.id === id)
@@ -149,8 +144,8 @@ export function DashboardSidebar({
         bsConfirm({
             desc: t('confirmDeleteDashboard', { title: dashboard.title }),
             okTxt: t('delete'),
-            onOk(next) {
-                deleteMutation.mutate(id)
+            async onOk(next) {
+                await deleteMutation.mutateAsync(id)
                 next()
             },
         })

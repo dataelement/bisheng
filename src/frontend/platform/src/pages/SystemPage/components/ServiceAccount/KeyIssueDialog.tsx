@@ -26,7 +26,7 @@ issueServiceAccountKeyApi,
 updateServiceAccountKeyApi,
 } from "@/controllers/API/serviceAccount";
 import { createDelegateCandidateSource } from "@/controllers/API/serviceAccountCandidates";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type {
 ApiKeyIssued,
 ApiKeyItem,
@@ -228,24 +228,22 @@ export function KeyIssueDialog({
           onOpenChange(false)
           return
         }
-        const updated = await captureAndAlertRequestErrorHoc(
-          updateServiceAccountKeyApi(
+        const updated = await updateServiceAccountKeyApi(
             serviceAccountId,
             editingKey.id,
             updatePayload,
-          ),
-        )
+          )
         if (!updated) return
         notification.open({ type: "success", title: String(t("openApiManagement.keys.edit") ?? ''), description: String(t("openApiManagement.feedback.keyUpdated") ?? '') })
         onUpdated()
         return
       }
-      const issued = await captureAndAlertRequestErrorHoc(
-        issueServiceAccountKeyApi(serviceAccountId, payload),
-      )
+      const issued = await issueServiceAccountKeyApi(serviceAccountId, payload)
       if (!issued) return
       notification.open({ type: "success", title: String(t("openApiManagement.keys.issue") ?? ''), description: String(t("openApiManagement.feedback.keyIssued") ?? '') })
       onIssued(issued)
+    } catch (error) {
+      showApiError(error)
     } finally {
       setLoading(false)
     }

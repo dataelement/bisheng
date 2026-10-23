@@ -27,7 +27,7 @@ interface FileListViewProps {
     currentUserRole?: SpaceRole | null;
     onDownload: (id: string) => void;
     onEditTags: (id: string) => void;
-    onRename: (id: string, newName: string) => void;
+    onRename: (id: string, newName: string) => void | Promise<void>;
     onDelete: (id: string) => void;
     onRetry: (id: string) => void;
     onNavigateFolder: (id: string) => void;

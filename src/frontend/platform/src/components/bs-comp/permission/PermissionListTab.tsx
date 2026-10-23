@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Alert, Button } from '@bisheng/ui';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { Alert, Button, Select } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 
 import {
@@ -91,6 +92,7 @@ function RosterRow({
   onRemove,
 }: RosterRowProps) {
   const { t } = useTranslation("permission")
+  const selectLabels = useSelectLabels();
   const SubjectIcon = SUBJECT_ICONS[assignee.subject.type]
   const editable = canMutatePermissionAssignee(assignee, context, models)
   const displayName =
@@ -136,24 +138,10 @@ function RosterRow({
       <div className="flex w-[176px] shrink-0 items-center justify-end gap-1">
         {editable ? (
           <>
-            <select
-              aria-label={`grant.model.${assignee.assignee_id}`}
-              value={assignee.model.key}
-              disabled={pending}
-              onChange={(event) => onMove(assignee, event.target.value)}
-              className="h-8 min-w-0 flex-1 cursor-pointer rounded-[6px] border-0 bg-transparent px-2 text-right text-sm text-[#4E5969] outline-none hover:bg-[#F7F7F7] focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {!currentIsGrantable && (
-                <option value={assignee.model.key}>
-                  {assignee.model.name}
-                </option>
-              )}
-              {models.map((model) => (
-                <option key={model.key} value={model.key}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
+            <Select {...selectLabels} aria-label={`grant.model.${assignee.assignee_id}`} variant="ghost"
+              value={assignee.model.key} disabled={pending} className="min-w-0 flex-1"
+              options={[...(!currentIsGrantable ? [{ value: assignee.model.key, label: assignee.model.name }] : []), ...models.map(model => ({ value: model.key, label: model.name }))]}
+              onChange={value => { if (value != null) onMove(assignee, String(value)); }} />
             <button
               type="button"
               aria-label={`${t("grant.remove")}.${assignee.assignee_id}`}

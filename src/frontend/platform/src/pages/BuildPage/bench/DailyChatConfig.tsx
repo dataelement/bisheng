@@ -13,6 +13,7 @@ import ConfigInheritanceBanner from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
 import { useChatConfig } from "./index";
+import { handleUiRequest } from "@/controllers/request";
 import OrgKbConfig from "./OrgKbConfig";
 import Preview from "./Preview";
 import RecommendedAppsConfig from "./RecommendedAppsConfig";
@@ -261,7 +262,7 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
-                        <Button onClick={handleSave}>{t("save")}</Button>
+                        <Button onClick={handleUiRequest(handleSave)}>{t("save")}</Button>
                     </div>
                 </CardContent>
             </div>

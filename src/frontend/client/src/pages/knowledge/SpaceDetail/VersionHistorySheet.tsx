@@ -1,4 +1,5 @@
-import { Tooltip as SharedTooltip } from '@bisheng/ui';
+import { showApiError } from "~/api/request";
+import { Button as RetryButton, Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { CheckCircle, Download, Eye, Loader2, Trash2, X } from "lucide-react";
 import {
@@ -310,9 +311,10 @@ export function VersionHistorySheet({
     const confirm = useConfirm();
     const queryClient = useQueryClient();
 
-    const { data, isLoading } = useQuery({
+    const { data, isLoading, error, refetch } = useQuery({
         queryKey: ["file-versions", fileId],
         queryFn: () => getFileVersionsApi(fileId!),
+        onError: showApiError,
         enabled: open && fileId !== null,
     });
     const versions = data?.versions ?? [];
@@ -331,12 +333,7 @@ export function VersionHistorySheet({
             queryClient.invalidateQueries({ queryKey: ["file-versions", fileId] });
             onPrimaryChanged?.();
         },
-        onError: () => {
-            showToast({
-                message: localize("com_knowledge.version.toast_set_primary_failure"),
-                status: "warning",
-            });
-        },
+        onError: showApiError,
     });
 
     const deleteMutation = useMutation({
@@ -349,12 +346,7 @@ export function VersionHistorySheet({
             queryClient.invalidateQueries({ queryKey: ["file-versions", fileId] });
             onDeleted?.();
         },
-        onError: () => {
-            showToast({
-                message: localize("com_knowledge.version.toast_delete_failure"),
-                status: "warning",
-            });
-        },
+        onError: showApiError,
     });
 
     const handleSetPrimary = async (versionId: number, versionNo: number) => {
@@ -423,6 +415,11 @@ export function VersionHistorySheet({
                     {isLoading ? (
                         <div className="flex h-32 items-center justify-center">
                             <Loader2 className="size-6 animate-spin text-text-3" />
+                        </div>
+                    ) : error ? (
+                        <div role="alert" className="flex h-32 items-center justify-center gap-2">
+                            <span>{error instanceof Error ? error.message : localize('com_ui_error')}</span>
+                            <RetryButton variant="outlined" onClick={() => void refetch()}>{localize('com_ui_retry')}</RetryButton>
                         </div>
                     ) : sortedVersions.length === 0 ? (
                         <div className="flex h-32 items-center justify-center text-sm text-text-3">

@@ -17,7 +17,7 @@ import { Outlined } from "bisheng-icons";
 import { MouseEvent, useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
-import { getSkillErrorMessage } from "./skillErrors";
+import { showSkillError } from "./skillErrors";
 
 const Check = Outlined.Check,
     FileText = Outlined.File,
@@ -125,7 +125,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
             onOpenChange(false);
             onUploaded();
         } catch (err) {
-            notification.open({ type: "error", description: String(getSkillErrorMessage(err, t, limit) ?? '') });
+            showSkillError(err, t, limit);
         } finally {
             setUploading(false);
         }
@@ -143,7 +143,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
             onOpenChange(false);
             onUploaded();
         } catch (err) {
-            notification.open({ type: "error", description: String(getSkillErrorMessage(err, t, limit) ?? '') });
+            showSkillError(err, t, limit);
         } finally {
             setImporting(false);
         }

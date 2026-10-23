@@ -105,6 +105,7 @@ class TestPersonalSkillStore:
         _conf(monkeypatch, 500, 800)
         assert PERSONAL_UPLOAD_MAX_BYTES == 52428800
         assert PERSONAL_UNPACKED_MAX_BYTES == 209715200
+        assert PERSONAL_SKILL_MD_MAX_BYTES == 1048576
 
         with pytest.raises(SkillFileTooLargeError) as upload_error:
             await store.publish_upload(
@@ -229,6 +230,8 @@ class TestPersonalSkillStore:
             ("pdf.md", b"hello", None),
             ("pdf.zip", payload, "application/zip"),
             ("pdf.skill", payload, "application/x-zip-compressed"),
+            ("pdf.skill", payload, "text/plain"),
+            ("pdf.skill", payload, "application/x-skill"),
             ("pdf.zip", payload, ""),
         ):
             files = await accept_skill_upload(filename, data, owner_user_id=USER, content_type=mime)

@@ -11,12 +11,13 @@ import { Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,Dialog
 import { Separator } from "@/components/bs-ui/separator";
 
 import { updateDashboard } from "@/controllers/API/dashboard";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { useComponentEditorStore,useEditorDashboardStore } from "@/store/dashboardStore";
 import { Tag } from "@bisheng/ui";
 
 import { useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation,useQueryClient } from "react-query";
+import { useMutation,useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { DashboardQueryKey,DashboardsQueryKey,usePublishDashboard } from "../../hook";
 import { ChartType,Dashboard } from "../../types/dataConfig";
@@ -72,7 +73,7 @@ export function EditorHeader({
             // refrensh react-query
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, Number(dashboardId)] })
             queryClient.setQueryData([DashboardsQueryKey], (old) =>
-                old.map(el => el.id === dashboard.id ? {
+                old?.map(el => el.id === dashboard.id ? {
                     ...el,
                     title: dashboard.title,
                     status: dashboard.status,
@@ -81,9 +82,7 @@ export function EditorHeader({
             // autosave not require toast
             !autoSave && notification.open({ type: "success", description: String(t('saveSuccess') ?? '') })
         },
-        onError: () => {
-            notification.open({ type: "error", description: String(t('saveFailed') ?? '') })
-        },
+        onError: showApiError,
         onSettled: () => {
             setIsSaving(false)
         },
@@ -268,7 +267,7 @@ export function EditorHeader({
                 }} color="default">
                     {t('fullScreen')}
                 </Button>
-                <Button variant="outlined" disabled={isPublishing} onClick={handlePublish} color="default">
+                <Button variant="outlined" disabled={isPublishing || isSaving} onClick={handleUiRequest(handlePublish)} color="default">
                     {t('saveAndPublish')}
                 </Button>
                 <Button onClick={handleSave} disabled={saveMutation.isLoading}>
@@ -283,7 +282,7 @@ export function EditorHeader({
                         <DialogDescription>{t('unsavedChangesWarning')}</DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button className="leave" onClick={handleSaveAndClose}>
+                        <Button className="leave" disabled={isSaving} onClick={handleUiRequest(handleSaveAndClose)}>
                             {t('saveAndLeave')}
                         </Button>
                         <Button variant="solid" onClick={() => navigator(-1)} color="danger">

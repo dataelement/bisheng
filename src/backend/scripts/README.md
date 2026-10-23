@@ -142,10 +142,11 @@ Model equality does not establish that historical service-account resource
 markers exist. This is an explicit deployment operation: container startup,
 `alembic upgrade head`, and `docker/deploy.sh update` do not run data repairs.
 
-For a first migration from legacy RBAC, use `migrate_f048_permission_data.py`;
+For a first migration from pre-F048 ReBAC, use `migrate_f048_permission_data.py`;
 its resource projection already writes both `user:*` and `service_account:*`
 markers at every hierarchy level. Do not repeat the first migration to repair
-an existing F048 installation.
+an existing F048 installation. Legacy RBAC environments must first complete
+the 2.5.x upgrade stage described below.
 
 ### `repair_deleted_app_grants.py`
 
@@ -471,13 +472,18 @@ empty.
 
 Audit and repair missing F048 projections for business-verified platform
 resources. The current inventory covers preset tool categories
-(`is_preset=1 AND user_id IS NULL`). Preset dashboards are intentionally
+(`is_preset=1 AND is_delete=0`), regardless of historical `user_id`. Preset dashboards are intentionally
 excluded: they are ordinary resources owned by the first super administrator.
 The reconciler does not infer system ownership from the resource-type
 allowlist alone.
 
-The default dry-run reports missing/non-current modes for those tool
-categories:
+The default dry-run reports missing/non-current modes and checks actual
+`user:*` system tuples at higher consistency for `CURRENT` categories. A
+`CURRENT` mode alone does not prove that system authorization is complete.
+`MISSING_TUPLES` lists missing `visible` / `system_use_marker` relations;
+`incomplete_count` counts affected existing resources and `missing_tuple_count`
+counts their missing relations. `missing_count` counts resources without a mode.
+Dry-run writes no permission modes, operations, grants, or tuples:
 
 ```bash
 export config=config.yaml
@@ -496,16 +502,27 @@ PYTHONPATH=./ .venv/bin/python \
   --operator-id 1
 ```
 
-Apply calls the regular `authorize_system_owned` facade. The resulting mode,
-durable projection operation/tuples, and OpenFGA marker tuples are therefore
-created by the same path as online resource creation. An existing
+Apply calls `authorize_system_owned` for absent modes and `repair_system_owned`
+for `CURRENT` preset tools with missing system relations. The repair only adds
+the missing relations through a durable `RESOURCE_SYSTEM_REPAIR` operation,
+claims the existing resource version, and finalizes the next version after
+OpenFGA verification. Existing Grant/assignee rows, visibility contributions,
+and permission mode are preserved. A second run with complete tuples performs
+no writes; later tuple loss can be repaired at the new resource version. An existing
 non-`CURRENT` mode is a blocker and remains owned by the ordinary
 operation/FAILED_CLOSED recovery scripts.
 
-The general projection-operation reconciler cannot repair this case because a
-freshly seeded resource has no durable operation yet. The visible reconciler
-also cannot repair it because system-owned resources intentionally have no
-Grant/assignee source rows.
+Run this explicit maintenance procedure after deploying the classifier fix to
+repair historical presets migrated as user-owned resources. Restarting the
+service does not repair all existing presets, and resuming a completed F048
+migration does not refresh its frozen resource classification. Review the
+dry-run against the target environment before applying; deploying this code
+alone does not mutate production permissions.
+
+The general projection-operation reconciler cannot invent missing system
+tuples for a historical resource: no operation describing that correction
+exists yet. The visible reconciler only rebuilds ordinary Grant sources;
+system authorization has a separate canonical business predicate.
 
 ### `recover_f048_failed_closed_projection.py`
 
@@ -558,10 +575,32 @@ finalized operation only verifies and skips it.
 
 ### `migrate_f048_permission_data.py`
 
+Legacy `user_group:<id>#admin` resource `manager`/`can_manage` tuples are
+retired with an INFO audit item instead of becoming F048 Grants or visible
+contributions. User groups no longer grant resource management separately to
+administrators. These tuples are not reassigned to `#member`; existing member
+Grants and protected resource creators still migrate normally. The retired
+F006 RBAC-to-ReBAC scripts are no longer shipped on this release line.
+
 Formal, forward-only migration from the legacy relation-model Config and
 resource tuples to the F048 Catalog / Model / Grant control plane. This is the
 only F048 business-data migration entry point. Alembic remains DDL-only, and
 the service never invokes this script from API startup, Celery, or Linsight.
+
+Upgrade prerequisite for legacy RBAC environments:
+
+1. Upgrade to a 2.5.x release that ships F006. Follow that release's schema
+   and data-upgrade instructions, then run its F006 RBAC-to-ReBAC migration
+   and verification. Require zero permission regressions and verify resource
+   access with a non-admin account before continuing.
+2. Upgrade from the verified 2.5.x environment to the target release while
+   retaining its database and OpenFGA Store, then run the F048 migration and
+   verification below. F048 consumes the existing ReBAC tuples; it does not
+   replace F006's conversion of legacy `roleaccess` rows.
+
+Do not skip the 2.5.x stage for a pure RBAC environment or restore/run F006
+inside an F048 deployment. Existing pre-F048 ReBAC environments that have
+already completed F006 do not need to repeat that stage.
 
 Run every command from `src/backend/` with the same `config` value as the live
 deployment.

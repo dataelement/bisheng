@@ -40,6 +40,8 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
+    const [probeTested, setProbeTested] = useState(false);
+    const [probeError, setProbeError] = useState('');
     const [probeResults, setProbeResults] = useState<SandboxProbeResult[]>([]);
     const loadedSandbox = useRef({ addressText: '', token: '' });
     const [sandbox, setSandbox] = useState({
@@ -120,15 +122,31 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
         return isValid;
     };
 
+    const clearProbe = () => {
+        setProbeTested(false);
+        setProbeError('');
+        setProbeResults([]);
+    };
+
     const handleTestConnection = async () => {
         setTesting(true);
+        setProbeTested(false);
+        setProbeError('');
+        setProbeResults([]);
         try {
             const data = await testSandboxConfApi({
                 endpoints: parseSandboxEndpoints(sandbox.addressText),
                 token: sandbox.token,
             });
             setProbeResults(Array.isArray(data?.results) ? data.results : []);
-        } catch {
+            setProbeTested(true);
+        } catch (error) {
+            const message = typeof error === 'string'
+                ? error
+                : error instanceof Error
+                    ? error.message
+                    : '';
+            setProbeError(message || t('sandboxTestFailed'));
             setProbeResults([]);
         } finally {
             setTesting(false);
@@ -221,9 +239,17 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                     tokenSource={sandbox.tokenSource}
                     deploymentAddress={sandbox.deploymentAddress}
                     testing={testing}
+                    tested={probeTested}
+                    error={probeError}
                     results={probeResults}
-                    onAddressChange={(value) => setSandbox((prev) => ({ ...prev, addressText: value }))}
-                    onTokenChange={(value) => setSandbox((prev) => ({ ...prev, token: value }))}
+                    onAddressChange={(value) => {
+                        clearProbe();
+                        setSandbox((prev) => ({ ...prev, addressText: value }));
+                    }}
+                    onTokenChange={(value) => {
+                        clearProbe();
+                        setSandbox((prev) => ({ ...prev, token: value }));
+                    }}
                     onTest={handleTestConnection}
                 />
             )}

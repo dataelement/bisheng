@@ -25,7 +25,7 @@ import {
   getEvaluationApi,
   getEvaluationUrlApi,
 } from "@/controllers/API/evaluate";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
 import { map } from "lodash-es";
@@ -70,12 +70,10 @@ export default function EvaluationPage() {
       title: t("prompt"),
       desc: t("evaluation.confirmDeleteEvaluation"),
       onOk(next) {
-        captureAndAlertRequestErrorHoc(
-          deleteEvaluationApi(id).then(() => {
+        return deleteEvaluationApi(id).then(() => {
             reload();
-          })
-        );
-        next();
+            next();
+          });
       },
     });
   };
@@ -185,7 +183,7 @@ export default function EvaluationPage() {
                     </TableCell>
                     <TableCell className="flex justify-end">
                       <div className="flex gap-2">
-                        {el.status !== EvaluationStatusEnum.failed && <Button size="small" variant="link" onClick={() => handleDownload(el)}>
+                        {el.status !== EvaluationStatusEnum.failed && <Button size="small" variant="link" onClick={handleUiRequest(() => handleDownload(el))}>
                           {t("evaluation.download")}
                         </Button>}
                         <Button size="small" variant="link" color="danger" onClick={() => handleDelete(el.id)}>

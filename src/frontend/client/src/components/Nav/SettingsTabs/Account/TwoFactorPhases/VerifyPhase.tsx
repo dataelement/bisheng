@@ -16,7 +16,6 @@ interface VerifyPhaseProps {
   onTokenChange: (value: string) => void;
   isVerifying: boolean;
   onNext: () => void;
-  onError: (error: Error) => void;
 }
 
 export const VerifyPhase: React.FC<VerifyPhaseProps> = ({

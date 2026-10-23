@@ -1,33 +1,29 @@
+import { useArticleList } from './useArticleList';
+import { ApiRequestFailure } from '~/components/ApiRequestFailure';
 import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { Tabs } from "@bisheng/ui";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { EmptyStateIllustration } from "~/components/illustrations";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     Article,
     Channel,
-    getArticlesApi,
-    getChannelDetailApi,
-    getChannelUnreadCountsApi,
-    type ArticleSearchResultItem
 } from "~/api/channels";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { useDebounce } from "~/hooks";
 import { ArticleCard } from "./ArticleCard";
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelSwitcher, SERIF_FONT_STACK } from "./ChannelSwitcher";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
 
-import { CopyShareLinkButton, buildClientShareUrl } from "~/components/CopyShareLinkButton";
+import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { Outlined } from "bisheng-icons";
-import { cn, copyText } from "~/utils";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { NotificationSeverity } from "~/common";
-import { useToastContext } from "~/Providers";
+import { cn } from "~/utils";
+import { useEffect, useRef, useState } from "react";
 import { useSetRecoilState } from "recoil";
 import { subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
+
+export { stripHtmlTags, stripMarkdown, mapToArticle } from './useArticleList';
 
 interface ArticleListProps {
     channel: Channel;
@@ -40,68 +36,6 @@ interface ArticleListProps {
     onOpenChannelNav?: () => void;
     onGoChannelSquare?: () => void;
     onCreateChannel?: () => void;
-}
-
-/** Strip HTML tags from a string, extracting body content first */
-export function stripHtmlTags(html: string): string {
-    if (!html) return "";
-    // Extract content within <body> tags if present
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const bodyContent = bodyMatch ? bodyMatch[1] : html;
-    return bodyContent
-        .replace(/<[^>]*>/g, "")       // Strip HTML tags
-        .replace(/&[a-zA-Z]+;/g, " ")  // Strip named entities (&nbsp; &amp; etc.)
-        .replace(/&#\d+;/g, " ")       // Strip numeric entities (&#160; etc.)
-        .replace(/\s+/g, " ")          // Collapse whitespace
-        .trim();
-}
-
-/**
- * Strip common Markdown syntax so a content preview reads as plain prose.
- * Article previews come back as Markdown; without this, link syntax like
- * `[text](https://very-long-url)` leaks the raw URL into the preview and the
- * unbreakable URL token forces `line-clamp` to wrap early, leaving the line
- * looking half-empty. No-op for plain prose (nothing to strip).
- */
-export function stripMarkdown(md: string): string {
-    if (!md) return "";
-    return md
-        .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")          // images ![alt](url) -> drop
-        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")         // links [text](url) -> text
-        .replace(/!\[[^\]]*\]?\([^)]*$/g, "")            // truncated trailing image ![alt](url… -> drop
-        .replace(/\[([^\]]*)\]\([^)]*$/g, "$1")          // truncated trailing link [text](url… -> text
-        .replace(/!?\[[^\]]*$/g, "")                     // trailing incomplete marker ![ / ![alt / [text
-        .replace(/^\s*#{1,6}\s+/gm, "")                  // ATX heading markers
-        .replace(/^\s*>+\s?/gm, "")                      // blockquote markers
-        .replace(/^\s*[-*+]\s+/gm, "")                   // unordered list markers
-        .replace(/`{1,3}([^`]*)`{1,3}/g, "$1")           // inline code / fences
-        .replace(/[*_~]{1,3}([^*_~]+)[*_~]{1,3}/g, "$1") // bold / italic / strike
-        .replace(/https?:\/\/\S+/g, "")                  // leftover bare URLs (e.g. from truncation)
-        .replace(/\s*[-–—|·]+\s*$/g, "")                 // trailing separator left after stripping a marker
-        .replace(/\s+/g, " ")                            // collapse whitespace
-        .trim();
-}
-
-/** Map backend ArticleSearchResultItem to frontend Article */
-export function mapToArticle(item: ArticleSearchResultItem, channelId: string): Article {
-    return {
-        id: item.doc_id,
-        title: item.title,
-        url: item.source_url || "",
-        content: stripMarkdown(stripHtmlTags(item.content_preview || "")),
-        content_html: item.content_html || "",
-        coverImage: item.cover_image || undefined,
-        sourceName: item.source_info?.source_name || "",
-        sourceAvatar: item.source_info?.source_icon || undefined,
-        sourceId: item.source_id,
-        channelId,
-        isRead: item.is_read ?? false,
-        publishedAt: item.publish_time || item.create_time || "",
-        createdAt: item.create_time || "",
-        highlight: item.highlight,
-        source_type: item.source_type,
-        sensitiveReview: item.sensitive_review,
-    };
 }
 
 /**
@@ -147,27 +81,19 @@ export function ArticleList({
     const isH5 = usePrefersMobileLayout();
     // Browse mode (PC, no article selected): show a two-column card grid. Reading mode: single column.
     const isGridMode = !selectedArticleId && !isH5;
-    const [articles, setArticles] = useState<Article[]>([]);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [hasMore, setHasMore] = useState(false);
-    // Start in the loading state: the initial mount fetches articles on the next
-    // render cycle, so this keeps the loading view up from first paint and stops
-    // the empty state from flashing before the first article list arrives.
-    const [loading, setLoading] = useState(true);
-    const [selectedSubChannelName, setSelectedSubChannelName] = useState<string | undefined>(undefined);
-
-    const [searchKey, setSearchQuery] = useState("");
-    const [onlyUnread, setOnlyUnread] = useState(false);
-    const [selectedSources, setSelectedSources] = useState<string[]>([]);
-    const [isListScrolling, setIsListScrolling] = useState(false);
-    const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    /** H5: title-bar channel dropdown + search input visibility; menu-triggered source filter */
-    const [mobileDropdownOpen, setMobileDropdownOpen] = useState(false);
-    const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
-    const [mobileSourceFilterOpen, setMobileSourceFilterOpen] = useState(false);
-    const searchQuery = useDebounce(searchKey, 500);
-    const queryClient = useQueryClient();
-    const { showToast } = useToastContext();
+    const {
+        articles, currentPage, hasMore,
+        loading, loadError, loadMoreError,
+        selectedSubChannelName, searchKey, setSearchQuery,
+        onlyUnread, selectedSources, isListScrolling,
+        mobileDropdownOpen, setMobileDropdownOpen, mobileSearchOpen,
+        setMobileSearchOpen, mobileSourceFilterOpen, setMobileSourceFilterOpen,
+        searchQuery, channelDetail, isChannelDetailLoading,
+        canOpenChannelShare, sourceOptions, subChannels,
+        loadArticles, handleArticleClick, handleSourcesChange,
+        handleToggleUnread, handleMobileShare, handleListScroll,
+        handleSubChannelChange,
+    } = useArticleList({ channel, onArticleSelect });
     // Publish the H5 dropdown-open state so the persistent 频道/广场 tab (rendered
     // above this view in Subscription/index) can grey itself out while it's open.
     const setMobileChannelDropdownOpen = useSetRecoilState(subscriptionMobileChannelDropdownOpenState);
@@ -178,208 +104,6 @@ export function ArticleList({
     useEffect(() => () => setMobileChannelDropdownOpen(false), [setMobileChannelDropdownOpen]);
 
 
-    // Fetch channel detail for the tooltip; isLoading drives the page-level loading state
-    const { data: channelDetail, isLoading: isChannelDetailLoading } = useQuery({
-        queryKey: ["channelDetail", channel.id],
-        queryFn: () => getChannelDetailApi(channel.id),
-        staleTime: 60_000, // Cache for 1 minute
-    });
-
-    // F040: per-sub-channel unread counts are split out of the channel detail
-    // endpoint (the preview drawer no longer pays the per-user ES cost). The
-    // in-channel view fetches them lazily here to fill the sub-channel badges;
-    // on failure the badges degrade to 0 (empty map) rather than breaking the list.
-    const { data: subChannelUnreadCounts } = useQuery({
-        queryKey: ["channelUnreadCounts", channel.id],
-        queryFn: () => getChannelUnreadCountsApi(channel.id),
-        staleTime: 30_000,
-        // Best-effort badges: a failed unread fetch must not surface an error toast.
-        retry: false,
-        placeholderData: {} as Record<string, number>,
-    });
-    // Share entry is available to anyone who can see the channel (creator/admin or subscriber),
-    // regardless of visibility — subscribers should always be able to copy/share the link.
-    const canOpenChannelShare = true;
-
-    // Derive source options directly from channelDetail.source_infos (refreshes after channel edit)
-    const sourceOptions = useMemo(() => {
-        const infos = channelDetail?.source_infos;
-        if (!infos?.length) return [];
-        return infos
-            .filter(s => s.id)
-            .map(s => ({ id: s.id, label: s.source_name || s.name || '' }));
-    }, [channelDetail?.source_infos]);
-
-    const subChannels = useMemo(() => {
-        const unreadByName = subChannelUnreadCounts || {};
-        return (channelDetail?.filter_rules || [])
-            .filter(fr => fr.channel_type === "sub" && fr.name)
-            .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name!, unreadCount: unreadByName[fr.name!] ?? 0 }))
-            .sort((a, b) => {
-                const getPriority = (name: string) => {
-                    const ch = name.charAt(0);
-                    if (/[a-zA-Z]/.test(ch)) return 0;
-                    if (/\d/.test(ch)) return 1;
-                    return 2;
-                };
-                const pa = getPriority(a.name);
-                const pb = getPriority(b.name);
-                if (pa !== pb) return pa - pb;
-                return a.name.localeCompare(b.name, "zh-CN");
-            });
-    }, [channelDetail?.filter_rules, subChannelUnreadCounts]);
-
-    const PAGE_SIZE = 20;
-
-    const loadArticles = useCallback(async (page: number) => {
-        if (!channel) return;
-
-        setLoading(true);
-        try {
-            const response = await getArticlesApi({
-                channelId: channel.id,
-                subChannelName: selectedSubChannelName,
-                keyword: searchQuery || undefined,
-                sourceIds: selectedSources.length > 0 ? selectedSources : undefined,
-                onlyUnread: onlyUnread || undefined,
-                page,
-                pageSize: PAGE_SIZE,
-            });
-
-            const mapped = (response.data || []).map(item => mapToArticle(item, channel.id));
-
-            if (page === 1) {
-                setArticles(mapped);
-            } else {
-                setArticles(prev => [...prev, ...mapped]);
-            }
-
-            const total = response.total || 0;
-            setHasMore(page * PAGE_SIZE < total);
-            setCurrentPage(page);
-        } catch (e) {
-            console.error("Failed to load articles:", e);
-            if (page === 1) setArticles([]);
-        } finally {
-            setLoading(false);
-        }
-        // Note: sourceOptions is NOT a dependency here to avoid re-fetching when sources load
-    }, [channel?.id, selectedSubChannelName, searchQuery, selectedSources, onlyUnread]);
-
-    // 统一的频道切换 + 筛选加载 effect
-    // 用 ref 检测频道是否切换，切换时重置状态再加载
-    const prevChannelIdRef = useRef<string | undefined>(undefined);
-    useEffect(() => {
-        if (!channel) return;
-
-        // 检测是否为频道切换
-        const isChannelSwitch = channel.id !== prevChannelIdRef.current;
-        if (isChannelSwitch) {
-            prevChannelIdRef.current = channel.id;
-            // Enter the loading state and drop the previous channel's articles right away.
-            // The actual fetch happens on the next render (after the filter resets below),
-            // so without this the list would briefly show the old/empty state during the gap.
-            setLoading(true);
-            setArticles([]);
-            setCurrentPage(1);
-            setSearchQuery("");
-            const savedSubName = localStorage.getItem(`selectedSubChannelName-${channel.id}`) || undefined;
-            setSelectedSubChannelName(savedSubName);
-            setSelectedSources([]);
-            setOnlyUnread(false);
-            onArticleSelect(null);
-            // 频道切换时不在这里加载，等 React 下一轮渲染
-            // 下一轮 selectedSubChannelName/selectedSources 变化后本 effect 会自动触发
-            return;
-        }
-
-        // 筛选条件变化或初始加载
-        loadArticles(1);
-    }, [channel?.id, searchQuery, selectedSources, onlyUnread, selectedSubChannelName]);
-
-    // Default the source filter to "all selected" once a channel's sources have loaded.
-    // Runs once per channel; afterwards the user can freely deselect — down to the empty
-    // state, which the picker blocks on close (requires at least one source).
-    const sourcesInitializedRef = useRef<string | undefined>(undefined);
-    useEffect(() => {
-        if (!channel || sourceOptions.length === 0) return;
-        if (sourcesInitializedRef.current === channel.id) return;
-        sourcesInitializedRef.current = channel.id;
-        setSelectedSources(sourceOptions.map(o => o.id));
-    }, [channel?.id, sourceOptions]);
-
-    // Optimistically mark the article as read in local state when selected.
-    // The backend already marks it read when the detail API is called.
-    const handleArticleClick = useCallback((article: Article | null) => {
-        if (article?.sensitiveReview?.can_view === false) {
-            showToast({
-                message: article.sensitiveReview.auto_reply || localize("com_subscription.sensitive_review_blocked"),
-                severity: NotificationSeverity.WARNING,
-            });
-            return;
-        }
-        if (article && !article.isRead) {
-            setArticles(prev =>
-                prev.map(a => a.id === article.id ? { ...a, isRead: true } : a)
-            );
-            // Optimistically decrement unread badge in sidebar channel cache
-            const decrementUnread = (old: Channel[] | undefined) => {
-                if (!old) return old;
-                return old.map(c =>
-                    c.id === channel.id && c.unreadCount > 0
-                        ? { ...c, unreadCount: c.unreadCount - 1 }
-                        : c
-                );
-            };
-            // Update all cached query variants for both created and subscribed lists
-            queryClient.setQueriesData<Channel[]>(
-                { queryKey: ["channels", "created"] },
-                decrementUnread
-            );
-            queryClient.setQueriesData<Channel[]>(
-                { queryKey: ["channels", "subscribed"] },
-                decrementUnread
-            );
-        }
-        onArticleSelect(article);
-    }, [onArticleSelect, channel.id, queryClient, showToast, localize]);
-
-    const handleSourcesChange = (newValue: string[]) => {
-        setSelectedSources(newValue);
-    };
-
-    const handleToggleUnread = () => {
-        setOnlyUnread(!onlyUnread);
-    };
-
-    /** H5: copy share link from the page-level actions menu (mirrors CopyShareLinkButton). */
-    const handleMobileShare = useCallback(async () => {
-        const url = buildClientShareUrl(`/channel/share/${channel.id}`);
-        try {
-            await copyText(url);
-            showToast({
-                message: localize("com_subscription.share_link_copied"),
-                status: "success",
-            });
-        } catch {
-            showToast({
-                message: localize("com_subscription.copy_failed_retry"),
-                status: "warning",
-            });
-        }
-    }, [channel.id, localize, showToast]);
-
-    const handleListScroll = () => {
-        setIsListScrolling(true);
-        if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current);
-        listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500);
-    };
-
-    // 处理子频道切换（改为 name 模式）
-    const handleSubChannelChange = (subChannelName: string) => {
-        localStorage.setItem(`selectedSubChannelName-${channel.id}`, subChannelName === "all" ? "" : subChannelName);
-        setSelectedSubChannelName(subChannelName === "all" ? undefined : subChannelName);
-    };
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
@@ -687,12 +411,16 @@ export function ArticleList({
                     // PC keeps 40px gutters whether grid or preview-open; H5 uses 16px.
                     isH5 ? "px-4" : "px-10",
                 )}>
+                    {(loadError || loadMoreError) ? <ApiRequestFailure
+                        error={loadError || loadMoreError}
+                        onRetry={() => loadArticles(loadError ? 1 : currentPage + 1)}
+                    /> : null}
                     {/* Show loading spinner while channel detail or initial article list is loading */}
                     {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
                         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-text-3">
                             <LoadingIcon className="size-20 text-primary" />
                         </div>
-                    ) : articles.length === 0 ? (
+                    ) : articles.length === 0 ? (!loadError && (
                         <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
                             {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
                                 <>
@@ -708,10 +436,10 @@ export function ArticleList({
                                 </>
                             )}
                         </div>
-                    ) : (
+                    )) : (
                         <InfiniteScroll
                             loadMore={() => loadArticles(currentPage + 1)}
-                            hasMore={hasMore}
+                            hasMore={hasMore && !loadError && !loadMoreError}
                             isLoading={loading}
                             emptyText={localize("com_subscription.all_messages_are_here")}
                             className=""

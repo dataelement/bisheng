@@ -23,29 +23,33 @@ export default frontendConfig({
       {
         name: 'react-query',
         message:
-          'react-query v3 is unmaintained and frozen; migration to @tanstack/react-query is pending (ledger #6). Do not add new usage.',
+          'Legacy react-query v3 has been removed. Use @tanstack/react-query from the workspace catalog.',
       },
       {
         name: 'xlsx',
         message:
-          'xlsx has known vulnerabilities (prototype pollution / ReDoS) and is frozen pending replacement (ledger #7). Do not add new usage.',
+          'Direct xlsx imports remain frozen (ledger #7). Reuse @bisheng/file-viewers for previews; shared SheetJS versions must come from the workspace catalog.',
       },
       {
         name: 'react-color',
         message:
-          'react-color is deprecated and frozen (ledger #8). Do not add new usage.',
+          'Existing react-color pickers remain frozen pending shared design-library coverage (ledger #8). Do not add new usage.',
       },
       {
         name: 'react-beautiful-dnd',
         message:
-          'react-beautiful-dnd is deprecated upstream (no React 18 StrictMode support) and frozen; use @hello-pangea/dnd when migrating (ledger #8).',
+          'react-beautiful-dnd was removed (ledger #8). Use @hello-pangea/dnd from the workspace catalog for list sorting.',
       },
     ],
     patterns: [
       {
+        group: ['react-beautiful-dnd/*'],
+        message: 'Use @hello-pangea/dnd from the workspace catalog for list sorting.',
+      },
+      {
         group: ['react-query/*'],
         message:
-          'react-query v3 is unmaintained and frozen (ledger #6). Do not add new usage.',
+          'Legacy react-query v3 has been removed. Use @tanstack/react-query from the workspace catalog.',
       },
       {
         group: ['xlsx-populate', 'xlsx-populate/*'],

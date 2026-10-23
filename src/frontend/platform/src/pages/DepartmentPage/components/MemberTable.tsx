@@ -13,7 +13,7 @@ import {
   type GlobalMemberSearchRow,
 } from "@/controllers/API/department";
 import { disableUserApi } from "@/controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type {
   DepartmentAdmin,
   DepartmentMember,
@@ -92,7 +92,7 @@ export function useMemberTableController({
       return;
     }
     let cancelled = false;
-    captureAndAlertRequestErrorHoc(getDepartmentPathTreeApi(internalId)).then((res) => {
+    getDepartmentPathTreeApi(internalId).then((res) => {
       if (cancelled) return;
       const pruned = (res as DepartmentSearchResult | null) ?? null;
       const chain: DepartmentTreeNode[] = [];
@@ -102,7 +102,7 @@ export function useMemberTableController({
         cur = cur.children?.[0];
       }
       setAncestorDepartments(chain.slice(0, -1));
-    });
+    }).catch(showApiError);
     return () => {
       cancelled = true;
     };
@@ -111,7 +111,7 @@ export function useMemberTableController({
   const loadAdminSummary = useCallback(() => {
     let cancelled = false;
     const run = async () => {
-      const direct = await captureAndAlertRequestErrorHoc(getDepartmentAdminsApi(deptId));
+      const direct = await getDepartmentAdminsApi(deptId);
       if (cancelled) return;
       const directRows = Array.isArray(direct) ? direct : [];
       const directUserIds = new Set(directRows.map((a) => Number(a.user_id)));
@@ -139,7 +139,7 @@ export function useMemberTableController({
       setDirectAdmins(directRows);
       setInheritedAdmins(inheritedRows);
     };
-    void run();
+    void run().catch(showApiError);
     return () => {
       cancelled = true;
     };
@@ -155,12 +155,12 @@ export function useMemberTableController({
     if (isPrimaryFilter !== "all") {
       params.is_primary = parseInt(isPrimaryFilter, 10);
     }
-    captureAndAlertRequestErrorHoc(getDepartmentMembersApi(deptId, params)).then((res) => {
+    getDepartmentMembersApi(deptId, params).then((res) => {
       if (res) {
         setMembers(res.data);
         setTotal(res.total);
       }
-    });
+    }).catch(showApiError);
   }, [deptId, keyword, isPrimaryFilter, memberScope]);
 
   useEffect(() => {
@@ -187,13 +187,12 @@ export function useMemberTableController({
       return;
     }
     setGlobalLoading(true);
-    captureAndAlertRequestErrorHoc(searchGlobalMembersApi({ keyword: kw, page: globalPage, limit: 20 })).then((res) => {
-      setGlobalLoading(false);
+    searchGlobalMembersApi({ keyword: kw, page: globalPage, limit: 20 }).then((res) => {
       if (res) {
         setGlobalRows(res.data);
         setGlobalTotal(res.total);
       }
-    });
+    }).catch(showApiError).finally(() => setGlobalLoading(false));
   }, [keyword, globalPage]);
 
   useEffect(() => {
@@ -236,17 +235,15 @@ export function useMemberTableController({
     (m: DepartmentMember, enabled: boolean) => {
       if (isArchived) return;
       setMembers((list) => list.map((x) => (x.user_id === m.user_id ? { ...x, enabled } : x)));
-      captureAndAlertRequestErrorHoc(
-        disableUserApi(m.user_id, enabled ? 0 : 1).then(() => {
+      disableUserApi(m.user_id, enabled ? 0 : 1).then(() => {
           notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t(enabled ? "bs:department.accountEnabledToast" : "bs:department.accountDisabledToast") ?? '') });
           onChanged();
-        }),
-      ).then((res) => {
-        // HoC returns false on error — revert optimistic toggle by reloading.
-        if (res === false) loadMembers();
+        }).catch(error => {
+        setMembers(list => list.map(x => x.user_id === m.user_id ? { ...x, enabled: m.enabled } : x));
+        showApiError(error);
       });
     },
-    [isArchived, loadMembers, onChanged, t],
+    [isArchived, onChanged, t],
   );
 
   const handleAdded = useCallback(() => {

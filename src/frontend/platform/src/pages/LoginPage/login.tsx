@@ -20,7 +20,7 @@ import { consumeLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { showApiError } from "../../controllers/request";
 import LoginBridge from "./loginBridge";
 import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from "./utils";
 
@@ -150,8 +150,7 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
         // });
 
         const encryptPwd = shouldUseLdap ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd);
-        captureAndAlertRequestErrorHoc(
-            (shouldUseLdap
+        (shouldUseLdap
                 ? ldapLoginApi(personId, encryptPwd)
                 : loginApi(personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
             ).then((res: any) => {
@@ -180,16 +179,15 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                         location.href = `${__APP_ENV__.BASE_URL}/admin`;
                     }
                 }
-            }),
-            (error) => {
-                if (error?.code === 10601) {
+            }).catch((error) => {
+                if ((error?.status_code ?? error?.code) === 10601) {
                     // 密码过期
                     localStorage.setItem("account", personId);
                     navigate("/reset", { state: { noback: true } });
-                    return true; // Skip the default error toast; resetPwd page shows its own
+                    return;
                 }
-            },
-        );
+                showApiError(error);
+            });
 
         fetchCaptchaData();
     };
@@ -227,16 +225,14 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
             return toast.show({ type: "warning", message: [String(`${t("prompt")}`), error.filter(Boolean).join('\n')].filter(Boolean).join('\n') });
         }
         const encryptPwd = await handleEncrypt(pwd);
-        captureAndAlertRequestErrorHoc(
-            registerApi(userName, personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(
+        registerApi(userName, personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(
                 (res) => {
                     // setSuccessData({ title: t('login.registrationSuccess') })
                     toast.show({ type: "success", message: [String(`${t("prompt")}`), ([t("login.registrationSuccess")]).filter(Boolean).join('\n')].filter(Boolean).join('\n') });
                     pwdRef.current.value = "";
                     setShowLogin(true);
                 },
-            ),
-        );
+            ).catch(showApiError);
 
         fetchCaptchaData();
     };

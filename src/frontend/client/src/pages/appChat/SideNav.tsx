@@ -1,3 +1,4 @@
+import { ApiRequestFailure } from '~/components/ApiRequestFailure';
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { ChevronLeft } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -81,6 +82,9 @@ export function SideNav() {
 
     // Sidebar hook for conversation list and actions
     const {
+        listError,
+        retryConversations,
+        loading,
         groups,
         activeConversationId,
         switchConversation,
@@ -190,13 +194,14 @@ export function SideNav() {
                     'touch-mobile:pt-3',
                 )}
             >
-                {groups.length === 0 ? (
+                {listError ? <ApiRequestFailure error={listError} onRetry={retryConversations} /> : null}
+                {groups.length === 0 ? (!listError && !loading && (
                     <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
                         <p className="text-center text-[14px] leading-[19.5px] text-text-3">
                             {localize('com_app_chat_sidebar_empty')}
                         </p>
                     </div>
-                ) : (
+                )) : (
                     groups.map((group, groupIdx) => (
                         <div key={groupIdx} className="flex flex-col">
                             {/* Time label */}
@@ -218,9 +223,10 @@ export function SideNav() {
                                                     setSidebarVisible(false);
                                                 }
                                             }}
-                                            onRenameSuccess={() => fetchConversations()}
+                                            onRenameSuccess={() => { void fetchConversations().catch(() => { /* The list keeps its retry state. */ }); }}
                                             onDeleteSuccess={async () => {
-                                                const list = await fetchConversations();
+                                                const list = await fetchConversations().catch(() => null);
+                                                if (!list) return;
                                                 if (!isActive) return;
                                                 if (list.length > 0) {
                                                     // Jump to the now-most-recent conversation

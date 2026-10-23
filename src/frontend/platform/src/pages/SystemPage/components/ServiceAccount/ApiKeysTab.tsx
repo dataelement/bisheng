@@ -20,7 +20,7 @@ listServiceAccountKeysPageApi,
 revokeAllServiceAccountKeysApi,
 revokeServiceAccountKeyApi,
 } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type {
   ApiKeyIssued,
   ApiKeyItem,
@@ -66,11 +66,11 @@ export function ApiKeysTab({
 
   useEffect(() => {
     setLoadingScopes(true)
-    void captureAndAlertRequestErrorHoc(listOpenApiScopesApi())
+    void listOpenApiScopesApi()
       .then((catalog) => {
         if (catalog) setScopes(catalog.scopes)
       })
-      .finally(() => setLoadingScopes(false))
+      .catch(showApiError).finally(() => setLoadingScopes(false))
   }, [])
 
   const handleRevoke = (keyId: number) => {
@@ -79,16 +79,14 @@ export function ApiKeysTab({
       desc: t("openApiManagement.keys.revokeConfirm"),
       okTxt: t("openApiManagement.actions.revoke"),
       onOk: (close) => {
-        close()
         setLoading(true)
-        void captureAndAlertRequestErrorHoc(
-          revokeServiceAccountKeyApi(serviceAccountId, keyId),
-        )
+        return revokeServiceAccountKeyApi(serviceAccountId, keyId)
           .then(async (result) => {
             if (!result) return
             notification.open({ type: "success", title: String(t("openApiManagement.keys.revokeConfirmTitle") ?? ''), description: String(t("openApiManagement.feedback.keyRevoked") ?? '') })
             await loadKeys()
             onKeysChanged?.()
+            close()
           })
           .finally(() => setLoading(false))
       },
@@ -101,11 +99,8 @@ export function ApiKeysTab({
       desc: t("openApiManagement.keys.revokeAllConfirm"),
       okTxt: t("openApiManagement.actions.revokeAll"),
       onOk: (close) => {
-        close()
         setLoading(true)
-        void captureAndAlertRequestErrorHoc(
-          revokeAllServiceAccountKeysApi(serviceAccountId),
-        )
+        return revokeAllServiceAccountKeysApi(serviceAccountId)
           .then(async (result) => {
             if (!result) return
             const { revoked } = result
@@ -114,6 +109,7 @@ export function ApiKeysTab({
               }) ?? '') })
             await loadKeys()
             onKeysChanged?.()
+            close()
           })
           .finally(() => setLoading(false))
       },
