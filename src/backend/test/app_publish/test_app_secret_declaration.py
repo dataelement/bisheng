@@ -4,6 +4,7 @@ import pytest
 import yaml
 
 from bisheng.common.errcode.app_publish import AppSecretReferenceUnsupportedError
+from test.app_publish.test_app_secret_repository import secret_repository as secret_repository
 
 
 def body(capabilities):
@@ -61,3 +62,30 @@ def test_secret_name_diff_has_no_values():
 
     result = VersionDiffService.secret_reference_diff({"secrets": [{"name": "A"}]}, {"secrets": [{"name": "B"}]})
     assert result == {"added": ["B"], "removed": ["A"]}
+
+
+async def test_approval_summary_contains_only_names_and_missing_status(
+    secret_repository, app_factory, owner_user, monkeypatch
+):
+    """AC-69, AC-72, AC-84: the actual approval summary consumes secret status."""
+    from bisheng.app_publish.application import runtime_secrets
+    from bisheng.app_publish.domain.services import publish_approval_service
+    from bisheng.app_publish.domain.services.app_secret_service import AppSecretService
+
+    repo, cipher = secret_repository
+    app, _ = await app_factory()
+    service = AppSecretService(repository=repo, cipher=cipher)
+    await service.save(app.id, "READY_KEY", value="never-expose-value", expected_revision=0, actor=owner_user.payload)
+
+    async def summary(app_id, declaration):
+        return await service.reference_status(app_id, declaration)
+
+    monkeypatch.setattr(runtime_secrets, "secret_reference_status", summary)
+    rows = await publish_approval_service._capabilities_payload(
+        {"secrets": [{"name": "READY_KEY"}, {"name": "MISSING_KEY"}]}, tenant_id=app.tenant_id, app_id=app.id
+    )
+    assert rows == [
+        {"kind": "secret", "name": "MISSING_KEY", "revoked": False, "reason": "missing_value"},
+        {"kind": "secret", "name": "READY_KEY", "revoked": False, "reason": "ok"},
+    ]
+    assert "never-expose-value" not in str(rows)

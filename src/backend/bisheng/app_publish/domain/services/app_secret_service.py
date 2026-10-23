@@ -139,7 +139,7 @@ class AppSecretService:
             row = await self.repo.config(session, app.id)
             entries = self._entries(row, app)
             current = await self.repo.version(session, app.id, app.current_version_id)
-            pending = await self.repo.version(session, app.id, app.pending_version_id)
+            pending = await self.repo.pending_version(session, app)
             approved = set(secret_names(current.capabilities if current else {}))
             proposed = set(secret_names(pending.capabilities if pending else {}))
             names = approved | proposed | (set(entries) if owner else set())
@@ -189,6 +189,24 @@ class AppSecretService:
                 "items": items,
                 "runtime": runtime,
             }
+
+    async def reference_status(self, app_id, declaration):
+        """Trusted declaration summaries only: never return values or owner masks."""
+        names = secret_names(declaration)
+        if not names:
+            return []
+        async with self.repo.transaction() as session:
+            app = await self.repo.app(session, app_id)
+            entries = self._entries(await self.repo.config(session, app.id), app)
+            return [
+                {
+                    "kind": "secret",
+                    "name": name,
+                    "revoked": False,
+                    "reason": "ok" if entries.get(name, {}).get("value", "") != "" else "missing_value",
+                }
+                for name in names
+            ]
 
     async def formal_snapshot(self, app, approved_version, *, session, expected_revision=None):
         from bisheng.core.context.tenant import get_current_tenant_id

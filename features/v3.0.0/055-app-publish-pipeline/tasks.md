@@ -1201,3 +1201,82 @@ Spec Discovery N4 原定「密钥引用随 PRD-2」，2026-10-09 PRD-1 评审改
 窄适配文件：T088/T092 同时消费新增 `runtime_secret_diagnostics.py`；T095 的持久删除清理接入 `runtime_cleanup_service.py`（沿既有 cleanup_status，不新增清理调度器）。独立源码包无需 Alembic create-table revision。幂等请求 key 使用 request_id 的 SHA-256 作为有界命名键（不是值摘要），原确认参数摘要与回放规则不变。
 
 定向证据：新增 backend 54 passed；manager 脱敏 3 passed；前端 hook/页面 4 passed；版本 diff 旧响应断言修订后单用例通过。非全量测试。Platform 类型检查报告两个既有问题（缺少 @hello-pangea/dnd 声明、clientVoiceDraft.test.tsx 参数数目）；未触及本功能文件。变更文件 ESLint 通过，Python Ruff/架构守卫持续核对。
+
+## 2026-10-24 补齐真实声明消费方（T109–T119）
+
+这些任务兑现已确认 AC-67、AC-69、AC-72、AC-84，不新增需求或审批流程。任务清单复审：作用域、生产消费、依赖与 AC 追溯通过；测试仅针对本次接线，完整回归仍待所有功能开发完成后。
+
+- [x] **T109** — 待审批引用与审批摘要用例
+  **类型**：测试
+  **文件**：`src/backend/test/app_publish/test_app_secret_service.py`、`src/backend/test/app_publish/test_app_secret_declaration.py`
+  **依赖**：T077
+  **覆盖 AC:** AC-67, AC-69, AC-72, AC-84
+
+- [x] **T110** — 识别真实待审批版本与安全引用状态
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/repositories/app_secret_repository.py`、`src/backend/bisheng/app_publish/domain/services/app_secret_service.py`
+  **依赖**：T109
+  **覆盖 AC:** AC-67, AC-72, AC-84
+
+- [x] **T111** — 公共只读协议接入审批快照
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/application/runtime_secrets.py`、`src/backend/bisheng/app_publish/domain/services/publish_approval_service.py`
+  **依赖**：T110
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T112** — 发布状态与 CLI 轮询消费引用状态
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/services/publish_status_service.py`、`src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py`
+  **依赖**：T111
+  **覆盖 AC:** AC-72, AC-84
+
+- [x] **T113** — 发布页能力摘要展示与用例
+  **类型**：前端 Platform
+  **文件**：`src/frontend/platform/src/pages/BuildPage/hostedApp/publish/CapabilityListCard.test.tsx`、`src/frontend/platform/src/pages/BuildPage/hostedApp/publish/CapabilityListCard.tsx`
+  **依赖**：T112
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T114** — 客户端审批卡提交时状态用例
+  **类型**：测试
+  **文件**：`src/frontend/client/src/components/approval/AppPublishDetailPanel.test.tsx`
+  **依赖**：T111
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T115** — 沿既有能力列表呈现名称和提交时状态
+  **类型**：前端 Client
+  **文件**：`src/frontend/client/src/components/approval/AppPublishDetailPanel.tsx`
+  **依赖**：T114
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T116** — 审批摘要中英文文案
+  **类型**：基础设施
+  **文件**：`src/frontend/client/src/locales/en/translation.json`、`src/frontend/client/src/locales/zh-Hans/translation.json`
+  **依赖**：T115
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T117** — 审批摘要日文与三语同键检查
+  **类型**：基础设施
+  **文件**：`src/frontend/client/src/locales/ja/translation.json`
+  **依赖**：T116
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T118** — CLI 名称缺值提醒去重用例
+  **类型**：测试
+  **文件**：`src/bisheng-cli/tests/test_secret_warnings.py`
+  **依赖**：T112
+  **覆盖 AC:** AC-72
+
+- [x] **T119** — 缺值提醒与随源码重建 wheel
+  **类型**：CLI
+  **文件**：`src/bisheng-cli/bisheng_cli/commands/deploy.py`
+  **依赖**：T118
+  **覆盖 AC:** AC-72
+
+T119 的 wheel/manifest 是 scripts/pack_cli_wheel.sh 的派生产物，须一并提交；不发布外部包。T114 用例已编写，但执行因本机 canvas.node 缺失阻断，该项不计入通过数。T106/T107 保留未完成状态，未以新任务替代真实部署与最终合入审查。
+
+- [x] **T120** — 真实 CLI 轮询 API 定向补验
+  **类型**：测试
+  **文件**：`src/backend/test/app_publish/test_app_secret_api.py`
+  **依赖**：T112
+  **覆盖 AC:** AC-72, AC-84
+  **结果**：公开 /api/v2 轮询入口返回正确的名称与缺值元数据且不含保存值；1 例通过。

@@ -88,3 +88,48 @@ async def test_delete_online_reference_requires_confirmation_and_deleted_app_can
         await service.save(app.id, "TOKEN", value="x", expected_revision=2, actor=owner_user.payload)
     await service.delete_for_app(app.id)
     assert await repo.read_config(app.id) is None
+
+
+async def test_saved_empty_value_has_metadata_and_can_be_deleted(secret_repository, app_factory, owner_user):
+    """AC-67, AC-79: an empty saved value is missing for injection but remains removable."""
+    from bisheng.app_publish.domain.services.app_secret_service import AppSecretService
+
+    repo, cipher = secret_repository
+    app, _ = await app_factory()
+    service = AppSecretService(repository=repo, cipher=cipher)
+    saved = await service.save(app.id, "EMPTY", value="", expected_revision=0, actor=owner_user.payload)
+    assert saved["present"] is False
+    state = await service.get(app.id, actor=owner_user.payload)
+    item = next(item for item in state["items"] if item["name"] == "EMPTY")
+    assert item["present"] is False and item["mask"] is None and item["updated_at"]
+    assert item["approved_reference"] is False and item["pending_reference"] is False
+    await service.delete(app.id, "EMPTY", expected_revision=state["revision"], actor=owner_user.payload)
+    final = await service.get(app.id, actor=owner_user.payload)
+    assert final["revision"] == 2 and final["items"] == []
+
+
+async def test_pending_approval_declaration_visible_before_pending_online_pointer(
+    secret_repository, app_factory, deployment_factory, owner_user
+):
+    """AC-67: approval-time version references are shown before go-live approval."""
+    from bisheng.app_publish.domain.services.app_secret_service import AppSecretService
+    from bisheng.database.models.app_version import AppVersion
+
+    repo, cipher = secret_repository
+    app, current = await app_factory()
+    async with repo.transaction() as session:
+        pending = AppVersion(
+            **{
+                **{key: getattr(current, key) for key in AppVersion.model_fields},
+                "id": "approval-version",
+                "version_no": 2,
+                "capabilities": {"secrets": [{"name": "APPROVAL_KEY"}]},
+                "terminal_state": None,
+            }
+        )
+        session.add(pending)
+    await deployment_factory(app_id=app.id, version_id=pending.id, status="waiting_approval")
+    state = await AppSecretService(repository=repo, cipher=cipher).get(app.id, actor=owner_user.payload)
+    assert app.pending_version_id is None
+    item = next(item for item in state["items"] if item["name"] == "APPROVAL_KEY")
+    assert item["pending_reference"] and not item["present"]

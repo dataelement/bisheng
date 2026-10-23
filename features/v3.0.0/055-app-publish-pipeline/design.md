@@ -147,7 +147,7 @@ sequenceDiagram
 |---|---|
 | GET `/deploy-limits` | 返回部署实际 `max_package_mb/max_unpacked_mb/max_package_entries`，CLI 不写死上限 |
 | POST `/deploy` | multipart package/app_id/confirm_schema_change；返回 deployment_id/app_id/version_id；同步失败不进入轮询阶段 |
-| GET `/deployments/{deployment_id}` | stage/status/failure/app_id/version_no/approval/app_state/pending_reason 等当前 service 投影；CLI 只读状态，不自行合成成功入口 |
+| GET `/deployments/{deployment_id}` | stage/status/failure/app_id/version_no/approval/app_state/pending_reason 及 secret_references（name/kind/reason/revoked，无值）等当前 service 投影；CLI 只读状态，不自行合成成功入口 |
 | GET `/{app_id}/logs` | tail/since/keyword；转同一个日志服务并增加 resource owner/租户限制，不因 key 的管理员身份放大范围 |
 
 **② 发布状态只读接口**：`GET /api/v1/apps/{app_id}/publish-status` 由 PublishStatusService 同时供发布页与工具适配消费；app_state/pending_reason、current/pending version、deployment、approval、tier、capabilities、schema_change、can 是不同维度，缺失 row 不假造成功。手动上线/撤回仍服务端重新检查。
@@ -349,3 +349,14 @@ CLI 不接收值、不提供写密钥命令；manifest 带合法名称可部署�
 - `RuntimeCleanupService` 对删除应用的配置资产沿用 storage_pending；业务 deleted 提交前不标清理完成，删除钩子在提交后尝试清理。
 - request_id 经 SHA-256 形成有界幂等 key；不包含环境变量值或其摘要。
 - 当前只有定向本地/模拟结果；真实 Docker/K8s 新功能 E2E 尚未执行。按用户最新安排，完整回归待全部功能完成后进行。
+
+### 2026-10-24 空值与失败提示补记
+
+空字符串表示缺值，但仍有保存条目；owner 以逐项 updated_at 识别可删除资产，声明存在但从未配置不显示删除入口。失败重建进入 maintenance 后直接重复重建的体验暂缓，当前提示使用既有下线/重新上线入口；该恢复组合待集中 E2E，不计入本地已验证能力。
+
+### 2026-10-24 声明呈现接线补记
+
+- 审批未完成时 app.pending_version_id 尚未设置；配置区通过同租户的活动 AppDeployment 找到已记录待审批版本，避免把“待审批”和“批准但待上线”混为一谈。
+- `reference_status` 仅返回已声明名及 ok/missing_value；`publish_approval_service` 将结果冻结到既有 capabilities 数组，客户端以提交时状态呈现。发布状态实时消费同一只读协议。
+- v2 发布轮询新增 secret_references 元数据，CLI 对缺值名称每次命令仅提醒一次，不因缺值直接拒绝部署，不授予密钥管理接口。CLI wheel 与后端分发清单随源码重建，SDK 分发信息保留。
+- 客户端审批卡新增用例受 canvas.node 缺失阻断；静态 lint 通过。该环境问题列入提测限制，不为此改动依赖树或扩大测试。

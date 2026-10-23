@@ -2680,5 +2680,12 @@
     "loading": "Loading…",
     "clear": "Clear",
     "remove": "Remove"
+  },
+  "approval": {
+    "app_environment": {
+      "type": "Environment variable",
+      "missing": "Not configured at submission",
+      "present": "Configured at submission"
+    }
   }
 }

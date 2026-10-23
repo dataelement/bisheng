@@ -449,10 +449,12 @@ def _follow(client: PlatformClient, emitter: Emitter, args: Any, state: dict[str
     polls = 0
     started = _monotonic()
     last_stage: str | None = None
+    warned_references: set[str] = set()
 
     while True:
         payload = client.get_json(path) or {}
         _absorb(payload, state)
+        _emit_secret_warnings(payload, emitter, warned_references)
         stage = payload.get("stage")
         status = payload.get("status")
         failure = payload.get("failure")
@@ -485,12 +487,33 @@ def _follow(client: PlatformClient, emitter: Emitter, args: Any, state: dict[str
         interval = next_interval(interval, polls)
 
 
+def _emit_secret_warnings(payload: dict[str, Any], emitter: Emitter, seen: set[str]) -> None:
+    """Only bounded names and presence metadata may reach the terminal."""
+    rows = payload.get("secret_references")
+    if not isinstance(rows, list):
+        return
+    for row in rows[:64]:
+        if not isinstance(row, dict) or row.get("reason") != "missing_value":
+            continue
+        name = row.get("name")
+        if (
+            not isinstance(name, str)
+            or not name.isascii()
+            or not name.isidentifier()
+            or len(name) > 128
+            or name in seen
+        ):
+            continue
+        seen.add(name)
+        emitter.warn(f"环境变量 {name} 尚未配置；预检和预览只获得空值，请在应用发布设置中保存。")
+
+
 def _absorb(payload: dict[str, Any], state: dict[str, Any]) -> None:
     # ``entry_url`` is absorbed here as of the F055 write-back: it used to exist
     # only on the POST response, where a first deploy is still a draft and the
     # value was almost always null exactly when it mattered. Now every poll
     # carries it, so `--wait` can print a real address on success.
-    for key in ("stage", "app_state", "pending_reason", "approval", "entry_url"):
+    for key in ("stage", "app_state", "pending_reason", "approval", "entry_url", "secret_references"):
         if payload.get(key) is not None:
             state[key] = payload[key]
     if payload.get("app_id"):

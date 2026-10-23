@@ -65,7 +65,7 @@ export function AppSecretSettings({ appId, canManage }: AppSecretSettingsProps) 
         </div>
         {canManage && <div className="flex gap-2">
           <Button size="small" variant="text" onClick={() => setEditing(item.name)} disabled={state.busy || editing !== undefined}>{t('hostedApp.secrets.replace')}</Button>
-          {item.present && <Button size="small" variant="text" color="danger" onClick={() => handleDelete(item.name)} disabled={state.busy}>{t('hostedApp.secrets.remove')}</Button>}
+          {(item.present || item.updated_at) && <Button size="small" variant="text" color="danger" onClick={() => handleDelete(item.name)} disabled={state.busy}>{t('hostedApp.secrets.remove')}</Button>}
         </div>}
       </div>)}
       {canManage && editing !== undefined && <AppSecretEditor key={`${appId}:${editing ?? 'new'}`} name={editing} busy={state.busy}

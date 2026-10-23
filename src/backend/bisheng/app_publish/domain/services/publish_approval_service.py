@@ -340,7 +340,7 @@ async def _build_payload(
         # card must keep describing *the release that was submitted* even after
         # the declaration changes underneath it.
         "capabilities": await _capabilities_payload(
-            manifest.get("capabilities"), tenant_id=int(deployment.tenant_id or app.tenant_id or 0)
+            manifest.get("capabilities"), tenant_id=int(deployment.tenant_id or app.tenant_id or 0), app_id=app.id
         ),
         "visibility_snapshot": [],
         # AC-09 / AC-24: the confirmed structure change, ``None`` when the
@@ -352,7 +352,7 @@ async def _build_payload(
     }
 
 
-async def _capabilities_payload(capabilities, *, tenant_id: int) -> list[dict[str, Any]]:
+async def _capabilities_payload(capabilities, *, tenant_id: int, app_id: str | None = None) -> list[dict[str, Any]]:
     """The capability summary an approver reads (AC-24), in plain language.
 
     Names, not ids: an approver deciding whether an application may search
@@ -371,7 +371,14 @@ async def _capabilities_payload(capabilities, *, tenant_id: int) -> list[dict[st
         # approval request that cannot be opened, and the log carries the cause.
         logger.warning(f"app_publish.capability_summary_unresolved tenant_id={tenant_id}")
         return []
-    return [{"kind": row.kind, "name": row.display_name, "revoked": row.revoked, "reason": row.reason} for row in rows]
+    result = [
+        {"kind": row.kind, "name": row.display_name, "revoked": row.revoked, "reason": row.reason} for row in rows
+    ]
+    if app_id and isinstance(capabilities, dict) and capabilities.get("secrets"):
+        from bisheng.app_publish.application.runtime_secrets import secret_reference_status
+
+        result.extend(await secret_reference_status(app_id, capabilities))
+    return result
 
 
 async def _tier_payload(tier_code: str) -> dict[str, Any]:

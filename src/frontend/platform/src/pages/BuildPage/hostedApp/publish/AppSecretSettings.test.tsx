@@ -1,13 +1,23 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppSecretSettings } from './AppSecretSettings'
 
-const { save, rebuild, confirm } = vi.hoisted(() => ({ save: vi.fn(), rebuild: vi.fn(), confirm: vi.fn() }))
-vi.mock('../hooks/useAppSecrets', () => ({ useAppSecrets: () => ({ data: { revision: 1, items: [{ name: 'COLOR', present: true, mask: '••••••', approved_reference: true, pending_reference: false }], runtime: { comparison: 'different', changed_names: ['COLOR'], running_version_id: 'v1', route_epoch: 3, rebuild_operation: null } }, save, rebuild, remove: vi.fn(), refresh: vi.fn(), loading: false, busy: false }) }))
+const { save, rebuild, confirm, row } = vi.hoisted(() => ({ save: vi.fn(), rebuild: vi.fn(), confirm: vi.fn(), row: { name: 'COLOR', present: true, mask: '••••••', updated_at: '2026-10-24T00:00:00', approved_reference: true, pending_reference: false } }))
+vi.mock('../hooks/useAppSecrets', () => ({ useAppSecrets: () => ({ data: { revision: 1, items: [row], runtime: { comparison: 'different', changed_names: ['COLOR'], running_version_id: 'v1', route_epoch: 3, rebuild_operation: null } }, save, rebuild, remove: vi.fn(), refresh: vi.fn(), loading: false, busy: false }) }))
 vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({ bsConfirm: confirm }))
 vi.mock('@bisheng/ui', () => ({ Button: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props} />, Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />, Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} /> }))
 
 describe('environment settings', () => {
+  beforeEach(() => { row.present = true; row.updated_at = '2026-10-24T00:00:00'; vi.clearAllMocks() })
+  it('allows deleting a saved empty value without treating an absent declaration as stored', () => {
+    row.present = false
+    const { unmount } = render(<AppSecretSettings appId="a" canManage />)
+    expect(screen.getByText('hostedApp.secrets.remove')).toBeInTheDocument()
+    unmount()
+    row.updated_at = ''
+    render(<AppSecretSettings appId="a" canManage />)
+    expect(screen.queryByText('hostedApp.secrets.remove')).not.toBeInTheDocument()
+  })
   it('replacing starts an empty draft; saving is separate from rebuilding', () => {
     render(<AppSecretSettings appId="a" canManage />)
     fireEvent.click(screen.getByText('hostedApp.secrets.replace'))

@@ -21,3 +21,17 @@
 
 User requested functional closeout first. Rare concurrency/fault combinations and real deployment scenarios remain in the test handoff; these are not claimed as tested. F054 host isolation recovery and F056 revocation audit design findings remain open.
 | T105 | live test script + synthetic probe | PASS / PASS / N/A / N/A / N/A / PASS / PASS | scope PASS; helpers reused; dependencies implemented | PASS_WITH_NOTES; two cases collected only. Existing approved dedicated app is a prerequisite; app publishing, live execution, resources/SQLite verification remain in the manual handoff. |
+
+## T099 定向复审：空值条目的删除
+
+类型：前端实现。范围：AppSecretSettings、对应组件用例、配置 Service 定向用例。架构/命名/序列化/前端/i18n/泄漏/设计同步 PASS；未新增接口、权限或视觉模式。先观察组件用例失败，再修改判定为“有值或有保存时间”，新增前后端用例均通过。失效重建的恢复文案按实际操作入口修正，不宣称直接重试维护态已支持。
+
+## T109–T119 接线补充 L1
+
+- 后端 2 例（待审批版本/审批摘要）、平台摘要 1 例、CLI 提醒去重 1 例通过；未跑全量。
+- 客户端审批组件用例已编写，执行阻断于 jsdom 的 canvas.node 原生模块；组件与用例静态 lint 通过。
+- 新公共协议只返回 name/kind/reason/revoked；权限不由前端摘要授予，值/掩码不进审批。
+- 依赖与文件范围已在新增任务中记录；CLI wheel 属于派生物，sdk manifest 原段保留。
+- L1 结果 PASS_WITH_NOTES，注释为环境/真实验收限制，不将未执行测试登记为通过；设计与 approval-module 参考已同步。
+
+T120 追加验证：测试命名、AC 标注、文件范围与依赖 PASS；真实 ASGI v2 管线消费 F055 安全摘要，仅替换配置 Repository 的数据库工厂，未替换查询端点业务；1 例通过。

@@ -42,3 +42,32 @@ async def test_secret_routes_are_v1_only(api_app, owner_user):
     async with api_app(payload=owner_user.payload) as client:
         response = await client.put("/api/v2/apps/missing/secrets/COLOR", json={"value": "x", "expected_revision": 0})
         assert response.status_code in {401, 404, 405}
+
+
+async def test_cli_polling_exposes_missing_names_without_values(
+    secret_repository, app_factory, deployment_factory, owner_user, service_account_principal, api_app, monkeypatch
+):
+    """AC-72: the actual CLI polling endpoint carries safe missing-reference metadata."""
+    from bisheng.app_publish.application import runtime_secrets
+    from bisheng.app_publish.domain.services.app_secret_service import AppSecretService
+
+    repo, cipher = secret_repository
+    app, version = await app_factory()
+    service = AppSecretService(repository=repo, cipher=cipher)
+    await service.save(app.id, "READY", value="private-value", expected_revision=0, actor=owner_user.payload)
+    deployment = await deployment_factory(
+        app_id=app.id,
+        version_id=version.id,
+        manifest={"capabilities": {"secrets": [{"name": "READY"}, {"name": "MISSING"}]}},
+    )
+
+    async def summary(app_id, declaration):
+        return await service.reference_status(app_id, declaration)
+
+    monkeypatch.setattr(runtime_secrets, "secret_reference_status", summary)
+    async with api_app(principal=service_account_principal()) as client:
+        response = await client.get(f"/api/v2/apps/deployments/{deployment.id}")
+    assert response.status_code == 200 and response.json()["status_code"] == 200
+    rows = response.json()["data"]["secret_references"]
+    assert {row["name"]: row["reason"] for row in rows} == {"READY": "ok", "MISSING": "missing_value"}
+    assert "private-value" not in response.text

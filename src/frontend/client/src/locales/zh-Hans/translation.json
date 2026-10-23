@@ -2608,5 +2608,12 @@
     "loading": "加载中…",
     "clear": "清除",
     "remove": "移除"
+  },
+  "approval": {
+    "app_environment": {
+      "type": "环境变量",
+      "missing": "提交时未配置",
+      "present": "提交时已配置"
+    }
   }
 }

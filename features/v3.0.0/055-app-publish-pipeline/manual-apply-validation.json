@@ -21,6 +21,26 @@
     "confirmation_replay_after_lock_recheck": {
       "passed": 1,
       "note": "re-run of existing case, not an additional unique test"
+    },
+    "saved_empty_value": {
+      "backend_passed": 1,
+      "frontend_passed": 1,
+      "scope": "new cases only; not a full rerun"
+    },
+    "declaration_consumers": {
+      "backend_passed": 3,
+      "platform_passed": 1,
+      "cli_passed": 1,
+      "client_component": {
+        "status": "environment_blocked",
+        "reason": "canvas.node native module missing before test body"
+      }
+    },
+    "unique_passed_totals": {
+      "backend": 59,
+      "manager": 3,
+      "platform": 6,
+      "cli": 1
     }
   },
   "static_checks": {
@@ -33,7 +53,8 @@
         "src/pages/BuildPage/bench/OrgKbConfig.tsx",
         "src/test/clientVoiceDraft.test.tsx"
       ]
-    }
+    },
+    "client_focused_eslint": "passed"
   },
   "live_e2e": {
     "executed": false,
@@ -45,13 +66,23 @@
     "real SQL lock interleavings",
     "rare crash combinations",
     "ARM runtime",
-    "live DM8"
+    "live DM8",
+    "retry directly from maintenance after a failed config rebuild; use existing stop/resume lifecycle and validate in centralized E2E"
   ],
   "not_claimed": [
     "Docker/K8s deployed validation",
     "all AC acceptance passed",
     "F054/F056 implementation complete",
-    "merge/push/tag/release"
+    "merge/push/tag/release",
+    "client approval rendering test passed"
   ],
-  "source_commit": "a5c7722b9"
+  "source_commit": "a5c7722b9",
+  "wheel": {
+    "path": "src/backend/bisheng/dev_toolkit/artifacts/bisheng_cli-3.0.0-py3-none-any.whl",
+    "sha256": "05919950d13091c609969201487c3b75d3de66aae2672f74af4e9b92c153e700",
+    "source_bytes_match": true,
+    "sdk_manifest_preserved": true,
+    "clean_venv_smoke": "passed",
+    "offline": true
+  }
 }

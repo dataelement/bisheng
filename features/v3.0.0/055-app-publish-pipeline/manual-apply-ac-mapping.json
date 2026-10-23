@@ -1,0 +1,340 @@
+{
+  "date": "2026-10-24",
+  "head_at_check": "09b17ebd71a8c7e4263f7097549204fdd4a7ebda",
+  "working_tree_delta_included": true,
+  "source_sha256": {
+    "src/backend/bisheng/app_publish/domain/services/app_secret_service.py": "6b4ad0cbafa4be3f54cde703450bbb99ee5f10d361ceba35daeda4711e94e086",
+    "src/backend/bisheng/app_publish/domain/services/publish_approval_service.py": "d2403107e77ec423882a5ee4d115e194af11ee168514f8333caa0618da0ccf93",
+    "src/backend/bisheng/app_publish/domain/services/publish_status_service.py": "ff228ee71b8176acdf1fb90dc48b6b6e336dc02509fc1522cd460c2fbfb7e6e3",
+    "src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py": "ed3b4ad62b76af638f7488e886c7ef44e7267204426e1c29278742e7c722398c",
+    "src/backend/bisheng/app_runtime/domain/services/secret_rebuild_service.py": "9a8ce16b9ec5f33692fec3524e56b2783f80792cb91e5c5c8d1c23f5389f7592",
+    "src/frontend/platform/src/pages/BuildPage/hostedApp/publish/AppSecretSettings.tsx": "af5013aa5b714dbb28996eccb8c585244132de5d1359c1a7895fe4d272af06f1",
+    "src/frontend/client/src/components/approval/AppPublishDetailPanel.tsx": "d245e7f70e54c07d59fe8a6fbf3b9b16ea4426a2ce1f6ed645996b5ef8f7ac20",
+    "src/bisheng-cli/bisheng_cli/commands/deploy.py": "1e6c759b98fcbf83cbfb7804d44e47fc8e0424f7234b716dd4ab33d9c2a4c537"
+  },
+  "acs": [
+    {
+      "ac": "AC-66",
+      "local_evidence_files": [
+        "test_app_secret_service.py",
+        "test_app_secret_api.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-67",
+      "local_evidence_files": [
+        "test_app_secret_service.py",
+        "AppSecretSettings.test.tsx"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-68",
+      "local_evidence_files": [
+        "test_app_secret_security.py",
+        "test_secret_diagnostics.py",
+        "test_secret_redaction.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-69",
+      "local_evidence_files": [
+        "test_app_secret_declaration.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending",
+        "client approval rendering test blocked by missing canvas.node"
+      ]
+    },
+    {
+      "ac": "AC-70",
+      "local_evidence_files": [
+        "test_app_secret_repository.py",
+        "test_secret_rebuild.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-71",
+      "local_evidence_files": [
+        "test_secret_rebuild.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-72",
+      "local_evidence_files": [
+        "test_app_secret_api.py",
+        "test_secret_warnings.py",
+        "CapabilityListCard.test.tsx"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending",
+        "client approval rendering test blocked by missing canvas.node"
+      ]
+    },
+    {
+      "ac": "AC-73",
+      "local_evidence_files": [
+        "test_app_secret_service.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-74",
+      "local_evidence_files": [
+        "useAppSecrets.test.tsx",
+        "AppSecretSettings.test.tsx"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-75",
+      "local_evidence_files": [
+        "test_app_secret_repository.py",
+        "test_secret_rebuild.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-76",
+      "local_evidence_files": [
+        "test_secret_rebuild.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-77",
+      "local_evidence_files": [
+        "test_app_secret_credentials.py",
+        "test_secret_rebuild.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-78",
+      "local_evidence_files": [
+        "test_app_secret_security.py",
+        "test_app_secret_declaration.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-79",
+      "local_evidence_files": [
+        "test_app_secret_security.py",
+        "test_app_secret_service.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-80",
+      "local_evidence_files": [
+        "test_app_secret_security.py",
+        "test_app_secret_service.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-81",
+      "local_evidence_files": [
+        "test_app_secret_repository.py",
+        "test_app_secret_credentials.py"
+      ],
+      "implementation": "partial_cross_feature",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending",
+        "F056 trusted app association / binding revocation audit requires its design confirmation and implementation"
+      ]
+    },
+    {
+      "ac": "AC-82",
+      "local_evidence_files": [
+        "test_secret_diagnostics.py",
+        "test_secret_redaction.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending",
+        "does not prove prevention of an application intentionally writing its own environment to its data or attachments"
+      ]
+    },
+    {
+      "ac": "AC-83",
+      "local_evidence_files": [
+        "test_app_secret_service.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-84",
+      "local_evidence_files": [
+        "test_app_secret_declaration.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending",
+        "client approval rendering test blocked by missing canvas.node"
+      ]
+    },
+    {
+      "ac": "AC-85",
+      "local_evidence_files": [
+        "test_app_secret_service.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-86",
+      "local_evidence_files": [
+        "test_secret_rebuild.py",
+        "test_secret_redaction.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-87",
+      "local_evidence_files": [
+        "test_app_secret_declaration.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-88",
+      "local_evidence_files": [
+        "test_app_secret_declaration.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-89",
+      "local_evidence_files": [
+        "useAppSecrets.test.tsx",
+        "AppSecretSettings.test.tsx"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-90",
+      "local_evidence_files": [
+        "test_app_secret_security.py",
+        "test_secret_runtime_snapshot.py"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-91",
+      "local_evidence_files": [
+        "test_secret_rebuild.py",
+        "AppSecretSettings.test.tsx"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    },
+    {
+      "ac": "AC-92",
+      "local_evidence_files": [
+        "test_secret_rebuild.py",
+        "useAppSecrets.test.tsx"
+      ],
+      "implementation": "main_path_coded",
+      "acceptance": "not_deployment_accepted",
+      "remaining": [
+        "real Docker/K8s acceptance pending"
+      ]
+    }
+  ],
+  "full_acceptance_passed": false
+}

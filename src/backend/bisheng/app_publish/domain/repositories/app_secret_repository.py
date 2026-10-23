@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select, update
 
+from bisheng.app_publish.domain.models.app_deployment import ACTIVE_STATUSES, AppDeployment
 from bisheng.app_publish.domain.models.app_secret_config import AppSecretConfig
 from bisheng.common.errcode.app_publish import AppPublishOwnerOnlyError, AppSecretRevisionConflictError
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
@@ -55,6 +56,22 @@ class AppSecretConfigRepository:
         return (
             await session.exec(select(AppVersion).where(AppVersion.app_id == app_id, AppVersion.id == version_id))
         ).first()
+
+    async def pending_version(self, session, app):
+        version = await self.version(session, app.id, app.pending_version_id)
+        if version is not None:
+            return version
+        deployments = (
+            await session.exec(
+                select(AppDeployment)
+                .where(AppDeployment.app_id == app.id, AppDeployment.status.in_(ACTIVE_STATUSES))
+                .order_by(AppDeployment.create_time.desc(), AppDeployment.id.desc())
+                .limit(1)
+            )
+        ).all()
+        if deployments and deployments[0].version_id != app.current_version_id:
+            return await self.version(session, app.id, deployments[0].version_id)
+        return None
 
     async def store(self, session, app, previous, *, ciphertext, actor_id, expected_revision, now):
         if (previous.revision if previous else 0) != expected_revision:

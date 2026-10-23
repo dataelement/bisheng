@@ -482,8 +482,18 @@ class PublishPipelineService:
             # single implementation — never composed here, and never in the
             # browser (AC-25).
             "entry_url": entry_url,
+            "secret_references": await cls._secret_references(deployment, app_row),
             "scan_result": deployment.scan_result,
         }
+
+    @staticmethod
+    async def _secret_references(deployment, app):
+        capabilities = (deployment.manifest or {}).get("capabilities", {})
+        if app is None or not capabilities.get("secrets"):
+            return []
+        from bisheng.app_publish.application.runtime_secrets import secret_reference_status
+
+        return await secret_reference_status(app.id, capabilities)
 
     # ------------------------------------------------------------------
     # Asynchronous leg

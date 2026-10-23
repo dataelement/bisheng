@@ -8,6 +8,13 @@ import { CapabilityListCard } from "./CapabilityListCard"
  */
 
 describe("CapabilityListCard", () => {
+  it("shows environment references with missing-value status", () => {
+    render(<CapabilityListCard capabilities={[{ kind: "secret", name: "COLOR", revoked: false, reason: "missing_value" }]} />)
+    expect(screen.getByText("COLOR")).toBeInTheDocument()
+    expect(screen.getByText("hostedApp.secrets.title")).toBeInTheDocument()
+    expect(screen.getByText("hostedApp.secrets.missing")).toBeInTheDocument()
+  })
+
   it("test_an_application_that_declares_nothing_says_so", () => {
     // Not an empty section: a card that disappears reads as "the page failed to
     // load it", which sends the owner looking for a problem that is not there.

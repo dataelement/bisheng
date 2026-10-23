@@ -15,3 +15,7 @@ def preview_environment(declaration):
 
 async def delete_for_app(app_id):
     await AppSecretService().delete_for_app(app_id)
+
+
+async def secret_reference_status(app_id, declaration):
+    return await AppSecretService().reference_status(app_id, declaration)

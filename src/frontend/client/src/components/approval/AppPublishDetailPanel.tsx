@@ -73,11 +73,15 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function toCapabilityEntries(value: unknown): CapabilityEntry[] {
+function toCapabilityEntries(value: unknown, localize: LocalizeFn): CapabilityEntry[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
     if (typeof item === "string") return { type: "", name: item, description: "" };
     const record = asRecord(item);
+    if (record.kind === "secret") {
+      return {type: localize("approval.app_environment.type"), name: asText(record.name),
+        description: localize(record.reason === "missing_value" ? "approval.app_environment.missing" : "approval.app_environment.present")};
+    }
     return {
       type: asText(record.type),
       name: asText(record.name) || asText(record.code) || asText(record.id),
@@ -181,7 +185,7 @@ export function AppPublishDetailPanel({
       ? localize("com_approval_app_publish_note_no_department_admin")
       : approverNote;
 
-  const capabilities = toCapabilityEntries(snapshot.capabilities);
+  const capabilities = toCapabilityEntries(snapshot.capabilities, localize);
   const visibility = toVisibilityEntries(snapshot.visibility_snapshot);
   // AC-09 / AC-24: the "结构变更" row appears only when the release changes the
   // declared tables. Breaking rows were confirmed by the publisher at submit

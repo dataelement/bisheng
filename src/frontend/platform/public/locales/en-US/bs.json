@@ -3161,7 +3161,7 @@
       "deleteConfirm": "Delete the saved value of {{name}}? The current instance may keep the old value until you confirm a rebuild or deploy again.",
       "rebuilding": "Rebuilding the instance. New saves do not change the configuration already confirmed for this operation.",
       "rebuilt": "The last rebuild completed.",
-      "rebuildFailed": "The last rebuild did not complete. Check the runtime records before confirming another rebuild.",
+      "rebuildFailed": "The last rebuild did not complete. Check the runtime records; take the app offline and bring it online again if you need to recover the instance.",
       "comparison": {
         "same": "The current instance uses the latest saved values.",
         "different": "The current instance differs from the saved settings. These variables have unapplied changes.",
