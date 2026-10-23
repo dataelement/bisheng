@@ -84,3 +84,10 @@ def test_tools_are_estimated_only_without_a_usage_base():
     assert count_context_tokens(no_base, tools=tools) > count_context_tokens(no_base)
     # The reported total already includes the tool schemas sent with that call.
     assert count_context_tokens(with_base, tools=tools) == count_context_tokens(with_base)
+
+
+def test_reasoning_sent_back_is_counted():
+    plain = estimate_tokens([AIMessage(content="答")])
+    with_reasoning = estimate_tokens([AIMessage(content="答", additional_kwargs={"reasoning_content": "思考" * 500})])
+
+    assert with_reasoning - plain == 1000

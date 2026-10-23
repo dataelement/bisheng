@@ -75,8 +75,14 @@ def _content_text(content: Any) -> str:
 
 def _message_text(message: BaseMessage) -> str:
     text = _content_text(message.content)
-    if isinstance(message, AIMessage) and message.tool_calls:
-        text += json.dumps([call.get("args", {}) for call in message.tool_calls], ensure_ascii=False)
+    if isinstance(message, AIMessage):
+        # Sent back with tool-calling requests (core/ai/llm/reasoning_passback.py),
+        # so it occupies the context like the visible text does.
+        reasoning = message.additional_kwargs.get("reasoning_content")
+        if isinstance(reasoning, str):
+            text += reasoning
+        if message.tool_calls:
+            text += json.dumps([call.get("args", {}) for call in message.tool_calls], ensure_ascii=False)
     return text
 
 
