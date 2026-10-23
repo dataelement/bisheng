@@ -2,6 +2,8 @@
 
 结论：**尚未通过完整业务验收**。当前优先189 K8s；arm新增验证暂停。详见[结构化证据](./platform.json)。
 
+当前R29下新Python单v1的发布、预览审批、HTTP/WebSocket、SDK/OBO/附件、停用SQLite编辑导出及恢复数据一致性已真实通过，九项独立物理核对也通过；详见文末R11记录。T069仍待容量前置负例和安全删除，故障与独立卸载另行验收。下文按时间保留旧批次现场，不把旧“待验”快照当成当前结果。
+
 | 现场步骤 | 真实结果 | 限制 |
 | --- | --- | --- |
 | 新Pod模板与创建事务 | k189r5首个prepare Pod已创建、调度并启动storage-guard/transfer | 不代表应用已上线 |
@@ -172,3 +174,14 @@ T256/T257开发已L1通过，本地完整runtime1649/13skip；250/255，新增�
 T258–T263的生产源码 `f8863f3763285435a5df01fc150400838bdb3f0a` 已完成189原生amd64构建及隔离导入烟测，仅推送专用内网仓库；manager固定digest `0b4bd3e66c1d7c49fe00046c83277dab8b6dbd0628f201abf3192d70dd67ddad`。专用backend/worker仅两个保护源文件按旧哈希备份、原CID重启；新字节哈希复核通过。Helm29升级后manager新UID `fae606c4-3e51-4efa-ba00-a7ce9163de3f`，原UID实际缺席；自然接管epoch24、ready、sticky保护合同v1/current及两guard true。host描述符与Pod投射的完整/保护摘要一致，保护基线 `9006c20349b46e6a60af9d7e2ccdc45f4e4efae5606f58cde88b69bd0b9ad3ff`。
 
 独立fresh核对：旧三个bundle的false/false保持，source/image的true/true保持；四个Running及一个held终态的Pod/CID/PVC/PV身份未变，旧stop仍timed_out/cleanup pending，r4 unknown-create原PVC保持。没有回填历史保护、移除finalizer或释放旧预占。helper/assembler/profile2、代理/准入及描述符数据/UID未变；此次不是重跑16项安装探测、ARM或公开CI发行。新单Python应用的发布/停用/离线数据/恢复仍需单独实测，不能以部署ready代替。结构化证据见JSON的 `protection_report_r29_deployment`。
+
+
+## R11：新Python单版本业务闭环与物理核对通过
+
+R29下新app `43baa81d168a45bfa5e53ffbd04f48fd`、v1 `a5a4faade83743a487803bd6080246bf`、审批12真实通过单次发布、预览访问/拒绝、正式HTTP/WebSocket、SDK/OBO身份、附件往返及owner/非owner/跨租户配对。预览先等待正常清理：纯SELECT首次拒绝未完成，第二次确认preview operation `3ca7af6fe7db41f8b45294a9946c8c5d`的四资源闭合、同UID kubelet_terminal、逐项API缺席、reservation released；原子发布证明SHA `01dfdd2bef68d6d0e0510626d758baede929e2a1f17a78f09a07ed49778b11a1`后，原审批只提交一次，未手工补发。
+
+正式deploy `0b694758d9274f42a7b4078897bbeaf8` gen1 →正常stop `3674c3af161946a39e6df19e1d417a7c` gen2 →停用SQLite随机nonce查改/CSV与权限拒绝 →resume `3d386771f5344e4aac321d2fc830bff3` gen3，均真实完成；仍只有同一已批准v1，恢复后行数据完全等于停用编辑后的数据。最终私有journal SHA `e3ea2f08d158b3c2bb23935a34e69daebc53abec4b047dade849e162635f6697`，随机内容不进入本仓库。
+
+独立metadata-only/API核对九项全通过：PVC UID `e72126ff-98c8-40b0-84d9-25b6b75aa0d0`保持；原serve UID `c96eedd4-44a6-45c1-888e-b282ce695128`有同UID持久停止证据且cleanupcomplete；恢复serve UID `999cf346-e483-439c-90bd-621d39152a9c`为当前对象，gen3、双连续保护true。只读观察SHA `80b98d038e860c6fe0593e4e5831ae8ee329a9f46237abe48ef0fe14c37cf93d`，不冒称重新观察了kubelet终态全过程或跨节点恢复。
+
+驱动r2在首次业务发包前修正真实CookieJar角色识别，并沿既有900秒共享预算；两个只读启动包装路径错误及原r1均保留，不重写为产品失败/通过。最终业务execute exit0。T069仍待容量前置负例和安全删除；T070故障/独立卸载、L2及公开发行仍未完成，256/261保持。ARM与新增109继续暂缓。

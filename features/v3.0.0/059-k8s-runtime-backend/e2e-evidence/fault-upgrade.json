@@ -48,10 +48,10 @@
     "record_retained": true
   },
   "not_executed": [
-    "189 cancel/init fault and unknown writer",
-    "manager restart or response loss in flight",
-    "migration failure and protected snapshot restoration",
-    "runtime upgrade/uninstall retention",
+    "189 cancel/init faults; additional UID replacement/unknown-writer injection beyond held legacy safety negatives",
+    "in-flight manager restart and response loss",
+    "migration failure with same-operation snapshot confirmation and explicit restore",
+    "full uninstall retention in independent install/platform-storage domain",
     "NodeLost or cross-node fencing"
   ],
   "boundary": "local fixture/HTTP proxy preparations do not count as deployed fault proof; T070 remains pending",
@@ -807,5 +807,14 @@
     "local_mechanism_tests": 5,
     "local_review_sha256": "47a133dd7dd5649c6145694be019a83d370981316f4b90a54376a13bde54bdc2",
     "boundary": "Old three false/new two true. Failed+terminated diagnostics do not restore provenance. Existing UID/finalizer/PVC/reservation retained; T258-T261 are future implementation correction, not historical repair."
-  }
+  },
+  "historical_top_not_executed_before_r11": [
+    "189 cancel/init fault and unknown writer",
+    "manager restart or response loss in flight",
+    "migration failure and protected snapshot restoration",
+    "runtime upgrade/uninstall retention",
+    "NodeLost or cross-node fencing"
+  ],
+  "r29_upgrade_retention_reference": "installation.json#protection_report_r29_deployment",
+  "r11_normal_stop_resume_reference": "platform.json#r11_single_v1_protection_acceptance"
 }

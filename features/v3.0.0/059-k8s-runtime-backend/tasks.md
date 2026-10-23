@@ -2269,3 +2269,5 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T258–T263 L1闭合：runtime97报告+11原子心跳新配对，独立108通过；backend51真实SQLite配对旧36红→51绿，独立51通过。完整runtime1757/13skip，后端运行/发布/SDK三模块1944/19skip；MCP按锁文件1.30临时覆盖，不改共享venv。四模块同选择原生产基线150fail/18error→新114fail/18error，差异36全为新配对，零新增；其余open_api鉴权/模式/fixture历史问题保留。源码f8863f376，256/261完成、120测试任务。189旧false不修，正式镜像/真实新停用另验，无ARM/109/公开发行。
 
 2026-10-23 R29实际部署：f886生产源已原生amd64构建/私有推送，backend两文件真实替换、Helm29 manager新UID/旧UID缺席、epoch24 ready/current/v1及两guard true独立核对通过；旧三false/新二true和held旧资源保持。256/261不变；新单Python业务尚未开始，不能勾T069/T070，ARM/新增109/公开发行继续暂缓。
+
+2026-10-23 r11真实闭环通过：新Python单v1发布/审批预览/HTTP/WS/SDK/OBO/附件/权限，正常stop后随机SQLite查改CSV、同已批准v1 resume及行数据完全一致；九项独立物理检查全部通过，同PVC、新PodUID、同UID旧停止证据及双保护保持。最终journal e3ea2f08…、physical80b98d03…；256/261不变，T069剩容量前置负例/安全删除，T070故障及独立卸载未结束。ARM/新增109/公开发行不执行。

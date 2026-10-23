@@ -1,7 +1,7 @@
 {
   "schema": "f059-platform-evidence/v1",
-  "recorded_at": "2026-10-22T21:28:54.819252+00:00",
-  "state": "python_v1_online_observe_passed_full_suite_continuing",
+  "recorded_at": "2026-10-23T01:31:44.578720+00:00",
+  "state": "r29_single_v1_business_and_physical_loop_passed_remaining_acceptance",
   "accepted": false,
   "host": "192.168.106.189",
   "platform": "linux/amd64",
@@ -223,9 +223,9 @@
     "root_cause_of_r5_failure": "not yet concluded from this ingress check alone"
   },
   "not_verified": [
-    "Complete static bundle, source-image and full image platform flows on K8s",
-    "Stopped SQLite edit/export and complete fault/upgrade/restore acceptance",
-    "Capacity stages, deletion and uninstall full acceptance"
+    "preapproval capacity negative",
+    "safe delete after later tests",
+    "fault and independent uninstall acceptance"
   ],
   "boundary": "Python and Node v1/v2 access and stop/resume passed; the complete business suite remains in progress. No cross-node/ARM/formal CI/public release claim.",
   "next_batch": {
@@ -1888,5 +1888,97 @@
       "backend-receipt.json": "cbbbe0fe5f909a1d0ea4c140b06cf0660e7ccb280ff2da8ee297356d27c4ea04",
       "manager-after.json": "f78415da83ebbae3b33f2b21deedbe83eeb2f2b28e992e2c611bcd80855d417f"
     }
+  },
+  "historical_top_not_verified_before_r11": [
+    "Complete static bundle, source-image and full image platform flows on K8s",
+    "Stopped SQLite edit/export and complete fault/upgrade/restore acceptance",
+    "Capacity stages, deletion and uninstall full acceptance"
+  ],
+  "r11_single_v1_protection_acceptance": {
+    "schema": "f059-r11-single-v1-real-acceptance/v1",
+    "source_revision": "f8863f3763285435a5df01fc150400838bdb3f0a",
+    "app_id": "43baa81d168a45bfa5e53ffbd04f48fd",
+    "version_id": "a5a4faade83743a487803bd6080246bf",
+    "deployment_id": "0a8dc574e6ae4f0790c0803b77f0a737",
+    "approval_id": 12,
+    "version_count": 1,
+    "operations": {
+      "first_deploy": "0b694758d9274f42a7b4078897bbeaf8",
+      "resume_deploy": "3d386771f5344e4aac321d2fc830bff3",
+      "stop": "3674c3af161946a39e6df19e1d417a7c"
+    },
+    "final_generation": 3,
+    "profile_revision": "e2e-f059-python311@2",
+    "business_result": "passed",
+    "physical_result": "passed",
+    "checks": {
+      "all_metadata_reads_determinate": true,
+      "different_serve_uid": true,
+      "first_uid_no_longer_current_at_name": true,
+      "one_first_and_resumed_serve": true,
+      "original_pvc_uid_current": true,
+      "persisted_same_uid_terminal_stop": true,
+      "resumed_uid_current_and_guarded": true,
+      "same_approved_pvc_claim": true,
+      "serve_generations_match_journal": true
+    },
+    "passed_business": [
+      "single publish",
+      "approval preview and refusal pairs",
+      "HTTP and WebSocket allow/deny",
+      "SDK human OBO identity",
+      "attachment roundtrip and entry refusal pairs",
+      "owner online row edit/export and tenant boundaries",
+      "normal stop completed/cleanupcomplete",
+      "stopped SQLite random-nonce edit/export and permission pairs",
+      "resume same approved v1",
+      "resumed rows exactly equal offline rows"
+    ],
+    "evidence_sha256": {
+      "platform_journal": "7c7f7dbb5331ab54487eb44f3c8af08bb306b70fa593eb3396b0a31ed3d7b6f4",
+      "offline_final_journal": "e3ea2f08d158b3c2bb23935a34e69daebc53abec4b047dade849e162635f6697",
+      "public_scope": "a37189348b4da69d78bbf092cbb9546879178e606681ad9eb6c4f4c37d1ad2e6",
+      "preview_cleanup_proof": "01dfdd2bef68d6d0e0510626d758baede929e2a1f17a78f09a07ed49778b11a1",
+      "physical_observation": "80b98d038e860c6fe0593e4e5831ae8ee329a9f46237abe48ef0fe14c37cf93d"
+    },
+    "private_evidence_root": "/opt/e2e-f059/evidence/k189r11-python-protection",
+    "physical_evidence_root": "/opt/e2e-f059/evidence/r11-resource-proof",
+    "operator_setup_notes": [
+      "r1 private driver not executed; real CookieJar and original900 budget fixed in r2 before live publication",
+      "two check-only wrapper mount-path failures retained before any business publication",
+      "first SELECT seed refused before normal preview cleanup; second read confirmed all four resources/released; no resource force-cleanup"
+    ],
+    "remaining": [
+      "preapproval capacity negative",
+      "safe delete after later tests",
+      "fault and independent uninstall acceptance"
+    ],
+    "full_feature_accepted": false,
+    "arm_tested": false,
+    "new_109_tested": false,
+    "public_issuance": false,
+    "production_pvc_uid": "e72126ff-98c8-40b0-84d9-25b6b75aa0d0",
+    "serve_pods": [
+      {
+        "operation_id": "0b694758d9274f42a7b4078897bbeaf8",
+        "resource_ref": "43e781a6-fbbc-55b8-8e60-3ab58f8844e6",
+        "uid": "c96eedd4-44a6-45c1-888e-b282ce695128",
+        "generation": 1,
+        "protected_since_creation": true,
+        "binding_policy_verified": true,
+        "stop_state": "confirmed",
+        "cleanup_state": "complete"
+      },
+      {
+        "operation_id": "3d386771f5344e4aac321d2fc830bff3",
+        "resource_ref": "5f525a1c-0ba4-5a0d-8784-6c07a4694151",
+        "uid": "999cf346-e483-439c-90bd-621d39152a9c",
+        "generation": 3,
+        "protected_since_creation": true,
+        "binding_policy_verified": true,
+        "stop_state": "held",
+        "cleanup_state": "pending"
+      }
+    ]
   }
 }
