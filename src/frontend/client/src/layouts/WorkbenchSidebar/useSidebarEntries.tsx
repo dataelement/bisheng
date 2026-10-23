@@ -70,7 +70,7 @@ export function useSidebarEntries(): SidebarEntry[] {
   const home = links.find(link => link.section === 'home');
   const squareIndex = sorted.findIndex(entry => entry.id === 'square');
   if (home && !home.to.startsWith('/menu-unavailable')) sorted.splice(squareIndex < 0 ? sorted.length : squareIndex, 0, {
-    id: 'capabilities', to: '/capabilities', icon: <Outlined.Application />,
+    id: 'capabilities', to: '/capabilities', icon: <Outlined.Newspaper />,
     label: localize('com_capability_center.title'), active: pathname.startsWith('/capabilities'),
   });
   return sorted;

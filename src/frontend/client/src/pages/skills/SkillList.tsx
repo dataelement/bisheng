@@ -56,11 +56,6 @@ function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
           {skill.description}
         </p>
       </div>
-      {personal && (
-        <time dateTime={personal.updatedAt} className="pointer-events-none shrink-0 text-caption text-text-3 max-[575px]:hidden">
-          {new Date(personal.updatedAt).toLocaleDateString()}
-        </time>
-      )}
       <Switch size="small" className="relative z-[1] shrink-0" checked={skill.enabled}
         loading={pendingId === skill.id} disabled={pendingId !== undefined && pendingId !== skill.id}
         aria-label={switchLabel} onCheckedChange={enabled => onToggle(skill, enabled)} />
