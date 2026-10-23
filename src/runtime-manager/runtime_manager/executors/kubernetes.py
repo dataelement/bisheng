@@ -164,7 +164,7 @@ class KubernetesExecutor:
             result.add(parsed.scheme + "://" + host + (":" + str(parsed.port) if parsed.port else ""))
         return sorted(result)
 
-    def capabilities(self):
+    def heartbeat_snapshot(self):
         capabilities = copy.deepcopy(self.document.get("capabilities", {}))
         try:
             self.client.list("pods", label_selector="bisheng.managed=v2")
@@ -174,25 +174,31 @@ class KubernetesExecutor:
         report, protection = self._probe_state()
         passed = {check["name"] for check in report.get("checks", []) if check.get("ok")}
         return {
-            **capabilities,
-            "mandatory_isolation": bool(report["ready"]),
-            "status_protection": "status-provenance" in passed,
-            "binding_protection": "binding-delete-fence" in passed,
-            "protection_observation": protection,
-            "paths": report.get("paths", {}),
-            "sandbox": report.get("sandbox", {}),
-            "package_sources": self._package_sources(),
-            "executor_kind": "kubernetes",
-            "cluster_id": self.settings.cluster_id,
-            "namespace": self.settings.namespace,
-            "orchestration_available": available,
-            "protocol_version": 2,
-            "platform": self.descriptor.platform,
-            "helper_image": self.document.get("helper_image", ""),
-            "assembler_image": self.document.get("assembler_image", ""),
-            "status_policy_revision": self.descriptor.status_policy_revision,
-            "data_transport_ready": self.data_transport is not None,
+            "capabilities": {
+                **capabilities,
+                "mandatory_isolation": bool(report["ready"]),
+                "status_protection": "status-provenance" in passed,
+                "binding_protection": "binding-delete-fence" in passed,
+                "protection_observation": protection,
+                "paths": report.get("paths", {}),
+                "sandbox": report.get("sandbox", {}),
+                "package_sources": self._package_sources(),
+                "executor_kind": "kubernetes",
+                "cluster_id": self.settings.cluster_id,
+                "namespace": self.settings.namespace,
+                "orchestration_available": available,
+                "protocol_version": 2,
+                "platform": self.descriptor.platform,
+                "helper_image": self.document.get("helper_image", ""),
+                "assembler_image": self.document.get("assembler_image", ""),
+                "status_policy_revision": self.descriptor.status_policy_revision,
+                "data_transport_ready": self.data_transport is not None,
+            },
+            "probe_report": report,
         }
+
+    def capabilities(self):
+        return self.heartbeat_snapshot()["capabilities"]
 
     def _controller_node(self):
         node = self.platform.node_snapshot().get("node")
