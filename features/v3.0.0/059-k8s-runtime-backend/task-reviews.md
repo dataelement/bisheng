@@ -3514,3 +3514,23 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 | 7 | 设计同步 | PASS | §4.3、§5与修订历史同步两容量码及实际wheel分发 |
 
 **元数据**：指定五文件、T264先完成、依赖与配对PASS。root主树0ff595428独立完整CLI391passed（5.86s），日志`/private/tmp/f059-cli-capacity-root-full.log`；独立ZIP读取确认errors.py等于源码、manifest只cli.sha256变化、SDK摘要保持。原pack_cli_wheel.sh离线干净venv烟测及作者RECORD验证见`/private/tmp/f059-cli-capacity-l1.md`。wheel SHA739d58c34a4f9eb4833c21ecec60936ef78bf1a48ce0b050b0d86a810b0e3e39。**结果：PASS**；189未部署新wheel，不冒称远端CLI验收。
+
+## Task Review: T266 — 真实销毁事实阶段配对
+
+**结果：PASS。** 单文件测试、完整六条AC元数据、命名与范围通过；前驱T263已完成。真实PlatformClient.fact编码→FastAPI→实际ExecutionFactInput，不复制阶段枚举；真实操作/维护/数据链配K8s与账本I/O替身，purge作用于私有SQLite目录。主树先独立11fail/3pass（0.55s），首例admitted422，再合4行实现；初次root目录导入失败另存，不当产品红。覆盖先ACK、结果事实先于helper收尾/PVC删除、503及回执丢失、同操作重启/不重复purge、ACK后取消/期限/owner epoch变化及schema控制。测试b143/元数据9f509已合为e391/93d；本地验证不等同189 API或平台SQL实测。
+
+## Task Review: T267 — 销毁前持久化合法维护阶段
+
+**结果：PASS。** 独立候选dd549合流1532e115e。
+
+| # | 检查项 | 结果 | 依据 |
+| --- | --- | --- | --- |
+| 1 | 架构分层 | PASS | 仅既有运行操作调用者，平台事实仍经客户端，未跨平台存储/权限Owner |
+| 2 | 命名 | PASS | 复用report/checkpoint和合法maintenance阶段，无新抽象 |
+| 3 | 序列化 | PASS | 实际ExecutionFactInput严格校验，未放开admitted/stopping |
+| 4 | 数据库 | N/A | 不改模型/SQL/迁移 |
+| 5 | 前端 | N/A | 无UI或前端文件 |
+| 6 | 信息泄漏 | PASS | 无新敏感参数/日志，新增注释英文 |
+| 7 | 设计同步 | PASS | 4.8销毁链与修订记录同步，D1/D5不变 |
+
+**元数据**：operations.py单文件；T266红例先于实现合入，14严格绿及独立相邻149绿；依赖/配对PASS。主树runtime全部选择1720pass/13skip和51个测试环境失败：缺省Helm临时路径已消失；显式现有helm3.16.4后安装模块121pass，剩21loopback绑定被沙箱拒绝，获授权重跑21pass/121deselected（1.12s）。1771个唯一测试逐项覆盖；不把初次失败抹去或称一次全量命令绿。Ruff/check format no-cache及两文件arch-guard/diffcheck通过。首次状态更新脚本cwd错误没有写文件，随后修正绝对路径同步标记；无产品范围变化。仍须R30原生构建/真实删除复验，T072未执行。

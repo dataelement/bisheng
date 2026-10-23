@@ -6865,8 +6865,8 @@
       ],
       "pair": "T267",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T267",
@@ -6890,8 +6890,8 @@
       ],
       "pair": "T266",
       "command": "",
-      "status": "pending",
-      "review": "pending"
+      "status": "complete",
+      "review": "PASS"
     },
     {
       "id": "T072",
