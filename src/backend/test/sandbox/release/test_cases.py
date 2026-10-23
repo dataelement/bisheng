@@ -19,12 +19,14 @@ from test.sandbox.release.client import (
     extra_of,
     file_urls,
     first_sum_result,
+    linsight_tool_payload,
     open_api,
     run_task_question,
     save_execution_type,
     submit_task,
     task_tool_results,
     tool_categories,
+    tool_category_payload,
     upload_linsight_file,
     user_input,
     wait_tasks,
@@ -47,7 +49,9 @@ from test.sandbox.release.parse import (
     code_output_values,
     history_steps,
     log_sum,
+    offload_notice,
     output_msg_text,
+    printed_ends,
     workflow_tool_result,
 )
 from test.sandbox.release.samples import docx_body, docx_contains, pptx_contains, xlsx_amounts, xlsx_contains_amounts
@@ -264,9 +268,9 @@ def test_s028(api, task_sum):
     follow = "读取刚才的表，保留原内容，增加翻倍金额列。"
     with _mode(api, "container"):
         version = submit_task(api, question)
-        wait_tasks(api, version)
+        first = wait_tasks(api, version)
         continue_task(api, version, follow)
-        tasks = wait_tasks(api, version)
+        tasks = wait_tasks(api, version, previous=first)
     blobs = _blobs(api, version, tasks)
     if not blobs:
         pytest.skip("未测：两轮都没有可下载的表格，构造不出跨轮追加列")
@@ -285,7 +289,7 @@ def test_s009(api, task_sum):
         if not task_id:
             pytest.fail("没有进入 ask_user 等待，不能从别的响应正文里找文件")
         user_input(api, version, task_id, "已确认")
-        tasks = wait_tasks(api, version)
+        tasks = wait_tasks(api, version, previous=tasks)
     blobs = _blobs(api, version, tasks)
     texts = [blob.decode("utf-8", errors="ignore") for blob in blobs]
     if not any("开始" in text and "已确认" in text for text in texts):
@@ -294,8 +298,37 @@ def test_s009(api, task_sum):
 
 def test_s025(api, task_sum):
     _require_sum(task_sum)
-    if not os.environ.get("BISHENG_RELEASE_LONG_TOOL"):
-        pytest.skip("未测：没有会把长结果转存的工具，不新增长度门槛")
+    web = tool_category_payload(api, "web_search")
+    if web is None:
+        pytest.skip("未测：工具列表里没有联网搜索")
+    question = (
+        "必须调用联网搜索工具，查询 2026 年全球主要城市的人口。"
+        "如果返回里出现 large_tool_results/ 路径，必须接着用代码工具打开那个相对路径，不要加前导斜杠。"
+        "只打印三行，格式固定为：\nFIRST:文件第一行\nLAST:文件最后一行\nCOUNT:总行数\n"
+        "不要用 read_file 代替代码。如果没有这个路径，说明没有转存，不要编造路径。"
+    )
+    with _mode(api, "container"):
+        _version, tasks = run_task_question(api, question, tools=[linsight_tool_payload(api), web])
+    notice = offload_notice(tasks)
+    if notice is None:
+        pytest.skip("未测：联网搜索的结果没有转到 large_tool_results，不新增长度门槛")
+    calls = task_tool_results(tasks)
+    logs = "\n".join(str(item["result"].get("log") or "") for item in calls)
+    printed = printed_ends(logs)
+    if printed is None:
+        pytest.skip("未测：结果已转存，但代码没有打印 FIRST、LAST 和 COUNT")
+    got_first, got_last, got_count = printed
+    assert got_count == notice["count"]
+    assert _same_edge(got_first, notice["first"])
+    assert _same_edge(got_last, notice["last"])
+
+
+def _same_edge(printed: str, original: str) -> bool:
+    """Preview lines are capped at 1000 characters. Either side may be that prefix."""
+    if printed == original:
+        return True
+    head = original[:200]
+    return bool(head) and (printed.startswith(head) or head.startswith(printed[:200]))
 
 
 def test_s011(api, task_sum):
@@ -313,9 +346,9 @@ def test_s011(api, task_sum):
     )
     with _mode(api, "container"):
         version = submit_task(api, seed)
-        wait_tasks(api, version)
+        first = wait_tasks(api, version)
         continue_task(api, version, question)
-        tasks = wait_tasks(api, version)
+        tasks = wait_tasks(api, version, previous=first)
     calls = task_tool_results(tasks)
     logs = "\n".join(str(item["result"].get("log") or "") for item in calls)
     code = "\n".join(_code_of(item["step"]) for item in calls)

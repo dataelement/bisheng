@@ -124,33 +124,53 @@ def save_execution_type(client: httpx.Client, mode: str) -> None:
     data_of(client.post("/tool/config", json={"tool_id": item["id"], "extra": {"type": mode}}))
 
 
-def linsight_tool_payload(client: httpx.Client) -> dict:
-    item = code_interpreter_type(tool_categories(client))
+def _category_with_tool(rows: list, tool_key: str) -> dict | None:
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        children = item.get("children") or []
+        if any(isinstance(child, dict) and child.get("tool_key") == tool_key for child in children):
+            return item
+    return None
+
+
+def tool_category_payload(client: httpx.Client, tool_key: str) -> dict | None:
+    """One preset category that contains ``tool_key``, shaped for workbench submit."""
+    item = _category_with_tool(tool_categories(client), tool_key)
     if item is None:
         preset = data_of(client.get("/tool/linsight/preset"))
         rows = preset if isinstance(preset, list) else []
-        item = code_interpreter_type(rows)
-    if item is None:
-        raise ApiError("任务模式工具列表没有代码执行器")
+        item = _category_with_tool(rows, tool_key)
+    if item is None or item.get("id") in (None, ""):
+        return None
     children = []
     for child in item.get("children") or []:
-        if not isinstance(child, dict):
+        if not isinstance(child, dict) or child.get("id") in (None, ""):
             continue
         children.append(
             {
-                "id": child.get("id"),
+                "id": int(child["id"]),
                 "name": child.get("name"),
                 "tool_key": child.get("tool_key"),
                 "desc": child.get("desc"),
             }
         )
+    if not children:
+        return None
     return {
-        "id": item["id"],
+        "id": int(item["id"]),
         "name": item.get("name"),
         "is_preset": item.get("is_preset", 1),
         "desc": item.get("desc") or item.get("description"),
         "children": children,
     }
+
+
+def linsight_tool_payload(client: httpx.Client) -> dict:
+    item = tool_category_payload(client, TOOL_NAME)
+    if item is None:
+        raise ApiError("任务模式工具列表没有代码执行器")
+    return item
 
 
 def workbench_model_id(client: httpx.Client) -> str | None:
@@ -232,11 +252,15 @@ def upload_linsight_file(client: httpx.Client, filename: str, content: bytes) ->
 
 
 def submit_task(
-    client: httpx.Client, question: str, files: list[dict] | None = None, skills: list[str] | None = None
+    client: httpx.Client,
+    question: str,
+    files: list[dict] | None = None,
+    skills: list[str] | None = None,
+    tools: list[dict] | None = None,
 ) -> str:
     body: dict[str, Any] = {
         "question": question,
-        "tools": [linsight_tool_payload(client)],
+        "tools": tools if tools is not None else [linsight_tool_payload(client)],
         "files": files or [],
         "org_knowledge_enabled": False,
         "personal_knowledge_enabled": False,
@@ -279,17 +303,99 @@ def task_detail(client: httpx.Client, version_id: str) -> list:
     return payload if isinstance(payload, list) else []
 
 
-def wait_tasks(client: httpx.Client, version_id: str, timeout_s: float | None = None) -> list:
+def _task_snapshot(tasks: list) -> tuple:
+    """Identity of a detail payload: task id, status, and history length."""
+    marks = []
+    for task in tasks or []:
+        if not isinstance(task, dict):
+            continue
+        history = task.get("history")
+        count = len(history) if isinstance(history, list) else 0
+        marks.append((str(task.get("id") or ""), str(task.get("status") or ""), count))
+    return tuple(marks)
+
+
+def _finished_code_calls(tasks: list) -> tuple:
+    """Finished code-interpreter calls. Continue keeps the execute task on success while history grows, so length alone is not a new round."""
+    ids = []
+    for index, item in enumerate(task_tool_results(tasks)):
+        step = item["step"]
+        call_id = step.get("call_id") or step.get("id")
+        ids.append(str(call_id) if call_id else f"{index}:{len(str(step.get('output') or ''))}")
+    return tuple(ids)
+
+
+def followup_ready(
+    last: list,
+    *,
+    baseline: tuple,
+    previous_codes: tuple,
+    was_waiting: bool,
+    stable: tuple | None,
+) -> tuple[bool, tuple | None]:
+    """Whether a continue or user-input round is done.
+
+    Continue leaves the execute task on success. The first history growth is
+    often a write or a plan step, and the code result arrives later. Returning
+    on that first growth downloads the previous round's file. A continue round
+    is done when a new finished code call is present and the same detail has
+    been seen twice. A user-input round is done when the task has left
+    waiting_for_user_input, reached a terminal status, and stayed there.
+    """
+    snap = _task_snapshot(last)
+    if snap == baseline:
+        return False, None
+    terminal = {"success", "failed", "terminated"}
+    terminal_now = bool(last) and all(isinstance(task, dict) and task.get("status") in terminal for task in last)
+    waiting_now = any(isinstance(task, dict) and task.get("status") == "waiting_for_user_input" for task in last)
+    if was_waiting:
+        progressed = (not waiting_now) and terminal_now
+    else:
+        progressed = terminal_now and _finished_code_calls(last) != previous_codes
+    if progressed and stable == snap:
+        return True, stable
+    return False, snap if progressed else None
+
+
+def wait_tasks(
+    client: httpx.Client,
+    version_id: str,
+    timeout_s: float | None = None,
+    previous: list | None = None,
+) -> list:
+    """Poll until every execute task is terminal, or one is waiting for the user.
+
+    ``previous`` is the detail from the round that just finished. Continue and
+    user-input leave that success/waiting row in place until the worker picks
+    the new round up, so an immediate poll would return the previous round.
+    """
     limit = timeout_s if timeout_s is not None else float(os.environ.get("BISHENG_RELEASE_TIMEOUT", "180"))
     deadline = time.time() + limit
     last: list = []
+    baseline = _task_snapshot(previous) if previous is not None else None
+    previous_codes = _finished_code_calls(previous) if previous is not None else None
+    was_waiting = bool(previous) and any(
+        isinstance(task, dict) and task.get("status") == "waiting_for_user_input" for task in previous
+    )
+    stable: tuple | None = None
     terminal = {"success", "failed", "terminated"}
     while time.time() < deadline:
         last = task_detail(client, version_id)
-        if last and all(task.get("status") in terminal for task in last if isinstance(task, dict)):
-            return last
-        if any(isinstance(task, dict) and task.get("status") == "waiting_for_user_input" for task in last):
-            return last
+        if previous is None:
+            if last and all(task.get("status") in terminal for task in last if isinstance(task, dict)):
+                return last
+            if any(isinstance(task, dict) and task.get("status") == "waiting_for_user_input" for task in last):
+                return last
+        else:
+            done, stable = followup_ready(
+                last,
+                baseline=baseline,
+                previous_codes=previous_codes,
+                was_waiting=was_waiting,
+                stable=stable,
+            )
+            if done:
+                return last
         time.sleep(2)
     return last
 
@@ -384,8 +490,9 @@ def run_task_question(
     question: str,
     files: list[dict] | None = None,
     skills: list[str] | None = None,
+    tools: list[dict] | None = None,
 ) -> tuple[str, list]:
-    version_id = submit_task(client, question, files=files, skills=skills)
+    version_id = submit_task(client, question, files=files, skills=skills, tools=tools)
     return version_id, wait_tasks(client, version_id)
 
 

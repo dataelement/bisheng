@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from typing import Any
+
+_OFFLOAD_PATH = re.compile(r"/large_tool_results/([A-Za-z0-9._\-]+)")
+_NUMBERED_PREVIEW = re.compile(r"^\s*(\d+)\t(.*)$")
+_PRINTED_ENDS = re.compile(r"^FIRST:(.*)\nLAST:(.*)\nCOUNT:(\d+)\s*$", re.M)
 
 
 def parse_object(value: Any) -> dict | None:
@@ -173,6 +178,57 @@ def chosen_tool_result(results: list, accept) -> dict | None:
         if accept(item):
             return item
     return present[-1] if present else None
+
+
+def offload_from_text(text: str) -> dict | None:
+    """Path and the preview's first line, last line, and line count.
+
+    The system writes the original tool text to ``large_tool_results/<id>`` and
+    replaces the message with a head-and-tail preview whose line numbers run to
+    the original line count. No length threshold is applied here.
+    """
+    if "Tool result too large" not in text:
+        return None
+    found = _OFFLOAD_PATH.search(text)
+    if found is None:
+        return None
+    numbered = []
+    for line in text.splitlines():
+        match = _NUMBERED_PREVIEW.match(line)
+        if match:
+            numbered.append((int(match.group(1)), match.group(2)))
+    if not numbered or numbered[0][0] != 1:
+        return None
+    last_number, last_line = numbered[-1]
+    return {
+        "path": f"large_tool_results/{found.group(1)}",
+        "first": numbered[0][1],
+        "last": last_line,
+        "count": last_number,
+    }
+
+
+def printed_ends(log: str) -> tuple[str, str, int] | None:
+    """FIRST / LAST / COUNT lines the code tool was asked to print."""
+    match = _PRINTED_ENDS.search(log)
+    if match is None:
+        return None
+    return match.group(1).strip(), match.group(2).strip(), int(match.group(3))
+
+
+def offload_notice(tasks: list) -> dict | None:
+    for step in history_steps(tasks):
+        output = step.get("output")
+        if isinstance(output, str):
+            text = output
+        elif output is None:
+            continue
+        else:
+            text = json.dumps(output, ensure_ascii=False)
+        notice = offload_from_text(text)
+        if notice:
+            return notice
+    return None
 
 
 def step_text(step: dict) -> str:
