@@ -68,7 +68,8 @@ export function useSidebarEntries(): SidebarEntry[] {
   }
   const sorted = orderSidebarEntries(entries, order);
   const home = links.find(link => link.section === 'home');
-  if (home && !home.to.startsWith('/menu-unavailable')) sorted.unshift({
+  const squareIndex = sorted.findIndex(entry => entry.id === 'square');
+  if (home && !home.to.startsWith('/menu-unavailable')) sorted.splice(squareIndex < 0 ? sorted.length : squareIndex, 0, {
     id: 'capabilities', to: '/capabilities', icon: <Outlined.Application />,
     label: localize('com_capability_center.title'), active: pathname.startsWith('/capabilities'),
   });

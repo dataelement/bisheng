@@ -77,7 +77,7 @@ export function CapabilityCenterPage() {
               <p className="mt-0.5 truncate text-caption text-text-3">{item.provider}<span aria-hidden className="mx-1.5">·</span>{item.description}</p>
             </div>
           </li>)}
-        </ul> : <StateView title={t('empty')} description={t('empty_hint')} action={<Button color="default" variant="outlined" onClick={() => setSearch('')}>{t('show_all')}</Button>} />}
+        </ul> : <StateView title={t('empty')} />}
       </div>
     </main>
     {selected && <CapabilityDetail key={selected.id} item={selected} onClose={() => handleSelect()}
