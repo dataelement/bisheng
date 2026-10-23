@@ -77,7 +77,6 @@ export function ModelMultiplierInput({ modelId, modelName, onSavingChange }: Mod
                 onChange={event => { setDraft(event.target.value); setError(null); setSaved(false) }}
                 onBlur={() => { void save() }}
                 onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void save() } }} />
-            <span className="text-sm text-muted-foreground">×</span>
             {(loading || saving) && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label={t(saving ? 'dsh.unified.saving' : 'dsh.loading')} />}
             {saved && !saving && <Check className="size-4 text-green-600" aria-label={t('dsh.unified.saved')} />}
             {error && error !== 'dsh.unified.multiplierInvalid' && <Button variant="ghost" size="icon"
