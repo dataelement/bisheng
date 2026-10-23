@@ -202,6 +202,12 @@ flowchart LR
 
 `never_scheduled` 不是仅凭“查不到状态”：必须保留带删除时间和空 nodeName 的同 UID API 对象。绑定和终态来源的允许/拒绝测试属于安装硬门；不满足时不能启用该证明类型。已绑定但 init 拉取失败/材料拒绝时，先 DELETE，再等待 `kubelet_terminal`；不能根据 PodInitializing 或状态缺失直接释放。
 
+**报告失效与历史保护（T258–T261细化）**：安装报告的readiness与旧UID连续保护是不同事实。信任安装者/集群管理员和受认证kubelet、Webhook保持failurePolicy=Fail；本设计不声称防御管理员卸除后重装保护。内部心跳新增`capabilities.protection_observation={version:1,baseline_digest:<64hex>,state:current|report_expired|helper_changed|unconfirmed}`，原布尔继续只表示当前两项探测通过。新摘要对整个descriptor使用原canonical SHA256，仅排除probe_report/helper_image；原descriptor_digest算法和对外deploy API不变。除helper_image外所有变化都作为保护基线变化处理；admission语义变化必须提升status_policy_revision。
+
+`current`要求cluster-probe来源、当前完整摘要与非未来24小时内时间有效，两项布尔沿用各check结果。`report_expired`仅允许时间过期、完整摘要/来源正确且两项唯一有效正证据；`helper_changed`仅允许进程基线与新投射严格只差helper_image，原报告仍绑定旧完整摘要、时间非未来且两项正证据有效。两种情况仍ready=false、当前两布尔=false；缺失/坏报告、任意其他字段变化、冷启动摘要不匹配均不享此例外。backend只有旧node已登记同一新摘要/策略且严格新元数据匹配，才不把这两种report-only未知写成历史gap；节点blocked，历史false不变，不授予新执行。首次新版fresh报告可在同domain/策略下登记legacy node，初始未知不能登记例外；已有新版基线不可静默降级。基线变化/真实检查失败仍不可逆降低对应保护标记。
+
+当前保护未知期间，即便历史true也暂缓首次停止确认：never_scheduled需当前binding_protection=true，kubelet_terminal需当前status_protection=true，backend独立检查；只因网络等其他项失败仍可安全收尾。当前fresh同基线恢复只恢复当前可确认性，不回写历史标记。已确认同UID幂等/not_created独立路径/原UID与新鲜度围栏不变。当前旧三false记录不自动迁移、不移除finalizer、不释放卷；如需历史追溯或物理fencing另行提交设计评审。本修正不新增证明类型、权限、SQL字段或外部恢复接口。
+
 **创建事务收尾（T203–T214实施细化）**：新Pod意图在现有 `observed_state.creation` 保存 `version=1` 及 `unattempted → started → rejected`；POST前原子 `create_begin` 固定唯一 `create_attempt_id` 和controller epoch，重复begin不重发。只有同attempt/epoch的明确HTTP403能记录rejected；timeout、transport、5xx、409、2xx解析失败等保持started/unknown。新意图准入只有started允许CREATE，旧JSON空记录不回填为unattempted。收尾先 `create_fence` 将unattempted/rejected固定为fenced并关闭CREATE，再新鲜GET404，通过独立 `not_created` 观察记录无执行体证明。该路径stop_state=confirmed但evidence_kind=not_created、UID仍NULL；普通stopped的同UID证明完全不变。任一实际对象出现必须验证范围、绑定真实UID并走停止流程；已证明未创建后又出现对象则拒绝，不删除或移除finalizer。旧r4缺少唯一尝试账本，保留操作/PVC/预占，不凭历史manager日志或当前404自动追认。锁序保持operation→node→resource，资源加锁读取使用populate_existing强制刷新预读identity map，避免并发begin/fence覆盖。无新DDL、无直接MinIO依赖、无外部deploy API变更。
 
 **延迟调度绑定收尾（T219/T220）**：Kubernetes CREATE返回时Pod可能尚无nodeName。停止前必须从API server新鲜读取并核对同namespace/name/UID及范围标签；仅首次从空节点补齐为实际节点，已有非空节点不得变化或被清空。补齐后校验平台绑定回执，再生成停止证明，保持backend对证据节点与账本节点严格相等的要求。已有confirmed证明不得补绑或改写；UID/范围变化、GET或绑定结果不确定继续保留资源。189已观察同UID材料Pod成功、facts200，但旧实现账本节点为空导致stopped409；189 Helm15已由正常对账补齐原Pod节点，保存同UID停止证据并完成三资源清理；完整发布仍待验收，未人工清理finalizer或PVC。
@@ -803,3 +809,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 T254/T255：安装registry探测补egress-proxy实际网络策略下的上游TCP检查，控制canary保持NotReady避免被业务Service选入；原外部crane权限/TLS检查和真实assembler业务验证分别保留。189 Docker仓库5443映射5000，Calico按DNAT后端口匹配，现场配置另增5000且已真实配对确认；不改变部署API、helper命令、镜像或descriptor摘要协议。
 
 2026-10-23 T256/T257：本地真实方法链确认prepare Running循环未观察已受理cancel，复用已有操作检查补齐；26配对与201相邻、主树1649/13skip通过。既定取消/围栏/期限合同内修正，不变API、helper/assembler/profile和停止证明。189真实取消与容量释放单列待验。
+
+2026-10-23 T258–T261：依据真实五例调用链与189 cohort，在4.5既有信任模型内区分报告失效和真实保护失败；严格同基线仅保留旧true并暂阻当前停止，旧false不恢复。实施和真实复验待完成，未扩展物理fencing合同。

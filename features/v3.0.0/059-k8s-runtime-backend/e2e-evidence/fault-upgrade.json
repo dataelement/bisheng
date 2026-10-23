@@ -416,5 +416,396 @@
       "Runtime mandatory checks are15; raw installer report has16 including registry-push",
       "No new ARM/109/public tag/DockerHub release"
     ]
+  },
+  "protection_report_stop_blocker": {
+    "state": "blocked_no_forced_cleanup",
+    "source_sha": "2ac60f808be170e73f0094ba5c8d041f8a9e10cd",
+    "host": "192.168.106.189",
+    "journal": "/opt/e2e-f059/evidence/k8s-offline-data-k189r10-r4.json",
+    "journal_sha256": "fdbbd894bd3f7fc9d705251fc60d24713f3f690ba9adf303528ee685c43b2f9b",
+    "last_event": {
+      "name": "offline-data-stopped",
+      "acs": [
+        "AC-55"
+      ],
+      "outcome": "failed",
+      "kind": "live-api",
+      "observed_at": 1792713168.0409951,
+      "exception_type": "AssertionError"
+    },
+    "cohort": {
+      "apps": [
+        {
+          "app_id": "a4a566cacbfb477daaf2bd90ea3eb21a",
+          "exec_ref": "21bfa140-b850-5935-8e4c-f8fcec73049c",
+          "generation": 8,
+          "operation_id": "462c127e015248ab9b9cd512be8f1dc8",
+          "owner_epoch": 1,
+          "phase": "stopped",
+          "pods": [
+            {
+              "actual": {
+                "created_at": "2026-10-22T20:18:53Z",
+                "deletion_at": "2026-10-22T23:42:48Z",
+                "finalizers": [
+                  "runtime.bisheng.io/stop-confirmed"
+                ],
+                "node_name": "binfeng-k8s-node189",
+                "phase": "Failed",
+                "states": [
+                  {
+                    "name": "data-layout",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "material-fetch",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "environment",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "app",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "data-helper",
+                    "states": [
+                      "terminated"
+                    ]
+                  }
+                ],
+                "uid": "0ca2a71e-b37d-47e0-a2eb-6d125aaa5c86"
+              },
+              "binding_policy_verified": false,
+              "cleanup_state": "pending",
+              "controller_epoch": 22,
+              "generation": 7,
+              "id": null,
+              "name": "app-6153b2cdf43a4bbef23a5d0a47e2a916ca8a0082",
+              "node_name": "binfeng-k8s-node189",
+              "observed_at": null,
+              "protected_since_creation": false,
+              "purpose": "serve",
+              "stop_classification": {
+                "kind": "unknown",
+                "reason": "writer_stop_unconfirmed"
+              },
+              "stop_evidence_kind": null,
+              "stop_requested_at": "2026-10-22T23:42:48",
+              "stop_state": "requested",
+              "uid": "0ca2a71e-b37d-47e0-a2eb-6d125aaa5c86"
+            }
+          ]
+        },
+        {
+          "app_id": "4316627161aa458a950d14497d2f21e9",
+          "exec_ref": "ea70dac2-c690-5cb4-ad5b-332ab995fa8b",
+          "generation": 4,
+          "operation_id": "b2106634b34c429099d6c6a64797499f",
+          "owner_epoch": 1,
+          "phase": "serving",
+          "pods": [
+            {
+              "actual": {
+                "created_at": "2026-10-22T20:34:01Z",
+                "deletion_at": null,
+                "finalizers": [
+                  "runtime.bisheng.io/stop-confirmed"
+                ],
+                "node_name": "binfeng-k8s-node189",
+                "phase": "Running",
+                "states": [
+                  {
+                    "name": "data-layout",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "material-fetch",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "environment",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "app",
+                    "states": [
+                      "running"
+                    ]
+                  },
+                  {
+                    "name": "data-helper",
+                    "states": [
+                      "running"
+                    ]
+                  }
+                ],
+                "uid": "2d155f36-bb1d-4e02-9aaf-fb070b999e4f"
+              },
+              "binding_policy_verified": false,
+              "cleanup_state": "pending",
+              "controller_epoch": 17,
+              "generation": 4,
+              "id": null,
+              "name": "app-8ee02249e6a0d0ba384ce4a22a6b608837c10400",
+              "node_name": "binfeng-k8s-node189",
+              "observed_at": null,
+              "protected_since_creation": false,
+              "purpose": "serve",
+              "stop_classification": {
+                "kind": "unknown",
+                "reason": "stop_protection_or_deletion_unconfirmed"
+              },
+              "stop_evidence_kind": null,
+              "stop_requested_at": null,
+              "stop_state": "held",
+              "uid": "2d155f36-bb1d-4e02-9aaf-fb070b999e4f"
+            }
+          ]
+        },
+        {
+          "app_id": "46ed080f7a6d4e24a94a2e0d6d499650",
+          "exec_ref": "49df894e-dedb-5661-959b-21d5c502ea0e",
+          "generation": 4,
+          "operation_id": "a0b07a75483c4a5b9cd8c8691c27c63c",
+          "owner_epoch": 1,
+          "phase": "serving",
+          "pods": [
+            {
+              "actual": {
+                "created_at": "2026-10-22T21:06:24Z",
+                "deletion_at": null,
+                "finalizers": [
+                  "runtime.bisheng.io/stop-confirmed"
+                ],
+                "node_name": "binfeng-k8s-node189",
+                "phase": "Running",
+                "states": [
+                  {
+                    "name": "data-layout",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "material-fetch",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "environment",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "app",
+                    "states": [
+                      "running"
+                    ]
+                  },
+                  {
+                    "name": "data-helper",
+                    "states": [
+                      "running"
+                    ]
+                  }
+                ],
+                "uid": "f405a380-5fb9-4a87-84ca-7269175cd7a8"
+              },
+              "binding_policy_verified": false,
+              "cleanup_state": "pending",
+              "controller_epoch": 18,
+              "generation": 4,
+              "id": null,
+              "name": "app-cb038aa8067273280d568cb7ef797dbe91e94927",
+              "node_name": "binfeng-k8s-node189",
+              "observed_at": null,
+              "protected_since_creation": false,
+              "purpose": "serve",
+              "stop_classification": {
+                "kind": "unknown",
+                "reason": "stop_protection_or_deletion_unconfirmed"
+              },
+              "stop_evidence_kind": null,
+              "stop_requested_at": null,
+              "stop_state": "held",
+              "uid": "f405a380-5fb9-4a87-84ca-7269175cd7a8"
+            }
+          ]
+        },
+        {
+          "app_id": "fad0b104e09c46cda59469248ab20605",
+          "exec_ref": "570e9beb-11d6-5fcf-820b-fdbad8ebb48a",
+          "generation": 4,
+          "operation_id": "88cc9c263af640df9e852e2c74cc2165",
+          "owner_epoch": 1,
+          "phase": "serving",
+          "pods": [
+            {
+              "actual": {
+                "created_at": "2026-10-22T22:44:11Z",
+                "deletion_at": null,
+                "finalizers": [
+                  "runtime.bisheng.io/stop-confirmed"
+                ],
+                "node_name": "binfeng-k8s-node189",
+                "phase": "Running",
+                "states": [
+                  {
+                    "name": "data-layout",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "app",
+                    "states": [
+                      "running"
+                    ]
+                  },
+                  {
+                    "name": "data-helper",
+                    "states": [
+                      "running"
+                    ]
+                  }
+                ],
+                "uid": "0ad1b4c0-db79-440c-a1f7-4acfba699692"
+              },
+              "binding_policy_verified": true,
+              "cleanup_state": "pending",
+              "controller_epoch": 21,
+              "generation": 4,
+              "id": null,
+              "name": "app-1eaef29a6764649b429a9f2a90aea27e4afd7752",
+              "node_name": "binfeng-k8s-node189",
+              "observed_at": null,
+              "protected_since_creation": true,
+              "purpose": "serve",
+              "stop_classification": {
+                "kind": "unknown",
+                "reason": "stop_protection_or_deletion_unconfirmed"
+              },
+              "stop_evidence_kind": null,
+              "stop_requested_at": null,
+              "stop_state": "held",
+              "uid": "0ad1b4c0-db79-440c-a1f7-4acfba699692"
+            }
+          ]
+        },
+        {
+          "app_id": "ec6229a98d434d7cb58f740b58945ff6",
+          "exec_ref": "4c549cd5-6a27-595d-b58f-622938ea70a7",
+          "generation": 4,
+          "operation_id": "68cc365b61d84c6585b7f9db897ea5c0",
+          "owner_epoch": 1,
+          "phase": "serving",
+          "pods": [
+            {
+              "actual": {
+                "created_at": "2026-10-22T23:26:23Z",
+                "deletion_at": null,
+                "finalizers": [
+                  "runtime.bisheng.io/stop-confirmed"
+                ],
+                "node_name": "binfeng-k8s-node189",
+                "phase": "Running",
+                "states": [
+                  {
+                    "name": "data-layout",
+                    "states": [
+                      "terminated"
+                    ]
+                  },
+                  {
+                    "name": "app",
+                    "states": [
+                      "running"
+                    ]
+                  },
+                  {
+                    "name": "data-helper",
+                    "states": [
+                      "running"
+                    ]
+                  }
+                ],
+                "uid": "fcbc7bdd-059e-4ef3-a5bd-cefe4931c38d"
+              },
+              "binding_policy_verified": true,
+              "cleanup_state": "pending",
+              "controller_epoch": 21,
+              "generation": 4,
+              "id": null,
+              "name": "app-07560d0f5d6ee4b0d34bd3b26604fd5346754065",
+              "node_name": "binfeng-k8s-node189",
+              "observed_at": null,
+              "protected_since_creation": true,
+              "purpose": "serve",
+              "stop_classification": {
+                "kind": "unknown",
+                "reason": "stop_protection_or_deletion_unconfirmed"
+              },
+              "stop_evidence_kind": null,
+              "stop_requested_at": null,
+              "stop_state": "held",
+              "uid": "fcbc7bdd-059e-4ef3-a5bd-cefe4931c38d"
+            }
+          ]
+        }
+      ],
+      "node": {
+        "controller_epoch": 22,
+        "heartbeat_at": null,
+        "node_id": "e2e-f059-node",
+        "protection": {
+          "binding_protection": true,
+          "mandatory_isolation": true,
+          "status_protection": true
+        },
+        "status": "ready"
+      },
+      "observed_at": 1792713374.9202218,
+      "stop_operation": {
+        "cleanup_status": "pending",
+        "deadline": "2026-10-22T23:52:48",
+        "failure": {
+          "data_may_have_changed": false,
+          "diagnostic_tail": "",
+          "failed_stage": "queued",
+          "maintenance": false,
+          "reason": "operation_timeout"
+        },
+        "generation": 8,
+        "kind": "stop",
+        "operation_id": "d675d583ebb34e68b4756fe8852ff91d",
+        "stage": "timed_out",
+        "status": "timed_out"
+      }
+    },
+    "cohort_sha256": "bfbd58e822d70fac0528232b8a715ea68e4f5ce522f3dbb09e0a271dd40bdd23",
+    "specific_trigger_heartbeat_identified": false,
+    "old_false_repaired": false,
+    "local_mechanism_tests": 5,
+    "local_review_sha256": "47a133dd7dd5649c6145694be019a83d370981316f4b90a54376a13bde54bdc2",
+    "boundary": "Old three false/new two true. Failed+terminated diagnostics do not restore provenance. Existing UID/finalizer/PVC/reservation retained; T258-T261 are future implementation correction, not historical repair."
   }
 }

@@ -45,3 +45,9 @@ Chart 卸载会删除 admission webhook、服务与 RBAC，以及执行域 Netwo
 Helm28只更新images.manager，旧Pod30d08ee0…替换为faa48ee8-fd38-4980-a290-4b44ada8d6b4；五应用PodUID、各容器CID、PVC/PV身份全部未变，egress/admission/app-proxy的Pod与容器未重启。descriptor数据/UID、helper/assembler/profile均不变。receipt SHA `539386dafef972122991013f7b03c0e920be301df794dea3df09ea5136763e5b`，before/after SHAefe107e7…/6e7757c1…；不据此声称切换期间所有HTTP请求连续成功。
 
 自然node heartbeat已ready/controller_epoch22，运行期15必需检查和原始安装报告16项分别通过，bundle/image/source-image三路径true；容量仍6784Mi/3125m/5实例，旧r4failed/cleanup pending及原PVC保持。root首轮核查误要求运行期16而assert失败，实际报告无故障；纠正口径后冻结真实ready文件，不改产品。owner取消、inflight重启/释放及其他故障仍待独立实测。
+
+## 189 停用验收新增阻塞：报告与历史保护
+
+Python应用a4a566…的单次正常停用d675d583ebb34e68b4756fe8852ff91d在原900秒后自然timed_out/operation_timeout，cleanup pending；离线driver在等待停用600秒处失败退出，未编辑数据库、未恢复上线。Pod0ca2a71e…同UID已删除中/Failed、全部init/app/helper terminated，但资源历史status/binding标志均false，分类器与backend继续拒绝确认。finalizer、PVC、容量保留，无手工SQL或强制清理。
+
+只读五应用cohort：旧Python/Node/static均false/false，后创建source/image仍true/true，node当前ready且两项保护true。不能据此归因最近manager-only升级；首次绑定时是否为true及具体触发心跳缺历史证据。真实本地assessment→manager heartbeat→backend Service→SQLite事务五例证明TTL/helper变化会触发不可逆清零，实际guard失败与报告失效被混用。T258–T261按design4.5细化；不将修正上线视作旧false恢复。原失败journal与脱敏快照SHA见JSON。

@@ -6452,6 +6452,121 @@
       "review": "PASS"
     },
     {
+      "id": "T258",
+      "wave": 8,
+      "kind": "测试",
+      "title": "报告失效与保护基线的runtime配对",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_protection_report.py",
+        "src/runtime-manager/tests/test_k8s_capabilities.py"
+      ],
+      "logic": "真实能力计算覆盖TTL/helper-only未知、保护字段变化、坏/重复证据、cold restart和真实failed；旧实现先红，保留readiness fail-closed及原descriptor摘要。",
+      "acs": [
+        "AC-07",
+        "AC-30",
+        "AC-31",
+        "AC-35",
+        "AC-40",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T257"
+      ],
+      "pair": "T259",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T259",
+      "wave": 8,
+      "kind": "实现",
+      "title": "runtime分别报告readiness和保护观察",
+      "files": [
+        "src/runtime-manager/runtime_manager/k8s_capabilities.py",
+        "src/runtime-manager/runtime_manager/executors/kubernetes.py"
+      ],
+      "logic": "新增严格版本化protection_observation与排除仅report/helper的基线摘要；仅两种可证明report-only未知不推导历史gap，当前能力仍false；其他不确定继续unconfirmed。",
+      "acs": [
+        "AC-07",
+        "AC-30",
+        "AC-31",
+        "AC-35",
+        "AC-40",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T258"
+      ],
+      "pair": "T258",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T260",
+      "wave": 8,
+      "kind": "测试",
+      "title": "平台历史保护与当前停止确认配对",
+      "files": [
+        "src/backend/test/app_runtime/test_runtime_protection_report.py"
+      ],
+      "logic": "真实SQLite事务覆盖同基线未知重复心跳/恢复、真实failed不可逆、基线变化/协议降级/无首次基线拒绝、当前保护未知不得确认停止及旧false不恢复。",
+      "acs": [
+        "AC-07",
+        "AC-30",
+        "AC-31",
+        "AC-35",
+        "AC-40",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T257"
+      ],
+      "pair": "T261",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T261",
+      "wave": 8,
+      "kind": "实现",
+      "title": "平台保留报告未知的历史事实并阻止当前释放",
+      "files": [
+        "src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py",
+        "src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py"
+      ],
+      "logic": "仅可信旧同基线+严格report-only元数据保留历史标记，节点blocked；实际失败/基线变更仍降级。首次停止须当前对应保护true，已确认幂等与not_created不变；不回填旧false。",
+      "acs": [
+        "AC-07",
+        "AC-30",
+        "AC-31",
+        "AC-35",
+        "AC-40",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T260"
+      ],
+      "pair": "T260",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

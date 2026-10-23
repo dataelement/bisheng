@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；255 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 250 / 255 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；259 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 250 / 259 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2059,6 +2059,41 @@
   **覆盖 AC:** AC-15、AC-39、AC-42、AC-48、AC-54、AC-55、AC-56
   **依赖:** T070、T067
 
+
+### 报告失效与连续保护修正（T258–T261）
+
+- [ ] **T258** — 报告失效与保护基线的runtime配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_protection_report.py`、`src/runtime-manager/tests/test_k8s_capabilities.py`
+  **逻辑/验收**：真实能力计算覆盖TTL/helper-only未知、保护字段变化、坏/重复证据、cold restart和真实failed；旧实现先红，保留readiness fail-closed及原descriptor摘要。
+  **覆盖 AC:** AC-07、AC-30、AC-31、AC-35、AC-40、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T257
+  **配对:** T259
+
+- [ ] **T259** — runtime分别报告readiness和保护观察
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/k8s_capabilities.py`、`src/runtime-manager/runtime_manager/executors/kubernetes.py`
+  **逻辑/验收**：新增严格版本化protection_observation与排除仅report/helper的基线摘要；仅两种可证明report-only未知不推导历史gap，当前能力仍false；其他不确定继续unconfirmed。
+  **覆盖 AC:** AC-07、AC-30、AC-31、AC-35、AC-40、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T258
+  **配对:** T258
+
+- [ ] **T260** — 平台历史保护与当前停止确认配对
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_runtime_protection_report.py`
+  **逻辑/验收**：真实SQLite事务覆盖同基线未知重复心跳/恢复、真实failed不可逆、基线变化/协议降级/无首次基线拒绝、当前保护未知不得确认停止及旧false不恢复。
+  **覆盖 AC:** AC-07、AC-30、AC-31、AC-35、AC-40、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T257
+  **配对:** T261
+
+- [ ] **T261** — 平台保留报告未知的历史事实并阻止当前释放
+  **类型**：实现
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`、`src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py`
+  **逻辑/验收**：仅可信旧同基线+严格report-only元数据保留历史标记，节点blocked；实际失败/基线变更仍降级。首次停止须当前对应保护true，已确认幂等与not_created不变；不回填旧false。
+  **覆盖 AC:** AC-07、AC-30、AC-31、AC-35、AC-40、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T260
+  **配对:** T260
+
 ### Wave 9
 
 - [ ] **T072** — L2 代码审查及交付核对
@@ -2207,3 +2242,5 @@ T254/T255 L1闭合：14先红后绿，作者213相关/独立18通过；合流后
 T256/T257登记：本地真实方法与间接调用链复现Running准备循环仅初读operation，随后仅续controller/resource；owner cancel不参与循环判定，直至自然结束或原期限。复用已有_startup_checkpoint修正，保留同UID正常清理与不确定结果围栏。机制证据SHA7fbeb6b796f32940b6c1b7fcd8736d1893e11fb2c832a4207f6405c6dab21fce，仅本地模拟/静态，尚非189取消实测。活跃248/255、117测试任务；ARM继续暂缓。
 
 T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac60f808；26配对旧19fail/7pass→26pass，相邻201pass，主树完整runtime1649passed/13skip（33.77s）。独立L1 SHA83dbd6c9bf858330b97960e83d42c18db15e0891edf5b9f829cec25fc5d9142c。design4.6同步；250/255完成、117测试任务，剩余五真实验收/发行/L2门保持未完。manager镜像及189取消待复验，无新ARM/109/公开发行。
+
+2026-10-23 T258–T261登记：本地真实方法/SQLite五例复现报告TTL或helper变化可清零历史保护；189旧三bundle为false，新source/image仍true。首个触发心跳未知，不能归因最近manager升级。Python离线停用d675已自然timed_out且cleanup pending，保留UID/finalizer/PVC/预占。增量细化4.5，不新增历史恢复或物理fencing，旧false不修；活跃250/259、119测试任务。ARM及新增109继续暂缓。
