@@ -26,7 +26,11 @@ from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
 from bisheng.tool.domain.services.openapi import OpenApiSchema
-from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService, manages_availability
+from bisheng.tool.domain.services.user_availability import (
+    UserToolAvailabilityService,
+    manages_availability,
+    uses_account_availability,
+)
 from bisheng.utils.async_utils import run_async_safe
 from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
@@ -283,7 +287,7 @@ class ToolExecutor(BaseTool):
         user_id: int,
         **kwargs,
     ) -> BaseTool:
-        if manages_availability(tool):
+        if uses_account_availability(app_type) and manages_availability(tool):
             UserToolAvailabilityService(user_id).ensure_enabled_sync(tool.id)
         try:
             return cls._init_by_tool_and_type(
@@ -347,7 +351,7 @@ class ToolExecutor(BaseTool):
     ) -> list[BaseTool]:
         result = []
         for tool in tools:
-            if manages_availability(tool) and not UserToolAvailabilityService(user_id).is_enabled_sync(tool.id):
+            if uses_account_availability(app_type) and manages_availability(tool) and not UserToolAvailabilityService(user_id).is_enabled_sync(tool.id):
                 continue
 
             tool_type = tool_types_map.get(tool.type)
@@ -490,7 +494,7 @@ class ToolExecutor(BaseTool):
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
 
-        if self.tool_is_preset == 1 and self.tool_key == "web_search":
+        if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
             UserToolAvailabilityService(self.user_id).ensure_enabled_sync(self.tool_id)
         if signature(self.tool_instance._run).parameters.get("config"):
             kwargs["config"] = config
@@ -502,7 +506,7 @@ class ToolExecutor(BaseTool):
     async def _arun(
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
-        if self.tool_is_preset == 1 and self.tool_key == "web_search":
+        if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
             await UserToolAvailabilityService(self.user_id).ensure_enabled(self.tool_id)
         if signature(self.tool_instance._run).parameters.get("config"):
             kwargs["config"] = config

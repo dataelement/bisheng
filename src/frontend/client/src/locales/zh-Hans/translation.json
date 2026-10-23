@@ -2543,6 +2543,8 @@
     "tab_square": "广场"
   },
   "com_capability_center": {
+    "tool": "工具",
+    "tool_enabled_setting": "启用工具",
     "availability_failed": "保存失败，请重试。",
     "web_search_setting": "启用联网搜索",
     "eyebrow": "BISHENG · 企业能力",

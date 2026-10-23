@@ -9,6 +9,12 @@ from fastapi import HTTPException
 from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
 
 
+@pytest.fixture(autouse=True)
+def account_availability(monkeypatch):
+    from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
+    monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", AsyncMock(return_value=set()))
+
+
 def tool(id=1, kind=1, name="Current time", key="get_current_time"):
     return SimpleNamespace(id=id, is_preset=kind, name=name, tool_key=key, desc="Description", is_delete=0)
 
@@ -183,7 +189,7 @@ async def test_account_disabled_search_remains_manageable_but_picker_marks_it_di
     assert next(child for child in picker[0]["children"] if child["id"] == 38)["enabled"] is False
 
 
-async def test_only_authorized_managed_search_can_change_account_availability(monkeypatch):
+async def test_only_authorized_tools_can_change_account_availability(monkeypatch):
     from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
 
     save = AsyncMock()
@@ -193,8 +199,45 @@ async def test_only_authorized_managed_search_can_change_account_availability(mo
     assert await app.set_availability(38, False) == {"tool_id": 38, "enabled": False}
     save.assert_awaited_once_with(38, False)
     work.publications.audit.assert_awaited_once()
-    for forbidden in (1, 999):
+    for forbidden in (999,):
         with pytest.raises(HTTPException) as failure:
             await app.set_availability(forbidden, False)
         assert failure.value.status_code == 404
-    assert save.await_count == 1
+    assert await app.set_availability(1, False) == {"tool_id": 1, "enabled": False}
+    assert save.await_count == 2
+
+
+@pytest.mark.parametrize("kind", [0, 1, 2])
+async def test_each_tool_kind_can_be_disabled_and_removed_from_work(monkeypatch, kind):
+    from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
+    from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
+
+    app, _ = make_service(monkeypatch, [tool(7, kind)])
+    disabled = AsyncMock(return_value=set())
+    monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", disabled)
+    work = WorkCapabilitiesService(SimpleNamespace(tenant_id=2, user_id=7))
+    assert set(await work._tools()) == {7}
+    disabled.return_value = {7}
+    item = (await app.list())["items"][0]
+    assert item["availability_enabled"] is False
+    assert item["ready"] is False
+    assert (await app.picker_tools())[0]["children"][0]["enabled"] is False
+    assert await work._tools() == {}
+    work._executor = AsyncMock()
+    with pytest.raises(HTTPException) as failure:
+        await work.call_tool("bisheng_tool_7", {})
+    assert failure.value.status_code == 403
+    work._executor.assert_not_awaited()
+
+
+async def test_dedicated_knowledge_adapter_uses_the_same_account_boundary(monkeypatch):
+    from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
+    from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
+
+    make_service(monkeypatch, [tool(7, key="bisheng_knowledge_search")])
+    work = WorkCapabilitiesService(SimpleNamespace(tenant_id=2, user_id=7))
+    await work.ensure_tool_key_enabled("bisheng_knowledge_search")
+    monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", AsyncMock(return_value={7}))
+    with pytest.raises(HTTPException) as failure:
+        await work.ensure_tool_key_enabled("bisheng_knowledge_search")
+    assert failure.value.status_code == 403

@@ -61,6 +61,9 @@ async def retrieve_workspace_context(
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
 ) -> Any:
     """Return permission-filtered context to an authenticated workspace task."""
+    from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
+
+    await WorkCapabilitiesService(svc.login_user).ensure_tool_key_enabled("bisheng_knowledge_search")
     svc.version_repo = version_repo
     return resp_200(await retrieve_workspace_chunks(svc, req))
 

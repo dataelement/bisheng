@@ -8,10 +8,10 @@ import { runCapabilityTrial, type Capability, type CapabilityResult } from '~/ap
 interface CapabilityDetailProps {
   item: Capability;
   onClose: () => void;
-  webSearch?: { checked: boolean; busy: boolean; onChange: (enabled: boolean) => void };
+  availability?: { checked: boolean; busy: boolean; onChange: (enabled: boolean) => void };
   availabilityError?: string;
 }
-export function CapabilityDetail({ item, onClose, webSearch, availabilityError }: CapabilityDetailProps) {
+export function CapabilityDetail({ item, onClose, availability, availabilityError }: CapabilityDetailProps) {
   const localize = useLocalize();
   const t = (key: string) => localize(`com_capability_center.${key}`);
   const [args, setArgs] = useState(item.trial?.arguments ?? {});
@@ -20,7 +20,7 @@ export function CapabilityDetail({ item, onClose, webSearch, availabilityError }
   const [error, setError] = useState('');
   const title = item.trial ? t(`scenario_${item.trial.scenario}`) : item.name;
   const handleRun = async () => {
-    if (busy) return;
+    if (busy || availability?.checked === false) return;
     setBusy(true); setError(''); setResult(null);
     try { setResult(await runCapabilityTrial(item.resource_id, args)); }
     catch { setError(t('trial_failed')); }
@@ -30,7 +30,7 @@ export function CapabilityDetail({ item, onClose, webSearch, availabilityError }
     <DialogContent close={false} className="flex max-h-[85dvh] w-[calc(100%-40px)] max-w-[720px] flex-col gap-0 overflow-hidden rounded-2xl border-border-base bg-bg-page p-0">
       <header className="flex items-center justify-between gap-4 border-b border-border-base px-6 py-4">
         <div className="min-w-0"><DialogTitle className="text-h4 text-text-1">{title}</DialogTitle>
-          <DialogDescription className="mt-1 text-caption text-text-3">{t(item.kind)} · {item.provider}</DialogDescription></div>
+          <DialogDescription className="mt-1 text-caption text-text-3">{t(item.kind === 'skill' ? 'skill' : 'tool')} · {item.provider}</DialogDescription></div>
         <Button color="default" variant="text" size="small" disabled={busy} onClick={onClose}>{t('close')}</Button>
       </header>
       <div className="scrollbar-os space-y-6 overflow-y-auto p-6">
@@ -41,11 +41,11 @@ export function CapabilityDetail({ item, onClose, webSearch, availabilityError }
             <span className="text-body-sm text-text-2">{t(`field_${name}`)}</span>
             <Input value={value} onChange={event => setArgs(current => ({ ...current, [name]: event.target.value }))} disabled={busy} />
           </label>)}
-          <Button size="medium" loading={busy} onClick={handleRun} icon={<Play className="size-4" />}>{t('run')}</Button>
+          <Button size="medium" loading={busy} disabled={availability?.checked === false || availability?.busy} onClick={handleRun} icon={<Play className="size-4" />}>{t('run')}</Button>
         </section> : null}
-        {webSearch && <div className="flex items-center justify-between gap-4">
-          <label htmlFor="capability-web-search" className="text-body-sm text-text-1">{t('web_search_setting')}</label>
-          <Switch id="capability-web-search" checked={webSearch.checked} loading={webSearch.busy} disabled={webSearch.busy} onCheckedChange={webSearch.onChange} aria-label={t('web_search_setting')} />
+        {availability && <div className="flex items-center justify-between gap-4">
+          <label htmlFor="capability-availability" className="text-body-sm text-text-1">{t('tool_enabled_setting')}</label>
+          <Switch id="capability-availability" checked={availability.checked} loading={availability.busy} disabled={availability.busy} onCheckedChange={availability.onChange} aria-label={t('tool_enabled_setting')} />
         </div>}
         {availabilityError && <p role="alert" className="text-body-sm text-danger">{availabilityError}</p>}
         {error && <p role="alert" className="text-body-sm text-danger">{error}</p>}

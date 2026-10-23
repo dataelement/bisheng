@@ -2537,6 +2537,8 @@
     "tab_square": "広場"
   },
   "com_capability_center": {
+    "tool": "ツール",
+    "tool_enabled_setting": "ツールを有効にする",
     "availability_failed": "保存できませんでした。もう一度お試しください。",
     "web_search_setting": "ウェブ検索を有効にする",
     "eyebrow": "BISHENG · 企業機能",

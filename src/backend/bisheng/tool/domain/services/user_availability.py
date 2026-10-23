@@ -4,7 +4,12 @@ from bisheng.tool.domain.repositories.user_availability import UserToolAvailabil
 
 
 def manages_availability(tool) -> bool:
-    return getattr(tool, "is_preset", None) == 1 and getattr(tool, "tool_key", None) == "web_search"
+    return getattr(tool, "is_preset", None) in (0, 1, 2) and bool(getattr(tool, "id", None))
+
+
+def uses_account_availability(app_type) -> bool:
+    """Personal Chat and Work preferences are separate from published applications."""
+    return app_type in ("daily_chat", "linsight", "dsh_desktop")
 
 
 class UserToolAvailabilityService:

@@ -36,6 +36,12 @@ class WorkCapabilitiesService:
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(tools)
         return {tool.id: tool for tool in tools if tool.id not in disabled}
 
+    async def ensure_tool_key_enabled(self, tool_key: str):
+        """Apply the tool catalog boundary to dedicated desktop adapters too."""
+        if any(tool.tool_key == tool_key for tool in (await self._tools()).values()):
+            return
+        raise HTTPException(403, "Enable this tool in Tools & Skills and verify its use permission")
+
     async def _skills(self):
         from bisheng.linsight.domain.services.user_skills import UserSkillsService
 

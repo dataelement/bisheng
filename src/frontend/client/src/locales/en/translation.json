@@ -2614,6 +2614,8 @@
     "tab_square": "Square"
   },
   "com_capability_center": {
+    "tool": "Tools",
+    "tool_enabled_setting": "Enable tool",
     "availability_failed": "Could not save. Try again.",
     "web_search_setting": "Enable web search",
     "eyebrow": "BISHENG · Enterprise capabilities",

@@ -75,15 +75,20 @@ async def test_closed_tool_is_denied_by_async_and_sync_execution_guards(availabi
     service.ensure_enabled_sync(38)
 
 
-async def test_only_managed_search_tools_read_availability():
+@pytest.mark.parametrize("kind", [0, 1, 2])
+async def test_all_tool_kinds_read_account_availability(kind):
     repository = SimpleNamespace(disabled_ids=AsyncMock(return_value={38}))
     service = UserToolAvailabilityService(7, repository)
-    ordinary = SimpleNamespace(id=1, is_preset=1, tool_key="get_current_time")
-    search = SimpleNamespace(id=38, is_preset=1, tool_key="web_search")
-    assert not manages_availability(ordinary)
-    assert await service.disabled_ids([ordinary]) == set()
-    repository.disabled_ids.assert_not_awaited()
-    assert await service.disabled_ids([search]) == {38}
+    tool = SimpleNamespace(id=38, is_preset=kind, tool_key="example")
+    assert manages_availability(tool)
+    assert await service.disabled_ids([tool]) == {38}
+    repository.disabled_ids.assert_awaited_once_with(7)
+
+
+@pytest.mark.parametrize("app_type, expected", [("daily_chat", True), ("linsight", True), ("dsh_desktop", True), ("workflow", False), ("assistant", False)])
+def test_personal_preferences_apply_to_chat_and_work(app_type, expected):
+    from bisheng.tool.domain.services.user_availability import uses_account_availability
+    assert uses_account_availability(app_type) is expected
 
 
 def test_missing_tenant_cannot_read_an_account_setting():
