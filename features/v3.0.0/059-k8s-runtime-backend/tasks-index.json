@@ -6799,6 +6799,50 @@
       "review": "pending"
     },
     {
+      "id": "T264",
+      "wave": 8,
+      "kind": "测试",
+      "title": "CLI v2 容量错误码配对",
+      "files": [
+        "src/bisheng-cli/tests/test_errors.py",
+        "src/bisheng-cli/tests/test_command_deploy_wait.py"
+      ],
+      "logic": "通过真实 error_from_platform 和 deploy failure 处理复现 v2 16125 被降为 exit19；覆盖16125与既有16226均为exit14、其他未知码继续降级，验证脱敏输出及原响应语义。",
+      "acs": [
+        "AC-02",
+        "AC-08"
+      ],
+      "depends": [
+        "T261"
+      ],
+      "pair": "T265",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T265",
+      "wave": 8,
+      "kind": "实现",
+      "title": "CLI 兼容 v2 容量不足并同步分发 wheel",
+      "files": [
+        "src/bisheng-cli/bisheng_cli/errors.py",
+        "src/backend/bisheng/dev_toolkit/artifacts/bisheng_cli-3.0.0-py3-none-any.whl"
+      ],
+      "logic": "仅将既有16125映射EXIT_CAPACITY并复用容量提示；不改backend返回码或对外协议。重建实际分发目录的wheel，校验源码与wheel errors.py一致，并运行CLI相关回归。",
+      "acs": [
+        "AC-02",
+        "AC-08"
+      ],
+      "depends": [
+        "T264"
+      ],
+      "pair": "T264",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T072",
       "wave": 9,
       "kind": "审查",

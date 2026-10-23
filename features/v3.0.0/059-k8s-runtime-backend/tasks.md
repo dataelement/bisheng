@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；261 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 256 / 261 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；263 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 256 / 263 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2113,6 +2113,24 @@
   **依赖:** T262
   **配对:** T262
 
+### CLI 容量错误兼容（T264/T265）
+
+- [ ] **T264** — CLI v2 容量错误码配对
+  **类型**：测试
+  **文件**：`src/bisheng-cli/tests/test_errors.py`、`src/bisheng-cli/tests/test_command_deploy_wait.py`
+  **逻辑/验收**：通过真实 error_from_platform 和 deploy failure 处理复现 v2 16125 被降为 exit19；覆盖16125与既有16226均为exit14、其他未知码继续降级，验证脱敏输出及原响应语义。
+  **覆盖 AC:** AC-02、AC-08
+  **依赖:** T261
+  **配对:** T265
+
+- [ ] **T265** — CLI 兼容 v2 容量不足并同步分发 wheel
+  **类型**：实现
+  **文件**：`src/bisheng-cli/bisheng_cli/errors.py`、`src/backend/bisheng/dev_toolkit/artifacts/bisheng_cli-3.0.0-py3-none-any.whl`
+  **逻辑/验收**：仅将既有16125映射EXIT_CAPACITY并复用容量提示；不改backend返回码或对外协议。重建实际分发目录的wheel，校验源码与wheel errors.py一致，并运行CLI相关回归。
+  **覆盖 AC:** AC-02、AC-08
+  **依赖:** T264
+  **配对:** T264
+
 ### Wave 9
 
 - [ ] **T072** — L2 代码审查及交付核对
@@ -2271,3 +2289,5 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 R29实际部署：f886生产源已原生amd64构建/私有推送，backend两文件真实替换、Helm29 manager新UID/旧UID缺席、epoch24 ready/current/v1及两guard true独立核对通过；旧三false/新二true和held旧资源保持。256/261不变；新单Python业务尚未开始，不能勾T069/T070，ARM/新增109/公开发行继续暂缓。
 
 2026-10-23 r11真实闭环通过：新Python单v1发布/审批预览/HTTP/WS/SDK/OBO/附件/权限，正常stop后随机SQLite查改CSV、同已批准v1 resume及行数据完全一致；九项独立物理检查全部通过，同PVC、新PodUID、同UID旧停止证据及双保护保持。最终journal e3ea2f08…、physical80b98d03…；256/261不变，T069剩容量前置负例/安全删除，T070故障及独立卸载未结束。ARM/新增109/公开发行不执行。
+
+2026-10-23 T264/T265登记：真实v2容量拒绝为16125/precheck_build，符合AC-08而无需改为16226；本地真实CLI函数将16125误归exit19。仅补CLI既有容量退出码14映射及实际分发wheel，不扩展backend/UI或把私有验收期望当产品合同。256/263完成，121测试任务；ARM继续暂缓。

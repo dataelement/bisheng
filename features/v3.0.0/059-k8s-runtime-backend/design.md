@@ -117,7 +117,7 @@
 
 本基线尚无 K8s executor、部署 Chart 或真实运行验收。该历史基线未包含原F086多租户启动及BIGINT修复。实施中已从F086单一来源继承Vibe专有BIGINT并显式汇合迁移；公共租户启动修复已按2026-10-22用户授权进入发布线9d156f261c，F059普通合并98fbba032继承，未复制权限分叉；新增空迁移汇合保持原父链。详见 [prerequisites.md](./prerequisites.md)。
 
-**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成250/255，T256/T257准备循环取消检查已闭合，当前本地完整runtime1649/13skip，backend保持6f且既有1764/19skip。189现为Helm28/epoch22、2ac manager镜像，egress/admission仍为0d5；Python、Node、static应用包与source-image均完成v1/v2及停用恢复，Python另通过SDK/OBO、附件与SQLite。完整镜像v1与停用恢复通过，v2原审批11执行因16226容量不足失败，旧版保留；随后同已批准v2仅一次手动上线，新操作68cc…/generation4及HTTP/WS/SDK/数据/权限通过，无新版本或审批。缺依赖16227/precheck_build负例通过，原失败记录保持。仓库DNAT5000配置缺口已修正，dedc安装器已真实16/16通过；五个Service相关canary全程NotReady/非Serving观察闭合，第六untrusted未连续观察。取消修复已原生构建并真实部署，仅更新manager且五应用Pod/CID/PVC/PV不变；实际owner取消仍待验。离线编辑导出及故障升级仍待续办。旧r4保持安全围栏，不能卸载主安装域。新ARM、109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
+**F059 实施进展（完整交付待验收）**：运行核心、平台存储解耦、SQLite维护、资源准入、Chart、镜像及验收工具已实现；L1完成256/263。T258–T263保护报告与心跳一致性修复已通过1757/13skip runtime、1944/19skip三个后端模块，189已部署R29/source f886 manager与两文件backend修复，实际epoch24/current及旧保护历史核对通过。五种交付模式原v1/v2证据保持；新增r11 Python已完成发布、审批预览、HTTP/WS/SDK/OBO/附件/权限、正常停用、随机SQLite查改CSV与同v1恢复行数据一致，九项独立资源检查通过。T069剩容量前置负例及安全删除；T070故障、迁移与独立卸载继续验收。旧r4及旧失信writer保持围栏，不能强制卸载主安装域。T264/T265新增CLI 16125→exit14兼容配对，尚未实施。ARM、新增109按用户优先级暂缓，DM8静态，未公开发行或完成L2。详见[task-reviews.md](./task-reviews.md)、[platform.json](./e2e-evidence/platform.json)。
 
 ### 4.2 拟实施拓扑与流程
 
@@ -148,7 +148,7 @@ flowchart LR
 
 ### 4.3 发布、访问及数据流程
 
-1. CLI、backend 同步校验、代码快照、Celery 扫描沿用 F055/F086。backend 校验运行时能力与冻结 profile，并创建 `RuntimeOperation`、预占及任务材料授权。
+1. CLI、backend 同步校验、代码快照、Celery 扫描沿用 F055/F086。v2容量不足使用既有16125，legacy预检可能返回16226；CLI应同时映射容量退出码14（T264/T265待实施），不为统一私有测试而改变平台错误码。backend 校验运行时能力与冻结 profile，并创建 `RuntimeOperation`、预占及任务材料授权。
 2. manager 获取操作，验证本进程控制器租约，准备 scratch PVC；可信传输 Pod 下载源码/离线材料或既有依赖产物。包大小、条目和解包边界沿用 F086。
 3. 有依赖变化且允许内网/受控包源时，download Pod 经 build 用途 egress 下载完整材料。resolve/install/compile Pod 不持材料或出口凭据，不挂生产卷，不能访问公网。各阶段结束并确认停止后才能交接 scratch 卷。
 4. 上传 Pod 验证结果、计算摘要、经 backend 上传并 finalize，形成冻结 `RuntimeDelivery`。只改业务代码时复用已验证依赖产物，仍执行本次编译及启动预检。
@@ -414,6 +414,7 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 
 | 反直觉事实 | 如果不知道会怎样 | 在哪处理 |
 | --- | --- | --- |
+| v2预检容量拒绝为16125而legacy为16226 | CLI若只登记legacy码将容量不足显示为未知错误并exit19 | `bisheng_cli/errors.py`两码映射既有EXIT_CAPACITY；分发wheel需同步，T264/T265待实施 |
 | 原 Protocol 是 Docker API 形状，目录逻辑散落在多个模块 | 加 K8s 文件后仍然访问 manager 本机路径或 Docker | 新 `executors/`；原 operations/preparer/data API 统一依赖能力接口 |
 | RWO 是单节点挂载，不是单 Pod 或进程写锁 | 同节点新旧应用或维护并发写生产库 | `executors/kubernetes.py`、资源账本、停止确认及固定生产位置准入 |
 | ClusterIP 不能默认由集群外平台主机访问 | 平台与 Pod 均健康，发布唤醒/应用访问却超时 | 安装 values 的共享 entry/control 私网接入及端到端连通性探测 |
@@ -819,3 +820,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 T262/T263：单次心跳的一次报告快照修正，保持内部保护合同一致；非有限时间继续规范null以发送真实blocked，不修改停止证明类型。
 
 2026-10-23 T258–T263 L1：源码f8863f376，独立runtime108/后端51配对通过；完整runtime1757/13skip，直接三后端模块1944/19skip，组合基线零新增错误。旧历史标记不恢复，189新版复验及正式发行仍待执行；仅实现完善，不新增恢复/fencing证明。
+
+2026-10-23 T264/T265登记：既有v2容量错误16125在CLI未映射，仅补既有容量语义与实际wheel分发；平台错误码、发布阶段、依赖及设计决策不变。同步R29与r11实际进展，未将其余故障验收列为通过。
