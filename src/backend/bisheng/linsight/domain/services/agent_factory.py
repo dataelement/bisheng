@@ -33,6 +33,7 @@ from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt
 
 from bisheng.common.services.config_service import settings
+from bisheng.linsight.domain.services.base_prompt import LinsightBasePromptMiddleware
 from bisheng.linsight.domain.services.binary_content_guard import (
     CODE_INTERPRETER_TOOL,
     build_binary_guards,
@@ -841,6 +842,8 @@ async def create_linsight_agent(
             budget_sink=turn_budget_sink,
             **rate_limit_observer_kwargs,
         ),
+        # Main graph only: the researcher keeps its own prompt (see base_prompt.py).
+        LinsightBasePromptMiddleware(),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
     ]
