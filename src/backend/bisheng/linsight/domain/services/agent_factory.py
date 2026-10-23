@@ -362,7 +362,7 @@ def _build_linsight_system_prompt(
 
     ``skills_present`` follows the same lockstep rule for SkillsMiddleware: the
     skill lines are injected IFF at least one bundle was materialized (so the
-    "Available Skills" section actually exists in the system message). They exist
+    "可用技能" section actually exists in the system message). They exist
     because the deliverable workflow below is an ORDER ("markdown 是唯一规范源"
     -> 3c export_docx) that outranks the middleware's progressive disclosure:
     observed in production, the model wrote the md, then emitted read_file(
@@ -415,7 +415,7 @@ def _build_linsight_system_prompt(
         delegate_line = ""
     if skills_present:
         skill_exec_line = (
-            "   - 【技能优先】系统提示的 “Available Skills” 列出了本次可用的技能。动手前先对照每个技能的"
+            "   - 【技能优先】系统提示的“可用技能”列出了本次可用的技能。动手前先对照每个技能的"
             "描述判断是否与任务匹配；一旦匹配，**必须先** read_file 读完它的 SKILL.md，"
             "**且必须传 limit=1000 一次读完**（默认 100 行、或自己改小成 200 都只能读到开头，"
             "关键的生成步骤在后面），再按它的指引执行。"
@@ -1079,7 +1079,7 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
     }
 
 
-# Appended to an Available Skills row. Not written into SKILL.md.
+# Appended to a 可用技能 row. Not written into SKILL.md.
 SKILL_SELECTED_NOTE = "用户选中了这个技能"
 SKILL_TOOL_UNAVAILABLE_NOTE = "该技能需要的工具当前不可用"
 # deepagents always binds these on the main graph. A skill that names one of
@@ -1100,7 +1100,7 @@ def task_tool_names(tools, *, has_code_interpreter: bool) -> set[str]:
 
 
 def _skill_line_notes(skill: dict, selected: set[str], available: set[str]) -> str:
-    """Sentences for one Available Skills row. Empty when the row stays as listed."""
+    """Sentences for one 可用技能 row. Empty when the row stays as listed."""
     notes: list[str] = []
     name = skill.get("name")
     if name and name in selected:
@@ -1136,7 +1136,7 @@ def _state_dict(state) -> dict:
 
 
 class SkillSelectionMiddleware(AgentMiddleware):
-    """Mark checked skills and unavailable tools on the Available Skills rows.
+    """Mark checked skills and unavailable tools on the 可用技能 rows.
 
     Sits after deepagents' ``SkillsMiddleware``. That middleware already wrote
     the list from ``skills_metadata``; this one only edits those rows. It does
@@ -1409,12 +1409,12 @@ async def create_linsight_agent(
     skills_advertised = bool(skills_present and file_dir)
     if skills_advertised:
         from deepagents.backends.filesystem import FilesystemBackend
-        from deepagents.middleware.skills import SkillsMiddleware
 
         from bisheng.linsight.domain.services.skill_provisioning import WORKSPACE_SKILLS_DIR
+        from bisheng.linsight.domain.services.skills_prompt import LinsightSkillsMiddleware
 
         middlewares.append(
-            SkillsMiddleware(
+            LinsightSkillsMiddleware(
                 backend=FilesystemBackend(root_dir=file_dir, virtual_mode=True),
                 sources=[(f"/{WORKSPACE_SKILLS_DIR}/", "Skills")],
             )
@@ -1514,7 +1514,7 @@ async def create_linsight_agent(
     ]
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the
-    # prompt never points at an "Available Skills" section that does not exist.
+    # prompt never points at a "可用技能" section that does not exist.
     # F087 P1: drop deepagents' own summarization from the main graph and every
     # subagent; ours is already first in their middleware lists (design decision 7).
     from bisheng.linsight.domain.services.context_budget import bisheng_summarization
