@@ -77,16 +77,43 @@ class CapabilityKnowledgeBaseRef(BaseModel):
     id: str | None = Field(default=None, max_length=64)
 
 
+class CapabilitySecretRef(BaseModel):
+    """Only a name may be frozen into an application version."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _safe_name(cls, value: str) -> str:
+        from bisheng.app_publish.domain.secret_security import validate_name
+        from bisheng.common.errcode.app_publish import AppSecretInvalidError
+
+        try:
+            return validate_name(value)
+        except AppSecretInvalidError:
+            raise ValueError("invalid_environment_name") from None
+
+
 class CapabilityDeclaration(BaseModel):
-    """``capabilities:`` — non-empty is refused this round (16231, design D16)."""
+    """Approved model, knowledge and name-only environment declarations."""
 
     model_config = ConfigDict(extra="forbid")
 
     models: list[CapabilityModelRef] = Field(default_factory=list)
     knowledge_bases: list[CapabilityKnowledgeBaseRef] = Field(default_factory=list)
 
+    secrets: list[CapabilitySecretRef] = Field(default_factory=list, max_length=64)
+
+    @model_validator(mode="after")
+    def _unique_secret_names(self):
+        names = [ref.name for ref in self.secrets]
+        if len(names) != len(set(names)):
+            raise ValueError("duplicate_environment_name")
+        return self
+
     def is_empty(self) -> bool:
-        return not self.models and not self.knowledge_bases
+        return not self.models and not self.knowledge_bases and not self.secrets
 
 
 class DatabaseColumn(BaseModel):

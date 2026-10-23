@@ -45,6 +45,43 @@ class CredentialRepository:
         return row
 
     @classmethod
+    async def create_in_transaction(cls, session, row, entries=(), *, audit_operator=None):
+        """Flush into the caller transaction; no cache writes or independent session."""
+        from bisheng.database.models.audit_log import AuditLog
+
+        session.add(row)
+        await session.flush()
+        for subject_type, subject_id in entries:
+            session.add(
+                ApiCredentialDelegateScope(
+                    tenant_id=row.tenant_id, credential_id=row.id, subject_type=subject_type, subject_id=subject_id
+                )
+            )
+        if audit_operator is not None:
+            session.add(
+                AuditLog(
+                    tenant_id=row.tenant_id,
+                    operator_id=audit_operator.user_id,
+                    operator_name=getattr(audit_operator, "user_name", None)
+                    or ("system" if audit_operator.user_id == 0 else None),
+                    operator_tenant_id=audit_operator.tenant_id,
+                    action="open_api.api_key.issue",
+                    target_type="api_credential",
+                    target_id=str(row.id),
+                    object_name=row.name,
+                    audit_metadata={
+                        "credential_id": row.id,
+                        "subject_kind": row.subject_kind,
+                        "subject_id": row.subject_id,
+                        "scopes": list(row.scopes or []),
+                        "key_mask": row.key_mask,
+                    },
+                )
+            )
+        await session.flush()
+        return row
+
+    @classmethod
     async def get(cls, credential_id: int) -> ApiCredential | None:
         async with get_async_db_session() as session:
             return (await session.exec(select(ApiCredential).where(ApiCredential.id == credential_id))).first()

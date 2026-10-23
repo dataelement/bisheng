@@ -294,6 +294,13 @@ class OperationExecutor:
                 if self.config.executor_kind == "docker":
                     self.runtime.cleanup_local_scratch(operation)
 
+    @staticmethod
+    def _safe_diagnostic(operation, text):
+        from runtime_manager.secret_redaction import redact_output
+
+        payload = operation.get("payload", {})
+        return redact_output(text, payload.get("runtime_env", {}), payload.get("sensitive_env_names", []))[-16384:]
+
     def _deploy(self, operation, runner=None):
         body, kind = operation["payload"], operation["kind"]
         current = self.checkpoint(operation)
@@ -359,7 +366,7 @@ class OperationExecutor:
             if current["status"] in TERMINAL
             else {
                 "reason": "operation_timeout",
-                "diagnostic_tail": str(getattr(exc, "tail", ""))[-16384:],
+                "diagnostic_tail": self._safe_diagnostic(operation, getattr(exc, "tail", "")),
                 "failed_stage": current["stage"],
                 "maintenance": False,
                 "data_may_have_changed": False,
@@ -504,7 +511,7 @@ class OperationExecutor:
         )
         failure = {
             "reason": reason,
-            "diagnostic_tail": str(getattr(exc, "tail", ""))[-16384:],
+            "diagnostic_tail": self._safe_diagnostic(operation, getattr(exc, "tail", "")),
             "failed_stage": current["stage"],
             "maintenance": operation["kind"] in {"deploy", "restore", "migrate"}
             and current["stage"] in {"maintenance", "snapshot_confirmed", "migrating", "starting", "ready"},

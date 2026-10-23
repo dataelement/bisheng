@@ -214,6 +214,42 @@ class AppRuntimeCredentialService:
         return issued.plaintext
 
     @classmethod
+    async def stage_in_transaction(cls, app_id, *, operation, session, scopes=()):
+        """Subject, candidate credential, binding and issue audit commit together."""
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeCredentialBinding
+        from bisheng.app_runtime.domain.repositories.runtime_credential_repository import stage_binding
+
+        app = await AppDao.aget(session, app_id)
+        if app is None or app.id != operation.app_id or app.tenant_id != operation.tenant_id:
+            raise AppRuntimeSubjectUnavailableError(reason="app_missing")
+        requested = CredentialService.validate_scopes(list(scopes))
+        if DELEGATE_SCOPE_CODE in requested:
+            raise OpenApiDelegateConfigurationInvalidError()
+        subject = await HostedAppSubjectDao.aget_by_app(session, app_id)
+        if subject is None:
+            subject = await HostedAppSubjectDao.acreate(session, app_id)
+        issued = await CredentialService.issue_in_transaction(
+            session=session,
+            tenant_id=app.tenant_id,
+            subject_kind=SUBJECT_KIND_HOSTED_APP,
+            subject_id=int(subject.id),
+            request=KeyIssueRequest(name=cls._credential_name(app), scopes=requested, expires_at=None),
+            created_by=None,
+            audit_operator=SYSTEM_AUDIT_OPERATOR,
+        )
+        await stage_binding(
+            session,
+            RuntimeCredentialBinding(
+                tenant_id=app.tenant_id,
+                app_id=app.id,
+                version_id=operation.version_id,
+                operation_id=operation.id,
+                credential_id=issued.id,
+            ),
+        )
+        return issued.plaintext
+
+    @classmethod
     async def revoke(cls, app_id: str, *, reason: str = REVOKE_REASON_SUBJECT_DELETED) -> int:
         """Revoke every live runtime credential of one application; return how many.
 

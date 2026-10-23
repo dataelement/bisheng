@@ -26,6 +26,60 @@ class RuntimeProjectionService:
                 policy.revoked_at = datetime.utcnow()
                 await self.repo.save(policy)
 
+    async def block_for_config_restart(self, operation, *, sequence):
+        """Only this operation's exact origin transition can be replayed."""
+        from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
+
+        async with self.repo.transaction():
+            op = await self.repo.get(RuntimeOperation, operation.id, lock=True)
+            transition = op.payload.get("maintenance_transition")
+            if transition:
+                if transition["fact_sequence"] != sequence:
+                    raise RuntimeConflict("maintenance_transition_conflict")
+                return
+            routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
+            route = routes[0] if routes else None
+            if (
+                route is None
+                or route.id != op.payload["origin_route_id"]
+                or route.operation_id != op.payload["origin_operation_id"]
+                or route.exec_ref != op.payload["origin_exec_ref"]
+                or route.route_epoch != op.payload["origin_route_epoch"]
+                or route.status != "serving"
+            ):
+                raise RuntimeConflict("rebuild_origin_changed")
+            before = route.route_epoch
+            await self.block(op.app_id, "maintenance")
+            op.payload = {
+                **op.payload,
+                "maintenance_transition": {
+                    "fact_sequence": sequence,
+                    "route_id": route.id,
+                    "before_epoch": before,
+                    "after_epoch": before + 1,
+                },
+            }
+            await self.repo.save(op)
+
+    async def verify_config_restart_origin(self, op):
+        from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
+
+        routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
+        route = routes[0] if routes else None
+        transition = op.payload.get("maintenance_transition")
+        expected_epoch = transition["after_epoch"] if transition else op.payload["origin_route_epoch"]
+        expected_status = "maintenance" if transition else "serving"
+        if (
+            route is None
+            or route.id != op.payload["origin_route_id"]
+            or route.operation_id != op.payload["origin_operation_id"]
+            or route.exec_ref != op.payload["origin_exec_ref"]
+            or route.route_epoch != expected_epoch
+            or route.status != expected_status
+            or route.version_id != op.version_id
+        ):
+            raise RuntimeConflict("rebuild_origin_changed")
+
     async def activate(self, op, ready):
         async with self.repo.transaction():
             current = await self.repo.get(RuntimeOperation, op.id, lock=True)

@@ -1490,7 +1490,10 @@
       "appReleaseCapabilityDeclared": "Capabilities declared",
       "appReleasePreviewStarted": "Review preview started",
       "appReleasePreviewReclaimed": "Review preview reclaimed",
-      "appReleaseRollback": "Publish rolled back"
+      "appReleaseRollback": "Publish rolled back",
+      "appSecretSet": "Save app environment variable",
+      "appSecretDelete": "Delete app environment variable",
+      "appSecretRebuild": "Confirm app instance rebuild"
     },
     "objectTypeEnum": {
       "app": "Application",
@@ -3131,6 +3134,40 @@
       "effectiveHint": "A tier takes effect from the next publish or resume; the running instance is unaffected.",
       "retiredTag": "Retired",
       "retiredHint": "An administrator retired this tier. The application keeps running; the next publish has to name a different one."
+    },
+    "secrets": {
+      "title": "Environment variables",
+      "refresh": "Refresh",
+      "add": "Add",
+      "name": "Variable name",
+      "value": "Value",
+      "save": "Save",
+      "cancel": "Cancel",
+      "replace": "Replace",
+      "remove": "Delete",
+      "saveHint": "Saving does not restart the app. Confirm a rebuild to apply changes to the current instance; the next deployment also uses the latest saved values.",
+      "valueHint": "Multiline values are supported, up to 16 KiB. Empty means not configured. Saved values are never displayed.",
+      "uncertain": "The save result is uncertain. Settings have been refreshed. Check before submitting again; no automatic retry or restart occurs.",
+      "loading": "Loading environment variables…",
+      "loadFailed": "Unable to load environment variables. Refresh to try again.",
+      "empty": "No environment variables configured.",
+      "present": "Configured",
+      "missing": "Not configured",
+      "approvedReference": "Used by the current version",
+      "pendingReference": "Used by the pending version",
+      "unreferenced": "Not referenced by a version",
+      "rebuild": "Rebuild instance",
+      "rebuildConfirm": "Rebuild the current approved version using the latest saved environment variables? The app will be briefly unavailable. Code, resource tier and data are preserved.",
+      "deleteConfirm": "Delete the saved value of {{name}}? The current instance may keep the old value until you confirm a rebuild or deploy again.",
+      "rebuilding": "Rebuilding the instance. New saves do not change the configuration already confirmed for this operation.",
+      "rebuilt": "The last rebuild completed.",
+      "rebuildFailed": "The last rebuild did not complete. Check the runtime records before confirming another rebuild.",
+      "comparison": {
+        "same": "The current instance uses the latest saved values.",
+        "different": "The current instance differs from the saved settings. These variables have unapplied changes.",
+        "unknown": "The current instance configuration cannot be confirmed yet. Refresh to check.",
+        "not_running": "The app is offline. The next deployment will inject the latest saved values."
+      }
     }
   },
   "dsh": {

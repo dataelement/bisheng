@@ -45,3 +45,12 @@ def is_serving_credential_sync(app_id, credential_id):
     route_query, binding_query = statements(app_id, credential_id)
     with bypass_tenant_filter(), get_sync_db_session() as session:
         return allowed(session.exec(route_query).first(), session.exec(binding_query).first())
+
+
+async def stage_binding(session, binding):
+    """Add a candidate in the explicit operation transaction without committing."""
+    from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import check_scope
+
+    check_scope(binding)
+    session.add(binding)
+    await session.flush()

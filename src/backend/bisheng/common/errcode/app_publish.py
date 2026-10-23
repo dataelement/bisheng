@@ -419,7 +419,7 @@ class AppTierDefaultCannotBeDisabledError(AppPublishError):
     Msg: str = "The default resource tier cannot be disabled"
 
 
-# 16264-16267 — approval-time preview instances (AC-26～AC-29 / T053). They are
+# 16264-16267 — approval-time preview instances (AC-26~AC-29 / T053). They are
 # their own little band because the approver's screen shows them next to the
 # review view's 1625x codes and the two must not be confused: 1625x is about
 # *reading* a version, 1626x is about *running* one.
@@ -556,3 +556,32 @@ class AppRuntimeSubjectUnavailableError(AppPublishError):
 
     Code: int = 16291
     Msg: str = "The application runtime credential subject is unavailable"
+
+
+# 16280-16283 — encrypted application environment and explicit rebuild.
+class AppSecretInvalidError(AppPublishError):
+    """Safe validation refusal; details never include submitted values."""
+
+    Code: int = 16280
+    Msg: str = "The application environment variable is invalid"
+
+
+class AppSecretRevisionConflictError(AppPublishError):
+    """A saved revision changed; refresh before submitting again."""
+
+    Code: int = 16281
+    Msg: str = "The application environment variables have changed; refresh and try again"
+
+
+class AppSecretEncryptionUnavailableError(AppPublishError):
+    """Missing key, unreadable ciphertext, or envelope binding mismatch."""
+
+    Code: int = 16282
+    Msg: str = "The application environment variables cannot be decrypted; contact an administrator"
+
+
+class AppSecretRebuildConflictError(AppPublishError):
+    """The confirmed runtime no longer matches or another operation is active."""
+
+    Code: int = 16283
+    Msg: str = "The application runtime has changed; refresh before confirming a rebuild"

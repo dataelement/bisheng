@@ -629,5 +629,9 @@
   "26201": "Offline plugin bundle validation failed",
   "26202": "Plugin state changed; refresh and retry",
   "26203": "Plugin or published version not found",
-  "26204": "Tenant administrator access is required"
+  "26204": "Tenant administrator access is required",
+  "16280": "The application environment variable is invalid",
+  "16281": "The application environment variables have changed; refresh and try again",
+  "16282": "The application environment variables cannot be decrypted; contact an administrator",
+  "16283": "The application runtime has changed; refresh before confirming a rebuild"
 }

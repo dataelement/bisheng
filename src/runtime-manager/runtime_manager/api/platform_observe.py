@@ -72,9 +72,9 @@ async def logs(app_id: str, tail: int = 100, since: str | None = None, keyword: 
     service, scope, _data = await asyncio.to_thread(record, app_id)
     bounded_tail = min(max(tail, 1), 1000)
     parsed_since = _parse_since(since)
+    operation = await asyncio.to_thread(service.platform.operation, scope["operation_id"])
     if service.config.executor_kind == "kubernetes":
         text = await asyncio.to_thread(service.runtime.logs, scope["exec_ref"], tail=bounded_tail, since=parsed_since)
-        operation = await asyncio.to_thread(service.platform.operation, scope["operation_id"])
         env = operation.get("payload", {}).get("runtime_env", {})
     else:
         text = await asyncio.to_thread(
@@ -82,7 +82,7 @@ async def logs(app_id: str, tail: int = 100, since: str | None = None, keyword: 
         )
         env = dict(item.split("=", 1) for item in _data.get("Config", {}).get("Env", []) if "=" in item)
     # Only the application's own output is read; helper identities are never logged.
-    text = redact(text, env)
+    text = redact(text, env, operation.get("payload", {}).get("sensitive_env_names", []))
     lines = text[-1024 * 1024 :].splitlines()
     if keyword:
         lines = [line for line in lines if keyword.lower() in line.lower()]

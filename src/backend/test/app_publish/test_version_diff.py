@@ -87,7 +87,8 @@ async def test_diff_endpoint_shape_and_change_kinds(publish_db, api_app, two_ver
     async with api_app(payload=owner_user.payload) as client:
         data = _body(await client.get(f"/api/v1/apps/{app.id}/versions/{v1.id}/diff/{v2.id}"))["data"]
 
-    assert set(data) == {"base", "target", "role", "summary", "files", "patches"}
+    assert set(data) == {"base", "target", "role", "summary", "files", "patches", "secret_references"}
+    assert data["secret_references"] == {"added": [], "removed": []}
     assert data["base"]["version_id"] == v1.id and data["base"]["version_no"] == 1
     assert data["target"]["version_id"] == v2.id and data["target"]["version_no"] == 2
     assert data["role"] == "owner"

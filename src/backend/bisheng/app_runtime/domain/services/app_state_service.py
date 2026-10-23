@@ -677,19 +677,24 @@ class AppStateService:
             deliveries = await repository.find(RuntimeDelivery, app_id=app.id, version_id=op.version_id)
             if not deliveries or deliveries[0].content != op.payload.get("resolved_delivery"):
                 raise RuntimeConflict("runtime_delivery_not_frozen")
-            if not is_transition_allowed(app.state, AppState.ONLINE.value):
-                raise RuntimeConflict("illegal_application_transition")
-            won = await AppDao.aupdate_state_cas(
-                session,
-                app.id,
-                from_states=(app.state,),
-                to_state=AppState.ONLINE.value,
-                current_version_id=op.version_id,
-                pending_version_id=app.pending_version_id if op.payload.get("preserve_pending_version") else None,
-            )
-            if not won:
-                raise RuntimeConflict("application_state_changed")
-            await VersionService.mark_runtime_online(repository, app.id, op.version_id)
+            if op.payload.get("purpose") == "config_restart":
+                if app.state != AppState.ONLINE.value or op.version_id != app.current_version_id:
+                    raise RuntimeConflict("rebuild_version_changed")
+                await RuntimeProjectionService(repository).verify_config_restart_origin(op)
+            else:
+                if not is_transition_allowed(app.state, AppState.ONLINE.value):
+                    raise RuntimeConflict("illegal_application_transition")
+                won = await AppDao.aupdate_state_cas(
+                    session,
+                    app.id,
+                    from_states=(app.state,),
+                    to_state=AppState.ONLINE.value,
+                    current_version_id=op.version_id,
+                    pending_version_id=app.pending_version_id if op.payload.get("preserve_pending_version") else None,
+                )
+                if not won:
+                    raise RuntimeConflict("application_state_changed")
+                await VersionService.mark_runtime_online(repository, app.id, op.version_id)
             await AppInstanceDao.aupsert(
                 session,
                 app.id,

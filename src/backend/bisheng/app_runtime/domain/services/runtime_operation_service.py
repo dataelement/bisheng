@@ -444,7 +444,9 @@ class RuntimeOperationService:
             except (KeyError, ValueError, TypeError):
                 raise RuntimeConflict("invalid_runtime_target") from None
         if "diagnostic_tail" in body.detail:
-            body.detail["diagnostic_tail"] = str(body.detail["diagnostic_tail"])[-16384:]
+            from bisheng.app_runtime.domain.services.runtime_secret_diagnostics import safe_diagnostic_tail
+
+            body.detail["diagnostic_tail"] = safe_diagnostic_tail(body.detail["diagnostic_tail"], op)
         async with self.repo.transaction():
             await self._guard_kubernetes_fact(op, identity, body)
             fact = await self.repo.record_fact(op.id, **body.model_dump())
@@ -466,7 +468,10 @@ class RuntimeOperationService:
             if body.phase == "maintenance":
                 from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
 
-                await RuntimeProjectionService(self.repo).block(op.app_id, "maintenance")
+                if op.payload.get("purpose") == "config_restart":
+                    await RuntimeProjectionService(self.repo).block_for_config_restart(op, sequence=body.sequence)
+                else:
+                    await RuntimeProjectionService(self.repo).block(op.app_id, "maintenance")
             if body.phase == "ready" and op.kind == "preview":
                 from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeRoute
 

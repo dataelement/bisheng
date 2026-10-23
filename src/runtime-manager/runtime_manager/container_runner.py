@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import time
 from pathlib import Path
 
@@ -32,21 +31,10 @@ def host_path(config: Config, path: Path):
     return str((config.host_data_root or config.data_root) / path.relative_to(root))
 
 
-def redact(text, env):
-    for key, value in env.items():
-        if (
-            value
-            and len(value) >= 6
-            and any(
-                marker in key.upper()
-                for marker in ["TOKEN", "SECRET", "PASSWORD", "KEY", "PROXY", "INDEX_URL", "REGISTRY", "AUTH"]
-            )
-        ):
-            text = text.replace(value, "<redacted>")
-    text = re.sub(r"(https?://)[^/\s:@]+:[^/\s@]+@", r"\1<redacted>@", text)
-    return re.sub(
-        r"([?&](?:access_token|token|api_key|key|password|secret)=)[^&\s]+", r"\1<redacted>", text, flags=re.IGNORECASE
-    )
+def redact(text, env, sensitive_names=()):
+    from runtime_manager.secret_redaction import redact_output
+
+    return redact_output(text, env, sensitive_names)
 
 
 class ContainerRunner:
@@ -153,7 +141,11 @@ class ContainerRunner:
             self.checkpoint()
             state = self.docker.inspect_container(container).get("State", {})
             if not state.get("Running"):
-                tail = redact(self.docker.container_logs(container, tail=40), env)[-16384:]
+                tail = redact(
+                    self.docker.container_logs(container, tail=40),
+                    env,
+                    operation.get("payload", {}).get("sensitive_env_names", []),
+                )[-16384:]
                 if state.get("ExitCode", 1) != 0:
                     raise ExecutionError("preparation_process_failed", tail)
                 return tail

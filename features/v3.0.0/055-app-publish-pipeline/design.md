@@ -114,7 +114,7 @@ F055 的 `AppSecretSettings` 加进应用详情的 settingsSlot，与档位/能�
 
 ### 4.1 数据流与实现状态
 
-**已实现**：接收包 → 代码快照 → 扫描/结构预检 → manager prepare/probe → 版本/审批 → 正式 deploy；backend 持有对象数据，manager 管 SQLite；RuntimeOperation 已持久保存 sealed_env，RuntimeRoute 标记当前运行 operation，K8s 已有执行专属 Secret。**本轮未实现**：合法 secret 声明、加密配置资产、管理 API/差异投影、用户确认的同版本重建分支及敏感输出合同。
+**已实现**：接收包 → 代码快照 → 扫描/结构预检 → manager prepare/probe → 版本/审批 → 正式 deploy；backend 持有对象数据，manager 管 SQLite；RuntimeOperation 已持久保存 sealed_env，RuntimeRoute 标记当前运行 operation，K8s 已有执行专属 Secret。**2026-10-24 已编码（未完成真实部署验收）**：合法 secret 声明、单表加密配置、管理 API/差异投影、用户确认的同版本重建与敏感输出合同；平台发布页环境变量设置已接线。
 
 ```mermaid
 sequenceDiagram
@@ -340,3 +340,12 @@ CLI 不接收值、不提供写密钥命令；manifest 带合法名称可部署�
 | 2026-10-23（二次修订，已由简化方案替代） | 明确固定部署 key 与运维边界、执行敏感项全链路、同一 UoW 生效与响应丢失/部分结果恢复 | 用户要求修订并复审；未新增轮换功能，尚未编码 |
 | 2026-10-23 | 刷新现有能力/存储/运行协议；新增 D17–D20、四组密钥合同、同版本配置刷新与定向验收设计 | 已确认增量规格与实际代码，未编码 |
 | 2026-08-17 起 | 早期发布管线/审批/档位/能力总线设计 | 旧正文见 `dda16a6`；本次不倒改历史验收事实 |
+
+### 2026-10-24 实现补记
+
+- 16280–16283 分别对应输入校验、revision 冲突、加密不可用、重建围栏拒绝；三语文案已生成。
+- `runtime_secret_repository` 与 `application/runtime_secrets` 提供实际运行快照及安全的重建状态；不导出历史明文。
+- 候选签发由 `CredentialService.issue_in_transaction` 和 `stage_in_transaction` 使用显式 session；`stage_binding` 仅 flush。
+- `RuntimeCleanupService` 对删除应用的配置资产沿用 storage_pending；业务 deleted 提交前不标清理完成，删除钩子在提交后尝试清理。
+- request_id 经 SHA-256 形成有界幂等 key；不包含环境变量值或其摘要。
+- 当前只有定向本地/模拟结果；真实 Docker/K8s 新功能 E2E 尚未执行。按用户最新安排，完整回归待全部功能完成后进行。

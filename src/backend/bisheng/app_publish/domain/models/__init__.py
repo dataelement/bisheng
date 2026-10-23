@@ -22,6 +22,7 @@ F054, so its model sits in ``bisheng/database/models/resource_tier.py`` to keep
 
 from bisheng.app_publish.domain.models.app_deployment import AppDeployment, AppDeploymentDao
 from bisheng.app_publish.domain.models.app_preview_session import AppPreviewSession, AppPreviewSessionDao
+from bisheng.app_publish.domain.models.app_secret_config import AppSecretConfig
 from bisheng.app_publish.domain.models.capability_call_record import (
     AppCapabilityCallRecord,
     AppCapabilityCallRecordDao,
@@ -35,6 +36,7 @@ __all__ = [
     "AppDeploymentDao",
     "AppPreviewSession",
     "AppPreviewSessionDao",
+    "AppSecretConfig",
     "HostedAppSubject",
     "HostedAppSubjectDao",
 ]

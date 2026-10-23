@@ -171,6 +171,39 @@ class CredentialService:
         return KeyIssuedResponse(**item.model_dump(), plaintext=plaintext)
 
     @classmethod
+    async def issue_in_transaction(
+        cls, *, session, tenant_id, subject_kind, subject_id, request, created_by, audit_operator=None
+    ):
+        """Trusted candidate issuance; ordinary public issuance retains its behavior."""
+        if subject_kind != SUBJECT_KIND_HOSTED_APP:
+            raise OpenApiDelegateConfigurationInvalidError()
+        scopes = cls.validate_scopes(request.scopes)
+        entries = await cls._delegate_entries(
+            tenant_id=tenant_id, subject_kind=subject_kind, scopes=scopes, entries=request.delegate_scopes
+        )
+        prefix = credential_prefix(subject_kind)
+        plaintext = prefix + secrets.token_urlsafe(32)
+        row = await CredentialRepository.create_in_transaction(
+            session,
+            ApiCredential(
+                tenant_id=tenant_id,
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                name=request.name,
+                key_prefix=prefix,
+                last4=plaintext[-4:],
+                token_hash=hash_token(plaintext),
+                scopes=scopes,
+                expires_at=request.expires_at,
+                created_by=created_by,
+            ),
+            entries,
+            audit_operator=audit_operator,
+        )
+        # Hosted apps cannot have delegate entries. Build the DTO from flushed data.
+        return KeyIssuedResponse(**KeyItem.from_row(row).model_dump(), plaintext=plaintext)
+
+    @classmethod
     async def list_by_subject(cls, subject_kind: str, subject_id: int) -> list[KeyItem]:
         rows = await CredentialRepository.list_by_subject(subject_kind, subject_id)
         moment = datetime.now()

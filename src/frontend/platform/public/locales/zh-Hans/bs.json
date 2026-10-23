@@ -1473,7 +1473,10 @@
       "appReleaseCapabilityDeclared": "声明能力依赖",
       "appReleasePreviewStarted": "拉起审批预览实例",
       "appReleasePreviewReclaimed": "回收审批预览实例",
-      "appReleaseRollback": "发布回滚"
+      "appReleaseRollback": "发布回滚",
+      "appSecretSet": "保存应用环境变量",
+      "appSecretDelete": "删除应用环境变量",
+      "appSecretRebuild": "确认重建应用实例"
     },
     "objectTypeEnum": {
       "app": "应用",
@@ -3076,6 +3079,40 @@
       "effectiveHint": "档位自下一次发布或重新上线起生效，正在运行的实例不受影响。",
       "retiredTag": "已停用",
       "retiredHint": "该档位已被管理员停用，当前应用照常运行；下次发布需要改成其它档位。"
+    },
+    "secrets": {
+      "title": "环境变量",
+      "refresh": "刷新",
+      "add": "新增",
+      "name": "变量名称",
+      "value": "变量值",
+      "save": "保存",
+      "cancel": "取消",
+      "replace": "替换",
+      "remove": "删除",
+      "saveHint": "保存不会重启应用。与当前实例不一致时，请确认后重建；下次上线也会采用最新保存值。",
+      "valueHint": "支持多行，最多 16 KiB。留空表示未配置；已有值不回显。",
+      "uncertain": "提交结果未确认，已刷新配置状态。请核对后再提交，系统不会自动重试或重启应用。",
+      "loading": "正在读取环境变量…",
+      "loadFailed": "无法读取环境变量，请刷新重试。",
+      "empty": "尚未配置环境变量。",
+      "present": "已配置",
+      "missing": "未配置",
+      "approvedReference": "当前版本引用",
+      "pendingReference": "待上线版本引用",
+      "unreferenced": "未被版本引用",
+      "rebuild": "重建实例",
+      "rebuildConfirm": "将使用最新保存的环境变量重建当前已批准版本，应用会短暂中断。代码、资源档位和数据保持不变。是否继续？",
+      "deleteConfirm": "删除变量 {{name}} 的保存值？当前实例仍可能使用旧值，确认重建或下次上线后才会采用新配置。",
+      "rebuilding": "实例正在重建，保存的新修改不会改变本次已确认的配置。",
+      "rebuilt": "上次重建已完成。",
+      "rebuildFailed": "上次重建未完成。请检查应用运行记录，再决定是否重新确认重建。",
+      "comparison": {
+        "same": "当前实例使用的值与最新保存值一致。",
+        "different": "当前实例使用的值与最新保存值不一致，以下变量尚未生效。",
+        "unknown": "暂时无法确认当前实例的配置，请刷新查看。",
+        "not_running": "应用未在线，下次上线时会注入最新保存值。"
+      }
     }
   },
   "dsh": {

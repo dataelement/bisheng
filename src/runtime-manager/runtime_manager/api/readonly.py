@@ -126,11 +126,7 @@ def _parse_since(raw: str | None) -> int | None:
 
 
 def _redactions(record: InstanceRecord) -> list[str]:
-    values = [
-        value
-        for name, value in (record.env or {}).items()
-        if value and len(value) >= MIN_REDACTABLE_LENGTH and SENSITIVE_ENV_NAME.search(name)
-    ]
+    values = [value for name, value in (record.env or {}).items() if value and SENSITIVE_ENV_NAME.search(name)]
     # Longest first: a shorter secret that is a substring of a longer one must
     # not chop the longer one into a half-redacted line.
     return sorted(set(values), key=len, reverse=True)
@@ -208,12 +204,13 @@ async def app_logs(
             raise BackendUnavailableError(f"the orchestration backend is not reachable: {exc}")
         raise NotFoundError(f"no readable output for app {app_id}: {exc}")
 
-    lines = [line for line in (raw or "").splitlines() if line.strip()]
+    from runtime_manager.secret_redaction import redact_output
+
+    safe = redact_output(raw or "", record.env or {}, [])
+    lines = [line for line in safe.splitlines() if line.strip()]
     if keyword:
         needle = keyword.lower()
         lines = [line for line in lines if needle in line.lower()]
-    for secret in _redactions(record):
-        lines = [line.replace(secret, REDACTED) for line in lines]
     return {"lines": lines}
 
 
