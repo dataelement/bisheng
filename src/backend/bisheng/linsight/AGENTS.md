@@ -11,6 +11,8 @@ are not derivable from reading the code — most of them come from the agent fra
 
 - **There is no single "workspace" — there are three stores plus a facade, and the only place they meet is the local `file_dir`.** MinIO `workspace/{svid}/` is the authoritative source for the agent's `ls` / `read_file`; the local cache dir is both a write-through cache and the code executor's cwd; `final_result/{svid}/` is the delivery snapshot (flat, generated names, no subdirectories). Reason about "where did the file go" against that map before reading code.
 
+- **A later round of the same session version starts with an empty `file_dir`.** `_cleanup_resources` deletes that directory when the round ends; the MinIO workspace is not deleted. `/workbench/continue` and ask_user resume keep the same `session_version_id`. Before the code interpreter copy-in, `_sync_workspace_originals` puts `output/`, `uploads/` and `large_tool_results/` back into `file_dir` and records them on the deliverable baseline. `scratch/` is not restored. Verified by `test/linsight/test_workspace_original_sync.py` (`test_output_synced_from_workspace_and_baselined`).
+
 - **`WorkspaceBackend.grep` is a substring test, not a regex.** `workspace_backend.py` matches with `if pattern in line`, so a model that passes a regex silently gets zero hits — indistinguishable from "no matches". If a tool description invites regex syntax, either implement regex or say plainly that the pattern is literal text.
 
 - **`ls` always reports `is_dir=False`.** Object storage has no directories, so `LsResult` entries are flat. Any middleware that needs real directory semantics (skill enumeration is the recurring case) must be given a separate directory-aware backend rather than reusing the workspace one.
