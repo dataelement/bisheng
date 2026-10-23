@@ -202,6 +202,74 @@ class RuntimeOperationService:
             )
         )
 
+    @staticmethod
+    def _protection_update(node, body):
+        capabilities = copy.deepcopy(body.capabilities)
+        previous = node.capabilities or {}
+        # These markers are server-owned and survive malformed/downgraded input.
+        capabilities.pop("protection_contract_version", None)
+        capabilities.pop("protection_baseline_digest", None)
+        present = "protection_observation" in capabilities
+        observation = capabilities.get("protection_observation")
+        valid = bool(
+            isinstance(observation, dict)
+            and set(observation) == {"version", "baseline_digest", "state"}
+            and type(observation.get("version")) is int
+            and observation["version"] == 1
+            and isinstance(observation.get("baseline_digest"), str)
+            and re.fullmatch(r"[a-f0-9]{64}", observation["baseline_digest"])
+            and isinstance(observation.get("state"), str)
+            and observation.get("state") in {"current", "report_expired", "helper_changed", "unconfirmed"}
+        )
+        adopted = previous.get("protection_contract_version") == 1 or "protection_observation" in previous
+        previous_digest = previous.get("protection_baseline_digest")
+        if not isinstance(previous_digest, str) or not re.fullmatch(r"[a-f0-9]{64}", previous_digest):
+            previous_digest = None
+        if present or adopted:
+            capabilities["protection_contract_version"] = 1
+            if valid:
+                capabilities["protection_baseline_digest"] = observation["baseline_digest"]
+            elif previous_digest:
+                capabilities["protection_baseline_digest"] = previous_digest
+        cluster_id, namespace = node.engine_id.split("/")
+        same_scope = (
+            previous.get("cluster_id", cluster_id) == capabilities.get("cluster_id")
+            and previous.get("namespace", namespace) == capabilities.get("namespace")
+            and previous.get("status_policy_revision") == capabilities.get("status_policy_revision")
+        )
+        report_only = bool(valid and observation["state"] in {"report_expired", "helper_changed"})
+        protocol_invalid = bool(
+            (present and not valid)
+            or (adopted and not present)
+            or (valid and observation["state"] == "unconfirmed")
+            or (
+                report_only
+                and (
+                    body.probe_report.get("ready") is not False
+                    or any(capabilities.get(key) is not False for key in ("status_protection", "binding_protection"))
+                )
+            )
+        )
+        baseline_changed = bool(
+            (previous and not same_scope)
+            or (previous_digest and valid and previous_digest != observation["baseline_digest"])
+        )
+        preserve_history = bool(
+            report_only
+            and adopted
+            and previous_digest == observation["baseline_digest"]
+            and same_scope
+            and not protocol_invalid
+        )
+        status_gap = binding_gap = baseline_changed or protocol_invalid
+        if not preserve_history:
+            status_gap = status_gap or capabilities.get("status_protection") is not True
+            binding_gap = binding_gap or capabilities.get("binding_protection") is not True
+        # Even a malformed positive claim must not grant current stop authority.
+        if protocol_invalid:
+            capabilities["status_protection"] = capabilities["binding_protection"] = False
+        return capabilities, status_gap, binding_gap, protocol_invalid or report_only
+
     async def heartbeat(self, identity, body):
         if not identity.node_id or (body.executor_kind == "kubernetes" and set(identity.roles) != {"manager"}):
             raise RuntimeConflict("node_identity_required")
@@ -226,10 +294,10 @@ class RuntimeOperationService:
             node.platform = body.platform
             node.memory_budget_mb, node.cpu_budget_millicores = body.memory_budget_mb, body.cpu_budget_millicores
             node.heartbeat_at = self.clock()
+            capabilities = copy.deepcopy(body.capabilities)
             if body.executor_kind == "kubernetes":
-                node.status = "ready" if ready else "blocked"
-                status_gap = body.capabilities.get("status_protection") is not True
-                binding_gap = body.capabilities.get("binding_protection") is not True
+                capabilities, status_gap, binding_gap, blocked = self._protection_update(node, body)
+                node.status = "ready" if ready and not blocked else "blocked"
                 if status_gap or binding_gap:
                     with bypass_tenant_filter():
                         for resource in await self.repo.find(
@@ -240,7 +308,7 @@ class RuntimeOperationService:
                             if binding_gap:
                                 resource.binding_policy_verified = False
                             await self.repo.save(resource)
-            node.capabilities, node.probe_report = copy.deepcopy(body.capabilities), copy.deepcopy(body.probe_report)
+            node.capabilities, node.probe_report = capabilities, copy.deepcopy(body.probe_report)
             await self.repo.save(node)
         return self._node_document(node)
 

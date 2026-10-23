@@ -344,7 +344,7 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
     async def confirm_resource_stop(self, resource_id, evidence, *, holder_id, controller_epoch, now=None):
         now = now or datetime.utcnow()
         async with self.transaction() as session:
-            row, _ = await self._resource_control(resource_id, holder_id, controller_epoch, now)
+            row, node = await self._resource_control(resource_id, holder_id, controller_epoch, now)
             if not isinstance(evidence, dict) or not row.uid or evidence.get("uid") != row.uid:
                 raise RuntimeConflict("stop_uid_refused")
             if row.stop_state == "confirmed":
@@ -381,6 +381,9 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
                 valid = False
             if not valid:
                 raise RuntimeConflict("stop_evidence_unconfirmed")
+            current_key = {"never_scheduled": "binding_protection", "kubelet_terminal": "status_protection"}.get(kind)
+            if current_key and (node.capabilities or {}).get(current_key) is not True:
+                raise RuntimeConflict("stop_protection_current_unconfirmed")
             row.stop_state, row.stop_evidence, row.observed_at = "confirmed", dict(evidence), observed
             await session.flush()
             return row
