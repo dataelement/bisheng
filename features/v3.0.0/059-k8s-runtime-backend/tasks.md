@@ -9,8 +9,8 @@
 | Spec Discovery | ✅ 已确认 | 会话确认开源交付及 K8s 续办范围 |
 | spec.md | ✅ 已评审、用户已确认 | 55 条有效 AC；规格确认不替代设计确认 |
 | design.md | ✅ 已评审、用户已确认 | 用户明确回复“确认设计，进入任务拆解，继续推进 SDD 流程。”；确认正文摘要 b846e993909cda416502d33fdbf6b2174357068673840c2fc0f7d75fe9dc76a4 |
-| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；259 项任务按依赖推进，无新增人审暂停点 |
-| 实现/任务评审 | 🟡 实施中 | 250 / 259 完成；详见 task-reviews.md |
+| tasks.md | ✅ 已拆解、评审通过 | tasks-review.txt 为 LGTM；261 项任务按依赖推进，无新增人审暂停点 |
+| 实现/任务评审 | 🟡 实施中 | 250 / 261 完成；详见 task-reviews.md |
 | E2E/L2审查 | 🟡 验收中/L2未开始 | 189 专用平台及四运行服务已部署；基线已读，真实隔离探测和业务验收进行中 |
 
 ## 开发模式
@@ -2094,6 +2094,25 @@
   **依赖:** T260
   **配对:** T260
 
+
+### 心跳快照一致性（T262/T263）
+
+- [ ] **T262** — 热刷新跨次读取的心跳一致性配对
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_protection_heartbeat.py`
+  **逻辑/验收**：实际OperationExecutor与Kube executor组合，expired→fresh/current→failed投射序列先红后绿；单次心跳同一descriptor/check快照，下次自然刷新，strict JSON与旧fake/Docker兼容。
+  **覆盖 AC:** AC-07、AC-30、AC-31、AC-35、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T259
+  **配对:** T263
+
+- [ ] **T263** — 心跳使用一次完整能力和报告快照
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/operations.py`
+  **逻辑/验收**：Kube提供原子heartbeat_snapshot，既有capabilities兼容；OperationExecutor优先一次快照提交，原Docker和无新方法的fake接口保持。矛盾输入仍由backend拒绝，不以宽容矛盾报告代替修复。
+  **覆盖 AC:** AC-07、AC-30、AC-31、AC-35、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T262
+  **配对:** T262
+
 ### Wave 9
 
 - [ ] **T072** — L2 代码审查及交付核对
@@ -2244,3 +2263,5 @@ T256/T257登记：本地真实方法与间接调用链复现Running准备循环�
 T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac60f808；26配对旧19fail/7pass→26pass，相邻201pass，主树完整runtime1649passed/13skip（33.77s）。独立L1 SHA83dbd6c9bf858330b97960e83d42c18db15e0891edf5b9f829cec25fc5d9142c。design4.6同步；250/255完成、117测试任务，剩余五真实验收/发行/L2门保持未完。manager镜像及189取消待复验，无新ARM/109/公开发行。
 
 2026-10-23 T258–T261登记：本地真实方法/SQLite五例复现报告TTL或helper变化可清零历史保护；189旧三bundle为false，新source/image仍true。首个触发心跳未知，不能归因最近manager升级。Python离线停用d675已自然timed_out且cleanup pending，保留UID/finalizer/PVC/预占。增量细化4.5，不新增历史恢复或物理fencing，旧false不修；活跃250/259、119测试任务。ARM及新增109继续暂缓。
+
+2026-10-23 T262/T263登记：静态真实调用者核对发现单次心跳先capabilities后probe_report会两次读投射，报告热刷新可产生expired+ready矛盾并永久失信。改一次snapshot而不放宽backend矛盾输入拒绝；Kube辅助方法在T259目标内，调用者独立T263。250/261、120测试任务；仍无ARM/新增109。

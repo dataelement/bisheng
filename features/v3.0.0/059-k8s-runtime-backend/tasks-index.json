@@ -6567,6 +6567,60 @@
       "review": "pending"
     },
     {
+      "id": "T262",
+      "wave": 8,
+      "kind": "测试",
+      "title": "热刷新跨次读取的心跳一致性配对",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_protection_heartbeat.py"
+      ],
+      "logic": "实际OperationExecutor与Kube executor组合，expired→fresh/current→failed投射序列先红后绿；单次心跳同一descriptor/check快照，下次自然刷新，strict JSON与旧fake/Docker兼容。",
+      "acs": [
+        "AC-07",
+        "AC-30",
+        "AC-31",
+        "AC-35",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T259"
+      ],
+      "pair": "T263",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
+      "id": "T263",
+      "wave": 8,
+      "kind": "实现",
+      "title": "心跳使用一次完整能力和报告快照",
+      "files": [
+        "src/runtime-manager/runtime_manager/operations.py"
+      ],
+      "logic": "Kube提供原子heartbeat_snapshot，既有capabilities兼容；OperationExecutor优先一次快照提交，原Docker和无新方法的fake接口保持。矛盾输入仍由backend拒绝，不以宽容矛盾报告代替修复。",
+      "acs": [
+        "AC-07",
+        "AC-30",
+        "AC-31",
+        "AC-35",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T262"
+      ],
+      "pair": "T262",
+      "command": "",
+      "status": "pending",
+      "review": "pending"
+    },
+    {
       "id": "T067",
       "wave": 8,
       "kind": "测试",

@@ -206,6 +206,10 @@ flowchart LR
 
 `current`要求cluster-probe来源、当前完整摘要与非未来24小时内时间有效，两项布尔沿用各check结果。`report_expired`仅允许时间过期、完整摘要/来源正确且两项唯一有效正证据；`helper_changed`仅允许进程基线与新投射严格只差helper_image，原报告仍绑定旧完整摘要、时间非未来且两项正证据有效。两种情况仍ready=false、当前两布尔=false；缺失/坏报告、任意其他字段变化、冷启动摘要不匹配均不享此例外。backend只有旧node已登记同一新摘要/策略且严格新元数据匹配，才不把这两种report-only未知写成历史gap；节点blocked，历史false不变，不授予新执行。首次新版fresh报告可在同domain/策略下登记legacy node，初始未知不能登记例外；已有新版基线不可静默降级。基线变化/真实检查失败仍不可逆降低对应保护标记。
 
+新合同登记不可因坏心跳丢失：backend在既有capabilities JSON保存服务端派生的protection_contract_version=1和最后合法protection_baseline_digest；忽略body对这两个键的写入。缺失/畸形observation保留此黏性标记及已知摘要，节点blocked并失信，随后legacy positive也不得绕回旧协议。只有有效current可恢复当前ready，历史false保持。未进入新合同的legacy manager保持原行为；首次有效新版报告沿用不可变engine_id核对执行域，显式guard=false仍优先失信。报告非有限/非数值observed_at诊断规范为null，使严格JSON心跳能送达blocked事实，不以编码失败保留旧ready。
+
+运行时心跳从同一投射快照生成capabilities与probe_report（heartbeat_snapshot），不能分别读取投射后拼装，避免TTL刷新或真实guard失败恰在两次读取间产生矛盾消息；backend继续保守拒绝矛盾元数据。expired/helper-only例外要求所有15必需check唯一且结构/证据合法，两guard必须为正；新投射若有匹配新descriptor的fresh失败/缺失/坏guard证据，优先unconfirmed，不用旧正例覆盖。
+
 当前保护未知期间，即便历史true也暂缓首次停止确认：never_scheduled需当前binding_protection=true，kubelet_terminal需当前status_protection=true，backend独立检查；只因网络等其他项失败仍可安全收尾。当前fresh同基线恢复只恢复当前可确认性，不回写历史标记。已确认同UID幂等/not_created独立路径/原UID与新鲜度围栏不变。当前旧三false记录不自动迁移、不移除finalizer、不释放卷；如需历史追溯或物理fencing另行提交设计评审。本修正不新增证明类型、权限、SQL字段或外部恢复接口。
 
 **创建事务收尾（T203–T214实施细化）**：新Pod意图在现有 `observed_state.creation` 保存 `version=1` 及 `unattempted → started → rejected`；POST前原子 `create_begin` 固定唯一 `create_attempt_id` 和controller epoch，重复begin不重发。只有同attempt/epoch的明确HTTP403能记录rejected；timeout、transport、5xx、409、2xx解析失败等保持started/unknown。新意图准入只有started允许CREATE，旧JSON空记录不回填为unattempted。收尾先 `create_fence` 将unattempted/rejected固定为fenced并关闭CREATE，再新鲜GET404，通过独立 `not_created` 观察记录无执行体证明。该路径stop_state=confirmed但evidence_kind=not_created、UID仍NULL；普通stopped的同UID证明完全不变。任一实际对象出现必须验证范围、绑定真实UID并走停止流程；已证明未创建后又出现对象则拒绝，不删除或移除finalizer。旧r4缺少唯一尝试账本，保留操作/PVC/预占，不凭历史manager日志或当前404自动追认。锁序保持operation→node→resource，资源加锁读取使用populate_existing强制刷新预读identity map，避免并发begin/fence覆盖。无新DDL、无直接MinIO依赖、无外部deploy API变更。
@@ -811,3 +815,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 T256/T257：本地真实方法链确认prepare Running循环未观察已受理cancel，复用已有操作检查补齐；26配对与201相邻、主树1649/13skip通过。既定取消/围栏/期限合同内修正，不变API、helper/assembler/profile和停止证明。189真实取消与容量释放单列待验。
 
 2026-10-23 T258–T261：依据真实五例调用链与189 cohort，在4.5既有信任模型内区分报告失效和真实保护失败；严格同基线仅保留旧true并暂阻当前停止，旧false不恢复。实施和真实复验待完成，未扩展物理fencing合同。
+
+2026-10-23 T262/T263：单次心跳的一次报告快照修正，保持内部保护合同一致；非有限时间继续规范null以发送真实blocked，不修改停止证明类型。
