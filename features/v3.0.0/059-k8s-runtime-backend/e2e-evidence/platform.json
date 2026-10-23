@@ -7,8 +7,8 @@
   "platform": "linux/amd64",
   "single_node": true,
   "components": {
-    "manager_source": "0d5ef7b2b8c12ff9a4c1ef48a1b8ba37a373a92c",
-    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:28449f9c96c2c60f1b1432a2f671b25434022e9e8675ea53aece36a823deee99",
+    "manager_source": "f8863f3763285435a5df01fc150400838bdb3f0a",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:0b4bd3e66c1d7c49fe00046c83277dab8b6dbd0628f201abf3192d70dd67ddad",
     "backend_updated_files_source": "709821ecbe5c653aad3f90358173e0d110bee7e3",
     "backend_rest_source": "7e720073b8a57492b7befbbb7155ffe30331af01",
     "profile_revision": 2,
@@ -19,14 +19,18 @@
       "bisheng/app_runtime/domain/services/runtime_data_grant_service.py",
       "bisheng/app_runtime/domain/services/runtime_data_session_service.py"
     ],
-    "helm_revision": 27,
+    "helm_revision": 29,
     "suite_source": "d13e9ee91a1014d576d11def1eff9cba21f4c927",
     "backend_data_cpu_source": "6f254f337dd6e8a36733501a2266bf08a04a56e9",
     "backend_data_cpu_files": [
       "bisheng/app_runtime/domain/services/runtime_data_session_service.py",
       "bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py"
     ],
-    "assembler_image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9"
+    "assembler_image": "192.168.106.189:5443/f059/runtime-assembler-ca@sha256:9836c13405df4e4b613712a2e933a73e755d22daeb79d51d6adefc242971c6b9",
+    "backend_protection_sources": {
+      "src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py": "2aeb4eccb208e6deba9f34acaf7b0f2e0db57e8e5fae6fa9b3ce638eec6d875c",
+      "src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py": "866efa5e8feebd838a804b60a3ec7f0d49c9edd2d8fb0e690c7f08c7a8197fe3"
+    }
   },
   "attempts": [
     {
@@ -1848,5 +1852,41 @@
     "prior_four_current_versions_unchanged": true,
     "old_r4_hold_preserved": true,
     "offline_data_fault_upgrade_l2_still_pending": true
+  },
+  "protection_report_r29_deployment": {
+    "schema": "f059-r29-real-deployment/v1",
+    "source_revision": "f8863f3763285435a5df01fc150400838bdb3f0a",
+    "manager_image": "192.168.106.189:5443/f059/runtime-manager@sha256:0b4bd3e66c1d7c49fe00046c83277dab8b6dbd0628f201abf3192d70dd67ddad",
+    "manager_image_config_id": "sha256:1cf328093deb9fb81e0202cd3cc0dec56ce6fba92efed3b45b8e6ee6eae2857a",
+    "manager_pod_uid": "fae606c4-3e51-4efa-ba00-a7ce9163de3f",
+    "old_manager_uid_absent": "faa48ee8-fd38-4980-a290-4b44ada8d6b4",
+    "helm_revision": 29,
+    "controller_epoch": 24,
+    "node_status": "ready",
+    "baseline_digest": "9006c20349b46e6a60af9d7e2ccdc45f4e4efae5606f58cde88b69bd0b9ad3ff",
+    "protection_contract_version": 1,
+    "status_protection": true,
+    "binding_protection": true,
+    "backend_sources": {
+      "src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py": "2aeb4eccb208e6deba9f34acaf7b0f2e0db57e8e5fae6fa9b3ce638eec6d875c",
+      "src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py": "866efa5e8feebd838a804b60a3ec7f0d49c9edd2d8fb0e690c7f08c7a8197fe3"
+    },
+    "namespace_uid": "6b72687f-fdaf-4ee9-9a97-cf088a30d88b",
+    "descriptor_configmap_uid": "9bcf2c14-d457-4947-bf9c-adb6e70ffd18",
+    "descriptor_digest": "f306a49e2e396c60c91e76672c72dfc9989763fd5d7dcb091257009f70b8f456",
+    "historical_three_false_two_true_preserved": true,
+    "old_timed_out_stop_cleanup_pending_preserved": true,
+    "r4_pvc_uid": "41426a1e-9713-46d5-afa5-e520afcd186b",
+    "new_business_acceptance": false,
+    "arm_tested": false,
+    "public_issuance": false,
+    "evidence_sha256": {
+      "independent-deployment-readonly.json": "e8accbb523d92a6fa21adbddf5ca8adb7e32f2a547de8e7091c2e7ded3b40cbc",
+      "f059-r29-after-manager-cohort.json": "656f0b2dedd37626d53e92176e5bc82a8af41cb1d8ff0981a2c0a89a58e31585",
+      "native-manager-result-r29.json": "be438498db6b9c817e5d5f1be999089a9cccd0c1b6efcf8be735d555ef44c83b",
+      "private-manager-push-r29.json": "f847472be23826f75157b7b1704051495be26c63bf06753f183bc9db39c54ca7",
+      "backend-receipt.json": "cbbbe0fe5f909a1d0ea4c140b06cf0660e7ccb280ff2da8ee297356d27c4ea04",
+      "manager-after.json": "f78415da83ebbae3b33f2b21deedbe83eeb2f2b28e992e2c611bcd80855d417f"
+    }
   }
 }

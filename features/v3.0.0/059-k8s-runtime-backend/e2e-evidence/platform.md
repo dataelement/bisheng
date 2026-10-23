@@ -165,3 +165,10 @@ T256/T257开发已L1通过，本地完整runtime1649/13skip；250/255，新增�
 缺依赖仅一次新提交：app `fb9a0f9e32f84ef99ae60ee60f6dc34b` / deployment `5df7298126ff4c2a9ec734d0b1fe0787`，真实16227/precheck_build/无审批通过。续办exit0并写最终 `r10-image-capacity-continuation-completed/passed`，成功父SHA `c6e17830766aa738621e7f681f2e04cc3eb9223e46ce5021266fc894e4aea11b`；原失败父1c1c…、source两次失败及c562容量失败历史保留，不伪造generic iteration-passed。
 
 至此Python、Node、static应用包、source-image、完整镜像五种场景均真实首发/升级主路径与停用恢复通过；完整镜像升级明确区分原容量拒绝和新手动成功。离线查改导出/恢复删除、故障升级及L2仍未闭合，不提前勾T069/T070。
+
+
+## R29：保护报告修复实际部署（新业务验收待完成）
+
+T258–T263的生产源码 `f8863f3763285435a5df01fc150400838bdb3f0a` 已完成189原生amd64构建及隔离导入烟测，仅推送专用内网仓库；manager固定digest `0b4bd3e66c1d7c49fe00046c83277dab8b6dbd0628f201abf3192d70dd67ddad`。专用backend/worker仅两个保护源文件按旧哈希备份、原CID重启；新字节哈希复核通过。Helm29升级后manager新UID `fae606c4-3e51-4efa-ba00-a7ce9163de3f`，原UID实际缺席；自然接管epoch24、ready、sticky保护合同v1/current及两guard true。host描述符与Pod投射的完整/保护摘要一致，保护基线 `9006c20349b46e6a60af9d7e2ccdc45f4e4efae5606f58cde88b69bd0b9ad3ff`。
+
+独立fresh核对：旧三个bundle的false/false保持，source/image的true/true保持；四个Running及一个held终态的Pod/CID/PVC/PV身份未变，旧stop仍timed_out/cleanup pending，r4 unknown-create原PVC保持。没有回填历史保护、移除finalizer或释放旧预占。helper/assembler/profile2、代理/准入及描述符数据/UID未变；此次不是重跑16项安装探测、ARM或公开CI发行。新单Python应用的发布/停用/离线数据/恢复仍需单独实测，不能以部署ready代替。结构化证据见JSON的 `protection_report_r29_deployment`。

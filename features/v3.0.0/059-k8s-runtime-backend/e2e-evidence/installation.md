@@ -70,3 +70,10 @@ dedc安装器通过独立r2 wrapper真实执行，exit0；完整16/16检查通�
 独立复核精确5个可能匹配三个业务Service的control canary：每个均1ADDED/10MODIFIED/1DELETED，同UID闭合，所有事件带NotReady gate、未出现gate=True或Ready=True；每个仅一次进入EndpointSlice，ready和serving明确false。三个正式Pod及Service UID/selector/publishNotReadyAddresses=false保持。registry-push精确对应egress canary UID7f51f0ff-cff8-4e99-9bb6-2cf18e07df32。独立JSON SHA `140eafa532248a53fe1dfef42f198a0bae3faaa47b49de12255d0ab53e508d62`；完整PSV SHA21d17d6c…/e59d0f0d…。
 
 第六个preflight-untrusted角色不匹配上述watch选择器，未连续观察其Ready/gate历史，不推定通过。未见ERROR或stderr错误；不以resourceVersion数字跳跃判断丢失，也不声称绝对无传输缺口/数据包级无影响。root核无control残留、Service不变和精确watch进程后主动SIGINT，两个SSH watch实际exit1属操作者停止记录，不记成130或测试故障。API probe/TCP、外部crane TLS权限、真实source-image业务各自独立。
+
+
+## R29：保护报告修复实际部署（新业务验收待完成）
+
+T258–T263的生产源码 `f8863f3763285435a5df01fc150400838bdb3f0a` 已完成189原生amd64构建及隔离导入烟测，仅推送专用内网仓库；manager固定digest `0b4bd3e66c1d7c49fe00046c83277dab8b6dbd0628f201abf3192d70dd67ddad`。专用backend/worker仅两个保护源文件按旧哈希备份、原CID重启；新字节哈希复核通过。Helm29升级后manager新UID `fae606c4-3e51-4efa-ba00-a7ce9163de3f`，原UID实际缺席；自然接管epoch24、ready、sticky保护合同v1/current及两guard true。host描述符与Pod投射的完整/保护摘要一致，保护基线 `9006c20349b46e6a60af9d7e2ccdc45f4e4efae5606f58cde88b69bd0b9ad3ff`。
+
+独立fresh核对：旧三个bundle的false/false保持，source/image的true/true保持；四个Running及一个held终态的Pod/CID/PVC/PV身份未变，旧stop仍timed_out/cleanup pending，r4 unknown-create原PVC保持。没有回填历史保护、移除finalizer或释放旧预占。helper/assembler/profile2、代理/准入及描述符数据/UID未变；此次不是重跑16项安装探测、ARM或公开CI发行。新单Python应用的发布/停用/离线数据/恢复仍需单独实测，不能以部署ready代替。结构化证据见JSON的 `protection_report_r29_deployment`。
