@@ -452,13 +452,18 @@ empty.
 
 Audit and repair missing F048 projections for business-verified platform
 resources. The current inventory covers preset tool categories
-(`is_preset=1 AND user_id IS NULL`). Preset dashboards are intentionally
+(`is_preset=1 AND is_delete=0`), regardless of historical `user_id`. Preset dashboards are intentionally
 excluded: they are ordinary resources owned by the first super administrator.
 The reconciler does not infer system ownership from the resource-type
 allowlist alone.
 
-The default dry-run reports missing/non-current modes for those tool
-categories:
+The default dry-run reports missing/non-current modes and checks actual
+`user:*` system tuples at higher consistency for `CURRENT` categories. A
+`CURRENT` mode alone does not prove that system authorization is complete.
+`MISSING_TUPLES` lists missing `visible` / `system_use_marker` relations;
+`incomplete_count` counts affected existing resources and `missing_tuple_count`
+counts their missing relations. `missing_count` counts resources without a mode.
+Dry-run writes no permission modes, operations, grants, or tuples:
 
 ```bash
 export config=config.yaml
@@ -477,16 +482,27 @@ PYTHONPATH=./ .venv/bin/python \
   --operator-id 1
 ```
 
-Apply calls the regular `authorize_system_owned` facade. The resulting mode,
-durable projection operation/tuples, and OpenFGA marker tuples are therefore
-created by the same path as online resource creation. An existing
+Apply calls `authorize_system_owned` for absent modes and `repair_system_owned`
+for `CURRENT` preset tools with missing system relations. The repair only adds
+the missing relations through a durable `RESOURCE_SYSTEM_REPAIR` operation,
+claims the existing resource version, and finalizes the next version after
+OpenFGA verification. Existing Grant/assignee rows, visibility contributions,
+and permission mode are preserved. A second run with complete tuples performs
+no writes; later tuple loss can be repaired at the new resource version. An existing
 non-`CURRENT` mode is a blocker and remains owned by the ordinary
 operation/FAILED_CLOSED recovery scripts.
 
-The general projection-operation reconciler cannot repair this case because a
-freshly seeded resource has no durable operation yet. The visible reconciler
-also cannot repair it because system-owned resources intentionally have no
-Grant/assignee source rows.
+Run this explicit maintenance procedure after deploying the classifier fix to
+repair historical presets migrated as user-owned resources. Restarting the
+service does not repair all existing presets, and resuming a completed F048
+migration does not refresh its frozen resource classification. Review the
+dry-run against the target environment before applying; deploying this code
+alone does not mutate production permissions.
+
+The general projection-operation reconciler cannot invent missing system
+tuples for a historical resource: no operation describing that correction
+exists yet. The visible reconciler only rebuilds ordinary Grant sources;
+system authorization has a separate canonical business predicate.
 
 ### `recover_f048_failed_closed_projection.py`
 
