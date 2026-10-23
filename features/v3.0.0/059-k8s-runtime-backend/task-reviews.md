@@ -3568,3 +3568,12 @@ T221/T223 AC追溯补核：新增测试的跨feature注释已修正为F059实际
 **结果：PASS（限任务列明业务流程）。** 指定platform.json/md两文件汇总了五交付模式及v1/v2、发布/预览/审批、容量拒绝与同审批恢复、HTTP/WS/SDK/OBO/附件/权限、在线和停用数据查改CSV/同v1恢复；最终R31健康fullimage正常删除的唯一intent、durable destroy/purge、同UID kubelet停止、PVC账本归属和自然缺席、PV Retain/SQLite缺席已独立审证。前置T068完成；不新增产品代码、无模型/迁移/UI变化、只输出脱敏标识，历史失败/未知与旧保护围栏完整保留。数据源为真实189，不以本地35/9脚本测试替代；没有重跑完整回归。
 
 独立L1 /private/tmp/f059-t069-independent-l1-r31.md SHA b8b0b9eb972855feb6c7c2e59a889028938bbcad8dfce6ce9f272aa0b4bd7fd2，复算UUID5/digest/同UID/PVC清理op/PV claim与原始三份证明匹配。snapshot样本0和当前prefix空不证明非空删除，源对象保留未采样；AC-02、AC-17、AC-18、AC-37、AC-45未新增真实子句证据明确留矩阵，T070故障/独立卸载、Docker补验/发行/L2仍独立pending。
+
+
+## T272 / T273 — PASS（租约交接定向修复，2026-10-23）
+
+- 根因：真实189在途SIGKILL后，旧holder尚未到期的409/controller_lease_held误入业务失败处理；真实双执行器最小复现确认跨到期后cleanup取得新epoch并终结原prepare。后端Service探针确认租约和相同模板资源复用符合原合同。
+- 实现：仅operations.execute的K8s分支在try/operation claim之前调用_controller。初始控制拒绝向Future传播，正常对账下一轮原plan再提交；不调用业务_failure，原操作/资源/阶段事实/deadline保持。真正业务API异常仍原失败/清理，Docker不走新门。
+- 测试：私有新7例旧代码4fail/3pass，红日志SHA3e6a8c7ba492d7b0b1f23d95e185a53f34a2f9a2a50ad2163e4f6d879a67272e。主树新配对+test_operations_v2+test_k8s_prepare_cancellation直接关联123pass/1fail；仅既有controller故障用例需适配异常传播，并新增整op不变断言。随后仅新配对＋该6例13pass/0.17s，未重跑全量。日志/private/tmp/f059-t272-t273-targeted-green-r1.log与-r2.log保留。
+- 独立L1：/private/tmp/f059-t272-t273-independent-l1.md，SHA489710ae0e65291f4faf09295800b60ee6f353c0b3df23b17d9899b459f31021；无产品阻断，两项测试AC标注/第二测试文件清单已由root补齐。Ruff、format、逐文件arch-guard及diff检查通过。
+- 边界：仅本地定向修复闭合，不宣称189新镜像/在途续办通过，不覆盖原NOT_PASSED记录，不替代T070其余场景或L2。

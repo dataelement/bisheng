@@ -94,3 +94,12 @@ m2已在新目录生成并冻结NULL→NOTNULL应用包（v1 09807c39…/1235B�
 SELECT账本六资源全部cleanupcomplete，三个Pod同UID kubelet_terminal停止事实；随后物理集合与账本逐ref/kind/UID精确一致、六项自然404，预约released。原四应用Pod/CID/restart与恢复后M2 Pod UID保持；未强删、改finalizer或手工释放。草稿保留用于后续已知终态的新发布，不把历史取消请求重放。
 
 五份原始脱敏文件摘要及完整ID见JSON；独立L1 `77e4d874…` 通过。验收工具仅修复v2 Bearer请求被登录Cookie覆盖和提交意图防重放，六项定向测试通过，不改产品、未跑全量回归。各调用有300秒总预算但分阶段无持久全局期限；本次submit意图至公开取消完成实际165.72秒，之后SQL/物理取证不冒作300秒内观测。仅关闭T070取消子项，初始化/响应丢失/在途SIGKILL/独立卸载仍待验收。
+
+
+## R31 在途SIGKILL首轮：未通过，原失败保留
+
+在新迭代f43bb953…/prepare c0fe7a9a…的真实240秒Node安装hook运行中，按manager原Pod UID56193f9b…/精确旧CID唯一SIGKILL，CLI已ACK。hook证明距BEGIN5.20秒、kill意图距BEGIN7.66秒；kubelet同Pod重启一次、controller28→29，但原prepare随后failed/execution_failed/cleanupcomplete，inputs/resolve事实保留、install未完成，正式版本仍0。观察器120秒预算包含预检，最终unknown/71次state检查异常，不能表述为71次HTTP失败或容器恢复即续办成功。
+
+原安装UID142037c5…及另两Pod均同UID kubelet_terminal停止，六资源自然API缺席、容量released，原四应用CID/restart与M2恢复Pod UID保持；未强制清理。故障后的owner取消工具仅做新绑定前置检查即拒绝，未提交cancel；原failed/意图/unknown结果均保留。七份脱敏证据及独立NOT_PASSED报告5c8ec11f…摘要见JSON。
+
+根因验证只围绕该链：真实backend Service/SQLite证明旧租约未到期对新holder的409/controller_lease_held不会改变prepare，epoch更换和相同模板本身可复用；真实OperationExecutor＋KubernetesExecutor最小复现证明该暂态拒绝进入业务_failure，错误处理跨自然到期后拿到新epoch并误清理正在安装的原Pod，runtime.prepare甚至尚未进入。实际故障窗只统计到10次lease_held标记，不单凭计数宣称抓到首个进程内异常。登记T272/T273，将开工前控制器准入移出业务失败处理范围；不改模板/后端围栏、不吞任意异常、不延长原deadline。修复与新操作复验尚未完成。

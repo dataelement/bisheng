@@ -6998,6 +6998,55 @@
       "review": "PASS"
     },
     {
+      "id": "T272",
+      "wave": 8,
+      "kind": "测试",
+      "title": "控制器暂态拒绝不得终结原准备操作",
+      "files": [
+        "src/runtime-manager/tests/test_k8s_controller_restart.py",
+        "src/runtime-manager/tests/test_operations_v2.py"
+      ],
+      "logic": "真实执行链覆盖旧租约暂态拒绝不claim/失败/清理，正常对账取得新epoch后按原操作/期限/进度续办；合法租约、Docker与业务失败保持。",
+      "acs": [
+        "AC-43",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T271"
+      ],
+      "pair": "T273",
+      "command": "targeted lease handoff regression; see task-reviews.md T272/T273",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
+      "id": "T273",
+      "wave": 8,
+      "kind": "实现",
+      "title": "在业务失败处理范围外取得K8s控制器租约",
+      "files": [
+        "src/runtime-manager/runtime_manager/operations.py"
+      ],
+      "logic": "K8s在操作执行前取得控制权，暂态拒绝不进入业务_failure；原期限、模板、后端授权和Docker不变。",
+      "acs": [
+        "AC-43",
+        "AC-48",
+        "AC-49",
+        "AC-52",
+        "AC-55"
+      ],
+      "depends": [
+        "T272"
+      ],
+      "pair": "T272",
+      "command": "targeted lease handoff regression; see task-reviews.md T272/T273",
+      "status": "complete",
+      "review": "PASS"
+    },
+    {
       "id": "T072",
       "wave": 9,
       "kind": "审查",

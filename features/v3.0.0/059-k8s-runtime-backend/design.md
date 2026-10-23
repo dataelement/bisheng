@@ -838,3 +838,6 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 开发收尾补记：T266–T269实际销毁阶段与PVC异步等待均已L1；T270/T271为在线restore接通同操作持久结果后的serve资源入口，仍按原deadline、严格resume=true、latest fact snapshot/digest/helper ref及全app旧writer停止保护。现有材料与ready/route提交不变。完整backend1174pass/19skip，manager1787pass/13skip；R31原生amd64构建/内网digest981bf135…已取得，source6c9694f0f，backend单文件独立source38a700233/c06fb408。首次真实restore4d858a52/gen3仍failed，需部署后新显式恢复验收；未公开发行、ARM暂缓。
 
 2026-10-23 验收现状：R31 Helm31与backend c06fb408实际部署通过；正常升级保持原应用/卷与SQL业务投影。T069安全删除经唯一owner业务请求、durable purge、同UID停止/PVC自然清理/PV Retain/SQLite缺席闭合，独立L1后265/269。全AC子句边界及T070/发行/L2保留；按用户要求仅定向测试修复和相邻链。
+
+
+2026-10-23 在途重启控制器准入（T272/T273）：189单次SIGKILL后的新进程在旧holder租约尚未到期时收到正常409/controller_lease_held；该异常错误进入业务_failure，错误处理跨到自然到期后取得新epoch并清理原安装。真实双执行器与后端Service最小复现已区分于模板/epoch资源复用问题。按4.6既有续办合同，在operation claim/执行和业务失败处理之前核当前K8s控制器租约；拒绝当前动作，原操作/阶段事实/资源和deadline保持，下一轮正常对账再试。不放宽后端围栏，不改Docker、冻结模板、原失败记录或截止时间；本地4行准入门及定向配对/独立L1已完成；189新镜像复验尚待完成。

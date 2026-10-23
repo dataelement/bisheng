@@ -2185,6 +2185,24 @@
   **依赖:** T270
   **配对:** T270
 
+### 在途重启的控制器准入（T272–T273）
+
+- [x] **T272** — 控制器暂态拒绝不得终结原准备操作
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_k8s_controller_restart.py`、`src/runtime-manager/tests/test_operations_v2.py`
+  **逻辑/验收**：真实OperationExecutor与KubernetesExecutor复现新holder被旧未到期租约拒绝、错误处理跨越自然到期后误清理原install并终结的链路。准入拒绝时不claim操作、不写失败事实、不清理；下一次取得新epoch后同操作/期限/进度继续，合法租约、Docker和取得权限后的业务失败保持原行为。
+  **覆盖 AC:** AC-43、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T271
+  **配对:** T273
+
+- [x] **T273** — 在业务失败处理范围外取得K8s控制器租约
+  **类型**：实现
+  **文件**：`src/runtime-manager/runtime_manager/operations.py`
+  **逻辑/验收**：在领取/执行操作前先核K8s控制器权限，暂态拒绝由下一次正常对账续办，不进入业务_failure；不吞任意API异常、不延长操作期限、不改模板、后端授权和Docker。
+  **覆盖 AC:** AC-43、AC-48、AC-49、AC-52、AC-55
+  **依赖:** T272
+  **配对:** T272
+
 ### Wave 9
 
 - [ ] **T072** — L2 代码审查及交付核对
@@ -2367,3 +2385,7 @@ T256/T257 L1闭合：固定1a568c85c核心5行检查＋79f4adb6f测试融合2ac6
 2026-10-23 T070子项：M2新restore6cd6/gen4真实完成，原行/NULL摘要、v1路由、pending清理、同操作confirmed保护上传及backend导出完整性、helper停止→单正式Pod/原PVC身份已核；原failed和工具未发包鉴权失败均保留。T070其余故障/卸载仍pending，不扩大为全AC通过。
 
 2026-10-23 T070取消子项：R31真实Node240秒npm hook在54.85秒精确UID/CID运行时owner单次取消，非owner/foreign16105；cancelled/cleanupcomplete、无审批正式版本、三Pod同UID终态及全部六资源自然清理/容量释放/原应用保持。独立L1 77e4d874…通过；265/269不变，T070仍pending。后续仅定向验证在途manager重启等剩余场景，不重复全量回归。
+
+2026-10-23 T272/T273登记：189单次SIGKILL已ACK且同manager Pod重启、epoch28→29，但c0fe prepare真实failed/execution_failed并自然清理。真实Service租约探针与双执行器最小复现证实旧lease held暂态拒绝进入业务_failure、跨自然到期后误清理；不改模板或backend，不将容器恢复记为续办通过。活跃265/271，原失败与取消未发出的预检记录保留。仅配对和相关链路验证。
+
+2026-10-23 T272/T273 L1闭合：旧7例4红3绿；主树新配对+操作执行/准备取消直接关联首轮123绿、1旧stop异常边界断言失败。仅适配该夹具并保留整op不变/旧writer不动，最窄13例全绿（0.17s），没有再跑全量。4行K8s前置门，无backend/template/Docker改动。独立L1 489710ae…两项AC/文件清单备注已补，Ruff/格式/逐文件架构门通过。267/271，189新镜像和在途重启复验待做。

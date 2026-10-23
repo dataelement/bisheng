@@ -1394,7 +1394,13 @@ def test_expired_stop_uncertain_control_plane_never_mutates_old_writer(tmp_path,
         )
     executor = cleanup_executor(tmp_path, platform, runtime, CleanupClock())
     try:
-        executor.execute("operation-a")
+        if cause == "controller-503":
+            before = deepcopy(platform.op)
+            with pytest.raises(PlatformError, match=r"^controller_lease_lost$"):
+                executor.execute("operation-a")
+            assert platform.op == before
+        else:
+            executor.execute("operation-a")
         assert state["cleanup_calls"] == 0 and platform.rows[1]["stop_state"] == "held"
         assert platform.op["cleanup_status"] == "pending"
         if cause == "claim-503":

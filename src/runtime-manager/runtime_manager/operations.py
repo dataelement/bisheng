@@ -205,6 +205,10 @@ class OperationExecutor:
             operation = self.platform.operation(operation_id)
             if operation["status"] in TERMINAL:
                 return operation
+            # A restarting manager may wait for its predecessor's lease to expire.
+            # Control-plane refusal must not enter application failure cleanup.
+            if self.config.executor_kind == "kubernetes":
+                self.runtime._controller()
             try:
                 self.platform.claim(operation_id)
                 kind, body = operation["kind"], operation["payload"]
