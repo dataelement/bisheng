@@ -508,8 +508,13 @@ class OperationExecutor:
             self.runtime._legacy_owned = getattr(self, "_legacy_owned", set())
             return self.runtime.heartbeat()
         descriptor = self.runtime.descriptor
-        capabilities = self.runtime.capabilities()
-        probe = self.runtime.probe_report()
+        snapshot = getattr(self.runtime, "heartbeat_snapshot", None)
+        if callable(snapshot):
+            observed = snapshot()
+            capabilities, probe = observed["capabilities"], observed["probe_report"]
+        else:
+            capabilities = self.runtime.capabilities()
+            probe = self.runtime.probe_report()
         probe["ready"] = probe.get("ready") is True and capabilities.get("orchestration_available") is True
         self.platform.heartbeat(
             {
