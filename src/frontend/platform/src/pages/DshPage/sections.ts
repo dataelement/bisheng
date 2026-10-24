@@ -3,6 +3,8 @@ const DSH_SECTION_DEFINITIONS = [
     { value: 'usage', labelKey: 'dsh.unified.usage', visible: true },
     { value: 'models', labelKey: 'dsh.unified.models', visible: true },
     { value: 'model-audit', labelKey: 'dsh.auditTab', visible: true },
+    { value: 'content-safety', labelKey: 'dsh.contentSafety.title', visible: true },
+    // Keep the audit implementation available for the upcoming design revision.
     { value: 'operations', labelKey: 'dsh.operations', visible: false },
     { value: 'access', labelKey: 'dsh.accessSettings', visible: true },
     { value: 'plugins', labelKey: 'dsh.enterprisePlugins', visible: true },

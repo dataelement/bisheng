@@ -2579,6 +2579,170 @@
     "noWebSnapshot": "暂无网页快照，请查看入库文本或打开原网页。"
   },
   "dsh": {
+    "contentSafety": {
+      "actions": {
+        "close": "关闭",
+        "load_more": "加载更多",
+        "refresh": "刷新",
+        "retry": "重试",
+        "save": "保存",
+        "saved": "已保存",
+        "saving": "保存中",
+        "view_details": "查看检查详情"
+      },
+      "association": {
+        "ASSOCIATED": "已关联审计记录",
+        "UNASSOCIATED": "尚未关联审计记录",
+        "unassociated_hint": "检查结果已保存，但尚不能确认对应的模型审计记录。",
+        "unassociated_title": "未关联检查记录",
+        "filter_hint": "这里的筛选独立于审计记录，按请求开始时间查询；默认最近 7 天，单次最多 31 天。"
+      },
+      "delivery": {
+        "backlog": "部分检查记录尚未送达，当前结果可能不完整。",
+        "committed": "记录已保存",
+        "pending": "记录等待送达",
+        "quarantined": "记录未被接收，请联系管理员检查。",
+        "retrying": "记录正在补报"
+      },
+      "description": "按当前租户的词库检查 Desktop 模型输入和输出，命中后停止交付相关内容。",
+      "details": {
+        "backend_request_id": "模型请求编号",
+        "builtin_digest": "内置词库标识",
+        "drain_status": "停止交付后的读取状态",
+        "empty": "暂无检查记录，不能据此判断已经通过。",
+        "event_id": "检查记录编号",
+        "event_kind": "记录类型",
+        "event_version": "记录版本",
+        "events": "检查记录",
+        "forwarded": "已转发模型请求",
+        "gateway_request_id": "转发请求编号",
+        "hit_count": "命中次数",
+        "hit_count_truncated": "命中次数已截断，实际次数可能更多。",
+        "input": "输入检查",
+        "model_started_at": "模型执行开始时间",
+        "no_matched_text": "检查记录不保存命中原文。",
+        "not_forwarded": "未转发模型请求",
+        "occurred_at": "检查结果产生时间",
+        "output": "输出检查",
+        "policy_version": "检查配置版本",
+        "received_at": "记录接收时间",
+        "request_started_at": "请求开始时间",
+        "rule_refs": "命中规则编号",
+        "source": "记录来源",
+        "summary": "整体检查结果",
+        "title": "敏感词检查详情",
+        "unknown": "未确认"
+      },
+      "details_status": {
+        "AVAILABLE": "明细可查看",
+        "PENDING": "明细尚未到达，请稍后刷新。",
+        "PURGED": "明细已按保留规则清理，已知检查结果仍保留。",
+        "UNREPORTED": "尚未收到检查明细。"
+      },
+      "directions": {
+        "BOTH": "输入和输出均命中",
+        "INPUT": "输入命中",
+        "OUTPUT": "输出命中"
+      },
+      "drain": {
+        "DISCONNECTED": "读取连接已断开",
+        "FINISHED": "已读完响应",
+        "LIMITED": "已到读取容量限制",
+        "NOT_REQUIRED": "无需继续读取",
+        "RUNNING": "正在等待模型响应结束",
+        "TIMED_OUT": "已到读取时限",
+        "usage_hint": "此状态不代表模型已经停止或不再计费，用量以模型记录为准。"
+      },
+      "errors": {
+        "capabilities_unknown": "无法确认敏感词检查是否可用，请刷新或联系管理员。",
+        "check_unavailable": "本次内容检查未能完成，已停止交付。请稍后重试或联系管理员。",
+        "content_blocked": "内容命中敏感词，已停止交付。",
+        "deployment_disabled": "当前部署未启用敏感词控制，请联系管理员。",
+        "events_load_failed": "未能读取检查详情，请重试。",
+        "load_failed": "未能读取敏感词配置，请刷新重试。",
+        "save_failed": "保存失败，修改内容已保留，请重试。",
+        "unavailable": "敏感词检查服务暂不可用，请联系管理员检查服务状态。",
+        "version_conflict": "配置已被更新，当前修改已保留。请刷新最新配置后再保存。"
+      },
+      "event_kinds": {
+        "DECISION": "阻断判定",
+        "DRAIN": "后续读取结果",
+        "FINAL": "检查结束"
+      },
+      "filters": {
+        "all": "全部",
+        "direction": "命中方向",
+        "has_hit": "有命中",
+        "hit": "敏感词命中",
+        "no_known_hit": "无已知命中",
+        "no_known_hit_hint": "无已知命中不代表已经检查通过。",
+        "state": "检查结果"
+      },
+      "model_entry": {
+        "ENTERED": "已进入模型处理",
+        "NOT_APPLICABLE": "不适用",
+        "NOT_ENTERED": "未调用模型",
+        "UNOBSERVED": "未观测到模型执行结果"
+      },
+      "origins": {
+        "EXTERNAL_SAFETY": "外部检查记录",
+        "MODEL": "模型调用记录"
+      },
+      "readiness": {
+        "all_count": "全部已汇总请求中，{{count}} 个命中",
+        "as_of": "统计更新至 {{time}}",
+        "matching_count": "符合当前筛选条件的请求中，{{count}} 个命中",
+        "pending": "命中统计更新中，请稍后刷新；请求明细仍可查看。",
+        "ready": "命中统计已更新",
+        "scan_limited": "本次查询已到扫描上限，请缩小范围或继续查看。",
+        "version": "统计版本",
+        "own_hits": "本会话命中请求数",
+        "branch_hits": "含子会话的命中请求数",
+        "all_hits": "全会话命中请求数",
+        "matching_hits": "当前筛选命中请求数"
+      },
+      "settings": {
+        "activation_hint": "保存后最多 5 秒对新请求生效；已开始的请求继续使用开始时的配置。",
+        "auto_reply": "阻断提示",
+        "auto_reply_hint": "命中时向用户显示此提示。请勿填写命中原文或敏感信息。",
+        "builtin_digest": "内置词库标识",
+        "builtin_words": "内置词库",
+        "custom_words": "自定义敏感词",
+        "custom_words_hint": "按现有词库规则分隔词条；按字面匹配，区分大小写。",
+        "custom_words_limit": "自定义词最多 {{bytes}} 字节。",
+        "default_off": "尚未设置，默认不检查。",
+        "disabled_hint": "关闭后停止检查新请求，已记录的检查结果仍然保留。",
+        "effective_words": "生效词数",
+        "effective_words_limit": "生效词库最多 {{count}} 词、{{bytes}} 字节；每词最多 {{length}} 个字符。",
+        "enabled": "启用检查",
+        "input_enabled": "检查输入",
+        "output_enabled": "检查输出",
+        "scope_hint": "配置仅用于当前选择的租户。",
+        "version": "当前配置版本",
+        "word_sources": "词库来源"
+      },
+      "states": {
+        "BLOCKED": "命中",
+        "DISABLED": "已关闭",
+        "ERROR": "检查失败",
+        "NOT_APPLICABLE": "不适用",
+        "PASSED": "通过",
+        "UNREPORTED": "未收到完整结果"
+      },
+      "title": "敏感词控制",
+      "validation": {
+        "custom_words_too_large": "自定义敏感词超过大小限制，请减少后重试。",
+        "reply_required": "启用检查前，请填写阻断提示。",
+        "too_many_words": "生效词数超过限制，请减少词条或词库来源。",
+        "word_too_long": "词条超过长度限制，请缩短后重试。",
+        "words_required": "启用检查前，请选择有效词库或填写自定义敏感词。",
+        "checks_required": "启用检查前，请至少选择检查输入或检查输出。",
+        "reply_too_long": "阻断提示最多 2048 个字符，请缩短后重试。",
+        "range_too_large": "单次查询最多 31 天，请缩小时间范围。",
+        "invalid_identity": "请输入完整、有效的用户或模型编号。",
+        "invalid_request_id": "请输入完整、有效的请求 UUID。"
+      }
+    },
     "modelAudit": "模型审计",
     "auditTab": "审计",
     "modelAuditView": {
@@ -2677,7 +2841,7 @@
         "INVALID_STATE": "记录状态无法识别"
       },
       "advanced_hint": "按模型、状态或完整编号进一步筛选；名称与编号均精确匹配。",
-      "all_time": "全部时间",
+      "all_time": "最近 7 天（默认）",
       "async_hint": "异步记录，可能存在缺口",
       "capture_status": "采集状态",
       "clear_advanced": "清空高级条件",
@@ -2688,8 +2852,8 @@
       "log_title": "审计日志",
       "managed_tenant": "当前管理租户",
       "model_placeholder": "选择模型，或填写完整历史名称",
-      "no_end": "不限结束",
-      "no_start": "不限开始",
+      "no_end": "默认当前时间",
+      "no_start": "默认结束前 7 天",
       "query_info": "范围与查询说明",
       "refresh_mode": "刷新状态",
       "refresh_records": "刷新记录",

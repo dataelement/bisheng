@@ -2634,6 +2634,170 @@
     "noWebSnapshot": "No web snapshot yet — check the stored text or open the source page."
   },
   "dsh": {
+    "contentSafety": {
+      "actions": {
+        "close": "Close",
+        "load_more": "Load more",
+        "refresh": "Refresh",
+        "retry": "Retry",
+        "save": "Save",
+        "saved": "Saved",
+        "saving": "Saving",
+        "view_details": "View check details"
+      },
+      "association": {
+        "ASSOCIATED": "Linked to an audit record",
+        "UNASSOCIATED": "Not linked to an audit record",
+        "unassociated_hint": "The check result is saved, but its model audit record has not been confirmed.",
+        "unassociated_title": "Unlinked check records",
+        "filter_hint": "These filters are separate from the audit records and use the request start time. The default is the last 7 days, with a maximum of 31 days per query."
+      },
+      "delivery": {
+        "backlog": "Some check records have not arrived. The displayed results may be incomplete.",
+        "committed": "Record saved",
+        "pending": "Record awaiting delivery",
+        "quarantined": "The record was not accepted. Ask an administrator to investigate.",
+        "retrying": "Record delivery retrying"
+      },
+      "description": "Check Desktop model inputs and outputs against the current tenant’s word list. Stop delivery when a match is found.",
+      "details": {
+        "backend_request_id": "Model request ID",
+        "builtin_digest": "Built-in word list fingerprint",
+        "drain_status": "Reading after delivery stopped",
+        "empty": "No check records are available. This does not confirm that checks passed.",
+        "event_id": "Check record ID",
+        "event_kind": "Record type",
+        "event_version": "Record version",
+        "events": "Check records",
+        "forwarded": "Model request forwarded",
+        "gateway_request_id": "Forwarding request ID",
+        "hit_count": "Match count",
+        "hit_count_truncated": "The match count is capped. There may be more matches.",
+        "input": "Input check",
+        "model_started_at": "Model execution started at",
+        "no_matched_text": "Check records do not store matched text.",
+        "not_forwarded": "Model request not forwarded",
+        "occurred_at": "Check result observed",
+        "output": "Output check",
+        "policy_version": "Check settings version",
+        "received_at": "Record received",
+        "request_started_at": "Request started",
+        "rule_refs": "Matched rule IDs",
+        "source": "Record source",
+        "summary": "Overall check result",
+        "title": "Sensitive word check details",
+        "unknown": "Unconfirmed"
+      },
+      "details_status": {
+        "AVAILABLE": "Details available",
+        "PENDING": "Details have not arrived yet. Refresh later.",
+        "PURGED": "Details were removed under the retention policy. Known check results are retained.",
+        "UNREPORTED": "Check details have not been received."
+      },
+      "directions": {
+        "BOTH": "Both input and output matched",
+        "INPUT": "Input matched",
+        "OUTPUT": "Output matched"
+      },
+      "drain": {
+        "DISCONNECTED": "Reading connection closed",
+        "FINISHED": "Response fully read",
+        "LIMITED": "Reading capacity limit reached",
+        "NOT_REQUIRED": "No further reading required",
+        "RUNNING": "Waiting for the model response to end",
+        "TIMED_OUT": "Reading time limit reached",
+        "usage_hint": "This status does not confirm that the model stopped or billing ended. Refer to the model usage record."
+      },
+      "errors": {
+        "capabilities_unknown": "Check availability could not be confirmed. Refresh or contact an administrator.",
+        "check_unavailable": "The content check could not finish, so delivery stopped. Try again later or contact an administrator.",
+        "content_blocked": "Content matched a sensitive word. Delivery has stopped.",
+        "deployment_disabled": "Sensitive word controls are not enabled for this deployment. Contact an administrator.",
+        "events_load_failed": "Could not load check details. Try again.",
+        "load_failed": "Could not load sensitive word settings. Refresh to retry.",
+        "save_failed": "Could not save. Your edits are retained. Try again.",
+        "unavailable": "Sensitive word checks are unavailable. Ask an administrator to check the service.",
+        "version_conflict": "The settings have changed. Your edits are retained. Refresh the latest settings before saving again."
+      },
+      "event_kinds": {
+        "DECISION": "Block decision",
+        "DRAIN": "Subsequent reading result",
+        "FINAL": "Check finished"
+      },
+      "filters": {
+        "all": "All",
+        "direction": "Match direction",
+        "has_hit": "Match recorded",
+        "hit": "Sensitive word match",
+        "no_known_hit": "No known match",
+        "no_known_hit_hint": "No known match does not mean the checks passed.",
+        "state": "Check result"
+      },
+      "model_entry": {
+        "ENTERED": "Model processing entered",
+        "NOT_APPLICABLE": "Not applicable",
+        "NOT_ENTERED": "Model not invoked",
+        "UNOBSERVED": "Model execution result not observed"
+      },
+      "origins": {
+        "EXTERNAL_SAFETY": "External check record",
+        "MODEL": "Model call record"
+      },
+      "readiness": {
+        "all_count": "{{count}} matched requests among all summarized requests",
+        "as_of": "Totals updated through {{time}}",
+        "matching_count": "{{count}} matched requests within the current filters",
+        "pending": "Match totals are updating. Refresh later; individual requests remain available.",
+        "ready": "Match totals updated",
+        "scan_limited": "This query reached its scan limit. Narrow the filters or continue browsing.",
+        "version": "Totals version",
+        "own_hits": "Matched requests in this conversation",
+        "branch_hits": "Matched requests including child conversations",
+        "all_hits": "Matched requests across the full conversation",
+        "matching_hits": "Matched requests within current filters"
+      },
+      "settings": {
+        "activation_hint": "Saved changes apply to new requests within 5 seconds. Requests already in progress keep their original settings.",
+        "auto_reply": "Block message",
+        "auto_reply_hint": "Show this message when content is blocked. Do not include matched text or sensitive information.",
+        "builtin_digest": "Built-in word list fingerprint",
+        "builtin_words": "Built-in word lists",
+        "custom_words": "Custom sensitive words",
+        "custom_words_hint": "Separate entries using the existing word list rules. Matching is literal and case-sensitive.",
+        "custom_words_limit": "Custom words can use up to {{bytes}} bytes.",
+        "default_off": "No settings saved. Checks are off by default.",
+        "disabled_hint": "Turning checks off affects new requests. Recorded results are retained.",
+        "effective_words": "Active word count",
+        "effective_words_limit": "The active list supports up to {{count}} words and {{bytes}} bytes, with up to {{length}} characters per word.",
+        "enabled": "Enable checks",
+        "input_enabled": "Check inputs",
+        "output_enabled": "Check outputs",
+        "scope_hint": "These settings apply only to the selected tenant.",
+        "version": "Current settings version",
+        "word_sources": "Word list sources"
+      },
+      "states": {
+        "BLOCKED": "Matched",
+        "DISABLED": "Disabled",
+        "ERROR": "Check failed",
+        "NOT_APPLICABLE": "Not applicable",
+        "PASSED": "Passed",
+        "UNREPORTED": "Complete result not received"
+      },
+      "title": "Sensitive word controls",
+      "validation": {
+        "custom_words_too_large": "Custom words exceed the size limit. Reduce the list and try again.",
+        "reply_required": "Enter a block message before enabling checks.",
+        "too_many_words": "The active word count exceeds the limit. Reduce the words or selected lists.",
+        "word_too_long": "A word exceeds the length limit. Shorten it and try again.",
+        "words_required": "Select a valid word list or add custom words before enabling checks.",
+        "checks_required": "Select input checks or output checks before enabling checks.",
+        "reply_too_long": "The block message can contain up to 2048 characters. Shorten it and try again.",
+        "range_too_large": "Select a time range of 31 days or less.",
+        "invalid_identity": "Enter a complete, valid user or model ID.",
+        "invalid_request_id": "Enter a complete, valid request UUID."
+      }
+    },
     "modelAudit": "Model audit",
     "auditTab": "Audit",
     "modelAuditView": {
@@ -2732,7 +2896,7 @@
         "INVALID_STATE": "Unrecognized record state"
       },
       "advanced_hint": "Refine by model, status or complete identifiers. Names and identifiers use exact matching.",
-      "all_time": "All time",
+      "all_time": "Last 7 days (default)",
       "async_hint": "Recorded asynchronously; gaps may exist",
       "capture_status": "Collection",
       "clear_advanced": "Clear advanced filters",
@@ -2743,8 +2907,8 @@
       "log_title": "Audit logs",
       "managed_tenant": "Managed tenant",
       "model_placeholder": "Select a model or enter its full historical name",
-      "no_end": "No end limit",
-      "no_start": "No start limit",
+      "no_end": "Default: current time",
+      "no_start": "Default: 7 days before the end",
       "query_info": "Scope and query details",
       "refresh_mode": "Refresh status",
       "refresh_records": "Refresh records",

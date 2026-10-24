@@ -45,3 +45,53 @@ def dsh_redis_url():
     if url.scheme not in {"redis", "rediss"} or not url.hostname:
         raise pytest.UsageError("DSH test Redis requires an explicit redis/rediss endpoint")
     return value
+
+
+@pytest.fixture
+def content_safety_clock():
+    from test.dsh.content_safety_fixtures import SafetyClock
+
+    return SafetyClock()
+
+
+@pytest.fixture
+def content_safety_identities():
+    from test.dsh.content_safety_fixtures import safety_identities
+
+    return safety_identities()
+
+
+@pytest.fixture
+def content_safety_event(content_safety_clock):
+    from test.dsh.content_safety_fixtures import safety_event_factory
+
+    return safety_event_factory(content_safety_clock)
+
+
+@pytest.fixture
+def content_safety_native_audit(content_safety_clock):
+    from test.dsh.content_safety_fixtures import native_audit_factory
+
+    return native_audit_factory(content_safety_clock)
+
+
+@pytest.fixture
+def content_safety_faults():
+    from test.dsh.content_safety_fixtures import SafetyFaults
+
+    return SafetyFaults()
+
+
+@pytest.fixture
+def content_safety_engine():
+    from test.dsh.content_safety_fixtures import safety_database
+
+    with safety_database() as engine:
+        yield engine
+
+
+@pytest.fixture
+def content_safety_transaction(content_safety_engine, content_safety_faults):
+    from test.dsh.content_safety_fixtures import safety_transaction_factory
+
+    return safety_transaction_factory(content_safety_engine, content_safety_faults)

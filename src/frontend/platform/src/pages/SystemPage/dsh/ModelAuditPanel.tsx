@@ -22,6 +22,8 @@ import { ModelAuditTenantSelect } from "./ModelAuditTenantSelect";
 import { useModelAudit } from "./useModelAudit";
 import { ModelAuditGroup } from "./ModelAuditGroup";
 import { ModelAuditTree } from "./ModelAuditTree";
+import { UnassociatedSafetyEvents } from "./UnassociatedSafetyEvents";
+import { Button as SafetyButton } from "@bisheng/ui";
 
 export function ModelAuditPanel() {
   const { user } = useContext(userContext);
@@ -81,7 +83,67 @@ interface ModelAuditRequestsProps {
   tenantId?: number;
   initialView?: "groups" | "unassociated" | "requests";
 }
-export function ModelAuditRequests({
+export function ModelAuditRequests(props: ModelAuditRequestsProps) {
+  const { user } = useContext(userContext);
+  const identity = user as {
+    user_id?: unknown;
+    tenant_id?: unknown;
+    leaf_tenant_id?: unknown;
+    role?: unknown;
+    is_global_super?: unknown;
+    is_child_admin?: unknown;
+  } | null;
+  const scope = JSON.stringify([
+    props.tenantId,
+    identity?.user_id,
+    identity?.tenant_id,
+    identity?.leaf_tenant_id,
+    identity?.role,
+    identity?.is_global_super,
+    identity?.is_child_admin,
+  ]);
+  return <ModelAuditViews key={scope} {...props} />;
+}
+
+function ModelAuditViews(props: ModelAuditRequestsProps) {
+  const { t } = useTranslation();
+  const [eventsOpen, setEventsOpen] = useState(false);
+  const [eventsVisited, setEventsVisited] = useState(false);
+  return (
+    <div className="min-w-0 space-y-4">
+      <div className="dsh-content-safety">
+        <SafetyButton
+          type="button"
+          variant="outlined"
+          aria-pressed={eventsOpen}
+          onClick={() => {
+            setEventsVisited(true);
+            setEventsOpen((old) => !old);
+          }}
+        >
+          {t(
+            eventsOpen
+              ? "dsh.modelAuditView.return_results"
+              : "dsh.contentSafety.association.unassociated_title",
+          )}
+        </SafetyButton>
+      </div>
+      <div hidden={eventsOpen}>
+        <ModelAuditRequestPage {...props} />
+      </div>
+      {eventsVisited && (
+        <div hidden={!eventsOpen}>
+          <UnassociatedSafetyEvents
+            tenantId={props.tenantId}
+            active={eventsOpen}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModelAuditRequestPage({
   tenantId,
   initialView = "groups",
 }: ModelAuditRequestsProps) {
@@ -429,6 +491,7 @@ export function ModelAuditRequests({
                   group.generation
                 }
                 node={group}
+                progress={groups.progress}
                 query={query}
                 expanded={openGroup === group.conversation_key}
                 onToggle={() =>
@@ -445,6 +508,7 @@ export function ModelAuditRequests({
               <ModelAuditGroup
                 key={group.conversation_key + ":" + revision}
                 group={group}
+                progress={groups.progress}
                 query={query}
                 expanded={openGroup === group.conversation_key}
                 onToggle={() =>

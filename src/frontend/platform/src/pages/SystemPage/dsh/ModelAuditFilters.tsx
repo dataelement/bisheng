@@ -1,5 +1,6 @@
 import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
+import { contentSafetyStates } from "@/types/dshContentSafety";
 import type { ModelAuditQuery } from "@/types/dshModelAudit";
 import { SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
@@ -14,6 +15,9 @@ const advancedKeys = [
   "conversation_id",
   "model_name",
   "audit_status",
+  "has_sensitive_hit",
+  "sensitive_direction",
+  "content_safety_state",
 ] as const;
 interface ModelAuditFiltersProps {
   pending: boolean;
@@ -40,7 +44,12 @@ export function ModelAuditFilters({
   const count = advancedKeys.filter(
     (key) => draft[key] !== undefined && draft[key] !== "",
   ).length;
-  const validRange = validAuditRange(draft.start_at, draft.end_at);
+  const rangeTooLarge =
+    !!draft.start_at &&
+    !!draft.end_at &&
+    Date.parse(draft.end_at) - Date.parse(draft.start_at) > 31 * 86400000;
+  const validRange =
+    validAuditRange(draft.start_at, draft.end_at) && !rangeTooLarge;
   return (
     <form
       className="space-y-3"
@@ -71,6 +80,7 @@ export function ModelAuditFilters({
           <Button
             type="submit"
             disabled={
+              !validRange ||
               (!!draft.model_name && !nameReady) ||
               (!!draft.audit_status && !statusReady)
             }
@@ -114,7 +124,11 @@ export function ModelAuditFilters({
           role="alert"
           className="text-sm text-destructive"
         >
-          {t("dsh.modelAuditView.invalid_time_range")}
+          {t(
+            rangeTooLarge
+              ? "dsh.contentSafety.validation.range_too_large"
+              : "dsh.modelAuditView.invalid_time_range",
+          )}
         </p>
       )}
       {advancedOpen && (
@@ -174,6 +188,87 @@ export function ModelAuditFilters({
                   {t("dsh.modelAuditView.index_preparing")}
                 </p>
               )}
+            </div>
+            <div className="space-y-1 [&_button]:w-full">
+              <span className="block text-xs text-muted-foreground">
+                {t("dsh.contentSafety.filters.has_hit")}
+              </span>
+              <DshChoice
+                label={t("dsh.contentSafety.filters.has_hit")}
+                value={
+                  draft.has_sensitive_hit === undefined
+                    ? "ALL"
+                    : String(draft.has_sensitive_hit)
+                }
+                options={[
+                  { value: "ALL", label: t("dsh.contentSafety.filters.all") },
+                  { value: "true", label: t("dsh.contentSafety.filters.hit") },
+                  {
+                    value: "false",
+                    label: t("dsh.contentSafety.filters.no_known_hit"),
+                  },
+                ]}
+                onChange={(value) =>
+                  onChange({
+                    has_sensitive_hit:
+                      value === "ALL" ? undefined : value === "true",
+                    cursor: undefined,
+                  })
+                }
+              />
+              {draft.has_sensitive_hit === false && (
+                <p className="text-xs text-muted-foreground">
+                  {t("dsh.contentSafety.filters.no_known_hit_hint")}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1 [&_button]:w-full">
+              <span className="block text-xs text-muted-foreground">
+                {t("dsh.contentSafety.filters.direction")}
+              </span>
+              <DshChoice
+                label={t("dsh.contentSafety.filters.direction")}
+                value={draft.sensitive_direction || "ALL"}
+                options={[
+                  { value: "ALL", label: t("dsh.contentSafety.filters.all") },
+                  ...(["INPUT", "OUTPUT", "BOTH"] as const).map((value) => ({
+                    value,
+                    label: t("dsh.contentSafety.directions." + value),
+                  })),
+                ]}
+                onChange={(value) =>
+                  onChange({
+                    sensitive_direction: (
+                      ["INPUT", "OUTPUT", "BOTH"] as const
+                    ).find((direction) => direction === value),
+                    cursor: undefined,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-1 [&_button]:w-full">
+              <span className="block text-xs text-muted-foreground">
+                {t("dsh.contentSafety.filters.state")}
+              </span>
+              <DshChoice
+                label={t("dsh.contentSafety.filters.state")}
+                value={draft.content_safety_state || "ALL"}
+                options={[
+                  { value: "ALL", label: t("dsh.contentSafety.filters.all") },
+                  ...contentSafetyStates.map((value) => ({
+                    value,
+                    label: t("dsh.contentSafety.states." + value),
+                  })),
+                ]}
+                onChange={(value) =>
+                  onChange({
+                    content_safety_state: contentSafetyStates.find(
+                      (state) => state === value,
+                    ),
+                    cursor: undefined,
+                  })
+                }
+              />
             </div>
             {(["request_id", "conversation_id"] as const).map((key) => (
               <label key={key} htmlFor={"audit-" + key} className="space-y-1">

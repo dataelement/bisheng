@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ModelAuditRecord } from "@/types/dshModelAudit";
+import { dshTime } from "./common";
 
 const bodies = vi.hoisted(() => ({ render: vi.fn() }));
 vi.mock("./ModelAuditBody", () => ({
@@ -197,4 +198,27 @@ it("AC-12, AC-13: shows model and response reasons independently and handles old
   expect(
     screen.getByText("dsh.modelAuditView.failures.unavailable"),
   ).toBeVisible();
+});
+
+it("keeps the request start stable while separately showing actual model execution start", () => {
+  const started = "2026-10-16T11:22:33Z";
+  render(<ModelAuditCard row={{ ...row, record_origin: "MODEL", model_entered: true, model_started_at: started }} expanded={false} onToggle={vi.fn()} onNavigate={vi.fn()} />);
+  expect(screen.getByRole("article").querySelector("header time")).toHaveTextContent(dshTime(row.started_at));
+  fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }));
+  const label = screen.getByText("dsh.contentSafety.details.model_started_at");
+  expect(label.nextElementSibling).toHaveTextContent(dshTime(started));
+  expect(screen.getByRole("article").querySelector("header time")).toHaveAttribute("datetime", row.started_at);
+});
+
+it.each([
+  { origin: "MODEL" as const, entered: undefined, expected: "dsh.contentSafety.details.unknown" },
+  { origin: "MODEL" as const, entered: true, expected: "dsh.contentSafety.details.unknown" },
+  { origin: "EXTERNAL_SAFETY" as const, entered: null, expected: "dsh.contentSafety.details.unknown" },
+  { origin: "EXTERNAL_SAFETY" as const, entered: false, expected: "dsh.contentSafety.model_entry.NOT_APPLICABLE" },
+])("shows an explicit model start state for $origin/$entered", ({ origin, entered, expected }) => {
+  render(<ModelAuditCard row={{ ...row, record_origin: origin, model_entered: entered, model_started_at: null }} expanded={false} onToggle={vi.fn()} onNavigate={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }));
+  const label = screen.getByText("dsh.contentSafety.details.model_started_at");
+  expect(label.nextElementSibling).toHaveTextContent(expected);
+  expect(screen.getByRole("article").querySelector("header time")).toHaveAttribute("datetime", row.started_at);
 });

@@ -72,6 +72,7 @@ DSH_CREDENTIAL_ROUTES = frozenset(
         ("POST", "/api/v1/dsh/chat/completions"),
         ("POST", "/api/v1/dsh/responses"),
         ("POST", "/api/v1/dsh/web-session"),
+        ("POST", "/api/v1/internal/dsh/content-safety-events"),
     }
 )
 

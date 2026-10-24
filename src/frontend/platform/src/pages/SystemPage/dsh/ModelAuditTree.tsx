@@ -1,14 +1,19 @@
 import { Button } from "@/components/bs-ui/button";
-import type { AuditTreeNode, ModelAuditQuery } from "@/types/dshModelAudit";
+import type {
+  AuditQueryReadiness,
+  AuditTreeNode,
+  ModelAuditQuery,
+} from "@/types/dshModelAudit";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshPager, dshTime } from "./common";
-import { ModelAuditGroupRequests } from "./ModelAuditGroup";
+import { ModelAuditGroupRequests, ModelAuditSafetySummary } from "./ModelAuditGroup";
 import { useModelAuditTree } from "./useModelAuditTree";
 
 interface ModelAuditTreeProps {
   node: AuditTreeNode;
+  progress?: AuditQueryReadiness;
   query: ModelAuditQuery;
   expanded: boolean;
   onToggle: () => void;
@@ -19,6 +24,7 @@ interface ModelAuditTreeProps {
 
 export function ModelAuditTree({
   node,
+  progress,
   query,
   expanded,
   onToggle,
@@ -99,6 +105,22 @@ export function ModelAuditTree({
               : t(prefix + "summary_pending")}
         </span>
       </header>
+      <ModelAuditSafetySummary
+        progress={progress}
+        own={{
+          label: "own_hits",
+          ready: node.own_summary.safety_ready,
+          count: node.own_summary.sensitive_hit_count,
+          hasHit: node.own_summary.has_sensitive_hit,
+        }}
+        branch={node.has_children ? {
+          label: "branch_hits",
+          ready: node.branch_summary.safety_ready,
+          count: node.branch_summary.sensitive_hit_count,
+          hasHit: node.branch_summary.has_sensitive_hit,
+        } : undefined}
+        matchingCount={node.matching_sensitive_hit_count}
+      />
       {expanded && (
         <div
           id={id}
@@ -229,6 +251,7 @@ function TreeChildren({
             <ModelAuditTree
               key={child.conversation_key}
               node={child}
+              progress={state.page?.progress}
               query={query}
               depth={depth + 1}
               expanded={open === child.conversation_key}

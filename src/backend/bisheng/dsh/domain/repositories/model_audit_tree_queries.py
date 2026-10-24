@@ -9,11 +9,18 @@ from time import monotonic
 from sqlalchemy import and_, or_
 from sqlmodel import select
 
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.dsh.domain.models.model_audit_request import DshModelAuditRequest as Request
 from bisheng.dsh.domain.models.model_audit_tree import DshAuditTreeNode as Node
 from bisheng.dsh.domain.models.model_audit_tree import DshAuditTreePath as Path
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
-from bisheng.dsh.domain.repositories.model_audit_conversations import utc
+from bisheng.dsh.domain.repositories.model_audit_conversations import (
+    positive_safety_filter,
+    query_filters,
+    query_progress,
+    request_matches,
+    utc,
+)
 from bisheng.dsh.domain.repositories.model_audit_tree_build import AuditTreeBuildRepository
 
 
@@ -24,38 +31,24 @@ class AuditTreeQueryRepository(AuditTreeBuildRepository):
             Request.user_id == Node.user_id,
             Request.conversation_key == Node.conversation_key,
         )
-        for key, value in filters.items():
-            if key == "model_name":
-                match = match.where(
-                    Request.model_name_digest == sha256(value.encode()).hexdigest(), Request.model_name == value
-                )
-            elif key == "conversation_id":
-                match = match.where(
-                    Request.conversation_id_digest == sha256(value.encode()).hexdigest(),
-                    Request.conversation_id == value,
-                )
-            elif key == "start_at":
-                match = match.where(Request.started_at >= value)
-            elif key == "end_at":
-                match = match.where(Request.started_at < value)
-            elif key in {"user_id", "request_id", "audit_status"}:
-                match = match.where(getattr(Request, key) == value)
-            else:
-                raise ValueError("Unsupported tree filter")
+        match = request_matches(match, filters)
         # IDs are generation-scoped; using conversation keys alone would join retired copies.
         return set(self.session.exec(select(Node.conversation_key).where(Node.id.in_(keys), match.exists())).all())
 
-    def _tree_metadata(self, node, *, summary_ready, match_scope="SELF"):
+    def _tree_metadata(self, node, *, summary_ready, match_scope="SELF", published_at=None, safety_ready=False):
         child = self.session.exec(
             select(Node.id).where(Node.generation == node.generation, Node.parent_key == node.conversation_key).limit(1)
         ).first()
 
-        def summary(count, abnormal):
+        def summary(count, abnormal, sensitive):
             return {
                 "ready": summary_ready,
                 "request_count": count if summary_ready else None,
                 "abnormal_count": abnormal if summary_ready else None,
                 "known_abnormal": abnormal > 0,
+                "safety_ready": safety_ready,
+                "sensitive_hit_count": sensitive if safety_ready else None,
+                "has_sensitive_hit": sensitive > 0,
             }
 
         return {
@@ -76,16 +69,40 @@ class AuditTreeQueryRepository(AuditTreeBuildRepository):
             **{key: utc(getattr(node, key)) for key in ("listed_at", "last_request_at", "updated_at")},
             "has_children": child is not None,
             "match_scope": match_scope,
-            "own_summary": summary(node.request_count, node.abnormal_count),
-            "branch_summary": summary(node.branch_count, node.branch_abnormal),
-            "summary_as_of": utc(node.create_time) if summary_ready else None,
+            "has_sensitive_hit": node.own_sensitive_hit_count > 0,
+            "sensitive_hit_count": node.own_sensitive_hit_count,
+            "matching_sensitive_hit_count": None,
+            "own_summary": summary(node.request_count, node.abnormal_count, node.own_sensitive_hit_count),
+            "branch_summary": summary(node.branch_count, node.branch_abnormal, node.branch_sensitive_hit_count),
+            "summary_as_of": utc(published_at or node.create_time) if summary_ready else None,
         }
 
-    def tree_page(self, *, parent_key="", generation=None, cursor=None, limit=20, scan_budget=1000, **filters):
+    def tree_page(
+        self, *, parent_key="", generation=None, cursor=None, limit=20, scan_budget=1000, now=None, **filters
+    ):
+        with strict_tenant_filter():
+            return self._tree_page(
+                parent_key=parent_key,
+                generation=generation,
+                cursor=cursor,
+                limit=limit,
+                scan_budget=scan_budget,
+                now=now,
+                **filters,
+            )
+
+    def _tree_page(
+        self, *, parent_key="", generation=None, cursor=None, limit=20, scan_budget=1000, now=None, **filters
+    ):
         tenant = require_tenant()
-        if not 1 <= limit <= 100 or not 1 <= scan_budget <= 1000:
+        if (
+            type(limit) is not int
+            or type(scan_budget) is not int
+            or not 1 <= limit <= 100
+            or not 1 <= scan_budget <= 1000
+        ):
             raise ValueError("Tree page exceeds bounds")
-        filters = {key: value for key, value in filters.items() if value is not None}
+        filters, effective_filters = query_filters(filters, now)
         fingerprint = sha256(
             json.dumps([tenant, parent_key, filters], sort_keys=True, default=str, ensure_ascii=False).encode()
         ).hexdigest()
@@ -117,7 +134,7 @@ class AuditTreeQueryRepository(AuditTreeBuildRepository):
                         raise ValueError()
             except (ValueError, TypeError, KeyError, UnicodeError):
                 raise ValueError("Invalid tree cursor") from None
-        progress = {**self.readiness(), **self.tree_progress()}
+        progress = query_progress(self)
         state = self.tree_state()
         generation = generation or (state.active if state else None)
         empty = {"items": [], "next_cursor": None, "scan_limited": False, "progress": progress}
@@ -133,6 +150,7 @@ class AuditTreeQueryRepository(AuditTreeBuildRepository):
         if not progress["status_ready"] or not progress["name_ready"]:
             return empty
         summary_ready = progress["summary_ready"] and generation == state.active
+        safety_ready = progress["safety_ready"] and generation == state.active
         items, scanned, exhausted = [], 0, False
         deadline = monotonic() + 1
         while len(items) < limit and scanned < scan_budget and monotonic() < deadline:
@@ -142,6 +160,8 @@ class AuditTreeQueryRepository(AuditTreeBuildRepository):
                     raise ValueError("Invalid tree candidate")
             else:
                 statement = select(Node).where(Node.generation == generation, Node.parent_key == parent_key)
+                if safety_ready and positive_safety_filter(filters):
+                    statement = statement.where(Node.branch_sensitive_hit_count > 0)
                 if filters.get("user_id"):
                     statement = statement.where(Node.user_id == filters["user_id"])
                 if before:
@@ -158,10 +178,17 @@ class AuditTreeQueryRepository(AuditTreeBuildRepository):
                     exhausted = True
                     break
                 candidate_key = candidate.conversation_key
-            own_match = bool(self._tree_matches([candidate.id], filters))
+            own_match = bool(self._tree_matches([candidate.id], effective_filters))
             if own_match:
                 # SELF means the node itself matches, not that descendants were exhaustively excluded.
-                items.append(self._tree_metadata(candidate, summary_ready=summary_ready))
+                items.append(
+                    self._tree_metadata(
+                        candidate,
+                        summary_ready=summary_ready,
+                        published_at=state.published_at,
+                        safety_ready=safety_ready,
+                    )
+                )
                 scanned += 1
             else:
                 paths = self.session.exec(
@@ -178,10 +205,18 @@ class AuditTreeQueryRepository(AuditTreeBuildRepository):
                 ids = [self.tree_node(generation, path.descendant_key) for path in paths]
                 if any(node is None or node.user_id != candidate.user_id for node in ids):
                     raise ValueError("Invalid tree path ownership")
-                matched = self._tree_matches([node.id for node in ids], filters) if ids else set()
+                matched = self._tree_matches([node.id for node in ids], effective_filters) if ids else set()
                 scanned += max(1, len(paths))
                 if matched:
-                    items.append(self._tree_metadata(candidate, summary_ready=summary_ready, match_scope="DESCENDANT"))
+                    items.append(
+                        self._tree_metadata(
+                            candidate,
+                            summary_ready=summary_ready,
+                            match_scope="DESCENDANT",
+                            published_at=state.published_at,
+                            safety_ready=safety_ready,
+                        )
+                    )
                 elif paths:
                     descendant_after = paths[-1].descendant_key
                     continue
