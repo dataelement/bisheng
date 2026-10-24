@@ -1,7 +1,7 @@
 {
   "date": "2026-10-24",
   "source_base": "818a12968",
-  "source_commit": "pending_local_commit",
+  "source_commit": "932fa37e1aa68f04d3e60a09b5af09394863d65f",
   "evidence_kind": "incremental_focused_checks_not_one_full_suite",
   "deployment_accepted": false,
   "full_suite_run": false,
