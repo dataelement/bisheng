@@ -6,11 +6,11 @@
 
 | 仓库 | 最终已推送ref | Drone | 实际结果 |
 |---|---|---|---|
-| BiSheng | `feat/bisheng-work-120-main` → `ecf43f79c8aa31bc645636e94b78fb1c9a74bcf9` | 5623 | SUCCESS，backend/frontend两镜像完成 |
-| Gateway | 同名分支 → `faa6463b14cc908e6e507241a9d280efb040e80e`；唯一tag `v1.8.0-dsh-f111-20261024-faa6463b` | 403 | SUCCESS，amd64/arm64镜像完成 |
-| Desktop | 当前隔离feature分支源`6c84d46`加T192最终补丁 | 本机 | 实际构建、启动、PKCE连接完成；模型/工具尚未验收 |
+| BiSheng | `feat/bisheng-work-120-main` → `3cc9de9298ad2c6346f17d180105d46d2d3e3324` | 5624 | SUCCESS，backend/frontend两镜像完成 |
+| Gateway | 同名分支 → `64f602bed9fc8593cb957fb1326c229f911aae1c`；唯一tag `v1.8.0-dsh-f111-20261024-admin-denial-64f602be` | 404 | SUCCESS，amd64/arm64镜像完成 |
+| Desktop | 隔离feature分支`3e8486c4da82b163d568ffde385a0304f040c698` | 本机 | build/typecheck/2820测试通过；真实两协议回复与工具正反例通过 |
 
-BiSheng是最新target `858f76605ca81f0cef36f42841414b797a432fac` 与F111源`3420114d0f2481d20b8854af1b84f7ca7c944c4b`的正常历史合并，保留源provider兼容修复。Gateway旧源108eb5c8存在已确证跨part漏检，不可部署；最终faa6463b含修复。两仓remote head/tag解引用均已读回。Gateway403实际stage只有clone/package/image/notify四步，115自动部署步骤由现有DSH标签条件过滤，不能把不存在的步骤描述为返回了SKIPPED状态。
+BiSheng是最新target `858f76605ca81f0cef36f42841414b797a432fac` 与F111源`3420114d0f2481d20b8854af1b84f7ca7c944c4b`的正常历史合并，保留源provider兼容修复。Gateway旧源108eb5c8存在已确证跨part漏检，不可部署；faa6463b含跨part修复，64f602be另含精确旧管理拒绝映射。两仓remote head/tag解引用均已读回。Gateway404实际stage只有clone/package/image/notify四步，115自动部署步骤由现有DSH标签条件过滤，不能把不存在的步骤描述为返回了SKIPPED状态。
 
 ## 实际镜像
 
@@ -18,11 +18,11 @@ BiSheng是最新target `858f76605ca81f0cef36f42841414b797a432fac` 与F111源`342
 
 | 服务 | 固定镜像 |
 |---|---|
-| backend / backend_worker | `cr.dataelem.com/dataelement/bisheng-backend@sha256:51536d8d7b22cb195f5dca946f55b7cf7604b27f5081398f4d7da8724239f7a4` |
+| backend / backend_worker | `cr.dataelem.com/dataelement/bisheng-backend@sha256:8c001dcc8c921ebf32c8e5c468d5368216c56b698a3511e2421f860713ee4392` |
 | frontend | `cr.dataelem.com/dataelement/bisheng-frontend@sha256:b323977b0249f1e75d3a4c09e5a5bbd925931022e694a0d3b06991c6022cdb50` |
-| gateway，109 x86_64 | `cr.dataelem.com/dataelement/gateway@sha256:84a7ee17ddf44b35a43f40b30aa7c86094f116333f0c5723771dbceb979a80f7` |
+| gateway，109 x86_64 | `cr.dataelem.com/dataelement/gateway@sha256:63d7d9eddd7b0b5c5633b8ab598f633c5ad6120d017de07221dc5fb93f75d908` |
 
-实际四容器ImageID已读回对应上述digest。后续T197/T198兼容修复需要新一轮CI后单独更新，不将当前镜像冒称包含尚未发布的源码。
+实际四容器ImageID已读回对应上述digest。T197/T198由B5624收口，T199/T200由G404收口；frontend两次digest相同。初次合并ecf43f79和前次Gfaa6463b构建历史仍保留，不覆盖标签。
 
 ## 109范围、备份与执行
 
@@ -42,8 +42,14 @@ BiSheng是最新target `858f76605ca81f0cef36f42841414b797a432fac` 与F111源`342
 
 已用用户提供平台账号真实RSA登录并GET身份读回；会话只保存本机0600临时文件，未保存密码到仓库。通过管理API创建本轮普通用户9（非global，leaf1），未修改既有账号/角色/默认模型。现有原生审计模式CONTENT/version1，未改动。知识/评估/助手/工作台默认配置已只读快照，后续核对不被测试设施改变。
 
-最终T192之后实际客户端再次build成功，并以独立appData/userData/session/log目录启动，Harness ready。真实Electron DOM打开企业账号，填写用户指定109 origin并确认可信内网HTTP；实际客户端生成PKCE，使用本轮普通用户真实平台会话批准，并成功抵达实际随机loopback回调。公开客户端state确认`connected=true`、`phase=connected`、`modelCount=0`。授权批准用真实HTTP API完成，此证据不冒充浏览器授权页按钮/iframe的手工UI验收。
+最终T192之后实际客户端再次build成功，并以独立appData/userData/session/log目录启动，Harness ready。真实Electron DOM打开企业账号，填写用户指定109 origin并确认可信内网HTTP；实际客户端生成PKCE，使用本轮普通用户真实平台会话批准，并成功抵达实际随机loopback回调。公开客户端state确认`connected=true`、`phase=connected`、`modelCount=2`。授权批准用真实HTTP API完成，此证据不冒充浏览器授权页按钮/iframe的手工UI验收。
 
-无费用Provider最终源码SHA256 `c6bdbeaf452e84fc6c736445e705054589b4a97661266558724150a01f32c26f`，仅本轮容器`f111-provider-20261024-f111a`接入DSH私网，宿主控制端口127.0.0.1:18181经SSH。使用独立随机测试key、只读挂载、256MiB/1CPU和无外部模型连接。初始global physical model POST计数0。模型offline→私有visibility→online须待T197/T198兼容修复，禁止先上线制造公开窗口。
+无费用Provider最终源码SHA256 `80782c04c0936c16aefeacbed35e7382b04d22901df8f97f8c567394289772fa`，仅本轮容器`f111-provider-20261024-f111a`接入DSH私网，宿主控制端口127.0.0.1:18181经SSH。使用独立随机测试key、只读挂载、256MiB/1CPU和无外部模型连接。旧计数已在Provider唯一重启前保存，active0；新进程计数取新基线，不跨进程相减。模型8/9已在offline期间GET/PUT CAS收窄仅user9、再读回确认后上线；旧默认与其他credit规则保持。
 
-Gateway实际`GET /api/license/status`为`expired=true`；两个敏感词管理接口HTTP200但业务码11001。已向用户请求该测试环境有效License，不绕过许可、不将租户默认关闭下的模型通过称为敏感词通过。完整四协议/命中/工具零执行/审计与用量现场结果均仍待执行。Linux DM8按用户决定保留待验，跨租户/多副本/容量及回退演练不以单实例组件测试代替。
+用户追加授权生成License后，使用现有官方gen_license/gateway_license.py、当前Gateway公钥匹配的sso兼容trial格式生成30天测试许可，有效至2026-11-23；仅私有0600保存和修改DSH Gateway配置，保留备份、不改许可检查。真实GET expired=false，平台聚合经现有合法状态上报同步为expiring/30days。
+
+真实HTTP协议35/35（380.29s）、身份/管理7/7（29.83s）、十二条实际审计记录的四模式只读复核4/4（12.47s）通过。Desktop两协议正常回复、read成功各一次且文件nonce匹配、敏感参数各零工具调度，界面显示租户提示且无自动重试；BLOCKED原生模型实际结算80保持。工具结束恢复version97，随后七边界验收结束最终CAS恢复原租户策略disabled/version111。详细历史和范围见implementation-verification.md。
+
+当前是单实例部分真实验收。LinuxDM8按用户决定待验，双租户、多副本、无Gateway、设施故障、容量及回退演练未完成，不以单实例组件测试或此次十二条只读核验替代。T121/T122/T123/T132完整任务仍不勾选。
+
+最后边界实际7/7通过（另49本地断言），PlatformEnglish命中筛选/方向/DECISION与DRAIN详情实际通过。再次逐字节比较所有非四目标的既有容器ID/image/StartedAt不变，owned Provider健康ready。原始密码/Token/HMAC/License值未进入交付文档和Git。

@@ -645,3 +645,32 @@ T192 PASS_WITH_NOTES：主读最终补丁/10配对及完整报告；标准clean 
 T197/T198 PASS：C持久16配对先11FAIL/5PASS→服务14PASS/管理2RED→全部16PASS；B独立五文件71PASS，主独立相关70PASS/5环境skip+新模型初始化1PASS。主完整读三源，Ruff/archguard/diff通过；管理只在既有admin authorize/profile_scope后读取独立治理快照，调用路径固定online_required=True，canonical Root共享和provider-owner核查不变，CAS409/倍率保持。新测试替换管理认证外端口，非admin真实现场拒绝另验，不夸称真实角色/双库证明。C扩大12旧文件用完整精确HEAD service源码和current各跑133PASS/同4FAIL/同1缺环境ERROR，属既有默认DB mock与DSH_TEST_DATABASE_URL条件；不改夹具求绿。109已创建本轮server5与model8/9，两个offline/status0，所有既有默认模型快照逐字节不变；安全收窄与上线等待包含该修复的新镜像。
 
 Desktop最终两源补丁已提交3e8486c；本轮已启动进程含该补丁，真实公开state connected=true/phase=connected、目录0（尚未开测试模型），不冒模型执行证明。
+
+
+2026-10-24现场进展：B最新治理修复3cc9de9298ad2c6346f17d180105d46d2d3e3324经Drone5624 SUCCESS；backend镜像8c001dcc8c921ebf32c8e5c468d5368216c56b698a3511e2421f860713ee4392实际运行，frontend与5623 digest相同无需重建。模型8/9在offline期间用真实管理GET/PUT CAS收窄为仅本轮普通user9，并读回确认后才online；普通user两端点真实HTTP200/status19801拒绝，既有默认模型和其它credit规则不变。
+
+四协议正常真实HTTP烟测4/4通过：每请求global和scenario物理Provider delta1，确切文本/SSE终态和80usage，原生MODEL/SUCCEEDED/SETTLED与安全DISABLED分离。四请求事件各AVAILABLE/一个FINAL，证明真实HMAC发送/接收；列表PENDING为保守展示，详情可用，不误称丢事件。第一次只等待SETTLED时usage事实稍后到达，改测试有限等待完整30/50/80且保留严格最终断言，无生产改动。实际Electron两独立UI会话分别选Chat8/Responses9，均可见合成文本和80token；真实session-title另产生调用，不把物理模型次数当工具执行次数。
+
+T122真实基础4PASS/3deselected（3.22s），PKCE/profile/models、两个完整凭据/refresh、logout后旧新access+refresh精确session_revoked，以及admin可读/普通GET-PUT19801且snapshot无变。A独立467源读及guard4/cleanup6合成异常安全检查通过；三策略例在此前License阻塞下未跑，不勾完整T122。T123最终633源已主全文与新增validator复读，B独立实际关闭嵌套/值/normal轴两个测试盲区；只读既有4normal manifest真实API 4PASS（5.30s），不触模型/策略，不冒SQL/ACK/Outbox或故障恢复。
+
+用户追加授权“生成License”后，主使用现有gen_license/gateway_license.py官方sso兼容格式、匹配当前Gateway公钥生成30天trial，expire_day2026-11-23，仅存0600，不需DSH发行私钥。只更新109 DSH Gateway license配置并备份/重建该服务，真实expired=false；capabilities available/enabled/configuration_ready全true。平台聚合按既有一天采样仍旧过期，主经现有上报接口同步真实Gateway状态，读回expiring/30days。未改许可检查或其他部署。
+
+T199/T200/T201 PASS：现场普通Gateway管理GET真实503错误映射，Client原20案例4RED→精确只加19801拒绝映射→Client20+Controller24全44PASS、34类891PASS；B独立私有javac44PASS+原三向Netty3PASS，未知19899/19803/500保持503。主读两源、追加独立验证文档并提交64f602bed9fc8593cb957fb1326c229f911aae1c，已原子推同名work120分支及唯一v1.8.0-dsh-f111-20261024-admin-denial-64f602be标签，远端解引用已核。Drone404 SUCCESS，实际只有四步、115部署被条件排除；运行109尚待当前协议套件结束再更新。
+
+T121首轮真实8PASS后第9(Chat非流输出BLOCKED)因测试错误混用Gateway公开错误编号和Backend audit UUID而失败。实际API证据为MODEL/BLOCKED/模型SUCCEEDED/raw80且DECISION正确关联，生产合同无改。A在唯一测试源修为分别记录public/backend/audit IDs，先8编号反例RED→GREEN、原23解析反例保留；C独立门禁PASS_WITH_NOTES。原CAS恢复失败又logout失败会保留Python异常context，只有顶层展示风险，实际合成probe留档，不伪称清理成功。主重跑该实际单案1PASS（10.59s），随后全35运行中；旧首轮失败日志/XML保留。策略已确认首轮退出恢复disabled/version18。
+
+
+## 2026-10-24 最终单实例现场验收（替代此前“全35运行中”的当前状态）
+
+- T121真实完整已落地协议子集35/35 PASS，380.29s；输入403的四模式global/scenario0、无账本增加；输出四模式阻断后仍实际30/50/80结算。Responses delta/done/final独立文本、reasoning summary/content、邻接空part、工具参数、完整历史/内部用途及Unicode均有真实链路观察。保留首轮ID测试失配历史，不改业务满足测试。日志protocol-live-final.log/XML均私有0600。
+- Gateway CI404 exact64f602be已仅重建109 dsh-gateway；实际镜像digest63d7d9eddd7b0b5c5633b8ab598f633c5ad6120d017de07221dc5fb93f75d908，imageID3bb8d64d1a3cd4f23a11b07826d5c7be8bdd673b0d906005528f76f0ddf50df4；capabilities正常且许可证保持有效。T122全部当前7例真实PASS/29.83s，普通Gateway策略管理精确403、admin允许、CAS旧版本冲突和非法配置不保存、撤销会话后原始准入拒绝均验证；不冒跨租户/多副本缓存验收。
+- T123从最终JUnit实际UUID经GET复核生成12条manifest（四NORMAL PASSED、四INPUT_BLOCKED EXTERNAL_SAFETY、四OUTPUT_BLOCKED MODEL）。最终633行只读测试4参数PASS/12.47s，每参数遍历3类并对摘要/事件稳定两读。Gateway重启后仍可查询，不冒Backend进程重启、事务ACK、丢ACK或Outbox故障恢复。
+- T202/T203主读902行Provider和335行持久测试、B独立全读及新48PASS/旧SDK33PASS/计数13PASS。默认lookup保持；工具名声明、same scenario+protocol+issued-call-ID+name+JSON对象语义参数+非空结果后final text，最多16标量tuple，不存请求/凭据。先保存旧global counters且active0才更新本轮Provider（SHA80782c04c0936c16aefeacbed35e7382b04d22901df8f97f8c567394289772fa），新进程计数从新基线开始，不能跨重启相减。
+- 实际Desktop Chat与Responses各独立两会话：正例公开持久tool/call1+tool/result1、isError=false、确切参数/同callId且结果含真实文件新nonce；turn/end completed。负例公开持久tool/call0/result0、turn/end CONTENT_FILTERED，界面显示租户合成提示，无自动重试。每个正例两次chat模型请求各raw80，负例一次chat模型请求raw80且安全BLOCKED、模型SUCCEEDED、SETTLED；另有原生session-title辅助请求，所以Provider场景总数正3/负2，不能误报模型总1。私有desktop-tools-live-results.json与四events文件/真实截图留档。
+- 工具验收结束实际CAS恢复租户原字段，version97，原enabled/input/output均false。该版本号只记录本轮快照，不作固定合同。
+- 主沿用/e2e-test与/task-review核AC/错误码/隔离/真实GET/cleanup与设计；新文件测试/设施源不改业务鉴权/计量。A最终只读一致性复核无HIGH/MEDIUM代码项，指出旧摘要/计数/执行树及反向AC引用已由主集中修订。DM8/多租户/多副本/设施故障、无Gateway部署、真实容量与回退仍留未执行；最终T132不能标完成。
+
+
+T204/T205最终主交叉验收PASS：完整单源420行/冻SHA749c8262247196cb869448ca90d3071cd4ac459452fd8ec3dace1d34bc0a1684；主发现能力字段与真实Wire不符，经3RED→9GREEN纠正，主最终actual56PASS（49local+7live）/78.03s。Chat/Responses各非法JSON/重复model/unknown INPUT，以及合法JSON确切33554433bytes上限+1均400 invalid_request、无Backend header、global/scenario0、无账本变化；两轮精确conversation/requestUUID/unassociatedGatewayUUID完整空页，发生在recorder前，故无安全ERROR事件。实际settings恢复原disabled/version111，capabilities可用；verify-scope再次NON_DSH_CONTAINER_IDENTITIES_UNCHANGED。
+
+真实Platform English管理员UI：在审计高级筛选设置Conversation ID为本轮Responses blocked会话、Match recorded=Sensitive word match，点击Search后唯一会话，命中计数1；展开只显示匹配请求（辅助标题被过滤），Overall Matched/Input Passed/Output Matched。打开View check details可见独立DECISION v1与DRAIN v2、同Gateway/Backend各UUID/策略96/rule opaque ID，续读先waiting后fullyread，实际usage ledger80，页面说明不把客户端中断当模型停止。原词与凭据不出现在内容安全事件详情。只读GET未改变租户策略。Japanese因当前APP_CONFIG.disableJa隐藏，未更改客户开关冒三语UI验收。

@@ -739,3 +739,6 @@ T192：当前Desktop既有Undici兼容patch使用Object.create克隆handler/cont
 
 
 T197/T198实际治理边界补齐：`get_dsh_model_metadata_snapshot`只供已授权管理员的visibility GET/PUT，复用原始tenant/Root共享/模型类型/provider owner核查但允许offline；`get_dsh_model_snapshot`固定要求online，所有模型调用及目录仍用原口。使新模型可offline创建→私有范围CAS并GET确认→上线，避免为设置权限制造可公开调用窗口，不更改既定敏感词架构。
+
+
+现场测试合同：Gateway合成错误的公开X-Request-ID为Gateway UUID，已知Backend ID另在X-Backend-Request-ID；普通转发保原编号并附已知Backend ID。MODEL审计使用Backend ID，输入EXTERNAL_SAFETY使用Gateway ID，测试不得互换。旧backend普通管理拒绝实际是HTTP200/业务19801，Gateway只对此已确证码精确映射403，未知业务失败仍503（T199/T200）。

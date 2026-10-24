@@ -13,17 +13,17 @@
 | spec.md | ✅ 已评审 | 用户已确认，后续取舍已同步 |
 | design.md | ✅ 已评审 | 用户于本轮明确“设计可以”，包含现有共享 HMAC、可信身份变化和既有分页取舍 |
 | tasks.md | ✅ 已拆解 | 经 sdd-review tasks 静态评审 LGTM；不代表任务已执行 |
-| 实现 | 🔄 进行中 | 179 / 196；核心实现及配对自审至Wave32，T119/T120 MySQL子项通过，DM8及完整E2E/容量/演练待验 |
+| 实现 | 🔄 进行中 | 190 / 205；核心实现及配对自审至Wave32，T119/T120 MySQL子项通过，DM8及完整E2E/容量/演练待验 |
 
 ## 2. 执行约定与仓库范围
 
 | 标识 | 执行工作树 | 当前执行基线 |
 |---|---|---|
-| B | /Users/zhangguoqing/.codex/worktrees/bisheng-work-dsh-guardrails/bisheng | 2e6b5ae0fb1dcd2e32d480545e1d1ea57e77cd24 |
-| G | /Users/zhangguoqing/works/bisheng-gateway.worktrees/dsh-guardrails | origin/main / 2995df6fdf9c51b70617a86a803aec9c6633b69e |
-| D | /Users/zhangguoqing/works/bisheng-work.worktrees/dsh-guardrails | origin/main / 01e09d027ba729f6021ec37c33937f5745cee992 |
+| B | /Users/zhangguoqing/.codex/worktrees/f111-work120-delivery/bisheng | work120集成3cc9de9298；原feature工作树保留 |
+| G | /Users/zhangguoqing/works/bisheng-gateway.worktrees/dsh-guardrails | main2995df6f起步，当前已推64f602be |
+| D | /Users/zhangguoqing/works/bisheng-work.worktrees/dsh-guardrails | main01e09d0起步，当前已推3e8486c |
 
-每项文件路径相对该项执行工作树，目标文件逐一列出；不存在的路径是拟新增文件，不声称已实现。三个仓库的功能分支均为 feat/bisheng-work-dsh-guardrails；G/D 于 2026-10-23 获取 main 后创建并核对远端 SHA，未复用原业务分支。原工作区和已有 worktree 均保留，禁止仓库级 stash/reset/restore/clean。
+每项文件路径相对该项执行工作树，目标文件逐一列出；不存在的路径是拟新增文件，不声称已实现。原三个仓库的功能分支均为 feat/bisheng-work-dsh-guardrails；B交付在独立codex/f111-work120-delivery正常合入并推送work120目标，G同步同名work120及唯一DSH标签，D仍推原feature分支；G/D 于 2026-10-23 获取 main 后创建并核对远端 SHA，未复用原业务分支。原工作区和已有 worktree 均保留，禁止仓库级 stash/reset/restore/clean。
 
 原设计评审核查基线保留在 design §4.1，作为历史依据。Gateway 新 main 与原核查提交文件树一致；Desktop 新 main 有变化，Chat 的 content_filter 分支与 Responses 的 UPSTREAM_ERROR 分支仍存在，但这不替代完整兼容性复核。各实现任务开始前须对新基线重读所涉及模块、目录规则和测试；该基线调整没有完成或勾选任何实现任务。
 
@@ -2792,6 +2792,47 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 
   **逻辑与验证**：仅在既有admin authorize/profile_scope后用治理快照，允许offline GET/PUT visibility后再上线；CAS和模型调用鉴权不变，不制造默认公开可用窗口。精确API配对与相邻回归。**依赖**：T197。
 
+- [x] **T199 真实旧管理拒绝业务码映射回归**
+
+  **类型**：测试 · Gateway。**文件**：Gateway `src/test/java/com/dataelem/gateway/client/DshSafetyAdminClientTest.java`。
+
+  **逻辑与验证**：109普通用户实际HTTP200/status_code19801，当前client误映射设施503。真实loopback先RED，固化明确19801→403和未知业务码仍503，保留401/403与管理短路。**依赖**：T066。
+
+- [x] **T200 管理拒绝码精确映射**
+
+  **类型**：实现/测试 · Gateway。**文件**：Gateway `src/main/java/com/dataelem/gateway/client/DshSafetyAdminClient.java`；`src/test/java/com/dataelem/gateway/client/DshSafetyAdminClientTest.java`。
+
+  **逻辑与验证**：只将已确证19801与原401/403归为admin_forbidden403，未知业务/设施失败保持503，不扩大授权或猜测码段。原管理Client/controller配对与相邻回归，最终新DSH tag CI后仅109更新。**依赖**：T199。
+
+- [x] **T201 Gateway 管理拒绝兼容交付验证记录**
+
+  **类型**：文档。**文件**：Gateway `docs/dsh-content-safety-verification.md`。
+
+  **逻辑与验证**：保留前882历史证据，追加T199四RED→T200原Client20/Controller24全部通过、34类891PASS与独立44/三向loopback；记录真实109修前503和待新tag镜像复验，不输出凭据，不冒替许可或完整E2E通过。**依赖**：T200。
+
+- [x] **T202 Desktop 真实工具Provider协议配对测试**
+
+  **类型**：测试设施。**文件**：`src/backend/test/dsh/test_content_safety_provider_tools.py`。
+
+  **逻辑与验证**：现Provider固定lookup不是真实Harness工具；实际注册read，须正例真实执行一次再验证命中零调度。四协议真实loopback先RED覆盖默认lookup兼容、声明工具/匹配call_id及真实tool_result后final text、跨scenario/协议/伪历史拒绝和有界预算。这里只证明HTTP设施，不能冒真实文件工具执行。**依赖**：T196。
+
+- [x] **T203 有界真实工具名与结果后终态测试设施**
+
+  **类型**：测试设施实现。**文件**：`src/backend/test/e2e/helpers/dsh_content_safety_provider.py`；`src/backend/test/dsh/test_content_safety_provider_tools.py`。
+
+  **逻辑与验证**：仅test-only Provider增合法tool_name（默认lookup）与可选after_tool_text；后者计入原32KiB总合成文本预算，只有同scenario/协议已发call_id与name/JSON参数/真实结果匹配才final text，≤16标量关联且线程安全，不存payload/token。原默认协议/计数回归保持；现场35结束后才更新唯一测试Provider，不中断运行套件。**依赖**：T202。
+
+- [x] **T204 预转发非法输入边界断言配对**
+  **类型**：测试；**目标文件**：B `src/backend/test/dsh/test_content_safety_boundary_e2e.py`。
+  **覆盖 AC**：AC-25、AC-26、AC-33、AC-34。
+  **逻辑与验证**：先本地反例验证 raw duplicate/非法 JSON/unknown 输入与精确32MiB+1字节；真实响应身份、无Backend header、物理global/scenario0及完整空审计分页不能误判。**依赖**：T196。
+
+- [x] **T205 真实预转发边界 E2E 接入**
+  **类型**：测试；**目标文件**：B `src/backend/test/dsh/test_content_safety_boundary_e2e.py`。
+  **覆盖 AC**：AC-25、AC-26、AC-33、AC-34。
+  **逻辑与验证**：复用冻结原生PKCE/自有模型/租户策略CAS fixture，七请求在真实109串行执行；无上游/无账本变化/两轮精确空审计，不把请求解析拒绝虚构成内容安全ERROR事件。**依赖**：T204。
+
+
 ## 5. AC → 测试任务追溯
 
 本表只列测试/验收任务；配对实现见各任务依赖。每条 AC 至少一个针对性测试或端到端场景，末端 E2E 和特性审查不能代替前置测试。
@@ -2820,18 +2861,18 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 | AC-20 | T069、T071、T073、T075、T121、T125、T132 |
 | AC-21 | T063、T069、T071、T073、T075、T121、T125、T132、T185、T186 |
 | AC-22 | T069、T071、T073、T075、T121、T125、T132、T185、T186 |
-| AC-23 | T075、T089、T115、T118、T121、T125、T132、T185、T186 |
-| AC-24 | T073、T075、T113、T115、T118、T121、T125、T132 |
-| AC-25 | T033、T069、T071、T073、T075、T121、T125、T132 |
-| AC-26 | T031、T033、T063、T069、T071、T075、T085、T091、T095、T097、T121、T125、T126、T128、T129、T132、T138、T159、T161、T171 |
+| AC-23 | T075、T089、T115、T118、T121、T125、T132、T185、T186、T202、T203 |
+| AC-24 | T073、T075、T113、T115、T118、T121、T125、T132、T202、T203 |
+| AC-25 | T033、T069、T071、T073、T075、T121、T125、T132、T204、T205 |
+| AC-26 | T031、T033、T063、T069、T071、T075、T085、T091、T095、T097、T121、T125、T126、T128、T129、T132、T138、T159、T161、T171、T204、T205 |
 | AC-27 | T023、T071、T087、T089、T121、T125、T132 |
-| AC-28 | T073、T075、T089、T121、T125、T132 |
-| AC-29 | T073、T075、T083、T085、T089、T113、T115、T118、T121、T125、T128、T132 |
-| AC-30 | T073、T075、T087、T089、T111、T113、T115、T118、T121、T125、T132、T136、T137、T140、T141、T142、T143、T144、T145、T146、T147 |
-| AC-31 | T073、T075、T083、T087、T089、T111、T113、T115、T118、T121、T125、T132、T136、T137、T140、T141、T142、T143、T144、T145、T146、T147 |
+| AC-28 | T073、T075、T089、T121、T125、T132、T202、T203 |
+| AC-29 | T073、T075、T083、T085、T089、T113、T115、T118、T121、T125、T128、T132、T202、T203 |
+| AC-30 | T073、T075、T087、T089、T111、T113、T115、T118、T121、T125、T132、T136、T137、T140、T141、T142、T143、T144、T145、T146、T147、T202、T203 |
+| AC-31 | T073、T075、T083、T087、T089、T111、T113、T115、T118、T121、T125、T132、T136、T137、T140、T141、T142、T143、T144、T145、T146、T147、T202、T203 |
 | AC-32 | T023、T025、T027、T037、T083、T085、T089、T113、T115、T121、T125、T128、T131、T132 |
-| AC-33 | T019、T073、T075、T077、T123、T125、T132 |
-| AC-34 | T019、T027、T037、T073、T077、T110、T123、T124、T125、T132、T133 |
+| AC-33 | T019、T073、T075、T077、T123、T125、T132、T204、T205 |
+| AC-34 | T019、T027、T037、T073、T077、T110、T123、T124、T125、T132、T133、T204、T205 |
 | AC-35 | T017、T023、T029、T031、T033、T039、T069、T077、T079、T093、T095、T097、T111、T122、T123、T125、T132、T135、T161、T163、T171、T172 |
 | AC-36 | T023、T027、T037、T123、T125、T132、T133 |
 | AC-37 | T023、T089、T123、T124、T125、T132、T174 |
@@ -2870,7 +2911,7 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 
 ## 8. 文档与执行检查
 
-初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后当前198项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。59条AC追溯表按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
+初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后当前205项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。59条AC追溯表按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
 
 ## 9. 执行记录
 
@@ -2925,3 +2966,8 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 2026-10-24：T052扩大组合确证T031当前进程重导runtime造成package/module别名分叉，新增T171单测试冷启动隔离维护；同HEAD原Setting36FAIL为保留证据，修复不放宽API断言。总171。
 
 2026-10-24：跨仓真实配置probe确证全局null→空串使事件/不可用capabilities被严格consumer拒绝，新增T172/T173配对局部修复；真实Repo确证大小写UUIDfilter与已存lower不等，新增T174/T175配对，保持每任务≤2源，不放宽DTO或更改默认分页取舍。总175。
+
+
+2026-10-24现场最终子集：35协议PASS（380.29s）、7身份/管理PASS（29.83s）、12实际请求的只读审计4参数PASS（12.47s）。两协议真实Desktop read成功各1且nonce匹配，BLOCKED各0调度，无自动重试；原生实际输出BLOCKED仍SUCCEEDED/SETTLED/raw80。Gateway64f602be经404成功构建并仅109部署。T202/T203新48/旧SDK33/计数13由主和独立B复核通过，已更新唯一测试Provider。T121/T122/T123完整故障/双租户/无Gateway/UNKNOWN和容量仍未完成，不以这些子集勾全任务。T204/T205已完成真实7项边界和49本地配对复验；许可证由用户追加授权生成官方兼容trial，2026-11-23到期且实际expired=false。详细结果见implementation-verification与deployment-execution。
+
+2026-10-24 T204/T205 PASS：主读全部420行单源，发现capabilities错用config_ready，C以真实@JsonProperty("configuration_ready")反例3RED→9GREEN修正；最终主真实执行56PASS（49本地+7现场，78.03s）。七请求均400 invalid_request、公开UUID一致/无Backend header、物理global+scenario0、两轮完整精确空审计与无额度变化。32MiB+1实际33554433bytes，未打印请求正文。测试退出原策略字段已恢复disabled/version111；其他109既有容器ID/image/StartedAt再次逐字节不变。当前190/205，完整T121/T122/T123、DM8、容量和最终T132保留未完成。
