@@ -123,3 +123,5 @@ T122历史基础子集（后续最终全7通过）：`test_content_safety_identi
 本轮执行日志均在/private/tmp/f111-release-109并0600保存：protocol-live-final、identity-live-final、recovery-twelve-live各log/XML；desktop-tools-live-results.json与四份持久事件、真实截图。记录不含原始凭据，错误首轮与修复单案日志保留。Gateway404更新后capabilities正常，测试策略按CAS恢复原关闭状态。
 
 T204/T205最终56PASS/78.03s（49local+7live），boundary-live-final.log/XML；请求解析拒绝无Backend header/无Provider/无审计/额度不变。PlatformEnglish实际命中筛选+Conversation精确筛选唯一会话，展开唯一匹配请求与DECISION/DRAIN详情；最终策略恢复原disabled/version111，其他容器身份复核不变。
+
+最终B5625 exactd5b026557成功且实际109 backend/worker固定digest151d35b0；真实Backend重启后原12条审计读取4PASS/13.14s，四协议稳定烟测4PASS/40.27s。保留重建窗口业务失败和烟测teardown503；先CAS核自有版本恢复，再按Backend业务ready→Gateway连接刷新→三次capabilities成功顺序收口。最终策略原关闭字段、默认模型/审计配置和非DSH容器身份复核保持；许可有效。该事实不替代完整故障恢复/多副本验收。

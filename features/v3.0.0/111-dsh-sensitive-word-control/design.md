@@ -3,8 +3,8 @@
 - **特性**：F111 / v3.0.0
 - **关联规格**：[spec.md](./spec.md)，用户于 2026-10-23 确认
 - **需求输入**：[已确认方案](../../../docs/architecture/proposals/2026-10-22-dsh-gateway-content-safety.md)
-- **状态**：已用户确认（2026-10-23）；Wave 3 前置测试与文案已完成，进入 Wave 4；模型检查与回传运行时尚未接线
-- **最后更新**：2026-10-23
+- **状态**：已用户确认；核心实现及真实109单实例子集已完成，完整验收PARTIAL，详见tasks与交付记录
+- **最后更新**：2026-10-24
 - **工作分支**：feat/bisheng-work-dsh-guardrails
 - **执行流水**：[tasks.md](./tasks.md) 已按确认设计拆解并评审，用户已授权按依赖持续实施；验证证据见 [implementation-verification.md](./implementation-verification.md)
 
@@ -57,7 +57,7 @@ Gateway 根据可信租户身份，对 DSH Chat Completions、Responses 的输�
 
 ### 2.3 证据边界
 
-仓库内置词表静态样本为 3,592 个去重词、44,592 字节，最长 16 码点，符合上述词表初值；部署自定义词库仍须独立校验。当前已完成基础设施编译、单元/组件回归和结构一致性检查，具体证据见 implementation-verification；没有执行模型请求、真实数据库迁移、MySQL/DM8 压测或浏览器 E2E。profile 成功路径约 8 次 SELECT 是静态路径计数，不含冷配置开销，也不是实测时延。
+仓库内置词表静态样本为 3,592 个去重词、44,592 字节，最长 16 码点，符合上述词表初值；部署自定义词库仍须独立校验。历史设计评审时仅完成基础设施编译、单元/组件与结构检查，尚无模型请求/真实迁移/压测或浏览器E2E；当前已执行真实MySQL迁移、109模型协议/审计、Platform与Desktop子集，详见implementation-verification与deployment-execution。LinuxDM8、真实容量/多副本与完整故障验收仍未执行。profile 成功路径约 8 次 SELECT 是静态路径计数，不含冷配置开销，也不是实测时延。
 
 ### 2.4 本轮用户评审取舍
 

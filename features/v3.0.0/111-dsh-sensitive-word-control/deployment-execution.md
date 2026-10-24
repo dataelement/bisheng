@@ -4,9 +4,9 @@
 
 ## 源码与CI
 
-| 仓库 | 最终已推送ref | Drone | 实际结果 |
+| 仓库 | 运行镜像对应源码（后续纯文档提交不改业务） | Drone | 实际结果 |
 |---|---|---|---|
-| BiSheng | `feat/bisheng-work-120-main` → `3cc9de9298ad2c6346f17d180105d46d2d3e3324` | 5624 | SUCCESS，backend/frontend两镜像完成 |
+| BiSheng | `feat/bisheng-work-120-main` → `d5b026557b76bb57af223520c11aeecd4e83473e` | 5625 | SUCCESS，backend/frontend两镜像完成 |
 | Gateway | 同名分支 → `64f602bed9fc8593cb957fb1326c229f911aae1c`；唯一tag `v1.8.0-dsh-f111-20261024-admin-denial-64f602be` | 404 | SUCCESS，amd64/arm64镜像完成 |
 | Desktop | 隔离feature分支`3e8486c4da82b163d568ffde385a0304f040c698` | 本机 | build/typecheck/2820测试通过；真实两协议回复与工具正反例通过 |
 
@@ -18,11 +18,11 @@ BiSheng是最新target `858f76605ca81f0cef36f42841414b797a432fac` 与F111源`342
 
 | 服务 | 固定镜像 |
 |---|---|
-| backend / backend_worker | `cr.dataelem.com/dataelement/bisheng-backend@sha256:8c001dcc8c921ebf32c8e5c468d5368216c56b698a3511e2421f860713ee4392` |
+| backend / backend_worker | `cr.dataelem.com/dataelement/bisheng-backend@sha256:151d35b0436825c23dd9c5940300d801e8294bb1c0a75c5798250216991ef0cd` |
 | frontend | `cr.dataelem.com/dataelement/bisheng-frontend@sha256:b323977b0249f1e75d3a4c09e5a5bbd925931022e694a0d3b06991c6022cdb50` |
 | gateway，109 x86_64 | `cr.dataelem.com/dataelement/gateway@sha256:63d7d9eddd7b0b5c5633b8ab598f633c5ad6120d017de07221dc5fb93f75d908` |
 
-实际四容器ImageID已读回对应上述digest。T197/T198由B5624收口，T199/T200由G404收口；frontend两次digest相同。初次合并ecf43f79和前次Gfaa6463b构建历史仍保留，不覆盖标签。
+实际四容器ImageID已读回对应上述digest。T197/T198由B5624收口，B5625只追加测试/helper与文档，bisheng业务树与3cc9de9298完全相同；当前已更新backend/worker到5625，T199/T200由G404收口；frontend两次digest相同。初次合并ecf43f79和前次Gfaa6463b构建历史仍保留，不覆盖标签。
 
 ## 109范围、备份与执行
 
@@ -53,3 +53,7 @@ BiSheng是最新target `858f76605ca81f0cef36f42841414b797a432fac` 与F111源`342
 当前是单实例部分真实验收。LinuxDM8按用户决定待验，双租户、多副本、无Gateway、设施故障、容量及回退演练未完成，不以单实例组件测试或此次十二条只读核验替代。T121/T122/T123/T132完整任务仍不勾选。
 
 最后边界实际7/7通过（另49本地断言），PlatformEnglish命中筛选/方向/DECISION与DRAIN详情实际通过。再次逐字节比较所有非四目标的既有容器ID/image/StartedAt不变，owned Provider健康ready。原始密码/Token/HMAC/License值未进入交付文档和Git。
+
+CI5625 SUCCESS的源码d5b026557已远端读回；实际backend/worker ImageID e5d1403c2e1a95323dffded3858cd088a76a8ac965df186cba799e0cea8587ce。真实Backend重启后十二条旧审计四模式4PASS/13.14s。启动期首次业务读取失败保留，不能以13001/health的SPA兜底200冒后端就绪；直接127.0.0.1:17860/health与真实管理API确认后再验。Gateway日志实际连接拒绝包含旧172.31.62.10和新172.31.62.9，重建后端切换窗口确有旧地址/启动连接失败。随后四模式烟测两case通过但策略teardown真实503，停止并核精确自有合成词/提示/版本114后CAS恢复115；不隐藏失败或全局覆盖策略。待Backend业务ready后仅原镜像重建指定Gateway刷新连接，受保护capabilities连续三读成功后复验。
+
+最终按依赖就绪顺序复验：四协议烟测4PASS/31deselected（40.27s），策略teardown全部成功；后端十二条持久审计读取4PASS（13.14s），并非全故障恢复验收。此前两case+teardown503和启动业务失败日志保留；不放宽断言、不改业务源码或重试模型求绿。最终许可证trial/2026-11-23/expired=false、全局默认模型与原审计设置不变，策略原字段恢复关闭；最后非DSH既有容器身份仍不变。后续仅features文档提交不改变src/backend构建上下文，运行镜像按本表CI5625来源记录。

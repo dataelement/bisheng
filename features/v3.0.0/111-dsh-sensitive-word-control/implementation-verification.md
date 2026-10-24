@@ -674,3 +674,12 @@ T121首轮真实8PASS后第9(Chat非流输出BLOCKED)因测试错误混用Gatewa
 T204/T205最终主交叉验收PASS：完整单源420行/冻SHA749c8262247196cb869448ca90d3071cd4ac459452fd8ec3dace1d34bc0a1684；主发现能力字段与真实Wire不符，经3RED→9GREEN纠正，主最终actual56PASS（49local+7live）/78.03s。Chat/Responses各非法JSON/重复model/unknown INPUT，以及合法JSON确切33554433bytes上限+1均400 invalid_request、无Backend header、global/scenario0、无账本变化；两轮精确conversation/requestUUID/unassociatedGatewayUUID完整空页，发生在recorder前，故无安全ERROR事件。实际settings恢复原disabled/version111，capabilities可用；verify-scope再次NON_DSH_CONTAINER_IDENTITIES_UNCHANGED。
 
 真实Platform English管理员UI：在审计高级筛选设置Conversation ID为本轮Responses blocked会话、Match recorded=Sensitive word match，点击Search后唯一会话，命中计数1；展开只显示匹配请求（辅助标题被过滤），Overall Matched/Input Passed/Output Matched。打开View check details可见独立DECISION v1与DRAIN v2、同Gateway/Backend各UUID/策略96/rule opaque ID，续读先waiting后fullyread，实际usage ledger80，页面说明不把客户端中断当模型停止。原词与凭据不出现在内容安全事件详情。只读GET未改变租户策略。Japanese因当前APP_CONFIG.disableJa隐藏，未更改客户开关冒三语UI验收。
+
+
+## 最终镜像与重启后复验
+
+B测试资料提交d5b026557b76bb57af223520c11aeecd4e83473e正常推work120并读回，Drone5625 SUCCESS；业务bisheng树与3cc9de9298无差异，backend COPY包含新测试故镜像更新为151d35b0436825c23dd9c5940300d801e8294bb1c0a75c5798250216991ef0cd，ImageID e5d1403c2e1a95323dffded3858cd088a76a8ac965df186cba799e0cea8587ce，仅109 backend/worker更新；frontend摘要未变。真实Backend进程重启后12条已存在审计四模式4PASS/13.14s，证明此批事实重启可读，不冒丢ACK/并发事务验收。
+
+启动窗口业务读取失败及四模式烟测2PASS后策略teardown503保留原日志；主核最后版本114/自有合成词和提示后CAS恢复115，不覆盖外部编辑。Gateway私有日志确实包含对旧172.31.62.10和新172.31.62.9的连接拒绝，127.0.0.1:17860/health及真实管理APIready后仅同镜像重建指定Gateway刷新连接，受保护capabilities连续三读成功。最终同源四模式烟测4PASS/31deselected/40.27s（post5625-stable-protocol-four），策略正常恢复；不放宽测试/不加模型自动重试。13001/health可被SPA兜底，不能当Backend就绪证据，运维步骤已同步。
+
+最终只读：官方trial许可证2026-11-23/expired=false；原默认模型四组和原审计设置完整值不变；租户原enabled/input/output/custom_words恢复关闭/空；verify-scope再次逐字节确认全部非四目标既有容器身份不变。190/205及完整AC0PASS/30PARTIAL/29NOT_RUN保持；DM8/双租户多副本/容量/设施故障/无Gateway/回退等待实际环境与验收。最后纯features文档提交不改构建上下文，不再次重建服务。

@@ -196,3 +196,8 @@ python scripts/dsh_content_safety_maintenance.py purge-audit --tenant-id "$TENAN
 Backend：`bisheng/dsh/content_safety_runtime.py`、`dsh/api/endpoints/content_safety_events.py`、`dsh/api/endpoints/model_audit_admin.py`、`dsh/domain/services/model_audit_queries.py`、`dsh/domain/repositories/model_audit_write.py`/`content_safety.py`、`bisheng/worker/config.py`/`dsh/content_safety.py`/`dsh/registry.py`、`core/config/sso_sync.py`/`dsh.py`、F111 revision、`scripts/dsh_content_safety_maintenance.py`及README。
 
 Gateway：`DshSafetyProperties`、`DshSafetyBeansConfiguration`、`BishengConfig`（只读字段定义，未读取License值）、`DshSensitivePolicyController`、`DshContentSafetyFilter`、`DshProfileClient`、`DshModelProxyClient`、`ContentSafetyEventClient`、`DshSafetyOutboxDispatcher`、`DshSafetyTelemetry`、两份application.yml路由/DSH配置及四份F111双库DDL/rollback SQL。
+
+
+## 11. 109已验证的启动就绪与连接切换
+
+Backend/worker更新后，先直接检查127.0.0.1:17860/health，再以真实平台管理身份GET核对业务接口200/成功envelope；13001/health可能是SPA兜底页面，不能作Backend就绪证据。2026-10-24实际Gateway在后端重建窗口对旧/新容器地址发生connection-refused，后续还观测管理teardown503；保留日志和失败，不重试模型来掩盖。确认Backend业务就绪后，仅对该DSH项目的同镜像Gateway执行精确force-recreate刷新连接，再要求受保护capabilities连续三读成功后开始验收。失败时按CAS验证本轮最后版本/合成词/提示才恢复原策略，版本不符停止自动写。此步骤不修改共享Docker daemon、其他Compose环境或业务认证。
