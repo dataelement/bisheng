@@ -197,14 +197,15 @@
       "ac": "AC-81",
       "local_evidence_files": [
         "test_app_secret_repository.py",
-        "test_app_secret_credentials.py"
+        "test_app_secret_credentials.py",
+        "test/open_api/test_runtime_credential_audit.py"
       ],
-      "implementation": "partial_cross_feature",
+      "implementation": "implemented_local_cross_feature",
       "acceptance": "not_deployment_accepted",
       "remaining": [
-        "real Docker/K8s acceptance pending",
-        "F056 trusted app association / binding revocation audit requires its design confirmation and implementation"
-      ]
+        "real Docker/K8s acceptance pending"
+      ],
+      "cross_feature_note": "F056 trusted app issue/revoke association and binding transition audit implemented on 2026-10-24; local targeted verification only"
     },
     {
       "ac": "AC-82",
@@ -336,5 +337,10 @@
       ]
     }
   ],
-  "full_acceptance_passed": false
+  "full_acceptance_passed": false,
+  "cross_feature_update": {
+    "date": "2026-10-24",
+    "scope": "AC-81 only; original F055 source hashes retained as historical evidence",
+    "evidence": "../056-app-square-governance/closeout-validation.json"
+  }
 }

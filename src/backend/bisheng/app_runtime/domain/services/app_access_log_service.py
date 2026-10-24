@@ -53,6 +53,7 @@ def schedule_access_record(
     user_id: int,
     user_name: str,
     request_id: str = "",
+    app_name_snapshot: str | None = None,
 ) -> asyncio.Task:
     """Fire-and-forget: schedule the record and return at once.
 
@@ -64,6 +65,7 @@ def schedule_access_record(
     task = asyncio.create_task(
         record_access(
             app_id=app_id,
+            app_name_snapshot=app_name_snapshot,
             tenant_id=tenant_id,
             user_id=user_id,
             user_name=user_name,
@@ -82,6 +84,7 @@ async def record_access(
     user_id: int,
     user_name: str,
     request_id: str = "",
+    app_name_snapshot: str | None = None,
 ) -> bool:
     """Write one row unless this entry is a repeat inside the merge window.
 
@@ -94,6 +97,7 @@ async def record_access(
         row = AppAccessLog(
             tenant_id=int(tenant_id),
             app_id=app_id,
+            app_name_snapshot=app_name_snapshot,
             user_id=int(user_id),
             user_name=(user_name or "")[:128] or None,
             entry_time=datetime.now(),

@@ -1,6 +1,6 @@
 # Design: 托管应用运行时与安全收尾
 
-> **2026-10-23 设计评审稿，待用户单独确认。** 规格已确认，本文新增设计尚未实现。
+> **2026-10-24 用户确认修订设计，进入任务拆解与编码。** 规格已确认；实现/验证状态见本轮任务记录。
 > 现状基线：`5f2541f4bc483c24624fede9031c88c4ec6f58f4`；增量规格确认提交：`dda16a6502908ba8d58cff61dc350c0213b86c19`。旧版 D1–D15 编号保留，内容按当前代码刷新；历史任务的行号、坑编号和 MVP 后置说法不作为当前实现状态。
 >
 > What：[spec.md](./spec.md)（73 条 AC）；流水账：[tasks.md](./tasks.md)；不变量：[release-contract.md](../release-contract.md)。本轮只补 AC-66、AC-67、AC-68、AC-69、AC-70、AC-71、AC-72、AC-73，对应历史 T098 / T099，不重开 F059 / F086 验收。
@@ -222,3 +222,12 @@ backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 用户�
 ### 2026-10-24 剩余设计问题复审
 
 F054-B1 修订：宿主 unit 为规则漂移的实际消费者，先修复并配对验证，失败则仅隔离/停止受管执行体并上报；backend 不承担宿主 root 行为，也不把网络隔离冒充 SQLite writer 停止证明。长尾的多防火墙外部重载竞态、不可识别防火墙后端和非支持网络形态列入提测限制，不能标 pass 或静默放行。F055 用户确认重建与运行快照已编码，当前尚未进行真实部署验证；本设计的宿主隔离/OBO 安全增量仍待单独确认。
+
+
+### 2026-10-24 实现状态与交付合同补记
+
+- 已确认设计进入实现。OBO 使用 `identity_config_incomplete`，同一 `_OBOSigningConfig` 快照完成检查/签发；验证器拒绝空白配置。正式/预览 allow 不缓存，拒绝与路由缓存保留。无尾斜线入口的规范化重定向是第二个 HTTP 请求，因而也重新判定。
+- 新增宿主报告、独立 HMAC role、Docker create/admit/claim/ready/route 门禁，legacy Engine create/start/build、路由和自检也读取证明；停止/清理不要求有效证明。K8s 沿用 F059。
+- `RuntimeHostIsolationReport.id` 直接使用 node_id 作主键（不再存重复 node_id 列），每节点只保存当前证明；接收时间与 60 秒 TTL 由服务器分配，revision 为 BigInteger。独立报告不随 manager 心跳续期。
+- 宿主实现位于 `runtime_manager/host_isolation.py`，安装材料在仓根 `deploy/runtime-manager/`；规则与 canary 必须运行在 Docker 宿主。安装示例覆盖 Compose 的 apps/build 两个网络，原默认 bridge 构建被拒绝。卸载先作废服务器证明，再确认本模块实例停止，然后移除自有规则。每个 Engine 仅一个宿主隔离单元。
+- 实现代码与本地定向验证已到位；宿主真实 iptables/nftables、失效收敛与 Docker/K8s 本次组合部署仍待提测。具体证据及边界见 closeout-validation.md，不据此宣称最终交付通过。

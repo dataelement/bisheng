@@ -350,21 +350,29 @@ class TestInjectionMaterial:
         assert verdict["obo_expires_at"] == claims["exp"]
         assert verdict["ws_max_lifetime_seconds"] == 7200
 
+    @pytest.mark.parametrize("bad_secret", ["", "  ", "session"])
     async def test_no_obo_token_when_secret_equals_session_secret(
-        self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible, monkeypatch
+        self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible, monkeypatch, bad_secret
     ):
-        """A shared secret is a misconfiguration, and signing anyway would hand
+        """AC-70, AC-73: a shared secret is a misconfiguration, and signing anyway would hand
         every hosted app a valid platform session."""
         from bisheng.common.services.config_service import settings
 
-        monkeypatch.setattr(settings.app_runtime, "obo_secret", settings.jwt_secret, raising=False)
+        monkeypatch.setattr(
+            settings.app_runtime,
+            "obo_secret",
+            settings.jwt_secret if bad_secret == "session" else bad_secret,
+            raising=False,
+        )
+        from bisheng.app_runtime.domain.services import entry_authz_service
+
+        recorded = []
+        monkeypatch.setattr(entry_authz_service, "schedule_access_record", lambda **kw: recorded.append(kw))
         _app, _ = await app_factory(slug="shared-secret-app", state=AppState.ONLINE.value)
 
         verdict = await _verdict("shared-secret-app", _token(app_owner.user_id))
-        assert verdict["decision"] == "allow"
-        assert verdict["obo_token"] is None
-        assert verdict["obo_expires_at"] is None, "no token, no expiry — the cap alone bounds a socket"
-        assert "X-BiSheng-Access-Token" not in verdict["headers"]
+        assert verdict == {"decision": "unavailable", "reason": "identity_config_incomplete"}
+        assert recorded == []
 
     async def test_the_verifier_reads_back_exactly_what_the_issuer_wrote(
         self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible
@@ -419,3 +427,65 @@ class TestInjectionMaterial:
         monkeypatch.setattr(settings.app_runtime, "obo_secret", settings.jwt_secret, raising=False)
 
         assert verify_obo_token(token, app_id="app", tenant_id=1) is None
+
+
+def test_obo_startup_diagnosis_only_for_enabled_layer(monkeypatch):
+    """覆盖 AC: AC-72. Startup diagnostics never interpolate key material."""
+    from bisheng.app_runtime.domain.services import entry_authz_service as module
+    from bisheng.common.services.config_service import settings
+
+    calls = []
+    monkeypatch.setattr(module, "_warn_once", lambda reason, message: calls.append((reason, message)))
+    monkeypatch.setattr(settings.app_runtime, "obo_secret", "  ")
+    monkeypatch.setattr(settings.app_runtime, "enabled", False)
+    module.diagnose_obo_configuration()
+    assert calls == []
+    monkeypatch.setattr(settings.app_runtime, "enabled", True)
+    module.diagnose_obo_configuration()
+    assert calls[0][0] == "obo_secret_missing"
+    assert settings.jwt_secret not in calls[0][1]
+
+
+def test_whitespace_obo_key_never_authenticates_a_forged_visitor(monkeypatch):
+    """覆盖 AC: AC-70, AC-73. Entry and capability consumers share the same invalid-key boundary."""
+    import time
+
+    from bisheng.app_runtime.domain.services.entry_authz_service import OBO_AUDIENCE, verify_obo_token
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.app_runtime, "obo_secret", "  ")
+    forged = jwt.encode(
+        {
+            "sub": json.dumps({"app_id": "app-a", "user_id": 7, "tenant_id": 1}),
+            "aud": OBO_AUDIENCE,
+            "iss": settings.cookie_conf.jwt_iss,
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 60,
+        },
+        "  ",
+        algorithm="HS256",
+    )
+    assert verify_obo_token(forged, app_id="app-a", tenant_id=1) is None
+
+
+async def test_one_request_uses_captured_obo_configuration(
+    app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible, monkeypatch
+):
+    """覆盖 AC: AC-73. A refresh during identity assembly cannot mix signing settings."""
+    from bisheng.app_runtime.domain.services import entry_authz_service as module
+    from bisheng.common.services.config_service import settings
+
+    original = module._identity_material
+
+    async def refresh(**kwargs):
+        result = await original(**kwargs)
+        monkeypatch.setattr(settings.app_runtime, "obo_secret", "")
+        return result
+
+    monkeypatch.setattr(module, "_identity_material", refresh)
+    app, _ = await app_factory(slug="snapshot-key-app", state=AppState.ONLINE.value)
+    first = await _verdict(app.slug, _token(app_owner.user_id))
+    assert first["decision"] == "allow"
+    assert jwt.decode(first["obo_token"], OBO_SECRET, algorithms=["HS256"], audience=module.OBO_AUDIENCE)["sub"]
+    second = await _verdict(app.slug, _token(app_owner.user_id))
+    assert second == {"decision": "unavailable", "reason": "identity_config_incomplete"}

@@ -1,0 +1,16 @@
+[Unit]
+Description=BiSheng Docker host isolation verification and repair
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/bisheng/runtime-host-isolation.env
+ExecStart=@PYTHON@ -m runtime_manager.host_isolation --settings /etc/bisheng/runtime-host-isolation.json
+TimeoutStartSec=180
+UMask=0077
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/lock

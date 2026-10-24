@@ -17,7 +17,7 @@ from bisheng.app_runtime.domain.models.runtime_delivery import (
 
 
 @pytest.fixture
-async def runtime_repo():
+async def runtime_repo(monkeypatch):
     from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeDeliveryRepository
     from bisheng.core.context.tenant import current_tenant_id
 
@@ -34,7 +34,17 @@ async def runtime_repo():
     def begin(connection):
         connection.exec_driver_sql("BEGIN")
 
+    from bisheng.app_runtime.domain.models.runtime_host_isolation import RuntimeHostIsolationReport
+    from bisheng.app_runtime.domain.repositories.host_isolation_repository import REQUIRED
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(
+        settings.app_runtime,
+        "runtime_host_isolation_nodes",
+        {"node-a": {"engine_id": "engine-a", "network_id": "network-a", "config_digest": "a" * 64}},
+    )
     async with engine.begin() as conn:
+        await conn.run_sync(RuntimeHostIsolationReport.__table__.create)
         for model in RUNTIME_TABLES:
             await conn.run_sync(model.__table__.create)
 
@@ -54,6 +64,23 @@ async def runtime_repo():
             heartbeat_at=datetime.utcnow(),
         )
     )
+    # Other ledger tests assume a verified node. This synthetic evidence is
+    # not a host-firewall test; test_host_isolation separately removes it.
+    async with repo.transaction() as session:
+        session.add(
+            RuntimeHostIsolationReport(
+                id="node-a",
+                engine_id="engine-a",
+                network_id="network-a",
+                config_digest="a" * 64,
+                rule_digest="b" * 64,
+                revision=1,
+                checked_at=datetime.utcnow(),
+                valid_until=datetime.utcnow() + timedelta(seconds=60),
+                status="valid",
+                checks=dict.fromkeys(REQUIRED, True),
+            )
+        )
     yield repo
     await engine.dispose()
     current_tenant_id.reset(token)

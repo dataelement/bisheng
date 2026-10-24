@@ -32,6 +32,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
+from starlette.concurrency import run_in_threadpool
 
 from runtime_manager.admission import AdmissionService
 from runtime_manager.auth import verify_hmac
@@ -231,11 +232,30 @@ async def runtime_status() -> dict:
     capacity = AdmissionService(config, store=store).capacity_snapshot()
     capacity["instances"] = len(store.alive())
 
+    checks = _preflight(config, docker, runtimes, available)
+    if config.executor_kind == "docker":
+        try:
+            await run_in_threadpool(docker.assert_host_isolation, config.network)
+            isolated = True
+        except Exception as exc:
+            # Status remains readable during a control-plane outage, while the
+            # actual create/start/route methods continue to fail closed.
+            logger.warning("host isolation proof unavailable (%s)", type(exc).__name__)
+            isolated = False
+        checks.append(
+            {
+                "name": "host_isolation",
+                "ok": isolated,
+                "detail": "fresh Docker host isolation proof"
+                if isolated
+                else "install/repair the Docker-host isolation unit and its signed report",
+            }
+        )
     return {
         "backend_available": available,
         "supported_runtimes": runtimes,
         "capacity": capacity,
-        "preflight": _preflight(config, docker, runtimes, available),
+        "preflight": checks,
     }
 
 

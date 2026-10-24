@@ -282,9 +282,23 @@ class RuntimeDeliveryRepository:
             await self.save(owner)
             return result
 
+    async def require_host_isolation(self, node_id):
+        from bisheng.app_runtime.domain.repositories.host_isolation_repository import HostIsolationRepository
+        from bisheng.common.services.config_service import settings
+
+        async with self.transaction() as session:
+            node = await self.get(RuntimeNode, node_id)
+            if node and node.executor_kind == "kubernetes":
+                return
+            await HostIsolationRepository.require(
+                session, node, settings.app_runtime.runtime_host_isolation_nodes.get(node_id)
+            )
+
     async def create_operation(self, operation: RuntimeOperation):
         check_scope(operation)
         async with self.transaction() as session:
+            if operation.kind in {"prepare", "probe", "preview", "deploy", "restore", "migrate"}:
+                await self.require_host_isolation(operation.node_id)
             matches = await self.find(
                 RuntimeOperation, scope_key=operation.scope_key, idempotency_key=operation.idempotency_key
             )
@@ -325,6 +339,8 @@ class RuntimeDeliveryRepository:
             if operation is None or operation.status in TERMINAL or operation.deadline <= datetime.utcnow():
                 raise RuntimeConflict("operation_expired")
             node = await self.get(RuntimeNode, operation.node_id, lock=True)
+            if operation.kind in {"prepare", "probe", "preview", "deploy", "restore", "migrate"}:
+                await self.require_host_isolation(operation.node_id)
             if (
                 node is None
                 or node.status != "ready"
@@ -394,6 +410,8 @@ class RuntimeDeliveryRepository:
                 raise RuntimeConflict("execution_fence_mismatch")
             if op.status in TERMINAL or op.deadline <= datetime.utcnow():
                 raise RuntimeConflict("operation_expired")
+            if op.kind in {"prepare", "probe", "preview", "deploy", "restore", "migrate"}:
+                await self.require_host_isolation(op.node_id)
             if op.kind in MUTATING:
                 # Serialize first-assignment creation on the fixed execution node.
                 # Locking a missing assignment alone leaves an insert-gap race.
@@ -525,6 +543,7 @@ class RuntimeDeliveryRepository:
                 raise RuntimeConflict("route_without_ready_fact")
             if op.status in TERMINAL or op.deadline <= datetime.utcnow():
                 raise RuntimeConflict("operation_expired")
+            await self.require_host_isolation(op.node_id)
             await self.claim(op.id, node_id=op.node_id, generation=op.generation, owner_epoch=op.owner_epoch)
             fact = max(facts, key=lambda x: x.sequence)
             if fact.exec_ref != route.exec_ref or fact.detail.get("target") != route.target:

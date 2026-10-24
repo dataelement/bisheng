@@ -1,8 +1,8 @@
 # Tasks: 应用广场接入与治理面（RT-02 广场 + GOV-01 授权交互 + GOV-04 审计登记）
 
-> **2026-10-23 增量 SDD**：用户已确认本轮规格；增量设计待单独确认。旧任务与旧评审状态仅描述历史批次；不代表本次增量已拆任务、编码或验收。本轮只做必要定向验证，不跑全量测试。旧任务的行号、计数和实现阶段为历史记录，当前实现快照以 design.md 为准。
+> **2026-10-23 增量 SDD**：用户已确认本轮规格，并于 2026-10-24 确认 F054/F056 修订设计。旧任务与旧评审状态仅描述历史批次；不代表本次增量已拆任务、编码或验收。本轮只做必要定向验证，不跑全量测试。旧任务的行号、计数和实现阶段为历史记录，当前实现快照以 design.md 为准。
 
-**关联规格**: [spec.md](./spec.md)（61 条 AC；已确认）· [design.md](./design.md)（D1–D15；本轮设计待单独确认；新接口合同 §4.4）
+**关联规格**: [spec.md](./spec.md)（61 条 AC；已确认）· [design.md](./design.md)（D1–D15；本轮设计已确认；新接口合同 §4.4）
 **版本**: v3.0.0
 **纵切**: [mvp-114-path.md](../mvp-114-path.md) **§6 MVP-核心 F056 行**是本轮裁剪基准——Wave 1–2 全部为 `[MVP-核心]`（广场接入 + 两入口授权与「仅 owner 可见」提示 + 三类审计事件可查），Wave 3–4 为顺延项（release 仍必做，只列标题 / 文件 / 覆盖 AC，不展开）
 **代码事实口径**: 本文所有 `文件:行号` 沿用 design.md（`3.0-vibe` HEAD `11e1b211d`，2026-08-17 核实）。路径以 `src/backend/bisheng/` 为根；前端另注 `client/` = `src/frontend/client/src/`、`platform/` = `src/frontend/platform/src/`。**行号会漂、符号名不会**——落地前一律以符号名重定位（F054 Wave 3 落地后 platform 前端行号必漂）。
@@ -14,8 +14,8 @@
 | 步骤 | 状态 | 备注 |
 |------|------|------|
 | spec.md | ✅ 本轮增量已确认 | 2026-10-23 用户明确确认；批准内容 hash 见规格评审 JSON |
-| design.md | 🔲 本轮增量待确认 | 2026-10-23 第三轮设计评审 NEEDS_FIX / 独立 REVISE（B1 隔离恢复、S1 凭据回收审计）；用户未确认，未进入任务拆解或编码 |
-| tasks.md | ✅ 已拆解（2026-08-17） | 本文（33 任务 / 4 Wave / 21 条 `[MVP-核心]`）；2026-08-17 初稿 + 同日 `/sdd-review tasks` 15 条修订（审计租户字段口径、client i18n、`objectTypeEnum.app` 新增认领、T009/T011 实现手段写死、夹具与追溯口径） |
+| design.md | ✅ 本轮增量已确认 | 2026-10-24 用户明确确认 F054/F056 修订设计；批准内容 SHA-256 `7136417b9ccd2d354903670e784f6a86acea213bd970e3393cb41ae4cd072c6c` |
+| tasks.md | ✅ 历史任务已拆解；本轮见文末增量 | 本文（33 任务 / 4 Wave / 21 条 `[MVP-核心]`）；2026-08-17 初稿 + 同日 `/sdd-review tasks` 15 条修订（审计租户字段口径、client i18n、`objectTypeEnum.app` 新增认领、T009/T011 实现手段写死、夹具与追溯口径） |
 | 实现 | 🟡 进行中（2026-09-16） | **32 / 33 完成**；`[MVP-核心]` 21 条中完成 20（T001–T020），未完成 1：**T021**（114 部署与人工验收，本 Feature 唯一未勾任务）；**T016** 代码已齐、2026-09-10 勾选，但需 `F056_E2E=1` 对真实部署（MySQL / Redis / OpenFGA）跑、114 重建后执行。Wave 3–4 顺延 12 条（T022–T033）已全部落地：T022–T026 + T032 先期交付，T027–T031 + T033 于 2026-09-16 分支 `wt/f056-verification` 交付（四条原写「无代码产出」的验收任务改为自动化回归，见各任务偏差段）。**仍只能在 114 上证的**：T021 整张手验清单；T029 / T030 / T031 的视觉确认；T033「站内信真的出现在 client 铃铛里」这一步。偏差见文末「实际偏差记录」 |
 
 ---
@@ -509,3 +509,91 @@
 **一个附带项**（AC-58 修复时浮现）：应用运行期凭据的审计行（本轮新加，`open_api.api_key.issue` / `.revoke`）target 是凭据、`metadata` 里只有 `subject_id`，**没有 `app_id`**，因此按「对象应用」筛不出来。如果选 A 或 B，这一条顺带补进去（additive，改 `CredentialService._audit` 的 metadata 即可）。
 
 **2026-10-09 拍板：方案 A。** 审计页新增「应用运行记录」tab，模型调用、应用能力调用、应用访问三类记录各一个子视图；筛选维度为时间、应用、服务账号密钥（模型调用）、访问用户，平台超管另有租户筛选；复用既有导出；未部署工场运行时层时不显示。运行期凭据审计行的 `metadata` 顺带补 `app_id`。需求口径见 PRD-1 v3.0 GOV-04「界面与交互」。
+
+## 2026-10-24 修订设计确认后收尾任务
+
+本节优先于历史裁剪/阶段描述。用户确认原文：确认 F054/F056 修订设计，继续完成剩余开发并提测。只运行本功能必要的定向验证；真实部署证据与模拟测试分开登记，未执行不记通过。
+
+- [x] **T034**（基础设施）：快照与导出任务持久模型、163 错误码；新表保留回滚；不建事实副本
+  - 文件：`src/backend/bisheng/app_governance/domain/models/runtime_audit.py`、`src/backend/bisheng/common/errcode/app_governance.py`。
+  - 依赖：无（已确认设计）；配对：无（基础设施/交付）。
+- [x] **T035**（基础设施）：既有访问表新增可空历史名称快照；迁移仅 DDL，可回滚列；无历史回填
+  - 文件：`src/backend/bisheng/database/models/app_access_log.py`、`src/backend/bisheng/core/database/alembic/versions/f056_access_name_snapshot.py`。
+  - 依赖：T034；配对：无（基础设施/交付）。
+- [x] **T036**（测试）：凭据签发可信 app 关联、真实撤销一次审计、幂等、伪造归属拒绝、审计失败整事务回滚
+  - 文件：`src/backend/test/open_api/test_runtime_credential_audit.py`。
+  - 依赖：无（已确认设计）；配对：T037、T038。覆盖 AC: AC-59, AC-58。
+- [x] **T037**（后端 Domain）：可信 subject 映射与同 session revoke_runtime_binding；普通凭据审计补可信关联
+  - 文件：`src/backend/bisheng/open_api/domain/repositories/credential_repository.py`、`src/backend/bisheng/open_api/domain/services/credential_service.py`。
+  - 依赖：T036；配对：T036。
+- [x] **T038**（后端 Domain）：公开撤销协议接真实切换/终结/停止/删除绑定状态转移；复用调用者事务
+  - 文件：`src/backend/bisheng/open_api/application/runtime_credentials.py`、`src/backend/bisheng/app_runtime/domain/services/runtime_projection_service.py`。
+  - 依赖：T037；配对：T036。
+- [x] **T039**（测试）：三源真实 SQLite 查询白名单、租户/角色拒绝、NULL/同秒稳定分页、筛选/候选、坏/过期游标
+  - 文件：`src/backend/test/app_governance/test_runtime_audit_query.py`（测试夹具内置在该测试文件）。
+  - 依赖：T034；配对：T040、T041、T042。覆盖 AC: AC-47, AC-48, AC-49, AC-50, AC-51, AC-52, AC-53, AC-54, AC-58, AC-61。
+- [x] **T040**（后端 Domain）：三个事实适配，显式授权范围、白名单、keyset 与 streaming source session 协议
+  - 文件：`src/backend/bisheng/app_governance/domain/repositories/runtime_audit_repository.py`、`src/backend/bisheng/app_governance/domain/schemas/runtime_audit.py`。
+  - 依赖：T039；配对：T039。
+- [x] **T041**（后端 Domain）：当前自然人管理员范围、合法筛选、快照及严格签名 cursor；候选从历史事实
+  - 文件：`src/backend/bisheng/app_governance/domain/services/runtime_audit_scope.py`、`src/backend/bisheng/app_governance/domain/services/runtime_audit_query_service.py`。
+  - 依赖：T040；配对：T039。
+- [x] **T042**（后端 API）：v1 session 注册三类查询/候选 API，拒绝开放凭据及禁用状态
+  - 文件：`src/backend/bisheng/app_governance/api/router.py`、`src/backend/bisheng/api/router.py`。
+  - 依赖：T041；配对：T039。
+- [x] **T043**（测试）：CSV 公式/Unicode/空值、完整多批扫描、私有分块 EOF manifest、租约/重试及当前权限拒绝
+  - 文件：`src/backend/test/app_governance/test_runtime_audit_export.py`。
+  - 依赖：T040；配对：T044、T045、T046。覆盖 AC: AC-51, AC-52, AC-53, AC-56, AC-57, AC-58, AC-60。
+- [x] **T044**（后端 Domain）：异步导出任务与幂等/租约/CAS，冻结条件，一次 source 读视图，私有分块及认证下载
+  - 文件：`src/backend/bisheng/app_governance/domain/repositories/runtime_audit_export_repository.py`、`src/backend/bisheng/app_governance/domain/services/runtime_audit_export_service.py`。
+  - 依赖：T043；配对：T043。
+- [x] **T045**（Worker）：后台扫描调度/恢复/GC，Celery headers 传 tenant_id 并恢复 ContextVar；每批当前授权
+  - 文件：`src/backend/bisheng/worker/runtime_audit/tasks.py`、`src/backend/bisheng/worker/main.py`。
+  - 依赖：T044；配对：T043。
+- [x] **T046**（后端 API）：导出提交/状态/认证下载，私有 MinIO 不公开 URL，当前权限/ready TTL 核验
+  - 文件：`src/backend/bisheng/app_governance/api/router.py`、`src/backend/bisheng/app_governance/domain/services/runtime_audit_storage.py`。
+  - 依赖：T044、T045；配对：T043。
+- [x] **T047**（后端 Domain）：新 allow 写 app_name_snapshot，保留历史未知及合并窗口
+  - 文件：`src/backend/bisheng/app_runtime/domain/services/app_access_log_service.py`、`src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py`。
+  - 依赖：T035；配对：T039。
+- [x] **T048**（前端 Platform）：包裹 request API 与 query hook，筛选 key 包含视图/范围，不保留旧租户内容
+  - 文件：`src/frontend/platform/src/controllers/API/runtimeAudit.ts`、`src/frontend/platform/src/pages/LogPage/runtime/useRuntimeAudit.ts`。
+  - 依赖：T042、T046；配对：T051。
+- [x] **T049**（前端 Platform）：现有 LogPage 第三 tab 三子视图、时间/历史候选筛选和异步完整导出，遵循现有组件
+  - 文件：`src/frontend/platform/src/pages/LogPage/runtime/RuntimeAuditPanel.tsx`、`src/frontend/platform/src/pages/LogPage/index.tsx`。
+  - 依赖：T048；配对：T051。
+- [x] **T050**（基础设施）：同一语义文案三语与新错误码三语，按 locale 文件独立原子编辑不触碰旧 keys
+  - 文件：`src/frontend/platform/public/locales/zh-Hans/bs.json`、`src/frontend/packages/locales/src/api_errors/zh-Hans.json`。
+  - 依赖：T034；配对：无（基础设施/交付）。
+- [ ] **T051**（测试）：可达 UI、切类别/租户不显示过期数据、查询/导出失败与合法空值、管理员和非管理员真实入口配对
+  - 文件：`src/frontend/platform/src/test/runtimeAudit.test.tsx`、`src/backend/test/e2e/test_e2e_vibe_governance_closeout.py`。
+  - 依赖：T048、T049、T050、T050a、T050b；配对：无（基础设施/交付）。覆盖 AC: AC-46, AC-55, AC-56, AC-57, AC-61。
+- [ ] **T052**（基础设施）：逐 AC 提测映射、定向 L1/L2、区分实际与待测；同步 F055 AC-81 凭据审计依赖
+  - 文件：`features/v3.0.0/056-app-square-governance/closeout-validation.md`、`docs/reviews/vibe-governance-closeout-handoff-2026-10-24.md`。
+  - 依赖：T038、T047、T051；配对：无（基础设施/交付）。
+
+- [x] **T050a**（基础设施）：英文运行记录与错误码文案，保留既有 keys。
+  - 文件：`src/frontend/platform/public/locales/en-US/bs.json`、`src/frontend/packages/locales/src/api_errors/en.json`。
+  - 依赖：T050；配对：无（纯文案）。
+- [x] **T050b**（基础设施）：日文运行记录与错误码文案，三语 key 对齐。
+  - 文件：`src/frontend/platform/public/locales/ja/bs.json`、`src/frontend/packages/locales/src/api_errors/ja.json`。
+  - 依赖：T050a；配对：无（纯文案）。
+- [x] **T053**（基础设施）：新读模型在租户过滤/发现注册；现有修复不改租户默认和双库约束。
+  - 文件：`src/backend/bisheng/core/database/tenant_filter.py`、`src/backend/bisheng/app_governance/domain/models/__init__.py`。
+  - 依赖：T034；配对：T039。
+- [x] **T054**（Worker）：注册任务及 30 秒恢复扫描；逐任务重新进入可信 tenant execution scope。
+  - 文件：`src/backend/bisheng/worker/__init__.py`、`src/backend/bisheng/core/config/settings.py`。
+  - 依赖：T045；配对：T043。
+
+增量任务审查：2026-10-24 `/sdd-review tasks` 第 1 轮发现三语任务粒度过大；已拆成每语两文件并补共享注册落点。第 2 轮 21 项检查 LGTM，证据见 `closeout-task-review.md`。后端按测试先行逐批落地，不把定向验证当部署验收。
+
+### 实际接线补充（同一批准范围）
+
+下列任务补齐共享配置、命名导出和测试夹具的文件归属；执行以依赖为准，配置/ORM 基础先于消费方。未引入新的业务需求。
+
+- [x] **T055**（后端 Domain）：提供当前管理视图的公开只读协议；失败不回退成全局；供读/worker/下载重新核验
+  - 文件：`src/backend/bisheng/admin/application/tenant_scope.py`、`src/backend/bisheng/admin/application/__init__.py`。依赖：T039；配对：定向用例见本功能 closeout-validation.md。
+- [x] **T056**（前端 Platform）：命名导出惰性接线及部署开关/管理员门禁测试，保留原两页签
+  - 文件：`src/frontend/platform/src/routes/index.tsx`、`src/frontend/platform/src/pages/LogPage/index.test.tsx`。依赖：T049；配对：T102、T103、T116（F054）或 T049（F056）。覆盖 AC: AC-46, AC-53, AC-61。
+
+**2026-10-24 状态**：本轮主功能实现代码及定向用例已接齐；部署 E2E 与最终 L2 仍未完成。未执行全量测试，旧批次计数不表示本轮交付状态。新增接线的 L1 与证据见 `closeout-validation.md`；未对每个小任务保留独立的先红后绿日志，不宣称完整 TDD 历史。

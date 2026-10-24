@@ -218,7 +218,7 @@ class BackendAuthzClient(HmacClient):
         request_id: str,
         client_ip: str | None = None,
     ) -> dict:
-        """Same 3 s cache, a **disjoint** key space.
+        """Refusals use the same TTL with a **disjoint** key space.
 
         ``("preview", session)`` rather than the bare session: an application
         whose slug happened to equal a session id would otherwise share a cache
@@ -238,7 +238,7 @@ class BackendAuthzClient(HmacClient):
 
     async def _verdict(self, path: str, *, key: tuple, body: dict) -> dict:
         cached = self.cache.get(key)
-        if cached is not None:
+        if cached is not None and cached.get("decision") != "allow":
             return {**cached, "cache_hit": True}
 
         response = await self._send("POST", path, json=body)
@@ -255,7 +255,10 @@ class BackendAuthzClient(HmacClient):
         if not isinstance(payload, dict) or "decision" not in payload:
             raise InternalRpcError(self.peer, "response has no decision field")
 
-        self.cache.set(key, payload)
+        # Positive decisions contain live identity material. Reauthorize each
+        # request/handshake so invalid OBO configuration cannot reuse an allow.
+        if payload.get("decision") != "allow":
+            self.cache.set(key, payload)
         return {**payload, "cache_hit": False}
 
 

@@ -12,7 +12,7 @@ import RouteErrorBoundary from "./RouteErrorBoundary";
 import EditorPage from "@/pages/Dashboard/editor";
 import SharePage from "@/pages/Dashboard/share";
 
-// 异步加载页面组件
+// Load page components lazily.
 const DshLogin = lazy(() => import('@/pages/DshLogin').then(module => ({ default: module.DshLogin })));
 const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
 const Apps = lazy(() => import("@/pages/BuildPage/apps"));
@@ -33,7 +33,7 @@ const QasPage = lazy(() => import("@/pages/KnowledgePage/qas"));
 const LabelPage = lazy(() => import("@/pages/LabelPage"));
 const TaskAppChats = lazy(() => import("@/pages/LabelPage/taskAppChats"));
 const TaskApps = lazy(() => import("@/pages/LabelPage/taskApps"));
-const LogPage = lazy(() => import("@/pages/LogPage"));
+const LogPage = lazy(() => import("@/pages/LogPage").then(module => ({ default: module.LogPage })));
 const AppChatDetail = lazy(() => import("@/pages/LogPage/useAppLog/appChatDetail"));
 const DailyChatDetail = lazy(() => import("@/pages/LogPage/useAppLog/dailyChatDetail"));
 const Doc = lazy(() => import("@/pages/ModelPage/doc"));
@@ -79,7 +79,7 @@ const privateRouter = [
     element: <MainLayout />,
     errorElement: <RouteErrorBoundary />,
     children: [
-      // 开发环境登录后曾跳转 /admin，但业务路由无该 path，会落入 * → 404；统一进管理端后再由 userContext 纠偏
+      // Normalize the legacy /admin redirect before userContext chooses the landing page.
       { path: "admin", element: <Navigate to="/label" replace /> },
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
@@ -159,7 +159,7 @@ const privateRouter = [
   { path: "*", element: <Navigate to="/404" replace /> }
 ]
 
-/** 与角色菜单 third_id 对齐：/sys 路由使用 permission `sys`，角色侧存为 system_config */
+/** Match the role menu third_id: /sys uses permission sys, stored as system_config. */
 function hasRoutePermission(permissions: string[], key: string) {
   if (key === "sys") {
     return permissions.includes("sys") || permissions.includes("system_config")

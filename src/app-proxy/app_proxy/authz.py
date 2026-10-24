@@ -6,7 +6,7 @@ app state) lives once, in the backend, on top of F048. Here we only:
 
 1. pull the session token out of the request the same way the platform
    middleware does (cookie first, then ``Authorization: Bearer``);
-2. call the internal endpoint, cached 3s per ``(session, slug)``;
+2. call the internal endpoint; only refusals are cached per session and slug;
 3. turn *anything* that is not a clean verdict into a refusal.
 
 Point 3 is AC-12 and is the reason :data:`KNOWN_DECISIONS` exists: a backend

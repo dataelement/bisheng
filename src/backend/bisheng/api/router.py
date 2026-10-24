@@ -20,6 +20,7 @@ from bisheng.api.v1 import (
     workflow_router,
     workstation_router,
 )
+from bisheng.app_governance.api.router import router as runtime_audit_router
 from bisheng.app_publish.api.router import v1_router as app_publish_v1_router
 from bisheng.app_publish.api.router import v2_router as app_publish_v2_router
 from bisheng.app_runtime.api.router import router as app_runtime_router
@@ -133,6 +134,7 @@ router.include_router(sensitive_word_policy_router)
 router.include_router(open_api_management_router)
 # F054: hosted application state actions, read side and the app-proxy hook.
 router.include_router(app_runtime_router)
+router.include_router(runtime_audit_router)
 # F055: publish status + manual publish for the publish face (session auth).
 router.include_router(app_publish_v1_router)
 # F053 (features/v3.0.0/053, design D10): CLI installer download + version

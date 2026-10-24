@@ -334,6 +334,11 @@ class CredentialService:
             return False
         return await CredentialRepository.touch_last_used(credential_id, used_at=datetime.now())
 
+    @classmethod
+    async def revoke_runtime_binding(cls, session, binding, operation, *, reason):
+        """Revoke and audit a runtime generation inside the caller's UoW."""
+        return await CredentialRepository.revoke_runtime_binding(session, binding, operation, reason=reason)
+
     @staticmethod
     async def _audit(operator, action: str, row: ApiCredential) -> None:
         """Record one credential event. Best effort, by design.
@@ -360,6 +365,7 @@ class CredentialService:
                     "subject_id": row.subject_id,
                     "scopes": list(row.scopes or []),
                     "key_mask": row.key_mask,
+                    **await CredentialRepository.audit_app_metadata(row),
                 },
             )
         except Exception:

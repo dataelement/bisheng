@@ -10,6 +10,7 @@ from bisheng.app_runtime.domain.models.runtime_delivery import (
     RuntimeRoute,
     RuntimeStorageBinding,
 )
+from bisheng.open_api.application.runtime_credentials import revoke_runtime_binding
 
 
 class RuntimeProjectionService:
@@ -81,7 +82,7 @@ class RuntimeProjectionService:
             raise RuntimeConflict("rebuild_origin_changed")
 
     async def activate(self, op, ready):
-        async with self.repo.transaction():
+        async with self.repo.transaction() as session:
             current = await self.repo.get(RuntimeOperation, op.id, lock=True)
             if current.stage == "serving":
                 return
@@ -105,8 +106,15 @@ class RuntimeProjectionService:
                 for row in await self.repo.find(model, app_id=op.app_id, lock=True):
                     if model is RuntimeStorageBinding and row.namespace != "production":
                         continue
-                    row.state = "active" if row.operation_id == op.id else "revoked"
-                    await self.repo.save(row)
+                    if model is RuntimeCredentialBinding and row.operation_id != op.id:
+                        # Production activation must not cancel another preview.
+                        origin = await self.repo.get(RuntimeOperation, row.operation_id)
+                        if origin and origin.kind == "preview":
+                            continue
+                        await revoke_runtime_binding(session, row, op, reason="runtime_replaced")
+                    else:
+                        row.state = "active" if row.operation_id == op.id else "revoked"
+                        await self.repo.save(row)
             for row in await self.repo.find(RuntimeCapacityReservation, operation_id=op.id, lock=True):
                 row.state = "active"
                 await self.repo.save(row)
@@ -114,12 +122,21 @@ class RuntimeProjectionService:
     async def terminal(self, op, detail):
         if not detail.get("stopped"):
             return
-        async with self.repo.transaction():
+        async with self.repo.transaction() as session:
             if not detail.get("serving"):
                 for model in (RuntimeCredentialBinding, RuntimeStorageBinding):
-                    for row in await self.repo.find(model, operation_id=op.id, lock=True):
-                        row.state = "revoked"
-                        await self.repo.save(row)
+                    filters = {"app_id": op.app_id} if op.kind in {"stop", "destroy"} else {"operation_id": op.id}
+                    for row in await self.repo.find(model, **filters, lock=True):
+                        if model is RuntimeCredentialBinding:
+                            origin = await self.repo.get(RuntimeOperation, row.operation_id)
+                            if op.kind == "stop" and origin and origin.kind == "preview":
+                                continue
+                            await revoke_runtime_binding(session, row, op, reason="runtime_" + op.kind)
+                        else:
+                            if op.kind == "stop" and row.namespace != "production":
+                                continue
+                            row.state = "revoked"
+                            await self.repo.save(row)
             if op.kind == "restore" and op.status == "completed" and not op.payload.get("resume_after_restore", True):
                 for route in await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True):
                     route.status = "stopped"

@@ -354,3 +354,18 @@ async def test_the_internal_endpoint_is_hmac_signed_and_answers_200_for_a_refusa
     assert allowed.json()["data"]["decision"] == "allow"
     assert refused.status_code == 200
     assert refused.json()["data"] == {"decision": "not_found"}
+
+
+@pytest.mark.parametrize("bad_secret", ["", "  ", "session"])
+async def test_preview_obo_configuration_refuses_without_identity(
+    preview_session, session_token, monkeypatch, bad_secret
+):
+    """覆盖 AC: AC-71, AC-73. No successful anonymous preview fallback."""
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(
+        settings.app_runtime, "obo_secret", settings.jwt_secret if bad_secret == "session" else bad_secret
+    )
+    _, _, row = await preview_session()
+    verdict = await _authorize(row.id, session_token(APPROVER_USER_ID))
+    assert verdict == {"decision": "unavailable", "reason": "identity_config_incomplete"}

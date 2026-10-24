@@ -1,7 +1,7 @@
 """The entry verdict: who is this, may they enter, and what does the app get told.
 
 app-proxy holds **no** permission logic (D6-C). It asks this service once per
-``(session, slug)`` and caches the answer for 3 seconds. Everything security
+new HTTP request or WebSocket handshake; positive identity material is never cached. Everything security
 relevant about ``/apps/{slug}`` therefore lives here, once, and is identical in
 the open-source and commercial builds — the Java gateway does not see ``/apps``
 at all (K8), so a second copy of these rules would silently diverge.
@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
 
@@ -183,17 +184,22 @@ async def authorize_entry(
                 "user_id": user_id,
             }
     user_name, subject_kind = await _user_facts(user_id, subject)
+    obo_config = _obo_signing_snapshot()
+    if obo_configuration_status(obo_config):
+        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
     material = await _identity_material(
         app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
     )
     obo_token, obo_expires_at = _issue_obo_token(
+        config=obo_config,
         app_id=app.id,
         user_id=user_id,
         tenant_id=int(app.tenant_id or 0),
         subject_kind=material.get("X-BiSheng-Subject-Kind", "human"),
     )
-    if obo_token:
-        material["X-BiSheng-Access-Token"] = obo_token
+    if not obo_token:
+        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
+    material["X-BiSheng-Access-Token"] = obo_token
     logger.debug("app_runtime.entry allow slug={} user={} ip={}", slug, user_id, client_ip)
     # AC-38: the access record is a side effect of *this* verdict and of no
     # other code path — app-proxy has no database, and only ``allow`` is an
@@ -201,6 +207,7 @@ async def authorize_entry(
     # answer (design D14-B); the merge window inside collapses repeats.
     schedule_access_record(
         app_id=app.id,
+        app_name_snapshot=app.name,
         tenant_id=int(app.tenant_id or 0),
         user_id=user_id,
         user_name=user_name,
@@ -292,10 +299,14 @@ async def authorize_preview_entry(
 
     set_current_tenant_id(int(app.tenant_id or 0))
     user_name, subject_kind = await _user_facts(user_id, subject)
+    obo_config = _obo_signing_snapshot()
+    if obo_configuration_status(obo_config):
+        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
     material = await _identity_material(
         app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
     )
     obo_token, obo_expires_at = _issue_obo_token(
+        config=obo_config,
         app_id=app.id,
         user_id=user_id,
         tenant_id=int(app.tenant_id or 0),
@@ -306,8 +317,9 @@ async def authorize_preview_entry(
         # forge — it.
         preview_session=row.id,
     )
-    if obo_token:
-        material["X-BiSheng-Access-Token"] = obo_token
+    if not obo_token:
+        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
+    material["X-BiSheng-Access-Token"] = obo_token
     logger.debug("app_runtime.preview_entry allow session={} user={} ip={}", session, user_id, client_ip)
     # No access record: AC-38 counts visits to an *application*, and a trial
     # instance of a version that may never ship is not one. Counting it would
@@ -551,6 +563,40 @@ def _warn_once(key: str, message: str) -> None:
     logger.error(message)
 
 
+@dataclass(frozen=True)
+class _OBOSigningConfig:
+    secret: str = field(repr=False)
+    session_secret: str = field(repr=False)
+    issuer: str
+    ttl: int
+
+
+def _obo_signing_snapshot():
+    runtime = settings.app_runtime
+    return _OBOSigningConfig(
+        runtime.obo_secret, settings.jwt_secret, settings.cookie_conf.jwt_iss, int(runtime.obo_ttl_seconds)
+    )
+
+
+def obo_configuration_status(config=None) -> str | None:
+    """Validate one captured signing configuration without disclosing its keys."""
+    config = config or _obo_signing_snapshot()
+    if not config.secret or not config.secret.strip():
+        reason = "obo_secret_missing"
+    elif config.secret == config.session_secret:
+        reason = "obo_secret_equals_jwt"
+    else:
+        return None
+    _warn_once(reason, f"app_runtime.obo_secret configuration invalid: {reason}; configure a dedicated nonblank key")
+    return reason
+
+
+def diagnose_obo_configuration() -> None:
+    """Startup diagnostic only when this deployment enables hosted apps."""
+    if settings.app_runtime.enabled:
+        obo_configuration_status()
+
+
 def _issue_obo_token(
     *,
     app_id: str,
@@ -558,6 +604,7 @@ def _issue_obo_token(
     tenant_id: int,
     subject_kind: str,
     preview_session: str | None = None,
+    config: _OBOSigningConfig | None = None,
 ) -> tuple[str | None, int | None]:
     """Short-lived on-behalf-of token injected into the app (AC-34).
 
@@ -577,39 +624,17 @@ def _issue_obo_token(
     caller can state it to app-proxy without decoding the token — or
     ``(None, None)`` when no token is issued.
 
-    Signed with ``app_runtime.obo_secret``, which **must differ** from
-    ``settings.jwt_secret``: sharing them would make every OBO token a valid
-    platform session cookie. A missing or shared secret means no token is
-    issued — the token has no consumer this round (its scope semantics belong
-    to F055), so refusing entry over it would break the entry path to protect
-    something nobody reads yet.
-
-    ⚠️ **When OBO gains its first consumer this must become fail-closed.** The
-    day an application reads the token to decide who it is talking to, "no
-    token issued" stops meaning "nobody reads it" and starts meaning "the app
-    sees an anonymous request" — a silent fail-open on identity. Ruled
-    2026-08-17: allow this round, flip to refusing entry in the same change
-    that gives OBO a reader.
-
-    Both misconfigurations are logged **once per process, not per request**:
-    they are static config, they never heal on their own, and a per-request
-    line on every entry both floods the log and buries the one occurrence that
-    would have told an operator what to fix.
+    Signed with a dedicated nonblank OBO key. Callers refuse entry when no
+    token can be issued; capability consumers must never see anonymous fallback.
+    Configuration diagnostics contain no key material.
     """
-    secret = settings.app_runtime.obo_secret
-    if not secret:
-        _warn_once("obo_secret_missing", "app_runtime.entry obo_secret is not configured; no OBO token issued")
+    config = config or _obo_signing_snapshot()
+    if obo_configuration_status(config):
         return None, None
-    if secret == settings.jwt_secret:
-        _warn_once(
-            "obo_secret_equals_jwt",
-            "app_runtime.entry obo_secret equals jwt_secret; refusing to sign (AC-34). "
-            "Sharing them would make every OBO token a valid platform session — set a distinct secret.",
-        )
-        return None, None
+    secret = config.secret
 
     now = int(time.time())
-    expires_at = now + int(settings.app_runtime.obo_ttl_seconds)
+    expires_at = now + config.ttl
     subject: dict[str, Any] = {
         "app_id": app_id,
         "user_id": user_id,
@@ -623,7 +648,7 @@ def _issue_obo_token(
         # same way; PyJWT 2.10 also requires ``sub`` to be a string.
         "sub": json.dumps(subject, sort_keys=True),
         "aud": OBO_AUDIENCE,
-        "iss": settings.cookie_conf.jwt_iss,
+        "iss": config.issuer,
         "iat": now,
         "exp": expires_at,
     }
@@ -646,8 +671,9 @@ def verify_obo_token(token: str, *, app_id: str, tenant_id: int) -> int | None:
     visitor's token for app A would let app B act as them.
     """
 
-    secret = settings.app_runtime.obo_secret
-    if not token or not secret or secret == settings.jwt_secret:
+    config = _obo_signing_snapshot()
+    secret = config.secret
+    if not token or obo_configuration_status(config):
         return None
     try:
         payload = jwt.decode(
@@ -655,7 +681,7 @@ def verify_obo_token(token: str, *, app_id: str, tenant_id: int) -> int | None:
             secret,
             algorithms=["HS256"],
             audience=OBO_AUDIENCE,
-            issuer=settings.cookie_conf.jwt_iss,
+            issuer=config.issuer,
         )
         claims = json.loads(payload.get("sub") or "{}")
     except Exception:

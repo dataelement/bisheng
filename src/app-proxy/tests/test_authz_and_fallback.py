@@ -22,41 +22,40 @@ from tests.fakes import DEFAULT_APP_ID, DEFAULT_UPSTREAM, allow_response, deny_r
 
 
 class TestAuthzCache:
-    def test_authorize_cached_3s_by_cookie_hash_and_slug(self, logged_in, fake_backend, fake_manager, frozen_clock):
-        """One RPC per (session, app) per 3s — and the route cache is separate."""
+    def test_positive_authorization_is_rechecked_for_every_request(
+        self, logged_in, fake_backend, fake_manager, frozen_clock
+    ):
+        """F054 AC-70: fresh identity decisions; route caching remains separate."""
         for _ in range(3):
-            logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
-        assert len(fake_backend.calls) == 1
+            logged_in.get("/apps/foo/", headers=NAVIGATE_HEADERS)
+        assert len(fake_backend.calls) == 3
 
-        logged_in.get("/apps/bar", headers=NAVIGATE_HEADERS)
-        assert len(fake_backend.calls) == 2, "a different slug is a different cache entry"
+        logged_in.get("/apps/bar/", headers=NAVIGATE_HEADERS)
+        assert len(fake_backend.calls) == 4
 
         logged_in.cookies.set("access_token_cookie", "a-different-session")
-        logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
-        assert len(fake_backend.calls) == 3, "a different session is a different cache entry"
+        logged_in.get("/apps/foo/", headers=NAVIGATE_HEADERS)
+        assert len(fake_backend.calls) == 5
 
-    def test_visibility_revoke_effective_after_cache_expiry(self, logged_in, fake_backend, frozen_clock):
-        """AC-10 "from the next request" == "after the 3s window" (D6)."""
-        response = logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
+    def test_visibility_revoke_effective_on_next_request(self, logged_in, fake_backend, frozen_clock):
+        """A prior allow cannot delay a new backend denial."""
+        response = logged_in.get("/apps/foo/", headers=NAVIGATE_HEADERS)
         assert response.status_code == 200
 
         fake_backend.response = deny_response("forbidden")
-        assert "无访问权限" not in logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS).text, "still cached"
-
-        frozen_clock.advance(3.1)
-        assert "无访问权限" in logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS).text
+        assert "无访问权限" in logged_in.get("/apps/foo/", headers=NAVIGATE_HEADERS).text
         assert len(fake_backend.calls) == 2
 
     def test_no_cookie_still_asks_backend_once_and_caches(self, proxy_client, fake_backend):
         """Anonymous traffic must not become a free RPC amplifier."""
         fake_backend.response = deny_response("login")
-        proxy_client.get("/apps/foo", headers=NAVIGATE_HEADERS)
-        proxy_client.get("/apps/foo", headers=NAVIGATE_HEADERS)
+        proxy_client.get("/apps/foo/", headers=NAVIGATE_HEADERS)
+        proxy_client.get("/apps/foo/", headers=NAVIGATE_HEADERS)
         assert len(fake_backend.calls) == 1
 
     def test_bearer_token_is_accepted_as_session(self, proxy_client, fake_backend):
         """``_extract_http_access_token`` takes cookie **or** Bearer; so do we."""
-        proxy_client.get("/apps/foo", headers={**NAVIGATE_HEADERS, "Authorization": "Bearer platform-jwt"})
+        proxy_client.get("/apps/foo/", headers={**NAVIGATE_HEADERS, "Authorization": "Bearer platform-jwt"})
         assert fake_backend.calls[0]["access_token"] == "platform-jwt"
 
 

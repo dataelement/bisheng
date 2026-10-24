@@ -426,6 +426,7 @@ def render_page(
     square_url: str = "/workspace",
     request_id: str = "",
     accept_language: str | None = None,
+    reason: str | None = None,
 ) -> str:
     """Full self-contained HTML document. No external request.
 
@@ -443,6 +444,18 @@ def render_page(
     layout = _LAYOUT.get(kind) or _LAYOUT[DECISION_UNAVAILABLE]
     chrome = _CHROME[locale]
     copy = _copy(kind, locale)
+    if kind == DECISION_UNAVAILABLE and reason == "identity_config_incomplete":
+        copy = {
+            LOCALE_ZH: _Copy(title="环境配置不完整", lines=("本环境配置不完整，请联系平台管理员。",)),
+            LOCALE_EN: _Copy(
+                title="Environment setup incomplete",
+                lines=("This environment is not fully configured. Contact a platform administrator.",),
+            ),
+            LOCALE_JA: _Copy(
+                title="環境設定が不完全です",
+                lines=("環境設定が不完全です。プラットフォーム管理者にお問い合わせください。",),
+            ),
+        }[locale]
     body = "\n".join(f"    <p>{_fill(line, chrome, app_name, owner_name)}</p>" for line in copy.lines)
 
     actions = ""

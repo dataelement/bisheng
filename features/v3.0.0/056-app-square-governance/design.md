@@ -1,6 +1,6 @@
 # Design: 应用广场、治理与运行记录查询
 
-> **2026-10-23 增量设计评审稿，待用户确认，未编码。** 现状基线 `5f2541f4bc483c24624fede9031c88c4ec6f58f4`；规格确认提交 `dda16a6502908ba8d58cff61dc350c0213b86c19`。保留 D1–D11 与 §1–§8 编号，新增 D12–D15；历史 MVP“查询全后置”已不适用于现有操作审计。
+> **2026-10-24 用户确认修订设计，进入任务拆解与编码。** 现状基线 `5f2541f4bc483c24624fede9031c88c4ec6f58f4`；规格确认提交 `dda16a6502908ba8d58cff61dc350c0213b86c19`。保留 D1–D11 与 §1–§8 编号，新增 D12–D15；历史 MVP“查询全后置”已不适用于现有操作审计。
 >
 > [spec.md](./spec.md)（61 条 AC）· [tasks.md](./tasks.md) · [release-contract.md](../release-contract.md)。本次新增 AC-46 至 AC-61，修订 AC-26、AC-34；不接管模型/能力/访问记录的业务写入者。
 
@@ -104,7 +104,7 @@ F055 负责写 app.secret.*；凭据 owner 在签发/撤销时从持久 `ApiCred
 
 ### 4.1 数据流与实现状态
 
-**已实现**：广场第三类型、两处权限 UI、可见范围审计、系统操作日志查询与应用筛选；模型表/能力表/访问表真实写入路径。**本轮未实现**：管理员 RuntimeAuditQueryService、新 endpoint/候选/稳定导出、新第三页签、可信凭据关联补齐、访问 app 名称快照。
+**已实现**：广场第三类型、两处权限 UI、可见范围审计、系统操作日志查询与应用筛选；模型表/能力表/访问表真实写入路径。**本轮已接线（2026-10-24，本地定向验证）**：管理员 RuntimeAuditQueryService、v1 查询/候选/异步导出、第三页签、可信凭据关联及实际 binding 回收审计、访问名称快照。真实环境验收与最终 L2 仍待完成。
 
 ```mermaid
 flowchart LR
@@ -249,3 +249,14 @@ worker 按持久任务 tenant_execution_scope 初始化租户过滤，只有源�
 ### 2026-10-24 剩余设计问题复审
 
 F056-S1 修订：运行绑定的真实撤销生产者由凭据 Owner 公共协议消费，同 session 状态转移与审计，以状态 CAS/行锁去重；查询层不能补造历史事实。保留列表/异步导出的主链路，低概率的外部存储瞬断与 worker 任意指令点崩溃组合列为后续故障验收；权限失效、跨租户拒绝、CSV 安全和完整导出仍属于主功能，不因缩减测试而放宽。实现尚未开始，仍待单独确认本修订设计。
+
+
+### 2026-10-24 实现状态与交付合同补记
+
+- 新读域落 `bisheng/app_governance/{api,domain}`；三个事实表以白名单列读取，不 live join App，不改模型/能力的业务写入者。列表快照只保存条件，`scope_tenant_id=None` 表示已经核验的 global，申请者 tenant_id 保持非空；未额外存冗余 scope_mode。
+- `runtime_audit_source_timezone` 默认使用 `BISHENG_RUNTIME_AUDIT_SOURCE_TIMEZONE`，空时取进程 TZ，再取 UTC。它必须与事实表无时区时间的既有写入约定一致；查询条件/输出规范化 UTC，源时区冻结进快照。不补写历史时间或用户身份。
+- 导出任务在默认 Celery 队列注册，Beat 每 30 秒恢复过期租约并 GC。每次新 attempt 从源 SELECT 开头重新流式扫描，独立进度事务；已确认上传的不可变分块收束为 EOF manifest，ready CAS 受 epoch/holder/租约约束。申请工作租户的短事务领取限制并发；实际跨进程资源负载仍待部署测量。
+- 下载保留期从 ready 算 10 分钟，backend 认证代理下载，验证 manifest/hash/每块、设置固定 Content-Length，拒绝把中断当完整文件；每块前再核验当前身份/管理视图。新增 `POST /exports/{id}/cancel` 供用户和运维中止，GC 完成状态持久记录，终态快照可独立清理。
+- 管理视图通过 `admin.application.tenant_scope.current_admin_scope` 重新读取，worker 不依赖 HTTP middleware 的上下文或失败回退；不改变旧操作审计的权限语义。
+- UI 使用现有 LogPage 第三页签、三子视图、稳定翻页、历史候选搜索/分页和异步导出；切类别/租户隔离状态。菜单与原两个页签保留，错误码 16301–16304 和文案三语同提交。`LogPage` 改为命名导出，原惰性路由通过 then adapter 接入。
+- SQLite 本地定向结果不代替 MySQL/DM8 驱动或真实 MinIO/worker/FGA 验收。DM8 按用户口径仅检查模型/DDL 静态兼容。提测与低概率组合清单见 closeout-validation.md。

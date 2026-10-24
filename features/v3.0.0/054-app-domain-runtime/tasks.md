@@ -1,8 +1,8 @@
 # Tasks: 托管应用领域模型与运行时（compose 形态 + 统一入口）
 
-> **2026-10-23 增量 SDD**：用户已确认本轮规格；增量设计待单独确认。旧任务与旧评审状态仅描述历史批次；不代表本次增量已拆任务、编码或验收。本轮只做必要定向验证，不跑全量测试。旧任务的行号、计数和实现阶段为历史记录，当前实现快照以 design.md 为准。
+> **2026-10-23 增量 SDD**：用户已确认本轮规格，并于 2026-10-24 确认 F054/F056 修订设计。旧任务与旧评审状态仅描述历史批次；不代表本次增量已拆任务、编码或验收。本轮只做必要定向验证，不跑全量测试。旧任务的行号、计数和实现阶段为历史记录，当前实现快照以 design.md 为准。
 
-**关联规格**: [spec.md](./spec.md)（73 条 AC；已确认）· [design.md](./design.md)（D1–D15；本轮设计待单独确认；新接口合同 §4.4）
+**关联规格**: [spec.md](./spec.md)（73 条 AC；已确认）· [design.md](./design.md)（D1–D15；本轮设计已确认；新接口合同 §4.4）
 **版本**: v3.0.0
 **裁剪基准**: [mvp-114-path.md](../mvp-114-path.md) **§6 MVP-核心（预算受限版）** —— Wave 1–3 全部为 `[MVP-核心]`；Wave 4 = `[MVP-114]` 纵切紧随项（design §8 优先级 1–3）；Wave 5 = release 必做项。**后置 ≠ 裁掉**（spec 决议-3 对出站白名单已明确要求）
 **代码事实口径**: 本文所有 `文件:行号` 沿用 design.md（`3.0-vibe` HEAD `b63a320f2`，2026-08-17 由四份探查笔记 E1–E4 核实；路径以 `src/backend/bisheng/` 为根，前端另注 `platform/` = `src/frontend/platform/src/`、`client/` = `src/frontend/client/src/`，仓根路径显式写出）。行号会漂移、符号名不会——落地前以符号名重定位。
@@ -14,8 +14,8 @@
 | 步骤 | 状态 | 备注 |
 |------|------|------|
 | spec.md | ✅ 本轮增量已确认 | 2026-10-23 用户明确确认；批准内容 hash 见规格评审 JSON |
-| design.md | 🔲 本轮增量待确认 | 2026-10-23 第三轮设计评审 NEEDS_FIX / 独立 REVISE（B1 隔离恢复、S1 凭据回收审计）；用户未确认，未进入任务拆解或编码 |
-| tasks.md | ✅ 已拆解（2026-08-17） | 本文；`/sdd-review tasks` 独立审查 16 条已修订（补 7 个测试任务 T082a/T084a/T086a/T087a/T089a/T090a/T094a + 可观测任务 T097） |
+| design.md | ✅ 本轮增量已确认 | 2026-10-24 用户明确确认 F054/F056 修订设计；批准内容 SHA-256 `1762a7e504f032dcc218e554a7fb2748c5234d14d8575a60f98225321d8713dc` |
+| tasks.md | ✅ 历史任务已拆解；本轮见文末增量 | 本文；`/sdd-review tasks` 独立审查 16 条已修订（补 7 个测试任务 T082a/T084a/T086a/T087a/T089a/T090a/T094a + 可观测任务 T097） |
 | 实现 | 🚧 进行中 | Wave 1（T001–T017）· Wave 2 runtime-manager（T018–T031）与 app-proxy（T036–T045）· **Wave 2 backend 入口判定（T032–T035）** · **Wave 3 领域服务与 API（T046–T057）** · **Wave 3 构建页第三类型（T058–T061）** · **Wave 3 platform 前端（T062–T070）** 已完成；`uv run pytest test/app_runtime test/app_publish` = **484 passed / 7 skipped / 1 xfailed**（其中 `test/app_runtime` 单独 229 passed / 7 skipped；总数与 T057 那批的 346 不可直接相比——F055 同期在并发补测试）；`test/workflow/test_flow_dao_tenant_isolation.py` 7 → 8 例全绿，`test/api` 20 例全绿。platform `pnpm lint` + `pnpm typecheck` 全绿，前端单测 3 文件 16 例全通过（`src/test/hostedApp{Api,State,CardComponent}.test.*`）。余 T072 / T074（部分）/ T075（**T071** 于 2026-09-10 按代码证据核实并勾选）。**2026-08-19 收口批**：勾上 **T073**（nginx 仓内两份同构，实现早于勾选）；**T074 标 🟡 部分完成不勾**——compose 形态此前有三个真缺陷（app-proxy 环境变量名全错 / `bisheng-apps` 网络无人创建 / bind 路径用了容器坐标系），配置面已修正并新增 `docker/verify-app-runtime-compose.sh` 静态契约守卫 + `.github/workflows/app-runtime-quality.yml`，但**没有任何人真的用 compose 起过这两个 service**，逐条见该任务的实际偏差记录。⚠️ **这三个缺陷全部符合同一模式：systemd 形态恰好正确，所以掩盖了 compose 形态**——114 是 systemd，在 114 跑通不能证明 compose 跑得通，凡「两种部署形态」的任务都要分别验。**T062–T070 的联调与 E2E 仍未做**（后端契约现已齐备，可以开跑）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4；逐条偏差见各任务的「实际偏差记录」与文末汇总 |
 
 ---
@@ -664,7 +664,7 @@
   **覆盖 AC**: AC-14
   **依赖**: T077
   **落地记录**（2026-09-16）：`SOCKET_PROXY_PERMISSIONS`（开关 → 需要它的 Protocol 方法）+ `SOCKET_PROXY_DENIED`（**显式列出并写死为 0**，不靠镜像默认值——镜像换版本翻了某个默认值，仓库里什么都不会变）+ `socket_proxy_env()` 产出整份环境。manager 侧改动 = compose 里一行 `RTM_DOCKER_HOST: tcp://docker-socket-proxy:2375`，并撤掉 `docker.sock` 直挂。`tests/test_socket_proxy.py` 9 例：双向 lockstep（每个 Protocol 方法都有开着的开关 / 白名单里没有不存在的方法）、写方法都在 `POST` 门下、`EXEC`/`VOLUMES`/`ALLOW_RESTARTS` 恒 0、**compose 那段环境与 `socket_proxy_env()` 逐字相等**。`VERSION=0` 是真决定：`docker-py` 只有 `version="auto"` 才 `GET /version`，而 `_RealDockerBackend` 刻意不传——谁加了那个参数，该改的是这张表不是参数。
-  **实际偏差记录**: 任务里写的文件名是 `docker/docker-compose.yaml`，仓内真实文件是 `docker/docker-compose.yml`。真代理容器是否确实拒 `/exec`：`@pytest.mark.docker` 两例，114 验证。
+  **实际偏差记录**: 任务里写的文件名是 `docker/docker-compose.yml`，仓内真实文件是 `docker/docker-compose.yml`。真代理容器是否确实拒 `/exec`：`@pytest.mark.docker` 两例，114 验证。
 
 - [x] **T079**: `[MVP-114]` WS 反代 + 不变量① 测试
   **文件**: `src/app-proxy/tests/test_websocket.py`（新）
@@ -1059,3 +1059,63 @@
   **修法**：入口判定在不签 OBO 时返回不可用判定，app-proxy 渲染「本环境配置不完整，请联系平台管理员」页；backend 启动时对工场运行时层开启但 `obo_secret` 缺失或等于 `jwt_secret` 打 error 日志。
   **验收**：配置缺失或相同时访问任一托管应用得到配置不完整页，不进入应用；配置正确时行为不变。
 
+
+## 2026-10-24 修订设计确认后收尾任务
+
+本节优先于历史裁剪/阶段描述。用户确认原文：确认 F054/F056 修订设计，继续完成剩余开发并提测。只运行本功能必要的定向验证；真实部署证据与模拟测试分开登记，未执行不记通过。
+
+- [x] **T100**（基础设施）：节点隔离报告持久模型与独立新表；None 租户不适用于节点全局事实；显式全局报告；回滚停用并保留表，不删数据
+  - 文件：`src/backend/bisheng/app_runtime/domain/models/runtime_host_isolation.py`、`src/backend/bisheng/app_runtime/domain/repositories/host_isolation_repository.py`。
+  - 依赖：无（已确认设计）；配对：无（基础设施/交付）。
+- [x] **T101**（测试）：正式/预览缺失、空白、与会话相同配置拒绝，正常签发及存在性顺序，拒绝无成功访问
+  - 文件：`src/backend/test/app_runtime/test_entry_authz_service.py`、`src/backend/test/app_runtime/test_preview_entry.py`。
+  - 依赖：无（已确认设计）；配对：T102。覆盖 AC: AC-70, AC-71, AC-72, AC-73。
+- [x] **T102**（后端 Domain）：共用 OBO 配置诊断，入口仅允许有效签发，启动安全诊断
+  - 文件：`src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py`、`src/backend/bisheng/main.py`。
+  - 依赖：T101；配对：T101。
+- [x] **T103**（后端 API）：配置不完整三语兜底页，HTTP/WS 保持拒绝
+  - 文件：`src/app-proxy/app_proxy/pages.py`、`src/app-proxy/app_proxy/main.py`。
+  - 依赖：T102；配对：T101。
+- [x] **T104**（测试）：报告签名/身份/时效/配置绑定，iptables/nft 主链正反向及不支持配置拒绝
+  - 文件：`src/backend/test/app_runtime/test_host_isolation.py`、`src/runtime-manager/tests/test_host_isolation.py`。
+  - 依赖：T100；配对：T105、T106、T107。覆盖 AC: AC-66, AC-67, AC-68, AC-69。
+- [x] **T105**（后端 Domain）：独立 host-isolation HMAC 报告和持久校验，角色不能混用
+  - 文件：`src/backend/bisheng/app_runtime/domain/services/host_isolation_service.py`、`src/backend/bisheng/app_runtime/api/endpoints/host_isolation.py`。
+  - 依赖：T104；配对：T104。
+- [x] **T106**（后端 Domain）：Docker create/claim/ready/route 提交核对 fresh proof；清理不阻断；K8s 保持原门禁
+  - 文件：`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`、`src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py`。
+  - 依赖：T105；配对：T104。
+- [x] **T107**（基础设施）：宿主真实网络规则事务安装/恢复、配对 canary、失败隔离本模块工作负载；无写入者证明不清数据
+  - 文件：`src/runtime-manager/runtime_manager/host_isolation.py`、`deploy/runtime-manager/install-host-isolation.sh`。
+  - 依赖：T104；配对：T104。
+- [x] **T108**（基础设施）：宿主 timer/配置交付及 compose/systemd 安装说明，保留无关规则和实例
+  - 文件：`deploy/runtime-manager/README.md`、`docker/docker-compose.yml`。
+  - 依赖：T107；配对：无（基础设施/交付）。
+- [ ] **T109**（测试）：E2E 用例与提测清单；本轮定向 L1，实际宿主未执行项明确待验
+  - 文件：`src/backend/test/e2e/test_e2e_vibe_governance_closeout.py`、`features/v3.0.0/054-app-domain-runtime/closeout-validation.md`。
+  - 依赖：T103、T106、T108；配对：无（基础设施/交付）。覆盖 AC: AC-66, AC-67, AC-68, AC-69, AC-70, AC-71, AC-72, AC-73。
+
+增量任务审查：2026-10-24 `/sdd-review tasks` 第 1 轮发现三语任务粒度过大；已拆成每语两文件并补共享注册落点。第 2 轮 21 项检查 LGTM，证据见 `closeout-task-review.md`。后端按测试先行逐批落地，不把定向验证当部署验收。
+
+### 实际接线补充（同一批准范围）
+
+下列任务补齐共享配置、命名导出和测试夹具的文件归属；执行以依赖为准，配置/ORM 基础先于消费方。未引入新的业务需求。
+
+- [x] **T110**（基础设施）：为既有生命周期测试声明合成已验证宿主；真实证明另测，不把 fake 当主机验收
+  - 文件：`src/runtime-manager/tests/fakes.py`、`src/backend/test/app_runtime/test_runtime_delivery_repository.py`。依赖：T100；配对：定向用例见本功能 closeout-validation.md。
+- [x] **T111**（基础设施）：宿主 root oneshot/timer 安装单元，30 秒刷新，manager 不获 root/CAP_NET_ADMIN
+  - 文件：`deploy/runtime-manager/bisheng-host-isolation.service`、`deploy/runtime-manager/bisheng-host-isolation.timer`。依赖：T107；配对：定向用例见本功能 closeout-validation.md。
+- [x] **T112**（基础设施）：登记独立宿主报告配置/身份和审计源时间区；旧 YAML 顶层不新增字段
+  - 文件：`src/backend/bisheng/core/config/app_runtime.py`、`docker/.env.example`。依赖：T100；配对：定向用例见本功能 closeout-validation.md。
+- [x] **T113**（测试）：正式/预览旧 allow 不复用，拒绝页三语，真实 HTTP mock 计数及下次请求拒绝
+  - 文件：`src/app-proxy/tests/test_obo_configuration_page.py`、`src/app-proxy/tests/test_authz_and_fallback.py`。依赖：T101；配对：T102、T103、T116（F054）或 T049（F056）。覆盖 AC: AC-70, AC-71, AC-73。
+- [x] **T114**（后端 Domain）：Engine 适配器与 legacy 路由走公共宿主证明协议，停止不受证明门禁影响
+  - 文件：`src/runtime-manager/runtime_manager/docker_backend.py`、`src/runtime-manager/runtime_manager/api/routes.py`。依赖：T104；配对：定向用例见本功能 closeout-validation.md。
+- [x] **T115**（后端 Domain）：legacy probe 加本节点归属标签，供宿主失败停止确认
+  - 文件：`src/runtime-manager/runtime_manager/probe.py`。依赖：T104；配对：定向用例见本功能 closeout-validation.md。
+- [x] **T116**（后端 Domain）：只保留拒绝缓存；所有新 HTTP/WS 握手重新鉴权，不改路由缓存
+  - 文件：`src/app-proxy/app_proxy/clients.py`、`src/app-proxy/app_proxy/authz.py`。依赖：T113；配对：定向用例见本功能 closeout-validation.md。
+- [x] **T117**（后端 Domain）：证明读取设 3 秒超时，legacy 自检显示真实宿主证明状态
+  - 文件：`src/runtime-manager/runtime_manager/platform_client.py`、`src/runtime-manager/runtime_manager/api/readonly.py`。依赖：T114；配对：定向用例见本功能 closeout-validation.md。
+
+**2026-10-24 状态**：本轮主功能实现代码及定向用例已接齐；部署 E2E 与最终 L2 仍未完成。未执行全量测试，旧批次计数不表示本轮交付状态。新增接线的 L1 与证据见 `closeout-validation.md`；未对每个小任务保留独立的先红后绿日志，不宣称完整 TDD 历史。

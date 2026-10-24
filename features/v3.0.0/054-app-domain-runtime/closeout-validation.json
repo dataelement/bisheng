@@ -1,0 +1,308 @@
+{
+  "date": "2026-10-24",
+  "source_base": "818a12968",
+  "source_commit": "pending_local_commit",
+  "evidence_kind": "incremental_focused_checks_not_one_full_suite",
+  "deployment_accepted": false,
+  "full_suite_run": false,
+  "dm8": "model_and_ddl_static_only",
+  "arm64": "deferred_by_user",
+  "executions": [
+    {
+      "name": "backend",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/backend.txt",
+      "summary": [
+        "30 passed"
+      ],
+      "sha256": "c9d6433fa770f4af62fad5c2d55ded53e07b03c06944f544b346504ffa6b1ab9"
+    },
+    {
+      "name": "backend-final",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/backend-final.txt",
+      "summary": [
+        "31 passed"
+      ],
+      "sha256": "566c766ca0b3cb541a93b334dd4aa3c8df47eeb8bb50e6baf30e1d63e3ad1d46"
+    },
+    {
+      "name": "obo-final",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/obo-final.txt",
+      "summary": [
+        "48 passed"
+      ],
+      "sha256": "ca6567344e61d777377fda5ccecb5e6a2387965375e97409a2b095f64fee48f6"
+    },
+    {
+      "name": "proxy-cache",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/proxy-cache.txt",
+      "summary": [
+        "5 passed"
+      ],
+      "sha256": "ad430bcd751b836a91fab4ff65c168e7e4f252c79243c40745308b866b554cb7"
+    },
+    {
+      "name": "proxy-http-final",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/proxy-http-final.txt",
+      "summary": [
+        "4 passed"
+      ],
+      "sha256": "6a145783a5cbfd88733842418703ac7d87dd27ec619e724919231c769528467e"
+    },
+    {
+      "name": "manager-verified",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/manager-verified.txt",
+      "summary": [
+        "9 passed"
+      ],
+      "sha256": "ed12499504fb433a657b31ced875e7369343bf9696d2544d97d223e4f49c7d34"
+    },
+    {
+      "name": "host-and-lease",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/host-and-lease.txt",
+      "summary": [
+        "5 passed"
+      ],
+      "sha256": "29b8039be5a2e30f15cb13d769ae67824db561989cc5927a224126d87f1a79d1"
+    },
+    {
+      "name": "download-size",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/download-size.txt",
+      "summary": [
+        "1 passed"
+      ],
+      "sha256": "5a082ae33cb1d26fa1c51cb9dbbd4146628160819b4607ef6606e67c199ef535"
+    },
+    {
+      "name": "ui-final",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/ui-final.txt",
+      "summary": [
+        "9 passed"
+      ],
+      "sha256": "61db11f6962220df12e404d191fe414c26c37ee8dfc984b0e294ae4029e9190f"
+    },
+    {
+      "name": "ui-verified",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/ui-verified.txt",
+      "summary": [
+        "4 passed"
+      ],
+      "sha256": "9d152cfc9cba8b0428e39bc33d0c34cb54f8d98e3033aac820ba3de4860c963b"
+    },
+    {
+      "name": "e2e-collection",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/e2e-collection.txt",
+      "summary": [
+        "4 tests collected"
+      ],
+      "sha256": "d6a28ee4f4d200d3b1ca62f286fb65c3b3c08657f66faefec3ac533bffa02bf4"
+    },
+    {
+      "name": "typecheck-last",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/typecheck-last.txt",
+      "summary": [
+        "static output; inspect receipt"
+      ],
+      "sha256": "4460929d5faac8064a9690c9d4714845f5af8cb8e344e3e986148228a19ffc5c"
+    },
+    {
+      "name": "eslint-last",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/eslint-last.txt",
+      "summary": [
+        "static output; inspect receipt"
+      ],
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "arch-final",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/arch-final.txt",
+      "summary": [
+        "static output; inspect receipt"
+      ],
+      "sha256": "ba7bb3dee213582b6299f08589a5fed436abdaed15e2556886cde63238794e3b"
+    },
+    {
+      "name": "static-receipt",
+      "file": "docs/reviews/evidence/vibe-governance-closeout-2026-10-24/static-receipt.json",
+      "summary": [
+        "static output; inspect receipt"
+      ],
+      "sha256": "3bcc84fd4a91ce9a9018bd9623eb2caf13bff18c0503bbabc19788bcd68e58a9"
+    }
+  ],
+  "source_sha256": {
+    "deploy/runtime-manager/bisheng-host-isolation.service": "ed3e09481a69b888285806d7a78d68b945f4a8d82b6d695d900ada6e0986f26a",
+    "deploy/runtime-manager/bisheng-host-isolation.timer": "379edd51a9d5bd2fb46ab1fc26dc46430604884a12027f45ba52151567eb60cc",
+    "deploy/runtime-manager/install-host-isolation.sh": "674ae0065ae8a31eceaff88f8a8672ca3aa2045e01deabd71cd9e63abf9004d2",
+    "docker/.env.example": "fbaf36877ba9ed132574c72841c615b1fd65c277f113cf989bb09618d695b607",
+    "docker/docker-compose.yml": "e535febf55b45f5544351bd00d72f008a6d82d689c688cd9e74d6a1395b3dae8",
+    "src/app-proxy/app_proxy/authz.py": "ad2bc8147cc1bce8bcc6ae5187848f72026559269469ae9335e154004bc8eec5",
+    "src/app-proxy/app_proxy/clients.py": "74cc03b6020c9a27e31e1edd7495fbc4dc37b6f8fcf7219ad4590a611411f99f",
+    "src/app-proxy/app_proxy/main.py": "04c67fcc55af794cf5c964fcdd28bb057aa9093d17a9f6dc83f06227ee35062d",
+    "src/app-proxy/app_proxy/pages.py": "cb2a07c4830fa0bed561d2982a8c46d5a7d26b630b136b54930f73be9bb79c42",
+    "src/app-proxy/tests/test_authz_and_fallback.py": "a1344844d6835175c5de260cb736524e119a6ef69c631de26d87800a92b6e5d2",
+    "src/app-proxy/tests/test_obo_configuration_page.py": "55023f89ba330a8ed6d2fab642a88f02428d0959fd884d3e83a22fa227cf9287",
+    "src/backend/bisheng/admin/application/__init__.py": "b7c8ab99e5b51e027882a87dac6fa0812f69502498af621980244872d487c665",
+    "src/backend/bisheng/admin/application/tenant_scope.py": "4ac89f41fa7d79cce41e49b6a38d9bbf52ce027ecafc931d9545b767f42187ee",
+    "src/backend/bisheng/api/router.py": "0383e8543e33b0d63bc76ee2a2cb70af85bac31d71aadf9e98b8bbece30e4380",
+    "src/backend/bisheng/app_governance/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/backend/bisheng/app_governance/api/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/backend/bisheng/app_governance/api/router.py": "40a19200792e6a7547ec8f97f347c548c0d73bdc529ea34023703ee27dc0ca58",
+    "src/backend/bisheng/app_governance/domain/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/backend/bisheng/app_governance/domain/models/__init__.py": "45c540050c373553e7e98e6c790753a7210a4c6dc0572285e9f69156d6cd5e36",
+    "src/backend/bisheng/app_governance/domain/models/runtime_audit.py": "7104faa06f47abe41f7d800b6e4fbc23b62393b408a3b82f834634a9561fb43b",
+    "src/backend/bisheng/app_governance/domain/repositories/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/backend/bisheng/app_governance/domain/repositories/runtime_audit_export_repository.py": "2e7b35732fdc94506fca6b3be2c1540546adadfb116add2671c87de117e1dcc4",
+    "src/backend/bisheng/app_governance/domain/repositories/runtime_audit_repository.py": "68a8aacfd22efae13b6bd073ad3ce080529e7961e9039b689323a87881def37b",
+    "src/backend/bisheng/app_governance/domain/schemas/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/backend/bisheng/app_governance/domain/schemas/runtime_audit.py": "9e12b95c53f10f42c8a4ba4255f03755cfbfb8ec8aff5efd12bdc523862d51f8",
+    "src/backend/bisheng/app_governance/domain/services/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/backend/bisheng/app_governance/domain/services/runtime_audit_export_service.py": "7f91eab2f453d7731d6a10fd6a986a1b47701039d46ec7b152fe5ded4ac8b803",
+    "src/backend/bisheng/app_governance/domain/services/runtime_audit_query_service.py": "f4b11d782a6adf889db05e68a66bd815e7e98c666439f228d659ab0abeb8f5eb",
+    "src/backend/bisheng/app_governance/domain/services/runtime_audit_scope.py": "6c12a018797b9bf68915f9531e131f2e3b766a6437d3f20cf01e50534412779e",
+    "src/backend/bisheng/app_governance/domain/services/runtime_audit_storage.py": "faae95c2f1e5fb73ce60b27896061676c3e1cb41bfb2aa87da4eae27c02cbaff",
+    "src/backend/bisheng/app_runtime/api/endpoints/host_isolation.py": "d8c05b88c16d1613796d1060e88c5e2d5cd9c72d81ef119639a73066a473a558",
+    "src/backend/bisheng/app_runtime/api/router.py": "d215b83dc12c75b57ec5a1e65fea4f13d7d400988362f7d46fc742ef1a3ecbc2",
+    "src/backend/bisheng/app_runtime/domain/models/__init__.py": "768bbd9a6bf3fc9a9c8ad01f63ed8ab8f36ffab8110803839ef62827c7c65690",
+    "src/backend/bisheng/app_runtime/domain/models/runtime_host_isolation.py": "0392978447ad8b1ae8f239647819307367222d1f1a93989902d9ef361d5e4e1d",
+    "src/backend/bisheng/app_runtime/domain/repositories/host_isolation_repository.py": "76dc5973f622c32bcadcdf4acfd237d2297445fc00049b3f713f2105291ae318",
+    "src/backend/bisheng/app_runtime/domain/repositories/runtime_delivery_repository.py": "e59af036a600545395dc8cc0b90bb762e95278608fe1db465347941eb61d0b26",
+    "src/backend/bisheng/app_runtime/domain/services/app_access_log_service.py": "a46316944cffcdca78631a1f0cd3efa9164dec9667375678acd79c9e7741c670",
+    "src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py": "07cfa45ea439b42b98a62e4b0fbc041d4e7dcead9215a841198b41b6665ddb5e",
+    "src/backend/bisheng/app_runtime/domain/services/host_isolation_service.py": "6156832d2dad24e47eada16695162dd4b7ccd2976d850a506646ab8216a70ed0",
+    "src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py": "afeb89c1128203430ad79bca15562fb7166b7f1bf3f0baeb2a08a75c5a619755",
+    "src/backend/bisheng/app_runtime/domain/services/runtime_projection_service.py": "63807575dca0082c76bf826dc34121d849ff12b262ecec2ae5c8d80e8a2d529b",
+    "src/backend/bisheng/common/errcode/app_governance.py": "d09ff1d629fda4c9f9ff48bc4de556f5fe2d603a6cdf80118782f14cbd3512e3",
+    "src/backend/bisheng/core/config/app_runtime.py": "b199be9ae5bd6cafa7b3031cb1a252968f46f2413916495b35ad421ce4819f3b",
+    "src/backend/bisheng/core/config/settings.py": "1e74c7617c548c03d331c306354caadd6664d9e543824509aa805b14877832f5",
+    "src/backend/bisheng/core/database/alembic/versions/f056_access_name_snapshot.py": "c285dda11faacbc21a0400d94a61e515529789ba113c7b041fcf597f84ba1bb9",
+    "src/backend/bisheng/core/database/tenant_filter.py": "4b06c292144e215d102d04fb2fd8dcd9e754e49efab2b3c24f03e245e2766317",
+    "src/backend/bisheng/database/models/app_access_log.py": "36498cb4581efdc6716d67a3d2c69d1bc3c9034a1941e144802834802e5ff7fb",
+    "src/backend/bisheng/main.py": "0c041db464ff1b202c7cd9f35e9d02b97d6cb65ad22a18988afd58ad7e6e2731",
+    "src/backend/bisheng/open_api/application/__init__.py": "ec8c53d600465fa24f8db753476d22c827bb9baa36310fea1e8e7389f4c740a6",
+    "src/backend/bisheng/open_api/application/runtime_credentials.py": "49d1bf9a263973f848b7692d3e6115a69f281ddb53d83002609ffd102987cc08",
+    "src/backend/bisheng/open_api/domain/repositories/credential_repository.py": "61ec2b4b79f6c4389e9aa919d62ccd9e95d3c6d3f1eb7cce6fc931bc4c8cf20a",
+    "src/backend/bisheng/open_api/domain/services/credential_service.py": "094cdb3a8cdf73f8773b77b123f222b6c7915da2b1903703620f1b880412a219",
+    "src/backend/bisheng/worker/__init__.py": "5ebd79bfbc31a58cf7ed3cd99b6880782621b26cbf8069d57c4ab3f1afb27ba1",
+    "src/backend/bisheng/worker/runtime_audit/__init__.py": "64fa6c65253fc46bec85ebf0bbe3eb59bb9107f5d8819176f55fc2170baf856e",
+    "src/backend/bisheng/worker/runtime_audit/tasks.py": "b7cf59e92ddc112978d81084f416731359d08ecacded5ee9180a5270d82c3d9d",
+    "src/backend/test/app_governance/test_runtime_audit_export.py": "8a0e99a478213119846a2b312d202b0228863bf772726d68b8cd72d6dbbd7bea",
+    "src/backend/test/app_governance/test_runtime_audit_query.py": "a34cabba9dd20205c0f7bc25bfc219f2b8aef194338da1ea7b821ef44c028654",
+    "src/backend/test/app_runtime/test_entry_authz_service.py": "f1abc773a7ac8400f56615761a9293632be384025c4b4bdfbf4a7e646570d1e2",
+    "src/backend/test/app_runtime/test_host_isolation.py": "3c29d392f9a05acf1b9421d6205b7666e46794f5148040681cba09b5a311a8f2",
+    "src/backend/test/app_runtime/test_preview_entry.py": "343192fc19ba4b357471e29fd5f3a64919553260ec87ad20105341906e602820",
+    "src/backend/test/app_runtime/test_runtime_delivery_repository.py": "0c211041c903de4d67a396b016f5b9919c4f39fafc1ce98bd9e65927c7c1d06c",
+    "src/backend/test/e2e/test_e2e_vibe_governance_closeout.py": "4b7145a2bffd38fdf335c65a4d8143b7c86de23ec87e308e7975ec17356511af",
+    "src/backend/test/open_api/test_runtime_credential_audit.py": "64a138f839ba4743ca2a2c8b369c1cd58cade1717f52fe351fc31d75d5b5e5de",
+    "src/frontend/packages/locales/src/api_errors/en.json": "2df4f93d72ebc294f31e3954605069829a07e969dc4e2fb7c1986b6cddc29a9a",
+    "src/frontend/packages/locales/src/api_errors/ja.json": "a49a67e8fcd51125a6b9b8c856ee7158de1454169b058fc771606f6d824df023",
+    "src/frontend/packages/locales/src/api_errors/zh-Hans.json": "bca642ce763ce959bb5f0147ae61ca7311a2c226ec16a1dc9f212f5b8282ad8c",
+    "src/frontend/platform/eslint-suppressions.json": "167c1ad24cbd4fc31255560b2a4c82f81aec416f9ce54f24d1a9512a23325f56",
+    "src/frontend/platform/public/locales/en-US/bs.json": "53af0b8d7a3d346507bafea371666e40a1bb078fcad29db491ba7d071a146d2e",
+    "src/frontend/platform/public/locales/ja/bs.json": "71239c7e4a8f38448de1c426ead50979ebb2db643e6cf4dae448924efc61c6f4",
+    "src/frontend/platform/public/locales/zh-Hans/bs.json": "a369ca80bc335bb504ef9d603da0d10aea8eb1a4fc6922fdee235348fc471f8a",
+    "src/frontend/platform/src/controllers/API/runtimeAudit.ts": "64fbcd101fce1e8cc28adc34fef54e7d7261b6d8f9058b94f14b9a1dbea8de0e",
+    "src/frontend/platform/src/pages/LogPage/index.test.tsx": "6bfb7e4389ef7005d9871066ac9cc9e68ed0433adbf88c1aa69b84e4c5eef516",
+    "src/frontend/platform/src/pages/LogPage/index.tsx": "a870c455127315a11cae7eaa2b2bf466a10265f51ba644c4cf65b3f0a16900c7",
+    "src/frontend/platform/src/pages/LogPage/runtime/RuntimeAuditPanel.tsx": "a11bdf8879e0f1d7a4f15a6e5037ced9e726a3f88012f8cedb37e1e44866ecc6",
+    "src/frontend/platform/src/pages/LogPage/runtime/useRuntimeAudit.ts": "b320d0294dfa5532a3c859a248ff8cf5b88169828a5a7f7c5938ccd295b5f55a",
+    "src/frontend/platform/src/routes/index.tsx": "e94b5b580c583e7aa2f835ed85a8d81233dff94387902fd9a066f02ba8de42a5",
+    "src/frontend/platform/src/test/runtimeAudit.test.tsx": "6bc8723ae25604bc4d48be735959dafd07def9545ce509b0977bad41b5dcba37",
+    "src/runtime-manager/runtime_manager/api/readonly.py": "89f9e4060b315fc81314656afe6777368200e61deb817b66637b6d8da7aa240d",
+    "src/runtime-manager/runtime_manager/api/routes.py": "b44cece784f1d5e556756bb70390eec9e2823f9e2e3aaf8797837edd2e0f6c3a",
+    "src/runtime-manager/runtime_manager/docker_backend.py": "1eca95b55d221b68a7230996d974fca45a5fa4f7f0370037ffcb825960293a0b",
+    "src/runtime-manager/runtime_manager/host_isolation.py": "d0f160b790bf8147f0e4ed669604f37f8a1c16f43220fb7a2d61450ea00c6acb",
+    "src/runtime-manager/runtime_manager/platform_client.py": "e00a1588c698ec433ab7ae85768bc28073df3caa1e404263138f311d854be260",
+    "src/runtime-manager/runtime_manager/probe.py": "38afbfaf76afe2b3c13f22813699a3b177bc82f36dddd406b9196b9c4b4adbed",
+    "src/runtime-manager/tests/fakes.py": "037e1b28186bcec252fa9b40254a51ac358d1345707974979c98af388fc0ab0b",
+    "src/runtime-manager/tests/test_host_isolation.py": "58d958766b7a261eef4f51c8493dc8fbf25172ad654b05dd1dd3a44f4d12f2a9"
+  },
+  "acs": [
+    {
+      "ac": "AC-66",
+      "implementation": "implemented_local",
+      "local_evidence_files": [
+        "src/runtime-manager/tests/test_host_isolation.py",
+        "src/backend/test/app_runtime/test_host_isolation.py"
+      ],
+      "deployment_acceptance": "pending",
+      "notes": "Local protocol/SQL/component evidence; not a real host/cluster acceptance claim"
+    },
+    {
+      "ac": "AC-67",
+      "implementation": "implemented_local",
+      "local_evidence_files": [
+        "src/runtime-manager/tests/test_host_isolation.py",
+        "src/backend/test/app_runtime/test_host_isolation.py"
+      ],
+      "deployment_acceptance": "pending",
+      "notes": "Local protocol/SQL/component evidence; not a real host/cluster acceptance claim"
+    },
+    {
+      "ac": "AC-68",
+      "implementation": "implemented_local",
+      "local_evidence_files": [
+        "src/runtime-manager/tests/test_host_isolation.py",
+        "src/backend/test/app_runtime/test_host_isolation.py"
+      ],
+      "deployment_acceptance": "pending",
+      "notes": "Local protocol/SQL/component evidence; not a real host/cluster acceptance claim"
+    },
+    {
+      "ac": "AC-69",
+      "implementation": "implemented_local",
+      "local_evidence_files": [
+        "src/runtime-manager/tests/test_host_isolation.py",
+        "src/backend/test/app_runtime/test_host_isolation.py"
+      ],
+      "deployment_acceptance": "pending",
+      "notes": "Local protocol/SQL/component evidence; not a real host/cluster acceptance claim"
+    },
+    {
+      "ac": "AC-70",
+      "implementation": "implemented_local",
+      "local_evidence_files": [
+        "src/backend/test/app_runtime/test_entry_authz_service.py",
+        "src/backend/test/app_runtime/test_preview_entry.py",
+        "src/app-proxy/tests/test_obo_configuration_page.py"
+      ],
+      "deployment_acceptance": "pending",
+      "notes": "Local protocol/SQL/component evidence; not a real host/cluster acceptance claim"
+    },
+    {
+      "ac": "AC-71",
+      "implementation": "implemented_local",
+      "local_evidence_files": [
+        "src/backend/test/app_runtime/test_entry_authz_service.py",
+        "src/backend/test/app_runtime/test_preview_entry.py",
+        "src/app-proxy/tests/test_obo_configuration_page.py"
+      ],
+      "deployment_acceptance": "pending",
+      "notes": "Local protocol/SQL/component evidence; not a real host/cluster acceptance claim"
+    },
+    {
+      "ac": "AC-72",
+      "implementation": "implemented_local",
+      "local_evidence_files": [
+        "src/backend/test/app_runtime/test_entry_authz_service.py",
+        "src/backend/test/app_runtime/test_preview_entry.py",
+        "src/app-proxy/tests/test_obo_configuration_page.py"
+      ],
+      "deployment_acceptance": "pending",
+      "notes": "Local protocol/SQL/component evidence; not a real host/cluster acceptance claim"
+    },
+    {
+      "ac": "AC-73",
+      "implementation": "implemented_local",
+      "local_evidence_files": [
+        "src/backend/test/app_runtime/test_entry_authz_service.py",
+        "src/backend/test/app_runtime/test_preview_entry.py",
+        "src/app-proxy/tests/test_obo_configuration_page.py"
+      ],
+      "deployment_acceptance": "pending",
+      "notes": "Local protocol/SQL/component evidence; not a real host/cluster acceptance claim"
+    }
+  ],
+  "revised_existing_acs": [],
+  "html_visual_acceptance": "not_performed_file_protocol_blocked_by_browser_policy",
+  "receipt_normalization": "terminal trailing blank lines removed; output content unchanged"
+}

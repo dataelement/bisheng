@@ -274,7 +274,7 @@ class RuntimeOperationService:
         if not identity.node_id or (body.executor_kind == "kubernetes" and set(identity.roles) != {"manager"}):
             raise RuntimeConflict("node_identity_required")
         ready = self._node_report(body)
-        async with self.repo.transaction():
+        async with self.repo.transaction() as session:
             node = await self.repo.get(RuntimeNode, identity.node_id, lock=True)
             if node and (
                 node.engine_id != body.engine_id
@@ -308,6 +308,18 @@ class RuntimeOperationService:
                             if binding_gap:
                                 resource.binding_policy_verified = False
                             await self.repo.save(resource)
+            else:
+                from bisheng.app_runtime.domain.repositories.host_isolation_repository import HostIsolationRepository
+
+                try:
+                    await HostIsolationRepository.require(
+                        session, node, settings.app_runtime.runtime_host_isolation_nodes.get(node.id)
+                    )
+                    capabilities["host_isolation_ready"] = True
+                    node.status = "ready" if ready else "blocked"
+                except RuntimeConflict:
+                    capabilities["host_isolation_ready"] = False
+                    node.status = "blocked"
             node.capabilities, node.probe_report = capabilities, copy.deepcopy(body.probe_report)
             await self.repo.save(node)
         return self._node_document(node)
@@ -358,6 +370,8 @@ class RuntimeOperationService:
         }
 
     async def claim(self, op, identity, *, command_nonce=None):
+        if op.kind in {"prepare", "probe", "preview", "deploy", "restore", "migrate"}:
+            await self.repo.require_host_isolation(op.node_id)
         if op.payload.get("environment_required") and not op.payload.get("sealed_env"):
             raise RuntimeConflict("environment_not_ready")
         if command_nonce and not await self.nonce_store(f"runtime:v2:command:{identity.key_id}:{command_nonce}", 3600):
@@ -424,6 +438,15 @@ class RuntimeOperationService:
                 raise RuntimeConflict("runtime_ready_target_unconfirmed")
 
     async def fact(self, op, identity, body):
+        if body.phase in {"preparing", "starting", "ready", "serving"} and op.kind in {
+            "prepare",
+            "probe",
+            "preview",
+            "deploy",
+            "restore",
+            "migrate",
+        }:
+            await self.repo.require_host_isolation(op.node_id)
         if body.node_id != identity.node_id:
             raise RuntimeConflict("node_identity_mismatch")
         if body.phase == "ready" and op.kind in {"deploy", "restore", "preview"}:
@@ -580,8 +603,15 @@ class RuntimeOperationService:
         route = rows[0]
         with bypass_tenant_filter():
             node = await self.repo.get(RuntimeNode, route.node_id)
-        if node and node.executor_kind == "kubernetes" and node.status != "ready":
+        if node is None:
+            return {"decision": "transition", "phase": "node_unavailable"}
+        if node.executor_kind == "kubernetes" and node.status != "ready":
             return {"decision": "transition", "phase": "unhealthy"}
+        if node and node.executor_kind == "docker":
+            try:
+                await self.repo.require_host_isolation(node.id)
+            except RuntimeConflict:
+                return {"decision": "transition", "phase": "host_isolation_unavailable"}
         if route.status != "serving":
             return {"decision": "transition", "phase": route.status}
         return {

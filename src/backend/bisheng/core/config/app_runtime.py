@@ -77,6 +77,12 @@ class AppRuntimeConf(BaseModel):
     runtime_service_keys: dict[str, dict] = Field(
         default_factory=lambda: json.loads(os.environ.get("BISHENG_RUNTIME_SERVICE_KEYS", "{}")), repr=False
     )
+    runtime_audit_source_timezone: str = Field(
+        default_factory=lambda: os.environ.get("BISHENG_RUNTIME_AUDIT_SOURCE_TIMEZONE") or os.environ.get("TZ") or "UTC"
+    )
+    runtime_host_isolation_nodes: dict[str, dict] = Field(
+        default_factory=lambda: json.loads(os.environ.get("BISHENG_RUNTIME_HOST_ISOLATION_NODES") or "{}")
+    )
     runtime_protocol_version: int = Field(
         default_factory=lambda: int(os.environ.get("BISHENG_RUNTIME_PROTOCOL_VERSION", "1")), ge=1, le=2
     )
