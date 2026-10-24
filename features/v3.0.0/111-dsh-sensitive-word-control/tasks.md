@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认，后续取舍已同步 |
 | design.md | ✅ 已评审 | 用户于本轮明确“设计可以”，包含现有共享 HMAC、可信身份变化和既有分页取舍 |
 | tasks.md | ✅ 已拆解 | 经 sdd-review tasks 静态评审 LGTM；不代表任务已执行 |
-| 实现 | 🔄 进行中 | 177 / 195；核心实现及配对自审至Wave32，T119/T120 MySQL子项通过，DM8及完整E2E/容量/演练待验 |
+| 实现 | 🔄 进行中 | 179 / 196；核心实现及配对自审至Wave32，T119/T120 MySQL子项通过，DM8及完整E2E/容量/演练待验 |
 
 ## 2. 执行约定与仓库范围
 
@@ -2750,7 +2750,7 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 
   **逻辑与验证**：AC-46要求稳定request_started与独立model_started可辨；已用真实组件复现字段存在却未显示。沿既有详情dl行显示模型开始/未知/未执行，保留请求排序与原时间，不新增视觉样式。配对RED/GREEN及相邻回归。**依赖**：T189、T190、T106。
 
-- [ ] **T192 Desktop Undici 既有补丁接收者兼容修复**
+- [x] **T192 Desktop Undici 既有补丁接收者兼容修复**
 
   **类型**：基础设施/测试 · Desktop。**文件**：Desktop `patches/undici+8.11.2.patch`；`test/undici-legacy-headers.test.mjs`。
 
@@ -2762,17 +2762,35 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 
   **逻辑与验证**：同步T185/T186最终60配对/主独立882回归、两次独立语义对照，明确旧108eb5c8不可部署及真实环境待验；与B design/code-review交叉一致，无凭据。**依赖**：T186。
 
-- [ ] **T194 真实HTTP验收共享helper接入**
+- [x] **T194 真实HTTP验收共享helper接入**
 
   **类型**：测试基础设施。**文件**：`src/backend/test/e2e/helpers/dsh.py`；`src/backend/test/e2e/helpers/dsh_content_safety.py`。
 
   **逻辑与验证**：复用真实RSA登录会话和原S256 PKCE，支持精确API/Origin且不破坏旧调用，live缺配置fail-loud；只读0600显式session，测试资源ID/前缀登记和GET确认/CAS恢复，无JWT伪造/生产SQL写。创建offline测试模型前核既有全局默认引用，避免set_default_model自动改变空默认。**依赖**：T179。
 
-- [ ] **T195 无费用受控Provider测试设施**
+- [x] **T195 无费用受控Provider测试设施**
 
   **类型**：测试基础设施。**文件**：`src/backend/test/e2e/helpers/dsh_content_safety_provider.py`。
 
   **逻辑与验证**：stdlib真实HTTP Chat/Responses流与非流，确定场景/有界调用计数，只有合成随机test key、opaque marker，无外部模型、原文/凭据日志。仅109 DSH私网临时容器，控制面只loopback经SSH隧道；不得接入其他部署。**依赖**：T194。
+
+- [x] **T196 真实上游全局计数与独立快照场景**
+
+  **类型**：测试基础设施。**文件**：`src/backend/test/e2e/helpers/dsh_content_safety_provider.py`；`src/backend/test/e2e/helpers/dsh_content_safety.py`。
+
+  **逻辑与验证**：负向零scenario计数无法排除marker丢失，增认证的有界全局物理model POST计数（含未标记/unknown/非法JSON/拒绝，排除control/health）；T121同时核global+scenario及正例marker保真。严格final_parts/done_parts/emit_deltas合成场景覆盖安全delta、最终新增命中，不在E2E里替换生产scanner。真实loopback先RED后GREEN并保留原27/33；无额外业务API。**依赖**：T194、T195。
+
+- [x] **T197 离线模型治理元数据快照与鉴权配对**
+
+  **类型**：兼容修复/测试。**文件**：`src/backend/bisheng/llm/domain/services/llm.py`；`src/backend/test/dsh/test_model_visibility_metadata.py`。
+
+  **逻辑与验证**：真实源码确认管理visibility复用调用快照，offline被拒，无法在上线前配置私有范围；新增独立治理元数据读取，复用既有tenant/Root FGA/provider归属校验，模型调用快照继续要求online。先RED后GREEN覆盖offline治理、调用拒绝及跨租户边界。**依赖**：T179。
+
+- [x] **T198 管理可见性接入治理快照**
+
+  **类型**：兼容修复/测试。**文件**：`src/backend/bisheng/dsh/api/endpoints/unified_policy.py`；`src/backend/test/dsh/test_model_visibility_metadata.py`。
+
+  **逻辑与验证**：仅在既有admin authorize/profile_scope后用治理快照，允许offline GET/PUT visibility后再上线；CAS和模型调用鉴权不变，不制造默认公开可用窗口。精确API配对与相邻回归。**依赖**：T197。
 
 ## 5. AC → 测试任务追溯
 
@@ -2852,7 +2870,7 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 
 ## 8. 文档与执行检查
 
-初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后当前195项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。59条AC追溯表按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
+初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后当前198项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。59条AC追溯表按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
 
 ## 9. 执行记录
 

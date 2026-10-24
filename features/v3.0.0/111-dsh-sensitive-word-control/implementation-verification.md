@@ -3,7 +3,7 @@
 - 首次记录：2026-10-23；更新至：2026-10-24
 - 执行范围：用户于2026-10-24新增授权合入最新work120并推送，经Drone构建后仅部署109 DSH13001并启动当前客户端联调；历史“不提交/推送/部署”描述仅指当时阶段。
 - 基线：B 2e6b5ae0；G 2995df6f；D 01e09d0，工作树及完整提交见 tasks §2。
-- 当前阶段：核心实现及work120兼容候选源码审查完成，任务177/195；T119/T120的MySQL子项已独立通过，Linux DM8、完整授权E2E、容量与演练尚待验收。下文按实施顺序保留历史证据，早期“尚未执行/尚未实现”描述仅指当时阶段，最新结果见末尾记录。
+- 当前阶段：核心实现及work120兼容候选源码审查完成，任务179/196；T119/T120的MySQL子项已独立通过，Linux DM8、完整授权E2E、容量与演练尚待验收。下文按实施顺序保留历史证据，早期“尚未执行/尚未实现”描述仅指当时阶段，最新结果见末尾记录。
 
 ## 1. 执行记录
 
@@ -626,3 +626,22 @@ Gateway候选108eb5c8七维审查NEEDS_FIX：实际Java证明同message相邻out
 - Desktop6c84d46正式build通过、临时Profile实际启动日志有Harness is ready，所有userData/session/log路径均在/private/tmp/f111-desktop-live.d65u13l2。原生CUA窗口检查异常耗时，只返回空窗口，未据此宣称完整UI验收。完整npmtest：2810PASS/5FAIL/3SKIP及3unhandled；typecheck通过。Python3.10 chdir环境问题用已有3.11独立7PASS，SSE readiness原用例单独1PASS但非全量通过。既有Undici private receiver真实故障登记T192修复。为依赖重放仅退出本轮5347，已确认5347/5368退出及43228/43230清空，不清用户profile。
 
 当前候选B/G源码审查与聚焦门禁已收口，T192及真实部署/客户端登录/E2E/容量继续推进。未把LinuxDM8缺环境或全量legacy lint当作通过。
+
+
+T194/T195 L1主完整读105/376/680行源，C独立复跑27合成边界+33真实loopback/SDK及额外15实际协议/资源检查均PASS，无HIGH；0600/Origin/真实PKCE/独立HTTP客户/CAS恢复与仅自有资源约束通过。Provider无外部网络client，32槽/128场景/128KiB及合成文本32KiB有界，不记录正文/Token。网络发布/故障和真实E2E仍非本地probe证明。发现scenario0不能排除未标记调用，登记T196增强物理全局计数与final独立版本fixture，T121不得以旧计数误证输入0。主真实账号只读核知识/评估/助手/工作台所需默认已配置（实际API为嵌套envelope，未写默认）。
+
+交付：B正常merge并远端读回ecf43f79c8aa31bc645636e94b78fb1c9a74bcf9；G最终faa6463b14cc908e6e507241a9d280efb040e80e同名分支与唯一DSH tag原子推送并读回。Drone B5623/G403均SUCCESS，G stage只有clone/package/image/notify四步，115部署步骤被ref条件过滤。109使用原有cr入口拉取，digest逐一等CI日志；未修改共享Docker daemon的insecure registry配置。
+
+
+T196 PASS：C独立读冻结404/767行helper/Provider，13新增+原27/33以及额外10真实loopback检查通过，含32混合并发/global32、饱和不回绕并由helper拒绝、独立delta/done/final观察。主逐项读最终合同与报告，通过私网部署gate。实际109仅临时f111-provider容器加入dsh-integration，控制面宿主127.0.0.1:18181经SSH，本轮随机0600测试key，不连接外部模型。现场协议仍未验。
+
+T192 PASS_WITH_NOTES：主读最终补丁/10配对及完整报告；标准clean npm ci 34patch成功，原包reverse/replay与真实安装SHA一致，package/lock未变。既有Mac CI=1串行配置+临时已有Py3.11 PATH完整2820PASS/3SKIP、0FAIL/0unhandled，472.78s；此前默认并行2817PASS/2FAIL的两个原物理复制超时记录保留，不宣称已证明竞争机制。最终npm run build再次exit0，已实际启动最终补丁客户端；隔离Profile与Harness ready成立，完整UI/模型/工具验收另列。
+
+109实际交付：B/G四目标容器镜像ID均等本次CI digest，B健康200、UI200；backend升级到f111_dsh_content_safety。实际ConfigService没有自动SSOSyncConf env覆盖，首次runtime hmac_configured=false（env已到达）；使用其既有YAML !env构造器引用0600env_file的共享key/header，真实load_settings_from_yaml内部值校验通过，仅重建backend/worker后实际hmac_configured=true。未把共享key明文写YAML/文档/Git。Gateway随后只重建指定gateway。部署前后所有非四目标容器ID/image/startedAt逐字节相等，额外仅本轮测试Provider。
+
+真实联调阻塞：GET /api/license/status actual expired=true，两个/api/sensitive/dsh管理接口HTTP200但status_code11001；已请求适用有效License，不绕过。独立发现work120离线模型管理复用online调用快照阻止安全上线前私有配置，登记T197/T198最小修复后再创建测试模型；不先online制造公开窗口。DM8/完整E2E/容量仍未执行。
+
+
+T197/T198 PASS：C持久16配对先11FAIL/5PASS→服务14PASS/管理2RED→全部16PASS；B独立五文件71PASS，主独立相关70PASS/5环境skip+新模型初始化1PASS。主完整读三源，Ruff/archguard/diff通过；管理只在既有admin authorize/profile_scope后读取独立治理快照，调用路径固定online_required=True，canonical Root共享和provider-owner核查不变，CAS409/倍率保持。新测试替换管理认证外端口，非admin真实现场拒绝另验，不夸称真实角色/双库证明。C扩大12旧文件用完整精确HEAD service源码和current各跑133PASS/同4FAIL/同1缺环境ERROR，属既有默认DB mock与DSH_TEST_DATABASE_URL条件；不改夹具求绿。109已创建本轮server5与model8/9，两个offline/status0，所有既有默认模型快照逐字节不变；安全收窄与上线等待包含该修复的新镜像。
+
+Desktop最终两源补丁已提交3e8486c；本轮已启动进程含该补丁，真实公开state connected=true/phase=connected、目录0（尚未开测试模型），不冒模型执行证明。

@@ -36,7 +36,7 @@ async def visibility(
     with profile_scope(tenant):
         from bisheng.llm.domain.services.llm import LLMService
 
-        await LLMService.get_dsh_model_snapshot(model_id)
+        await LLMService.get_dsh_model_metadata_snapshot(model_id)
         return resp_200(data=await policy_transaction(lambda repo: repo.visibility(model_id)))
 
 
@@ -52,7 +52,7 @@ async def save_visibility(
     with profile_scope(tenant):
         from bisheng.llm.domain.services.llm import LLMService
 
-        await LLMService.get_dsh_model_snapshot(model_id)
+        await LLMService.get_dsh_model_metadata_snapshot(model_id)
         return resp_200(data=await policy_transaction(lambda repo: repo.save_visibility(model_id, user.user_id, body)))
 
 

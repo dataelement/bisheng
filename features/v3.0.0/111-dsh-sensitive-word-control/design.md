@@ -376,6 +376,8 @@ Desktop 将 content_blocked/content_filter 统一映射为不可重试的 CONTEN
 
 | 25 | Responses同消息连续part按content_index独立扫描会漏跨part词，delta/done/final观察又可能互相抹除 | 已支持文本跨块绕检，甚至part.done提前泄漏尾部 | §4.6同逻辑域连续检查，§9保留有界首尾/条目尾屏障和混合观察候选预算 |
 | 26 | react-query开发logger会输出保存错误的Axios配置；实际Card未显示model_started_at | 草稿/请求凭据进入开发日志；请求时间与模型执行时间无法区分 | §9局部安全logger及独立模型开始时间详情行 |
+| 27 | 现场ConfigService为YAML BaseModel加载器，SSOSyncConf文档的自动env覆盖并未实现 | 容器收到共享HMAC env仍无法验签 | 部署复用既有`!env`构造器显式引用env_file，实际load/readback确认，不将key明文写YAML |
+| 28 | 管理visibility复用要求online的模型调用快照 | 离线私有配置被拒，上线再收窄会形成公开窗口 | T197/T198独立治理快照保留tenant/Root校验，调用快照继续要求online |
 
 ## 6. 对外契约与依赖
 
@@ -734,3 +736,6 @@ T185/T186：Responses保留同item同channel各part的实际delta及显式done�
 T188–T191：策略局部QueryClient关闭原始error对象日志，仍保留页面失败反馈/草稿/CAS冲突；请求详情沿既有dl行独立显示model_started_at、未知或不适用，header与排序仍是稳定请求开始。两项候选审查MEDIUM均已配对RED/GREEN关闭，无新视觉模式。
 
 T192：当前Desktop既有Undici兼容patch使用Object.create克隆handler/controller，会使private字段的回调方法接收者失配。完整回归实际三超时/unhandled错误；按宿主patch契约修原维护patch及原测试，不以直接改node_modules或依赖升级隐去此问题。联调期间真实客户端使用独立临时Profile，修改依赖前仅退出本轮进程。
+
+
+T197/T198实际治理边界补齐：`get_dsh_model_metadata_snapshot`只供已授权管理员的visibility GET/PUT，复用原始tenant/Root共享/模型类型/provider owner核查但允许offline；`get_dsh_model_snapshot`固定要求online，所有模型调用及目录仍用原口。使新模型可offline创建→私有范围CAS并GET确认→上线，避免为设置权限制造可公开调用窗口，不更改既定敏感词架构。

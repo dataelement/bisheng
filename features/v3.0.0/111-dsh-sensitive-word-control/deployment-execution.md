@@ -1,30 +1,49 @@
-# F111 work120 整合与109 DSH交付执行记录
+# F111 work120 整合与109 DSH交付记录
 
-更新：2026-10-24。用户已明确授权合入最新`feat/bisheng-work-120-main`、推送、Drone构建并部署109专用DSH13001，及启动当前客户端分支联调；其他部署环境不可变更。本文不保存密码、Token、HMAC或License值。
+更新：2026-10-24。用户已授权合入最新`feat/bisheng-work-120-main`、推送、Drone构建、仅109 DSH13001部署及启动客户端联调。本文无密码、Token、HMAC或License值。完整特性验收仍与本次部署分开。
 
-## 已核事实
+## 源码与CI
 
-- B远端target：`858f76605ca81f0cef36f42841414b797a432fac`；原目标worktree有他人未跟踪review文档，保留。新隔离集成树：`/Users/zhangguoqing/.codex/worktrees/f111-work120-delivery/bisheng`。
-- B源F111基线`2e6b5ae0`有目标尚未包含的provider兼容修复，须按真实历史合并保留；source敏感词实现提交3420114d0已形成，组合候选继续修复后才合并提交。
-- 组合迁移原图两个head，T176已将未发布F111接续f062_credit_multiplier，持久保护已发布积分revision哈希，普通迁移回归37PASS。109当前实际head为`work110_dsh_local_sessions`，尚未应用F111。
-- 109目标Compose项目：`dsh-bisheng`，文件`/opt/server/dsh/bisheng/docker-compose.yml`，目标服务`backend`/`backend_worker`/`frontend`，公开13001，backend仅本机17860。Gateway项目`dsh-gateway`，文件`/opt/server/dsh/bisheng-gateway/docker-compose.yml`，目标服务`gateway`，仅本机18098。
-- 109Gateway实际外部配置`/opt/server/dsh/bisheng-gateway/application.yml`覆盖jar路由；现仅WebSocket与带CacheRequestBody的HTTP通配路由。须最小加入两精确DSH POST路由并保留其余配置。
-- 109实际backend：DSH开启、单租户、签名头X-Signature、共享HMAC未配置；Gateway已有共享HMAC。部署时复用其现有值给backend，密钥不输出/不入Git。Gateway当前未配content-safety和正response-timeout，启用前需明确部署读取预算。
-- G `origin/main=v1.8.0=2995df6f`与109现有remove-dsh-seat源码树一致；G无同名work120分支。交付将建立同名DSH集成分支与唯一新DSH专用tag。
-- Gateway Drone只由v* tag构建；普通tag会自动部署115。必须使用现有`v*-dsh-*`排除模式、验证115步骤skip，再仅更新109。
+| 仓库 | 最终已推送ref | Drone | 实际结果 |
+|---|---|---|---|
+| BiSheng | `feat/bisheng-work-120-main` → `ecf43f79c8aa31bc645636e94b78fb1c9a74bcf9` | 5623 | SUCCESS，backend/frontend两镜像完成 |
+| Gateway | 同名分支 → `faa6463b14cc908e6e507241a9d280efb040e80e`；唯一tag `v1.8.0-dsh-f111-20261024-faa6463b` | 403 | SUCCESS，amd64/arm64镜像完成 |
+| Desktop | 当前隔离feature分支源`6c84d46`加T192最终补丁 | 本机 | 实际构建、启动、PKCE连接完成；模型/工具尚未验收 |
 
-## 尚未执行
+BiSheng是最新target `858f76605ca81f0cef36f42841414b797a432fac` 与F111源`3420114d0f2481d20b8854af1b84f7ca7c944c4b`的正常历史合并，保留源provider兼容修复。Gateway旧源108eb5c8存在已确证跨part漏检，不可部署；最终faa6463b含修复。两仓remote head/tag解引用均已读回。Gateway403实际stage只有clone/package/image/notify四步，115自动部署步骤由现有DSH标签条件过滤，不能把不存在的步骤描述为返回了SKIPPED状态。
 
-最终合并提交/远端推送、CI镜像digest、迁移/配置修改/服务更新、平台登录与客户端联调仍待实际执行。B/G/D源提交分别3420114d0/108eb5c8/6c84d46；Gateway审查确证同消息跨part漏检，T185测试51项其中19RED，T186修复进行中，发布暂缓。Desktop当前分支正式npm run build通过，尚未启动。原DM8/完整E2E/容量待验与既有前端门禁失败保留；不修改其他环境，不用License绕过来求绿。
+## 实际镜像
 
-## 部署前备份（已执行）
+镜像由CI `192.168.106.8:6082`产出，经既有`cr.dataelem.com`入口拉取，digest与CI日志逐一匹配。未修改109共享Docker daemon或insecure registries。
 
-仅检查dsh-bisheng/dsh-gateway项目标签后，在109 `/opt/server/dsh/backups/f111-20261024-predeploy` 建立700目录、600文件：configuration.tgz（7295字节）、镜像引用与ID、专用两库single-transaction dump（28313708字节）及SHA256SUMS。两个实际库是 `dsh_test_work110_main_20261020` 和 `bisheng_gateway`，没有备份/修改其他部署库。备份保留于远端私有目录，不将配置、凭据或业务数据下载入Git。命令exit0。运行服务尚未变更。
+| 服务 | 固定镜像 |
+|---|---|
+| backend / backend_worker | `cr.dataelem.com/dataelement/bisheng-backend@sha256:51536d8d7b22cb195f5dca946f55b7cf7604b27f5081398f4d7da8724239f7a4` |
+| frontend | `cr.dataelem.com/dataelement/bisheng-frontend@sha256:b323977b0249f1e75d3a4c09e5a5bbd925931022e694a0d3b06991c6022cdb50` |
+| gateway，109 x86_64 | `cr.dataelem.com/dataelement/gateway@sha256:84a7ee17ddf44b35a43f40b30aa7c86094f116333f0c5723771dbceb979a80f7` |
 
-实际13001 Nginx：/api/v1/dsh模型入口经过gateway:8080；旧/api/dsh登录兼容入口直连backend:7860，不能误将该登录兼容规则视为模型绕过路径。Gateway自身仅loopback18098暴露。当前平台页面为登录页，无现成已登录会话；已向用户询问验收租户/平台账号，等待答复，不将root机器凭据猜作平台密码。
+实际四容器ImageID已读回对应上述digest。后续T197/T198兼容修复需要新一轮CI后单独更新，不将当前镜像冒称包含尚未发布的源码。
 
-## 最终源码与发布准备
+## 109范围、备份与执行
 
-Gateway修复后最终commit `faa6463b14cc908e6e507241a9d280efb040e80e`，唯一新DSH标签 `v1.8.0-dsh-f111-20261024-faa6463b`；882项主独立回归及第二独立交叉审（60配对+2100语义样本）通过。该ref命中现有115排除规则；实际远端refs/Drone115步骤状态仍以随后读回为准。B远端刷新仍858f766，目标无并行推进。
+- 项目`dsh-bisheng`，文件`/opt/server/dsh/bisheng/docker-compose.yml`，只更新服务`backend`、`backend_worker`、`frontend`。公开13001，backend仅127.0.0.1:17860。
+- 项目`dsh-gateway`，文件`/opt/server/dsh/bisheng-gateway/docker-compose.yml`，只更新`gateway`，仅127.0.0.1:18098。私网`dsh-integration`。
+- 专用库`dsh_test_work110_main_20261020`、`bisheng_gateway`；现场MySQL8.0.43。没有操作109其他数据库、Compose项目或115部署。
+- 备份在`/opt/server/dsh/backups/f111-20261024-predeploy`，并在真正更新前刷新到`f111-20261024-work120-before-up`，目录700/文件600。包含Compose、B/G配置、entrypoint、nginx、实际两个旧env_file、单事务两库dump、镜像身份与SHA256SUMS；备份不下载入Git。
+- additive Gateway DDL实际建`gt_dsh_sensitive_policy`与`gt_dsh_safety_outbox`，创建前均不存在，创建后均0行。Backend实际Alembic从work110升级至`f111_dsh_content_safety`，保留f062积分历史。
+- 配置仅追加两条精确POST模型路由，保留旧WebSocket和通配路由；精确路由不带CacheRequestBody。既有response-timeout为3600秒，与nginx预算一致。启用content-safety部署能力，namespace=`dsh109-work120`、source=`dsh109-gateway`。
+- 共享HMAC以私有env_file注入Backend两服务。实际ConfigService没有自动SSOSyncConf env覆盖，故配置必须用其已存在`!env`构造器显式引用变量；用实际load_settings_from_yaml内部比较确认一致，不输出值。绑定文件替换后仅重建backend/worker，实际readback `hmac_configured=true`，签名头`X-Signature`。
+- 只以`docker compose -p <exact project> -f <exact file> up -d --no-deps <exact services>`更新，未操作其他中间件或共享daemon。
+- 四目标更新后Backend健康200、13001页面200。与部署前快照逐字节比较：所有其他既有容器的ID、Image和StartedAt不变；额外只有本轮临时测试Provider。
 
-用户提供的测试账号已真实RSA登录并GET user/info读回成功；临时会话仅本机0600文件，不保存密码到仓库。待部署后使用真实PKCE客户端联调。
+实际13001 nginx模型入口`/api/v1/dsh`经过Gateway；旧`/api/dsh`登录兼容入口直连Backend，不将登录规则误报为模型旁路。真实普通用户网络封闭验收仍未执行。
+
+## 真实联调进度与阻塞
+
+已用用户提供平台账号真实RSA登录并GET身份读回；会话只保存本机0600临时文件，未保存密码到仓库。通过管理API创建本轮普通用户9（非global，leaf1），未修改既有账号/角色/默认模型。现有原生审计模式CONTENT/version1，未改动。知识/评估/助手/工作台默认配置已只读快照，后续核对不被测试设施改变。
+
+最终T192之后实际客户端再次build成功，并以独立appData/userData/session/log目录启动，Harness ready。真实Electron DOM打开企业账号，填写用户指定109 origin并确认可信内网HTTP；实际客户端生成PKCE，使用本轮普通用户真实平台会话批准，并成功抵达实际随机loopback回调。公开客户端state确认`connected=true`、`phase=connected`、`modelCount=0`。授权批准用真实HTTP API完成，此证据不冒充浏览器授权页按钮/iframe的手工UI验收。
+
+无费用Provider最终源码SHA256 `c6bdbeaf452e84fc6c736445e705054589b4a97661266558724150a01f32c26f`，仅本轮容器`f111-provider-20261024-f111a`接入DSH私网，宿主控制端口127.0.0.1:18181经SSH。使用独立随机测试key、只读挂载、256MiB/1CPU和无外部模型连接。初始global physical model POST计数0。模型offline→私有visibility→online须待T197/T198兼容修复，禁止先上线制造公开窗口。
+
+Gateway实际`GET /api/license/status`为`expired=true`；两个敏感词管理接口HTTP200但业务码11001。已向用户请求该测试环境有效License，不绕过许可、不将租户默认关闭下的模型通过称为敏感词通过。完整四协议/命中/工具零执行/审计与用量现场结果均仍待执行。Linux DM8按用户决定保留待验，跨租户/多副本/容量及回退演练不以单实例组件测试代替。

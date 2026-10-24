@@ -36,7 +36,7 @@
 | 稳定身份 | `dsh.content-safety.backend-namespace` / `source-id` | 默认空；开启时必须显式、格式合法且稳定；不能让用户请求覆盖 |
 | Backend origin | Gateway `bisheng.bisheng-api-url` | 既有配置；仅 HTTP(S) origin，可无 path 或 `/`，不能带凭据/query/fragment；profile、模型代理、回传共同固定到它 |
 | 共享 HMAC | Gateway `bisheng.gateway-hmac-secret`；Backend `sso_sync.gateway_hmac_secret` | 必须同一已存在的共享值，安全配置注入，不打印或保存明文，不引入 DSH 新密钥/key_id |
-| 既有环境变量 | Gateway 示例 YAML 引用 `BISHENG_GATEWAY_HMAC_SECRET`；Backend 支持 `BS_SSO_SYNC__GATEWAY_HMAC_SECRET` | 只登记变量名；不能为了排查而 `env`/`printenv` 输出值 |
+| 既有环境变量 | Gateway 示例 YAML 引用 `BISHENG_GATEWAY_HMAC_SECRET`；Backend YAML以既有`!env BS_SSO_SYNC__GATEWAY_HMAC_SECRET`显式引用env_file（无自动env覆盖） | 只登记变量名；不能为了排查而 `env`/`printenv` 输出值 |
 | 签名头 | Gateway `bisheng.signature-header`；Backend `sso_sync.signature_header` | 默认双方 `X-Signature`；定制时双方一致，走同一个已批准的变更 |
 | Gateway HTTP 期限 | `spring.cloud.gateway.httpclient.response-timeout` | 启用前必须为正；Docker 挂载示例为 `3600s`，不是推荐 SLO。源码 resources YAML 未给这个值，不能假定所有部署都已有 |
 | 内置词库 | 既有 `custom.sensitive-words-path` / 既有词库加载路径 | 各副本内容/摘要一致；缺词库、摘要不一致或读取失败不能视为租户关闭而放行 |

@@ -36,3 +36,8 @@
 LinuxDM8按用户确认待验；T121–T125真实角色/模型/页面/工具与恢复验收、T126–T129容量、T131回退演练仍须实际证据。旧全量frontend lint Platform95/Client23有逐文件字节等target基线，不修改抑制项，不声称全量lint通过。Desktop联调须先收口T192。
 
 本报告不批准更改其他部署、放宽认证、生成License、清理真实审计、覆盖已有标签或force-push。用户已单独授权本次merge/push/CI/109部署和启动客户端，最终操作记录按实际追加。
+
+
+## T197/T198 部署前最小兼容补审（2026-10-24）
+
+PASS，未发现HIGH/MEDIUM：离线模型治理元数据与实际调用快照分开；仅两管理员visibility路由使用前者。调用online、tenant/Root FGA、provider归属、DTO、policy CAS与计量未改变。主读全部三源，独立相关71PASS/5真实环境skip；B五文件71PASS及Ruff/archguard/diff通过。测试的管理身份依赖替换只证明端口短路，实际普通身份拒绝尚待109新镜像读回。新修复待新CI镜像，不改写前一ecf43f79镜像身份；完整特性T132及License阻塞下现场验收保持未完成。
