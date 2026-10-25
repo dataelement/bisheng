@@ -231,3 +231,9 @@ F054-B1 修订：宿主 unit 为规则漂移的实际消费者，先修复并配
 - `RuntimeHostIsolationReport.id` 直接使用 node_id 作主键（不再存重复 node_id 列），每节点只保存当前证明；接收时间与 60 秒 TTL 由服务器分配，revision 为 BigInteger。独立报告不随 manager 心跳续期。
 - 宿主实现位于 `runtime_manager/host_isolation.py`，安装材料在仓根 `deploy/runtime-manager/`；规则与 canary 必须运行在 Docker 宿主。安装示例覆盖 Compose 的 apps/build 两个网络，原默认 bridge 构建被拒绝。卸载先作废服务器证明，再确认本模块实例停止，然后移除自有规则。每个 Engine 仅一个宿主隔离单元。
 - 实现代码与本地定向验证已到位；宿主真实 iptables/nftables、失效收敛与 Docker/K8s 本次组合部署仍待提测。具体证据及边界见 closeout-validation.md，不据此宣称最终交付通过。
+
+### 2026-10-25 部署兼容修复
+
+116 的 `iptables-save` 把父链跳转参数规范为 `-s … -i …`，与提交时的 `-i … -s …` 等价。
+父链前 N 条仍按数量/位置校验，规则字段经同一 `normalized_iptables` 比较；提前 ACCEPT、额外条件、错误子网继续拒绝。
+这是已批准隔离合同的兼容修复，不放宽权限或新增绕过开关。正反定向回归见整合报告；真实宿主复验另记。
