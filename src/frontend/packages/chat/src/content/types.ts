@@ -17,13 +17,11 @@ export interface CitationPreview { title: string; snippet: string; sourceName: s
 export type { PreviewPdfBBox as CitationPdfBBox } from '@bisheng/file-viewers/types';
 export type CitationDetailLoader = (id: string) => Promise<ChatCitation | null>;
 export interface CitationDocumentPreviewState { detail: ChatCitation; itemId?: string; itemIds?: string[]; locateChunk?: boolean }
-export interface CitationReferencesDesktopPayload {
-  messageId?: string; content: string; webContent?: ChatCitationPayload[];
-  citations?: ChatCitation[] | null; referenceItems: never[]; initialDocumentPreview?: CitationDocumentPreviewState | null;
-}
+export type { CitationReferencesDesktopPayload } from '../citations/types';
 export interface CitationSourceIconProps { detail?: ChatCitation | null; preview?: CitationPreview | null; type?: string; ragIconVariant?: 'document' | 'knowledge'; clipAsCircle?: boolean }
 export interface MarkdownCodeProps { language: string; code: string; inline: boolean; className?: string; codeRef?: RefObject<HTMLElement> }
 export interface MarkdownServices {
+  scopeKey?:string;
   localize: ChatLocalize;
   latexParsing?: boolean;
   isMobileLayout?: boolean;

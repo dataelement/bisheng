@@ -86,10 +86,10 @@ Interfaces: 复用ChatCitation/CitationDisplayData/PreviewState；`CitationServi
 Files: 新建 `packages/chat/src/citations/{CitationReferences,CitationDocumentPreview,CitationSourceIcon,useCitationPreview,useCitedPassageLocate}`及组件测试/子入口；两端ReferencesDrawer/DocumentPreviewDrawer/Markdown服务薄适配。
 Interfaces: `CitationDocumentPreview({preview,services,compactMode})`；`CitationReferences({content,webContent,citations,services,onPreview})`；shared预览使用T2/T3/T4输入及T5服务，不读宿主store。两端移动导航/抽屉容器/后台只读能力留宿主。
 覆盖 AC: AC-09、AC-10、AC-11、AC-12、AC-13、AC-14、AC-19、AC-20。
-- [ ] 写组件和真实adapter测试：引用来源/文件正确、原文件下载、PDF多片段/非PDF文本定位、权限拒绝不请求文件、A→B→A不串、切换账号/分享scope不复用、只读无写入。
-- [ ] RED后迁client来源视图，保留后台历史协议和媒体特性，接入共享Markdown、旧日常/任务已有消费入口，移除业务无关旧副本。
-- [ ] 跑chat及两端引用/共享会话/只读/标注相关测试，期望PASS。
-- [ ] 提交 `refactor(citation): share reference lists and document previews`。
+- [x] 写组件和真实adapter测试：引用来源/文件正确、原文件下载、PDF多片段/非PDF文本定位、权限拒绝不请求文件、A→B→A不串、切换账号/分享scope不复用、只读无写入。
+- [x] RED后迁client来源视图，保留后台历史协议和媒体特性，接入共享Markdown、旧日常/任务已有消费入口，移除业务无关旧副本。
+- [x] 跑chat及两端引用/共享会话/只读/标注相关测试，期望PASS。
+- [x] 提交 `refactor(citation): share reference lists and document previews`。
 
 ### Task 7: 全部入口清理及联合验收
 

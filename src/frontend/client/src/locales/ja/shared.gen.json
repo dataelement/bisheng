@@ -103,5 +103,38 @@
       "interrupted": "ツール呼び出しは結果を返しませんでした（セッション終了）"
     },
     "attach": "ファイルを添付"
+  },
+  "citations": {
+    "com_citation": {
+      "close_document_preview": "ドキュメントのプレビューを閉じる",
+      "document_preview": "ドキュメントのプレビュー",
+      "locate_missed": "引用箇所を自動で特定できませんでした。引用された原文は次のとおりです:",
+      "no_download_url": "ダウンロード可能なファイルアドレスがありません",
+      "preview_loading": "プレビューを読み込み中…",
+      "preview_unavailable": "このファイルはプレビューできません",
+      "source_article": "記事",
+      "source_document": "ドキュメント",
+      "source_temp_kb": "一時ナレッジベース",
+      "source_web": "ウェブページ"
+    },
+    "com_knowledge": {
+      "download_file": "ファイルのダウンロード"
+    },
+    "com_message": {
+      "document_preview": "ドキュメントプレビュー",
+      "source_empty": "参考資料はありません",
+      "source_load_failed": "参照元の詳細を読み込めませんでした",
+      "source_loading": "参照元の詳細を読み込み中...",
+      "source_name_fallback_document": "政策文書",
+      "source_name_fallback_web": "ウェブページ",
+      "source_panel_back": "参考資料一覧に戻る",
+      "source_panel_close": "参考資料を閉じる",
+      "source_panel_download": "ドキュメントをダウンロード",
+      "source_panel_label": "参考資料",
+      "source_type_document": "ドキュメント",
+      "source_type_web": "ウェブページ",
+      "source_untitled": "タイトルなし"
+    },
+    "com_msg_source_reference": "参照元"
   }
 }

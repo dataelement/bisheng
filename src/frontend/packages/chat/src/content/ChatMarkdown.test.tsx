@@ -41,11 +41,11 @@ it('copies highlighted code as source text', () => {
   fireEvent.click(screen.getByRole('button', { name: 'shared:app_chat.copy_code' }));
   expect(api.copyText).toHaveBeenCalledWith('const value = 1;');
 });
-it('keeps a forbidden private citation inert after batch resolution', async () => {
+it('keeps an already forbidden citation inert without resolving it again', async () => {
   const api = services();
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} });
   render(<ChatMarkdown services={api} content={'Answer\ue200knowledgesearch_file:1\ue202'} />);
-  await waitFor(() => expect(api.resolveCitationDetails).toHaveBeenCalledWith(['knowledgesearch_file']));
+  await waitFor(() => expect(api.resolveCitationDetails).not.toHaveBeenCalled());
   fireEvent.click(screen.getByText('1'));
   await screen.findByText('shared:app_chat.citation.no_permission');
   expect(api.getCitationDetail).not.toHaveBeenCalled();

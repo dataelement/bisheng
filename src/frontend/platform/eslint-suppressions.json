@@ -125,14 +125,6 @@
       "count": 3
     }
   },
-  "src/components/bs-comp/chatComponent/CitationDocumentPreviewDrawer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/components/bs-comp/chatComponent/index.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -1209,9 +1201,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4
-    },
-    "no-restricted-syntax": {
-      "count": 1
     },
     "no-useless-escape": {
       "count": 1

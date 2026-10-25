@@ -103,5 +103,38 @@
       "interrupted": "工具调用未返回结果（会话已结束）"
     },
     "attach": "添加附件"
+  },
+  "citations": {
+    "com_citation": {
+      "close_document_preview": "关闭文档预览",
+      "document_preview": "文档预览",
+      "locate_missed": "没能自动找到被引段落，下面是引用的原文",
+      "no_download_url": "暂无可下载文件地址",
+      "preview_loading": "正在加载文件预览…",
+      "preview_unavailable": "这份文件暂时无法预览",
+      "source_article": "文章",
+      "source_document": "文档",
+      "source_temp_kb": "临时知识库",
+      "source_web": "网页"
+    },
+    "com_knowledge": {
+      "download_file": "下载文件"
+    },
+    "com_message": {
+      "document_preview": "文档预览",
+      "source_empty": "暂无参考资料",
+      "source_load_failed": "溯源详情加载失败",
+      "source_loading": "加载溯源详情...",
+      "source_name_fallback_document": "政策文件",
+      "source_name_fallback_web": "网页",
+      "source_panel_back": "返回参考资料列表",
+      "source_panel_close": "关闭参考资料",
+      "source_panel_download": "下载文档",
+      "source_panel_label": "参考资料",
+      "source_type_document": "文档",
+      "source_type_web": "网页",
+      "source_untitled": "暂无标题"
+    },
+    "com_msg_source_reference": "参考来源"
   }
 }

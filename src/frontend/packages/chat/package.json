@@ -10,7 +10,11 @@
     ".": "./src/index.ts",
     "./core": "./src/core/index.ts",
     "./styles.css": "./src/styles/index.css",
-    "./citations": "./src/citations/index.ts"
+    "./citations": "./src/citations/index.ts",
+    "./citation-views": "./src/citations/views.ts",
+    "./citation-locate": "./src/citations/citationLocate.ts",
+    "./citation-locate-hook": "./src/citations/useCitedPassageLocate.ts",
+    "./citation-inline": "./src/citations/inline.tsx"
   },
   "scripts": {
     "test": "vitest run --maxWorkers=1 --minWorkers=1",
