@@ -198,6 +198,7 @@ worker 按持久任务 tenant_execution_scope 初始化租户过滤，只有源�
 | SAK 资源 owner 是人，不代表那人的某个 app | app 筛选错误归因其他 key 的行为 | credential owner 可信 subject_ref 解析 |
 | 下载公开 MinIO URL 可绕过后来失权 | 撤权后继续新下载 | 认证代理下载/按块重验 |
 | CSV 双引号不是公式防护 | 表格软件执行攻击字段 | 类型白名单 + 首有效危险字符处理 |
+| MySQL INSERT 不回传服务器默认时间字段，普通 SQLite 默认会回传 | 同事务签发后构建凭据 DTO 触发隐式异步 IO / MissingGreenlet，审批执行失败 | CredentialRepository.create_in_transaction 在 flush 后显式 await refresh，不提交事务；定向测试禁用 INSERT RETURNING 并验证 rollback |
 | HTTP 失败不是空结果 | 用户误以为无人访问/导出成功 | 独立 error/loading/empty 状态 |
 | 应用 allow 访问按窗口合并 | 错读为 PV/逐次网络请求 | UI 字段提示与 F054 同语义 |
 
@@ -260,3 +261,5 @@ F056-S1 修订：运行绑定的真实撤销生产者由凭据 Owner 公共协�
 - 管理视图通过 `admin.application.tenant_scope.current_admin_scope` 重新读取，worker 不依赖 HTTP middleware 的上下文或失败回退；不改变旧操作审计的权限语义。
 - UI 使用现有 LogPage 第三页签、三子视图、稳定翻页、历史候选搜索/分页和异步导出；切类别/租户隔离状态。菜单与原两个页签保留，错误码 16301–16304 和文案三语同提交。`LogPage` 改为命名导出，原惰性路由通过 then adapter 接入。
 - SQLite 本地定向结果不代替 MySQL/DM8 驱动或真实 MinIO/worker/FGA 验收。DM8 按用户口径仅检查模型/DDL 静态兼容。提测与低概率组合清单见 closeout-validation.md。
+
+2026-10-25 部署热修：运行凭据事务写入后显式加载服务器默认字段，修复 MySQL 上 KeyItem 读取 create_time 的 MissingGreenlet；不改变授权、API 或事务提交边界。
