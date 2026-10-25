@@ -1,0 +1,422 @@
+[
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-ci-release/README.md",
+    "sha256": "6014af13ba36e6663873b0b19dee8924fdc3224ed7f49ffda366a3aca9c30a72",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-ci-release/app-proxy-index.json",
+    "sha256": "0c5cbff5b4ae0e7e5ab6be8dd468549013e305e4317ef15d73b958cb2279506a",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-ci-release/cleanup-verification.json",
+    "sha256": "da0422acf68e383dea178995fed3d71854275c8ce624ef9ea5733c9078aeea31",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-ci-release/release.json",
+    "sha256": "a57b4b5e9589919a382ebb3d12c740e36d0ae58d7b4da7efe45d21e77bbe94ea",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-ci-release/runtime-manager-index.json",
+    "sha256": "1e42c3a775593063838b2ba8c2e1daceeacf7849e1ebaaf21f0af4ecaa155547",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-ci-release/service-verification.json",
+    "sha256": "1ec63f3ae5da40941792da6f01f2209077dfb158b434a1656d2a61d39f96d466",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-ci-release/sha256.json",
+    "sha256": "065cb7a51ba1316f74857ae3eb2f01fdbe80a2c3f8a3b12dcfb3657c72186f7d",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-ci-release/verify_services.py",
+    "sha256": "01722a2e1dfc0eed3981c8b15a268bed0474d7c7a6c93d89e777cb9382ecebd8",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/.gitignore",
+    "sha256": "a4e6b5adcc8e252c6e820a9a56a20a6249b18222a616090634ca5ab06f483a5a",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/README.md",
+    "sha256": "74fa8ee74fe07988b4090dd14800747191444adb8a1f8e61d981e1bba1c1a525",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/cancel-timeout-results.json",
+    "sha256": "9cf30cb4b11aad5c685cfd15ef4bbfdc3123f3334044000115d4641b5cee0867",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/compile-timeout-result.json",
+    "sha256": "b1f38374532a2f7007a0cf9926bb3a8c4394131c170ebcaa7041b515947ac2cc",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/connect-policy-revoke.json",
+    "sha256": "e6c21701d3daeed33c4fb36568be8cc841cb6a6e7ac1992e27da1e714e6e62ac",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/deletion-followup.json",
+    "sha256": "a3c4ced6a96c0a8cddf308e7326dd84cc5ea4be918b29d97796a0cb9ea2cf9cf",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/docker-cleanup.json",
+    "sha256": "4ac5d21a57bf5240186cfea43323bf1d6a05727986010cc6d9c28da8e0c9d147",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/install-cancel-result.json",
+    "sha256": "12f984b1295c18973f1ec68f50332411cd34d8ef6442ce443b28151c1eee67af",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/legacy-container-before.txt",
+    "sha256": "1a55bff1e4fc0821a3cddb2adc17ac3418a6c093dc0775ea4640cc2c2c11cbdf",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/legacy-manager-image.json",
+    "sha256": "bc418fba3a5936e0c9a10bdf51fd4e75e4b353a229ac0b80b02b543327238897",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/approval-retry.log",
+    "sha256": "46172b32a17c3d002e8359f78ceed447ba0ceedf6a322d10787f549d73c5bde8",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/bootstrap-before.log",
+    "sha256": "e5836e984b153c35bed972ea87ea851b4d24bf056ce97d1afa8fde5c6a802360",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/bootstrap-fixed.log",
+    "sha256": "9de2d09895516621dd074d8d6555dca6a0c7707d86bdd70ab1125559d0bf2e1f",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/compile-timeout.log",
+    "sha256": "186a02e18ed0daad559fc290e5f845d51ca290b50904b40dd862ac52f6a6d1f5",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/connect-confirm.log",
+    "sha256": "ccbafa3afc98c77243eae78a5326492aafa5bfb2cb7faf2187db099f7c21eb07",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/deletion-followup.log",
+    "sha256": "8630a61d399cbb7b367790e6e21149a8e17fe7845dc19d7103a3c9bdbc9638b9",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/install-cancel.log",
+    "sha256": "c6e190447a7dd995201a3f20beeb286cd7d9e6871abf0a5074b816b3c49ff7c9",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/legacy-pending-confirm.log",
+    "sha256": "a6a9c6c5546d142a091dcc68afda20ecc7180a762334db29ed49cc04b6c32bea",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/legacy-publication.log",
+    "sha256": "7730d2d07ab724ae3e82c6589dbeb62c4adcc76247ba836ca6117cffb1daa565",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/live-boundaries.log",
+    "sha256": "7086834d382ffe07d561d3c902f8cc2255e7fc6e76cde3a36ff266f20ffd966d",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/manager-connect.log",
+    "sha256": "7be6cbf12ff61752a9f96e9fa120d8c48159ba549086f563a6a13e93d6fc921e",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/manager-existing-connections.log",
+    "sha256": "23d4ec1b73e890ebe13af1b0feb8e35c46ac1e23180d6fd57031b60ece94e924",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/migration-startup-failure.log",
+    "sha256": "2c6191c112630159b98defdce94b3ad7bb51975cfe42b93de815c7b12a62ff37",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/mt-online.log",
+    "sha256": "a93b1f042b039ed458ed07ec59ae47914924907b92ac24cfe3eee7962f6d4ba3",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/multi-tenant-identities.log",
+    "sha256": "4ab4ff8ebdcabce9209c99a203b02293c5d012958c677e24b1cab537e6c5960e",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/restart-probe.log",
+    "sha256": "26339b428eb60ab07b86c35facbf1897269e390276e1b8290cd025d713476f83",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/snapshot-fault-confirm.log",
+    "sha256": "c4d456d6a5ec0eeea025f9b53c0acbb7a93b599acff4238ffed3239641ec1267",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/timeout-confirm.log",
+    "sha256": "b3cfb6fad1983a2985e7fb6009d85bb42b9b6c99ac6d0b257b1d2dec4f433f60",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/upgrade-apply-repeat.log",
+    "sha256": "08f86945fc7b4d381fe9c0d93940ae667b283548995e9db6d2c2c0bec23ed403",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/upgrade-apply.log",
+    "sha256": "08f86945fc7b4d381fe9c0d93940ae667b283548995e9db6d2c2c0bec23ed403",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/upgrade-dry-run.log",
+    "sha256": "efa0eb31e66bcad82999a7045d4c1bfa032b481e882781fd2620b073354901d5",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/upgrade-inventory.log",
+    "sha256": "3d8e323bc3609387abffeb793811724d41f2a0cad7f18f334ca1606a2d9ccff2",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/upgrade-rebind.log",
+    "sha256": "25687ac0cdb519d0568c370941abc0599723e18f4c75a61937cb411c97ecbf36",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/upgrade-retained-attachment.log",
+    "sha256": "5a0c240ed5b24ac14917b5a829784fc7d14c0125493d804e69097a3122e55360",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/upgrade-rollback-check.log",
+    "sha256": "1bb69304f58b9ab3d8e8eed3c92c328ece68a88f373337287866252363fb6e50",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/ws-backend-failclosed.log",
+    "sha256": "edf3ea75d0ca90e6c55bbbe902e6d64c198b7a4e14a436f04b26419ec434aad8",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/logs/ws-permission-revoke.log",
+    "sha256": "c292b1272ae3bd0c6c0f2740ca25614bf718f3f990cf52e64162c19530342649",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/manager-existing-connections.json",
+    "sha256": "f74016c6fc491249f0e022ab080061c80b51032232fd337047766c315a276a5d",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/migration-startup-failure.json",
+    "sha256": "e1f78ee22b08ca516ee54c38df8ecc82b10d656547bd752e53a461781be94e4f",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/mt-baseline.json",
+    "sha256": "2a6279219ca1b752ec1d4dad84cba1ba1af2f6f72e32e5e0a75ef3606ed6e5f9",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/normalization.json",
+    "sha256": "d2f376a2029fed4f39894d7691836e4ae02bfd4d8ebf12b5de9c623f467f93bd",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/protected-backup-facts.json",
+    "sha256": "8eb9ff8609e6566c5b065298b9e9c52e5a9f447d3f660d22abc79201aa4a348b",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/quality-and-startup-observation.json",
+    "sha256": "78976d111bc9715aff6f59ef0c5023cc6b180be27ca497e70ec4180aec60a216",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/restart-probe-after-ids.txt",
+    "sha256": "3d90977135589a05781aad7479d30bc646cb490eb20ee1e78791a700a3d6ad77",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/restart-probe-before-ids.txt",
+    "sha256": "3d90977135589a05781aad7479d30bc646cb490eb20ee1e78791a700a3d6ad77",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/restart-probe-result.json",
+    "sha256": "4787c45c00aac946db6781e32cec28114d1dda35f3ea502083dd53b136814288",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/scratch-cleanup-facts.json",
+    "sha256": "e935c80c7770ba9befa96faf7626cd28c94804ba9a793fa163f0456d4e99a7cb",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/sha256-export.json",
+    "sha256": "91580ce535d1c00bf287e48a518063cc36b62e26816e4941ec50e0af28e7893d",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/smoke-inventory.json",
+    "sha256": "9e0203c5f9b74579404beb283e7cd5c5f6cc23add0ecc1e5b822f362c6e23973",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/snapshot-confirmation-fault.json",
+    "sha256": "b7aa868b8b342d41891807b0b68d16a4a050f2c9a0228fd6837ccc4e4c94912e",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/upgrade-apply.json",
+    "sha256": "cf27f6f21c0c84c17db1134552a8b84e528d26a76076badc3f92f3ce8b5e924b",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/upgrade-dry-run.json",
+    "sha256": "6a1a89f1c1f9386ba6cda23886f28055f705358c33ebcdbf25572f965ad67f0a",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/upgrade-first-apply.json",
+    "sha256": "bb7654a451b76301d099ba8dfaf66a1daeb21f15c66a137bc63117941169b659",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/upgrade-inventory.json",
+    "sha256": "0cea380418a9f2c082e96f9714fe47572caee36462757a7f9fbe7ce139bc6237",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/upgrade-rebind-result.json",
+    "sha256": "904d2fcfee647aa312f1d993e4b7a41fe0481b4bb199e0a0aa6d7e6c40bee0a5",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/ws-backend-failclosed.json",
+    "sha256": "b073253b3550e3e21d2f6a8ca21da3f100a876e0b8df134f9541b3154ce05361",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-evidence/2026-10-21-docker/ws-permission-revoke.json",
+    "sha256": "4648bd269a0fe0d099f80518197a5fa5c27522573f23c311701719c031e55767",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/model-review-tests.txt",
+    "sha256": "e6df50c913491f78c8e9aa6725aa6afdad6be6c1ae90d8cf16571a7393440b6e",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/model-review.json",
+    "sha256": "b85baa43b230aa792e4beadbb099021e2988fe6838032f5c974b181fc1577535",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/model-review.md",
+    "sha256": "c15e6048f3552814af4ab8d5e8851d35edb3fb54549b0fd1363c55e73ef0999f",
+    "same_as_integrated": true
+  },
+  {
+    "path": "src/backend/test/tenant/test_tenant_execution_scope.py",
+    "sha256": "582700a8ff1a426c53291fc16928ff0516e6d164aa63ea9d393198b0233032ea",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/code-review.md",
+    "sha256": "204063a2ee251ec3af4bad41d2c2caf6298c6616305bdb1cd5f41cdfe761a81a",
+    "same_as_integrated": false
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/design.md",
+    "sha256": "854ab6a042a6b258bfb822a25b93562445a86a711c2471d60a848a12f2ffaa71",
+    "same_as_integrated": false
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/e2e-checklist.md",
+    "sha256": "ecf6d5c246fec5e2607cff8bdab90fb7071f42548c85846993843a9029b604ca",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/implementation-files.sha256.json",
+    "sha256": "6bf757300db21cce238bef95515392a23b8ceb4d12a3717fa350dd61557c1fa9",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/live-validation.md",
+    "sha256": "3d25e7b03506829dbafbf8a40eacb677e8e6d9911b5793c16250fdea23cfa1af",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/spec.md",
+    "sha256": "52b6be5885b1f010ce04a4adf4ae90ed4381ee39e623eb62fd38cedc23921645",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/task-reviews.md",
+    "sha256": "b1691ae2263d254980f086776a99c99708076ee6455594a7023e593ac9a416ca",
+    "same_as_integrated": false
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/tasks-index.json",
+    "sha256": "3a019e3c68b49c38821bbb5861bf920cd992af4e922e0e7e7ccc2db845955fab",
+    "same_as_integrated": true
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/tasks.md",
+    "sha256": "cfeb8d132b0251ed972f80989af0219e2ada8b16ec0e41e68fd5a1640213e61d",
+    "same_as_integrated": false
+  },
+  {
+    "path": "features/v3.0.0/086-vibe-runtime-delivery/validation.json",
+    "sha256": "1319567ab824b021e8d59fba0f7bc63b6ba68616c9d4aaed430eb106e43fbc50",
+    "same_as_integrated": false
+  },
+  {
+    "path": "src/backend/bisheng/api/services/f048_preset_dashboard_bootstrap.py",
+    "sha256": "80d0118a2065f2e1e2e69d50a48a512f810d6c43ac40428ec0454e805734ad30",
+    "same_as_integrated": true
+  },
+  {
+    "path": "src/backend/bisheng/core/context/tenant.py",
+    "sha256": "6cd240901bab1b9fc8983044ea4e3fe1eb6d31a908304efba6417ef1b5ddf62a",
+    "same_as_integrated": true
+  },
+  {
+    "path": "src/backend/bisheng/permission/application/system_resource_reconcile.py",
+    "sha256": "48a3ec8b62cca4d97a99eeab896505fbe2a21f7d167b2e4e36f43ccd85c742cf",
+    "same_as_integrated": false
+  },
+  {
+    "path": "src/backend/test/permission/test_f048_preset_dashboard_bootstrap.py",
+    "sha256": "053da8023afe2981354d2555851b1cdaf307c79cf2415adef66c24cb4efe3a41",
+    "same_as_integrated": true
+  },
+  {
+    "path": "src/backend/test/permission/test_f048_system_resource_reconcile.py",
+    "sha256": "fb2ef0cf3b43b570db6809fd274c81c25a25c62cf80b24f8a8081ddff7c26aad",
+    "same_as_integrated": false
+  }
+]
