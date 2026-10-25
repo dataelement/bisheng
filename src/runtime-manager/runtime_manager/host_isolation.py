@@ -223,10 +223,10 @@ def apply_rules(descriptor, backend, *, remove=False):
             rules = [shlex.split(line) for line in current.splitlines() if line.startswith("-A " + parent + " ")]
             first = rules[: len(descriptor["networks"])]
             expected_jumps = {
-                tuple(shlex.split(f"-A {parent} -i {item['bridge']} -s {item['subnet']} -j {chain}"))
+                normalized_iptables(f"-A {parent} -i {item['bridge']} -s {item['subnet']} -j {chain}")
                 for item in descriptor["networks"]
             }
-            if {tuple(x) for x in first} != expected_jumps:
+            if {normalized_iptables(shlex.join(x)) for x in first} != expected_jumps:
                 raise ValueError("host_firewall_jump_not_first")
         return content_digest(sorted(actual))
     if backend != "nftables":

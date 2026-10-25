@@ -1119,3 +1119,7 @@
   - 文件：`src/runtime-manager/runtime_manager/platform_client.py`、`src/runtime-manager/runtime_manager/api/readonly.py`。依赖：T114；配对：定向用例见本功能 closeout-validation.md。
 
 **2026-10-24 状态**：本轮主功能实现代码及定向用例已接齐；部署 E2E 与最终 L2 仍未完成。未执行全量测试，旧批次计数不表示本轮交付状态。新增接线的 L1 与证据见 `closeout-validation.md`；未对每个小任务保留独立的先红后绿日志，不宣称完整 TDD 历史。
+
+## 2026-10-25 部署定向修复
+
+- [x] **T118**（hotfix）：父链读取按规范化字段比较，保留 first-N 及精确子网围栏。文件：`src/runtime-manager/runtime_manager/host_isolation.py`、`src/runtime-manager/tests/test_host_isolation.py`。覆盖 AC: AC-66、AC-68。单文件 11 passed，Ruff 通过；真实宿主复验尚待记录。

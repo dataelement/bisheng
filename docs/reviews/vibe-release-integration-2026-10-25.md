@@ -35,3 +35,9 @@
 - Docker 宿主证明单元、K8s 能力报告、私有材料路径和实际应用发布/升级/停止/档位选择须部署后分别验证；当前尚未在这份记录中标记通过。
 
 证据目录：`docs/reviews/evidence/vibe-release-20261025/`。执行中的 SHA、CI 构建号、镜像摘要、环境入口和清理结果将在各阶段完成后追加。
+
+## 实测后的窄范围修复
+
+116 真实 `iptables-save` 将父链 `-i/-s` 选项换序，导致等价规则误判 `host_firewall_jump_not_first`。校验现复用字段规范化；仍检查父链前 N 条，额外 ACCEPT 或其他子网必须拒绝。11 个宿主隔离用例通过（包括两网络参数换序、提前 ACCEPT 和错误子网），Ruff 通过；未跑其他全量回归。
+
+此 hotfix 七维度检查无新增 HIGH：无 API/权限/事务变化；不扩大规则、日志或清理范围；仅修正合法配置的读回比较，文档和任务已同步。真实 canary 继续复验后记录结果。116 的 systemd219 使用部署 drop-in `ProtectSystem=full` 兼容旧版，不宣称旧版支持 strict/ReadWritePaths。

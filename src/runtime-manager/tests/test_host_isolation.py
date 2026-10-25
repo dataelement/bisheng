@@ -52,6 +52,48 @@ def test_nft_owns_input_and_forward_table_only(descriptor):
     assert all(chain["prio"] == -100 for chain in chains)
 
 
+@pytest.mark.parametrize("mutation", [None, "earlier_accept", "foreign_subnet"])
+def test_parent_jump_readback_accepts_canonical_order_but_preserves_fences(monkeypatch, descriptor, mutation):
+    """Real iptables-save reorders -s before -i; the first-rule and exact-subnet checks still apply."""
+    from copy import deepcopy
+    from types import SimpleNamespace
+
+    from runtime_manager import host_isolation
+
+    second = deepcopy(descriptor["networks"][0])
+    second.update(
+        name="build",
+        id="def456",
+        bridge="br-def456",
+        subnet="172.31.0.0/24",
+        gateway="172.31.0.1",
+        proxy_ip="172.31.0.2",
+    )
+    descriptor["networks"].append(second)
+    saved = "*filter\n:INPUT ACCEPT [0:0]\n:DOCKER-USER - [0:0]\nCOMMIT\n"
+    program = iptables_restore(descriptor, saved)
+    current = []
+    for item in reversed(descriptor["networks"]):
+        for parent, chain in (("INPUT", host_isolation.INPUT), ("DOCKER-USER", host_isolation.FORWARD)):
+            current.append(f"-A {parent} -s {item['subnet']} -i {item['bridge']} -j {chain}")
+    current.extend(line for line in program.splitlines() if line.startswith("-A "))
+    if mutation == "earlier_accept":
+        current.insert(0, "-A INPUT -j ACCEPT")
+    elif mutation == "foreign_subnet":
+        current[0] = current[0].replace("172.31.0.0/24", "172.99.0.0/24")
+    reads = iter([saved, "\n".join(current)])
+
+    def command(args, raw=None, *, check=True):
+        return SimpleNamespace(stdout=next(reads) if args[0] == "iptables-save" else "", returncode=0)
+
+    monkeypatch.setattr(host_isolation, "command", command)
+    if mutation is None:
+        assert host_isolation.apply_rules(descriptor, "iptables")
+    else:
+        with pytest.raises(ValueError, match="host_firewall_jump_not_first"):
+            host_isolation.apply_rules(descriptor, "iptables")
+
+
 @pytest.mark.parametrize("value", ["2001:db8::/64", "0.0.0.0/0", "172.30.0.1/24"])
 def test_unprotected_or_ambiguous_network_refused(descriptor, value):
     descriptor["networks"][0]["subnet"] = value
