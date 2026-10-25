@@ -80,6 +80,9 @@ class CredentialRepository:
                 )
             )
         await session.flush()
+        # MySQL does not return server defaults on INSERT. Load them explicitly
+        # before synchronous DTO construction, without committing the caller's UoW.
+        await session.refresh(row)
         return row
 
     @classmethod
