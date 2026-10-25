@@ -247,17 +247,64 @@ def test_overwritten_output_file_is_still_a_deliverable():
     assert _names(select_deliverables([rewritten], baseline_paths=baseline)) == ["output/milvus_status_report.md"]
 
 
-def test_leftover_output_kept_when_this_run_also_wrote_output():
-    """A new chart next to last turn's report: keep the zone, drop nothing."""
+def test_leftover_output_dropped_when_this_run_also_wrote_output():
+    """A new chart next to last turn's report: deliver the chart, not the old report."""
     leftover = _detail("output/report.md", mtime=10.0)
     leftover["file_md5"] = "old"
     chart = _detail("output/chart.png", mtime=20.0)
     chart["file_md5"] = "new"
     baseline = {leftover["file_path"]: "old"}
-    assert _names(select_deliverables([leftover, chart], baseline_paths=baseline)) == [
-        "output/report.md",
+    assert _names(select_deliverables([leftover, chart], baseline_paths=baseline)) == ["output/chart.png"]
+
+
+def test_follow_up_turn_delivers_only_its_own_file():
+    """Turn 3 "再做一个word文档" inherits turns 1-2's output/; only the docx is new."""
+    inherited = [
+        _detail("output/就业方式.pptx", mtime=1.0),
+        _detail("output/就业方式.html", mtime=2.0),
+        _detail("output/就业方式.xlsx", mtime=3.0),
+        _detail("output/就业方式.md", mtime=4.0),
+    ]
+    baseline = {info["file_path"]: info["file_md5"] for info in inherited}
+    docx = _detail("output/就业方式.docx", mtime=9.0)
+    assert _names(select_deliverables([*inherited, docx], baseline_paths=baseline)) == ["output/就业方式.docx"]
+
+
+def test_leftover_chart_linked_by_fresh_report_is_kept(tmp_path):
+    """The md preview resolves ![](charts/a.png) against the delivered file list."""
+    root = str(tmp_path)
+    os.makedirs(os.path.join(root, "output", "charts"))
+    report = _detail("output/report.md", mtime=20.0, root=root)
+    with open(report["file_path"], "w", encoding="utf-8") as f:
+        f.write("# 报告\n\n![趋势](charts/a.png)\n")
+    linked = _detail("output/charts/a.png", mtime=10.0, root=root)
+    unlinked = _detail("output/charts/b.png", mtime=10.0, root=root)
+    old_deck = _detail("output/deck.pptx", mtime=10.0, root=root)
+    baseline = {info["file_path"]: info["file_md5"] for info in (linked, unlinked, old_deck)}
+    selected = select_deliverables([report, linked, unlinked, old_deck], baseline_paths=baseline)
+    assert _names(selected) == ["output/report.md", "output/charts/a.png"]
+
+
+def test_leftover_linked_by_workspace_relative_path_is_kept(tmp_path):
+    root = str(tmp_path)
+    os.makedirs(os.path.join(root, "output"))
+    page = _detail("output/page.html", mtime=20.0, root=root)
+    with open(page["file_path"], "w", encoding="utf-8") as f:
+        f.write('<img src="output/chart.png">')
+    chart = _detail("output/chart.png", mtime=10.0, root=root)
+    baseline = {chart["file_path"]: chart["file_md5"]}
+    assert _names(select_deliverables([page, chart], baseline_paths=baseline)) == [
+        "output/page.html",
         "output/chart.png",
     ]
+
+
+def test_fresh_binary_deliverable_keeps_no_leftovers():
+    """Only markdown/html are scanned for links; a fresh xlsx pulls nothing in."""
+    sheet = _detail("output/data.xlsx", mtime=20.0)
+    chart = _detail("output/chart.png", mtime=10.0)
+    baseline = {chart["file_path"]: chart["file_md5"]}
+    assert _names(select_deliverables([sheet, chart], baseline_paths=baseline)) == ["output/data.xlsx"]
 
 
 def test_path_only_baseline_still_keeps_output_zone():

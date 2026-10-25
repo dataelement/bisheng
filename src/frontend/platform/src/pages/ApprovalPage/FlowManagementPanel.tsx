@@ -1,3 +1,6 @@
+import { useContext } from "react";
+import { locationContext } from "@/contexts/locationContext";
+import { approverSourceLabel } from "./approverSources";
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
 import { Alert, Button, Select } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -7,7 +10,7 @@ import { handleUiRequest, showApiError } from '@/controllers/request';
 import { Switch, Tag, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { ApproverSource } from "./approvalMetadata";
-import { APPROVER_SOURCE_OPTIONS, conditionLabel } from "./approvalMetadata";
+import { conditionLabel } from "./approvalMetadata";
 import { ActionBtn, SectionHeader, StatusBadge } from "./ApprovalPrimitives";
 
 import type { useApprovalController } from "./useApprovalController";
@@ -15,6 +18,7 @@ interface FlowManagementPanelProps {
   controller: ReturnType<typeof useApprovalController>;
 }
 export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
+  const { appConfig } = useContext(locationContext);
   const selectLabels = useSelectLabels();
   const {
     activeTab,
@@ -450,12 +454,7 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                                             icon={<Outlined.People size={12} />}
                                             className="whitespace-nowrap"
                                           >
-                                            {(() => {
-                                              const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
-                                              return opt
-                                                ? t(opt.labelKey, { defaultValue: src.type })
-                                                : (src.label ?? src.type);
-                                            })()}
+                                            {approverSourceLabel(src.type, t, src.label, !!appConfig.multiTenantEnabled)}
                                           </Tag>
                                         );
                                       })}

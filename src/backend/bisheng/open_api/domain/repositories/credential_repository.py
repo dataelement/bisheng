@@ -45,9 +45,171 @@ class CredentialRepository:
         return row
 
     @classmethod
+    async def create_in_transaction(cls, session, row, entries=(), *, audit_operator=None):
+        """Flush into the caller transaction; no cache writes or independent session."""
+        from bisheng.database.models.audit_log import AuditLog
+
+        session.add(row)
+        await session.flush()
+        for subject_type, subject_id in entries:
+            session.add(
+                ApiCredentialDelegateScope(
+                    tenant_id=row.tenant_id, credential_id=row.id, subject_type=subject_type, subject_id=subject_id
+                )
+            )
+        if audit_operator is not None:
+            session.add(
+                AuditLog(
+                    tenant_id=row.tenant_id,
+                    operator_id=audit_operator.user_id,
+                    operator_name=getattr(audit_operator, "user_name", None)
+                    or ("system" if audit_operator.user_id == 0 else None),
+                    operator_tenant_id=audit_operator.tenant_id,
+                    action="open_api.api_key.issue",
+                    target_type="api_credential",
+                    target_id=str(row.id),
+                    object_name=row.name,
+                    audit_metadata={
+                        "credential_id": row.id,
+                        "subject_kind": row.subject_kind,
+                        "subject_id": row.subject_id,
+                        "scopes": list(row.scopes or []),
+                        "key_mask": row.key_mask,
+                        **await cls.trusted_app_metadata(session, row),
+                    },
+                )
+            )
+        await session.flush()
+        return row
+
+    @classmethod
+    async def trusted_app_metadata(cls, session, row):
+        """Resolve the immutable hosted subject, never an owner's other apps."""
+        from bisheng.app_publish.domain.models.hosted_app_subject import HostedAppSubject
+        from bisheng.database.models.app import App
+
+        if row.subject_kind != "hosted_app":
+            return {}
+        statement = (
+            select(App.id)
+            .join(HostedAppSubject, HostedAppSubject.app_id == App.id)
+            .where(HostedAppSubject.id == row.subject_id, App.tenant_id == row.tenant_id)
+        )
+        app_id = (await session.exec(statement)).first()
+        if app_id is None:
+            raise ValueError("credential_app_binding_invalid")
+        return {"app_id": app_id}
+
+    @classmethod
+    async def audit_app_metadata(cls, row):
+        if row.subject_kind != "hosted_app":
+            return {}
+        async with get_async_db_session() as session:
+            return await cls.trusted_app_metadata(session, row)
+
+    @staticmethod
+    async def append_runtime_revoke_audit(session, *, row, binding, operation, reason):
+        from bisheng.database.models.audit_log import AuditLog
+
+        session.add(
+            AuditLog(
+                tenant_id=row.tenant_id,
+                operator_id=0,
+                operator_name="system",
+                operator_tenant_id=row.tenant_id,
+                action="open_api.api_key.revoke",
+                target_type="api_credential",
+                target_id=str(row.id),
+                object_name=row.name,
+                audit_metadata={
+                    "app_id": binding.app_id,
+                    "credential_id": row.id,
+                    "operation_id": operation.id,
+                    "reason": reason,
+                    "subject_kind": row.subject_kind,
+                    "subject_id": row.subject_id,
+                    "key_mask": row.key_mask,
+                },
+            )
+        )
+        await session.flush()
+
+    @classmethod
+    async def revoke_runtime_binding(cls, session, binding, operation, *, reason):
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeCredentialBinding, RuntimeOperation
+
+        current = (
+            await session.exec(
+                select(RuntimeCredentialBinding)
+                .where(
+                    RuntimeCredentialBinding.id == binding.id,
+                    RuntimeCredentialBinding.tenant_id == operation.tenant_id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).first()
+        if current is None or current.app_id != operation.app_id:
+            raise ValueError("credential_app_binding_invalid")
+        row = (
+            await session.exec(
+                select(ApiCredential)
+                .where(
+                    ApiCredential.id == current.credential_id,
+                    ApiCredential.tenant_id == current.tenant_id,
+                )
+                .with_for_update()
+            )
+        ).first()
+        origin = (
+            await session.exec(
+                select(RuntimeOperation).where(
+                    RuntimeOperation.id == current.operation_id,
+                    RuntimeOperation.tenant_id == current.tenant_id,
+                    RuntimeOperation.app_id == current.app_id,
+                    RuntimeOperation.version_id == current.version_id,
+                )
+            )
+        ).first()
+        if (
+            row is None
+            or origin is None
+            or (await cls.trusted_app_metadata(session, row)).get("app_id") != current.app_id
+        ):
+            raise ValueError("credential_app_binding_invalid")
+        if current.state == "revoked":
+            return False
+        current.state = "revoked"
+        session.add(current)
+        # Binding state is the authentication fence. Keep the credential's own
+        # revoked marker consistent; do not perform a separate cache transaction.
+        if row.revoked_at is None:
+            row.revoked_at = datetime.now()
+            row.revoke_reason = reason
+            session.add(row)
+        await cls.append_runtime_revoke_audit(session, row=row, binding=current, operation=operation, reason=reason)
+        return True
+
+    @classmethod
     async def get(cls, credential_id: int) -> ApiCredential | None:
         async with get_async_db_session() as session:
             return (await session.exec(select(ApiCredential).where(ApiCredential.id == credential_id))).first()
+
+    @classmethod
+    async def get_by_ids(cls, credential_ids: list[int]) -> list[ApiCredential]:
+        """Batch read for display — the audit page resolves the key mask of
+        the credential an ``open_api.call`` / ``app.release.submit`` row names
+        in ``metadata.credential_id`` (F056 AC-17). Tenant filter bypassed:
+        a global super's audit page spans tenants and the rows themselves were
+        already scoped by the audit query. Revoked rows are included on
+        purpose — a mask must stay readable after the key is gone.
+        """
+        if not credential_ids:
+            return []
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                statement = select(ApiCredential).where(col(ApiCredential.id).in_(credential_ids))
+                return list((await session.exec(statement)).all())
 
     @classmethod
     async def get_by_hash(cls, token_hash: str) -> ApiCredential | None:

@@ -1,0 +1,7 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+Root nodes [{"id": 1, "dept_id": "BS@root", "external_id": "BS@root", "name": "\u9ed8\u8ba4\u7ec4\u7ec7", "parent_id": null, "path": "/1/", "sort_order": 0, "source": "local", "status": "active", "is_tenant_root": false, "mounted_tenant_id": null, "has_children": true, "matched": false, "children": []}]
+Mounted a tenant 2 assignable [{"id": 2, "role_name": "\u666e\u901a\u7528\u6237", "role_type": "global", "department_id": null}]
+Ordinary member childowner tenant 2 member {"user_id": 4, "user_name": "e2e-f086-childowner", "person_id": "e2e-f086-childowner", "dept_id": "BS@4ecd86"}
+Ordinary member childnonowner tenant 2 member {"user_id": 5, "user_name": "e2e-f086-childnonowner", "person_id": "e2e-f086-childnonowner", "dept_id": "BS@4ecd86"}
+Mounted b tenant 3 assignable [{"id": 2, "role_name": "\u666e\u901a\u7528\u6237", "role_type": "global", "department_id": null}]
+Ordinary member foreign tenant 3 member {"user_id": 6, "user_name": "e2e-f086-foreign", "person_id": "e2e-f086-foreign", "dept_id": "BS@726557"}

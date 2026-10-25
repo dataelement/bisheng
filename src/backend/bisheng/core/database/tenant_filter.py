@@ -108,7 +108,39 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.finetune.domain.models.preset_train",
     "bisheng.finetune.domain.models.model_deploy",
     "bisheng.finetune.domain.models.finetune",
+    # Open API auth: package-level registration — the package __init__ imports
+    # api_credential / service_account / credential_delegate_scope /
+    # open_api_tenant_setting, all of which carry tenant_id.
     "bisheng.open_api.domain.models",
+    # F054 hosted apps. `app` / `app_instance` carry tenant_id and are filtered.
+    # `app_version` deliberately does NOT: a version belongs to its app, so its
+    # isolation is derived — load the `app` row by `app_id` (that one IS
+    # filtered) and read the version through it. Listing the module here only
+    # guarantees SQLModel.metadata sees the table;
+    # _discover_tenant_aware_tables() skips it for lack of the column, so a
+    # read that starts from a bare `version_id` still leaks across tenants
+    # (design K5 ② / pit 31) — the DAO forces `app_id` into every such
+    # signature for exactly this reason.
+    "bisheng.database.models.app",
+    "bisheng.database.models.app_version",
+    "bisheng.database.models.app_instance",
+    # `app_access_log` (AC-38) carries the *application's* tenant_id, written
+    # explicitly by entry_authz_service (the internal authorize endpoint runs
+    # under bypass, so before_flush does not fill it); registering it here is
+    # what makes the F056 query face's reads auto-filtered.
+    "bisheng.database.models.app_access_log",
+    # F055 publish pipeline. `app_deployment` and `app_preview_session` carry
+    # tenant_id and are filtered; `hosted_app_subject` does not (it derives
+    # isolation from the `app` row).
+    "bisheng.app_publish.domain.models",
+    "bisheng.app_runtime.domain.models",
+    "bisheng.app_governance.domain.models",
+    # `resource_tier` has NO tenant_id column: resource tiers are platform-level
+    # and shared across tenants (AC-44). Listing it here only guarantees
+    # SQLModel.metadata sees the table; _discover_tenant_aware_tables() skips it
+    # for lack of the column, so it is never auto-filtered.
+    "bisheng.database.models.resource_tier",
+    # F062 desktop model access.
     "bisheng.dsh.domain.models.user_policy",
     "bisheng.dsh.domain.models.admin_operation",
     "bisheng.dsh.domain.models.monthly_usage",

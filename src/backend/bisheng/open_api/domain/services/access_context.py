@@ -9,8 +9,10 @@ from typing import Any
 from bisheng.common.errcode.open_api import (
     OpenApiAuthDependencyUnavailableError,
     OpenApiAuthError,
+    OpenApiDelegateLocalDevRefusedError,
     OpenApiDelegationModeUnsupportedError,
     OpenApiEndpointUnregisteredError,
+    OpenApiHostedAppEndpointRefusedError,
     OpenApiScopeMissingError,
     PersonalTokenDisabledError,
 )
@@ -21,7 +23,12 @@ from bisheng.open_api.domain.context import (
     reset_current_open_api_principal,
     set_current_open_api_principal,
 )
-from bisheng.open_api.domain.scopes import OpenApiScopeMarker
+from bisheng.open_api.domain.scopes import (
+    DELEGATE_SCOPE_CODE,
+    HOSTED_APP_ACTOR_KIND,
+    LOCAL_DEV_TOOLKIT_SCOPE_CODES,
+    OpenApiScopeMarker,
+)
 from bisheng.open_api.domain.services.credential_validator import validate_bearer
 from bisheng.open_api.domain.services.identity_service import (
     assert_no_removed_identity_headers,
@@ -80,6 +87,20 @@ async def open_api_access_context(
 
         if marker is None:
             raise OpenApiEndpointUnregisteredError()
+        # App factory (F055 AC-52): a hosted application's scopes come from its
+        # capability declaration, and one declared knowledge base buys
+        # ``knowledge:read`` — which also admits routes that execute as the
+        # application's owner. So this subject is admitted per route,
+        # default-deny, and only the capability faces opt in (``hosted_app``).
+        # The MCP transport marker never opts in.
+        if principal.actor_kind == HOSTED_APP_ACTOR_KIND and not marker.hosted_app:
+            raise OpenApiHostedAppEndpointRefusedError()
+        # App factory (INV-31 runtime half): the local development toolkit
+        # scopes execute as the service account itself and never carry
+        # delegation. Checked before the scope check so a delegated key hears
+        # the real reason instead of 26003 or 26016.
+        if marker.scope in LOCAL_DEV_TOOLKIT_SCOPE_CODES and principal.has_scope(DELEGATE_SCOPE_CODE):
+            raise OpenApiDelegateLocalDevRefusedError()
         if marker.scope is not None and not principal.has_scope(marker.scope):
             raise OpenApiScopeMissingError(required=marker.scope)
 

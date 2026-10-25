@@ -1,0 +1,74 @@
+name: App Runtime Quality
+
+# Gate for the app-factory runtime layer (F054): src/runtime-manager/,
+# src/app-proxy/ and the docker-compose wiring that connects them.
+#
+# Why it exists: both processes are configured entirely through environment
+# variables and both are *fail-closed but still healthy* — a typo'd variable
+# name is indistinguishable from an unset one, the process boots, the container
+# reports healthy, and every request renders a fallback page. That failure mode
+# is invisible to any runtime probe, so it has to be caught statically.
+#
+# It got caught the hard way once: the compose file shipped
+# APP_PROXY_BACKEND_BASE_URL / APP_PROXY_HMAC_SECRET, which nothing reads, while
+# the systemd unit next to it had already been fixed. Nothing was red.
+
+on:
+  pull_request:
+    paths:
+      - "src/runtime-manager/**"
+      - "src/app-proxy/**"
+      - "docker/docker-compose.yml"
+      - "docker/verify-app-runtime-compose.sh"
+      - "docker/verify_app_runtime_compose.py"
+      - ".github/workflows/app-runtime-quality.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose-contract:
+    name: Compose ↔ config.py contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ubuntu-latest ships docker compose v2; the script needs it only to
+      # resolve the compose document, never to start anything.
+      - name: Verify the app-runtime compose wiring
+        run: bash docker/verify-app-runtime-compose.sh
+
+  unit:
+    name: Lint & Test (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [runtime-manager, app-proxy]
+    defaults:
+      run:
+        working-directory: src/${{ matrix.package }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen, not a plain sync: uv.lock is committed and both Dockerfiles
+      # build from `uv export --frozen`, so CI must resolve the same way.
+      - name: Sync (frozen)
+        run: uv sync --frozen --extra dev
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      # `docker`-marked cases need a real daemon and are skipped by default
+      # (RTM_RUN_DOCKER_TESTS=1 turns them on during the 114 verification).
+      - name: Tests
+        run: uv run pytest -q

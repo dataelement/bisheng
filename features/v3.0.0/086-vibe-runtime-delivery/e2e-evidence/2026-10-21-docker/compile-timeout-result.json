@@ -1,0 +1,55 @@
+{
+  "operation": {
+    "id": "4688564f2fdf44d3926b1fe22c8edea3",
+    "kind": "prepare",
+    "stage": "timed_out",
+    "status": "timed_out",
+    "cleanup_status": "complete",
+    "failure": {
+      "reason": "operation_timeout",
+      "maintenance": false,
+      "failed_stage": "preparing",
+      "diagnostic_tail": "",
+      "data_may_have_changed": false
+    },
+    "version_id": "0f53778bac9a4dd6b3c4dbdec3adbf76",
+    "generation": 1
+  },
+  "deployment": {
+    "deployment_id": "86b7d788bfd4419c9fe331203d4f6eef",
+    "app_id": "21d7555bc22c48b29b12be8d63d07284",
+    "version_id": "0f53778bac9a4dd6b3c4dbdec3adbf76",
+    "version_no": null,
+    "stage": "precheck_build",
+    "status": "failed",
+    "failure": {
+      "code": 16227,
+      "hints": [],
+      "stage": "precheck_build",
+      "details": {
+        "reason": "operation_timeout",
+        "operation_id": "4688564f2fdf44d3926b1fe22c8edea3",
+        "runtime_stage": "preparing"
+      },
+      "message": "\u5e94\u7528\u4f9d\u8d56\u6216\u4ea4\u4ed8\u51c6\u5907\u5931\u8d25"
+    },
+    "approval": null,
+    "app_state": "draft",
+    "entry_url": "http://nginx:3001/apps/e2e-f086-compile-timeout",
+    "scan_result": {
+      "hits": [],
+      "blocked": false,
+      "skipped": [],
+      "files_scanned": 4,
+      "files_skipped": 0
+    }
+  },
+  "actual_phase": "compile",
+  "container": {
+    "operation_id": "4688564f2fdf44d3926b1fe22c8edea3",
+    "container_id": "fd3079c24dba3e9e251898278519a5200825bfadc2b9a61e840c992282cc4108",
+    "network_mode": "none",
+    "read_only": true
+  },
+  "reservations_released": true
+}

@@ -1,4 +1,5 @@
 // DialogueWork.tsx
+import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { ScopeBar } from "@/pages/ModelPage/manage/ScopeBar";
 import { Tabs } from "@bisheng/ui";
@@ -14,6 +15,7 @@ export default function DialogueWork() {
     const [scopeVersion, setScopeVersion] = useState(0);
     const { t, i18n } = useTranslation();
     const { user } = useContext(userContext);
+    const { appConfig } = useContext(locationContext);
     useEffect(() => {
         i18n.loadNamespaces("tool");
     }, [i18n]);
@@ -21,7 +23,7 @@ export default function DialogueWork() {
     return (
         <div className="w-full h-full px-2 pt-4 relative">
             <div className="mb-4 flex items-center gap-3">
-                <ScopeBar user={user} onScopeChange={() => setScopeVersion((value) => value + 1)} />
+                {appConfig.multiTenantEnabled && <ScopeBar user={user} onScopeChange={() => setScopeVersion((value) => value + 1)} />}
                 <Tabs
                     activeKey={activeTab}
                     onChange={setActiveTab}

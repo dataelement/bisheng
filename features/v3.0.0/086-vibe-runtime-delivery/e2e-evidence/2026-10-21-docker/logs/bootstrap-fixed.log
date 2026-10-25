@@ -1,0 +1,32 @@
+........................................................                 [100%]
+=============================== warnings summary ===============================
+bisheng/core/ai/__init__.py:2
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/bisheng/core/ai/__init__.py:2: DeprecationWarning: `langchain-community` is being sunset and is no longer actively maintained. See https://github.com/langchain-ai/langchain-community/issues/674 for details and migration guidance toward standalone integration packages.
+    from langchain_community.chat_models import ChatTongyi, ChatZhipuAI, MoonshotChat
+
+<frozen importlib._bootstrap>:241
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18
+  /Users/zhangguoqing/works/bisheng/src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/_pytest/cacheprovider.py:475
+  /Users/zhangguoqing/works/bisheng/src/backend/.venv/lib/python3.11/site-packages/_pytest/cacheprovider.py:475: PytestCacheWarning: cache could not write path /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/.pytest_cache/v/cache/nodeids: [Errno 1] Operation not permitted: '/Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/.pytest_cache/v/cache/nodeids'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/_pytest/cacheprovider.py:429
+  /Users/zhangguoqing/works/bisheng/src/backend/.venv/lib/python3.11/site-packages/_pytest/cacheprovider.py:429: PytestCacheWarning: cache could not write path /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/.pytest_cache/v/cache/lastfailed: [Errno 1] Operation not permitted: '/Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/.pytest_cache/v/cache/lastfailed'
+    config.cache.set("cache/lastfailed", self.lastfailed)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+56 passed, 9 warnings in 0.33s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

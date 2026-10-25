@@ -11,6 +11,7 @@ from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from bisheng.core.config.app_runtime import AppRuntimeConf
 from bisheng.core.config.dsh import DshSettings
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
@@ -236,6 +237,8 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.information.reconcile.dispatch_information_subscription_reconcile",
                 "schedule": 3600.0,
             }
+        if "runtime_audit_reconcile" not in self.beat_schedule:
+            self.beat_schedule["runtime_audit_reconcile"] = {"task": "runtime_audit_reconcile", "schedule": 30.0}
         if "dispatch_information_article_poll" not in self.beat_schedule:
             self.beat_schedule["dispatch_information_article_poll"] = {
                 "task": "bisheng.worker.information.article.dispatch_information_article_poll",
@@ -1007,8 +1010,15 @@ class Settings(BaseModel):
     information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
     mcp: McpConf = McpConf()
     multi_tenant: MultiTenantConf = MultiTenantConf()
+    # Open platform switch (three-stage: yaml → /env → appConfig) and open API
+    # auth tuning; both models live in core/config/open_platform.py. Process-level,
+    # not DB hot config.
     open_platform: OpenPlatformConf = OpenPlatformConf()
     open_api: OpenApiConf = OpenApiConf()
+    # F054: app-factory runtime layer switch + runtime-manager / app-proxy
+    # wiring. Sibling key of open_platform, never merged with it — any
+    # combination of the two must boot (AC-61).
+    app_runtime: AppRuntimeConf = AppRuntimeConf()
     open_mcp: OpenMcpConf = OpenMcpConf()
     openfga: OpenFGAConf = OpenFGAConf()
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()

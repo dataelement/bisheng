@@ -122,6 +122,11 @@ export function useApprovalController() {
     const presetFields = preset?.condition_fields?.filter((f) => CONDITION_FIELD_META[f]) ?? [];
     return dedup([...ALWAYS_INCLUDED, ...presetFields]);
   }, [selectedScenario, presets]);
+  // Only a preset may withdraw the automatic approval option.
+  const allowPassRoute = useMemo(() => {
+    if (!selectedScenario) return true;
+    return !presets.find(preset => preset.scenario_code === selectedScenario.scenario_code)?.mandatory_approval;
+  }, [selectedScenario, presets]);
   // Approver source types allowed for the selected scenario (drives NodeDialog dropdown)
   const activeSourceTypes = useMemo<string[] | undefined>(() => {
     if (!selectedScenario) return undefined;
@@ -538,6 +543,7 @@ export function useApprovalController() {
     handleAddScenario,
     routeDialog,
     activeConditionFields,
+    allowPassRoute,
     handleSaveRoute,
     flowDialog,
     handleSaveFlow,

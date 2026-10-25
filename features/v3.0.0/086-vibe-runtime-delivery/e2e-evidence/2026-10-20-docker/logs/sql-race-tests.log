@@ -1,0 +1,71 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.1.1, pluggy-1.7.0 -- /app/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /work
+configfile: pyproject.toml
+plugins: asyncio-1.3.0, langsmith-0.8.14, anyio-4.11.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 5 items
+
+test/app_runtime/test_runtime_delivery_database.py::test_live_identical_concurrent_requests_return_one_operation FAILED [ 20%]
+test/app_runtime/test_runtime_delivery_database.py::test_live_last_capacity_admits_only_one_tenant PASSED [ 40%]
+test/app_runtime/test_runtime_delivery_database.py::test_live_competing_claims_have_one_assignment FAILED [ 60%]
+test/app_runtime/test_runtime_delivery_database.py::test_live_outer_rollback_removes_nested_operation_and_reservation PASSED [ 80%]
+test/app_runtime/test_runtime_delivery_database.py::test_live_foreign_tenant_cannot_load_or_write_operation PASSED [100%]
+
+=================================== FAILURES ===================================
+_________ test_live_identical_concurrent_requests_return_one_operation _________
+test/app_runtime/test_runtime_delivery_database.py:107: in test_live_identical_concurrent_requests_return_one_operation
+    assert not [type(row).__name__ for row in results if isinstance(row, BaseException)]
+E   AssertionError: assert not ['RuntimeConflict', 'RuntimeConflict', 'RuntimeConflict', 'RuntimeConflict', 'RuntimeConflict', 'RuntimeConflict', ...]
+________________ test_live_competing_claims_have_one_assignment ________________
+test/app_runtime/test_runtime_delivery_database.py:163: in test_live_competing_claims_have_one_assignment
+    assert len([row for row in results if isinstance(row, RuntimeConflict)]) == 1
+E   assert 0 == 1
+E    +  where 0 = len([])
+=============================== warnings summary ===============================
+bisheng/core/ai/__init__.py:2
+  /work/bisheng/core/ai/__init__.py:2: DeprecationWarning: `langchain-community` is being sunset and is no longer actively maintained. See https://github.com/langchain-ai/langchain-community/issues/674 for details and migration guidance toward standalone integration packages.
+    from langchain_community.chat_models import ChatTongyi, ChatZhipuAI, MoonshotChat
+
+../app/.venv/lib/python3.11/site-packages/simhash/__init__.py:50
+  /app/.venv/lib/python3.11/site-packages/simhash/__init__.py:50: DeprecationWarning: invalid escape sequence '\w'
+    """
+
+../app/.venv/lib/python3.11/site-packages/jieba/__init__.py:44
+  /app/.venv/lib/python3.11/site-packages/jieba/__init__.py:44: DeprecationWarning: invalid escape sequence '\.'
+    re_han_default = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._%\-]+)", re.U)
+
+../app/.venv/lib/python3.11/site-packages/jieba/__init__.py:46
+  /app/.venv/lib/python3.11/site-packages/jieba/__init__.py:46: DeprecationWarning: invalid escape sequence '\s'
+    re_skip_default = re.compile("(\r\n|\s)", re.U)
+
+../app/.venv/lib/python3.11/site-packages/jieba/finalseg/__init__.py:78
+  /app/.venv/lib/python3.11/site-packages/jieba/finalseg/__init__.py:78: DeprecationWarning: invalid escape sequence '\.'
+    re_skip = re.compile("([a-zA-Z0-9]+(?:\.\d+)?%?)")
+
+../app/.venv/lib/python3.11/site-packages/jieba/_compat.py:18
+  /app/.venv/lib/python3.11/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+../app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:16
+  /app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:16: DeprecationWarning: invalid escape sequence '\.'
+    re_skip_detail = re.compile("([\.0-9]+|[a-zA-Z0-9]+)")
+
+../app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:17
+  /app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:17: DeprecationWarning: invalid escape sequence '\.'
+    re_han_internal = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._]+)")
+
+../app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:18
+  /app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:18: DeprecationWarning: invalid escape sequence '\s'
+    re_skip_internal = re.compile("(\r\n|\s)")
+
+../app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:21
+  /app/.venv/lib/python3.11/site-packages/jieba/posseg/__init__.py:21: DeprecationWarning: invalid escape sequence '\.'
+    re_num = re.compile("[\.0-9]+")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/app_runtime/test_runtime_delivery_database.py::test_live_identical_concurrent_requests_return_one_operation
+FAILED test/app_runtime/test_runtime_delivery_database.py::test_live_competing_claims_have_one_assignment
+=================== 2 failed, 3 passed, 10 warnings in 4.20s ===================

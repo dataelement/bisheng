@@ -1,0 +1,11 @@
+{
+  "design_confirmation": "确认 F055 简化设计",
+  "approved_design_sha256": "2ef7247c7fcc71d1e2e44b34a9df8dfe865135adc66c249166a29202e29402d6",
+  "tasks_result": "LGTM",
+  "count": 38,
+  "range": [
+    "T071",
+    "T108"
+  ],
+  "code_started": false
+}

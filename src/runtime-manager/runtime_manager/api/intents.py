@@ -1,0 +1,176 @@
+"""Intent RPC — the write side (design §4.2 ①).
+
+Every route is HMAC protected and *declares desired state*: "this app should be
+running version V of image I at tier T". The manager reconciles; the backend
+never says ``docker run`` (D1).
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends
+
+from runtime_manager.admission import AdmissionService, Tier
+from runtime_manager.api.schemas import (
+    AdmissionRequest,
+    AdmissionResponse,
+    BuildRequest,
+    DbMigrateRequest,
+    DeployRequest,
+    DestroyRequest,
+    PreviewStartRequest,
+    PreviewStopRequest,
+    ProbeRequest,
+    StopRequest,
+)
+from runtime_manager.appdb import AppDbSchemaService
+from runtime_manager.auth import verify_hmac
+from runtime_manager.builder import BuildService
+from runtime_manager.config import get_config
+from runtime_manager.errors import InvalidRequestError
+from runtime_manager.lifecycle import LifecycleService
+from runtime_manager.observability import intent_span
+from runtime_manager.preview import PreviewService
+from runtime_manager.probe import ProbeService
+
+router = APIRouter(prefix="/v1", tags=["intents"], dependencies=[Depends(verify_hmac)])
+
+
+@router.post("/admission", response_model=AdmissionResponse)
+async def admission(request: AdmissionRequest) -> AdmissionResponse:
+    """AC-19 — can this host take one more instance (or one more build)?"""
+    config = get_config()
+    tier = Tier(cpu=request.tier.cpu, mem_mb=request.tier.mem) if request.tier else None
+    with intent_span("admission", None) as span:
+        result = AdmissionService(config).evaluate(tier, purpose=request.purpose)
+        # A refusal is a legitimate answer, not an error — but it is the answer
+        # an operator will come looking for, so it is the span's result.
+        span.result = "ok" if result.admitted else result.reason
+        return AdmissionResponse(**result.to_response())
+
+
+@router.post("/intents/build")
+async def build(request: BuildRequest) -> dict:
+    """AC-15 — build an image from a code snapshot using the platform's template.
+
+    Returns a handle immediately: a real build takes minutes and the backend
+    polls ``GET /v1/builds/{build_id}``. An unsupported ``runtime`` is rejected
+    synchronously (400 + the supported set) rather than becoming a build that
+    has to be polled to discover it never had a chance.
+    """
+    with intent_span("build", request.app_id) as span:
+        record = BuildService(get_config()).submit(request)
+        span.result = record.status
+        return {"build_id": record.build_id, "status": record.status}
+
+
+@router.get("/builds/{build_id}")
+async def build_status(build_id: str) -> dict:
+    """Poll a build: ``{status, stage, message, tail, image_ref}`` (AC-15)."""
+    return BuildService(get_config()).get(build_id).to_response()
+
+
+@router.post("/intents/deploy")
+async def deploy(request: DeployRequest) -> dict:
+    """Declare the desired running state of one app.
+
+    Capacity first, readiness gate before the switch, old instance retired after
+    a grace window (D4 / AC-21). A refusal (capacity) or a failed readiness gate
+    leaves whatever was already serving exactly as it was.
+    """
+    with intent_span("deploy", request.app_id) as span:
+        result = LifecycleService(get_config()).deploy(request)
+        span.result = str(result.get("phase") or "ok")
+        return result
+
+
+@router.post("/intents/stop")
+async def stop(request: StopRequest) -> dict:
+    """AC-41 — reclaim the execution body; the app's data is untouched."""
+    with intent_span("stop", request.app_id) as span:
+        result = LifecycleService(get_config()).stop(request.app_id)
+        span.result = str(result.get("phase") or "ok")
+        return result
+
+
+@router.post("/intents/destroy")
+async def destroy(request: DestroyRequest) -> dict:
+    """AC-40 — only ``purge_volume=true`` (the owner's explicit delete) removes data."""
+    with intent_span("destroy", request.app_id):
+        return LifecycleService(get_config()).destroy(request.app_id, purge_volume=request.purge_volume)
+
+
+@router.post("/intents/preview")
+async def preview_start(request: PreviewStartRequest) -> dict:
+    """F055 AC-26 — an approver's temporary instance of the pending version.
+
+    Deliberately **not** ``deploy`` with a different id: deploy writes a
+    desired-state record, and a record is exactly what would make a preview
+    count against the instance quota and get resurrected by the reconciler.
+    """
+    with intent_span("preview_start", request.app_id) as span:
+        outcome = PreviewService(get_config()).start(
+            session_id=request.session_id,
+            app_id=request.app_id,
+            slug=request.slug,
+            version_id=request.version_id,
+            version_no=request.version_no,
+            image_ref=request.image_ref,
+            tier=Tier(cpu=request.tier.cpu, mem_mb=request.tier.mem),
+            port=request.port,
+            health_path=request.health.path,
+            platform_api_base=request.platform_api_base,
+            base_path=request.base_path,
+            env=request.env,
+            expires_at=request.expires_at,
+            timeout=request.timeout,
+            egress_domains=list(request.egress_domains),
+        )
+        span.result = outcome.phase
+        return outcome.to_response()
+
+
+@router.post("/intents/preview/stop")
+async def preview_stop(request: PreviewStopRequest) -> dict:
+    """F055 AC-28 — reclaim one preview. Idempotent; a gone preview is a success."""
+    with intent_span("preview_stop", None) as span:
+        result = PreviewService(get_config()).stop(request.session_id)
+        span.result = "reclaimed" if result.get("reclaimed") else "absent"
+        return result
+
+
+@router.post("/intents/db-migrate")
+async def db_migrate(request: DbMigrateRequest) -> dict:
+    """F055 T062 / AC-42 — bring an app's declared tables to the shape it declares.
+
+    An intent rather than a data-plane route: the caller states the shape it
+    wants and the manager works out which statements get there, so the data
+    tab's five routes stay provably free of DDL (``test_appdb.py``). Adding a
+    POST under ``/v1/apps/{app_id}/db/…`` would weaken exactly the assertion
+    that makes that namespace safe.
+    """
+    with intent_span("db_migrate", request.app_id) as span:
+        result = AppDbSchemaService(get_config()).migrate(request.app_id, request.plan, snapshot=request.snapshot)
+        span.result = "migrated" if result["applied"] else "noop"
+        return result
+
+
+@router.post("/intents/probe")
+async def probe(request: ProbeRequest) -> dict:
+    """AC-18 — readiness of a live instance, or of a bare image (F055 pre-flight)."""
+    service = ProbeService(get_config())
+    with intent_span("probe", request.app_id) as span:
+        if request.app_id:
+            outcome = service.probe_app(request.app_id, timeout=request.timeout)
+        elif request.image_ref:
+            outcome = service.probe_image(
+                image_ref=request.image_ref,
+                env=request.env,
+                port=request.port,
+                health_path=request.health.path,
+                timeout=request.timeout,
+            )
+        else:
+            raise InvalidRequestError("probe needs either app_id or image_ref")
+        span.result = "ready" if outcome.ready else (outcome.reason or "not_ready")
+        # ``log_tail`` is empty unless an image probe failed (see ProbeOutcome).
+        return {"ready": outcome.ready, "reason": outcome.reason, "log_tail": list(outcome.log_tail)}

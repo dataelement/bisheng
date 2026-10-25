@@ -103,6 +103,10 @@ class User(UserBase, table=True):
             comment="v2.5.1 F012: JWT invalidation counter; +1 on leaf tenant change",
         ),
     )
+    # Every row here is a natural person. Service accounts live in their own
+    # ``service_account`` table (F053 design K15 / K17), so there is no
+    # principal-type column: the vibe-era ``user_type`` was dropped by the
+    # ``vibe_drop_user_user_type`` revision.
 
     # F062: increment in the owning user transaction before publishing a profile snapshot.
     dsh_profile_version: int = Field(
@@ -232,7 +236,11 @@ class UserDao(UserBase):
 
     @classmethod
     async def aget_login_candidates_by_account(cls, account: str) -> list[User]:
-        """登录账号仅支持 external_id（人员ID），并过滤禁用账号。"""
+        """登录账号仅支持 external_id（人员ID），并过滤禁用账号。
+
+        No principal-type lock is needed: service accounts are not rows of this
+        table (F053 design K15 / K17), so they structurally cannot log in.
+        """
         acc = (account or "").strip()
         if not acc:
             return []
@@ -279,6 +287,11 @@ class UserDao(UserBase):
 
     @classmethod
     def _filter_users_statement(cls, statement, user_ids: list[int], keyword: str = None):
+        """Shared base of ``/user/list`` and its consumers.
+
+        People pickers need no service-account exclusion here: service accounts
+        are not rows of this table (F053 design K15 / K17).
+        """
         if user_ids:
             statement = statement.where(User.user_id.in_(user_ids))
         if keyword:

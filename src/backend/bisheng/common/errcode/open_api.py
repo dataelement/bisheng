@@ -225,6 +225,76 @@ class PersonalTokenDataScopeError(OpenApiAuthError):
         super().__init__(**kwargs)
 
 
+# 26050+: the `delegate` ⊗ local development toolkit scope policy (伴生 PRD
+# §4.2.4), one code per gate — 26050 at issue / edit time (a form the admin can
+# fix), 26051 at the channel entrance (a call the developer cannot fix, only
+# re-key). They are deliberately not one code: the two gates have different
+# audiences, different transports (400 vs 403) and different next actions, and
+# `constitution.md` binds one HTTP status per code.
+# 26032-26039 and 26045-26049 stay reserved (test/open_api/test_error_codes.py).
+
+
+class OpenApiDelegateExclusiveScopeError(OpenApiAuthError):
+    """``delegate`` combined with a local development toolkit scope.
+
+    A delegated key must send ``X-On-Behalf-Of`` on every call, while the
+    toolkit surfaces (``model:invoke`` / ``identity:read`` / ``app:manage``)
+    execute as the service account itself — such a key is unusable on both
+    sides, so the combination is refused at issue and edit time rather than
+    left to fail at runtime.
+    """
+
+    Code = 26050
+    Msg = "A delegated credential cannot carry local development toolkit scopes; issue a separate key"
+    http_status = 400
+
+
+class OpenApiDelegateLocalDevRefusedError(OpenApiAuthError):
+    """A delegated key reached a local development toolkit endpoint.
+
+    The runtime half of INV-31 / 伴生 PRD §4.2.4「运行期兜底」. 26050 keeps such
+    a key from being issued, but keys predating that gate still exist, so the
+    channel entrance refuses them by scope — before the missing-scope check, or
+    a delegated key without ``app:manage`` would get 26003 and send its holder
+    to an administrator who then cannot tick the box (26050 refuses the
+    combination) — and before delegation resolution, which would otherwise
+    answer 26016 「补个身份头」, advice the PRD calls undiagnosable for a local
+    agent: the CLI never sends identity headers, so no header is the fix.
+    """
+
+    Code = 26051
+    Msg = "This credential is delegation-only; issue a separate key without delegate for local development"
+    http_status = 403
+
+
+class OpenApiHostedAppEndpointRefusedError(OpenApiAuthError):
+    """A hosted application reached a v2 endpoint that executes as a natural person.
+
+    The legacy ``/api/v2`` business endpoints run as ``get_open_api_operator()``,
+    which for this subject resolves to the application's **owner** — with the
+    owner's roles. That is fine for a service-account key, whose holder *is* that
+    person; it is the exact fall-back F055 AC-52 forbids for an application,
+    which may only reach what its capability declaration names.
+
+    The gap is not hypothetical and is not about one endpoint: a declaration that
+    names a single knowledge base derives ``knowledge:read``, and that one scope
+    also opens ``GET /filelib``, ``GET /filelib/file/list``, ``detail_qa``,
+    ``query_qa`` and the citation detail — every one of which would answer with
+    the owner's full visibility and no whitelist. So the refusal lives at the
+    single place all of them share (``_principal_user_id``) rather than on each
+    route, where the next route added would silently miss it.
+
+    An application's own faces never reach here: the model face resolves its
+    range through ``model_range_policy`` and ``/filelib/retrieve`` routes this
+    subject through ``CapabilityBusService``, which builds the *access user's*
+    identity instead.
+    """
+
+    Code = 26052
+    Msg = "This endpoint is not available to hosted applications; use the declared capability faces"
+    http_status = 403
+
+
 # F073 task-mode Open API. Numbered from 26060: 26045-26049 are reserved by
 # F053, and 26050-26052 are already taken on 3.0-vibe (hosted apps), which will
 # merge this release line later.

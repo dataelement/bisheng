@@ -1002,6 +1002,9 @@ importers:
       pdfjs-dist:
         specifier: 3.10.111
         version: 3.10.111
+      qrcode.react:
+        specifier: 'catalog:'
+        version: 4.2.0(react@18.3.1)
       react:
         specifier: 'catalog:'
         version: 18.3.1

@@ -77,7 +77,7 @@ Content-Type: application/json
 | `filters.knowledge_base_filters[].tags` | string[] | ✅ | — | 标签名（**不是** tag id）。标签作用域是单个 KB（business_type=knowledge_space, business_id=该 KB 的 id）。 |
 | `filters.knowledge_base_filters[].tag_match_mode` | enum | ❌ | `"ANY"` | 枚举：`"ANY"` 或 `"ALL"`。**目前只支持 ANY**，传 `"ALL"` 返回 400。 |
 | `top_k` | int | ❌ | 10 | 最终返回的 chunk 数量上限，跨所有 KB 合并后再截断。范围 `[1, 200]`。 |
-| `max_content` | int | ❌ | 15000 | 单个 KB 内合并文本的字符上限（影响检索阶段返回的最大 chunk 数），传递给底层 retriever。范围 `>=1`。 |
+| `max_content` | int | ❌ | 15000 | 单个 KB 内合并文本的字符上限（影响检索阶段返回的最大 chunk 数），传递给底层 retriever。范围 `1 ~ 60000`；超过 60000 直接按参数校验失败拒绝（本端点上 v2 的校验错误统一回 HTTP 400，见 §5.1），**不做静默夹取**——响应体里没有承载「已被截断」的字段，悄悄给少了调用方无从察觉。 |
 
 ### 3.4 字段语义补充
 
@@ -163,7 +163,10 @@ Content-Type: application/json
 | `knowledge_base_ids` 为空 | `"knowledge_base_ids must not be empty"` |
 | 过滤器引用了不在 `knowledge_base_ids` 中的 KB | `"filter references kb_id 99 not present in knowledge_base_ids"` |
 | `tag_match_mode` 传了 `"ALL"` | `"tag_match_mode=ALL is not yet supported"` |
+| `max_content` 超过 60000 | 字段校验失败，`status_message` 为 pydantic 错误列表 |
 | 字段类型校验失败（FastAPI 自动校验） | `"validation error"` 嵌套结构 |
+
+> `/api/v2` 上的参数校验失败由 v2 异常处理器统一回 **HTTP 400**（不是 FastAPI 默认的 422），响应体形如 `{"status_code": 400, "status_message": [...]}`。
 
 ```json
 {
@@ -175,18 +178,22 @@ Content-Type: application/json
 
 BiSheng 沿用了「HTTP 200 + body 内 status_code」的统一响应模型用于业务错误：
 
-| `status_code` | 含义 | 何时触发 |
-|---|---|---|
-| 404 | 知识库不存在 | `knowledge_base_ids` 中某个 ID 在数据库中查不到 |
-| 403 | 默认操作员对该 KB 无访问权限 | 多租户 / ReBAC 权限检查不通过 |
-| 500 | 服务器内部错误 | 向量库 / ES 不可用、embedding 服务异常等 |
+| `status_code` | HTTP | 含义 | 何时触发 |
+|---|---|---|---|
+| 26321 | 404 | 知识库不可及 | `knowledge_base_ids` 里有一个或多个不可及。**不存在 / 未授予 / 类型不支持（QA 库、个人库）/ 被个人令牌的 data scope 窄化掉** 四种情形给同一个响应——可区分就等于给了一条探测知识库存在性的通道。`data.unreachable_ids` 只列出是哪些 id，不说原因。整个请求失败，不会静默剔除后返回缩水结果 |
+| 26322 | 409 | 声明的知识库能力已被收回 | 仅托管应用运行期出现：能力声明里的库已被删除 |
+| 26323 | 400 | 检索范围过大 | 未显式指定目标、而可及范围超过 200；请在 `knowledge_base_ids` 里点名 |
+| 19002 / 19201 | 503 | 权限引擎不可用 | 评估失败即报错、零结果；**绝不返回未过滤或部分过滤的结果集** |
+| 500 | 500 | 服务器内部错误 | 向量库 / ES 不可用、embedding 服务异常等 |
+
+> **2026-09 变更（F052）**：此前「知识库不存在」答 404 `NotFoundError`、「无权限」答 403、「类型不支持」答 10962，三者可区分；现已统一收敛为 26321。个人令牌被 data scope 窄化时此前答 26044，现同样落到 26321（26044 仍出现在清单类端点上）。
 
 ```json
 {
-  "status_code": 404,
-  "status_message": "Knowledge base 99 not found",
+  "status_code": 26321,
+  "status_message": "Knowledge base is unreachable",
   "data": {
-    "exception": "..."
+    "unreachable_ids": [99]
   }
 }
 ```
@@ -284,7 +291,7 @@ def bisheng_retrieve(query: str, knowledge_base_ids: list[int], top_k: int = 10)
 
 每个 KB 独立执行以下流程，最终结果合并：
 
-1. 权限校验：default operator 是否对该 KB 有 view 权限。
+1. 可及性判定（统一检索门面，F052）：按**执行身份**（密钥主体本身；委托模式下是被代表用户，不是 default operator）一次批量判定——知识空间看 `visible`、文档知识库看 `use`。任一目标不可及即整请求 26321。随后的检索对知识空间还会做**文件级**双层过滤（索引层预过滤 + 结果层过滤），过滤发生在返回之前。
 2. 解析过滤：tag 名（如有）→ tag id → file id 列表。无对应文件时该 KB 返回空。
 3. 构建过滤器：file id 列表 + 主版本过滤（排除已废弃的文档版本）→ Milvus expr + ES filter。
 4. 双路召回：Milvus 向量检索 + Elasticsearch 全文检索，各取 top 100。

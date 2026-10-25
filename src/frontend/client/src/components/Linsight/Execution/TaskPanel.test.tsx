@@ -95,3 +95,33 @@ describe('TaskPanel header state', () => {
         expect(screen.getByText('com_linsight_task_terminated')).toBeTruthy();
     });
 });
+
+describe('TaskPanel header state', () => {
+    it('does not declare the run finished while the session is still running', () => {
+        // Wrap-up window: the model ticked off its last todo, the backend is still
+        // synthesizing the deliverable. Both signals derive from the same data, so
+        // this is not a race — the panel used to contradict the stream every time.
+        render(<TaskPanel tasks={FOUR_DONE} completed={false} running />);
+        expect(screen.getByText('com_linsight_task_panel_wrapping_up')).toBeTruthy();
+        expect(screen.queryByText('com_linsight_task_panel_done')).toBeNull();
+        expect(screen.getByText('4/4')).toBeTruthy();
+    });
+
+    it('declares the run finished once the session status says so', () => {
+        render(<TaskPanel tasks={FOUR_DONE} completed running={false} />);
+        expect(screen.getByText('com_linsight_task_panel_done')).toBeTruthy();
+        expect(screen.queryByText('com_linsight_task_panel_wrapping_up')).toBeNull();
+    });
+
+    it('keeps the plain task header while a task is still running', () => {
+        const inFlight = [...FOUR_DONE, task('e', 'in_progress')];
+        render(<TaskPanel tasks={inFlight} completed={false} running />);
+        expect(screen.getByText('com_linsight_task_panel')).toBeTruthy();
+    });
+
+    it('still flags a manually stopped run', () => {
+        // Gate-keeper: the stop path outranks the wrap-up window.
+        render(<TaskPanel tasks={FOUR_DONE} completed={false} running terminated />);
+        expect(screen.getByText('com_linsight_task_terminated')).toBeTruthy();
+    });
+});

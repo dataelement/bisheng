@@ -17,11 +17,16 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { userContext } from "@/contexts/userContext";
-import { changeAssistantStatusApi,createAssistantsApi,deleteAssistantApi,getAssistantDetailApi,saveAssistanttApi } from "@/controllers/API/assistant";
-import { deleteFlowFromDatabase,getAppsApi,getFlowApi } from "@/controllers/API/flow";
-import { copyReportTemplate,createWorkflowApi,onlineWorkflow } from "@/controllers/API/workflow";
-import { handleUiRequest } from "@/controllers/request";
-import { AppNumType,AppType } from "@/types/app";
+import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
+import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
+import { deleteFlowFromDatabase, getAppsApi, getFlowApi } from "@/controllers/API/flow";
+import type { HostedAppActionResult } from "@/controllers/API/hostedApp";
+import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/controllers/API/workflow";
+import { AppNumType, AppType } from "@/types/app";
+import { locationContext } from "@/contexts/locationContext";
+import { HostedAppCard } from "./HostedAppCard";
+import type { HostedAppActionKind } from "./useHostedAppActions";
+import { HOSTED_APP_STATES, stateI18nKey } from "./hostedApp/types";
 import { FlowType } from "@/types/flow";
 import { useInfiniteCursorTable } from "@/util/hook";
 import { generateUUID } from "@/utils";
@@ -34,16 +39,25 @@ import CreateApp from "./CreateApp";
 import CreateTemp from "./CreateTemp";
 import { useCreateTemp,useQueryLabels } from "./hook";
 
-/** 按应用上线(2)/下线(1)状态筛选，与后端 ``/api/v1/workflow/list?status=`` 一致 */
-export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultValue?: string; onChange: (v: string) => void }) => {
+/**
+ * 按应用上线(2)/下线(1)状态筛选，与后端 ``/api/v1/workflow/list?status=`` 一致。
+ *
+ * F054: with `hosted`, the options become the five hosted-application states
+ * instead. They deliberately do NOT ride on `status` — that column is projected
+ * 2/1 for the shared switch and the backend only honours those two values — so
+ * the caller forwards the chosen value as the separate `app_state` parameter.
+ */
+export const SelectAppStatus = ({ defaultValue = 'all', hosted = false, onChange }: { defaultValue?: string; hosted?: boolean; onChange: (v: string) => void }) => {
     const [value, setValue] = useState(defaultValue)
     const { t } = useTranslation()
     const selectLabels = useSelectLabels()
 
     const options = [
         { value: 'all', label: t('build.allAppStatus') },
-        { value: '2', label: t('build.online') },
-        { value: '1', label: t('build.offline') },
+        ...(hosted ? HOSTED_APP_STATES.map(state => ({ value: state, label: t(stateI18nKey(state)) })) : [
+            { value: '2', label: t('build.online') },
+            { value: '1', label: t('build.offline') },
+        ]),
     ]
 
     return (
@@ -63,7 +77,12 @@ export const SelectAppStatus = ({ defaultValue = 'all', onChange }: { defaultVal
     )
 }
 
-export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
+/**
+ * `includeHosted` is opt-in on purpose: this component is also the template
+ * manager's type picker (`appTemps.tsx`), and templates have no hosted-app
+ * flavour — an unconditional third option would navigate that page to a 404.
+ */
+export const SelectType = ({ all = false, includeHosted = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
     const { t } = useTranslation();
     const selectLabels = useSelectLabels()
@@ -72,6 +91,10 @@ export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
         { label: t('build.workflow'), value: AppType.FLOW },
         { label: t('build.assistant'), value: AppType.ASSISTANT },
     ];
+
+    if (includeHosted) {
+        options.push({ label: t('hostedApp.typeName'), value: AppType.HOSTED_APP });
+    }
 
     if (all) {
         options.unshift({ label: t('build.allAppTypes'), value: 'all' });
@@ -120,7 +143,20 @@ function LabelFilterSelect({ options, value, onChange }: LabelFilterSelectProps)
 
 const TypeNames = {
     5: AppType.ASSISTANT,
-    10: AppType.FLOW
+    10: AppType.FLOW,
+    35: AppType.HOSTED_APP
+}
+
+/**
+ * A row of the app list. The endpoint projects all three application types onto
+ * one column set, so `flow_type` (and, for hosted apps, `app_state`) is what
+ * tells them apart.
+ */
+type AppListRow = FlowType & {
+    flow_type?: number
+    /** F054 only — the five-state application state. */
+    app_state?: string
+    version_list?: { id: string | number }[]
 }
 
 const APP_ACTIONS = [
@@ -132,7 +168,7 @@ const APP_ACTIONS = [
     'manage_permission',
 ]
 
-export default function apps() {
+export default function Apps() {
     const { t, i18n } = useTranslation()
     // useErrorPrompt();
 
@@ -140,8 +176,13 @@ export default function apps() {
         i18n.loadNamespaces('flow');
     }, [i18n]);
     const { user } = useContext(userContext);
-
+    const { appConfig } = useContext(locationContext);
     const navigate = useNavigate()
+    // F054: the third type only exists where the app-factory runtime layer is
+    // deployed. Deployment-level flag, read from /api/v1/env.
+    const hostedAppEnabled = !!appConfig.appRuntimeEnabled
+    const [typeFilter, setTypeFilter] = useState<string>(AppType.ALL)
+    const hostedSelected = hostedAppEnabled && typeFilter === AppType.HOSTED_APP
 
     // Build page lists apps the user can manage. Backend treats managed=true
     // as "filter by edit" (admins still see everything via the admin
@@ -166,16 +207,24 @@ export default function apps() {
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string; type: string } | null>(null);
-    const workflowResourceIds = dataSource
-        .filter((item: any) => item.flow_type !== AppNumType.ASSISTANT)
-        .map((item: any) => String(item.id));
-    const assistantResourceIds = dataSource
-        .filter((item: any) => item.flow_type === AppNumType.ASSISTANT)
-        .map((item: any) => String(item.id));
+    // Three buckets, one per resource type. A hosted app that fell into the
+    // workflow bucket would be checked against the wrong type and come back
+    // with no actions at all — a card you can see but cannot touch.
+    const appRows = dataSource as AppListRow[];
+    const workflowResourceIds = appRows
+        .filter((item) => item.flow_type !== AppNumType.ASSISTANT && item.flow_type !== AppNumType.HOSTED_APP)
+        .map((item) => String(item.id));
+    const assistantResourceIds = appRows
+        .filter((item) => item.flow_type === AppNumType.ASSISTANT)
+        .map((item) => String(item.id));
+    const hostedAppResourceIds = appRows
+        .filter((item) => item.flow_type === AppNumType.HOSTED_APP)
+        .map((item) => String(item.id));
     const { actions: workflowActions } = useResourceActions('workflow', workflowResourceIds, APP_ACTIONS);
     const { actions: assistantActions } = useResourceActions('assistant', assistantResourceIds, APP_ACTIONS);
-    const resourceActions = { ...workflowActions, ...assistantActions };
-    const listedAppIds = new Set(dataSource.map((item: any) => String(item.id)));
+    const { actions: hostedAppActions } = useResourceActions('app', hostedAppResourceIds, APP_ACTIONS);
+    const resourceActions = { ...workflowActions, ...assistantActions, ...hostedAppActions };
+    const listedAppIds = new Set(appRows.map((item) => String(item.id)));
     const canRead = (id: string | number) =>
         user.role === 'admin' ||
         hasResourceAction(resourceActions, id, 'visible') ||
@@ -185,7 +234,7 @@ export default function apps() {
     const canUnpublish = (id: string | number) => hasResourceAction(resourceActions, id, 'unpublish');
     const canManage = (id: string | number) => hasResourceAction(resourceActions, id, 'manage_permission');
     const canDelete = (id: string | number) => hasResourceAction(resourceActions, id, 'delete');
-    const visibleApps = dataSource;
+    const visibleApps = appRows;
 
     // `create_app` controls the create and template-management entries.
     // Only global super admins bypass the role menu permission.
@@ -243,7 +292,9 @@ export default function apps() {
     };
 
     const handleOpenPermission = (item: any) => {
-        const typeMap = { 5: 'assistant', 10: 'workflow' };
+        // A missing entry falls back to 'workflow', which opens the dialog
+        // against the wrong resource type and paints it red with 19003.
+        const typeMap = { 5: 'assistant', 10: 'workflow', 35: 'app' };
         setPermTarget({ id: String(item.id), name: item.name, type: typeMap[item.flow_type] || 'workflow' });
         setPermDialogOpen(true);
     };
@@ -271,9 +322,26 @@ export default function apps() {
         }
     }
 
+    // A hosted-app action answers with the state it left the app in. Patch the
+    // row from that answer *before* refetching: taking one offline waits on
+    // `docker stop` (~10s), and the list request that follows is another round
+    // trip on top — long enough for the card to look like nothing happened.
+    // Failures re-sync too (`result` is null): a rejected action is usually one
+    // that already landed, which is exactly the case that used to need F5.
+    const handleHostedAppChanged = (kind: HostedAppActionKind, result: HostedAppActionResult | null) => {
+        if (kind !== 'delete' && result?.app_id && result.state) {
+            refreshData(
+                (row) => String(row.id) === String(result.app_id),
+                { status: result.state === 'online' ? 2 : 1, app_state: result.state } as Partial<FlowType>,
+            )
+        }
+        reload()
+    }
+
     const typeCnNames = {
         5: t('build.assistant'),
-        10: t('build.workflow')
+        10: t('build.workflow'),
+        35: t('hostedApp.typeName')
     }
 
     const handleDelete = (data) => {
@@ -294,6 +362,9 @@ export default function apps() {
 
 
     const handleSetting = (data) => {
+        if (data.flow_type === AppNumType.HOSTED_APP) {
+            return navigate(`/build/apps/${data.id}`)
+        }
         if (!data.write) {
             return notification.open({ type: 'warning', description: String(t('build.editPermissionRequired')) })
         }
@@ -319,14 +390,22 @@ export default function apps() {
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
             <div className="flex gap-4">
-                <SearchInput placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)} className={"w-64"}></SearchInput>
-                <SelectType all onChange={(v) => {
+                <SearchInput className="w-64" placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)}></SearchInput>
+                <SelectType all includeHosted={hostedAppEnabled} onChange={(v) => {
                     tempTypeRef.current = v
-                    filterData({ type: v })
+                    setTypeFilter(v)
+                    // Switching type resets the state filter: `status` and
+                    // `app_state` are two different columns and leaving the
+                    // previous one set would silently narrow the new list.
+                    filterData({ type: v, status: undefined, app_state: undefined })
                 }} />
                 <SelectAppStatus
+                    key={hostedSelected ? 'hosted' : 'default'}
+                    hosted={hostedSelected}
                     onChange={(v) => {
-                        filterData({ status: v === 'all' ? undefined : Number(v) })
+                        filterData(hostedSelected
+                            ? { app_state: v === 'all' ? undefined : v, status: undefined }
+                            : { status: v === 'all' ? undefined : Number(v), app_state: undefined })
                     }}
                 />
                 <LabelFilterSelect
@@ -335,7 +414,7 @@ export default function apps() {
                     onChange={handleLabelSearch}
                 />
                 {canCreateApp && (
-                    <Button variant="text" className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto" onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)} color="default"><Outlined.MoveToFolder className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
+                    <Button variant="text" className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto" onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL && tempTypeRef.current !== AppType.HOSTED_APP ? tempTypeRef.current : AppType.FLOW}`)} color="default"><Outlined.MoveToFolder className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
                 )}
             </div>
             {/* list */}
@@ -358,7 +437,28 @@ export default function apps() {
                             </AppTempSheet>
                         )}
                         {
-                            visibleApps.map((item: any, i) => (
+                            visibleApps.map((item) => item.flow_type === AppNumType.HOSTED_APP ? (
+                                <HostedAppCard
+                                    key={item.id}
+                                    item={item}
+                                    currentUser={user}
+                                    isAdmin={user.role === 'admin'}
+                                    canDelete={canDelete(item.id)}
+                                    canSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
+                                    canManagePermission={canManage(item.id)}
+                                    onPermission={handleOpenPermission}
+                                    onChanged={handleHostedAppChanged}
+                                    labelPannel={
+                                        <LabelShow
+                                            data={item}
+                                            user={user}
+                                            type={item.flow_type}
+                                            all={filteredOptions}
+                                            onChange={refetchLabels}>
+                                        </LabelShow>
+                                    }
+                                />
+                            ) : (
                                 <CardComponent<FlowType>
                                     key={item.id}
                                     data={item}

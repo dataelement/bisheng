@@ -250,6 +250,24 @@ class _ContextRuntime(_Runtime):
         return ("use", "edit", "delete", "manage_permission")
 
 
+class _OrdinaryContextRuntime(_ContextRuntime):
+    """Denies BOTH ``visible`` and ``manage_permission``.
+
+    ``_ContextRuntime`` allows every non-visible action, which makes its actor a
+    manager — and ``get_context`` lets a manager (owner, granted manager, or an
+    admin via check_action's identity shortcut) in without a visible tuple, so
+    that fake cannot model an ordinary user. This one can: no management right,
+    no visibility, therefore no entry.
+    """
+
+    async def check_action(self, actor, target, action):
+        if action in {"visible", "manage_permission"}:
+            if action == "visible":
+                self.visible_checks += 1
+            return False
+        return True
+
+
 class _ExplainRuntime(_ContextRuntime):
     """Visible via FGA, but the grant-derived explanation is empty.
 
@@ -319,7 +337,7 @@ async def test_tenant_admin_reads_context_for_own_tenant_without_visible_tuple()
 async def test_ordinary_user_context_still_requires_a_visible_tuple() -> None:
     from bisheng.common.errcode.permission import PermissionDeniedError
 
-    runtime = _ContextRuntime()
+    runtime = _OrdinaryContextRuntime()
     api = F048ResourcePermissionApi(
         resources=_Resources(),
         runtime=runtime,

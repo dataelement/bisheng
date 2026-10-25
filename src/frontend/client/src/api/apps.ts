@@ -413,6 +413,11 @@ export async function unpinUsedAppApi(flowId: string) {
         data: { flow_id: flowId }
     });
 }
+/** Record that the user opened a hosted app so it lands in the recently-used list */
+export async function recordUsedAppApi(flowId: string) {
+    return await request.post('/api/v1/workstation/app/used/record', { flow_id: flowId });
+}
+
 /** F027 cursor waterfall. Pass the previous response's `nextCursor` to load more;
  * omit for the first page. Returns { list, hasMore, nextCursor }. */
 export async function getUncategorized(cursor: string | null = null, pageSize: number = 8, keyword?: string) {
