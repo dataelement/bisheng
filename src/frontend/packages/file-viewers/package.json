@@ -22,7 +22,8 @@
     "./locale": "./src/usePreviewLocale.ts",
     "./viewer-types": "./src/viewerTypes.ts",
     "./sanitize": "./src/html/sanitizeHtml.ts",
-    "./formats": "./src/formats.ts"
+    "./formats": "./src/formats.ts",
+    "./pdf": "./src/pdf/index.ts"
   },
   "scripts": {
     "lint": "eslint .",
@@ -42,7 +43,8 @@
     "remark-gfm": "^4.0.0",
     "rehype-highlight": "^6.0.0",
     "bisheng-icons": "catalog:",
-    "@bisheng/ui": "workspace:*"
+    "@bisheng/ui": "workspace:*",
+    "pdfjs-dist": "3.10.111"
   },
   "devDependencies": {
     "@types/react": "catalog:",

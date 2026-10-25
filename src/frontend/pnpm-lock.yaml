@@ -800,6 +800,9 @@ importers:
       mammoth:
         specifier: 1.12.0
         version: 1.12.0
+      pdfjs-dist:
+        specifier: 3.10.111
+        version: 3.10.111
       react:
         specifier: '>=18'
         version: 18.3.1

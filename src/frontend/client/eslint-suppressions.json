@@ -2782,11 +2782,6 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/FilePreview/index.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/pages/knowledge/KnowledgeSpacePreviewDrawer.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3

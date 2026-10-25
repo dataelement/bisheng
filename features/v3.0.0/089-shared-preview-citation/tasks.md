@@ -66,10 +66,10 @@ Interfaces: 各视图 `PreviewViewerProps {resource:PreviewResource;zoomLevel?:n
 Files: 新建 `packages/file-viewers/src/pdf/{usePdfDocument,PdfPage,PdfViewer,coordinates,types}`及测试、lazy入口；修改platform `components/bs-comp/FileView.tsx`、client `knowledge/FilePreview/index.tsx`/`viewers/PdfViewer.tsx`。
 Interfaces: `usePdfDocument(url:string,assets:{workerUrl:string;cMapUrl:string})`返回loading/error/document并销毁loadingTask；`PdfPage`消费document/pageIndex/width/zoom/drawText，提供 `renderOverlay(metrics)`、`onMetrics(metrics)`、`onError(error)`；`metrics {pageIndex,originalWidth,originalHeight,width,height,scale}`。共享只读PdfViewer沿用client现有props，仅bbox类型改公共定义；后台onSelectLabel/onPageChange既有payload不变。
 覆盖 AC: AC-01、AC-06、AC-08、AC-11、AC-13、AC-14、AC-19、AC-20。
-- [ ] 写坐标/页码测试、真实渲染任务替身测试：0/1起边界、多尺寸、缩放高亮/框选映射、多实例隔离、取消不报错、当前文档多页失败仅一次、旧文档失败忽略。
-- [ ] RED后提取共享PdfPage及session；后台保留react-window/框选薄适配，移除模块全局页缓存和固定DOM id；client迁公共只读视口。
-- [ ] 跑原PdfViewer.errors测试及新PDF/编辑适配回归，types/lint；浏览器真实Canvas/定位/框选在T7验证。
-- [ ] 提交 `refactor(preview): share PDF rendering with host editing overlays`。
+- [x] 写坐标/页码测试、真实渲染任务替身测试：0/1起边界、多尺寸、缩放高亮/框选映射、多实例隔离、取消不报错、当前文档多页失败仅一次、旧文档失败忽略。
+- [x] RED后提取共享PdfPage及session；后台保留react-window/框选薄适配，移除模块全局页缓存和固定DOM id；client迁公共只读视口。
+- [x] 跑原PdfViewer.errors测试及新PDF/编辑适配回归，types/lint；浏览器真实Canvas/定位/框选在T7验证。
+- [x] 提交 `refactor(preview): share PDF rendering with host editing overlays`。
 
 ### Task 5: Citation纯工具与宿主资源合同
 

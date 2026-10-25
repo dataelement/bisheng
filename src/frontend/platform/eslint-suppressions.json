@@ -76,26 +76,6 @@
       "count": 2
     }
   },
-  "src/components/bs-comp/FileView.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 6
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 4
-    }
-  },
   "src/components/bs-comp/apiComponent/ApiAccessSkill.tsx": {
     "no-empty-pattern": {
       "count": 1

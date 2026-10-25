@@ -4,7 +4,7 @@
  * Width: 100% — the parent controls sizing.
  * AI assistant and split-pane logic live in the parent (FilePreviewPage).
  */
-import type * as pdfjsLib from "pdfjs-dist";
+import { usePdfDocument } from "@bisheng/file-viewers/pdf";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -89,48 +89,19 @@ export default function FilePreview({
     const showHeader = !compactMode && !hideHeader;
 
     // --- PDF-specific state ---
-    const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+    const pdfState = usePdfDocument(viewerType === 'pdf' ? fileUrl : '', {
+        workerUrl: __APP_ENV__.BASE_URL + '/pdf.worker.min.js',
+        cMapUrl: __APP_ENV__.BASE_URL + '/cmaps/',
+    });
+    const pdfDoc = pdfState.document;
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(0);
+    const totalPages = pdfDoc?.numPages ?? 0;
     const [targetPage, setTargetPage] = useState<number | null>(null);
 
     // --- Shared state ---
     const [zoomLevel, setZoomLevel] = useState(100);
     const [sidebarOpen, setSidebarOpen] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    // Load PDF
-    useEffect(() => {
-        if (viewerType !== "pdf" || !fileUrl) return;
-
-        let cancelled = false;
-        import("pdfjs-dist")
-            .then((pdfjs) => {
-                pdfjs.GlobalWorkerOptions.workerSrc =
-                    __APP_ENV__.BASE_URL + "/pdf.worker.min.js";
-                return pdfjs.getDocument({
-                    url: fileUrl,
-                    // CMaps are required for CID-keyed PDFs with non-embedded CJK
-                    // fonts (e.g. GBK-EUC-H government docs) — without them the
-                    // text layer renders blank. Shipped to /cmaps/ by viteStaticCopy.
-                    cMapUrl: __APP_ENV__.BASE_URL + "/cmaps/",
-                    cMapPacked: true,
-                }).promise;
-            })
-            .then((doc) => {
-                if (cancelled) return;
-                setPdfDoc(doc);
-                setTotalPages(doc.numPages);
-            })
-            .catch((e) => {
-                if (cancelled) return;
-                console.error("Failed to load PDF:", e);
-                setError(localize("com_knowledge.load_pdf_failed"));
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [fileUrl, viewerType]);
+    const error = pdfState.status === 'error' ? localize('com_knowledge.load_pdf_failed') : null;
 
     // Update document title
     useEffect(() => {

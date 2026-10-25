@@ -1,6 +1,8 @@
 // @ts-strict-ignore
 import { PlatformImagePreview } from '@/components/bs-comp/preview/DocumentPreview';
 import { usePreviewLocale } from '@bisheng/file-viewers/locale';
+import type { PdfScrollContext } from '@/components/bs-comp/preview/PlatformPdfPreview';
+import { labelTop as pdfLabelTop } from '@/components/bs-comp/preview/pdfEditing';
 import FileView from "@/components/bs-comp/FileView";
 import { Outlined } from "bisheng-icons";
 
@@ -218,13 +220,13 @@ export default function PreviewFile({
   };
 
   // 8. 页面滚动检测（新增，与ParagraphEdit的handlePageChange一致）
-  const handlePageChange = (offset, h, paperSize, scale) => {
+  const handlePageChange = (offset, h, paperSize, scale, context?: PdfScrollContext) => {
     if (offset === 0) return;
     const labelsArray = Array.from(labelsMap.values());
     setShowPos(!labelsArray.some(item => {
       const pageHeight = (item.page - 1) * paperSize;
-      const labelTop = pageHeight + item.label[1] / scale;
-      return item.active && labelTop > offset && labelTop < (offset + h);
+      const labelTop = context ? pdfLabelTop(item.page, item.label[1], context.startIndex, context.layout) : pageHeight + item.label[1] / scale;
+      return item.active && labelTop !== null && labelTop > offset && labelTop < (offset + h);
     }));
   };
 

@@ -1,6 +1,8 @@
 // @ts-strict-ignore
 import { PlatformImagePreview } from '@/components/bs-comp/preview/DocumentPreview';
 import { Button, toast } from '@bisheng/ui';
+import type { PdfScrollContext } from '@/components/bs-comp/preview/PlatformPdfPreview';
+import { labelTop as pdfLabelTop } from '@/components/bs-comp/preview/pdfEditing';
 import FileView from "@/components/bs-comp/FileView";
 import { Outlined } from "bisheng-icons";
 
@@ -207,13 +209,13 @@ const ParagraphEdit = ({
     }, [random])
 
     const [showPos, setShowPos] = useState(false)
-    const handlePageChange = (offset, h, paperSize, scale) => {
+    const handlePageChange = (offset, h, paperSize, scale, context?: PdfScrollContext) => {
         if (offset === 0) return
         // console.log('data :>> ', data, offset, h, paperSize, scale);
         setShowPos(!data.some(item => {
             const pageHeight = (item.page - 1) * paperSize
-            const labelTop = pageHeight + item.label[1] / scale
-            return item.active && labelTop > offset && labelTop < (offset + h)
+            const labelTop = context ? pdfLabelTop(item.page, item.label[1], context.startIndex, context.layout) : pageHeight + item.label[1] / scale
+            return item.active && labelTop !== null && labelTop > offset && labelTop < (offset + h)
         }))
     }
 
