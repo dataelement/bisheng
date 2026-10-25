@@ -12,12 +12,15 @@
   "node_id": "docker-node-1",
   "network_names": ["bisheng-apps", "bisheng-build"],
   "proxy_container": "bisheng-egress-proxy",
+  "ingress_containers": ["bisheng-runtime-manager", "bisheng-app-proxy"],
   "canary_image": "dataelement/bisheng-app-python@sha256:<已交付的真实镜像摘要>",
   "host_targets": [["192.0.2.10", 22]],
   "firewall_backend": "iptables",
   "platform_base_url": "http://127.0.0.1"
 }
 ```
+
+`ingress_containers` 仅填写受信控制服务的 Docker 容器名，不填写托管应用。工具检查容器运行中、没有托管应用标签，并把其实际网络 IP 加入签名 descriptor。只在 FORWARD 链允许这些精确源 IP 到同一应用子网的 ORIGINAL TCP；不增加 INPUT 放行。canary 还通过这些控制容器实测 HTTP 入口。控制容器重建后地址不变可恢复；地址或名称变化须重新生成绑定，旧绑定立即失效。manager 和宿主工具必须使用同一版本，否则 descriptor 对账拒绝执行。
 
 `host_targets` 由管理员指定，必须确实监听，且同端口经应用 bridge gateway 可达；例如监听 0.0.0.0 的专用探测服务。canary 对该服务执行 host 允许、应用拒绝的配对检查。服务不监听不能充当隔离证据。镜像必须包含 `python`，使用 rootfs 只读、非 root、无挂载的临时实例；此探测不接触应用 SQLite/PVC。
 
@@ -28,7 +31,7 @@
 
 ## 行为与恢复
 
-- iptables 使用自有 INPUT/FORWARD 链，parent jump 放在前部；只允许精确 egress IP:3128 的 ORIGINAL TCP 和 ESTABLISHED REPLY，其他应用主动连接丢弃，不放开 backend 附件服务端口。
+- iptables 使用自有 INPUT/FORWARD 链，parent jump 放在前部；应用源只允许精确 egress IP:3128 的 ORIGINAL TCP 和 ESTABLISHED REPLY；受信控制入口另按上述精确源 IP / 目标子网开放 FORWARD TCP，其他应用主动连接丢弃，不放开 backend 附件服务端口。
 - nftables 使用自有 `inet bisheng_egress` 的 input/forward hooks。每次先检查完整事务、应用、读取结构，并做真实 allow/deny canary。不同工具版本的 read-back 不匹配会拒绝证明，不降级为只看链存在。
 - timer 每 30 秒重新应用自有规则、修复漂移并探测；backend 报告有效期 60 秒，使用接收时刻、递增 revision 和一次性签名 nonce。不由 manager 心跳续期。
 - 恢复失败时只停止实际 Engine 上、指定网络内的本模块托管实例；v2 还要求 node 标签匹配。停止后再次读取同一容器 ID 确认。未知停止状态继续按失败处理；不删除容器、卷、SQLite 或其他网络资源。

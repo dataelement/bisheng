@@ -237,3 +237,7 @@ F054-B1 修订：宿主 unit 为规则漂移的实际消费者，先修复并配
 116 的 `iptables-save` 把父链跳转参数规范为 `-s … -i …`，与提交时的 `-i … -s …` 等价。
 父链前 N 条仍按数量/位置校验，规则字段经同一 `normalized_iptables` 比较；提前 ACCEPT、额外条件、错误子网继续拒绝。
 这是已批准隔离合同的兼容修复，不放宽权限或新增绕过开关。正反定向回归见整合报告；真实宿主复验另记。
+
+### 2026-10-26 Docker 控制入口热修
+
+116 实测同一 canary 的 host HTTP200，而 manager/app-proxy 都 ConnectTimeout。根因：按应用 bridge 整段源地址执行出口拒绝时，也误拦在该 bridge 上的控制服务主动访问应用。host 工具新增可选 root-only ingress_containers；检查非托管、运行中的真实控制服务，将服务名和逐网络实际 IP 纳入既有签名 descriptor，只在 FORWARD 允许精确源 IP 到本子网的 ORIGINAL TCP。INPUT 拒绝和应用出口规则不变；canary 增加从已声明控制容器访问测试应用的实际验证。同地址的合法控制进程重建不改变绑定；地址变化、进程停止、替换为托管应用或网络变化均拒绝，重新生成期望 descriptor 后才准入。宿主与 manager 包须同时升级；这是既有控制入口合同的修复，不新增用户授权能力。

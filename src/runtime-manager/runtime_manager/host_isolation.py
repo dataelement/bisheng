@@ -30,7 +30,23 @@ FORWARD = "BISHENG_APP_FORWARD"
 TABLE = "bisheng_egress"
 
 
+def ingress_names(document):
+    names = document.get("ingress_containers", [])
+    if (
+        not isinstance(names, list)
+        or len(names) > 8
+        or any(
+            not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", name) for name in names
+        )
+        or len(set(names)) != len(names)
+    ):
+        raise ValueError("host_ingress_identity_invalid")
+    return names
+
+
 def validate_descriptor(descriptor):
+    trusted = ingress_names(descriptor)
+    observed = set()
     if not descriptor["networks"] or "@sha256:" not in descriptor["canary_image"]:
         raise ValueError("host_isolation_descriptor_invalid")
     for item in descriptor["networks"]:
@@ -40,6 +56,29 @@ def validate_descriptor(descriptor):
         for key in ("proxy_ip", "gateway"):
             if ipaddress.ip_address(item[key]) not in subnet:
                 raise ValueError("host_isolation_address_mismatch")
+        peers = item.get("ingress", [])
+        if not isinstance(peers, list) or len(peers) > len(trusted):
+            raise ValueError("host_ingress_identity_invalid")
+        addresses, names = set(), set()
+        for peer in peers:
+            if not isinstance(peer, dict) or set(peer) != {"container", "ip"}:
+                raise ValueError("host_ingress_identity_invalid")
+            if any(not isinstance(value, str) for value in peer.values()) or peer["container"] not in trusted:
+                raise ValueError("host_ingress_identity_invalid")
+            address = ipaddress.ip_address(peer["ip"])
+            if (
+                address not in subnet
+                or address in {subnet.network_address, subnet.broadcast_address}
+                or str(address) in {item["proxy_ip"], item["gateway"]}
+                or address in addresses
+                or peer["container"] in names
+            ):
+                raise ValueError("host_ingress_address_invalid")
+            addresses.add(address)
+            names.add(peer["container"])
+            observed.add(peer["container"])
+    if observed != set(trusted):
+        raise ValueError("host_ingress_network_missing")
     for address, port in descriptor["host_targets"]:
         if ipaddress.ip_address(address).version != 4 or not 1 <= int(port) <= 65535:
             raise ValueError("host_isolation_target_invalid")
@@ -54,6 +93,17 @@ def discover(api, config):
     result = {key: config[key] for key in ("node_id", "proxy_container", "canary_image", "host_targets")}
     result["engine_id"] = info["ID"]
     result["networks"] = []
+    trusted = ingress_names(config)
+    if trusted:
+        result["ingress_containers"] = trusted
+    controls = {}
+    for name in trusted:
+        actual = api.inspect_container(name)
+        if not actual.get("State", {}).get("Running") or (actual.get("Config", {}).get("Labels") or {}).get(
+            "bisheng.managed"
+        ):
+            raise ValueError("host_ingress_container_refused")
+        controls[name] = actual
     for name in config["network_names"]:
         network = api.inspect_network(name)
         if network["Driver"] != "bridge" or network.get("EnableIPv6") or not network.get("Internal"):
@@ -76,6 +126,15 @@ def discover(api, config):
                 "proxy_ip": endpoint["IPAddress"],
             }
         )
+        peers = []
+        for control, actual in controls.items():
+            attached = actual.get("NetworkSettings", {}).get("Networks", {}).get(name)
+            if attached:
+                if attached.get("NetworkID") != network["Id"]:
+                    raise ValueError("host_ingress_network_mismatch")
+                peers.append({"container": control, "ip": attached["IPAddress"]})
+        if peers:
+            result["networks"][-1]["ingress"] = peers
     validate_descriptor(result)
     return result
 
@@ -113,6 +172,11 @@ def iptables_restore(descriptor, save, *, remove=False):
                     f"-A {chain} -i {bridge} -s {subnet} -m conntrack --ctdir REPLY --ctstate ESTABLISHED -j RETURN",
                     f"-A {chain} -i {bridge} -s {subnet} -d {proxy} -p tcp --dport 3128 -m conntrack --ctdir ORIGINAL -j RETURN",
                 ]
+            for peer in item.get("ingress", []):
+                lines.append(
+                    f"-A {FORWARD} -i {bridge} -s {peer['ip']} -d {subnet} -p tcp "
+                    "-m conntrack --ctdir ORIGINAL -j RETURN"
+                )
         lines += [f"-A {INPUT} -j DROP", f"-A {FORWARD} -j DROP"]
     return "\n".join([*lines, "COMMIT", ""])
 
@@ -173,7 +237,28 @@ def nft_document(descriptor, *, exists=False, remove=False):
                 match({"ct": {"key": "direction"}}, "original"),
                 {"accept": None},
             ]
-            for expr in (reply, proxy, [*base, {"drop": None}]):
+            ingress = []
+            if hook == "forward":
+                for peer in item.get("ingress", []):
+                    ingress.append(
+                        [
+                            *base,
+                            match({"payload": {"protocol": "ip", "field": "saddr"}}, peer["ip"]),
+                            match(
+                                {"payload": {"protocol": "ip", "field": "daddr"}},
+                                {
+                                    "prefix": {
+                                        "addr": str(ipaddress.ip_network(item["subnet"]).network_address),
+                                        "len": ipaddress.ip_network(item["subnet"]).prefixlen,
+                                    }
+                                },
+                            ),
+                            match({"meta": {"key": "l4proto"}}, "tcp"),
+                            match({"ct": {"key": "direction"}}, "original"),
+                            {"accept": None},
+                        ]
+                    )
+            for expr in (reply, proxy, *ingress, [*base, {"drop": None}]):
                 commands.append({"add": {"rule": {"family": "inet", "table": TABLE, "chain": hook, "expr": expr}}})
     return {"nftables": commands}
 
@@ -353,6 +438,14 @@ def canary(api, descriptor):
                     if time.monotonic() >= deadline:
                         raise ValueError("host_ingress_reply_failed") from None
                     time.sleep(0.2)
+            for peer in network.get("ingress", []):
+                check = (
+                    "import sys,urllib.request; r=urllib.request.urlopen(sys.argv[1],timeout=3); assert r.status==200"
+                )
+                ident = api.exec_create(peer["container"], ["python", "-c", check, f"http://{address}:8080/"])["Id"]
+                api.exec_start(ident)
+                if api.exec_inspect(ident)["ExitCode"] != 0:
+                    raise ValueError("host_control_ingress_failed")
             targets = [*descriptor["host_targets"]]
             # Prove the same listening service is denied via the bridge gateway
             # as well as the admin-published host address.

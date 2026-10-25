@@ -169,3 +169,125 @@ def test_manager_rechecks_actual_engine_descriptor(monkeypatch, descriptor):
     engine["id"] = "replacement"
     with pytest.raises(platform_client.PlatformError, match="descriptor_changed"):
         manager_proof(API(), SimpleNamespace(), "bisheng-apps")
+
+
+def add_ingress(descriptor):
+    descriptor["ingress_containers"] = ["manager", "entry"]
+    descriptor["networks"][0]["ingress"] = [
+        {"container": "manager", "ip": "172.30.0.3"},
+        {"container": "entry", "ip": "172.30.0.4"},
+    ]
+    return descriptor
+
+
+def test_trusted_control_ingress_is_exact_forward_tcp_only(descriptor):
+    add_ingress(descriptor)
+    text = iptables_restore(descriptor, "")
+    for peer in descriptor["networks"][0]["ingress"]:
+        expected = (
+            f"-A BISHENG_APP_FORWARD -i br-abc123 -s {peer['ip']} -d 172.30.0.0/24 "
+            "-p tcp -m conntrack --ctdir ORIGINAL -j RETURN"
+        )
+        assert expected in text
+        assert text.index(expected) < text.index("-A BISHENG_APP_FORWARD -j DROP")
+        assert not any(peer["ip"] in line for line in text.splitlines() if line.startswith("-A BISHENG_APP_INPUT"))
+    assert "-s 172.30.0.0/24 -d 172.30.0.0/24" not in text
+    assert "--dport 3128" in text
+
+
+def test_nft_trusted_ingress_never_opens_host_input(descriptor):
+    import json
+
+    add_ingress(descriptor)
+    rules = [x["add"]["rule"] for x in nft_document(descriptor)["nftables"] if "rule" in x.get("add", {})]
+    for peer in descriptor["networks"][0]["ingress"]:
+        matched = [rule for rule in rules if peer["ip"] in json.dumps(rule)]
+        assert len(matched) == 1 and matched[0]["chain"] == "forward"
+        encoded = json.dumps(matched[0])
+        assert "daddr" in encoded and "tcp" in encoded and "original" in encoded
+    assert rules[-1]["expr"][-1] == {"drop": None}
+
+
+@pytest.mark.parametrize("change", ["outside", "gateway", "proxy", "duplicate", "foreign", "invalid_type", "missing"])
+def test_trusted_ingress_refuses_ambiguous_identity_or_address(descriptor, change):
+    add_ingress(descriptor)
+    peer = descriptor["networks"][0]["ingress"][0]
+    if change == "outside":
+        peer["ip"] = "192.0.2.1"
+    elif change == "gateway":
+        peer["ip"] = "172.30.0.1"
+    elif change == "proxy":
+        peer["ip"] = "172.30.0.2"
+    elif change == "duplicate":
+        descriptor["networks"][0]["ingress"][1]["ip"] = peer["ip"]
+    elif change == "foreign":
+        peer["container"] = "application"
+    elif change == "invalid_type":
+        peer["ip"] = None
+    else:
+        descriptor["networks"][0]["ingress"].pop()
+    with pytest.raises(ValueError):
+        validate_descriptor(descriptor)
+
+
+@pytest.mark.parametrize("change", [None, "application", "stopped", "network_changed", "recreated", "ip_changed"])
+def test_discovery_pins_actual_trusted_container_identity(descriptor, change):
+    from copy import deepcopy
+
+    from runtime_manager.host_isolation import discover
+
+    descriptor = add_ingress(descriptor)
+    network = descriptor["networks"][0]
+
+    class API:
+        def info(self):
+            return {"ID": "engine-a", "SecurityOptions": []}
+
+        def inspect_network(self, name):
+            return {
+                "Id": network["id"],
+                "Driver": "bridge",
+                "Internal": True,
+                "EnableIPv6": False,
+                "IPAM": {"Config": [{"Subnet": network["subnet"], "Gateway": network["gateway"]}]},
+                "Options": {"com.docker.network.bridge.name": network["bridge"]},
+            }
+
+        def inspect_container(self, name):
+            peer = next((x for x in network["ingress"] if x["container"] == name), None)
+            doc = {
+                "Id": ("b" if name == "manager" else "c") * 64,
+                "State": {"Running": True},
+                "Config": {"Labels": {}},
+                "NetworkSettings": {
+                    "Networks": {
+                        "bisheng-apps": {
+                            "NetworkID": network["id"],
+                            "IPAddress": peer["ip"] if peer else network["proxy_ip"],
+                        }
+                    }
+                },
+            }
+            if name == "manager":
+                if change == "application":
+                    doc["Config"]["Labels"] = {"bisheng.managed": "v2"}
+                elif change == "stopped":
+                    doc["State"]["Running"] = False
+                elif change == "network_changed":
+                    doc["NetworkSettings"]["Networks"]["bisheng-apps"]["NetworkID"] = "replacement"
+                elif change == "recreated":
+                    doc["Id"] = "e" * 64
+                elif change == "ip_changed":
+                    doc["NetworkSettings"]["Networks"]["bisheng-apps"]["IPAddress"] = "172.30.0.5"
+            return doc
+
+    config = {**deepcopy(descriptor), "network_names": ["bisheng-apps"]}
+    if change in {"application", "stopped", "network_changed"}:
+        with pytest.raises(ValueError):
+            discover(API(), config)
+    else:
+        actual = discover(API(), config)
+        if change in {None, "recreated"}:
+            assert actual == descriptor
+        else:
+            assert actual != descriptor
