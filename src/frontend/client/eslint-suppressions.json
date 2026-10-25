@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 15
+      "count": 13
     }
   },
   "src/api/index.ts": {
@@ -501,9 +501,6 @@
     }
   },
   "src/components/Chat/Messages/Content/CitationReferencesDrawer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
     "no-restricted-imports": {
       "count": 1
     },
@@ -621,11 +618,6 @@
   "src/components/Chat/Messages/Content/WrenchIcon.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    }
-  },
-  "src/components/Chat/Messages/Content/citationUtils.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
     }
   },
   "src/components/Chat/Messages/Content/useCitationReferencePanel.tsx": {

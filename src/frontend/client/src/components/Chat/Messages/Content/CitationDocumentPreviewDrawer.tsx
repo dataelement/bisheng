@@ -121,7 +121,7 @@ export function CitationDocumentPreviewContent({
       if (!active) return;
       setResolvedUrls(nextUrls);
       setIsResolvingFileUrl(false);
-    });
+    }).catch(() => { if (active) setIsResolvingFileUrl(false); });
 
     return () => {
       active = false;
@@ -240,7 +240,7 @@ export default function CitationDocumentPreviewDrawer({
     void resolveCitationDownloadUrl(detail).then((nextUrl) => {
       if (!active) return;
       setResolvedRawFileUrl(nextUrl || '');
-    });
+    }).catch(() => { if (active) setResolvedRawFileUrl(''); });
 
     return () => {
       active = false;
@@ -252,7 +252,9 @@ export default function CitationDocumentPreviewDrawer({
   }
 
   const handleDownload = async () => {
-    const nextFileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl || await resolveCitationDownloadUrl(detail));
+    let rawUrl = resolvedRawFileUrl;
+    try { rawUrl ||= await resolveCitationDownloadUrl(detail); } catch { return; }
+    const nextFileUrl = toAbsolutePreviewUrl(rawUrl);
     setResolvedRawFileUrl((current) => current || nextFileUrl);
     if (!nextFileUrl) return;
     const link = document.createElement('a');

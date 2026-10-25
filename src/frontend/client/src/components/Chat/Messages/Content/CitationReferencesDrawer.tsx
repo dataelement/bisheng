@@ -36,7 +36,7 @@ import {
 
 type CitationReferencesDrawerProps = {
   content: string;
-  webContent?: any;
+  webContent?: unknown;
   citations?: ChatCitation[] | null;
   referenceItems?: CitationReferenceItem[];
   buttonClassName?: string;
@@ -57,7 +57,7 @@ type CitationReferencesDrawerProps = {
 export type CitationReferencesDesktopPayload = {
   messageId?: string;
   content: string;
-  webContent?: any;
+  webContent?: unknown;
   citations?: ChatCitation[] | null;
   referenceItems: CitationReferenceItem[];
   initialDocumentPreview?: CitationDocumentPreviewState | null;
@@ -364,8 +364,8 @@ export default function CitationReferencesDrawer({
         }));
         return detail;
       })
-      .catch((error: any) => {
-        if (error?.citationForbidden || error?.citationExpired) {
+      .catch((error: unknown) => {
+        if (error && typeof error === 'object' && (('citationForbidden' in error && error.citationForbidden) || ('citationExpired' in error && error.citationExpired))) {
           return null;
         }
         console.error('Failed to load citation detail:', error);
@@ -511,7 +511,9 @@ export default function CitationReferencesDrawer({
     const fileName = getCitationDocumentName(documentPreview.detail);
     // The original upload, not the derived preview — a clip must download as the
     // clip, not as the transcript that happens to render in the panel.
-    const fileUrl = toAbsolutePreviewUrl(await resolveCitationDownloadUrl(documentPreview.detail));
+    let resolvedUrl = '';
+    try { resolvedUrl = await resolveCitationDownloadUrl(documentPreview.detail); } catch { /* The unavailable state below handles denied downloads. */ }
+    const fileUrl = toAbsolutePreviewUrl(resolvedUrl);
     if (!fileUrl) {
       // Nothing to download (the backend withholds file URLs from viewers who
       // lack view_file) — say so rather than letting the click do nothing.

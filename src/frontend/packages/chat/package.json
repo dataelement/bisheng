@@ -9,7 +9,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./core": "./src/core/index.ts",
-    "./styles.css": "./src/styles/index.css"
+    "./styles.css": "./src/styles/index.css",
+    "./citations": "./src/citations/index.ts"
   },
   "scripts": {
     "test": "vitest run --maxWorkers=1 --minWorkers=1",
@@ -42,6 +43,7 @@
     "unified": "^11",
     "@radix-ui/react-popover": "catalog:",
     "lucide-react": "^0.544.0",
-    "@radix-ui/react-dialog": "catalog:"
+    "@radix-ui/react-dialog": "catalog:",
+    "@bisheng/file-viewers": "workspace:*"
   }
 }

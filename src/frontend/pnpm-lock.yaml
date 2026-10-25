@@ -706,6 +706,9 @@ importers:
 
   packages/chat:
     dependencies:
+      '@bisheng/file-viewers':
+        specifier: workspace:*
+        version: link:../file-viewers
       '@bisheng/ui':
         specifier: workspace:*
         version: link:../ui

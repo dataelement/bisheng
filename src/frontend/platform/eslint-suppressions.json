@@ -133,14 +133,6 @@
       "count": 1
     }
   },
-  "src/components/bs-comp/chatComponent/citationUtils.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 7
-    },
-    "no-restricted-syntax": {
-      "count": 17
-    }
-  },
   "src/components/bs-comp/chatComponent/index.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1

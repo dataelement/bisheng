@@ -76,10 +76,10 @@ Interfaces: `usePdfDocument(url:string,assets:{workerUrl:string;cMapUrl:string})
 Files: 共享 `packages/chat/src/citations/{index,types,markers,normalize,referenceItems,export,documentResources}`及fixtures/tests；整合现有content/citationMarkers/citationPreview/types；两端citationUtils逐个迁移/转接。
 Interfaces: 复用ChatCitation/CitationDisplayData/PreviewState；`CitationServices {scopeKey:string;getCitationDetail;resolveCitationDetails;getCitationUnresolvedReason;resolveDocumentUrls;download;openArticle;localize}`（已有服务签名沿用design）；resolver `Promise<PreviewResource>`，宿主明确拒绝继续reject，不走legacy权限回退。PDF bbox type-only引用file-viewers。
 覆盖 AC: AC-09、AC-10、AC-11、AC-12、AC-13、AC-14、AC-20。
-- [ ] 收集两端真实旧引用/导出/临时/知识/媒体输入fixture并写差异对照测试，标记、片段编号、多个itemIds、顺序/分组、剥离/烘焙结果保持。
-- [ ] RED后收敛纯工具；权限/URL调用留宿主，以同scope in-flight复用、不跨token/租户缓存；临时引用不调knowledge/file_share。
-- [ ] 跑共享chat及两端citation/bake/导出已有测试，纯子入口无DOM导入及无重依赖测试，期望PASS。
-- [ ] 提交 `refactor(citation): unify parsing and document resource contracts`。
+- [x] 收集两端真实旧引用/导出/临时/知识/媒体输入fixture并写差异对照测试，标记、片段编号、多个itemIds、顺序/分组、剥离/烘焙结果保持。
+- [x] RED后收敛纯工具；权限/URL调用留宿主，以同scope in-flight复用、不跨token/租户缓存；临时引用不调knowledge/file_share。
+- [x] 跑共享chat及两端citation/bake/导出已有测试，纯子入口无DOM导入及无重依赖测试，期望PASS。
+- [x] 提交 `refactor(citation): unify parsing and document resource contracts`。
 
 ### Task 6: Citation来源列表与文档预览
 
