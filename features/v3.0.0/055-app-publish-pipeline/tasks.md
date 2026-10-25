@@ -1,6 +1,8 @@
 # Tasks: 发布管线、预置审批流、版本记录、资源档位与能力总线
 
-**关联规格**: [spec.md](./spec.md)（65 条 AC，What 的唯一真相）· [design.md](./design.md)（How 的唯一真相，D1–D16 / 坑 1–30 / §4.2 契约 / §8 后续）
+> **2026-10-23 增量 SDD**：用户已确认手动生效修订规格与单表简化设计；进入本轮任务拆解和实施；旧三表自动生效方案已替换。旧任务与旧评审状态仅描述历史批次；不代表本次增量已拆任务、编码或验收。本轮只做必要定向验证，不跑全量测试。旧任务的行号、计数和实现阶段为历史记录，当前实现快照以 design.md 为准。
+
+**关联规格**: [spec.md](./spec.md)（92 条 AC；手动生效修订已确认）· [design.md](./design.md)（D1–D20；本轮设计待单独确认；新接口合同 §4.4）
 **版本**: v3.0.0
 **纵切**: [mvp-114-path.md](../mvp-114-path.md) **§6 MVP-核心**（预算受限版，本轮裁剪基准）与 §2 F055 行——**Wave 1–3 全部标 `[MVP-核心]`**，Wave 4–7 为 release 必做但本轮顺延，只列标题 / 文件 / 测试载体 / 覆盖 AC，不展开逻辑。
 **§6 字面读法的两处对齐**：① §6 F055 顺延栏写「`withdraw` 守卫**以外**的事件触达全表」→ 守卫（AC-22）留在 MVP 内 → **T051 归 Wave 3.9**（修点一行 + 一个测试文件，成本极低，无理由为省一行而偏离基准）；② 顺延栏其余项（审读视图 / 预览 / 能力总线 / 结构演进 / 版本差异 / 档位 tab）照 §6 顺延。
@@ -12,8 +14,8 @@
 
 | 步骤 | 状态 | 备注 |
 |------|------|------|
-| spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 33 条修订，65 AC 定稿（决议-1～9） |
-| design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 15 条修订（D1–D16 / 30 坑）；接手时的第一入口 |
+| spec.md | ✅ 手动生效修订已评审、用户确认 | 用户原文“确认修订规格，更新简化设计”；92 条 AC；批准 hash 见简化设计评审 JSON |
+| design.md | ✅ 单表简化设计已评审、用户确认 | 原文“确认 F055 简化设计”；批准SHA256 `2ef7247c7fcc71d1e2e44b34a9df8dfe865135adc66c249166a29202e29402d6`；F054-B1/F056-S1另待修 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；70 任务 / 7 Wave / 53 条 `[MVP-核心]`（2026-08-17 独立审查 14 条修订：Celery 登记 / 组合根接线 / 跨 Wave 执行序 / 档位依赖链 / 图标落地 / 16207 闸 / T044·T027 拆分 / 路径与 i18n 补齐 / 建桶接线 / 顺延任务测试载体 / 追溯表订正 / T051 上提） |
 | 实现 | 🚧 进行中 | **52 / 70 完成**（Wave 1 + Wave 2 + **Wave 3.1–3.5**（T024–T043）+ **3.8**（T051）+ **T050**（上游回写）落地。2026-08-17 落 T024–T041；**2026-08-19 收口批**核实并勾上 T042 / T043（事件触达——实现早于勾选，服务与两个调用点在 3.1–3.4 那批就已随 `publish_approval_service` / `publish_online_service` 落地）、完成 T051（`withdraw` 终态守卫 + 18118）。`pytest test/app_publish` **343 passed**（2026-08-19 实测，含新增 `test_publish_notification.py` 14 例 + `test_withdraw_guard.py` 15 例）。⚠️ `test/approval` 有 13 例失败，逐条归因为**本批之前就红的既有漂移**（4–5 例本地 MySQL 未起、6 例 fake 与被测 API 漂移、2 例断言漂移），无一走 `withdraw_instance`——详见 T051 偏差记录与 followup）。剩余 Wave 3：3.6 只剩 **T044b**（另批核实；**T044a / T045–T048 于 2026-09-10 按代码证据核实并勾选**，逐条证据见各任务末行）· 3.9 只剩 **T049**（114 部署与手动验证；T050 上游回写已于 2026-08-19 完成并勾选）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
@@ -912,3 +914,369 @@ Spec Discovery N4 原定「密钥引用随 PRD-2」，2026-10-09 PRD-1 评审改
 - `bisheng-app.yaml` 能力声明恢复 `secrets` 字段；预检由「出现即拒绝」改为「缺值警告、不阻断」，审批单标注「缺少值」。
 - 能力总线在应用启动时注入同名环境变量（注入通道已预留引用名位）；修改值不经审批，保存后重启应用实例生效；新增或删除引用名随发布审批。
 
+
+## 2026-10-23 · 用户修订：仅保存配置，确认后重建
+
+保存不自动重建，显示当前实例与最新保存值的差异；用户确认后复用现有部署流程重建当前已批准版本，不改代码/档位/SQLite。F055 spec 修订 AC-70、AC-73、AC-74、AC-76、AC-77、AC-86，新增 AC-90、AC-91、AC-92。建议以单个加密配置资产及现有 RuntimeOperation/route 取代三表自动生效状态机，正式设计待修订规格确认后更新；不展开增量任务或勾选旧任务。
+
+## 2026-10-23 · 手动生效规格确认与简化设计
+
+用户确认 92 条 AC 修订规格。design D17–D20/§4.4/§5–§8已按单表和既有运行操作覆盖更新；移除独立自动生效、请求账本和 applied 回执协议；F054消费协议同步。设计仍待独立评审与用户确认，尚未展开增量任务/编码；B1/S1不在本次关闭。
+
+## 2026-10-23 · F055 手动生效开发任务（当前批次）
+
+用户已确认设计。本批次独立于历史70项，不把旧完成计数作为增量交付证明。按波次串行实施；只做必要定向验证，不新增Celery任务，沿现有租户上下文与node-plan。新增独立表按backend AGENTS由模型发现/create_all创建，不增加无必要revision；不改变批准的单表边界。L1记录写入manual-apply-task-reviews.md。
+
+- [x] **T071** — 单表模型及发现注册
+  **类型**：基础设施
+  **文件**：`src/backend/bisheng/app_publish/domain/models/app_secret_config.py`、`src/backend/bisheng/app_publish/domain/models/__init__.py`
+  **逻辑/验收**：App主键同型，tenant默认None/NOT NULL/index，通用LargeText，revision与时间；空映射保留行。新独立表由create_all发现，无额外DDL revision；回退旧代码保留加密表，不删数据。
+  **覆盖 AC:** AC-67, AC-68, AC-80, AC-83
+  **依赖**：无
+
+- [x] **T072** — 新增密钥业务错误
+  **类型**：基础设施
+  **文件**：`src/backend/bisheng/common/errcode/app_publish.py`
+  **逻辑/验收**：核对162占用分配配置校验/冲突/加密不可用/重建拒绝错误；安全原因不含值。
+  **覆盖 AC:** AC-66, AC-76, AC-78, AC-79, AC-80, AC-89
+  **依赖**：无
+
+- [x] **T102** — 业务错误中英文
+  **类型**：基础设施
+  **文件**：`src/frontend/packages/locales/src/api_errors/zh-Hans.json`、`src/frontend/packages/locales/src/api_errors/en.json`
+  **逻辑/验收**：162新增错误安全文案三语一致，不手改生成物。
+  **覆盖 AC:** AC-66, AC-76, AC-78, AC-79, AC-80, AC-89
+  **依赖**：T072
+
+- [x] **T103** — 业务错误日文与生成检查
+  **类型**：基础设施
+  **文件**：`src/frontend/packages/locales/src/api_errors/ja.json`
+  **逻辑/验收**：补同键后按包脚本生成api_errors并做增量parity。生成物为本任务派生产物，不单独维护。
+  **覆盖 AC:** AC-66, AC-76, AC-78, AC-79, AC-80, AC-89
+  **依赖**：T102
+
+- [x] **T073** — 加密、输入与值差异测试
+  **类型**：测试
+  **文件**：`src/backend/test/app_publish/test_app_secret_security.py`
+  **逻辑/验收**：真实Fernet绑定app/tenant，坏key/密文拒绝；大小/保留名/空白/Unicode/多行/NUL，声明子集及A→B→A。
+  **覆盖 AC:** AC-68, AC-78, AC-79, AC-90
+  **依赖**：T071, T072
+
+- [x] **T074** — 加密与输入合同
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/secret_security.py`、`src/backend/bisheng/app_publish/domain/schemas/app_secrets.py`
+  **逻辑/验收**：按测试实现有界映射、加密envelope、名称策略与安全请求schema；无原始输入回显。
+  **覆盖 AC:** AC-68, AC-78, AC-79, AC-90
+  **依赖**：T073
+
+- [x] **T075** — 保存、权限、CAS与审计事务测试
+  **类型**：测试
+  **文件**：`src/backend/test/app_publish/test_app_secret_service.py`、`src/backend/test/app_publish/test_app_secret_repository.py`
+  **逻辑/验收**：SQLite真实事务；owner允许/管理员/跨租户拒绝；零编排；CAS/最后项删除不重置；审计失败回滚；逐项时间、未引用与未知运行上下文。
+  **覆盖 AC:** AC-66, AC-67, AC-68, AC-73, AC-74, AC-75, AC-77, AC-79, AC-80, AC-81, AC-83, AC-85, AC-89, AC-90
+  **依赖**：T074
+
+- [x] **T076** — 单表Repository
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/repositories/app_secret_repository.py`
+  **逻辑/验收**：App→配置锁，显式session读写和同事务业务AuditLog；业务不可写后不保存，无serviceSQL/新DAO。
+  **覆盖 AC:** AC-67, AC-68, AC-77, AC-80, AC-81, AC-83
+  **依赖**：T075
+
+- [x] **T077** — 密钥服务及公开环境协议
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/services/app_secret_service.py`、`src/backend/bisheng/app_publish/application/runtime_secrets.py`
+  **逻辑/验收**：owner会话写、分级只读、revision、差异；formal_snapshot/preview_environment/delete_for_app公共协议，保存零operation。
+  **覆盖 AC:** AC-66, AC-67, AC-68, AC-70, AC-71, AC-73, AC-74, AC-75, AC-77, AC-80, AC-83, AC-84, AC-85, AC-89, AC-90
+  **依赖**：T076
+
+- [x] **T078** — manifest与声明呈现配对
+  **类型**：测试
+  **文件**：`src/backend/test/app_publish/test_app_secret_declaration.py`、`src/backend/test/app_publish/test_version_diff.py`（既有响应形状断言同步）
+  **逻辑/验收**：合法secrets/name、重复保留名/其他secret子树拒绝；无新增scope，缺值不单独阻断；diff/审读名称无值。
+  **覆盖 AC:** AC-54, AC-56, AC-69, AC-71, AC-72, AC-78, AC-84, AC-87, AC-88
+  **依赖**：T074
+
+- [x] **T079** — 声明schema与严格解包校验
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/schemas/app_manifest.py`、`src/backend/bisheng/app_publish/domain/services/manifest_validator.py`
+  **逻辑/验收**：只豁免合法capabilities.secrets[*].name，保留其他明文/引用拒绝与源码扫描；兼容旧manifest。
+  **覆盖 AC:** AC-56, AC-69, AC-72, AC-78, AC-88
+  **依赖**：T078
+
+- [x] **T080** — 声明能力消费与差异
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`、`src/backend/bisheng/app_publish/domain/services/version_diff_service.py`
+  **逻辑/验收**：is_empty/derive_scopes保持模型知识语义，diff展示名增删，不携值。
+  **覆盖 AC:** AC-54, AC-69, AC-72, AC-84, AC-87
+  **依赖**：T079
+
+- [x] **T081** — 同事务候选凭据生产测试
+  **类型**：测试
+  **文件**：`src/backend/test/app_publish/test_app_secret_credentials.py`
+  **逻辑/验收**：主体/凭据/delegate/binding/issue-audit同session，seal/flush失败全部回滚；原入口不变。
+  **覆盖 AC:** AC-68, AC-70, AC-77, AC-81, AC-82
+  **依赖**：T077, T079
+
+- [x] **T082** — 凭据底座session入口
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/open_api/domain/repositories/credential_repository.py`、`src/backend/bisheng/open_api/domain/services/credential_service.py`
+  **逻辑/验收**：受信内部session-aware签发；不提前commit/外部回调，不跨session读未提交数据；普通签发入口行为不改。
+  **覆盖 AC:** AC-68, AC-70, AC-77, AC-81, AC-82
+  **依赖**：T081
+
+- [x] **T083** — 运行期stage事务接线
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/services/app_credential_service.py`、`src/backend/bisheng/app_runtime/domain/repositories/runtime_credential_repository.py`
+  **逻辑/验收**：stage_in_transaction含subject创建及binding；F055 owner协议，回放不重签。历史binding回收S1不在本任务关闭。
+  **覆盖 AC:** AC-70, AC-77, AC-81, AC-82
+  **依赖**：T082
+
+- [x] **T084** — 用户确认重建与真实运行快照合同
+  **类型**：测试
+  **文件**：`src/backend/test/app_runtime/test_secret_rebuild.py`、`src/backend/test/app_runtime/test_secret_runtime_snapshot.py`
+  **逻辑/验收**：过期/重复确认，原tier/delivery/pending，零DDL，精确maintenance回放，ready自动提交与丢响应，原操作失败不自动recover，在途保存差异；锁图定向。
+  **覆盖 AC:** AC-70, AC-74, AC-75, AC-76, AC-77, AC-86, AC-90, AC-91, AC-92
+  **依赖**：T077, T083
+
+- [x] **T085** — 运行快照公共只读口
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_runtime/application/runtime_secrets.py`、`src/backend/bisheng/app_runtime/domain/repositories/runtime_secret_repository.py`
+  **逻辑/验收**：正式路由/实例/op一致DTO，缺上下文unknown，拒绝任意历史明文读取。
+  **覆盖 AC:** AC-68, AC-80, AC-90
+  **依赖**：T084
+
+- [x] **T086** — 重建受理应用服务
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/secret_rebuild_service.py`
+  **逻辑/验收**：App→node/assignment→route→配置，无回锁旧op；旧请求先回放，新请求冻结原批准组合；auto_commit；同UoW候选及seal。
+  **覆盖 AC:** AC-70, AC-76, AC-77, AC-86, AC-91, AC-92
+  **依赖**：T085
+
+- [x] **T087** — 正式/预览注入与失败恢复接线
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_delivery_coordinator.py`、`src/backend/bisheng/app_runtime/domain/services/app_state_service.py`
+  **逻辑/验收**：purpose分支绕过同版本快捷返回但不重标版本/DDL；普通环境冻结、failed config_restart不自动再建，指针与配置分离。
+  **覆盖 AC:** AC-70, AC-71, AC-75, AC-76, AC-77, AC-86, AC-91, AC-92
+  **依赖**：T086
+
+- [x] **T088** — 维护事实与ready提交围栏
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_runtime/domain/services/runtime_operation_service.py`、`src/backend/bisheng/app_runtime/domain/services/runtime_projection_service.py`
+  **逻辑/验收**：own maintenance持久幂等转换，旧事实不改新route；auto_commit重报原ready；归属/停止证明不放宽。
+  **覆盖 AC:** AC-76, AC-77, AC-90, AC-91, AC-92
+  **依赖**：T087
+
+- [x] **T089** — 运行期输出脱敏合同
+  **类型**：测试
+  **文件**：`src/runtime-manager/tests/test_secret_redaction.py`、`src/backend/test/app_runtime/test_secret_diagnostics.py`
+  **逻辑/验收**：短值/普通名/Unicode/跨行/重叠/边界/缺上下文，全执行绑定集合，backend安全落库；不猜名称或忽略短值。
+  **覆盖 AC:** AC-68, AC-71, AC-82, AC-86
+  **依赖**：T074
+
+- [x] **T090** — manager敏感集合及Docker日志
+  **类型**：后端 Domain
+  **文件**：`src/runtime-manager/runtime_manager/secret_redaction.py`、`src/runtime-manager/runtime_manager/api/platform_observe.py`
+  **逻辑/验收**：最长匹配，先脱敏后截断；受限operation环境与敏感名，缺上下文安全省略，不写本地明文。
+  **覆盖 AC:** AC-68, AC-82, AC-86
+  **依赖**：T089
+
+- [x] **T091** — K8s与legacy输出
+  **类型**：后端 Domain
+  **文件**：`src/runtime-manager/runtime_manager/executors/kubernetes.py`、`src/runtime-manager/runtime_manager/api/readonly.py`
+  **逻辑/验收**：各日志/诊断消费相同集合、purpose能力明确、未知能力不能降级。
+  **覆盖 AC:** AC-68, AC-71, AC-82, AC-86
+  **依赖**：T090
+
+- [x] **T092** — 执行器错误与准备容器输出
+  **类型**：后端 Domain
+  **文件**：`src/runtime-manager/runtime_manager/operations.py`、`src/runtime-manager/runtime_manager/container_runner.py`
+  **逻辑/验收**：统一出口保护，不向helper注入业务值；config_restart用途校验。
+  **覆盖 AC:** AC-68, AC-71, AC-82, AC-86
+  **依赖**：T091
+
+- [x] **T093** — 会话API权限和安全校验
+  **类型**：测试
+  **文件**：`src/backend/test/app_publish/test_app_secret_api.py`
+  **逻辑/验收**：真实HTTP依赖覆盖，session owner允许与admin/nonowner/跨tenant/SAK/PAT拒绝；非法body不回显；保存无重建、确认才受理。
+  **覆盖 AC:** AC-66, AC-67, AC-68, AC-73, AC-74, AC-76, AC-78, AC-79, AC-80, AC-89, AC-90, AC-91, AC-92
+  **依赖**：T088
+
+- [x] **T094** — 密钥endpoint与路由
+  **类型**：后端 API
+  **文件**：`src/backend/bisheng/app_publish/api/endpoints/secrets.py`、`src/backend/bisheng/app_publish/api/router.py`
+  **逻辑/验收**：GET/PUT/DELETE/rebuild既有envelope，只依赖Service；安全ValidationErrorhandler和route长度限制不含config。
+  **覆盖 AC:** AC-66, AC-67, AC-68, AC-73, AC-74, AC-76, AC-89, AC-90, AC-91, AC-92
+  **依赖**：T093
+
+- [x] **T095** — 缺值与清理集成
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/services/publish_status_service.py`、`src/backend/bisheng/app_publish/composition.py`
+  **逻辑/验收**：发布/审读名称缺值，删除持久cleanup公共接线，业务事件登记不制造查询事件。
+  **覆盖 AC:** AC-67, AC-72, AC-81, AC-83, AC-84
+  **依赖**：T094
+
+- [x] **T096** — API与hook测试
+  **类型**：前端 Platform
+  **文件**：`src/frontend/platform/src/pages/BuildPage/hostedApp/hooks/useAppSecrets.test.tsx`
+  **逻辑/验收**：保存/确认分开、丢响应不自动重复、旧请求清理、缓存不存值、mask不提交。
+  **覆盖 AC:** AC-67, AC-74, AC-76, AC-89, AC-90, AC-91, AC-92
+  **依赖**：T094
+
+- [x] **T097** — API与hook实现
+  **类型**：前端 Platform
+  **文件**：`src/frontend/platform/src/controllers/API/appSecrets.ts`、`src/frontend/platform/src/pages/BuildPage/hostedApp/hooks/useAppSecrets.ts`
+  **逻辑/验收**：wrapped request/ReactQuery，短时空草稿、明确确认stable request_id，轮询既有op状态不自动再试。
+  **覆盖 AC:** AC-67, AC-74, AC-76, AC-89, AC-90, AC-91, AC-92
+  **依赖**：T096
+
+- [x] **T098** — 页面定向测试
+  **类型**：前端 Platform
+  **文件**：`src/frontend/platform/src/pages/BuildPage/hostedApp/publish/AppSecretSettings.test.tsx`
+  **逻辑/验收**：只读/admin边界、保存不重启、差异名、取消零调用、unknown/not_running、失败保留输入及独立bsConfirm。
+  **覆盖 AC:** AC-66, AC-67, AC-68, AC-73, AC-74, AC-75, AC-76, AC-79, AC-85, AC-89, AC-90, AC-91, AC-92
+  **依赖**：T097
+
+- [x] **T099** — 密钥设置与编辑表单
+  **类型**：前端 Platform
+  **文件**：`src/frontend/platform/src/pages/BuildPage/hostedApp/publish/AppSecretSettings.tsx`、`src/frontend/platform/src/pages/BuildPage/hostedApp/publish/AppSecretEditor.tsx`
+  **逻辑/验收**：done组件按当前规范，单文件600内；空草稿/固定mask、多行值、独立确认、只显示名/安全状态。
+  **覆盖 AC:** AC-66, AC-67, AC-68, AC-73, AC-74, AC-75, AC-76, AC-79, AC-85, AC-89, AC-90, AC-91, AC-92
+  **依赖**：T098
+
+- [x] **T100** — 发布槽位和中文文案
+  **类型**：前端 Platform
+  **文件**：`src/frontend/platform/src/pages/BuildPage/hostedApp/index.tsx`、`src/frontend/platform/public/locales/zh-Hans/bs.json`
+  **逻辑/验收**：只插已有settingsSlot，不改视觉模式，三语键同步后交付。
+  **覆盖 AC:** AC-67, AC-74, AC-89, AC-90, AC-91
+  **依赖**：T099
+
+- [x] **T101** — 英文日文文案
+  **类型**：前端 Platform
+  **文件**：`src/frontend/platform/public/locales/en-US/bs.json`、`src/frontend/platform/public/locales/ja/bs.json`
+  **逻辑/验收**：与中文同key无硬编码；界面动词短、环境变量值不展示。
+  **覆盖 AC:** AC-67, AC-74, AC-89, AC-90, AC-91
+  **依赖**：T100
+
+- [x] **T104** — 事件可见登记
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/database/models/audit_log.py`
+  **逻辑/验收**：仅登记app.secret.set/delete/rebuild事件及可信app关联，F056历史回收审计另待修；共享枚举增量兼容。
+  **覆盖 AC:** AC-81
+  **依赖**：T095
+
+- [x] **T108** — 前端审计事件登记
+  **类型**：前端 Platform
+  **文件**：`src/frontend/platform/src/controllers/API/log.ts`
+  **逻辑/验收**：只补app.secret.set/delete/rebuild事件，沿已有i18n映射；不混入后端实现。
+  **覆盖 AC:** AC-81
+  **依赖**：T104
+
+- [x] **T105** — E2E脚本与最小fixture
+  **类型**：测试
+  **文件**：`src/backend/test/e2e/test_app_secret_manual_apply.py`、`src/backend/test/e2e/fixtures/app_secret_probe.py`
+  **逻辑/验收**：走真实公开入口，哨兵仅回bool；Docker/K8s保存前后UID、确认原版本/档位/PVC数据、权限配对、预览空值，失败不自动再试。
+  **覆盖 AC:** AC-66, AC-67, AC-68, AC-70, AC-71, AC-73, AC-74, AC-75, AC-76, AC-77, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-85, AC-86, AC-87, AC-88, AC-89, AC-90, AC-91, AC-92
+  **依赖**：T103, T104, T108, T092, T101
+
+- [ ] **T106** — 定向回归与真实E2E证据
+  **类型**：测试
+  **文件**：`features/v3.0.0/055-app-publish-pipeline/manual-apply-validation.md`、`features/v3.0.0/055-app-publish-pipeline/manual-apply-validation.json`
+  **逻辑/验收**：仅变化路径和必要lint/架构/类型/模型约束；授权专用环境部署前固定source/digest和保护范围；ARM不测DM8仅静态；未执行明确记录。
+  **覆盖 AC:** AC-54, AC-56, AC-66, AC-67, AC-68, AC-69, AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-85, AC-86, AC-87, AC-88, AC-89, AC-90, AC-91, AC-92
+  **依赖**：T105
+
+- [ ] **T107** — L2与交付汇总
+  **类型**：测试
+  **文件**：`features/v3.0.0/055-app-publish-pipeline/manual-apply-code-review.md`、`features/v3.0.0/055-app-publish-pipeline/manual-apply-ac-mapping.json`
+  **逻辑/验收**：按sdd-code-review七维，只审F055增量和公共衔接；逐AC区分本地/模拟/真实/未验；未获授权不公开push/tag。
+  **覆盖 AC:** AC-54, AC-56, AC-66, AC-67, AC-68, AC-69, AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-85, AC-86, AC-87, AC-88, AC-89, AC-90, AC-91, AC-92
+  **依赖**：T106
+
+
+## 2026-10-24 实施进度与验证安排
+
+用户要求优先完成全部主功能并提测，开发期只做当前功能定向测试，完整回归放到全部功能完成后。本轮 F055 已接入单表加密、声明、会话 API、实际运行差异、明确确认重建、运行输出脱敏和发布设置页面；T105–T107 为 E2E/交付检查，未执行真实环境验证，不宣称交付验收全部通过。
+
+窄适配文件：T088/T092 同时消费新增 `runtime_secret_diagnostics.py`；T095 的持久删除清理接入 `runtime_cleanup_service.py`（沿既有 cleanup_status，不新增清理调度器）。独立源码包无需 Alembic create-table revision。幂等请求 key 使用 request_id 的 SHA-256 作为有界命名键（不是值摘要），原确认参数摘要与回放规则不变。
+
+定向证据：新增 backend 54 passed；manager 脱敏 3 passed；前端 hook/页面 4 passed；版本 diff 旧响应断言修订后单用例通过。非全量测试。Platform 类型检查报告两个既有问题（缺少 @hello-pangea/dnd 声明、clientVoiceDraft.test.tsx 参数数目）；未触及本功能文件。变更文件 ESLint 通过，Python Ruff/架构守卫持续核对。
+
+## 2026-10-24 补齐真实声明消费方（T109–T119）
+
+这些任务兑现已确认 AC-67、AC-69、AC-72、AC-84，不新增需求或审批流程。任务清单复审：作用域、生产消费、依赖与 AC 追溯通过；测试仅针对本次接线，完整回归仍待所有功能开发完成后。
+
+- [x] **T109** — 待审批引用与审批摘要用例
+  **类型**：测试
+  **文件**：`src/backend/test/app_publish/test_app_secret_service.py`、`src/backend/test/app_publish/test_app_secret_declaration.py`
+  **依赖**：T077
+  **覆盖 AC:** AC-67, AC-69, AC-72, AC-84
+
+- [x] **T110** — 识别真实待审批版本与安全引用状态
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/repositories/app_secret_repository.py`、`src/backend/bisheng/app_publish/domain/services/app_secret_service.py`
+  **依赖**：T109
+  **覆盖 AC:** AC-67, AC-72, AC-84
+
+- [x] **T111** — 公共只读协议接入审批快照
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/application/runtime_secrets.py`、`src/backend/bisheng/app_publish/domain/services/publish_approval_service.py`
+  **依赖**：T110
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T112** — 发布状态与 CLI 轮询消费引用状态
+  **类型**：后端 Domain
+  **文件**：`src/backend/bisheng/app_publish/domain/services/publish_status_service.py`、`src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py`
+  **依赖**：T111
+  **覆盖 AC:** AC-72, AC-84
+
+- [x] **T113** — 发布页能力摘要展示与用例
+  **类型**：前端 Platform
+  **文件**：`src/frontend/platform/src/pages/BuildPage/hostedApp/publish/CapabilityListCard.test.tsx`、`src/frontend/platform/src/pages/BuildPage/hostedApp/publish/CapabilityListCard.tsx`
+  **依赖**：T112
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T114** — 客户端审批卡提交时状态用例
+  **类型**：测试
+  **文件**：`src/frontend/client/src/components/approval/AppPublishDetailPanel.test.tsx`
+  **依赖**：T111
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T115** — 沿既有能力列表呈现名称和提交时状态
+  **类型**：前端 Client
+  **文件**：`src/frontend/client/src/components/approval/AppPublishDetailPanel.tsx`
+  **依赖**：T114
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T116** — 审批摘要中英文文案
+  **类型**：基础设施
+  **文件**：`src/frontend/client/src/locales/en/translation.json`、`src/frontend/client/src/locales/zh-Hans/translation.json`
+  **依赖**：T115
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T117** — 审批摘要日文与三语同键检查
+  **类型**：基础设施
+  **文件**：`src/frontend/client/src/locales/ja/translation.json`
+  **依赖**：T116
+  **覆盖 AC:** AC-69, AC-72, AC-84
+
+- [x] **T118** — CLI 名称缺值提醒去重用例
+  **类型**：测试
+  **文件**：`src/bisheng-cli/tests/test_secret_warnings.py`
+  **依赖**：T112
+  **覆盖 AC:** AC-72
+
+- [x] **T119** — 缺值提醒与随源码重建 wheel
+  **类型**：CLI
+  **文件**：`src/bisheng-cli/bisheng_cli/commands/deploy.py`
+  **依赖**：T118
+  **覆盖 AC:** AC-72
+
+T119 的 wheel/manifest 是 scripts/pack_cli_wheel.sh 的派生产物，须一并提交；不发布外部包。T114 用例已编写，但执行因本机 canvas.node 缺失阻断，该项不计入通过数。T106/T107 保留未完成状态，未以新任务替代真实部署与最终合入审查。
+
+- [x] **T120** — 真实 CLI 轮询 API 定向补验
+  **类型**：测试
+  **文件**：`src/backend/test/app_publish/test_app_secret_api.py`
+  **依赖**：T112
+  **覆盖 AC:** AC-72, AC-84
+  **结果**：公开 /api/v2 轮询入口返回正确的名称与缺值元数据且不含保存值；1 例通过。

@@ -130,6 +130,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     # isolation from the `app` row).
     "bisheng.app_publish.domain.models",
     "bisheng.app_runtime.domain.models",
+    "bisheng.app_governance.domain.models",
     # `resource_tier` has NO tenant_id column: resource tiers are platform-level
     # and shared across tenants (AC-44). Listing it here only guarantees
     # SQLModel.metadata sees the table; _discover_tenant_aware_tables() skips it

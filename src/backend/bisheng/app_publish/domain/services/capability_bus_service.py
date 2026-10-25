@@ -71,7 +71,7 @@ from bisheng.database.models.app_version import AppVersionDao
 from bisheng.open_api.domain.scopes import is_scope_issuable
 from bisheng.open_api.domain.services.public_base_url import MODEL_GATEWAY_BASE_PATH
 
-#: Capability kinds. Two this round; 决议-1 keeps secret references out.
+#: API capability kinds. Secret references grant no Open API scope.
 CAPABILITY_KIND_MODEL = "model"
 CAPABILITY_KIND_KNOWLEDGE = "knowledge"
 
@@ -322,7 +322,7 @@ class HostedAppDeclarationAdapter:
 
 
 def derive_scopes(declaration: CapabilityDeclaration) -> list[str]:
-    """Open-API scopes a declaration buys. Nothing is granted by default.
+    """Open-API scopes a declaration buys. Secrets grant no scopes.
 
     Order is fixed so the issued credential's scope list is stable across
     publishes of the same declaration — an unstable list would make every

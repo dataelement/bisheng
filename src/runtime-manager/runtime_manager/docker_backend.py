@@ -39,6 +39,8 @@ from runtime_manager.errors import BackendUnavailableError
 class DockerBackend(Protocol):
     """Form-specific operations the manager needs. Keep this list minimal."""
 
+    def assert_host_isolation(self, network: str) -> None: ...
+
     def ping(self) -> bool: ...
 
     def api_version(self) -> dict[str, Any]: ...
@@ -90,6 +92,11 @@ class _RealDockerBackend:
         self._base_url = base_url or None
         self._api = None
 
+    def assert_host_isolation(self, network):
+        from runtime_manager.host_isolation import manager_proof
+
+        manager_proof(self._client(), get_config(), network)
+
     def _client(self):
         if self._api is None:
             try:
@@ -128,9 +135,17 @@ class _RealDockerBackend:
             return False
 
     def create_container(self, name: str, payload: dict[str, Any]) -> str:
+        network = payload.get("HostConfig", {}).get("NetworkMode", "")
+        if network not in {"none", ""}:
+            self.assert_host_isolation(network)
+        elif network != "none":
+            raise BackendUnavailableError("unprotected_default_network_refused")
         return self._client().create_container_from_config(payload, name=name)["Id"]
 
     def start_container(self, container: str) -> None:
+        network = self._client().inspect_container(container).get("HostConfig", {}).get("NetworkMode", "")
+        if network != "none":
+            self.assert_host_isolation(network)
         self._client().start(container)
 
     def stop_container(self, container: str, timeout: int = 10) -> None:
@@ -158,6 +173,9 @@ class _RealDockerBackend:
         memory_bytes: int,
         network_mode: str | None = None,
     ) -> Iterator[dict[str, Any]]:
+        self.assert_host_isolation(network_mode)
+        if not network_mode:
+            raise BackendUnavailableError("unprotected_build_network_refused")
         return self._client().build(
             path=context_dir,
             dockerfile=dockerfile,

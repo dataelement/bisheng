@@ -281,6 +281,9 @@ export const V2_ACTIONS: string[] = [
     'app.release.preview_started',
     'app.release.preview_reclaimed',
     'app.release.rollback',
+    'app.secret.set',
+    'app.secret.delete',
+    'app.secret.rebuild',
 ];
 
 const actions = [

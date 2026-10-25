@@ -302,6 +302,9 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "app.release.preview_started",
     "app.release.preview_reclaimed",
     "app.release.rollback",
+    "app.secret.set",
+    "app.secret.delete",
+    "app.secret.rebuild",
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`

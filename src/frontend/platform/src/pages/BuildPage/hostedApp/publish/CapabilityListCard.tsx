@@ -40,6 +40,7 @@ function reasonI18nKey(reason: string): string {
 }
 
 function kindI18nKey(kind: string): string {
+  if (kind === "secret") return "hostedApp.secrets.title"
   return kind === "model"
     ? "hostedApp.publishStatus.capabilityKindModel"
     : "hostedApp.publishStatus.capabilityKindKnowledge"
@@ -61,18 +62,19 @@ export function CapabilityListCard({ capabilities }: CapabilityListCardProps) {
       ) : (
         <ul className="flex flex-col gap-2.5">
           {rows.map((capability, index) => {
-            const Icon = capability.kind === "model" ? Sparkles : Database
+            const Icon = capability.kind === "secret" ? null : capability.kind === "model" ? Sparkles : Database
             return (
               <li
                 key={`${capability.kind}-${capability.name}-${index}`}
                 className="flex flex-col gap-1 text-sm"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                  {Icon && <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
                   <span className="text-muted-foreground">
                     {t(kindI18nKey(capability.kind))}
                   </span>
                   <span className="min-w-0 break-all">{capability.name}</span>
+                  {capability.kind === "secret" && capability.reason === "missing_value" && <span className="text-muted-foreground">{t("hostedApp.secrets.missing")}</span>}
                   {capability.revoked && (
                     <StatusTag className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
                       {t("hostedApp.publishStatus.capabilityRevokedTag")}

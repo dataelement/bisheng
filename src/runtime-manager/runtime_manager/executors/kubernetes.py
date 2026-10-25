@@ -980,7 +980,11 @@ class KubernetesExecutor:
             "PIP_EXTRA_INDEX_URL": self.config.build_extra_index_url,
             "NPM_REGISTRY": self.config.build_npm_registry,
         }
-        return redact("\n".join(output), env).encode()[-16384:].decode("utf-8", errors="ignore")
+        return (
+            redact("\n".join(output), env, operation.get("payload", {}).get("sensitive_env_names", []))
+            .encode()[-16384:]
+            .decode("utf-8", errors="ignore")
+        )
 
     def logs(self, exec_ref, *, since=None, tail=200):
         row = self.platform.resource(exec_ref)
@@ -1003,7 +1007,15 @@ class KubernetesExecutor:
                     raise
         parts.append(self.client.logs(row["name"], since_time=since_time, tail=tail, container="app"))
         self._fresh(row)
-        return "\n".join(parts).encode()[-1024 * 1024 :].decode("utf-8", errors="ignore")
+        from runtime_manager.secret_redaction import redact_output
+
+        operation = self.platform.operation(row["operation_id"])
+        payload = operation.get("payload", {})
+        return (
+            redact_output("\n".join(parts), payload.get("runtime_env", {}), payload.get("sensitive_env_names", []))
+            .encode()[-1024 * 1024 :]
+            .decode("utf-8", errors="ignore")
+        )
 
     def cleanup(self, operation):
         if operation["kind"] == "data" and operation["payload"].get("online"):

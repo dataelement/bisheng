@@ -114,6 +114,9 @@ async def lifespan(app: FastAPI):
         await initialize_app_context(config=settings)
         _register_permission_runtime_contexts()
         _register_app_publish_composition()
+        from bisheng.app_runtime.domain.services.entry_authz_service import diagnose_obo_configuration
+
+        diagnose_obo_configuration()
         open_api_call_audit_service.start()
         # F051: the model protocol face writes one model_call_record per call
         # write-behind. Own writer, own table — the audit page must not be drowned

@@ -76,6 +76,12 @@ async def on_app_deleted(*, app_id: str, actor_user_id: int, tenant_id: int) -> 
         logger.info(f"app_publish.release_cancelled app_id={app_id} instance_id={instance.id}")
 
 
+async def on_app_deleted_secrets(*, app_id: str, actor_user_id: int, tenant_id: int) -> None:
+    from bisheng.app_publish.application.runtime_secrets import delete_for_app
+
+    await delete_for_app(app_id)
+
+
 async def _capability_env(*, app_id: str, capabilities) -> dict[str, str]:
     """``runtime_env_ports`` provider — the environment one hosted container starts with.
 
@@ -121,6 +127,7 @@ def register() -> None:
 
     lifecycle_hooks.register_app_deleted_hook(on_app_deleted)
     lifecycle_hooks.register_app_deleted_hook(on_app_deleted_revoke_credential)
+    lifecycle_hooks.register_app_deleted_hook(on_app_deleted_secrets)
     # Registered here rather than declared in ``open_api`` so the dependency
     # keeps pointing F055 → the credential base and never back (F049 design D2:
     # "defined and registered by F055"). Until this runs, a ``hosted_app``

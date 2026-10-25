@@ -287,7 +287,7 @@ class RuntimeDeliveryCoordinator:
         await self.wake(op)
         return await self.wait(op)
 
-    async def inject_environment(self, op, *, capabilities=None, environment=None, preview=False):
+    async def inject_environment(self, op, *, capabilities=None, environment=None, preview=False, secret_snapshot=None):
         from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
         from bisheng.app_publish.domain.services.capability_bus_service import (
             derive_scopes,
@@ -297,7 +297,7 @@ class RuntimeDeliveryCoordinator:
         from bisheng.app_runtime.domain.services.app_storage_service import AppStorageService
         from bisheng.app_runtime.domain.services.runtime_payload import seal
 
-        async with self.repo.transaction():
+        async with self.repo.transaction() as session:
             op = await self.repo.get(RuntimeOperation, op.id, lock=True)
             if op.payload.get("sealed_env"):
                 return
@@ -309,10 +309,28 @@ class RuntimeDeliveryCoordinator:
             ).issue(op, base_url=base, preview_session=op.id if preview else None)
             env = {**(environment or {}), **storage["env"], "BISHENG_PLATFORM_API_BASE": base}
             # Preflight gets isolated data and no production application identity.
-            if not preview:
+            from bisheng.app_publish.application.runtime_secrets import formal_snapshot, preview_environment
+
+            if preview:
+                env.update(preview_environment(capabilities or {}))
+            else:
+                if secret_snapshot is None:
+                    from bisheng.database.models.app import App
+                    from bisheng.database.models.app_version import AppVersion
+
+                    app = await self.repo.get(App, op.app_id, lock=True)
+                    version = await self.repo.get(AppVersion, op.version_id)
+                    secret_snapshot = await formal_snapshot(app, version, session=session)
+                env.update(secret_snapshot.env)
+                op.payload = {
+                    **op.payload,
+                    "secret_config_revision": secret_snapshot.revision,
+                    "sensitive_env_names": secret_snapshot.sensitive_env_names,
+                    "approved_declaration_digest": secret_snapshot.declaration_digest,
+                }
                 declaration = parse_declaration(capabilities or {})
-                token = await AppRuntimeCredentialService.stage(
-                    op.app_id, operation=op, scopes=derive_scopes(declaration), repository=self.repo
+                token = await AppRuntimeCredentialService.stage_in_transaction(
+                    op.app_id, operation=op, scopes=derive_scopes(declaration), session=session
                 )
                 env.update({"BISHENG_APP_TOKEN": token, "BISHENG_API_BASE_URL": base})
                 if declaration.models:
@@ -370,12 +388,22 @@ class RuntimeDeliveryCoordinator:
             "preserve_pending_version": preserve_pending,
             "egress_domains": egress_domains_of(version.manifest),
         }
-        op = await self.submit(
-            app, kind="deploy", key=key or "deploy:" + uuid4().hex, version_id=version.id, payload=body
-        )
-        await self.inject_environment(
-            op, capabilities=version.capabilities, environment=(version.injections or {}).get("env", {})
-        )
+        async with self.repo.transaction():
+            from bisheng.database.models.app import App
+
+            locked = await self.repo.get(App, app.id, lock=True)
+            if locked is None or (locked.state, locked.current_version_id, locked.pending_version_id) != (
+                app.state,
+                app.current_version_id,
+                app.pending_version_id,
+            ):
+                raise RuntimeConflict("application_state_changed")
+            op = await self.submit(
+                app, kind="deploy", key=key or "deploy:" + uuid4().hex, version_id=version.id, payload=body
+            )
+            await self.inject_environment(
+                op, capabilities=version.capabilities, environment=(version.injections or {}).get("env", {})
+            )
         await self.wake(op)
         result = await self.wait(op, ready=True)
         from bisheng.app_runtime.domain.services.app_state_service import AppStateService
@@ -391,7 +419,7 @@ class RuntimeDeliveryCoordinator:
             app,
             kind="destroy" if destroy else "stop",
             key=("destroy:" if destroy else "stop:") + uuid4().hex,
-            payload={"purge_volume": purge_volume},
+            payload={"purge_volume": purge_volume, "delete_secret_config": destroy},
         )
         await self.wake(op)
         return await self.wait(op)
@@ -416,7 +444,9 @@ class RuntimeDeliveryCoordinator:
             "egress_domains": payload["egress_domains"],
         }
         op = await self.submit(app, kind="preview", key="preview:" + row.id, version_id=version.id, payload=body)
-        await self.inject_environment(op, preview=True, environment=payload.get("env"))
+        await self.inject_environment(
+            op, preview=True, capabilities=version.capabilities, environment=payload.get("env")
+        )
         await self.wake(op)
         return await self.wait(op, ready=True)
 
@@ -457,6 +487,12 @@ class RuntimeDeliveryCoordinator:
             return
         if previous and previous.cleanup_status != "complete":
             return
+        if (
+            previous
+            and previous.payload.get("purpose") == "config_restart"
+            and previous.status in {"failed", "cancelled", "timed_out"}
+        ):
+            return
         attempt = (previous.payload.get("recovery_attempt", 0) if previous else 0) + 1
         if attempt > 3:
             return
@@ -480,14 +516,24 @@ class RuntimeDeliveryCoordinator:
             "auto_commit": True,
             "recovery_attempt": attempt,
         }
-        op = await self.submit(
-            app,
-            kind="deploy",
-            key=f"recover:{route.id}:{route.route_epoch}:{attempt}",
-            version_id=version.id,
-            payload=payload,
-        )
-        await self.inject_environment(
-            op, capabilities=version.capabilities, environment=(version.injections or {}).get("env", {})
-        )
+        async with self.repo.transaction():
+            from bisheng.database.models.app import App
+
+            locked = await self.repo.get(App, app.id, lock=True)
+            if locked is None or (locked.state, locked.current_version_id, locked.pending_version_id) != (
+                app.state,
+                app.current_version_id,
+                app.pending_version_id,
+            ):
+                return
+            op = await self.submit(
+                app,
+                kind="deploy",
+                key=f"recover:{route.id}:{route.route_epoch}:{attempt}",
+                version_id=version.id,
+                payload=payload,
+            )
+            await self.inject_environment(
+                op, capabilities=version.capabilities, environment=(version.injections or {}).get("env", {})
+            )
         await self.wake(op)

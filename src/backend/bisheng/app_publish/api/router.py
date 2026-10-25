@@ -16,6 +16,7 @@ endpoint that the pipeline refuses outright.
 
 from fastapi import APIRouter
 
+from bisheng.app_publish.api.endpoints.app_secrets import router as secrets_router
 from bisheng.app_publish.api.endpoints.deploy import router as deploy_router
 from bisheng.app_publish.api.endpoints.preview import router as preview_router
 from bisheng.app_publish.api.endpoints.publish_status import router as publish_status_router
@@ -31,6 +32,7 @@ v2_router.include_router(deploy_router)
 #: ``/api/v1/resource-tiers/**`` (super-admin tier tab — not under ``/apps``
 #: because F054's ``GET /apps/{app_id}`` is mounted first and would swallow it).
 v1_router = APIRouter()
+v1_router.include_router(secrets_router)
 v1_router.include_router(publish_status_router)
 v1_router.include_router(snapshot_router)
 v1_router.include_router(preview_router)

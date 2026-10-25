@@ -143,7 +143,7 @@ class ProbeService:
             "Image": image_ref,
             "Env": [f"{k}={v}" for k, v in sorted(env.items())],
             "ExposedPorts": {f"{port}/tcp": {}},
-            "Labels": {LABEL_MANAGED: "probe"},
+            "Labels": {LABEL_MANAGED: "probe", "bisheng.runtime.node": self._config.node_id},
             "HostConfig": {
                 "ReadonlyRootfs": True,
                 # ``mode=1777`` is required, not cosmetic: the container runs as

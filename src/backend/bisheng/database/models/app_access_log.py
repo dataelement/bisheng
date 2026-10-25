@@ -61,6 +61,7 @@ class AppAccessLog(SQLModelSerializable, table=True):
         sa_column=Column(Integer, nullable=False, index=True, comment="Tenant of the application (not of the token)"),
     )
     app_id: str = Field(sa_column=Column(String(36), nullable=False, comment="app.id that was entered"))
+    app_name_snapshot: str | None = Field(default=None, sa_column=Column(String(128), nullable=True))
     user_id: int = Field(sa_column=Column(Integer, nullable=False, comment="Visitor user.user_id"))
     user_name: str | None = Field(
         default=None,

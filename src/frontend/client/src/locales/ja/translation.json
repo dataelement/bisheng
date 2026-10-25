@@ -2603,5 +2603,12 @@
     "loading": "読み込み中…",
     "clear": "クリア",
     "remove": "削除"
+  },
+  "approval": {
+    "app_environment": {
+      "type": "環境変数",
+      "missing": "申請時は未設定",
+      "present": "申請時は設定済み"
+    }
   }
 }

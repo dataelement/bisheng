@@ -100,6 +100,13 @@ class _Budget:
 class VersionDiffService:
     """``diff(app_id, base, target)`` — what changed from ``base`` to ``target``."""
 
+    @staticmethod
+    def secret_reference_diff(base: dict, target: dict) -> dict:
+        from bisheng.app_publish.domain.services.app_secret_service import secret_names
+
+        old, new = set(secret_names(base)), set(secret_names(target))
+        return {"added": sorted(new - old), "removed": sorted(old - new)}
+
     @classmethod
     async def diff(cls, app_id: str, base_version_id: str, target_version_id: str, *, actor) -> dict[str, Any]:
         """Design §4.2 ⑨. ``base`` is the older side ("a/"), ``target`` the newer ("b/").
@@ -137,6 +144,7 @@ class VersionDiffService:
             "base": SnapshotBrowseService.version_payload(base),
             "target": SnapshotBrowseService.version_payload(target),
             "role": role,
+            "secret_references": cls.secret_reference_diff(base.capabilities, target.capabilities),
             "summary": {
                 "files_changed": budget.files_changed,
                 "additions": budget.additions,

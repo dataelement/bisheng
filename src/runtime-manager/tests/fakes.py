@@ -147,6 +147,10 @@ class FakeDockerBackend:
         if c.payload.get("Healthcheck") and c.health is None:
             c.health = "starting"
 
+    def assert_host_isolation(self, network: str) -> None:
+        """Synthetic verified host for lifecycle tests; real proof has its own tests."""
+        return None
+
     def stop_container(self, container: str, timeout: int = 10) -> None:
         self.calls.append(("stop_container", {"container": container, "timeout": timeout}))
         self._require_reachable()

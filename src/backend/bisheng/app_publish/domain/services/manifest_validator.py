@@ -119,6 +119,10 @@ async def validate_manifest(raw: str | bytes) -> ManifestValidation:
     tier = await ResourceTierService.resolve_tier(manifest.tier)
 
     hints: list[str] = []
+    if manifest.capabilities.secrets:
+        hints.append(
+            "Secret values are configured in the platform; precheck and approval previews receive empty values."
+        )
     bare = [table.name for table in manifest.database.tables if not table.columns]
     if bare:
         hints.append(_TABLES_WITHOUT_COLUMNS_HINT.format(names=", ".join(bare)))
@@ -150,21 +154,33 @@ def _load_yaml(raw: str | bytes) -> dict[str, Any]:
 
 
 def _reject_secret_references(document: dict[str, Any]) -> None:
-    """AC-56 — any secret reference is refused in this version, with its own code."""
+    """AC-56 — only the validated name-only declaration is exempt."""
     hit = _find_secret_reference(document, path="")
     if hit is None:
         return
     raise AppSecretReferenceUnsupportedError(
-        msg="本版不支持在应用声明中引用密钥",
+        msg="应用密钥声明仅支持 capabilities.secrets 中的名称引用",
         details={"field": hit, "reason": "secret_reference"},
-        hints=["请移除密钥引用; 运行期凭据随能力总线波次提供, 当前版本不注入任何密钥"],
+        hints=["仅填写 capabilities.secrets: [{name: NAME}], 不在代码包中放入密钥值"],
     )
+
+
+def _valid_secret_declaration(value: Any) -> bool:
+    from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
+
+    try:
+        CapabilityDeclaration.model_validate({"secrets": value})
+    except (ValidationError, ValueError, TypeError):
+        return False
+    return True
 
 
 def _find_secret_reference(node: Any, *, path: str) -> str | None:
     if isinstance(node, dict):
         for key, value in node.items():
             child = f"{path}.{key}" if path else str(key)
+            if child == "capabilities.secrets" and _valid_secret_declaration(value):
+                continue
             if _SECRET_KEY_RE.search(str(key)):
                 return child
             found = _find_secret_reference(value, path=child)

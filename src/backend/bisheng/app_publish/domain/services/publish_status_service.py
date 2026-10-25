@@ -400,7 +400,7 @@ class PublishStatusService:
         they are resolved for real rather than shown as permanently healthy.
         """
         if version is None:
-            return []
+            result = []
         from bisheng.app_publish.domain.services import capability_bus_service as bus
 
         try:
@@ -441,6 +441,12 @@ class PublishStatusService:
             }
             for row in rows
         ]
+
+        if (getattr(version, "capabilities", None) or {}).get("secrets"):
+            from bisheng.app_publish.application.runtime_secrets import secret_reference_status
+
+            result.extend(await secret_reference_status(app.id, version.capabilities))
+        return result
 
     @staticmethod
     async def _tier_payload(version) -> dict[str, Any] | None:

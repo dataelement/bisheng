@@ -106,6 +106,7 @@ def render_verdict_response(
         kind,
         app_name=verdict.app_name if verdict else None,
         owner_name=verdict.owner_name if verdict else None,
+        reason=verdict.reason if verdict else None,
         square_url=config.square_url,
         request_id=request_id,
         accept_language=accept_language,

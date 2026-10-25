@@ -50,3 +50,14 @@ class RuntimeCleanupService:
                 artifact.state = "purged"
                 artifact.retained_until = datetime.utcnow()
                 await self.repo.save(artifact)
+
+        if op.kind == "destroy" and op.payload.get("delete_secret_config"):
+            from bisheng.app_publish.application.runtime_secrets import delete_for_app
+            from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
+
+            app = await self.repo.get_application(op.app_id)
+            if app is None or app.state != "deleted":
+                # The destroy fact precedes the business delete. Keep the existing
+                # cleanup obligation visible until that transition commits.
+                raise RuntimeConflict("business_delete_not_committed")
+            await delete_for_app(op.app_id)

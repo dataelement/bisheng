@@ -237,6 +237,8 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.information.reconcile.dispatch_information_subscription_reconcile",
                 "schedule": 3600.0,
             }
+        if "runtime_audit_reconcile" not in self.beat_schedule:
+            self.beat_schedule["runtime_audit_reconcile"] = {"task": "runtime_audit_reconcile", "schedule": 30.0}
         if "dispatch_information_article_poll" not in self.beat_schedule:
             self.beat_schedule["dispatch_information_article_poll"] = {
                 "task": "bisheng.worker.information.article.dispatch_information_article_poll",

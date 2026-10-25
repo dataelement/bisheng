@@ -27,7 +27,7 @@ class PlatformError(RuntimeError):
 
 
 class PlatformClient:
-    def __init__(self, config: Config, *, transport=None, ca_file=None):
+    def __init__(self, config: Config, *, transport=None, ca_file=None, timeout=60):
         self.config = config
         parsed = urlsplit(config.platform_base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
@@ -36,7 +36,7 @@ class PlatformClient:
         self._http = httpx.Client(
             base_url=config.platform_base_url.rstrip("/"),
             transport=transport,
-            timeout=60,
+            timeout=timeout,
             verify=ssl.create_default_context(cafile=str(ca_file) if ca_file else None),
             trust_env=False,
             follow_redirects=False,

@@ -1,0 +1,12 @@
+test/e2e/test_e2e_vibe_governance_closeout.py::test_ac46_53_three_real_sources_and_paired_denial[model]
+test/e2e/test_e2e_vibe_governance_closeout.py::test_ac46_53_three_real_sources_and_paired_denial[capability]
+test/e2e/test_e2e_vibe_governance_closeout.py::test_ac46_53_three_real_sources_and_paired_denial[access]
+test/e2e/test_e2e_vibe_governance_closeout.py::test_ac51_56_complete_authenticated_export
+
+=============================== warnings summary ===============================
+../../../../src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18
+  /Users/zhangguoqing/works/bisheng/src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+4 tests collected in 0.03s

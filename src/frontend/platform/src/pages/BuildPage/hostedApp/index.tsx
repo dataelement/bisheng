@@ -13,6 +13,9 @@
  * which lands here as an inline notice. The alternative — a real 403 — makes
  * the platform interceptor navigate the whole SPA to `/403`.
  */
+import { useContext } from "react"
+import { userContext } from "@/contexts/userContext"
+import { AppSecretSettings } from "./publish/AppSecretSettings"
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Tabs } from "@bisheng/ui"
 import { useTranslation } from "react-i18next"
@@ -68,6 +71,8 @@ export function HostedAppDetail() {
     errorMessage: publishError,
     reload: reloadPublishStatus,
   } = usePublishStatus(appId)
+
+  const { user } = useContext(userContext)
 
   const handleTabChange = (value: string) => {
     // `replace` so the back button leaves the page instead of walking the tabs.
@@ -151,6 +156,7 @@ export function HostedAppDetail() {
                   {!!publishStatus && (
                     <CapabilityListCard capabilities={publishStatus.capabilities} />
                   )}
+                  <AppSecretSettings appId={app.app_id} canManage={Number(user?.user_id) === Number(app.owner_user_id)} />
                   <VisibilityScopeSection app={app} />
                 </div>
               </Panel>

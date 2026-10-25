@@ -32,6 +32,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
+from starlette.concurrency import run_in_threadpool
 
 from runtime_manager.admission import AdmissionService
 from runtime_manager.auth import verify_hmac
@@ -126,11 +127,7 @@ def _parse_since(raw: str | None) -> int | None:
 
 
 def _redactions(record: InstanceRecord) -> list[str]:
-    values = [
-        value
-        for name, value in (record.env or {}).items()
-        if value and len(value) >= MIN_REDACTABLE_LENGTH and SENSITIVE_ENV_NAME.search(name)
-    ]
+    values = [value for name, value in (record.env or {}).items() if value and SENSITIVE_ENV_NAME.search(name)]
     # Longest first: a shorter secret that is a substring of a longer one must
     # not chop the longer one into a half-redacted line.
     return sorted(set(values), key=len, reverse=True)
@@ -208,12 +205,13 @@ async def app_logs(
             raise BackendUnavailableError(f"the orchestration backend is not reachable: {exc}")
         raise NotFoundError(f"no readable output for app {app_id}: {exc}")
 
-    lines = [line for line in (raw or "").splitlines() if line.strip()]
+    from runtime_manager.secret_redaction import redact_output
+
+    safe = redact_output(raw or "", record.env or {}, [])
+    lines = [line for line in safe.splitlines() if line.strip()]
     if keyword:
         needle = keyword.lower()
         lines = [line for line in lines if needle in line.lower()]
-    for secret in _redactions(record):
-        lines = [line.replace(secret, REDACTED) for line in lines]
     return {"lines": lines}
 
 
@@ -234,11 +232,30 @@ async def runtime_status() -> dict:
     capacity = AdmissionService(config, store=store).capacity_snapshot()
     capacity["instances"] = len(store.alive())
 
+    checks = _preflight(config, docker, runtimes, available)
+    if config.executor_kind == "docker":
+        try:
+            await run_in_threadpool(docker.assert_host_isolation, config.network)
+            isolated = True
+        except Exception as exc:
+            # Status remains readable during a control-plane outage, while the
+            # actual create/start/route methods continue to fail closed.
+            logger.warning("host isolation proof unavailable (%s)", type(exc).__name__)
+            isolated = False
+        checks.append(
+            {
+                "name": "host_isolation",
+                "ok": isolated,
+                "detail": "fresh Docker host isolation proof"
+                if isolated
+                else "install/repair the Docker-host isolation unit and its signed report",
+            }
+        )
     return {
         "backend_available": available,
         "supported_runtimes": runtimes,
         "capacity": capacity,
-        "preflight": _preflight(config, docker, runtimes, available),
+        "preflight": checks,
     }
 
 

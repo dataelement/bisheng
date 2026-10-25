@@ -188,6 +188,8 @@ ApprovalCenterService.decide_task()
 - **首节点站内信由 F055 自己发**（网关只建 task + 写审计、不发消息，见 §8 注）
 - ⚠️ **终态回调的成功语义**：outbox 只按「有没有抛异常」判成败。「待上线（资源不足 / 拉起失败）」是**产品终态**（有应用态、有通知、有发布面呈现）→ **必须正常返回**；只有系统坏了才抛。判据是「这个申请会不会自己变好——会，就 return；不会，就 raise」
 
+**2026-10-24 F055 环境变量摘要**：`publish_approval_service._capabilities_payload(..., app_id=...)` 使用 F055 `secret_reference_status` 追加 `{kind:"secret",name,revoked:false,reason:"ok"|"missing_value"}`。值、掩码与加密内容不进入审批快照。既有 `AppPublishScenarioHandler.build_detail` 传递该能力数组；客户端审批卡按“提交时已配置/未配置”呈现，读侧不会取得写权限。后端生产者的定向测试为 `test_app_secret_declaration::test_approval_summary_contains_only_names_and_missing_status`；客户端组件执行受本地 canvas 原生依赖缺失限制，未宣称运行通过。
+
 ### 4.5 业务侧取消：`cancel_instance_by_business()` — 公共 API，2026-08-19 新增
 `ApprovalCenterService.cancel_instance_by_business(*, instance_id=None, scenario_code=None, business_resource_type=None, business_resource_id=None, tenant_id=None, reason=None, operator_user_id=0, operator_user_name=None)`
 

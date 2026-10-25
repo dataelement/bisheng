@@ -93,6 +93,18 @@ describe("AppPublishDetailPanel", () => {
     ).toBeInTheDocument();
   });
 
+  // AC-69, AC-72, AC-84: names and submission-time state only.
+  it("shows environment reference names and submission-time missing state", () => {
+    const detail = buildDetail();
+    detail.detail_snapshot = {
+      ...detail.detail_snapshot,
+      capabilities: [{ kind: "secret", name: "COLOR", revoked: false, reason: "missing_value" }],
+    };
+    render(<AppPublishDetailPanel detail={detail} scope="task" localize={localize} />);
+    expect(screen.getByText("COLOR")).toBeInTheDocument();
+    expect(screen.getByText("approval.app_environment.type · approval.app_environment.missing")).toBeInTheDocument();
+  });
+
   it("lists declared capabilities and visibility entries when they arrive", () => {
     const detail = buildDetail();
     detail.detail_snapshot = {
