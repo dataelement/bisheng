@@ -2,6 +2,8 @@
 
 更新：2026-10-25。分支 `codex/089-shared-preview-citation`，开发基线 `4767247ca`。本次没有后端、数据库、接口或权限合同变更，没有推送或合并共享分支。
 
+最终相关回归合计 **341 项通过**，两端最终生产构建和隔离 Chrome 验证通过。执行摘要见 [回归结果](evidence/regression-summary.json)。
+
 ## 自动回归
 
 | 范围 | 结果 |
@@ -64,3 +66,5 @@ API E2E 分类：本次没有新增或修改的 API 行为类 AC，因此没有�
 签名 fresh 读取仅共享同 scope 同 ID 的未完成请求；旧默认缓存不再直接作为后台预览签名。完整临时来源继续使用消息 seed。PDF 未启用的文字层 AbortException 分支没有活跃调用证据，不扩大改造；未来启用应补取消测试。
 
 可复现入口：[浏览器样本说明](browser-smoke/README.md)、[单 worker 回归脚本](browser-smoke/regression.sh)。真实业务验收仍按清单执行。
+
+全部实施裁定及完成记录见 [实施记录](implementation-log.md)；开发分支保留，未自动合并或推送。

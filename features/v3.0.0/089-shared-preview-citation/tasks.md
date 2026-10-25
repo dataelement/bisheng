@@ -96,10 +96,10 @@ Interfaces: `CitationDocumentPreview({preview,services,compactMode})`；`Citatio
 Files: 两端实际调用/无调用副本、包边界扫描tests、F089 e2e-checklist/verification/tasks/design/release-contract。
 Interfaces: 不新增运行时合同；检查T1–T6输出一致。
 覆盖 AC: AC-01、AC-02、AC-03、AC-04、AC-05、AC-06、AC-07、AC-08、AC-09、AC-10、AC-11、AC-12、AC-13、AC-14、AC-15、AC-16、AC-17、AC-18、AC-19、AC-20。
-- [ ] 扫描静态/动态/barrel调用，删除失去入口的副本，第三方vditor按可达性保留理由；写包边界回归避免宿主反向import。
-- [ ] 跑相关全测试、lint/typecheck、i18n/archguard、串行两端构建；记录既有基线，禁止扩大suppressions。
-- [ ] 用 /e2e-test 生成并执行适用的前端验证：真实文件、Canvas/框选/定位/沙箱、独立dev与生产资源、PWA清单、懒加载、三语言/窄屏；模拟与真实环境区分。
-- [ ] fresh reviewer全分支审查，修复重要问题；/sdd-code-review 对照AC；提交验证文档，保留开发分支待用户验收，不自动推送/合并。
+- [x] 扫描静态/动态/barrel调用，删除失去入口的副本，第三方vditor按可达性保留理由；写包边界回归避免宿主反向import。
+- [x] 跑相关全测试、lint/typecheck、i18n/archguard、串行两端构建；记录既有基线，禁止扩大suppressions。
+- [x] 用 /e2e-test 生成并执行适用的前端验证：真实文件、Canvas/框选/定位/沙箱、独立dev与生产资源、PWA清单、懒加载、三语言/窄屏；模拟与真实环境区分。
+- [x] fresh reviewer全分支审查，修复重要问题；/sdd-code-review 对照AC；提交验证文档，保留开发分支待用户验收，不自动推送/合并。
 
 ## 实际偏差记录
 
