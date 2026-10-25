@@ -6,7 +6,10 @@ import { useToastContext } from '~/Providers';
 import { useClientCitationServices } from './useClientCitationServices';
 import { renderClientCitationFile } from './CitationDocumentPreviewDrawer';
 export type { CitationReferencesDesktopPayload } from '@bisheng/chat/citation-views';
-type ClientReferencesProps=Omit<CitationReferencesProps,'services'|'renderFile'|'isNarrowLayout'|'onMobileNavVisibility'|'onUnavailable'>;
+interface ClientReferencesProps extends Omit<CitationReferencesProps,'services'|'renderFile'|'isNarrowLayout'|'onMobileNavVisibility'|'onUnavailable'> {
+  /** Client callers can place existing message actions beside the source control. */
+  actionButtons?: React.ReactNode;
+}
 export function ClientCitationReferencesDrawer(props:ClientReferencesProps){
  const services=useClientCitationServices();const isNarrowLayout=usePrefersMobileLayout();
  const hideNav=useSetRecoilState(store.chatMobileNavHiddenState);const {showToast}=useToastContext();

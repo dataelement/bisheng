@@ -25,10 +25,13 @@ describe('frontend dependency ownership', () => {
     expect(manifest('client').dependencies).not.toHaveProperty('react-virtualized');
   });
 
-  it('keeps both live file preview lists on the same catalog version', () => {
-    for (const app of ['client', 'platform']) {
-      expect(manifest(app).dependencies?.['react-window']).toBe('catalog:');
-    }
+  it('keeps PDF virtualization only in the platform host that uses it', () => {
+    expect(manifest('platform').dependencies?.['react-window']).toBe('catalog:');
+    expect(manifest('client').dependencies).not.toHaveProperty('react-window');
+  });
+  it('owns DOCX parsing in the shared preview package', () => {
+    expect(manifest('packages/file-viewers').dependencies?.mammoth).toBe('1.12.0');
+    for (const app of ['client', 'platform']) expect(manifest(app).dependencies).not.toHaveProperty('mammoth');
   });
 
   it('retains the distinct active drag and color picker implementations', () => {

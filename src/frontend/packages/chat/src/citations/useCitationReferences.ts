@@ -6,7 +6,8 @@ export type CitationReadServices=Pick<CitationServices,'scopeKey'|'localize'|'ge
 interface ReferenceInput {content:string;webContent?:unknown;citations?:ChatCitation[]|null;referenceItems?:CitationReferenceItem[];services:CitationReadServices;allowRemoteResolve?:boolean}
 export function useCitationReferences({content,webContent,citations,referenceItems,services,allowRemoteResolve=true}:ReferenceInput) {
   const references=useMemo(()=>referenceItems?.length ? referenceItems : createCitationUtilities(services.localize).buildCitationReferenceItems({content,webContent,citations}),[content,webContent,citations,referenceItems,services.localize]);
-  const seed=createCitationUtilities(services.localize).createCitationDetailMap(citations);
+  const utilities=createCitationUtilities(services.localize);
+  const seed=utilities.createCitationDetailMap(citations);
   references.forEach(item=>{if(item.detail)seed[item.data.citationId]=item.detail;});
   const key=JSON.stringify([services.scopeKey,references.map(item=>item.data.citationId),seed,allowRemoteResolve]);
   const current=useRef(key);current.current=key;
@@ -14,7 +15,7 @@ export function useCitationReferences({content,webContent,citations,referenceIte
   if(requests.current.key!==key)requests.current={key,pending:new Map()};
   const state=usePreviewResource<Record<string,ChatCitation>>(key,async()=>{
     const map={...seed};
-    const ids=[...new Set(references.map(item=>item.data.citationId))].filter(id=>!id.startsWith('citation:')&&!services.getCitationUnresolvedReason(id)&&(!map[id]||(!map[id].sourcePayload?.previewUrl&&!map[id].sourcePayload?.downloadUrl)));
+    const ids=[...new Set(references.map(item=>item.data.citationId))].filter(id=>!id.startsWith('citation:')&&!services.getCitationUnresolvedReason(id)&&(!map[id]||(utilities.isFilePreviewCitation(map[id])&&!utilities.getCitationDocumentPreviewUrl(map[id]))));
     if(allowRemoteResolve&&ids.length){
       const resolved=await services.resolveCitationDetails(ids);
       resolved.forEach(item=>{map[item.citationId]=item;});

@@ -33,3 +33,10 @@ it('does not mount a denied preview from a stale seed or call its file resolver'
  await waitFor(()=>expect(view.getByText('shared:citations.com_message.source_load_failed')).toBeTruthy());
  expect(view.queryByTestId('viewer')).toBeNull();expect(api.resolveDocumentUrls).not.toHaveBeenCalled();
 });
+it.each(['webSearch','articleSearch','tempSearch'])('retains seeded %s sources without requiring a private registry lookup',async type=>{
+ const api=services();const seeded:ChatCitation={citationId:type+'_cached',type,sourcePayload:{title:'Cached source',documentName:'temporary.txt',sourceUrl:'/cached.txt',url:'https://example.com/source'}};
+ vi.mocked(api.resolveCitationDetails).mockRejectedValue(new Error('Registry no longer available'));
+ const view=render(<CitationReferences content={`${seeded.citationId}:a`} citations={[seeded]} services={api} renderFile={renderFile} panelOnly/>);
+ await waitFor(()=>expect(api.resolveCitationDetails).not.toHaveBeenCalled());
+ expect(view.container.textContent).toContain(type==='tempSearch'?'temporary':'Cached source');
+});

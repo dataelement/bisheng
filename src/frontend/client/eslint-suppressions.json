@@ -1295,47 +1295,6 @@
       "count": 1
     }
   },
-  "src/components/PreviewFile/DocxFileViewer.tsx": {
-    "no-useless-escape": {
-      "count": 1
-    }
-  },
-  "src/components/PreviewFile/FileView.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    },
-    "no-console": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 4
-    }
-  },
-  "src/components/PreviewFile/TxtFileViewer.tsx": {
-    "no-useless-escape": {
-      "count": 1
-    }
-  },
-  "src/components/PreviewFile/index.tsx": {
-    "no-console": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 1
-    }
-  },
   "src/components/Prompts/AdvancedSwitch.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -2581,23 +2540,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/pages/appChat/components/ResouceModal.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 5
     }
   },
   "src/pages/appChat/hooks/useAppSidebar.ts": {

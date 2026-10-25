@@ -1,0 +1,112 @@
+{
+  "date": "2026-10-25",
+  "method": "Headless Google Chrome via CDP, isolated local fixtures; no live backend business data",
+  "development": [
+    {
+      "app": "platform",
+      "pdf": [
+        {
+          "width": 1083,
+          "height": 2166
+        },
+        {
+          "width": 1083,
+          "height": 541
+        }
+      ],
+      "passed": [
+        "canvas",
+        "zoom",
+        "docx",
+        "markdown-newlines",
+        "csv",
+        "sandbox",
+        "image",
+        "audio-playback",
+        "citation-locate",
+        "charts",
+        "dedup",
+        "3-locales",
+        "narrow"
+      ],
+      "exceptions": 0
+    },
+    {
+      "app": "client",
+      "pdf": [
+        {
+          "width": 1083,
+          "height": 2166
+        },
+        {
+          "width": 1083,
+          "height": 541
+        }
+      ],
+      "passed": [
+        "canvas",
+        "zoom",
+        "docx",
+        "markdown-newlines",
+        "csv",
+        "sandbox",
+        "image",
+        "audio-playback",
+        "citation-locate",
+        "charts",
+        "dedup",
+        "3-locales",
+        "narrow"
+      ],
+      "exceptions": 0
+    }
+  ],
+  "platformMouseActions": [
+    "label click",
+    "box selection"
+  ],
+  "production": [
+    {
+      "app": "platform",
+      "bootstrap": true,
+      "highlighterModules": [
+        "vendor-editor-D7ITX5FM.js"
+      ],
+      "referenceErrors": 0,
+      "offlineApiErrors": 0,
+      "firstScreenPdfDocxChunks": []
+    },
+    {
+      "app": "client",
+      "bootstrap": true,
+      "highlighterModules": [
+        "markdown_highlight.9Xf5tPFZ.js"
+      ],
+      "referenceErrors": 0,
+      "offlineApiErrors": 1,
+      "firstScreenPdfDocxChunks": []
+    }
+  ],
+  "outputs": {
+    "platform": {
+      "assets": {
+        "echarts.min.js": true,
+        "mermaid.min.js": true
+      },
+      "worker": true,
+      "cmaps": true
+    },
+    "client": {
+      "assets": {
+        "echarts.min.js": true,
+        "mermaid.min.js": true
+      },
+      "worker": true,
+      "cmaps": true,
+      "pwaRootGraphAssets": {
+        "echarts.min.js": true,
+        "mermaid.min.js": true
+      }
+    }
+  }
+}
