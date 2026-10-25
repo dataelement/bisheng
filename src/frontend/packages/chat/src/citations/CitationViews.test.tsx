@@ -1,4 +1,4 @@
-import { cleanup,fireEvent,render,waitFor } from '@testing-library/react';
+import { act,cleanup,fireEvent,render,waitFor } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import { CitationDocumentPreview } from './CitationDocumentPreview';
 import { CitationReferences } from './CitationReferences';
@@ -39,4 +39,28 @@ it.each(['webSearch','articleSearch','tempSearch'])('retains seeded %s sources w
  const view=render(<CitationReferences content={`${seeded.citationId}:a`} citations={[seeded]} services={api} renderFile={renderFile} panelOnly/>);
  await waitFor(()=>expect(api.resolveCitationDetails).not.toHaveBeenCalled());
  expect(view.container.textContent).toContain(type==='tempSearch'?'temporary':'Cached source');
+});
+
+it('opens a complete temporary source seed without asking its unavailable registry',async()=>{
+ const api=services();const seeded:ChatCitation={citationId:'tempSearch_legacy',type:'tempSearch',sourcePayload:{documentName:'temporary.txt',sourceUrl:'/temporary.txt'}};
+ vi.mocked(api.getCitationDetail).mockRejectedValue(new Error('Registry expired'));
+ const view=render(<CitationReferences content="tempSearch_legacy:a" citations={[seeded]} services={api} renderFile={renderFile} panelOnly/>);
+ fireEvent.click(await view.findByRole('button',{name:/temporary.*\.txt/}));
+ await waitFor(()=>expect(view.getByTestId('viewer')).toBeTruthy());
+ expect(api.getCitationDetail).not.toHaveBeenCalled();
+ expect(api.resolveDocumentUrls).toHaveBeenCalledWith(seeded);
+});
+it.each(['close','unmount','scope'])('ignores a source request failure after %s',async mode=>{
+ const api=services();const unavailable=vi.fn();let fail!:(error:Error)=>void;
+ vi.mocked(api.getCitationDetail).mockImplementation(()=>new Promise((_,reject)=>{fail=reject;}));
+ const props={content:'knowledgeSearch_doc:a',citations:[detail],services:api,renderFile,onUnavailable:unavailable};
+ const view=render(<CitationReferences {...props}/>);
+ fireEvent.click(view.container.querySelector('[data-citation-references-trigger]')!);
+ fireEvent.click(await view.findByRole('button',{name:/test.*\.mp4/}));
+ expect(api.getCitationDetail).toHaveBeenCalledTimes(1);
+ if(mode==='unmount')view.unmount();
+ else if(mode==='close')fireEvent.click(view.getByRole('button',{name:'shared:citations.com_message.source_panel_close'}));
+ else view.rerender(<CitationReferences {...props} services={{...api,scopeKey:'B'}}/>);
+ await act(async()=>fail(new Error('Old source failed')));
+ expect(unavailable).not.toHaveBeenCalled();
 });

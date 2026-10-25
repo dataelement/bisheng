@@ -2,6 +2,7 @@ import { diagramAssetTargets } from '../config/diagramAssets';
 import { createFrontendProxy, frontendEnvDefinitions, createMinioWarning, loadFrontendEnv, resolveApiTarget } from '../config/vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import * as http from 'node:http';
 import path from 'path';
 import { visualizer } from "rollup-plugin-visualizer";
@@ -12,6 +13,8 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { createHtmlPlugin } from 'vite-plugin-html';
+
+const clientRequire = createRequire(import.meta.url);
 
 /**
  * Build stamp shown on the crash screen: package version plus the minute the
@@ -456,10 +459,22 @@ export default defineConfig(({ command, mode }) => {
       },
       chunkSizeWarningLimit: 1500,
     },
+    optimizeDeps: {
+      // The shim must not be prebundled into a chunk that imports its own banner.
+      exclude: [
+        'vite-plugin-node-polyfills/shims/buffer',
+        'vite-plugin-node-polyfills/shims/global',
+        'vite-plugin-node-polyfills/shims/process',
+      ],
+    },
     resolve: {
       // Workspace viewers must use the app's initialized i18n hook instance.
       dedupe: ['react-i18next'],
       alias: {
+        // Workspace source needs absolute shim paths; use the ESM sibling of the require entry.
+        'vite-plugin-node-polyfills/shims/buffer': clientRequire.resolve('vite-plugin-node-polyfills/shims/buffer').replace(/\.cjs$/, '.js'),
+        'vite-plugin-node-polyfills/shims/global': clientRequire.resolve('vite-plugin-node-polyfills/shims/global').replace(/\.cjs$/, '.js'),
+        'vite-plugin-node-polyfills/shims/process': clientRequire.resolve('vite-plugin-node-polyfills/shims/process').replace(/\.cjs$/, '.js'),
         '~': path.join(__dirname, 'src/'),
         '@': path.join(__dirname, 'src/'),
         $fonts: path.resolve(__dirname, 'public/fonts'),

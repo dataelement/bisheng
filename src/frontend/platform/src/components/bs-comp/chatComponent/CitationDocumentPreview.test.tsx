@@ -1,10 +1,11 @@
 import { render,waitFor } from '@testing-library/react';
-import { afterEach,expect,it,vi } from 'vitest';
+import { afterEach,beforeEach,expect,it,vi } from 'vitest';
 import { CitationDocumentPreviewContent } from './CitationDocumentPreviewDrawer';
 import type { ChatCitation } from '@bisheng/chat/citations';
-const { reason }=vi.hoisted(()=>({reason:vi.fn()}));
-vi.mock('@/controllers/API',()=>({getCitationDetail:vi.fn(),resolveCitationDetails:vi.fn(),getCitationUnresolvedReason:reason}));
+const { reason,getDetail }=vi.hoisted(()=>({reason:vi.fn(),getDetail:vi.fn()}));
+vi.mock('@/controllers/API',()=>({getCitationDetail:getDetail,resolveCitationDetails:vi.fn(),getCitationUnresolvedReason:reason}));
 const detail:ChatCitation={citationId:'knowledgeSearch_fixture',type:'knowledgeSearch',sourcePayload:{documentName:'note.txt',downloadUrl:'https://storage.example/files/note.txt',previewUrl:'https://storage.example/files/note.txt'}};
+beforeEach(()=>getDetail.mockResolvedValue(detail));
 afterEach(()=>{vi.unstubAllGlobals();reason.mockReset();});
 it('uses the shared text viewer and preserves the platform file-proxy policy',async()=>{
  const fetch=vi.fn().mockResolvedValue({ok:true,text:async()=> 'Shared preview fixture text'});vi.stubGlobal('fetch',fetch);

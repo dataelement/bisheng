@@ -57,7 +57,7 @@ export function CitationReferences({
   onDesktopViewChange,
 }: CitationReferencesProps) {
   const localize=(key:string,options?:Record<string,unknown>)=>services.localize(key.startsWith('shared:')?key:'shared:citations.'+key,options);
-  const {getCitationDocumentName}=createCitationUtilities(localize);
+  const {getCitationDocumentName,getCitationDocumentPreviewUrl}=createCitationUtilities(localize);
   // <=768: use the drawer (no inline split); <=576: drawer covers full screen
   const isPhoneViewport = useCitationMediaQuery('(max-width: 576px)');
   const isFullBleedMobile = isPhoneViewport;
@@ -80,7 +80,7 @@ export function CitationReferences({
   const {references,detailMap,loadingMap,errorMap,loadCitationDetail}=useCitationReferences({content,webContent,citations,referenceItems,services,allowRemoteResolve});
   const selectedDocument=useCitationPreview(documentPreview,services);
   const openTicket=useRef(0);
-  const live=useRef({scope:services.scopeKey,mounted:true});live.current.scope=services.scopeKey;
+  const live=useRef({scope:services.scopeKey,mounted:true,open:false});live.current.scope=services.scopeKey;
   useEffect(()=>{const identity=live.current;const counter=openTicket;identity.mounted=true;return()=>{identity.mounted=false;counter.current++;};},[]);
   const selectionIdentity=JSON.stringify([services.scopeKey,messageId||content,citations?.map(item=>item.citationId)]);
   useEffect(()=>{openTicket.current++;setDocumentPreview(null);setDesktopView('list');},[selectionIdentity]);
@@ -92,6 +92,7 @@ export function CitationReferences({
     && desktopMode === 'inline-panel'
     && (panelOnly || !!onDesktopOpen || typeof open === 'boolean' || !!onOpenChange);
   const isOpen = panelOnly ? true : isDesktopInlinePanel ? !!open : internalOpen;
+  live.current.open=isOpen;
   const isDesktopPreviewInline = isDesktopInlinePanel && desktopView === 'document-preview' && !!documentPreview;
 
   // Only the full-screen references view (<=576) hides MobileNav; the tablet-width
@@ -109,6 +110,7 @@ export function CitationReferences({
 
   useEffect(() => {
     if (!isOpen && !panelOnly) {
+      openTicket.current++;
       setDesktopView('list');
       setDocumentPreview(null);
     }
@@ -165,9 +167,17 @@ export function CitationReferences({
   const handleOpenDocumentPreview = async (item: CitationReferenceItem, detail: ChatCitation) => {
     const ticket=++openTicket.current;
     const scope=services.scopeKey;
+    const isCurrent=()=>ticket===openTicket.current&&live.current.mounted&&live.current.scope===scope&&live.current.open;
     let latestDetail:ChatCitation|null=detail;
-    try { latestDetail = allowRemoteResolve ? await loadCitationDetail(item.data.citationId) : detail; } catch { onUnavailable?.(localize('com_message.source_load_failed')); return; }
-    if(ticket!==openTicket.current||!live.current.mounted||live.current.scope!==scope)return;
+    try {
+      if(services.getCitationUnresolvedReason(item.data.citationId))return;
+      const needsDetail=allowRemoteResolve&&!item.data.citationId.startsWith('citation:')&&!getCitationDocumentPreviewUrl(detail);
+      latestDetail=needsDetail ? await loadCitationDetail(item.data.citationId) : detail;
+    } catch {
+      if(isCurrent())onUnavailable?.(localize('com_message.source_load_failed'));
+      return;
+    }
+    if(!isCurrent())return;
     if (!latestDetail) {
       return;
     }

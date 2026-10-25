@@ -2,7 +2,7 @@
 
 关联：[spec.md](spec.md) · [discovery.md](discovery.md)。版本 v3.0.0；更新于 2026-10-25。
 
-状态：规格及设计已确认，Task 1–6 已实现；入口清理、两端构建及 Chrome 文件验证已完成，最终审查及业务验收中。开发基线为更新后的 `origin/feat/3.0.0` / `4767247ca`。
+状态：规格及设计已确认，Task 1–7 已实现；入口清理、两端构建及 Chrome 文件验证已完成，独立审查发现已修复，最终回归及业务验收中。开发基线为更新后的 `origin/feat/3.0.0` / `4767247ca`。
 
 ## 1. 目标与非目标
 
@@ -74,17 +74,17 @@
 
 **重新考虑条件**：未来产品明确需要中央资源服务，或库正式改成受控 ESM 依赖时，再评估输出路径和加载方式。
 
-## 4. 当前代码与拟实施数据流
+## 4. 当前实现与数据流
 
 ### 4.1 当前实际调用
 
-- platform `KnowledgePage/components/PreviewFile.tsx` → 本地 DocxFileViewer / TxtFileViewer / `bs-comp/FileView.tsx`；Excel 已共享。
-- client `knowledge/FilePreview/index.tsx` → viewers 下各格式组件，lazy import pdfjs、DOCX、Excel；文件预览还被 Citation 抽屉和其他入口复用。
-- platform `PlatformChatMarkdown`、client `ClientChatMarkdown` → 共享 ChatMarkdown → 各宿主 CitationDocumentPreviewDrawer；来源列表、工具函数仍分别实现。
-- client citationUtils 还被导出/复制、Linsight 制品等调用；platform 工具还被 FlowChat/messageStore 等调用，需追踪入口，不以文件存在推断全部活跃。
+- platform `KnowledgePage/components/PreviewFile.tsx` → 旧路径纯转接或 `preview/DocumentPreview` → 共享格式组件；PDF 由 `PlatformPdfPreview` 保留虚拟化/编辑布局，调用共享单页内核。
+- client `knowledge/FilePreview/index.tsx` → viewers 薄适配 → 共享格式组件，保留 lazy PDF/DOCX/Excel、原工具栏与侧栏；无入口的旧 appChat PreviewFile 闭合图已删除。
+- platform `PlatformChatMarkdown`、client `ClientChatMarkdown` → 共享 ChatMarkdown/来源视图 → 宿主 CitationServices 和共享预览；旧日常/任务 Markdown 与后台历史消息也使用同一引用展示/读取内核。
+- 两端 citationUtils 仅创建带本地化和宿主 URL 规则的公共工具适配；导出/复制、Linsight 制品、FlowChat/messageStore 等实际调用保留。
 - 后台看板 BaseChart 使用根目录 ECharts；两端 Mermaid 模块给共享会话提供 loadScript。platform public/vditor 中另有内嵌脚本，属于第三方分发包，不能同根资源一起直接删。
 
-### 4.2 实施后的流程
+### 4.2 数据流
 
 文件入口 → 宿主确认能力/解析可访问地址 → 共享加载与对应视图 → 事件回传业务入口。失败/切换通过实例代次隔离，完成后释放资源。
 
@@ -92,7 +92,7 @@
 
 图表视图/看板 → 公共 loader（固定 kind、宿主 base）→ 自己站点的压缩 JS → window 全局对象；多个请求复用同一次 in-flight 加载。
 
-### 4.3 模块职责及拟定接口
+### 4.3 模块职责及接口
 
 | 模块 | 做什么 | 不做什么 |
 | --- | --- | --- |
@@ -126,6 +126,7 @@
 - `CitationReferenceItem` 包含稳定 key、展示数据、可选多个 itemIds、detail/legacyPreview。显示分组去重不可丢失原引用顺序或片段，复制/导出剥离标记及烘焙引用的规则也迁为同源纯函数。
 - `CitationServices` 提供 detail/批量resolve、unresolved reason、resolveDocumentUrls、download、openArticle、localize，以及授权上下文 `scopeKey`。共享层不假定所有适配器都能远程解析；拒绝状态先终止，不能自动走临时/legacy路径重取。
 - URL resolver 返回 original/preview 及实际可预览格式，下载优先 original；媒体播放用 original、转写用 preview。临时引用沿用消息附带地址，不调用知识文件 API。
+- 后台知识引用每次打开通过原 citation 详情权限接口 fresh 读取签名，仅合并同 scope 同 ID 的未完成请求；缓存详情不作为预览签名的长期来源。完整临时 seed 使用消息地址，缺失才解析详情；不把 registry 失败兜底成其他授权路径。
 - in-flight 去重最多在同一个宿主授权上下文内按稳定身份复用；不跨账号/租户/分享 token 缓存，不长期缓存已签名 URL。关闭后重新打开允许刷新签名；显式拒绝不回退旧链接。
 - 来源切换和预览切换都带代次/取消信号，A→B→A 也不接纳第一次 A 的过期结果。薄移动容器负责导航可见性；共享内容不读 Recoil。
 
@@ -145,19 +146,31 @@
 - static-copy targets 只包含两个白名单文件及必要许可文本，dest 为输出根；不存在公共源应使构建失败。删除两端根 public 副本，构建 hash 测试防止重新分叉。
 - client PWA 和压缩插件按原配置运行；实测生成的资源及 service worker 清单。public/vditor 内嵌依赖先追踪真实调用：活跃分发包不改其私有依赖版本；若引用/产物完全不可达，删除只在有调用证据且不破坏完整分发合同后执行。
 
-### 5.5 实施落点索引
+### 5.5 已确认的实现边界
 
-以下是拟新增/迁移落点，不表示代码已存在：
+| 已知坑 | 不处理的影响 | 当前处理 |
+| --- | --- | --- |
+| 完整临时引用可能没有可用 registry | 旧来源有地址仍打不开 | `CitationReferences` 先检查拒绝，完整 seed 直接预览 |
+| 关闭后的失败与成功一样可能晚到 | 离开后仍出现旧错误提示 | 来源点击使用 ticket、scope、mounted、open 检查 |
+| 后台详情缓存包含短期签名 | 同一用户重开仍得到过期链接 | API `getCitationDetail` 可 fresh；宿主资源适配每次知识预览刷新并合并 pending |
+| 同实例 A 失败→B→A | 图片/媒体永远停在第一次错误 | 按资源 key 重建内部状态；不靠 URL 永久记错 |
+| 来源段落更新重建 memo 组件 | PDF 反复卸载和滚动丢失 | `FileViewPanne` memo 固定在模块级 |
+| client polyfill 注入裸路径 | workspace 源码开发转换 500 | client 显式 ESM shim alias + 排除 shim 自身预打包 |
+| 新文档重新采用模块级缓存 | 多窗口 PDF 页码/尺寸串扰 | PDF 会话和页尺寸限定预览实例 |
+
+### 5.6 实施落点索引
+
+以下为当前实现落点：
 
 | 风险 | 处理位置 |
 | --- | --- |
-| PDF 页码/坐标、渲染取消、实例缓存 | `packages/file-viewers/src/pdf/{PdfDocumentSession,PdfPage,coordinates}`；platform `components/bs-comp/FileView.tsx` 只保留编辑/虚拟布局适配 |
+| PDF 页码/坐标、渲染取消、实例缓存 | `packages/file-viewers/src/pdf/{usePdfDocument,PdfPage,coordinates}`；platform `preview/PlatformPdfPreview.tsx` 保留编辑/虚拟布局，旧 `FileView.tsx` 仅转接 |
 | 原文件/预览地址、临时引用和授权作用域 | `packages/chat/src/citations/{types,documentResources}`；两端 `preview/citation` 服务适配器保留原业务入口 |
 | 过期引用和文件回调 | `packages/chat/src/citations/useCitationPreview`、`file-viewers` 文档会话 |
 | HTML 存储 shim/隔离及文档清洗 | `packages/file-viewers/src/html/sandboxedHtml` 与 `viewers/DocxViewer`；原宿主 helper 仅转接 |
 | 脚本去重/超时、开发和构建资源路径 | `packages/diagram-runtime/src/loader`、`config/diagramAssets.ts`；两端 vite.config 的 static-copy 配置 |
 
-文件名可在任务拆解时调整；职责与合同不变。
+旧默认导入路径仅作纯转接，不保留第二套渲染器。
 
 ## 6. 对外依赖与影响入口
 
@@ -200,12 +213,13 @@
 
 ## 8. 交付波次及保留边界
 
-建议顺序：① 静态图表资源/loader；② 非 PDF 文件视图及媒体；③ PDF 共享内核与后台编辑；④ Citation 纯工具、来源列表及预览接入；⑤ 清理副本与两端联合回归。每波保持两端可构建，未迁移入口明确列出，最终 AC-20 按真实调用清零公共逻辑副本。
+已按以下顺序实施：① 静态图表资源/loader；② 非 PDF 文件视图及媒体；③ PDF 共享内核与后台编辑；④ Citation 纯工具、来源列表及预览接入；⑤ 清理副本与两端联合回归。每波保持两端可构建，未迁移入口明确列出，最终 AC-20 按真实调用清零公共逻辑副本。
 
 继续保留业务配置、权限/URL 服务、客户端移动导航、后台 PDF 编辑控制和虚拟布局。这些不能为了删除文件而伪装成公共层。新格式和第三方分发包升级另行立项。
 
 | 日期 | 修订 |
 | --- | --- |
-| 2026-10-23 | 初版设计待确认；规格确认后细化预览、引用与图表资源合同 |
+| 2026-10-23 | 初版设计；规格确认后细化预览、引用与图表资源合同 |
+| 2026-10-25 | 完成共享实现、旧图清理、两端真实文件验证；独立审查补齐临时 seed、过期请求、后台签名刷新及预览重试边界 |
 
 PDF 编辑适配补充：后台继续使用虚拟列表，页尺寸缓存限定在当前预览实例；滚动通知保留原四个参数，增加可选的逐页位置上下文，供原有选区定位提示适配混合尺寸及 0 起始页码。只读入口不绑定选择写入。

@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import type { PreviewViewerProps } from '../viewerTypes';
 import { PreviewState } from './PreviewState';
-export function ImageViewer({ resource, zoomLevel = 100, locale, onError }: PreviewViewerProps) {
+export function ImageViewer(props: PreviewViewerProps) {
+  return <ImagePreview key={props.resource.previewUrl || props.resource.originalUrl} {...props} />;
+}
+function ImagePreview({ resource, zoomLevel = 100, locale, onError }: PreviewViewerProps) {
   const url = resource.previewUrl || resource.originalUrl;
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (failedUrl === url) return <PreviewState loading={false} locale={locale} />;

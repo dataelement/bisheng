@@ -8,7 +8,10 @@ export interface MediaViewerProps extends PreviewViewerProps {
   allowDownload?: boolean;
   onDownload?: () => void;
 }
-export function MediaViewer({ resource, kind, locale, onError, allowDownload = false, onDownload }: MediaViewerProps) {
+export function MediaViewer(props: MediaViewerProps) {
+  return <MediaPreview key={JSON.stringify([props.kind,props.resource.originalUrl,props.resource.previewUrl])} {...props} />;
+}
+function MediaPreview({ resource, kind, locale, onError, allowDownload = false, onDownload }: MediaViewerProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (failedUrl === resource.originalUrl) return <PreviewState loading={false} locale={locale} />;
   const transcript = resource.previewUrl && resource.previewUrl !== resource.originalUrl;

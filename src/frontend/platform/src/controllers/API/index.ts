@@ -1,7 +1,7 @@
 // @ts-strict-ignore
 import { getCitationAccessScope } from '../citationScope';
 import { AppNumType, AppType } from "@/types/app";
-import originAxios from "axios";
+import originAxios, { type AxiosRequestConfig } from "axios";
 import { AppConfig } from "../../types/api/app";
 import { FlowType } from "../../types/flow";
 import axios from "../request";
@@ -35,6 +35,7 @@ import type { ChatCitation } from '@bisheng/chat/citations';
 
 function citationCacheKey(id: string, scope = getCitationAccessScope()) { return JSON.stringify([scope,id]); }
 const citationDetailMemoryCache: Record<string, ChatCitation> = {};
+const citationFreshRequestCache = new Map<string, Promise<ChatCitation>>();
 const citationResolveRequestCache: Record<string, Promise<ChatCitation[]>> = {};
 
 export type CitationUnresolvedReason = "forbidden" | "expired";
@@ -45,35 +46,53 @@ export function getCitationUnresolvedReason(citationId: string): CitationUnresol
     return citationReasonCache[citationCacheKey(citationId)];
 }
 
-function citationReasonFromPayload(payload: any): CitationUnresolvedReason {
-    const reason = payload?.data?.reason ?? payload?.reason;
+function citationRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+const citationRequestOptions: AxiosRequestConfig & { silent: boolean } = { silent: true };
+function citationReasonFromPayload(payload: unknown): CitationUnresolvedReason {
+    const record = citationRecord(payload);
+    const reason = citationRecord(record.data).reason ?? record.reason;
     if (reason === "expired") {
         return "expired";
     }
     return "forbidden";
 }
 
-function throwCitationResolveError(citationId: string, payload: any, scope = getCitationAccessScope()): never {
+function throwCitationResolveError(citationId: string, payload: unknown, scope = getCitationAccessScope()): never {
     const reason = citationReasonFromPayload(payload);
     citationReasonCache[citationCacheKey(citationId, scope)] = reason;
-    const err: any = new Error(reason === "expired" ? "citation expired" : "citation forbidden");
-    err.citationForbidden = reason !== "expired";
-    err.citationExpired = reason === "expired";
-    throw err;
+    throw Object.assign(new Error(reason === "expired" ? "citation expired" : "citation forbidden"), {
+        citationForbidden: reason !== "expired", citationExpired: reason === "expired",
+    });
 }
 
-export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
+export async function getCitationDetail(citationId: string, options?: { fresh?: boolean }): Promise<ChatCitation> {
     const scope = getCitationAccessScope();
-    if (citationDetailMemoryCache[citationCacheKey(citationId, scope)]) {
+    if (!options?.fresh && citationDetailMemoryCache[citationCacheKey(citationId, scope)]) {
         return citationDetailMemoryCache[citationCacheKey(citationId, scope)];
     }
 
+    if (options?.fresh) {
+        const key = citationCacheKey(citationId, scope);
+        const pending = citationFreshRequestCache.get(key);
+        if (pending) return pending;
+        const request = readCitationDetail(citationId, scope).finally(() => {
+            if (citationFreshRequestCache.get(key) === request) citationFreshRequestCache.delete(key);
+        });
+        citationFreshRequestCache.set(key, request);
+        return request;
+    }
+    return readCitationDetail(citationId, scope);
+}
+
+async function readCitationDetail(citationId: string, scope: string): Promise<ChatCitation> {
     try {
-        const detail = await axios.get<any, ChatCitation>(
+        const detail = await axios.get<unknown, ChatCitation & { status_code?: number }>(
             `/api/v1/citations/${encodeURIComponent(citationId)}`,
-            { silent: true } as any,
+            citationRequestOptions,
         );
-        if ((detail as any)?.status_code === 404) {
+        if (detail?.status_code === 404) {
             throwCitationResolveError(citationId, detail, scope);
         }
         if (detail?.citationId) {
@@ -82,14 +101,12 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
         }
         citationDetailMemoryCache[citationCacheKey(citationId, scope)] = detail;
         return detail;
-    } catch (error: any) {
-        if (error?.citationForbidden || error?.citationExpired) {
-            throw error;
-        }
-        const status = error?.status_code || error?.response?.data?.status_code;
-        if (status === 404) {
-            throwCitationResolveError(citationId, error?.response?.data ?? error, scope);
-        }
+    } catch (error: unknown) {
+        const failure = citationRecord(error);
+        if (failure.citationForbidden || failure.citationExpired) throw error;
+        const envelope = citationRecord(citationRecord(failure.response).data);
+        const status = failure.status_code || envelope.status_code;
+        if (status === 404) throwCitationResolveError(citationId, envelope, scope);
         throw error;
     }
 }
@@ -110,12 +127,12 @@ export async function resolveCitationDetails(citationIds: string[]): Promise<Cha
     const pendingRequest = citationResolveRequestCache[requestKey];
     const resolvedItems = pendingRequest
         ? await pendingRequest
-        : await (citationResolveRequestCache[requestKey] = axios.post<any, { items?: ChatCitation[]; unresolved?: { citationId?: string; reason?: string }[] }>(
+        : await (citationResolveRequestCache[requestKey] = axios.post<unknown, { items?: ChatCitation[]; unresolved?: { citationId?: string; reason?: string }[] }>(
             `/api/v1/citations/resolve`,
             {
                 citationIds: uniqueCitationIds,
             },
-            { silent: true } as any,
+            citationRequestOptions,
         ).then((response) => {
             const items = Array.isArray(response?.items) ? response.items : [];
             items.forEach((detail) => {

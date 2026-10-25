@@ -655,7 +655,7 @@
   },
   "src/controllers/API/index.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 58
+      "count": 52
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 2

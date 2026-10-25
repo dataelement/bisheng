@@ -97,3 +97,20 @@ it('retains playback, keyboard seeking and volume controls after extraction', as
   fireEvent.click(screen.getByRole('button',{name:'mute'}));
   expect(media.muted).toBe(true);
 });
+
+it('retries an image after selecting another resource and returning to the failed image',()=>{
+ const a={originalUrl:'/A.png',previewUrl:'/A.png'},b={originalUrl:'/B.png',previewUrl:'/B.png'};
+ const view=render(<ImageViewer resource={a} locale={locale}/>);
+ fireEvent.error(screen.getByAltText('Image preview'));expect(screen.getByText('Preview failed')).toBeTruthy();
+ view.rerender(<ImageViewer resource={b} locale={locale}/>);fireEvent.load(screen.getByAltText('Image preview'));
+ view.rerender(<ImageViewer resource={a} locale={locale}/>);
+ expect(screen.getByAltText('Image preview').getAttribute('src')).toBe('/A.png');
+});
+it('retries playback after selecting another resource and returning to failed media',()=>{
+ const a={originalUrl:'/A.mp4',previewUrl:''},b={originalUrl:'/B.mp4',previewUrl:''};
+ const view=render(<MediaViewer resource={a} kind="video" locale={locale}/>);
+ fireEvent.error(view.container.querySelector('video')!);expect(screen.getByText('Preview failed')).toBeTruthy();
+ view.rerender(<MediaViewer resource={b} kind="video" locale={locale}/>);expect(view.container.querySelector('video')).not.toBeNull();
+ view.rerender(<MediaViewer resource={a} kind="video" locale={locale}/>);
+ expect(view.container.querySelector('video')?.getAttribute('src')).toBe('/A.mp4');
+});
