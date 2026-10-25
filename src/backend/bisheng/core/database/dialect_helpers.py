@@ -13,6 +13,21 @@ from sqlalchemy.sql.schema import Computed
 from sqlalchemy.sql.sqltypes import Boolean as _Boolean
 from sqlalchemy.types import TypeDecorator
 
+
+class PreciseDateTime(TypeDecorator):
+    """Microsecond ordering on MySQL; retain the native temporal type on DM8."""
+
+    impl = sa.DateTime
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "mysql":
+            from sqlalchemy.dialects.mysql import DATETIME
+
+            return dialect.type_descriptor(DATETIME(fsp=6))
+        return dialect.type_descriptor(sa.DateTime())
+
+
 # ---------------------------------------------------------------------------
 # Boolean DDL override for DaMeng
 # ---------------------------------------------------------------------------

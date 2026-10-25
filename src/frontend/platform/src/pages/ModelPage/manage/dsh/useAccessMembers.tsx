@@ -76,7 +76,6 @@ export function useAccessMembers(
                     modelId,
                     {
                         limit: 50,
-                        include_seats: true,
                         membership: 'DIRECT',
                         ...(departmentId === 0 ? { unassigned_only: true } : { department_id: departmentId }),
                         keyword: keyword || undefined,

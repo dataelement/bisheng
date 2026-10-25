@@ -227,7 +227,7 @@ async def test_api_service_repository_chain_and_denials(audit_db):
     authorize = AsyncMock(return_value=({}, 2))
     service = DshManagementService(
         repository_scope=None,
-        gateway=None,
+        sessions=None,
         profiles=None,
         policy=None,
         policy_view=None,

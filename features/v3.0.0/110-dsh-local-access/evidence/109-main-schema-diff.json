@@ -1,0 +1,101 @@
+{
+  "main_head": [
+    "f065_dsh_install_policy_default_off"
+  ],
+  "feature_head": [
+    "work110_dsh_local_sessions"
+  ],
+  "main_tables": 128,
+  "feature_tables": 143,
+  "added_tables": [
+    "dsh_audit_tree_node",
+    "dsh_audit_tree_path",
+    "dsh_audit_tree_state",
+    "dsh_model_audit_body_access",
+    "dsh_model_audit_content",
+    "dsh_model_audit_conversation",
+    "dsh_model_audit_conversation_title",
+    "dsh_model_audit_evidence",
+    "dsh_model_audit_manifest",
+    "dsh_model_audit_occurrence",
+    "dsh_model_audit_request",
+    "dsh_model_audit_setting",
+    "dsh_model_audit_setting_change",
+    "dsh_refresh_token",
+    "dsh_session"
+  ],
+  "removed_tables": [],
+  "changed_existing_tables": [
+    "dsh_model_call"
+  ],
+  "changed_columns": {
+    "seat_id": {
+      "before": {
+        "name": "seat_id",
+        "type": "VARCHAR(36) COLLATE \"utf8mb4_unicode_ci\"",
+        "default": null,
+        "nullable": false
+      },
+      "after": {
+        "name": "seat_id",
+        "type": "VARCHAR(36) COLLATE \"utf8mb4_unicode_ci\"",
+        "default": null,
+        "nullable": true
+      }
+    },
+    "grant_version": {
+      "before": {
+        "name": "grant_version",
+        "type": "BIGINT",
+        "default": null,
+        "nullable": false
+      },
+      "after": {
+        "name": "grant_version",
+        "type": "BIGINT",
+        "default": null,
+        "nullable": true
+      }
+    }
+  },
+  "checks": {
+    "before": [
+      {
+        "name": "ck_dsh_call_source",
+        "sqltext": "((`usage_source` is null) or (`usage_source` in (_utf8mb4'PROVIDER',_utf8mb4'RECONCILED')))"
+      },
+      {
+        "name": "ck_dsh_call_status",
+        "sqltext": "(`status` in (_utf8mb4'RUNNING',_utf8mb4'SUCCEEDED',_utf8mb4'FAILED',_utf8mb4'CANCELLED',_utf8mb4'USAGE_UNKNOWN'))"
+      },
+      {
+        "name": "ck_dsh_call_usage",
+        "sqltext": "(((`input_tokens` is null) and (`output_tokens` is null) and (`total_tokens` is null)) or ((`input_tokens` is not null) and (`output_tokens` is not null) and (`total_tokens` is not null) and (`input_tokens` >= 0) and (`output_tokens` >= 0) and (`total_tokens` = (`input_tokens` + `output_tokens`))))"
+      },
+      {
+        "name": "ck_dsh_call_versions",
+        "sqltext": "((`grant_version` >= 1) and (`event_version` >= 1) and (`quota_epoch` >= 1) and (`policy_version` >= 1))"
+      }
+    ],
+    "after": [
+      {
+        "name": "ck_dsh_call_source",
+        "sqltext": "((`usage_source` is null) or (`usage_source` in (_utf8mb4'PROVIDER',_utf8mb4'RECONCILED')))"
+      },
+      {
+        "name": "ck_dsh_call_status",
+        "sqltext": "(`status` in (_utf8mb4'RUNNING',_utf8mb4'SUCCEEDED',_utf8mb4'FAILED',_utf8mb4'CANCELLED',_utf8mb4'USAGE_UNKNOWN'))"
+      },
+      {
+        "name": "ck_dsh_call_usage",
+        "sqltext": "(((`input_tokens` is null) and (`output_tokens` is null) and (`total_tokens` is null)) or ((`input_tokens` is not null) and (`output_tokens` is not null) and (`total_tokens` is not null) and (`input_tokens` >= 0) and (`output_tokens` >= 0) and (`total_tokens` = (`input_tokens` + `output_tokens`))))"
+      },
+      {
+        "name": "ck_dsh_call_versions",
+        "sqltext": "(((`grant_version` is null) or (`grant_version` >= 1)) and (`event_version` >= 1) and (`quota_epoch` >= 1) and (`policy_version` >= 1))"
+      }
+    ]
+  },
+  "main_schema_sha256": "114ab3e5339a6083d49010339b1c0343fa2d8043f198da04659a97217739d04f",
+  "feature_schema_sha256": "a594c75f015d112a5f322ce70d1ab6dfc9055173c9f706c2c0130080a91f7224"
+}

@@ -16,7 +16,7 @@ from test.dsh.test_quota_admission import running
 
 
 def principal():
-    return DshPrincipal(tenant_id="2", user_id="20", seat_id="seat", session_id="session", grant_version=1)
+    return DshPrincipal(tenant_id="2", user_id="20", session_id="session")
 
 
 def request(stream=False):
@@ -58,6 +58,7 @@ class Ledger:
         assert self.used == 90
         assert monthly_token_limit == 100
         admitted = event.model_copy(update={"quota_epoch": 9})
+        assert admitted.seat_id is None and admitted.grant_version is None
         self.events.append(admitted)
         return admitted
 

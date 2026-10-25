@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
     getDshOperation,
     isDshRequestRejected,
-    isDshSeatLimitReached,
     saveDshPolicy,
 } from '@/controllers/API/dsh'
 import type { DshModelUserPermission, DshOperation } from '@/types/dsh'
@@ -158,7 +157,7 @@ export function useUserPolicyDrafts(
                         }),
                     )
                 } catch (failure) {
-                    if (isDshRequestRejected(failure) || isDshSeatLimitReached(failure)) {
+                    if (isDshRequestRejected(failure)) {
                         setEntry({ ...entry, operationId: null })
                         throw failure
                     }

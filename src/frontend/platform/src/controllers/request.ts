@@ -7,7 +7,7 @@ import i18next from "i18next";
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
     baseURL: import.meta.env.BASE_URL
-    // 配置
+    // Shared base URL.
 });
 export const requestInterceptor: {
     remoteLoginFuc?: (msg: string) => void
@@ -63,10 +63,7 @@ function beginSessionKick(envelope: unknown): boolean {
 }
 
 customAxios.interceptors.request.use(function (config) {
-    const token = localStorage.getItem('ws_token');
-    if (token && !/^\/bisheng/.test(config.url)) {
-        config.headers['Authorization'] = `Bearer ${token}`;
-    }
+    Object.assign(config.headers, requestAuthHeaders(config.url || ''));
     return config;
 }, function (error) {
     return Promise.reject(error);
@@ -163,7 +160,7 @@ async function responseError(cause, response?) {
     });
 }
 
-customAxios.interceptors.response.use(async function (response) {
+export async function handleRequestResponse(response) {
     const binary = response.data instanceof Blob || response.data instanceof ArrayBuffer;
     const decoded = binary ? await decodeErrorEnvelope(response.data) : undefined;
     const envelope = decoded ?? response.data;
@@ -205,7 +202,9 @@ customAxios.interceptors.response.use(async function (response) {
     }
     if (response.config.showError !== false) showApiError(error);
     return Promise.reject(error);
-}, async function (cause) {
+}
+
+export async function handleRequestError(cause) {
     const error = await responseError(cause);
     if (error.httpStatus === 401) {
         error.presentation = 'global';
@@ -227,7 +226,9 @@ customAxios.interceptors.response.use(async function (response) {
     }
     if (!cause.config?.silent && cause.config?.showError !== false) showApiError(error);
     return Promise.reject(error);
-});
+}
+
+customAxios.interceptors.response.use(handleRequestResponse, handleRequestError);
 
 export default customAxios;
 
@@ -243,4 +244,9 @@ export function handleUiRequest<Args extends unknown[]>(handler: (...args: Args)
     return (...args: Args): void => {
         void Promise.resolve().then(() => handler(...args)).catch(showApiError);
     };
+}
+
+export function requestAuthHeaders(url: string): Record<string, string> {
+    const token = localStorage.getItem("ws_token");
+    return token && !/^\/bisheng/.test(url) ? { Authorization: `Bearer ${token}` } : {};
 }

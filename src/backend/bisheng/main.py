@@ -34,10 +34,13 @@ from bisheng.utils.threadpool import thread_pool
 def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
     http_status = status.HTTP_200_OK
     if isinstance(exc, HTTPException):
+        detail = exc.detail
         msg = {
             "status_code": exc.status_code,
-            "status_message": exc.detail["error"] if isinstance(exc.detail, dict) else exc.detail,
+            "status_message": detail["error"] if isinstance(detail, dict) else detail,
         }
+        if isinstance(detail, dict) and isinstance(detail.get("code"), str):
+            msg["data"] = {"code": detail["code"]}
     elif isinstance(exc, BaseErrorCode):
         data = {"exception": str(exc), **exc.kwargs} if exc.kwargs else {"exception": str(exc)}
         msg = {"status_code": exc.code, "status_message": exc.message, "data": data}
@@ -248,6 +251,9 @@ def create_app():
         return JSONResponse(status_code=401, content={"detail": str(exc)})
 
     app.include_router(router)
+    from bisheng.dsh.api.router import compatibility_router
+
+    app.include_router(compatibility_router)
     app.include_router(router_rpc)
     app.include_router(router_public)
     app.include_router(runtime_material_router)

@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
+from pptx.util import Length
 
 # --- tunables -------------------------------------------------------------
 #
@@ -192,9 +193,11 @@ def _para_line_height_pt(para, size_pt: float) -> float:
     spacing = para.line_spacing
     if spacing is None:
         return size_pt * DEFAULT_LINE_SPACING
-    if isinstance(spacing, (int, float)):
-        return size_pt * float(spacing)
-    return _pt(spacing)  # Length: exact leading
+    # Length subclasses int, so test it first: an exact leading (spcPts) read as a
+    # multiplier inflates the height by ~12700x and fakes an overflow ERROR.
+    if isinstance(spacing, Length):
+        return _pt(spacing)
+    return size_pt * float(spacing)
 
 
 def _estimate_text_height_pt(shape, layout_sizes: dict) -> tuple[float, float]:
