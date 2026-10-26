@@ -1,4 +1,7 @@
 {
+  "chatImage": {
+    "processingRequired": "图片已保留。请切换到支持识图的模型，或请管理员配置图片解析服务后再发送。"
+  },
   "skillReference": {
     "readFile": "读取技能参考文件"
   },

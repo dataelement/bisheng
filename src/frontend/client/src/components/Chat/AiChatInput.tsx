@@ -15,7 +15,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
 import store from "~/store";
-import { buildChatAccept, isFileNameAccepted } from "~/common/chatAccept";
+import { buildChatAccept, canProcessChatImage, isFileNameAccepted } from "~/common/chatAccept";
 import { taskModeSkillsState } from "~/store/linsight";
 import { useQuery } from '@tanstack/react-query';
 import { getSelectableSkills } from '~/api/linsight';
@@ -289,6 +289,10 @@ const AiChatInput = memo(
             relative_path?: string;
         }>>([]);
         const inputFilesRef = useRef<any>(null);
+        const supportsVision = modelOptions?.some(
+            (model) => String(model.id) === String(modelValue) && model.visual,
+        ) ?? false;
+        const supportsImageParsing = !!bsConfig?.enable_etl4lm;
 
         // Ordinary chat clears task skills and keeps supported document attachments.
         // Fires only on a true→false transition, never on mount or re-entry.
@@ -297,7 +301,6 @@ const AiChatInput = memo(
                 setDailySkills([]);
                 const dailyAccept = buildChatAccept({
                     enableMedia: !!envConfig?.enable_media_upload,
-                    enableEtl4lm: !!bsConfig?.enable_etl4lm,
                     includeOfd: !isLingsi,
                 });
                 const isKept = (name: string) => isFileNameAccepted(name || "", dailyAccept);
@@ -321,7 +324,7 @@ const AiChatInput = memo(
                 }
             }
             prevTaskModeRef.current = taskMode;
-            // envConfig/bsConfig are read only when the transition fires; leaving them
+            // Environment configuration is read when the mode transition fires; leaving it
             // out keeps a config refetch from re-running the cleanup.
             // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [taskMode, setDailySkills]);
@@ -377,6 +380,12 @@ const AiChatInput = memo(
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
             if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
+            if (!taskMode && !isLingsi && chatFiles?.some((file) => !canProcessChatImage(
+                file.name || file.file_name || file.filename || '', supportsVision, supportsImageParsing,
+            ))) {
+                showToast?.({ message: localize('chatImage.processingRequired'), status: 'warning' });
+                return;
+            }
             // Pass files through to parent. The local first-frame poster is a blob
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
@@ -402,7 +411,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, setDailySkills]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, setDailySkills, supportsVision, supportsImageParsing, showToast, localize]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -533,7 +542,6 @@ const AiChatInput = memo(
                         const InputFilesAny = InputFiles as any;
                         const accept = buildChatAccept({
                             enableMedia: !!envConfig?.enable_media_upload,
-                            enableEtl4lm: !!bsConfig?.enable_etl4lm,
                             includeOfd: !isLingsi,
                             // Task mode also takes data/config/source files: it has a
                             // workspace and a code interpreter to use them with. Daily
