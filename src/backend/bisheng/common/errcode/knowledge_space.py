@@ -37,6 +37,11 @@ class SpaceNameAllocationBusyError(BaseErrorCode):
     Msg: str = "知识库名称正在分配或服务暂不可用, 请稍后重试"
 
 
+class McpFolderRetrievalScopeLimitError(BaseErrorCode):
+    Code: int = 18007
+    Msg: str = "目录检索范围过大，请选择更小的目录或设置 recursive=false"  # noqa: RUF001
+
+
 class SpaceFolderNotFoundError(BaseErrorCode):
     Code: int = 18010
     Msg: str = "Folder does not exist"

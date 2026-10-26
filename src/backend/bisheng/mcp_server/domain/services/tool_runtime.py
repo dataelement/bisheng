@@ -10,6 +10,7 @@ from mcp.server.fastmcp import Context
 from mcp.server.fastmcp.exceptions import ToolError
 
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.knowledge_space import McpFolderRetrievalScopeLimitError
 from bisheng.core.logger import trace_id_var
 from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.mcp_server.domain.schemas.identity import McpExecutionIdentity, McpIdentityRequest
@@ -69,6 +70,8 @@ class McpToolRuntime:
         except (TimeoutError, asyncio.TimeoutError) as exc:
             raise ToolError("MCP operation timed out; verify write state before retrying") from exc
         except BaseErrorCode as exc:
+            if name == "retrieve_folder_chunks" and isinstance(exc, McpFolderRetrievalScopeLimitError):
+                raise ToolError(McpFolderRetrievalScopeLimitError.Msg) from exc
             if exc.kwargs.get("mcp_identity_denied"):
                 raise ToolError(IDENTITY_DENIED_MESSAGE) from exc
             if name in WRITE_TOOLS and exc.kwargs.get("mcp_write_uncertain"):

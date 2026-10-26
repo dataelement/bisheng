@@ -4,12 +4,13 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import StrictBool
 
-from bisheng.mcp_server.domain.schemas.browse import Cursor, ResourceId
+from bisheng.mcp_server.domain.schemas.browse import Cursor, FolderId, ResourceId
 from bisheng.mcp_server.domain.schemas.content import (
     FileDetailRequest,
     FileDetailResponse,
     FileSourceRequest,
     FileSourceResponse,
+    FolderRetrieveRequest,
     MaxChars,
     McpRetrieveFilters,
 )
@@ -83,3 +84,30 @@ def register_content_tools(server: FastMCP, runtime: McpToolRuntime) -> None:
             filters=filters,
         )
         return RetrieveResp.model_validate(await runtime.invoke(ctx, "retrieve_chunks", params))
+
+    @server.tool(
+        description="检索指定知识空间内单个文件夹的有权正文片段,默认包含子目录;recursive=false 仅检索当前层,不生成模型答案。",
+        annotations=annotations,
+    )
+    async def retrieve_folder_chunks(
+        external_id: ExternalAccount,
+        query: SearchQuery,
+        knowledge_id: ResourceId,
+        folder_id: FolderId,
+        ctx: Context,
+        recursive: StrictBool = True,
+        top_k: TopK = 5,
+        max_content: MaxContent = 15000,
+        filters: McpRetrieveFilters | None = None,
+    ) -> RetrieveResp:
+        params = FolderRetrieveRequest(
+            external_id=external_id,
+            query=query,
+            knowledge_id=knowledge_id,
+            folder_id=folder_id,
+            recursive=recursive,
+            top_k=top_k,
+            max_content=max_content,
+            filters=filters,
+        )
+        return RetrieveResp.model_validate(await runtime.invoke(ctx, "retrieve_folder_chunks", params))

@@ -48,6 +48,7 @@ EXPECTED_TOOL_NAMES = {
     "get_file_detail",
     "get_file_source",
     "retrieve_chunks",
+    "retrieve_folder_chunks",
     "create_document",
     "upload_file",
 }

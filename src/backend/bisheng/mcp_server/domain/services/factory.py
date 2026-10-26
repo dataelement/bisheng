@@ -22,6 +22,7 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_mcp_reposit
 )
 from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import KnowledgeDocumentEntryResolver
 from bisheng.knowledge.domain.services.knowledge_mcp_content_service import KnowledgeMcpContentService
+from bisheng.knowledge.domain.services.knowledge_mcp_folder_retrieval_service import KnowledgeMcpFolderRetrievalService
 from bisheng.knowledge.domain.services.knowledge_mcp_ingestion_service import KnowledgeMcpIngestionService
 from bisheng.knowledge.domain.services.knowledge_mcp_query_service import KnowledgeMcpQueryService
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
@@ -83,6 +84,7 @@ async def build_tool_services(
         owner = build_knowledge_space_service_for_filelib_sync(session=session, login_user=user, request=request)
         repository = KnowledgeMcpRepositoryImpl(session)
         query = KnowledgeMcpQueryService(repository, owner)
+        folder_retrieval = KnowledgeMcpFolderRetrievalService(query)
 
         async def permissions(file_id: int, space_id: int) -> set[str]:
             return await query.permissions("knowledge_file", file_id, space_id)
@@ -106,6 +108,20 @@ async def build_tool_services(
             async with search_factory(request, user) as service:
                 return await service.retrieve(RetrieveReq(knowledge_base_ids=knowledge_base_ids, **params))
 
+        async def retrieve_folder_chunks(
+            *, knowledge_id: int, folder_id: int, recursive: bool = True, **params: Any
+        ) -> RetrieveResp:
+            file_ids = await folder_retrieval.resolve_file_ids(
+                knowledge_id=knowledge_id, folder_id=folder_id, recursive=recursive
+            )
+            if not file_ids:
+                return RetrieveResp(chunks=[], total=0)
+            async with search_factory(request, user) as service:
+                return await service.retrieve(
+                    RetrieveReq(knowledge_base_ids=[knowledge_id], **params),
+                    file_ids_by_knowledge={knowledge_id: file_ids},
+                )
+
         yield SimpleNamespace(
             list_knowledge=query.list_knowledge,
             list_folders=query.list_folders,
@@ -116,4 +132,5 @@ async def build_tool_services(
             create_document=ingestion.create_document,
             upload_file=ingestion.upload_file,
             retrieve_chunks=retrieve_chunks,
+            retrieve_folder_chunks=retrieve_folder_chunks,
         )

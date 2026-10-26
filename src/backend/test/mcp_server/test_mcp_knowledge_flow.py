@@ -4,9 +4,11 @@ import importlib
 import io
 from contextlib import asynccontextmanager
 from functools import partial
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+from langchain_core.documents import Document
 from sqlalchemy import DefaultClause, MetaData, text
 from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -89,7 +91,7 @@ class OwnerPort:
         self.knowledge_file_repo = KnowledgeMcpRepositoryImpl(db)
 
     async def _get_effective_permission_ids(self, *args, **kwargs):
-        if self.login_user.user_id == 9:
+        if self.login_user.user_id == 9 or (args[0] == "knowledge_file" and args[1] == 903):
             return set()
         return {"view_space", "view_folder", "view_file", "upload_file_to_space", "upload_file_to_folder"}
 
@@ -203,6 +205,26 @@ async def test_nine_tools_sdk_flow_uses_real_services_and_repositories(monkeypat
         )
         db.add(KnowledgeDocument(id=200, tenant_id=7, knowledge_id=118, primary_version_id=300))
         db.add(KnowledgeDocumentVersion(id=300, document_id=200, knowledge_file_id=1, version_no=1, is_primary=True))
+        for file_id, kind, path in [
+            (400, 0, "/305"),
+            (401, 0, "/305"),
+            (901, 1, "/305"),
+            (902, 1, "/305/400"),
+            (903, 1, "/305"),
+            (904, 1, "/3050"),
+        ]:
+            db.add(
+                KnowledgeFile(
+                    id=file_id,
+                    knowledge_id=118,
+                    tenant_id=7,
+                    user_id=7,
+                    file_type=kind,
+                    file_name=f"scope-{file_id}.txt",
+                    file_level_path=path,
+                    status=2,
+                )
+            )
         await db.commit()
         factory = importlib.import_module("bisheng.mcp_server.domain.services.factory")
         monkeypatch.setattr(user_repository_impl, "User", IdentityUserFixture)
@@ -240,6 +262,37 @@ async def test_nine_tools_sdk_flow_uses_real_services_and_repositories(monkeypat
             ),
         )
         monkeypatch.setattr(KnowledgeMcpRepositoryImpl, "content_matches", AsyncMock(return_value={1}))
+        folder_scopes = []
+
+        @asynccontextmanager
+        async def folder_search_factory(request, user):
+            from bisheng.open_endpoints.domain.services.filelib_retrieve_service import FilelibRetrieveService
+
+            async def retrieve_backend(**kwargs):
+                assert user.user_id == user.tenant_id == current_tenant_id.get() == 7
+                assert kwargs["strict_file_scope"] is True
+                ids = kwargs["kb_filters"][118]["file_ids"]
+                folder_scopes.append(ids)
+                return [
+                    (
+                        118,
+                        Document(
+                            page_content="scoped policy",
+                            metadata={
+                                "document_id": file_id,
+                                "document_name": f"scope-{file_id}.txt",
+                            },
+                        ),
+                    )
+                    for file_id in ids
+                ]
+
+            yield FilelibRetrieveService(
+                SimpleNamespace(aretrieve_chunks=retrieve_backend),
+                SimpleNamespace(resolve_links=AsyncMock(return_value={})),
+                SimpleNamespace(config=SimpleNamespace(total_timeout_seconds=1, source_link_timeout_seconds=1)),
+            )
+
         async with server(monkeypatch, identity_resolver=factory.resolve_execution_identity) as (app, calls, _):
             async with session(app, token="second") as client:
 
@@ -269,6 +322,25 @@ async def test_nine_tools_sdk_flow_uses_real_services_and_repositories(monkeypat
                 assert retrieved["total"] == 1
                 legacy = await call("search_knowledge", query="policy", knowledge_base_ids=[118])
                 assert legacy["total"] == 1 and calls[-1][:2] == (7, 7)
+                base_factory = app.routes[0].endpoint.tool_runtime.factory
+                app.routes[0].endpoint.tool_runtime.factory = partial(
+                    factory.build_tool_services,
+                    search_factory=folder_search_factory,
+                )
+                scoped = await call("retrieve_folder_chunks", query="policy", knowledge_id=118, folder_id="000305")
+                assert {chunk["document_id"] for chunk in scoped["chunks"]} == {901, 902}
+                direct = await call(
+                    "retrieve_folder_chunks",
+                    query="policy",
+                    knowledge_id=118,
+                    folder_id=305,
+                    recursive=False,
+                )
+                assert [chunk["document_id"] for chunk in direct["chunks"]] == [901]
+                empty = await call("retrieve_folder_chunks", query="policy", knowledge_id=118, folder_id=401)
+                assert empty == {"chunks": [], "total": 0}
+                assert folder_scopes == [[901, 902], [901]]
+                app.routes[0].endpoint.tool_runtime.factory = base_factory
                 created = await call(
                     "create_document", knowledge_id=118, folder_id=305, file_name="e2e-note.md", content="# note"
                 )
@@ -300,14 +372,25 @@ async def test_nine_tools_sdk_flow_uses_real_services_and_repositories(monkeypat
                 ready = await call("get_file_detail", knowledge_id=118, file_id=created["file_id"])
                 assert ready["content"] == "# note" and ready["content_ready"]
                 listed = await call("list_files", knowledge_id=118, folder_id=305)
-                assert [r["id"] for r in listed["data"]] == [created["file_id"]]
+                assert {r["id"] for r in listed["data"]} == {created["file_id"], 901}
             async with session(app, token="first") as other:
                 denied = await other.call_tool(
                     "get_file_detail", {"external_id": "0008", "knowledge_id": 118, "file_id": 1}
                 )
                 assert denied.isError and "policy" not in str(denied)
+                cross_tenant_folder = await other.call_tool(
+                    "retrieve_folder_chunks",
+                    {
+                        "external_id": "0008",
+                        "query": "policy",
+                        "knowledge_id": 118,
+                        "folder_id": 305,
+                    },
+                )
+                assert cross_tenant_folder.isError and "scoped policy" not in str(cross_tenant_folder)
                 for name, args in [
                     ("get_file_detail", {"knowledge_id": 118, "file_id": 1}),
+                    ("retrieve_folder_chunks", {"query": "policy", "knowledge_id": 118, "folder_id": 305}),
                     ("create_document", {"knowledge_id": 118, "file_name": "e2e-denied.md", "content": "denied"}),
                     ("upload_file", {"knowledge_id": 118, "file_name": "e2e-denied.txt", "content_base64": "YQ=="}),
                 ]:

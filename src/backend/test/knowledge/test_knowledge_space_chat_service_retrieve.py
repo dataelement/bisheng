@@ -619,7 +619,8 @@ async def test_shared_path_missing_dependencies_fails_closed(monkeypatch):
     svc._aretrieve_chunks_for_kb.assert_not_awaited()
 
 
-async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monkeypatch):
+@pytest.mark.parametrize("strict_file_scope", [False, True])
+async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monkeypatch, strict_file_scope):
     svc = _make_service()
     svc.file_repo = MagicMock()
     svc._resolve_kb_target_file_ids = AsyncMock(return_value=[10, 11])
@@ -699,6 +700,7 @@ async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monke
         },
         top_k=5,
         max_content=8000,
+        **({"strict_file_scope": True} if strict_file_scope else {}),
     )
 
     assert result == []
@@ -714,6 +716,20 @@ async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monke
     )
     reader.search_milvus.assert_awaited_once()
     assert reader.search_milvus.await_args.kwargs["filter_"] is backend_filter
+    assert resolver.map_and_authorize_hits.await_args.kwargs == ({"strict_explicit": True} if strict_file_scope else {})
+
+
+@pytest.mark.parametrize("filters,shared", [(None, True), ({7: {"tags": []}}, True), ({7: {"file_ids": [1]}}, False)])
+async def test_strict_scope_rejects_missing_file_filter_or_nonshared_path(filters, shared):
+    """F083 覆盖 AC: AC-05, AC-06;严格范围不能静默进入无范围或旧索引路径。"""
+    svc = _make_service()
+    svc._is_shared_storage_active = AsyncMock(return_value=shared)
+    svc._aretrieve_chunks_for_kb = AsyncMock(return_value=[])
+    svc._aretrieve_chunks_shared = AsyncMock(return_value=[])
+    with pytest.raises(ValueError):
+        await svc.aretrieve_chunks(query="q", knowledge_base_ids=[7], kb_filters=filters, strict_file_scope=True)
+    svc._aretrieve_chunks_for_kb.assert_not_called()
+    svc._aretrieve_chunks_shared.assert_not_called()
 
 
 @pytest.mark.parametrize(
