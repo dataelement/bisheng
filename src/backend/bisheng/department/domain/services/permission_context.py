@@ -29,4 +29,10 @@ class DepartmentPermissionContextProvider:
                     raise PermissionPublishNotReadyError(msg="Department permission facts are not current")
                 result.add(current)
                 current = row.parent_id
-        return ActorDepartmentContext(user_id=user_id, subtree_department_ids=tuple(sorted(result)))
+        async with asyncio.timeout(5):
+            member_tenant_ids = await self._repository.load_root_membership(user_id)
+        return ActorDepartmentContext(
+            user_id=user_id,
+            subtree_department_ids=tuple(sorted(result)),
+            member_tenant_ids=member_tenant_ids,
+        )

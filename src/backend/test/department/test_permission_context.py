@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.department import Department, UserDepartment
+from bisheng.database.models.tenant import UserTenant
 from bisheng.department.domain.repositories import permission_context_repository as repository_module
 from bisheng.department.domain.repositories.permission_context_repository import DepartmentContextRow
 from bisheng.department.domain.services.permission_context import DepartmentPermissionContextProvider
@@ -22,7 +23,7 @@ async def database(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite://")
     metadata = MetaData()
     Table("user", metadata, Column("user_id", Integer, primary_key=True))
-    for name in ("department", "user_department"):
+    for name in ("department", "user_department", "user_tenant"):
         table = SQLModel.metadata.tables[name].to_metadata(metadata)
         table.c.id.type = Integer()
     async with engine.begin() as connection:
@@ -63,7 +64,7 @@ async def test_repository_reads_only_user_ancestry_and_observes_move_and_removal
     event.listen(engine.sync_engine, "before_cursor_execute", track)
     provider = DepartmentPermissionContextProvider()
     assert (await provider.load(10)).subtree_department_ids == (1, 2, 3)
-    assert len(reads) == 4
+    assert len(reads) == 5
     assert all("WHERE" in statement.upper() for statement, _ in reads)
     async with factory() as session:
         child = await session.get(Department, 2)
@@ -119,3 +120,30 @@ async def test_repository_overflow_and_orphan_fail_before_returning_context(data
         await session.commit()
     with pytest.raises(PermissionPublishNotReadyError, match="incomplete"):
         await DepartmentPermissionContextProvider().load(20)
+
+
+async def test_root_membership_tracks_current_active_leaf(database):
+    _, factory = database
+    async with factory() as session:
+        session.add(UserTenant(id=1, user_id=10, tenant_id=1, is_active=1, status="active"))
+        await session.commit()
+    provider = DepartmentPermissionContextProvider()
+    assert (await provider.load(10)).member_tenant_ids == (1,)
+    assert (await provider.load(20)).member_tenant_ids == ()
+    async with factory() as session:
+        membership = await session.get(UserTenant, 1)
+        membership.tenant_id = 2
+        await session.commit()
+    assert (await provider.load(10)).member_tenant_ids == ()
+    async with factory() as session:
+        membership = await session.get(UserTenant, 1)
+        membership.tenant_id = 1
+        membership.status = "disabled"
+        await session.commit()
+    assert (await provider.load(10)).member_tenant_ids == ()
+    async with factory() as session:
+        membership = await session.get(UserTenant, 1)
+        membership.status = "active"
+        membership.is_active = None
+        await session.commit()
+    assert (await provider.load(10)).member_tenant_ids == ()
