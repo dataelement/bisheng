@@ -32,9 +32,12 @@ const DialogOverlay = React.forwardRef<
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
+// `close` toggles the built-in top-right X. It has always been supported at
+// runtime; declaring it keeps strict-mode call sites (e.g. the F049 one-shot
+// key reveal, which must not be dismissable) from failing to type-check.
 const DialogContent = React.forwardRef<
     React.ElementRef<typeof DialogPrimitive.Content>,
-    React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+    React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { close?: boolean }
 >(({ className, children, close = true, ...props }, ref) => (
     <DialogPortal>
         <DialogOverlay />

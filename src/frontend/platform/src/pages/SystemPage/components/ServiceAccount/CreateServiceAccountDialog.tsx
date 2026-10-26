@@ -15,11 +15,12 @@ DialogTitle,
 import { Label } from "@/components/bs-ui/label";
 
 import { createServiceAccountApi } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { locationContext } from "@/contexts/locationContext";
 
 export interface CreateServiceAccountDialogProps {
   open: boolean
@@ -33,6 +34,13 @@ export function CreateServiceAccountDialog({
   onCreated,
 }: CreateServiceAccountDialogProps) {
   const { t } = useTranslation()
+  const { appConfig } = useContext(locationContext)
+  // Single-tenant deployments have no "current tenant" to scope the owner
+  // picker to; the hint keeps its substance (pick an active user) and drops
+  // the tenant qualifier.
+  const createHintKey = appConfig?.multiTenantEnabled
+    ? "openApiManagement.serviceAccount.createHint"
+    : "openApiManagement.serviceAccount.createHintSingle"
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [owners, setOwners] = useState<DepartmentUserOption[]>([])
@@ -43,13 +51,11 @@ export function CreateServiceAccountDialog({
 
     setLoading(true)
     try {
-      const account = await captureAndAlertRequestErrorHoc(
-        createServiceAccountApi({
+      const account = await createServiceAccountApi({
           name: name.trim(),
           description: description.trim() || null,
           resource_owner_user_id: owners[0].value,
-        }),
-      )
+        })
       if (!account) return
       setName("")
       setDescription("")
@@ -57,6 +63,8 @@ export function CreateServiceAccountDialog({
       onOpenChange(false)
       notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.create") ?? ''), description: String(t("openApiManagement.feedback.created") ?? '') })
       onCreated(account.id)
+    } catch (error) {
+      showApiError(error)
     } finally {
       setLoading(false)
     }
@@ -79,9 +87,7 @@ export function CreateServiceAccountDialog({
           <DialogTitle>
             {t("openApiManagement.serviceAccount.create")}
           </DialogTitle>
-          <DialogDescription>
-            {t("openApiManagement.serviceAccount.createHint")}
-          </DialogDescription>
+          <DialogDescription>{t(createHintKey)}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">

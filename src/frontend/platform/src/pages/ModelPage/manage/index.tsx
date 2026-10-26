@@ -11,7 +11,6 @@ import { useTranslation } from "react-i18next"
 
 
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLLmModelStatus } from "@/controllers/API/finetune"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useQuery } from "@tanstack/react-query"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
@@ -101,23 +100,19 @@ export default function Management() {
 
     // off & online
     const handleCheck = async (serverId: number, modelId: number, online: boolean) => {
-        const result = await captureAndAlertRequestErrorHoc(
-            changeLLmServerStatus(String(modelId), Number(online)).then(() => {
-                setData(prev => prev.map(server => server.id === serverId
-                    ? { ...server, models: server.models.map(model => model.id === modelId ? { ...model, online } : model) }
-                    : server))
-                void refetch()
-                return true
-            })
-        )
-        return result === true
+        await changeLLmServerStatus(String(modelId), Number(online));
+        setData(prev => prev.map(server => server.id === serverId
+            ? { ...server, models: server.models.map(model => model.id === modelId ? { ...model, online } : model) }
+            : server));
+        void refetch();
+        return true;
     }
 
     const handleVerify = async (serverId: number, modelId: number) => {
-        const result = await captureAndAlertRequestErrorHoc(verifyLLmModelStatus(modelId))
+        const result = await verifyLLmModelStatus(modelId);
         if (result?.id) {
-            handleVerified(serverId, result)
-            toast.show({ type: 'success', message: String(t('model.statusUpdated') ?? '') })
+            handleVerified(serverId, result);
+            toast.show({ type: 'success', message: String(t('model.statusUpdated') ?? '') });
         }
     }
 

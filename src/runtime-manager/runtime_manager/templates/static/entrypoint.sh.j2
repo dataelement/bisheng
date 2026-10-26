@@ -1,0 +1,25 @@
+#!/bin/sh
+# BiSheng hosted-app entrypoint (D5.2) — static runtime.
+#
+# There is no application process to resolve here: the platform's nginx serves
+# the shipped files. BISHENG_APP_START / Procfile are therefore not consulted —
+# a static package has nothing to start. What this wrapper does own is the
+# same PORT contract as the other runtimes and the read-only-rootfs dance:
+# nginx's config, pid and temp paths must all live under the /tmp tmpfs.
+set -eu
+
+BISHENG_APP_BASE_PATH="${BISHENG_APP_BASE_PATH:-}"
+PORT="${PORT:-${BISHENG_APP_PORT:-{{ port }}}}"
+BISHENG_APP_PORT="$PORT"
+export PORT BISHENG_APP_PORT BISHENG_APP_BASE_PATH
+
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi
+
+mkdir -p /tmp/nginx
+sed "s|__PORT__|$PORT|g" /etc/bisheng/nginx.conf.tmpl > /tmp/nginx/nginx.conf
+
+# exec, so nginx is pid 1's process: docker stop's signal reaches the master
+# directly and the shutdown is nginx's own graceful one.
+exec nginx -c /tmp/nginx/nginx.conf -g 'daemon off;'

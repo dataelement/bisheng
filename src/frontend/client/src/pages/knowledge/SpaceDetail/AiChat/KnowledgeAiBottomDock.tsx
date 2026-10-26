@@ -1,3 +1,4 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 /**
  * KnowledgeAiBottomDock — bottom-anchored AI dock for a single knowledge space.
@@ -152,6 +153,9 @@ export function KnowledgeAiBottomDock({
         sessions,
         activeChatId,
         isLoading,
+        historyError,
+        isClearing,
+        retryHistory,
         isStreaming,
         sendMessage,
         stopGenerating,
@@ -269,7 +273,7 @@ export function KnowledgeAiBottomDock({
                 <div className="relative min-h-0 flex-1">
                     {/* AiChatMessages owns the empty state; pass the brand ArticleQA
                         illustration so it follows the blue ⇄ green theme. */}
-                    <AiChatMessages
+                    {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                         messages={messages}
                         conversationId={activeChatId}
                         title=""
@@ -285,7 +289,7 @@ export function KnowledgeAiBottomDock({
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={() => { }}
                         onRegenerate={regenerate}
-                    />
+                    />)}
                     <div
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-10 bg-gradient-to-t from-white to-white/0"
@@ -310,7 +314,7 @@ export function KnowledgeAiBottomDock({
                         onModelChange={selectModel}
                         onModelAutoChange={repairModel}
                         isStreaming={isStreaming}
-                        disabled={!bsConfig?.models?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length}
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant="box"
@@ -443,7 +447,7 @@ export function KnowledgeAiBottomDock({
                             {/* AiChatMessages owns the empty state; pass the brand ArticleQA
                                 illustration so it follows the blue ⇄ green theme. */}
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                                <AiChatMessages
+                                {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                                     messages={messages}
                                     conversationId={activeChatId}
                                     title=""
@@ -459,7 +463,7 @@ export function KnowledgeAiBottomDock({
                                     emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                                     onPresetClick={() => { }}
                                     onRegenerate={regenerate}
-                                />
+                                />)}
                             </div>
                         </div>
                     </div>
@@ -473,7 +477,7 @@ export function KnowledgeAiBottomDock({
                         onModelChange={selectModel}
                         onModelAutoChange={repairModel}
                         isStreaming={isStreaming}
-                        disabled={!bsConfig?.models?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length}
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant={open ? "line" : "box"}

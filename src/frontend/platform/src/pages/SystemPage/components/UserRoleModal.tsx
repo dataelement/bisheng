@@ -4,7 +4,7 @@ import { Dialog,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/co
 
 import { generateUUID } from "@/components/bs-ui/utils";
 import { updateUserGroups,updateUserRoles } from "@/controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
 
 import { useEffect,useState } from "react";
@@ -61,8 +61,7 @@ export default function UserRoleModal({ user, onClose, onChange }) {
         const roles = Array.from(rolesSet);
         if (roles.length === 0) return toast.show({ type: 'warning', message: [String(t('prompt') ?? ''), String(t('system.selectRole') ?? '')].filter(Boolean).join('\n') })
         if (groupIds.length === 0) return toast.show({ type: 'warning', message: [String(t('prompt') ?? ''), String(t('system.selectGroup') ?? '')].filter(Boolean).join('\n') })
-        captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, roles))
-        captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, groupIds))
+        await Promise.all([updateUserRoles(user.user_id, roles), updateUserGroups(user.user_id, groupIds)])
         onChange()
     }
 
@@ -87,7 +86,7 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             } color="default" iconOnly><Outlined.Plus className="size-5" /> </Button>
             <DialogFooter>
                 <Button variant="outlined" onClick={onClose} color="default">{t('cancel')}</Button>
-                <Button onClick={handleSave}>{t('save')}</Button>
+                <Button onClick={handleUiRequest(handleSave)}>{t('save')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

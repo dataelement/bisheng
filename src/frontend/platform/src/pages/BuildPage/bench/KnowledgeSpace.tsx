@@ -11,7 +11,7 @@ import {
     getDepartmentKnowledgeSpacesApi,
     type DepartmentKnowledgeSpaceSummary,
 } from "@/controllers/API/departmentKnowledgeSpace";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { canManageWorkbenchConfig, isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -63,11 +63,14 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
 
     const loadDepartmentSpaces = async () => {
         setDepartmentSpacesLoading(true);
-        const res = await captureAndAlertRequestErrorHoc(getDepartmentKnowledgeSpacesApi({ order_by: "name" }));
+        try {
+        const res = await getDepartmentKnowledgeSpacesApi({ order_by: "name" });
         if (Array.isArray(res)) {
             setDepartmentSpaces(res);
         }
-        setDepartmentSpacesLoading(false);
+        } finally {
+            setDepartmentSpacesLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -78,11 +81,12 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
 
     useEffect(() => {
         if (user.user_id && isGlobalSuper) {
-            loadDepartmentSpaces();
+            void loadDepartmentSpaces().catch(showApiError);
         }
     }, [isGlobalSuper, user.user_id]);
 
     const handleSave = async () => {
+        if (!configMeta) return false;
         if ((String((formData.assistantName) ?? '').length > 50) || (String((formData.systemPrompt) ?? '').length > 30000) || (String((formData.userPrompt) ?? '').length > 30000)) return;
 
         const sensitiveSaved = await sensitivePolicyRef.current?.save();
@@ -266,7 +270,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
-                        <Button onClick={handleSave} disabled={(String((formData.assistantName) ?? '').length > 50) || (String((formData.systemPrompt) ?? '').length > 30000) || (String((formData.userPrompt) ?? '').length > 30000)}>{t("save")}</Button>
+                        <Button onClick={handleUiRequest(handleSave)} disabled={(String((formData.assistantName) ?? '').length > 50) || (String((formData.systemPrompt) ?? '').length > 30000) || (String((formData.userPrompt) ?? '').length > 30000)}>{t("save")}</Button>
                     </div>
                 </CardContent>
             </div>
@@ -276,7 +280,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                     <DepartmentKnowledgeSpaceManagerDialog
                         open={managerOpen}
                         onOpenChange={setManagerOpen}
-                        onChanged={loadDepartmentSpaces}
+                        onChanged={handleUiRequest(loadDepartmentSpaces)}
                     />
                 </>
             )}
@@ -330,7 +334,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
                 // Blank = unconfigured; the client falls back to its localized default
                 menuDisplayName: resolveConfigString(menuDisplayNameFromRes, "").trim(),
             }));
-        });
+        }).catch(showApiError);
     }, [scopeVersion, t]);
 
 
@@ -376,7 +380,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             menu_display_name: await toStoredMenuName(formData.menuDisplayName, "bench.knowledgeSpace"),
         };
 
-        const res = await captureAndAlertRequestErrorHoc(setKnowledgeConfigApi(dataToSave));
+        const res = await setKnowledgeConfigApi(dataToSave);
         if (res) {
             setConfigMeta({
                 inherited_from_root: false,

@@ -57,17 +57,6 @@ export interface SkillRecord {
   files: string[];
 }
 
-export class SkillRequestError extends Error {
-  constructor(
-    readonly statusCode: number,
-    readonly data?: Record<string, unknown>,
-    readonly statusMessage?: string,
-  ) {
-    super(String(statusCode));
-    this.name = 'SkillRequestError';
-  }
-}
-
 export class SkillError extends Error {
   constructor(public readonly code: string) {
     super(code);

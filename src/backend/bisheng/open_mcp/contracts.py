@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, model_validator
 
 from bisheng.common.services.config_service import settings
+from bisheng.department.domain.services.org_directory_service import MAX_MEMBER_PAGE_SIZE
 
 
 class McpContract(BaseModel):
@@ -84,6 +85,7 @@ class KnowledgeFileUploadInput(McpContract):
     force_ocr: Literal[0, 1] = 0
     enable_formula: Literal[0, 1] = 1
     filter_page_header_footer: Literal[0, 1] = 0
+
     @model_validator(mode="after")
     def validate_file_source(self):
         has_inline = self.content_base64 is not None
@@ -241,6 +243,124 @@ class FileListData(McpContract):
     writeable: bool
 
 
+# ── Identity and organisation (identity:read) ──────────────────────────────
+
+
+class DepartmentRef(McpContract):
+    dept_id: str
+    name: str
+    path: str
+
+
+class IdentityUser(McpContract):
+    user_id: int
+    user_name: str
+    status: str
+    departments: list[DepartmentRef] = Field(default_factory=list)
+    roles: list[str] = Field(default_factory=list)
+
+
+class DepartmentNode(McpContract):
+    dept_id: str
+    name: str
+    parent_id: str | None = None
+    path: str
+    sort_order: int = 0
+    source: str = "local"
+    status: str = "active"
+    children: list[DepartmentNode] = Field(default_factory=list)
+
+
+DepartmentNode.model_rebuild()
+
+
+class OrgTreeResult(McpContract):
+    departments: list[DepartmentNode] = Field(default_factory=list)
+
+
+class DepartmentMember(McpContract):
+    user_id: int
+    user_name: str
+    status: str
+
+
+class DepartmentMembersResult(McpContract):
+    members: list[DepartmentMember] = Field(default_factory=list)
+    total: int = 0
+
+
+class IdentityGetUserInput(McpContract):
+    # Not ``user_id``: that name is a removed identity input on every v2 door
+    # and is forbidden in MCP arguments. This is the person being looked up,
+    # not the caller.
+    target_user_id: int = Field(gt=0)
+
+
+class OrgTreeInput(McpContract):
+    pass
+
+
+class DeptMembersInput(McpContract):
+    dept_id: str = Field(min_length=1)
+    page: int = Field(default=1, ge=1)
+    size: int = Field(default=50, ge=1, le=MAX_MEMBER_PAGE_SIZE)
+    keyword: str | None = None
+
+
+# ── Hosted-application data, state and logs (app:manage) ───────────────────
+
+MAX_LOG_TAIL = 2000
+MAX_ROW_PAGE_SIZE = 200
+
+
+class AppStatusResult(McpContract):
+    app_id: str
+    app_state: str | None = None
+    instance: dict[str, Any] = Field(default_factory=dict)
+    publish: dict[str, Any] = Field(default_factory=dict)
+
+
+class AppLogsResult(McpContract):
+    lines: list[str] = Field(default_factory=list)
+    app_state: str | None = None
+    pending_reason: str | None = None
+
+
+class AppDataResult(McpContract):
+    """Passthrough envelope for ``AppDataService``'s own payloads.
+
+    Deliberately untyped inside: the data plane's shapes belong to F054, and
+    re-declaring them here would create a second contract to keep in step.
+    """
+
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
+class AppIdInput(McpContract):
+    app_id: str = Field(min_length=1)
+
+
+class AppLogsInput(AppIdInput):
+    tail: int = Field(default=200, ge=1, le=MAX_LOG_TAIL)
+    since: str | None = None
+    keyword: str | None = None
+
+
+class AppTableInput(AppIdInput):
+    table: str = Field(min_length=1)
+
+
+class AppRowsInput(AppTableInput):
+    page: int = Field(default=1, ge=1)
+    size: int = Field(default=50, ge=1, le=MAX_ROW_PAGE_SIZE)
+    order: str | None = None
+
+
+class AppRowUpdateInput(AppTableInput):
+    key: str = Field(min_length=1)
+    values: dict[str, Any]
+
+
 MCP_INPUT_MODELS = {
     "bisheng_knowledge_list": KnowledgeListInput,
     "bisheng_knowledge_create": KnowledgeCreateInput,
@@ -252,16 +372,39 @@ MCP_INPUT_MODELS = {
     "bisheng_knowledge_file_list": KnowledgeFileListInput,
     "bisheng_knowledge_file_delete": KnowledgeFileDeleteInput,
     "bisheng_knowledge_files_delete": KnowledgeFilesDeleteInput,
+    "bisheng_identity_get_user": IdentityGetUserInput,
+    "bisheng_org_tree": OrgTreeInput,
+    "bisheng_dept_members": DeptMembersInput,
+    "bisheng_app_status": AppIdInput,
+    "bisheng_app_logs": AppLogsInput,
+    "bisheng_app_db_tables": AppIdInput,
+    "bisheng_app_db_schema": AppTableInput,
+    "bisheng_app_db_rows": AppRowsInput,
+    "bisheng_app_db_row_update": AppRowUpdateInput,
 }
 
 
 __all__ = [
     "MCP_INPUT_MODELS",
+    "AppDataResult",
+    "AppIdInput",
+    "AppLogsInput",
+    "AppLogsResult",
+    "AppRowUpdateInput",
+    "AppRowsInput",
+    "AppStatusResult",
+    "AppTableInput",
+    "DepartmentMembersResult",
+    "DeptMembersInput",
     "FileItem",
     "FileListData",
     "FileRecord",
+    "IdentityGetUserInput",
+    "IdentityUser",
     "KnowledgeResource",
     "OperationResult",
+    "OrgTreeInput",
+    "OrgTreeResult",
     "ResourceListData",
     "RetrieveData",
 ]

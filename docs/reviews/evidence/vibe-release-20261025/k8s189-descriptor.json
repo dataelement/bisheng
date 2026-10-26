@@ -1,0 +1,294 @@
+{
+  "assembler_image": "192.168.106.189:5443/vibe-release/bisheng-runtime-assembler@sha256:93d072a998db38d594d32a04e5c6b32abebb67f0aa8e8b1e7cad196e7289b97c",
+  "canary_profiles": [
+    {
+      "command": [
+        "python",
+        "--version"
+      ],
+      "name": "app-python",
+      "runtime_image": "192.168.106.189:5443/vibe-release/bisheng-app-python@sha256:585663bd94cb176c0e72a8203941f5b976c561c4271738d634493d4661bd9b67"
+    },
+    {
+      "command": [
+        "python",
+        "--version"
+      ],
+      "name": "app-python-preparer",
+      "runtime_image": "192.168.106.189:5443/vibe-release/bisheng-app-python-preparer@sha256:d1be6968edb6209b811ec1bb58b6556580502b7519a6403d5590f96bb5e33802"
+    },
+    {
+      "command": [
+        "node",
+        "--version"
+      ],
+      "name": "app-node",
+      "runtime_image": "192.168.106.189:5443/vibe-release/bisheng-app-node@sha256:4e4670b5f669c793ece6f99309ec80c8fd7500405006e8a772554dd4d1be2c98"
+    },
+    {
+      "command": [
+        "node",
+        "--version"
+      ],
+      "name": "app-node-preparer",
+      "runtime_image": "192.168.106.189:5443/vibe-release/bisheng-app-node-preparer@sha256:ab620d24bc1efcccb340ebe6034f6b1e23bea7f828e2a83656f5957ce3992247"
+    },
+    {
+      "command": [
+        "nginx",
+        "-v"
+      ],
+      "name": "app-static",
+      "runtime_image": "192.168.106.189:5443/vibe-release/bisheng-app-static@sha256:e9d9b7235d02160e71ab6579b4bdec00f7ce74c56c588c4376e8a74926087453"
+    }
+  ],
+  "capabilities": {
+    "pod_cidrs": [
+      "10.233.64.0/24"
+    ],
+    "service_cidrs": [
+      "10.233.0.0/18"
+    ]
+  },
+  "cluster_id": "bisheng-vibe-189",
+  "cni_username": "system:serviceaccount:kube-system:calico-cni-plugin",
+  "cpu_budget_millicores": 4000,
+  "data_public_keys_configmap": "runtime-data-public-keys",
+  "helper_image": "192.168.106.189:5443/vibe-release/bisheng-runtime-helper@sha256:468b8e774c1e55a8360a0e0db6c48b001b38168f923ec3d8bbdf2c0f79782e52",
+  "image_registry_endpoints": [
+    "https://192.168.106.189:5443"
+  ],
+  "image_repository": "192.168.106.189:5443/vibe-release/apps",
+  "insecure_registry": false,
+  "installation_id": "bisheng-vibe-release",
+  "memory_budget_mb": 4096,
+  "namespace": "bisheng-vibe-runtime-apps",
+  "offline": true,
+  "package_endpoints": [],
+  "platform": "linux/amd64",
+  "pod_cidrs": [
+    "10.233.64.0/24"
+  ],
+  "probe_report": {
+    "artifacts": {
+      "image-cri": [
+        {
+          "image_id": "docker-pullable://192.168.106.189:5443/vibe-release/bisheng-runtime-helper@sha256:468b8e774c1e55a8360a0e0db6c48b001b38168f923ec3d8bbdf2c0f79782e52",
+          "image_ref": "192.168.106.189:5443/vibe-release/bisheng-runtime-helper@sha256:468b8e774c1e55a8360a0e0db6c48b001b38168f923ec3d8bbdf2c0f79782e52",
+          "platform": "linux/amd64",
+          "resource_version": "3521248",
+          "uid": "61de8902-7c77-4442-9a82-d2b76209e467"
+        },
+        {
+          "image_id": "docker-pullable://192.168.106.189:5443/vibe-release/bisheng-app-python@sha256:585663bd94cb176c0e72a8203941f5b976c561c4271738d634493d4661bd9b67",
+          "image_ref": "192.168.106.189:5443/vibe-release/bisheng-app-python@sha256:585663bd94cb176c0e72a8203941f5b976c561c4271738d634493d4661bd9b67",
+          "platform": "linux/amd64",
+          "resource_version": "3521328",
+          "uid": "58ed4489-5ab0-456d-8ea4-a2b7d5653531"
+        },
+        {
+          "image_id": "docker-pullable://192.168.106.189:5443/vibe-release/bisheng-app-python-preparer@sha256:d1be6968edb6209b811ec1bb58b6556580502b7519a6403d5590f96bb5e33802",
+          "image_ref": "192.168.106.189:5443/vibe-release/bisheng-app-python-preparer@sha256:d1be6968edb6209b811ec1bb58b6556580502b7519a6403d5590f96bb5e33802",
+          "platform": "linux/amd64",
+          "resource_version": "3521386",
+          "uid": "8fada07d-cf09-4935-8318-86785b21fb28"
+        },
+        {
+          "image_id": "docker-pullable://192.168.106.189:5443/vibe-release/bisheng-app-node@sha256:4e4670b5f669c793ece6f99309ec80c8fd7500405006e8a772554dd4d1be2c98",
+          "image_ref": "192.168.106.189:5443/vibe-release/bisheng-app-node@sha256:4e4670b5f669c793ece6f99309ec80c8fd7500405006e8a772554dd4d1be2c98",
+          "platform": "linux/amd64",
+          "resource_version": "3521447",
+          "uid": "8636344f-3ea9-4357-bdcd-be7bbc2f85cd"
+        },
+        {
+          "image_id": "docker-pullable://192.168.106.189:5443/vibe-release/bisheng-app-node-preparer@sha256:ab620d24bc1efcccb340ebe6034f6b1e23bea7f828e2a83656f5957ce3992247",
+          "image_ref": "192.168.106.189:5443/vibe-release/bisheng-app-node-preparer@sha256:ab620d24bc1efcccb340ebe6034f6b1e23bea7f828e2a83656f5957ce3992247",
+          "platform": "linux/amd64",
+          "resource_version": "3521507",
+          "uid": "e26a57de-8581-40e5-a72c-76bdd1262fe0"
+        },
+        {
+          "image_id": "docker-pullable://192.168.106.189:5443/vibe-release/bisheng-app-static@sha256:e9d9b7235d02160e71ab6579b4bdec00f7ce74c56c588c4376e8a74926087453",
+          "image_ref": "192.168.106.189:5443/vibe-release/bisheng-app-static@sha256:e9d9b7235d02160e71ab6579b4bdec00f7ce74c56c588c4376e8a74926087453",
+          "platform": "linux/amd64",
+          "resource_version": "3521569",
+          "uid": "efd66ae8-3926-4e37-93cf-523f6f771fce"
+        }
+      ]
+    },
+    "checks": [
+      {
+        "evidence": {
+          "uid": "61de8902-7c77-4442-9a82-d2b76209e467"
+        },
+        "name": "admission-create",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "6454758b-be1d-4eee-984f-7e586efc3126"
+        },
+        "name": "binding-delete-fence",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "digest": "sha256:468b8e774c1e55a8360a0e0db6c48b001b38168f923ec3d8bbdf2c0f79782e52",
+          "uid": "61de8902-7c77-4442-9a82-d2b76209e467"
+        },
+        "name": "image-cri",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "code": "control_side_tls",
+          "uid": "f870c3eb-6c1e-4e6b-92bf-2f2b0fa4efc6"
+        },
+        "name": "material-tls",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "f870c3eb-6c1e-4e6b-92bf-2f2b0fa4efc6"
+        },
+        "name": "namespace-budget",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "e668ad01-b24b-4efa-bf70-5825d7bd61fe"
+        },
+        "name": "network-direct-denied",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "3b96e611-bfbe-4364-99d1-e8640b5d00ce"
+        },
+        "name": "network-dns-denied",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "7422ef13-5afa-4ab8-8bc6-032f3d79d9ec"
+        },
+        "name": "network-egress-allowed",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "61de8902-7c77-4442-9a82-d2b76209e467"
+        },
+        "name": "network-ingress",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "c1f9ea5a-6fc3-47da-a8c2-1a3d5b7a96b0"
+        },
+        "name": "no-exec",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "code": "control_side_authenticated_api",
+          "uid": "f870c3eb-6c1e-4e6b-92bf-2f2b0fa4efc6"
+        },
+        "name": "platform-capabilities",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "c1f9ea5a-6fc3-47da-a8c2-1a3d5b7a96b0"
+        },
+        "name": "rbac-namespace",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "61de8902-7c77-4442-9a82-d2b76209e467"
+        },
+        "name": "restricted-psa",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "policy_revision": "v1",
+          "uid": "61de8902-7c77-4442-9a82-d2b76209e467"
+        },
+        "name": "status-provenance",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      },
+      {
+        "evidence": {
+          "uid": "e571afa2-f754-448b-bc73-5e9e5f87bc2d"
+        },
+        "name": "storage-sqlite",
+        "observed_at": 1792938423.6732242,
+        "ok": true,
+        "reason": "verified"
+      }
+    ],
+    "descriptor_digest": "8b4d243db44fd4baa2b1b78fe1d9e28e9fda2331940da9c5a3484a812e0e78fd",
+    "observed_at": 1792938423.6732242,
+    "source": "cluster-probe"
+  },
+  "pull_secret": "",
+  "registry_secret": "",
+  "runtime_class": "",
+  "sandbox": {
+    "requested": "default",
+    "runtime_classes": {
+      "hardened": "",
+      "recommended": ""
+    }
+  },
+  "schema_version": 1,
+  "service_cidrs": [
+    "10.233.0.0/18"
+  ],
+  "status_policy_revision": "v1",
+  "storage": {
+    "class": "bisheng-vibe-local",
+    "filesystem": "ext4",
+    "node_local": true,
+    "scratch_size_mb": 4096,
+    "size_mb": 1024,
+    "sqlite_compatible": true,
+    "static_pool": true
+  },
+  "storage_controller_usernames": [
+    "system:kube-scheduler",
+    "system:serviceaccount:kube-system:persistent-volume-binder",
+    "system:serviceaccount:kube-system:pvc-protection-controller"
+  ],
+  "temporary_storage_mb": 4096
+}

@@ -10,8 +10,8 @@
     "build:platform": "pnpm --filter bisheng build",
     "build": "pnpm --filter bisheng build && pnpm --filter bishengchat build",
     "build:docs": "pnpm --filter bishengchat build:docs",
-    "lint": "pnpm --filter bisheng lint && pnpm --filter bishengchat lint && pnpm --filter @bisheng/ui lint && pnpm --filter @bisheng/file-viewers lint && pnpm --filter @bisheng/chat lint",
-    "typecheck": "pnpm --filter bisheng typecheck && pnpm --filter bishengchat typecheck && pnpm --filter @bisheng/file-viewers typecheck && pnpm --filter @bisheng/chat typecheck",
+    "lint": "pnpm --filter bisheng lint && pnpm --filter bishengchat lint && pnpm --filter @bisheng/ui lint && pnpm --filter @bisheng/file-viewers lint && pnpm --filter @bisheng/chat lint && pnpm --filter @bisheng/api-client lint",
+    "typecheck": "pnpm --filter bisheng typecheck && pnpm --filter bishengchat typecheck && pnpm --filter @bisheng/file-viewers typecheck && pnpm --filter @bisheng/chat typecheck && pnpm --filter @bisheng/api-client typecheck",
     "locales:build": "pnpm --filter @bisheng/locales build",
     "locales:watch": "pnpm --filter @bisheng/locales watch",
     "locales:check": "pnpm --filter @bisheng/locales check",
@@ -35,7 +35,8 @@
       "qs@6.15.3": "6.16.0",
       "nanoid@3.3.16": "3.3.18",
       "rollup@^4.0.0": "4.64.12",
-      "postcss@^8.0.0": "8.5.31"
+      "postcss@^8.0.0": "8.5.31",
+      "xlsx": "file:vendor/xlsx-0.20.3.tgz"
     }
   },
   "devDependencies": {

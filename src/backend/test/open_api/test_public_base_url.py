@@ -13,9 +13,9 @@ from starlette.requests import Request
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.config_service import settings
 from bisheng.core.config.open_platform import OpenApiConf
-from bisheng.open_api.api import public_base_url as resolver_module
 from bisheng.open_api.api.endpoints import personal_token_self, skill_pack
-from bisheng.open_api.api.public_base_url import resolve_public_base_url
+from bisheng.open_api.domain.services import public_base_url as resolver_module
+from bisheng.open_api.domain.services.public_base_url import resolve_public_base_url
 
 PACK_PATH = "/api/v1/open-api/skill-packs/knowledge-search"
 

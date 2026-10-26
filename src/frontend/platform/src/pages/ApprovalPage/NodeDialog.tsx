@@ -6,9 +6,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { type ApprovalNodeItem } from "@/controllers/API/approval";
 import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { APPROVER_SOURCE_OPTIONS } from "./approvalMetadata";
+import { approverSourceLabel, offerableApproverSources } from "./approverSources";
+import { locationContext } from "@/contexts/locationContext";
 import { ActionBtn } from "./ApprovalPrimitives";
 import { ApproverUserPicker } from "./components/ApproverUserPicker";
 
@@ -33,15 +34,9 @@ export function NodeDialog({ open, initial, allowedSourceTypes, onClose, onConfi
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [selectedUserNames, setSelectedUserNames] = useState<string[]>([]);
 
-  // Filter global list to only those allowed for the current scenario
-  const effectiveSourceOptions = allowedSourceTypes
-    ? APPROVER_SOURCE_OPTIONS.filter((o) => allowedSourceTypes.includes(o.value))
-    : APPROVER_SOURCE_OPTIONS;
-
-  const getApproverLabel = (type: string) => {
-    const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === type);
-    return opt ? t(opt.labelKey, { defaultValue: type }) : type;
-  };
+  const { appConfig } = useContext(locationContext);
+  const effectiveSourceOptions = offerableApproverSources(allowedSourceTypes);
+  const getApproverLabel = (type: string) => approverSourceLabel(type, t, undefined, !!appConfig.multiTenantEnabled);
 
   const dialogSnapshot = useRef({ initial, getApproverLabel });
   dialogSnapshot.current = { initial, getApproverLabel };
@@ -136,9 +131,9 @@ export function NodeDialog({ open, initial, allowedSourceTypes, onClose, onConfi
                     )}
                   </span>
                 ))}
-                <Dropdown disabled={effectiveSourceOptions.every(o => sources.some(s => s.type === o.value))}
-                  menu={effectiveSourceOptions.filter(o => !sources.some(s => s.type === o.value)).map(o =>
-                    <DropdownItem key={o.value} onSelect={() => addSource(o.value)}>{t(o.labelKey, { defaultValue: o.value })}</DropdownItem>)}>
+                <Dropdown disabled={effectiveSourceOptions.every(value => sources.some(source => source.type === value))}
+                  menu={effectiveSourceOptions.filter(value => !sources.some(source => source.type === value)).map(value =>
+                    <DropdownItem key={value} onSelect={() => addSource(value)}>{getApproverLabel(value)}</DropdownItem>)}>
                   <Button size="small" variant="outlined" color="default" aria-label={t("approvalPage.addApprover")}>
                     <Outlined.Plus size={14} />{t("approvalPage.addApprover")}<DropdownChevron />
                   </Button>

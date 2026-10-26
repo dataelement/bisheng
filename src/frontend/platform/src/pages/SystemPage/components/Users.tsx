@@ -30,7 +30,7 @@ TableRow
 } from "../../../components/bs-ui/table";
 import { userContext } from "../../../contexts/userContext";
 import { disableUserApi,getUsersApi } from "../../../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 import UserRoleModal from "./UserRoleModal";
 
 import CreateUser from "./CreateUser";
@@ -107,17 +107,17 @@ export default function Users(params) {
             desc: t('system.confirmDisable'),
             okTxt: t('disable'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(disableUserApi(user.user_id, 1).then(res => {
+                return disableUserApi(user.user_id, 1).then(() => {
                     reload()
-                }))
-                next()
+                    next()
+                })
             }
         })
     }
     const handleEnableUser = (user) => {
-        captureAndAlertRequestErrorHoc(disableUserApi(user.user_id, 0).then(res => {
+        disableUserApi(user.user_id, 0).then(() => {
             reload()
-        }))
+        }).catch(showApiError)
     }
 
     // 编辑

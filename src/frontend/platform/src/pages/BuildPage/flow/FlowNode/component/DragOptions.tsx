@@ -8,7 +8,7 @@ import { Outlined } from "bisheng-icons";
 import i18next from "i18next";
 import { GripVertical } from "lucide-react"; // 图标
 import { forwardRef,useEffect,useRef,useState } from 'react';
-import { DragDropContext,Draggable,Droppable } from 'react-beautiful-dnd';
+import { DragDropContext,Draggable,Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from 'react-i18next';
 
 interface Iprops {
@@ -98,7 +98,7 @@ const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, o
     };
 
     const handleDragEnd = (result) => {
-        if (!result.destination) return;
+        if (!result.destination || result.destination.index === result.source.index) return;
         const newItems = Array.from(items);
         const [removed] = newItems.splice(result.source.index, 1);
         newItems.splice(result.destination.index, 0, removed);
@@ -107,7 +107,7 @@ const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, o
 
     return (
         <div ref={ref} className={`${scroll && 'nowheel overflow-y-auto max-h-80'} mt-2`}>
-            <DragDropContext onDragEnd={handleDragEnd} usePortal>
+            <DragDropContext onDragEnd={handleDragEnd}>
                 <Droppable droppableId="options-list">
                     {(provided) => (
                         <div
@@ -150,6 +150,7 @@ const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, o
                                     )}
                                 </Draggable>
                             ))}
+                            {provided.placeholder}
                         </div>
                     )}
                 </Droppable>

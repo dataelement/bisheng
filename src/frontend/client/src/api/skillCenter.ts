@@ -1,5 +1,6 @@
-import request from './request';
-import { SkillRequestError, type SkillRecord } from '~/components/Skills/types';
+import { isApiError, normalizeApiError } from '@bisheng/api-client';
+import request, { translateApiErrorMessage } from './request';
+import { type SkillRecord } from '~/components/Skills/types';
 
 const SKILL_API = '/api/v1/linsight/skill';
 
@@ -56,12 +57,7 @@ function toRecord(row: ApiCard, source: SkillRecord['source']): SkillRecord {
 
 function unwrap<T>(body: Envelope<T>): T {
   if (body?.status_code !== 200) {
-    const data = body?.data;
-    throw new SkillRequestError(
-      body?.status_code,
-      data && typeof data === 'object' ? data as Record<string, unknown> : undefined,
-      body?.status_message,
-    );
+    throw normalizeApiError(body, { message: translateApiErrorMessage(body) });
   }
   return body.data;
 }
@@ -95,7 +91,7 @@ export async function getSkillDetail(skillId: number): Promise<SkillRecord> {
 export async function getSkillFile(skillId: number, path: string): Promise<string> {
   const response = await request.get<Envelope<{ path: string; content: string }>>(
     `${SKILL_API}/personal/${skillId}/file`,
-    { params: { path }, skip403Redirect: true, skipMaintenance: true },
+    { params: { path }, showError: false, skip403Redirect: true, skipMaintenance: true },
   );
   return unwrap(response).content ?? '';
 }
@@ -117,11 +113,17 @@ export async function getPersonalSkillUsage(): Promise<SkillUsage> {
 }
 
 export async function findPersonalSkillByImport(importId: string): Promise<SkillRecord | null> {
-  const response = await request.get<Envelope<ApiCard>>(
-    `${SKILL_API}/personal/import/${encodeURIComponent(importId)}`,
-  );
-  if (response?.status_code === 11053) return null;
-  return toRecord(unwrap(response), 'personal');
+  try {
+    const response = await request.get<Envelope<ApiCard>>(
+      `${SKILL_API}/personal/import/${encodeURIComponent(importId)}`,
+      { showError: false },
+    );
+    if (response?.status_code === 11053) return null;
+    return toRecord(unwrap(response), 'personal');
+  } catch (error) {
+    if (isApiError(error) && error.status_code === 11053) return null;
+    throw error;
+  }
 }
 
 export interface SkillUploadCheck {

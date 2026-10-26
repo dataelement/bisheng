@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 
 import { userContext } from "@/contexts/userContext";
 import { applyMenuAccessApi } from "@/controllers/API/approval";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
@@ -41,17 +41,14 @@ export default function MenuPermissionPlaceholder() {
     const handleSubmit = async () => {
         if (!menuKey || submitting) return;
         setSubmitting(true);
-        await captureAndAlertRequestErrorHoc(
-            applyMenuAccessApi({ menu_key: menuKey, menu_name: menuName, reason: reason.trim() || undefined }).then(
+        await applyMenuAccessApi({ menu_key: menuKey, menu_name: menuName, reason: reason.trim() || undefined }).then(
                 () => {
                     setApplied(true);
                     setShowDialog(false);
                     setReason("");
                     notification.open({ type: "success", description: String(t("approvalPage.genericOperateSuccess") ?? '') });
                 },
-            ),
-        );
-        setSubmitting(false);
+            ).catch(showApiError).finally(() => setSubmitting(false));
     };
 
     return (

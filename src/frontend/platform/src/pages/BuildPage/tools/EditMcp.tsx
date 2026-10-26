@@ -10,7 +10,7 @@ import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/compone
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 
 import { createTool,deleteTool,getMcpServeByConfig,testMcpApi,updateTool } from "@/controllers/API/tools";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { isValidJSON } from "@/util/utils";
 import { forwardRef,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -55,8 +55,7 @@ const TestDialog = forwardRef((props, ref) => {
             console.log('toolData :>> ', toolData);
             const { server_host, children, auth_method, auth_type, api_key } = serverRef.current
 
-            const res = await captureAndAlertRequestErrorHoc(
-                testMcpApi({
+            const res = await testMcpApi({
                     server_host,
                     extra: children.find(el => el.name === toolData.name).extra,
                     auth_method,
@@ -64,10 +63,11 @@ const TestDialog = forwardRef((props, ref) => {
                     api_key,
                     request_params: params,
                     openapi_schema: openapiSchemaRef.current
-                }).then(setResult)
-            );
+                }).then(setResult);
             console.log('res :>> ', res);
             // setResult(JSON.stringify(res, null, 2));
+        } catch (error) {
+            showApiError(error);
         } finally {
             setLoading(false);
         }
@@ -181,7 +181,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 setCanDelete(serverData.delete)
                 originalName.current = serverData.name;
                 setIsEditMode(true);
-                loadToolsFromSchema(serverData.openapi_schema);
+                void loadToolsFromSchema(serverData.openapi_schema).catch(showApiError);
             } else {
                 resetFormState();
                 setIsEditMode(false);
@@ -211,13 +211,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
         // setIsLoading(true);
         try {
-            const tools = await captureAndAlertRequestErrorHoc(
-                getMcpServeByConfig({ file_content: schemaContent }),
-                (res) => {
-                    serverRef.current.children = [];
-                    setAvailableTools([]);
-                }
-            );
+            const tools = await getMcpServeByConfig({ file_content: schemaContent });
 
             if (tools && typeof tools === 'object') {
                 serverRef.current = tools;
@@ -232,6 +226,10 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 setFormData(newFormData);
                 latestFormData.current = newFormData;
             }
+        } catch (error) {
+            serverRef.current.children = [];
+            setAvailableTools([]);
+            throw error;
         } finally {
             // setIsLoading(false);
             parseBeforeSaveRef.current = false;
@@ -267,13 +265,11 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
     // Form submission
     const handleSubmit = async () => {
+        setIsLoading(true);
+        try {
         if (parseBeforeSaveRef.current) {
-            setIsLoading(true);
             await loadToolsFromSchema(textareaRef.current.value)
             parseBeforeSaveRef.current = false
-            setTimeout(() => {
-                handleSubmit()
-            }, 0);
         }
 
         // Use latestFormData.current to get latest data
@@ -282,23 +278,23 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             return toast.show({ type: "warning", message: String(validationErrors ?? '') });
         }
 
-        setIsLoading(true);
-        try {
             const apiMethod = isEditMode ? updateTool : createTool;
             const { openapiSchema, ...other } = latestFormData.current;
 
-            await captureAndAlertRequestErrorHoc(apiMethod({
+            await apiMethod({
                 ...serverRef.current,
                 ...other,
                 description: serverRef.current.description,
                 openapi_schema: openapiSchema,
                 is_preset: 2
-            })).then((res) => {
+            }).then((res) => {
                 if (!res) return;
                 toast.show({ type: "success", message: String(t('skills.saveSuccessful') ?? '') });
                 setIsDialogOpen(false);
                 onReload();
             });
+        } catch (error) {
+            showApiError(error);
         } finally {
             setIsLoading(false);
         }
@@ -310,9 +306,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             title: t('prompt'),
             desc: t('tools.confirmDeleteMcp'),
             onOk(closeDialog) {
-                captureAndAlertRequestErrorHoc(
-                    deleteTool(formData.id)
-                ).then(() => {
+                return deleteTool(formData.id).then(() => {
                     setIsDialogOpen(false);
                     onReload();
                     closeDialog();
@@ -327,7 +321,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             ...prev,
             openapiSchema: exampleSchema
         }));
-        loadToolsFromSchema(exampleSchema);
+        void loadToolsFromSchema(exampleSchema).catch(showApiError);
     };
     return (
         <div>
@@ -371,14 +365,14 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                         openapiSchema: e.target.value
                                     }))
                                     parseBeforeSaveRef.current = true;
-                                }} onBlur={() => loadToolsFromSchema(formData.openapiSchema)} textareaClassName={"min-h-[200px] font-mono"} />
+                                }} onBlur={handleUiRequest(() => loadToolsFromSchema(formData.openapiSchema))} textareaClassName={"min-h-[200px] font-mono"} />
                         </div>
 
                         {/* Tool list */}
                         <div>
                             <div className="flex justify-between items-center mb-2">
                                 <label>{t('tools.availableTools')}</label>
-                                <Button variant="outlined" disabled={isLoading} onClick={() => loadToolsFromSchema(formData.openapiSchema)} color="default">
+                                <Button variant="outlined" disabled={isLoading} onClick={handleUiRequest(() => loadToolsFromSchema(formData.openapiSchema))} color="default">
                                     {t('build.refresh')}
                                 </Button>
                             </div>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useInlineRename } from "./useInlineRename";
 
 const mockShowToast = jest.fn();
@@ -13,7 +13,7 @@ jest.mock("~/hooks", () => ({
 
 interface HarnessProps {
   fileName: string;
-  onRename: (newName: string) => void;
+  onRename: (newName: string) => void | Promise<void>;
   onValidateName?: (newName: string) => string | null;
 }
 
@@ -116,4 +116,18 @@ describe("useInlineRename", () => {
     expect(mockShowToast).toHaveBeenCalled();
     expect(screen.queryByTestId("rename-input")).not.toBeNull();
   });
+});
+
+it('keeps the edited name after a rejected save and permits retry', async () => {
+  const onRename = jest.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(undefined);
+  render(<Harness fileName="a.pdf" onRename={onRename} />);
+  fireEvent.click(screen.getByText('rename'));
+  fireEvent.change(screen.getByTestId('rename-input'), { target: { value: 'draft.pdf' } });
+  pointerDownOutside();
+  await waitFor(() => expect(onRename).toHaveBeenCalledTimes(1));
+  expect(screen.getByTestId('rename-input')).toHaveValue('draft.pdf');
+  await act(async () => {});
+  pointerDownOutside();
+  await waitFor(() => expect(screen.queryByTestId('rename-input')).toBeNull());
+  expect(onRename).toHaveBeenLastCalledWith('draft.pdf');
 });

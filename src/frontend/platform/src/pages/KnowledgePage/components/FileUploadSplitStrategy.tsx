@@ -6,7 +6,7 @@ import { Outlined } from "bisheng-icons";
 
 import { generateUUID } from '@/components/bs-ui/utils';
 import { useState } from 'react';
-import { DragDropContext,Draggable,Droppable } from 'react-beautiful-dnd';
+import { DragDropContext,Draggable,Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from 'react-i18next';
 export const ruleI18nMap = {
   '\\n': 'singleNewlineRule',
@@ -40,7 +40,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
   const [position, setPosition] = useState('after');
 
   const handleDragEnd = (result) => {
-    if (!result.destination) return;
+    if (!result.destination || result.destination.index === result.source.index) return;
 
     const items = Array.from(strategies);
     const [reorderedItem] = items.splice(result.source.index, 1);

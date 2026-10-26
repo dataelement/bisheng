@@ -1,12 +1,15 @@
 // @ts-strict-ignore
+import { PlatformImagePreview } from '@/components/bs-comp/preview/DocumentPreview';
 import { Button, toast } from '@bisheng/ui';
+import type { PdfScrollContext } from '@/components/bs-comp/preview/PlatformPdfPreview';
+import { labelTop as pdfLabelTop } from '@/components/bs-comp/preview/pdfEditing';
 import FileView from "@/components/bs-comp/FileView";
 import { Outlined } from "bisheng-icons";
 
 
 
 import { getFileBboxApi,getFilePathApi,getKnowledgeChunkApi,updateChunkApi,updatePreviewChunkApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Crosshair } from "lucide-react";
 import React,{ useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import { useTranslation } from "react-i18next";
@@ -118,12 +121,11 @@ const ParagraphEdit = ({
         }) : updateChunkApi({
             knowledge_id: Number(id), file_id: fileId, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
         })
-        await captureAndAlertRequestErrorHoc(promise.then(res => {
+        await promise.then(() => {
             toast.show({ type: 'success', message: String(t('editSuccess') ?? '') })
             onClose()
             onChange(_value)
-        }))
-        setLoading(false)
+        }).catch(showApiError).finally(() => setLoading(false))
     }
 
     const labels = useMemo(() => {
@@ -207,13 +209,13 @@ const ParagraphEdit = ({
     }, [random])
 
     const [showPos, setShowPos] = useState(false)
-    const handlePageChange = (offset, h, paperSize, scale) => {
+    const handlePageChange = (offset, h, paperSize, scale, context?: PdfScrollContext) => {
         if (offset === 0) return
         // console.log('data :>> ', data, offset, h, paperSize, scale);
         setShowPos(!data.some(item => {
             const pageHeight = (item.page - 1) * paperSize
-            const labelTop = pageHeight + item.label[1] / scale
-            return item.active && labelTop > offset && labelTop < (offset + h)
+            const labelTop = context ? pdfLabelTop(item.page, item.label[1], context.startIndex, context.layout) : pageHeight + item.label[1] / scale
+            return item.active && labelTop !== null && labelTop > offset && labelTop < (offset + h)
         }))
     }
 
@@ -249,9 +251,7 @@ const ParagraphEdit = ({
             case 'png':
             case 'jpg':
             case 'jpeg':
-            case 'bmp': return <img
-                className="border"
-                src={previewFileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
+            case 'bmp': return <PlatformImagePreview filePath={previewFileUrl} />
             default:
                 return <div className="flex justify-center items-center h-full text-gray-400">
                     <div className="text-center">
@@ -391,7 +391,7 @@ export const convertJsonData = (inputObj: Record<string, any>) => {
 
         return finalResult
     } catch (error) {
-        console.error('数据转换错误:', error)
+        console.error('Preview data conversion failed:', error)
         return []
     }
 }

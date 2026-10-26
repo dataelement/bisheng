@@ -1,0 +1,30 @@
+{
+  "operation": {
+    "id": "6a1d9260b583437d9c4fead315cdc39a",
+    "kind": "deploy",
+    "stage": "failed",
+    "status": "failed",
+    "cleanup_status": "complete",
+    "failure": {
+      "reason": "startup_exited",
+      "maintenance": true,
+      "failed_stage": "starting",
+      "diagnostic_tail": "",
+      "data_may_have_changed": true
+    },
+    "version_id": "2733ef13fab84fd894728e5cd5ae08e3",
+    "generation": 4
+  },
+  "state": "online",
+  "current_version_unchanged": true,
+  "new_table_persisted": true,
+  "production_data_retained": true,
+  "confirmed_snapshots": 2,
+  "roll_forward": {
+    "version_id": "346df0d3cb8049008982dfe490944140",
+    "entry": {
+      "version": 4,
+      "value": "production-marker"
+    }
+  }
+}

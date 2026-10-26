@@ -2,6 +2,8 @@
 import { notification } from '@bisheng/ui';
 // components/AudioPlayButton.tsx
 import { textToSpeech } from '@/controllers/API/workbench';
+import { showApiError } from '@/controllers/request';
+import { isApiError } from '@bisheng/api-client';
 import { Outlined } from "bisheng-icons";
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -100,7 +102,8 @@ export const AudioPlayComponent = ({ messageId, msg = '', compact = false }: Aud
       });
     } catch (err) {
       console.error('播放请求异常详情:', err);
-      notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(t('playbackUnavailable') ?? '') });
+      if (isApiError(err)) showApiError(err);
+      else notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(t('playbackUnavailable') ?? '') });
       setLoading(false);
       setCurrentPlayingId(null);
     }

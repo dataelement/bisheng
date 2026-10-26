@@ -28,6 +28,8 @@ export function useAppSidebar() {
   const location = useLocation();
   const localize = useLocalize();
   const { fid: flowId, type: flowType, conversationId } = useParams();
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
   const { showToast } = useToastContext();
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
@@ -39,6 +41,9 @@ export function useAppSidebar() {
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
 
   const [loading, setLoading] = useState(false);
+  const [listError, setListError] = useState<unknown>(null);
+  const localizeRef = useRef(localize);
+  localizeRef.current = localize;
   // Track whether we previously had conversations (to distinguish initial empty from delete-all)
   const hadConversationsRef = useRef(false);
 
@@ -53,7 +58,7 @@ export function useAppSidebar() {
       const list: AppConversation[] = (res.data?.list || []).map((item: any) => {
         return {
           id: item.chat_id,
-          title: item.name || item.flow_name || '新对话',
+          title: item.name || item.flow_name || localizeRef.current('com_ui_new_chat'),
           flowId: item.flow_id || flowId,
           flowType: Number(item.flow_type || flowType),
           updatedAt: item.update_time || '',
@@ -61,17 +66,18 @@ export function useAppSidebar() {
         };
       });
       setConversations(list);
+      setListError(null);
 
       // Show toast only when user deletes all conversations (non-empty → empty),
       // not on initial load when no history exists
       if (list.length === 0 && hadConversationsRef.current) {
-        showToastRef.current?.({ message: '历史会话已删除', severity: NotificationSeverity.WARNING });
+        showToastRef.current?.({ message: localizeRef.current('com_app.history_deleted'), severity: NotificationSeverity.WARNING });
       }
       hadConversationsRef.current = list.length > 0;
       return list;
-    } catch {
-      console.error('Failed to fetch app conversations');
-      return [];
+    } catch (error) {
+      setListError(error);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -125,11 +131,11 @@ export function useAppSidebar() {
     const url = getAppShareUrl(flowId, flowType || '');
     try {
       await copyText(url);
-      showToast?.({ message: '已将应用链接复制到剪贴板', severity: NotificationSeverity.SUCCESS });
+      showToast?.({ message: localize('com_app_share_link_copied'), severity: NotificationSeverity.SUCCESS });
     } catch {
-      showToast?.({ message: '复制失败', severity: NotificationSeverity.WARNING });
+      showToast?.({ message: localize('com_app_share_link_copy_failed'), severity: NotificationSeverity.WARNING });
     }
-  }, [flowId, flowType, showToast, chatState?.flow, currentApp]);
+  }, [flowId, flowType, showToast, chatState?.flow, currentApp, localize]);
 
   // Guard: auto-select runs only once per flowId (on initial mount).
   // This prevents re-triggering when the user creates a new chat or switches conversations.
@@ -165,36 +171,43 @@ export function useAppSidebar() {
   }, [flowId, flowType, setCurrentApp]);
 
   // Auto-fetch on mount or flowId change, with one-time auto-select
-  useEffect(() => {
-    fetchConversations().then((list) => {
-      // Skip if auto-select already ran for this flowId
-      if (hasAutoSelectedRef.current === flowId) return;
-      hasAutoSelectedRef.current = flowId!;
+  const retryConversations = useCallback(async () => {
+    const list = await fetchConversations();
+    // Skip if auto-select already ran for this flowId
+    if (hasAutoSelectedRef.current === flowId) return;
+    hasAutoSelectedRef.current = flowId!;
 
-      // When the current conversationId doesn't match any existing conversation
-      // (e.g. freshly opened from app center with a generated UUID), prepend a
-      // placeholder so the sidebar shows it immediately — same as createNewChat.
-      if (conversationId && !list.some(c => c.id === conversationId)) {
-        setConversations((prev) => [{
-          id: conversationId,
-          title: localize('com_ui_new_chat'),
-          flowId: flowId!,
-          flowType: Number(flowType),
-          updatedAt: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-        }, ...prev]);
-      }
-    });
+    // When the current conversationId doesn't match any existing conversation
+    // (e.g. freshly opened from app center with a generated UUID), prepend a
+    // placeholder so the sidebar shows it immediately — same as createNewChat.
+    const currentConversationId = conversationIdRef.current;
+    if (currentConversationId && !list.some(c => c.id === currentConversationId)) {
+      setConversations((prev) => [{
+        id: currentConversationId,
+        title: localizeRef.current('com_ui_new_chat'),
+        flowId: flowId!,
+        flowType: Number(flowType),
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      }, ...prev]);
+    }
+  // Read the current route when a retry finishes, without reloading on navigation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchConversations]);
+
+  useEffect(() => {
+    void retryConversations().catch(() => { /* The sidebar owns the failed-list state. */ });
     // Only re-run when fetchConversations identity changes (i.e. flowId changes).
     // conversationId is intentionally excluded to prevent re-fetch on every navigation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchConversations]);
+  }, [retryConversations]);
 
   return {
     currentApp,
     conversations,
     groups,
     loading,
+    listError,
+    retryConversations,
     activeConversationId: conversationId,
     sidebarVisible,
     fetchConversations,

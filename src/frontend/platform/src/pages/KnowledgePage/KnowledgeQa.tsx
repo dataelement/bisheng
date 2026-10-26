@@ -17,7 +17,7 @@ import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/comp
 
 import { userContext } from "@/contexts/userContext";
 import { copyQaDatabase,deleteFileLib,readFileLibDatabase } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useInfiniteCursorTable } from "@/util/hook";
 
 import { useContext,useEffect,useState } from "react";
@@ -114,8 +114,7 @@ export default function KnowledgeQa(params) {
             title: t('prompt'),
             desc: t('lib.confirmDeleteLibrary', { ns: 'bs' }),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteFileLib(id).then(reload));
-                next();
+                return deleteFileLib(id).then(() => { reload(); next() });
             },
         });
     };
@@ -177,10 +176,11 @@ export default function KnowledgeQa(params) {
         doing[elem.id] = true;
 
         try {
-            await captureAndAlertRequestErrorHoc(copyQaDatabase(elem.id, newName));
+            await copyQaDatabase(elem.id, newName);
             reload();
         } catch (error) {
-            notification.open({ type: 'error', description: String(t('copyFailed') ?? '') });
+            delete doing[elem.id];
+            showApiError(error);
         } finally {
             setCopyLoadingId(null);
             setSelectOpenId(null);

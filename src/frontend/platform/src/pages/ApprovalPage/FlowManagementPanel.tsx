@@ -1,12 +1,16 @@
+import { useContext } from "react";
+import { locationContext } from "@/contexts/locationContext";
+import { approverSourceLabel } from "./approverSources";
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
 import { Alert, Button, Select } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { listApprovalNodesApi } from "@/controllers/API/approval";
+import { handleUiRequest, showApiError } from '@/controllers/request';
 import { Switch, Tag, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { ApproverSource } from "./approvalMetadata";
-import { APPROVER_SOURCE_OPTIONS, conditionLabel } from "./approvalMetadata";
+import { conditionLabel } from "./approvalMetadata";
 import { ActionBtn, SectionHeader, StatusBadge } from "./ApprovalPrimitives";
 
 import type { useApprovalController } from "./useApprovalController";
@@ -14,6 +18,7 @@ interface FlowManagementPanelProps {
   controller: ReturnType<typeof useApprovalController>;
 }
 export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
+  const { appConfig } = useContext(locationContext);
   const selectLabels = useSelectLabels();
   const {
     activeTab,
@@ -78,12 +83,12 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                     onKeyDown={(event) => {
                       if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                         event.preventDefault();
-                        void selectScenario(s.id);
+                        void selectScenario(s.id).catch(showApiError);
                       }
                     }}
                     key={s.id}
 
-                    onClick={() => void selectScenario(s.id)}
+                    onClick={() => void selectScenario(s.id).catch(showApiError)}
                     className={`group relative w-full rounded-lg border px-3 py-3 text-left transition-colors ${
                       active
                         ? "border-primary/30 bg-primary/5"
@@ -254,29 +259,31 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                       <Select {...selectLabels} aria-label={t("approvalPage.selectFlow")} value={selectedFlowId ?? null} allowClear
                         placeholder={t("approvalPage.selectFlow")} className="w-64 max-w-full"
                         options={flows.filter(flow => flow.id != null).map(flow => ({ value: flow.id, label: flow.flow_name || flow.flow_code || '' }))}
-                        onChange={async (value) => {
+                        onChange={handleUiRequest(async (value) => {
                           const id = Number(value) || null;
                           if (isNodeEditMode && isNodeDirty) {
                             bsConfirm({
                               title: t("approvalPage.discardChangesTitle"),
                               desc: t("approvalPage.switchFlowDiscardDesc"),
                               onOk: async (next) => {
+                                const nextNodes = id ? await listApprovalNodesApi(id) : [];
                                 setIsNodeEditMode(false);
                                 setDraftNodes([]);
                                 setIsNodeDirty(false);
                                 setSelectedFlowId(id);
-                                setNodes(id ? await listApprovalNodesApi(id) : []);
+                                setNodes(nextNodes);
                                 next();
                               },
                             });
                             return;
                           }
+                          const nextNodes = id ? await listApprovalNodesApi(id) : [];
                           setIsNodeEditMode(false);
                           setDraftNodes([]);
                           setIsNodeDirty(false);
                           setSelectedFlowId(id);
-                          setNodes(id ? await listApprovalNodesApi(id) : []);
-                        }} />
+                          setNodes(nextNodes);
+                        })} />
                       {selectedFlow && <StatusBadge enabled={selectedFlow.is_active} />}
                       <div className="ml-auto flex items-center gap-2">
                         {isNodeEditMode ? (
@@ -447,12 +454,7 @@ export function FlowManagementPanel({ controller }: FlowManagementPanelProps) {
                                             icon={<Outlined.People size={12} />}
                                             className="whitespace-nowrap"
                                           >
-                                            {(() => {
-                                              const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
-                                              return opt
-                                                ? t(opt.labelKey, { defaultValue: src.type })
-                                                : (src.label ?? src.type);
-                                            })()}
+                                            {approverSourceLabel(src.type, t, src.label, !!appConfig.multiTenantEnabled)}
                                           </Tag>
                                         );
                                       })}

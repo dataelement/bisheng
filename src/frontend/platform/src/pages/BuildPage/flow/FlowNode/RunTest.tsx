@@ -9,7 +9,7 @@ import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels
 import { Sheet,SheetClose,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 
 import { runWorkflowNodeApi } from "@/controllers/API/workflow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { WorkflowNode } from "@/types/flow";
 import { copyText } from "@/utils";
 
@@ -163,8 +163,7 @@ export const RunTest = forwardRef((props, ref) => {
 
         setLoading(true)
         setResults([])
-        await captureAndAlertRequestErrorHoc(
-            runWorkflowNodeApi({
+        await runWorkflowNodeApi({
                 node_input: inputs.reduce((result, input) => {
                     result[`${input.key}`] = input.value;
                     return result;
@@ -175,9 +174,7 @@ export const RunTest = forwardRef((props, ref) => {
                 const result = res.map(el => TranslationName(el)) // .map(item => ({ title: item.key, text: item.value }))
                 setCurrentIndex(0)
                 setResults(result)
-            })
-        );
-        setLoading(false)
+            }).catch(showApiError).finally(() => setLoading(false));
     }
 
     // 翻译变量名

@@ -53,6 +53,7 @@ Two React apps that **must not be mixed**. Per-app rules auto-load from each sub
 - Named exports for components (`export function`); no default exports. Minimize `any` — if unavoidable, `// eslint-disable-next-line` + a one-line reason.
 - **Never** `import axios` directly — use the wrapped request module. (store must not call HTTP = constitution **C7**)
 - **Never** introduce new UI or state-management libraries.
+- **Shared list infrastructure**: list sorting uses `@hello-pangea/dnd` and file-preview virtualization uses `react-window`, both pinned in the workspace catalog. Do not reintroduce `react-beautiful-dnd` or `react-virtualized`. Client's existing `react-dnd` remains for its distinct drag/drop use cases; it is not replaced by the list-sorting library. Keep file-upload drop handling on its existing single owner.
 - All code comments in English.
 - 403 handled automatically by response interceptors — never add 403 branches in business code.
 - **A Radix `<SelectItem>` must never receive an empty-string `value`** — it throws and takes the whole page down with it. Any selector rendering a backend list has to filter out rows whose id is `null` or `''` before mapping them to items. Do not rely on the backend to sanitize: older backend versions do send such rows, and the crash surfaces to the user as a blank page rather than an empty dropdown.
@@ -66,7 +67,7 @@ Two React apps that **must not be mixed**. Per-app rules auto-load from each sub
 ## 5. Architecture Guard (Auto-enforced)
 
 `scripts/arch-guard.sh` runs after every Write/Edit via a PostToolUse hook (through `.claude/hooks/arch-guard-hook.sh`, which feeds violations back to the agent as `additionalContext` for self-correction).
-The 8 RULEs are the machine-enforcement arm of constitution **C1 / C4 / C6 / C7** — the clause↔RULE anchor table lives in [`docs/constitution.md`](docs/constitution.md). **VIOLATION must be fixed immediately.**
+The 10 RULEs (RULE-1 … RULE-10) are the machine-enforcement arm of constitution **C1 / C4 / C6 / C7** — the clause↔RULE anchor table lives in [`docs/constitution.md`](docs/constitution.md). **VIOLATION must be fixed immediately.**
 
 ---
 

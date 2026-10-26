@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { QuestionHint as QuestionTooltip } from "@/components/bs-comp/QuestionHint";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { SkillBrief, SkillDetail, skillApi } from "@/controllers/API/linsight";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Sparkles } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -21,7 +21,6 @@ import { useTranslation } from "react-i18next";
 import { SkillDetailSheet } from "./SkillDetailSheet";
 import { SkillFormDrawer } from "./SkillFormDrawer";
 import { SkillUploadDialog } from "./SkillUploadDialog";
-import { getSkillErrorMessage } from "./skillErrors";
 
 const ChevronRight = Outlined.Right,
     Plus = Outlined.Plus,
@@ -64,7 +63,7 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                 setSkills(res.data);
                 setTotal(res.total);
             })
-            .finally(() => setLoading(false));
+            .catch(showApiError).finally(() => setLoading(false));
     }, []);
 
     useEffect(() => {
@@ -87,27 +86,25 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
     const handleToggle = (skill: SkillBrief, enabled: boolean) => {
         // Optimistic flip: takes effect immediately in the end-user picker (FR-5.9).
         setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled } : s)));
-        captureAndAlertRequestErrorHoc(skillApi.setSkillStatus(skill.name, enabled)).then((res) => {
-            if (res) {
+        skillApi.setSkillStatus(skill.name, enabled).then(() => {
                 notification.open({ type: "success", description: String(enabled ? t("skillManage.enabledToast") : t("skillManage.disabledToast") ?? '') });
-            } else {
+        }).catch(error => {
                 setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled: !enabled } : s)));
-            }
+                showApiError(error);
         });
     };
 
     const handleDefaultCheckedToggle = (skill: SkillBrief, defaultChecked: boolean) => {
         setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, default_checked: defaultChecked } : s)));
-        captureAndAlertRequestErrorHoc(skillApi.setSkillDefaultChecked(skill.name, defaultChecked)).then((res) => {
-            if (res) {
+        skillApi.setSkillDefaultChecked(skill.name, defaultChecked).then(() => {
                 notification.open({ type: "success", description: String(defaultChecked
                         ? t("skillManage.defaultCheckedOnToast")
                         : t("skillManage.defaultCheckedOffToast") ?? '') });
-            } else {
+        }).catch(error => {
                 setSkills((prev) =>
                     prev.map((s) => (s.name === skill.name ? { ...s, default_checked: !defaultChecked } : s)),
                 );
-            }
+                showApiError(error);
         });
     };
 
@@ -116,13 +113,11 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
             desc: t("skillManage.deleteConfirm", { name: skill.display_name }),
             okTxt: t("skillManage.deleteAction"),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(skillApi.deleteSkill(skill.name)).then((res) => {
-                    if (res) {
+                return skillApi.deleteSkill(skill.name).then(() => {
                         notification.open({ type: "success", description: String(t("skillManage.deleted") ?? '') });
                         refresh();
-                    }
+                    next();
                 });
-                next();
             },
         });
     };
@@ -131,7 +126,7 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
         skillApi
             .getSkillDetail(skill.name)
             .then(setDetail)
-            .catch((err) => notification.open({ type: "error", description: String(getSkillErrorMessage(err, t) ?? '') }));
+            .catch(showApiError);
     };
 
     // From the detail sheet: close it first, then open the next overlay once the

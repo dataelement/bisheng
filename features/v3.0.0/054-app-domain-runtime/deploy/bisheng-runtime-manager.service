@@ -1,0 +1,87 @@
+# BiSheng 编排器（runtime-manager）—— F054 T072 / design §4.2 ⑧
+#
+# ⚠️ 这份文件是**模板**。真身在独立运维仓 `~/Projects/bisheng-ops/systemd/`
+# （K10），产品仓不持有 114 的部署文件。落库由 T075 在 114 上执行：
+#   cp bisheng-runtime-manager.service /opt/bisheng-ops/systemd/
+#   ln -sf /opt/bisheng-ops/systemd/bisheng-runtime-manager.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now bisheng-runtime-manager
+#
+# 这是全平台**唯一**被允许持有容器编排访问面的进程（arch-guard RULE-10 的另一
+# 半：backend 不得 import docker、不得出现 docker.sock、不得读 DOCKER_HOST）。
+# 「安全来自笼子」的前提是 backend 自己在笼子外面拿不到钥匙——所以这个单元和
+# backend 单元的权限差异是刻意的，不要为了"方便"把 backend 也加进 docker 组。
+[Unit]
+Description=BiSheng runtime-manager (orchestrator RPC :8091)
+# 它要跟 dockerd 说话，dockerd 没起来它启动即失败并被 Restart 拉起，
+# 徒增噪声；用 After 让 systemd 排好序。
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+PartOf=bisheng.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bisheng/src/runtime-manager
+Environment=PYTHONPATH=/opt/bisheng/src/runtime-manager
+# 默认只监听回环：它除了 HMAC 没有别的门面，暴露到 0.0.0.0 等于把编排能力挂到
+# 网上——HMAC 是防篡改不是防暴露。
+#
+# ⚠️ 但**附件存储句柄（F054 T084/T085）要求应用容器够得到本进程**：托管容器在
+# `bisheng-apps` 网桥上，回环对它们不可达。要用附件功能就必须在
+# EnvironmentFile 里把 RTM_HOST 覆盖成网桥网关地址（`docker network inspect
+# bisheng-apps -f '{{(index .IPAM.Config 0).Gateway}}'`，形如 172.22.0.1），并把
+# RTM_APP_FACING_BASE_URL 指向同一个地址。网关地址只在宿主本地可达，外网够不到，
+# 所以这不等于暴露到 0.0.0.0。
+#
+# ExecStart 因此从 $RTM_HOST / $RTM_PORT 取值而不是写死：写死的话
+# EnvironmentFile 里设了也不生效，而 `runtime/status` 的 attachment_storage
+# 自检看到 RTM_APP_FACING_BASE_URL 已设就答 ok——配置看着对、容器却拨不通
+# （2026-09-16 在 114 上实测踩到）。
+Environment=RTM_HOST=127.0.0.1
+Environment=RTM_PORT=8091
+# HMAC 共享密钥经环境注入，不落配置文件（C6）。与 backend 的
+# app_runtime.manager_hmac_secret 必须一致，两边不一致的症状是所有编排意图
+# 被回 401，而 backend 侧会把它折叠成 16121「编排器不可用」。
+#
+# ⚠️ T077 / T078 起，这份 EnvironmentFile 还必须给出下面这些（`RTM_` 前缀）：
+#   RTM_DOCKER_HOST=tcp://127.0.0.1:2375   D2-B：编排走 docker-socket-proxy 的
+#       端点白名单。端点清单由 runtime_manager.docker_backend.socket_proxy_env()
+#       唯一给出（`python -c "from runtime_manager.docker_backend import
+#       socket_proxy_env; print(socket_proxy_env())"`），代理容器**只绑 127.0.0.1**。
+#       留空 = 回到直连 /var/run/docker.sock 的 D2-A 形态，那时本单元需要 docker 组。
+#   RTM_EGRESS_PROXY=<bisheng-apps 网关>:3128   D12：应用视角的唯一出口地址，
+#       必须与 bisheng-egress-proxy.service 的 RTM_EGRESS_LISTEN 逐字相同。
+#       **留空 = 整层未部署**，`GET /v1/runtime/status` 的 preflight 会直说
+#       「托管应用出站不受限」——没有「开关开了但代理不在」这种掐死出站的组合。
+#   RTM_BUILD_NETWORK=bisheng-build        构建期专用 --internal 网。
+#   RTM_APPS_SUBNET=<docker network inspect bisheng-apps 的 Subnet>  L3 兜底网段。
+#   RTM_FIREWALL_BACKEND=iptables|nftables 留空则探测；探测到 nftables 会判红，
+#       因为 Docker 29 起 nftables 后端**没有 DOCKER-USER 链**（design 坑 22），
+#       iptables 规则会「下发成功」却从不被查阅。
+#   RTM_PLATFORM_BASE_URL=<平台地址>       构建期唯一放行的平台分发端点（装
+#       bisheng-sdk 用，AC-16）。
+#   RTM_BUILD_EXTRA_INDEX_URL=<平台地址>/api/v1/dev-toolkit/simple/
+#   RTM_BUILD_EXTRA_TRUSTED_HOST=<平台主机名>   bisheng-sdk 只在平台自己的包索引上。
+#       漏配 = 所有依赖 bisheng-sdk 的应用构建失败（16227, No matching distribution
+#       found for bisheng-sdk），症状像网络问题。地址必须在 RTM_PLATFORM_BASE_URL
+#       之下，出站代理才会放行；而且要从构建容器够得到（写宿主机地址，不写 localhost）。
+#
+# 前置资源随之增加两条（原有的 `docker network create bisheng-apps` 要改写法）：
+#   docker network create --internal bisheng-apps
+#   docker network create --internal bisheng-build
+# 已存在的网**不会**被 `create` 改成 internal：先停掉全部托管应用、`docker
+# network rm`、再按上面重建。preflight 的 application_network_internal 这一行
+# 就是用来发现「看着装好了其实没改」的。
+EnvironmentFile=/etc/bisheng/runtime-manager.env
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+ExecStart=/opt/bisheng/src/runtime-manager/.venv/bin/python -m uvicorn runtime_manager.main:app --host ${RTM_HOST} --port ${RTM_PORT} --workers 1 --no-access-log
+StandardOutput=append:/tmp/bisheng-runtime-manager.log
+StandardError=append:/tmp/bisheng-runtime-manager.log
+# 停机时正在跑的构建可能持有 docker 客户端连接，给足退出时间；
+# 强杀会留下悬挂的构建容器，下一次 reconcile 才收得掉。
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

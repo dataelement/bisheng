@@ -8,7 +8,7 @@ import { Table,TableBody,TableCell,TableHead,TableRow } from "@/components/bs-ui
 
 import SimpleUpload from "@/components/bs-ui/upload/simple";
 import { getQaFile,getQaFilePreview,postImportQaFile } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest } from "@/controllers/request";
 import { downloadFile } from "@/util/utils";
 import { generateUUID } from "@/utils";
 import { forwardRef,useImperativeHandle,useRef,useState } from "react";
@@ -212,9 +212,9 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
         if (errors.length > 0) {
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') });
         }
-        const res = await captureAndAlertRequestErrorHoc(postImportQaFile(id, {
+        const res = await postImportQaFile(id, {
             url: form.fileUrl
-        }));
+        });
         const errorLines = res.errors[0];
         console.log('errors', errorLines);
         if (errorLines.length) {
@@ -227,10 +227,10 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
     };
     const { id } = useParams();
     const handleFileUploadSuccess = async (name, url) => {
-        const res = await captureAndAlertRequestErrorHoc(getQaFilePreview(id, {
+        const res = await getQaFilePreview(id, {
             size: 10,
             url,
-        }));
+        });
         const { result } = res;
         setDataList(result);
         setForm({
@@ -268,7 +268,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                             uploadUrl={'/api/v1/knowledge/upload'}
                             accept={['xls', 'xlsx']}
                             className={`${error.fileUrl ? 'border-red-400' : ''}`}
-                            onSuccess={handleFileUploadSuccess}
+                            onSuccess={handleUiRequest(handleFileUploadSuccess)}
                             preCheck={(file) => excelPreCheck(file, t)}
                         />
                         <p className="text-sm text-green-500 mt-2">{form.fileName}</p>
@@ -288,7 +288,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                             {t('cancel')}
                         </Button>
                     </DialogClose>
-                    <Button loading={saveLoad} type="submit" onClick={handleSubmit} disabled={Boolean(saveLoad)}>
+                    <Button loading={saveLoad} type="submit" onClick={handleUiRequest(handleSubmit)} disabled={Boolean(saveLoad)}>
                         {t('submit')}
                     </Button>
                 </DialogFooter>

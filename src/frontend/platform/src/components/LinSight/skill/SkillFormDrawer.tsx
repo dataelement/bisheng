@@ -13,7 +13,7 @@ import { SkillDetail, skillApi } from "@/controllers/API/linsight";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getSkillErrorMessage } from "./skillErrors";
+import { showSkillError } from "./skillErrors";
 
 const Pencil = Outlined.Edit,
     Plus = Outlined.Plus,
@@ -137,7 +137,7 @@ export function SkillFormDrawer({ open, editing, onOpenChange, onSaved }: SkillF
             onOpenChange(false);
             onSaved();
         } catch (err) {
-            notification.open({ type: "error", description: String(getSkillErrorMessage(err, t) ?? '') });
+            showSkillError(err, t);
         } finally {
             setSaving(false);
         }

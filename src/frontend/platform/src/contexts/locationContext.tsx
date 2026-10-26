@@ -91,6 +91,16 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           enableMediaUpload: !!res.enable_media_upload,
           enableEtl4lm: res.enable_etl4lm,
           multiTenantEnabled: !!res.multi_tenant_enabled,
+          // F049 / M14: gates the three `local_dev_toolkit` scopes and the
+          // owner-picker deploy notice. Independent of the management-console
+          // switch below (open_api.management_ui_enabled).
+          openPlatformEnabled: !!res.open_platform_enabled,
+          // F054: gates the third build-page type, the hosted-app detail page
+          // and the `apps/*` guide copy. Deployment-level, not a tenant
+          // preference — it only changes when config.yaml changes.
+          appRuntimeEnabled: !!res.app_runtime_enabled,
+          // F053: personal access tokens (user-side) and the service-account /
+          // personal-token management tabs on the system page.
           personalTokenEnabled: !!res.personal_token_enabled,
           openApiManagementEnabled: !!res.open_api_management_enabled,
           // Off unless an operator turned it on: the builder marks the node as

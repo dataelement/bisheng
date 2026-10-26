@@ -5,7 +5,7 @@ import { SearchInput } from '@bisheng/ui';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlignJustify, Check, CpuIcon, Minus, Plus, Star, User, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from 'react-i18next';
 import { LoadIcon } from '../bs-icons/loading';
 
@@ -26,6 +26,7 @@ const ToolSelector = ({
   toolSearchTerm,
   setToolSearchTerm,
   loading,
+  loadErrorContent,
   filteredTools,
   expandedItems,
   setManuallyExpandedItems,
@@ -373,6 +374,7 @@ const ToolSelector = ({
               transition: 'max-height 0.3s ease-out',
             }}
           >
+            {loadErrorContent}
             {loading ? (
               <div className="flex justify-center items-center h-full">
                 <LoadIcon className="animate-spin" />
@@ -457,7 +459,7 @@ const ToolSelector = ({
                   </AccordionItem>
                 ))}
               </Accordion>
-            ) : (
+            ) : loadErrorContent ? null : (
               <div className="text-center text-sm text-gray-500 py-4">
                 {t('toolSelector.noToolsFound')}
               </div>

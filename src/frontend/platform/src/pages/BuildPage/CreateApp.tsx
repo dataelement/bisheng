@@ -15,7 +15,7 @@ import { readTempsDatabase } from "@/controllers/API";
 import { createAssistantsApi } from "@/controllers/API/assistant";
 import { getAssistantModelConfig,getLlmDefaultModel } from "@/controllers/API/finetune";
 import { copyReportTemplate,createWorkflowApi } from "@/controllers/API/workflow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { AppType,AppTypeToNum } from "@/types/app";
 import { forwardRef,useContext,useImperativeHandle,useMemo,useRef,useState } from "react";
@@ -139,15 +139,16 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
             if (!isValid) return;
 
             setLoading(true);
+            try {
             if (isEditMode) {
-                setLoading(false);
-                setOpen(false);
-                return onSave({
+                await onSave({
                     name: formData.name,
                     description: formData.desc,
                     logo: formData.url,
                     viewUrl: formData.viewUrl,
                 })
+                setOpen(false);
+                return;
             }
 
             if (tempDataRef.current) {
@@ -181,12 +182,12 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                             )
                         }
                     })
-                    const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current));
+                    const res = await createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current);
                     if (res) navigate('/flow/' + res.id);
                 }
             } else {
                 if (appType === AppType.ASSISTANT) {
-                    const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.desc, formData.url));
+                    const res = await createAssistantsApi(formData.name, formData.desc, formData.url);
                     if (res) {
                         //@ts-ignore
                         window.assistantCreate = true // Mark the created assistant
@@ -194,7 +195,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                     }
                 } else {
                     if (appId) return navigate('/flow/' + appId);
-                    const workflow = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url));
+                    const workflow = await createWorkflowApi(formData.name, formData.desc, formData.url);
                     if (workflow) {
                         const navigateToFlow = (id) => navigate(`/flow/${id}`);
                         if (!appConfig.isPro) return navigateToFlow(workflow.id);
@@ -205,7 +206,11 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                     }
                 }
             }
-            setLoading(false);
+            } catch (error) {
+                showApiError(error);
+            } finally {
+                setLoading(false);
+            }
         };
 
         const uploadAvator = (file: File) => {

@@ -6,7 +6,7 @@ import { Outlined } from "bisheng-icons";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { getServiceAccountApi, listServiceAccountsApi } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import type { ServiceAccountItem } from "@/types/api/openApi";
 import { formatIsoDateTime } from "@/util/utils";
 import { Tabs } from "@bisheng/ui";
@@ -39,7 +39,7 @@ export function ServiceAccount() {
   const idleDays = list.response?.idle_days ?? 0;
 
   const openDetail = async (id: number, tab: "overview" | "keys" = "overview") => {
-    const account = await captureAndAlertRequestErrorHoc(getServiceAccountApi(id));
+    const account = await getServiceAccountApi(id);
     if (account) {
       setInitialTab(tab);
       setAutoOpenIssue(tab === "keys");
@@ -100,9 +100,9 @@ export function ServiceAccount() {
                       accountEnabled={isEnabled}
                       initialIssueOpen={autoOpenIssue}
                       onKeysChanged={() => {
-                        void captureAndAlertRequestErrorHoc(getServiceAccountApi(selected.id)).then((updated) => {
+                        void getServiceAccountApi(selected.id).then((updated) => {
                           if (updated) setSelected(updated);
-                        });
+                        }).catch(showApiError);
                         void list.reload();
                       }}
                     />
@@ -156,7 +156,7 @@ export function ServiceAccount() {
             return (
               <TableRow key={account.id}>
                 <TableCell>
-                  <Button variant="link" className="h-auto max-w-56 px-0 font-medium" onClick={() => openDetail(account.id)}>
+                  <Button variant="link" className="h-auto max-w-56 px-0 font-medium" onClick={handleUiRequest(() => openDetail(account.id))}>
                     <span className="truncate">{account.name}</span>
                   </Button>
                 </TableCell>
@@ -236,7 +236,7 @@ export function ServiceAccount() {
         onOpenChange={setCreateOpen}
         onCreated={(id) => {
           void list.reload();
-          void openDetail(id, "keys");
+          void openDetail(id, "keys").catch(showApiError);
         }}
       />
     </div>

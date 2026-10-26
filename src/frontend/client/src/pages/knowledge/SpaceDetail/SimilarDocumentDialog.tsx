@@ -1,3 +1,4 @@
+import { showApiError } from "~/api/request";
 import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -235,9 +236,7 @@ function RightPanel({
             });
             onLinked(response);
         },
-        // The unified request interceptor already toasts api_errors.<code>
-        // when skip403Redirect is set, so onError here can be a no-op.
-        onError: () => undefined,
+        onError: showApiError,
     });
 
     const handleLink = async (targetDoc: { document_id: number; title: string }) => {
@@ -475,12 +474,7 @@ export function SimilarDocumentDialog({
             onProcessed?.();
             setSelectedFileId(null); // wait for refetch to auto-select the next one
         },
-        onError: () => {
-            showToast({
-                message: localize("com_knowledge.version.toast_link_failure"),
-                status: "warning",
-            });
-        },
+        onError: showApiError,
     });
 
     // Callback fired after a successful link

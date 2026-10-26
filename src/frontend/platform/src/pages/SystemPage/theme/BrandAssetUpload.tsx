@@ -18,7 +18,7 @@ SelectTrigger,
 
 import type { BrandAsset,BrandAssetCategory,BrandAssetOption } from "@/controllers/API";
 import { deleteBrandAssetApi,uploadBrandAssetApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { withBrandBaseUrl } from "@/utils/brand";
 import { Outlined } from "bisheng-icons";
 import { ImageIcon,Link } from "lucide-react";
@@ -220,13 +220,16 @@ export default function BrandAssetUpload({
             formData.append("category", category);
         }
         setUploading(true);
-        const uploaded = await captureAndAlertRequestErrorHoc(uploadBrandAssetApi(formData));
-        setUploading(false);
-        if (!uploaded) return;
-
+        try {
+        const uploaded = await uploadBrandAssetApi(formData);
         onChange(uploaded);
         onUploaded?.(uploaded);
         notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.brandAssetUploadSuccess") ?? '') });
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setUploading(false);
+        }
     };
 
     const handleAssetSelect = (assetValue: string) => {
@@ -273,12 +276,8 @@ export default function BrandAssetUpload({
 
         if (!category) return;
         setDeletingValue(optionValue);
-        const defaultAsset = await captureAndAlertRequestErrorHoc(
-            deleteBrandAssetApi(category, option.relative_path)
-        );
-        setDeletingValue("");
-        if (!defaultAsset) return;
-
+        try {
+        const defaultAsset = await deleteBrandAssetApi(category, option.relative_path);
         const fallbackAsset: BrandAsset = {
             url: defaultAsset.url || fallbackUrl,
             relative_path: defaultAsset.relative_path || "",
@@ -290,6 +289,11 @@ export default function BrandAssetUpload({
         }
         onDeleted?.(option, fallbackAsset, deletedWasSelected);
         notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.brandAssetDeleteSuccess") ?? '') });
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setDeletingValue("");
+        }
     };
 
     const handleOpenUrlDialog = () => {

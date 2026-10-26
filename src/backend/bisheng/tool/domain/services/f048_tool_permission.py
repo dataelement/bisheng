@@ -29,7 +29,6 @@ class ToolPermissionRecord:
     permission_version: int
     context_version: str
     preset: bool
-    system_allowlisted: bool
 
 
 class ToolPermissionLoader(Protocol):
@@ -74,7 +73,6 @@ class ToolDaoPermissionLoader:
             permission_version=version,
             context_version=context_version,
             preset=preset,
-            system_allowlisted=preset and row.user_id is None,
         )
 
 
@@ -216,7 +214,6 @@ class F048ToolPermissionAdapter:
             or record.resource_id != resource_id
             or record.status != "ACTIVE"
             or (record.tenant_id != actor.current_tenant_id and not actor.super_admin)
-            or (record.preset and not record.system_allowlisted)
             or (not record.preset and not record.owner_user_id)
         ):
             raise PermissionInvalidResourceError()

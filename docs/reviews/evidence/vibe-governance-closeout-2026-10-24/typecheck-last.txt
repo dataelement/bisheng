@@ -1,0 +1,6 @@
+- Looking for strict files...
+🎯 Found 881 strict files
+- Compiling with strict mode...
+src/pages/BuildPage/bench/OrgKbConfig.tsx(17,55): error TS2307: Cannot find module '@hello-pangea/dnd' or its corresponding type declarations.
+src/test/clientVoiceDraft.test.tsx(47,49): error TS2554: Expected 0 arguments, but got 1.
+💥 Found 2 errors

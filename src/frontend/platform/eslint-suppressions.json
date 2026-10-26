@@ -16,19 +16,11 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     },
-    "no-restricted-imports": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
   },
   "src/components/LinSight/ToolSelectorContainer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/LinSight/skill/skillErrors.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
@@ -73,40 +65,15 @@
       "count": 1
     }
   },
-  "src/components/VariablesComponent/VarDialog.tsx": {
-    "no-restricted-imports": {
-      "count": 1
-    }
-  },
   "src/components/VariablesComponent/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
     },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 3
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 2
-    }
-  },
-  "src/components/bs-comp/FileView.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 6
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-useless-escape": {
       "count": 2
     },
     "react-hooks/exhaustive-deps": {
-      "count": 4
+      "count": 2
     }
   },
   "src/components/bs-comp/apiComponent/ApiAccessSkill.tsx": {
@@ -156,22 +123,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
-    }
-  },
-  "src/components/bs-comp/chatComponent/CitationDocumentPreviewDrawer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/bs-comp/chatComponent/citationUtils.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 7
-    },
-    "no-restricted-syntax": {
-      "count": 17
     }
   },
   "src/components/bs-comp/chatComponent/index.tsx": {
@@ -300,14 +251,6 @@
       "count": 1
     }
   },
-  "src/components/bs-comp/sheets/TaggingSheet.tsx": {
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/components/bs-comp/sheets/ToolsSheet.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -419,9 +362,6 @@
     }
   },
   "src/components/bs-ui/alertDialog/useConfirm.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
@@ -484,9 +424,6 @@
   "src/components/bs-ui/upload/simple.tsx": {
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
     }
   },
   "src/components/bs-ui/utils.tsx": {
@@ -714,14 +651,11 @@
   "src/controllers/API/flow.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 15
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/controllers/API/index.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 58
+      "count": 52
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
@@ -733,7 +667,7 @@
       "count": 6
     },
     "no-restricted-syntax": {
-      "count": 20
+      "count": 18
     }
   },
   "src/controllers/API/license.ts": {
@@ -751,7 +685,7 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     }
   },
   "src/controllers/API/orgSync.ts": {
@@ -788,22 +722,13 @@
     }
   },
   "src/controllers/hooks/knowledge.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
   "src/controllers/request.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "no-console": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/i18n.js": {
@@ -1069,23 +994,14 @@
   "src/pages/BuildPage/appTemps.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-restricted-imports": {
-      "count": 1
     }
   },
   "src/pages/BuildPage/apps.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 11
+      "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
       "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 14
     }
   },
   "src/pages/BuildPage/assistant/CreateAssistant.tsx": {
@@ -1186,22 +1102,10 @@
   "src/pages/BuildPage/bench/OrgKbConfig.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    },
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
     }
   },
   "src/pages/BuildPage/bench/RecommendedAppsConfig.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 4
     }
   },
@@ -1294,9 +1198,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4
-    },
-    "no-restricted-syntax": {
-      "count": 1
     },
     "no-useless-escape": {
       "count": 1
@@ -1399,9 +1300,6 @@
   },
   "src/pages/BuildPage/flow/FlowNode/component/DragOptions.tsx": {
     "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -1635,7 +1533,7 @@
   },
   "src/pages/BuildPage/flow/Header.tsx": {
     "@typescript-eslint/no-unused-expressions": {
-      "count": 4
+      "count": 3
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -1699,9 +1597,6 @@
     }
   },
   "src/pages/BuildPage/tools/EditMcp.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-console": {
       "count": 2
     }
@@ -1822,7 +1717,7 @@
   },
   "src/pages/Dashboard/components/charts/BaseChart.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
+      "count": 9
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
@@ -2019,9 +1914,6 @@
     }
   },
   "src/pages/DataSetPage/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "react-hooks/rules-of-hooks": {
       "count": 3
     }
@@ -2047,9 +1939,6 @@
     }
   },
   "src/pages/KnowledgePage/KnowledgeFile.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
     "no-console": {
       "count": 8
     },
@@ -2059,23 +1948,9 @@
   },
   "src/pages/KnowledgePage/KnowledgeQa.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/components/DocxFileViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "no-useless-escape": {
-      "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
       "count": 1
     }
   },
@@ -2116,9 +1991,6 @@
     }
   },
   "src/pages/KnowledgePage/components/FileUploadSplitStrategy.tsx": {
-    "no-restricted-imports": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 4
     }
@@ -2147,7 +2019,7 @@
       "count": 2
     },
     "no-console": {
-      "count": 5
+      "count": 4
     },
     "no-restricted-syntax": {
       "count": 10
@@ -2158,7 +2030,7 @@
       "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 2
     },
     "no-restricted-syntax": {
       "count": 1
@@ -2216,15 +2088,12 @@
       "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     },
     "no-console": {
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 2
-    },
-    "no-useless-escape": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -2251,12 +2120,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "no-useless-escape": {
-      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
@@ -2296,9 +2159,6 @@
   "src/pages/KnowledgePage/components/RichPreviewFile.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/pages/KnowledgePage/components/RuleFile.tsx": {
@@ -2323,14 +2183,6 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/components/TxtFileViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 1
-    }
-  },
   "src/pages/KnowledgePage/components/WebLinkImportDialog.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
@@ -2343,9 +2195,6 @@
     }
   },
   "src/pages/KnowledgePage/components/tags/KnowledgeTagSelect.tsx": {
-    "no-restricted-syntax": {
-      "count": 6
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2370,7 +2219,7 @@
   },
   "src/pages/KnowledgePage/qas.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
@@ -2400,17 +2249,9 @@
       "count": 1
     }
   },
-  "src/pages/LogPage/index.tsx": {
-    "react-hooks/rules-of-hooks": {
-      "count": 1
-    }
-  },
   "src/pages/LogPage/systemLog/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
+      "count": 6
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2418,7 +2259,7 @@
   },
   "src/pages/LogPage/useAppLog/appChatDetail.tsx": {
     "@typescript-eslint/no-unused-expressions": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
@@ -2519,9 +2360,6 @@
     }
   },
   "src/pages/ModelPage/components/FinetuneDetail.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-console": {
       "count": 1
     },
@@ -2592,7 +2430,7 @@
       "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 3
     }
   },
   "src/pages/ModelPage/manage/SystemConfigBanners.tsx": {
@@ -2614,9 +2452,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-console": {
       "count": 1
     }
@@ -2624,9 +2459,6 @@
   "src/pages/ModelPage/manage/tabs/EvaluationModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/pages/ModelPage/manage/tabs/KnowledgeModel.tsx": {
@@ -2637,21 +2469,18 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 1
     }
   },
   "src/pages/ModelPage/manage/tabs/WorkbenchModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-console": {
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2660,9 +2489,6 @@
   "src/pages/ModelPage/manage/tabs/WorkflowModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/pages/ModelPage/manage/useSystemConfigEnvelope.ts": {
@@ -2730,7 +2556,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -3075,9 +2901,6 @@
     },
     "no-constant-binary-expression": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 5
     },
     "react-hooks/exhaustive-deps": {
       "count": 1

@@ -5,6 +5,7 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import Loading from "@/components/ui/loading";
 import { locationContext } from "@/contexts/locationContext";
 import { uploadChatFile } from "@/controllers/API/flow";
+import { showApiError } from '@/controllers/request';
 import { MAX_MEDIA_FILES,isMediaFileName } from "@/util/fileAcceptUtils";
 import { getFileExtension } from "@/util/utils";
 import { Outlined } from "bisheng-icons";
@@ -108,7 +109,6 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
         // 只要有有效文件就继续上传流程
         if (!validFiles.length) return;
 
-        // 以下逻辑完全保留，无需修改
         onChange(null);
         const filesWithProgress = validFiles.map(({ file, id }) => {
             return {
@@ -128,7 +128,7 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
             return res;
         });
 
-        remainingUploadsRef.current = validFiles.length;
+        remainingUploadsRef.current += validFiles.length;
 
         const uploadPromises = validFiles.map(({ file, id }) => {
             return uploadChatFile(v, file, (progress) => {
@@ -143,6 +143,7 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
                     return updatedFiles;
                 });
             }).then(response => {
+                if (!filesRef.current.some(file => file.id === id)) return;
                 const filePath = response.file_path;
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
@@ -152,39 +153,34 @@ export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ 
                 });
                 setFiles(filesRef.current);
 
-                remainingUploadsRef.current -= 1;
+                remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
                 if (remainingUploadsRef.current === 0) {
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+                    const uploadedFileIds = filesRef.current.filter(f => !f.isUploading && f.filePath).map(f => ({ path: f.filePath, name: f.name }));
                     onChange(uploadedFileIds);
                 }
-            }).catch(() => {
-                notification.open({ type: 'error', description: String(t('chat.fileUploadFailed', { name: file.name }) ?? '') });
+            }).catch((error) => {
+                showApiError(error);
                 handleFileRemove(file.name);
-                remainingUploadsRef.current -= 1;
-                if (remainingUploadsRef.current === 0) {
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-                    onChange(uploadedFileIds);
-                }
             });
         });
 
-        Promise.all(uploadPromises).then(() => {
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-            onChange(uploadedFileIds);
-        });
+        void Promise.all(uploadPromises).catch(showApiError);
     };
 
     const handleFileRemove = (fileName) => {
+        const removed = filesRef.current.filter(file => file.name === fileName);
+        if (!removed.length) return;
+        const pendingRemoved = removed.filter(file => file.isUploading).length;
         const res = filesRef.current.filter(file => file.name !== fileName);
         filesRef.current = res
         setFiles(res);
 
-        // If we manually remove a file during upload, we decrease the remaining upload counter
-        remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
+        // Count each pending attachment exactly once, including manual removal.
+        remainingUploadsRef.current = Math.max(remainingUploadsRef.current - pendingRemoved, 0);
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+            const uploadedFileIds = filesRef.current.filter(f => !f.isUploading && f.filePath).map(f => ({ path: f.filePath, name: f.name }));
             onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
         }
     };

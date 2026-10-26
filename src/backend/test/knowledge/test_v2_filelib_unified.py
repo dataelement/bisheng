@@ -178,6 +178,9 @@ async def test_list_dispatch_kb(monkeypatch):
         return {"data": [], "page_size": 10, "has_more": False, "next_cursor": None}
 
     monkeypatch.setattr(KnowledgeService, "get_knowledge", classmethod(_fake_get))
+    # F049 dropped the per-request `user_id` delegation kwarg: identity delegation
+    # is now supplied only via the `X-On-Behalf-Of` header, resolved centrally
+    # into the principal the `_patch_identity` fixture fakes out above.
     resp = await filelib.get_knowledge(
         request=None,
         knowledge_type=KnowledgeTypeEnum.NORMAL.value,

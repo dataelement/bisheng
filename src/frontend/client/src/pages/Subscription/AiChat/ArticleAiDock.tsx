@@ -1,3 +1,4 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Outlined } from "bisheng-icons";
@@ -268,6 +269,9 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
         conversationId,
         title,
         isLoading,
+        historyError,
+        isClearing,
+        retryHistory,
         isStreaming,
         sendMessage,
         stopGenerating,
@@ -356,7 +360,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 {/* Messages — scrollable, with bottom fade-out. Default z-auto so it falls
                     below the focused-state grey overlay. */}
                 <div className="relative min-h-0 flex-1">
-                    <AiChatMessages
+                    {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                         messages={messages}
                         conversationId={conversationId}
                         title={title}
@@ -374,7 +378,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
-                    />
+                    />)}
                     {/* White gradient where messages meet the input — text appears to fade out. */}
                     <div
                         aria-hidden
@@ -402,7 +406,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         onChange={setInputText}
                         onSend={handleSend}
                         model={model}
-                        disabled={!modelOptions?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !modelOptions?.length}
                         isStreaming={isStreaming}
                         placeholder={localize("com_subscription.ask_article_placeholder")}
                         variant="box"
@@ -498,7 +502,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                             </div>
                         </div>
 
-                        <AiChatMessages
+                        {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                             messages={messages}
                             conversationId={conversationId}
                             title={title}
@@ -516,7 +520,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                             emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                             onPresetClick={(q) => setInputText(q)}
                             onRegenerate={regenerate}
-                        />
+                        />)}
                     </div>
                 </div>
 
@@ -527,7 +531,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                     onChange={setInputText}
                     onSend={handleSend}
                     model={model}
-                    disabled={!modelOptions?.length}
+                    disabled={Boolean(historyError) || isLoading || isClearing || !modelOptions?.length}
                     isStreaming={isStreaming}
                     placeholder={localize("com_subscription.ask_article_placeholder")}
                     variant={open ? "line" : "box"}

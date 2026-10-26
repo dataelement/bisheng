@@ -72,7 +72,6 @@ def _record(
     tenant_id: int = 5,
     status: str = "ACTIVE",
     preset: bool = False,
-    system_allowlisted: bool = False,
 ) -> ToolPermissionRecord:
     return ToolPermissionRecord(
         tenant_id=tenant_id,
@@ -82,7 +81,6 @@ def _record(
         permission_version=2,
         context_version=f"tool-{resource_id}-v2",
         preset=preset,
-        system_allowlisted=system_allowlisted,
     )
 
 
@@ -149,7 +147,7 @@ async def test_custom_tool_create_projects_protected_owner() -> None:
 
 @pytest.mark.asyncio
 async def test_preset_tool_create_projects_read_only_system_actions() -> None:
-    preset = _record(preset=True, system_allowlisted=True)
+    preset = _record(preset=True)
     permission = _Permission()
     adapter = F048ToolPermissionAdapter(
         loader=_Loader((preset,)),
@@ -164,8 +162,8 @@ async def test_preset_tool_create_projects_read_only_system_actions() -> None:
 
 
 @pytest.mark.asyncio
-async def test_preset_tool_requires_both_predicate_and_read_allowlist() -> None:
-    preset = _record(preset=True, system_allowlisted=True)
+async def test_preset_tool_allows_creator_and_keeps_read_only_actions() -> None:
+    preset = _record(preset=True)
     adapter = F048ToolPermissionAdapter(
         loader=_Loader((preset,)),
         permission=_Permission(),
@@ -182,17 +180,18 @@ async def test_preset_tool_requires_both_predicate_and_read_allowlist() -> None:
             action="edit",
         )
 
-    blocked = replace(preset, system_allowlisted=False)
+    with_creator = replace(preset, owner_user_id=7)
     adapter = F048ToolPermissionAdapter(
-        loader=_Loader((blocked,)),
+        loader=_Loader((with_creator,)),
         permission=_Permission(),
     )
-    with pytest.raises(PermissionInvalidResourceError):
-        await adapter.resolve_permission_target(
-            resource_id="10",
-            actor=_actor(),
-            action="visible",
-        )
+    assert await adapter.check_action(
+        resource_id="10",
+        actor=_actor(),
+        action="use",
+    )
+    with pytest.raises(InvalidCatalogActionError):
+        await adapter.resolve_permission_target(resource_id="10", actor=_actor(), action="edit")
 
 
 @pytest.mark.asyncio

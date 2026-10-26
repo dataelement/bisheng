@@ -86,7 +86,7 @@ interface KnowledgeSpaceContentProps {
     ) => void;
     onCreateFolder: () => void;
     onDownloadFile: (fileId: string) => void;
-    onRenameFile: (fileId: string, newName: string) => void;
+    onRenameFile: (fileId: string, newName: string) => void | Promise<void>;
     onDeleteFile: (fileId: string) => void;
     /** Optimistic batch delete: removes the given ids in place. Resolves true on success. */
     onBatchDeleteFiles: (ids: Array<string | number>) => Promise<boolean>;

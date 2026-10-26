@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from sqlmodel import select
 
-from bisheng.common.errcode.dsh import DshInvalidRequestError, DshOperationConflictError
+from bisheng.common.errcode.dsh import DshOperationConflictError
 from bisheng.database.models.tenant import Tenant
 from bisheng.dsh.domain.models.subject_grant import DshSubjectGrant
 from bisheng.dsh.domain.models.subject_policy import DshSubjectPolicy
@@ -62,13 +62,7 @@ class DshSubjectGrantRepository:
                 ):
                     return row.model_dump()
             raise DshOperationConflictError()
-        members = (
-            policies.selected_user_ids(subject_type, subject_id)
-            if request.enabled and request.monthly_token_limit > 0
-            else []
-        )
-        if len(members) > 1000:
-            raise DshInvalidRequestError()
+        members = []
         row = DshSubjectGrant(
             operation_id=str(uuid4()),
             tenant_id=tenant,

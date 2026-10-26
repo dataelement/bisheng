@@ -8,7 +8,7 @@ import {
     updateSensitiveWordPolicyApi,
     type SensitiveWordType,
 } from "@/controllers/API/sensitiveWordPolicy";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { Checkbox, Switch } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
@@ -68,18 +68,16 @@ export const KnowledgeSpaceSensitivePolicy = forwardRef<KnowledgeSpaceSensitiveP
                 };
                 setForm(next);
                 setLoaded(true);
-            });
+            }).catch(showApiError);
         }, []);
 
         const savePolicy = async (nextForm: SensitiveForm) => {
-            const res = await captureAndAlertRequestErrorHoc(
-                updateSensitiveWordPolicyApi({
+            const res = await updateSensitiveWordPolicyApi({
                     enabled: nextForm.isCheck,
                     words_types: toApiWordsType(nextForm.wordsType),
                     custom_words: nextForm.words || "",
                     extra_config: {},
-                }),
-            );
+                });
             if (res) {
                 setForm(nextForm);
             }

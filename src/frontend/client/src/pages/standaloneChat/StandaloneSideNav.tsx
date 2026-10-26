@@ -1,3 +1,4 @@
+import { ApiRequestFailure } from '~/components/ApiRequestFailure';
 import { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardPortal } from '~/components/ui/HoverCard';
 import { X } from 'lucide-react';
 import { useRecoilValue } from 'recoil';
@@ -29,6 +30,9 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
   const isGuest = mode === 'guest';
 
   const {
+    listError,
+    retryConversations,
+    loading,
     groups,
     activeChatId,
     switchConversation,
@@ -191,13 +195,14 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0 px-2">
-        {groups.length === 0 ? (
+        {listError ? <ApiRequestFailure error={listError} onRetry={retryConversations} /> : null}
+        {groups.length === 0 ? (!listError && !loading && (
           <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
             <p className="text-center text-[14px] leading-[19.5px] text-text-3">
               {localize('com_app_chat_sidebar_empty')}
             </p>
           </div>
-        ) : (
+        )) : (
           groups.map((group, groupIdx) => (
             <div key={groupIdx} className="flex flex-col">
               <div className="text-black opacity-60 pt-4 text-[12px] mb-1">
@@ -226,9 +231,10 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                       conv={conv}
                       isActive={isActive}
                       onClick={() => switchConversation(conv)}
-                      onRenameSuccess={() => fetchConversations()}
+                      onRenameSuccess={() => { void fetchConversations().catch(() => { /* The list keeps its retry state. */ }); }}
                       onDeleteSuccess={async () => {
-                        const list = await fetchConversations();
+                        const list = await fetchConversations().catch(() => null);
+                        if (!list) return;
                         if (!isActive) return;
                         if (list.length > 0) {
                           switchConversation(list[0]);

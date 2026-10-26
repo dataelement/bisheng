@@ -10,7 +10,7 @@ import { Label } from "@/components/bs-ui/label";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getSubConfigApi, setSubConfigApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -98,6 +98,7 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
     }, [navigate, user]);
 
     const handleSave = async () => {
+        if (!configMeta) return false;
         if ((String((formData.assistantName) ?? '').length > 50) || (String((formData.systemPrompt) ?? '').length > 30000) || (String((formData.userPrompt) ?? '').length > 30000)) return;
 
         const sensitiveSaved = await sensitivePolicyRef.current?.save();
@@ -225,7 +226,7 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
-                        <Button onClick={handleSave} disabled={(String((formData.assistantName) ?? '').length > 50) || (String((formData.systemPrompt) ?? '').length > 30000) || (String((formData.userPrompt) ?? '').length > 30000)}>{t("save")}</Button>
+                        <Button onClick={handleUiRequest(handleSave)} disabled={(String((formData.assistantName) ?? '').length > 50) || (String((formData.systemPrompt) ?? '').length > 30000) || (String((formData.userPrompt) ?? '').length > 30000)}>{t("save")}</Button>
                     </div>
                 </CardContent>
             </div>
@@ -297,7 +298,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
                     menuDisplayName: resolveConfigString(menuDisplayNameFromRes, "").trim(),
                 };
             });
-        });
+        }).catch(showApiError);
     }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
@@ -404,7 +405,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
             menu_display_name: await toStoredMenuName(formData.menuDisplayName, "bench.subscribe"),
         };
 
-        const res = await captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave));
+        const res = await setSubConfigApi(dataToSave);
         if (res) {
             setConfigMeta({
                 inherited_from_root: false,

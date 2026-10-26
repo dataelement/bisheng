@@ -38,9 +38,10 @@ module.exports = {
     '\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
       'jest-file-loader',
   },
-  // @bisheng/ui is source-shipped TS from the workspace — jest must transform it
-  // (default ignore would skip everything under node_modules).
-  transformIgnorePatterns: ['node_modules/(?!(@bisheng/ui|@bisheng/chat|@zattoo/use-double-click)/)'],
+  // Transform all source-shipped workspace packages in Jest.
+  transformIgnorePatterns: [
+    'node_modules/(?!(@bisheng/ui|@bisheng/file-viewers|@bisheng/chat|@bisheng/api-client|@zattoo/use-double-click)/)',
+  ],
   preset: 'ts-jest',
   setupFilesAfterEnv: ['@testing-library/jest-dom/extend-expect', '<rootDir>/test/setupTests.js'],
   clearMocks: true,

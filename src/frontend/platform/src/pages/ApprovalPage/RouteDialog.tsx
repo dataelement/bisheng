@@ -1,3 +1,5 @@
+import { locationContext } from "@/contexts/locationContext";
+import { FIXED_ROLE_VALUES, selectableRoleValues } from "./approverSources";
 import { Button, Input, Select } from '@bisheng/ui';
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
@@ -5,15 +7,16 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 
 import { type ApprovalFlowItem, type ApprovalRouteItem } from "@/controllers/API/approval";
 import { getRolesApi } from "@/controllers/API/user";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CONDITION_FIELD_META, FIXED_ROLE_VALUES, normalizeApprovalRoles } from "./approvalMetadata";
+import { CONDITION_FIELD_META, normalizeApprovalRoles } from "./approvalMetadata";
 
 interface RouteDialogProps {
   open: boolean;
   initial: Partial<ApprovalRouteItem>;
   flows: ApprovalFlowItem[];
   conditionFields: string[];
+  allowPassRoute?: boolean;
   onClose: () => void;
   onConfirm: (data: {
     route_name: string;
@@ -23,21 +26,21 @@ interface RouteDialogProps {
   }) => void;
 }
 
-export function RouteDialog({ open, initial, flows, conditionFields, onClose, onConfirm }: RouteDialogProps) {
+export function RouteDialog({ open, initial, flows, conditionFields, allowPassRoute = true, onClose, onConfirm }: RouteDialogProps) {
   const [name, setName] = useState(initial.route_name ?? "");
-  const [type, setType] = useState(initial.route_type ?? "flow");
+  const [type, setType] = useState(!allowPassRoute && initial.route_type === "pass" ? "flow" : (initial.route_type ?? "flow"));
   const [flowId, setFlowId] = useState(initial.flow_definition_id ? String(initial.flow_definition_id) : "");
   const [condField, setCondField] = useState(initial.match_config?.field ?? "");
   const [condValue, setCondValue] = useState(initial.match_config?.value ?? "");
   const [systemRoles, setSystemRoles] = useState<{ value: string; label: string }[]>([]);
 
-  const dialogSnapshot = useRef({ initial });
-  dialogSnapshot.current = { initial };
+  const dialogSnapshot = useRef({ initial, allowPassRoute });
+  dialogSnapshot.current = { initial, allowPassRoute };
   useEffect(() => {
     if (open) {
-      const { initial } = dialogSnapshot.current;
+      const { initial, allowPassRoute } = dialogSnapshot.current;
       setName(initial.route_name ?? "");
-      setType(initial.route_type ?? "flow");
+      setType(!allowPassRoute && initial.route_type === "pass" ? "flow" : (initial.route_type ?? "flow"));
       setFlowId(initial.flow_definition_id ? String(initial.flow_definition_id) : "");
       setCondField(initial.match_config?.field ?? "");
       setCondValue(initial.match_config?.value ?? "");
@@ -58,12 +61,17 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
 
   const { t } = useTranslation("bs");
   const selectLabels = useSelectLabels();
+  const { appConfig } = useContext(locationContext);
+  const roleValueOptions = useMemo(() => {
+    const selectable = selectableRoleValues(!!appConfig.multiTenantEnabled);
+    return [...selectable, ...FIXED_ROLE_VALUES.filter(value => value.value === condValue && !selectable.some(option => option.value === value.value))];
+  }, [appConfig.multiTenantEnabled, condValue]);
   const fieldMeta = condField ? CONDITION_FIELD_META[condField] : null;
   // For applicant_role: fixed entries use i18n keys → need t(); system roles have real names → no translation
   const allRoleValues =
     condField === "applicant_role"
       ? [
-          ...FIXED_ROLE_VALUES.map((v) => ({ value: v.value, label: t(v.label, { defaultValue: v.value }) })),
+          ...roleValueOptions.map((v) => ({ value: v.value, label: t(v.label, { defaultValue: v.value }) })),
           ...systemRoles, // label is already the display name, skip t()
         ]
       : (fieldMeta?.values ?? []).map((v) => ({
@@ -135,9 +143,10 @@ export function RouteDialog({ open, initial, flows, conditionFields, onClose, on
           <label className="block text-sm text-muted-foreground">
             {t("approvalPage.routeTypeLabel")}
             <Select {...selectLabels} aria-label={t("approvalPage.routeTypeLabel")} value={type} className="mt-1"
-              options={[{ value: 'pass', label: t("approvalPage.routeTypePassFull") }, { value: 'flow', label: t("approvalPage.routeTypeFlowFull") }]}
+              options={[...(allowPassRoute ? [{ value: 'pass', label: t("approvalPage.routeTypePassFull") }] : []), { value: 'flow', label: t("approvalPage.routeTypeFlowFull") }]}
               onChange={value => setType(String(value ?? 'flow'))} />
           </label>
+          {!allowPassRoute && <p className="text-xs text-muted-foreground">{t("approvalPage.routeTypeMandatoryHint")}</p>}
           {type === "flow" && (
             <label className="block text-sm text-muted-foreground">
               {t("approvalPage.bindFlow")}

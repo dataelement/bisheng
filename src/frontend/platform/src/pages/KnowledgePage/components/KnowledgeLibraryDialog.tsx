@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 
 
 import { createFileLib,updateKnowledge } from "../../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 import { useModel } from "../../ModelPage/manage";
 import { ModelSelect } from "../../ModelPage/manage/tabs/WorkbenchModel";
 interface LibraryDialogProps {
@@ -132,7 +132,7 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
 
         setIsSubmitting(true)
         if (mode === 'create') {
-            await captureAndAlertRequestErrorHoc(createFileLib({
+            await createFileLib({
                 name,
                 description: desc,
                 model: modelId,
@@ -145,7 +145,7 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
                     : `/filelib/${res.id}`
                 );
                 onOpenChange(false);
-            })).finally(() => {
+            }).catch(showApiError).finally(() => {
                 setIsSubmitting(false)
             })
         } else {
@@ -156,14 +156,11 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
                 "knowledge_name": name,
                 "description": desc
             }
-            await captureAndAlertRequestErrorHoc(updateKnowledge(data).then(() => {
+            await updateKnowledge(data).then(() => {
                 notification.open({ type: "success", description: String(t('updateSuccess') ?? '') })
                 onOpenChange(false);
                 onLoadEnd()
-            }).catch(error => {
-                notification.open({ type: "error", description: String(error || t('updateFailed')) });
-                onOpenChange(false);
-            })).finally(() => {
+            }).catch(showApiError).finally(() => {
                 setIsSubmitting(false)
             })
         }

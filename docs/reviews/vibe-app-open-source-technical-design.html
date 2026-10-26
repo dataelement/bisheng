@@ -1,0 +1,1578 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="source-sha256" content="2fb280efb649aae0c6430b3cc418078e559cef8734e3e30fa402a1575a447c52"><meta name="description" content="BiSheng Vibe 全开源技术方案：发布与运行、平台存储、SQLite、权限隔离及离线交付。代码基线 736ef59。"><title>Vibe 应用托管全开源技术方案</title><style>
+:root{color-scheme:light;--ink:#202d40;--muted:#5c6b80;--line:#dbe2ec;--accent:#304e87;--paper:#fff;--bg:#f2f5f9}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:80px}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.85 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}a{color:#2d5291;text-decoration:none}a:hover{text-decoration:underline}a:focus-visible,button:focus-visible{outline:3px solid #759bd6;outline-offset:3px}header{position:sticky;top:0;z-index:3;background:#fff;border-bottom:1px solid var(--line);height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:16px}.brand{font-size:14px;font-weight:650;letter-spacing:.03em}.status{color:#785f16;background:#fff4cd;padding:3px 10px;border-radius:5px;font-size:12px;font-weight:600}header .actions{display:flex;align-items:center;gap:18px;font-size:13px}button{border:1px solid #ccd6e5;border-radius:6px;padding:7px 13px;color:#31496e;background:white;font:inherit;cursor:pointer}.layout{max-width:1540px;margin:auto;display:grid;grid-template-columns:236px minmax(0,1fr);gap:28px;padding:28px}aside{align-self:start;position:sticky;top:85px;max-height:calc(100vh - 115px);overflow:auto;font-size:13px;padding:18px 0}aside .nav-title{font-size:12px;letter-spacing:.1em;font-weight:700;color:var(--muted);margin:0 0 12px 12px}aside ul{list-style:none;margin:0;padding:0}aside li{margin:0 0 5px}aside a{display:block;padding:8px 12px;border-radius:5px;color:#52627a;line-height:1.6}aside a.active{background:#e6edf8;color:#234477;font-weight:650}aside .note{margin:20px 12px 0;padding-top:16px;border-top:1px solid var(--line);color:#69778b;line-height:1.8;font-size:12px}article{min-width:0;max-width:1160px;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:40px 48px 55px;box-shadow:0 3px 14px #24395805}h1{font-size:36px;line-height:1.4;letter-spacing:-.025em;margin:0 0 18px;color:#1c3459}h1+p{font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:24px}h2{font-size:25px;line-height:1.5;margin:46px 0 20px;border-top:2px solid #e5ebf4;padding-top:24px;color:#203e69}h3{font-size:18px;line-height:1.6;margin:28px 0 12px;color:#2c4569}p{margin:12px 0 17px}li{margin:6px 0}strong{font-weight:650}blockquote{margin:22px 0;padding:14px 19px;background:#f0f4fb;border-left:4px solid #6683b2;border-radius:0 7px 7px 0;color:#354965}blockquote p{margin:0}code{font: .88em/1.6 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;background:#eef2f7;border-radius:3px;padding:2px 5px;overflow-wrap:anywhere}pre{background:#17253a;color:#e4edf9;border-radius:8px;overflow:auto;padding:18px 20px;font-size:13px;line-height:1.75;margin:18px 0 24px}pre code{background:none;padding:0;color:inherit;font-size:inherit;white-space:pre;overflow-wrap:normal}.table-scroll{max-width:100%;overflow-x:auto;margin:18px 0 26px;border:1px solid #d9e1ec;border-radius:7px}table{width:100%;border-collapse:collapse;font-size:13.5px;line-height:1.85;table-layout:fixed}th{text-align:left;vertical-align:top;background:#edf2f9;color:#294266;font-weight:650;padding:12px 13px;border-bottom:1px solid #cfd9e7}td{vertical-align:top;padding:11px 13px;border-bottom:1px solid #e2e7ef;overflow-wrap:anywhere}tr:last-child td{border-bottom:0}tr:nth-child(even) td{background:#fafbfd}td code{font-size:12px;padding:1px 3px}table[data-columns="3"] th:first-child{width:21%}table[data-columns="4"] th:first-child{width:16%}table[data-columns="5"] th:first-child{width:14%}table.evidence-table[data-columns="3"] th:first-child{width:8%}table.evidence-table th:nth-child(2){width:60%}table.evidence-table th:nth-child(3){width:32%}.sequence{margin:22px 0 26px;border:1px solid #d8e2f0;border-radius:9px;padding:12px 10px 8px;background:#fbfcff}.diagram-scroll{overflow-x:auto;max-width:100%}.sequence svg{display:block;width:100%;height:auto;min-width:780px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}.diagram-panel+.diagram-panel{margin-top:16px;padding-top:16px;border-top:1px dashed #cfdaeb}.sequence figcaption{font-size:12px;color:#64748b;padding:7px 8px 0;line-height:1.7}.doc-footer{border-top:1px solid var(--line);margin-top:38px;padding-top:18px;color:#67778c;font-size:12px}.doc-footer code{font-size:11px}.reading{font-size:12px;color:#60738f}.mobile-nav{display:none}article>ul:first-of-type{columns:2;column-gap:28px;padding-left:22px}article>ul:first-of-type li{break-inside:avoid}article>a[id]{display:block;scroll-margin-top:80px}.print-note{font-size:11px}
+@media(min-width:1750px){.layout{max-width:1660px;grid-template-columns:250px minmax(0,1fr)}article{max-width:1260px;padding:48px 58px}}
+@media(max-width:1050px){.layout{grid-template-columns:190px minmax(0,1fr);gap:18px;padding:18px}article{padding:30px 26px}header{padding:0 20px}h1{font-size:29px}table{font-size:13px}}
+@media(max-width:760px){header{height:auto;min-height:58px;padding:10px 14px;flex-wrap:wrap}.brand{font-size:12px}header .actions{gap:11px;font-size:12px}.reading{display:none}.layout{display:block;padding:12px}aside{position:static;max-height:none;padding:8px 6px 16px}aside ul{display:flex;gap:6px;overflow:auto}aside li{flex:0 0 190px}aside a{background:#eaf0f8;min-height:65px}aside .note,aside .nav-title{display:none}article{padding:25px 19px;border-radius:7px;font-size:15px;line-height:1.85}h1{font-size:27px}h2{font-size:22px;margin-top:34px}h3{font-size:17px}article>ul:first-of-type{columns:1}table{min-width:760px;font-size:13px}pre{font-size:12px;padding:14px}.sequence{padding:8px 5px}.sequence svg{min-width:880px}}
+@page{size:A4 landscape;margin:12mm 13mm}
+@media print{html{scroll-behavior:auto;scroll-padding-top:0}body{background:white;font-size:10.5pt;line-height:1.65;color:#17253a}header,aside{display:none!important}.layout{display:block;padding:0;max-width:none}article{padding:0;max-width:none;border:0;border-radius:0;box-shadow:none}h1{font-size:25pt}h1+p{font-size:9pt;padding-bottom:10px}h2{font-size:18pt;break-before:page;border-top:0;padding-top:0;margin:0 0 13px}article>h2:first-of-type{break-before:auto;margin-top:24px}h3{font-size:12pt;break-after:avoid;margin-top:17px}p{margin:7px 0 10px;orphans:3;widows:3}li{margin:3px 0}blockquote{padding:10px 13px;margin:10px 0;background:#f3f6fa}.table-scroll{overflow:visible;border-radius:0;margin:12px 0 17px;break-inside:auto}table{font-size:9pt;line-height:1.6;min-width:0!important}th,td{padding:7px 9px}thead{display:table-header-group}tr{break-inside:avoid}td code{font-size:8pt}pre{white-space:pre-wrap;overflow:visible;background:#eef2f6;color:#152840;font-size:9pt;break-inside:avoid;padding:12px}pre code{white-space:pre-wrap;overflow-wrap:anywhere}.sequence{padding:0;margin:14px 0;border:0;background:none;break-inside:auto}.diagram-panel{padding:8px;border:1px solid #d8e2f0;border-radius:5px;break-inside:avoid}.diagram-panel+.diagram-panel{margin-top:12px;padding-top:8px;border-top:1px solid #d8e2f0}.diagram-scroll{overflow:visible}.sequence svg{min-width:0;width:100%;max-height:155mm}.sequence figcaption{font-size:8pt}article>a[id]{scroll-margin:0}a{color:#23416f;text-decoration:none}.doc-footer{font-size:8pt}article>ul:first-of-type{columns:2}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body><header><div class="brand">BISHENG · 技术评审 <span class="status">评审稿</span></div><div class="actions"><span class="reading">736ef59 · 2026-10-20</span><a href="vibe-app-open-source-technical-design.md">Markdown 源文</a><button type="button" onclick="window.print()">打印 / 保存 PDF</button></div></header><div class="layout"><aside aria-label="章节目录"><p class="nav-title">REVIEW CONTENTS</p><ul><li><a href="#section-1">1 评审基线与方案决策</a></li><li><a href="#section-2">2 开源仓库与运行架构</a></li><li><a href="#section-3">3 应用交付与运行契约</a></li><li><a href="#section-4">4 存储与共享状态</a></li><li><a href="#section-5">5 平台与 runtime 接口</a></li><li><a href="#section-6">6 发布上线流程</a></li><li><a href="#section-7">7 应用访问与平台能力</a></li><li><a href="#section-8">8 SQLite 持久化与恢复</a></li><li><a href="#section-9">9 Docker 与 K8s 交付</a></li><li><a href="#section-10">10 权限隔离与运行可靠性</a></li><li><a href="#section-11">11 实施阶段与验收</a></li><li><a href="#section-12">12 待评审事项与代码证据</a></li></ul><p class="note">全部开源，留在 BiSheng 仓库。现有实现与目标增量分别标注。<br>正文及 4 幅流程图离线可读。<br><span class="print-note">打印布局：A4 横向</span></p></aside><article><h1>Vibe 应用托管全开源技术方案</h1>
+<p>日期：2026-10-19　｜　更新：2026-10-20　｜　状态：待技术评审　｜　范围：应用交付、发布、运行、存储、权限、离线部署与实施阶段</p>
+<p>Vibe 应用托管作为毕昇开源功能，在 <code>bisheng</code> 仓库内继续开发和交付。复用现有 Python runtime-manager、app-proxy、egress-proxy、CLI 和 SDK，保留独立进程的权限及故障边界。应用通过平台统一发布和访问，编排服务通过 backend 获取产物、上传快照，平台统一管理附件和对象存储。</p>
+<p><strong>本轮决定：全部开源，不设置商业授权和固定上线数量额度。</strong> 原“免费同时在线 10 个应用”、闭源 runtime、Java 重写以保护代码、迁入 <code>bisheng-gateway</code> 等方案退出实施范围。上线仍受 CPU、内存、磁盘、临时任务并发等资源约束；平台现有用户、租户和应用权限继续生效。既有商业网关可按部署环境继续转发平台请求，但不是 Vibe 功能的安装或授权前置。</p>
+<p><strong>推荐发布路线：</strong> 以“预制运行镜像＋版本化应用包＋可复用依赖产物”为源码应用的目标默认路线，同时支持用户提交完整应用镜像；现有源码构建应用镜像的路线作为迁移基线及兼容方式保留。应用包、完整镜像和 K8s 的具体契约均为待开发能力，不按已有代码认定为已交付。</p>
+<p><strong>服务镜像交付已确认：</strong> runtime-manager 仿照 backend，由项目 CI/CD 构建并推送 Docker Hub，正式 Compose 引用已发布镜像；客户安装时拉取或离线导入镜像。应用基础运行镜像另行维护，不能用 runtime-manager 服务镜像运行用户应用。实现细节见 §3.4—§3.8，发布交付见 §9.4。</p>
+<p>2026-10-20 补充：纯离线依赖来源、补包闭环及失败行为见 <a href="#offline-dependencies">§9.5 离线依赖准备与补包</a>；现有基础镜像位置和目标运行环境配置、替换步骤见 <a href="#runtime-image-config">§9.6 基础运行镜像配置</a>。运行环境清单导入与离线依赖导入均为待开发能力。</p>
+<p>本方案替代此前商业化评审和 Gateway 归仓实施方案中的产品与架构选择。2026-10-16 确认的存储边界继续有效：附件 API 迁到 backend；manager 保留本地 SQLite 备份、迁移和恢复，经 backend 下载源码、上传快照，不直接访问 MinIO。</p>
+<h2>阅读导航</h2>
+<ul>
+<li><a href="#section-1">1 评审基线与方案决策</a></li>
+<li><a href="#section-2">2 开源仓库与运行架构</a></li>
+<li><a href="#section-3">3 应用交付与运行契约</a></li>
+<li><a href="#section-4">4 存储与共享状态</a></li>
+<li><a href="#section-5">5 平台与 runtime 接口</a></li>
+<li><a href="#section-6">6 发布上线流程</a></li>
+<li><a href="#section-7">7 应用访问与平台能力</a></li>
+<li><a href="#section-8">8 SQLite 持久化与恢复</a></li>
+<li><a href="#section-9">9 Docker 与 K8s 交付</a></li>
+<li><a href="#section-10">10 权限隔离与运行可靠性</a></li>
+<li><a href="#section-11">11 实施阶段与验收</a></li>
+<li><a href="#section-12">12 待评审事项与代码证据</a></li>
+</ul>
+<p><a id="section-1"></a></p>
+<h2>1 评审基线与方案决策</h2>
+<h3>1.1 代码基线</h3>
+<p>2026-10-19 只读核对远端 <code>feat/3.0.0-vibe</code>，提交仍为 <code>736ef593f3fc6e1634008c842d2604304d6f70a6</code>。源码事实均以该固定提交为准；当前工作目录检出的是另一版本分支，本文通过 <code>git show</code> 核查，不把工作目录中的其他改动作为 Vibe 实现。</p>
+<p>本轮完成静态核查和技术方案，尚未执行应用部署、离线安装、K8s 适配或故障恢复实测。下文按“当前基线”“目标方案”“后续扩展”标注能力状态。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>事项</th>
+<th>当前基线</th>
+<th>本方案目标</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>代码与语言</td>
+<td>Python manager、两个 Python 代理位于 BiSheng 仓库</td>
+<td>全部继续开源，沿用 Python；不增加 Gateway 代码归仓或 Maven 重组任务</td>
+</tr>
+<tr>
+<td>源码发布</td>
+<td>tar.gz → 平台模板构建应用镜像 → 探活 → 审批 → 上线</td>
+<td>应用包＋运行镜像作为目标默认；镜像构建兼容；用户完整镜像另有准入契约</td>
+</tr>
+<tr>
+<td>运行后端</td>
+<td>Docker Engine API 经 socket proxy；K8s 仅有规格</td>
+<td>Docker 先完成可交付闭环；K8s 使用同一产物和生命周期协议另行适配</td>
+</tr>
+<tr>
+<td>对象存储</td>
+<td>manager 预签名下载源码，直连 MinIO 处理附件/SQLite 快照</td>
+<td>manager 只经 backend 文件 API；SDK 附件直达 backend</td>
+</tr>
+<tr>
+<td>控制状态</td>
+<td>manager 本地 JSON、容器标签；出站策略使用共享本地文件</td>
+<td>平台 SQL 持久化控制状态，Redis 做投影/缓存，本地只作可重建缓存</td>
+</tr>
+<tr>
+<td>路由</td>
+<td>app-proxy 查询 manager，短缓存约 3 秒</td>
+<td>manager 上报真实就绪事实；backend 提供独立路由投影读接口，去掉请求对 manager 存活的依赖</td>
+</tr>
+<tr>
+<td>上线数量</td>
+<td>已查代码中的 Admission 检查 CPU/内存，不是商业授权</td>
+<td>无商业上线名额；管理员按运行资源及任务并发设置容量策略</td>
+</tr>
+</tbody></table></div>
+<p>依据：<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-cli/bisheng_cli/commands/deploy.py#L54">C01</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py#L92">C06</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/precheck_service.py#L156">C07</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/desired_state.py#L229">C18</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/egress.py#L444">C27</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docker/docker-compose.yml#L277">C29</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/features/v3.0.0/059-k8s-runtime-backend/spec.md#L108">C34</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/admission.py#L137">C39</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/app-proxy/app_proxy/clients.py#L281-L307">A05</a>。</p>
+<h3>1.2 推荐决策</h3>
+<ol>
+<li><strong>保留三个服务进程。</strong> manager 负责有编排能力的控制面，app-proxy 和 egress-proxy 负责流量转发；socket proxy 为额外的 Docker 基础组件。</li>
+<li><strong>平台统一存储和业务授权。</strong> backend 管理附件、产物、快照、应用/租户权限及审计；manager 不读 backend 配置文件或平台业务数据库，不持 MinIO 主凭据。</li>
+<li><strong>共享控制状态落平台。</strong> 遵守 constitution C8；跨进程读取的路由、出站策略、任务和期望状态不能依赖某台机器上的 JSON 文件。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docs/constitution.md#L156-L180">A03</a></li>
+<li><strong>运行环境与应用版本分离。</strong> 版本固定运行镜像 digest、代码包摘要、依赖产物摘要、启动/健康契约；代码小改可以复用依赖，不要求每次生成 OCI 应用镜像。</li>
+<li><strong>SQLite 保持单活动写入。</strong> 升级前停写、必要时备份并等待平台持久确认；不承诺 SQLite 结构变更零停机。</li>
+<li><strong>按可验证阶段交付。</strong> 先补齐 Docker 当前链路和存储/状态边界，再上线应用包及完整镜像方式；K8s 不与首轮 Docker 修整混为同一个完成标记。</li>
+</ol>
+<h3>1.3 功能范围</h3>
+<p>开源交付保留应用清单与版本、部署预检、审批和临时预览、上线/停用/恢复、统一访问入口、SDK 能力、附件、SQLite 数据管理、运行日志及环境自检。本文主要调整运行实现和可靠性；既有业务权限继续由 backend 判定。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_runtime/domain/services/app_state_service.py#L283">C15</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py#L88">C25</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/api/readonly.py#L245">C40</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/preview_instance_service.py#L440">C43</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/api/appdb.py#L27">C46</a></p>
+<p>SQLite 数据页与 MCP 数据工具仍经 backend 完成 owner 收窄和审计，再调用 manager 的表清单、结构、分页行读取、单行修改及导出接口；不接受任意 SQL，也不让 backend 挂卷或直开数据库。目标 bundle/image 模式都要说明是否支持该数据契约，不将任意用户镜像中的数据库自动识别为平台可管理数据。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/api/appdb.py#L27">C46</a></p>
+<p>托管层继续允许按部署开关选装。未安装时隐藏相关入口，既有平台功能应正常启动；这属于部署形态，不是许可证判定。<code>app_runtime.enabled</code> 与开放能力层开关保持独立，CLI/SDK 所需开放接口由安装自检明确核对。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/core/config/app_runtime.py#L45">C05</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/features/v3.0.0/054-app-domain-runtime/spec.md#L148-L153">A02</a></p>
+<p><a id="section-2"></a></p>
+<h2>2 开源仓库与运行架构</h2>
+<h3>2.1 目录组织</h3>
+<pre><code class="language-text">bisheng/                             # 现有 Git 仓库
+├── src/backend/bisheng/
+│   ├── app_publish/                 # 接收、预检、审批、版本、上线协调
+│   └── app_runtime/                 # 状态、权限、运行事实、数据及文件接口
+├── src/runtime-manager/
+│   ├── runtime_manager/             # Python 编排、执行适配、SQLite 本地操作
+│   ├── Dockerfile                   # manager 服务镜像
+│   └── Dockerfile.egress            # 目标：代理专用精简构建入口
+├── src/app-proxy/                   # 应用 HTTP/WS 入口，独立服务镜像
+├── src/app-runtime-images/          # 目标：Python/Node/static 运行环境和准备镜像
+├── src/bisheng-cli/                 # 打包、部署、状态和日志
+├── src/bisheng-sdk/                 # 应用内身份、检索及附件句柄
+├── docker/                         # Compose、nginx、网络及安装材料
+│   └── runtime-profiles.yaml        # 目标：管理员导入 backend 的运行环境清单
+└── features/v3.0.0/                 # F054/F055/F059 等规格与设计
+</code></pre>
+<p>上述业务目录已存在；<code>src/app-runtime-images/</code>、<code>docker/runtime-profiles.yaml</code>、<code>Dockerfile.egress</code> 及平台状态/产物接口为目标增量。首轮不为开源交付重排整个仓库，也不强制新建共享 Python 工程；代理依赖可按需抽取最小配置与策略读取模块，避免拖入全部编排依赖。</p>
+<h3>2.2 进程职责</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>服务或组件</th>
+<th>负责内容</th>
+<th>资源访问边界</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>backend / Celery</td>
+<td>元数据、用户权限、审批、版本、附件、产物传输、快照保存；运行期望与事实投影</td>
+<td>平台 SQL、Redis、MinIO、统一权限模块；调用 manager，不调用 Docker/K8s SDK，不挂应用数据卷</td>
+</tr>
+<tr>
+<td>runtime-manager</td>
+<td>准备产物、容量判断、容器/Pod 生命周期、探活、对账、自愈、预览、日志、SQLite 数据管理与备份/迁移/恢复</td>
+<td>Engine API 或 K8s API、受控数据卷、backend 内部接口；不直连 MinIO 或平台 SQL</td>
+</tr>
+<tr>
+<td>app-proxy</td>
+<td>会话授权结果消费、可信头注入、HTTP/WS 转发、预览和拒绝页面</td>
+<td>backend 授权和路由读接口、应用网络；无 Engine 管理身份</td>
+</tr>
+<tr>
+<td>egress-proxy</td>
+<td>HTTP/CONNECT、应用出站身份、目标域名和解析地址校验、连接限制</td>
+<td>backend 策略只读接口、允许的出口；不提供编排接口，不持 manager 管理密钥</td>
+</tr>
+<tr>
+<td>docker-socket-proxy</td>
+<td>限制并转发 Docker Engine API</td>
+<td>持 Docker socket；只在专用控制网络可达，不开放宿主端口</td>
+</tr>
+<tr>
+<td>应用容器</td>
+<td>执行业务、页面/API、SQLite、SDK/模型能力</td>
+<td>本 app 数据卷、平台应用 API、受控出站；不接触控制面密钥和其他应用卷</td>
+</tr>
+<tr>
+<td>CLI / SDK</td>
+<td>CLI 调平台部署 API；SDK 运行在应用内部</td>
+<td>仅获得对应用户/应用/访问者权限，无宿主或集群管理能力</td>
+</tr>
+</tbody></table></div>
+<p>app-proxy、egress-proxy 不因开源而必须合并，也不因开源就失去进程隔离价值。manager 升级和构建任务不应直接带走应用入口/出口连接；原 F054 AC-22、AC-60 已定义相应的重启及独立启停目标。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/features/v3.0.0/054-app-domain-runtime/spec.md#L88-L97">A01</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/features/v3.0.0/054-app-domain-runtime/spec.md#L148-L153">A02</a></p>
+<p>egress 可以继续与 manager 共用源码工程，但使用独立入口和镜像，且只读自己的策略缓存，不挂整个应用数据根目录。独立镜像用于缩小依赖和运行权限；本方案不以隐藏源码作为安全手段。</p>
+<h3>2.3 网络与权限</h3>
+<p>Docker 目标至少区分入口/平台网络、应用受限网络、构建网络和 Engine 控制网络。manager 与 socket proxy 使用控制网络，backend 和两个代理不因共享默认网络而自动获得 Engine API 可达性。应用之间的可达性也需要网络规则限制，不能仅凭“没有 publish 宿主端口”宣称绝对不可直连。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/lifecycle.py#L209">C16</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docker/docker-compose.yml#L277">C29</a></p>
+<p>对外复用平台 nginx 的 <code>/apps/{slug}/</code>，不为每个应用开放宿主机端口。所有应用可以监听容器内部相同端口，通过各自内部地址区分。管理 API 只供已认证平台服务使用；egress 监听端口只用于正向代理协议，不能混入 intent API。</p>
+<p><a id="section-3"></a></p>
+<h2>3 应用交付与运行契约</h2>
+<h3>3.1 当前源码包</h3>
+<pre><code class="language-text">leave-helper/
+├── bisheng-app.yaml
+├── requirements.txt                # 可声明 bisheng-sdk
+├── Procfile                        # 可选，指定 web 启动命令
+├── main.py
+├── templates/
+└── static/
+</code></pre>
+<p>CLI 当前生成 tar.gz，以 multipart <code>package</code> 上传 <code>/api/v2/apps/deploy</code>；支持 <code>python3.11</code>、<code>node20</code>、<code>static</code>。源码包默认上限 50 MiB、展开 200 MiB、20,000 条目，实际值由平台配置及 deploy-limits 接口决定；拒绝路径逃逸、链接和特殊设备条目。当前 manifest 没有完整镜像或通用 command 字段。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-cli/bisheng_cli/commands/deploy.py#L54">C01</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-cli/bisheng_cli/packaging.py#L110">C02</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/schemas/app_manifest.py#L147">C03</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/package_service.py#L61">C04</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/core/config/app_runtime.py#L45">C05</a></p>
+<p>SDK 是应用依赖，不是另一台服务；应用框架、第三方包、前端资源由项目及构建产物提供。<code>Procfile</code>、Python/Node 约定入口和平台 entrypoint 共同确定启动方式，不要求用户以 manager 服务镜像作为应用镜像。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/builder.py#L76">C09</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/templates/python3.11/entrypoint.sh.j2#L27">C12</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/templates/node20/entrypoint.sh.j2#L44">C13</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-sdk/README.md#L1">C31</a></p>
+<h3>3.2 三种发布路线</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>路线</th>
+<th>发布和启动方式</th>
+<th>定位</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>运行镜像＋应用包</td>
+<td>预制运行镜像；平台准备不可变代码/前端产物及兼容依赖包，启动时只物化已确认产物</td>
+<td>目标默认源码路线；免去每次代码发布生成 OCI 镜像，但仍管理依赖和编译</td>
+</tr>
+<tr>
+<td>用户完整应用镜像</td>
+<td>提交镜像 digest、容器内启动/健康/端口契约；跳过平台源码构建</td>
+<td>目标支持方式；适合复杂系统库和用户已有 CI，仍须遵守资源、UID、网络及卷限制</td>
+</tr>
+<tr>
+<td>当前源码构建应用镜像</td>
+<td>平台 Dockerfile 模板安装依赖、复制代码并生成应用镜像</td>
+<td>当前已实现；迁移基线和兼容方式，复杂环境仍可使用</td>
+</tr>
+</tbody></table></div>
+<p>运行镜像中可以预装常用库，但版本必须明确。新增 OS 软件或不兼容解释器时需新的运行镜像/环境档位，或改用完整镜像；不能通过预装“常用库”保证任意应用离线运行。</p>
+<p>应用包路线下，依赖变更会触发依赖准备；纯代码变更可复用已验证依赖。缓存键至少覆盖 OS/CPU、解释器与 ABI、运行镜像 digest、锁定依赖和安装配置。Python 原生扩展、Node native 模块必须在匹配环境中准备，不能直接复用开发机虚拟环境。</p>
+<p>TypeScript/Vite 等前端编译仍需执行并保存输出，静态站点可使用固定 nginx 运行镜像。准备任务不得等到每次应用正常启动时再访问公网安装依赖。当前实现只有 Docker 分层缓存，没有应用级“比较依赖后跳过整次构建”的完整功能。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/builder.py#L76">C09</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/templates/python3.11/Dockerfile.j2#L42">C11</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/templates/node20/Dockerfile.j2#L46">C45</a></p>
+<h3>3.3 目标 manifest 与版本模型</h3>
+<p>建议保持 v1 兼容，新增显式的 v2 执行描述。下例仅为协议设计草案，字段不能直接用于当前 v1 接口。</p>
+<pre><code class="language-yaml">manifest_version: 2
+name: 请假知识助手
+slug: leave-helper
+runtime: python3.11
+port: 8080
+tier: light
+execution:
+  type: bundle
+  runtime_profile: python311-standard-v1
+  command: [python, -m, uvicorn, main:app, --host, 0.0.0.0, --port, &quot;8080&quot;]
+data_mode: sqlite
+health:
+  path: /healthz
+</code></pre>
+<p><code>runtime_profile</code> 指向管理员登记的运行环境及镜像 digest；用户自定义运行镜像通过同一登记/验证流程接入。完整镜像模式使用 <code>execution.type=image</code> 和镜像 digest，默认采用镜像 entrypoint，也可按契约覆盖容器内 argv。所有命令只在受限应用容器内执行，不转成任意宿主 shell。</p>
+<p>版本记录需要冻结：源码/前端产物摘要、依赖产物格式/摘要与完整锁定结果、运行镜像 digest 或完整镜像 digest、启动 argv、端口、健康契约、资源档位、能力声明、数据库 schema 及出站声明。<code>image_ref</code> 一个字段不足以表达应用包版本。完整镜像不上传 MinIO；平台保存其引用和运行契约。</p>
+<p>源码包继续采用严格安全解包。依赖产物是平台在受控环境产出的专门归档，需要校验路径和链接目标；不能直接接受任意用户虚拟环境 tar 包，也不能无条件沿用源码包拒绝所有链接的规则，导致 Node 等依赖布局被破坏。</p>
+<h3>3.4 应用包路线的实现分层</h3>
+<p>每个应用版本由“运行镜像＋代码产物＋依赖产物＋启动契约”组成。manager 调用 Engine API 创建准备容器和业务容器，不把应用代码安装进自己的 Python 环境，不为每次代码修改提交一个新镜像。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>层次</th>
+<th>内容与发布者</th>
+<th>更新频率与存储</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>manager 服务镜像</td>
+<td>平台编排 Python 代码及其服务依赖；项目 CI 发布</td>
+<td>随平台版本发布到 Docker Hub，Compose 引用；不包含用户应用</td>
+</tr>
+<tr>
+<td>应用运行镜像</td>
+<td>Python/Node/nginx、固定系统库、非特权用户和平台 launcher；项目 CI 发布或管理员登记</td>
+<td>环境升级时发布，冻结实际 CPU 架构对应的镜像 digest；执行节点提前加载/拉取</td>
+</tr>
+<tr>
+<td>准备镜像</td>
+<td>与运行环境匹配的解释器、包工具、必要编译器/头文件</td>
+<td>平台发布并固定 digest；只用于隔离准备任务，不将工具链带入普通应用容器</td>
+</tr>
+<tr>
+<td>代码产物</td>
+<td>安全解包后的源码、必要的前端编译输出、冻结清单</td>
+<td>每版本不可变，经 backend 存 MinIO、下载至执行节点</td>
+</tr>
+<tr>
+<td>依赖产物</td>
+<td>Python wheelhouse 与安装锁文件，或匹配环境的 Node 依赖归档及元数据</td>
+<td>兼容键命中时复用，经 backend 持久化；本机安装环境是可重建缓存</td>
+</tr>
+</tbody></table></div>
+<p>应用运行镜像可以携带常用 wheel 文件，帮助离线依赖准备；Python 默认独立 venv 不继承基础解释器的全局 site-packages。不能一边隔离依赖，一边假定基础镜像中 <code>pip install</code> 的全局包会自动出现在每个应用环境中。建议把常用包做成版本明确的离线 wheel 集合，由依赖准备过程选用；经验证的固定环境档位也可以直接命中同一依赖组合。<a href="https://docs.python.org/3.11/library/venv.html">R05</a></p>
+<p>目标执行顺序：</p>
+<figure class="sequence" data-diagram="1"><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 566" role="img" aria-labelledby="sequence-1-1-title sequence-1-1-desc" data-events="7"><title id="sequence-1-1-title">时序图 1 第 1 部分</title><desc id="sequence-1-1-desc">Worker 到 Manager：1 提交运行档位、锁文件和固定源码产物；Manager 到 API：2 查询兼容依赖产物或下载源码和锁文件；Manager 到 Prep：3 未命中时用批准包源或已导入离线包准备依赖；Prep 到 Manager：4 返回 wheelhouse 或 Node 依赖及校验结果；Manager 到 API：5 上传新产物，冻结摘要和环境兼容元数据；Manager 到 Prep：6 本节点环境未命中时，用依赖产物离线安装及校验；Manager 到 Manager：7 物化代码、只读环境，固定版本引用</desc><defs><marker id="sequence-1-1-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="940" height="566" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">发布 worker</text><line x1="279" y1="76" x2="279" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="202" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="279" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">runtime-manager</text><line x1="470" y1="76" x2="470" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="393" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="470" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend 产物 API</text><line x1="661" y1="76" x2="661" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="584" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="661" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">隔离准备容器</text><line x1="852" y1="76" x2="852" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="775" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="852" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">正式应用容器</text><rect x="92" y="92" width="183" height="46" rx="5" fill="#fbfcff"/><text x="183.5" y="106" text-anchor="middle" font-size="13" fill="#28364c">1 提交运行档位、锁文件和</text><text x="183.5" y="125" text-anchor="middle" font-size="13" fill="#28364c">固定源码产物</text><line x1="88" y1="146" x2="279" y2="146" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-1-1-arrow)"/><circle cx="88" cy="146" r="2.7" fill="#465a7d"/><rect x="283" y="164" width="183" height="46" rx="5" fill="#fbfcff"/><text x="374.5" y="178" text-anchor="middle" font-size="13" fill="#28364c">2 查询兼容依赖产物或下载</text><text x="374.5" y="197" text-anchor="middle" font-size="13" fill="#28364c">源码和锁文件</text><line x1="279" y1="218" x2="470" y2="218" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-1-1-arrow)"/><circle cx="279" cy="218" r="2.7" fill="#465a7d"/><rect x="283" y="236" width="374" height="27" rx="5" fill="#fbfcff"/><text x="470" y="250" text-anchor="middle" font-size="13" fill="#28364c">3 未命中时用批准包源或已导入离线包准备依赖</text><line x1="279" y1="271" x2="661" y2="271" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-1-1-arrow)"/><circle cx="279" cy="271" r="2.7" fill="#465a7d"/><rect x="283" y="289" width="374" height="27" rx="5" fill="#fbfcff"/><text x="470" y="303" text-anchor="middle" font-size="13" fill="#28364c">4 返回 wheelhouse 或 Node 依赖及校验结果</text><line x1="661" y1="324" x2="279" y2="324" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-1-1-arrow)"/><circle cx="661" cy="324" r="2.7" fill="#465a7d"/><rect x="283" y="342" width="183" height="46" rx="5" fill="#fbfcff"/><text x="374.5" y="356" text-anchor="middle" font-size="13" fill="#28364c">5 上传新产物，冻结摘要和</text><text x="374.5" y="375" text-anchor="middle" font-size="13" fill="#28364c">环境兼容元数据</text><line x1="279" y1="396" x2="470" y2="396" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-1-1-arrow)"/><circle cx="279" cy="396" r="2.7" fill="#465a7d"/><rect x="283" y="414" width="374" height="27" rx="5" fill="#fbfcff"/><text x="470" y="428" text-anchor="middle" font-size="13" fill="#28364c">6 本节点环境未命中时，用依赖产物离线安装及校验</text><line x1="279" y1="449" x2="661" y2="449" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-1-1-arrow)"/><circle cx="279" cy="449" r="2.7" fill="#465a7d"/><rect x="170" y="467" width="314" height="27" rx="5" fill="#f0f4fa"/><text x="327" y="481" text-anchor="middle" font-size="13" fill="#28364c">7 物化代码、只读环境，固定版本引用</text><path d="M 279 502 h 32 v 17 h -32" fill="none" stroke="#465a7d" stroke-width="1.5" marker-end="url(#sequence-1-1-arrow)"/><circle cx="279" cy="502" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 1 · 第 1/2 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 234" role="img" aria-labelledby="sequence-1-2-title sequence-1-2-desc" data-events="2"><title id="sequence-1-2-title">时序图 1 第 2 部分</title><desc id="sequence-1-2-desc">Manager 到 App：8 指定运行镜像、挂载、环境变量和容器内 argv；App 到 Manager：9 launcher 执行业务进程，通过健康检查</desc><defs><marker id="sequence-1-2-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="940" height="234" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="222" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">发布 worker</text><line x1="279" y1="76" x2="279" y2="222" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="202" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="279" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">runtime-manager</text><line x1="470" y1="76" x2="470" y2="222" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="393" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="470" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend 产物 API</text><line x1="661" y1="76" x2="661" y2="222" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="584" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="661" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">隔离准备容器</text><line x1="852" y1="76" x2="852" y2="222" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="775" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="852" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">正式应用容器</text><rect x="323.5" y="92" width="484" height="27" rx="5" fill="#fbfcff"/><text x="565.5" y="106" text-anchor="middle" font-size="13" fill="#28364c">8 指定运行镜像、挂载、环境变量和容器内 argv</text><line x1="279" y1="127" x2="852" y2="127" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-1-2-arrow)"/><circle cx="279" cy="127" r="2.7" fill="#465a7d"/><rect x="323.5" y="145" width="484" height="27" rx="5" fill="#fbfcff"/><text x="565.5" y="159" text-anchor="middle" font-size="13" fill="#28364c">9 launcher 执行业务进程，通过健康检查</text><line x1="852" y1="180" x2="279" y2="180" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-1-2-arrow)"/><circle cx="852" cy="180" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 1 · 第 2/2 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div></figure><p>这是单次准备与启动的内部细化图，预检、审批和正式上线的外层顺序仍按第 6 节执行。缓存命中可跳过对应准备步骤；跨节点第一次运行需要下载产物并建立节点缓存，不依赖另一个 manager 的本地目录。</p>
+<h3>3.5 Python 依赖的安装与复用</h3>
+<p><strong>第一层：可持久复用的 wheel 产物。</strong> 推荐应用提交锁定依赖及完整传递依赖；只提交 <code>requirements.txt</code> 时，平台首次准备需生成并冻结解析结果，后续复用必须引用该固定结果。显式刷新依赖才重新解析，不能让同一个已批准版本随包源变化得到另一套库。</p>
+<p>隔离准备容器在匹配目标 OS/CPU、Python ABI 和系统库的环境中下载或构建 wheels。纯 Python wheel 也记录目标兼容性；原生扩展要在匹配工具链中构建，并在目标运行镜像中验证导入和动态库。wheelhouse 包含整个运行依赖闭包、<code>bisheng-sdk</code>、安装清单和各文件摘要，缺少任意依赖不得退回公网补装。<a href="https://pip.pypa.io/en/stable/cli/pip_wheel/">R06</a></p>
+<p>以下是联网准备机或可访问内网包源的准备容器中的示意命令；工具版本、包源、锁文件和网络权限由平台准备计划指定，不在 manager 服务容器执行。纯离线现场必须先具备相应包文件和构建依赖，不能通过该命令凭空取得新包，来源与导入过程见 §9.5：</p>
+<pre><code class="language-sh">python -m pip wheel --wheel-dir /out/wheelhouse -r /input/requirements.resolved.lock
+</code></pre>
+<p>源码构建出的 wheel 与原始源码归档的摘要可能不同。平台应据最终 wheel 内容生成 <code>requirements.runtime.lock</code>，固定全部包版本及 wheel 哈希，并记录构建来源；不能把源码包的哈希直接当成新 wheel 的哈希。SDK 按固定版本从平台指定分发源取得并核对摘要，不依赖公共源中恰好出现同名包。</p>
+<p><strong>第二层：执行节点的已安装环境缓存。</strong> manager 为 <code>env_key</code> 分配临时目录，挂载进一次性准备容器的 <code>/opt/venv</code>；在与正式应用相同的运行镜像中创建环境并离线安装。这里不需要编译器：所有需要的 wheel 已在第一层准备完毕。</p>
+<pre><code class="language-sh">python -m venv /opt/venv
+/opt/venv/bin/python -m pip install --no-index --find-links=/deps/wheelhouse --only-binary=:all: --require-hashes -r /deps/requirements.runtime.lock
+/opt/venv/bin/python -m pip check
+</code></pre>
+<p><code>--no-index</code> 配合本地 wheelhouse 完成安装，运行锁文件禁止残留 VCS、外网 URL 和开发机绝对路径；需要本地项目依赖时，先做成 wheel 并计入内容摘要。准备容器同时验证关键 import，最终用真实应用预检验证启动；<code>pip check</code> 通过不等于整个应用就绪。<a href="https://pip.pypa.io/en/stable/cli/pip_install/">R07</a></p>
+<p>验证成功后以原子方式发布节点缓存完成标记。正式容器把该目录只读挂到相同的 <code>/opt/venv</code>，设置 <code>PATH</code> 并执行其 Python；不再运行 pip。Python 官方指出 venv 通常不可移动，本方案因此持久保存 wheel 及锁文件，节点丢缓存时就地重建 venv，不把开发机或其他节点的 venv 打包搬运。<a href="https://docs.python.org/3.11/library/venv.html">R05</a></p>
+<p><code>env_key</code> 至少包含租户缓存范围、平台解析结果/依赖哈希、目标架构、运行镜像实际 digest、Python ABI、准备镜像/工具版本和安装策略。同租户多个应用依赖完全一致时可只读共用；不同依赖或镜像得到不同目录。默认不跨租户共享私有依赖产物和命中信息。</p>
+<p>并发准备同一个 key 时只能有一个有效发布结果，失败临时目录不标完成；运行中的缓存不允许原地 <code>pip install</code> 或升级。<code>PYTHONDONTWRITEBYTECODE=1</code> 避免把字节码写回共享环境，需要运行缓存的库使用 app 自己的 <code>/tmp</code> 或指定数据子目录。</p>
+<h3>3.6 Node 与静态应用的依赖处理</h3>
+<p>Node 使用固定 Node/npm 版本，基于 <code>package.json</code>、<code>package-lock.json</code> 和影响安装的配置执行 <code>npm ci</code>。该命令按锁文件安装且不改锁文件；锁文件不匹配时拒绝，而不是现场自动修正。<a href="https://docs.npmjs.com/cli/v11/commands/npm-ci/">R08</a></p>
+<p>平台准备并验证对应架构的依赖归档。运行依赖只读挂到 <code>/workspace/app/node_modules</code>，代码挂到 <code>/workspace/app</code>，保留正常 Node/ESM 相对解析路径；不能仅依赖 <code>NODE_PATH</code> 将所有依赖放在任意外部目录。代码物化时由平台预留依赖挂载点，不能使用用户传入的宿主路径或不可信链接。</p>
+<p>需要 TypeScript/Vite 构建时，在私有可写准备工作区安装构建依赖、执行构建并保存输出；不能写入正在被其他应用使用的依赖缓存。运行版本只保留实际所需依赖和输出。若安装脚本、workspace、本地依赖或原生模块构建读取应用源码，相关源码摘要也必须计入 key；此时“锁文件没变”并不足以跳过准备。</p>
+<p>静态应用将已生成的 HTML/CSS/JS 产物挂到固定 nginx 运行镜像的站点目录，按约定端口提供服务。无需 Node 运行时的静态站点不启动 Node；纯静态资源没有依赖时也不生成空的依赖环境。特殊系统库或不能满足只读契约的应用使用登记过的自定义运行环境或完整镜像模式。</p>
+<h3>3.7 代码挂载和启动契约</h3>
+<p>Docker 首轮采用宿主内容目录＋只读 bind mount。manager 通过 backend 流式下载代码包到临时目录，验证 app/version 归属、大小和摘要，再安全解包并原子发布；被运行容器使用的版本目录不做原地覆盖。文件大小写、可执行位、依赖链接及 UID/GID 一并校验。</p>
+<p>以当前默认数据根为例，目标布局如下；<code>cache/</code> 下全部可从平台产物重建，SQLite 目录按独立持久化策略管理：</p>
+<pre><code class="language-text">宿主机 /opt/bisheng/app-data/             manager 容器内 /app-data/
+├── cache/releases/{app_id}/{version_id}/app/    # 代码、前端输出
+├── cache/envs/{tenant_scope}/{env_key}/venv/    # 本节点安装好的 Python 环境
+├── cache/node-deps/{tenant_scope}/{env_key}/node_modules/
+└── apps/{app_id}/data/                         # 目标 SQLite 持久目录
+</code></pre>
+<p>manager 看见的路径与交给宿主 Engine 的路径必须按配置根映射；本例 <code>RTM_DATA_ROOT=/app-data</code>，<code>RTM_HOST_DATA_ROOT=/opt/bisheng/app-data</code>。不能把仅存在 manager 镜像可写层中的目录当作应用 bind 源。Docker bind 的源路径由 daemon 所在主机解释，因此首轮要求 manager 对应同机 Engine；远程 Engine 须先提供该执行节点自己的产物物化机制。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/config.py#L57">C17</a> <a href="https://docs.docker.com/engine/storage/bind-mounts/">R09</a></p>
+<p>Python 应用实例的关键 Engine 参数示例如下。它是目标 DTO 示意，并非完整安全配置；实际创建仍须包含资源、应用网络、日志、只读、卷及可信标签约束：</p>
+<pre><code class="language-json">{
+  &quot;Image&quot;: &quot;dataelement/bisheng-app-python@sha256:&lt;runtime-arch-digest&gt;&quot;,
+  &quot;WorkingDir&quot;: &quot;/workspace/app&quot;,
+  &quot;Entrypoint&quot;: [&quot;/usr/local/bin/bisheng-launch&quot;],
+  &quot;Cmd&quot;: [&quot;python&quot;, &quot;-m&quot;, &quot;uvicorn&quot;, &quot;main:app&quot;, &quot;--host&quot;, &quot;0.0.0.0&quot;, &quot;--port&quot;, &quot;8080&quot;],
+  &quot;User&quot;: &quot;10001:10001&quot;,
+  &quot;Env&quot;: [
+    &quot;PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin&quot;,
+    &quot;VIRTUAL_ENV=/opt/venv&quot;,
+    &quot;PYTHONDONTWRITEBYTECODE=1&quot;,
+    &quot;PORT=8080&quot;
+  ],
+  &quot;HostConfig&quot;: {
+    &quot;ReadonlyRootfs&quot;: true,
+    &quot;Binds&quot;: [
+      &quot;/opt/bisheng/app-data/cache/releases/app-example/version-example/app:/workspace/app:ro&quot;,
+      &quot;/opt/bisheng/app-data/cache/envs/tenant-example/env-example/venv:/opt/venv:ro&quot;,
+      &quot;/opt/bisheng/app-data/apps/app-example/data:/data:rw&quot;
+    ],
+    &quot;Tmpfs&quot;: {&quot;/tmp&quot;: &quot;rw,nosuid,nodev,size=67108864&quot;}
+  }
+}
+</code></pre>
+<p><code>bisheng-launch</code> 是目标运行镜像内的平台启动入口：校验必需目录和版本材料、设置有限环境后用 <code>exec</code> 启动 <code>Cmd</code> 对应业务进程，使其接收停止信号。它不联网安装依赖、不运行宿主命令、不启动 manager。manifest 显式 argv 优先；兼容的 <code>Procfile</code> 和语言默认入口在发布准备阶段解析成冻结启动契约，再由运行镜像消费。</p>
+<p>应用在容器内监听 <code>0.0.0.0:8080</code>；不同容器可重复使用该端口，不配置每应用宿主 <code>PortBindings</code>，app-proxy 使用内部地址访问。<code>/data</code> 的所有权由受控维护步骤准备，普通应用不能获得整棵缓存或其他应用数据。重启复用同版本目录；新版本使用新目录和新实例，数据兼容与切换按第 6、8 节处理。</p>
+<h3>3.8 何时重装、复用与清理</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>事件</th>
+<th>依赖和代码处理</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>仅普通业务代码变化</td>
+<td>创建新代码版本；完整兼容 key 不变则复用依赖产物和本节点环境；仍执行必要前端编译和应用探活</td>
+</tr>
+<tr>
+<td>依赖锁定结果/安装相关源码变化</td>
+<td>新依赖 key；准备新产物及新环境，旧环境保持不可变</td>
+</tr>
+<tr>
+<td>同一版本应用重启</td>
+<td>有效本地缓存直接挂载，不执行 pip/npm 安装，不重新解析依赖</td>
+</tr>
+<tr>
+<td>切到新节点或删除缓存</td>
+<td>从 backend 下载冻结产物；Python 用 wheelhouse 离线重建环境，Node 按验证契约物化依赖；再启动</td>
+</tr>
+<tr>
+<td>切换基础镜像、架构或 ABI</td>
+<td>按新兼容 key 重新准备与验证，不能凭 <code>requirements.txt</code> 相同跨架构复用</td>
+</tr>
+<tr>
+<td>更新 runtime-manager 服务镜像</td>
+<td>只升级编排服务；已有应用版本的运行镜像、依赖和代码引用不随之变化</td>
+</tr>
+<tr>
+<td>清理与回退</td>
+<td>按当前实例、审批、运行操作及回退窗口引用回收；节点缓存可重建，平台不可变产物保留策略单独管理</td>
+</tr>
+</tbody></table></div>
+<p>这一方案省去的是每次发布的 OCI 应用镜像构建/推送。首次安装、新依赖和新节点仍有依赖准备成本；命中的是经验证的完整环境组合，不能把 package manager 的下载缓存命中等同于应用运行环境已经可用。</p>
+<p><a id="section-4"></a></p>
+<h2>4 存储与共享状态</h2>
+<h3>4.1 数据归属</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>数据</th>
+<th>权威存储及目标访问方</th>
+<th>本地用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>应用、租户归属、权限关联、版本和审批</td>
+<td>平台 MySQL/DM8；backend/Celery 经领域服务和仓储读写</td>
+<td>manager 不复制平台用户/权限模型</td>
+</tr>
+<tr>
+<td>发布/运行操作、期望版本、节点归属、阶段和幂等结果</td>
+<td>平台 SQL；manager 通过内部接口接收任务和上报结果</td>
+<td>本地任务缓存可重建，不是另一份可独立修改的权威</td>
+</tr>
+<tr>
+<td>执行事实、就绪版本和路由投影</td>
+<td>manager 产生真实事实，backend 经归属/generation 校验持久化；Redis 加速读取</td>
+<td>app-proxy 内存缓存可在有效期内使用，不共享宿主 JSON</td>
+</tr>
+<tr>
+<td>出站策略及策略代次</td>
+<td>平台 SQL 保存确认后的声明与派生策略，Redis 投影；egress 经只读 API 获取</td>
+<td>代理缓存版本化快照，重启可重新获取；不以共享文件为唯一来源</td>
+</tr>
+<tr>
+<td>运行环境档位及默认映射</td>
+<td>管理员从清单导入，backend 校验并存平台 SQL；执行计划冻结具体修订与镜像</td>
+<td>YAML 是配置导入材料，manager 不以某台机器的文件作为档位权威</td>
+</tr>
+<tr>
+<td>源码和代码/依赖产物</td>
+<td>MinIO 私有 <code>bisheng-apps</code>；backend 存取和分发</td>
+<td>manager/准备任务按内容摘要下载到受控缓存，挂载给应用只读</td>
+</tr>
+<tr>
+<td>附件</td>
+<td>同一私有桶；应用 SDK → backend → MinIO</td>
+<td>应用不拿 MinIO 账号；manager 不经过附件数据流</td>
+</tr>
+<tr>
+<td>SQLite 快照</td>
+<td>同一私有桶及平台快照元数据；manager 本地生成后上传 backend</td>
+<td>临时一致副本、tar 和导出文件；持久确认后清理</td>
+</tr>
+<tr>
+<td>应用 SQLite</td>
+<td>应用专属持久卷，单活动应用使用；manager 在受控环境执行备份/迁移</td>
+<td>Docker 本机 bind 或 K8s PVC，是显式的应用数据持久化，不是平台跨服务控制状态</td>
+</tr>
+</tbody></table></div>
+<p>constitution C8 要求跨进程共享状态的权威放在 SQL、Redis 或 MinIO。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docs/constitution.md#L156-L180">A03</a> 当前 manager 的 <code>desired-state.json</code> 和 egress 策略文件是单机实现，应迁移为节点可重建缓存；本方案不继续把共享本地文件扩展为多节点控制协议。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/desired_state.py#L229">C18</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/egress.py#L444">C27</a></p>
+<p>应用 SQLite 延续原规格的单应用持久卷约束，不承接平台路由、权限、任务或跨节点共识。它的数据恢复与节点绑定需在 F054/F059 设计中明确，不能将该局部存储方式推广到平台业务控制状态。</p>
+<h3>4.2 对象路径与生命周期</h3>
+<p>可继续使用现有私有桶和对象布局；无需新建 MinIO 实例或每应用一个桶。目标接口对 manager 隐藏 bucket/key，以下路径只由 backend 内部管理。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/package_service.py#L61">C04</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/appdb.py#L509">C21</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/storage.py#L147">C22</a></p>
+<pre><code class="language-text">bisheng-apps/
+└── apps/{app_id}/
+    ├── versions/{version_id}/code.tar.gz
+    ├── attachments/{relative_key}
+    ├── db-snapshots/{snapshot_id}.tar
+    └── artifacts/{artifact_id}/...          # 目标扩展
+</code></pre>
+<p>当前 SQLite 快照使用时间戳文件名；目标建议由平台分配快照 ID 并关联任务，避免并发或重试依赖秒级命名。旧路径可按元数据兼容读取；内容摘要、大小和产物归属应独立记录。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>动作</th>
+<th>代码/镜像与产物</th>
+<th>SQLite 和附件</th>
+<th>运行状态</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>停用</td>
+<td>保留版本与可恢复产物</td>
+<td>保留</td>
+<td>平台禁止入口，停止执行并撤销出站主体；失败可重试</td>
+</tr>
+<tr>
+<td>更新</td>
+<td>新增不可变版本，复用兼容依赖缓存</td>
+<td>沿用本 app 数据，必要时迁移；附件命名空间保持</td>
+<td>新版本就绪后发布路由事实，旧版本按发布策略回收</td>
+</tr>
+<tr>
+<td>审批预览</td>
+<td>使用冻结版本，临时执行</td>
+<td>临时空库/隔离附件，不挂生产数据</td>
+<td>独立 session、策略、TTL 和并发限制</td>
+</tr>
+<tr>
+<td>删除</td>
+<td>backend 清理或按策略保留远端资产；共享依赖按引用回收</td>
+<td>manager 仅按明确指令清本地卷；backend 清附件和快照</td>
+<td>先停用并作删除标记，再幂等清理；不是跨系统单一原子事务</td>
+</tr>
+<tr>
+<td>代码回滚</td>
+<td>选定仍可用的历史产物组合</td>
+<td>不自动恢复数据库</td>
+<td>先检查数据库兼容性；数据恢复是独立受控动作</td>
+</tr>
+</tbody></table></div>
+<p>缓存、临时任务和孤儿对象定期清理；被在用、回退窗口或审批引用的产物不得回收。大包采用流式传输和有界临时空间；源码、依赖产物、附件、快照分别设置大小和保留策略，不能把源码 50 MiB 默认值套到所有产物。</p>
+<p><a id="section-5"></a></p>
+<h2>5 平台与 runtime 接口</h2>
+<h3>5.1 三组内部协议</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>协议</th>
+<th>调用方</th>
+<th>主要内容</th>
+<th>校验方与副作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>运行意图与操作查询</td>
+<td>backend/Celery → manager</td>
+<td>准备、部署、停止、销毁、探活、预览、SQLite 操作；operation ID、app/version、generation</td>
+<td>manager 验服务身份、任务归属、重复请求和节点所有权；操作 Engine/数据卷并上报事实</td>
+</tr>
+<tr>
+<td>产物与快照</td>
+<td>manager/准备任务 → backend</td>
+<td>内容下载、摘要校验、快照上传/状态查询/恢复下载</td>
+<td>backend 校验任务授权和范围，访问 MinIO；不返回 MinIO URL 或 302 跳转</td>
+</tr>
+<tr>
+<td>控制状态与只读投影</td>
+<td>manager → backend 上报；两个代理 → backend 读取</td>
+<td>任务、期望、心跳、实例、路由、出站策略及撤销代次</td>
+<td>backend 用 SQL CAS/幂等记录和 Redis 投影；代理只读，不获得编排身份</td>
+</tr>
+</tbody></table></div>
+<p>现有 <code>/v1/intents/*</code>、构建查询、route、db、logs 接口可以作为兼容入口，但目标字段通过显式协议版本演进。当前 build 使用 <code>code_url/code_object_key</code>，后续改为平台产物描述；当前 deploy 只含 <code>image_ref</code>，后续需要执行产物组合。不得直接改变返回形态而不升级 CLI/worker/代理调用者。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/api/schemas.py#L37">C08</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_runtime/domain/services/orchestrator_client.py#L134">C38</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/api/endpoints/deploy.py#L128">C41</a></p>
+<p>建议的内部接口能力如下，路径和 DTO 在设计评审后冻结，当前代码尚未提供这些目标接口：</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>接口能力</th>
+<th>关键参数的产生与消费</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>artifacts/{id}/content</code> 下载</td>
+<td>backend 建立 artifact ID、大小、摘要与任务授权；manager 或准备任务消费并校验</td>
+</tr>
+<tr>
+<td><code>snapshots/{id}/content</code> 上传/恢复下载</td>
+<td>backend 分配 snapshot ID 和目的；manager 提交一致副本或在恢复任务中下载；backend 校验摘要并持久确认</td>
+</tr>
+<tr>
+<td>运行操作创建/查询及期望读取</td>
+<td>backend 创建操作和冻结计划；manager 取得所分配节点/应用任务；重试使用相同 operation ID 和 payload hash</td>
+</tr>
+<tr>
+<td>执行事实与路由发布</td>
+<td>manager 上报真实就绪版本、可达地址、generation、owner epoch；backend 校验并形成路由投影</td>
+</tr>
+<tr>
+<td>代理路由和策略快照读取</td>
+<td>backend 提供节点/应用范围内的已确认结果及代次；代理持专用只读身份，按版本刷新</td>
+</tr>
+<tr>
+<td>应用附件 API</td>
+<td>SDK 使用 app 范围 endpoint/token；backend 判断应用、租户及相对路径，返回内容和元信息</td>
+</tr>
+</tbody></table></div>
+<h3>5.2 产物和运行意图示例</h3>
+<p>以下 JSON 为目标协议示例，不可原样发送到当前 manager schema；摘要和镜像值均为占位符。</p>
+<pre><code class="language-json">{
+  &quot;protocol_version&quot;: 2,
+  &quot;operation_id&quot;: &quot;op-example&quot;,
+  &quot;app_id&quot;: &quot;app-example&quot;,
+  &quot;version_id&quot;: &quot;version-example&quot;,
+  &quot;node_id&quot;: &quot;runtime-node-a&quot;,
+  &quot;generation&quot;: 7,
+  &quot;execution&quot;: {
+    &quot;type&quot;: &quot;bundle&quot;,
+    &quot;runtime_image&quot;: &quot;bisheng/app-python@sha256:&lt;digest&gt;&quot;,
+    &quot;code&quot;: {&quot;artifact_id&quot;: &quot;code-example&quot;, &quot;sha256&quot;: &quot;&lt;sha256&gt;&quot;},
+    &quot;dependencies&quot;: {&quot;artifact_id&quot;: &quot;deps-example&quot;, &quot;format&quot;: &quot;python-wheelhouse-v1&quot;, &quot;sha256&quot;: &quot;&lt;sha256&gt;&quot;},
+    &quot;command&quot;: [&quot;python&quot;, &quot;main.py&quot;],
+    &quot;port&quot;: 8080
+  },
+  &quot;resources&quot;: {&quot;cpu&quot;: 0.5, &quot;memory_mb&quot;: 1024},
+  &quot;data_mode&quot;: &quot;sqlite&quot;
+}
+</code></pre>
+<p>backend 提供应用附件句柄、平台能力地址和短期任务授权，manager 负责受保护环境变量覆盖及注入。服务管理密钥和文件传输任务授权不进入应用环境、普通日志或公开版本记录。</p>
+<h3>5.3 认证与传输</h3>
+<p>内部 HMAC/服务认证用于确认服务身份和请求完整性，继续保留，与商业许可证无关。新协议增加时间窗口、nonce 或等效防重放机制，以及 app/任务/动作范围；文件传输按可信内容摘要签署并在接收时验证，不为了签名将大文件全部读入内存。原 HMAC 只覆盖方法、路径和 raw body，不能按已有代码宣称具备这些新增约束。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/auth.py#L42">C35</a></p>
+<p>应用运行凭据代表应用；OBO 凭据代表本次访问者；附件句柄仅对应应用附件空间；构建/快照任务授权仅对应某个操作。四者不可互换，代理读权限也不能调用 runtime intent。</p>
+<p>SDK 附件 API 保持应用使用方式，但需处理地址、令牌校验权威、响应 envelope 和错误语义的兼容。当前 SDK 按 manager 的错误信封解析，不能仅改 endpoint 就宣布迁移完成。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/storage.py#L147">C22</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-sdk/bisheng_sdk/_storage_remote.py#L3">C33</a></p>
+<p><a id="section-6"></a></p>
+<h2>6 发布上线流程</h2>
+<h3>6.1 上传与预检</h3>
+<figure class="sequence" data-diagram="2"><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1098 595" role="img" aria-labelledby="sequence-2-1-title sequence-2-1-desc" data-events="7"><title id="sequence-2-1-title">时序图 2 第 1 部分</title><desc id="sequence-2-1-desc">CLI 到 API：1 上传源码包或完整镜像描述；API 到 API：2 鉴权、归属、大小、清单和安全校验；API 到 Store：3 保存不可变源码或清单产物，元数据存平台 SQL；API 到 Worker：4 记录 deployment 并提交预检任务；API 到 CLI：5 返回 deployment_id 与查询入口；Worker 到 Worker：6 扫描密钥、能力与数据库变更；Worker 到 Manager：7 提交有幂等标识的产物准备任务</desc><defs><marker id="sequence-2-1-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="1098" height="595" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="583" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">CLI</text><line x1="272.4" y1="76" x2="272.4" y2="583" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="195.39999999999998" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="272.4" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend API</text><line x1="456.8" y1="76" x2="456.8" y2="583" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="379.8" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="456.8" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Celery worker</text><line x1="641.2" y1="76" x2="641.2" y2="583" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="564.2" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="641.2" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">runtime-manager</text><line x1="825.6" y1="76" x2="825.6" y2="583" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="748.6" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="825.6" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">准备任务 / Engine</text><line x1="1010" y1="76" x2="1010" y2="583" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="933" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="1010" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">MinIO</text><rect x="92" y="92" width="176.39999999999998" height="46" rx="5" fill="#fbfcff"/><text x="180.2" y="106" text-anchor="middle" font-size="13" fill="#28364c">1 上传源码包或完整镜像描</text><text x="180.2" y="125" text-anchor="middle" font-size="13" fill="#28364c">述</text><line x1="88" y1="146" x2="272.4" y2="146" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-2-1-arrow)"/><circle cx="88" cy="146" r="2.7" fill="#465a7d"/><rect x="163.39999999999998" y="164" width="314" height="27" rx="5" fill="#f0f4fa"/><text x="320.4" y="178" text-anchor="middle" font-size="13" fill="#28364c">2 鉴权、归属、大小、清单和安全校验</text><path d="M 272.4 199 h 32 v 17 h -32" fill="none" stroke="#465a7d" stroke-width="1.5" marker-end="url(#sequence-2-1-arrow)"/><circle cx="272.4" cy="199" r="2.7" fill="#465a7d"/><rect x="399.20000000000005" y="227" width="484" height="27" rx="5" fill="#fbfcff"/><text x="641.2" y="241" text-anchor="middle" font-size="13" fill="#28364c">3 保存不可变源码或清单产物，元数据存平台 SQL</text><line x1="272.4" y1="262" x2="1010" y2="262" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-2-1-arrow)"/><circle cx="272.4" cy="262" r="2.7" fill="#465a7d"/><rect x="276.4" y="280" width="176.40000000000003" height="46" rx="5" fill="#fbfcff"/><text x="364.6" y="294" text-anchor="middle" font-size="13" fill="#28364c">4 记录 deployment 并提</text><text x="364.6" y="313" text-anchor="middle" font-size="13" fill="#28364c">交预检任务</text><line x1="272.4" y1="334" x2="456.8" y2="334" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-2-1-arrow)"/><circle cx="272.4" cy="334" r="2.7" fill="#465a7d"/><rect x="92" y="352" width="176.39999999999998" height="46" rx="5" fill="#fbfcff"/><text x="180.2" y="366" text-anchor="middle" font-size="13" fill="#28364c">5 返回 deployment_id</text><text x="180.2" y="385" text-anchor="middle" font-size="13" fill="#28364c">与查询入口</text><line x1="272.4" y1="406" x2="88" y2="406" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-2-1-arrow)"/><circle cx="272.4" cy="406" r="2.7" fill="#465a7d"/><rect x="347.8" y="424" width="314" height="27" rx="5" fill="#f0f4fa"/><text x="504.8" y="438" text-anchor="middle" font-size="13" fill="#28364c">6 扫描密钥、能力与数据库变更</text><path d="M 456.8 459 h 32 v 17 h -32" fill="none" stroke="#465a7d" stroke-width="1.5" marker-end="url(#sequence-2-1-arrow)"/><circle cx="456.8" cy="459" r="2.7" fill="#465a7d"/><rect x="460.79999999999995" y="487" width="176.40000000000003" height="46" rx="5" fill="#fbfcff"/><text x="549" y="501" text-anchor="middle" font-size="13" fill="#28364c">7 提交有幂等标识的产物准</text><text x="549" y="520" text-anchor="middle" font-size="13" fill="#28364c">备任务</text><line x1="456.8" y1="541" x2="641.2" y2="541" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-2-1-arrow)"/><circle cx="456.8" cy="541" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 2 · 第 1/3 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1098 556" role="img" aria-labelledby="sequence-2-2-title sequence-2-2-desc" data-events="7"><title id="sequence-2-2-title">时序图 2 第 2 部分</title><desc id="sequence-2-2-desc">Manager 到 API：8 请求固定源码或依赖产物内容；API 到 Manager：9 流式返回文件；校验摘要；Manager 到 Engine：10 复用依赖或准备编译产物；Manager 到 API：11 上传准备产物并登记兼容元数据；API 到 Store：12 保存代码、依赖与静态产物；Manager 到 Engine：13 用冻结产物组合启动临时实例探活；Manager 到 Worker：14 返回产物组合、结果和日志</desc><defs><marker id="sequence-2-2-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="1098" height="556" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="544" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">CLI</text><line x1="272.4" y1="76" x2="272.4" y2="544" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="195.39999999999998" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="272.4" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend API</text><line x1="456.8" y1="76" x2="456.8" y2="544" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="379.8" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="456.8" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Celery worker</text><line x1="641.2" y1="76" x2="641.2" y2="544" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="564.2" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="641.2" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">runtime-manager</text><line x1="825.6" y1="76" x2="825.6" y2="544" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="748.6" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="825.6" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">准备任务 / Engine</text><line x1="1010" y1="76" x2="1010" y2="544" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="933" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="1010" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">MinIO</text><rect x="276.4" y="92" width="360.80000000000007" height="27" rx="5" fill="#fbfcff"/><text x="456.8" y="106" text-anchor="middle" font-size="13" fill="#28364c">8 请求固定源码或依赖产物内容</text><line x1="641.2" y1="127" x2="272.4" y2="127" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-2-2-arrow)"/><circle cx="641.2" cy="127" r="2.7" fill="#465a7d"/><rect x="276.4" y="145" width="360.80000000000007" height="27" rx="5" fill="#fbfcff"/><text x="456.8" y="159" text-anchor="middle" font-size="13" fill="#28364c">9 流式返回文件；校验摘要</text><line x1="272.4" y1="180" x2="641.2" y2="180" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-2-2-arrow)"/><circle cx="272.4" cy="180" r="2.7" fill="#465a7d"/><rect x="645.2" y="198" width="176.39999999999998" height="46" rx="5" fill="#fbfcff"/><text x="733.4000000000001" y="212" text-anchor="middle" font-size="13" fill="#28364c">10 复用依赖或准备编译产</text><text x="733.4000000000001" y="231" text-anchor="middle" font-size="13" fill="#28364c">物</text><line x1="641.2" y1="252" x2="825.6" y2="252" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-2-2-arrow)"/><circle cx="641.2" cy="252" r="2.7" fill="#465a7d"/><rect x="276.4" y="270" width="360.80000000000007" height="27" rx="5" fill="#fbfcff"/><text x="456.8" y="284" text-anchor="middle" font-size="13" fill="#28364c">11 上传准备产物并登记兼容元数据</text><line x1="641.2" y1="305" x2="272.4" y2="305" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-2-2-arrow)"/><circle cx="641.2" cy="305" r="2.7" fill="#465a7d"/><rect x="399.20000000000005" y="323" width="484" height="27" rx="5" fill="#fbfcff"/><text x="641.2" y="337" text-anchor="middle" font-size="13" fill="#28364c">12 保存代码、依赖与静态产物</text><line x1="272.4" y1="358" x2="1010" y2="358" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-2-2-arrow)"/><circle cx="272.4" cy="358" r="2.7" fill="#465a7d"/><rect x="645.2" y="376" width="176.39999999999998" height="46" rx="5" fill="#fbfcff"/><text x="733.4000000000001" y="390" text-anchor="middle" font-size="13" fill="#28364c">13 用冻结产物组合启动临</text><text x="733.4000000000001" y="409" text-anchor="middle" font-size="13" fill="#28364c">时实例探活</text><line x1="641.2" y1="430" x2="825.6" y2="430" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-2-2-arrow)"/><circle cx="641.2" cy="430" r="2.7" fill="#465a7d"/><rect x="460.79999999999995" y="448" width="176.40000000000003" height="46" rx="5" fill="#fbfcff"/><text x="549" y="462" text-anchor="middle" font-size="13" fill="#28364c">14 返回产物组合、结果和</text><text x="549" y="481" text-anchor="middle" font-size="13" fill="#28364c">日志</text><line x1="641.2" y1="502" x2="456.8" y2="502" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-2-2-arrow)"/><circle cx="641.2" cy="502" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 2 · 第 2/3 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1098 191" role="img" aria-labelledby="sequence-2-3-title sequence-2-3-desc" data-events="1"><title id="sequence-2-3-title">时序图 2 第 3 部分</title><desc id="sequence-2-3-desc">Worker 到 Worker：15 审批准入；写版本，失败补偿取消审批</desc><defs><marker id="sequence-2-3-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="1098" height="191" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="179" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">CLI</text><line x1="272.4" y1="76" x2="272.4" y2="179" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="195.39999999999998" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="272.4" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend API</text><line x1="456.8" y1="76" x2="456.8" y2="179" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="379.8" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="456.8" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Celery worker</text><line x1="641.2" y1="76" x2="641.2" y2="179" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="564.2" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="641.2" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">runtime-manager</text><line x1="825.6" y1="76" x2="825.6" y2="179" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="748.6" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="825.6" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">准备任务 / Engine</text><line x1="1010" y1="76" x2="1010" y2="179" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="933" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="1010" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">MinIO</text><rect x="347.8" y="92" width="314" height="27" rx="5" fill="#f0f4fa"/><text x="504.8" y="106" text-anchor="middle" font-size="13" fill="#28364c">15 审批准入；写版本，失败补偿取消审批</text><path d="M 456.8 127 h 32 v 17 h -32" fill="none" stroke="#465a7d" stroke-width="1.5" marker-end="url(#sequence-2-3-arrow)"/><circle cx="456.8" cy="127" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 2 · 第 3/3 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div></figure><p>这是目标流程：应用包模式准备代码/依赖，镜像兼容模式在第 10 步构建应用镜像，完整镜像模式检查镜像契约并跳过源码依赖准备。三者均执行相应扫描/准入及启动预检，不能用“用户提供镜像”跳过运行约束。</p>
+<p>当前实现已具有源码接收、扫描、模板构建和临时探活；使用短期 MinIO 预签名 URL 下载源码，附件/快照直连也尚未迁移。版本写入的真实顺序是先提交审批准入，再插入版本，失败时尝试取消审批；本方案继续保持这一已查明语义。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py#L92">C06</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/precheck_service.py#L156">C07</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/version_service.py#L138">C37</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/probe.py#L126">C44</a></p>
+<h3>6.2 审批后上线与迁移</h3>
+<figure class="sequence" data-diagram="3"><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 566" role="img" aria-labelledby="sequence-3-1-title sequence-3-1-desc" data-events="7"><title id="sequence-3-1-title">时序图 3 第 1 部分</title><desc id="sequence-3-1-desc">Publish 到 Backend：1 接收审批结果，冻结本次上线计划；Publish 到 Manager：2 检查资源并取得应用独占操作权；Manager 到 Backend：3 确认任务、期望代次及节点归属；Manager 到 App：4 SQLite 场景停写并隔离旧执行体；Manager 到 Manager：5 Backup API 生成迁移前一致快照；Manager 到 Backend：6 上传快照并等待持久确认；Backend 到 Manager：7 对象和元数据保存成功，返回 snapshot_id</desc><defs><marker id="sequence-3-1-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="940" height="566" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">发布执行服务</text><line x1="279" y1="76" x2="279" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="202" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="279" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend API</text><line x1="470" y1="76" x2="470" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="393" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="470" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">runtime-manager</text><line x1="661" y1="76" x2="661" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="584" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="661" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Docker / K8s</text><line x1="852" y1="76" x2="852" y2="554" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="775" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="852" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">应用实例</text><rect x="92" y="92" width="183" height="46" rx="5" fill="#fbfcff"/><text x="183.5" y="106" text-anchor="middle" font-size="13" fill="#28364c">1 接收审批结果，冻结本次</text><text x="183.5" y="125" text-anchor="middle" font-size="13" fill="#28364c">上线计划</text><line x1="88" y1="146" x2="279" y2="146" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-1-arrow)"/><circle cx="88" cy="146" r="2.7" fill="#465a7d"/><rect x="92" y="164" width="374" height="27" rx="5" fill="#fbfcff"/><text x="279" y="178" text-anchor="middle" font-size="13" fill="#28364c">2 检查资源并取得应用独占操作权</text><line x1="88" y1="199" x2="470" y2="199" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-1-arrow)"/><circle cx="88" cy="199" r="2.7" fill="#465a7d"/><rect x="283" y="217" width="183" height="46" rx="5" fill="#fbfcff"/><text x="374.5" y="231" text-anchor="middle" font-size="13" fill="#28364c">3 确认任务、期望代次及节</text><text x="374.5" y="250" text-anchor="middle" font-size="13" fill="#28364c">点归属</text><line x1="470" y1="271" x2="279" y2="271" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-1-arrow)"/><circle cx="470" cy="271" r="2.7" fill="#465a7d"/><rect x="474" y="289" width="374" height="27" rx="5" fill="#fbfcff"/><text x="661" y="303" text-anchor="middle" font-size="13" fill="#28364c">4 SQLite 场景停写并隔离旧执行体</text><line x1="470" y1="324" x2="852" y2="324" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-1-arrow)"/><circle cx="470" cy="324" r="2.7" fill="#465a7d"/><rect x="361" y="342" width="314" height="27" rx="5" fill="#f0f4fa"/><text x="518" y="356" text-anchor="middle" font-size="13" fill="#28364c">5 Backup API 生成迁移前一致快照</text><path d="M 470 377 h 32 v 17 h -32" fill="none" stroke="#465a7d" stroke-width="1.5" marker-end="url(#sequence-3-1-arrow)"/><circle cx="470" cy="377" r="2.7" fill="#465a7d"/><rect x="283" y="405" width="183" height="27" rx="5" fill="#fbfcff"/><text x="374.5" y="419" text-anchor="middle" font-size="13" fill="#28364c">6 上传快照并等待持久确认</text><line x1="470" y1="440" x2="279" y2="440" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-1-arrow)"/><circle cx="470" cy="440" r="2.7" fill="#465a7d"/><rect x="283" y="458" width="183" height="46" rx="5" fill="#fbfcff"/><text x="374.5" y="472" text-anchor="middle" font-size="13" fill="#28364c">7 对象和元数据保存成功，</text><text x="374.5" y="491" text-anchor="middle" font-size="13" fill="#28364c">返回 snapshot_id</text><line x1="279" y1="512" x2="470" y2="512" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-3-1-arrow)"/><circle cx="279" cy="512" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 3 · 第 1/3 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 576" role="img" aria-labelledby="sequence-3-2-title sequence-3-2-desc" data-events="7"><title id="sequence-3-2-title">时序图 3 第 2 部分</title><desc id="sequence-3-2-desc">Manager 到 Manager：8 执行事务化、可重试的本地迁移；Publish 到 Manager：9 提交冻结产物及应用能力配置；Manager 到 Engine：10 再验容量、挂卷、启动正式实例；Manager 到 App：11 执行就绪检查；Manager 到 Backend：12 上报就绪事实和待发布路由代次；Backend 到 Backend：13 CAS 保存执行事实并更新路由投影；Backend 到 Manager：14 确认可供代理读取的路由版本</desc><defs><marker id="sequence-3-2-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="940" height="576" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="564" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">发布执行服务</text><line x1="279" y1="76" x2="279" y2="564" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="202" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="279" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend API</text><line x1="470" y1="76" x2="470" y2="564" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="393" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="470" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">runtime-manager</text><line x1="661" y1="76" x2="661" y2="564" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="584" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="661" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Docker / K8s</text><line x1="852" y1="76" x2="852" y2="564" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="775" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="852" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">应用实例</text><rect x="361" y="92" width="314" height="27" rx="5" fill="#f0f4fa"/><text x="518" y="106" text-anchor="middle" font-size="13" fill="#28364c">8 执行事务化、可重试的本地迁移</text><path d="M 470 127 h 32 v 17 h -32" fill="none" stroke="#465a7d" stroke-width="1.5" marker-end="url(#sequence-3-2-arrow)"/><circle cx="470" cy="127" r="2.7" fill="#465a7d"/><rect x="92" y="155" width="374" height="27" rx="5" fill="#fbfcff"/><text x="279" y="169" text-anchor="middle" font-size="13" fill="#28364c">9 提交冻结产物及应用能力配置</text><line x1="88" y1="190" x2="470" y2="190" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-2-arrow)"/><circle cx="88" cy="190" r="2.7" fill="#465a7d"/><rect x="474" y="208" width="183" height="46" rx="5" fill="#fbfcff"/><text x="565.5" y="222" text-anchor="middle" font-size="13" fill="#28364c">10 再验容量、挂卷、启动正</text><text x="565.5" y="241" text-anchor="middle" font-size="13" fill="#28364c">式实例</text><line x1="470" y1="262" x2="661" y2="262" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-2-arrow)"/><circle cx="470" cy="262" r="2.7" fill="#465a7d"/><rect x="474" y="280" width="374" height="27" rx="5" fill="#fbfcff"/><text x="661" y="294" text-anchor="middle" font-size="13" fill="#28364c">11 执行就绪检查</text><line x1="470" y1="315" x2="852" y2="315" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-2-arrow)"/><circle cx="470" cy="315" r="2.7" fill="#465a7d"/><rect x="283" y="333" width="183" height="46" rx="5" fill="#fbfcff"/><text x="374.5" y="347" text-anchor="middle" font-size="13" fill="#28364c">12 上报就绪事实和待发布路</text><text x="374.5" y="366" text-anchor="middle" font-size="13" fill="#28364c">由代次</text><line x1="470" y1="387" x2="279" y2="387" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-2-arrow)"/><circle cx="470" cy="387" r="2.7" fill="#465a7d"/><rect x="170" y="405" width="314" height="27" rx="5" fill="#f0f4fa"/><text x="327" y="419" text-anchor="middle" font-size="13" fill="#28364c">13 CAS 保存执行事实并更新路由投影</text><path d="M 279 440 h 32 v 17 h -32" fill="none" stroke="#465a7d" stroke-width="1.5" marker-end="url(#sequence-3-2-arrow)"/><circle cx="279" cy="440" r="2.7" fill="#465a7d"/><rect x="283" y="468" width="183" height="46" rx="5" fill="#fbfcff"/><text x="374.5" y="482" text-anchor="middle" font-size="13" fill="#28364c">14 确认可供代理读取的路由</text><text x="374.5" y="501" text-anchor="middle" font-size="13" fill="#28364c">版本</text><line x1="279" y1="522" x2="470" y2="522" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-3-2-arrow)"/><circle cx="279" cy="522" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 3 · 第 2/3 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 253" role="img" aria-labelledby="sequence-3-3-title sequence-3-3-desc" data-events="2"><title id="sequence-3-3-title">时序图 3 第 3 部分</title><desc id="sequence-3-3-desc">Manager 到 Engine：15 按策略回收旧执行体和临时资源；Manager 到 Publish：16 返回操作结果，平台完成状态和审计</desc><defs><marker id="sequence-3-3-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="940" height="253" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="241" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">发布执行服务</text><line x1="279" y1="76" x2="279" y2="241" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="202" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="279" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend API</text><line x1="470" y1="76" x2="470" y2="241" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="393" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="470" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">runtime-manager</text><line x1="661" y1="76" x2="661" y2="241" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="584" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="661" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Docker / K8s</text><line x1="852" y1="76" x2="852" y2="241" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="775" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="852" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">应用实例</text><rect x="474" y="92" width="183" height="46" rx="5" fill="#fbfcff"/><text x="565.5" y="106" text-anchor="middle" font-size="13" fill="#28364c">15 按策略回收旧执行体和临</text><text x="565.5" y="125" text-anchor="middle" font-size="13" fill="#28364c">时资源</text><line x1="470" y1="146" x2="661" y2="146" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-3-3-arrow)"/><circle cx="470" cy="146" r="2.7" fill="#465a7d"/><rect x="92" y="164" width="374" height="27" rx="5" fill="#fbfcff"/><text x="279" y="178" text-anchor="middle" font-size="13" fill="#28364c">16 返回操作结果，平台完成状态和审计</text><line x1="470" y1="199" x2="88" y2="199" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-3-3-arrow)"/><circle cx="470" cy="199" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 3 · 第 3/3 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div></figure><p>迁移快照和产物的 MinIO 存取均由 backend 执行，图中第 7 步的确认包含对象内容及平台 SQL 元数据。首次发布尚无数据库、或无需快照的兼容性迁移，可以按明确策略跳过第 5—7 步，不生成无意义空快照。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>执行方及关键输入</th>
+<th>状态/存储副作用</th>
+<th>失败处理</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>接收</td>
+<td>CLI → backend；package/清单、可选 app ID、结构变更确认</td>
+<td>源码快照、deployment、审计</td>
+<td>同步拒绝越权/危险归档；大文件临时空间受限</td>
+</tr>
+<tr>
+<td>预检</td>
+<td>worker 调 manager；固定版本/产物及资源</td>
+<td>分阶段结果、依赖产物、临时探活日志</td>
+<td>失败不进入审批，清理临时执行体；保留可诊断日志</td>
+</tr>
+<tr>
+<td>审批与预览</td>
+<td>平台审批服务、预览参与资格、冻结版本</td>
+<td>审批和版本记录、临时 preview session</td>
+<td>拒绝/撤回回收预览；生产数据不被预览修改</td>
+</tr>
+<tr>
+<td>上线准入</td>
+<td>backend 协调，manager 检查资源、任务和独占权</td>
+<td>上线 operation、节点归属/代次</td>
+<td>资源不足保留待上线版本，旧在线版本按其状态继续；不重复建审批</td>
+</tr>
+<tr>
+<td>SQLite 迁移</td>
+<td>manager、本地卷、冻结迁移计划及快照任务</td>
+<td>快照文件/元数据、DDL 结果</td>
+<td>快照失败/状态不明则不做破坏性 DDL；停写后的恢复动作明确记录</td>
+</tr>
+<tr>
+<td>正式启动</td>
+<td>manager、Engine、运行镜像/代码/依赖、env、卷、资源</td>
+<td>候选执行体和探活结果</td>
+<td>失败不发布候选路由，按是否已经迁移判断旧版本可否恢复</td>
+</tr>
+<tr>
+<td>路由发布</td>
+<td>manager 上报事实；backend 验 generation 和所有权</td>
+<td>SQL 事实、Redis 投影、路由代次</td>
+<td>投影未确认不退休旧版本；通过 outbox/重试修复，不回报虚假上线</td>
+</tr>
+<tr>
+<td>停用/删除</td>
+<td>backend 权限与入口状态；manager 执行停止/销毁</td>
+<td>路由和策略撤销、本地卷显式清理、远端资产由 backend 处理</td>
+<td>幂等重试和对账；数据清理不靠重复动作猜测是否完成</td>
+</tr>
+</tbody></table></div>
+<h3>6.3 更新方式和异常边界</h3>
+<p>无持久写入或已确认数据兼容的应用可采用候选探活后切路由；声明 SQLite 或存在不能并发运行的数据写入者时，采用单活动发布：隔离旧写入、备份/迁移、启动新实例。后者允许短维护窗口，不能同时承诺任意 schema 变更零停机。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/lifecycle.py#L209">C16</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/appdb.py#L509">C21</a></p>
+<p>当前实现先迁移，再执行部分资源准入/启动；并存在 deploy 前先撤销旧应用能力凭据再重签的路径。新方案将资源预检前移，并把凭据切换设计成候选可用、正式切换后再失效旧凭据的受控阶段。数据库迁移和容器启动仍不是同一事务，启动失败不能自动推断旧版本数据及凭据未变化。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/publish_online_service.py#L110">C14</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_runtime/domain/services/app_state_service.py#L283">C15</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/capability_bus_service.py#L384">C36</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/app_credential_service.py#L134">C48</a></p>
+<p>同一个 app 的发布、迁移、恢复、停用按持久操作和 generation 串行协调；重复 operation ID 复用结果，ID 相同但参数摘要不同则拒绝。后台对账同样读取有效期望与执行所有权，不按本地过期缓存擅自重建已停用应用。</p>
+<p><a id="section-7"></a></p>
+<h2>7 应用访问与平台能力</h2>
+<h3>7.1 目标访问链路</h3>
+<figure class="sequence" data-diagram="4"><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1098 594" role="img" aria-labelledby="sequence-4-1-title sequence-4-1-desc" data-events="7"><title id="sequence-4-1-title">时序图 4 第 1 部分</title><desc id="sequence-4-1-desc">Browser 到 Proxy：1 请求 /apps/slug，携带平台会话；Proxy 到 Backend：2 请求入口授权及当前访问者材料；Backend 到 Proxy：3 应用可见性、用户状态和短期 OBO；Proxy 到 Backend：4 独立查询已确认路由投影；Backend 到 Proxy：5 返回就绪实例与 generation；Proxy 到 App：6 清理伪造头后注入身份并转发 HTTP / WS；App 到 Backend：7 用应用凭据及访问者 OBO 调模型或检索</desc><defs><marker id="sequence-4-1-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="1098" height="594" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="582" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">浏览器 / nginx</text><line x1="272.4" y1="76" x2="272.4" y2="582" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="195.39999999999998" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="272.4" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">app-proxy</text><line x1="456.8" y1="76" x2="456.8" y2="582" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="379.8" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="456.8" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend API</text><line x1="641.2" y1="76" x2="641.2" y2="582" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="564.2" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="641.2" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">应用 / SDK</text><line x1="825.6" y1="76" x2="825.6" y2="582" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="748.6" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="825.6" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">egress-proxy</text><line x1="1010" y1="76" x2="1010" y2="582" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="933" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="1010" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">允许的外部服务</text><rect x="92" y="92" width="176.39999999999998" height="46" rx="5" fill="#fbfcff"/><text x="180.2" y="106" text-anchor="middle" font-size="13" fill="#28364c">1 请求 /apps/slug，携</text><text x="180.2" y="125" text-anchor="middle" font-size="13" fill="#28364c">带平台会话</text><line x1="88" y1="146" x2="272.4" y2="146" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-4-1-arrow)"/><circle cx="88" cy="146" r="2.7" fill="#465a7d"/><rect x="276.4" y="164" width="176.40000000000003" height="46" rx="5" fill="#fbfcff"/><text x="364.6" y="178" text-anchor="middle" font-size="13" fill="#28364c">2 请求入口授权及当前访问</text><text x="364.6" y="197" text-anchor="middle" font-size="13" fill="#28364c">者材料</text><line x1="272.4" y1="218" x2="456.8" y2="218" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-4-1-arrow)"/><circle cx="272.4" cy="218" r="2.7" fill="#465a7d"/><rect x="276.4" y="236" width="176.40000000000003" height="46" rx="5" fill="#fbfcff"/><text x="364.6" y="250" text-anchor="middle" font-size="13" fill="#28364c">3 应用可见性、用户状态和</text><text x="364.6" y="269" text-anchor="middle" font-size="13" fill="#28364c">短期 OBO</text><line x1="456.8" y1="290" x2="272.4" y2="290" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-4-1-arrow)"/><circle cx="456.8" cy="290" r="2.7" fill="#465a7d"/><rect x="276.4" y="308" width="176.40000000000003" height="27" rx="5" fill="#fbfcff"/><text x="364.6" y="322" text-anchor="middle" font-size="13" fill="#28364c">4 独立查询已确认路由投影</text><line x1="272.4" y1="343" x2="456.8" y2="343" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-4-1-arrow)"/><circle cx="272.4" cy="343" r="2.7" fill="#465a7d"/><rect x="276.4" y="361" width="176.40000000000003" height="46" rx="5" fill="#fbfcff"/><text x="364.6" y="375" text-anchor="middle" font-size="13" fill="#28364c">5 返回就绪实例与</text><text x="364.6" y="394" text-anchor="middle" font-size="13" fill="#28364c">generation</text><line x1="456.8" y1="415" x2="272.4" y2="415" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-4-1-arrow)"/><circle cx="456.8" cy="415" r="2.7" fill="#465a7d"/><rect x="276.4" y="433" width="360.80000000000007" height="27" rx="5" fill="#fbfcff"/><text x="456.8" y="447" text-anchor="middle" font-size="13" fill="#28364c">6 清理伪造头后注入身份并转发 HTTP / WS</text><line x1="272.4" y1="468" x2="641.2" y2="468" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-4-1-arrow)"/><circle cx="272.4" cy="468" r="2.7" fill="#465a7d"/><rect x="460.79999999999995" y="486" width="176.40000000000003" height="46" rx="5" fill="#fbfcff"/><text x="549" y="500" text-anchor="middle" font-size="13" fill="#28364c">7 用应用凭据及访问者 OBO</text><text x="549" y="519" text-anchor="middle" font-size="13" fill="#28364c">调模型或检索</text><line x1="641.2" y1="540" x2="456.8" y2="540" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-4-1-arrow)"/><circle cx="641.2" cy="540" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 4 · 第 1/2 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div><div class="diagram-panel"><div class="diagram-scroll"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1098 513" role="img" aria-labelledby="sequence-4-2-title sequence-4-2-desc" data-events="6"><title id="sequence-4-2-title">时序图 4 第 2 部分</title><desc id="sequence-4-2-desc">App 到 Backend：8 用 app 范围附件句柄读写附件；App 到 Egress：9 访问批准的外部地址，携带代理身份；Egress 到 Egress：10 校验策略版本、域名及解析地址；Egress 到 Remote：11 建立受控 HTTP 或 CONNECT 连接；App 到 Proxy：12 返回应用内容或持续 WebSocket 数据；Proxy 到 Browser：13 返回浏览器</desc><defs><marker id="sequence-4-2-arrow" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7" fill="#465a7d"/></marker></defs><rect width="1098" height="513" rx="12" fill="#fbfcff"/><line x1="88" y1="76" x2="88" y2="501" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="11" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="88" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">浏览器 / nginx</text><line x1="272.4" y1="76" x2="272.4" y2="501" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="195.39999999999998" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="272.4" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">app-proxy</text><line x1="456.8" y1="76" x2="456.8" y2="501" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="379.8" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="456.8" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">Backend API</text><line x1="641.2" y1="76" x2="641.2" y2="501" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="564.2" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="641.2" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">应用 / SDK</text><line x1="825.6" y1="76" x2="825.6" y2="501" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="748.6" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="825.6" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">egress-proxy</text><line x1="1010" y1="76" x2="1010" y2="501" stroke="#d7deeb" stroke-dasharray="4 5"/><rect x="933" y="14" width="154" height="62" rx="9" fill="#eef2fa" stroke="#cbd5e5"/><text x="1010" y="47" text-anchor="middle" font-size="14" font-weight="600" fill="#263959">允许的外部服务</text><rect x="460.79999999999995" y="92" width="176.40000000000003" height="46" rx="5" fill="#fbfcff"/><text x="549" y="106" text-anchor="middle" font-size="13" fill="#28364c">8 用 app 范围附件句柄读</text><text x="549" y="125" text-anchor="middle" font-size="13" fill="#28364c">写附件</text><line x1="641.2" y1="146" x2="456.8" y2="146" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-4-2-arrow)"/><circle cx="641.2" cy="146" r="2.7" fill="#465a7d"/><rect x="645.2" y="164" width="176.39999999999998" height="46" rx="5" fill="#fbfcff"/><text x="733.4000000000001" y="178" text-anchor="middle" font-size="13" fill="#28364c">9 访问批准的外部地址，携</text><text x="733.4000000000001" y="197" text-anchor="middle" font-size="13" fill="#28364c">带代理身份</text><line x1="641.2" y1="218" x2="825.6" y2="218" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-4-2-arrow)"/><circle cx="641.2" cy="218" r="2.7" fill="#465a7d"/><rect x="716.6" y="236" width="314" height="27" rx="5" fill="#f0f4fa"/><text x="873.6" y="250" text-anchor="middle" font-size="13" fill="#28364c">10 校验策略版本、域名及解析地址</text><path d="M 825.6 271 h 32 v 17 h -32" fill="none" stroke="#465a7d" stroke-width="1.5" marker-end="url(#sequence-4-2-arrow)"/><circle cx="825.6" cy="271" r="2.7" fill="#465a7d"/><rect x="829.5999999999999" y="299" width="176.39999999999998" height="46" rx="5" fill="#fbfcff"/><text x="917.8" y="313" text-anchor="middle" font-size="13" fill="#28364c">11 建立受控 HTTP 或</text><text x="917.8" y="332" text-anchor="middle" font-size="13" fill="#28364c">CONNECT 连接</text><line x1="825.6" y1="353" x2="1010" y2="353" stroke="#465a7d" stroke-width="1.6"  marker-end="url(#sequence-4-2-arrow)"/><circle cx="825.6" cy="353" r="2.7" fill="#465a7d"/><rect x="276.4" y="371" width="360.80000000000007" height="27" rx="5" fill="#fbfcff"/><text x="456.8" y="385" text-anchor="middle" font-size="13" fill="#28364c">12 返回应用内容或持续 WebSocket 数据</text><line x1="641.2" y1="406" x2="272.4" y2="406" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-4-2-arrow)"/><circle cx="641.2" cy="406" r="2.7" fill="#465a7d"/><rect x="92" y="424" width="176.39999999999998" height="27" rx="5" fill="#fbfcff"/><text x="180.2" y="438" text-anchor="middle" font-size="13" fill="#28364c">13 返回浏览器</text><line x1="272.4" y1="459" x2="88" y2="459" stroke="#465a7d" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#sequence-4-2-arrow)"/><circle cx="272.4" cy="459" r="2.7" fill="#465a7d"/></svg></div><figcaption>图 4 · 第 2/2 部分 · 按步骤编号连续阅读；窄屏可横向滚动</figcaption></div></figure><p>这是目标链路，路由读接口改到 backend 投影；当前仍由 app-proxy 查询 manager。后端的授权结果和路由读取继续保持不同语义、不同缓存，不把“有路由”当作“有访问权限”。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/app-proxy/app_proxy/clients.py#L177">C24</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py#L88">C25</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/app-proxy/app_proxy/clients.py#L281-L307">A05</a></p>
+<h3>7.2 路由与策略的可用性</h3>
+<p>manager 是真实就绪和执行地址的生产者，backend 只接收已认证、归属正确且代次有效的事实，形成持久只读投影。平台不通过 <code>exec_ref</code> 猜容器地址，也不复制 Docker 操作逻辑。代理读取该投影，因此 manager 短暂重启时不会因 3 秒路由缓存到期就必须连 manager 才能接收新请求。</p>
+<p>出站策略采用相同原则：批准的声明和派生策略存平台，egress 经专用只读 API 获取版本化快照。旧 JSON/共享文件仅作为迁移输入或缓存；代理重启可从平台恢复，不要求与 manager 在同一机器共享目录。该变化修正原 D5.1 和文件策略的单机依赖，需要更新相应设计与契约。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/desired_state.py#L229">C18</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/egress.py#L444">C27</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docs/constitution.md#L156-L180">A03</a></p>
+<p>缓存必须有应用、版本、generation、有效期及撤销语义，刷新采用轮询/版本查询，推送仅作加速。停止/删除/撤权由 backend 使授权失效并更新投影，必要时通知代理关闭既有连接。权限或策略状态无法确认时拒绝新授权；不得为了 manager 故障容错而无限保留已撤销权限。平台自身不可用与 manager 重启是不同故障，不承诺权限服务长期不可用时仍绕过校验。</p>
+<h3>7.3 身份与出站控制</h3>
+<p>app-proxy 继续处理可信头规范化、前缀剥离和重定向修复，转发 HTTP/WebSocket，并定期重校验长连接。backend 通过统一权限运行时验证用户/租户状态和 <code>app:use</code>。检索和需要访问者身份的模型能力按“应用声明范围与访问者权限共同约束”判断，缺少访问者不能退化为应用 owner 权限。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py#L88">C25</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/app-proxy/app_proxy/headers.py#L29">C26</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-sdk/README.md#L1">C31</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-sdk/bisheng_sdk/retrieve.py#L40">C32</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/capability_bus_service.py#L384">C36</a></p>
+<p>egress 检查代理令牌、允许域名/端口和 DNS 解析地址，防止将出口变成访问内部数据库的跳板。CONNECT 只在建连前校验目标，不解密 TLS。代理配置不能独自阻止不遵循 HTTP_PROXY 的应用，仍需实际生效的网络和 TCP/UDP 兜底规则；构建期允许包源，运行期不自动获得包源权限。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/egress.py#L444">C27</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/egress_proxy.py#L171">C28</a></p>
+<p><a id="section-8"></a></p>
+<h2>8 SQLite 持久化与恢复</h2>
+<h3>8.1 数据卷与预览</h3>
+<p>Docker 沿用按 app 隔离的宿主数据目录，挂载到 <code>/data</code>，数据库为 <code>/data/app.db</code>。<code>RTM_DATA_ROOT</code> 是 manager 视角，<code>RTM_HOST_DATA_ROOT</code> 是 Engine 解释 bind mount 的宿主视角，必须对应同一数据。代理不挂整棵应用数据根，backend 不直接打开 SQLite。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/lifecycle.py#L209">C16</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/config.py#L57">C17</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docker/docker-compose.yml#L277">C29</a></p>
+<p>K8s 使用每应用独占 PVC 和单活动执行策略。在 CSI/集群支持时优先 <code>ReadWriteOncePod</code>；普通 <code>ReadWriteOnce</code> 只限制单节点，仍可能被同节点多个 Pod 使用。SQLite WAL 需要本机共享内存，不可让跨主机进程把 NFS/SMB 上的数据库当作共享运行库。<a href="https://sqlite.org/wal.html">R02</a> <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">R03</a></p>
+<p>审批预览默认空临时库和临时附件空间，结束后清理。若需要生产数据副本，必须另行授权生成隔离副本，不能直接挂正式 PVC 或注入生产附件凭据。当前 preview 使用 tmpfs，目标延续隔离原则。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/preview.py#L18">C20</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/preview_instance_service.py#L440">C43</a></p>
+<h3>8.2 备份与迁移</h3>
+<p>manager 在操作独占和写入隔离下执行 SQLite Backup API，得到一致副本，再通过 backend 上传。快照元数据至少包含 app、来源版本、schema、operation、大小、摘要、创建时间和状态；backend 确认文件和元数据都已持久化后，才能执行破坏性 DDL。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/appdb.py#L509">C21</a> <a href="https://sqlite.org/backup.html">R01</a></p>
+<p>上传超时可能发生在文件已经保存之后，因此以同一 snapshot/operation ID 查询和重试；不能重复产生不可关联的快照，也不能将“本地备份完成”当作“平台备份完成”。事务化 DDL 只保证数据库内部事务，不覆盖上传、启动和路由切换。</p>
+<p>应用包和历史镜像回退只恢复代码/环境。数据库恢复需要停写、明确恢复点和数据损失窗口，下载并校验对应快照、验证完整性、恢复文件所有权，再探活并恢复路由。启动失败后不能自动恢复旧快照而覆盖可能已产生的新业务数据。</p>
+<h3>8.3 节点故障边界</h3>
+<p>Docker 本机盘不能承诺节点损坏后自动无损迁移；应通过平台快照和现场备份策略恢复。K8s 跨节点恢复取决于 CSI/PVC 的实际能力。manager 在 K8s 下不能假定远端 PVC 在自己本机可读，应编排挂载同一 PVC 的受控维护执行体，保证业务写入者已经停止，再进行备份/迁移/恢复。</p>
+<p>这种执行体是编排服务的受控操作手段，不是新的常驻业务服务；不能以任意远程 SQL 或任意宿主路径作为接口输入。各平台支持矩阵需覆盖 Python/SQLite 动态库、文件锁、文件所有权及目标 CPU 架构。</p>
+<p><a id="section-9"></a></p>
+<h2>9 Docker 与 K8s 交付</h2>
+<p><strong>本节实施摘要：</strong></p>
+<ol>
+<li><strong>无外网且无可用内网包源时，提前交付离线依赖包。</strong> 首次发布使用已导入的基础依赖集合；新增依赖缺失时，在可取得依赖的环境制作补充包，经 backend 导入和验证后再发布。缺包在预检阶段明确报错，不回退公网。</li>
+<li><strong>离线包包含完整依赖闭包。</strong> 固定锁文件、传递依赖、SDK、目标平台信息及文件摘要；不能仅拷贝顶层库，也不能把开发机 venv 当作通用交付物。manager 经 backend 获取 wheelhouse，在执行节点离线建立并缓存环境。</li>
+<li><strong>应用基础镜像通过运行环境清单配置。</strong> 目标新增 <code>docker/runtime-profiles.yaml</code>，由管理员导入 backend 后统一持久化；应用使用 <code>execution.runtime_profile</code> 选择版本化档位。当前代码仍是 <code>BASE_IMAGES</code> 常量，该配置入口需要实施。</li>
+<li><strong>manager 镜像与应用基础镜像分别更新。</strong> Compose 的 <code>runtime-manager.image</code> 只更新编排服务；替换应用运行环境需要新档位、依赖兼容验证及正常发布，不能使已冻结版本随默认配置变化。</li>
+</ol>
+<p>操作流程与配置示例分别见 <a href="#offline-dependencies">离线依赖准备与补包</a>、<a href="#runtime-image-config">基础运行镜像配置</a>。</p>
+<h3>9.1 前置条件</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>条件</th>
+<th>Docker 首轮交付</th>
+<th>K8s 后续适配</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>执行接口</td>
+<td>Docker Engine HTTP API，经 socket proxy；manager 不需要 Docker CLI</td>
+<td>K8s API、专用 namespace、ServiceAccount/RBAC；不要求节点安装 dockerd</td>
+</tr>
+<tr>
+<td>应用包</td>
+<td>manager 从 backend 下载并校验，物化到受控内容寻址缓存，以只读方式供应用使用</td>
+<td>init/准备执行体通过 backend 下载到受控卷，校验后供主容器只读使用</td>
+</tr>
+<tr>
+<td>依赖准备</td>
+<td>匹配运行环境的隔离准备任务；限制网络、CPU、内存和临时磁盘</td>
+<td>同类受限 Job，记录结果/日志/产物；不是默认每次生成 OCI 镜像</td>
+</tr>
+<tr>
+<td>镜像构建兼容</td>
+<td>已有 Engine build 和平台模板</td>
+<td>若启用该路线，另配构建器、推送凭据、镜像分发与缓存；集群本身不提供源码构建能力</td>
+</tr>
+<tr>
+<td>运行镜像</td>
+<td>预制且固定版本/digest，目标 Engine 可加载或拉取</td>
+<td>所有可调度节点可以取得对应架构的运行/初始化镜像</td>
+</tr>
+<tr>
+<td>SQLite</td>
+<td>单应用本机 bind，明确路径与权限</td>
+<td>独占 PVC、合适 StorageClass、单活动策略及维护执行体</td>
+</tr>
+<tr>
+<td>路由与策略</td>
+<td>backend 持久投影/读接口，代理缓存</td>
+<td>同一接口可用；应用地址由执行适配器产生，可使用稳定 Service</td>
+</tr>
+<tr>
+<td>资源与身份</td>
+<td>编排能力仅给 manager；代理只读身份</td>
+<td>最小 RBAC 和 Pod 安全准入；应用不挂集群控制凭据</td>
+</tr>
+</tbody></table></div>
+<p>当前 Docker manager 和模板已经存在；K8s 行为属于目标适配。应用包路线只减少应用镜像构建步骤，不会取消集群 API、镜像分发、卷和网络前置。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/builder.py#L76">C09</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/docker_backend.py#L124">C10</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/features/v3.0.0/059-k8s-runtime-backend/spec.md#L108">C34</a></p>
+<h3>9.2 无外网和无内网镜像仓库</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>层次</th>
+<th>离线材料</th>
+<th>必须验证</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>平台/管理服务</td>
+<td>backend、worker、manager、代理和基础组件的目标架构镜像、配置与数据迁移</td>
+<td>完整安装和内部认证，不仅是容器存活</td>
+</tr>
+<tr>
+<td>应用运行环境</td>
+<td>固定运行镜像、初始化/维护镜像、常用环境档位</td>
+<td>在实际执行引擎/节点存在，摘要与架构一致</td>
+</tr>
+<tr>
+<td>依赖与编译</td>
+<td>完整 wheel/npm 产物或内网包源、系统库、工具链、SDK 平台索引</td>
+<td>锁文件外链、安装脚本和前端编译都不访问公网</td>
+</tr>
+<tr>
+<td>产物与数据服务</td>
+<td>平台私有桶、backend 文件接口、共享 SQL/Redis、数据卷和容量</td>
+<td>manager 被禁止直连 MinIO 时仍能准备源码、保存和恢复快照</td>
+</tr>
+<tr>
+<td>应用运行能力</td>
+<td>模型、检索、附件和明确允许的业务接口</td>
+<td>页面可打开不等于平台能力可调用；外部 SaaS 不会因离线镜像自动可用</td>
+</tr>
+</tbody></table></div>
+<p>Docker 单机没有仓库时，可随安装包导入固定服务/运行镜像到同一个 Engine；应用包放平台对象存储，后续代码发布不必新增应用 OCI 镜像。完整镜像模式需要用户将对应镜像导入目标 Engine 或提供可访问仓库。</p>
+<p>K8s 推荐客户内网仓库或附带最小 Registry。若不建设仓库，可以在可控的全部目标节点预装固定镜像，并配置与现场策略相符的 <code>IfNotPresent/Never</code>；新增/替换节点必须先完成镜像准备再承载应用。Kubernetes 官方明确说明预拉取方式依赖可控节点和一致的镜像准备，<code>Never</code> 缺图时直接启动失败；还须按目标集群版本核对本地镜像的凭据验证策略。<a href="https://kubernetes.io/docs/concepts/containers/images/">R04</a></p>
+<p>无仓库方式不适合不受控的自动节点替换。离线包应有镜像 digest/架构清单、产物摘要、导入顺序、补包流程及缺依赖诊断；Registry 自身若随包交付，要能在其他镜像尚未导入前启动。</p>
+<h3>9.3 配置归属</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>配置</th>
+<th>读取方与归属</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>backend <code>app_runtime</code></td>
+<td>backend/worker 读取部署开关、manager 地址、内部认证、包限制及发布配置；不把 manager 容量参数复制进此处</td>
+</tr>
+<tr>
+<td>manager <code>RTM_*</code></td>
+<td>manager 自己读取 Engine/集群连接、数据根、资源预留、包源、超时和目标平台内部客户端配置；不读取 backend 的 <code>config.yaml</code></td>
+</tr>
+<tr>
+<td>app-proxy / egress 配置</td>
+<td>各进程读取监听地址、平台只读接口及自己的服务身份、缓存/连接限制；不继承 manager 管理凭据</td>
+</tr>
+<tr>
+<td>MinIO / 平台 SQL</td>
+<td>只由平台存储及领域服务使用；目标 manager 不再配置 MinIO 地址、bucket、访问密钥</td>
+</tr>
+<tr>
+<td>应用注入变量</td>
+<td>backend 产生业务能力和访问句柄，manager 按冻结版本注入；运行镜像/入口消费，用户不能覆盖平台保留项</td>
+</tr>
+<tr>
+<td>运行环境目录（目标新增）</td>
+<td>管理员用 <code>docker/runtime-profiles.yaml</code> 导入 backend；SQL 保存不可变档位与默认映射。worker 从平台目录冻结执行计划，manager 不直接读取该 YAML，见 §9.6</td>
+</tr>
+</tbody></table></div>
+<p>当前容量、数据根和包源已经由 manager 的环境变量读取，不能仅修改 backend 配置就预期生效。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/core/config/app_runtime.py#L45">C05</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/config.py#L57">C17</a> 新增内部客户端和策略 API 配置属于本次目标增量，应提供各进程独立配置样例和缺项诊断。</p>
+<h3>9.4 runtime-manager 的 CI/CD 与 Compose 交付</h3>
+<p><strong>确定采用：与 backend 相同的预构建镜像交付方式。</strong> 已检查的 backend 流程在 <code>v*</code> tag 推送时构建并推送 amd64/arm64 镜像到 Docker Hub，release 流程聚合版本 manifest。runtime-manager 应加入对应构建和发布阶段；当前源码基线尚未接入该发布作业，Compose 的 manager 服务仍使用本地 <code>build:</code>。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/.github/workflows/ci.yml#L3-L54">A06</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/.github/workflows/release.yml#L3-L45">A07</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docker/docker-compose.yml#L277">C29</a></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>环节</th>
+<th>目标实施</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>镜像构建入口</td>
+<td>复用 <code>src/runtime-manager/Dockerfile</code> 及该目录构建上下文，依赖锁文件安装服务自身依赖；新功能开发后同步调整依赖并修正旧 socket/root 注释</td>
+</tr>
+<tr>
+<td>CI 作业</td>
+<td>在现有 <code>ci.yml</code> 增加 manager 的 amd64/arm64 构建、必要测试与镜像启动检查；使用仓库 Docker Hub secrets，不在 Compose 或镜像层放推送凭据</td>
+</tr>
+<tr>
+<td>镜像命名</td>
+<td>建议 <code>dataelement/bisheng-runtime-manager:&lt;platform-version&gt;-amd64/-arm64</code>；版本名示意，尚未声明这些仓库/tag 已存在</td>
+</tr>
+<tr>
+<td>正式发布</td>
+<td><code>release.yml</code> 聚合同一源码提交且构建成功的架构镜像为版本 tag；核验各 digest/提交标签存在后再发布，不能只因 release 事件触发就认定 tag CI 已完成</td>
+</tr>
+<tr>
+<td>Compose</td>
+<td>正式文件用 <code>image:</code> 引用已发布版本，不带 manager <code>build:</code>；本地源码开发可在开发 override 中启用构建</td>
+</tr>
+<tr>
+<td>其他镜像</td>
+<td>app-proxy、egress-proxy 同样纳入各自预构建交付；应用运行/准备镜像有独立环境版本和兼容清单，不跟随每次应用代码发布重建</td>
+</tr>
+<tr>
+<td>离线与架构</td>
+<td>安装材料包含所需架构的服务、运行及准备镜像和 digest 清单；国产化平台逐项验证，amd64/arm64 覆盖不等于支持所有 CPU/系统库组合</td>
+</tr>
+</tbody></table></div>
+<p>现有 manager Dockerfile 是服务构建入口，不是应用运行基础；其中关于“直接挂 socket、因此必须 root”的旧注释与当前 Compose 的 socket proxy 方式不一致，发布前应按实际访问链路修正。服务镜像是否以非 root 运行还需核对本地数据目录、chown 与维护操作，不能只改 <code>USER</code> 就宣布权限适配完成。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/Dockerfile#L1-L25">A08</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docker/docker-compose.yml#L277">C29</a></p>
+<p>正式 Compose 的关键配置片段如下。它表达目标交付方式，不是完整可直接替换的 Compose；backend 新内部 API 身份、容量、网络、就绪和出站规则需与全文件一起配置：</p>
+<pre><code class="language-yaml">services:
+  runtime-manager:
+    image: ${BISHENG_IMAGE_NAMESPACE:-dataelement}/bisheng-runtime-manager:${BISHENG_VERSION:?set BISHENG_VERSION}
+    profiles: [app-runtime]
+    environment:
+      RTM_HOST: &quot;0.0.0.0&quot;
+      RTM_PORT: &quot;8091&quot;
+      RTM_HMAC_SECRET: ${BISHENG_RTM_HMAC_SECRET:?set BISHENG_RTM_HMAC_SECRET}
+      RTM_DOCKER_HOST: tcp://docker-socket-proxy:2375
+      RTM_PLATFORM_BASE_URL: http://backend:7860
+      RTM_EGRESS_PROXY: egress-proxy:3128
+      RTM_DATA_ROOT: /app-data
+      RTM_HOST_DATA_ROOT: ${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}
+    volumes:
+      - type: bind
+        source: ${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}
+        target: /app-data
+        bind:
+          create_host_path: false
+    networks: [default, bisheng-apps, runtime-control]
+    depends_on: [docker-socket-proxy]
+    restart: on-failure
+</code></pre>
+<p>安装器先创建绝对数据根并设置权限；socket proxy 只加入受控的 <code>runtime-control</code> 网络，backend/代理不加入该控制网。此片段不挂 Docker socket、不配置 MinIO、不开放 manager 宿主端口；生产 image 固定发布版本，交付清单另记录 digest，不能默认依赖 <code>latest</code>。<a href="https://docs.docker.com/reference/compose-file/services/">R10</a></p>
+<p>在线安装时 Compose 拉取 manager 镜像；离线安装时事先导入与引用一致的镜像并采用现场拉取策略。manager 和应用运行镜像的 Engine API 获取权限分别配置；CI 中用于构建镜像的 Docker/Buildx 工具不成为 manager 运行容器必须安装 Docker CLI 的理由。</p>
+<p>平台升级 manager 镜像后，仍按旧应用版本记录使用原运行镜像、代码和依赖；运行环境档位升级应显式产生新的应用执行组合并预检。这样平台服务升级与应用环境升级有各自的回退边界。</p>
+<p><a id="offline-dependencies"></a></p>
+<h3>9.5 断外网时，wheelhouse 从哪里获取</h3>
+<p><strong>纯离线环境必须提前获得依赖文件。</strong> wheelhouse 是已下载或已构建 wheel 的集合，不能自己产生一个现场不存在的包。首次发布不一定需要临时搬包：若随安装包提供的依赖集合已经覆盖应用，可以直接准备；新增依赖不在已导入集合或内网源中时，必须先补包，再继续发布。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>现场条件</th>
+<th>首次发布及新增依赖的来源</th>
+<th>未满足时的行为</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>无公网，有完整内网 PyPI/制品源</td>
+<td>在受限准备任务中从批准的内网源获取锁定依赖，产出 wheelhouse</td>
+<td>内网源未同步目标版本、只会转发公网请求时，不能认为依赖可用；报告缺包</td>
+</tr>
+<tr>
+<td>无公网、无内网包源</td>
+<td>从平台离线安装包的基础依赖集合，或预先导入的应用专用离线包选取</td>
+<td>缺少目标包/版本/架构时，预检失败，不生成审批、不尝试公网回退</td>
+</tr>
+<tr>
+<td>已有同兼容键的依赖产物</td>
+<td>经 backend 下载冻结 wheelhouse；节点环境命中则直接复用</td>
+<td>产物不完整或摘要/运行环境不匹配则拒绝，不能借用另一 ABI 的缓存</td>
+</tr>
+</tbody></table></div>
+<p>建议随平台离线交付一份<strong>有明确版本清单的基础依赖集合</strong>，覆盖 SDK 和官方样例的依赖。它是有限集合，不能承诺包含所有 Python 库及所有版本；业务新增包通过增量离线包交付。预制运行镜像、wheel 集合和 SDK 版本分别登记，镜像中携带常用 wheels 也要进入同样的完整性及兼容检查。</p>
+<p><strong>离线包制作在可取得依赖的环境完成。</strong> 推荐在与客户目标运行环境匹配的准备镜像/CPU 上，使用固定锁文件下载或构建完整传递依赖，必要时从项目交付物取得指定 SDK wheel，然后在目标运行镜像中断网执行安装和探活验证。已有兼容 wheel 时可用下列命令收集；只能在联网准备机或可达完整包源处运行：<a href="https://pip.pypa.io/en/stable/cli/pip_download/">R11</a></p>
+<pre><code class="language-sh">python -m pip download --only-binary=:all: --dest /out/wheelhouse -r /input/requirements.runtime.lock
+</code></pre>
+<p>需要源码构建的包按 §3.5 制作目标 wheel，再生成最终 wheel 哈希锁文件；在 x86/macOS 开发机直接下载出来的包不能默认适配客户 ARM/其他国产 CPU。若使用 pip 的跨平台下载参数，须完整指定目标解释器/ABI/平台并另做目标验证；跨平台下载选项不等于交叉编译能力。<a href="https://pip.pypa.io/en/stable/cli/pip_download/">R11</a></p>
+<p>应用专用离线包建议包含以下内容。目录是目标交付格式草案，非现有 CLI 自动生成能力：</p>
+<pre><code class="language-text">app-offline-deps.tar.gz
+├── manifest.json                   # 格式、目标环境/平台、来源、锁文件和文件摘要
+├── requirements.runtime.lock       # 全部运行包的固定版本及最终 wheel 哈希
+├── wheelhouse/
+│   └── *.whl                       # 包含传递依赖和对应 SDK
+├── checksums.sha256
+└── validation.json                 # 制作环境、目标镜像与断网安装验证记录
+</code></pre>
+<p>系统动态库、Python 解释器和工具链不由 wheelhouse 自动解决。应用需要新增 OS 库时，应交付相容的新运行/准备镜像及其离线镜像材料，或完整应用镜像；仅搬入 <code>.whl</code> 可能仍不能导入或运行。离线现场仍要从平台存储和数据卷读取产物，只是不访问公网。</p>
+<p><strong>导入和增量补包闭环：</strong></p>
+<ol>
+<li>管理员或获授权交付人员提交离线包到 backend 产物导入接口；接口/工具为本方案新增项，不要求 manager 访问 MinIO。</li>
+<li>backend 校验身份、归属、大小、安全归档、清单及摘要，把内容存私有对象存储并保存 SQL 元数据，先标为待验证；文件哈希仅证明一致性，信任来源仍由导入权限及供应方验证决定。</li>
+<li>backend 调 manager 启动受限准备任务，以目标镜像、明确禁公网网络和任务范围的文件访问取得离线材料，完成安装、关键 import 和应用预检；失败不把产物标为可复用。</li>
+<li>验证通过后登记依赖产物及兼容键，发布计划引用该 artifact ID；执行节点从 backend 下载后按需要重建本地 venv。</li>
+<li>新增依赖时输出可复核的缺失清单，包含可确定的包/版本约束、目标架构/ABI、镜像和阶段。外部补齐完整依赖闭包或可合并的增量包，重新验证后复用/重试发布；不能仅上传一个顶层库就跳过其传递依赖检查。</li>
+</ol>
+<p>无内网包源的首轮交付优先采用“平台基础离线集合＋按应用补包”。应用持续增加大量依赖时再建设内网 PyPI/制品源，减少人工转运；源里的内容仍需预先同步。Node 的 npm 包、安装脚本下载件和前端构建工具也遵循同一离线闭包原则。</p>
+<p><a id="runtime-image-config"></a></p>
+<h3>9.6 预置应用基础运行镜像的配置与替换</h3>
+<p><strong>当前代码：基础镜像写在 <code>src/runtime-manager/runtime_manager/builder.py</code> 的 <code>BASE_IMAGES</code>，还没有可直接修改的部署配置项。</strong> <code>python3.11</code> 对应 <code>python:3.11-slim</code>，<code>node20</code> 对应 <code>node:20-slim</code>，<code>static</code> 对应 <code>nginx:1.27-alpine</code>，模板使用 <code>FROM {{ base_image }}</code>。现有构建调用没有从配置接收基础镜像的入口；修改这些默认值需要改代码并重建 manager 服务镜像。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/builder.py#L76-L80">A09</a></p>
+<p><code>RTM_IMAGE_PREFIX</code> 是构建后应用镜像的命名前缀，<code>RTM_BUILD_INDEX_URL</code>/<code>RTM_BUILD_NPM_REGISTRY</code> 是包源，Compose 的 manager <code>image:</code> 是编排服务镜像；都不能用来替换应用基础运行镜像。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/config.py#L57">C17</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/builder.py#L76-L80">A09</a></p>
+<p><strong>目标方案：新增 <code>docker/runtime-profiles.yaml</code> 运行环境清单，由管理员导入 backend 的运行环境目录。</strong> 导入后的不可变档位、默认映射和修订记录存 SQL，worker/API 都从平台目录读取；YAML 是安装/变更的输入，不是各服务共享读取的本地状态。manager 只接收已冻结的档位、实际镜像摘要和执行契约，不读取 backend 配置或该 YAML。</p>
+<p>以下配置仅为新增格式草案，当前代码不能直接读取；镜像和摘要均为占位示意：</p>
+<pre><code class="language-yaml">schema_version: 1
+profiles:
+  - id: python311-standard-v2
+    runtime: python3.11
+    runtime_image: &quot;registry.intra/bisheng/app-python:py311-v2@sha256:&lt;runtime-manifest-digest&gt;&quot;
+    prepare_image: &quot;registry.intra/bisheng/app-python-prepare:py311-v2@sha256:&lt;prepare-manifest-digest&gt;&quot;
+    platforms: [linux/amd64, linux/arm64]
+    launcher: /usr/local/bin/bisheng-launch
+    default_port: 8080
+defaults:
+  python3.11: python311-standard-v2
+</code></pre>
+<p>镜像内容需要符合 bundle 运行契约：解释器、launcher、非特权用户、挂载目录、系统库及准备环境匹配。不能仅把任意 <code>python</code> 官方镜像地址填进档位就预期它具备平台 launcher。镜像内容在目标新增的 <code>src/app-runtime-images/</code> Dockerfile 中维护并经 CI 发布，清单登记已发布/已导入的结果。</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>想修改的对象</th>
+<th>目标修改入口</th>
+<th>生效范围</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>应用的基础运行/准备镜像</td>
+<td>新建运行档位，修改 <code>runtime-profiles.yaml</code> 对应引用，导入 backend</td>
+<td>新发布/显式升级的应用版本，且必须重验依赖兼容性</td>
+</tr>
+<tr>
+<td>新应用默认使用哪个档位</td>
+<td>清单 <code>defaults</code> 映射，经 backend 校验后持久化</td>
+<td>后续未显式选择档位的发布；版本一旦冻结，不随默认值变化</td>
+</tr>
+<tr>
+<td>某个应用选择哪个环境</td>
+<td>应用 <code>bisheng-app.yaml</code> 的 <code>execution.runtime_profile</code></td>
+<td>该应用新版本；示例 <code>python311-standard-v2</code></td>
+</tr>
+<tr>
+<td>runtime-manager 自身升级</td>
+<td>正式 Compose 的 <code>runtime-manager.image</code></td>
+<td>编排服务，不替换已上线应用的基础镜像</td>
+</tr>
+<tr>
+<td>应用完全自带镜像</td>
+<td><code>execution.type=image</code> 及批准的完整镜像引用</td>
+<td>走完整镜像契约，不再给该镜像叠加 bundle 基础运行镜像</td>
+</tr>
+</tbody></table></div>
+<p>替换步骤是：发布或导入新镜像 → 新建档位清单并导入平台 → 执行环境自检与依赖验证 → 修改默认档位或应用的档位选择 → 正常发布预检、审批及上线。旧档位 ID 的镜像内容不可原地改写；旧版本和回退窗口仍引用原组合。镜像地址转到内网仓库时，也必须验证内容与登记摘要一致。</p>
+<p>多架构镜像的清单摘要在执行计划中进一步解析为目标平台的实际镜像摘要，参与依赖兼容键。无仓库离线导入须验证目标 Engine 能使用内容一致的执行引用，不能只检查同名 tag 存在。拉取凭据保留在节点/集群的受控配置，不写入应用包、清单公开内容或用户应用环境。</p>
+<p>该运行环境目录、导入接口、默认选择、v2 manifest 与 manager 执行协议需要一起实现；本轮只补齐评审设计，不声称已有对应配置文件或管理命令。</p>
+<p><a id="section-10"></a></p>
+<h2>10 权限隔离与运行可靠性</h2>
+<h3>10.1 编排权限</h3>
+<p>全部开源不降低运行权限要求。manager 经 Engine API 仍能创建/删除容器及控制挂载；socket proxy 的端点白名单不能自动限制请求中的特权、hostPath 或 bind 参数。manager 必须生成固定安全参数并限制受管标签范围；普通应用和代理不能访问控制网络或持有同一把全能力管理密钥。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/lifecycle.py#L209">C16</a> <a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docker/docker-compose.yml#L277">C29</a></p>
+<p>镜像和容器使用只读根文件系统、明确可写目录、非特权用户和资源限制；用户完整镜像也必须遵循。镜像来源和自定义运行环境的登记属于平台管理权限，不是商业能力开关。</p>
+<h3>10.2 状态一致性与节点所有权</h3>
+<p>建议扩展平台现有 app/version/deployment/instance 元数据，补充运行操作、节点归属、owner epoch、generation、心跳及路由/策略投影。新增表和索引须支持 MySQL/DM8，使用仓库双方言类型，业务权限走统一应用层接口，不让 runtime 直接写平台表。</p>
+<p>一个 app 同时只有一个有效执行所有者。首轮 Docker 按明确节点分配，禁止多 manager 自动争抢同一应用；跨节点迁移和多活动控制面另行验证旧 owner 失效规则。租约超时本身不能保证旧进程已经停止操作 Engine，失联时先隔离和对账，不盲目在另一节点启动第二个 SQLite 写入者。</p>
+<p>平台操作持久化后再投递，worker 重放使用相同幂等 ID；manager 重启从平台期望和真实执行体标签恢复，本地缓存可删除重建。原 JSON 状态和策略文件需要受控导入，不能在迁移后与平台状态同时作为权威。</p>
+<h3>10.3 故障处理</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>场景</th>
+<th>目标处理</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>manager 重启/升级</td>
+<td>已运行容器和两个代理继续运行；路由/策略从平台投影读取，恢复后先对账再变更</td>
+</tr>
+<tr>
+<td>backend/权限服务不可达</td>
+<td>新业务授权和任务不放行；代理对已持有的短期权限按契约处理，到期/撤销不能无限容错</td>
+</tr>
+<tr>
+<td>Redis 故障</td>
+<td>通过可控 SQL 读取/投影重建或明确不可用处理，不以本地跨服务文件替代权威</td>
+</tr>
+<tr>
+<td>元数据已保存但响应丢失</td>
+<td>用 operation/generation 查询确定结果，不能仅按调用超时重复创建或清理</td>
+</tr>
+<tr>
+<td>快照上传失败</td>
+<td>保留可诊断状态，禁止破坏性迁移；按维护策略恢复旧服务或等待重试</td>
+</tr>
+<tr>
+<td>路由投影失败</td>
+<td>不宣布候选对外上线，不过早退休旧实例；投影修复与事实对账可重试</td>
+</tr>
+<tr>
+<td>单应用退出/不健康</td>
+<td>资源范围内进行有界重启和探活，持续失败进入可见故障状态，避免无限高速重建</td>
+</tr>
+<tr>
+<td>磁盘不足</td>
+<td>准入检查及缓存回收；不能删除在用数据卷或未完成确认的唯一备份</td>
+</tr>
+</tbody></table></div>
+<p>日志包含 operation、app/version、阶段、节点与错误原因，过滤已知注入的敏感值；构建日志和运行日志有大小/保留限制。健康分为进程存活、依赖就绪和应用业务就绪，不以 <code>/healthz</code> 成功代替全部前置验证。<a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/api/readonly.py#L245">C40</a></p>
+<p><a id="section-11"></a></p>
+<h2>11 实施阶段与验收</h2>
+<h3>11.1 实施顺序</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>变更内容</th>
+<th>完成标准</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>P0 契约与样例</td>
+<td>更新 F054/F055/F059 设计；冻结交付描述、运行档位清单/导入、离线依赖格式、状态与文件接口；建立 Python/Node/static 样例</td>
+<td>明确已实现与增量；Docker 全流程基线及故障点可重现；不以商业方案为开发前提</td>
+</tr>
+<tr>
+<td>P1 平台存储和控制状态</td>
+<td>backend 附件、源码/产物/快照 API；任务/期望/执行事实持久化、路由与策略投影；manager/代理协议迁移</td>
+<td>无 manager MinIO 配置；禁止共享本地文件作为控制权威；多 API/worker 节点可读同一状态</td>
+</tr>
+<tr>
+<td>P2 生命周期和数据可靠性</td>
+<td>独占任务、快照确认、SQLite 单活动发布、凭据分阶段切换、重启对账、代理最小权限和镜像</td>
+<td>manager 重启不直接关闭代理连接，新请求无需 manager 路由 RPC；失败不越权、不误迁移或误删数据</td>
+</tr>
+<tr>
+<td>P3 应用包与完整镜像</td>
+<td>运行档位目录与默认选择、运行/准备镜像、离线包导入验证、Python wheelhouse/venv、Node 依赖、只读挂载和 launcher；完整镜像准入</td>
+<td>普通代码更新复用兼容依赖；缺包明确拒绝且补包后可重试；新节点可离线重建，v1 镜像路线兼容</td>
+</tr>
+<tr>
+<td>P4 开源交付与升级</td>
+<td>manager/代理/运行镜像 CI 发布，Compose image 引用、一键安装/自检、离线清单、SDK/CLI 兼容、旧状态导入和运维文档</td>
+<td>无需现场构建 manager 服务镜像；完成真实安装、发布、升级、停用恢复和故障演练</td>
+</tr>
+<tr>
+<td>P5 K8s 适配</td>
+<td>Python K8s 执行后端、Job/init、Service、RBAC、PVC、网络/镜像前置、维护执行体</td>
+<td>不改平台业务语义，分别验证 bundle 和完整镜像模式；将集群验证结果与 Docker 区分</td>
+</tr>
+</tbody></table></div>
+<p>P1 和 P2 是应用包默认发布前的基础。P3 中依赖管理与完整镜像可分别开发，但必须共用运行/数据契约；P5 作为独立交付阶段。是否先开放当前镜像路线的稳定版本、再开放应用包默认路线，由本次评审确认，不能把后续能力提前计入交付。</p>
+<p>P4 中的 manager 镜像构建与发布作业可以提前接入，首个对客户交付的版本即应提供预构建镜像；阶段编号不表示先要求客户自行构建，再补正式镜像。</p>
+<h3>11.2 代码改动映射</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>模块</th>
+<th>主要增量</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>backend <code>app_publish</code></td>
+<td>产物准备抽象、版本组合、兼容 manifest、预检/审批与上线计划、凭据切换、阶段结果及补偿</td>
+</tr>
+<tr>
+<td>backend <code>app_runtime</code></td>
+<td>文件/附件、离线产物导入、运行环境目录与默认映射、任务和事实、节点/所有权、路由/策略读接口、数据授权和审计</td>
+</tr>
+<tr>
+<td>平台模型/迁移</td>
+<td>产物/快照引用和摘要、操作/generation/节点、只读投影元数据；MySQL/DM8 双方言</td>
+</tr>
+<tr>
+<td>manager</td>
+<td>平台文件/状态客户端、两级依赖准备/缓存、挂载路径映射、执行适配、幂等生命周期、SQLite 维护和事实上报；删除 MinIO 与附件服务依赖</td>
+</tr>
+<tr>
+<td><code>src/app-runtime-images</code></td>
+<td>Python/Node/static 运行镜像、匹配准备镜像、launcher、固定 UID/目录与兼容清单；该目录为目标新增</td>
+</tr>
+<tr>
+<td>app-proxy</td>
+<td>路由源迁至平台投影、读身份和缓存/撤销处理；保留授权、头规范化、HTTP/WS 行为</td>
+</tr>
+<tr>
+<td>egress-proxy</td>
+<td>独立精简镜像、平台策略读取、版本缓存、连接/目标限制；不依赖同机共享目录或 manager 存活</td>
+</tr>
+<tr>
+<td>CLI / SDK</td>
+<td>v2 交付描述和状态跟踪；保持 SDK 存储语义，适配 backend envelope/身份和预览隔离</td>
+</tr>
+<tr>
+<td><code>.github/workflows/ci.yml</code> / <code>release.yml</code></td>
+<td>manager 及代理多架构构建、Docker Hub 推送、版本聚合、提交/digest 核验；应用运行镜像的环境版本发布</td>
+</tr>
+<tr>
+<td>Compose / 后续 K8s 材料</td>
+<td>正式 image 引用、开发 build override、控制网络、只读/专用卷、凭据、运行档位清单、离线基础依赖/补包和健康检查</td>
+</tr>
+</tbody></table></div>
+<h3>11.3 验收集合</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>类别</th>
+<th>必须覆盖的场景</th>
+<th>通过标准</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>开源安装</td>
+<td>不安装商业 Gateway、不提供许可证</td>
+<td>可完整发布和使用；没有固定 10 个上线名额检查，实际资源足够时第 11 个应用不因授权被拒绝</td>
+</tr>
+<tr>
+<td>包与隔离</td>
+<td>超限、路径逃逸、跨应用/租户文件、伪造任务和越权镜像档位</td>
+<td>在正确阶段拒绝，无跨路径写入/读取；新字段有明确版本</td>
+</tr>
+<tr>
+<td>正常发布</td>
+<td>上传、扫描、准备、探活、审批、上线、浏览器/WS</td>
+<td>平台版本、执行事实和路由一致；临时资源回收</td>
+</tr>
+<tr>
+<td>依赖与镜像</td>
+<td>纯代码修改、锁文件/安装脚本变化、原生依赖、基础镜像/架构变化、自定义环境、完整镜像</td>
+<td>环境 key 包含全部输入；变更正确失效；不会修改其他应用使用中的环境</td>
+</tr>
+<tr>
+<td>挂载与启动</td>
+<td>manager 容器路径和宿主路径不同、重启、缓存清空、新节点、Node ESM 和只读目录</td>
+<td>代码、venv/node_modules 和数据各挂正确路径；有缓存不安装；缓存丢失从平台产物离线重建</td>
+</tr>
+<tr>
+<td>服务镜像交付</td>
+<td>CI 两架构构建、release 聚合、正式 Compose 与离线镜像包</td>
+<td>固定版本/提交/digest 一致，正式配置没有 manager build；平台服务升级不悄然更换应用环境</td>
+</tr>
+<tr>
+<td>断外网</td>
+<td>目标架构镜像、依赖、SDK、源码及快照接口</td>
+<td>新装和新增依赖均按离线闭包验证，不依赖开发机已有缓存</td>
+</tr>
+<tr>
+<td>离线补包</td>
+<td>首次发布依赖命中/缺失、传递依赖遗漏、错误架构、内网源未同步、增量包导入</td>
+<td>缺包不入审批、不回退公网；导入且目标验证后可重试，manager 无 MinIO 连接</td>
+</tr>
+<tr>
+<td>运行镜像配置</td>
+<td>新档位导入、改默认、旧 ID 修改、应用选择、新镜像缺 launcher 或不兼容</td>
+<td>仅授权变更生效；冻结版本不漂移；错误环境不放行，换镜像使依赖 key 正确失效</td>
+</tr>
+<tr>
+<td>状态与多进程</td>
+<td>删除本地缓存、不同 API/worker 主机、重复任务、旧 generation</td>
+<td>从平台恢复一致状态，不依赖共享本地盘，不发生多次创建或过期覆盖</td>
+</tr>
+<tr>
+<td>manager 故障</td>
+<td>超过原路由短缓存时间的 manager 重启/不可达</td>
+<td>已有代理连接不被 manager 退出直接关闭，新请求按平台权限及有效路由继续处理；独立测平台故障</td>
+</tr>
+<tr>
+<td>SQLite</td>
+<td>停写、Backup API、上传响应丢失、DDL 失败、指定恢复、预览</td>
+<td>保存确认前不破坏性迁移；无两个活动写入者；生产数据不被预览或回退误覆盖</td>
+</tr>
+<tr>
+<td>凭据</td>
+<td>候选失败、版本切换、撤权/停用、伪造头和 OBO 缺失</td>
+<td>老版本能力按切换契约处理，不能因旧容器存在就忽略旧令牌已被撤销的问题</td>
+</tr>
+<tr>
+<td>网络与权限</td>
+<td>绕代理、UDP/IP 直连、私网解析、代理调用 intent、控制网络扫描</td>
+<td>安全规则实际生效；代理和应用无 Engine 管理能力</td>
+</tr>
+<tr>
+<td>K8s 独立验证</td>
+<td>PVC 单写、维护任务、节点替换、预装镜像/仓库、RBAC</td>
+<td>在支持矩阵内真实验证；Docker 结果不代替集群交付</td>
+</tr>
+</tbody></table></div>
+<p>上表是实施后的验收要求，本次没有执行结果。文档阶段仅检查源码依据、方案一致性及离线 HTML 布局；正式开发按仓库 SDD 流程评审 spec/design/tasks，再实施和验证。</p>
+<p><a id="section-12"></a></p>
+<h2>12 待评审事项与代码证据</h2>
+<h3>12.1 需要定案的技术选择</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>编号</th>
+<th>事项</th>
+<th>本方案建议</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>D01</td>
+<td>交付阶段</td>
+<td>先补齐 Docker 存储/状态和数据可靠性，随后将应用包作为默认，镜像兼容及完整镜像并存</td>
+</tr>
+<tr>
+<td>D02</td>
+<td>进程组合</td>
+<td>保留 manager、入口和出口三个进程；部署通过 Compose 简化，不以合并 PID 为目标</td>
+</tr>
+<tr>
+<td>D03</td>
+<td>控制状态演进</td>
+<td>平台 SQL＋Redis 投影，经 API 读写；明确修改原 manager 本地路由/策略权威的设计</td>
+</tr>
+<tr>
+<td>D04</td>
+<td>应用 v2 描述与环境配置</td>
+<td>明确 bundle/image、运行档位清单导入、默认选择、自定义镜像准入、argv、data_mode 及版本组合；兼容 v1</td>
+</tr>
+<tr>
+<td>D05</td>
+<td>SQLite 升级</td>
+<td>单活动维护窗口；备份持久确认；恢复需明确恢复点与停写策略，不承诺任意 DDL 零停机</td>
+</tr>
+<tr>
+<td>D06</td>
+<td>预览与清理</td>
+<td>默认临时空库及隔离附件，TTL/并发由资源策略控制；生产副本另行授权</td>
+</tr>
+<tr>
+<td>D07</td>
+<td>K8s 首发范围</td>
+<td>在独立阶段适配 bundle 和完整镜像；构建 OCI 只作为显式启用的兼容路线</td>
+</tr>
+<tr>
+<td>D08</td>
+<td>离线支持矩阵与补包</td>
+<td>明确 OS/CPU、运行镜像、SQLite/原生库和依赖闭包；提供基础离线集合＋补包导入，无仓库模式限定可控节点</td>
+</tr>
+</tbody></table></div>
+<p>全部开源、取消商业上线额度、留在 BiSheng 仓库、backend 存储边界，以及 manager 经 CI/CD 发布镜像并由正式 Compose 引用，是确定方向。技术评审只对上表及具体依赖/启动契约等实现细节作决策。</p>
+<h3>12.2 固定提交代码证据</h3>
+<div class="table-scroll"><table class="evidence-table">
+<thead>
+<tr>
+<th>编号</th>
+<th>固定提交中的位置</th>
+<th>核查内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-cli/bisheng_cli/commands/deploy.py#L54">C01</a></td>
+<td><code>src/bisheng-cli/bisheng_cli/commands/deploy.py:54</code></td>
+<td>CLI 上传与轮询</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-cli/bisheng_cli/packaging.py#L110">C02</a></td>
+<td><code>src/bisheng-cli/bisheng_cli/packaging.py:110</code></td>
+<td>可重复打包与 SHA-256</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/schemas/app_manifest.py#L147">C03</a></td>
+<td><code>src/backend/bisheng/app_publish/domain/schemas/app_manifest.py:147</code></td>
+<td>应用清单字段</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/package_service.py#L61">C04</a></td>
+<td><code>src/backend/bisheng/app_publish/domain/services/package_service.py:61</code></td>
+<td>私有桶、解包与代码快照</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/core/config/app_runtime.py#L45">C05</a></td>
+<td><code>src/backend/bisheng/core/config/app_runtime.py:45</code></td>
+<td>后端配置及包限制</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py#L92">C06</a></td>
+<td><code>src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py:92</code></td>
+<td>异步发布阶段与接收入口</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/precheck_service.py#L156">C07</a></td>
+<td><code>src/backend/bisheng/app_publish/domain/services/precheck_service.py:156</code></td>
+<td>构建、预签名下载与临时探活</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/api/schemas.py#L37">C08</a></td>
+<td><code>src/runtime-manager/runtime_manager/api/schemas.py:37</code></td>
+<td>编排 API 参数模型</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/builder.py#L76">C09</a></td>
+<td><code>src/runtime-manager/runtime_manager/builder.py:76</code></td>
+<td>模板、基础镜像和构建流程</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/docker_backend.py#L124">C10</a></td>
+<td><code>src/runtime-manager/runtime_manager/docker_backend.py:124</code></td>
+<td>Docker API 协议与真实实现</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/templates/python3.11/Dockerfile.j2#L42">C11</a></td>
+<td><code>src/runtime-manager/runtime_manager/templates/python3.11/Dockerfile.j2:42</code></td>
+<td>依赖层与源码层</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/templates/python3.11/entrypoint.sh.j2#L27">C12</a></td>
+<td><code>src/runtime-manager/runtime_manager/templates/python3.11/entrypoint.sh.j2:27</code></td>
+<td>Python 启动入口</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/templates/node20/entrypoint.sh.j2#L44">C13</a></td>
+<td><code>src/runtime-manager/runtime_manager/templates/node20/entrypoint.sh.j2:44</code></td>
+<td>Node 启动入口</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/publish_online_service.py#L110">C14</a></td>
+<td><code>src/backend/bisheng/app_publish/domain/services/publish_online_service.py:110</code></td>
+<td>审批通过、停用分支与迁移顺序</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_runtime/domain/services/app_state_service.py#L283">C15</a></td>
+<td><code>src/backend/bisheng/app_runtime/domain/services/app_state_service.py:283</code></td>
+<td>应用状态与上线意图</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/lifecycle.py#L209">C16</a></td>
+<td><code>src/runtime-manager/runtime_manager/lifecycle.py:209</code></td>
+<td>容器参数、部署、路由切换与删除</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/config.py#L57">C17</a></td>
+<td><code>src/runtime-manager/runtime_manager/config.py:57</code></td>
+<td>RTM 配置、路径和超时默认值</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/desired_state.py#L229">C18</a></td>
+<td><code>src/runtime-manager/runtime_manager/desired_state.py:229</code></td>
+<td>本地期望状态持久化</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/preview.py#L18">C20</a></td>
+<td><code>src/runtime-manager/runtime_manager/preview.py:18</code></td>
+<td>审批预览的数据库隔离</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/appdb.py#L509">C21</a></td>
+<td><code>src/runtime-manager/runtime_manager/appdb.py:509</code></td>
+<td>SQLite 数据面、迁移和一致性快照</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/storage.py#L147">C22</a></td>
+<td><code>src/runtime-manager/runtime_manager/storage.py:147</code></td>
+<td>MinIO 附件句柄和应用隔离</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/app-proxy/app_proxy/clients.py#L177">C24</a></td>
+<td><code>src/app-proxy/app_proxy/clients.py:177</code></td>
+<td>入口鉴权和路由的双 RPC</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py#L88">C25</a></td>
+<td><code>src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py:88</code></td>
+<td>入口权限及 OBO</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/app-proxy/app_proxy/headers.py#L29">C26</a></td>
+<td><code>src/app-proxy/app_proxy/headers.py:29</code></td>
+<td>身份头清理与注入</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/egress.py#L444">C27</a></td>
+<td><code>src/runtime-manager/runtime_manager/egress.py:444</code></td>
+<td>出站策略持久化和运行配置</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/egress_proxy.py#L171">C28</a></td>
+<td><code>src/runtime-manager/runtime_manager/egress_proxy.py:171</code></td>
+<td>独立出站转发进程</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docker/docker-compose.yml#L277">C29</a></td>
+<td><code>docker/docker-compose.yml:277</code></td>
+<td>四进程部署、网络、挂载和配置</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-sdk/README.md#L1">C31</a></td>
+<td><code>src/bisheng-sdk/README.md:1</code></td>
+<td>SDK 的运行位置与三类功能</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-sdk/bisheng_sdk/retrieve.py#L40">C32</a></td>
+<td><code>src/bisheng-sdk/bisheng_sdk/retrieve.py:40</code></td>
+<td>检索 API 与双重身份</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/bisheng-sdk/bisheng_sdk/_storage_remote.py#L3">C33</a></td>
+<td><code>src/bisheng-sdk/bisheng_sdk/_storage_remote.py:3</code></td>
+<td>SDK 附件服务地址</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/features/v3.0.0/059-k8s-runtime-backend/spec.md#L108">C34</a></td>
+<td><code>features/v3.0.0/059-k8s-runtime-backend/spec.md:108</code></td>
+<td>K8s 构建、仓库和 PVC 规格</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/auth.py#L42">C35</a></td>
+<td><code>src/runtime-manager/runtime_manager/auth.py:42</code></td>
+<td>内部 HMAC 的当前实现</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/capability_bus_service.py#L384">C36</a></td>
+<td><code>src/backend/bisheng/app_publish/domain/services/capability_bus_service.py:384</code></td>
+<td>应用凭据和模型地址注入</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/version_service.py#L138">C37</a></td>
+<td><code>src/backend/bisheng/app_publish/domain/services/version_service.py:138</code></td>
+<td>冻结版本与镜像引用</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_runtime/domain/services/orchestrator_client.py#L134">C38</a></td>
+<td><code>src/backend/bisheng/app_runtime/domain/services/orchestrator_client.py:134</code></td>
+<td>后端编排 RPC 客户端</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/admission.py#L137">C39</a></td>
+<td><code>src/runtime-manager/runtime_manager/admission.py:137</code></td>
+<td>资源容量准入</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/api/readonly.py#L245">C40</a></td>
+<td><code>src/runtime-manager/runtime_manager/api/readonly.py:245</code></td>
+<td>运行环境自检</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/api/endpoints/deploy.py#L128">C41</a></td>
+<td><code>src/backend/bisheng/app_publish/api/endpoints/deploy.py:128</code></td>
+<td>发布 HTTP 接口及鉴权依赖</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/preview_instance_service.py#L440">C43</a></td>
+<td><code>src/backend/bisheng/app_publish/domain/services/preview_instance_service.py:440</code></td>
+<td>预览参数与回收</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/probe.py#L126">C44</a></td>
+<td><code>src/runtime-manager/runtime_manager/probe.py:126</code></td>
+<td>临时镜像探活与回收</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/templates/node20/Dockerfile.j2#L46">C45</a></td>
+<td><code>src/runtime-manager/runtime_manager/templates/node20/Dockerfile.j2:46</code></td>
+<td>Node 依赖和前端编译</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/api/appdb.py#L27">C46</a></td>
+<td><code>src/runtime-manager/runtime_manager/api/appdb.py:27</code></td>
+<td>SQLite 数据管理接口</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/backend/bisheng/app_publish/domain/services/app_credential_service.py#L134">C48</a></td>
+<td><code>src/backend/bisheng/app_publish/domain/services/app_credential_service.py:134</code></td>
+<td>应用凭据重签与撤销顺序</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/features/v3.0.0/054-app-domain-runtime/spec.md#L88-L97">A01</a></td>
+<td><code>features/v3.0.0/054-app-domain-runtime/spec.md:L88-L97</code></td>
+<td>F054 AC-14、AC-22：编排权限与运行服务重启目标</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/features/v3.0.0/054-app-domain-runtime/spec.md#L148-L153">A02</a></td>
+<td><code>features/v3.0.0/054-app-domain-runtime/spec.md:L148-L153</code></td>
+<td>F054 AC-59、AC-60、AC-61：选装与独立启停</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/docs/constitution.md#L156-L180">A03</a></td>
+<td><code>docs/constitution.md:L156-L180</code></td>
+<td>C8：多节点默认与共享控制状态持久化</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/app-proxy/app_proxy/clients.py#L281-L307">A05</a></td>
+<td><code>src/app-proxy/app_proxy/clients.py:L281-L307</code></td>
+<td>当前路由缓存与 manager RPC 依赖</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/.github/workflows/ci.yml#L3-L54">A06</a></td>
+<td><code>.github/workflows/ci.yml:L3-L54</code></td>
+<td>tag 构建触发、Docker Hub 认证、backend 构建入口；arm64 见同文件 L108</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/.github/workflows/release.yml#L3-L45">A07</a></td>
+<td><code>.github/workflows/release.yml:L3-L45</code></td>
+<td>release 触发和 backend 多架构版本聚合</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/Dockerfile#L1-L25">A08</a></td>
+<td><code>src/runtime-manager/Dockerfile:L1-L25</code></td>
+<td>manager 自身依赖、服务启动入口及待修正的 socket/root 注释</td>
+</tr>
+<tr>
+<td><a href="https://github.com/dataelement/bisheng/blob/736ef593f3fc6e1634008c842d2604304d6f70a6/src/runtime-manager/runtime_manager/builder.py#L76-L80">A09</a></td>
+<td><code>src/runtime-manager/runtime_manager/builder.py:L76-L80</code></td>
+<td>现有基础镜像常量；渲染读取见 L129-L148，实际调用见 L404</td>
+</tr>
+</tbody></table></div>
+<h3>12.3 官方资料</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>编号</th>
+<th>资料</th>
+<th>使用范围</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="https://sqlite.org/backup.html">R01</a></td>
+<td>SQLite Backup API</td>
+<td>在线一致备份和错误处理；本方案另加迁移前停写与持久确认</td>
+</tr>
+<tr>
+<td><a href="https://sqlite.org/wal.html">R02</a></td>
+<td>SQLite WAL</td>
+<td>单写入者与跨主机/网络文件系统限制</td>
+</tr>
+<tr>
+<td><a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">R03</a></td>
+<td>Kubernetes Persistent Volumes</td>
+<td>RWO/RWOP、CSI 和实际挂载约束</td>
+</tr>
+<tr>
+<td><a href="https://kubernetes.io/docs/concepts/containers/images/">R04</a></td>
+<td>Kubernetes Images</td>
+<td>镜像拉取策略、预装节点与版本相关的凭据验证</td>
+</tr>
+<tr>
+<td><a href="https://docs.python.org/3.11/library/venv.html">R05</a></td>
+<td>Python 3.11 venv</td>
+<td>默认环境隔离、可执行脚本路径及不可通用搬运的限制</td>
+</tr>
+<tr>
+<td><a href="https://pip.pypa.io/en/stable/cli/pip_wheel/">R06</a></td>
+<td>pip wheel</td>
+<td>从锁定输入准备可安装 wheel 产物</td>
+</tr>
+<tr>
+<td><a href="https://pip.pypa.io/en/stable/cli/pip_install/">R07</a></td>
+<td>pip install</td>
+<td>本地 wheelhouse、无索引安装、二进制与哈希约束</td>
+</tr>
+<tr>
+<td><a href="https://docs.npmjs.com/cli/v11/commands/npm-ci/">R08</a></td>
+<td>npm ci</td>
+<td>锁文件一致性、冻结安装和安装参数约束</td>
+</tr>
+<tr>
+<td><a href="https://docs.docker.com/engine/storage/bind-mounts/">R09</a></td>
+<td>Docker bind mounts</td>
+<td>daemon 主机路径语义与只读挂载</td>
+</tr>
+<tr>
+<td><a href="https://docs.docker.com/reference/compose-file/services/">R10</a></td>
+<td>Docker Compose services</td>
+<td>已发布镜像引用及服务配置；本文片段仍是待实现目标</td>
+</tr>
+<tr>
+<td><a href="https://pip.pypa.io/en/stable/cli/pip_download/">R11</a></td>
+<td>pip download</td>
+<td>离线收集包、目标平台参数及只能下载已有目标二进制的边界</td>
+</tr>
+</tbody></table></div>
+<p>历史参考：<a href="vibe-app-hosting-commercialization-review.md">原商业化评审</a>、<a href="bisheng-gateway-runtime-manager-implementation-plan.md">原 Gateway 归仓方案</a>。它们的商业化及 Gateway 迁移建议已经被本方案替代，历史代码核查结论可按固定提交追溯。</p>
+<footer class="doc-footer">此 HTML 由同目录 Markdown 生成，正文以 Markdown 为维护依据。流程图已内嵌为 SVG，无在线渲染依赖。<br>源文 SHA-256：<code>2fb280efb649aae0c6430b3cc418078e559cef8734e3e30fa402a1575a447c52</code></footer></article></div><script>
+for(const table of document.querySelectorAll('table'))table.dataset.columns=table.querySelector('tr')?.children.length||0;
+const nav=[...document.querySelectorAll('aside a[href^="#"]')];
+if('IntersectionObserver' in window){const observer=new IntersectionObserver(entries=>{for(const entry of entries){if(entry.isIntersecting){nav.forEach(a=>a.classList.toggle('active',a.hash==='#'+entry.target.id));}}},{rootMargin:'-10% 0px -75% 0px'});for(const a of nav){const el=document.querySelector(a.hash);if(el)observer.observe(el)}}
+</script></body></html>

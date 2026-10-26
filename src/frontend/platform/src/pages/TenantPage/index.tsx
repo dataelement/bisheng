@@ -7,7 +7,7 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { deleteTenantApi, getTenantsApi, updateTenantStatusApi } from "@/controllers/API/tenant";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { useTable } from "@/util/hook";
@@ -78,22 +78,18 @@ function TenantPageInner() {
         title: t("tenant.disable"),
         desc: t("tenant.confirmDisable"),
         onOk: (next: () => void) => {
-          captureAndAlertRequestErrorHoc(
-            updateTenantStatusApi(tenant.id, newStatus).then(() => {
+          return updateTenantStatusApi(tenant.id, newStatus).then(() => {
               notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
               reload();
-            }),
-          );
-          next();
+              next();
+            });
         },
       });
     } else {
-      captureAndAlertRequestErrorHoc(
-        updateTenantStatusApi(tenant.id, newStatus).then(() => {
+      updateTenantStatusApi(tenant.id, newStatus).then(() => {
           notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
           reload();
-        }),
-      );
+        }).catch(showApiError);
     }
   };
 
@@ -104,13 +100,11 @@ function TenantPageInner() {
 
   const confirmDelete = () => {
     if (!deleteTarget || deleteConfirmCode !== deleteTarget.tenant_code) return;
-    captureAndAlertRequestErrorHoc(
-      deleteTenantApi(deleteTarget.id).then(() => {
+    deleteTenantApi(deleteTarget.id).then(() => {
         notification.open({ type: "success", title: String(t("updateSuccess") ?? ''), description: "" });
         setDeleteTarget(null);
         reload();
-      }),
-    );
+      }).catch(showApiError);
   };
 
   // Tenant CRUD only makes sense in multi-tenant deployments. The route is

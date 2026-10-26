@@ -15,16 +15,15 @@ import {
   getRolesPageApi,
   updateRoleV2Api,
 } from "@/controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { DepartmentTreeNode } from "@/types/api/department";
 import { ROLE } from "@/types/api/user";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  ADMIN_PARENT_ID,
   CHILD_DEPENDENTS,
+  DEFAULT_ENABLED_MENU_IDS,
   normalizeRoleMenuSelection,
-  TASK_MODE_MENU_ID,
   WORKBENCH_CHILD_MENUS,
   WORKBENCH_PARENT_ID,
 } from "./roleMenuSelection";
@@ -40,19 +39,6 @@ import {
   serializeRoleQuotaSnapshot,
   validateRoleQuota,
 } from "./roleQuotaConfig";
-
-/** 工作台四项（首页 / 应用 / 订阅 / 知识空间）新建角色默认全开，与 PRD 一致 */
-const DEFAULT_ENABLED_MENU_IDS = [
-  WORKBENCH_PARENT_ID,
-  "home",
-  TASK_MODE_MENU_ID,
-  "apps",
-  "subscription",
-  "knowledge_space",
-  ADMIN_PARENT_ID,
-  "knowledge",
-  "build",
-] as const;
 
 export function useRolesController() {
   const { t } = useTranslation();
@@ -152,14 +138,12 @@ export function useRolesController() {
   const loadDepartments = async () => {
     // F038: only the root layer is needed here (default role-scope selection);
     // the scope picker itself lazy-loads. Avoids fetching the whole org tree.
-    const res = await captureAndAlertRequestErrorHoc(getDepartmentChildrenApi(null));
+    const res = await getDepartmentChildrenApi(null);
     if (res) setDeptTree(res);
   };
 
   const loadRoles = async (nextPage = page, nextKeyword = keyword) => {
-    const res = await captureAndAlertRequestErrorHoc(
-      getRolesPageApi({ page: nextPage, limit: 20, keyword: nextKeyword || undefined }),
-    );
+    const res = await getRolesPageApi({ page: nextPage, limit: 20, keyword: nextKeyword || undefined });
     if (res) {
       setRoles(res.data || []);
       setTotal(res.total || 0);
@@ -167,11 +151,11 @@ export function useRolesController() {
   };
 
   useEffect(() => {
-    loadDepartments();
+    void loadDepartments().catch(showApiError);
   }, []);
 
   useEffect(() => {
-    loadRoles(1, keyword);
+    void loadRoles(1, keyword).catch(showApiError);
     setPage(1);
   }, [keyword]);
 
@@ -206,8 +190,9 @@ export function useRolesController() {
   const loadRoleMenus = async (role: ROLE, roleQuota: RoleQuotaState) => {
     setIsMenuLoading(true);
     setMenuLoadFailed(false);
-    const menuRes = await captureAndAlertRequestErrorHoc(getRoleMenuV2Api(role.id));
-    if (menuRes === false || !Array.isArray(menuRes)) {
+    try {
+    const menuRes = await getRoleMenuV2Api(role.id);
+    if (!Array.isArray(menuRes)) {
       setMenuLoadFailed(true);
       setInitialEditSnapshot("");
       setIsMenuLoading(false);
@@ -234,6 +219,13 @@ export function useRolesController() {
       }),
     );
     setIsMenuLoading(false);
+    } catch (error) {
+      setMenuLoadFailed(true);
+      setInitialEditSnapshot("");
+      showApiError(error);
+    } finally {
+      setIsMenuLoading(false);
+    }
   };
 
   const openEdit = async (role: ROLE) => {
@@ -282,16 +274,16 @@ export function useRolesController() {
     };
     try {
       if (!activeRole) {
-        const created = await captureAndAlertRequestErrorHoc(createRoleV2Api(payload));
-        if (created === null || created === false) return;
+        await createRoleV2Api(payload);
       } else {
-        const updated = await captureAndAlertRequestErrorHoc(updateRoleV2Api(activeRole.id, payload));
-        if (updated === null || updated === false) return;
+        await updateRoleV2Api(activeRole.id, payload);
       }
 
       toast.show({ type: "success", message: String(t("saved") ?? '') });
       setEditOpen(false);
       await loadRoles();
+    } catch (error) {
+      showApiError(error);
     } finally {
       setIsSaving(false);
     }
@@ -315,14 +307,10 @@ export function useRolesController() {
       desc,
       okTxt: t("delete"),
       onOk: async (next) => {
-        try {
-          const res = await captureAndAlertRequestErrorHoc(deleteRoleV2Api(item.id));
-          if (res === false) return;
+          await deleteRoleV2Api(item.id);
           await loadRoles();
           toast.show({ type: "success", message: String(t("deleteSuccess") ?? '') });
-        } finally {
           next();
-        }
       },
     });
   };

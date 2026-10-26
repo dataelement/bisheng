@@ -22,9 +22,10 @@ listPersonalTokensApi,
 revokePersonalTokenApi,
 updatePersonalTokenSettingApi,
 } from "@/controllers/API/personalToken";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import type { PersonalTokenDataScope,PersonalTokenLedgerItem,PersonalTokenSetting } from "@/types/api/openApi";
-import { useCallback,useEffect,useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
+import { locationContext } from "@/contexts/locationContext";
 import { useTranslation } from "react-i18next";
 import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter";
 import { useOpenApiList } from "../OpenApiList/useOpenApiList";
@@ -35,6 +36,17 @@ function formatDate(value: string | null): string {
 
 export function PersonalToken() {
   const { t } = useTranslation()
+  const { appConfig } = useContext(locationContext)
+  // The policy row is per tenant; on a single-tenant deployment "tenant policy"
+  // names a concept the rest of the console never shows, so it reads as
+  // "token policy" there. Same setting, same endpoint — copy only.
+  const multiTenantEnabled = !!appConfig?.multiTenantEnabled
+  const settingsTitleKey = multiTenantEnabled
+    ? "openApiManagement.personalToken.settings"
+    : "openApiManagement.personalToken.settingsSingle"
+  const settingsSavedKey = multiTenantEnabled
+    ? "openApiManagement.personalToken.settingsSaved"
+    : "openApiManagement.personalToken.settingsSavedSingle"
   const [setting, setSetting] = useState<PersonalTokenSetting | null>(null)
   const [enabled, setEnabled] = useState(false)
   const [ttlDays, setTtlDays] = useState(365)
@@ -46,7 +58,7 @@ export function PersonalToken() {
   const items = list.items
 
   const load = useCallback(async () => {
-    const nextSetting = await captureAndAlertRequestErrorHoc(getPersonalTokenSettingApi())
+    const nextSetting = await getPersonalTokenSettingApi()
     if (!nextSetting) return
     setSetting(nextSetting)
     setEnabled(nextSetting.pat_enabled)
@@ -55,7 +67,7 @@ export function PersonalToken() {
   }, [])
 
   useEffect(() => {
-    void load()
+    void load().catch(showApiError)
   }, [load])
 
   const applySetting = (next: PersonalTokenSetting) => {
@@ -68,13 +80,11 @@ export function PersonalToken() {
   const doSave = async () => {
     setSaving(true)
     try {
-      const next = await captureAndAlertRequestErrorHoc(
-        updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays, data_scope: dataScope }),
-      )
+      const next = await updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays, data_scope: dataScope })
       if (!next) return
 
       applySetting(next)
-      toast.show({ type: "success", message: [String(t("prompt") ?? ''), String(t("openApiManagement.personalToken.settingsSaved") ?? '')].filter(Boolean).join('\n') })
+      toast.show({ type: "success", message: [String(t("prompt") ?? ''), String(t(settingsSavedKey) ?? '')].filter(Boolean).join('\n') })
     } finally {
       setSaving(false)
     }
@@ -91,14 +101,14 @@ export function PersonalToken() {
         title: t("openApiManagement.personalToken.tightenConfirmTitle"),
         desc: t("openApiManagement.personalToken.tightenConfirmBody"),
         okTxt: t("openApiManagement.personalToken.tightenConfirmOk"),
-        onOk: (close) => {
+        onOk: async (close) => {
+          await doSave()
           close()
-          void doSave()
         },
       })
       return
     }
-    void doSave()
+    void doSave().catch(showApiError)
   }
 
   const handleRevoke = (item: PersonalTokenLedgerItem) => {
@@ -106,10 +116,10 @@ export function PersonalToken() {
       title: t("openApiManagement.personalToken.revokeConfirmTitle"),
       desc: t("openApiManagement.personalToken.revokeConfirmBody"),
       okTxt: t("openApiManagement.actions.revoke"),
-      onOk: (close) => {
+      onOk: async (close) => {
+        await revokePersonalTokenApi(item.id)
+        await list.reload()
         close()
-        void captureAndAlertRequestErrorHoc(revokePersonalTokenApi(item.id).then(() => true))
-          .then((success) => { if (success) void list.reload() })
       },
     })
   }
@@ -118,7 +128,7 @@ export function PersonalToken() {
     <div className="h-full min-h-0 flex-1 space-y-5 overflow-y-auto pb-8">
       <section className="rounded-md border p-4">
         <div className="mb-4">
-          <h2 className="font-semibold">{t("openApiManagement.personalToken.settings")}</h2>
+          <h2 className="font-semibold">{t(settingsTitleKey)}</h2>
           {!setting?.deployment_enabled ? (
             <p className="mt-1 text-sm text-muted-foreground">{t("openApiManagement.personalToken.deploymentDisabled")}</p>
           ) : null}

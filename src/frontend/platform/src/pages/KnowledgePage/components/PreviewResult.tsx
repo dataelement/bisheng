@@ -3,7 +3,7 @@ import { FileIcon } from "@/components/bs-icons/file";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Select } from "@bisheng/ui";
 import { delChunkInPreviewApi,previewFileSplitApi,updatePreviewChunkApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest } from "@/controllers/request";
 import { cn } from "@/util/utils";
 import { useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -154,9 +154,6 @@ export default function PreviewResult({
             if (["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)) {
               setFileViewUrl({ load: false, url: currentFile.filePath });
             }
-            // 调用原错误提示高阶函数（如果需要）
-            // captureAndAlertRequestErrorHoc 可能需要调整为接收错误对象
-            // captureAndAlertRequestErrorHoc(null, data);
             console.error('解析错误：', data.code, data.message);
             break;
           case 'canceled':
@@ -178,12 +175,12 @@ export default function PreviewResult({
 
   const handleDelete = async (chunkIndex: number, text: string) => {
     const filePath = rules.fileList.find(file => file.id === selectId)?.filePath
-    await captureAndAlertRequestErrorHoc(delChunkInPreviewApi({
+    await delChunkInPreviewApi({
       knowledge_id: id || kId,
       file_path: filePath,
       text: text,
       chunk_index: chunkIndex
-    }))
+    })
     const res = chunks.filter(chunk => chunk.chunkIndex !== chunkIndex)
     setChunks(res)
   }
@@ -250,7 +247,7 @@ export default function PreviewResult({
         edit={step === 3 || (step === 2 && !showPreview)}
         loading={loading}
         chunks={chunks}
-        onDel={handleDelete}
+        onDel={handleUiRequest(handleDelete)}
         onChange={handleChunkChange}
       />
     </div>

@@ -1,3 +1,4 @@
+import { showApiError } from "~/api/request";
 /**
  * Folder/space chat hook — manages sessions, history, and streaming.
  *
@@ -59,10 +60,24 @@ export default function useFolderChat(
     const [activeChatId, setActiveChatId] = useState<string>("");
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
+    const [historyError, setHistoryError] = useState<unknown>(null);
+    const [historyReload, setHistoryReload] = useState(0);
+    const [isClearing, setIsClearing] = useState(false);
+    const clearingRef = useRef<object | null>(null);
+    const retryHistory = () => setHistoryReload(value => value + 1);
     const [isLoading, setIsLoading] = useState(false);
     const [isSessionsLoading, setIsSessionsLoading] = useState(false);
     const [sseSubmission, setSseSubmission] =
         useState<StreamChatSSESubmission | null>(null);
+
+    const resourceKey = chatMemoKey(spaceId, folderId);
+    const resourceRef = useRef({ key: resourceKey });
+    if (resourceRef.current.key !== resourceKey) {
+        resourceRef.current = { key: resourceKey };
+        clearingRef.current = null;
+    }
+    const activeChatRef = useRef(activeChatId);
+    activeChatRef.current = activeChatId;
 
     const messagesRef = useRef<ChatMessage[]>([]);
     messagesRef.current = messages;
@@ -79,14 +94,18 @@ export default function useFolderChat(
     // --- Load session list on mount / when space or folder changes ---
     useEffect(() => {
         if (!enabled) return;
+        let active = true;
         // Immediately reset state to prevent stale chatId from being used
         // if the user sends a message before the API responds.
         setActiveChatId("");
         setMessages([]);
         setSessions([]);
+        setHistoryError(null);
+        setIsClearing(false);
         setIsSessionsLoading(true);
         getFolderSessions(spaceId, folderId)
             .then((list) => {
+                if (!active) return;
                 setSessions(list);
                 if (list.length > 0) {
                     // Restore the last-viewed session for this space/folder if it still
@@ -101,11 +120,10 @@ export default function useFolderChat(
                 }
                 // list.length === 0 → activeChatId stays "", handled above
             })
-            .catch((err) =>
-                console.error("[FolderChat] Failed to load sessions:", err)
-            )
-            .finally(() => setIsSessionsLoading(false));
-    }, [spaceId, folderId, enabled]);
+            .catch(error => { if (active) setHistoryError(error); })
+            .finally(() => { if (active) setIsSessionsLoading(false); });
+        return () => { active = false; };
+    }, [spaceId, folderId, enabled, historyReload]);
 
     // Remember the active chat per space/folder so a later remount can restore it.
     useEffect(() => {
@@ -125,17 +143,18 @@ export default function useFolderChat(
             skipHistoryLoadRef.current = false;
             return;
         }
+        setHistoryError(null);
         setIsLoading(true);
+        let active = true;
         getFolderChatHistory(spaceId, {
             folderId,
             chatId: activeChatId,
         })
-            .then((msgs) => setMessages(msgs))
-            .catch((err) =>
-                console.error("[FolderChat] Failed to load history:", err)
-            )
-            .finally(() => setIsLoading(false));
-    }, [spaceId, folderId, activeChatId, enabled]);
+            .then(msgs => { if (active) setMessages(msgs); })
+            .catch(error => { if (active) setHistoryError(error); })
+            .finally(() => { if (active) setIsLoading(false); });
+        return () => { active = false; };
+    }, [spaceId, folderId, activeChatId, enabled, historyReload]);
 
     // --- Helper: build SSE submission ---
     const buildSubmission = useCallback(
@@ -208,7 +227,7 @@ export default function useFolderChat(
             setMessages([]);
             return session;
         } catch (err) {
-            console.error("[FolderChat] Failed to create session:", err);
+            showApiError(err);
         }
     }, [enabled, spaceId, numericFolderId]);
 
@@ -267,7 +286,7 @@ export default function useFolderChat(
                     });
                 }
             } catch (err) {
-                console.error("[FolderChat] Failed to delete session:", err);
+                showApiError(err);
             }
         },
         [enabled, spaceId, numericFolderId, activeChatId]
@@ -276,7 +295,7 @@ export default function useFolderChat(
     // --- Send a message ---
     const sendMessage = useCallback(
         async (text: string, _files?: any[] | null, tag?: FolderChatTag) => {
-            if (!text.trim() || isStreaming || !enabled) return;
+            if (clearingRef.current || !text.trim() || isStreaming || !enabled) return;
 
             // If no active session, create one first
             let chatId = activeChatId;
@@ -356,27 +375,34 @@ export default function useFolderChat(
 
     // --- Clear conversation (delete session + clear local) ---
     const clearConversation = useCallback(() => {
+        if (clearingRef.current) return;
         stopGenerating();
         if (activeChatId && enabled) {
-            deleteFolderSession(spaceId, activeChatId, numericFolderId).catch(
-                (err) =>
-                    console.error(
-                        "[FolderChat] Failed to delete session on clear:",
-                        err
-                    )
-            );
-            setSessions((prev) =>
-                prev.filter((s) => s.chat_id !== activeChatId)
-            );
+            const operation = {};
+            clearingRef.current = operation;
+            setIsClearing(true);
+            const resource = resourceRef.current;
+            void deleteFolderSession(spaceId, activeChatId, numericFolderId).then(() => {
+                if (resourceRef.current !== resource) return;
+                setSessions(prev => prev.filter(s => s.chat_id !== activeChatId));
+                if (activeChatRef.current === activeChatId) {
+                    setActiveChatId("");
+                    setMessages([]);
+                }
+            }).catch(showApiError).finally(() => {
+                if (clearingRef.current === operation) {
+                    clearingRef.current = null;
+                    setIsClearing(false);
+                }
+            });
         }
-        setActiveChatId("");
-        setMessages([]);
+
     }, [stopGenerating, activeChatId, enabled, spaceId, numericFolderId]);
 
     // --- Regenerate ---
     const regenerate = useCallback(
         (parentMessageId: string) => {
-            if (isStreaming || !enabled || !activeChatId) return;
+            if (clearingRef.current || isStreaming || !enabled || !activeChatId) return;
 
             const parentMsg = messagesRef.current.find(
                 (m) => m.messageId === parentMessageId
@@ -410,6 +436,9 @@ export default function useFolderChat(
     );
 
     return {
+        historyError,
+        isClearing,
+        retryHistory,
         messages,
         sessions,
         activeChatId,

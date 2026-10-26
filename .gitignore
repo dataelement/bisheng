@@ -19,6 +19,8 @@ autogen_coding/
 .claude/docs/
 # Claude Code runtime artifacts
 .claude/scheduled_tasks.lock
+# Codex local tooling config (per-developer, not for sharing)
+.codex/
 
 
 

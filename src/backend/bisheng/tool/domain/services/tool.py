@@ -567,7 +567,6 @@ class ToolServices(BaseModel):
             permission_version=0,
             context_version=context_version,
             preset=preset,
-            system_allowlisted=preset and tool_type.user_id is None,
         )
 
     async def refresh_all_mcp(self) -> list[str]:

@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
-import { Button, Input, Select, toast } from '@bisheng/ui';
+import { Alert, Button, Input, Select, toast } from '@bisheng/ui';
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
@@ -15,7 +15,7 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useAdminScope } from "@/hooks/useAdminScope";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -77,6 +77,9 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
 
     const [formData, setFormData] = useState({ ...defaultForm })
     const [nameError, setNameError] = useState('')
+    const [detailError, setDetailError] = useState<unknown>(null)
+    const [detailLoading, setDetailLoading] = useState(id !== -1)
+    const [detailReload, setDetailReload] = useState(0)
 
     // Create mode reads the admin scope fresh instead of taking it from the
     // list page: the scope is a server-side lease that can expire while the
@@ -95,11 +98,20 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     });
 
     useEffect(() => {
-        if (id === -1) return
-        getLLmServerDetail(id).then(res => {
-            setFormData(res)
-        })
-    }, [id])
+        let active = true;
+        setDetailError(null);
+        setFormData({ ...defaultForm });
+        setDetailLoading(id !== -1);
+        if (id === -1) return;
+        void getLLmServerDetail(id).then(res => {
+            if (active) setFormData(res);
+        }).catch(error => {
+            if (!active) return;
+            setDetailError(error);
+            showApiError(error);
+        }).finally(() => { if (active) setDetailLoading(false); });
+        return () => { active = false; };
+    }, [id, detailReload])
 
     const getModelsByType = useSelectModel()
     const handleTypeChange = (val) => {
@@ -195,19 +207,19 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             }
 
             if (id === -1) {
-                await captureAndAlertRequestErrorHoc(addLLmServer(saveData).then(res => {
+                await addLLmServer(saveData).then(res => {
                     onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
                     onBack()
-                }))
+                })
             } else {
-                await captureAndAlertRequestErrorHoc(updateLLmServer(saveData).then(res => {
+                await updateLLmServer(saveData).then(res => {
                     onAfterSave(t('model.updateSuccess'))
                     onBack()
-                }))
+                })
             }
             refetchConfig()
         } catch (error) {
-            console.error('Save error:', error);
+            showApiError(error);
         } finally {
             setIsLoading(false);
         }
@@ -217,12 +229,12 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         bsConfirm({
             desc: t('model.deleteConfirmation'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteLLmServer(id).then(res => {
-                    onAfterSave(t('model.deleteSuccess'))
-                    refetchConfig()
-                }))
-                onBack()
-                next()
+                return deleteLLmServer(id).then(() => {
+                    onAfterSave(t('model.deleteSuccess'));
+                    refetchConfig();
+                    onBack();
+                    next();
+                });
             }
         })
     }
@@ -233,9 +245,14 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
 
     const providerInfo = useModelProviderInfo(formData.type)
 
-    if (!formData) return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+    if (detailLoading) return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
         <Outlined.Loading  className="size-4 animate-spin"/>
     </div>
+
+    if (detailError) return <Alert type="error" live
+        description={detailError instanceof Error ? detailError.message : String(t('api_errors:fallback'))}
+        actions={[{ label: t('retry', { ns: 'knowledge' }), onClick: () => setDetailReload(value => value + 1) }]}
+    />;
 
     return <div className="relative size-full py-4">
         <div className="flex ml-6 items-center gap-x-3">

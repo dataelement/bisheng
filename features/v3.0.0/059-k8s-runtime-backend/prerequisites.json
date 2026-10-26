@@ -1,0 +1,37 @@
+{
+  "feature": "F059",
+  "status": "inherited_from_release",
+  "public_bootstrap": {
+    "source_commit": "0e3c156e5042d7805c3b02f32c39c49e235bf521",
+    "branch": "codex/f086-tenant-bootstrap",
+    "release_base": "8510a9645382c7ac5f886503e26ae68cb8a0d935",
+    "tests": "17 hotfix tests; inherited permission/audit selection 197 passed, 3 xfailed",
+    "inherited": true,
+    "reason": "Explicit user authorization on 2026-10-22; ordinary release-line merge; production repair files identical to release.",
+    "release_commit": "9d156f261cc7769fcf75f41caeb104a425308017",
+    "f059_merge_commit": "98fbba0325be7a897239e9fe853653297b4b1b87",
+    "pushed": true,
+    "remote_head_verified": true
+  },
+  "vibe_byte_counters": {
+    "source_commit": "667546bb77",
+    "source_branch": "codex/086-vibe-runtime-delivery",
+    "branch_specific_reason": "runtime_delivery.py does not exist on feat/3.0.0",
+    "imported": true,
+    "integration_revision": "f059_merge_f086_heads",
+    "tests": "27 passed",
+    "deliberate_divergence": "Combine BigInteger and existing String imports; static model guard includes new K8s models and explicitly nullable historical authorization_id/unbound uid unique keys. Neither source revision parent is changed."
+  },
+  "release_inheritance": {
+    "schema_head": "f059_merge_release_heads",
+    "previous_heads": [
+      "f059_merge_f086_heads",
+      "asr_rt_model_type",
+      "merge_skill_center_heads"
+    ],
+    "runtime_tests": "600 passed, 10 skipped",
+    "backend_tests": "82 passed",
+    "frontend_tests": "98 passed",
+    "frontend_quality_new_findings": 0
+  }
+}

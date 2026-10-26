@@ -5,7 +5,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { DialogClose } from "@/components/bs-ui/dialog";
 
 import { getWorkflowReportTemplate,saveWorkflowReportTemplate } from "@/controllers/API/workflow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import Word from "@/pages/Report/components/Word";
 import { getOfficeReachableUrl } from "@/utils/officeUrl";
@@ -55,11 +55,16 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
     const handleSave = async () => {
         if (saving) return
         setSaving(true)
-        const res = await captureAndAlertRequestErrorHoc(saveWorkflowReportTemplate(docx.key, flowId))
-        setSaving(false)
+        try {
+        const res = await saveWorkflowReportTemplate(docx.key, flowId)
         // Failures are already surfaced by the request interceptor.
         if (res?.saved) {
             toast.show({ type: 'success', message: String(t('report.saveSuccess') ?? '') })
+        }
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setSaving(false)
         }
     }
 
@@ -144,7 +149,7 @@ const useReport = (versionKey, flowId, onchange) => {
             console.warn('REPORT:读取报告所用KEY是 :>> ', versionKey);
             console.warn('REPORT:读取报告所后变更KEY是 :>> ', res.version_key);
             onchange(res.version_key)
-        })
+        }).catch(showApiError).finally(() => setPageLoading(false))
     }, [])
 
 

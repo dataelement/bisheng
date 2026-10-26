@@ -8,7 +8,7 @@ import { CardContent } from "@/components/bs-ui/card";
 
 import { locationContext } from "@/contexts/locationContext";
 import { getDailyConfigApi, setDailyConfigApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
@@ -32,6 +32,7 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
 
     useEffect(() => {
         setConfigMeta(null);
+        loadedCfgRef.current = null;
         getDailyConfigApi().then((res) => {
             const { data: cfg, meta } = resolveConfigEnvelope<any>(res);
             setConfigMeta(meta);
@@ -40,7 +41,7 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
             setDescription(cfg?.applicationCenterDescription ?? "");
             // Blank = unconfigured; the placeholder shows the default and the client localizes it
             setMenuDisplayName((cfg?.appCenterMenuDisplayName ?? "").trim());
-        });
+        }).catch(showApiError);
     }, [scopeVersion, t]);
 
     const handleChange = (field: "welcome" | "description", value: string) => {
@@ -52,7 +53,7 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
     };
 
     const handleSave = async () => {
-        if (welcome.length > MAX_LEN || description.length > MAX_LEN) return;
+        if (!loadedCfgRef.current || welcome.length > MAX_LEN || description.length > MAX_LEN) return;
         const dataToSave = {
             ...(loadedCfgRef.current || {}),
             // Round-tripped from the home tab; normalize so a saved default name doesn't stay frozen
@@ -61,7 +62,7 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
             applicationCenterWelcomeMessage: welcome.trim() || t("chatConfig.appCenterWelcomePlaceholder"),
             applicationCenterDescription: description.trim() || t("chatConfig.appCenterDescriptionPlaceholder"),
         };
-        captureAndAlertRequestErrorHoc(setDailyConfigApi(dataToSave)).then((res) => {
+        await setDailyConfigApi(dataToSave).then((res) => {
             if (res) {
                 setConfigMeta({ inherited_from_root: false, has_override: true });
                 notification.open({ type: "success", description: String(t("chatConfig.saveSuccess") ?? '') });
@@ -104,7 +105,7 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
                         />
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
-                        <Button disabled={welcome.length > MAX_LEN || description.length > MAX_LEN} onClick={handleSave}>{t("save")}</Button>
+                        <Button disabled={!loadedCfgRef.current || welcome.length > MAX_LEN || description.length > MAX_LEN} onClick={handleUiRequest(handleSave)}>{t("save")}</Button>
                     </div>
                 </CardContent>
             </div>

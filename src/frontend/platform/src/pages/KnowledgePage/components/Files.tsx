@@ -30,7 +30,7 @@ import { useTranslation } from "react-i18next";
 
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import { batchDownloadFileApi,deleteFile,getKnowledgeDetailApi,readFileByLibDatabase,retryKnowledgeFileApi } from "../../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import useKnowledgeStore from "../useKnowledgeStore";
@@ -126,11 +126,11 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
             title: t('prompt'),
             desc: t('confirmDeleteFile'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteFile(id).then(res => {
+                return deleteFile(id).then(() => {
                     reload()
                     setSelectedFileObjs(prev => prev.filter(file => file.id !== id));
-                }))
-                next()
+                    next()
+                })
             },
         })
     }
@@ -138,9 +138,9 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     // Retry parsing (preserving original file parameter structure)
     const handleRetry = (files) => {
         if (!canEditKb) return;
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: files }).then(res => {
+        retryKnowledgeFileApi({ file_objs: files }).then(() => {
             reload()
-        }))
+        }).catch(showApiError)
     }
 
     // Select all/Deselect all (storing complete file objects)
@@ -186,15 +186,15 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
             title: t('prompt'),
             desc: t('confirmDeleteSelectedFiles', { count: selectedFileObjs.length }),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(Promise.all(
+                return Promise.all(
                     selectedFileObjs.map(file => deleteFile(file.id))
                 ).then(() => {
                     setPage(1);
                     reload();
                     setSelectedFileObjs([]);
                     setIsAllSelected(false);
-                }))
-                next();
+                    next();
+                })
             },
         })
     }

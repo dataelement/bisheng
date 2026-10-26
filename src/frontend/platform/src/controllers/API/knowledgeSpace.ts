@@ -38,9 +38,9 @@ export async function batchCreateDepartmentKnowledgeSpacesApi(
  */
 export async function getSelectableKnowledgeSpacesApi(): Promise<KnowledgeSpaceSummary[]> {
   const results = await Promise.all([
-    axios.get(`/api/v1/knowledge/space/mine`).catch(() => []),
-    axios.get(`/api/v1/knowledge/space/joined`).catch(() => []),
-    axios.get(`/api/v1/knowledge/space/department`).catch(() => []),
+    axios.get(`/api/v1/knowledge/space/mine`),
+    axios.get(`/api/v1/knowledge/space/joined`),
+    axios.get(`/api/v1/knowledge/space/department`),
   ])
   const byId = new Map<number, KnowledgeSpaceSummary>()
   results.flat().forEach((space: KnowledgeSpaceSummary) => {

@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { checkAppEditPermission, getFlowApi } from "@/controllers/API/flow";
+import { showApiError } from "@/controllers/request";
 import { flowVersionCompatible } from "@/util/flowCompatible";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -24,7 +25,7 @@ export default function FlowPage() {
     const flowInit = async () => {
         await checkAppEditPermission(id, 10)
         
-        getFlowApi(id).then(f => {
+        await getFlowApi(id).then(f => {
             setChecking(false)
             clearRunCache();
 
@@ -53,7 +54,7 @@ export default function FlowPage() {
     }
 
     useEffect(() => {
-        flowInit()
+        void flowInit().catch(showApiError).finally(() => setChecking(false))
 
         return () => {
             setFlow(null);

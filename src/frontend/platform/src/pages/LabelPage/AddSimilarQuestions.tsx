@@ -12,7 +12,7 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { addSimilarQa, getQaList } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -87,7 +87,7 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
         const operation = operationRef.current;
         pendingRef.current = true;
         setSaving(true);
-        await captureAndAlertRequestErrorHoc(addSimilarQa({
+        await addSimilarQa({
             ids: selectedItems,
             question: qRef.current
         }).then(async () => {
@@ -96,7 +96,7 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
                 close();
             }
             await onMarked?.(operation);
-        })).finally(() => {
+        }).catch(showApiError).finally(() => {
             if (generation === generationRef.current) { pendingRef.current = false; setSaving(false); }
         });
     };

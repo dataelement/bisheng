@@ -56,6 +56,10 @@ def test_env_exposes_only_normalized_workflow_auto_rerun_switch(monkeypatch):
         get_knowledge=lambda: SimpleNamespace(image_parser_enabled=False, version_management=None),
         get_from_db=lambda key: {} if key == "env" else "",
         get_system_login_method=lambda: SimpleNamespace(bisheng_pro=False, dashboard_pro=False),
+        # F049 / F054 switches ``get_env`` reads on this branch; the fake settings
+        # object has to carry them or the endpoint raises before reaching workflow.
+        open_platform=SimpleNamespace(enabled=False),
+        app_runtime=SimpleNamespace(enabled=False),
         get_workflow_conf=lambda: WorkflowConf(auto_rerun_on_open=True),
     )
     monkeypatch.setattr(endpoints, "bisheng_settings", fake_settings)
@@ -75,6 +79,10 @@ def test_env_fails_closed_when_workflow_config_cannot_be_loaded(monkeypatch):
         get_knowledge=lambda: SimpleNamespace(image_parser_enabled=False, version_management=None),
         get_from_db=lambda key: {} if key == "env" else "",
         get_system_login_method=lambda: SimpleNamespace(bisheng_pro=False, dashboard_pro=False),
+        # F049 / F054 switches ``get_env`` reads on this branch; the fake settings
+        # object has to carry them or the endpoint raises before reaching workflow.
+        open_platform=SimpleNamespace(enabled=False),
+        app_runtime=SimpleNamespace(enabled=False),
         get_workflow_conf=raise_invalid_config,
     )
     monkeypatch.setattr(endpoints, "bisheng_settings", fake_settings)

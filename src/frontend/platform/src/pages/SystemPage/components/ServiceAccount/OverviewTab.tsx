@@ -7,13 +7,14 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Label } from "@/components/bs-ui/label";
 
+import { locationContext } from "@/contexts/locationContext";
 import {
 deleteServiceAccountApi,
 listServiceAccountResourceGrantsApi,
 setServiceAccountEnabledApi,
 updateServiceAccountApi,
 } from "@/controllers/API/serviceAccount";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import type {
 ServiceAccountForm,
 ServiceAccountItem,
@@ -21,7 +22,7 @@ ServiceAccountItem,
 import { formatIsoDateTime } from "@/util/utils";
 import { Outlined } from "bisheng-icons";
 
-import { type ReactNode,useState } from "react";
+import { type ReactNode,useContext,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export interface OverviewTabProps {
@@ -51,6 +52,10 @@ export function OverviewTab({
   onDeleted,
 }: OverviewTabProps) {
   const { t } = useTranslation()
+  const { appConfig } = useContext(locationContext)
+  // A standard docker install is a single (Root) tenant: showing "Tenant: 1"
+  // there names a concept the deployment does not expose anywhere else.
+  const multiTenantEnabled = !!appConfig?.multiTenantEnabled
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(detail.name)
   const [description, setDescription] = useState(detail.description || "")
@@ -91,13 +96,13 @@ export function OverviewTab({
     }
     setLoading("save")
     try {
-      const updated = await captureAndAlertRequestErrorHoc(
-        updateServiceAccountApi(detail.id, payload),
-      )
+      const updated = await updateServiceAccountApi(detail.id, payload)
       if (!updated) return
       notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.updated") ?? '') })
       setEditing(false)
       onChanged(updated)
+    } catch (error) {
+      showApiError(error)
     } finally {
       setLoading(null)
     }
@@ -106,9 +111,7 @@ export function OverviewTab({
   const handleToggle = () => {
     const enabled = detail.status !== "enabled"
     setLoading("toggle")
-    void captureAndAlertRequestErrorHoc(
-      setServiceAccountEnabledApi(detail.id, enabled),
-    )
+    void setServiceAccountEnabledApi(detail.id, enabled)
       .then((updated) => {
         if (!updated) return
         notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t(
@@ -118,14 +121,12 @@ export function OverviewTab({
           ) ?? '') })
         onChanged(updated)
       })
-      .finally(() => setLoading(null))
+      .catch(showApiError).finally(() => setLoading(null))
   }
 
   const handleDelete = async () => {
     setLoading("delete")
-    const grants = await captureAndAlertRequestErrorHoc(
-      listServiceAccountResourceGrantsApi(detail.id),
-    ).finally(() => setLoading(null))
+    const grants = await listServiceAccountResourceGrantsApi(detail.id).finally(() => setLoading(null))
     if (!grants) return
     bsConfirm({
       title: t("openApiManagement.serviceAccount.deleteConfirmTitle"),
@@ -157,13 +158,13 @@ export function OverviewTab({
         </div>
       ),
       onOk: (close) => {
-        close()
         setLoading("delete")
-        void captureAndAlertRequestErrorHoc(deleteServiceAccountApi(detail.id))
+        return deleteServiceAccountApi(detail.id)
           .then((result) => {
             if (!result) return
             notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.deleted") ?? '') })
             onDeleted()
+            close()
           })
           .finally(() => setLoading(null))
       },
@@ -183,9 +184,11 @@ export function OverviewTab({
         <Field label={t("openApiManagement.fields.status")}>
           {t(`openApiManagement.status.${detail.status}`)}
         </Field>
-        <Field label={t("openApiManagement.fields.tenant")}>
-          {detail.tenant_id}
-        </Field>
+        {multiTenantEnabled ? (
+          <Field label={t("openApiManagement.fields.tenant")}>
+            {detail.tenant_id}
+          </Field>
+        ) : null}
         <Field
           label={t("openApiManagement.fields.description")}
           className="col-span-2"
@@ -272,7 +275,7 @@ export function OverviewTab({
                   : "openApiManagement.actions.enable",
               )}
             </Button>
-            <Button variant="solid" disabled={loading !== null} onClick={handleDelete} color="danger">
+            <Button variant="solid" disabled={loading !== null} onClick={handleUiRequest(handleDelete)} color="danger">
               {loading === "delete" ? (
                 <Outlined.Loading
                   aria-hidden="true"

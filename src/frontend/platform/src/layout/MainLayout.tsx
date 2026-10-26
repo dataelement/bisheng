@@ -20,7 +20,6 @@ import { Separator } from "../components/bs-ui/separator";
 import { darkContext } from "../contexts/darkContext";
 import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
-import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
 import { getBrandAssetUrl } from "../utils/brand";
 import { HeaderMenu } from "./HeaderMenu";
@@ -41,7 +40,7 @@ export default function MainLayout() {
             desc: `${t("menu.logoutContent")}？`,
             okTxt: t("system.confirm"),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(logoutApi()).then((_) => {
+                return logoutApi().then((_) => {
                     const thirdPartyLogoutUrl = localStorage.getItem("THIRD_PARTY_LOGOUT_URL");
                     localStorage.removeItem("isLogin");
                     if (thirdPartyLogoutUrl) {
@@ -49,8 +48,8 @@ export default function MainLayout() {
                     } else {
                         setUser(null);
                     }
+                    next();
                 });
-                next();
             },
         });
     };

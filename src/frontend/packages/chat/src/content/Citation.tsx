@@ -2,16 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { Badge } from '@bisheng/ui';
 import { asRecord } from '../core/normalizeHistory';
-import { useMarkdownServices, useCitationUtilities } from './MarkdownServices';
+import { useCitationPresentation, useCitationUtilities } from './MarkdownServices';
 import { CitationPreviewCard } from './CitationPreviewCard';
-import type { ChatCitation, ChatCitationPayload, CitationDisplayData, CitationDetailLoader } from './types';
+import type { ChatCitation, CitationDisplayData, CitationDetailLoader } from './types';
 export const Citation = ({ data: rawData, children, initialDetail, initialNotPermitted, initialExpired, webContent, loadCitationDetail, popoverKey, activePopoverKey, onActivePopoverKeyChange, onClosePopover, onOpenDocumentPreview, citationPreviewUsesHover, }: {
     data: Partial<CitationDisplayData>;
     children: React.ReactNode;
     initialDetail?: ChatCitation | null;
     initialNotPermitted?: boolean;
     initialExpired?: boolean;
-    webContent?: ChatCitationPayload[];
+    webContent?: unknown;
     loadCitationDetail: CitationDetailLoader;
     popoverKey: string;
     activePopoverKey: string | null;
@@ -23,7 +23,7 @@ export const Citation = ({ data: rawData, children, initialDetail, initialNotPer
     const data = rawData ?? ({} as Partial<CitationDisplayData>);
     const hasData = !!rawData;
     const isOpen = activePopoverKey === popoverKey;
-    const { localize } = useMarkdownServices();
+    const { localize } = useCitationPresentation();
 const { normalizeCitationType, getLegacyCitationPreview, buildCitationPreview, isArticleCitation, getCitationArticleUrl, isFilePreviewCitation, getCitationSourceLabelKey } = useCitationUtilities();
     const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
     const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +31,9 @@ const { normalizeCitationType, getLegacyCitationPreview, buildCitationPreview, i
     const [notPermitted, setNotPermitted] = useState(!!initialNotPermitted);
     const [expired, setExpired] = useState(!!initialExpired);
     const closeTimerRef = useRef<number | null>(null);
+    const identity=JSON.stringify([data.citationId,data.itemId]);
+    const lifecycle=useRef({identity,mounted:true});lifecycle.current.identity=identity;
+    useEffect(()=>{const state=lifecycle.current;state.mounted=true;return()=>{state.mounted=false;};},[]);
     const citationSource = normalizeCitationType(data.type) === 'web' ? 'web' : 'document';
     const legacyPreview = data.ref?.startsWith('citation:')
         ? getLegacyCitationPreview(webContent, data.label)
@@ -44,10 +47,12 @@ const { normalizeCitationType, getLegacyCitationPreview, buildCitationPreview, i
         setError(false);
         try {
             const nextDetail = await loadCitationDetail(data.citationId);
+            if(!lifecycle.current.mounted||lifecycle.current.identity!==identity)return null;
             setDetail(nextDetail);
             return nextDetail;
         }
         catch (err) {
+            if(!lifecycle.current.mounted||lifecycle.current.identity!==identity)return null;
  const reason = asRecord(err);
             if (reason.citationExpired) {
                 setExpired(true);
@@ -62,7 +67,7 @@ const { normalizeCitationType, getLegacyCitationPreview, buildCitationPreview, i
             return null;
         }
         finally {
-            setIsLoading(false);
+            if(lifecycle.current.mounted&&lifecycle.current.identity===identity)setIsLoading(false);
         }
     };
     const openWebCitation = (url?: string, targetWindow?: Window | null) => {
@@ -145,20 +150,8 @@ const { normalizeCitationType, getLegacyCitationPreview, buildCitationPreview, i
         onOpenDocumentPreview(nextDetail, data.itemId, true);
     };
     useEffect(() => {
-        if (initialDetail) {
-            setDetail(initialDetail);
-        }
-    }, [initialDetail]);
-    useEffect(() => {
-        if (initialExpired) {
-            setExpired(true);
-        }
-    }, [initialExpired]);
-    useEffect(() => {
-        if (initialNotPermitted) {
-            setNotPermitted(true);
-        }
-    }, [initialNotPermitted]);
+        setDetail(initialDetail??null);setNotPermitted(!!initialNotPermitted);setExpired(!!initialExpired);setError(false);
+    },[identity,initialDetail,initialNotPermitted,initialExpired]);
     useEffect(() => {
         return () => {
             if (closeTimerRef.current) {

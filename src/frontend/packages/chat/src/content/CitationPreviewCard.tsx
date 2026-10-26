@@ -1,5 +1,5 @@
 import { Outlined } from 'bisheng-icons';
-import { useMarkdownServices } from './MarkdownServices';
+import { useCitationPresentation } from './MarkdownServices';
 import type { ChatCitation, CitationPreview } from './types';
 function DefaultSourceIcon() { return <Outlined.FileWord size={16} />; }
 export function CitationPreviewCard({ preview, detail, isLoading, error, notPermitted, expired, onCardClick, onOpenDocumentPreview, }: {
@@ -12,7 +12,7 @@ export function CitationPreviewCard({ preview, detail, isLoading, error, notPerm
     onCardClick?: () => void;
     onOpenDocumentPreview?: () => void;
 }) {
-    const { localize, SourceIcon = DefaultSourceIcon } = useMarkdownServices();
+    const { localize, SourceIcon = DefaultSourceIcon } = useCitationPresentation();
 const CitationSourceIcon = SourceIcon;
     if (isLoading) {
         return (<div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]">

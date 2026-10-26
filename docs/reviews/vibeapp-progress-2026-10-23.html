@@ -1,0 +1,276 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VibeApp 开发与测试进度 · 2026-10-23</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f4f6f8;color:#202733;font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}header,main,nav{max-width:1200px;margin:auto}header{padding:32px 32px 14px}header p{margin:0;color:#4e5c6e}nav{padding:12px 32px;display:flex;flex-wrap:wrap;gap:6px 18px}nav a{font-size:13px}main{background:white;padding:32px;border:1px solid #dfe5ed;border-radius:10px;margin-bottom:40px}h1{font-size:28px;line-height:1.4}h2{font-size:22px;margin-top:34px;padding-top:12px;border-top:1px solid #dfe5ed;scroll-margin-top:16px}h3{font-size:17px}a{color:#1756ad;text-decoration:none}a:hover{text-decoration:underline}code{font:13px/1.65 ui-monospace,Menlo,Consolas,monospace;background:#f0f3f7;padding:2px 4px;border-radius:3px;overflow-wrap:anywhere}table{border-collapse:collapse;width:100%;font-size:13px;line-height:1.7;margin:16px 0}th,td{border:1px solid #dfe5ed;padding:9px 12px;vertical-align:top;overflow-wrap:anywhere}th{background:#edf2f8;text-align:left}tr:nth-child(even) td{background:#fafbfd}li{margin:6px 0}strong{font-weight:650}blockquote{border-left:3px solid #5c7fa8;margin:18px 0;padding:0 18px;color:#435164}@media(max-width:760px){header{padding:20px 16px 8px}nav{padding:10px 16px}main{padding:16px;border-radius:0;border-left:0;border-right:0}h1{font-size:23px}h2{font-size:19px}table{display:block;overflow-x:auto}th,td{min-width:150px}}@media print{@page{size:A4 landscape;margin:14mm}body{font-size:10pt;background:white}header,nav{display:none}main{max-width:none;margin:0;padding:0;border:0}h1{font-size:19pt}h2{font-size:14pt;break-after:avoid}h3{break-after:avoid}table{display:table;font-size:8.5pt}tr{break-inside:avoid}thead{display:table-header-group}a{color:inherit}code{font-size:8pt}th,td{padding:5px 7px}}</style></head><body><header><p>代码与证据快照 · 运行层已实现 / 整体交付未完成</p></header><nav aria-label="目录"><a href="#section-2">1. 结论</a><a href="#section-3">2. 最新发布线合并结果</a><a href="#section-5">3. 开发进度：按实际模块</a><a href="#section-7">4. 测试进度：已有真实证据</a><a href="#section-9">5. 本次合并的必要定向验证</a><a href="#section-10">6. 账本与证据需要收敛的地方</a><a href="#section-11">7. 建议的收尾顺序</a><a href="#section-12">8. 资料与范围</a></nav><main><h1 id="section-1">VibeApp 开发与测试进度报告</h1>
+<p>日期：2026-10-23。评估对象：<code>feat/3.0.0-vibe</code>；以本次发布线同步后的代码、任务正文和已有脱敏运行证据为依据。</p>
+<h2 id="section-2">1. 结论</h2>
+<p><strong>托管运行层的 Docker/K8s 开发已收口，平台发布及运行主链路已有真实验证；整体 Vibe 产品尚不能标为“开发与测试全部完成”。</strong></p>
+<p>需要分开看三件事：</p>
+<ol>
+<li><strong>已完成的运行交付实现</strong>：开源独立 manager/app-proxy/egress-proxy，平台存储、应用包与依赖复用、Docker/K8s 编排、SQLite 维护、Chart/准入/能力报告和镜像流水线代码。</li>
+<li><strong>仍有真实功能缺口</strong>：应用密钥管理最小版（GOV-05）、管理面“应用运行记录”查询（GOV-04）；旧 F054 还保留 systemd 出站 INPUT 规则与 OBO 配置错误时入口拒绝两项安全待办。不能把这些归为“只差测试”。</li>
+<li><strong>剩余验收与发行</strong>：完整离线平台新装/目录导入、剩余故障及独立卸载保留、部分 CLI/MCP/审计/页面 AC、当前整合版本正式双架构镜像发行。ARM 按用户要求暂缓，DM8 仅静态；不是本轮补跑范围。</li>
+</ol>
+<p>任务勾选是工程账本，不是功能完成率或 AC 通过率。特别是 GOV-04/GOV-05 只追加了文字决议，没有完整任务展开；不能据 F055 的 69/70、F056 的 32/33 宣称仅剩一次 E2E。</p>
+<h2 id="section-3">2. 最新发布线合并结果</h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>固定值 / 结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>最新远端发布线</td>
+<td><code>origin/feat/3.0.0@38395b19804effe7a8474809f54f5f7396e5b940</code></td>
+</tr>
+<tr>
+<td>合并前 Vibe</td>
+<td><code>276ec191b6c9e20b903232ad078d00378454010a</code></td>
+</tr>
+<tr>
+<td>合并提交</td>
+<td><code>8121d5efdb28b8f887469dca39e34cea61151e63</code></td>
+</tr>
+<tr>
+<td>合并范围</td>
+<td>43 个源分支独有提交；相对 merge-base 686 个文件，55 个双方改动文件</td>
+</tr>
+<tr>
+<td>冲突</td>
+<td>22 个文件；逐 hunk 处理，无整文件覆盖另一方独有业务</td>
+</tr>
+<tr>
+<td>本轮验证</td>
+<td>48 个唯一测试通过，来自定向分组；不重复累计中间失败或重跑；未跑全量或远端部署验收</td>
+</tr>
+<tr>
+<td>Git 工作区</td>
+<td>在独立工作树完成；主工作区其他权限修复文件保留</td>
+</tr>
+</tbody>
+</table>
+<p>本次继承 React Query v4、共享聊天、请求错误处理、排序/依赖治理、知识文件可见性与工具权限修复等发布线成果。源分支的业务改动按原提交进入 Vibe，不把 686 文件都称为本次新开发的托管功能。</p>
+<h3 id="section-4">合并时保留和适配的行为</h3>
+<ul>
+<li><strong>必审</strong>：托管应用场景仍不提供免审选项，存量 pass 配置编辑时转为 flow；其他场景的免审能力保留。</li>
+<li><strong>审批人来源</strong>：保留预置场景允许列表和单租户名称语义，同时使用发布线迁移后的组件；不把来源字符串误当为带 value 的对象。</li>
+<li><strong>客户端审批</strong>：同时保留拒绝理由必填与详情/选中任务一致性守卫，加载失败时不对旧任务执行决定。</li>
+<li><strong>慢停用</strong>：卡片开关保留等待和重复操作锁，并接入统一错误提示；失败时释放锁。</li>
+<li><strong>新请求错误合同</strong>：可见范围、资源档位两个 Vibe 页面补齐 catch/finally；失败不走成功通知，不丢编辑草稿，不一直加载。四个新错误场景先复现失败后通过。</li>
+<li><strong>多语言与共享包</strong>：合并 shared 的 hostedApp 与 app_chat 两套键，再由生成脚本生成两端文件；保留 file-viewers/chat/api-client 的 Jest 与样式扫描范围。</li>
+<li><strong>后端检索</strong>：保留 Vibe 的 RetrievalEngine/统一 facade 接线，同时继承发布线 verified batch 可见性接口测试；服务账号身份与权限依赖失败行为有定向验证。</li>
+</ul>
+<p>静态核对显示，本次发布线同步没有改动 manager、app-proxy、app-runtime、CLI/SDK、backend app_runtime/app_publish 的产品文件。共享权限/配置/前端发生了变化，因此合并后的完整平台兼容性仍需后续分项确认；此前 189 结果保留原镜像和源码，不能改标成本次合并版本的部署证明。</p>
+<h2 id="section-5">3. 开发进度：按实际模块</h2>
+<p>以下数字从各目录 tasks.md 的复选框重新统计；F049 已由 beta2 鉴权底座承接并归档，F050/F058 的既有取消/替代决定不作为当前未开发量。表内 F086 指 <code>086-vibe-runtime-delivery</code>，与新合入的 <code>086-shared-app-chat</code> 同号目录分别识别。</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>账本完成</th>
+<th>已有实现</th>
+<th>尚未闭合</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>模型协议面</td>
+<td>27/30</td>
+<td>托管应用模型调用已接线；部分 SDK/OBO 调用有实证</td>
+<td>T025、T027、T028：指定环境端到端、本地引擎及审计账本核对</td>
+</tr>
+<tr>
+<td>MCP 能力面</td>
+<td>33/35</td>
+<td>沿用统一 MCP 底座及应用工具接线</td>
+<td>T104、T302：存储层拒绝断言、真 MCP 客户端/CI 中间件</td>
+</tr>
+<tr>
+<td>CLI / 开发工具</td>
+<td>52/53</td>
+<td>打包、认证、发布、补包、分发 wheel 已实现</td>
+<td>T033：原 114 验收清单需与 109/189 新证据逐 AC 对齐</td>
+</tr>
+<tr>
+<td>应用领域 / 访问 / SQLite</td>
+<td>102/106</td>
+<td>应用与权限、入口代理、数据与生命周期已实现</td>
+<td>T074、T096、T098、T099；含两项历史安全待办，见下文</td>
+</tr>
+<tr>
+<td>发布 / 审批 / 能力</td>
+<td>69/70</td>
+<td>发布预检、必审、预览、上线及失败态已实现</td>
+<td>T049 原环境验收；另有未纳入复选框的 GOV-05 应用密钥缺口</td>
+</tr>
+<tr>
+<td>广场 / 授权 / 治理</td>
+<td>32/33</td>
+<td>广场入口、可见范围与生命周期审计已有实现</td>
+<td>T021 原环境闭环；另有未纳入复选框的 GOV-04 查询页缺口</td>
+</tr>
+<tr>
+<td>SDK</td>
+<td>42/45</td>
+<td>SDK0.1.1、模型/OBO、附件与部分业务调用有实证</td>
+<td>T032、T040、T042：旧环境构建/手动验证及模型评测 6/6</td>
+</tr>
+<tr>
+<td>K8s 托管</td>
+<td>268/272</td>
+<td>执行器、Pod 内物化、PVC/单写、准入、探测、Chart、helper 已实现</td>
+<td>T067、T070、T071、T072：剩余回归/故障卸载、发行、最终交付汇总</td>
+</tr>
+<tr>
+<td>Docker / 开源交付</td>
+<td>92/94</td>
+<td>应用包/依赖复用、完整镜像、源码兼容、存储解耦、离线补包已实现</td>
+<td>T055、T056：完整离线安装、剩余故障及最终交付汇总</td>
+</tr>
+</tbody>
+</table>
+<p>不将上述计数相加为全产品交付百分比：任务粒度不同、部分新决议尚未拆任务、旧指定环境条目与新运行证据也未逐 AC 汇合。</p>
+<h3 id="section-6">3.1 确定仍需开发的产品项</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>当前代码/记录</th>
+<th>完成所需工作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GOV-05 应用密钥最小版</td>
+<td>发布面没有完整密钥录入/状态区域；manifest validator 仍调用 <code>_reject_secret_references</code>，返回 16230；F055 2026-10-09 决议明确写“待展开”</td>
+<td>补已决定范围的规格/设计/任务，owner 密钥录入与加密存储、掩码/审计、声明缺值提示、启动注入与保存重启；不能把服务 HMAC/应用运行期凭据等同用户业务密钥</td>
+</tr>
+<tr>
+<td>GOV-04 应用运行记录</td>
+<td>已有发布生命周期审计及运行记录写入；未找到 PRD 决定的管理面三类记录查询 tab/子视图完整接线；F056 仍只记录方案 A 决议</td>
+<td>模型调用、应用能力调用、应用访问的授权查询/筛选/导出与管理页面；补凭据审计 app_id 关联并验证可追溯</td>
+</tr>
+<tr>
+<td>F054 T098：legacy systemd 宿主入口规则</td>
+<td>tasks 仍未完成；egress legacy 防火墙代码仅有 DOCKER-USER 路径，未见该模块的 INPUT 规则实现</td>
+<td>明确仍支持的 legacy systemd 形态，补 INPUT 拒绝与实际允许/拒绝配对；不能用 K8s NetworkPolicy 实证替代</td>
+</tr>
+<tr>
+<td>F054 T099：错误 OBO 配置时入口拒绝</td>
+<td><code>_issue_obo_token</code> 缺 secret 或与 JWT secret 相同时返回 None；入口仍可返回不带 OBO 的材料，而代码已经有 OBO reader；任务仍未完成</td>
+<td>在正式/预览入口落实对应拒绝语义并做配置正反例；本轮未修改这项历史合同</td>
+</tr>
+</tbody>
+</table>
+<p>证据：<a href="../../features/v3.0.0/055-app-publish-pipeline/tasks.md">F055 密钥决议</a>、<a href="../../src/backend/bisheng/app_publish/domain/services/manifest_validator.py">manifest validator</a>、<a href="../../features/v3.0.0/056-app-square-governance/tasks.md">F056 查询面决议</a>、<a href="../../features/v3.0.0/054-app-domain-runtime/tasks.md">F054 安全待办</a>、<a href="../../src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py">入口身份代码</a>、<a href="../../src/runtime-manager/runtime_manager/egress.py">legacy 防火墙</a>。以上是静态核查，未新执行攻击或故障注入。</p>
+<h2 id="section-7">4. 测试进度：已有真实证据</h2>
+<table>
+<thead>
+<tr>
+<th>层次 / 环境</th>
+<th>已有通过证据</th>
+<th>尚未证明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Docker，109</td>
+<td>CLI/服务账号发布、预检与审批、上线、HTTP/WS、SDK/OBO/附件、SQLite/恢复/删除；多租户与关键权限负例；部分故障及旧应用升级/回退；历史公开服务镜像启动检查</td>
+<td>本次合并后的再次部署；完整客户断网新装及目录导入；全部失败/取消/失联组合</td>
+</tr>
+<tr>
+<td>K8s 安装，189</td>
+<td>单节点 amd64 专用资源；受限身份、准入、隔离、卷与 SQLite 能力、镜像启动的分项报告；R32 manager-only 交付</td>
+<td>多节点、NodeLost、其他 StorageClass 全面兼容；当前合并版本成套新发行安装</td>
+</tr>
+<tr>
+<td>K8s 业务，189</td>
+<td>Python/Node/static 应用包、完整镜像、source-image 五类交付已有发布记录；r11 人工审批/预览、HTTP/WS/SDK/OBO/附件、owner/非owner/跨租户配对；在线与停用数据、CSV、停用恢复；R31 安全删除</td>
+<td>全部页面/CLI/MCP/开关兜底、全部档位变化时序、资源限额故障、CLI/通知/审计全链及全部缓存失效输入矩阵</td>
+</tr>
+<tr>
+<td>K8s 故障与升级，189</td>
+<td>真实取消；manager 停机访问；容量前置拒绝；迁移失败后的 gen4 显式恢复；R31 升级数据保留；R32 在途 prepare 单次 SIGKILL 续办</td>
+<td>额外 init 失败、响应丢失、UID 替换/未知 writer 完整矩阵、独立安装域卸载保留；跨节点恢复</td>
+</tr>
+<tr>
+<td>镜像与离线物料</td>
+<td>旧测试 Tag <code>v3.0.0-test-vibe@755d4456e5</code> 双原生七镜像 CI/目录与 109 启动；F059 helper/assembler/Chart/CI 实现及局部私仓 amd64 交付</td>
+<td>最终整合源码的九镜像双原生正式 CI、成套 digest/目录、完整离线客户安装；旧 Tag 不含全部后续修复</td>
+</tr>
+<tr>
+<td>数据库</td>
+<td>历史 MySQL 竞争/事务实证；SQLite 数据主链路；DM8 模型/约束静态检查</td>
+<td>DM8 真驱动/DDL/事务本轮按用户要求不测；不把静态方言编译当真实 DM8 通过</td>
+</tr>
+<tr>
+<td>开发审查</td>
+<td>F086/F059 开发整合 L2 分工审查、已发现问题修复及证据归档</td>
+<td>完整 Feature 的逐 AC 交付签收、全部验收门关闭</td>
+</tr>
+</tbody>
+</table>
+<h3 id="section-8">4.1 R32 在途重启的准确范围</h3>
+<ul>
+<li>manager 源码：<code>0f2db1f9a29213ca94d4596e64b00ad8fcbac528</code>；内网 manager digest：<code>sha256:bc488d16d3b75ccd30e729d7ef79b0c4591abaa40c0037057697f405d9e4900b</code>，Helm revision 32。</li>
+<li>一次 SIGKILL 后 controller 30→31；原 prepare、deadline、安装 Pod UID/CID 保持，240 秒 hook 自然完成，8 个 prepare 资源在停止证明后自然清理并释放预占。</li>
+<li>不包含批准上线或生产路由操作；后续 probe 的 SQL completed/cleanupcomplete 不扩大成 probe 物理清理证明。旧失败与 unknown writer 围栏保留。</li>
+</ul>
+<p>权威分项记录：<a href="../../features/v3.0.0/059-k8s-runtime-backend/e2e-evidence/installation.json">安装</a>、<a href="../../features/v3.0.0/059-k8s-runtime-backend/e2e-evidence/platform.json">业务</a>、<a href="../../features/v3.0.0/059-k8s-runtime-backend/e2e-evidence/fault-upgrade.json">故障升级</a>、<a href="../../features/v3.0.0/086-vibe-runtime-delivery/live-validation.md">Docker 真实记录</a>。这些是保存的历史证据，本轮没有 SSH 刷新环境状态。</p>
+<h2 id="section-9">5. 本次合并的必要定向验证</h2>
+<table>
+<thead>
+<tr>
+<th>分组</th>
+<th style="text-align:right">唯一用例数</th>
+<th>最终结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Platform：必审路由、来源词汇、共享选择器、卡片慢停用、个人令牌、资源档位及可见范围错误</td>
+<td style="text-align:right">39</td>
+<td>通过；按受影响文件分组执行，未重复计算重跑</td>
+</tr>
+<tr>
+<td>Client：审批列表/详情失败及陈旧任务决定守卫</td>
+<td style="text-align:right">3</td>
+<td>通过</td>
+</tr>
+<tr>
+<td>Backend：检索两分支、索引前后过滤、服务账号 actor、依赖失败 503</td>
+<td style="text-align:right">6</td>
+<td>通过</td>
+</tr>
+<tr>
+<td>合计</td>
+<td style="text-align:right"><strong>48</strong></td>
+<td>仅本次选择，不等于全仓/所有 AC</td>
+</tr>
+</tbody>
+</table>
+<p>静态检查：冲突标记为零；13 个受影响 TS/TSX 语法检查通过（不等于完整 TypeScript 类型检查）；Platform 冲突/修复文件定向 ESLint 自动 prune 通过，未增加任何超出父分支的 suppression；Python 冲突测试 Ruff/format 与逐文件架构检查通过；i18n parity 和生成物 check 通过；迁移静态图与运行模块保留检查通过。</p>
+<p>本地依赖使用已有缓存，未重新 pnpm install；workspace 包指向本工作树。客户端审批 DOM 测试在进程中禁用无构建二进制的可选 canvas，未模拟业务判断；最初依赖缺失/未构建属于测试环境准备失败，不计作通过。当前缓存缺少部分锁定的 dnd/SheetJS/本地编辑器物料，未据此声称完整前端构建可重复。</p>
+<p>全差异 <code>git diff --check</code> 发现上游四个文件的既有空白/CRLF 问题；逐文件确认与发布线字节相同，没有批量格式化。双方改动交集及本轮修复范围的 diff 检查通过。未跑全量测试、全项目 lint/typecheck/build、未重做 Docker/K8s 部署、未发新 Tag 或公开镜像。</p>
+<h2 id="section-10">6. 账本与证据需要收敛的地方</h2>
+<ol>
+<li>F054 的 T074 仍写 Compose 从未起过，而 F086 已有 109 实证；F059 e2e-checklist 的“真实状态”表仍大量写未执行，与后续 JSON 分项证据不同步。应逐 AC 关联，不能整表勾选。</li>
+<li>部分旧任务指定 114，新证据在 109/189；有些业务断言可复用，但原环境/CLI/MCP/页面要求不会自动完成。</li>
+<li>F059 <code>validation.json</code> 顶层大套件检查仍对应旧源码 <code>f8863f376...</code>，追加段才记录后续 R31/R32；只读顶层会低估进展，把旧大套件数当新 merge 实测又会高估。</li>
+<li>上轮“开发整合已收口”针对 F086/F059 的运行交付工作，不覆盖本报告发现的 GOV-04/GOV-05 全产品缺口。不能沿用为全部 Vibe 产品完成结论。</li>
+</ol>
+<h2 id="section-11">7. 建议的收尾顺序</h2>
+<ol>
+<li><strong>先解决真实开发缺口</strong>：GOV-05、GOV-04 单独补正式规格/设计/任务；T098/T099 按仍支持的部署形态关闭或做明确的范围决定，不伪装成已测试。</li>
+<li><strong>按新合并版本做最小兼容确认</strong>：一次实际发布→审批预览→上线访问，普通 owner/非owner/跨租户配对；选现有专用应用，不重跑已无变化的全部安装与依赖组合。</li>
+<li><strong>定向补故障差额</strong>：init 失败、响应丢失、必要 UID/未知 writer 负例、独立安装域卸载保留；每项有明确缺口才执行，不反复跑完整套件。</li>
+<li><strong>最后做成套发行</strong>：冻结源码/profile/digest，运行正式九镜像流水线并验证离线目录与完整断网新装；ARM 继续按用户当前优先级后置，不能先写双架构通过。</li>
+<li><strong>逐 AC 汇总签收</strong>：将跨 Feature 的历史证据和新差额按实际断言合并，更新账本和最终交付审查。到此才适合标记整体可正式交付。</li>
+</ol>
+<h2 id="section-12">8. 资料与范围</h2>
+<ul>
+<li><a href="./vibeapp-progress-2026-10-23.json">本次结构化快照</a>：源/目标/merge SHA、任务统计、定向验证与边界。</li>
+<li><a href="./vibe-development-integration-2026-10-23.md">上轮运行开发整合报告</a>：历史整合来源及原分工 L2。</li>
+<li><a href="./vibeapp-progress-2026-10-23.html">离线 HTML</a>：与本 Markdown 同源生成，无外部字体、CDN 或在线脚本。</li>
+</ul>
+<p>本报告是当前仓库静态评估＋既有证据核对；没有把未执行、skip、模拟端口、历史通过结果，转写成当前整合版本的真实验收通过。</p>
+</main></body></html>

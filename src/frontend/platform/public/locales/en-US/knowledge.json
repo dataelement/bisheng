@@ -444,5 +444,10 @@
     "pause": "Pause recording",
     "failed": "Voice input failed. Please try again."
   },
-  "fileStatusFilterLabel": "Filter by file status: {{value}}"
+  "fileStatusFilterLabel": "Filter by file status: {{value}}",
+  "tagEditor": {
+    "addPlaceholder": "Enter a tag and press Enter to save",
+    "existingTags": "Existing tags",
+    "emptyTags": "No tags"
+  }
 }

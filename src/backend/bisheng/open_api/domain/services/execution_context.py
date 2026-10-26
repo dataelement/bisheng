@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime
 
@@ -12,6 +13,7 @@ from bisheng.open_api.domain.context import OpenApiExecutionSnapshot
 from bisheng.open_api.domain.models.api_credential import (
     SUBJECT_KIND_NATURAL_PERSON,
     SUBJECT_KIND_SERVICE_ACCOUNT,
+    ApiCredential,
 )
 from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
 from bisheng.open_api.domain.repositories.service_account_repository import ServiceAccountRepository
@@ -22,6 +24,19 @@ from bisheng.permission.application.identity import (
     set_current_permission_actor,
 )
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
+
+#: Per-subject-kind liveness check for the **asynchronous** leg, the sync twin
+#: of ``credential_validator.SUBJECT_RESOLVERS``.
+#:
+#: The two built-in kinds are checked inline below because this module already
+#: owns their rows. A kind whose subject lives in another package registers its
+#: check here from that package's composition root (``hosted_app`` does, from
+#: ``app_publish.composition``), so the dependency keeps pointing at this base
+#: and never back. An entry raises ``OpenApiCredentialInvalidError`` when the
+#: subject may no longer execute; a kind with **no** entry is refused outright —
+#: a queued task must never outlive the check that admitted it, and "no rule
+#: applies" is the shape that silently lets it.
+SUBJECT_EXECUTION_GUARDS: dict[str, Callable[[ApiCredential, OpenApiExecutionSnapshot], None]] = {}
 
 
 def validate_execution_snapshot(snapshot: OpenApiExecutionSnapshot) -> None:
@@ -66,6 +81,16 @@ def validate_execution_snapshot(snapshot: OpenApiExecutionSnapshot) -> None:
             ).first()
         if user is None or user.delete != 0 or membership is None:
             raise PersonalTokenHolderInvalidError()
+    else:
+        # Any other subject kind (``hosted_app`` today) must bring its own
+        # liveness check. Without one the queued task would outlive the
+        # admission that created it — the synchronous gate refuses a stopped
+        # application, and this leg would happily run the work it enqueued
+        # seconds earlier (F055 AC-58).
+        guard = SUBJECT_EXECUTION_GUARDS.get(credential.subject_kind)
+        if guard is None:
+            raise OpenApiCredentialInvalidError()
+        guard(credential, snapshot)
 
 
 @contextmanager
@@ -109,4 +134,4 @@ def restore_execution_context(snapshot_data: dict | None):
         current_tenant_id.reset(tenant_token)
 
 
-__all__ = ["restore_execution_context", "validate_execution_snapshot"]
+__all__ = ["SUBJECT_EXECUTION_GUARDS", "restore_execution_context", "validate_execution_snapshot"]

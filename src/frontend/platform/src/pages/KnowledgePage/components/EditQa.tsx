@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 
 import { InputList } from '@/components/bs-comp/formFields/InputList';
 import { generateSimilarQa,getQaDetail,updateQa } from "../../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 export interface EditQaHandle {
     open: () => void
     edit: (item: { id: string | number; source?: string | number }) => void
@@ -76,7 +76,7 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
             return toast.show({ type: 'warning', message: String(t('pleaseEnterQuestion') ?? '') });
         }
         setLoading(true);
-        captureAndAlertRequestErrorHoc(generateSimilarQa(form.question, form.answer).then(res => {
+        generateSimilarQa(form.question, form.answer).then(res => {
             setForm((prevForm) => {
                 const updatedSimilarQuestions = [...prevForm.similarQuestions];
                 updatedSimilarQuestions.splice(updatedSimilarQuestions.length - 1, 0, ...(res as unknown as { questions: string[] }).questions);
@@ -85,8 +85,7 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
                     similarQuestions: updatedSimilarQuestions
                 };
             });
-            setLoading(false);
-        }));
+        }).catch(showApiError).finally(() => setLoading(false));
     };
 
 
@@ -113,16 +112,21 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
         }
 
         setSaveLoad(true);
-        await captureAndAlertRequestErrorHoc(updateQa(idRef.current, {
+        try {
+        await updateQa(idRef.current, {
             questions: [form.question, ..._similarQuestions],
             answers: [form.answer],
             knowledge_id: knowlageId,
             source: sourceRef.current || 1
-        }));
+        });
 
         onChange();
-        setSaveLoad(false);
         close();
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setSaveLoad(false);
+        }
     };
 
     const close = () => {

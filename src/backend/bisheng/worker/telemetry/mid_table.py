@@ -45,6 +45,11 @@ def convert_flow_type(flow_type: int) -> ApplicationTypeEnum:
         FlowType.ASSISTANT.value: ApplicationTypeEnum.ASSISTANT,
         FlowType.WORKFLOW.value: ApplicationTypeEnum.WORKFLOW,
     }
+    # F054 hosted applications (flow_type 35) reach this feed and land in
+    # UNKNOWN on purpose, not by oversight: giving them their own member would
+    # add a value to an enum that is already written into ES documents and read
+    # by downstream dashboards, which is a telemetry contract change and not
+    # part of this feature. Revisit together with whoever owns those dashboards.
     return flow_type_mapping.get(flow_type, ApplicationTypeEnum.UNKNOWN)
 
 

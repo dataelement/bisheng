@@ -43,7 +43,7 @@ interface FileCardProps {
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
-    onRename: (newName: string) => void;
+    onRename: (newName: string) => void | Promise<void>;
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;

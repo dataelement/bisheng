@@ -26,6 +26,17 @@ it('does not show a pending spinner or fetch before a manual chart trigger', () 
   client.clear();
 });
 
+it('keeps a failed chart query distinguishable from a successful empty chart', async () => {
+  mock.query.mockRejectedValue(new Error('Chart unavailable'));
+  mock.state.chartRefreshTriggers['chart-1'] = { trigger: 1, queryParams: [] };
+  const client = createPlatformQueryClient();
+  render(<QueryClientProvider client={client}><ChartContainer component={component} isDark={false} isPreviewMode={false} /></QueryClientProvider>);
+  expect(await screen.findByText('operationFailed')).toBeInTheDocument();
+  expect(screen.queryByText('noDataInChart')).not.toBeInTheDocument();
+  expect(client.getQueryState(['chartData', 'chart-1', 1])?.status).toBe('error');
+  client.clear();
+});
+
 it('shows loading during a manual request and then renders the returned chart', async () => {
   let finish: (value: { dimensions: string[]; series: unknown[] }) => void = () => undefined;
   mock.query.mockImplementation(() => new Promise(resolve => { finish = resolve; }));

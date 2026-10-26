@@ -122,7 +122,7 @@ export interface FileListRowProps {
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
     onEditTags: () => void;
-    onRename: (newName: string) => void;
+    onRename: (newName: string) => void | Promise<void>;
     onDelete: () => void;
     onRetry: () => void;
     onNavigateFolder?: () => void;

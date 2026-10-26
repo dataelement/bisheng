@@ -38,6 +38,11 @@ export function AgentCard({
   const { canShare, ensureSharePermission } = useLazyAppSharePermission(agent);
   // Only render pin affordances when a toggle handler is supplied.
   const showPin = typeof onTogglePin === 'function';
+  // Hosted applications (flow_type 35) are not conversational — they open a web
+  // surface at `/apps/{slug}`. Their primary action says "enter app", not "start chat".
+  const HOSTED_APP_FLOW_TYPE = 35;
+  const primaryActionLabel =
+    agent.flow_type === HOSTED_APP_FLOW_TYPE ? localize('com_app_enter_app') : localize('com_app_start_chat');
 
   const handleShare = () => {
     onShare({ ...agent, can_share: true });
@@ -66,7 +71,7 @@ export function AgentCard({
         }}
         className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-md px-2 py-0 text-[14px] font-normal"
       >
-        {localize('com_app_start_chat')}
+        {primaryActionLabel}
       </Button>
     </>
   );
@@ -91,6 +96,14 @@ export function AgentCard({
           <p className="font-['PingFang_SC'] font-normal leading-[22px] text-text-1 text-[14px] truncate">
             {agent.name}
           </p>
+          {/* Hosted applications only. A stopped application keeps its card on
+              purpose: removing it is indistinguishable, to the user, from having
+              lost access to it. */}
+          {agent.app_state === 'stopped' ? (
+            <span className="shrink-0 rounded-sm bg-[#F2F3F5] px-1.5 py-0.5 text-[12px] leading-[16px] text-[#86909C]">
+              {localize('com_app_state_stopped')}
+            </span>
+          ) : null}
         </div>
 
         {isMobileCard ? (
@@ -212,7 +225,7 @@ export function AgentCard({
                 : "opacity-100 pointer-events-auto",
             )}
           >
-            {localize('com_app_start_chat')}
+            {primaryActionLabel}
           </Button>
         </div>
       ) : (

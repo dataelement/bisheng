@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from sqlmodel import select
+from starlette.requests import Request
 
 from bisheng.database.models.tenant import UserTenant
 from bisheng.open_api.api.endpoints.auth import whoami
@@ -40,7 +41,9 @@ async def test_independent_service_account_round_trip_keeps_user_tables_unchange
         created_by=1,
     )
     resolved = await validate_bearer(f"Bearer {issued.plaintext}")
-    response = await whoami(resolved)
+    # ``whoami`` takes the request since F051: it derives the model face's base
+    # URL from the browser-facing origin.
+    response = await whoami(_bare_request(), resolved)
 
     async with open_api_db() as session:
         assert len((await session.exec(select(User))).all()) == users_before
@@ -65,3 +68,18 @@ async def test_independent_service_account_round_trip_keeps_user_tables_unchange
     assert service_account_actor.fga_subject == "service_account:1"
     assert user_actor != service_account_actor
     assert audit_events[0]["metadata"]["service_account_id"] == account.id
+
+
+def _bare_request() -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v2/auth/whoami",
+            "query_string": b"",
+            "headers": [(b"host", b"test")],
+            "scheme": "http",
+            "server": ("test", 80),
+            "root_path": "",
+        }
+    )

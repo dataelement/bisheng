@@ -16,7 +16,7 @@ import DepartmentUsersSelect, {
 
 import { mountTenantApi } from "@/controllers/API/department"
 import { grantTenantAdminApi } from "@/controllers/API/tenant"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -49,11 +49,9 @@ export function MountTenantDialog({
     if (!canSubmit) return
     setLoading(true)
     try {
-      const mounted = await captureAndAlertRequestErrorHoc(
-        mountTenantApi(deptId, {
+      const mounted = await mountTenantApi(deptId, {
           tenant_name: tenantName.trim(),
         })
-      )
       if (!mounted) return
 
       // Grant admin role to each selected user. Failures are surfaced but the
@@ -78,6 +76,8 @@ export function MountTenantDialog({
           }) ?? '') })
       }
       onMounted()
+    } catch (error) {
+      showApiError(error)
     } finally {
       setLoading(false)
     }
