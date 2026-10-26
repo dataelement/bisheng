@@ -35,7 +35,8 @@
       "qs@6.15.3": "6.16.0",
       "nanoid@3.3.16": "3.3.18",
       "rollup@^4.0.0": "4.64.12",
-      "postcss@^8.0.0": "8.5.31"
+      "postcss@^8.0.0": "8.5.31",
+      "xlsx": "file:vendor/xlsx-0.20.3.tgz"
     }
   },
   "devDependencies": {

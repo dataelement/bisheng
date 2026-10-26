@@ -11,9 +11,11 @@ The workspace owns shared dependency versions in `pnpm-workspace.yaml` (`catalog
 Keep both dev servers on their documented ports (3001/4001). API and object storage targets are separate; the MinIO target host must match the host used to sign object URLs. Restart Vite after dependency upgrades to discard prebundled modules.
 
 SheetJS is pinned to **0.20.3** in the workspace catalog for client, platform and
-`@bisheng/file-viewers`. Use the official versioned tarball from
-https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz, not the stale npm `xlsx`
-release (0.18.5). The pnpm lockfile records SHA-512 integrity. This release includes
+`@bisheng/file-viewers`. The unchanged official archive is committed at `vendor/xlsx-0.20.3.tgz`; the root
+`pnpm.overrides.xlsx` makes all consumers use it without contacting the external CDN.
+The catalog retains version 0.20.3 because pnpm 9.15.9 does not accept `file:` catalog
+entries. Archive provenance and SHA-512 are recorded in `vendor/README.md` and checked
+by the configuration tests. Do not use the stale npm `xlsx` release (0.18.5). This release includes
 the fixes for CVE-2023-30533 (prototype pollution, fixed in 0.19.3) and
 CVE-2024-22363 (ReDoS, fixed in 0.20.2). Upgrades must update the catalog and lockfile
 together and rerun `pnpm test:config` plus both production builds. Package source:
