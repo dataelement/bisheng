@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>目录下载能力验证（临时）</title>
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 800px; margin: 24px auto; padding: 0 16px; color: #222; }
+  button { font: inherit; padding: 10px 16px; cursor: pointer; }
+  textarea { box-sizing: border-box; width: 100%; min-height: 360px; margin-top: 16px; font: 13px/1.5 monospace; }
+  #status { white-space: pre-wrap; }
+</style>
+<h1>目录下载能力验证</h1>
+<button id="back" type="button">返回知识空间</button>
+<p>临时验证页：请在企业微信实际入口打开。点击后选择保存位置，页面只创建一个新的测试文件夹，写入两个小文件、一个子文件夹和一个空目录，再读回校验。</p>
+<p>不读取已有文件，不调用毕昇接口。成功后请在系统文件管理器中确认文件实际存在；测试目录可手动删除。</p>
+<button id="run" type="button">选择目录并验证写入</button>
+<p id="status" role="status" aria-live="polite">脚本加载中；若长时间未变化，请检查静态文件路径或脚本加载策略。</p>
+<label for="report">验证结果（可全选复制或截图反馈）</label>
+<textarea id="report" readonly spellcheck="false"></textarea>
+<script src="./probe.js" defer></script>
+</html>

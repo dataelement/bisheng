@@ -180,6 +180,28 @@ export default defineConfig(({ command, mode }) => {
     envDir: '../',
     envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
     plugins: [
+      {
+        name: 'bisheng:directory-download-probe',
+        enforce: 'pre',
+        apply: 'serve',
+        configureServer(server) {
+          // Keep the temporary standalone page ahead of HTML SPA rewrites.
+          server.middlewares.use((req, res, next) => {
+            const pathname = (req.url || '').split('?')[0];
+            const prefix = `${app_env.BASE_URL}/static/directory-download-probe/`;
+            const filename = pathname.startsWith(prefix) ? pathname.slice(prefix.length) : '';
+            if (!['index.html', 'probe.js'].includes(filename)) return next();
+            try {
+              const content = readFileSync(path.join(__dirname, 'public/static/directory-download-probe', filename));
+              res.setHeader('Content-Type', filename === 'index.html' ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8');
+              res.setHeader('Cache-Control', 'no-store');
+              res.end(content);
+            } catch (error) {
+              next(error);
+            }
+          });
+        },
+      },
       minioFileProxyPlugin(minioTarget),
       react(),
       nodePolyfills(),
@@ -202,7 +224,7 @@ export default defineConfig(({ command, mode }) => {
           ],
           globIgnores: ['images/**/*', '**/*.map', 'index.html'],
           maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-          navigateFallbackDenylist: [/^\/oauth/],
+          navigateFallbackDenylist: [/^\/oauth/, /^\/workspace\/static\/directory-download-probe\//],
         },
         includeAssets: [],
         // manifest: {

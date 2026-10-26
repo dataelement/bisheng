@@ -53,6 +53,7 @@ import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
 import { FileListToolbar } from "./FileListToolbar";
+import { DirectoryDownloadProbeLink } from "./DirectoryDownloadProbeLink";
 import { FileListView } from "./FileListView";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
@@ -1721,6 +1722,8 @@ export function KnowledgeSpaceContent({
                     onSelectAll={() => handleSelectAll(isAllSelectedOnPage)}
                 />
             )}
+
+            <DirectoryDownloadProbeLink />
 
             {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">

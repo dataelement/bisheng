@@ -1279,6 +1279,7 @@
     "duplicate_replace": "替换",
     "duplicate_cancel": "取消",
     "direct_subscribe_desc": "任何人可直接订阅，无需审核",
+    "directory_download_probe": "目录下载验证（临时）",
     "dissolve_space": "解散知识空间",
     "doc_loading": "文档加载中...",
     "download": "下载",
