@@ -160,7 +160,8 @@ class ExportPdfTool(_ExportToolBase):
 
 
 def init_linsight_export_tools(backend) -> list[BaseTool]:
-    """Closure-inject the session WorkspaceBackend into the export tools.
+    """Closure-inject the session WorkspaceBackend into the deliverable tools:
+    export_docx, export_pdf and check_html.
 
     Returns ``[]`` when no writable backend is supplied (e.g. the test-only
     FakeWorkspaceBackend has no ``awrite``), so the tools never surface to the
@@ -168,4 +169,8 @@ def init_linsight_export_tools(backend) -> list[BaseTool]:
     """
     if backend is None or not hasattr(backend, "awrite"):
         return []
-    return [ExportDocxTool(backend=backend), ExportPdfTool(backend=backend)]
+    # Late import: the HTML checker is a sibling deliverable tool, bound under the
+    # same "writable backend" condition so the prompt can advertise all of them.
+    from bisheng.tool.domain.langchain.linsight_html_check import CheckHtmlTool
+
+    return [ExportDocxTool(backend=backend), ExportPdfTool(backend=backend), CheckHtmlTool(backend=backend)]
