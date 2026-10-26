@@ -21,6 +21,7 @@ def test_application_enum_preserves_existing_values():
         "MODEL_TEST": "model_test",
         "ASR": "asr",
         "TTS": "tts",
+        "MODEL_GATEWAY": "model_gateway",
         "UNKNOWN": "unknown",
     }
     assert {item.name: item.value for item in ApplicationTypeEnum if item.name != "DSH_DESKTOP"} == expected

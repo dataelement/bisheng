@@ -1,0 +1,150 @@
+{
+  "date": "2026-10-23",
+  "branch": "feat/3.0.0-vibe",
+  "release_source": "38395b19804effe7a8474809f54f5f7396e5b940",
+  "vibe_before": "276ec191b6c9e20b903232ad078d00378454010a",
+  "merge_commit": "8121d5efdb28b8f887469dca39e34cea61151e63",
+  "source_only_commits": 43,
+  "source_changed_files_from_merge_base": 686,
+  "overlap_files": 55,
+  "conflict_files": 22,
+  "task_counts": {
+    "051-model-protocol-gateway": {
+      "complete": 27,
+      "total": 30,
+      "pending": [
+        "**T025**: 114 托管应用端到端（2h）**依赖 F055 T056 部署到 114**",
+        "**T027**: 本地引擎手动验证（Qwen Code / Codex CLI 对话补全模式 / Kimi Code / Claude Code 反例）（3h）",
+        "**T028**: 审计与账本核对（1h）"
+      ]
+    },
+    "052-mcp-server-face": {
+      "complete": 33,
+      "total": 35,
+      "pending": [
+        "**T104**: 集合相等 + fail-closed 集成用例（CI 中间件分组）——**部分落地，未完成**（勾选留空：`[x]` 会让本条在「哪些还没做」的检索里消失，而 AC-40 / AC-42 / AC-44 的存储层断言确实还没有）",
+        "**T302**: 端到端（真 MCP 客户端 + CI 中间件）"
+      ]
+    },
+    "053-dev-cli-skills": {
+      "complete": 52,
+      "total": 53,
+      "pending": [
+        "**T033**: `[MVP-核心]` 114 部署与手动验证清单（演示剧本步 2–3）"
+      ]
+    },
+    "054-app-domain-runtime": {
+      "complete": 102,
+      "total": 106,
+      "pending": [
+        "**T074**: `[MVP-核心]` compose 两个 service + profile 表达「整层不装」　**🟡 部分完成——配置面已交付并有机器守卫，但 compose 形态从未真机起过，故不勾**",
+        "**T096**: E2E（`/e2e-test`）+ 页面手动验证清单",
+        "**T098**: 出站白名单 systemd 形态缺口——补宿主 INPUT 规则",
+        "**T099**: `obo_secret` 缺失或等于 `jwt_secret` 时入口改为拒绝进入"
+      ]
+    },
+    "055-app-publish-pipeline": {
+      "complete": 69,
+      "total": 70,
+      "pending": [
+        "**T049**: `[MVP-核心]` 114 部署与手动验证清单（演示剧本步 3–4）"
+      ]
+    },
+    "056-app-square-governance": {
+      "complete": 32,
+      "total": 33,
+      "pending": [
+        "**T021**: `[MVP-核心]` 114 部署与 MVP-核心闭环手动验证清单（演示剧本步 5–6）"
+      ]
+    },
+    "057-bisheng-sdk": {
+      "complete": 42,
+      "total": 45,
+      "pending": [
+        "**T032**: 114 构建期真机验证〔1.5h，`needs_114`〕",
+        "**T040**: 评测跑分（模型判定）并回填〔1.5h〕",
+        "**T042**: 114 手动验证（`/e2e-test features/v3.0.0/057-bisheng-sdk`）〔3h，`needs_114`〕"
+      ]
+    },
+    "059-k8s-runtime-backend": {
+      "complete": 268,
+      "total": 272,
+      "pending": [
+        "**T067** — Docker 与平台回归",
+        "**T070** — 故障与升级卸载验收",
+        "**T071** — 模型静态兼容与发行证据",
+        "**T072** — L2 代码审查及交付核对"
+      ]
+    },
+    "086-vibe-runtime-delivery": {
+      "complete": 92,
+      "total": 94,
+      "pending": [
+        "**T055**：API E2E与故障证据",
+        "**T056**：最终审查和证据汇总"
+      ]
+    }
+  },
+  "focused_tests": {
+    "platform": 39,
+    "client": 3,
+    "backend": 6,
+    "unique_total": 48,
+    "whole_suite_run": false
+  },
+  "development_gaps": [
+    "GOV-05 application secrets",
+    "GOV-04 runtime record query UI",
+    "F054 T098 legacy systemd INPUT rules",
+    "F054 T099 invalid OBO config entry rejection"
+  ],
+  "pending_acceptance": [
+    "full offline platform installation and catalog import",
+    "remaining fault and independent uninstall retention matrix",
+    "selected CLI/MCP/UI/audit AC",
+    "current revision public nine-image release"
+  ],
+  "arm": "deferred by user",
+  "dm8": "static only",
+  "remote_environment_refreshed": false,
+  "full_product_delivered": false,
+  "git_full_diff_whitespace": "inherited in four byte-identical release files; overlap/fix scoped check passed",
+  "local_test_environment": "existing dependency cache; optional canvas disabled for approval DOM tests; no reinstall",
+  "focused_test_files": {
+    "platform": [
+      "src/test/approvalRouteGuard.test.tsx",
+      "src/test/approvalApproverSources.test.ts",
+      "src/pages/ApprovalPage/selectionControls.test.tsx",
+      "src/test/hostedAppCardComponent.test.tsx",
+      "src/test/personalTokenSettingsInteraction.test.tsx",
+      "src/test/resourceTierTab.test.tsx",
+      "src/pages/BuildPage/hostedApp/publish/VisibilityScopeSection.errors.test.tsx"
+    ],
+    "client": [
+      "src/components/approval/ApprovalPaneErrors.test.tsx"
+    ],
+    "backend": [
+      "test/knowledge/test_openapi_retrieve_file_visibility.py"
+    ]
+  },
+  "static_checks": {
+    "i18n_parity": "passed",
+    "locale_artifacts": "passed",
+    "platform_eslint": "focused files passed and automatic prune only",
+    "new_suppression_increases_vs_parents": 0,
+    "ts_tsx_syntax_files": 13,
+    "full_typecheck": false,
+    "alembic_revisions": 115,
+    "alembic_head": "f059_resource_phases",
+    "architecture_guard": "focused files passed",
+    "runtime_modules_changed_by_merge": false,
+    "report_links_tables_css": "static checks passed; no browser visual claim"
+  },
+  "compatibility_repairs": [
+    "mandatory approval options + newer Select",
+    "source allowlist strings + newer Dropdown",
+    "stale task guard + required rejection comment",
+    "slow stop pending lock + request errors",
+    "request rejection handling in visibility and resource tiers"
+  ]
+}

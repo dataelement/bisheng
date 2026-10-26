@@ -1,0 +1,714 @@
+"""The entry verdict: who is this, may they enter, and what does the app get told.
+
+app-proxy holds **no** permission logic (D6-C). It asks this service once per
+new HTTP request or WebSocket handshake; positive identity material is never cached. Everything security
+relevant about ``/apps/{slug}`` therefore lives here, once, and is identical in
+the open-source and commercial builds — the Java gateway does not see ``/apps``
+at all (K8), so a second copy of these rules would silently diverge.
+
+**The order of the five steps is the information-disclosure contract**, not an
+implementation detail (spec §3):
+
+1. is the factory deployed here at all → ``not_enabled``. Answered *before* the
+   session check, so an environment without the layer never bounces visitors
+   through a login they did not need.
+2. is there a valid platform session → ``login``. "Valid" means the platform's
+   own middleware chain: token version, account disabled, tenant disabled.
+   Decoding the JWT locally and stopping there would skip all three (K7), which
+   is precisely how a disabled account keeps working for the length of its
+   token's lifetime.
+3. does the app exist *and* has it ever been online → ``not_found``. Draft,
+   pending, deleted and "no such slug" collapse into one answer (AC-29): any
+   difference between them tells a stranger which application names are taken.
+4. is the visitor inside the visible scope → ``forbidden``, carrying the app
+   name and its owner so the page can say who to ask.
+5. is it stopped → ``stopped``, and only for people who passed step 4.
+
+**The permission engine failing is a refusal** (AC-12 / INV-30). There is no
+branch here that treats "could not decide" as "let them in".
+
+Identity leaves as *material*, not as headers: app-proxy owns the wire format,
+strips the entire ``x-bisheng-`` equivalence class off the inbound request and
+then writes this material back on (AC-32). Non-ASCII values are
+percent-encoded here because HTTP headers are latin-1 and the usual test
+account has an English name, so the bug is invisible until a real user with a
+Chinese name opens an app (pit 9).
+"""
+
+from __future__ import annotations
+
+import json
+import time
+from dataclasses import dataclass, field
+from typing import Any
+from urllib.parse import quote
+
+import jwt
+from loguru import logger
+
+from bisheng.app_runtime.domain.constants import ENTRY_VISIBLE_STATES, AppState
+from bisheng.app_runtime.domain.services.app_access_log_service import schedule_access_record
+from bisheng.common.errcode.app_factory import AppPermissionEngineUnavailableError
+from bisheng.common.errcode.permission import (
+    PermissionInvalidResourceError,
+    PermissionServiceUnavailableError,
+)
+from bisheng.common.errcode.tenant_fga import PermissionBackendUnavailableError
+from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import bypass_tenant_filter, set_current_tenant_id
+from bisheng.core.database import get_async_db_session
+from bisheng.database.models.app import App, AppDao
+from bisheng.permission.application.business_authorization import check_business_action
+from bisheng.utils.http_middleware import (
+    _check_is_global_super,
+    _decode_jwt_subject,
+    _validate_current_session_token,
+    _validate_token_version,
+)
+
+DECISION_ALLOW = "allow"
+DECISION_LOGIN = "login"
+DECISION_FORBIDDEN = "forbidden"
+DECISION_STOPPED = "stopped"
+DECISION_NOT_FOUND = "not_found"
+DECISION_NOT_ENABLED = "not_enabled"
+#: Could not decide. app-proxy renders a refusal page for it — never a pass.
+DECISION_UNAVAILABLE = "unavailable"
+
+#: Audience of the on-behalf-of token. Distinct from any platform audience so a
+#: leaked OBO token cannot be replayed as a session (AC-34).
+OBO_AUDIENCE = "bisheng-app-obo"
+
+#: Visible-scope action. ``use`` rather than ``runtime.check_visible``: ``use``
+#: is what the permission dialog's viewer tier grants, so "who can open it"
+#: matches what an owner sees when they share it. ``check_visible`` is wider —
+#: it would admit a custom model that granted ``edit`` without ``use`` (D9).
+ENTRY_ACTION = "use"
+
+
+async def authorize_entry(
+    *,
+    slug: str,
+    access_token: str | None,
+    request_id: str = "",
+    client_ip: str | None = None,
+) -> dict[str, Any]:
+    """One verdict for one visit. Never raises for a business outcome."""
+    if not settings.app_runtime.enabled:
+        return {"decision": DECISION_NOT_ENABLED}
+
+    subject = _decode_jwt_subject(access_token) if access_token else None
+    if subject is None:
+        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+
+    user_id = int(subject.get("user_id") or 0)
+    tenant_id = int(subject.get("tenant_id") or 0)
+    if not user_id:
+        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+
+    session_reason = await _session_invalid_reason(user_id, tenant_id, subject, access_token)
+    if session_reason:
+        # Answered as "sign in again" rather than "forbidden": the visitor has
+        # no usable session, and at this point we have not even looked the app
+        # up — saying "forbidden" would imply it exists.
+        return {"decision": DECISION_LOGIN, "reason": session_reason}
+
+    app = await _load_app_by_slug(slug)
+    if app is None or AppState(app.state) not in ENTRY_VISIBLE_STATES:
+        return {"decision": DECISION_NOT_FOUND}
+
+    set_current_tenant_id(int(app.tenant_id or 0))
+    actor = await _build_actor(user_id, subject)
+    try:
+        visible = await check_business_action(
+            actor,
+            resource_type="app",
+            resource_id=app.id,
+            action=ENTRY_ACTION,
+        )
+    except (PermissionServiceUnavailableError, PermissionBackendUnavailableError) as exc:
+        logger.error("app_runtime.entry permission engine unavailable slug={} user={}: {}", slug, user_id, exc)
+        return {
+            "decision": DECISION_UNAVAILABLE,
+            "code": AppPermissionEngineUnavailableError.Code,
+            "reason": "permission_engine_unavailable",
+        }
+    except PermissionInvalidResourceError:
+        # The F048 target resolver raises this (19003) when the app is not a
+        # legitimate target for THIS actor — most commonly a cross-tenant
+        # visitor, whom AC-29 says must not even learn the app exists. Answered
+        # as NOT_FOUND, not FORBIDDEN. Critically, it must be caught here: it is
+        # a BaseErrorCode, so letting it propagate makes the internal endpoint
+        # return a body with no ``decision`` field, and app-proxy then
+        # fail-closes the visit to a 503 instead of a clean not-found page.
+        return {"decision": DECISION_NOT_FOUND}
+
+    owner_name = await _owner_name(app)
+    if not visible:
+        # Name and owner on purpose: the visitor has been told the app exists
+        # (they were given a link to it), so the useful answer is who to ask.
+        return {
+            "decision": DECISION_FORBIDDEN,
+            "app_id": app.id,
+            "app_name": app.name,
+            "owner_name": owner_name,
+            "app_state": app.state,
+            # Not identity material — app-proxy injects nothing on a refusal.
+            # It is the visitor app-proxy writes into ``app_proxy.request``
+            # (design §7): a refusal whose user_id is empty cannot answer
+            # "who could not get in", and that is the commonest support call.
+            "user_id": user_id,
+        }
+
+    if app.state == AppState.STOPPED.value:
+        # Only reachable after the visible-scope check — a stranger must not be
+        # able to distinguish "stopped" from "does not exist" (AC-29).
+        return {
+            "decision": DECISION_STOPPED,
+            "app_id": app.id,
+            "app_name": app.name,
+            "owner_name": owner_name,
+            "app_state": app.state,
+            "user_id": user_id,
+        }
+
+    if settings.app_runtime.runtime_protocol_version == 2:
+        from bisheng.app_runtime.domain.services.runtime_operation_service import RuntimeOperationService
+
+        route = await RuntimeOperationService().route(f"app:{app.id}")
+        if route["decision"] != "allow":
+            return {
+                "decision": DECISION_UNAVAILABLE,
+                "reason": "runtime_maintenance",
+                "app_id": app.id,
+                "user_id": user_id,
+            }
+    user_name, subject_kind = await _user_facts(user_id, subject)
+    obo_config = _obo_signing_snapshot()
+    if obo_configuration_status(obo_config):
+        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
+    material = await _identity_material(
+        app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
+    )
+    obo_token, obo_expires_at = _issue_obo_token(
+        config=obo_config,
+        app_id=app.id,
+        user_id=user_id,
+        tenant_id=int(app.tenant_id or 0),
+        subject_kind=material.get("X-BiSheng-Subject-Kind", "human"),
+    )
+    if not obo_token:
+        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
+    material["X-BiSheng-Access-Token"] = obo_token
+    logger.debug("app_runtime.entry allow slug={} user={} ip={}", slug, user_id, client_ip)
+    # AC-38: the access record is a side effect of *this* verdict and of no
+    # other code path — app-proxy has no database, and only ``allow`` is an
+    # entry. Scheduled, not awaited: the write must never delay or fail the
+    # answer (design D14-B); the merge window inside collapses repeats.
+    schedule_access_record(
+        app_id=app.id,
+        app_name_snapshot=app.name,
+        tenant_id=int(app.tenant_id or 0),
+        user_id=user_id,
+        user_name=user_name,
+        request_id=request_id,
+    )
+    return {
+        "decision": DECISION_ALLOW,
+        "app_id": app.id,
+        "app_name": app.name,
+        "owner_name": owner_name,
+        "app_state": app.state,
+        "headers": material,
+        "obo_token": obo_token,
+        # WebSocket lifetime inputs (D6 invariant ①, T081): app-proxy fixes a
+        # socket's authorised lifetime at the handshake as
+        # ``min(OBO remaining, ws_max_lifetime_seconds)``. Stated here so the
+        # cap is this process's config, not a second copy in the proxy's env.
+        "obo_expires_at": obo_expires_at,
+        "ws_max_lifetime_seconds": int(settings.app_runtime.ws_max_lifetime_seconds),
+    }
+
+
+async def authorize_preview_entry(
+    *,
+    session: str,
+    access_token: str | None,
+    request_id: str = "",
+    client_ip: str | None = None,
+) -> dict[str, Any]:
+    """The verdict for ``/apps/preview/{session}`` (F054 AC-37, F055 AC-26 / AC-27).
+
+    Same five-step order as :func:`authorize_entry` and, where it differs, the
+    difference is the point:
+
+    * **Step 3 is the preview session, not the slug.** Unknown, reclaimed and
+      expired are one answer — ``not_found`` — because the difference would
+      tell a stranger that a session id was once real.
+    * **Step 4 is "is this the person who raised it", not the visible scope.**
+      A preview belongs to the person it was raised for and to nobody else.
+      That is an approver, or the owner previewing their own pending version
+      (PRD-1 RT-03 AC 11, ``ReviewAccess`` lets the owner raise one). The
+      instance carries its raiser's identity, so a second person entering it
+      would be acting as the first — the owner cannot enter an approver's
+      preview, nor an approver the owner's. The approval exception in NFR-1.2 /
+      INV-36 widens what the *capabilities* inside the preview may do, not who
+      may open it.
+    * **There is no ``stopped`` branch.** A preview has two states, running and
+      gone, and "gone" is ``not_found``.
+
+    The identity material is the ordinary one — this really is the approver
+    visiting — plus the app id of the application under review, so the trial
+    instance sees the same environment shape it will see in production.
+    """
+    if not settings.app_runtime.enabled:
+        return {"decision": DECISION_NOT_ENABLED}
+
+    subject = _decode_jwt_subject(access_token) if access_token else None
+    if subject is None:
+        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+
+    user_id = int(subject.get("user_id") or 0)
+    tenant_id = int(subject.get("tenant_id") or 0)
+    if not user_id:
+        return {"decision": DECISION_LOGIN, "reason": "no_session"}
+
+    session_reason = await _session_invalid_reason(user_id, tenant_id, subject, access_token)
+    if session_reason:
+        return {"decision": DECISION_LOGIN, "reason": session_reason}
+
+    row = await _resolve_preview_session(session)
+    if row is None:
+        return {"decision": DECISION_NOT_FOUND}
+
+    if int(row.approver_user_id or 0) != user_id:
+        # Not ``forbidden``: the visitor has not been told this preview exists,
+        # and telling them now — with an app name and an owner to ask — would
+        # hand out the existence of an unpublished application (AC-30).
+        logger.info(
+            "app_runtime.preview_entry refused session={} visitor={} owner_of_session={}",
+            session,
+            user_id,
+            row.approver_user_id,
+        )
+        return {"decision": DECISION_NOT_FOUND}
+
+    app = await _load_app_by_id(str(row.app_id))
+    if app is None:
+        return {"decision": DECISION_NOT_FOUND}
+
+    set_current_tenant_id(int(app.tenant_id or 0))
+    user_name, subject_kind = await _user_facts(user_id, subject)
+    obo_config = _obo_signing_snapshot()
+    if obo_configuration_status(obo_config):
+        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
+    material = await _identity_material(
+        app=app, user_id=user_id, user_name=user_name, subject_kind=subject_kind, request_id=request_id
+    )
+    obo_token, obo_expires_at = _issue_obo_token(
+        config=obo_config,
+        app_id=app.id,
+        user_id=user_id,
+        tenant_id=int(app.tenant_id or 0),
+        subject_kind=material.get("X-BiSheng-Subject-Kind", "human"),
+        # The approval exception rides the token, not a header: AC-27 widens
+        # what the *platform* does for this visit, so the fact belongs where the
+        # platform reads it back, never where the application could read — or
+        # forge — it.
+        preview_session=row.id,
+    )
+    if not obo_token:
+        return {"decision": DECISION_UNAVAILABLE, "reason": "identity_config_incomplete"}
+    material["X-BiSheng-Access-Token"] = obo_token
+    logger.debug("app_runtime.preview_entry allow session={} user={} ip={}", session, user_id, client_ip)
+    # No access record: AC-38 counts visits to an *application*, and a trial
+    # instance of a version that may never ship is not one. Counting it would
+    # inflate an app's usage with its own approvals.
+    return {
+        "decision": DECISION_ALLOW,
+        "app_id": app.id,
+        "app_name": app.name,
+        "app_state": app.state,
+        "preview_session": row.id,
+        "headers": material,
+        "obo_token": obo_token,
+        "obo_expires_at": obo_expires_at,
+        "ws_max_lifetime_seconds": int(settings.app_runtime.ws_max_lifetime_seconds),
+    }
+
+
+async def _resolve_preview_session(session: str):
+    """F055 owns the session's lifetime; this module only asks whether it is live.
+
+    Imported inside the function so ``app_runtime`` keeps no import-time edge to
+    ``app_publish`` — the dependency direction is F055 → F054 everywhere else,
+    and a module-level import here would make it a cycle.
+    """
+    try:
+        from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
+
+        return await PreviewInstanceService.resolve_entry(session)
+    except Exception as exc:
+        # Fail-closed, like every other unanswerable question on this path
+        # (AC-12): a broken lookup must not become "let them in".
+        logger.error("app_runtime.preview_entry session lookup failed session={}: {}", session, exc)
+        return None
+
+
+async def _load_app_by_id(app_id: str) -> App | None:
+    if not app_id:
+        return None
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            row = await AppDao.aget(session, app_id)
+    if row is None or row.state == AppState.DELETED.value:
+        return None
+    return row
+
+
+# ---------------------------------------------------------------------------
+# session
+# ---------------------------------------------------------------------------
+
+
+async def _session_invalid_reason(user_id: int, tenant_id: int, subject: dict, access_token: str) -> str | None:
+    """The session checks the HTTP middleware performs and a local JWT decode does not.
+
+    Same order and same helpers as ``CustomMiddleware``, so a session the platform
+    has already signed out cannot keep opening hosted apps — in particular the
+    single-login policy: with ``allow_multi_login`` off, a JWT that is no longer the
+    user's current session is refused here exactly as it is on ``/api/v1``.
+    """
+    if not await _validate_token_version(user_id, int(subject.get("token_version", 0) or 0)):
+        return "token_version_mismatch"
+    if not await _validate_current_session_token(user_id, access_token):
+        return "session_superseded"
+    if await _account_disabled(user_id):
+        return "account_disabled"
+    if tenant_id and await _tenant_disabled(tenant_id):
+        return "tenant_disabled"
+    return None
+
+
+async def _account_disabled(user_id: int) -> bool:
+    from bisheng.user.domain.models.user import UserDao
+
+    try:
+        row = await UserDao.aget_user(user_id)
+    except Exception as exc:
+        logger.warning("app_runtime.entry account lookup failed user={}: {}", user_id, exc)
+        return False
+    return row is not None and int(row.delete or 0) == 1
+
+
+async def _tenant_disabled(tenant_id: int) -> bool:
+    """Redis blacklist, same key the middleware reads.
+
+    Fails **open** on an unreachable Redis, deliberately matching
+    ``CustomMiddleware``: the platform as a whole already behaves that way, and
+    an entry path that fails closed here would lock every hosted application
+    out during a cache blip while the rest of the product kept working.
+    """
+    try:
+        from bisheng.core.cache.redis_manager import get_redis_client
+        from bisheng.tenant.domain.services.tenant_service import DISABLED_TENANT_KEY
+
+        client = await get_redis_client()
+        return bool(await client.aget(DISABLED_TENANT_KEY.format(tenant_id)))
+    except Exception as exc:
+        logger.debug("app_runtime.entry tenant blacklist unavailable tenant={}: {}", tenant_id, exc)
+        return False
+
+
+async def _build_actor(user_id: int, subject: dict):
+    from bisheng.common.dependencies.user_deps import UserPayload
+
+    is_super = False
+    try:
+        is_super = await _check_is_global_super(user_id)
+    except Exception as exc:
+        logger.debug("app_runtime.entry super-admin probe failed user={}: {}", user_id, exc)
+    return UserPayload(
+        user_id=user_id,
+        user_name=str(subject.get("user_name") or ""),
+        user_role=[],
+        tenant_id=int(subject.get("tenant_id") or 0),
+        is_global_super=is_super,
+    )
+
+
+# ---------------------------------------------------------------------------
+# app + identity material
+# ---------------------------------------------------------------------------
+
+
+async def _load_app_by_slug(slug: str) -> App | None:
+    # The slug is global and the visitor's tenant context is not established
+    # yet, so the lookup runs under bypass and the row's own tenant_id becomes
+    # the authoritative tenant for everything after it.
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            return await AppDao.aget_by_slug(session, slug)
+
+
+async def _owner_name(app: App) -> str | None:
+    from bisheng.user.domain.models.user import UserDao
+
+    try:
+        row = await UserDao.aget_user(int(app.owner_user_id or 0))
+    except Exception as exc:
+        logger.debug("app_runtime.entry owner lookup failed app={}: {}", app.id, exc)
+        return None
+    return row.user_name if row is not None else None
+
+
+async def _identity_material(
+    *, app: App, user_id: int, user_name: str, subject_kind: str, request_id: str
+) -> dict[str, str]:
+    """The header values app-proxy will inject (AC-31).
+
+    ``Dept-Id`` is the **business key** (``BS@xxx``), not the autoincrement id:
+    the autoincrement one is meaningless outside the platform database and would
+    make every hosted app's authorisation logic depend on a surrogate key.
+
+    ``user_name`` / ``subject_kind`` come from :func:`_user_facts`, resolved by
+    the caller once — the access record (AC-38) needs the plain name too, and
+    reading it back out of the percent-encoded header would be a round trip
+    that mangles an ASCII name containing a literal ``%``.
+    """
+    dept_id, dept_name, dept_path = await _primary_department(user_id)
+
+    material: dict[str, str] = {
+        "X-BiSheng-User-Id": str(user_id),
+        "X-BiSheng-User-Name": _encode(user_name),
+        "X-BiSheng-Tenant-Id": str(int(app.tenant_id or 0)),
+        "X-BiSheng-Subject-Kind": subject_kind,
+        "X-BiSheng-App-Id": app.id,
+    }
+    if request_id:
+        material["X-BiSheng-Request-Id"] = request_id
+    if dept_id:
+        material["X-BiSheng-Dept-Id"] = dept_id
+        material["X-BiSheng-Dept-Name"] = _encode(dept_name)
+        material["X-BiSheng-Dept-Path"] = _encode(dept_path)
+    return material
+
+
+async def _user_facts(user_id: int, subject: dict) -> tuple[str, str]:
+    """The visitor's display name plus the constant subject kind ``human``.
+
+    A platform session belongs to a natural person by construction: service
+    accounts are not rows of ``user`` (F053 design K15 / K17) and reach the
+    platform only through ``/api/v2`` keys, never through ``/apps/{slug}``.
+    The kind is still emitted so app-proxy's ``X-BiSheng-Subject-Kind`` (AC-31)
+    keeps one authoritative writer.
+    """
+    from bisheng.user.domain.models.user import UserDao
+
+    name = str(subject.get("user_name") or "")
+    kind = "human"
+    try:
+        row = await UserDao.aget_user(user_id)
+    except Exception as exc:
+        logger.debug("app_runtime.entry user lookup failed user={}: {}", user_id, exc)
+        return name, kind
+    if row is not None:
+        name = row.user_name or name
+    return name, kind
+
+
+async def _primary_department(user_id: int) -> tuple[str, str, str]:
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+
+    try:
+        # ``user_department`` has no tenant_id while ``department`` does, so the
+        # pair is read under bypass and scoped by the user id instead.
+        with bypass_tenant_filter():
+            membership = await UserDepartmentDao.aget_user_primary_department(user_id)
+            if membership is None:
+                return "", "", ""
+            department = await DepartmentDao.aget_by_id(int(membership.department_id))
+    except Exception as exc:
+        logger.debug("app_runtime.entry department lookup failed user={}: {}", user_id, exc)
+        return "", "", ""
+    if department is None:
+        return "", "", ""
+    return str(department.dept_id or ""), str(department.name or ""), str(department.path or "")
+
+
+def _encode(value: str) -> str:
+    """UTF-8 percent-encoding, idempotent for values that are already ASCII.
+
+    HTTP headers are latin-1: a raw Chinese name is either rejected by h11 or
+    arrives mangled. ``safe="/"`` keeps a department path readable.
+    """
+    text = str(value or "")
+    return text if text.isascii() else quote(text, safe="/")
+
+
+# ---------------------------------------------------------------------------
+# OBO token
+# ---------------------------------------------------------------------------
+
+
+#: Config problems already reported. Keyed by cause, not by message, so a
+#: reworded log line does not start flooding again.
+_WARNED_ONCE: set[str] = set()
+
+
+def _warn_once(key: str, message: str) -> None:
+    if key in _WARNED_ONCE:
+        return
+    _WARNED_ONCE.add(key)
+    logger.error(message)
+
+
+@dataclass(frozen=True)
+class _OBOSigningConfig:
+    secret: str = field(repr=False)
+    session_secret: str = field(repr=False)
+    issuer: str
+    ttl: int
+
+
+def _obo_signing_snapshot():
+    runtime = settings.app_runtime
+    return _OBOSigningConfig(
+        runtime.obo_secret, settings.jwt_secret, settings.cookie_conf.jwt_iss, int(runtime.obo_ttl_seconds)
+    )
+
+
+def obo_configuration_status(config=None) -> str | None:
+    """Validate one captured signing configuration without disclosing its keys."""
+    config = config or _obo_signing_snapshot()
+    if not config.secret or not config.secret.strip():
+        reason = "obo_secret_missing"
+    elif config.secret == config.session_secret:
+        reason = "obo_secret_equals_jwt"
+    else:
+        return None
+    _warn_once(reason, f"app_runtime.obo_secret configuration invalid: {reason}; configure a dedicated nonblank key")
+    return reason
+
+
+def diagnose_obo_configuration() -> None:
+    """Startup diagnostic only when this deployment enables hosted apps."""
+    if settings.app_runtime.enabled:
+        obo_configuration_status()
+
+
+def _issue_obo_token(
+    *,
+    app_id: str,
+    user_id: int,
+    tenant_id: int,
+    subject_kind: str,
+    preview_session: str | None = None,
+    config: _OBOSigningConfig | None = None,
+) -> tuple[str | None, int | None]:
+    """Short-lived on-behalf-of token injected into the app (AC-34).
+
+    ``preview_session`` marks the token as belonging to an **approval-time
+    trial**, and it is the carrier for the one exception in NFR-1.2 / INV-36:
+    inside a preview the platform capabilities pass at the **owner's** level
+    (F055 AC-27) rather than at the visitor's, because the point of the trial is
+    to see the release work, and an approver who is not in the app's knowledge
+    scope would otherwise see a release that "does not work". The flag has to
+    ride the token: it is the only thing the capability bus gets that says
+    *which* visit this is, and a capability bus that cannot tell a preview from
+    a production visit will quietly apply the wrong rule to both. No reader
+    yet — the capability bus is F055 T056 to T060 — so this is the fact being
+    carried, not the rule being applied.
+
+    Returns ``(token, expires_at)`` — the expiry as epoch seconds, so the
+    caller can state it to app-proxy without decoding the token — or
+    ``(None, None)`` when no token is issued.
+
+    Signed with a dedicated nonblank OBO key. Callers refuse entry when no
+    token can be issued; capability consumers must never see anonymous fallback.
+    Configuration diagnostics contain no key material.
+    """
+    config = config or _obo_signing_snapshot()
+    if obo_configuration_status(config):
+        return None, None
+    secret = config.secret
+
+    now = int(time.time())
+    expires_at = now + config.ttl
+    subject: dict[str, Any] = {
+        "app_id": app_id,
+        "user_id": user_id,
+        "tenant_id": tenant_id,
+        "subject_kind": subject_kind,
+    }
+    if preview_session:
+        subject["preview_session"] = preview_session
+    payload = {
+        # Serialised like the platform's own session subject so both decode the
+        # same way; PyJWT 2.10 also requires ``sub`` to be a string.
+        "sub": json.dumps(subject, sort_keys=True),
+        "aud": OBO_AUDIENCE,
+        "iss": config.issuer,
+        "iat": now,
+        "exp": expires_at,
+    }
+    return jwt.encode(payload, secret, algorithm="HS256"), expires_at
+
+
+def verify_obo_token(token: str, *, app_id: str, tenant_id: int) -> int | None:
+    """The reader :func:`_issue_obo_token` was written for — returns the visitor's user id.
+
+    ``None`` for every failure, with no distinction between them: an expired,
+    forged, wrong-application or wrong-tenant token must answer the same way, or
+    the token becomes a probe for which applications exist and who is inside
+    them. The caller turns that ``None`` into a refusal (F051 26504 on the model
+    face, and no retrieval at all on the capability bus) — never into "the
+    application itself", which would make attribution something the caller can
+    steer by sending garbage.
+
+    ``app_id`` and ``tenant_id`` are checked against the token's own claims
+    because an OBO token is issued **per application**: without that check a
+    visitor's token for app A would let app B act as them.
+    """
+
+    config = _obo_signing_snapshot()
+    secret = config.secret
+    if not token or obo_configuration_status(config):
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            audience=OBO_AUDIENCE,
+            issuer=config.issuer,
+        )
+        claims = json.loads(payload.get("sub") or "{}")
+    except Exception:
+        # Every rejection PyJWT can raise (signature, expiry, audience, issuer)
+        # plus a malformed ``sub``. Logged at debug: a refused token is a normal
+        # event on a public entry, not an incident.
+        logger.debug("app_runtime.obo_verify rejected app_id={}", app_id)
+        return None
+
+    if str(claims.get("app_id") or "") != str(app_id):
+        return None
+    if int(claims.get("tenant_id") or 0) != int(tenant_id or 0):
+        return None
+    user_id = claims.get("user_id")
+    return int(user_id) if user_id else None
+
+
+class AccessSubjectVerifier:
+    """F051's ``AccessSubjectVerifierPort``, wired from F055's composition root.
+
+    A thin adapter rather than the port itself: the token's shape belongs to
+    F054 (it issues it), while the registry belongs to the model face. Both
+    sides keep their own module and neither imports the other.
+    """
+
+    def verify(self, token: str, *, app_id: str, tenant_id: int):
+        from bisheng.open_api.domain.services.model_range_policy import AccessSubject
+
+        user_id = verify_obo_token(token, app_id=app_id, tenant_id=tenant_id)
+        return AccessSubject(user_id=user_id) if user_id else None

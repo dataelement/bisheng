@@ -98,7 +98,7 @@ describe("personal-token tenant settings interaction", () => {
     await waitFor(() => expect(saveButton).toBeEnabled())
     expect(toast.show).toHaveBeenCalledWith({
       type: "success",
-      message: "prompt\nopenApiManagement.personalToken.settingsSaved",
+      message: "prompt\nopenApiManagement.personalToken.settingsSavedSingle",
     })
   })
 

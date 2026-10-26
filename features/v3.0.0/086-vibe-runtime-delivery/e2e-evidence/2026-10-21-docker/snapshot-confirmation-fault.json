@@ -1,0 +1,40 @@
+{
+  "app_id": "8411f09dd5f94b249d272492f8536812",
+  "operation": {
+    "id": "939502f3817c4ec6b1eb57818645cd06",
+    "kind": "deploy",
+    "stage": "failed",
+    "status": "failed",
+    "cleanup_status": "complete",
+    "failure": {
+      "reason": "execution_failed",
+      "maintenance": true,
+      "failed_stage": "maintenance",
+      "diagnostic_tail": "",
+      "data_may_have_changed": false
+    },
+    "version_id": "a53d95479b6640cea612be489c3456a1",
+    "generation": 2
+  },
+  "unconfirmed_artifact": {
+    "id": "4adf3776186f453e92e982e0aa46b8a2",
+    "state": "uploading",
+    "confirmed_at": null,
+    "object_key": "tenants/2/apps/8411f09dd5f94b249d272492f8536812/snapshots/939502f3817c4ec6b1eb57818645cd06/4adf3776186f453e92e982e0aa46b8a2.sqlite",
+    "object_size": 8192
+  },
+  "state": "online",
+  "entry_status": 503,
+  "notes_table_absent": true,
+  "value_retained": true,
+  "current_version_unchanged": true,
+  "retry": {
+    "version_id": "a53d95479b6640cea612be489c3456a1",
+    "entry": {
+      "version": 2,
+      "value": "retained"
+    },
+    "snapshots_confirmed": 1,
+    "same_approval_instance": 2
+  }
+}

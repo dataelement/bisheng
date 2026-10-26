@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-20",
+  "baseline_ref": "origin/feat/3.0.0-vibe",
+  "baseline_sha": "4aa9ce69b2830b81162fe631b9c801057c40ee8b",
+  "branch": "codex/086-vibe-runtime-delivery",
+  "review_input_sha256": {
+    "vibe-app-open-source-technical-design.md": "2fb280efb649aae0c6430b3cc418078e559cef8734e3e30fa402a1575a447c52",
+    "vibe-app-open-source-technical-design.html": "36e131d491a8afbf769c695a0f2acefaa51a82e9def2fcf1a203403afc46411e",
+    "vibe-app-hosting-commercialization-review.md": "528d3e7c1f1898711a3cdb34bc14b9ca4786306a8e98074d9d387b09f6326066",
+    "vibe-app-hosting-commercialization-review.html": "082b550f7abc9c4f8b7d85572565abc5d0487f451d6edd086dba0047c331963d",
+    "bisheng-gateway-runtime-manager-implementation-plan.md": "c9c87e983023b858fe35dce701855d9e7ae340ceee84d49f3270db7c9fc19182",
+    "bisheng-gateway-runtime-manager-implementation-plan.html": "b393e3ad7e59bd98847690c3fed786f56361f385f818227eb51f9c2478e308f7"
+  },
+  "state": "integration_verification_pending",
+  "runtime_changes": true,
+  "spec_review_round": 2,
+  "spec_review": "LGTM",
+  "human_spec_confirmation": "用户明确要求修复四项问题并在复审通过后继续；条件已满足",
+  "design_review": "LGTM",
+  "human_design_confirmation": "2026-10-20 用户回复：确认",
+  "tasks_review": "LGTM",
+  "completed_tasks": 86,
+  "total_tasks": 89,
+  "pending_tasks": [
+    "T053",
+    "T055",
+    "T056"
+  ],
+  "live_validation": "live-validation.md"
+}

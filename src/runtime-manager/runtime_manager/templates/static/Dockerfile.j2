@@ -1,0 +1,49 @@
+# BiSheng hosted-app image — runtime: static
+#
+# Platform-owned (D3 / PRD-1 DEV-04): the developer ships files, the platform
+# owns the server, which is exactly why the security baseline below cannot be
+# opted out of.
+#   * runs as a non-root user (nginx master and workers alike)
+#   * writes nothing under / at runtime → survives ReadonlyRootfs (AC-17):
+#     pid, temp paths and the runtime-rendered config all live under the /tmp
+#     tmpfs (see entrypoint.sh)
+#   * exec-form ENTRYPOINT → nginx is pid 1's process and receives the signal
+#   * no package manager runs at build time: nothing to resolve, nothing to
+#     reach, so an air-gapped host builds this with only the base image
+#
+# Only classic-builder-compatible syntax is used (no `COPY --chmod`, no
+# heredocs): 114 and the 信创 baselines build through the plain daemon builder,
+# and a BuildKit-only Dockerfile would fail there with a syntax error that looks
+# nothing like "your Docker is too old".
+#
+# The served directory is decided at *render* time from the source tree
+# (``source_facts``): the package root when it carries index.html, else the
+# first of dist/ build/ public/ that does. The rendered COPY states which.
+FROM {{ base_image }}
+
+RUN set -eux; \
+    addgroup -S -g {{ app_gid }} {{ app_user }}; \
+    adduser -S -u {{ app_uid }} -G {{ app_user }} -h /app -H -s /sbin/nologin {{ app_user }}; \
+    mkdir -p /app/www /data /etc/bisheng; \
+    chown {{ app_user }}:{{ app_user }} /data
+
+COPY --chown={{ app_user }}:{{ app_user }} {{ static_root }}/ /app/www/
+
+# Template, not the live config: the entrypoint substitutes the port into a
+# copy under /tmp, because the root filesystem is read-only by then.
+COPY nginx.conf /etc/bisheng/nginx.conf.tmpl
+COPY entrypoint.sh /usr/local/bin/bisheng-app-entrypoint
+COPY healthcheck.sh /usr/local/bin/bisheng-healthcheck
+RUN chmod 0755 /usr/local/bin/bisheng-app-entrypoint /usr/local/bin/bisheng-healthcheck
+
+ENV BISHENG_APP_PORT={{ port }} \
+    PORT={{ port }}
+
+EXPOSE {{ port }}
+USER {{ app_user }}
+
+# Durations are overridden at create time from the tier (D4); the command lives
+# in the image so every runtime template owns the probe that suits it.
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD ["/usr/local/bin/bisheng-healthcheck"]
+
+ENTRYPOINT ["/usr/local/bin/bisheng-app-entrypoint"]

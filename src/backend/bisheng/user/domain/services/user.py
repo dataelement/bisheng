@@ -497,6 +497,10 @@ class UserService:
         """Reject users without any role or organizational administration, or without an effective entry menu.
 
         In approval mode, a top-level workstation or admin menu alone is sufficient for entry.
+
+        No service-account guard is needed here: service accounts are not rows
+        of ``user`` (F053 design K15 / K17), so no login path can ever hand one
+        in as ``db_user``.
         """
         # Pre-tenant-context check: any role/dept/group access across all tenants
         # qualifies for login. Without bypass, every DAO below trips

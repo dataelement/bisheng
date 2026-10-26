@@ -68,3 +68,9 @@ API E2E 分类：本次没有新增或修改的 API 行为类 AC，因此没有�
 可复现入口：[浏览器样本说明](browser-smoke/README.md)、[单 worker 回归脚本](browser-smoke/regression.sh)。真实业务验收仍按清单执行。
 
 全部实施裁定及完成记录见 [实施记录](implementation-log.md)；开发分支保留，未自动合并或推送。
+
+## 合入发版线验证（2026-10-26）
+
+合入远端 `feat/3.0.0` 的 `3fdd1ba6b` 后重新验证：相关回归 341 项全部通过；共享 chat/file-viewers 类型与 lint、三语言及生成文件检查通过。两端生产构建通过（platform 28 秒，client 2 分 23 秒）；两端隔离 Chrome 文件/引用/图表样本通过，未捕获异常均为 0。生产静态启动及高亮模块导入通过，图表输出 SHA256 与公共源一致；client 离线环境读取仍出现 1 个预期的 API 404，未记为业务联调通过。
+
+完整工作区 manifest 的 frozen/offline 锁文件验证通过；三个 SheetJS 消费方均从空 store 离线安装成功，XLSX/XLS 往返验证通过。30 个生产文件的请求辅助导入检查无缺失。相对远端发版线的差异空白检查通过。此前列出的全仓检查基线不在本次修复范围。真实业务验收继续按 e2e-checklist 执行。

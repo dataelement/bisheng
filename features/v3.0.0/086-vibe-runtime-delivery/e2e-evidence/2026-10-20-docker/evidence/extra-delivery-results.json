@@ -1,0 +1,42 @@
+[
+  {
+    "mode": "image",
+    "app_id": "0d59597a523641eba843a5bdaf80e7f8",
+    "deployment_id": "97290cb9f8fd4850bc1eff147936cde5",
+    "status": "waiting_approval",
+    "stage": "approval_created",
+    "http": 200,
+    "deleted": true
+  },
+  {
+    "mode": "legacy",
+    "app_id": "308bc75b105b469a86235641df1741c1",
+    "deployment_id": "0f135ac5eece4cd1a8d3091926a87f2c",
+    "status": "waiting_approval",
+    "stage": "approval_created",
+    "http": 200,
+    "deleted": true
+  },
+  {
+    "mode": "bad-port",
+    "app_id": "56e7f26a33884f6eb0cc526e394fc8c2",
+    "deployment_id": "313564fac2eb43c396d612a4ce0213f6",
+    "status": "failed",
+    "failure": {
+      "code": 16124,
+      "hints": [],
+      "stage": "precheck_probe",
+      "details": {
+        "reason": "readiness_timeout",
+        "maintenance": false,
+        "operation_id": "b3d4a49ffe2144aca37b7866198a9c27",
+        "runtime_stage": "starting",
+        "data_may_have_changed": false
+      },
+      "message": "\u5e94\u7528\u6267\u884c\u5931\u8d25"
+    },
+    "no_approval": true,
+    "no_formal_version": true,
+    "deleted": true
+  }
+]

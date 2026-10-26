@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
-from bisheng.open_api.api.public_base_url import resolve_public_base_url
+from bisheng.open_api.domain.services.public_base_url import resolve_public_base_url
 from bisheng.open_api.domain.services.skill_pack_service import SkillPackService
 
 router = APIRouter(prefix="/open-api/skill-packs", tags=["OpenAPI"])

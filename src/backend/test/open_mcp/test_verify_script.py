@@ -20,7 +20,11 @@ def _load_script():
 def test_verifier_allowlist_and_calls_are_read_only():
     script = _load_script()
 
-    assert script.EXPECTED_TOOL_NAMES == frozenset(TOOL_REGISTRY)
+    # The verifier covers the ten knowledge tools; the app-factory tools have no
+    # /api/v2 source route and need other scopes.
+    assert script.EXPECTED_TOOL_NAMES == frozenset(
+        name for name, definition in TOOL_REGISTRY.items() if definition.source_method != "MCP"
+    )
     assert script.READ_ONLY_TOOL_NAMES == {
         "bisheng_knowledge_list",
         "bisheng_knowledge_retrieve",

@@ -1,0 +1,15 @@
+slug	state	formal_versions
+e2e-f086-image	deleted	1
+e2e-f086-legacy	deleted	1
+e2e-f086-sqlite	deleted	4
+e2e-f086-bad-port	deleted	0
+state	COUNT(*)
+released	29
+kind	status	cleanup_status	reason	failed_stage
+probe	failed	complete	readiness_timeout	admitted
+probe	failed	complete	readiness_timeout	admitted
+prepare	completed	complete	NULL	NULL
+destroy	completed	complete	NULL	NULL
+prepare	completed	complete	NULL	NULL
+probe	failed	complete	readiness_timeout	starting
+prepare	completed	complete	NULL	NULL

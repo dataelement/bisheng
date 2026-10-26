@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh BiSheng host isolation evidence every 30 seconds
+
+[Timer]
+OnBootSec=10
+OnUnitActiveSec=30
+AccuracySec=1
+Unit=bisheng-host-isolation.service
+
+[Install]
+WantedBy=timers.target

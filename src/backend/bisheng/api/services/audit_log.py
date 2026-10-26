@@ -23,9 +23,12 @@ from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
     get_admin_scope_tenant_id,
     get_current_tenant_id,
 )
+from bisheng.core.database import get_async_db_session
+from bisheng.database.models.app import AppDao
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.audit_log import AuditLog, AuditLogDao, EventType, ObjectType, SystemId
 from bisheng.database.models.department import DepartmentDao
@@ -35,11 +38,19 @@ from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.services.auth import LoginUser
+
+# F056 AC-32: the system-audit export walks the same paginated query the
+# list uses. The cap keeps one request bounded; the frontend tells the
+# operator to narrow the filters when ``total`` exceeds it.
+AUDIT_EXPORT_MAX_ROWS = 10_000
+AUDIT_EXPORT_PAGE_SIZE = 500
 
 
 # todo change to async or submit thread pool
@@ -73,29 +84,315 @@ class AuditLogService:
         return get_current_tenant_id()
 
     @classmethod
-    async def get_audit_log(
-        cls, login_user: UserPayload, group_ids, operator_ids, start_time, end_time, system_id, event_type, page, limit
-    ) -> Any:
-        groups = group_ids
-        if not login_user.is_admin():
-            if await cls._user_has_log_web_menu(login_user):
-                groups = group_ids
-            else:
-                groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
-                # Not an administrator of any user groups
-                if not groups:
-                    return UnAuthorizedError.return_resp()
-                # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
-                if group_ids:
-                    groups = list(set(groups) & set(group_ids))
-                    if not groups:
-                        return UnAuthorizedError.return_resp()
+    async def _resolve_audit_groups(cls, login_user: UserPayload, group_ids: list[str]) -> list[str]:
+        """Group filter the caller is allowed to run, or ``UnAuthorizedError``.
 
-        tenant_scope = cls._get_audit_tenant_scope(login_user)
+        Admins and log-menu roles filter by whatever they picked (possibly
+        nothing); a user-group admin is pinned to the groups they manage,
+        intersected with their pick.
+        """
+        if login_user.is_admin() or await cls._user_has_log_web_menu(login_user):
+            return list(group_ids)
+        groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
+        # Not an administrator of any user groups
+        if not groups:
+            raise UnAuthorizedError()
+        # Filter by group_id and administrator-permission groups, doing intersections
+        if group_ids:
+            groups = list(set(groups) & set(group_ids))
+            if not groups:
+                raise UnAuthorizedError()
+        return groups
+
+    @classmethod
+    async def _group_member_ids(cls, groups: list[str]) -> list[int]:
+        """Current members of the selected groups (F056 design pit 15).
+
+        Structured v2 rows never fill ``group_ids``, so the DAO also matches
+        v2 rows by *operator membership*. Read only when a group filter is
+        in force — the common admin path passes no groups and pays nothing.
+        """
+        if not groups:
+            return []
+        rows = await UserGroupDao.aget_group_users([int(one) for one in groups])
+        return sorted({one.user_id for one in rows})
+
+    @classmethod
+    def _resolve_tenant_scope(cls, login_user: UserPayload, tenant_id: int | None) -> int | None:
+        """Combine the role-derived scope with an explicit ``tenant_id`` filter.
+
+        - global super (scope ``None``) → ``tenant_id`` narrows the view (AC-30);
+        - anyone else → ``tenant_id`` must equal their own scope, otherwise the
+          request is rejected outright rather than silently narrowed (AC-31).
+        """
+        scope = cls._get_audit_tenant_scope(login_user)
+        if tenant_id is None:
+            return scope
+        if scope is None:
+            return tenant_id
+        if tenant_id != scope:
+            raise UnAuthorizedError()
+        return scope
+
+    @classmethod
+    async def _assert_app_in_scope(cls, app_id: str, tenant_scope: int | None) -> None:
+        """The object-app filter must not reach into another tenant (AC-31).
+
+        Looked up with the tenant filter bypassed on purpose: with it on, a
+        foreign app simply reads as "not found" and the query would degrade
+        to an empty list instead of the rejection the AC asks for. An unknown
+        id is left to the predicate, which then matches nothing.
+        """
+        if tenant_scope is None:
+            return
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                app = await AppDao.aget(session, app_id)
+        if app is not None and int(app.tenant_id or 0) != tenant_scope:
+            raise UnAuthorizedError()
+
+    @classmethod
+    async def _prepare_audit_query(
+        cls, login_user: UserPayload, group_ids: list[str], target_app_id: str | None, tenant_id: int | None
+    ) -> tuple[list[str], list[int], int | None]:
+        """Role gate + tenant boundary shared by the list and the export.
+
+        One function on purpose (spec 决议-8): an export whose scope differs
+        from the query's is a bypass, so both go through here and receive
+        the same ``(groups, member_ids, tenant_scope)``.
+        """
+        groups = await cls._resolve_audit_groups(login_user, group_ids)
+        tenant_scope = cls._resolve_tenant_scope(login_user, tenant_id)
+        if target_app_id:
+            await cls._assert_app_in_scope(target_app_id, tenant_scope)
+        member_ids = await cls._group_member_ids(groups)
+        return groups, member_ids, tenant_scope
+
+    @classmethod
+    def _row_metadata(cls, row: AuditLog) -> dict[str, Any]:
+        return row.audit_metadata if isinstance(row.audit_metadata, dict) else {}
+
+    @classmethod
+    def _operator_kind(cls, row: AuditLog) -> str | None:
+        """``service_account`` for rows a service account produced, else ``None``.
+
+        Three shapes are recognised, in order of how explicit they are:
+        ``metadata.actor_kind`` (what ``OpenApiAuditMiddleware`` and the F055
+        ``app.release.submit`` writer stamp today), ``metadata.operator.kind``
+        (the contract writers adopt going forward), and the beta2 convention
+        both of the above also follow — operator 0 with the account's name
+        (``operator_id=0`` *without* a name is a system trigger and renders as
+        ``system``).
+        """
+        metadata = cls._row_metadata(row)
+        if metadata.get("actor_kind") == "service_account":
+            return "service_account"
+        operator = metadata.get("operator") if isinstance(metadata.get("operator"), dict) else {}
+        if operator.get("kind") == "service_account":
+            return "service_account"
+        if row.operator_id == 0 and row.operator_name and row.operator_name != "system":
+            return "service_account"
+        return None
+
+    @classmethod
+    def _row_credential_id(cls, row: AuditLog) -> int | None:
+        """``metadata.credential_id`` as the writers stamp it (int, or its
+        string form) — the key the audit row was produced with."""
+        raw = cls._row_metadata(row).get("credential_id")
+        if isinstance(raw, bool):
+            return None
+        if isinstance(raw, int):
+            return raw
+        if isinstance(raw, str) and raw.isdigit():
+            return int(raw)
+        return None
+
+    @classmethod
+    def _row_app_id(cls, row: AuditLog) -> str | None:
+        """Which hosted application a row is about — mirrors ``_object_app_predicate``."""
+        if row.target_type == "app" and row.target_id:
+            return row.target_id
+        metadata = row.audit_metadata if isinstance(row.audit_metadata, dict) else {}
+        app_id = metadata.get("app_id")
+        return app_id if isinstance(app_id, str) and app_id else None
+
+    @classmethod
+    async def _enrich_audit_rows(cls, rows: list[AuditLog]) -> list[dict[str, Any]]:
+        """Project rows for the audit page / export (F056 AC-17, AC-29, AC-30).
+
+        The raw ``metadata`` blob is deliberately **not** emitted: it is a
+        free-form dict every writer fills differently and the one place a
+        secret could leak through (AC-26). Only derived, named fields leave
+        this function. Applications are resolved with the tenant filter
+        bypassed — a global super's page spans tenants — and the rows
+        themselves were already scoped by the query.
+        """
+        if not rows:
+            return []
+        app_ids = {app_id for row in rows if (app_id := cls._row_app_id(row))}
+        tenant_ids = {row.tenant_id for row in rows if row.tenant_id is not None}
+        # Only service-account rows get a mask (AC-17); a natural person's
+        # personal token is not surfaced on the audit page.
+        credential_ids = {
+            cred_id
+            for row in rows
+            if cls._operator_kind(row) == "service_account" and (cred_id := cls._row_credential_id(row))
+        }
+
+        apps_by_id: dict[str, Any] = {}
+        if app_ids:
+            with bypass_tenant_filter():
+                async with get_async_db_session() as session:
+                    apps_by_id = {app.id: app for app in await AppDao.alist_by_ids(session, sorted(app_ids))}
+        tenants_by_id = {t.id: t for t in await TenantDao.aget_by_ids(sorted(tenant_ids))} if tenant_ids else {}
+        # ``key_mask`` is built from the stored prefix + last four characters;
+        # the plaintext key is never persisted, so nothing longer exists to
+        # leak from here (AC-26).
+        masks_by_credential: dict[int, str] = {}
+        if credential_ids:
+            masks_by_credential = {
+                c.id: c.key_mask for c in await CredentialRepository.get_by_ids(sorted(credential_ids))
+            }
+
+        owner_ids = {app.owner_user_id for app in apps_by_id.values() if app.owner_user_id}
+        owners_by_id: dict[int, str] = {}
+        if owner_ids:
+            owners_by_id = {u.user_id: u.user_name for u in (await UserDao.aget_user_by_ids(sorted(owner_ids)) or [])}
+
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            item = row.model_dump(exclude={"audit_metadata"})
+            metadata = cls._row_metadata(row)
+            app_id = cls._row_app_id(row)
+            app = apps_by_id.get(app_id) if app_id else None
+            item["app_id"] = app_id
+            # The live row wins for slug / state; the audit row's own
+            # ``object_name`` is the name snapshot and stays authoritative
+            # when the application row is gone or renamed since (AC-21).
+            item["app_name"] = app.name if app is not None else (row.object_name if app_id else None)
+            item["app_slug"] = app.slug if app is not None else metadata.get("app_slug")
+            item["app_state"] = app.state if app is not None else None
+            item["app_owner_name"] = owners_by_id.get(app.owner_user_id) if app is not None else None
+            version_no = metadata.get("version_no")
+            item["version_no"] = version_no if isinstance(version_no, int) else None
+            tenant = tenants_by_id.get(row.tenant_id) if row.tenant_id is not None else None
+            item["tenant_name"] = tenant.tenant_name if tenant is not None else None
+            operator = metadata.get("operator") if isinstance(metadata.get("operator"), dict) else {}
+            item["operator_kind"] = cls._operator_kind(row)
+            # A mask the writer already produced wins; otherwise the credential
+            # row named by ``metadata.credential_id`` supplies its stored one.
+            # Nothing here reconstructs a mask from a longer value (AC-26).
+            key_mask = operator.get("key_mask")
+            if not isinstance(key_mask, str):
+                cred_id = cls._row_credential_id(row)
+                key_mask = masks_by_credential.get(cred_id) if cred_id is not None else None
+            item["operator_key_mask"] = key_mask if item["operator_kind"] and key_mask else None
+            result.append(item)
+        return result
+
+    @classmethod
+    async def get_audit_log(
+        cls,
+        login_user: UserPayload,
+        group_ids,
+        operator_ids,
+        start_time,
+        end_time,
+        system_id,
+        event_type,
+        page,
+        limit,
+        target_app_id: str | None = None,
+        tenant_id: int | None = None,
+    ) -> Any:
+        try:
+            groups, member_ids, tenant_scope = await cls._prepare_audit_query(
+                login_user, group_ids, target_app_id, tenant_id
+            )
+        except UnAuthorizedError:
+            return UnAuthorizedError.return_resp()
         data, total = await AuditLogDao.get_audit_logs(
-            groups, operator_ids, start_time, end_time, system_id, event_type, page, limit, tenant_scope=tenant_scope
+            groups,
+            operator_ids,
+            start_time,
+            end_time,
+            system_id,
+            event_type,
+            page,
+            limit,
+            tenant_scope=tenant_scope,
+            target_app_id=target_app_id,
+            group_member_ids=member_ids,
         )
-        return resp_200(data={"data": data, "total": total})
+        return resp_200(data={"data": await cls._enrich_audit_rows(data), "total": total})
+
+    @classmethod
+    async def export_audit_log(
+        cls,
+        login_user: UserPayload,
+        group_ids,
+        operator_ids,
+        start_time,
+        end_time,
+        system_id,
+        event_type,
+        target_app_id: str | None = None,
+        tenant_id: int | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Every row the same query would list, in list order (F056 AC-32).
+
+        Returns ``(rows, total)``; ``rows`` is capped at
+        ``AUDIT_EXPORT_MAX_ROWS`` and the caller compares the two to tell the
+        operator the export was truncated. Same gate, same scope, same
+        projection as :meth:`get_audit_log` — the only difference is that
+        pagination is driven from here.
+        """
+        groups, member_ids, tenant_scope = await cls._prepare_audit_query(
+            login_user, group_ids, target_app_id, tenant_id
+        )
+        rows: list[dict[str, Any]] = []
+        page = 1
+        total = 0
+        while len(rows) < AUDIT_EXPORT_MAX_ROWS:
+            chunk, total = await AuditLogDao.get_audit_logs(
+                groups,
+                operator_ids,
+                start_time,
+                end_time,
+                system_id,
+                event_type,
+                page,
+                AUDIT_EXPORT_PAGE_SIZE,
+                tenant_scope=tenant_scope,
+                target_app_id=target_app_id,
+                group_member_ids=member_ids,
+            )
+            if not chunk:
+                break
+            rows.extend(await cls._enrich_audit_rows(chunk))
+            if len(chunk) < AUDIT_EXPORT_PAGE_SIZE:
+                break
+            page += 1
+        return rows[:AUDIT_EXPORT_MAX_ROWS], total
+
+    @classmethod
+    async def search_audit_apps(cls, login_user: UserPayload, keyword: str, limit: int) -> list[dict[str, Any]]:
+        """Options for the audit page's object-application selector (AC-28).
+
+        Same gate as the list; same tenant scope, so a tenant admin only
+        ever sees their own tenant's applications (AC-31). Deleted
+        applications are included on purpose — their delete event is the
+        one a reader is most likely looking for (AC-21).
+        """
+        await cls._resolve_audit_groups(login_user, [])
+        tenant_scope = cls._get_audit_tenant_scope(login_user)
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                apps = await AppDao.asearch_for_audit(session, tenant_scope, keyword, limit)
+        return [
+            {"id": app.id, "name": app.name, "slug": app.slug, "state": app.state, "tenant_id": app.tenant_id}
+            for app in apps
+        ]
 
     @classmethod
     async def get_all_operators(cls, login_user: UserPayload) -> list[dict]:
@@ -875,7 +1172,6 @@ class AuditLogService:
         # group membership before tenant context is established. Without
         # bypass, hotfix-3's tenant-aware user_group table trips
         # NoTenantContextError on every login.
-        from bisheng.core.context.tenant import bypass_tenant_filter
 
         with bypass_tenant_filter():
             user_group = UserGroupDao.get_user_group(user.user_id)

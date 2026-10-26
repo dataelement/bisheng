@@ -17,7 +17,7 @@ export function DocxViewer({ resource, zoomLevel = 100, locale, onError }: Previ
         <div className="scrollbar-os min-w-0 flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="box-border flex w-full justify-center py-6 px-3 sm:px-4">
                 <div
-                    
+
                     className="w-full max-w-[800px] rounded-sm bg-white shadow-md"
                     style={{
                         transform: `scale(${scale})`,

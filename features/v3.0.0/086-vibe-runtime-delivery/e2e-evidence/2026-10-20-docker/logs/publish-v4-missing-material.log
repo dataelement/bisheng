@@ -1,0 +1,7 @@
+Submitted v4 26702a608dfd483d963ea36455aefe14
+received running
+precheck_build running
+precheck_build running
+precheck_build running
+precheck_build failed
+Publish outcome {"deployment_id": "26702a608dfd483d963ea36455aefe14", "app_id": "3192b1ee03c943ce9fd15f91727ccb4d", "version_id": "11f610a044a24578b0f5d3c85e653589", "version_no": null, "stage": "precheck_build", "status": "failed", "failure": {"code": 16227, "hints": [], "stage": "precheck_build", "details": {"reason": "\u5e94\u7528\u6267\u884c\u5931\u8d25", "operation_id": "9783f77ac50b489ab0876ab252659a27"}, "message": "\u5e94\u7528\u4f9d\u8d56\u6216\u4ea4\u4ed8\u51c6\u5907\u5931\u8d25"}, "approval": null, "app_state": "online", "entry_url": "http://nginx:3001/apps/e2e-f086-sqlite", "scan_result": {"hits": [], "blocked": false, "skipped": [], "files_scanned": 3, "files_skipped": 0}}

@@ -65,4 +65,3 @@ export const codeNoExecution: React.ElementType = memo(({ className, children }:
     return <CodeBlock lang={lang ?? 'text'} codeChildren={children} allowExecution={false} />;
   }
 });
-

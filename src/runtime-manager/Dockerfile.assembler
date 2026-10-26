@@ -1,0 +1,25 @@
+# Build context: repository root. Go modules are verified by the Go checksum database in CI.
+ARG HELPER_IMAGE
+FROM golang:1.27.3-bookworm AS crane
+WORKDIR /build
+RUN go mod init bisheng.invalid/runtime-crane \
+    && go get github.com/google/go-containerregistry/cmd/crane@v0.22.1 \
+    && CGO_ENABLED=0 go build -mod=readonly -trimpath -o /out/crane github.com/google/go-containerregistry/cmd/crane \
+    && mkdir -p /out/licenses/modules \
+    && cp /usr/local/go/LICENSE /out/licenses/Go.LICENSE \
+    && cp go.mod go.sum /out/licenses/ \
+    && go version -m /out/crane > /out/licenses/crane-build.txt \
+    && go list -m -json all > /out/licenses/modules.json \
+    && go list -m -f '{{if .Dir}}{{.Dir}}{{end}}' all | while IFS= read -r module; do \
+         [ -n "$module" ] || continue; \
+         destination="/out/licenses/modules/${module#/go/pkg/mod/}"; \
+         mkdir -p "$destination"; \
+         find "$module" -maxdepth 1 -type f \( -iname 'LICENSE*' -o -iname 'COPYING*' -o -iname 'NOTICE*' \) \
+           -exec cp '{}' "$destination/" \;; \
+       done
+FROM ${HELPER_IMAGE}
+COPY --from=crane /out/crane /usr/local/bin/crane
+COPY --from=crane /out/licenses/ /usr/share/licenses/crane/
+USER 10001:10001
+ENTRYPOINT ["python", "-I", "-m", "runtime_manager.oci_assembler"]
+CMD []

@@ -43,4 +43,3 @@ export function parseTranscriptCues(markdown: string): { preamble: string; cues:
 
     return { preamble: preambleLines.join("\n\n"), cues };
 }
-

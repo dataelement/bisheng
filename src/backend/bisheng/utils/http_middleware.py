@@ -38,10 +38,34 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # v2.5.1 F015: HMAC-signed relink + resolve-conflict endpoints.
     "/api/v1/internal/departments/relink",
     "/api/v1/internal/departments/relink/resolve-conflict",
+    # v3.0.0 F054: app-proxy's HMAC-signed entry authorization. No JWT rides on
+    # this request — the visitor's session token is *data in the body* to be
+    # judged — so there is no tenant context and the handler runs under bypass.
+    # The match is a prefix, so F055's ``…/authorize-preview`` (the entry verdict
+    # for an approval-time preview instance) is covered by this same entry — it
+    # is the same kind of request for the same reason.
+    "/api/v1/internal/app-proxy/authorize",
+    "/api/v1/internal/app-runtime/v2/",
+    # Workload Ed25519 authorization establishes its own verified tenant scope.
+    "/internal/app-runtime/v2/material-access/",
+    # The nginx error_page fallback: a static page served when app-proxy is down.
+    # Reached by an anonymous browser, so it must not require a session.
+    "/api/v1/apps/_unavailable",
     # Share-link reads are anonymous by design (recipients open the URL
     # without logging in). The token itself authorizes access; downstream
     # DAOs must run under bypass since the recipient has no tenant context.
     "/api/v1/share-link",
+    # v3.0.0 F053: the CLI installer + version endpoints are anonymous by design
+    # (an administrator forwards the link; the developer installs before holding
+    # a key). No JWT means no tenant context under multi-tenancy — the fallback
+    # in ``_set_tenant_context`` only fires when multi_tenant is *off* — so the
+    # first tenant-aware SELECT anywhere in the call tree would raise
+    # NoTenantContextError. ⚠️ The flip side: everything reachable under this
+    # prefix runs with the tenant filter bypassed, so nothing tenant-scoped may
+    # ever be served here. Today it is disk-only (a wheel + its manifest, both
+    # properties of the build, not of any tenant); anything per-tenant belongs
+    # behind a credential on a different path.
+    "/api/v1/dev-toolkit",
     "/health",
     "/docs",
     "/openapi.json",
@@ -93,7 +117,9 @@ def owns_dsh_credential(method: str, path: str) -> bool:
 
 def _uses_browser_identity(path: str) -> bool:
     """v2 credentials and v3 default operators resolve identity at their endpoints."""
-    return path not in {"/api/v2", "/api/v3"} and not path.startswith(("/api/v2/", "/api/v3/"))
+    return path not in {"/api/v2", "/api/v3"} and not path.startswith(
+        ("/api/v2/", "/api/v3/", "/internal/app-runtime/v2/material-access/")
+    )
 
 
 def _decode_jwt_subject(token: str) -> dict | None:
@@ -425,7 +451,9 @@ class CustomMiddleware(BaseHTTPMiddleware):
             ]
 
         req_path = request.url.path
-        is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS)
+        is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS) or bool(
+            re.fullmatch(r"/api/v1/apps/[A-Za-z0-9_-]+/storage(?:/.*)?", req_path)
+        )
 
         # Exempt paths run before tenant context is established (login,
         # register, SSO/LDAP callbacks, captcha, env, internal sync hooks).

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "node_id": "e2e-f086-node",
+  "engine_id": "c2fa2d5d-7f72-438c-9c24-705fd91079cd",
+  "applications": [
+    {
+      "app_id": "7dcca9caca5b4a2b8d50405717ddcc5c",
+      "version_id": "ea1cf255b9344560837b5d7b2722b43e",
+      "generation": 1,
+      "desired": "running",
+      "exec_ref": "e74115e12aab5e4d98cf06db089f9c33b49fd7a7322e502e6a13eb7c761b08af",
+      "image_id": "sha256:71e9a7edf37ff93e07d7a07137ad4fea305dd8e266f9e3bbab3eb9c9a65c4c50",
+      "platform": "linux/amd64",
+      "running": true,
+      "labels": {
+        "bisheng.app.id": "7dcca9caca5b4a2b8d50405717ddcc5c",
+        "bisheng.app.slug": "e2e-f086-legacy-upgrade",
+        "bisheng.egress.domains": "",
+        "bisheng.generation": "1",
+        "bisheng.health.path": "/",
+        "bisheng.managed": "true",
+        "bisheng.port": "8080",
+        "bisheng.tier.cpu": "0.5",
+        "bisheng.tier.mem_mb": "1024",
+        "bisheng.version.id": "ea1cf255b9344560837b5d7b2722b43e",
+        "bisheng.version.no": "1"
+      },
+      "tier": {
+        "memory_mb": 1024,
+        "cpu_millicores": 500
+      },
+      "target": {
+        "host": "192.168.128.4",
+        "port": 8080
+      },
+      "storage_namespace": "apps/7dcca9caca5b4a2b8d50405717ddcc5c/",
+      "storage_bucket": "bisheng-apps"
+    }
+  ]
+}

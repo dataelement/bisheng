@@ -22,17 +22,18 @@ revokeServiceAccountKeyApi,
 } from "@/controllers/API/serviceAccount";
 import { showApiError } from "@/controllers/request";
 import type {
-ApiKeyIssued,
-ApiKeyItem,
-OpenApiScopeItem,
-} from "@/types/api/openApi";
-import { formatIsoDateTime } from "@/util/utils";
-import { useCallback,useEffect,useState } from "react";
-import { useTranslation } from "react-i18next";
-import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter";
-import { useOpenApiList } from "../OpenApiList/useOpenApiList";
-import { KeyIssueDialog } from "./KeyIssueDialog";
-import { KeyRevealDialog } from "./KeyRevealDialog";
+  ApiKeyIssued,
+  ApiKeyItem,
+  OpenApiScopeItem,
+} from "@/types/api/openApi"
+import { formatIsoDateTime } from "@/util/utils"
+import { useCallback, useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { AccessInfoPanel } from "./AccessInfoPanel"
+import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter"
+import { useOpenApiList } from "../OpenApiList/useOpenApiList"
+import { KeyIssueDialog } from "./KeyIssueDialog"
+import { KeyRevealDialog } from "./KeyRevealDialog"
 
 export interface ApiKeysTabProps {
   serviceAccountId: number
@@ -159,6 +160,10 @@ export function ApiKeysTab({
 
   return (
     <div className="space-y-4">
+      {/* AC-44: the access information sits above the key table — it is what an
+          administrator forwards before any key exists. Absent where the
+          open-capability layer is not deployed (the panel decides). */}
+      <AccessInfoPanel />
       <div className="flex justify-end gap-2">
         <Button variant="outlined" disabled={loading || loadingData || !list.response?.active_count} onClick={handleRevokeAll} color="default">
           {t("openApiManagement.actions.revokeAll")}

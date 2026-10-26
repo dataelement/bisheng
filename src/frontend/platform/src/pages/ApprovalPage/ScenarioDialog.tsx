@@ -3,9 +3,10 @@ import { Button, Select } from '@bisheng/ui';
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { type ApprovalScenarioPreset } from "@/controllers/API/approval";
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { APPROVER_SOURCE_LABEL_KEYS } from "./approvalMetadata";
+import { approverSourceLabel } from "./approverSources";
+import { locationContext } from "@/contexts/locationContext";
 
 interface AddScenarioDialogProps {
   open: boolean;
@@ -17,6 +18,7 @@ interface AddScenarioDialogProps {
 
 export function AddScenarioDialog({ open, presets, existingCodes, onClose, onConfirm }: AddScenarioDialogProps) {
   const { t } = useTranslation("bs");
+  const { appConfig } = useContext(locationContext);
   const selectLabels = useSelectLabels();
   const available = useMemo(() => presets.filter((p) => !existingCodes.has(p.scenario_code)), [presets, existingCodes]);
   const [selected, setSelected] = useState("");
@@ -31,7 +33,7 @@ export function AddScenarioDialog({ open, presets, existingCodes, onClose, onCon
     .join("、");
 
   const approverSourceLabels = (preset?.approver_source_types ?? [])
-    .map((s) => t(APPROVER_SOURCE_LABEL_KEYS[s] ?? `approvalPage.approverSource.${s}`, { defaultValue: s }))
+    .map((s) => approverSourceLabel(s, t, undefined, !!appConfig.multiTenantEnabled))
     .join("、");
 
   return (

@@ -168,6 +168,26 @@ markers at every hierarchy level. Do not repeat the first migration to repair
 an existing F048 installation. Legacy RBAC environments must first complete
 the 2.5.x upgrade stage described below.
 
+### `repair_deleted_app_grants.py`
+
+Close the permission gate of hosted apps deleted before the 2026-09-16 delete
+fix (`AppStateService.delete` used to re-read the permission record after
+flipping the app to `deleted`, got 19003, and skipped the delete projection, the
+delete audit and the lifecycle hooks). F048's delete plan removes only the
+`permission_enabled` markers on the object; grant links, `custom_mode` and
+visible-projection tuples stay, as after deleting any F048 resource. The script
+lists deleted apps that still carry `permission_enabled` and, with `--apply`,
+projects the removal using the pre-deletion record. Dry-run is the default.
+
+```bash
+cd src/backend
+PYTHONPATH=./ .venv/bin/python scripts/repair_deleted_app_grants.py                  # list only
+PYTHONPATH=./ .venv/bin/python scripts/repair_deleted_app_grants.py --apply          # repair all
+PYTHONPATH=./ .venv/bin/python scripts/repair_deleted_app_grants.py --apply --app-id <app_id>
+```
+
+Exit code 1 means at least one app still has a `permission_enabled` marker after `--apply`.
+
 ### `cleanup_f048_user_group_admin_grants.py`
 
 Audit and revoke resource Grant sources assigned to one user group's
@@ -742,6 +762,54 @@ Exit codes:
 - `3`: a migration or verification safety gate blocked progress
 - `4`: unexpected runtime/infrastructure failure; traceback is printed
 
+### `upgrade_f048_authorization_model.py` / `.sh`
+
+Makes the F054 **`app`** resource type effective on an environment that has
+**already** run the F048 migration. A fresh install needs nothing — the model is
+built from the constants at first boot — but an existing one needs this, for two
+independent reasons:
+
+- adding `app` changes the authorization-model checksum, so every process boots
+  into `migration_required` and answers 503 for **all** permission checks until
+  the SQL pin is moved deliberately;
+- `permission_action_resource_scope` is written only by the first migration and
+  by a Catalog draft publish, and no `CatalogChangeType` can change an action's
+  `resource_types` — so without a backfill `is_action_effective("app", …)` is
+  false forever and every check raises `InvalidCatalogActionError`.
+
+Four steps: publish (or adopt) the model in the store, insert the new ACTIVE
+`authorization_model_release` and retire the old one, re-point the CURRENT
+`permission_catalog_release`, backfill the `app` scope rows. Steps 2-4 share one
+transaction; step 1 is an HTTP write and cannot join it.
+
+```bash
+cd src/backend/
+export config=config.yaml            # same value the live service runs with
+
+bash scripts/upgrade_f048_authorization_model.sh              # plan — writes nothing
+bash scripts/upgrade_f048_authorization_model.sh apply
+bash scripts/upgrade_f048_authorization_model.sh verify
+bash scripts/upgrade_f048_authorization_model.sh rollback     # re-point SQL back
+```
+
+Operational notes:
+
+- **Restart every process after `apply` or `rollback`** — API, celery x3, beat,
+  linsight worker. Heartbeats are re-checked every 15 s (TTL 45 s): a process
+  left running fails closed rather than continuing to serve.
+- **Ship the code before adding a new `config.yaml` key.** `load_settings_from_yaml`
+  raises `KeyError` on an unknown top-level key, so adding `app_runtime:` ahead
+  of the code stops the backend from starting.
+- `apply` is idempotent — it locates an existing model by canonical checksum, so
+  a re-run reports `noop` instead of publishing a duplicate. It refuses to run
+  while permission runtime heartbeats are live unless `--allow-live` is given.
+- `rollback` re-points SQL and removes the `app` scope rows. The published model
+  **stays in the store** (OpenFGA models are immutable); it becomes an orphan
+  nobody pins, which is harmless exactly because `apply` matches by checksum.
+
+Exit codes: `0` success, `3` a safety gate blocked progress, `4` unexpected
+runtime failure.
+
 ### `benchmark_f048_permission_paths.py`
 
 Reproducible BENCH-01 harness for the single F048 OpenFGA model. It prepares a
@@ -1192,6 +1260,16 @@ python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7
 python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7 --apply
 ```
 
+## Vibe runtime v2 deployment bindings
+
+`upgrade_vibe_runtime.py` uses authenticated scope APIs only. Export a signed manager
+`/v2/upgrade/inventory` during the maintenance window, review its SHA256, then run
+dry-run first with `BISHENG_MANAGEMENT_TOKEN`, `--inventory`, `--base-url` and
+`--report`. `--apply` additionally requires `--acknowledge-maintenance` and
+`--expected-inventory-sha256`. The backend rechecks live Engine facts. After import,
+use `POST /api/v1/apps/{app_id}/runtime/upgrade/rebind` to rebuild the current frozen
+image with backend storage; pending approved versions are preserved. Do not restore
+an older SQLite database as part of a code rollback.
 ## DSH audit model-name digest backfill
 
 After the `dsh_audit_model_lookup` schema migration and deployment of all new writers,

@@ -31,9 +31,33 @@ def _principal(*, actor_kind="service_account", scopes=frozenset({"knowledge:rea
     )
 
 
+#: App-factory tools folded in from F052. They have no ``/api/v2`` source route,
+#: so they stay out of ``SOURCE_ALLOWLIST`` and the API freeze contract.
+APP_FACTORY_TOOLS = {
+    "bisheng_identity_get_user",
+    "bisheng_org_tree",
+    "bisheng_dept_members",
+    "bisheng_app_status",
+    "bisheng_app_logs",
+    "bisheng_app_db_tables",
+    "bisheng_app_db_schema",
+    "bisheng_app_db_rows",
+    "bisheng_app_db_row_update",
+}
+
+
 def test_allowlist_is_exactly_ten_and_bidirectional():
-    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 10
+    knowledge_tools = [item for item in TOOL_DEFINITIONS if item.name not in APP_FACTORY_TOOLS]
+    assert len(knowledge_tools) == 10
+    assert len(TOOL_DEFINITIONS) == len(TOOL_REGISTRY) == 10 + len(APP_FACTORY_TOOLS)
     assert SOURCE_ALLOWLIST == EXPECTED_SOURCES
+
+
+def test_app_factory_tools_are_service_account_only_and_never_delegated():
+    for name in APP_FACTORY_TOOLS:
+        definition = TOOL_REGISTRY[name]
+        assert definition.modes == frozenset({"S"})
+        assert definition.allow_pat is False
 
 
 def test_pat_only_discovers_the_three_read_tools():

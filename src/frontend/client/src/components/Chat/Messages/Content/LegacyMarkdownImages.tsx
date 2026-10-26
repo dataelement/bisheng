@@ -93,4 +93,3 @@ export function MarkdownImage({
   }
   return <img src={resolved} alt={alt} title={title} className="max-w-full rounded" loading="lazy" />;
 }
-

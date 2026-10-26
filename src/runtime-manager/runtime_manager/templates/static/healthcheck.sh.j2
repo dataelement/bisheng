@@ -1,0 +1,22 @@
+#!/bin/sh
+# Container HEALTHCHECK probe for the static runtime.
+#
+# nginx:alpine carries busybox wget and no curl / python / node, so the probe is
+# a shell script around wget. Same inputs as the other runtimes' probes: the
+# port and path come from the environment variables the platform injects, so
+# there is exactly one place they are defined. busybox wget exits non-zero on
+# any HTTP error, so "index.html is missing" reads as unhealthy — which is the
+# honest verdict for a file server.
+port="${BISHENG_APP_PORT:-${PORT:-{{ port }}}}"
+path="${BISHENG_APP_HEALTH_PATH:-{{ health_path }}}"
+case "$path" in
+    /*) ;;
+    *) path="/$path" ;;
+esac
+
+url="http://127.0.0.1:${port}${path}"
+if wget -q -T 2 -O /dev/null "$url"; then
+    exit 0
+fi
+echo "health probe $url failed" >&2
+exit 1

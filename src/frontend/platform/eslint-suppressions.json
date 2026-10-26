@@ -685,7 +685,7 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     }
   },
   "src/controllers/API/orgSync.ts": {
@@ -998,13 +998,10 @@
   },
   "src/pages/BuildPage/apps.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 11
+      "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 14
+      "count": 1
     }
   },
   "src/pages/BuildPage/assistant/CreateAssistant.tsx": {
@@ -2252,17 +2249,9 @@
       "count": 1
     }
   },
-  "src/pages/LogPage/index.tsx": {
-    "react-hooks/rules-of-hooks": {
-      "count": 1
-    }
-  },
   "src/pages/LogPage/systemLog/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
+      "count": 6
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
