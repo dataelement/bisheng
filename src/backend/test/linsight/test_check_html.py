@@ -212,3 +212,17 @@ def test_render_hang_is_an_error_not_a_crash(monkeypatch):
     findings, _, unavailable = hc._render_findings(html)
     assert unavailable is None
     assert [f.topic for f in _errors(findings)] == ["渲染超时"]
+
+
+@chromium
+def test_small_text_check_ignores_scaled_svg_labels():
+    """A matplotlib SVG labels its ticks at 10 user units; width:100% scales them up."""
+    svg = (
+        '<svg viewBox="0 0 200 100" width="100%" xmlns="http://www.w3.org/2000/svg">'
+        '<text x="10" y="50" style="font-size:10px">1月</text></svg>'
+    )
+    html = GOOD.replace("</body>", svg + "</body>")
+    findings, _, _ = hc._render_findings(html)
+    assert "字号过小" not in _topics(findings)
+    # The xmlns URL is a namespace, not a fetch.
+    assert hc.static_findings(html) == []
