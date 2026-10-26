@@ -43,7 +43,11 @@ from bisheng.linsight.domain.services.state_message_manager import (
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
-from bisheng.linsight.domain.services.workspace_backend import LARGE_TOOL_RESULTS_DIR, UPLOADS_DIR
+from bisheng.linsight.domain.services.workspace_backend import (
+    LARGE_TOOL_RESULTS_DIR,
+    OUTPUT_DIR,
+    UPLOADS_DIR,
+)
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.gpts.tools.code_interpreter.local_run_registry import release_local_run
 from bisheng_langchain.linsight.const import TaskStatus
@@ -525,6 +529,9 @@ class LinsightWorkflowTask:
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
         self.llm = await self._get_llm(session_model)
+        # The previous round deleted file_dir. Put this session's output/ back
+        # before the code interpreter copies the directory into the sandbox.
+        await self._sync_workspace_originals(session_model)
         # Before the code interpreter snapshots file_dir into the E2B file_list.
         await self._provision_session_skills(session_model)
         tools = await self._generate_tools(session_model)
@@ -653,6 +660,9 @@ class LinsightWorkflowTask:
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
         self.llm = await self._get_llm(session_model)
+        # Same session workspace, new local dir: output/ from the previous round
+        # is still in MinIO and must be back in file_dir before copy-in.
+        await self._sync_workspace_originals(session_model)
         # Before the code interpreter snapshots file_dir into the E2B file_list.
         await self._provision_session_skills(session_model)
         tools = await self._generate_tools(session_model)
@@ -1241,28 +1251,33 @@ class LinsightWorkflowTask:
     async def _sync_workspace_originals(self, session_model: LinsightSessionVersion) -> None:
         """Make workspace originals reachable by the code interpreter this turn.
 
-        ``_init_file_directory`` prefetches originals from THIS turn's ``files``,
-        which is empty on a follow-up ("总结一下刚才那个表") — the originals only
-        exist in the workspace, copied there by the seed. The code interpreter's
-        file list is built from the local ``file_dir``, so without this step the
-        model sees ``uploads/x.xlsx`` (or ``large_tool_results/<call_id>``) in
-        ``ls``, is told it can open them, and then finds nothing in the sandbox.
+        ``_init_file_directory`` prefetches originals from THIS turn's ``files``.
+        A later round of the same session (``/workbench/continue`` or ask_user
+        resume) deletes that local directory and creates an empty one. The
+        workspace in MinIO still holds ``output/``, ``uploads/`` and
+        ``large_tool_results/``. ``ls`` reads MinIO, so those paths look present,
+        but the code interpreter only copy-ins ``file_dir``. Without this step
+        ``open('output/金额表.xlsx')`` raises FileNotFoundError.
 
-        Runs after the seed and before tools are built. Idempotent: on a fresh turn
-        the prefetch already wrote these files and ``_materialize`` serves them from
-        cache. Best-effort — losing the precise-data track must never fail the turn.
+        Called on the first start (after the cross-version seed) and again at the
+        start of continue and resume, before tools are built. Idempotent: a file
+        already in ``file_dir`` is left untouched and is not added to the baseline.
+        Best-effort — a sync failure must never fail the turn.
         """
         try:
             from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
             minio = await get_minio_storage()
             backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
-            # uploads/ originals: the code interpreter computes on the raw xlsx/docx.
-            # large_tool_results/: FilesystemMiddleware dumps oversized tool payloads
-            # here and the prompt forbids re-running that call. A follow-up that
-            # `open('large_tool_results/<call_id>')` must find the file in cwd.
+            # output/: deliverables from an earlier round of this same workspace.
+            # uploads/: raw xlsx/docx the code interpreter computes on. Markdown
+            # views stay on read_file. large_tool_results/: offloaded tool dumps.
             synced: list[str] = []
-            for zone, skip_md in ((UPLOADS_DIR, True), (LARGE_TOOL_RESULTS_DIR, False)):
+            for zone, skip_md in (
+                (OUTPUT_DIR, False),
+                (UPLOADS_DIR, True),
+                (LARGE_TOOL_RESULTS_DIR, False),
+            ):
                 ls_res = await backend.als(zone)
                 if getattr(ls_res, "error", None):
                     continue
