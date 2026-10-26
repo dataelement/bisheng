@@ -1,14 +1,13 @@
 // @ts-strict-ignore
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate, type ErrorPresentation } from '@bisheng/api-client';
-import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import i18next from "i18next";
-import { setTokenHeader } from '~/api/chat/headers-helpers';
 import { redirectToLogin } from '~/utils/loginRedirect';
 import * as endpoints from '~/api/chat/api-endpoints';
 import type * as t from '~/types/chat/types';
 
-// 报错的时候是否弹窗
+// Controls automatic error notifications.
 type ErrorOptions = {
   showError?: boolean;
   /** When true, the interceptor will NOT auto-redirect on 403. The caller handles it. */
@@ -19,7 +18,6 @@ type ErrorOptions = {
 
 const customAxios = axios.create({
   baseURL: import.meta.env.BASE_URL
-  // 配置
 });
 
 async function _get<T>(url: string, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
@@ -91,27 +89,8 @@ async function _patch<T = unknown>(url: string, data?: any, options?: AxiosReque
   return response.data;
 }
 
-let isRefreshing = false;
-let failedQueue: { resolve: (value?: any) => void; reject: (reason?: any) => void }[] = [];
-
 const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefined> =>
   _post(endpoints.refreshToken(retry));
-
-const dispatchTokenUpdatedEvent = (token: string) => {
-  setTokenHeader(token);
-  window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: token }));
-};
-
-const processQueue = (error: AxiosError | null, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
 
 export const translateApiErrorMessage = (data: any) => {
   const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : '';
@@ -311,7 +290,6 @@ customAxios.interceptors.response.use(
     }
 
     if (error.response.status === 401 && !originalRequest._retry) {
-      console.warn('401 error, refreshing token');
       originalRequest._retry = true;
 
       // Standalone guest chat links (/chat/flow/:flowId, /chat/assistant/:flowId)
@@ -334,53 +312,6 @@ customAxios.interceptors.response.use(
       if (import.meta.env.MODE === 'production') {
         responsePresentation.set(error.response, 'global');
         redirectToLogin();
-      }
-      // } else {
-      //   if (location.pathname.indexOf('login') === -1) {
-      //     // location.href = '/workspace/login';
-      //   }
-      // }
-      // location.href = '/'
-
-      // if (isRefreshing) {
-      //   try {
-      //     const token = await new Promise((resolve, reject) => {
-      //       failedQueue.push({ resolve, reject });
-      //     });
-      //     // originalRequest.headers['Authorization'] = 'Bearer ' + token;
-      //     return await customAxios(originalRequest);
-      //   } catch (err) {
-      //     return Promise.reject(err);
-      //   }
-      // }
-
-      // isRefreshing = true;
-
-      try {
-        // const response = await refreshToken(
-        //   // Handle edge case where we get a blank screen if the initial 401 error is from a refresh token request
-        //   originalRequest.url?.includes('api/auth/refresh') === true ? true : false,
-        // );
-
-        // const token = response?.token ?? '';
-
-        // if (token) {
-        //   originalRequest.headers['Authorization'] = 'Bearer ' + token;
-        //   dispatchTokenUpdatedEvent(token);
-        //   processQueue(null, token);
-        //   return await customAxios(originalRequest);
-        // } else if (window.location.href.includes('share/')) {
-        //   console.log(
-        //     `Refresh token failed from shared link, attempting request to ${originalRequest.url}`,
-        //   );
-        // } else {
-        //   window.location.href = '/login';
-        // }
-      } catch (err) {
-        processQueue(err as AxiosError, null);
-        return Promise.reject(err);
-      } finally {
-        isRefreshing = false;
       }
     }
 
@@ -436,14 +367,14 @@ const paramsSerializer = (params) => {
     .map(key => {
       const value = params[key];
       if (value === undefined) {
-        return null; // 只返回非undefined的值
+        return null; // Omit undefined values.
       }
       if (Array.isArray(value)) {
         return value.map(val => `${key}=${val}`).join('&');
       }
       return `${key}=${value}`;
     })
-    .filter(item => item !== null) // 过滤掉值为null的项
+    .filter(item => item !== null) // Remove omitted entries.
     .join('&');
 }
 
@@ -459,6 +390,5 @@ export default {
   deleteWithOptions: _deleteWithOptions,
   patch: _patch,
   refreshToken,
-  dispatchTokenUpdatedEvent,
   paramsSerializer
 };
