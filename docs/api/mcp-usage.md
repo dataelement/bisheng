@@ -11,7 +11,7 @@
 }
 ```
 
-本文面向接入开发者和客户端使用者，适用于当前知识空间 MCP 实现。九个新工具仅覆盖知识空间，包括公共、部门、团队、科室和已有个人空间；另保留兼容工具 `search_knowledge`，共十个工具。
+本文面向接入开发者和客户端使用者，适用于当前知识空间 MCP 实现。十个知识空间工具覆盖公共、部门、团队、科室和已有个人空间；另保留兼容工具 `search_knowledge`，共十一个工具。
 
 示例域名和资源 ID 均需替换：`118` 为知识空间 ID，`305` 为目录 ID，`901` 为文件 ID。实际以发现工具返回的 ID 为准。部署后的工具清单可通过客户端的 `tools/list` 查看。
 
@@ -23,13 +23,13 @@
 2. 客户端选择 **Streamable HTTP**，填写后端实际地址及 `X-Developer-Token` 请求头。
 3. 客户端连接并完成 MCP 初始化，刷新工具列表。
 4. 可信业务后端从已验证登录会话取 `external_id`，每次工具调用均传入该账号；调用 `list_knowledge` 取得空间 ID，再用 `list_folders`、`list_files` 浏览内容。
-5. 读取用 `get_file_detail`，问答取片段用 `retrieve_chunks`；保存内容用 `create_document` 或 `upload_file`。
+5. 读取用 `get_file_detail`，整空间取片段用 `retrieve_chunks`，指定文件夹取片段用 `retrieve_folder_chunks`；保存内容用 `create_document` 或 `upload_file`。
 
 典型操作顺序：
 
 ```text
 浏览读取：list_knowledge → list_folders → list_files / search_files
-         → get_file_detail / get_file_source / retrieve_chunks
+         → get_file_detail / get_file_source / retrieve_chunks / retrieve_folder_chunks
 
 保存文件：list_knowledge(writable_only=true) → 选择可写位置
          → create_document / upload_file → get_file_detail 查询解析结果
@@ -87,6 +87,7 @@ X-Developer-Token: <完整Token>
 | `get_file_detail` | 读取文件元数据、解析状态和正文页 | 否 |
 | `get_file_source` | 获取允许的预览来源链接 | 否 |
 | `retrieve_chunks` | 根据问题返回相关片段及出处 | 否 |
+| `retrieve_folder_chunks` | 在一个空间的指定文件夹中检索片段，默认包含子目录 | 否 |
 | `create_document` | 将文本或 Markdown 保存成新文件 | 是 |
 | `upload_file` | 将客户端文件字节以 Base64 上传 | 是 |
 | `search_knowledge` | 兼容已有知识检索调用 | 否 |
@@ -97,7 +98,7 @@ X-Developer-Token: <完整Token>
 
 ### 3.1 业务账号、资源 ID 与参数
 
-十个工具均新增顶层必填参数 `external_id`（严格字符串）：去掉首尾空白后长度为 1～255，保留大小写、内部字符和前导零，按精确值匹配唯一有效用户。数字、布尔、null、空白、未找到、禁用或跨来源重复账号均拒绝；缺参不会回退到 Token 用户。账号只出现在顶层，不放入 filters 或 folder_scope。
+十一个工具均要求顶层必填参数 `external_id`（严格字符串）：去掉首尾空白后长度为 1～255，保留大小写、内部字符和前导零，按精确值匹配唯一有效用户。数字、布尔、null、空白、未找到、禁用或跨来源重复账号均拒绝；缺参不会回退到 Token 用户。账号只出现在顶层，不放入 filters 或 folder_scope。
 
 允许跨 Token 租户执行。多租户开启时使用目标用户唯一 `is_active=1` 的当前有效关系及启用租户；关系缺失/重复/失效或租户停用则拒绝，不选择历史关系、主部门、Token 租户或 Root 代替。单租户模式使用有效的默认租户 1。业务阶段恢复正常租户过滤和目标用户原有权限。
 
@@ -105,15 +106,15 @@ X-Developer-Token: <完整Token>
 
 这是必填参数及权限身份变化。旧客户端须补账号并刷新工具清单；列工具与握手仍只需要有效 Token。代码回退可恢复旧执行方式，但不会撤销已创建文件或其授权。
 
-九个新工具读总预算为 30 秒、写总预算为 120 秒，包含身份解析及业务装配；身份解析本身最多 30 秒。旧 search_knowledge 在原检索预算之前增加最多 30 秒身份阶段。超时、失败或取消均不回退 Token 用户。
+知识空间工具读总预算为 30 秒、写总预算为 120 秒，包含身份解析及业务装配；身份解析本身最多 30 秒。旧 search_knowledge 在原检索预算之前增加最多 30 秒身份阶段。超时、失败或取消均不回退 Token 用户。
 
 `knowledge_id`、`file_id` 等其他资源 ID 使用严格正整数，不能传字符串或布尔值。`folder_id` 同时接受正整数和纯 ASCII 数字的正数字符串，例如 `305`、`"305"`、`"000305"` 均表示目录 305；服务端统一转为整数后进行目录归属和权限校验，响应中的 ID 仍为整数。
 
-顶层 `folder_id` 省略或为 `null` 表示根目录。`folder_scope.folder_id` 同样兼容数字字符串，但必填且不能为 `null`。空字符串、空白、非数字、带符号/小数、布尔值及非正数均拒绝，不会自动落入根目录。
+浏览和写入工具的顶层 `folder_id` 省略或为 `null` 表示根目录。`retrieve_folder_chunks.folder_id` 和 `folder_scope.folder_id` 必填且不能为 `null`，同样兼容数字字符串。空字符串、空白、非数字、带符号/小数、布尔值及非正数均拒绝，不会自动落入根目录。
 
 新工具拒绝未声明字段，包括 `user_id`、`tenant_id`、`source`、`skip_approval`、`file_path` 等。Token 只放在请求头，不能作为工具参数传入。
 
-检索工具使用复数参数 `knowledge_base_ids`；文件搜索使用 `knowledge_ids`。它们的名称不同，不能互换。
+整空间检索工具使用复数参数 `knowledge_base_ids`；文件夹检索使用单个 `knowledge_id` 和 `folder_id`；文件搜索使用 `knowledge_ids`。这些名称不能互换。
 
 ### 3.2 调用和返回格式
 
@@ -171,7 +172,7 @@ X-Developer-Token: <完整Token>
 
 可见状态受权限限制，传入状态筛选不会扩大文件权限。读取未完成文件的详情时，正文为空且 `content_ready=false`，不等同于文件本身没有内容。
 
-## 4. 九个工具的参数与示例
+## 4. 知识空间工具的参数与示例
 
 ### 4.1 list_knowledge 列出知识空间
 
@@ -408,6 +409,39 @@ X-Developer-Token: <完整Token>
 
 当前允许的扩展名为 `pdf`、`txt`、`docx`、`ppt`、`pptx`、`md`、`xls`、`xlsx`、`doc`、`html`、`htm`。是否能完成解析还取决于文件内容和现有解析服务。
 
+### 4.10 retrieve_folder_chunks 在文件夹内检索正文片段
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `external_id` | string | 必填 | 由可信业务后端提供的已登录用户账号 |
+| `query` | string | 必填 | 首尾去空白后 1～2000 字符 |
+| `knowledge_id` | integer | 必填 | 单个有权知识空间 ID |
+| `folder_id` | integer / string | 必填 | 已有目录，兼容 `305`、`"305"`、`"000305"`；不接受 null 或 0 |
+| `recursive` | boolean | `true` | 包含全部子目录；false 只检索直接文件，不能传字符串 `"false"` |
+| `top_k` | integer | `5` | 最多返回 1～50 个片段 |
+| `max_content` | integer | `15000` | 沿用正文检索字符预算，1～15000 |
+| `filters` | object / null | `null` | 与目录取交集的标签条件，只允许本空间的一项过滤，tag_match_mode 只支持 ANY |
+
+默认检索目录及全部子目录：
+
+```json
+{"name":"retrieve_folder_chunks","arguments":{"external_id":"00012345","query":"设备检修前需要完成哪些检查？","knowledge_id":118,"folder_id":"305","top_k":5}}
+```
+
+仅当前层，同时按标签缩小范围：
+
+```json
+{"name":"retrieve_folder_chunks","arguments":{"external_id":"00012345","query":"设备检修前需要完成哪些检查？","knowledge_id":118,"folder_id":305,"recursive":false,"filters":{"knowledge_base_filters":[{"knowledge_base_id":118,"tags":["操作规程"],"tag_match_mode":"ANY"}]}}}
+```
+
+结果沿用 §4.7 的 `{chunks,total}`。`document_id` 是指定目录范围内的授权文件入口，可继续读取详情；不会替换成目录外同文档的其他入口。工具不生成模型答案。
+
+先校验空间/目录归属及读取权限，再逐文件执行原权限规则。目录可读不代表其中所有文件可读。空目录、没有可检索的有权文件、标签交集为空或无匹配时返回 `{"chunks":[],"total":0}`；无权或无效目录报错，不能降级为整库检索。跨空间过滤、重复过滤、ALL、客户端 file_ids 或其他未声明字段均拒绝。
+
+每次最多解析 **1000 个状态成功的文件候选**，递归时包含子目录；在权限和标签过滤前计数。恰好 1000 可继续，第 1001 个导致整次报错，提示“目录检索范围过大，请选择更小的目录或设置 recursive=false”，不会只搜索前 1000 个。文件夹、解析中/失败文件不计入。沿用只读工具 **30 秒总预算**，包括身份、目录解析、检索和来源处理；上限不保证所有请求都可在时限内完成。
+
+目录范围按本次枚举得到的文件集合执行，最终授权和当前内容版本检查继续生效；不承诺调用期间文件移动或改权的跨系统原子快照，下一次调用重新解析。检索整个空间继续使用 `retrieve_chunks`，原调用参数不变。
+
 ## 5. 分类、标签和大小限制
 
 两个写工具共用以下可选元数据：
@@ -578,6 +612,7 @@ asyncio.run(main())
 | `Resource denied or unavailable` | 资源无权、状态不可用、目标错误或原上传业务规则不满足；检查空间/目录/文件归属与目标用户权限 |
 | `Invalid MCP input or pagination cursor` 或参数校验错误 | 检查参数名、ID 类型、Base64、文件名、大小及游标条件；无效游标从首页重新获取 |
 | `MCP operation timed out` | 操作超时；读取可缩小范围，写入先查询已有结果再决定是否重试 |
+| `目录检索范围过大` | 成功文件候选超过 1000；选择更小目录或设置 `recursive=false`，不会返回截断结果 |
 | `Write outcome uncertain` | 创建/投递结果不确定；按返回的 `file_id` 或目录列表核对，不能当作已经回滚 |
 | `MCP operation failed` | 下游操作异常或不支持的过滤条件，例如 `tag_match_mode=ALL`；核对参数，必要时结合 `X-Trace-ID` 排查 |
 | 列表为空 | 可能无匹配或无权；有 `next_cursor` 时仍需继续翻页 |

@@ -2,6 +2,9 @@
 
 在 src/backend 执行, 默认只读预览, 不根据发布路径推导组织:
   .venv/bin/python scripts/backfill_knowledge_file_organization.py --tenant-id 1 --output /tmp/org-plan.jsonl
+不使用计划文件也可显式写入, 同时保留回退日志:
+  .venv/bin/python scripts/backfill_knowledge_file_organization.py --tenant-id 1 --apply --output /tmp/org-write.jsonl
+也可选择执行保存的预览计划:
   .venv/bin/python scripts/backfill_knowledge_file_organization.py --plan /tmp/org-plan.jsonl --apply --output /tmp/org-write.jsonl
 回退先预览, 确认后再增加 --apply:
   .venv/bin/python scripts/backfill_knowledge_file_organization.py --rollback /tmp/org-write.jsonl --output /tmp/org-rollback.jsonl
@@ -20,7 +23,7 @@ import sys
 import traceback
 from collections import Counter
 from contextlib import contextmanager
-from datetime import datetime
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -52,11 +55,34 @@ class JsonlJournal:
     def __init__(self, path: str | Path):
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         self.file = os.fdopen(fd, "w", encoding="utf-8")
+        self.lock = asyncio.Lock()
+        self.failed: Exception | None = None
 
     def write(self, value: dict) -> None:
-        self.file.write(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+        self.write_many([value])
+
+    def write_many(self, values: list[dict]) -> None:
+        if self.failed is not None:
+            raise OSError("审计日志已失败, 禁止继续追加") from self.failed
+        self.file.writelines(
+            json.dumps(value, ensure_ascii=False, sort_keys=True, default=str) + "\n" for value in values
+        )
         self.file.flush()
         os.fsync(self.file.fileno())
+
+    async def awrite(self, *values: dict) -> None:
+        async with self.lock:
+            if self.failed is not None:
+                raise OSError("审计日志已失败, 禁止继续追加") from self.failed
+            task = asyncio.create_task(asyncio.to_thread(self.write_many, list(values)))
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                await task
+                raise
+            except Exception as exc:
+                self.failed = exc
+                raise
 
     def __enter__(self):
         return self
@@ -260,7 +286,80 @@ def header(session: AsyncSession, tenant_id: int, mode: str) -> dict:
     }
 
 
-async def preview(
+def validate_parallel(concurrency: int, session_factory, write_batch_size: int = 200) -> None:
+    if not 1 <= concurrency <= 16 or not 1 <= write_batch_size <= 500:
+        raise ValueError("concurrency必须为1~16, write_batch_size必须为1~500")
+    if concurrency > 1 and session_factory is None:
+        raise ValueError("并发必须提供独立会话工厂, 不能共享AsyncSession")
+
+
+async def bounded_results(items, worker, concurrency: int):
+    iterator = iter(items)
+    while batch := list(islice(iterator, concurrency)):
+        pending = asyncio.gather(*(worker(item) for item in batch), return_exceptions=True)
+        try:
+            results = await asyncio.shield(pending)
+        except BaseException:
+            results = await pending
+            for result in results:
+                if isinstance(result, BaseException) and not isinstance(result, asyncio.CancelledError):
+                    traceback.print_exception(type(result), result, result.__traceback__)
+            raise
+        failures = [result for result in results if isinstance(result, BaseException)]
+        if failures:
+            for failure in failures[1:]:
+                traceback.print_exception(type(failure), failure, failure.__traceback__)
+            raise failures[0]
+        yield results
+
+
+async def isolated(controller: AsyncSession, session_factory, tenant_id: int, worker, item):
+    if session_factory is None:
+        return await worker(controller, item)
+    async with session_factory() as session:
+        with tenant_scope(tenant_id):
+            if database_key(session) != database_key(controller):
+                raise ValueError("并发会话数据库身份与计划不一致")
+            return await worker(session, item)
+
+
+async def unique_seeds(session: AsyncSession, seeds, tenant_id: int, seen: set) -> list[tuple[int, str]]:
+    own_seeds = [seed for seed in seeds if seed.tenant_id == tenant_id]
+    links = {}
+    for start in range(0, len(own_seeds), 500):
+        rows = (
+            await session.exec(
+                select(KnowledgeDocumentVersion.knowledge_file_id, KnowledgeDocumentVersion.document_id).where(
+                    KnowledgeDocumentVersion.knowledge_file_id.in_([seed.id for seed in own_seeds[start : start + 500]])
+                )
+            )
+        ).all()
+        for row in rows:
+            links.setdefault(row.knowledge_file_id, set()).add(row.document_id)
+    result = []
+    for seed in own_seeds:
+        identities = set(links.get(seed.id, set()))
+        if seed.reference_document_id is not None:
+            identities.add(seed.reference_document_id)
+        key = (
+            f"document:{next(iter(identities))}"
+            if len(identities) == 1
+            else f"invalid:{seed.id}"
+            if identities
+            else f"file:{seed.id}"
+        )
+        if key not in seen:
+            seen.add(key)
+            result.append((seed.id, key))
+    return result
+
+
+async def preview(session: AsyncSession, journal: JsonlJournal, **kwargs) -> dict:
+    """保留只读预览入口, 与直接执行共用扫描规则。"""
+    return await scan(session, journal, apply=False, **kwargs)
+
+
+async def scan(
     session: AsyncSession,
     journal: JsonlJournal,
     *,
@@ -270,7 +369,12 @@ async def preview(
     batch_size: int = 200,
     limit: int | None = None,
     start_after_id: int = 0,
+    concurrency: int = 1,
+    session_factory=None,
+    apply: bool = False,
+    write_batch_size: int = 200,
 ) -> dict:
+    validate_parallel(concurrency, session_factory, write_batch_size)
     if batch_size <= 0 or start_after_id < 0 or (limit is not None and limit <= 0):
         raise ValueError("batch_size/limit必须为正整数, start_after_id不能为负")
     counts = Counter(scanned=0, groups=0, would_update=0, skipped=0, updated=0)
@@ -281,12 +385,47 @@ async def preview(
                 row = await session.get(model, entity_id)
                 if row is None or row.tenant_id != tenant_id:
                     raise ValueError("限定范围不存在或不属于指定租户")
-        journal.write(header(session, tenant_id, "preview"))
+        await journal.awrite(
+            {
+                **header(session, tenant_id, "apply" if apply else "preview"),
+                "concurrency": concurrency,
+                "write_batch_size": write_batch_size,
+            }
+        )
+
+        async def resolve(work_session, item):
+            seed_id, expected_key = item
+            try:
+                record = await candidate(work_session, seed_id, tenant_id)
+                if record["group_key"] != expected_key:
+                    raise Refuse("document_identity_changed_during_scan")
+                if apply:
+                    # 结束扫描快照后再锁定复核, 避免复用旧事务中的普通读结果。
+                    await work_session.rollback()
+                    result = await apply_item(
+                        work_session,
+                        record,
+                        journal,
+                        tenant_id=tenant_id,
+                        rollback=False,
+                        apply=True,
+                        write_batch_size=write_batch_size,
+                    )
+                    return {"type": "applied", **result}
+                return record
+            except Refuse as exc:
+                return {"type": "skipped", "seed_id": seed_id, "reason": str(exc)}
+            finally:
+                await work_session.rollback()
+
+        async def worker(item):
+            return await isolated(session, session_factory, tenant_id, resolve, item)
+
         cursor = start_after_id
         while limit is None or counts["scanned"] < limit:
             size = min(batch_size, limit - counts["scanned"]) if limit is not None else batch_size
             query = (
-                select(KnowledgeFile.id, KnowledgeFile.tenant_id)
+                select(KnowledgeFile.id, KnowledgeFile.tenant_id, KnowledgeFile.reference_document_id)
                 .where(
                     KnowledgeFile.id > cursor,
                     KnowledgeFile.file_type == 1,
@@ -304,25 +443,25 @@ async def preview(
             seeds = (await session.exec(query)).all()
             if not seeds:
                 break
-            for seed in seeds:
-                cursor = seed.id
-                counts["scanned"] += 1
-                if seed.tenant_id != tenant_id:
-                    continue
-                try:
-                    record = await candidate(session, seed.id, tenant_id)
-                    if record["group_key"] in seen:
-                        continue
-                    seen.add(record["group_key"])
-                    counts["groups"] += 1
-                    counts["would_update"] += len(record["target_ids"])
-                    journal.write(record)
-                except Refuse as exc:
-                    counts["skipped"] += 1
-                    journal.write({"type": "skipped", "seed_id": seed.id, "reason": str(exc)})
+            cursor = seeds[-1].id
+            counts["scanned"] += len(seeds)
+            jobs = await unique_seeds(session, seeds, tenant_id, seen)
             await session.rollback()
+            async for results in bounded_results(jobs, worker, concurrency):
+                for record in results:
+                    if record["type"] == "skipped":
+                        counts["skipped"] += 1
+                        continue
+                    counts["groups"] += 1
+                    if record["type"] == "applied":
+                        counts.update({key: record[key] for key in ("updated", "would_update", "skipped")})
+                    else:
+                        counts["would_update"] += len(record["target_ids"])
+                pending = [record for record in results if record["type"] != "applied"]
+                if pending:
+                    await journal.awrite(*pending)
         result = {**counts, "next_start_after_id": cursor}
-        journal.write({"type": "summary", **result})
+        await journal.awrite({"type": "summary", **result})
         return result
 
 
@@ -338,9 +477,11 @@ def read_records(path: str | Path):
             yield record
 
 
-async def write_values(session: AsyncSession, record: dict, value: int | None, expected: int | None) -> list[dict]:
-    before = {row["id"]: row for row in record["rows"]}
-    for file_id in record["target_ids"]:
+async def write_values(
+    session: AsyncSession, record: dict, value: int | None, expected: int | None, *, batch_size: int = 200
+) -> list[dict]:
+    for start in range(0, len(record["target_ids"]), batch_size):
+        ids = record["target_ids"][start : start + batch_size]
         predicate = (
             KnowledgeFile.belonging_organization_id.is_(None)
             if expected is None
@@ -348,17 +489,13 @@ async def write_values(session: AsyncSession, record: dict, value: int | None, e
         )
         result = await session.exec(
             update(KnowledgeFile)
-            .where(KnowledgeFile.id == file_id, predicate)
+            .where(KnowledgeFile.id.in_(ids), predicate)
             .values(
                 belonging_organization_id=value,
-                update_time=(
-                    datetime.fromisoformat(before[file_id]["update_time"])
-                    if before[file_id]["update_time"] is not None
-                    else None
-                ),
+                update_time=KnowledgeFile.update_time,
             )
         )
-        if result.rowcount != 1:
+        if result.rowcount != len(ids):
             raise Refuse("conditional_update_drift")
     after = await file_snapshots(session, [row["id"] for row in record["rows"]])
     expected_values = {
@@ -370,9 +507,71 @@ async def write_values(session: AsyncSession, record: dict, value: int | None, e
     return after
 
 
-async def apply_plan(
-    session: AsyncSession, path: str | Path, journal: JsonlJournal, *, rollback: bool = False, apply: bool = True
+async def apply_item(
+    session: AsyncSession,
+    item: dict,
+    journal: JsonlJournal,
+    *,
+    tenant_id: int,
+    rollback: bool,
+    apply: bool,
+    write_batch_size: int,
 ) -> dict:
+    counts = Counter(updated=0, would_update=0, skipped=0)
+    record = item["candidate"] if rollback else item
+    key = record["group_key"]
+    try:
+        if record["tenant_id"] != tenant_id or not record["target_ids"]:
+            raise Refuse("invalid_candidate_scope")
+        if rollback:
+            current = await load_group(session, record["seed_id"], tenant_id, lock=True)
+            if (
+                current["rows"] != item["after"]
+                or current["document"] != record["document"]
+                or current["versions"] != record["versions"]
+            ):
+                raise Refuse("rollback_state_changed")
+        elif await candidate(session, record["seed_id"], tenant_id, lock=True) != record:
+            raise Refuse("plan_state_changed")
+        counts["would_update"] += len(record["target_ids"])
+        if not apply:
+            await journal.awrite({"type": "would_rollback", "group_key": key, "file_ids": record["target_ids"]})
+            await session.rollback()
+            return dict(counts)
+        await journal.awrite({"type": "intent", "candidate": record, "rollback": rollback})
+        after = await write_values(
+            session,
+            record,
+            None if rollback else record["organization_id"],
+            record["organization_id"] if rollback else None,
+            batch_size=write_batch_size,
+        )
+        await journal.awrite({"type": "prepared", "candidate": record, "after": after})
+        await session.commit()
+        await journal.awrite({"type": "committed", "candidate": record, "after": after})
+        counts["updated"] += len(record["target_ids"])
+    except Refuse as exc:
+        await session.rollback()
+        counts["skipped"] += 1
+        await journal.awrite({"type": "skipped", "group_key": key, "reason": str(exc)})
+    except BaseException:
+        await session.rollback()
+        raise
+    return dict(counts)
+
+
+async def apply_plan(
+    session: AsyncSession,
+    path: str | Path,
+    journal: JsonlJournal,
+    *,
+    rollback: bool = False,
+    apply: bool = True,
+    concurrency: int = 1,
+    session_factory=None,
+    write_batch_size: int = 200,
+) -> dict:
+    validate_parallel(concurrency, session_factory, write_batch_size)
     records = read_records(path)
     source_header = next(records, {})
     tenant_id = source_header.get("tenant_id", 0)
@@ -385,85 +584,86 @@ async def apply_plan(
         raise ValueError("报告版本、模式或数据库身份不匹配")
     if not rollback:
         last = None
+        keys = set()
         for record in read_records(path):
             if record.get("type") == "incomplete_tail":
                 raise ValueError("预览计划不完整, 请重新生成")
+            if record.get("type") == "candidate":
+                key = record["group_key"]
+                if key in keys:
+                    raise ValueError("计划中存在重复文档, 请重新生成")
+                keys.add(key)
             last = record
         if last is None or last.get("type") != "summary":
             raise ValueError("预览计划缺少完整汇总, 请重新生成")
     counts = Counter(updated=0, would_update=0, skipped=0)
     committed_keys, prepared_keys = set(), set()
-    with tenant_scope(tenant_id):
-        journal.write(
-            header(
-                session, tenant_id, "rollback" if rollback and apply else "rollback-preview" if rollback else "apply"
-            )
-        )
+
+    def actions():
         for item in records:
             if rollback and item.get("type") == "prepared":
                 prepared_keys.add(item["candidate"]["group_key"])
             if item.get("type") != ("committed" if rollback else "candidate"):
                 continue
-            record = item["candidate"] if rollback else item
-            key = record["group_key"]
             if rollback:
+                key = item["candidate"]["group_key"]
+                if key in committed_keys:
+                    raise ValueError("写入日志中存在重复文档提交, 请人工核对")
                 committed_keys.add(key)
-            try:
-                if record["tenant_id"] != tenant_id or not record["target_ids"]:
-                    raise Refuse("invalid_candidate_scope")
-                if rollback:
-                    current = await load_group(session, record["seed_id"], tenant_id, lock=True)
-                    if (
-                        current["rows"] != item["after"]
-                        or current["document"] != record["document"]
-                        or current["versions"] != record["versions"]
-                    ):
-                        raise Refuse("rollback_state_changed")
-                elif await candidate(session, record["seed_id"], tenant_id, lock=True) != record:
-                    raise Refuse("plan_state_changed")
-                counts["would_update"] += len(record["target_ids"])
-                if not apply:
-                    journal.write({"type": "would_rollback", "group_key": key, "file_ids": record["target_ids"]})
-                    await session.rollback()
-                    continue
-                journal.write({"type": "intent", "candidate": record, "rollback": rollback})
-                after = await write_values(
+            yield item
+
+    async def execute(work_session, item):
+        return await apply_item(
+            work_session,
+            item,
+            journal,
+            tenant_id=tenant_id,
+            rollback=rollback,
+            apply=apply,
+            write_batch_size=write_batch_size,
+        )
+
+    async def worker(item):
+        return await isolated(session, session_factory, tenant_id, execute, item)
+
+    with tenant_scope(tenant_id):
+        await session.rollback()
+        await journal.awrite(
+            {
+                **header(
                     session,
-                    record,
-                    None if rollback else record["organization_id"],
-                    record["organization_id"] if rollback else None,
-                )
-                journal.write({"type": "prepared", "candidate": record, "after": after})
-                await session.commit()
-                journal.write({"type": "committed", "candidate": record, "after": after})
-                counts["updated"] += len(record["target_ids"])
-            except Refuse as exc:
-                await session.rollback()
-                counts["skipped"] += 1
-                journal.write({"type": "skipped", "group_key": key, "reason": str(exc)})
-            except Exception:
-                await session.rollback()
-                raise
+                    tenant_id,
+                    "rollback" if rollback and apply else "rollback-preview" if rollback else "apply",
+                ),
+                "concurrency": concurrency,
+                "write_batch_size": write_batch_size,
+            }
+        )
+        async for results in bounded_results(actions(), worker, concurrency):
+            for result in results:
+                counts.update(result)
         if rollback:
             for key in sorted(prepared_keys - committed_keys):
                 counts["skipped"] += 1
-                journal.write({"type": "skipped", "group_key": key, "reason": "commit_outcome_unknown"})
-        journal.write({"type": "summary", **counts})
+                await journal.awrite({"type": "skipped", "group_key": key, "reason": "commit_outcome_unknown"})
+        await journal.awrite({"type": "summary", **counts})
         return dict(counts)
 
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    result.add_argument("--tenant-id", type=int, help="预览时必须指定租户")
+    result.add_argument("--tenant-id", type=int, help="扫描预览或直接写入时必须指定租户")
     result.add_argument("--space-id", type=int, help="仅选择指定知识库的种子, 扩展到整文档")
     result.add_argument("--file-id", type=int, help="仅选择指定文件种子, 扩展到整文档")
     result.add_argument("--batch-size", type=int, default=200)
+    result.add_argument("--concurrency", type=int, default=4, help="文档并发数1~16, 默认4; 1为串行")
+    result.add_argument("--write-batch-size", type=int, default=200, help="每条UPDATE的目标文件数1~500, 默认200")
     result.add_argument("--limit", type=int)
     result.add_argument("--start-after-id", type=int, default=0)
     mode = result.add_mutually_exclusive_group()
     mode.add_argument("--plan", type=Path, help="执行已审核的预览计划, 需要--apply")
     mode.add_argument("--rollback", type=Path, help="回退写入日志, 默认只预览")
-    result.add_argument("--apply", action="store_true", help="实际写入, 不允许直接扫描写入")
+    result.add_argument("--apply", action="store_true", help="实际写入; 无--plan时按指定租户直接扫描补齐")
     result.add_argument("--output", type=Path, required=True, help="新报告路径, 不允许覆盖")
     return result
 
@@ -477,10 +677,17 @@ async def run(args: argparse.Namespace) -> int:
             async with get_async_db_session() as session:
                 if args.plan or args.rollback:
                     counts = await apply_plan(
-                        session, args.plan or args.rollback, journal, rollback=bool(args.rollback), apply=args.apply
+                        session,
+                        args.plan or args.rollback,
+                        journal,
+                        rollback=bool(args.rollback),
+                        apply=args.apply,
+                        concurrency=args.concurrency,
+                        session_factory=get_async_db_session,
+                        write_batch_size=args.write_batch_size,
                     )
                 else:
-                    counts = await preview(
+                    counts = await scan(
                         session,
                         journal,
                         tenant_id=args.tenant_id,
@@ -489,6 +696,10 @@ async def run(args: argparse.Namespace) -> int:
                         batch_size=args.batch_size,
                         limit=args.limit,
                         start_after_id=args.start_after_id,
+                        concurrency=args.concurrency,
+                        session_factory=get_async_db_session,
+                        apply=args.apply,
+                        write_batch_size=args.write_batch_size,
                     )
         print(json.dumps(counts, ensure_ascii=False, sort_keys=True))
         return 3 if args.apply and counts["skipped"] else 0
@@ -499,6 +710,8 @@ async def run(args: argparse.Namespace) -> int:
 def main() -> int:
     cli = parser()
     args = cli.parse_args()
+    if not 1 <= args.concurrency <= 16 or not 1 <= args.write_batch_size <= 500:
+        cli.error("--concurrency必须为1~16, --write-batch-size必须为1~500")
     if args.plan or args.rollback:
         if (
             args.tenant_id is not None
@@ -511,8 +724,8 @@ def main() -> int:
             cli.error("计划或回退模式不能另改游标或批大小")
         if args.plan and not args.apply:
             cli.error("执行计划必须显式传入--apply")
-    elif args.tenant_id is None or args.apply:
-        cli.error("预览必须指定--tenant-id; 写入需先生成计划, 再使用--plan和--apply")
+    elif args.tenant_id is None or args.tenant_id <= 0:
+        cli.error("扫描预览或直接写入必须指定正整数--tenant-id")
     try:
         return asyncio.run(run(args))
     except (ValueError, FileExistsError) as exc:

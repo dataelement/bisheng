@@ -12,20 +12,30 @@ This directory contains manual maintenance and migration scripts for the backend
 # 在 src/backend 执行。必须已完成 f118_file_belonging_organization 迁移。
 # 示例租户为1；默认只读，所有报告必须使用新路径。
 .venv/bin/python scripts/backfill_knowledge_file_organization.py \
-  --tenant-id 1 --output /tmp/file-org-plan.jsonl
+  --tenant-id 1 --concurrency 4 --output /tmp/file-org-plan.jsonl
 # 可增加 --space-id 或 --file-id 缩小种子范围，整份文档仍会展开到所有版本/入口。
-# 审核计划后，在维护窗口执行同一计划，写入前会重新校验。
+# 不需要计划文件：在维护窗口显式增加 --apply，直接扫描并补齐。
 .venv/bin/python scripts/backfill_knowledge_file_organization.py \
-  --plan /tmp/file-org-plan.jsonl --apply --output /tmp/file-org-write.jsonl
+  --tenant-id 1 --apply --concurrency 4 --write-batch-size 200 \
+  --output /tmp/file-org-write.jsonl
+# 可选：审核保存的计划后执行同一计划，写入前会重新校验。输出路径须另取新名。
+.venv/bin/python scripts/backfill_knowledge_file_organization.py \
+  --plan /tmp/file-org-plan.jsonl --apply --concurrency 4 --write-batch-size 200 \
+  --output /tmp/file-org-plan-write.jsonl
 # 回退先预览；确认需要回退后再增加 --apply，并另换新的输出文件名。
 .venv/bin/python scripts/backfill_knowledge_file_organization.py \
   --rollback /tmp/file-org-write.jsonl --output /tmp/file-org-rollback-preview.jsonl
 ```
 
 - 仅补空值。某个版本或入口已有非空值且与推导结果不同，整份文档跳过。上传人没有唯一有效主组织、链路损坏、跨租户、不支持的旧发布引用或分发在途时跳过并记录原因；文件夹、收藏引用和投影墓碑不处理。软删除的正常版本仍随文档处理。
-- 预览支持 `--batch-size`（默认200）、`--limit`、`--start-after-id`。游标与限制针对扫描种子，不是改动行数；一个文档会展开全部版本和业务入口。未启用自动租户过滤的环境仍逐行复核租户，不写入其他租户；扫描计数可能包含被排除的其他租户种子。
-- 计划绑定数据库地址/库名摘要及租户，执行不允许再修改范围或直接扫描写入；逐组锁定、重新计算组织并比较计划快照，漂移时跳过。只写组织列并显式保留原更新时间，不改上传人、更新人、解析状态、权限或ES/Milvus索引。
+- 扫描预览和直接执行均支持 `--batch-size`（默认200）、`--limit`、`--start-after-id`。游标与限制针对扫描种子，不是改动行数；一个文档会展开全部版本和业务入口。未启用自动租户过滤的环境仍逐行复核租户，不写入其他租户；扫描计数可能包含被排除的其他租户种子。
+- 预览、执行和回退均支持 `--concurrency`，CLI默认4，范围1～16；设为1可串行执行。先按文档去重，再按有限窗口并发，每任务独立会话；同一文档的版本/入口不拆成并发事务。旧计划及写入日志不需要重新生成。
+- `--write-batch-size` 默认200，范围1～500，控制同文档每条UPDATE的文件数；`--batch-size`只控制扫描分页。所有UPDATE批次都在同一文档事务内，任一批失败会回滚该文档；其他已成功文档不会被一并回滚。
+- `--plan` 可省略；直接执行必须指定正整数租户及 `--apply`，边扫描边逐文档补齐。省略 `--apply` 仍只预览。直接执行的日志可交给同一个 `--rollback` 入口，不需要预先生成计划。
+- 保存计划模式绑定数据库地址/库名摘要及租户，执行时不允许再修改范围。两种写入方式都逐组锁定、重新计算组织并比较候选快照，漂移时跳过。只写组织列并显式保留原更新时间，不改上传人、更新人、解析状态、权限或ES/Milvus索引。
 - JSONL报告独占创建、权限0600。写前意图和提交前读回结果会fsync落盘，提交后记确认。回退只清空本次从NULL补入且记录未漂移的值；已有非空值永不清理。提交未确认的组列为 `commit_outcome_unknown`，不盲目回退；末尾中断残片不会被当成已提交记录。
+- 日志使用单写锁和异步落盘，预览每个完成窗口合并fsync，写入仍逐文档等待意图/prepared/committed持久化屏障。日志故障禁止后续追加；数据库或日志异常停止新窗口派发并等待在途任务结束，Ctrl+C也会等待当前窗口收尾，避免关闭日志时仍有任务提交。预期的数据漂移仍按原规则跳过后继续。
+- 并发会增加数据库连接和锁竞争，先以默认4观察后再调整；真实MySQL/DM8吞吐需在目标环境验证，本地测试不承诺固定倍数加速。脚本不修改连接池配置。
 - 必须在维护窗口暂停相关上传、移动、编辑、发布/分享、版本切换和组织同步；脚本不停止服务，也不取得全局维护锁。各文档独立提交，中断或失败前的成功组保留，以写入报告定向回退。未知提交结果需保留日志人工核对，不能直接视为全部回滚。
 - 容器临时目录会随重建丢失；正式操作应使用持久化路径保存计划和写入日志。退出码：0正常结束（预览可能含跳过），3实际执行有跳过需核对，2参数/报告错误，1数据库或执行失败，130人工中断。
 

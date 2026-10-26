@@ -12,7 +12,7 @@ from test.mcp_server.test_mcp_server import server, session
 
 
 async def test_all_tools_require_external_account_before_business(monkeypatch, caplog):
-    """F081 AC-01, AC-07: 十工具 schema 及缺参执行一致拒绝。"""
+    """F081/F083 AC-01: 十一个工具的 schema 及缺参执行一致拒绝。"""
     import logging
 
     caplog.set_level(logging.INFO)
@@ -25,6 +25,7 @@ async def test_all_tools_require_external_account_before_business(monkeypatch, c
         "get_file_detail": {"knowledge_id": 1, "file_id": 2},
         "get_file_source": {"knowledge_id": 1, "file_id": 2},
         "retrieve_chunks": {"query": "q", "knowledge_base_ids": [118]},
+        "retrieve_folder_chunks": {"query": "q", "knowledge_id": 118, "folder_id": "305"},
         "search_knowledge": {"query": "q", "knowledge_base_ids": [118]},
         "create_document": {"knowledge_id": 1, "file_name": "a.md", "content": "x"},
         "upload_file": {"knowledge_id": 1, "file_name": "a.txt", "content_base64": "YQ=="},
@@ -40,7 +41,7 @@ async def test_all_tools_require_external_account_before_business(monkeypatch, c
         assert not calls
         resolver.assert_not_called()
         audits = [record.message for record in caplog.records if "mcp tool=" in record.message]
-        assert len(audits) == 10 and all("user_id=None tenant_id=None" in line for line in audits)
+        assert len(audits) == len(arguments) and all("user_id=None tenant_id=None" in line for line in audits)
 
 
 @pytest.mark.parametrize("value", [None, 7, True, "", " ", "sensitive-account-" * 20])
@@ -56,7 +57,7 @@ async def test_sdk_rejects_invalid_accounts_before_resolution(monkeypatch, value
         resolver.assert_not_called()
 
 
-@pytest.mark.parametrize("tool", ["search_knowledge", "list_knowledge"])
+@pytest.mark.parametrize("tool", ["search_knowledge", "list_knowledge", "retrieve_folder_chunks"])
 async def test_identity_timeout_prevents_business_and_audits_no_actor(monkeypatch, caplog, tool):
     """F081 AC-08, AC-09: 两入口身份超时释放作用域。不使用 Token 充当执行用户。"""
     import logging
@@ -78,6 +79,8 @@ async def test_identity_timeout_prevents_business_and_audits_no_actor(monkeypatc
             args = {"external_id": "0008"}
             if tool == "search_knowledge":
                 args.update(query="q", knowledge_base_ids=[118])
+            elif tool == "retrieve_folder_chunks":
+                args.update(query="q", knowledge_id=118, folder_id=305)
             result = await client.call_tool(tool, args)
             assert result.isError and "timed out" in str(result)
         assert not calls and not active and released == [True]
@@ -278,6 +281,111 @@ async def test_invalid_folder_id_never_opens_business_services(monkeypatch, fold
             )
             assert result.isError
         factory.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"folder_id": None},
+        {"folder_id": True},
+        {"folder_id": "0"},
+        {"folder_id": " 305"},
+        {"recursive": "false"},
+        {"knowledge_id": "118"},
+        {"file_ids": [1]},
+        {"filters": {"knowledge_base_filters": [{"knowledge_base_id": 119}]}},
+        {"filters": {"knowledge_base_filters": [{"knowledge_base_id": 118, "tag_match_mode": "ALL"}]}},
+        {"filters": {"knowledge_base_filters": [{"knowledge_base_id": 118}, {"knowledge_base_id": 118}]}},
+        {"filters": {"knowledge_base_filters": [{"knowledge_base_id": 118, "file_ids": [1]}]}},
+    ],
+)
+async def test_folder_retrieval_invalid_scope_never_opens_business(monkeypatch, overrides):
+    """F083 覆盖 AC: AC-01, AC-05;无效限域不得退化成整库检索。"""
+    async with server(monkeypatch) as (app, _, _):
+        factory = AsyncMock(side_effect=AssertionError("must not open"))
+        app.routes[0].endpoint.tool_runtime.factory = factory
+        async with session(app) as client:
+            result = await client.call_tool(
+                "retrieve_folder_chunks",
+                {
+                    "external_id": "0007",
+                    "query": "q",
+                    "knowledge_id": 118,
+                    "folder_id": 305,
+                    **overrides,
+                },
+            )
+            assert result.isError
+        factory.assert_not_called()
+
+
+@pytest.mark.parametrize("folder_id,recursive", [(305, True), ("000305", False)])
+async def test_folder_retrieval_uses_target_identity_and_normalized_scope(monkeypatch, folder_id, recursive):
+    """F083 覆盖 AC: AC-01, AC-04;真实 SDK 的参数类型与目标身份透传。"""
+    captured = []
+
+    @asynccontextmanager
+    async def factory(request, user):
+        async def retrieve_folder_chunks(**params):
+            captured.append((user.user_id, get_current_tenant_id(), params))
+            return {"chunks": [], "total": 0}
+
+        yield SimpleNamespace(retrieve_folder_chunks=retrieve_folder_chunks)
+
+    async with server(monkeypatch) as (app, _, _):
+        app.routes[0].endpoint.tool_runtime.factory = factory
+        async with session(app) as client:
+            tool = next(t for t in (await client.list_tools()).tools if t.name == "retrieve_folder_chunks")
+            assert set(tool.inputSchema["required"]) == {"external_id", "query", "knowledge_id", "folder_id"}
+            args = {"external_id": "0008", "query": " q ", "knowledge_id": 118, "folder_id": folder_id}
+            if not recursive:
+                args["recursive"] = False
+            result = await client.call_tool("retrieve_folder_chunks", args)
+            assert not result.isError and result.structuredContent == {"chunks": [], "total": 0}
+    assert captured == [
+        (
+            8,
+            8,
+            {
+                "query": "q",
+                "knowledge_id": 118,
+                "folder_id": 305,
+                "recursive": recursive,
+                "top_k": 5,
+                "max_content": 15000,
+                "filters": None,
+            },
+        )
+    ]
+
+
+async def test_folder_capacity_error_has_safe_actionable_message(monkeypatch):
+    """F083 覆盖 AC: AC-03, AC-06;预算拒绝有明确提示,且关闭业务作用域。"""
+    from bisheng.common.errcode.knowledge_space import McpFolderRetrievalScopeLimitError
+
+    closed = []
+
+    @asynccontextmanager
+    async def factory(request, user):
+        try:
+            yield SimpleNamespace(retrieve_folder_chunks=AsyncMock(side_effect=McpFolderRetrievalScopeLimitError()))
+        finally:
+            closed.append(True)
+
+    async with server(monkeypatch) as (app, _, _):
+        app.routes[0].endpoint.tool_runtime.factory = factory
+        async with session(app) as client:
+            result = await client.call_tool(
+                "retrieve_folder_chunks",
+                {
+                    "external_id": "0007",
+                    "query": "q",
+                    "knowledge_id": 118,
+                    "folder_id": 305,
+                },
+            )
+            assert result.isError and "recursive=false" in str(result)
+    assert closed == [True]
 
 
 @pytest.mark.parametrize("declared", [False, True])
