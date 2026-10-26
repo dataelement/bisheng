@@ -41,10 +41,10 @@ def test_init_returns_empty_for_non_writable_backend():
     assert linsight_export.init_linsight_export_tools(object()) == []  # no awrite attr
 
 
-def test_init_returns_both_tools_for_writable_backend():
+def test_init_returns_every_deliverable_tool_for_writable_backend():
     tools = linsight_export.init_linsight_export_tools(_writable_backend())
     names = {t.name for t in tools}
-    assert names == {"export_docx", "export_pdf"}
+    assert names == {"export_docx", "export_pdf", "check_html"}
 
 
 async def test_export_docx_reads_converts_writes(monkeypatch):
