@@ -74,6 +74,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
 )
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.llm_error_classifier import ErrorType, label_error, unwrap
+from bisheng.common.utils.message_content import extract_message_reasoning, extract_message_text
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.chat_attachment import promote_chat_attachments
@@ -2110,8 +2111,8 @@ async def _agent_stream_chat_completion(
                         chunk = (ev.get("data") or {}).get("chunk")
                         if chunk is None:
                             continue
-                        text = getattr(chunk, "content", "") or ""
-                        reasoning = (getattr(chunk, "additional_kwargs", None) or {}).get("reasoning_content", "")
+                        text = extract_message_text(chunk)
+                        reasoning = extract_message_reasoning(chunk)
                         if reasoning:
                             if current_thinking_idx is None:
                                 start_ms = int(time.time() * 1000)
@@ -2300,8 +2301,8 @@ async def _agent_stream_chat_completion(
                 if sys_prompt:
                     llm_messages.insert(0, SystemMessage(content=sys_prompt))
                 async for chunk in bisheng_llm.astream(llm_messages):
-                    text = getattr(chunk, "content", "") or ""
-                    reasoning = (getattr(chunk, "additional_kwargs", None) or {}).get("reasoning_content", "")
+                    text = extract_message_text(chunk)
+                    reasoning = extract_message_reasoning(chunk)
                     if reasoning:
                         if current_thinking_idx is None:
                             start_ms = int(time.time() * 1000)
