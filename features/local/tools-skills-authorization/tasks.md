@@ -7,5 +7,5 @@
 - [x] 完成使用链路授权校验、全员授权撤销和显式升级脚本。
 - [x] 自动回归、类型、构建、lint、i18n 与架构检查；对照原始分支记录扩大回归差异。
 - [x] 完成自查与升级说明。
-- [ ] 向 feat/bisheng-work-120-main 提交 PR。
+- [x] 向 feat/bisheng-work-120-main 提交 [PR #2518](https://github.com/dataelement/bisheng/pull/2518)。
 - [ ] 上线环境执行迁移与真实账号验收（独立交付环节）。

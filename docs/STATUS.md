@@ -204,4 +204,4 @@
 - 使用边界：工具列表和每次调用、技能目录/直接下载/装载、开放 API 配置/提交按当前使用授权过滤；个人启停在企业授权范围内生效。
 - 自动验证：123 项权限与技能回归通过；隔离提供方实现后，24 项工具业务测试及 9 个子场景通过。前端 4 项回归、611 个严格类型文件、变更 lint、生产构建、i18n 与架构检查通过。
 - 扩大回归：技能业务组基线 69 通过/20 失败，本分支 72 通过/18 失败（补齐 runtime 测试身份与 DAO fixture，增加撤销下载回归）；余下为原有 selectable/provisioning fixture 与业务入口不匹配。授权主体路由组基线和本分支均 9 通过/1 失败，原因是本地 FastAPI 路由结构变化。完整提供方导入、真实 OpenFGA/数据库迁移、普通账号网页及任务端到端验收待上线环境执行。
-- 上线步骤与回退：[upgrade.md](../features/local/tools-skills-authorization/upgrade.md)。本轮提交 PR，部署与合并单独执行。
+- 上线步骤与回退：[upgrade.md](../features/local/tools-skills-authorization/upgrade.md)。已提交 [PR #2518](https://github.com/dataelement/bisheng/pull/2518)，部署与合并单独执行。
