@@ -238,6 +238,8 @@ _PROBE_JS = """
   while (walker.nextNode()) {
     const el = walker.currentNode.parentElement;
     if (!el || counted.has(el) || !walker.currentNode.textContent.trim()) continue;
+    // SVG text reports its size in user units, before the viewBox scales it up.
+    if (el.closest('svg')) continue;
     counted.add(el);
     const cs = getComputedStyle(el);
     if (cs.display === 'none' || cs.visibility === 'hidden') continue;
