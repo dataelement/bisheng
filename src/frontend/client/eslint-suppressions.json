@@ -112,11 +112,6 @@
       "count": 1
     }
   },
-  "src/api/request.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/api/user.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 10
