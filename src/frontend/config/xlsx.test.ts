@@ -1,10 +1,19 @@
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-it('retains integrity verification for the official patched SheetJS artifact', () => {
+it('uses one verified local official SheetJS artifact for the entire workspace', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  expect(manifest.pnpm.overrides.xlsx).toBe('file:vendor/xlsx-0.20.3.tgz');
+  const catalog = readFileSync(new URL('../pnpm-workspace.yaml', import.meta.url), 'utf8');
+  expect(catalog).toMatch(/xlsx: 0\.20\.3/);
+  const artifact = readFileSync(new URL('../vendor/xlsx-0.20.3.tgz', import.meta.url));
+  const integrity = 'sha512-' + createHash('sha512').update(artifact).digest('base64');
+  expect(integrity).toBe('sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==');
   const lockfile = readFileSync(new URL('../pnpm-lock.yaml', import.meta.url), 'utf8');
-  expect(lockfile).toContain('resolution: {integrity: sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==, tarball: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz}');
+  expect(lockfile).toContain(`resolution: {integrity: ${integrity}, tarball: file:vendor/xlsx-0.20.3.tgz}`);
+  expect(lockfile).not.toContain('https://cdn.sheetjs.com/');
 });
 
 // Resolve from each consumer so stale app-local dependencies cannot hide behind a root import.
