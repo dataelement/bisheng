@@ -98,6 +98,8 @@ th[aria-sort="ascending"]::after { content: " ▲"; font-size: 10px; }
 th[aria-sort="descending"]::after { content: " ▼"; font-size: 10px; }
 tbody tr:last-child td { border-bottom: 0; }
 td.n, th.n { text-align: right; font-family: var(--font-num); }
+/* 首列是要素名，不要被挤成一字一行 */
+th:first-child, td:first-child { min-width: 6.5em; }
 /* 对照表：不一致的行在左侧加色条，不给整行上色 */
 tr.diff td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
 tr.conflict td:first-child { box-shadow: inset 3px 0 0 var(--risk); }
