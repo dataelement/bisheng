@@ -298,20 +298,24 @@ def test_s009(api, task_sum):
 
 def test_s025(api, task_sum):
     _require_sum(task_sum)
-    web = tool_category_payload(api, "web_search")
-    if web is None:
-        pytest.skip("未测：工具列表里没有联网搜索")
+    page = tool_category_payload(api, "web_fetch")
+    if page is None:
+        pytest.skip("未测：工具列表里没有网页读取")
     question = (
-        "必须调用联网搜索工具，查询 2026 年全球主要城市的人口。"
-        "如果返回里出现 large_tool_results/ 路径，必须接着用代码工具打开那个相对路径，不要加前导斜杠。"
-        "只打印三行，格式固定为：\nFIRST:文件第一行\nLAST:文件最后一行\nCOUNT:总行数\n"
+        "必须调用网页读取工具 web_fetch，"
+        "url 固定为 http://www.gutenberg.org/cache/epub/1342/pg1342.txt。"
+        "不要改网址，不要用别的工具代替这次读取。"
+        "先等网页读取返回。只有返回里出现 large_tool_results/ 路径时，才用代码工具打开那个相对路径，"
+        "不要加前导斜杠，也不要和网页读取同一次调用。"
+        "只打印三行，不要打印整行。每行只取前 80 个字符，格式固定为：\n"
+        "FIRST:第一行的前80个字符\nLAST:最后一行的前80个字符\nCOUNT:总行数\n"
         "不要用 read_file 代替代码。如果没有这个路径，说明没有转存，不要编造路径。"
     )
     with _mode(api, "container"):
-        _version, tasks = run_task_question(api, question, tools=[linsight_tool_payload(api), web])
+        _version, tasks = run_task_question(api, question, tools=[linsight_tool_payload(api), page])
     notice = offload_notice(tasks)
     if notice is None:
-        pytest.skip("未测：联网搜索的结果没有转到 large_tool_results，不新增长度门槛")
+        pytest.skip("未测：网页读取的结果没有转到 large_tool_results，不新增长度门槛")
     calls = task_tool_results(tasks)
     logs = "\n".join(str(item["result"].get("log") or "") for item in calls)
     printed = printed_ends(logs)

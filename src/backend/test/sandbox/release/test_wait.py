@@ -1,6 +1,11 @@
 """Continue must not treat the first history growth as the new round."""
 
-from test.sandbox.release.client import _finished_code_calls, _task_snapshot, followup_ready
+from test.sandbox.release.client import (
+    _finished_code_calls,
+    _task_snapshot,
+    continue_round_done,
+    followup_ready,
+)
 from test.sandbox.release.parse import offload_from_text
 
 
@@ -53,6 +58,14 @@ def test_offload_notice_reads_preview_ends():
         "count": 10,
     }
     assert offload_from_text("短结果，没有转存") is None
+
+
+def test_failed_retry_does_not_finish_the_round():
+    first = _task_snapshot(_task([_code("round-1", "1,2,3")]))
+    retrying = _task_snapshot(_task([_code("round-1", "1,2,3"), _code("retry", "fail")]))
+    assert continue_round_done("in_progress", retrying, first) is False
+    assert continue_round_done("completed", first, first) is False
+    assert continue_round_done("completed", retrying, first) is True
 
 
 def test_unchanged_success_is_still_the_previous_round():

@@ -22,6 +22,17 @@ class ApiError(RuntimeError):
     pass
 
 
+class TaskVersion(str):
+    """Session version id that also carries the session id for status polling."""
+
+    session_id: str
+
+    def __new__(cls, version_id: str, session_id: str):
+        obj = str.__new__(cls, version_id)
+        obj.session_id = session_id
+        return obj
+
+
 def encrypt_password(client: httpx.Client, password: str) -> str:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import padding
@@ -274,6 +285,7 @@ def submit_task(
     if model_id:
         body["model"] = model_id
     version_id = ""
+    session_id = ""
     with client.stream("POST", "/linsight/workbench/submit", json=body, timeout=120.0) as resp:
         if resp.status_code != 200:
             raise ApiError(f"submit HTTP {resp.status_code}")
@@ -287,6 +299,7 @@ def submit_task(
             if event == "linsight_workbench_submit":
                 version = payload.get("linsight_session_version") or {}
                 version_id = str(version.get("id") or "")
+                session_id = str(version.get("session_id") or "")
                 break
     if not version_id:
         raise ApiError("submit 没有返回 linsight_session_version.id")
@@ -295,7 +308,31 @@ def submit_task(
     )
     if started is not True:
         raise ApiError(f"start-execute data 不是 true: {started!r}")
-    return version_id
+    return TaskVersion(version_id, session_id)
+
+
+_SESSION_DONE = {"completed", "failed", "terminated"}
+
+
+def session_version_status(client: httpx.Client, session_id: str, version_id: str) -> str:
+    """Status of one session version. Empty when the list does not contain it."""
+    payload = data_of(client.get("/linsight/workbench/session-version-list", params={"session_id": session_id}))
+    rows = payload if isinstance(payload, list) else []
+    for row in rows:
+        if isinstance(row, dict) and str(row.get("id") or "") == version_id:
+            return str(row.get("status") or "").lower()
+    return ""
+
+
+def continue_round_done(status: str, snap: tuple, baseline: tuple) -> bool:
+    """A follow-up round is done when the session has left in_progress and the task detail changed.
+
+    The execute task stays success while the model retries. The first new code
+    call can be a failed attempt; the file from that moment is still the
+    previous round. The session status returns to completed only after the
+    round's last step is stored.
+    """
+    return status in _SESSION_DONE and snap != baseline
 
 
 def task_detail(client: httpx.Client, version_id: str) -> list:
@@ -379,12 +416,17 @@ def wait_tasks(
     )
     stable: tuple | None = None
     terminal = {"success", "failed", "terminated"}
+    session_id = getattr(version_id, "session_id", "") or ""
     while time.time() < deadline:
         last = task_detail(client, version_id)
         if previous is None:
             if last and all(task.get("status") in terminal for task in last if isinstance(task, dict)):
                 return last
             if any(isinstance(task, dict) and task.get("status") == "waiting_for_user_input" for task in last):
+                return last
+        elif session_id:
+            status = session_version_status(client, session_id, str(version_id))
+            if continue_round_done(status, _task_snapshot(last), baseline):
                 return last
         else:
             done, stable = followup_ready(
