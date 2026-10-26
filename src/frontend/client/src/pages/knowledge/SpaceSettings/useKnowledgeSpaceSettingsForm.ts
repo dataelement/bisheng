@@ -102,6 +102,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  const [isDepartmentSpace, setIsDepartmentSpace] = useState(false);
   const [canEdit, setCanEdit] = useState(mode === "create");
   const [canManagePermissions, setCanManagePermissions] = useState(false);
   const [relationModels, setRelationModels] = useState<GrantablePermissionModel[]>([]);
@@ -179,6 +180,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   useEffect(() => {
     let cancelled = false;
     setLoadError(null);
+    setIsDepartmentSpace(false);
 
     const load = async () => {
       if (mode === "create") {
@@ -219,6 +221,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           throw new Error("Knowledge space settings access denied");
         }
         setCanEdit(canEditSpace);
+        setIsDepartmentSpace(space.departmentId != null || space.spaceKind === "department");
         setForm({
           name: space.name,
           description: space.description ?? "",
@@ -393,6 +396,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     submitting,
     loadError,
     canEdit,
+    isDepartmentSpace,
     canManagePermissions,
     relationModels,
     canAddNonUserSubjects: relationModels.length > 0,

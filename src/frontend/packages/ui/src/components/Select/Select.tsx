@@ -308,7 +308,9 @@ export function Select(props: SelectProps) {
         {single.icon}
       </span>
     );
-  } else if (multiple && hasValue) {
+  } else if (multiple && (hasValue || searchable)) {
+    // Keep the search input mounted when the first tag is added or the last removed.
+    // Replacing it lets a parent dialog reclaim focus and dismiss the panel.
     body = (
       <SelectTags
         options={selectedOptions}
