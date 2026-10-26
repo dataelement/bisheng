@@ -16,6 +16,12 @@ class DshSettings(BaseModel):
     session_ttl_seconds: int = Field(
         default=2592000, ge=600, le=2592000, description="Absolute lifetime in seconds of a native desktop session."
     )
+    mobile_session_ttl_seconds: int = Field(
+        default=2592000,
+        ge=600,
+        le=2592000,
+        description="Absolute lifetime in seconds of a phone refresh session. Rotation does not extend it.",
+    )
 
     enabled: bool = Field(
         default=False,

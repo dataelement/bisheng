@@ -57,6 +57,8 @@ DSH_CREDENTIAL_ROUTES = frozenset(
         ("POST", "/api/v1/dsh/authorizations"),
         ("POST", "/api/v1/dsh/token"),
         ("POST", "/api/v1/dsh/logout"),
+        ("POST", "/api/v1/dsh/mobile/session/refresh"),
+        ("DELETE", "/api/v1/dsh/mobile/session"),
         ("POST", "/api/dsh/authorizations"),
         ("POST", "/api/dsh/token"),
         ("POST", "/api/dsh/logout"),

@@ -5,13 +5,28 @@ from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocket
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.dsh import DshInvalidRequestError
+from bisheng.common.schemas.api import resp_200
 from bisheng.dsh.api.dependencies import desktop_principal
 from bisheng.dsh.domain.services.access import DshPrincipal
 from bisheng.dsh.domain.services.mobile_access import MobileAccessService, MobileResult
+from bisheng.dsh.domain.services.mobile_session import MobileSessionService, build_mobile_session_service
 from bisheng.dsh.infrastructure.mobile_access import MobileAccessStore
 
 router = APIRouter()
 _service: MobileAccessService | None = None
+_sessions: MobileSessionService | None = None
+
+
+async def mobile_sessions(request: Request) -> MobileSessionService:
+    override = getattr(request.app.state, "mobile_sessions", None)
+    if override is not None:
+        return override
+    global _sessions
+    if _sessions is None:
+        _sessions = build_mobile_session_service()
+    return _sessions
 
 
 async def mobile_service() -> MobileAccessService:
@@ -46,6 +61,46 @@ async def unbind(
     if body is None:
         return _invalid()
     return _respond(await service.unbind(_desktop_account(principal), body))
+
+
+@router.post("/dsh/mobile/session")
+async def open_mobile_session(
+    user=Depends(UserPayload.get_login_user),
+    service: MobileSessionService = Depends(mobile_sessions),
+):
+    try:
+        data = await service.open(user.user_id, user.tenant_id, getattr(user, "user_name", None))
+    except BaseErrorCode as error:
+        return _failure(error)
+    return resp_200(data)
+
+
+@router.post("/dsh/mobile/session/refresh")
+async def refresh_mobile_session(
+    request: Request,
+    service: MobileSessionService = Depends(mobile_sessions),
+):
+    body = await _object_body(request)
+    if body is None:
+        return _failure(DshInvalidRequestError())
+    refresh = body.get("refresh_token")
+    try:
+        data = await service.refresh(refresh if isinstance(refresh, str) else None)
+    except BaseErrorCode as error:
+        return _failure(error)
+    return resp_200(data)
+
+
+@router.delete("/dsh/mobile/session")
+async def revoke_mobile_session(
+    request: Request,
+    service: MobileSessionService = Depends(mobile_sessions),
+):
+    body = await _object_body(request)
+    refresh = body.get("refresh_token") if isinstance(body, dict) else None
+    if isinstance(refresh, str):
+        await service.revoke(refresh)
+    return Response(status_code=204)
 
 
 @router.get("/dsh/mobile/desktops")
@@ -107,3 +162,14 @@ def _desktop_account(principal: DshPrincipal) -> _DesktopAccount:
 
 def _invalid() -> JSONResponse:
     return JSONResponse(status_code=400, content={"error": "invalid_request"})
+
+
+def _failure(error: BaseErrorCode) -> JSONResponse:
+    return JSONResponse(
+        status_code=getattr(error, "HttpStatus", 401),
+        content={
+            "status_code": error.Code,
+            "status_message": error.Msg,
+            "error": getattr(error, "ClientCode", "unauthorized"),
+        },
+    )
