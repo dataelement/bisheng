@@ -22,6 +22,7 @@ import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@
 import { deleteFlowFromDatabase, getAppsApi, getFlowApi } from "@/controllers/API/flow";
 import type { HostedAppActionResult } from "@/controllers/API/hostedApp";
 import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/controllers/API/workflow";
+import { handleUiRequest } from "@/controllers/request";
 import { AppNumType, AppType } from "@/types/app";
 import { locationContext } from "@/contexts/locationContext";
 import { HostedAppCard } from "./HostedAppCard";
