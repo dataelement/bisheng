@@ -36,7 +36,7 @@ from bisheng.permission.domain.services.visibility_projection_service import (
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_OWNED_RESOURCE_ALLOWLIST = frozenset({"workflow", "assistant", "tool"})
+SYSTEM_OWNED_RESOURCE_ALLOWLIST = frozenset({"workflow", "assistant", "tool", "linsight_skill"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,22 +135,32 @@ class F048OwnerProjectionService:
             self._validate_system_owned(context)
             grant = None
             source = None
-            marker_relations = (
-                "visible",
-                *(f"system_{action}_marker" for action in context.system_action_codes if action != "visible"),
-            )
-            protected_deltas = tuple(
-                ProjectionTupleDelta(
-                    phase="STAGE",
-                    sequence=index,
-                    action="WRITE",
-                    user="user:*",
-                    relation=relation,
-                    object=(f"{context.target.resource_type}:{context.target.resource_id}"),
+            if context.target.resource_type in {"tool", "linsight_skill"}:
+                if len(context.creation_grants) != 1:
+                    raise PermissionInvalidResourceError()
+                protected_deltas = ()
+                visibility = self._visibility.compile(
+                    tenant_id=context.target.tenant_id,
+                    grants=context.creation_grants,
+                    existing_sources=(),
                 )
-                for index, relation in enumerate(dict.fromkeys(marker_relations))
-            )
-            visibility = None
+            else:
+                marker_relations = (
+                    "visible",
+                    *(f"system_{action}_marker" for action in context.system_action_codes if action != "visible"),
+                )
+                protected_deltas = tuple(
+                    ProjectionTupleDelta(
+                        phase="STAGE",
+                        sequence=index,
+                        action="WRITE",
+                        user="user:*",
+                        relation=relation,
+                        object=(f"{context.target.resource_type}:{context.target.resource_id}"),
+                    )
+                    for index, relation in enumerate(dict.fromkeys(marker_relations))
+                )
+                visibility = None
         else:
             grant, source, protected_deltas = self._protected_owner(context)
             visibility = self._visibility.compile(
@@ -274,7 +284,10 @@ class F048OwnerProjectionService:
                 grant.tenant_id != context.target.tenant_id
                 or grant.resource_type != context.target.resource_type
                 or grant.resource_id != context.target.resource_id
-                or any(source.protected or source.source_type != "CREATOR_GRANT" for source in grant.sources)
+                or any(
+                    source.protected or source.source_type not in {"CREATOR_GRANT", "TENANT"}
+                    for source in grant.sources
+                )
                 for grant in context.creation_grants
             ):
                 raise PermissionInvalidResourceError()
