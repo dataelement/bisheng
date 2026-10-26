@@ -84,5 +84,5 @@ export function ChatMarkdown({ services, ...props }: ChatMarkdownProps) {
   const viewport = useMarkdownViewport();
   const resolved = { ...services, latexParsing: services.latexParsing ?? CLIENT_MARKDOWN_DEFAULTS.latexParsing,
     isMobileLayout: services.isMobileLayout ?? viewport.isMobileLayout, finePointer: services.finePointer ?? viewport.finePointer };
-  return <MarkdownServicesContext.Provider value={resolved}><div className="bs-mkdown bisheng-chat-markdown"><ChatMarkdownContent {...props} /></div></MarkdownServicesContext.Provider>;
+  return <MarkdownServicesContext.Provider value={resolved}><div className="bs-mkdown bisheng-chat-markdown"><ChatMarkdownContent key={JSON.stringify([services.scopeKey,props.messageId])} {...props} /></div></MarkdownServicesContext.Provider>;
 }

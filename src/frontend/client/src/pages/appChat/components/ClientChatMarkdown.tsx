@@ -1,3 +1,4 @@
+import { getCitationAccessScope } from '~/api/citationScope';
 import { splitMessageContent } from '@bisheng/chat/core';
 import { ChatMarkdown, type ChatMarkdownProps, type MarkdownCodeProps } from '@bisheng/chat';
 import { useRef, type ComponentProps } from 'react';
@@ -28,7 +29,7 @@ export function ClientChatMarkdown({ readOnly, latexParsing, ...props }: ClientC
     const { showToast } = useToastContext();
     const canRunCode = useHasAccess({ permissionType: PermissionTypes.RUN_CODE, permission: Permissions.USE });
     return <ArtifactProvider><CodeBlockProvider><ChatMarkdown {...props} content={parsed.referenceText} webContent={props.webContent ?? parsed.webContent} services={{
-        localize, latexParsing,
+        localize, latexParsing, scopeKey:getCitationAccessScope(),
         getCitationDetail, resolveCitationDetails, getCitationUnresolvedReason, SourceIcon: CitationSourceIcon,
         copyText,
         renderDocumentPreview: (preview, onClose) => <CitationDocumentPreviewDrawer preview={preview} onClose={onClose} />,

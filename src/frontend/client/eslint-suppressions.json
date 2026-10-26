@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 15
+      "count": 13
     }
   },
   "src/api/index.ts": {
@@ -493,21 +493,12 @@
     }
   },
   "src/components/Chat/Messages/Content/CitationDocumentPreviewDrawer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
     }
   },
   "src/components/Chat/Messages/Content/CitationReferencesDrawer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
     "no-restricted-imports": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
@@ -552,7 +543,7 @@
       "count": 2
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 1
     },
     "no-restricted-imports": {
       "count": 1
@@ -621,11 +612,6 @@
   "src/components/Chat/Messages/Content/WrenchIcon.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    }
-  },
-  "src/components/Chat/Messages/Content/citationUtils.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
     }
   },
   "src/components/Chat/Messages/Content/useCitationReferencePanel.tsx": {
@@ -1306,47 +1292,6 @@
   },
   "src/components/Nav/SettingsTabs/Speech/TTS/VoiceDropdown.tsx": {
     "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/components/PreviewFile/DocxFileViewer.tsx": {
-    "no-useless-escape": {
-      "count": 1
-    }
-  },
-  "src/components/PreviewFile/FileView.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 5
-    },
-    "no-console": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 4
-    }
-  },
-  "src/components/PreviewFile/TxtFileViewer.tsx": {
-    "no-useless-escape": {
-      "count": 1
-    }
-  },
-  "src/components/PreviewFile/index.tsx": {
-    "no-console": {
-      "count": 1
-    },
-    "no-useless-escape": {
       "count": 1
     }
   },
@@ -2556,23 +2501,6 @@
       "count": 1
     }
   },
-  "src/pages/appChat/components/ResouceModal.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 5
-    }
-  },
   "src/pages/appChat/hooks/useAppSidebar.ts": {
     "no-restricted-imports": {
       "count": 1
@@ -2738,51 +2666,6 @@
   },
   "src/pages/knowledge/FilePreview/DocumentViewer.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/RichKnowledgePreview.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/index.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/viewers/DocxViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/viewers/HtmlViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/viewers/MarkdownViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/FilePreview/viewers/TextViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },

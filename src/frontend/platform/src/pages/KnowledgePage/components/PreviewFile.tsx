@@ -1,4 +1,8 @@
 // @ts-strict-ignore
+import { PlatformImagePreview } from '@/components/bs-comp/preview/DocumentPreview';
+import { usePreviewLocale } from '@bisheng/file-viewers/locale';
+import type { PdfScrollContext } from '@/components/bs-comp/preview/PlatformPdfPreview';
+import { labelTop as pdfLabelTop } from '@/components/bs-comp/preview/pdfEditing';
 import FileView from "@/components/bs-comp/FileView";
 import { Outlined } from "bisheng-icons";
 
@@ -40,6 +44,7 @@ export default function PreviewFile({
   previewErrorMessage?: string;
 }) {
   const { t } = useTranslation('knowledge')
+  const previewLocale = usePreviewLocale();
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
   const selectedChunkDistanceFactor = useKnowledgeStore((state) => state.selectedChunkDistanceFactor);
@@ -215,13 +220,13 @@ export default function PreviewFile({
   };
 
   // 8. 页面滚动检测（新增，与ParagraphEdit的handlePageChange一致）
-  const handlePageChange = (offset, h, paperSize, scale) => {
+  const handlePageChange = (offset, h, paperSize, scale, context?: PdfScrollContext) => {
     if (offset === 0) return;
     const labelsArray = Array.from(labelsMap.values());
     setShowPos(!labelsArray.some(item => {
       const pageHeight = (item.page - 1) * paperSize;
-      const labelTop = pageHeight + item.label[1] / scale;
-      return item.active && labelTop > offset && labelTop < (offset + h);
+      const labelTop = context ? pdfLabelTop(item.page, item.label[1], context.startIndex, context.layout) : pageHeight + item.label[1] / scale;
+      return item.active && labelTop !== null && labelTop > offset && labelTop < (offset + h);
     }));
   };
 
@@ -254,7 +259,7 @@ export default function PreviewFile({
           <img
             className="size-52 block"
             src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
-          <p>此文件类型不支持预览</p>
+          <p>{previewLocale.unsupported}</p>
         </div>
       </div>
       case 'pdf':
@@ -279,11 +284,7 @@ export default function PreviewFile({
       case 'jpg':
       case 'jpeg':
       case 'bmp': return (
-        <img
-          className="border"
-          src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)}
-          alt="预览图片"
-        />
+        <PlatformImagePreview filePath={url} />
       );
       case 'xlsx':
       case 'xls':
@@ -311,7 +312,7 @@ export default function PreviewFile({
 
     Array.from(labelsMap.values()).forEach((item) => {
       if (typeof labelTextRef.current[item.id] === 'string') {
-        return alert('文件已失效，请上传新文件后重试');
+        return alert(previewLocale.fileExpired);
       }
 
       if (item.active) {

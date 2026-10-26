@@ -1,3 +1,4 @@
+import { getCitationAccessScope } from '@/controllers/citationScope';
 import { ChatMarkdown, type ChatMarkdownProps, type ChatCitation } from '@bisheng/chat';
 import { useTranslation } from 'react-i18next';
 import { getCitationDetail, getCitationUnresolvedReason, resolveCitationDetails, type ChatCitation as PlatformCitation } from '@/controllers/API';
@@ -9,7 +10,7 @@ function platformCitation(detail: ChatCitation): PlatformCitation { return { ...
 /** Platform supplies authenticated resource reads and its existing preview host. */
 export function PlatformChatMarkdown(props: Omit<ChatMarkdownProps, 'services'>) {
     const { t } = useTranslation(['bs', 'shared']);
-    return <ChatMarkdown {...props} services={{ localize: (key, options) => String(t(key, options)),
+    return <ChatMarkdown {...props} services={{ scopeKey:getCitationAccessScope(),localize: (key, options) => String(t(key, options)),
         getCitationDetail: async id => { const detail = await getCitationDetail(id); return { ...detail, type: detail.type ?? '' }; },
         resolveCitationDetails: async ids => (await resolveCitationDetails(ids)).map(detail => ({ ...detail, type: detail.type ?? '' })),
         getCitationUnresolvedReason,

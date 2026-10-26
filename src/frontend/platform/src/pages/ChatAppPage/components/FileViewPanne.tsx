@@ -6,9 +6,10 @@ import TxtFileViewer from "@/pages/KnowledgePage/components/TxtFileViewer";
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+const MemoizedFileView = React.memo(FileView);
+
 export default function FileViewPanne({ file }) {
     const { t } = useTranslation();
-    const MemoizedFileView = React.memo(FileView);
     const [postion, setPositon] = useState(null);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [showP, setShowP] = useState(true);

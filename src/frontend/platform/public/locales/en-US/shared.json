@@ -17,6 +17,39 @@
       "imageLoadFailed": "Image failed to load",
       "imageRef": "Image reference",
       "imagesOutsideTable": "Images outside the table area"
+    },
+    "preview": {
+      "loading": "Loading...",
+      "docLoading": "Loading document...",
+      "failed": "Failed to load file",
+      "imageAlt": "Image Preview",
+      "htmlTitle": "HTML Preview",
+      "recognizedText": "Recognized text",
+      "entryText": "Knowledge text",
+      "media": {
+        "download": "Download",
+        "exit_fullscreen": "Exit full screen",
+        "fullscreen": "Full screen",
+        "more": "More",
+        "mute": "Mute",
+        "pause": "Pause",
+        "picture_in_picture": "Picture in picture",
+        "play": "Play",
+        "playback_speed": "Playback speed",
+        "progress": "Playback progress",
+        "unmute": "Unmute",
+        "volume": "Volume"
+      },
+      "select": {
+        "emptyText": "No data",
+        "noMatchText": "No matches",
+        "loadingText": "Loading…",
+        "clearLabel": "Clear",
+        "removeLabel": "Remove"
+      },
+      "empty": "The file is empty",
+      "unsupported": "This file type cannot be previewed",
+      "fileExpired": "The file is unavailable. Upload a new file and try again."
     }
   },
   "hostedApp": {
@@ -90,5 +123,38 @@
       "interrupted": "The tool call returned no result (the session ended)"
     },
     "attach": "Attach file"
+  },
+  "citations": {
+    "com_citation": {
+      "close_document_preview": "Close document preview",
+      "document_preview": "Document preview",
+      "locate_missed": "Couldn't find the cited passage automatically. Here is the quoted text:",
+      "no_download_url": "No downloadable file address",
+      "preview_loading": "Loading preview…",
+      "preview_unavailable": "This file can't be previewed",
+      "source_article": "Article",
+      "source_document": "Document",
+      "source_temp_kb": "Temporary knowledge base",
+      "source_web": "Web page"
+    },
+    "com_knowledge": {
+      "download_file": "Download file"
+    },
+    "com_message": {
+      "document_preview": "Document preview",
+      "source_empty": "No references yet",
+      "source_load_failed": "Failed to load source details",
+      "source_loading": "Loading source details...",
+      "source_name_fallback_document": "Policy document",
+      "source_name_fallback_web": "Web page",
+      "source_panel_back": "Back to reference list",
+      "source_panel_close": "Close references",
+      "source_panel_download": "Download document",
+      "source_panel_label": "References",
+      "source_type_document": "Document",
+      "source_type_web": "Web page",
+      "source_untitled": "Untitled"
+    },
+    "com_msg_source_reference": "Reference"
   }
 }

@@ -17,6 +17,39 @@
       "imageLoadFailed": "图片加载失败",
       "imageRef": "图片引用",
       "imagesOutsideTable": "表格区域外的图片"
+    },
+    "preview": {
+      "loading": "加载中...",
+      "docLoading": "文档加载中...",
+      "failed": "无法加载文件",
+      "imageAlt": "图片预览",
+      "htmlTitle": "HTML 预览",
+      "recognizedText": "识别文本",
+      "entryText": "入库文本",
+      "media": {
+        "download": "下载",
+        "exit_fullscreen": "退出全屏",
+        "fullscreen": "全屏",
+        "more": "更多",
+        "mute": "静音",
+        "pause": "暂停",
+        "picture_in_picture": "画中画",
+        "play": "播放",
+        "playback_speed": "倍速",
+        "progress": "播放进度",
+        "unmute": "取消静音",
+        "volume": "音量"
+      },
+      "select": {
+        "emptyText": "暂无数据",
+        "noMatchText": "无匹配结果",
+        "loadingText": "加载中…",
+        "clearLabel": "清除",
+        "removeLabel": "移除"
+      },
+      "empty": "文件为空",
+      "unsupported": "此文件类型不支持预览",
+      "fileExpired": "文件已失效，请上传新文件后重试"
     }
   },
   "hostedApp": {
@@ -90,5 +123,38 @@
       "interrupted": "工具调用未返回结果（会话已结束）"
     },
     "attach": "添加附件"
+  },
+  "citations": {
+    "com_citation": {
+      "close_document_preview": "关闭文档预览",
+      "document_preview": "文档预览",
+      "locate_missed": "没能自动找到被引段落，下面是引用的原文",
+      "no_download_url": "暂无可下载文件地址",
+      "preview_loading": "正在加载文件预览…",
+      "preview_unavailable": "这份文件暂时无法预览",
+      "source_article": "文章",
+      "source_document": "文档",
+      "source_temp_kb": "临时知识库",
+      "source_web": "网页"
+    },
+    "com_knowledge": {
+      "download_file": "下载文件"
+    },
+    "com_message": {
+      "document_preview": "文档预览",
+      "source_empty": "暂无参考资料",
+      "source_load_failed": "溯源详情加载失败",
+      "source_loading": "加载溯源详情...",
+      "source_name_fallback_document": "政策文件",
+      "source_name_fallback_web": "网页",
+      "source_panel_back": "返回参考资料列表",
+      "source_panel_close": "关闭参考资料",
+      "source_panel_download": "下载文档",
+      "source_panel_label": "参考资料",
+      "source_type_document": "文档",
+      "source_type_web": "网页",
+      "source_untitled": "暂无标题"
+    },
+    "com_msg_source_reference": "参考来源"
   }
 }

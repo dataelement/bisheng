@@ -9,7 +9,12 @@
   "exports": {
     ".": "./src/index.ts",
     "./core": "./src/core/index.ts",
-    "./styles.css": "./src/styles/index.css"
+    "./styles.css": "./src/styles/index.css",
+    "./citations": "./src/citations/index.ts",
+    "./citation-views": "./src/citations/views.ts",
+    "./citation-locate": "./src/citations/citationLocate.ts",
+    "./citation-locate-hook": "./src/citations/useCitedPassageLocate.ts",
+    "./citation-inline": "./src/citations/inline.tsx"
   },
   "scripts": {
     "test": "vitest run --maxWorkers=1 --minWorkers=1",
@@ -42,6 +47,7 @@
     "unified": "^11",
     "@radix-ui/react-popover": "catalog:",
     "lucide-react": "^0.544.0",
-    "@radix-ui/react-dialog": "catalog:"
+    "@radix-ui/react-dialog": "catalog:",
+    "@bisheng/file-viewers": "workspace:*"
   }
 }

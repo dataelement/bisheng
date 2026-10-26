@@ -76,26 +76,6 @@
       "count": 2
     }
   },
-  "src/components/bs-comp/FileView.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 6
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 4
-    }
-  },
   "src/components/bs-comp/apiComponent/ApiAccessSkill.tsx": {
     "no-empty-pattern": {
       "count": 1
@@ -143,22 +123,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
-    }
-  },
-  "src/components/bs-comp/chatComponent/CitationDocumentPreviewDrawer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/components/bs-comp/chatComponent/citationUtils.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 7
-    },
-    "no-restricted-syntax": {
-      "count": 17
     }
   },
   "src/components/bs-comp/chatComponent/index.tsx": {
@@ -691,7 +655,7 @@
   },
   "src/controllers/API/index.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 58
+      "count": 52
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
@@ -1235,9 +1199,6 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 4
     },
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "no-useless-escape": {
       "count": 1
     }
@@ -1756,7 +1717,7 @@
   },
   "src/pages/Dashboard/components/charts/BaseChart.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
+      "count": 9
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
@@ -1993,20 +1954,6 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/components/DocxFileViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "no-useless-escape": {
-      "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 1
-    }
-  },
   "src/pages/KnowledgePage/components/DuplicateFileDialog.test.tsx": {
     "no-restricted-syntax": {
       "count": 7
@@ -2147,9 +2094,6 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 2
-    },
-    "no-useless-escape": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -2176,12 +2120,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "no-useless-escape": {
-      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
@@ -2221,9 +2159,6 @@
   "src/pages/KnowledgePage/components/RichPreviewFile.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/pages/KnowledgePage/components/RuleFile.tsx": {
@@ -2245,14 +2180,6 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/components/TxtFileViewer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-useless-escape": {
       "count": 1
     }
   },
@@ -2974,9 +2901,6 @@
     },
     "no-constant-binary-expression": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 5
     },
     "react-hooks/exhaustive-deps": {
       "count": 1

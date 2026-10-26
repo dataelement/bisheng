@@ -63,7 +63,7 @@ export function SourcePane({ preview, occurrence, onStep, onClose, onBackToRepor
         setDownloadUrl('');
         void resolveCitationDownloadUrl(detail).then((url) => {
             if (active) setDownloadUrl(toAbsolutePreviewUrl(url || ''));
-        });
+        }).catch(() => { if (active) setDownloadUrl(''); });
         return () => {
             active = false;
         };

@@ -5,6 +5,7 @@
   "dependencies": {
     "@hello-pangea/dnd": "catalog:",
     "@bisheng/ui": "workspace:*",
+    "@bisheng/diagram-runtime": "workspace:*",
     "@bisheng/file-viewers": "workspace:*",
     "@headlessui/react": "^2.0.4",
     "@radix-ui/react-accordion": "catalog:",
@@ -44,7 +45,6 @@
     "jsencrypt": "^3.3.2",
     "lodash-es": "^4.17.21",
     "lucide-react": "^0.544.0",
-    "mammoth": "^1.9.0",
     "pdfjs-dist": "3.10.111",
     "qrcode.react": "catalog:",
     "react": "catalog:",

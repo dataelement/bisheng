@@ -7,23 +7,21 @@ export interface ChatCitationItem {
 export interface ChatCitationPayload {
   url?: string; title?: string; snippet?: string; content?: string; source?: string; sourceUrl?: string;
   previewUrl?: string; downloadUrl?: string; knowledgeName?: string; documentName?: string;
-  fileName?: string; filename?: string; file_name?: string; fileType?: string; datePublished?: string;
+  fileName?: string; filename?: string; file_name?: string; fileType?: string; datePublished?: string; articleDocId?: string; siteIcon?: string;
   date?: string; documentId?: string | number; page?: number; items?: ChatCitationItem[];
   [key: string]: unknown;
 }
 export interface ChatCitation { citationId: string; type: string; itemId?: string | null; sourcePayload?: ChatCitationPayload }
 export interface CitationDisplayData { label: number; ref: string; type: string; groupKey: string; chunkId: string; citationId: string; itemId: string }
 export interface CitationPreview { title: string; snippet: string; sourceName: string; sourceMeta: string; link?: string; type: string }
-export interface CitationPdfBBox { page: number; bbox: [number, number, number, number] }
+export type { PreviewPdfBBox as CitationPdfBBox } from '@bisheng/file-viewers/types';
 export type CitationDetailLoader = (id: string) => Promise<ChatCitation | null>;
 export interface CitationDocumentPreviewState { detail: ChatCitation; itemId?: string; itemIds?: string[]; locateChunk?: boolean }
-export interface CitationReferencesDesktopPayload {
-  messageId?: string; content: string; webContent?: ChatCitationPayload[];
-  citations?: ChatCitation[] | null; referenceItems: never[]; initialDocumentPreview?: CitationDocumentPreviewState | null;
-}
+export type { CitationReferencesDesktopPayload } from '../citations/types';
 export interface CitationSourceIconProps { detail?: ChatCitation | null; preview?: CitationPreview | null; type?: string; ragIconVariant?: 'document' | 'knowledge'; clipAsCircle?: boolean }
 export interface MarkdownCodeProps { language: string; code: string; inline: boolean; className?: string; codeRef?: RefObject<HTMLElement> }
 export interface MarkdownServices {
+  scopeKey?:string;
   localize: ChatLocalize;
   latexParsing?: boolean;
   isMobileLayout?: boolean;
