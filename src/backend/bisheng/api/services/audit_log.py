@@ -33,7 +33,7 @@ from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role import Role
-from bisheng.database.models.session import MessageSessionDao, MessageSession
+from bisheng.database.models.session import MessageSessionDao, MessageSession, feedback_opinion_count
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
@@ -816,7 +816,8 @@ class AuditLogService:
     @classmethod
     async def get_session_list(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int],
                                start_date: datetime, end_date: datetime,
-                               feedback: str, sensitive_status: int, page: int, page_size: int) -> Tuple[
+                               feedback: str, sensitive_status: int, page: int, page_size: int,
+                               answer_abnormal: int | None = None) -> Tuple[
         List[AppChatList], int]:
 
         if user.is_admin() or await cls._can_read_tenant_audit(user):
@@ -853,6 +854,8 @@ class AuditLogService:
         # Basic equality/range filtering
         if sensitive_status:
             conditions.append(MessageSession.sensitive_status == sensitive_status)
+        if answer_abnormal in (0, 1):
+            conditions.append(MessageSession.answer_abnormal == answer_abnormal)
 
         if user_ids:
             conditions.append(col(MessageSession.user_id).in_(user_ids))
@@ -876,7 +879,8 @@ class AuditLogService:
         feedback_map = {
             'like': col(MessageSession.like) > 0,
             'dislike': col(MessageSession.dislike) > 0,
-            'copied': col(MessageSession.copied) > 0
+            'copied': col(MessageSession.copied) > 0,
+            'comment': feedback_opinion_count() > 0,
         }
         if feedback in feedback_map:
             conditions.append(feedback_map[feedback])
@@ -970,14 +974,16 @@ class AuditLogService:
     async def get_session_messages(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int],
                                    group_ids: List[int],
                                    start_date: datetime, end_date: datetime, feedback: str,
-                                   sensitive_status: int) -> List[AppChatList]:
+                                   sensitive_status: int,
+                                   answer_abnormal: int | None = None) -> List[AppChatList]:
         page = 1
         page_size = 50
         res = []
         while True:
             result, total = await cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date,
                                                        feedback,
-                                                       sensitive_status, page, page_size)
+                                                       sensitive_status, page, page_size,
+                                                       answer_abnormal)
             if not result:
                 break
             page += 1

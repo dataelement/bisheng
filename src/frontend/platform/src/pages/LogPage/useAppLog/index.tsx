@@ -39,6 +39,7 @@ type FilterState = {
     dateRange: any[];
     feedback: string;
     sensitive_status: string;
+    answer_abnormal: string;
 };
 
 type Action =
@@ -58,7 +59,8 @@ const createEmptyFilters = (): FilterState => ({
     userGroup: '',
     dateRange: [],
     feedback: '',
-    sensitive_status: ''
+    sensitive_status: '',
+    answer_abnormal: '',
 });
 
 const filterReducer = (state: FilterState, action: Action): FilterState => {
@@ -100,6 +102,9 @@ export default function AppUseLog() {
             end_date,
             feedback: param.feedback || undefined,
             sensitive_status: param.sensitive_status || undefined,
+            ...(param.answer_abnormal === '0' || param.answer_abnormal === '1'
+                ? { answer_abnormal: Number(param.answer_abnormal) }
+                : {}),
         })
     }, restored?.page ?? 1);
     const processedData = useMemo(() =>
@@ -118,6 +123,7 @@ export default function AppUseLog() {
             { defaultWidth: 180, minWidth: 80 },
             { defaultWidth: 170, minWidth: 120 },
             { defaultWidth: 160, minWidth: 120 },
+            { defaultWidth: 100, minWidth: 80 },
         ]
         if (appConfig.isPro) {
             cols.push({ defaultWidth: 140, minWidth: 100 })
@@ -134,6 +140,7 @@ export default function AppUseLog() {
         { label: t('log.userGroup') },
         { label: t('createTime') },
         { label: t('log.userFeedback') },
+        { label: t('log.answerAbnormal') },
         ...(appConfig.isPro ? [{ label: t('log.sensitiveReviewResult') }] : []),
         { label: t('operations'), className: 'text-right' },
     ]
@@ -236,6 +243,9 @@ export default function AppUseLog() {
             end_date,
             feedback: filters.feedback || undefined,
             sensitive_status: filters.sensitive_status || undefined,
+            ...(filters.answer_abnormal === '0' || filters.answer_abnormal === '1'
+                ? { answer_abnormal: Number(filters.answer_abnormal) }
+                : {}),
         }).then(async res => {
             const data = [
                 [
@@ -249,7 +259,8 @@ export default function AppUseLog() {
                     t('log.csvHeaders.messageContent'),
                     t('log.csvHeaders.like'),
                     t('log.csvHeaders.dislike'),
-                    t('log.csvHeaders.copy'),
+                    t('log.feedbackOpinions'),
+                    t('log.csvHeaders.answerAbnormal'),
                     t('log.csvHeaders.sensitiveStatus')
                 ]
             ];
@@ -284,7 +295,11 @@ export default function AppUseLog() {
                         handleMessage(message, msg.category, item.flow_id + '_' + item.chat_id),
                         msg.liked === 1 ? t('log.yes') : t('log.no'),
                         msg.liked === 2 ? t('log.yes') : t('log.no'),
-                        msg.copied ? t('log.yes') : t('log.no'),
+                        (item.feedback_comments || [])
+                            .filter((one) => one.message_id === msg.id && one.comment)
+                            .map((one) => /^[=+\-@]/.test(one.comment) ? "'" + one.comment : one.comment)
+                            .join('\n'),
+                        item.answer_abnormal === 1 ? t('log.yes') : t('log.no'),
                         msg.sensitive_status === 1 ? t('log.no') : t('log.yes')
                     ])
                 })
@@ -325,9 +340,22 @@ export default function AppUseLog() {
                         options={[
                             { value: "like", label: t('log.likeFeedback') },
                             { value: "dislike", label: t('log.dislikeFeedback') },
-                            { value: "copied", label: t('log.copyFeedback') },
+                            { value: "comment", label: t('log.feedbackOpinions') },
                         ]}
                         onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['feedback']: value } })}
+                    />
+                </div>
+                <div className="w-[200px] relative">
+                    <ClearableFilterSelect
+                        value={filters.answer_abnormal || ""}
+                        placeholder={t('log.answerAbnormal')}
+                        triggerClassName="w-[200px]"
+                        contentClassName="max-w-[200px] break-all"
+                        options={[
+                            { value: "1", label: t('log.yes') },
+                            { value: "0", label: t('log.no') },
+                        ]}
+                        onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { answer_abnormal: value } })}
                     />
                 </div>
                 {appConfig.isPro && <div className="w-[200px] relative">
@@ -388,8 +416,9 @@ export default function AppUseLog() {
                     <TableBody>
                         {processedData.map((el: any) => {
                             const flowName = el.flow_type === 15 ? t('log.workbench_daily') : (el.flow_name || "-")
-                            const sensitiveIdx = appConfig.isPro ? 6 : -1
-                            const opsIdx = appConfig.isPro ? 7 : 6
+                            const abnormalIdx = 6
+                            const sensitiveIdx = appConfig.isPro ? 7 : -1
+                            const opsIdx = appConfig.isPro ? 8 : 7
                             return (
                                 <TableRow key={el.id}>
                                     <TruncatedTableCell tdProps={rc.getTdProps(0)} text={flowName} />
@@ -415,6 +444,11 @@ export default function AppUseLog() {
                                             </div>
                                             <AuditFeedbackButton count={el.comment_count} comments={el.feedback_comments} />
                                         </div>
+                                    </TableCell>
+                                    <TableCell {...rc.getTdProps(abnormalIdx)} className="overflow-hidden">
+                                        {el.answer_abnormal === 1
+                                            ? <Badge variant="outline" className="text-red-500">{t('log.yes')}</Badge>
+                                            : <Badge variant="outline">{t('log.no')}</Badge>}
                                     </TableCell>
                                     {appConfig.isPro && (
                                         <TableCell {...rc.getTdProps(sensitiveIdx)} className="overflow-hidden">

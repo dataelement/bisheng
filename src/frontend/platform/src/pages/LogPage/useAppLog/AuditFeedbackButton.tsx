@@ -1,8 +1,8 @@
-import { ThunmbIcon } from '@/components/bs-icons/thumbs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog';
+import { MessageSquareText } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import MessageFeedback from './MessageFeedback';
-import { useState } from 'react';
 
 interface Props {
     count?: number;
@@ -15,12 +15,12 @@ export default function AuditFeedbackButton({ count = 0, comments = [] }: Props)
     return <>
         <button
             type="button"
-            aria-label={t('log.viewFeedback')}
-            title={t('log.viewFeedback')}
+            aria-label={t('log.feedbackOpinions')}
+            title={t('log.feedbackOpinions')}
             className="flex flex-col items-center text-xs rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
             onClick={() => setOpen(true)}
         >
-            <ThunmbIcon type="copy" className={count ? 'text-primary hover:text-primary' : ''} />
+            <MessageSquareText size={20} className={count ? 'text-primary' : 'text-gray-400'} />
             <span>{count}</span>
         </button>
         <Dialog open={open} onOpenChange={setOpen}>

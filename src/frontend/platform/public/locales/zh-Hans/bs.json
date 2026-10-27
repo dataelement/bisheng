@@ -1900,6 +1900,7 @@
     "unratedFeedback": "未评价",
     "viewFeedback": "查看反馈意见",
     "feedbackOpinions": "反馈意见",
+    "answerAbnormal": "是否异常",
     "noFeedback": "暂无反馈意见",
     "enterQuestion": "请先输入问题",
     "qaLibQuestionAnswerRequired": "QA知识库、问题、答案不能为空",
@@ -1937,7 +1938,8 @@
       "messageContent": "消息文本内容",
       "like": "点赞",
       "dislike": "点踩",
-      "copy": "复制",
+      "copy": "反馈意见",
+      "answerAbnormal": "是否异常",
       "sensitiveStatus": "是否命中内容安全审查"
     },
     "userRole": "用户",

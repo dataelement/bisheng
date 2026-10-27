@@ -260,6 +260,7 @@ export async function getAuditAppListApi(params: {
     end_date,
     feedback,
     sensitive_status,
+    answer_abnormal,
     page,
     page_size
 }) {
@@ -277,7 +278,8 @@ export async function exportCsvApi(params: {
     start_date,
     end_date,
     feedback,
-    sensitive_status
+    sensitive_status,
+    answer_abnormal
 }) {
     return await axios.get('/api/v1/audit/session/export', {
         params, paramsSerializer
@@ -292,7 +294,8 @@ export async function exportCsvDataApi(params: {
     start_date,
     end_date,
     feedback,
-    sensitive_status
+    sensitive_status,
+    answer_abnormal
 }) {
     return await axios.get('/api/v1/audit/session/export/data', {
         params, paramsSerializer

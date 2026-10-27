@@ -11,7 +11,7 @@ it('opens saved opinions directly from the feedback count and renders them as te
         { message_id: 321, liked: 0, comment: '<img src=x onerror=alert(1)>请补充出处' },
         { message_id: 322, liked: 2, comment: '历史意见' },
     ]} />);
-    const button = screen.getByRole('button', { name: 'log.viewFeedback' });
+    const button = screen.getByRole('button', { name: 'log.feedbackOpinions' });
     expect(button).toHaveTextContent('2');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     fireEvent.click(button);
@@ -26,7 +26,7 @@ it('opens saved opinions directly from the feedback count and renders them as te
 
 it('shows zero and an empty state when there are no saved opinions', () => {
     render(<AuditFeedbackButton count={0} comments={[]} />);
-    const button = screen.getByRole('button', { name: 'log.viewFeedback' });
+    const button = screen.getByRole('button', { name: 'log.feedbackOpinions' });
     expect(button).toHaveTextContent('0');
     fireEvent.click(button);
     expect(within(screen.getByRole('dialog')).getByText('log.noFeedback')).toBeInTheDocument();

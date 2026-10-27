@@ -5,10 +5,11 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 from sqlalchemy import Integer
 from bisheng.core.database.dialect_helpers import JsonType, LargeText, UPDATE_TIME_SERVER_DEFAULT
-from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_, 
+from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
                       select, text, update, col)
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.database.models.answer_failure import note_answer_failure
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 class LikedType(Enum):
@@ -334,6 +335,7 @@ class ChatMessageDao(MessageBase):
             session.add(message)
             session.commit()
             session.refresh(message)
+        note_answer_failure(message)
         return message
 
     @classmethod
@@ -342,6 +344,7 @@ class ChatMessageDao(MessageBase):
             session.add(message)
             await session.commit()
             await session.refresh(message)
+        note_answer_failure(message)
         return message
 
     @classmethod
@@ -353,13 +356,17 @@ class ChatMessageDao(MessageBase):
             for one in messages:
                 session.refresh(one)
                 ret.append(one)
-            return ret
+        for one in ret:
+            note_answer_failure(one)
+        return ret
 
     @classmethod
     async def ainsert_batch(cls, messages: List[ChatMessage]):
         async with get_async_db_session() as session:
             session.add_all(messages)
             await session.commit()
+        for one in messages:
+            note_answer_failure(one)
 
     @classmethod
     def get_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:

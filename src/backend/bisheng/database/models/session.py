@@ -41,6 +41,13 @@ class MessageSessionBase(SQLModelSerializable):
     dislike: Optional[int] = Field(default=0, description='Number of messages clicked')
     copied: Optional[int] = Field(default=0, description='Number of messages copied')
     sensitive_status: int = Field(default=SensitiveStatus.PASS.value, description='Review Status')
+    answer_abnormal: int = Field(
+        default=0,
+        sa_column=Column(
+            Integer, nullable=False, server_default=text('0'),
+            comment='回答过程是否出现失败: 0否 1是',
+        ),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -48,6 +55,58 @@ class MessageSessionBase(SQLModelSerializable):
 
 class MessageSession(MessageSessionBase, table=True):
     __tablename__ = 'message_session'
+
+
+def _mark_if_messages_already_failed(chat_id: str | None) -> None:
+    """会话往往在首条消息之后才创建. 创建时补看已写入的失败消息."""
+    if not chat_id:
+        return
+    try:
+        from bisheng.database.models.answer_failure import payload_has_answer_failure
+        from bisheng.database.models.message import ChatMessage
+
+        with get_sync_db_session() as session:
+            rows = session.exec(select(ChatMessage).where(ChatMessage.chat_id == chat_id)).all()
+        if any(
+            payload_has_answer_failure(
+                is_bot=bool(row.is_bot),
+                category=row.category or '',
+                extra=row.extra,
+                message=row.message,
+            )
+            for row in rows
+        ):
+            MessageSessionDao.mark_answer_abnormal(chat_id)
+    except Exception:
+        # 会话行已经提交. 补标失败只影响审计列表, 不能把创建会话变成失败.
+        from loguru import logger
+
+        logger.exception('mark existing answer failure failed chat_id={}', chat_id)
+
+
+def feedback_opinion_count():
+    """统计一个会话里的反馈意见条数.
+
+    空备注, break_answer 和 inaction 不算. 口径与审计列表上的意见按钮一致.
+
+    Returns:
+        按 chat_id 关联的条数子查询.
+    """
+    from bisheng.database.models.message import ChatMessage
+
+    return (
+        select(func.count(ChatMessage.id))
+        .where(
+            ChatMessage.chat_id == MessageSession.chat_id,
+            col(ChatMessage.is_bot).is_(True),
+            ChatMessage.remark.is_not(None),
+            ChatMessage.remark != '',
+            ChatMessage.remark.notin_(['break_answer', 'inaction']),
+        )
+        .correlate(MessageSession)
+        .scalar_subquery()
+    )
+
 
 class MessageSessionDao(MessageSessionBase):
 
@@ -62,7 +121,8 @@ class MessageSessionDao(MessageSessionBase):
             session.add(data)
             session.commit()
             session.refresh(data)
-            return data
+        _mark_if_messages_already_failed(data.chat_id)
+        return data
 
     @classmethod
     async def async_insert_one(cls, data: MessageSession) -> MessageSession:
@@ -75,7 +135,8 @@ class MessageSessionDao(MessageSessionBase):
             session.add(data)
             await session.commit()
             await session.refresh(data)
-            return data
+        _mark_if_messages_already_failed(data.chat_id)
+        return data
 
     @classmethod
     async def delete_session(cls, chat_id: str):
@@ -122,6 +183,8 @@ class MessageSessionDao(MessageSessionBase):
             statement = statement.where(MessageSession.dislike > 0)
         elif feedback == 'copied':
             statement = statement.where(MessageSession.copied > 0)
+        elif feedback == 'comment':
+            statement = statement.where(feedback_opinion_count() > 0)
 
         if not include_delete:
             statement = statement.where(MessageSession.is_delete == False)  # noqa
@@ -249,6 +312,23 @@ class MessageSessionDao(MessageSessionBase):
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.first()
+
+    @classmethod
+    def mark_answer_abnormal(cls, chat_id: str) -> None:
+        """把会话标成回答异常. 已经是异常时不再写.
+
+        Args:
+            chat_id: 会话 id.
+        """
+        if not chat_id:
+            return
+        statement = update(MessageSession).where(
+            MessageSession.chat_id == chat_id,
+            MessageSession.answer_abnormal == 0,
+        ).values(answer_abnormal=1)
+        with get_sync_db_session() as session:
+            session.exec(statement)
+            session.commit()
 
     @classmethod
     def update_sensitive_status(cls, chat_id: str, sensitive_status: SensitiveStatus):

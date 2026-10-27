@@ -55,12 +55,15 @@ async def get_session_list(login_user: UserPayload = Depends(UserPayload.get_log
                                                            description='like LikedislikeUnlikecopiedCopy:'),
                            sensitive_status: Optional[int] = Query(default=None,
                                                                    description='Sensitive word review status'),
+                           answer_abnormal: Optional[int] = Query(default=None, ge=0, le=1,
+                                                                  description='回答过程是否异常, 0否 1是'),
                            page: Optional[int] = Query(default=1, description='Page'),
                            page_size: Optional[int] = Query(default=10, description='Listings Per Page')):
     """ Filter all session lists """
     data, total = await AuditLogService.get_session_list(login_user, flow_ids, user_ids, group_ids, start_date,
                                                          end_date,
-                                                         feedback, sensitive_status, page, page_size)
+                                                         feedback, sensitive_status, page, page_size,
+                                                         answer_abnormal)
     return resp_200(data={
         'data': data,
         'total': total
@@ -77,10 +80,12 @@ async def get_session_messages(login_user: UserPayload = Depends(UserPayload.get
                                feedback: Optional[str] = Query(default=None,
                                                                description='like LikedislikeUnlikecopiedCopy:'),
                                sensitive_status: Optional[int] = Query(default=None,
-                                                                       description='Sensitive word review status')):
+                                                                       description='Sensitive word review status'),
+                               answer_abnormal: Optional[int] = Query(default=None, ge=0, le=1,
+                                                                      description='回答过程是否异常, 0否 1是')):
     """ Export data for a list of session details """
     result = await AuditLogService.get_session_messages(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
-                                                        feedback, sensitive_status)
+                                                        feedback, sensitive_status, answer_abnormal)
     return resp_200(data={
         'data': result
     })
