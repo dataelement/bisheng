@@ -283,3 +283,11 @@
 - 自动验证：前端 23 项回归、隔离目录服务 5 项测试、1,471 个严格类型文件、变更文件 ESLint、Ruff、词典生成与 i18n 检查、生产构建通过。后端测试加载实际目录服务，提供方、可用性与技能依赖使用夹具；jsdom 将当前环境中缺失原生组件的可选 canvas 视为未安装。
 - 全量 client lint 的 23 项存量错误位于 chatApi.ts、ComposerEditor.test.tsx、CitationReferencesDrawer.tsx，已核对三文件及 lint 配置与目标分支一致；完整后端环境和真实账号网页/原生桌面验收待执行。发布需同步后端目录接口与 client 网页。
 - 本轮交付源码 PR；证据位于主工作区 `outputs/bisheng-work120-tool-localization-20261027/`。
+
+## 2026-10-27 — 3006 recent-fix integration candidate
+
+- Candidate branch `codex/3006-recent-fixes-20261027` combines release baseline `55d698144` with PRs 2517, 2518, 2519, 2520, 2521, 2523 and 2524 at the recorded heads. Existing 3006 tool/Skill permissions and workbench Logo support are preserved.
+- Scope includes stable capability ordering, model display refresh, image paste, resource icons, permission/tool localization, task workspace continuity, public-origin forwarding, credit and audit fixes already merged on the release branch. Native desktop packages remain a separate delivery.
+- Integration verification: 330 backend regressions, 88 client tests and 100 platform tests passed. Strict type checks passed for 1,476 client and 616 platform files. Both production frontend builds and candidate application import passed against the current 3006 runtime image.
+- Test integration aligns composer assertions with icon/name resource chips, uses the Node renderer under jsdom, and checks department scope together with its child-department label. These fixture changes preserve product behavior. Changed test ESLint passed.
+- Deployment rehearsal and live switch evidence is recorded separately under `outputs/3006-recent-fixes-20261027/` in the main workspace. Real-account and native desktop acceptance remains a user verification step.

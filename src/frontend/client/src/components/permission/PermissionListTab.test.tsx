@@ -107,7 +107,7 @@ describe("F048 Client PermissionListTab", () => {
     expect(screen.getByRole("searchbox")).toBeInTheDocument();
     expect(screen.getByText("f048_permission.source.direct")).toBeInTheDocument();
     expect(
-      screen.getByText("f048_permission.source.department"),
+      screen.getByText("f048_permission.source.department · f048_permission.source.include_children"),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/f048_permission\.source\.include_children/),
