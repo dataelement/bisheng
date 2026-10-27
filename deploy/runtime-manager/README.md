@@ -26,7 +26,7 @@
 
 3. 在宿主执行 `python -m runtime_manager.host_isolation --settings /etc/bisheng/runtime-host-isolation.json --describe`。该命令只读，输出实际 Engine ID、network ID、配置摘要及 descriptor。将完整输出按 node_id 存入 backend 的 `app_runtime.runtime_host_isolation_nodes` 或 `BISHENG_RUNTIME_HOST_ISOLATION_NODES` JSON 映射。网络/出口容器/IP/探测镜像或固定目标改变后重新生成并更新映射。后端旧报告随配置摘要变化立即失效。
 4. backend 的 `runtime_service_keys` 增加单独 `roles=["host-isolation"]`、绑定该 node_id 的签名身份。manager 的身份保持 `roles=["manager"]`；两者不能共用 key。写 `/etc/bisheng/runtime-host-isolation.env`，只配置 `HOST_ISOLATION_KEY_ID`、`HOST_ISOLATION_SECRET`、`RTM_DOCKER_HOST`（如 socket proxy HTTP 地址；也可用宿主 socket）。密钥不写进 Git。Compose 已登记 `host-isolation-node-1`；其 secret 对应 `BISHENG_RUNTIME_HOST_ISOLATION_SECRET`，节点描述对应 `BISHENG_RUNTIME_HOST_ISOLATION_NODES`。宿主 `platform_base_url` 使用宿主可达的 nginx/backend 地址，不能使用仅在容器 DNS 内有效的 `backend` 主机名。
-5. 配置 manager 的 `RTM_NODE_ID`、`RTM_PLATFORM_BASE_URL`、`RTM_PLATFORM_KEY_ID`、`RTM_PLATFORM_SECRET`，使其可使用已有 v2 内部签名客户端读取宿主证明。legacy 形态也需要这条证明读取配置；不改变 legacy 业务 API。
+5. 配置 manager 的 `RTM_NODE_ID`、`RTM_PLATFORM_BASE_URL`、`RTM_PLATFORM_KEY_ID`、`RTM_PLATFORM_SECRET`，使其可使用已有 v2 内部签名客户端读取宿主证明。legacy 形态也需要这条证明读取配置；不改变 legacy 业务 API。注意：manager 与出站代理以宿主 systemd 进程运行的部署，只补这条配置不够——隔离规则会拦掉应用到宿主网关的出站和附件访问，只能整体升级到 v2（2026-10-27 在 114 验证，见 `docs/architecture/14-app-factory-deployment.md`「形态二」）。
 6. 执行 `bash deploy/runtime-manager/install-host-isolation.sh /opt/bisheng/runtime-manager/.venv/bin/python`。脚本验证包和配置后安装并运行单元；首次失败不会启用 timer。使用 `systemctl status` 和 `journalctl -u bisheng-host-isolation` 定位错误；不得只按进程存活认定隔离成立。
 
 ## 行为与恢复
