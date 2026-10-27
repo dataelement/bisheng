@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -48,7 +49,11 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
-    msg = {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()}
+    # Pydantic validator context can contain ValueError instances.
+    msg = jsonable_encoder(
+        {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()},
+        custom_encoder={ValueError: str},
+    )
     logger.error(f"{req.method} {req.url} {str(exc.errors())[:100]}")
     return JSONResponse(content=msg)
 

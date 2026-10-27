@@ -78,3 +78,46 @@ it('cancels a row edit without changing the saved allowance', async () => {
     expect(screen.getByText('1000')).toBeInTheDocument()
     expect(saveCreditRule).not.toHaveBeenCalled()
 })
+
+// Boundary precision must match backend accounting without rounding through Number.
+it.each(['9999999999999', '9223372036854.775808', '9223372036855'])('blocks an overflowing credit allowance %s before saving', async credits => {
+    render(<CreditRulesView />)
+    await addDepartment()
+    const input = screen.getByLabelText('dsh.unified.monthlyCredits')
+    fireEvent.change(input, { target: { value: credits } })
+    expect(input).toHaveValue(credits)
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input).toHaveAccessibleDescription('dsh.unified.creditRangeHint')
+    expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'dsh.unified.save' }))
+    expect(saveCreditRule).not.toHaveBeenCalled()
+})
+it('saves the exact maximum and recovers from an overflowing draft', async () => {
+    render(<CreditRulesView />)
+    await addDepartment()
+    const input = screen.getByLabelText('dsh.unified.monthlyCredits')
+    fireEvent.change(input, { target: { value: '9223372036854.775808' } })
+    expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeDisabled()
+    fireEvent.change(input, { target: { value: '9223372036854.775807' } })
+    expect(input).toHaveAttribute('aria-invalid', 'false')
+    expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'dsh.unified.save' }))
+    await waitFor(() => expect(saveCreditRule).toHaveBeenCalledWith({ kind: 'DEPARTMENT', id: 10 }, {
+        version: 0, enabled: true, monthly_credits: '9223372036854.775807',
+    }))
+})
+
+it('preserves an existing user allowance when an overflowing edit is cancelled', async () => {
+    vi.mocked(getCreditRules).mockResolvedValue([{ subject_type: 'USER', subject_id: 2, name: 'Alice', version: 4, enabled: true, monthly_credits: '5000000' }])
+    render(<CreditRulesView />)
+    fireEvent.click(await screen.findByRole('button', { name: 'dsh.unified.edit' }))
+    const input = screen.getByRole('textbox', { name: 'dsh.unified.monthlyCredits' })
+    fireEvent.change(input, { target: { value: '9999999999999' } })
+    expect(input).toHaveValue('9999999999999')
+    expect(screen.getByRole('alert')).toHaveTextContent('dsh.unified.creditRangeHint')
+    expect(screen.getByRole('alert')).toHaveClass('text-destructive')
+    expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'dsh.unified.cancel' }))
+    expect(screen.getByText('5000000')).toBeInTheDocument()
+    expect(saveCreditRule).not.toHaveBeenCalled()
+})
