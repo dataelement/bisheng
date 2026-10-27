@@ -1,6 +1,6 @@
 [project]
 name = "bisheng-cli"
-version = "3.0.0"
+version = "3.0.0.post1"
 description = "BiSheng developer CLI — login / deploy / logs for hosted apps, zero coupling to the backend package"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }

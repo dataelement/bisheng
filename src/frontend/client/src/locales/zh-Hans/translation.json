@@ -2614,6 +2614,10 @@
       "type": "环境变量",
       "missing": "提交时未配置",
       "present": "提交时已配置"
+    },
+    "app_release_notes": {
+      "title": "发布说明",
+      "empty": "未填写发布说明"
     }
   }
 }

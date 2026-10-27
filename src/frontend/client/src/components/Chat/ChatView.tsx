@@ -15,7 +15,8 @@ import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel
 import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
 import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspacePanel';
 import { useCompareTransitionFreeze } from '~/components/Linsight/Artifacts/useCompareTransitionFreeze';
-import { collectConversationWorkspaceFiles } from '~/components/Linsight/Artifacts/artifactUtils';
+import { collectConversationWorkspaceFiles, getWorkspaceLoadState } from '~/components/Linsight/Artifacts/artifactUtils';
+import { TaskTurnLoadContext } from '~/components/Linsight/Execution/taskTurnLoad';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { getLinsightSessionVersionList, userStopLinsightEvent } from '~/api/linsight';
 import { SopStatus, taskModeState } from '~/store/linsight';
@@ -703,6 +704,23 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const taskWorkspaceFiles = useMemo(() => {
     return collectConversationWorkspaceFiles(taskVersionIds.map((versionId) => linsightMap.get(versionId)));
   }, [taskVersionIds, linsightMap]);
+  // Task turns hydrate lazily (TaskTurnPanel), so on a cold load (share page,
+  // full refresh) the store is still empty — that must not read as "no files".
+  // A turn whose load failed reports it here; it never reaches the store.
+  const [taskLoadFailedIds, setTaskLoadFailedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const reportTaskTurnLoadFailed = useCallback((versionId: string, failed: boolean) => {
+    setTaskLoadFailedIds((prev) => {
+      if (prev.has(versionId) === failed) return prev;
+      const next = new Set(prev);
+      if (failed) next.add(versionId);
+      else next.delete(versionId);
+      return next;
+    });
+  }, []);
+  const taskWorkspaceLoadState = useMemo(
+    () => getWorkspaceLoadState(taskVersionIds, linsightMap, taskLoadFailedIds),
+    [taskVersionIds, linsightMap, taskLoadFailedIds],
+  );
 
   // F035: while the latest task round is in a non-terminal state (generating /
   // running / queued), the input stays editable but the send button is disabled
@@ -761,6 +779,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   }, [taskRunning, latestTaskVersionId, updateLinsight, stopGenerating]);
 
   return (
+    <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
     <Presentation isLingsi={false}>
       <div className={cn('h-full')}>
         <div
@@ -943,6 +962,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           <div ref={dockedCardRef} className="h-full min-w-[420px]">
                             <WorkspacePanel
                               files={taskWorkspaceFiles}
+                              loading={taskWorkspaceLoadState === 'loading'}
+                              loadFailed={taskWorkspaceLoadState === 'failed'}
                               versionId={latestTaskVersionId}
                               citations={taskLinsight?.output_result?.citations}
                               messageId={taskLinsight?.message_id ?? undefined}
@@ -973,6 +994,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       const mobilePanel = (
                         <WorkspacePanel
                           files={taskWorkspaceFiles}
+                          loading={taskWorkspaceLoadState === 'loading'}
+                          loadFailed={taskWorkspaceLoadState === 'failed'}
                           versionId={latestTaskVersionId}
                           citations={taskLinsight?.output_result?.citations}
                           messageId={taskLinsight?.message_id ?? undefined}
@@ -1130,6 +1153,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             >
               <WorkspacePanel
                 files={taskWorkspaceFiles}
+                loading={taskWorkspaceLoadState === 'loading'}
+                loadFailed={taskWorkspaceLoadState === 'failed'}
                 versionId={latestTaskVersionId}
                 citations={taskLinsight?.output_result?.citations}
                 messageId={taskLinsight?.message_id ?? undefined}
@@ -1169,6 +1194,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
       </div>
     </Presentation>
+    </TaskTurnLoadContext.Provider>
   );
 };
 

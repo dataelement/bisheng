@@ -77,6 +77,7 @@ _DELEGATE_ONLY_SENTENCE = "这把密钥被配置为委托专用（delegate），
 _DELEGATE_ONLY_NEXT_STEP = "请平台管理员另外签发一把不含 delegate 位的服务账号密钥用于 CLI。"
 
 ERROR_HINTS: dict[int, tuple[str, str]] = {
+    16233: ("Release notes exceed the limit", "Shorten the release notes to 2,000 characters and retry."),
     # --- F049, 260 segment: credential and scope ---
     26001: (
         "请求没有携带可识别的 Authorization 头",
@@ -256,6 +257,7 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
 ERROR_HINTS[16125] = ERROR_HINTS[16226]
 
 ERROR_EXIT_CODES: dict[int, int] = {
+    16233: EXIT_LOCAL_INVALID,
     26001: EXIT_AUTH,
     26002: EXIT_AUTH,
     26027: EXIT_AUTH,
@@ -363,6 +365,11 @@ def error_from_platform(
 ) -> CliError:
     """Translate a platform error code into a CliError."""
     hint = ERROR_HINTS.get(code)
+    if code == 16233:
+        from bisheng_cli.release_notes import MAX_CODEPOINTS
+        from bisheng_cli.release_notes import message as release_notes_message
+
+        hint = (release_notes_message("too_long", limit=MAX_CODEPOINTS), release_notes_message("fix_input"))
     if hint is not None:
         human, next_step = hint
         next_step = _augment_next_step(code, next_step, details)

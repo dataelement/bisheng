@@ -2686,6 +2686,10 @@
       "type": "Environment variable",
       "missing": "Not configured at submission",
       "present": "Configured at submission"
+    },
+    "app_release_notes": {
+      "title": "Release notes",
+      "empty": "No release notes provided"
     }
   }
 }

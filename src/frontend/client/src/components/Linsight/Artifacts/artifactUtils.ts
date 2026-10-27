@@ -181,6 +181,27 @@ export function collectConversationWorkspaceFiles(
     return Array.from(collected.values());
 }
 
+export type WorkspaceLoadState = 'loading' | 'failed' | 'ready';
+
+/**
+ * Whether every task turn of the conversation has its detail in the store.
+ * A turn that is neither loaded nor marked failed is still loading; without
+ * this the workspace shows its empty state during the cold load.
+ */
+export function getWorkspaceLoadState(
+    versionIds: string[],
+    loadedIds: { has: (id: string) => boolean },
+    failedIds: { has: (id: string) => boolean },
+): WorkspaceLoadState {
+    let failed = false;
+    for (const id of versionIds) {
+        if (loadedIds.has(id)) continue;
+        if (!failedIds.has(id)) return 'loading';
+        failed = true;
+    }
+    return failed ? 'failed' : 'ready';
+}
+
 /**
  * Resolve a MinIO share url into a same-origin fetchable path.
  *

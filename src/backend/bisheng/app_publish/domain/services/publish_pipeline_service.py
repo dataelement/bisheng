@@ -56,6 +56,7 @@ from bisheng.app_publish.domain.models.app_deployment import (
     AppDeployment,
     AppDeploymentDao,
 )
+from bisheng.app_publish.domain.release_notes import normalize_release_notes
 from bisheng.app_publish.domain.schemas.app_manifest import ICON_EXTENSIONS, MAX_ICON_BYTES, AppManifest
 from bisheng.app_publish.domain.schemas.failure import failure_from_error
 from bisheng.app_publish.domain.services import (
@@ -201,6 +202,7 @@ class PublishPipelineService:
         app_id: str | None = None,
         confirm_schema_change: bool = False,
         tenant_id: int | None = None,
+        release_notes: str | None = None,
     ) -> AcceptResult:
         """Receive one package. Fast, local, and it leaves nothing behind when it refuses.
 
@@ -219,6 +221,7 @@ class PublishPipelineService:
                 hints=["请联系管理员在部署配置中开启 app_runtime"],
             )
 
+        release_notes = normalize_release_notes(release_notes)
         tenant = tenant_id if tenant_id is not None else get_current_tenant_id()
         owner_user_id = resource_owner_of(principal)
         package_service.check_upload_size(Path(package_path).stat().st_size)
@@ -268,6 +271,7 @@ class PublishPipelineService:
             )
 
             deployment = AppDeployment(
+                release_notes=release_notes,
                 tenant_id=tenant,
                 app_id=app_id,
                 owner_user_id=owner_user_id,

@@ -1,4 +1,7 @@
-import type { ApprovalInstanceDetail, ApprovalTaskDetail } from "~/api/approval";
+import type {
+  ApprovalInstanceDetail,
+  ApprovalTaskDetail,
+} from "~/api/approval";
 import { cn } from "~/utils";
 import type { AppReviewTarget } from "./AppReviewView";
 import {
@@ -37,7 +40,11 @@ type SchemaChangeEntry = {
 };
 
 /** Ops the backend gate required confirmation for (schema_evolution_service.BREAKING_OPS). */
-const BREAKING_SCHEMA_OPS = new Set(["drop_table", "drop_column", "modify_column"]);
+const BREAKING_SCHEMA_OPS = new Set([
+  "drop_table",
+  "drop_column",
+  "modify_column",
+]);
 
 const SCHEMA_OP_I18N: Record<string, string> = {
   add_table: "com_approval_app_publish_schema_op_add_table",
@@ -73,14 +80,25 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function toCapabilityEntries(value: unknown, localize: LocalizeFn): CapabilityEntry[] {
+function toCapabilityEntries(
+  value: unknown,
+  localize: LocalizeFn,
+): CapabilityEntry[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
-    if (typeof item === "string") return { type: "", name: item, description: "" };
+    if (typeof item === "string")
+      return { type: "", name: item, description: "" };
     const record = asRecord(item);
     if (record.kind === "secret") {
-      return {type: localize("approval.app_environment.type"), name: asText(record.name),
-        description: localize(record.reason === "missing_value" ? "approval.app_environment.missing" : "approval.app_environment.present")};
+      return {
+        type: localize("approval.app_environment.type"),
+        name: asText(record.name),
+        description: localize(
+          record.reason === "missing_value"
+            ? "approval.app_environment.missing"
+            : "approval.app_environment.present",
+        ),
+      };
     }
     return {
       type: asText(record.type),
@@ -97,7 +115,8 @@ function toVisibilityEntries(value: unknown): VisibilityEntry[] {
     const record = asRecord(item);
     return {
       type: asText(record.type) || asText(record.subject_type),
-      name: asText(record.name) || asText(record.subject_name) || asText(record.id),
+      name:
+        asText(record.name) || asText(record.subject_name) || asText(record.id),
     };
   });
 }
@@ -111,16 +130,30 @@ function toSchemaChangeEntries(value: unknown): SchemaChangeEntry[] {
     if (!table) return [];
     const column = asText(record.column);
     const op = asText(record.op);
-    return [{ op, target: column ? `${table}.${column}` : table, breaking: BREAKING_SCHEMA_OPS.has(op) }];
+    return [
+      {
+        op,
+        target: column ? `${table}.${column}` : table,
+        breaking: BREAKING_SCHEMA_OPS.has(op),
+      },
+    ];
   });
 }
 
 function SectionTitle({ children }: { children: string }) {
-  return <div className="mb-2 text-[14px] font-medium text-text-primary">{children}</div>;
+  return (
+    <div className="mb-2 text-[14px] font-medium text-text-primary">
+      {children}
+    </div>
+  );
 }
 
 function SectionEmpty({ children }: { children: string }) {
-  return <div className="rounded-lg bg-[#fafbfc] p-4 text-[13px] text-[#86909c]">{children}</div>;
+  return (
+    <div className="rounded-lg bg-[#fafbfc] p-4 text-[13px] text-[#86909c]">
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -140,9 +173,15 @@ export function AppPublishDetailPanel({
   onOpenReview,
 }: AppPublishDetailPanelProps) {
   const snapshot: Record<string, unknown> = detail.detail_snapshot ?? {};
-  const instanceId = scope === "task" ? detail.instance_id ?? null : detail.instance_id ?? detail.id ?? null;
-  const serialNo = instanceId ? formatSerialNo(instanceId, detail.create_time) : "--";
-  const instanceStatus = "instance_status" in detail ? detail.instance_status : undefined;
+  const instanceId =
+    scope === "task"
+      ? (detail.instance_id ?? null)
+      : (detail.instance_id ?? detail.id ?? null);
+  const serialNo = instanceId
+    ? formatSerialNo(instanceId, detail.create_time)
+    : "--";
+  const instanceStatus =
+    "instance_status" in detail ? detail.instance_status : undefined;
 
   const appName = asText(snapshot.app_name) || detail.business_name || "--";
 
@@ -169,11 +208,20 @@ export function AppPublishDetailPanel({
   const basicRows: [string, string][] = [
     [localize("com_approval_field_serial_no"), serialNo],
     [localize("com_approval_app_publish_field_app_name"), appName],
-    [localize("com_approval_app_publish_field_owner"), asText(snapshot.owner_user_name) || detail.applicant_user_name || "--"],
+    [
+      localize("com_approval_app_publish_field_owner"),
+      asText(snapshot.owner_user_name) || detail.applicant_user_name || "--",
+    ],
     [localize("com_approval_app_publish_field_source"), sourceText],
     [localize("com_approval_app_publish_field_release_kind"), releaseKindText],
-    [localize("com_approval_app_publish_field_version"), versionNo ? `v${versionNo}` : "--"],
-    [localize("com_approval_app_publish_field_submitted_at"), formatTime(asText(snapshot.submitted_at) || detail.create_time)],
+    [
+      localize("com_approval_app_publish_field_version"),
+      versionNo ? `v${versionNo}` : "--",
+    ],
+    [
+      localize("com_approval_app_publish_field_submitted_at"),
+      formatTime(asText(snapshot.submitted_at) || detail.create_time),
+    ],
   ];
 
   // AC-16: says why the request skipped the department approval node, so an
@@ -191,7 +239,8 @@ export function AppPublishDetailPanel({
   // declared tables. Breaking rows were confirmed by the publisher at submit
   // time — the approver sees what was confirmed, they are not asked again.
   const schemaChange = toSchemaChangeEntries(snapshot.schema_change);
-  const schemaChangeBreaking = asRecord(snapshot.schema_change).has_breaking === true;
+  const schemaChangeBreaking =
+    asRecord(snapshot.schema_change).has_breaking === true;
 
   const tier = asRecord(snapshot.tier);
   const cpuMillicores = Number(tier.cpu_millicores);
@@ -199,12 +248,17 @@ export function AppPublishDetailPanel({
   const tierRows: [string, string][] = [
     [
       localize("com_approval_app_publish_field_tier_name"),
-      asText(tier.name) || asText(tier.code) || asText(snapshot.tier_name) || "--",
+      asText(tier.name) ||
+        asText(tier.code) ||
+        asText(snapshot.tier_name) ||
+        "--",
     ],
     [
       localize("com_approval_app_publish_field_cpu"),
       Number.isFinite(cpuMillicores) && cpuMillicores > 0
-        ? localize("com_approval_app_publish_cpu_cores", { value: String(cpuMillicores / 1000) })
+        ? localize("com_approval_app_publish_cpu_cores", {
+            value: String(cpuMillicores / 1000),
+          })
         : "--",
     ],
     [
@@ -229,7 +283,9 @@ export function AppPublishDetailPanel({
 
       {/* ① Basic information */}
       <div>
-        <SectionTitle>{localize("com_approval_section_basic_info")}</SectionTitle>
+        <SectionTitle>
+          {localize("com_approval_section_basic_info")}
+        </SectionTitle>
         <InfoGrid rows={basicRows} />
         {/* AC-24's third operation. It sits with the release's identity rather
             than beside 通过 / 驳回: reading the code is what you do *before*
@@ -262,22 +318,44 @@ export function AppPublishDetailPanel({
         )}
       </div>
 
+      <div className="min-w-0">
+        <SectionTitle>
+          {localize("approval.app_release_notes.title")}
+        </SectionTitle>
+        <p className="whitespace-pre-wrap break-words text-body-sm text-text-1 [overflow-wrap:anywhere]">
+          {typeof snapshot.release_notes === "string" && snapshot.release_notes
+            ? snapshot.release_notes
+            : localize("approval.app_release_notes.empty")}
+        </p>
+      </div>
+
       {/* ② Declared platform capabilities */}
       <div>
-        <SectionTitle>{localize("com_approval_app_publish_section_capabilities")}</SectionTitle>
+        <SectionTitle>
+          {localize("com_approval_app_publish_section_capabilities")}
+        </SectionTitle>
         {capabilities.length === 0 ? (
-          <SectionEmpty>{localize("com_approval_app_publish_capabilities_empty")}</SectionEmpty>
+          <SectionEmpty>
+            {localize("com_approval_app_publish_capabilities_empty")}
+          </SectionEmpty>
         ) : (
           <div className="overflow-hidden rounded-lg border border-[#f2f3f5]">
             {capabilities.map((capability, index) => (
               <div
                 key={`${capability.type}-${capability.name}-${index}`}
-                className={cn("bg-white px-3 py-2", index > 0 && "border-t border-[#f2f3f5]")}
+                className={cn(
+                  "bg-white px-3 py-2",
+                  index > 0 && "border-t border-[#f2f3f5]",
+                )}
               >
-                <div className="text-[14px] font-medium text-text-primary break-all">{capability.name || "--"}</div>
+                <div className="text-[14px] font-medium text-text-primary break-all">
+                  {capability.name || "--"}
+                </div>
                 {(capability.type || capability.description) && (
                   <div className="mt-0.5 text-[12px] text-[#86909c] break-all">
-                    {[capability.type, capability.description].filter(Boolean).join(" · ")}
+                    {[capability.type, capability.description]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                 )}
               </div>
@@ -288,9 +366,13 @@ export function AppPublishDetailPanel({
 
       {/* ③ Visibility snapshot */}
       <div>
-        <SectionTitle>{localize("com_approval_app_publish_section_visibility")}</SectionTitle>
+        <SectionTitle>
+          {localize("com_approval_app_publish_section_visibility")}
+        </SectionTitle>
         {visibility.length === 0 ? (
-          <SectionEmpty>{localize("com_approval_app_publish_visibility_empty")}</SectionEmpty>
+          <SectionEmpty>
+            {localize("com_approval_app_publish_visibility_empty")}
+          </SectionEmpty>
         ) : (
           <div className="flex flex-wrap gap-2 rounded-lg bg-[#fafbfc] p-4">
             {visibility.map((entry, index) => (
@@ -307,7 +389,9 @@ export function AppPublishDetailPanel({
 
       {/* ④ Resource tier (+ the structure-change row when there is one) */}
       <div>
-        <SectionTitle>{localize("com_approval_app_publish_section_tier")}</SectionTitle>
+        <SectionTitle>
+          {localize("com_approval_app_publish_section_tier")}
+        </SectionTitle>
         <InfoGrid rows={tierRows} />
         {schemaChange.length > 0 && (
           <div
@@ -331,7 +415,9 @@ export function AppPublishDetailPanel({
                   className="flex flex-wrap items-center gap-2 text-[12px] text-[#4e5969]"
                 >
                   <span className="rounded bg-white px-1.5 py-0.5 text-[#1d2129]">
-                    {SCHEMA_OP_I18N[entry.op] ? localize(SCHEMA_OP_I18N[entry.op]) : entry.op || "--"}
+                    {SCHEMA_OP_I18N[entry.op]
+                      ? localize(SCHEMA_OP_I18N[entry.op])
+                      : entry.op || "--"}
                   </span>
                   <code className="break-all font-mono">{entry.target}</code>
                   {entry.breaking && (
