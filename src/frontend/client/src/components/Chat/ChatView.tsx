@@ -837,6 +837,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           onPreviewFile={taskArtifacts.openPreview}
                           hideEmptyState
                           flatMode
+                          scrollOnUserMessage
                         />)}
                         {/* Soft translucent fade so the scrolling step flow
                             dissolves into the pinned task panel / input instead of

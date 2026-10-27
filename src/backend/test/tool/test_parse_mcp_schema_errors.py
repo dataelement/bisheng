@@ -1,8 +1,8 @@
-"""MCP schema connect failures must surface as 15024, not an unhandled 500."""
+"""MCP schema connect failures must surface as a connection error, not an unhandled 500."""
 
 import pytest
 
-from bisheng.common.errcode.tool import ToolMcpSchemaError
+from bisheng.common.errcode.tool import ToolMcpRequestError
 from bisheng.tool.domain.services import tool as tool_mod
 from bisheng.tool.domain.services.tool import ToolServices, _flatten_mcp_error
 
@@ -19,8 +19,9 @@ async def test_parse_mcp_schema_maps_exception_group_to_tool_error(monkeypatch):
 
     monkeypatch.setattr(tool_mod.ClientManager, "connect_mcp_from_json", _boom)
 
-    with pytest.raises(ToolMcpSchemaError) as exc_info:
+    with pytest.raises(ToolMcpRequestError) as exc_info:
         await ToolServices.parse_mcp_schema(
             '{"mcpServers":{"remote-tool":{"type":"sse","url":"http://127.0.0.1:9/sse"}}}'
         )
-    assert "Connection closed" in str(exc_info.value)
+    assert exc_info.value.code == 15032
+    assert "Connection closed" not in str(exc_info.value)

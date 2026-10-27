@@ -121,7 +121,7 @@ const CreateDataSet = forwardRef<CreateDataSetHandle, CreateDataSetProps>(({ onC
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[625px]">
+            <DialogContent className="grid-cols-1 sm:max-w-[625px]">
                 <DialogHeader>
                     <DialogTitle>{t('dataset.createDataset')}</DialogTitle>
                 </DialogHeader>
