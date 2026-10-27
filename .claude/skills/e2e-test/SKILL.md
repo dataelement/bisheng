@@ -70,7 +70,8 @@ description: >-
 检查共享 helpers 是否存在：
 
 ```
-src/backend/test/e2e/
+# 仓库根目录。不要放在 src/backend/test/e2e 或 src/frontend/**/e2e。
+e2e/
 ├── conftest.py       # pytest fixtures（认证、client、cleanup）
 ├── helpers/
 │   ├── __init__.py
@@ -87,7 +88,7 @@ src/backend/test/e2e/
 
 基于 `references/test-template.md` 生成测试文件。
 
-**文件命名**：`src/backend/test/e2e/test_e2e_{feature_name}.py`
+**文件命名**：`e2e/<feature>/test_e2e_{feature_name}.py`（仓库根目录）
 
 **强制生成规则（12 条）**：
 
@@ -97,7 +98,7 @@ src/backend/test/e2e/
 4. **认证流程**：通过 helpers 获取 JWT token，注入到请求 headers。测试管理员和普通用户两种角色
 5. **响应格式断言**：所有 API 响应必须断言 `UnifiedResponseModel` 格式（`status_code`, `status_message`, `data`）
 6. **权限测试配对**：每个"允许"操作配对一个"拒绝"测试（不同角色/不同租户）
-7. **共享 helpers**：导入 `test/e2e/helpers/` 的函数，**禁止在测试文件内重新定义**通用工具函数
+7. **共享 helpers**：导入 `e2e/helpers/` 的函数，**禁止在测试文件内重新定义**通用工具函数
 8. **AC 追溯**：每个测试方法的 docstring 标注 `AC-NN: <描述>`
 9. **API 验证**：数据变更操作后，通过 GET 请求断言最终状态（不仅依赖创建响应）
 10. **错误码精确断言**：业务错误断言具体的 MMMEE 错误码，不仅检查非 200
@@ -109,8 +110,8 @@ src/backend/test/e2e/
 运行生成的测试：
 
 ```bash
-cd src/backend
-.venv/bin/pytest test/e2e/test_e2e_{feature_name}.py -v
+# 在仓库根目录执行，虚拟环境仍用后端的。
+src/backend/.venv/bin/pytest e2e/<feature>/test_e2e_{feature_name}.py -v
 ```
 
 如果失败，按照 `references/common-pitfalls.md` 的诊断表定位问题。
@@ -120,13 +121,13 @@ cd src/backend
 **调试技巧**：
 ```bash
 # 单个测试
-.venv/bin/pytest test/e2e/test_e2e_{feature}.py::TestE2E{Feature}::test_ac01 -v -s
+src/backend/.venv/bin/pytest e2e/<feature>/test_e2e_{feature}.py::TestE2E{Feature}::test_ac01 -v -s
 
 # 显示完整请求/响应
-.venv/bin/pytest test/e2e/test_e2e_{feature}.py -v -s --log-cli-level=DEBUG
+src/backend/.venv/bin/pytest e2e/<feature>/test_e2e_{feature}.py -v -s --log-cli-level=DEBUG
 
 # 只运行失败的
-.venv/bin/pytest test/e2e/test_e2e_{feature}.py --lf -v
+src/backend/.venv/bin/pytest e2e/<feature>/test_e2e_{feature}.py --lf -v
 ```
 
 ### Step 6：覆盖报告
@@ -210,7 +211,7 @@ cd src/backend
 
 > 首次运行时由 Step 3 自动创建。以下是目标结构。
 
-### `test/e2e/helpers/auth.py`
+### `e2e/helpers/auth.py`
 
 | 函数 | 签名 | 用途 |
 |------|------|------|
@@ -219,7 +220,7 @@ cd src/backend
 | `create_test_user` | `(client, admin_token, username, role_id) -> dict` | 创建测试用户 |
 | `auth_headers` | `(token) -> dict` | 构建认证请求头 |
 
-### `test/e2e/helpers/api.py`
+### `e2e/helpers/api.py`
 
 | 导出 | 用途 |
 |------|------|
@@ -230,7 +231,7 @@ cd src/backend
 | `list_resources(client, path, token, params)` | 通用 GET 列表 |
 | `delete_resource(client, path, resource_id, token)` | 通用 DELETE |
 
-### `test/e2e/helpers/cleanup.py`
+### `e2e/helpers/cleanup.py`
 
 | 函数 | 用途 |
 |------|------|
