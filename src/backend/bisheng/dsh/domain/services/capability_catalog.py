@@ -48,6 +48,7 @@ class CapabilityCatalogService:
                         "resource_id": tool.id,
                         "kind": {0: "api", 1: "builtin", 2: "mcp"}[tool.is_preset],
                         "name": tool.name,
+                        "tool_key": tool.tool_key if tool.is_preset == 1 else None,
                         "description": tool.desc or "",
                         "provider": group.name,
                         "ready": tool.id not in disabled,

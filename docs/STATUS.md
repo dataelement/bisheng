@@ -203,3 +203,11 @@
 - 自动化：53 项默认授权、普通成员有效权限、既有指定用户授权、跨租户隔离、失败回滚及模型 DAO 回归通过；变更 Ruff、格式检查、diff 检查通过。本机轻量 Python 环境缺少完整 provider 依赖，测试启动器跳过 `llm.domain` 聚合入口，实际 DAO、异步 SQLite、策略仓储及事务照常执行；完整 provider 导入链由 3006 正常启动验证。
 - 3006 发布：`new-model-visibility-20261023`，基于现场 `capability-polish-20261023-121446`，仅覆盖三个后端文件，保留现有前端及其他会话更新；发布前执行中会话为零，旧发布保留用于回滚。服务健康检查通过，已安装源码哈希匹配。
 - 现场验证：真实数据库事务中验证默认所有成员可见、已有显式限制保留及重复初始化幂等，测试数据全部回滚。业务模型及授权保持原值。管理员从界面新建真实模型及普通用户真实调用留待产品验收。
+
+## 2026-10-27 — Work 工具列表、详情与搜索复用共享翻译
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@d2be34458dbfa19c40324f6916dfa75202743cf9`；分支 `codex/work120-tool-localization`，目录 `.worktrees/bisheng-work120-tool-localization`。
+- 实现：现有工具中英日词典迁入 `packages/locales/src/tool`，生成平台与客户端资源；目录为内置工具提供稳定 `tool_key`。列表、详情、无障碍名称和搜索使用统一显示数据，搜索同时覆盖原始文案和工具标识。自定义 API/MCP/技能保留配置文案，旧接口与未知工具使用原始信息。知识库检索复用已有分类翻译，当前 39 个内置工具均有词典条目。
+- 自动验证：前端 23 项回归、隔离目录服务 5 项测试、1,471 个严格类型文件、变更文件 ESLint、Ruff、词典生成与 i18n 检查、生产构建通过。后端测试加载实际目录服务，提供方、可用性与技能依赖使用夹具；jsdom 将当前环境中缺失原生组件的可选 canvas 视为未安装。
+- 全量 client lint 的 23 项存量错误位于 chatApi.ts、ComposerEditor.test.tsx、CitationReferencesDrawer.tsx，已核对三文件及 lint 配置与目标分支一致；完整后端环境和真实账号网页/原生桌面验收待执行。发布需同步后端目录接口与 client 网页。
+- 本轮交付源码 PR；证据位于主工作区 `outputs/bisheng-work120-tool-localization-20261027/`。
