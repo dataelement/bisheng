@@ -518,6 +518,8 @@
   "com_linsight_deliverable_not_generated": "(not generated)",
   "com_linsight_deliverable_not_generated_hint": "The model mentioned this file but never wrote it, so there is nothing to open.",
   "com_linsight_preview_load_failed": "Failed to load the file",
+  "com_linsight_preview_slides_generating": "Generating preview…",
+  "com_linsight_preview_slides_notice": "This preview is rendered on the server. Fonts and layout may differ slightly from PowerPoint; the downloaded file is authoritative.",
   "com_linsight_download_failed": "Download failed, please try again later",
   "com_linsight_exporting": "Exporting, please wait…",
   "com_linsight_export_success": "File downloaded",
@@ -1981,9 +1983,6 @@
     "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar.",
     "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it",
     "main_channel": "Channel name"
-  },
-  "com_tools": {
-    "image_view": "Image View"
   },
   "com_unified_permission": {
     "access_and_share": "Access and sharing",

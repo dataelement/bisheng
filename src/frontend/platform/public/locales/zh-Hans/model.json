@@ -12,6 +12,8 @@
     "linsightDefaultModelTooltip": "任务模式默认用这个模型执行任务。用户发起任务时，可以换成列表中的其他模型。",
     "workbenchVoiceModel": "工作台及知识空间语音模型",
     "sessionTitleGenerationModel": "应用会话标题生成模型",
+    "imageReadModel": "图片读取模型",
+    "imageReadModelTooltip": "用于查看文档中的图片，并判断哪些图片与问题有关。知识库问答、频道问答和日常对话都使用这里配置的模型。",
     "asrModel": "语音转文字（ASR）模型",
     "asrModelTooltip": "用于工作台对话中的语音输入，把用户说的话转成文字。",
     "knowledgeAsrModelTooltip": "用于音视频解析中语音转文字场景",

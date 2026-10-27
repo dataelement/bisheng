@@ -12,9 +12,9 @@
  *   redirect to `/403` — one forbidden tab would cost the whole detail page.
  *   Reads that a non-owner can legitimately hit therefore pass `silent: true`
  *   so the caller receives the envelope and can render an inline notice.
- * - **`entry_url` comes from the backend, whole.** Never compose it from
- *   `location.origin`: in dev the SPA runs on :3001 and `/apps` is not in the
- *   vite proxy, so a composed link would be dead.
+ * - **`entry_url` is the backend's configured address.** Browser surfaces use
+ *   the current origin and deployment prefix for the app route; API/CLI
+ *   consumers can keep using this configured full address.
  */
 import axios from "@/controllers/request"
 
@@ -47,7 +47,7 @@ export interface HostedAppDetail {
   tenant_id: number
   current_version_id: string | null
   pending_version_id: string | null
-  /** Full address of the entry, built by the backend. Do not compose it. */
+  /** Configured full address; browser links follow the current browser origin. */
   entry_url: string
   create_time: string | null
   update_time: string | null

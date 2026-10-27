@@ -56,3 +56,38 @@ class ToolMcpSchemaError(BaseErrorCode):
 class ToolMcpStdioError(BaseErrorCode):
     Code: int = 15025
     Msg: str = "MCP stdio mode is not supported"
+
+
+class ToolMcpConnectionError(BaseErrorCode):
+    Code: int = 15026
+    Msg: str = "Cannot connect to the MCP service. Check the address and network."
+
+
+class ToolMcpTimeoutError(BaseErrorCode):
+    Code: int = 15027
+    Msg: str = "MCP service timed out. Try again later."
+
+
+class ToolMcpAuthError(BaseErrorCode):
+    Code: int = 15028
+    Msg: str = "MCP service denied access. Check the API key and permissions."
+
+
+class ToolMcpNotFoundError(BaseErrorCode):
+    Code: int = 15029
+    Msg: str = "MCP service address was not found. Check the endpoint."
+
+
+class ToolMcpProtocolError(BaseErrorCode):
+    Code: int = 15030
+    Msg: str = "MCP service response does not match SSE. Check the transport type and endpoint."
+
+
+class ToolMcpUrlError(BaseErrorCode):
+    Code: int = 15031
+    Msg: str = "Invalid MCP service URL. Use a complete http:// or https:// address."
+
+
+class ToolMcpRequestError(BaseErrorCode):
+    Code: int = 15032
+    Msg: str = "Failed to retrieve MCP tools. Check the service status and configuration."

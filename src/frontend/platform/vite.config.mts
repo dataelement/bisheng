@@ -83,6 +83,12 @@ export default defineConfig(({ command, mode }) => {
   // More specific than `/api/` and must be registered first, otherwise Vite's
   // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
   proxyTargets[`${app_env.BASE_URL}/api/license`] = gatewayProxyConfig;
+  // This target must expose the app entry (nginx/gateway/app-proxy), not only
+  // FastAPI. Keep the browser URL on the current origin, including WebSockets.
+  proxyTargets[`${app_env.BASE_URL}/apps/`] = createFrontendProxy(
+    env.VITE_APP_PROXY_TARGET || target,
+    { rewrite, verbose: proxyLog },
+  );
   apiRoutes.forEach(route => {
     proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
   });

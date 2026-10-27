@@ -147,6 +147,7 @@
 | 网页读取内置工具及其配置、网页读取引用来源 | F085-web-fetch | 新增独立内置工具，配置与联网搜索分开保存；网页读取来源复用既有网页角标链路展示，不取得角标领域对象的所有权 |
 | 无新增领域对象 | F087-context-window-budget | 任务模式确定模型的上下文长度（高级配置 `context_window`、Ollama 上下文长度字段、服务商接口），并据此控制压缩与工具结果转存；不改变模型配置的存储结构 |
 | MinerU 4.0 解析提供方及其配置 | F076-mineru-v4 | 负责新增提供方的选择、输入输出适配和配置；复用既有知识文件及预览对象，不取得这些对象的领域所有权 |
+| 无新增领域对象 | F111-taskmode-pptx-templates-preview | 任务模式 PPT 技能内置 5 套模板与新检查；结果区按需把 pptx 转为 PDF 预览并缓存在对象存储；预览鉴权与下载一致，不改变原文件下载（遵守 V3-INV-7）；spec 已确认，design 待确认 |
 
 ### 发版线 表 2：跨 Feature 不变量
 
@@ -174,6 +175,7 @@
 | F087-context-window-budget | 各服务商的模型信息接口 | 读取上下文长度；读不到时保持原行为 |
 | F076-mineru-v4 | 独立部署的 MinerU 4.0 解析服务 | 服务版本和能力由部署环境确认 |
 | F086-shared-app-chat | F078 共享 UI、现有工作流/助手会话和标注/QA 能力 | 抽离前端公共能力，保留现有业务数据与授权合同 |
+| F111-taskmode-pptx-templates-preview | F089 共享预览（pptx 映射到 PDF 查看器）、既有任务模式内置技能种子化与物化机制、后端镜像的 LibreOffice | 不取得文件预览或技能领域所有权 |
 
 ### 发版线 已分配模块编码（MMMEE）
 
@@ -184,6 +186,7 @@
 |---|---|---|---|
 | 11075 | LinsightContextOverflowError | F087-context-window-budget | 任务内容超出模型上下文长度（压缩后仍超窗）；沿用已分配的灵思模块 110 |
 | 11076 | LinsightContextCompressFailedError | F087-context-window-budget | 压缩时生成摘要失败；沿用已分配的灵思模块 110 |
+| 11025 | LinsightArtifactPreviewError | F111-taskmode-pptx-templates-preview | 任务结果 pptx 预览生成失败或超时；沿用已分配的灵思模块 110 |
 
 
 ## F086 规格变更与 Impacted Specs（2026-10-20）

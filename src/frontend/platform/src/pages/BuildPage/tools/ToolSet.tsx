@@ -16,7 +16,6 @@ import TianyanchaToolForm from "./builtInTool/Tianyancha";
 import WebSearchForm from "./builtInTool/WebSearchFrom";
 import { useWebSearchStore } from './webSearchStore';
 import FinancialDataToolForm from "./builtInTool/FinancialData";
-import { ImageViewForm } from "./builtInTool/ImageView";
 import { WebFetchForm } from "./builtInTool/WebFetchForm";
 const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [open, setOpen] = useState(false);
@@ -124,8 +123,6 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 return <CodeExecutor formData={formData} onSubmit={handleSubmit} />;
             case '经济金融数据':
                 return <FinancialDataToolForm formData={formData} onSubmit={handleSubmit} />;
-            case 'Image View':
-                return <ImageViewForm formData={formData} onSubmit={handleSubmit} />;
             default:
                 return null;
         }

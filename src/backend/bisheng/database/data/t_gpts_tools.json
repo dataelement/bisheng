@@ -1116,19 +1116,6 @@
     "id": 38
   },
   {
-    "name": "Image View",
-    "logo": null,
-    "desc": "查看文档中的图片，并判断哪些图片符合问题",
-    "api_params": [],
-    "tool_key": "image_view",
-    "type": 17,
-    "extra": "{}",
-    "is_preset": 1,
-    "is_delete": 0,
-    "user_id": null,
-    "id": 39
-  },
-  {
     "name": "网页读取",
     "logo": null,
     "desc": "读取指定网址的网页，返回网页标题和 Markdown 正文。",

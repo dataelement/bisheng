@@ -38,6 +38,13 @@ class LinsightFileTooLargeError(BaseErrorCode):
     Msg: str = "The file exceeds the upload size limit"
 
 
+# The PDF preview of a task-generated .ppt/.pptx could not be produced (LibreOffice
+# failed, timed out, or rendered zero pages). The original file stays downloadable.
+class LinsightArtifactPreviewError(BaseErrorCode):
+    Code: int = 11025
+    Msg: str = "Failed to generate the slide preview"
+
+
 # Your Idea has run out of uses, please use the new invite code to activate the Idea feature
 class LinsightUseUpError(BaseErrorCode):
     Code: int = 11030

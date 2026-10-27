@@ -336,7 +336,7 @@ export async function getResourcePermissionContextApi(
 export async function getResourcePermissionGrantsApi(
   resourceType: PermissionResourceType,
   resourceId: string,
-  params: { cursor?: string | null; page_size?: number } = {},
+  params: { cursor?: string | null; page_size?: number; keyword?: string; subject_type?: string } = {},
 ): Promise<PermissionGrantCursorPage> {
   return await axios.get(
     `${permissionResourcePath(resourceType, resourceId)}/grants`,
@@ -344,6 +344,8 @@ export async function getResourcePermissionGrantsApi(
       params: {
         cursor: params.cursor ?? undefined,
         page_size: params.page_size ?? 50,
+        keyword: params.keyword || undefined,
+        subject_type: params.subject_type || undefined,
       },
     },
   )

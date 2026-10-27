@@ -1185,7 +1185,8 @@
     "autoTagGenerationDesc": "When enabled, users can choose a tag library for a knowledge space. After parsing, matching tags are selected from the library.",
     "searchTagLibrary": "Search tag libraries",
     "tagLibraryEmpty": "No tag libraries",
-    "appTypeFilter": "App type"
+    "appTypeFilter": "App type",
+    "clearDebugConversation": "Clear"
   },
   "bench": {
     "daily": "Daily",

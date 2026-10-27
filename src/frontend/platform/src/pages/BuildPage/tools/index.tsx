@@ -26,7 +26,7 @@ import ToolSet from "./ToolSet";
 const MANAGED_TOOLS = [
     'Dalle3绘画', 'Bing web搜索', '天眼查',
     'Firecrawl', 'Jina AI', 'SiliconFlow',
-    '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据', 'Image View'
+    '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据'
 ];
 // Newer built-in tools are matched by a child tool_key instead of the stored type name.
 export const MANAGED_TOOL_KEYS = ['web_fetch'];
@@ -250,7 +250,7 @@ export const useMcpRefrensh = () => {
             const res = await refreshMcpApi()
             if (res.length) {
                 setLoading(false);
-                return notification.open({ type: "error", description: (res.map(e => `${e} ${t("toolFetchFailed")}`)).filter(Boolean).join('\n') })
+                return notification.open({ type: "error", description: (res.map(e => typeof e === "string" ? `${e} ${t("toolFetchFailed")}` : `${e.name}：${t(`api_errors:${e.code}`)}`)).filter(Boolean).join('\n') })
             }
             toast.show({ type: "success", message: String(t("refreshSuccess") ?? '') })
             } catch (error) {

@@ -177,7 +177,7 @@ async def init_default_data():
                     await session.exec(update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
 
-                await _ensure_image_view_tool(session)
+                await _retire_image_view_tool(session)
                 await _ensure_web_fetch_tool(session)
 
             # Initialize Databaseconfig while init bypass is still active.
@@ -458,52 +458,28 @@ async def _backfill_guest_department_membership(session):
             )
 
 
-async def _ensure_image_view_tool(session) -> None:
-    """Insert the Image View builtin tool when an existing database was seeded earlier."""
-    from bisheng.core.context.tenant import DEFAULT_TENANT_ID
-
-    existing = (
-        await session.exec(
-            select(GptsTools).where(
-                GptsTools.tool_key == "image_view",
-                GptsTools.tenant_id == DEFAULT_TENANT_ID,
-                GptsTools.is_delete == 0,
-            )
-        )
-    ).first()
-    if existing is not None:
+async def _retire_image_view_tool(session) -> None:
+    """Hide the retired Image View builtin tool. Pixel viewing uses the workbench image-reading model."""
+    tools = (
+        await session.exec(select(GptsTools).where(GptsTools.tool_key == "image_view", GptsTools.is_delete == 0))
+    ).all()
+    if not tools:
         return
-    tool_type = GptsToolsType(
-        name="Image View",
-        logo="",
-        description="使用模型管理中的视觉模型查看文档图片",
-        server_host="",
-        auth_method=0,
-        api_key="",
-        auth_type="basic",
-        is_preset=1,
-        user_id=None,
-        is_delete=0,
-        extra=json.dumps({"model_id": ""}),
-        tenant_id=DEFAULT_TENANT_ID,
-    )
-    session.add(tool_type)
+    type_ids = {tool.type for tool in tools if tool.type}
+    for tool in tools:
+        tool.is_delete = 1
     await session.flush()
-    session.add(
-        GptsTools(
-            name="Image View",
-            logo=None,
-            desc="查看文档中的图片，并判断哪些图片符合问题",
-            tool_key="image_view",
-            type=tool_type.id,
-            extra="{}",
-            is_preset=1,
-            is_delete=0,
-            user_id=None,
-            api_params=[],
-            tenant_id=DEFAULT_TENANT_ID,
-        )
-    )
+    for type_id in type_ids:
+        remaining = (
+            await session.exec(select(GptsTools.id).where(GptsTools.type == type_id, GptsTools.is_delete == 0))
+        ).first()
+        if remaining is not None:
+            continue
+        tool_type = (
+            await session.exec(select(GptsToolsType).where(GptsToolsType.id == type_id, GptsToolsType.is_delete == 0))
+        ).first()
+        if tool_type is not None:
+            tool_type.is_delete = 1
     await session.commit()
 
 
@@ -597,9 +573,7 @@ async def _project_web_fetch_tool_types() -> None:
     if not type_by_tenant:
         return
     inventory = await load_system_owned_resource_inventory()
-    specs = tuple(
-        spec for spec in inventory.resources if type_by_tenant.get(spec.tenant_id) == int(spec.resource_id)
-    )
+    specs = tuple(spec for spec in inventory.resources if type_by_tenant.get(spec.tenant_id) == int(spec.resource_id))
     missing = [state.resource for state in await inspect_system_owned_resources(specs) if state.state == "MISSING"]
     if not missing:
         return

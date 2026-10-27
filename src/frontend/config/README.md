@@ -10,6 +10,13 @@ The workspace owns shared dependency versions in `pnpm-workspace.yaml` (`catalog
 
 Keep both dev servers on their documented ports (3001/4001). API and object storage targets are separate; the MinIO target host must match the host used to sign object URLs. Restart Vite after dependency upgrades to discard prebundled modules.
 
+The platform's hosted-app links use the browser's current origin and deployment
+prefix, matching the app tutorial. Local development proxies `/apps/` (HTTP and
+WebSocket). Set `VITE_APP_PROXY_TARGET` in `platform/.env.development.local` to the
+installed nginx/gateway/app-proxy entry that serves `/apps/`, for example
+`http://app-entry.example:3001`. It defaults to the API proxy target when that
+target also routes hosted apps. A FastAPI-only target cannot serve `/apps/`.
+
 SheetJS is pinned to **0.20.3** in the workspace catalog for client, platform and
 `@bisheng/file-viewers`. The unchanged official archive is committed at `vendor/xlsx-0.20.3.tgz`; the root
 `pnpm.overrides.xlsx` makes all consumers use it without contacting the external CDN.

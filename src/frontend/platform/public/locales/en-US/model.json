@@ -14,6 +14,8 @@
     "linsightDefaultModelTooltip": "Task mode runs tasks with this model by default. When users start a task, they can switch to another model in this list.",
     "workbenchVoiceModel": "Workbench Voice Model",
     "sessionTitleGenerationModel": "Session Title Generation Model",
+    "imageReadModel": "Image Reading Model",
+    "imageReadModelTooltip": "Reads pictures in documents and decides which ones match the question. Knowledge Q&A, channel Q&A, and daily chat all use the model set here.",
     "asrModel": "Speech-to-Text (ASR) Model",
     "asrModelTooltip": "Used for voice input in workbench conversations: converts what the user says into text.",
     "knowledgeAsrModelTooltip": "Used for speech-to-text in audio/video parsing",

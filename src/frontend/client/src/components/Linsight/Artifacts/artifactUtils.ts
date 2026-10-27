@@ -38,14 +38,16 @@ export interface ArtifactFile {
     previewAsImage?: boolean;
 }
 
-export type PreviewKind = 'markdown' | 'text' | 'image' | 'document' | 'unsupported';
+export type PreviewKind = 'markdown' | 'text' | 'image' | 'document' | 'slides' | 'unsupported';
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
 // Rich file types rendered inline by the shared FilePreview viewer (pdfjs /
-// mammoth / xlsx). Explicitly excludes `doc` (legacy binary mammoth can't parse)
-// and `ppt`/`pptx` (need a backend pptx→pdf conversion) — those stay 'unsupported'
-// so they keep the "download to view" fallback.
+// mammoth / xlsx). Explicitly excludes `doc` (legacy binary mammoth can't parse),
+// which stays 'unsupported' and keeps the "download to view" fallback.
 const DOCUMENT_EXTS = ['pdf', 'docx', 'xls', 'xlsx', 'csv'];
+// F111: slide decks are previewed through a backend pptx→pdf conversion
+// (see useSlidesPreview), then rendered by the same PDF viewer.
+const SLIDES_EXTS = ['ppt', 'pptx'];
 // Deliverable extensions whose bytes are markdown TEXT - the only artifacts
 // fetchArtifactBlob decodes (to strip citation markers); everything else is
 // handed out as raw bytes.
@@ -63,6 +65,7 @@ export function getPreviewKind(fileName: string): PreviewKind {
     if (ext === 'txt') return 'text';
     if (IMAGE_EXTS.includes(ext)) return 'image';
     if (DOCUMENT_EXTS.includes(ext)) return 'document';
+    if (SLIDES_EXTS.includes(ext)) return 'slides';
     return 'unsupported';
 }
 

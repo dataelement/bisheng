@@ -25,6 +25,7 @@ class GrantSubjectSearchRepository:
                 UserTenant.user_id == User.user_id,
                 UserTenant.tenant_id == scope.tenant_id,
                 UserTenant.status == "active",
+                UserTenant.is_active == 1,
             )
             .exists()
         )
