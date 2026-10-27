@@ -291,3 +291,10 @@
 - Integration verification: 330 backend regressions, 88 client tests and 100 platform tests passed. Strict type checks passed for 1,476 client and 616 platform files. Both production frontend builds and candidate application import passed against the current 3006 runtime image.
 - Test integration aligns composer assertions with icon/name resource chips, uses the Node renderer under jsdom, and checks department scope together with its child-department label. These fixture changes preserve product behavior. Changed test ESLint passed.
 - Deployment rehearsal and live switch evidence is recorded separately under `outputs/3006-recent-fixes-20261027/` in the main workspace. Real-account and native desktop acceptance remains a user verification step.
+
+## 2026-10-27 — 3006 recent-fix deployment completed
+
+- Deployed integration `fd03193dcd180e4636b6bb5fa07a572eacca3c12` to `http://192.168.106.119:3006/` at 2026-10-27T20:25:08.032132. Release: `recent-fixes-20261027`. It combines baseline `55d698144` and PRs 2517, 2518, 2519, 2520, 2521, 2523 and 2524.
+- Verification: 330 backend + 88 client + 100 platform regressions, strict frontend types and both production builds passed. The schema-only rehearsal and repeated upgrade passed; live schema is `f111_dsh_content_safety`. Three backend processes each match all 1,812 candidate runtime source files. Both served HTML files match their builds; static resources, browser configuration, gateway JWKS and deployment metadata return HTTP 200.
+- Rollback evidence: previous release `/data/bs119/deployments/f054-unified-agent-3006/releases/workbench-logo-upload-20261027-100846`; database and environment backup `/data/bs119/deployments/f054-unified-agent-3006/backups/recent-fixes-20261027-202244`. The gateway and authorization model are preserved. Temporary rehearsal databases and runtime environment export were cleaned up.
+- Native desktop binaries and real-account business acceptance are separate delivery/verification steps. Evidence: main workspace `outputs/3006-recent-fixes-20261027/deployment-report.md`, `deployment-result.json`, `verification.json`.
