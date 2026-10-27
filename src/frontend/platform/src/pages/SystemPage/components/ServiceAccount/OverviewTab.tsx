@@ -1,26 +1,29 @@
-import DepartmentUsersSelect, {
-  type DepartmentUserOption,
-} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
-import { Input, Textarea } from "@/components/bs-ui/input"
-import { Label } from "@/components/bs-ui/label"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { Button, Input, Textarea, notification } from '@bisheng/ui';
+import DepartmentUsersSelect,{
+type DepartmentUserOption,
+} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+
+
+import { Label } from "@/components/bs-ui/label";
+
+import { locationContext } from "@/contexts/locationContext";
 import {
-  deleteServiceAccountApi,
-  listServiceAccountResourceGrantsApi,
-  setServiceAccountEnabledApi,
-  updateServiceAccountApi,
-} from "@/controllers/API/serviceAccount"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+deleteServiceAccountApi,
+listServiceAccountResourceGrantsApi,
+setServiceAccountEnabledApi,
+updateServiceAccountApi,
+} from "@/controllers/API/serviceAccount";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import type {
-  ServiceAccountForm,
-  ServiceAccountItem,
-} from "@/types/api/openApi"
-import { formatIsoDateTime } from "@/util/utils"
-import { Loader2 } from "lucide-react"
-import { type ReactNode, useState } from "react"
-import { useTranslation } from "react-i18next"
+ServiceAccountForm,
+ServiceAccountItem,
+} from "@/types/api/openApi";
+import { formatIsoDateTime } from "@/util/utils";
+import { Outlined } from "bisheng-icons";
+
+import { type ReactNode,useContext,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface OverviewTabProps {
   detail: ServiceAccountItem
@@ -49,6 +52,10 @@ export function OverviewTab({
   onDeleted,
 }: OverviewTabProps) {
   const { t } = useTranslation()
+  const { appConfig } = useContext(locationContext)
+  // A standard docker install is a single (Root) tenant: showing "Tenant: 1"
+  // there names a concept the deployment does not expose anywhere else.
+  const multiTenantEnabled = !!appConfig?.multiTenantEnabled
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(detail.name)
   const [description, setDescription] = useState(detail.description || "")
@@ -72,6 +79,8 @@ export function OverviewTab({
   }
 
   const handleSave = async () => {
+        if ((String((name) ?? '').length > 128) || (String((description) ?? '').length > 512)) return;
+
     if (!name.trim() || owner.length !== 1) return
     const payload: Partial<ServiceAccountForm> = {}
     if (name.trim() !== detail.name) payload.name = name.trim()
@@ -87,17 +96,13 @@ export function OverviewTab({
     }
     setLoading("save")
     try {
-      const updated = await captureAndAlertRequestErrorHoc(
-        updateServiceAccountApi(detail.id, payload),
-      )
+      const updated = await updateServiceAccountApi(detail.id, payload)
       if (!updated) return
-      toast({
-        title: t("openApiManagement.serviceAccount.title"),
-        description: t("openApiManagement.feedback.updated"),
-        variant: "success",
-      })
+      notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.updated") ?? '') })
       setEditing(false)
       onChanged(updated)
+    } catch (error) {
+      showApiError(error)
     } finally {
       setLoading(null)
     }
@@ -106,30 +111,22 @@ export function OverviewTab({
   const handleToggle = () => {
     const enabled = detail.status !== "enabled"
     setLoading("toggle")
-    void captureAndAlertRequestErrorHoc(
-      setServiceAccountEnabledApi(detail.id, enabled),
-    )
+    void setServiceAccountEnabledApi(detail.id, enabled)
       .then((updated) => {
         if (!updated) return
-        toast({
-          title: t("openApiManagement.serviceAccount.title"),
-          description: t(
+        notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t(
             enabled
               ? "openApiManagement.feedback.enabled"
               : "openApiManagement.feedback.disabled",
-          ),
-          variant: "success",
-        })
+          ) ?? '') })
         onChanged(updated)
       })
-      .finally(() => setLoading(null))
+      .catch(showApiError).finally(() => setLoading(null))
   }
 
   const handleDelete = async () => {
     setLoading("delete")
-    const grants = await captureAndAlertRequestErrorHoc(
-      listServiceAccountResourceGrantsApi(detail.id),
-    ).finally(() => setLoading(null))
+    const grants = await listServiceAccountResourceGrantsApi(detail.id).finally(() => setLoading(null))
     if (!grants) return
     bsConfirm({
       title: t("openApiManagement.serviceAccount.deleteConfirmTitle"),
@@ -161,17 +158,13 @@ export function OverviewTab({
         </div>
       ),
       onOk: (close) => {
-        close()
         setLoading("delete")
-        void captureAndAlertRequestErrorHoc(deleteServiceAccountApi(detail.id))
+        return deleteServiceAccountApi(detail.id)
           .then((result) => {
             if (!result) return
-            toast({
-              title: t("openApiManagement.serviceAccount.title"),
-              description: t("openApiManagement.feedback.deleted"),
-              variant: "success",
-            })
+            notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.title") ?? ''), description: String(t("openApiManagement.feedback.deleted") ?? '') })
             onDeleted()
+            close()
           })
           .finally(() => setLoading(null))
       },
@@ -183,11 +176,7 @@ export function OverviewTab({
       <div className="grid grid-cols-2 gap-4">
         <Field label={t("openApiManagement.fields.name")}>
           {editing ? (
-            <Input
-              value={name}
-              maxLength={128}
-              onChange={(event) => setName(event.target.value)}
-            />
+            <Input value={name} maxLength={128} onChange={(event) => setName(event.target.value)} showCount />
           ) : (
             detail.name
           )}
@@ -195,20 +184,17 @@ export function OverviewTab({
         <Field label={t("openApiManagement.fields.status")}>
           {t(`openApiManagement.status.${detail.status}`)}
         </Field>
-        <Field label={t("openApiManagement.fields.tenant")}>
-          {detail.tenant_id}
-        </Field>
+        {multiTenantEnabled ? (
+          <Field label={t("openApiManagement.fields.tenant")}>
+            {detail.tenant_id}
+          </Field>
+        ) : null}
         <Field
           label={t("openApiManagement.fields.description")}
           className="col-span-2"
         >
           {editing ? (
-            <Textarea
-              value={description}
-              maxLength={512}
-              rows={3}
-              onChange={(event) => setDescription(event.target.value)}
-            />
+            <Textarea value={description} maxLength={512} rows={3} onChange={(event) => setDescription(event.target.value)} showCount />
           ) : (
             detail.description || "-"
           )}
@@ -258,42 +244,27 @@ export function OverviewTab({
       <div className="flex flex-wrap gap-3">
         {editing ? (
           <>
-            <Button
-              disabled={loading !== null || !name.trim() || owner.length !== 1}
-              onClick={handleSave}
-            >
+            <Button disabled={((String((name) ?? '').length > 128) || (String((description) ?? '').length > 512)) || (loading !== null || !name.trim() || owner.length !== 1)} onClick={handleSave}>
               {loading === "save" ? (
-                <Loader2
+                <Outlined.Loading
                   aria-hidden="true"
                   className="mr-2 size-4 animate-spin"
                 />
               ) : null}
               {t("save")}
             </Button>
-            <Button
-              variant="outline"
-              disabled={loading !== null}
-              onClick={() => setEditing(false)}
-            >
+            <Button variant="outlined" disabled={loading !== null} onClick={() => setEditing(false)} color="default">
               {t("cancel")}
             </Button>
           </>
         ) : (
           <>
-            <Button
-              variant="outline"
-              disabled={loading !== null}
-              onClick={startEdit}
-            >
+            <Button variant="outlined" disabled={loading !== null} onClick={startEdit} color="default">
               {t("edit")}
             </Button>
-            <Button
-              variant="outline"
-              disabled={loading !== null}
-              onClick={handleToggle}
-            >
+            <Button variant="outlined" disabled={loading !== null} onClick={handleToggle} color="default">
               {loading === "toggle" ? (
-                <Loader2
+                <Outlined.Loading
                   aria-hidden="true"
                   className="mr-2 size-4 animate-spin"
                 />
@@ -304,13 +275,9 @@ export function OverviewTab({
                   : "openApiManagement.actions.enable",
               )}
             </Button>
-            <Button
-              variant="destructive"
-              disabled={loading !== null}
-              onClick={handleDelete}
-            >
+            <Button variant="solid" disabled={loading !== null} onClick={handleUiRequest(handleDelete)} color="danger">
               {loading === "delete" ? (
-                <Loader2
+                <Outlined.Loading
                   aria-hidden="true"
                   className="mr-2 size-4 animate-spin"
                 />

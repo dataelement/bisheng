@@ -1,13 +1,13 @@
+import {
+  Dropdown,
+  DropdownItem,
+  Tooltip as SharedTooltip,
+  TooltipProvider as SharedTooltipProvider,
+} from '@bisheng/ui';
 import type { AppItem } from '~/@types/app';
 import { Button } from '~/components';
 import AppAvator from '~/components/Avator';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '~/components/ui';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize, useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';
 import { Outlined } from 'bisheng-icons';
@@ -38,6 +38,11 @@ export function AgentCard({
   const { canShare, ensureSharePermission } = useLazyAppSharePermission(agent);
   // Only render pin affordances when a toggle handler is supplied.
   const showPin = typeof onTogglePin === 'function';
+  // Hosted applications (flow_type 35) are not conversational — they open a web
+  // surface at `/apps/{slug}`. Their primary action says "enter app", not "start chat".
+  const HOSTED_APP_FLOW_TYPE = 35;
+  const primaryActionLabel =
+    agent.flow_type === HOSTED_APP_FLOW_TYPE ? localize('com_app_enter_app') : localize('com_app_start_chat');
 
   const handleShare = () => {
     onShare({ ...agent, can_share: true });
@@ -66,7 +71,7 @@ export function AgentCard({
         }}
         className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-md px-2 py-0 text-[14px] font-normal"
       >
-        {localize('com_app_start_chat')}
+        {primaryActionLabel}
       </Button>
     </>
   );
@@ -91,6 +96,14 @@ export function AgentCard({
           <p className="font-['PingFang_SC'] font-normal leading-[22px] text-text-1 text-[14px] truncate">
             {agent.name}
           </p>
+          {/* Hosted applications only. A stopped application keeps its card on
+              purpose: removing it is indistinguishable, to the user, from having
+              lost access to it. */}
+          {agent.app_state === 'stopped' ? (
+            <span className="shrink-0 rounded-sm bg-[#F2F3F5] px-1.5 py-0.5 text-[12px] leading-[16px] text-[#86909C]">
+              {localize('com_app_state_stopped')}
+            </span>
+          ) : null}
         </div>
 
         {isMobileCard ? (
@@ -111,47 +124,37 @@ export function AgentCard({
                   <Outlined.Pin size={16} className="shrink-0" />
                 </span>
               ) : null}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              {/* The menu is portaled, but its clicks still bubble through the
+                  React tree to the card — stop them here. */}
+              <span className="contents" onClick={(e) => e.stopPropagation()}>
+                <Dropdown
+                  align="end"
+                  menu={
+                    <>
+                      {showPin ? (
+                        <DropdownItem onSelect={() => onTogglePin?.(agent)}>
+                          {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
+                        </DropdownItem>
+                      ) : null}
+                      {canShare ? (
+                        <DropdownItem onSelect={handleShare}>{localize('com_app_share_app')}</DropdownItem>
+                      ) : null}
+                    </>
+                  }
+                >
                   <button
                     type="button"
-                    onClick={(e) => e.stopPropagation()}
                     className="inline-flex size-6 items-center justify-center rounded-md border border-border-base bg-white text-text-3 fine-pointer:hover:bg-fill-1"
                     aria-label={localize('com_ui_more')}
                   >
                     <MoreVertical className="size-4" />
                   </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[120px]">
-                  {showPin ? (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onTogglePin?.(agent);
-                      }}
-                    >
-                      {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
-                    </DropdownMenuItem>
-                  ) : null}
-                  {canShare ? (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleShare();
-                      }}
-                    >
-                      {localize('com_app_share_app')}
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </Dropdown>
+              </span>
             </div>
           ) : null
         ) : showPin ? (
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
+          <SharedTooltipProvider delayDuration={200}><SharedTooltip  content={isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')} ><button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -184,13 +187,7 @@ export function AgentCard({
                   ) : (
                     <Outlined.Pin size={18} className="shrink-0 text-text-2" />
                   )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                </button></SharedTooltip></SharedTooltipProvider>
         ) : null}
       </div>
 
@@ -204,7 +201,7 @@ export function AgentCard({
         <div className="mt-auto flex w-full min-w-0 items-center justify-between gap-1">
           <div className="relative min-w-0 flex-1 overflow-hidden">
             <div className="flex items-center gap-1 overflow-hidden whitespace-nowrap">
-              {(agent.tags && agent.tags.length > 0 ? agent.tags : [{ name: '精选' }]).map((tag, idx) => (
+              {(agent.tags && agent.tags.length > 0 ? agent.tags : [{ name: localize("com_app.featured") }]).map((tag, idx) => (
                 <div
                   key={idx}
                   className="shrink-0 rounded-[4px] bg-fill-2 px-2 py-0.5 text-[12px] font-normal leading-[20px] text-text-2"
@@ -228,7 +225,7 @@ export function AgentCard({
                 : "opacity-100 pointer-events-auto",
             )}
           >
-            {localize('com_app_start_chat')}
+            {primaryActionLabel}
           </Button>
         </div>
       ) : (

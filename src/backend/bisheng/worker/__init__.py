@@ -2,6 +2,7 @@
 # ruff: noqa: F401 - importing task modules is the Celery registration mechanism.
 from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.worker.agent_runtime.tasks import sweep_agent_tmp_sessions
+from bisheng.worker.app_publish.tasks import run_publish_pipeline
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.commercial_license.tasks import refresh_etl_license
 
@@ -44,6 +45,7 @@ from bisheng.worker.permission.retry_failed_tuples import (
     cleanup_succeeded_failed_tuples,
     retry_failed_tuples,
 )
+from bisheng.worker.runtime_audit.tasks import runtime_audit_export, runtime_audit_reconcile
 from bisheng.worker.telemetry.mid_table import (
     sync_mid_app_increment,
     sync_mid_knowledge_increment,

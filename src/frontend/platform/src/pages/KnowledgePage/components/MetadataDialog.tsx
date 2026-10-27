@@ -1,61 +1,23 @@
 // @ts-strict-ignore
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Dialog, DialogContent, DialogHeader, DialogDescription } from '@/components/bs-ui/dialog';
-import { Button } from '@/components/bs-ui/button';
-import { Plus, Search, Trash2, Type, Hash, Clock3, X } from 'lucide-react';
-import { cname } from "@/components/bs-ui/utils";
-import { toast } from "@/components/bs-ui/toast/use-toast";
-import { format } from "date-fns";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { Button } from '@bisheng/ui';
+
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
+import { Dialog,DialogContent,DialogDescription,DialogHeader } from '@/components/bs-ui/dialog';
+import { cname } from "@/components/bs-ui/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import Tip from '@/components/bs-ui/tooltip/tip';
+import { Outlined } from "bisheng-icons";
+import { Hash } from 'lucide-react';
+import React,{ useMemo,useRef } from 'react';
+import { KnowledgeTooltip } from "./KnowledgeTooltip";
 
-// Types
-interface MetadataItem {
-    id: string;
-    name: string;
-    type: 'String' | 'Number' | 'Time';
-    value?: string;
-    description?: string;
-    updated?: number;
-    updated_at?: string;
-}
 
-interface FileInfo {
-    id?: string;
-    file_name?: string;
-    create_time?: string;
-    update_time?: string;
-    creat_user?: string;
-    update_user?: string;
-    file_size?: number;
-    split_rule?: string;
-    title?: string;
-    user_metadata?: Record<string, any>;
-}
-
-interface MetadataDialogProps {
-    open: boolean;
-    file: FileInfo | null;
-}
-
-interface SideDialogProps {
-    type: 'search' | 'create' | null;
-    open: boolean;
-}
-
-interface NewMetadata {
-    name: string;
-    type: 'String' | 'Number' | 'Time';
-}
+import type { FileInfo,MetadataDialogProps,MetadataItem,NewMetadata,SideDialogProps } from "./metadataTypes";
 
 // Type icon constants
 const TYPE_ICONS = {
-    String: <Type />,
+    String: <Outlined.FontSize />,
     Number: <Hash />,
-    Time: <Clock3 />
+    Time: <Outlined.Time />
 };
 
 // Metadata row component
@@ -100,10 +62,8 @@ export const MetadataRow = React.memo(({
                     {item.type}
                 </span>
                 <div className="min-w-0 flex-1 max-w-[120px]">
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <span
+                    <KnowledgeTooltip content={<><p>{item.name}</p></>}>
+<span
                                     className={cname(
                                         "font-medium truncate block",
                                         isSmallScreen ? "text-sm" : "",
@@ -117,17 +77,7 @@ export const MetadataRow = React.memo(({
                                 >
                                     {item.name}
                                 </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[200px] whitespace-normal"
-                                style={{
-                                    whiteSpace: 'normal',
-                                    wordBreak: 'break-word'
-                                }}
-                            >
-                                <p>{item.name}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+</KnowledgeTooltip>
                 </div>
             </div>
             <div className="flex items-center gap-2 flex-2 justify-end p-2 rounded-lg bg-gray-50 h-11 ml-10 min-w-[180px]">
@@ -188,7 +138,7 @@ export const MetadataRow = React.memo(({
                 className="p-1 rounded transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 title={t('metacommon.delete')}
             >
-                <Trash2 size={isSmallScreen ? 18 : 20} className="text-gray-500" />
+                <Outlined.Delete size={isSmallScreen ? 18 : 20} className="text-gray-500" />
             </button>
         </div>
     )
@@ -247,7 +197,7 @@ export const MainMetadataDialog = React.memo(({
                         disabled={!isKnowledgeAdmin}
                         className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-4"
                     >
-                        <Plus size={16} />
+                        <Outlined.Plus size={16} />
                         <span>{t('metadatainfor.addMetadata')}</span>
                     </button>
 
@@ -314,11 +264,11 @@ export const MainMetadataDialog = React.memo(({
                                     <div key={index} className="grid grid-cols-4 gap-4 items-center">
                                         <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
                                         {
-                                            item.isFileName ? <Tip content={item.value} align="start">
+                                            item.isFileName ? <KnowledgeTooltip content={item.value} align="start">
                                                 <span className={`col-span-3 text-sm truncate max-w-full`}>
                                                     {item.value || t('metacommon.none')}
                                                 </span>
-                                            </Tip> :
+                                            </KnowledgeTooltip> :
                                                 <span className={`col-span-3 text-sm`}>
                                                     {item.value || t('metacommon.none')}
                                                 </span>
@@ -331,21 +281,13 @@ export const MainMetadataDialog = React.memo(({
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 flex-shrink-0">
-                    <Button
-                        variant="outline"
-                        onClick={() => setMetadataDialog({ ...metadataDialog, open: false })}
-                        className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
-                    >
+                    <Button variant="outlined" onClick={() => setMetadataDialog({ ...metadataDialog, open: false })} className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")} color="default">
                         {t('metacommon.cancel')}
                     </Button>
-                    <Button
-                        onClick={handleSaveUserMetadata}
-                        disabled={!isKnowledgeAdmin}
-                        className={cname(
+                    <Button onClick={handleSaveUserMetadata} disabled={!isKnowledgeAdmin} className={cname(
                             "bg-blue-500 hover:bg-blue-600",
                             isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
-                        )}
-                    >
+                        )}>
                         {t('metacommon.save')}
                     </Button>
                 </div>
@@ -440,7 +382,7 @@ export const MetadataSideDialog = React.memo(({
                             className="absolute right-3 top-3 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
                             onClick={closeSideDialog}
                         >
-                            <X className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
+                            <Outlined.Close className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
                             <span className="sr-only">Close</span>
                         </DialogPrimitive.Close>
                     </DialogPrimitive.Content>
@@ -459,7 +401,7 @@ export const MetadataSideDialog = React.memo(({
                     <>
                         <DialogHeader>
                             <div className="relative w-full">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
+                                <Outlined.Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-blue-500" />
                                 <input
                                     ref={searchInputRef}
                                     type="text"
@@ -511,25 +453,13 @@ export const MetadataSideDialog = React.memo(({
                                                     {metadata.type}
                                                 </span>
 
-                                                <TooltipProvider>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <div className="flex-1 min-w-0">
+                                                <KnowledgeTooltip content={<><p>{metadata.name}</p></>}>
+<div className="flex-1 min-w-0">
                                                                 <div className="font-medium text-sm truncate">
                                                                     {metadata.name}
                                                                 </div>
                                                             </div>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent className="max-w-[200px] whitespace-normal"
-                                                            style={{
-                                                                whiteSpace: 'normal',
-                                                                wordBreak: 'break-word'
-                                                            }}
-                                                        >
-                                                            <p>{metadata.name}</p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
+</KnowledgeTooltip>
                                             </div>
                                         </div>
                                     ))}
@@ -544,7 +474,7 @@ export const MetadataSideDialog = React.memo(({
                                     disabled={!isKnowledgeAdmin}
                                     className="py-2 w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 >
-                                    <Plus size={isSmallScreen ? 14 : 16} />
+                                    <Outlined.Plus size={isSmallScreen ? 14 : 16} />
                                     <span>{t('metadatainfor.createMetadata')}</span>
                                 </button>
                             </div>
@@ -612,20 +542,13 @@ export const MetadataSideDialog = React.memo(({
                         </div>
 
                         <div className="flex justify-end gap-2">
-                            <Button
-                                variant="outline"
-                                onClick={() => setSideDialog({ type: 'search', open: true })}
-                                className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
-                            >
+                            <Button variant="outlined" onClick={() => setSideDialog({ type: 'search', open: true })} className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")} color="default">
                                 {t('metacommon.cancel')}
                             </Button>
-                            <Button
-                                onClick={handleSaveNewMetadata}
-                                className={cname(
+                            <Button onClick={handleSaveNewMetadata} className={cname(
                                     "bg-blue-500 hover:bg-blue-600",
                                     isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
-                                )}
-                            >
+                                )}>
                                 {t('metacommon.save')}
                             </Button>
                         </div>

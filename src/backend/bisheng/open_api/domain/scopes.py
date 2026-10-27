@@ -6,8 +6,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from bisheng.common.services.config_service import settings
+
 IdentityMode = Literal["S", "D"]
 WS = "WS"
+
+GROUP_LOCAL_DEV_TOOLKIT = "local_dev_toolkit"
+DELEGATE_SCOPE_CODE = "delegate"
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,7 +22,15 @@ class OpenApiScope:
     group: str
     label_key: str
     desc_key: str
+    # ``False`` -> never offered nor accepted at issue time, whatever the
+    # deployment switches say: the surface it unlocks has not shipped yet
+    # (``identity:read`` waits for F052).
     issuable: bool = True
+    # ``True`` -> offered / accepted only while ``settings.open_platform.enabled``
+    # (伴生 PRD §4.2.4 三扩展位; migration plan M7). Read per call through
+    # ``is_scope_issuable`` so a deployment flag never freezes into an
+    # import-time constant.
+    requires_open_platform: bool = False
     hint_keys: tuple[str, ...] = ()
 
 
@@ -126,34 +139,60 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
         "openApiManagement.scopes.knowledge_write.label",
         "openApiManagement.scopes.knowledge_write.desc",
     ),
+    # --- local dev toolkit: the three extension scopes of 伴生 PRD §4.2.4.
+    # Mode S only and mutually exclusive with ``delegate`` (INV-31); the
+    # exclusion is enforced at issue / edit time by CredentialService.
     OpenApiScope(
         "model:invoke",
-        (),
-        "local_dev_toolkit",
+        # F051 model protocol face: the two promised OpenAI-compatible endpoints
+        # plus the catch-all that refuses everything else. The catch-all is
+        # registered too because it is a real mounted route and carries the same
+        # marker — credentials are judged before the path is.
+        (
+            ("POST", f"{_V2}/model/v1/chat/completions"),
+            ("GET", f"{_V2}/model/v1/models"),
+            ("GET", f"{_V2}/model/v1/{{rest}}"),
+            ("POST", f"{_V2}/model/v1/{{rest}}"),
+            ("PUT", f"{_V2}/model/v1/{{rest}}"),
+            ("DELETE", f"{_V2}/model/v1/{{rest}}"),
+            ("PATCH", f"{_V2}/model/v1/{{rest}}"),
+        ),
+        GROUP_LOCAL_DEV_TOOLKIT,
         "openApiManagement.scopes.model_invoke.label",
         "openApiManagement.scopes.model_invoke.desc",
-        issuable=False,
+        requires_open_platform=True,
     ),
     OpenApiScope(
         "identity:read",
         (),
-        "local_dev_toolkit",
+        GROUP_LOCAL_DEV_TOOLKIT,
         "openApiManagement.scopes.identity_read.label",
         "openApiManagement.scopes.identity_read.desc",
-        issuable=False,
+        # Read by the three identity / organisation MCP tools. No ``endpoints``
+        # entry — this scope has no REST route of its own, it gates MCP tools,
+        # and the check happens in ``open_mcp/registry.py`` rather than off a
+        # route marker.
+        requires_open_platform=True,
         hint_keys=("openApiManagement.scopes.identity_read.warning",),
     ),
     OpenApiScope(
         "app:manage",
-        (),
-        "local_dev_toolkit",
+        # F055 publish pipeline: what ``bisheng deploy`` / ``bisheng logs`` call
+        # (app_publish/api/endpoints/deploy.py, router prefix ``/apps``).
+        (
+            ("GET", f"{_V2}/apps/deploy-limits"),
+            ("POST", f"{_V2}/apps/deploy"),
+            ("GET", f"{_V2}/apps/deployments/{{deployment_id}}"),
+            ("GET", f"{_V2}/apps/{{app_id}}/logs"),
+        ),
+        GROUP_LOCAL_DEV_TOOLKIT,
         "openApiManagement.scopes.app_manage.label",
         "openApiManagement.scopes.app_manage.desc",
-        issuable=False,
+        requires_open_platform=True,
         hint_keys=("openApiManagement.scopes.app_manage.hint",),
     ),
     OpenApiScope(
-        "delegate",
+        DELEGATE_SCOPE_CODE,
         (),
         "delegation",
         "openApiManagement.scopes.delegate.label",
@@ -164,7 +203,33 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
 
 OPEN_API_SCOPE_MAP = {scope.code: scope for scope in OPEN_API_SCOPES}
 OPEN_API_SCOPE_CODES = frozenset(OPEN_API_SCOPE_MAP)
-ISSUABLE_OPEN_API_SCOPE_CODES = frozenset(scope.code for scope in OPEN_API_SCOPES if scope.issuable)
+# The three extension scopes (伴生 PRD §4.2.4 / release-contract INV-31).
+LOCAL_DEV_TOOLKIT_SCOPE_CODES = frozenset(
+    scope.code for scope in OPEN_API_SCOPES if scope.group == GROUP_LOCAL_DEV_TOOLKIT
+)
+# Issuable on every deployment, no switch consulted. NOT the full issuable set:
+# scopes gated by ``open_platform.enabled`` are only in ``issuable_scope_codes()``.
+ALWAYS_ISSUABLE_OPEN_API_SCOPE_CODES = frozenset(
+    scope.code for scope in OPEN_API_SCOPES if scope.issuable and not scope.requires_open_platform
+)
+
+
+def is_scope_issuable(scope: OpenApiScope) -> bool:
+    """Whether this deployment may put ``scope`` on a credential right now."""
+    if not scope.issuable:
+        return False
+    return not scope.requires_open_platform or bool(settings.open_platform.enabled)
+
+
+def issuable_scopes() -> tuple[OpenApiScope, ...]:
+    """Registry entries offered by the issue / edit form on this deployment."""
+    return tuple(scope for scope in OPEN_API_SCOPES if is_scope_issuable(scope))
+
+
+def issuable_scope_codes() -> frozenset[str]:
+    """Codes accepted at issue / edit time on this deployment, evaluated per call."""
+    return frozenset(scope.code for scope in issuable_scopes())
+
 
 # Required scope -> granted scopes that also satisfy it. Only one pair exists:
 # a credential that may write knowledge bases may also read them. The grant
@@ -183,12 +248,27 @@ def is_scope_granted(required: str, granted: frozenset[str] | set[str]) -> bool:
 
 OPEN_API_SCOPE_ATTR = "__open_api_scope__"
 
+#: ``OpenApiPrincipal.actor_kind`` of a hosted application, fixed by
+#: ``api_credential.SUBJECT_KIND_HOSTED_APP``. Spelled here, next to the marker
+#: that decides which routes admit it, so the gate and the compatibility shim
+#: read one constant instead of two string literals that can drift apart. Not
+#: imported from the credential base on purpose: this module is a leaf that the
+#: route decorators load at import time.
+HOSTED_APP_ACTOR_KIND = "hosted_app"
+
 
 @dataclass(frozen=True, slots=True)
 class OpenApiScopeMarker:
     scope: str | None
     modes: frozenset[IdentityMode]
     session: bool
+    #: Whether a **hosted application** may reach this route (F055 AC-52).
+    #: Default-deny, because a scope is far coarser than the set of routes an
+    #: application should get from declaring one capability: ``knowledge:read``
+    #: covers seven routes and a declaration only ever buys the one the
+    #: capability bus serves. Opting in is per route, so the route added next
+    #: inherits the refusal rather than the permission.
+    hosted_app: bool = False
 
 
 def open_api_scope(
@@ -196,13 +276,14 @@ def open_api_scope(
     *,
     modes: tuple[IdentityMode, ...] = ("S", "D"),
     session: bool = False,
+    hosted_app: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     if scope is not None and scope not in OPEN_API_SCOPE_CODES:
         raise ValueError(f"unknown open API scope {scope!r}")
     mode_set = frozenset(modes)
     if not mode_set or not mode_set <= {"S", "D"}:
         raise ValueError("modes must be a non-empty subset of {'S', 'D'}")
-    marker = OpenApiScopeMarker(scope=scope, modes=mode_set, session=session)
+    marker = OpenApiScopeMarker(scope=scope, modes=mode_set, session=session, hosted_app=hosted_app)
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
         setattr(func, OPEN_API_SCOPE_ATTR, marker)

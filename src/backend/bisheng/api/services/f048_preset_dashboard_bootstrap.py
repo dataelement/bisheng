@@ -9,7 +9,7 @@ from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.database.constants import AdminRole
 from bisheng.permission.application.process_runtime import get_f048_process_runtime
@@ -128,21 +128,22 @@ async def reconcile_preset_dashboard_permissions() -> PresetDashboardProjectionR
             super_admin=True,
         )
         for dashboard in missing:
-            await components.facade.authorize_created(
-                actor=actor,
-                target=VerifiedPermissionTarget.from_business_service(
-                    tenant_id=DEFAULT_TENANT_ID,
-                    resource_type="dashboard",
-                    resource_id=str(dashboard.id),
-                    resource_version=0,
-                    context_version=_context_version(dashboard),
-                ),
-                owner_user_id=PRESET_DASHBOARD_OWNER_ID,
-                mode="CUSTOM",
-                source_type="CREATOR",
-                protected=True,
-                idempotency_key=(f"f048:preset-dashboard-owner:{dashboard.id}:{PRESET_DASHBOARD_OWNER_ID}"),
-            )
+            with tenant_execution_scope(DEFAULT_TENANT_ID):
+                await components.facade.authorize_created(
+                    actor=actor,
+                    target=VerifiedPermissionTarget.from_business_service(
+                        tenant_id=DEFAULT_TENANT_ID,
+                        resource_type="dashboard",
+                        resource_id=str(dashboard.id),
+                        resource_version=0,
+                        context_version=_context_version(dashboard),
+                    ),
+                    owner_user_id=PRESET_DASHBOARD_OWNER_ID,
+                    mode="CUSTOM",
+                    source_type="CREATOR",
+                    protected=True,
+                    idempotency_key=(f"f048:preset-dashboard-owner:{dashboard.id}:{PRESET_DASHBOARD_OWNER_ID}"),
+                )
         _, modes = await _load_preset_dashboards_and_modes()
     if any(
         str(dashboard.id) not in modes or modes[str(dashboard.id)].projection_state != "CURRENT"

@@ -22,7 +22,7 @@ from bisheng.open_api.domain.schemas.credential import (
     OpenApiScopeEndpoint,
     OpenApiScopeItem,
 )
-from bisheng.open_api.domain.scopes import OPEN_API_SCOPES
+from bisheng.open_api.domain.scopes import issuable_scopes
 from bisheng.open_api.domain.services.credential_service import CredentialService
 from bisheng.open_api.domain.services.delegate_scope_service import DelegateScopeService
 from bisheng.open_api.domain.services.service_account_service import ServiceAccountService
@@ -34,10 +34,11 @@ scopes_router = APIRouter(prefix="/service-accounts", tags=["ServiceAccount"])
 
 @scopes_router.get("/scopes", response_model=UnifiedResponseModel[OpenApiScopeCatalog])
 async def list_open_api_scopes(_admin: UserPayload = Depends(get_service_account_admin)):
+    # Same per-call issuability CredentialService.validate_scopes enforces, so
+    # the form never offers a scope the issue call would then refuse (and
+    # ``app:manage`` appears exactly when ``open_platform.enabled`` is on).
     items = []
-    for scope in OPEN_API_SCOPES:
-        if not scope.issuable:
-            continue
+    for scope in issuable_scopes():
         items.append(
             OpenApiScopeItem(
                 code=scope.code,

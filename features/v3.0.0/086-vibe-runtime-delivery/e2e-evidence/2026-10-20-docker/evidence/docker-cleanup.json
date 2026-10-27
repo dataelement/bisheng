@@ -1,0 +1,9 @@
+{
+  "original_containers": 26,
+  "differences": {},
+  "cached_images_retained": true,
+  "test_containers_remaining": 0,
+  "credential_and_test_data_directory_removed": true,
+  "test_networks_removed": true,
+  "same_ids_still_running": true
+}

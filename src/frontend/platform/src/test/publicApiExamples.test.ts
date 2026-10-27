@@ -15,9 +15,14 @@ vi.mock("react-syntax-highlighter", () => ({
   Prism: ({ children }: { children: ReactNode }) => createElement("pre", {}, children),
 }))
 vi.mock("@/utils", () => ({ copyText: vi.fn().mockResolvedValue(undefined) }))
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   useToast: () => ({ message: vi.fn() }),
-}))
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 
 afterEach(() => {
   cleanup()

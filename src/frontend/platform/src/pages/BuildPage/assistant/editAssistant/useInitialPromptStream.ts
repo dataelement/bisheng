@@ -1,4 +1,5 @@
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { notification } from '@bisheng/ui';
+
 import { getAssistantOptimizeTaskApi } from "@/controllers/API/assistant";
 import { useAssistantStore } from "@/store/assistantStore";
 import { t } from "i18next";
@@ -29,7 +30,7 @@ function stripMarkdownFence(text: string): string {
  * any generation is still running (opening lines continue after the prompt).
  */
 export function useInitialPromptStream(enabled: boolean) {
-    const { toast } = useToast()
+
     const id = useAssistantStore((state) => state.assistantState.id)
     const prompt = useAssistantStore((state) => state.assistantState.prompt)
     const dispatchAssistant = useAssistantStore((state) => state.dispatchAssistant)
@@ -81,7 +82,7 @@ export function useInitialPromptStream(enabled: boolean) {
                         }
                         // The prompt is replaced only once generation succeeded; keep what the user wrote
                         if (!generated.trim()) dispatchAssistant('setPrompt', { prompt: originalPrompt })
-                        toast({ title: t('tip'), variant: 'error', description: streamErrorMessage(data) })
+                        notification.open({ type: 'error', title: String(t('tip') ?? ''), description: String(streamErrorMessage(data) ?? '') })
                         finish()
                         break
                 }
@@ -95,7 +96,7 @@ export function useInitialPromptStream(enabled: boolean) {
             setStreaming(false)
             setPromptStreaming(false)
         })
-    }, [enabled, id, prompt, dispatchAssistant, toast])
+    }, [enabled, id, prompt, dispatchAssistant])
 
     useEffect(() => () => sourceRef.current?.close(), [])
 

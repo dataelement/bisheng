@@ -1,14 +1,14 @@
-// F035: 应用 tab — app-center welcome message and description, moved out of
+import { Button, notification } from '@bisheng/ui';
 // the home tab. Both fields still persist into the daily workstation config:
 // the full config is loaded on mount and round-tripped on save with only
 // these two fields replaced (tab content remounts on switch, so the loaded
 // snapshot stays fresh).
-import { Button } from "@/components/bs-ui/button";
+
 import { CardContent } from "@/components/bs-ui/card";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { locationContext } from "@/contexts/locationContext";
 import { getDailyConfigApi, setDailyConfigApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
@@ -19,51 +19,53 @@ const MAX_LEN = 1000;
 
 export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const { t } = useTranslation();
-    const { toast } = useToast();
+
     const { reloadConfig } = useContext(locationContext);
-    const [welcome, setWelcome] = useState('');
-    const [description, setDescription] = useState('');
+    const [welcome, setWelcome] = useState("");
+    const [description, setDescription] = useState("");
     // Sidebar entry name for the app-center module — optional, blank keeps the localized default.
-    const [menuDisplayName, setMenuDisplayName] = useState('');
-    const [errors, setErrors] = useState({ welcome: '', description: '', menuDisplayName: '' });
+    const [menuDisplayName, setMenuDisplayName] = useState("");
+    const [errors, setErrors] = useState({ welcome: "", description: "", menuDisplayName: "" });
     const [configMeta, setConfigMeta] = useState<any>(null);
     // Full loaded config — round-tripped on save so home-tab fields survive.
     const loadedCfgRef = useRef<any>(null);
 
     useEffect(() => {
         setConfigMeta(null);
+        loadedCfgRef.current = null;
         getDailyConfigApi().then((res) => {
             const { data: cfg, meta } = resolveConfigEnvelope<any>(res);
             setConfigMeta(meta);
             loadedCfgRef.current = cfg || {};
-            setWelcome(cfg?.applicationCenterWelcomeMessage ?? '');
-            setDescription(cfg?.applicationCenterDescription ?? '');
+            setWelcome(cfg?.applicationCenterWelcomeMessage ?? "");
+            setDescription(cfg?.applicationCenterDescription ?? "");
             // Blank = unconfigured; the placeholder shows the default and the client localizes it
-            setMenuDisplayName((cfg?.appCenterMenuDisplayName ?? '').trim());
-        });
+            setMenuDisplayName((cfg?.appCenterMenuDisplayName ?? "").trim());
+        }).catch(showApiError);
     }, [scopeVersion, t]);
 
-    const handleChange = (field: 'welcome' | 'description', value: string) => {
-        (field === 'welcome' ? setWelcome : setDescription)(value);
-        setErrors(prev => ({
+    const handleChange = (field: "welcome" | "description", value: string) => {
+        (field === "welcome" ? setWelcome : setDescription)(value);
+        setErrors((prev) => ({
             ...prev,
-            [field]: value.length >= MAX_LEN ? t('chatConfig.errors.maxCharacters', { count: MAX_LEN }) : '',
+            [field]: value.length > MAX_LEN ? t("chatConfig.errors.maxCharacters", { count: MAX_LEN }) : "",
         }));
     };
 
     const handleSave = async () => {
+        if (!loadedCfgRef.current || welcome.length > MAX_LEN || description.length > MAX_LEN) return;
         const dataToSave = {
             ...(loadedCfgRef.current || {}),
             // Round-tripped from the home tab; normalize so a saved default name doesn't stay frozen
-            homeMenuDisplayName: await toStoredMenuName(loadedCfgRef.current?.homeMenuDisplayName ?? '', 'bench.home'),
-            appCenterMenuDisplayName: await toStoredMenuName(menuDisplayName, 'bench.appCenter'),
-            applicationCenterWelcomeMessage: welcome.trim() || t('chatConfig.appCenterWelcomePlaceholder'),
-            applicationCenterDescription: description.trim() || t('chatConfig.appCenterDescriptionPlaceholder'),
+            homeMenuDisplayName: await toStoredMenuName(loadedCfgRef.current?.homeMenuDisplayName ?? "", "bench.home"),
+            appCenterMenuDisplayName: await toStoredMenuName(menuDisplayName, "bench.appCenter"),
+            applicationCenterWelcomeMessage: welcome.trim() || t("chatConfig.appCenterWelcomePlaceholder"),
+            applicationCenterDescription: description.trim() || t("chatConfig.appCenterDescriptionPlaceholder"),
         };
-        captureAndAlertRequestErrorHoc(setDailyConfigApi(dataToSave)).then((res) => {
+        await setDailyConfigApi(dataToSave).then((res) => {
             if (res) {
                 setConfigMeta({ inherited_from_root: false, has_override: true });
-                toast({ variant: 'success', description: t('chatConfig.saveSuccess') });
+                notification.open({ type: "success", description: String(t("chatConfig.saveSuccess") ?? '') });
                 reloadConfig();
             }
         });
@@ -76,34 +78,34 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
                     <div className="w-full max-h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-scroll scrollbar-hide pb-10">
                         <ConfigInheritanceBanner meta={configMeta} />
                         <FormInput
-                            label={t('chatConfig.menuDisplayName')}
+                            label={t("chatConfig.menuDisplayName")}
                             value={menuDisplayName}
                             error={errors.menuDisplayName}
-                            placeholder={t('bench.appCenter')}
+                            placeholder={t("bench.appCenter")}
                             onChange={(v) => {
                                 setMenuDisplayName(clampMenuName(v));
-                                setErrors(prev => ({ ...prev, menuDisplayName: '' }));
+                                setErrors((prev) => ({ ...prev, menuDisplayName: "" }));
                             }}
                         />
                         <FormInput
-                            label={t('chatConfig.appCenterWelcome')}
+                            label={t("chatConfig.appCenterWelcome")}
                             value={welcome}
                             error={errors.welcome}
-                            placeholder={t('chatConfig.appCenterWelcomePlaceholder')}
+                            placeholder={t("chatConfig.appCenterWelcomePlaceholder")}
                             maxLength={MAX_LEN}
-                            onChange={(v) => handleChange('welcome', v)}
+                            onChange={(v) => handleChange("welcome", v)}
                         />
                         <FormInput
-                            label={t('chatConfig.appCenterDescription')}
+                            label={t("chatConfig.appCenterDescription")}
                             value={description}
                             error={errors.description}
-                            placeholder={t('chatConfig.appCenterDescriptionPlaceholder')}
+                            placeholder={t("chatConfig.appCenterDescriptionPlaceholder")}
                             maxLength={MAX_LEN}
-                            onChange={(v) => handleChange('description', v)}
+                            onChange={(v) => handleChange("description", v)}
                         />
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
-                        <Button onClick={handleSave}>{t('save')}</Button>
+                        <Button disabled={!loadedCfgRef.current || welcome.length > MAX_LEN || description.length > MAX_LEN} onClick={handleUiRequest(handleSave)}>{t("save")}</Button>
                     </div>
                 </CardContent>
             </div>

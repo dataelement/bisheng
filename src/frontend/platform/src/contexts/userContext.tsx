@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { notification } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { toast } from "@/components/bs-ui/toast/use-toast";
+
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
 import { hasDesktopLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
@@ -8,7 +9,7 @@ import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
 import { getUserInfo, logoutApi } from "../controllers/API/user";
-import { captureAndAlertRequestErrorHoc, markSessionKickAck, requestInterceptor } from "../controllers/request";
+import { markSessionKickAck, requestInterceptor } from "../controllers/request";
 import { User } from "../types/api/user";
 
 type userContextType = {
@@ -60,7 +61,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
         // 覆盖
         if (overrid) {
-            return captureAndAlertRequestErrorHoc(overridComponent(data)).then(res => {
+            return overridComponent(data).then(res => {
                 setSavedComponents((comps =>
                     comps.map(comp =>
                         comp.name === data.name ? data : comp
@@ -82,7 +83,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     }
                 } while (savedComponents.some(item => item.name === data.name))
             }
-            return captureAndAlertRequestErrorHoc(saveComponent(data)).then(sucess => {
+            return saveComponent(data).then(sucess => {
                 sucess && setSavedComponents([...savedComponents, data])
             })
         }
@@ -202,10 +203,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     history.pushState(null, '', BASE_URL + '/403')
                     return
                 }
-                toast({
-                    variant: 'error',
-                    description: i18next.t('menu.noAdminConsoleAccess'),
-                })
+                notification.open({ type: 'error', description: String(i18next.t('menu.noAdminConsoleAccess') ?? '') })
                 // Hard-navigate to the workspace client. Must NOT use history.back()
                 // here: under the SSO flow the previous history entry is the IdP /
                 // portal page, so "going back" silently re-triggers SSO and produces

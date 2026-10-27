@@ -11,17 +11,21 @@ pnpm start -- --host 0.0.0.0                                          # dev serv
 VITE_PROXY_TARGET=http://localhost:8180 pnpm start -- --host 0.0.0.0  # commercial gateway proxy mode
 ```
 
+Both apps extend `../config/` for TypeScript, ESLint, PostCSS and Vite proxy helpers. Shared dependency versions are managed by the workspace catalog. See `../config/README.md`.
+
 ## Tech Stack
-Vite 5 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + **Zustand** + React Context + **react-query v3** + react-i18next + react-router-dom v6 + **@xyflow/react** + axios (wrapped in `@/controllers/request.ts`)
+Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + **Zustand** + React Context + **@tanstack/react-query v4 (4.44.0, workspace catalog)** + react-i18next + react-router-dom v6 + **@xyflow/react** + axios (wrapped in `@/controllers/request.ts`)
 
 ## Mandatory Rules (platform-specific — common hard rules in root §4)
 - **Path Aliases**: `@/` → `src/`.
 - **HTTP Requests**: wrapper is `@/controllers/request.ts`; API modules in `@/controllers/API/`.
+- **Server request cache**: Use `@tanstack/react-query` from the workspace catalog. Query keys are arrays; keep cache invalidation/removal keys consistent. Manual/disabled query spinners use `isInitialLoading`. HTTP still goes through the wrapped API layer.
 - **State Management**: Zustand stores in `@/store/` (cross-page); React Context (`@/contexts/`) for UI-scoped state (alerts, theme, tabs).
-- **Frozen deps (lint-enforced via `no-restricted-imports`; existing usage suppressed)**: `react-query` v3 (unmaintained; @tanstack migration pending, ledger #6) — new data fetching uses the API Layer Pattern below; `xlsx` / `xlsx-populate` (vulnerable / duplicated, ledger #7); `react-color`, `react-beautiful-dnd` (deprecated, ledger #8). Do not add new imports of any of these.
-- **UI Components**: `@/components/bs-ui/` (Radix-based). Icons from `@/components/bs-icons/`.
+- **Frozen deps (lint-enforced via `no-restricted-imports`; existing usage suppressed)**: direct `xlsx` / `xlsx-populate` imports (ledger #7; SheetJS security fixes are pinned in the workspace catalog, shared previews retain xlsx-populate for image extraction); `react-color` (existing pickers retained pending shared design-library coverage, ledger #8). Do not add new imports of these. Removed `react-beautiful-dnd` stays banned.
+- **UI Components**: Buttons, input fields (incl. InputNumber), notices, selection controls, Select, Dropdown, Slider, tags/badges, tooltips and tabs import directly from `@bisheng/ui`; no platform compatibility wrappers or primitive re-exports. Every shared `Select` gets `{...useSelectLabels()}` (`@/components/bs-comp/formFields/useSelectLabels`) for its localized copy. Business compositions live in `@/components/bs-comp/formFields/` and use shared primitives. Other families remain Radix-based in `@/components/bs-ui/`. The old `bs-ui/select` (index / multi / cascader) survives only where the shared Select cannot express the panel — cascading pickers, tabs inside the panel, swatch-only or thumbnail+delete options, the workflow variable picker — do not add new callers. Shared tokens and the Tailwind preset are loaded by platform.
+- **Icons**: Prefer `bisheng-icons`. Existing icon implementations may be retained when no suitable equivalent is available.
 - **Workflow editor**: `@xyflow/react` (**not** `react-flow-renderer`); nodes in `src/pages/BuildPage/flow/FlowNode/`. (Legacy skill editor + `src/CustomNodes/` were removed with the skill module.)
-- **Toast**: `import { toast } from "@/components/bs-ui/toast/use-toast"; toast({ title, variant: 'error' | 'success', description })`.
+- **Toast**: `import { toast, notification } from "@bisheng/ui"`. Use `toast.show({ type, message })` for light messages and `notification.open({ type, title, description })` for notification cards; copy is localized at the caller.
 - **Confirm Dialogs**: `import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"`.
 - **i18n**: `useTranslation()` from react-i18next → `t()`. Locale files at `public/locales/{en-US,zh-Hans,ja}/{ns}.json`. Namespaces: bs, flow, model, tool, dashboard, knowledge.
 
@@ -34,10 +38,15 @@ export async function getSomething(): Promise<SomeType> {
 }
 
 // Component usage
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { handleUiRequest } from "@/controllers/request"
 import { getSomething } from "@/controllers/API"
-captureAndAlertRequestErrorHoc(getSomething()).then(res => { ... })
+const handleLoad = handleUiRequest(async () => {
+  const result = await getSomething()
+  // Update the UI only after fulfillment.
+})
 ```
+
+Request failures reject a complete `ApiError` even after a shared notification. Services/hooks keep rejection; event/effect owners catch it with `showApiError` or `handleUiRequest`. An async confirmation returns its Promise so the dialog can keep its pending lock. Verified by `requestErrors.test.ts`, `requestCompatibilityMatrix.test.ts`, and `useConfirm.test.tsx` (F088, 2026-10-22).
 
 ## Known Pitfalls
 - **MinIO Image Proxy**: Vite `fileServiceTarget` must match backend `config.yaml` `object_storage.minio.sharepoint`, otherwise image requests get 403.

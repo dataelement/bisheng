@@ -1,4 +1,4 @@
-import { Checkbox } from "~/components/ui/Checkbox";
+import { Checkbox } from '@bisheng/ui';
 import { Button, SearchInput, Tag } from "@bisheng/ui";
 import { SubjectIdentity } from "./SubjectIdentity";
 import { useSubjectKeyword } from "./useSubjectKeyword";
@@ -186,7 +186,7 @@ export function SubjectSearchUser({
                     the slot would only be dead space. The checkbox leads the row. */}
                 <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
                   <Checkbox
-                    className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                    className="peer border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                     // Already-granted rows read as checked: the picker shows who holds
                     // the resource, so an empty box next to the badge reads as a bug.
                     checked={selectedIds.has(user.user_id) || isDisabled}

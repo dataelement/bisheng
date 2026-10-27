@@ -2,18 +2,18 @@
 /**
  * AgentToolSelector — v2.5 Agent-mode tool picker for the daily chat input bar.
  *
- * Shows parent-level toggles that mirror Linsight (one Switch per tool group).
+ * A multiple Select over the tool groups (one option per group, mirroring
+ * Linsight); the trigger is the toolbar's own button, tinted while any is on.
  * Backend still dispatches at child level, so each parent's children[] are
  * flattened into leaf-level entries at request time (see useAiChat).
  */
-import { Settings2Icon, WebhookIcon } from "lucide-react";
+import { Button, Select } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 import { useEffect } from "react";
 import { useRecoilState } from "recoil";
-import { Switch } from "~/components/ui";
 import ApiAppIcon from "~/components/ui/icon/ApiApp";
-import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
 import { useLocalize } from "~/hooks";
+import useSelectCopy from "~/hooks/useSelectCopy";
 import store from "~/store";
 import { cn } from "~/utils";
 
@@ -47,8 +47,8 @@ interface Props {
 
 function iconForGroup(group: AvailableToolGroup) {
   const firstKey = group.children?.[0]?.tool_key;
-  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-text-2" />;
-  return <Outlined.Hammer className="size-4 text-text-2" />;
+  if (firstKey === "web_search") return <Outlined.Earth className="text-text-2" />;
+  return <Outlined.Hammer className="text-text-2" />;
 }
 
 function labelForGroup(group: AvailableToolGroup, localize: (key: string) => string) {
@@ -59,8 +59,24 @@ function labelForGroup(group: AvailableToolGroup, localize: (key: string) => str
   return group.name;
 }
 
+/** The leaf-flattened shape stored in `store.selectedAgentTools`. */
+function toSelection(group: AvailableToolGroup) {
+  return {
+    id: group.id,
+    name: group.name,
+    description: group.description,
+    children: (group.children || []).map((c) => ({
+      id: c.id,
+      tool_key: c.tool_key,
+      name: c.name,
+      desc: c.desc || c.description,
+    })),
+  };
+}
+
 export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
   const localize = useLocalize();
+  const selectCopy = useSelectCopy();
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
   const [initialized, setInitialized] = useRecoilState(store.agentToolsInitialized);
 
@@ -69,19 +85,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
   // manual toggles aren't overwritten when the config gets refetched.
   useEffect(() => {
     if (initialized || !availableTools || availableTools.length === 0) return;
-    const defaults = availableTools
-      .filter((g) => g.default_checked)
-      .map((g) => ({
-        id: g.id,
-        name: g.name,
-        description: g.description,
-        children: (g.children || []).map((c) => ({
-          id: c.id,
-          tool_key: c.tool_key,
-          name: c.name,
-          desc: c.desc || c.description,
-        })),
-      }));
+    const defaults = availableTools.filter((g) => g.default_checked).map(toSelection);
     if (defaults.length) setSelected(defaults);
     setInitialized(true);
   }, [availableTools, initialized, setSelected, setInitialized]);
@@ -98,84 +102,51 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
   const activeCount = selected.length;
   const isActive = activeCount > 0;
 
-  const isChecked = (id: number) => selected.some((g) => g.id === id);
-  const toggle = (group: AvailableToolGroup) => {
-    if (isChecked(group.id)) {
-      setSelected(selected.filter((g) => g.id !== group.id));
-    } else {
-      setSelected([
-        ...selected,
-        {
-          id: group.id,
-          name: group.name,
-          description: group.description,
-          children: (group.children || []).map((c) => ({
-            id: c.id,
-            tool_key: c.tool_key,
-            name: c.name,
-            desc: c.desc || c.description,
-          })),
-        },
-      ]);
-    }
+  // Keep earlier picks as they were (and in their order); only new ids are
+  // built from the admin config.
+  const handleChange = (ids: (string | number)[]) => {
+    const kept = selected.filter((g) => ids.includes(g.id));
+    const added = availableTools
+      .filter((g) => ids.includes(g.id) && !kept.some((k) => k.id === g.id))
+      .map(toSelection);
+    setSelected([...kept, ...added]);
   };
 
   if (!availableTools || availableTools.length === 0) return null;
 
   return (
-    <Select disabled={disabled}>
-      <SelectTrigger
-        className={cn(
-          // Tools Select never sets a value (selection is via inner switches), so
-          // Radix keeps the trigger in [data-placeholder] state; without this the
-          // base `data-[placeholder]:text-gray-500` would override to #595959 and
-          // mismatch the knowledge/model selects. Pin it to the shared #4E5969.
-          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-1 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
-        )}
-      >
-        <div className="flex min-w-0 gap-1.5 items-center">
+    <Select
+      {...selectCopy}
+      multiple
+      disabled={disabled}
+      options={availableTools.map((group) => ({
+        value: group.id,
+        label: labelForGroup(group, localize),
+        icon: iconForGroup(group),
+      }))}
+      value={selected.map((g) => g.id)}
+      onChange={handleChange}
+      aria-label={localize("com_tools_title")}
+      trigger={
+        <Button
+          color="default"
+          variant="text"
+          disabled={disabled}
+          aria-label={localize("com_tools_title")}
+          className="min-w-0 max-w-[min(52vw,220px)] gap-1.5 px-2 text-text-2"
+        >
           {/* Icon is neutral by default (matches the + button) and turns
               brand-blue once a tool is selected — mirrors the knowledge-space
               selector (ChatKnowledge) so both pickers signal an active selection. */}
-          <div className="relative shrink-0">
-            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-text-2")} strokeWidth={1.5} />
-          </div>
-          {/* Compact: collapse to icon + chevron only to save horizontal space. */}
+          <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-text-2")} strokeWidth={1.5} />
+          {/* Compact: collapse to icon only to save horizontal space. */}
           {!compact && (
-            <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(20vw,60px)]">
+            <span className="truncate min-w-0 max-w-[min(20vw,60px)]">
               {localize("com_tools_title")}
             </span>
           )}
-        </div>
-      </SelectTrigger>
-      <SelectContent
-        className="bg-white rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
-        viewportClassName="flex flex-col gap-1 p-3"
-      >
-        {availableTools.map((group) => {
-          const label = labelForGroup(group, localize);
-          return (
-            <div key={group.id} className="flex h-8 justify-between items-center rounded-lg px-2">
-              <div className="flex gap-2 items-center min-w-0">
-                {iconForGroup(group)}
-                <span
-                  className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
-                  title={group.description || label}
-                >
-                  {label}
-                </span>
-              </div>
-              <Switch
-                variant="tool"
-                className="shrink-0"
-                disabled={disabled}
-                checked={isChecked(group.id)}
-                onCheckedChange={() => toggle(group)}
-              />
-            </div>
-          );
-        })}
-      </SelectContent>
-    </Select>
+        </Button>
+      }
+    />
   );
 }

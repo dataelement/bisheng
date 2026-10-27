@@ -1,11 +1,12 @@
 // @ts-strict-ignore
-import { getFlowApi } from "@/controllers/API/flow";
-import { useEffect, useMemo } from "react";
+import { MessageStoreProvider as WorkflowMessageStoreProvider } from './messageStore';
+import type { ComponentProps } from 'react';
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { useEffect,useMemo } from "react";
 import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
-import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 
-export default function ChatPane({ debug = false, autoRun = false, chatId, flow, wsUrl = '',version }: { debug?: boolean, autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
+function ChatPaneContent({ debug = false, autoRun = false, chatId, flow, wsUrl = '',version }: { debug?: boolean, autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
     const { changeChatId } = useMessageStore()
 
     useEffect(() => {
@@ -95,6 +96,7 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
     }, [flow])
 
     return <Chat
+        title={flow.name}
         debug={debug}
         autoRun={autoRun}
         useName=''
@@ -107,3 +109,7 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
     ></Chat>
 
 };
+
+export default function ChatPane(props: ComponentProps<typeof ChatPaneContent>) {
+    return <WorkflowMessageStoreProvider><ChatPaneContent {...props} /></WorkflowMessageStoreProvider>;
+}

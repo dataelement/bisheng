@@ -1,0 +1,203 @@
+---
+status: done
+component: Alert
+---
+
+# 警告提示 Alert
+
+**嵌在页面里的一条提示**，说明「这个页面或这块区域当前处在什么状态」：配置还没完成、额度快用完了、这项功能暂不可用。它不浮起来、不挡页面、**不会自己消失**，状态解除或用户关掉才走。组件库 `@bisheng/ui` 导出 **`Alert`**。规范全文见「文档 → 组件规范 → 警告提示 Alert」。
+
+**它是 JSX 挂载式的，没有 `alert.warning(…)` 这种命令式写法**——轻提示和通知提醒报的是「刚发生的一件事」，适合随手一调；警告提示报的是「现在还成立的一种状态」，显隐天然由业务 state 说了算。
+
+**壳把规范写死的部分**：四种类型各自的图标与浅色底（没有纯文字款）；圆角 12px、无边框、无投影；四周 8px 外边距由组件自带，业务不再包一层；只有一句话时高度正好 40px，一有标题或正文换行就改成上下 12px 内边距；标题 1 行、正文 2 行截断（截到的才挂原生 tooltip）；操作按钮最多两个、固定右侧、24px 无底色；关闭按钮 16px 贴最右；关闭时 200ms 淡出并收起高度。这些没有 prop。
+
+## 和轻提示、通知提醒怎么分工
+
+**事情是「一直在」的用警告提示，「刚发生」的用轻提示或通知提醒。** 点保存成功、链接已复制 → [轻提示](/components/toast)；后台任务跑完了、别人把你拉进了一个空间 → [通知提醒](/components/notification)；必须当场决定 → [弹窗](/components/modal)。「保存成功」「删除失败」不要放这里。
+
+## 四种类型
+
+靠**图标 + 浅色底**区分语义，每种类型必须带图标——颜色分不清的用户靠图标读语义。拿不准用哪种就用 `info`（默认）。不做「加载中」类型。
+
+```tsx
+import { Alert } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 720 }}>
+    <Alert description="当前知识库由 2 个空间共享，修改分段策略会影响两边的检索结果" />
+    <Alert type="success" description="向量模型已配置完成，知识库可以正常检索了" />
+    <Alert type="warning" description="本月调用额度已用 90%，超出后将暂停服务" />
+    <Alert type="error" description="未配置向量模型，当前知识库无法检索" />
+  </div>
+);
+```
+
+## 一句话 / 带标题
+
+只有一句话要说的时候**不要硬凑标题**：此时提示条正好 40px 高、文字垂直居中。一旦给了标题，或者正文长到换行，就自动换成上下 12px 内边距、高度随内容长。
+
+```tsx
+import { Alert } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 720 }}>
+    <Alert type="warning" description="本月调用额度已用 90%，超出后将暂停服务" />
+    <Alert
+      type="error"
+      title="向量模型未配置"
+      description="当前知识库无法检索，请先在「模型管理」里配置向量模型，再回到这里重新解析文件"
+    />
+  </div>
+);
+```
+
+## 宽度与位置
+
+**宽度撑满所在容器，四周留 8px 外边距**（组件自带），不贴边、保留圆角——下面虚线框就是容器。**放在它所描述的那块内容的正上方**：说页面的放页面顶部，说某个列表的放列表上方。它在内容流里跟着页面滚动，不固定、不浮层。
+
+**一块区域只放一条。** 两条叠着就没人读了；有两件事要说，合成一条或只说最要紧的那件。
+
+```tsx
+import { Alert } from '@bisheng/ui';
+
+export default () => (
+  <div
+    style={{
+      maxWidth: 720,
+      border: '1px dashed rgba(128, 128, 128, 0.4)',
+      borderRadius: 16,
+    }}
+  >
+    <Alert type="warning" description="本月调用额度已用 90%，超出后将暂停服务" />
+    <div style={{ padding: '12px 16px 16px', fontSize: 13, opacity: 0.6 }}>
+      ——以下是这块区域本来的内容——
+    </div>
+  </div>
+);
+```
+
+## 操作按钮
+
+**最多两个**，固定在右侧，`actions[0]` 是主动作（品牌色）。按钮必须是**处理这个状态的实际动作**——「去配置」「查看节点」「重试」，**不许是「关闭」「知道了」**，那是关闭按钮的事。**点了操作按钮提示不会自己消失**：状态还在，撤不撤由业务说。失败和警告要么在正文里说下一步，要么配一个操作按钮。
+
+```tsx
+import { Alert, toast } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 720 }}>
+    <Alert
+      type="error"
+      description="未配置向量模型，当前知识库无法检索"
+      actions={[{ label: '去配置', onClick: () => toast.info('跳转到模型管理') }]}
+    />
+    <Alert
+      type="warning"
+      title="模型已下线"
+      description="「文心一言 3.5」已由供应商停止服务，工作流中 3 个节点需要更换模型"
+      actions={[
+        { label: '查看节点', onClick: () => toast.info('打开节点列表') },
+        { label: '忽略本次', onClick: () => toast.info('已忽略') },
+      ]}
+    />
+  </div>
+);
+```
+
+## 可关闭
+
+**默认不给关闭**——它说的是当前状态，状态没解除就不该让用户关掉；影响使用的失败不给关闭。只有「用户知道了就行、不需要处理」的提示才加 `closable`。关掉后**要不要记住（刷新不再出现）由业务决定**，组件不存状态：`onClose` 里写进 localStorage 还是什么都不做，都是业务的事。
+
+```tsx
+import React from 'react';
+import { Alert, Button, toast } from '@bisheng/ui';
+
+export default () => {
+  const [visible, setVisible] = React.useState(true);
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      {visible ? (
+        <Alert
+          type="warning"
+          description="本月调用额度已用 90%，超出后将暂停服务"
+          actions={[{ label: '查看用量', onClick: () => toast.info('打开用量页') }]}
+          closable
+          closeLabel="关闭"
+          onClose={() => setVisible(false)}
+        />
+      ) : (
+        <div style={{ padding: 8 }}>
+          <Button color="default" variant="outlined" onClick={() => setVisible(true)}>
+            再放一条
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+## 长文案
+
+**标题 1 行、正文最多 2 行**，超出截断加省略号，不做展开——两行说不完，把细节放到操作按钮指向的页面去，不是把提示写长。被截断的完整文案挂在原生 `title` 上兜底（没截断的不挂，免得平白多一个浏览器气泡）。
+
+```tsx
+import { Alert, toast } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 560 }}>
+    <Alert
+      type="error"
+      title="「发票识别」工作流中有 3 个节点引用了已下线的模型，需要逐个更换"
+      description="「文心一言 3.5」已于 2026 年 9 月 30 日由供应商宣布停止服务，受影响的节点包括「字段抽取」「金额校验」「结果汇总」，在更换模型之前这条工作流无法运行，历史运行记录不受影响"
+      actions={[{ label: '查看节点', onClick: () => toast.info('打开节点列表') }]}
+    />
+  </div>
+);
+```
+
+## 规格
+
+| 项 | 值 |
+|---|---|
+| 位置 / 宽度 | 在内容流里，放在所描述内容的正上方；宽度撑满容器，四周 8px 外边距（组件自带 `m-2`），不固定、不浮层、没有层级 |
+| 高度 | 只有一句话时 40px、垂直无内边距、文字居中；带标题或正文换行时上下各 12px，高度自适应 |
+| 水平内边距 / 圆角 | 16px · `rounded-xl`（12px） |
+| 边框 / 投影 | 都没有——它嵌在页面里，不浮起 |
+| 底色 | 对应类型的功能色浅底（`*-tint`，信息取 `blue-50`），暗色模式由 token 自动翻转 |
+| 图标 | **始终 16px**，对应类型的功能色主色（信息取品牌色），文字左侧间距 8px；单行与文字居中，多行与第一行居中 |
+| 标题 / 正文 | 都是 `text-body`（14/22）；标题字重 500 主文字色、1 行截断；正文有标题时次要文字色、无标题时主文字色，2 行截断；两者间距 4px |
+| 操作区 | 固定右侧，24px 无底色按钮；与文字 16px，按钮之间 8px，与关闭按钮 16px |
+| 关闭按钮 | 16px 图标贴最右，`text-4`，悬停 `text-2`，触屏热区 ≥44px |
+| 动效 | 出现不做进场动效（随页面渲染）；关闭 200ms 淡出 + 收起高度，下方内容补位，`cubic-bezier(0.2,0,0,1)` |
+
+## 使用规则
+
+- **说的是状态，不是操作结果。** 「保存成功」「删除失败」是轻提示的事。
+- **不要拿它做营销和引导。** 「试试新功能」一类不走警告提示——它出现就意味着「有件事影响你用这个页面」，掺一次无关的，以后每条都会被忽略。
+- **表单单个字段的错误不用它**，用字段自己的报错（见[输入框](/components/input)）；整张表单的汇总错误才放顶部。
+- 正文要**说清「现在是什么状态」和「用户能做什么」**：「未配置向量模型，当前知识库无法检索」比「请注意配置」有用；别只靠颜色区分警告和错误。
+- 只放纯文字，不放富文本、不放图片；要跳转用操作按钮。
+- 无障碍：**常驻在页面里的提示不加 live region**（屏幕阅读器按阅读顺序自然读到）；由用户操作触发、动态插入的才传 `live`——失败与警告播成 `role="alert"`，成功与信息播成 `role="status"`。出现时不抢焦点；图标是装饰不播报；操作按钮与关闭按钮都能 Tab 到达。
+
+## API
+
+```ts
+interface AlertProps {
+  type?: 'info' | 'success' | 'warning' | 'error';  // 默认 info
+  title?: string;        // 可选，1 行截断
+  description: string;   // 必填，纯文本，2 行截断
+  actions?: { label: string; onClick: () => void }[];  // 最多两项，[0] 为主动作；多传只渲染前两项并 warn
+  closable?: boolean;    // 默认 false
+  onClose?: () => void;  // 收起动画走完后触发；要不要「记住已关闭」由业务决定
+  live?: boolean;        // 默认 false；动态插入的提示才开，按类型取 role alert / status
+  closeLabel?: string;   // 关闭按钮的 aria-label，文案键 com_ui_close
+  className?: string;    // 外层盒子（带 8px 外边距的那层）的额外类名
+}
+
+// 显隐由业务 state 控制；文案全部由业务侧传入（组件库不含 i18n）
+<Alert type="warning" description="本月调用额度已用 90%，超出后将暂停服务" closable closeLabel="关闭" />
+```
+
+- 组件**不存关闭状态**，但关掉的是**这一个实例**：它自此不再渲染任何东西，改 props 也叫不回来。要让它再出现就得重新挂载——业务侧那句 `visible && <Alert … />` 本来就是这么写的（见上面的可关闭 demo）。
+- 没有 `alert.warning(…)` 这种命令式 API：状态该不该显示，只有业务自己知道。

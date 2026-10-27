@@ -148,6 +148,22 @@ class TenantService:
             except Exception:
                 logger.warning("built-in skill seeding failed for new tenant %s", tenant.id, exc_info=True)
 
+            # Step 7: seed the preset approval scenarios. Same reason as step 6
+            # — boot-time seeding only covers the tenants that existed then, so
+            # without this a tenant created from the admin console has no
+            # scenario at all and its first `bisheng deploy` fails with
+            # "approval scenario not enabled" (F055 AC-20). Best-effort for the
+            # same reason: an unseeded scenario is recoverable, a tenant that
+            # failed to be created is not.
+            try:
+                from bisheng.approval.domain.services.approval_seed_service import (
+                    seed_approval_scenarios_for_tenant,
+                )
+
+                await seed_approval_scenarios_for_tenant(tenant.id)
+            except Exception:
+                logger.warning("approval scenario seeding failed for new tenant %s", tenant.id, exc_info=True)
+
             return _safe_tenant_dump(tenant)
 
         except TenantCodeDuplicateError:

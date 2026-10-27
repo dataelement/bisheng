@@ -1,9 +1,7 @@
-import base64
 import hashlib
 import io
 import json
 import stat
-import time
 import zipfile
 from contextlib import contextmanager
 
@@ -20,7 +18,6 @@ from bisheng.core.database.model_discovery import discover_sqlmodel_module_names
 from bisheng.dsh_market.api.auth import MarketActor, market_actor, market_admin
 from bisheng.dsh_market.api.endpoints import router
 from bisheng.dsh_market.domain.bundle import BundleError, validate_bundle
-from bisheng.dsh_market.domain.lease import sign_policy
 from bisheng.dsh_market.domain.models import MarketVersion
 from bisheng.dsh_market.domain.repository import ConflictError, MarketRepository
 from bisheng.dsh_market.domain.service import MarketService
@@ -260,6 +257,43 @@ def test_api_contract_and_admin_boundary(service):
     assert client.get("/api/v1/dsh/market/catalog").json()["data"]["total"] == 0
 
 
+def test_install_policy_is_tenant_scoped_and_exposed_to_desktop(service):
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+
+    @app.exception_handler(BaseErrorCode)
+    async def error_handler(request, error):
+        return JSONResponse(error.to_dict())
+
+    app.dependency_overrides[get_market_service] = lambda: service
+    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20)
+    client = TestClient(app)
+    url = "/api/v1/dsh/market/admin/install-policy"
+    assert client.get(url).json()["status_code"] == 26204
+    response = client.get("/api/v1/dsh/market/capabilities")
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.json()["data"]["allow_third_party_plugins"] is False
+
+    app.dependency_overrides[market_admin] = lambda: MarketActor(2, 20)
+    assert client.get(url).json()["data"]["allow_third_party_workbenches"] is False
+    changed = client.patch(url, json={"field": "allow_third_party_plugins", "allowed": True}).json()["data"]
+    assert changed == {
+        "tenant_id": 2,
+        "allow_third_party_plugins": True,
+        "allow_third_party_workbenches": False,
+    }
+    client.patch(url, json={"field": "allow_third_party_workbenches", "allowed": True})
+    caps = client.get("/api/v1/dsh/market/capabilities").json()["data"]
+    assert caps["allow_third_party_plugins"] is True
+    assert caps["allow_third_party_workbenches"] is True
+    assert client.patch(url, json={"field": "unknown", "allowed": False}).status_code == 422
+
+    app.dependency_overrides[market_actor] = lambda: MarketActor(3, 30)
+    app.dependency_overrides[market_admin] = lambda: MarketActor(3, 30)
+    assert client.get(url).json()["data"]["allow_third_party_plugins"] is False
+    assert client.get("/api/v1/dsh/market/capabilities").json()["data"]["allow_third_party_workbenches"] is False
+
+
 def test_reimport_restores_legacy_unpublished_and_preserves_present_version(service):
     plugin = published(service)
     service.change(2, 20, plugin["id"], plugin["revision"], "unpublish")
@@ -290,34 +324,43 @@ def test_legacy_disabled_plugins_use_unpublished_state_and_remain_revoked(servic
     assert service.repository.policies(2)[0]["disabled"]
 
 
-def test_policy_is_signed_by_deployment_key(monkeypatch):
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-    from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
-
-    key = Ed25519PrivateKey.generate()
-    pem = key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode()
-    monkeypatch.setenv("BISHENG_DSH_MARKET_SIGNING_KEY", pem)
-    payload = {"tenant_id": "2", "user_id": "20", "expires_at": int(time.time()) + 3600}
-    receipt = sign_policy(payload)
-
-    def decode(value):
-        return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-
-    from cryptography.hazmat.primitives.serialization import load_pem_public_key
-
+@pytest.mark.parametrize("legacy_key", [None, "retired-unused-market-key"])
+@pytest.mark.parametrize("desktop", [False, True])
+def test_market_sync_uses_online_identity_without_signing_key(service, monkeypatch, legacy_key, desktop):
+    if legacy_key is None:
+        monkeypatch.delenv("BISHENG_DSH_MARKET_SIGNING_KEY", raising=False)
+    else:
+        monkeypatch.setenv("BISHENG_DSH_MARKET_SIGNING_KEY", legacy_key)
+    plugin = published(service)
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
-    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20)
+    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20, desktop=desktop)
+    app.dependency_overrides[get_market_service] = lambda: service
     with TestClient(app) as client:
-        capabilities = client.get("/api/v1/dsh/market/capabilities").json()["data"]
-        assert capabilities["enabled"] and capabilities["tenant_id"] == "2"
-        assert "PRIVATE" not in capabilities["public_key"]
-        advertised_key = load_pem_public_key(capabilities["public_key"].encode())
-        advertised_key.verify(decode(receipt["signature"]), decode(receipt["payload"]))
-        monkeypatch.delenv("BISHENG_DSH_MARKET_SIGNING_KEY")
-        capabilities = client.get("/api/v1/dsh/market/capabilities").json()["data"]
-        assert capabilities["enabled"] is False and capabilities["public_key"] is None
-    assert json.loads(decode(receipt["payload"])) == payload
+        response = client.get("/api/v1/dsh/market/capabilities")
+        assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
+        capability = response.json()["data"]
+        assert capability["enabled"] is True and capability["contract_version"] == 2
+        assert capability["tenant_id"] == "2"
+        assert capability["allow_third_party_plugins"] is False
+        assert capability["allow_third_party_workbenches"] is False
+        assert "public_key" not in capability and "lease_seconds" not in capability
+        catalog = client.get("/api/v1/dsh/market/catalog")
+        assert catalog.headers["cache-control"] == "no-store"
+        assert catalog.json()["data"]["total"] == 1
+        result = client.post("/api/v1/dsh/market/sync", json={"device_id": "device-1", "plugins": []})
+        assert result.status_code == 200 and result.headers["cache-control"] == "no-store"
+        snapshot = result.json()["data"]
+        assert snapshot["tenant_id"] == "2" and snapshot["user_id"] == "20"
+        assert snapshot["device_id"] == "device-1" and isinstance(snapshot["synced_at"], int)
+        assert snapshot["policies"][0]["plugin_id"] == plugin["id"]
+        assert "signature" not in snapshot and "payload" not in snapshot
+        assert "expires_at" not in snapshot and "issued_at" not in snapshot
+
+        app.dependency_overrides[market_actor] = lambda: MarketActor(3, 30, desktop=desktop)
+        other = client.post("/api/v1/dsh/market/sync", json={"device_id": "device-1", "plugins": []}).json()["data"]
+        assert other["tenant_id"] == "3" and other["user_id"] == "30"
+        assert other["policies"] == []
 
 
 def test_admin_scope_requires_role_and_active_tenant(monkeypatch):
@@ -489,3 +532,33 @@ def test_market_upload_limit_is_512_mib():
     from bisheng.dsh_market.domain.bundle import MAX_UPLOAD_BYTES
 
     assert MAX_UPLOAD_BYTES == 512 * 1024 * 1024
+
+
+@pytest.mark.parametrize("kind", ["zip", "tgz"])
+def test_community_import_preview_and_artifact_round_trip(service, kind):
+    from test.dsh_market.test_community_bundle import package_archive
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20, desktop=True)
+    app.dependency_overrides[market_admin] = lambda: MarketActor(2, 20)
+    app.dependency_overrides[get_market_service] = lambda: service
+    data = package_archive(kind)
+    upload = {"file": ("plugin." + kind, data)}
+    with TestClient(app) as client:
+        preview = client.post("/api/v1/dsh/market/admin/imports/preview", files=upload).json()["data"]
+        assert preview["allowed"] and preview["incoming_version"] == "1.2.0-beta.1"
+        result = client.post("/api/v1/dsh/market/admin/imports", files=upload).json()["data"]
+        assert result["status"] == "completed"
+        plugin = client.get("/api/v1/dsh/market/catalog").json()["data"]["data"][0]
+        url = f"/api/v1/dsh/market/plugins/{plugin['id']}/versions/{result['version_id']}/artifact"
+        artifact = client.get(url)
+        assert artifact.content == data
+        assert artifact.headers["etag"] == '"' + hashlib.sha256(data).hexdigest() + '"'
+        assert artifact.headers["content-type"] == ("application/gzip" if kind == "tgz" else "application/zip")
+        assert artifact.headers["cache-control"] == "no-store"
+        release = package_archive(kind, {"version": "1.2.0"})
+        upgraded = client.post("/api/v1/dsh/market/admin/imports", files={"file": ("release." + kind, release)})
+        assert upgraded.json()["data"]["status"] == "completed"
+        older = client.post("/api/v1/dsh/market/admin/imports/preview", files=upload).json()["data"]
+        assert not older["allowed"] and older["reason"] == "lower_version"

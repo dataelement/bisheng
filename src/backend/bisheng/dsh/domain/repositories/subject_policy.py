@@ -9,14 +9,12 @@ from sqlmodel import Session, select
 from bisheng.common.errcode.dsh import (
     DshInvalidRequestError,
     DshOperationConflictError,
-    DshSeatLimitReachedError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.role import Role
 from bisheng.database.models.tenant import Tenant, UserTenant
-from bisheng.dsh.domain.models.admin_operation import DshAdminOperation
 from bisheng.dsh.domain.models.subject_policy import DshSubjectPolicy, DshSubjectPolicyAudit
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
@@ -36,8 +34,9 @@ def _state(row: DshSubjectPolicy | None) -> dict:
 
 
 class DshSubjectPolicyRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, *, include_retired_roles: bool = False):
         self.session = session
+        self.include_retired_roles = include_retired_roles
 
     def _departments(self) -> list[Department]:
         tenant = require_tenant()
@@ -75,163 +74,6 @@ class DshSubjectPolicyRepository:
             row = self.session.exec(select(Tenant).where(Tenant.id == tenant).with_for_update()).one_or_none()
         if row is None or row.status != "active":
             raise DshInvalidRequestError()
-
-    def entitled_user_ids(
-        self,
-        *,
-        proposed_subject: tuple[str, int, int, bool, int] | None = None,
-        proposed_user: tuple[int, int, bool, int] | None = None,
-    ) -> list[int]:
-        """Resolve users entitled to at least one positive DSH model grant.
-
-        A proposal replaces the matching persisted row, so capacity is checked
-        against the complete post-change state before the write is committed.
-        """
-        tenant = require_tenant()
-        with strict_tenant_filter():
-            active_user_ids = {
-                int(user_id)
-                for user_id in self.session.exec(
-                    select(User.user_id)
-                    .join(UserTenant, UserTenant.user_id == User.user_id)
-                    .join(Tenant, Tenant.id == UserTenant.tenant_id)
-                    .where(
-                        UserTenant.tenant_id == tenant,
-                        UserTenant.is_active == 1,
-                        UserTenant.status == "active",
-                        Tenant.status == "active",
-                        User.delete == 0,
-                    )
-                ).all()
-            }
-            direct_rows = list(self.session.exec(select(DshUserPolicy).where(DshUserPolicy.tenant_id == tenant)).all())
-            pending_policy_operations = list(
-                self.session.exec(
-                    select(DshAdminOperation).where(
-                        DshAdminOperation.tenant_id == tenant,
-                        DshAdminOperation.action == "UPDATE_POLICY",
-                        DshAdminOperation.status.in_(("PENDING", "PROCESSING")),
-                    )
-                ).all()
-            )
-            subject_rows = list(
-                self.session.exec(select(DshSubjectPolicy).where(DshSubjectPolicy.tenant_id == tenant)).all()
-            )
-            membership_rows = (
-                list(
-                    self.session.exec(
-                        select(UserDepartment.user_id, UserDepartment.department_id)
-                        .join(Department, Department.id == UserDepartment.department_id)
-                        .where(
-                            UserDepartment.user_id.in_(active_user_ids),
-                            Department.tenant_id == tenant,
-                            Department.status == "active",
-                        )
-                    ).all()
-                )
-                if active_user_ids
-                else []
-            )
-            role_rows = (
-                list(
-                    self.session.exec(
-                        select(UserRole.user_id, UserRole.role_id).where(
-                            UserRole.tenant_id == tenant,
-                            UserRole.user_id.in_(active_user_ids),
-                        )
-                    ).all()
-                )
-                if active_user_ids
-                else []
-            )
-
-        direct = {
-            (int(row.user_id), int(row.model_id)): (
-                bool(row.enabled),
-                int(row.monthly_token_limit),
-            )
-            for row in direct_rows
-        }
-        # A durable direct-policy command reserves capacity as soon as it is
-        # registered. This keeps two concurrent pending grants from both
-        # passing the same seat check before the worker commits either policy.
-        for operation in sorted(
-            pending_policy_operations,
-            key=lambda item: item.operation_id,
-        ):
-            payload = operation.payload
-            model_id = payload.get("model_id") if isinstance(payload, dict) else None
-            enabled = payload.get("enabled") if isinstance(payload, dict) else None
-            monthly_token_limit = payload.get("monthly_token_limit") if isinstance(payload, dict) else None
-            if type(model_id) is not int or type(enabled) is not bool or type(monthly_token_limit) is not int:
-                raise DshInvalidRequestError()
-            direct[(int(operation.user_id), model_id)] = (enabled, monthly_token_limit)
-        if proposed_user is not None:
-            user_id, model_id, enabled, monthly_token_limit = proposed_user
-            direct[(user_id, model_id)] = (enabled, monthly_token_limit)
-
-        subjects = {
-            (row.subject_type, int(row.subject_id), int(row.model_id)): (
-                bool(row.enabled),
-                int(row.monthly_token_limit),
-            )
-            for row in subject_rows
-        }
-        if proposed_subject is not None:
-            subject_type, subject_id, model_id, enabled, monthly_token_limit = proposed_subject
-            subjects[(subject_type, subject_id, model_id)] = (enabled, monthly_token_limit)
-
-        entitled = {
-            user_id
-            for (user_id, _model_id), (enabled, monthly_token_limit) in direct.items()
-            if user_id in active_user_ids and enabled and monthly_token_limit > 0
-        }
-        active_subjects = {
-            (subject_type, subject_id, model_id)
-            for (subject_type, subject_id, model_id), (enabled, monthly_token_limit) in subjects.items()
-            if enabled and monthly_token_limit > 0
-        }
-        if active_subjects and active_user_ids:
-            departments = self._departments()
-            memberships: dict[int, set[int]] = {user_id: set() for user_id in active_user_ids}
-            roles: dict[int, set[int]] = {user_id: set() for user_id in active_user_ids}
-            for user_id, department_id in membership_rows:
-                memberships[int(user_id)].add(int(department_id))
-            for user_id, role_id in role_rows:
-                roles[int(user_id)].add(int(role_id))
-            for user_id in active_user_ids - entitled:
-                ancestors = self._department_ancestor_ids_for(memberships[user_id], departments)
-                if any(
-                    (
-                        (kind == "DEPARTMENT" and subject_id in ancestors)
-                        or (kind == "ROLE" and subject_id in roles[user_id])
-                    )
-                    and not direct.get((user_id, model_id), (False, 0))[0]
-                    for kind, subject_id, model_id in active_subjects
-                ):
-                    entitled.add(user_id)
-        return sorted(entitled)
-
-    def ensure_seat_capacity(
-        self,
-        seat_limit: int,
-        *,
-        proposed_subject: tuple[str, int, int, bool, int] | None = None,
-        proposed_user: tuple[int, int, bool, int] | None = None,
-    ) -> None:
-        if type(seat_limit) is not int or seat_limit < 0:
-            raise DshInvalidRequestError()
-        self._lock_tenant()
-        if (
-            len(
-                self.entitled_user_ids(
-                    proposed_subject=proposed_subject,
-                    proposed_user=proposed_user,
-                )
-            )
-            > seat_limit
-        ):
-            raise DshSeatLimitReachedError()
 
     @staticmethod
     def _ordered_department_tree(departments: list[Department]) -> list[tuple[Department, int]]:
@@ -346,7 +188,6 @@ class DshSubjectPolicyRepository:
         expected_version: int,
         monthly_token_limit: int,
         enabled: bool,
-        seat_limit: int | None = None,
     ) -> dict:
         tenant = require_tenant()
         if (
@@ -360,17 +201,6 @@ class DshSubjectPolicyRepository:
         ):
             raise DshInvalidRequestError()
         subject = self._validate_subject(subject_type, subject_id)
-        if seat_limit is not None:
-            self.ensure_seat_capacity(
-                seat_limit,
-                proposed_subject=(
-                    subject_type,
-                    subject_id,
-                    model_id,
-                    enabled,
-                    monthly_token_limit,
-                ),
-            )
         statement = select(DshSubjectPolicy).where(
             DshSubjectPolicy.tenant_id == tenant,
             DshSubjectPolicy.subject_type == subject_type,
@@ -520,15 +350,15 @@ class DshSubjectPolicyRepository:
                 ).all()
             }
 
-    @staticmethod
     def _matching_grants(
-        grants: list[DshSubjectPolicy], department_ids: set[int], role_ids: set[int]
+        self, grants: list[DshSubjectPolicy], department_ids: set[int], role_ids: set[int]
     ) -> list[DshSubjectPolicy]:
+        # Only the offline migration reader opts into retired role sources.
         return [
             row
             for row in grants
             if (row.subject_type == "DEPARTMENT" and row.subject_id in department_ids)
-            or (row.subject_type == "ROLE" and row.subject_id in role_ids)
+            or (self.include_retired_roles and row.subject_type == "ROLE" and row.subject_id in role_ids)
         ]
 
     def user_permissions(

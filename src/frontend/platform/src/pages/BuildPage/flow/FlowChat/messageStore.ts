@@ -1,21 +1,23 @@
 // @ts-strict-ignore
-import { message } from '@/components/bs-ui/toast/use-toast';
+import { workflowStreamForHost } from '@bisheng/chat/core';
 import { generateUUID } from '@/components/bs-ui/utils';
-import { getChatHistory } from '@/controllers/API';
 import { WorkflowMessage } from '@/types/flow';
 import { formatDate } from '@/util/utils';
-import i18next from 'i18next';
 import cloneDeep from 'lodash-es/cloneDeep';
-import { create } from 'zustand';
+import { createStore } from 'zustand/vanilla';
+import { createHistoryAdapter } from '@/components/bs-comp/appChat/historyAdapter';
+import { createMessageStoreScope } from '@/components/bs-comp/appChat/createMessageStoreScope';
 import { normalizeCitationItems } from '@/components/bs-comp/chatComponent/citationUtils';
-import { parseAgentNotices, toChatFiles } from './agentDeliverables';
 
 /**
  * 会话消息管理
  */
 
 type State = {
+    eventTarget: EventTarget,
+    historyGeneration: number,
     running: boolean,
+    inputLocked: boolean,
     /**
      * 会话 ID
      * 变更会触发 ws建立，解锁滚动
@@ -30,17 +32,17 @@ type State = {
      * 控制引导问题的显示状态
      */
     showGuideQuestion: boolean
+    questions: string[];
     inputForm: null | any
 }
 
 type Actions = {
-    loadHistoryMsg: (flowid: string, chatId: string, data: { appendHistory: boolean, lastMsg: string }) => Promise<any>;
-    loadMoreHistoryMsg: (flowid: string, appendHistory: boolean) => Promise<void>;
+    setQuestions: (questions: string[]) => void;
+    setInputLocked: (locked: boolean) => void;
     destory: () => void;
     createSendMsg: (msg: string) => void;
     createWsMsg: (data: any) => void;
     streamWsMsg: (data: any) => void;
-    updateCurrentMessage: (data: any) => void;
     changeChatId: (chatId: string) => void;
     startNewRound: (str: string) => void;
     insetSeparator: (text: string) => void;
@@ -52,73 +54,23 @@ type Actions = {
 }
 
 
-const handleHistoryMsg = (data: any[]): WorkflowMessage[] => {
-    const correctedJsonString = (str: string) => str
-        // .replace(/\\([\s\S])|(`)/g, '\\\\$1$2') // 转义反斜线和反引号
-        .replace(/\n/g, '\\n')                  // 转义换行符
-        .replace(/\r/g, '\\r')                  // 转义回车符
-        .replace(/\t/g, '\\t')                  // 转义制表符
-        .replace(/'/g, '"');                    // 将单引号替换为双引号
 
-    return data.filter(item =>
-        ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
-        && (item.message || item.reasoning_log)).map(item => {
-            let { message, files, is_bot, intermediate_steps, category, ...other } = item
-            try {
-                message = message && message[0] === '{' ? JSON.parse(message) : message || ''
-            } catch (e) {
-                // 未考虑的情况暂不处理
-                console.error('message to JSON error :>> ', e);
-            }
-            // hack
-            let chatKey = undefined
-            if (typeof message !== 'string') {
-                // 优先 input
-                if ('input' in message) {
-                    chatKey = 'input'
-                } else {
-                    chatKey = Object.keys(message)[0]
-                }
-            }
 
-            return {
-                ...other,
-                category,
-                chatKey,
-                end: true,
-                files: toChatFiles(files ? JSON.parse(files) : []),
-                notices: parseAgentNotices(other.extra),
-                isSend: !is_bot,
-                message,
-                thought: intermediate_steps,
-                reasoning_log: message.reasoning_content || '',
-                citations: normalizeCitationItems(other),
-                noAccess: true
-            }
-        })
-}
-
-let currentChatId = ''
-
-const mergeStreamText = (current: unknown, incoming: unknown) => {
-    const currentText = typeof current === 'string' ? current : String(current || '')
-    const incomingText = typeof incoming === 'string' ? incoming : String(incoming || '')
-
-    if (!incomingText) return currentText
-    if (!currentText) return incomingText
-
-    // 兼容后端发送完整快照和增量片段两种流式协议
-    return incomingText.startsWith(currentText) ? incomingText : currentText + incomingText
-}
-
-export const useMessageStore = create<State & Actions>((set, get) => ({
+export const createMessageStore = () => {
+const store = createStore<State & Actions>((set, get) => ({
+    eventTarget: new EventTarget(),
+    historyGeneration: 0,
     chatId: '',
     messages: [],
     inputForm: null,
     running: false,
+    inputLocked: true,
     hisMessages: [],
     historyEnd: false,
+    questions: [],
     showGuideQuestion: false,
+    setQuestions(questions) { set({ questions: questions.filter(question => typeof question === "string" && question.trim()) }); },
+    setInputLocked(inputLocked) { set({ inputLocked }); },
     changeChatId(chatId) {
         set((state) => ({ chatId }))
     },
@@ -134,8 +86,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             newChat.push({
                 category, flow_id, chat_id,
                 message_id: messageId,
-                files: toChatFiles(files), is_bot,
-                notices: parseAgentNotices(extra),
+                files, is_bot,
                 message, receiver, source, user_id,
                 liked: !!liked,
                 end: type === 'over',
@@ -151,33 +102,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
     // stream
     streamWsMsg(data) {
-        const messages = cloneDeep(get().messages);
-        const { unique_id, output_key, reasoning_content } = data.message;
-        const currentMessageIndex = messages.findIndex(msg => msg.message_id === (unique_id + output_key))
-        const currentMsg = messages[currentMessageIndex]
-        if (!currentMsg) return get().createWsMsg(
-            { ...data, message: data.message.msg, reasoning_log: reasoning_content || '', message_id: unique_id + output_key }
-        )
-
-        // append
-        const newCurrentMessage = {
-            ...currentMsg,
-            message_id: data.type === 'end' ? data.message_id : currentMsg.message_id,
-            message: data.type === 'end' ? data.message.msg : mergeStreamText(currentMsg.message, data.message.msg),
-            reasoning_log: data.type === 'end' ? currentMsg.reasoning_log : mergeStreamText(currentMsg.reasoning_log, reasoning_content),
-            create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
-            source: data.source,
-            citations: normalizeCitationItems(data) || currentMsg.citations || null,
-            // F078: an agent node's deliverables and notices arrive with the end event.
-            files: data.type === 'end' ? toChatFiles(data.files) : currentMsg.files,
-            notices: data.type === 'end' ? parseAgentNotices(data.extra) : currentMsg.notices,
-            end: data.type === 'end'
-        }
-
-        messages[currentMessageIndex] = newCurrentMessage
-        set((state) => ({ messages }))
+        set({ messages: workflowStreamForHost(get().messages, data, get().chatId) as unknown as WorkflowMessage[] });
     },
     createSendMsg(msg) {
+        set({ questions: [] });
         set((state) => ({
             messages:
                 [...state.messages, {
@@ -224,50 +152,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             return { messages: newChat }
         })
     },
-    async loadHistoryMsg(flowid, chatId, { lastMsg }) {
-        const res = await getChatHistory(flowid, chatId, 30, 0)
-        const msgs = handleHistoryMsg(res)
-        const hisMessages: WorkflowMessage[] = msgs.map(el => ({ ...el, his: true })).reverse()
-        currentChatId = chatId
-        if (msgs.length && lastMsg) {
-            hisMessages.push({
-                ...bsMsgItem,
-                category: 'separator',
-                message_id: generateUUID(8),
-                message: i18next.t('chat.chatEndMessage', { ns: 'chat' }),
-                create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
-            })
-        }
-        set({
-            historyEnd: false,
-            messages: hisMessages,
-            hisMessages
-        })
-        return msgs
-    },
-    async loadMoreHistoryMsg(flowid, appendHistory) {
-        if (get().running) return // 会话进行中禁止加载more历史
-        if (get().historyEnd) return // 没有更多历史纪录
-        const chatId = get().chatId
-        const prevMsgs = get().messages
-        // 最后一条消息id不存在，忽略 loadmore
-        if (!prevMsgs[0]?.id) return
-        const res = await getChatHistory(flowid, chatId, 10, Number(prevMsgs[0]?.id || 0))
-        // 过滤非同一会话消息
-        if (res[0]?.chat_id !== currentChatId) {
-            return console.warn('loadMoreHistoryMsg chatId not match, ignore')
-        }
-        const msgs = handleHistoryMsg(res)
-        if (msgs.length) {
-            set({ [appendHistory ? 'messages' : 'hisMessages']: [...msgs.reverse(), ...prevMsgs] })
-        } else {
-            set({ historyEnd: true })
-        }
-    },
     overWsMsg(data) {
         // 删除所有未结束消息
         if (data.type === 'end_cover' && data.message) {
-            console.log('security audit triggered, dropping unfinished messages');
+            console.log('触发安全审计,删除所有未结束消息 :>> ');
             data.category = "stream_msg"
             data.type = 'over'
             data.message_id = generateUUID(8)
@@ -277,109 +165,29 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             }, 0);
         }
     },
-    // stream end old
-    updateCurrentMessage(data) {
-        const messages = get().messages
-
-        console.log('change updateCurrentMessage');
-        const currentMessageIndex = messages.findIndex(msg => msg.message_id === data.message_id)
-        const currentMessage = messages[currentMessageIndex]
-
-        const newCurrentMessage = {
-            ...currentMessage,
-            ...data,
-            message: mergeStreamText(currentMessage.message, data.message),
-            end: ['end', 'over'].includes(data.type),
-            citations: normalizeCitationItems(data) || currentMessage.citations || null,
-            create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
-        }
-
-        messages[currentMessageIndex] = newCurrentMessage
-        set((state) => ({ messages: [...messages] }))
-    },
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
     },
     clearMsgs() {
-        setTimeout(() => {
-            set({ hisMessages: [], messages: [], historyEnd: true })
-        }, 0);
+        set({ historyGeneration: get().historyGeneration + 1, hisMessages: [], messages: [], questions: [], inputForm: null, running: false, showGuideQuestion: false, historyEnd: true });
     },
     destory() {
         set({
+            historyGeneration: get().historyGeneration + 1,
             chatId: '',
+            questions: [],
             messages: [],
-            inputForm: null
+            inputForm: null,
+            running: false,
+            hisMessages: [],
+            historyEnd: false,
+            showGuideQuestion: false
         })
     },
     setInputForm(form) {
         set({ inputForm: form })
     },
 
-    // // stream end
-    // updateCurrentMessage(wsdata, cover = false) {
-    //     // console.log( wsdata.chat_id, get().chatId);
-    //     // if (wsdata.end) {
-    //     //     debugger
-    //     // }
-    //     console.log('change updateCurrentMessage');
-    //     const messages = get().messages
-    //     const isRunLog = runLogsTypes.includes(wsdata.category);
-    //     // run log类型存在嵌套情况，使用 extra 匹配 currentMessage; 否则取最近
-    //     let currentMessageIndex = 0
-    //     for (let i = messages.length - 1; i >= 0; i--) {
-    //         if (isRunLog && messages[i].extra === wsdata.extra) {
-    //             currentMessageIndex = i;
-    //             break;
-    //         } else if (!isRunLog && !runLogsTypes.includes(messages[i].category)) {
-    //             currentMessageIndex = i;
-    //             break;
-    //         }
-    //     }
-    //     const currentMessage = messages[currentMessageIndex]
-
-    //     const newCurrentMessage = {
-    //         ...currentMessage,
-    //         ...wsdata,
-    //         id: isRunLog ? wsdata.extra : wsdata.messageId, // 每条消息必唯一
-    //         message: isRunLog ? JSON.parse(wsdata.message) : currentMessage.message + wsdata.message,
-    //         thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
-    //         files: wsdata.files || [],
-    //         category: wsdata.category || '',
-    //         source: wsdata.source
-    //     }
-    //     // 无id补上（如文件解析完成消息，后端无返回messageid）
-    //     if (!newCurrentMessage.id) {
-    //         newCurrentMessage.id = Math.random() * 1000000
-    //         // console.log('msg:', newCurrentMessage);
-    //     }
-
-    //     messages[currentMessageIndex] = newCurrentMessage
-    //     // 会话特殊处理，兼容后端的缺陷
-    //     if (!isRunLog) {
-    //         // start - end 之间没有内容删除load
-    //         if (newCurrentMessage.end && !(newCurrentMessage.files.length || newCurrentMessage.thought || newCurrentMessage.message)) {
-    //             messages.pop()
-    //         }
-    //         // 无 messageid 删除
-    //         // if (newCurrentMessage.end && !newCurrentMessage.id) {
-    //         //     messages.pop()
-    //         // }
-    //         // 删除重复消息
-    //         const prevMessage = messages[currentMessageIndex - 1];
-    //         if ((prevMessage
-    //             && prevMessage.message === newCurrentMessage.message
-    //             && prevMessage.thought === newCurrentMessage.thought)
-    //             || cover) {
-    //             const removedMsg = messages.pop()
-    //             // 使用最后一条的信息作为准确信息
-    //             Object.keys(prevMessage).forEach((key) => {
-    //                 prevMessage[key] = removedMsg[key]
-    //             })
-    //         }
-    //     }
-    //     set((state) => ({ messages: [...messages] }))
-    // },
     startNewRound(str) {
         get().insetSeparator(str)
         set((state) => ({ showGuideQuestion: true }))
@@ -405,7 +213,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             }]
         }))
     }
-}))
+}));
+return Object.assign(store, { services: createHistoryAdapter(store, 'workflow') });
+};
+export const { MessageStoreProvider, useMessageStore } = createMessageStoreScope(createMessageStore);
 
 
 

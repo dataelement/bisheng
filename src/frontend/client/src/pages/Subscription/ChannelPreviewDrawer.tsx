@@ -1,3 +1,5 @@
+import { showApiError } from "~/api/request";
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { NoPermissionIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,7 +23,7 @@ import {
     SheetHeader,
     SheetTitle,
 } from "~/components/ui/Sheet";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { useAuthContext } from "~/hooks/AuthContext";
 import { useToastContext } from "~/Providers";
 import { ArticleCard } from "./ArticleList/ArticleCard";
@@ -214,12 +216,8 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
             queryClient.invalidateQueries({ queryKey: ["channelPreviewDetail", channelId] });
             queryClient.invalidateQueries({ queryKey: ["channelPreviewArticles", channelId] });
             onSubscriptionChanged?.();
-        } catch (e: any) {
-            const msg =
-                e?.response?.data?.status_message ||
-                e?.message ||
-                localize("com_subscription.subscribe_failed_retry");
-            showToast({ message: msg, severity: NotificationSeverity.WARNING });
+        } catch (error) {
+            showApiError(error);
         } finally {
             setSubscribing(false);
         }
@@ -278,16 +276,9 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
 
                             {/* Description (2-line clamp + tooltip) */}
                             {channelDetail.description && (
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <p className="cursor-default text-left text-[14px] leading-[22px] text-[#A9AEB8] line-clamp-2">
+                                <SharedTooltip  content={channelDetail.description} ><p className="cursor-default text-left text-[14px] leading-[22px] text-[#A9AEB8] line-clamp-2">
                                             {channelDetail.description}
-                                        </p>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="shadow-lg py-2 max-w-md text-sm">
-                                        {channelDetail.description}
-                                    </TooltipContent>
-                                </Tooltip>
+                                        </p></SharedTooltip>
                             )}
 
                             {/* Creator Info */}

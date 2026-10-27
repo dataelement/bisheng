@@ -1,24 +1,21 @@
+import { Dropdown, DropdownItem, DropdownSeparator, Tooltip as SharedTooltip } from '@bisheng/ui';
 import { Download, MoreVertical, GitBranch, History, FileSearch } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useState, type MouseEvent } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Tag } from "@bisheng/ui";
-import { Button, Checkbox } from "~/components";
+import { Button } from "~/components";
+import { Checkbox } from '@bisheng/ui';
 import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
 import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import { Card, CardContent } from "~/components/ui/Card";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger
-} from "~/components/ui/DropdownMenu";
-import { ActionMenuContent, ActionMenuItem, ActionMenuLoadingRow } from "~/components/ActionMenu";
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemRetryable, isKnowledgeItemUploading, type KnowledgeStatusTone } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -46,7 +43,7 @@ interface FileCardProps {
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
-    onRename: (newName: string) => void;
+    onRename: (newName: string) => void | Promise<void>;
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;
@@ -183,7 +180,8 @@ export function FileCard({
         inputRef,
         handleRenameSubmit,
         handleKeyDown,
-        startRenaming,
+        startRenamingFromMenu,
+        handleMenuCloseAutoFocus,
     } = useInlineRename({
         fileName: file.name,
         isFolder,
@@ -270,14 +268,7 @@ export function FileCard({
         );
 
         const wrapped = statusReason ? (
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <span className="inline-flex">{pill}</span>
-                </TooltipTrigger>
-                <TooltipContent noArrow side="top" className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white">
-                    {statusReason}
-                </TooltipContent>
-            </Tooltip>
+            <SharedTooltip  content={statusReason} side="top" ><span className="inline-flex">{pill}</span></SharedTooltip>
         ) : pill;
 
         // Inline (H5 row meta line) returns the bare pill; desktop card overlays it on the icon.
@@ -382,77 +373,63 @@ export function FileCard({
         !isUploadingFolderPlaceholder &&
         (isFolder || isKnowledgeItemPreviewable(file));
 
+    // The danger row gets its own group only when something sits above it.
+    const hasItemsAboveDelete = showMenuDownloadItem || Boolean(onManagePermission) || canRename
+        || (isAdmin && (!isFolder || hasRetryOption)) || showMoveItem || showVersionManagement || showVersionHistory;
     // Shared action-menu items, reused by the "..." dropdown, the H5 row menu and
     // the right-click menu. While permissions are still resolving, show a single
     // loading row so the menu doesn't open with a few items and then grow.
     const moreMenuItems = permissionsLoading ? (
-        <ActionMenuLoadingRow />
+        <DropdownItem disabled icon={<Outlined.Loading className="animate-spin motion-reduce:animate-pulse" />}>
+            {localize("com_list_loading")}
+        </DropdownItem>
     ) : (
         <>
             {showMenuDownloadItem && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                    icon={<Outlined.Download />}
-                    label={localize("com_knowledge.download")}
-                />
+                <DropdownItem onSelect={() => onDownload()} icon={<Outlined.Download />}>
+                    {localize("com_knowledge.download")}
+                </DropdownItem>
             )}
             {onManagePermission && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                    icon={<Outlined.PeopleSafe />}
-                    label={localize("com_permission.manage_permission")}
-                />
+                <DropdownItem onSelect={() => onManagePermission()} icon={<Outlined.PeopleSafe />}>
+                    {localize("com_permission.manage_permission")}
+                </DropdownItem>
             )}
             {isAdmin && !isFolder && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                    icon={<Outlined.Tag />}
-                    label={localize("com_knowledge.edit_tags")}
-                />
+                <DropdownItem onSelect={() => onEditTags()} icon={<Outlined.Tag />}>
+                    {localize("com_knowledge.edit_tags")}
+                </DropdownItem>
             )}
             {canRename && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); startRenaming(); }}
-                    icon={<Outlined.Edit />}
-                    label={localize("com_knowledge.rename")}
-                />
+                <DropdownItem onSelect={startRenamingFromMenu} icon={<Outlined.Edit />}>
+                    {localize("com_knowledge.rename")}
+                </DropdownItem>
             )}
             {showMoveItem && (
-                <ActionMenuItem
-                    disabled={!canMove || isUploading}
-                    onClick={(e) => { e.stopPropagation(); onMove?.(); }}
-                    icon={<Outlined.MoveToFolder />}
-                    label={localize("com_knowledge.move")}
-                />
+                <DropdownItem disabled={!canMove || isUploading} onSelect={() => onMove?.()} icon={<Outlined.MoveToFolder />}>
+                    {localize("com_knowledge.move")}
+                </DropdownItem>
             )}
             {isAdmin && hasRetryOption && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                    icon={<Outlined.Refresh />}
-                    label={localize("com_knowledge.retry")}
-                />
+                <DropdownItem onSelect={() => onRetry?.()} icon={<Outlined.Refresh />}>
+                    {localize("com_knowledge.retry")}
+                </DropdownItem>
             )}
             {showVersionManagement && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
-                    icon={<GitBranch />}
-                    label={localize("com_knowledge.version.menu_version_management")}
-                />
+                <DropdownItem onSelect={() => onOpenVersionManagement?.(file)} icon={<GitBranch />}>
+                    {localize("com_knowledge.version.menu_version_management")}
+                </DropdownItem>
             )}
             {showVersionHistory && (
-                <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
-                    icon={<History />}
-                    label={localize("com_knowledge.version.menu_version_history")}
-                />
+                <DropdownItem onSelect={() => onOpenVersionHistory?.(file)} icon={<History />}>
+                    {localize("com_knowledge.version.menu_version_history")}
+                </DropdownItem>
             )}
+            {canDelete && hasItemsAboveDelete && <DropdownSeparator />}
             {canDelete && (
-                <ActionMenuItem
-                    danger
-                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                    icon={<Outlined.Delete />}
-                    label={localize("com_knowledge.delete")}
-                />
+                <DropdownItem danger onSelect={() => onDelete()} icon={<Outlined.Delete />}>
+                    {localize("com_knowledge.delete")}
+                </DropdownItem>
             )}
         </>
     );
@@ -595,9 +572,10 @@ export function FileCard({
             onContextMenu={handleCardContextMenu}
         >
             {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
+            {/* Portaled menu clicks still bubble through the React tree; keep them off the card. */}
             {showMoreMenu && (
-                <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
-                    <DropdownMenuTrigger asChild>
+                <span className="contents" onClick={(e) => e.stopPropagation()}>
+                    <Dropdown open={contextMenuOpen} onOpenChange={setContextMenuOpen} onCloseAutoFocus={handleMenuCloseAutoFocus} menu={moreMenuItems}>
                         <button
                             type="button"
                             aria-hidden="true"
@@ -605,11 +583,8 @@ export function FileCard({
                             className="fixed size-0 opacity-0"
                             style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
                         />
-                    </DropdownMenuTrigger>
-                    <ActionMenuContent align="start" width={140} onClick={(e) => e.stopPropagation()}>
-                        {moreMenuItems}
-                    </ActionMenuContent>
-                </DropdownMenu>
+                    </Dropdown>
+                </span>
             )}
             <CardContent className={cn(
                 "flex flex-col p-0",
@@ -624,10 +599,10 @@ export function FileCard({
                 {!hideSelectionCheckbox && mobileListMode && (
                     <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
-                            className={cn(
+                            className={`peer ${(cn(
                                 SELECTION_CHECKBOX_CLASS,
                                 !isSelectable && "cursor-not-allowed opacity-50",
-                            )}
+                            )) || ''}`}
                             disabled={!isSelectable}
                             checked={isSelected}
                             onCheckedChange={(checked) => onSelect(!!checked)}
@@ -670,10 +645,10 @@ export function FileCard({
                             )}
                         >
                             <Checkbox
-                                className={cn(
+                                className={`peer ${(cn(
                                     SELECTION_CHECKBOX_CLASS,
                                     !isSelectable && "cursor-not-allowed opacity-50",
-                                )}
+                                )) || ''}`}
                                 disabled={!isSelectable}
                                 checked={isSelected}
                                 onCheckedChange={(checked) => onSelect(!!checked)}
@@ -696,26 +671,17 @@ export function FileCard({
                             )}
                         >
                             {showMoreMenu && (
-                                <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
-                                    <DropdownMenuTrigger asChild>
+                                <span className="contents" onClick={(e) => e.stopPropagation()}>
+                                    <Dropdown align="end" open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange} onCloseAutoFocus={handleMenuCloseAutoFocus} menu={moreMenuItems}>
                                         <Button
                                             variant="outline"
                                             size="icon"
                                             className="w-5 h-5 rounded-md shrink-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                                            onClick={(e) => e.stopPropagation()}
                                         >
                                             <MoreVertical className="size-4 text-text-2 group-hover:text-text-1" />
                                         </Button>
-                                    </DropdownMenuTrigger>
-
-                                    <ActionMenuContent
-                                        align="end"
-                                        width={140}
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        {moreMenuItems}
-                                    </ActionMenuContent>
-                                </DropdownMenu>
+                                    </Dropdown>
+                                </span>
                             )}
                         </div>
                     )}
@@ -765,24 +731,13 @@ export function FileCard({
                         </Button>
                     )}
                     {showMoreMenu && (
-                        <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-5 w-5 shrink-0 rounded-md"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
+                        <span className="contents" onClick={(e) => e.stopPropagation()}>
+                            <Dropdown align="end" open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange} onCloseAutoFocus={handleMenuCloseAutoFocus} menu={moreMenuItems}>
+                                <Button variant="outline" size="icon" className="h-5 w-5 shrink-0 rounded-md">
                                     <MoreVertical className="size-4 text-text-2" />
                                 </Button>
-                            </DropdownMenuTrigger>
-                            <ActionMenuContent
-                                align="end"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                {moreMenuItems}
-                            </ActionMenuContent>
-                        </DropdownMenu>
+                            </Dropdown>
+                        </span>
                     )}
                     </div>
                 )}

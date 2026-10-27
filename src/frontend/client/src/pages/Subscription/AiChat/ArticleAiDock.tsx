@@ -1,12 +1,9 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Outlined } from "bisheng-icons";
 import { TextareaAutosize } from "~/components/ui";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "~/components/ui/Tooltip2";
+
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
@@ -272,6 +269,9 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
         conversationId,
         title,
         isLoading,
+        historyError,
+        isClearing,
+        retryHistory,
         isStreaming,
         sendMessage,
         stopGenerating,
@@ -360,7 +360,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 {/* Messages — scrollable, with bottom fade-out. Default z-auto so it falls
                     below the focused-state grey overlay. */}
                 <div className="relative min-h-0 flex-1">
-                    <AiChatMessages
+                    {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                         messages={messages}
                         conversationId={conversationId}
                         title={title}
@@ -378,7 +378,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
-                    />
+                    />)}
                     {/* White gradient where messages meet the input — text appears to fade out. */}
                     <div
                         aria-hidden
@@ -406,7 +406,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         onChange={setInputText}
                         onSend={handleSend}
                         model={model}
-                        disabled={!modelOptions?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !modelOptions?.length}
                         isStreaming={isStreaming}
                         placeholder={localize("com_subscription.ask_article_placeholder")}
                         variant="box"
@@ -457,23 +457,14 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 {/* Floating expand button: only once a conversation exists and the panel is
                     collapsed. Hovers ~10px above the input's top-right, right-aligned with it. */}
                 {!open && messages.length > 0 && (
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button
+                    <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_ui_expand")}</p></>} ><button
                                     type="button"
                                     onClick={() => setOpen(true)}
                                     aria-label={localize("com_ui_expand")}
                                     className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
                                 >
                                     <Outlined.DoubleDown className="size-4 rotate-180" />
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>{localize("com_ui_expand")}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                                </button></SharedTooltip></SharedTooltipProvider>
                 )}
                 {/* Header + messages grow upward above the input. Height scales with the viewport
                     (taller on large screens), floored at 440px and capped so it never overflows. */}
@@ -492,44 +483,26 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                                 <div className="min-w-0 flex-1" aria-hidden />
                             {/* Clear · DoubleDown — bare 16px icons, 12px gap, right-aligned (matches the knowledge dock). */}
                             <div className="flex shrink-0 items-center justify-end gap-3 py-1">
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <button
+                                <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_subscription.clear_chat")}</p></>} ><button
                                                 type="button"
                                                 onClick={handleClear}
                                                 aria-label={localize("com_subscription.clear_chat")}
                                                 className="inline-flex size-4 shrink-0 items-center justify-center text-text-1 transition-colors hover:text-text-2"
                                             >
                                                 <Outlined.Delete className="size-4 shrink-0" />
-                                            </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>{localize("com_subscription.clear_chat")}</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <button
+                                            </button></SharedTooltip></SharedTooltipProvider>
+                                <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_ui_collapse")}</p></>} side="top" ><button
                                                 type="button"
                                                 onClick={() => setOpen(false)}
                                                 aria-label={localize("com_ui_collapse")}
                                                 className="inline-flex size-4 shrink-0 items-center justify-center text-text-3 transition-colors hover:text-text-2"
                                             >
                                                 <Outlined.DoubleDown className="size-4 shrink-0" />
-                                            </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top">
-                                            <p>{localize("com_ui_collapse")}</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
+                                            </button></SharedTooltip></SharedTooltipProvider>
                             </div>
                         </div>
 
-                        <AiChatMessages
+                        {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                             messages={messages}
                             conversationId={conversationId}
                             title={title}
@@ -547,7 +520,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                             emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                             onPresetClick={(q) => setInputText(q)}
                             onRegenerate={regenerate}
-                        />
+                        />)}
                     </div>
                 </div>
 
@@ -558,7 +531,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                     onChange={setInputText}
                     onSend={handleSend}
                     model={model}
-                    disabled={!modelOptions?.length}
+                    disabled={Boolean(historyError) || isLoading || isClearing || !modelOptions?.length}
                     isStreaming={isStreaming}
                     placeholder={localize("com_subscription.ask_article_placeholder")}
                     variant={open ? "line" : "box"}

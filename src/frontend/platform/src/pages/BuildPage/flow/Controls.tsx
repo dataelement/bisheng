@@ -1,14 +1,15 @@
-import { FileIcon, Maximize, ZoomIn, ZoomOut } from "lucide-react";
+import { Button } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+import { ZoomIn,ZoomOut } from "lucide-react";
 import { forwardRef } from "react";
 
-import { Button } from "@/components/bs-ui/button";
+
 import { cn } from "@/util/utils";
 import {
-    Panel,
-    PanelProps,
-    useReactFlow,
-    useStore,
-    useViewport,
+Panel,
+PanelProps,
+useReactFlow,
+useStore
 } from "@xyflow/react";
 
 export const Controls = forwardRef<
@@ -29,16 +30,12 @@ export const Controls = forwardRef<
     return (
         <Panel
             className={cn(
-                "flex gap-1 rounded-md bg-background  p-1 text-foreground left-52 selelct-none",
+                "flex gap-1 rounded-md bg-background  p-1 text-foreground !left-52 selelct-none",
                 className,
             )}
             {...props}
         >
-            <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => zoomIn({ duration: 300 })}
-            >
+            <Button variant="text" size="medium" onClick={() => zoomIn({ duration: 300 })} color="default" iconOnly>
                 <ZoomIn className="size-5" />
             </Button>
             {/* <Button
@@ -48,27 +45,15 @@ export const Controls = forwardRef<
             >
                 {(100 * zoom).toFixed(0)}%
             </Button> */}
-            <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => zoomOut({ duration: 300 })}
-            >
+            <Button variant="text" size="medium" onClick={() => zoomOut({ duration: 300 })} color="default" iconOnly>
                 <ZoomOut className="size-5" />
             </Button>
-            <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => fitView({ duration: 300 })}
-            >
-                <Maximize className="size-5" />
+            <Button variant="text" size="medium" onClick={() => fitView({ duration: 300 })} color="default" iconOnly>
+                <Outlined.FullScreen className="size-5" />
             </Button>
-            <Button
-                variant="ghost"
-                size="icon"
-                onClick={props.onCreateNote}
-            >
+            <Button variant="text" size="medium" className="gap-0.5" onClick={props.onCreateNote} color="default" iconOnly>
                 <span>+</span>
-                <FileIcon className="size-5 ml-0.5" />
+                <Outlined.File className="size-5" />
             </Button>
         </Panel>
     );

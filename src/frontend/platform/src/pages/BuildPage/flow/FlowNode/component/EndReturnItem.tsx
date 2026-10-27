@@ -1,6 +1,6 @@
 import { Label } from "@/components/bs-ui/label";
-import { Switch } from "@/components/bs-ui/switch";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { Switch } from "@bisheng/ui";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
 import { WorkflowNode, WorkflowNodeParam } from "@/types/flow";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

@@ -2,14 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deletePersonalSkill, getSkillCenter, setPersonalSkillEnabled } from '~/api/skillCenter';
 import type { SkillRecord } from './types';
 
+type SkillChange = { kind: 'toggle'; target: SkillRecord; enabled: boolean } | { kind: 'delete'; target: SkillRecord };
+
 const centerKey = ['skill-center'];
 
 export function useSkillCenter() {
   const client = useQueryClient();
   const center = useQuery(centerKey, () => getSkillCenter(), { retry: false });
   const refresh = () => client.invalidateQueries(centerKey);
-  const mutation = useMutation({
-    mutationFn: (change: { kind: 'toggle'; target: SkillRecord; enabled: boolean } | { kind: 'delete'; target: SkillRecord }) => {
+  const mutation = useMutation<SkillRecord | void, unknown, SkillChange>({
+    mutationFn: (change: SkillChange) => {
       if (change.kind === 'delete') return deletePersonalSkill(change.target.id);
       return setPersonalSkillEnabled(change.target.id, change.enabled);
     },

@@ -1,3 +1,4 @@
+import { showApiError } from "~/api/request";
 import { useLocalize } from "~/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -96,7 +97,7 @@ export function useChannelActions({
         } catch (e) {
             // Rollback on failure
             queryClient.invalidateQueries({ queryKey: ["channels", "created"] });
-            showToast({ message: localize("com_subscription.update_failed_retry"), severity: NotificationSeverity.WARNING });
+            showApiError(e);
         }
     };
 

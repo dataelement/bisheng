@@ -1,31 +1,34 @@
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Badge } from "@/components/bs-ui/badge"
-import { Button, LoadButton } from "@/components/bs-ui/button"
-import { Input } from "@/components/bs-ui/input"
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio-group"
-import { Switch } from "@/components/bs-ui/switch"
-import { message } from "@/components/bs-ui/toast/use-toast"
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input, toast } from '@bisheng/ui';
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { RadioGroup,Radio as RadioGroupItem,Switch,Tag } from "@bisheng/ui";
+
+
+
+
+
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/bs-ui/table"
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow,
+} from "@/components/bs-ui/table";
+
 import {
-  getPersonalTokenSettingApi,
-  listPersonalTokensApi,
-  revokePersonalTokenApi,
-  updatePersonalTokenSettingApi,
-} from "@/controllers/API/personalToken"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import type { PersonalTokenDataScope, PersonalTokenSetting } from "@/types/api/openApi"
-import type { PersonalTokenLedgerItem } from "@/types/api/openApi"
-import { useCallback, useEffect, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter"
-import { useOpenApiList } from "../OpenApiList/useOpenApiList"
+getPersonalTokenSettingApi,
+listPersonalTokensApi,
+revokePersonalTokenApi,
+updatePersonalTokenSettingApi,
+} from "@/controllers/API/personalToken";
+import { showApiError } from "@/controllers/request";
+import type { PersonalTokenDataScope,PersonalTokenLedgerItem,PersonalTokenSetting } from "@/types/api/openApi";
+import { useCallback, useContext, useEffect, useState } from "react";
+import { locationContext } from "@/contexts/locationContext";
+import { useTranslation } from "react-i18next";
+import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter";
+import { useOpenApiList } from "../OpenApiList/useOpenApiList";
 
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleString() : "-"
@@ -33,6 +36,17 @@ function formatDate(value: string | null): string {
 
 export function PersonalToken() {
   const { t } = useTranslation()
+  const { appConfig } = useContext(locationContext)
+  // The policy row is per tenant; on a single-tenant deployment "tenant policy"
+  // names a concept the rest of the console never shows, so it reads as
+  // "token policy" there. Same setting, same endpoint — copy only.
+  const multiTenantEnabled = !!appConfig?.multiTenantEnabled
+  const settingsTitleKey = multiTenantEnabled
+    ? "openApiManagement.personalToken.settings"
+    : "openApiManagement.personalToken.settingsSingle"
+  const settingsSavedKey = multiTenantEnabled
+    ? "openApiManagement.personalToken.settingsSaved"
+    : "openApiManagement.personalToken.settingsSavedSingle"
   const [setting, setSetting] = useState<PersonalTokenSetting | null>(null)
   const [enabled, setEnabled] = useState(false)
   const [ttlDays, setTtlDays] = useState(365)
@@ -44,7 +58,7 @@ export function PersonalToken() {
   const items = list.items
 
   const load = useCallback(async () => {
-    const nextSetting = await captureAndAlertRequestErrorHoc(getPersonalTokenSettingApi())
+    const nextSetting = await getPersonalTokenSettingApi()
     if (!nextSetting) return
     setSetting(nextSetting)
     setEnabled(nextSetting.pat_enabled)
@@ -53,7 +67,7 @@ export function PersonalToken() {
   }, [])
 
   useEffect(() => {
-    void load()
+    void load().catch(showApiError)
   }, [load])
 
   const applySetting = (next: PersonalTokenSetting) => {
@@ -66,23 +80,19 @@ export function PersonalToken() {
   const doSave = async () => {
     setSaving(true)
     try {
-      const next = await captureAndAlertRequestErrorHoc(
-        updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays, data_scope: dataScope }),
-      )
+      const next = await updatePersonalTokenSettingApi({ pat_enabled: enabled, pat_ttl_days: ttlDays, data_scope: dataScope })
       if (!next) return
 
       applySetting(next)
-      message({
-        title: t("prompt"),
-        variant: "success",
-        description: t("openApiManagement.personalToken.settingsSaved"),
-      })
+      toast.show({ type: "success", message: [String(t("prompt") ?? ''), String(t(settingsSavedKey) ?? '')].filter(Boolean).join('\n') })
     } finally {
       setSaving(false)
     }
   }
 
   const handleSave = () => {
+        if ((String((ttlDays) ?? '') !== '' && (!Number.isFinite(Number(ttlDays)) || Number(ttlDays) < 1 || Number(ttlDays) > 365))) return;
+
     if (saving) return
     // Narrowing hits every issued key immediately — confirm before tightening;
     // widening back needs no ceremony.
@@ -91,14 +101,14 @@ export function PersonalToken() {
         title: t("openApiManagement.personalToken.tightenConfirmTitle"),
         desc: t("openApiManagement.personalToken.tightenConfirmBody"),
         okTxt: t("openApiManagement.personalToken.tightenConfirmOk"),
-        onOk: (close) => {
+        onOk: async (close) => {
+          await doSave()
           close()
-          void doSave()
         },
       })
       return
     }
-    void doSave()
+    void doSave().catch(showApiError)
   }
 
   const handleRevoke = (item: PersonalTokenLedgerItem) => {
@@ -106,10 +116,10 @@ export function PersonalToken() {
       title: t("openApiManagement.personalToken.revokeConfirmTitle"),
       desc: t("openApiManagement.personalToken.revokeConfirmBody"),
       okTxt: t("openApiManagement.actions.revoke"),
-      onOk: (close) => {
+      onOk: async (close) => {
+        await revokePersonalTokenApi(item.id)
+        await list.reload()
         close()
-        void captureAndAlertRequestErrorHoc(revokePersonalTokenApi(item.id).then(() => true))
-          .then((success) => { if (success) void list.reload() })
       },
     })
   }
@@ -118,7 +128,7 @@ export function PersonalToken() {
     <div className="h-full min-h-0 flex-1 space-y-5 overflow-y-auto pb-8">
       <section className="rounded-md border p-4">
         <div className="mb-4">
-          <h2 className="font-semibold">{t("openApiManagement.personalToken.settings")}</h2>
+          <h2 className="font-semibold">{t(settingsTitleKey)}</h2>
           {!setting?.deployment_enabled ? (
             <p className="mt-1 text-sm text-muted-foreground">{t("openApiManagement.personalToken.deploymentDisabled")}</p>
           ) : null}
@@ -130,7 +140,7 @@ export function PersonalToken() {
           </label>
           <label className="w-48 space-y-1 text-sm">
             <span>{t("openApiManagement.personalToken.ttlDays")}</span>
-            <Input type="number" min={1} max={365} value={ttlDays} disabled={saving} onChange={(event) => setTtlDays(Number(event.target.value))} />
+            <Input type="number" min={1} max={365} value={ttlDays} disabled={saving} onChange={(event) => { if (!isNumberDraftWithinBounds(event.currentTarget.value, { min: 1, max: 365 })) return; return setTtlDays(Number(event.target.value)); }} />
           </label>
         </div>
         <div className="mt-4 space-y-2 text-sm">
@@ -139,7 +149,7 @@ export function PersonalToken() {
             value={dataScope}
             disabled={saving}
             onValueChange={(value) => setDataScope(value as PersonalTokenDataScope)}
-            className="space-y-2"
+            className="items-start"
           >
             <label className="flex items-start gap-2">
               <RadioGroupItem value="all_visible" className="mt-0.5" />
@@ -155,14 +165,9 @@ export function PersonalToken() {
           </RadioGroup>
         </div>
         <div className="mt-4">
-          <LoadButton
-            loading={saving}
-            aria-busy={saving}
-            disabled={!setting?.deployment_enabled || ttlDays < 1 || ttlDays > 365}
-            onClick={handleSave}
-          >
+          <Button loading={saving} aria-busy={saving} onClick={handleSave} disabled={((String((ttlDays) ?? '') !== '' && (!Number.isFinite(Number(ttlDays)) || Number(ttlDays) < 1 || Number(ttlDays) > 365))) || (Boolean(saving) || (!setting?.deployment_enabled || ttlDays < 1 || ttlDays > 365))}>
             {t("save")}
-          </LoadButton>
+          </Button>
         </div>
       </section>
       <Table>
@@ -182,13 +187,9 @@ export function PersonalToken() {
               <TableCell>
                 {item.holder_name || item.holder_user_id}
                 {item.holder_is_admin ? (
-                  <Badge
-                    className="ml-2"
-                    variant="secondary"
-                    title={t("openApiManagement.personalToken.adminHolderTip")}
-                  >
-                    {t("openApiManagement.personalToken.adminHolder")}
-                  </Badge>
+                  <span title={t("openApiManagement.personalToken.adminHolderTip")}>
+                    <Tag size="small" className="ml-2">{t("openApiManagement.personalToken.adminHolder")}</Tag>
+                  </span>
                 ) : null}
               </TableCell>
               <TableCell><code>{item.key_mask}</code></TableCell>
@@ -212,7 +213,7 @@ export function PersonalToken() {
               <TableCell>{formatDate(item.expires_at)}</TableCell>
               <TableCell>{t(item.is_valid ? "openApiManagement.status.active" : "openApiManagement.status.revoked")}</TableCell>
               <TableCell className="whitespace-nowrap text-right">
-                <Button variant="link" disabled={!item.is_valid} onClick={() => handleRevoke(item)}>{t("openApiManagement.actions.revoke")}</Button>
+                <Button size="small" variant="link" color="danger" disabled={!item.is_valid} onClick={() => handleRevoke(item)}>{t("openApiManagement.actions.revoke")}</Button>
               </TableCell>
             </TableRow>
           ))}

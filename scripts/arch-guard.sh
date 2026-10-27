@@ -13,6 +13,7 @@
 #   RULE-7: 硬编码敏感信息检测（C6，WARNING）
 #   RULE-8: DAO/Model 层不得直读 RoleAccessDao 做权限过滤（C4，INV-T19，VIOLATION）
 #   RULE-9: 业务模块不得导入 OpenFGA 基础设施（C4，VIOLATION）
+#   RULE-10: backend 不得依赖容器/编排 SDK 与 docker socket（C1/K1，VIOLATION）
 
 FILE="$1"
 [ -z "$FILE" ] && exit 0
@@ -130,6 +131,31 @@ if echo "$FILE" | grep -q "/bisheng/" && echo "$FILE" | grep -q "\.py$"; then
         if grep -qE "bisheng\.permission\.domain\.schemas\.tuple_operation|PermissionService\.batch_write_tuples\(" "$FILE" 2>/dev/null; then
             echo "⚠️  [arch-guard] RULE-9 VIOLATION: $(basename "$FILE") — 业务模块禁止构造或写入 transport tuple（请使用 PermissionRelationChange/apply_changes）"
         fi
+    fi
+fi
+
+# ── RULE-10：backend 禁编排依赖（F054 K1）─────────────────────────
+# 「安全来自笼子」的前提是 backend 自己不在笼子外面：它编译期与运行期都不得
+# 持有容器编排后端的访问面——不 import docker/kubernetes 客户端、不出现
+# /var/run/docker.sock 字面量、不读 DOCKER_HOST。编排一律经 runtime-manager
+# （独立包、独立进程、意图式 HTTP RPC）下发期望态。
+#
+# 只扫 src/backend/bisheng/** 的 .py：
+#   - .drone.yml 挂 docker.sock 是 CI 的正当用法（全仓唯一出现处），扫进来
+#     就是假阳性，而假阳性最终会让人把整条规则关掉；
+#   - src/runtime-manager/ 是唯一被允许持有该访问面的地方，它不在此路径下。
+# ⚠️ 路径前缀不带前导 `/`：hook 传的是绝对路径，但 CI / 手工以相对路径调用同样要生效。
+# 写成 "/src/backend/bisheng/" 会让相对路径静默不匹配 —— 守卫看着在跑、实则不设防
+# （SDD-Guide §0 记载过同类失效：永远验证"是否真的在拦"，而不是"应该在拦"）。
+if echo "$FILE" | grep -q "src/backend/bisheng/" && echo "$FILE" | grep -q "\.py$"; then
+    if grep -qE "^[[:space:]]*(from|import)[[:space:]]+(docker|aiodocker|kubernetes|kubernetes_asyncio)\b" "$FILE" 2>/dev/null; then
+        echo "⚠️  [arch-guard] RULE-10 VIOLATION: $(basename "$FILE") — backend 禁止导入容器/编排 SDK（docker/kubernetes），编排请经 runtime-manager 的意图 RPC"
+    fi
+    if grep -q "/var/run/docker.sock" "$FILE" 2>/dev/null; then
+        echo "⚠️  [arch-guard] RULE-10 VIOLATION: $(basename "$FILE") — backend 禁止出现 docker socket 路径（编排特权只属于 runtime-manager）"
+    fi
+    if grep -qE "\bDOCKER_HOST\b" "$FILE" 2>/dev/null; then
+        echo "⚠️  [arch-guard] RULE-10 VIOLATION: $(basename "$FILE") — backend 禁止读取 DOCKER_HOST（编排特权只属于 runtime-manager）"
     fi
 fi
 

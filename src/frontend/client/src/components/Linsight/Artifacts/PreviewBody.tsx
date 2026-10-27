@@ -1,3 +1,5 @@
+import { isApiError } from '@bisheng/api-client';
+import { showApiError } from '~/api/request';
 /**
  * F035: shared file-preview body — resolves the artifact source (text / image)
  * and renders it (markdown / plain text / image / "download to view" fallback).
@@ -226,7 +228,8 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
             await downloadArtifactFile(file, versionId);
         } catch (e) {
             console.error('artifact download failed:', e);
-            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.WARNING });
+            if (isApiError(e)) showApiError(e);
+            else showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.WARNING });
         }
     };
 

@@ -1,0 +1,108 @@
+[
+  {
+    "scenario": "cancel",
+    "deployment": {
+      "deployment_id": "c9bb8a38d4504016a37dbfc2311337cb",
+      "app_id": "0e7c8fa1ad01451bb4ac7ffff2b79ece",
+      "version_id": "d4b33600585b4f5583e60bbed1741c82",
+      "version_no": null,
+      "stage": "precheck_probe",
+      "status": "failed",
+      "failure": {
+        "code": 16124,
+        "hints": [],
+        "stage": "precheck_probe",
+        "details": {
+          "reason": "operation_cancelled",
+          "maintenance": false,
+          "operation_id": "466e303908ad4ec6a26eb9d1ba840a40",
+          "runtime_stage": "starting",
+          "data_may_have_changed": false
+        },
+        "message": "\u5e94\u7528\u6267\u884c\u5931\u8d25"
+      },
+      "approval": null,
+      "app_state": "draft",
+      "entry_url": "http://nginx:3001/apps/e2e-f086-cancel",
+      "scan_result": {
+        "hits": [],
+        "blocked": false,
+        "skipped": [],
+        "files_scanned": 3,
+        "files_skipped": 0
+      }
+    },
+    "operation": {
+      "id": "466e303908ad4ec6a26eb9d1ba840a40",
+      "kind": "probe",
+      "stage": "cancelled",
+      "status": "cancelled",
+      "cleanup_status": "complete",
+      "failure": {
+        "reason": "operation_cancelled",
+        "maintenance": false,
+        "failed_stage": "starting",
+        "diagnostic_tail": "",
+        "data_may_have_changed": false
+      },
+      "version_id": "d4b33600585b4f5583e60bbed1741c82",
+      "generation": 1
+    },
+    "reservation_states": [
+      "released",
+      "released"
+    ]
+  },
+  {
+    "scenario": "timeout",
+    "deployment": {
+      "deployment_id": "552cef0a11074e2692be1f14117d490b",
+      "app_id": "2a3a9b211e684496a719987a48c88c35",
+      "version_id": "3f35053445fb4e14a9ce84da09d7db07",
+      "version_no": null,
+      "stage": "precheck_probe",
+      "status": "failed",
+      "failure": {
+        "code": 16124,
+        "hints": [],
+        "stage": "precheck_probe",
+        "details": {
+          "reason": "operation_timeout",
+          "operation_id": "d1a45643ffe2486ca33539d0414e8a68",
+          "runtime_stage": "starting"
+        },
+        "message": "\u5e94\u7528\u64cd\u4f5c\u8d85\u65f6, \u6b63\u5728\u786e\u8ba4\u6e05\u7406\u72b6\u6001"
+      },
+      "approval": null,
+      "app_state": "draft",
+      "entry_url": "http://nginx:3001/apps/e2e-f086-timeout",
+      "scan_result": {
+        "hits": [],
+        "blocked": false,
+        "skipped": [],
+        "files_scanned": 3,
+        "files_skipped": 0
+      }
+    },
+    "operation": {
+      "id": "d1a45643ffe2486ca33539d0414e8a68",
+      "kind": "probe",
+      "stage": "timed_out",
+      "status": "timed_out",
+      "cleanup_status": "complete",
+      "failure": {
+        "reason": "operation_timeout",
+        "maintenance": false,
+        "failed_stage": "starting",
+        "diagnostic_tail": "",
+        "data_may_have_changed": false
+      },
+      "version_id": "3f35053445fb4e14a9ce84da09d7db07",
+      "generation": 1
+    },
+    "reservation_states": [
+      "released",
+      "released"
+    ]
+  }
+]

@@ -70,6 +70,7 @@
 | —（无新增） | F072-nvdb-security-fixes | NVDB 2026-09-02 批次 5 个漏洞的修复：JWT 密钥去代码默认值（未配置时生成一次存 `config` 表，键 `jwt_secret`）、知识空间排序参数白名单、HTML 本地媒体目录围栏、文件下载工具本地路径围栏、创建工作流 / 助手接口校验 `create_app` 菜单权限。复用既有 `Config` 表与 `RoleAccess` WEB_MENU，不新增领域对象、错误码、对外 API 或 Alembic。工作流代码节点沙箱不在本 Feature |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上为灵思任务模式增加会话级来源编号表与完成时审计） | **F069-linsight-citation-handles** | 拥有 Redis `linsight:cite_handles:<session_id>` / `linsight:cite_seen:<svid>` 的写入语义与 `output_result.citation_audit` 字段。不拥有 registry item 生成、`message_citation` 写入（仍经 F047 路径）、resolve 与权限过滤 |
 | —（无新增领域对象；日常模式成为 F069 会话级来源编号表的第二个写入方） | **F075-daily-chat-citation-handles** | 工作台日常模式检索结果改呈现 `[Sn]` 短编号、流式下发前转回私有区标记、零引用不落库、历史回放标记转编号。编号表 `linsight:cite_handles:<session_id>` 的写入语义仍归 F069，本 Feature 只调用其分配接口且**不写** `meta:enabled`。不拥有 registry item 生成、`message_citation` schema、resolve 与权限过滤；不改知识空间 / 频道 / 工作流 / 助手的引用链路与共享的 `citation.yaml`、`format_retrieved_chunk`、`select_registry_items_for_persistence` |
+| —（无新增领域对象；复用既有 `Config` 表新增一条部署级记录） | **F086-sandbox-endpoint-ui** | 拥有沙箱接入参数页面配置（接入地址与访问令牌）的写入语义；页面填写的字段覆盖 F068 `sandbox_conf` 的部署配置，留空回退。不拥有 `gpts_tools.extra`（代码执行方式仍存其中、沙箱参数仍不进 `extra`），不改 runner 参数、网络可达性与 F068 执行语义 |
 | `LinsightSessionVersion.api_meta`（增量字段，本体归灵思既有 Feature） | **F073-openapi-task-mode** | 开放 API 发起的任务模式任务的元数据（`channel=open_api_v2`、业务上下文指令、凭据 id、身份模式）；worker 据此无人值守执行（不装配 `ask_user`、技能缺失即失败）。只写本列，不改 `LinsightSessionVersion` 其余字段的写入语义；工作台任务该列为空、行为不变。复用 F053 `SessionSubject` 标记会话归属，不新增表 / 领域对象 / 不变量 |
 
 > ⚠️ **F054 编号冲突未决**：上表两行都占用 F054。`unified-citation-entries` 在 `feat/3.0.0-beta1` 取号，`contextual-department-membership` 在 `feat/3.0.0-beta1-test` 上已从 F053 改号而来，合并后再次撞号。两行都保留，改哪一个由各自 Feature owner 决定。
@@ -161,6 +162,7 @@
 | F067-unified-remote-mcp-service | F053、F066 | 只为中粮 SeedMind Apifox 范围基线明确列出的 10 项知识资源/文件 API 增加统一 MCP 访问面；凭据、S/D 身份、PAT 数据范围、资源授权、审计和业务语义仍由既有 Feature 定义；F053 其他开放路由不在本期范围 |
 | F071-knowledge-space-chat-history-retention | v2.6.0 F034、F048、既有知识空间问答 | 在文件/文件夹删除及跨空间移动的既有成功语义上增加源空间历史保留；权限继续走 F048，其他会话类型不受影响 |
 | F075-daily-chat-citation-handles | F069（编号表、转换文法、`assign_handles`）；F047 / F054（私有区标记、`message_citation`、resolve 分态、会话导出剥标 AC-07 / AC-12）；F029 / F041（`view_file` 与 INV-7，本 Feature **不改**） | 上游契约替换型：日常模式模型只写 `[Sn]`，下游零改动；无开关、无过渡期；无新增错误码 / 对外 API / 表 / Alembic / 系统配置项 |
+| F086-sandbox-endpoint-ui | F068（`SandboxConf`、服务地址列表 `endpoints`、`build_code_executor`、管理端「代码执行方式」弹窗） | 页面配置覆盖部署配置、不重启生效；不改 F068 的执行、失败与隔离语义 |
 | F073-openapi-task-mode | F053（密钥管线、`OpenApiPrincipal`、`SessionSubject`、会话附件上传、`/api/v2/workstation/*`）；F063（任务模式输入内容安全）；F048（`knowledge_library` 的 `use`、`knowledge_space` 的可见性、`tool` 的 `use`）；灵思任务模式执行内核（v2.6.0 F035 存量） | 接线型：在 F053 会话接口上点亮「任务 × 异步」，查询 / 下载 / 终止 / 可用配置查询；全部权限在提交时判定，worker 执行期无用户级判定；抽出共享提交核心 `submit_task_turn` 与 `LinsightWorkbenchImpl.terminate`（工作台行为不变）。Alembic 一列 |
 
 ---
@@ -207,7 +209,7 @@
 | 260 | 开放 API 鉴权、身份传递、个人访问令牌、日常模式会话、限流 / 幂等 | F053；26001～26043 分段见 `053-openapi-auth-and-identity/design.md` §6.3（26013 / 26014 已废止不复用）；`26044`（PAT 数据范围受限，403）随 F066 增补（PRD v2.9 附录 C）；`26060`～`26068`（任务模式开放 API，F073；跳过 `3.0-vibe` 已占用的 `26050`～`26052`）；落码时按 C5 回写 `docs/constitution.md` |
 | 270 | 商业授权状态聚合与上报 | F070；实现时按 C5 回写 `docs/constitution.md`；不得占用 11x（灵思）或把 Gateway 11001 当成 BISHENG 模块号 |
 | —（不新增） | NVDB 漏洞修复 | F072-nvdb-security-fixes 复用 403 / 422 与既有 `ValueError` 路径，不占模块号 |
-| 280 | 代码执行沙箱（执行环境可达性、容量、超时、copy-in 超限、代码节点出参序列化、协议不符） | F068-code-execution-sandbox；28001～28006，具体语义见该 Feature Design §4.2。落码时按 C5 回写 `docs/constitution.md`。已按 C5 重新派生占用列表确认 280 空闲；不得占用 11x（灵思）或 150（tool） |
+| 280 | 代码执行沙箱（执行环境可达性、容量、超时、copy-in 超限、代码节点出参序列化、协议不符） | F068-code-execution-sandbox；28001～28006，具体语义见该 Feature Design §4.2。落码时按 C5 回写 `docs/constitution.md`。已按 C5 重新派生占用列表确认 280 空闲；不得占用 11x（灵思）或 150（tool）。代码中已用到 28008；F086 沙箱接入参数校验失败从 28009 起，具体码号见 F086 Design §6 |
 
 ---
 
@@ -264,3 +266,5 @@
 | 2026-09-30 | 登记 F073 任务模式开放 API（PRD《3.0 任务模式开放 API PRD》v1.4、父 PRD v2.11）：表 1 记 `LinsightSessionVersion.api_meta` 增量归 F073；表 3 记依赖 F053 / F063 / F048 / 灵思执行内核；表 4 记修订 F053（`26017` 收窄、提交端点分派、`/config` 增 `run_mode`、日常模式 `26066`、`chat:invoke` 覆盖任务模式）与灵思任务模式（共享提交核心与终止，行为不变）；260 段增补 `26060`～`26068`；Alembic `f073_linsight_api_meta` | F073、F053 |
 
 | 2026-10-09 | beta3 合并到统一 3.0.0 分支时解决编号冲突：F071 保留知识空间历史保留、F072 保留 NVDB 修复；来源对照查看改为 F074、日常引用短句柄改为 F075。仅改文档与注释引用，不改运行行为。 | F071、F072、F074、F075 |
+| 2026-10-20 | 登记 F086 沙箱接入参数页面配置：表 1 标无新增领域对象（复用 `Config` 表一条部署级记录）；表 3 记依赖 F068；280 段从 28009 起分配校验错误码；无新增表 / Alembic / 不变量 | F086、F068 |
+| 2026-10-21 | 订正 F086 对 F068 的依赖表述：副本只认服务地址列表 `endpoints`，不再写主机名发现 | F086、F068 |

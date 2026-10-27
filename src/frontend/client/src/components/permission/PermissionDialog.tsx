@@ -1,3 +1,4 @@
+import { Tabs } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useState } from "react";
 import { getResourcePermissionContext } from "~/api/permission";
@@ -9,19 +10,8 @@ import type {
   ResourceType,
   SubjectType,
 } from "~/api/permission";
-import {
-  Button,
-  Checkbox,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "~/components/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "~/components/ui";
+import { Checkbox } from '@bisheng/ui';
 import { useLocalize } from "~/hooks";
 import { ModeHeader } from "./ModeHeader";
 import { PermissionGrantTab } from "./PermissionGrantTab";
@@ -175,27 +165,16 @@ export function PermissionDialog({
                 onApplied={handleModeApplied}
               />
 
-              <Tabs
-                value={subjectType}
-                onValueChange={(value) =>
-                  setSubjectType(value as SubjectType)
-                }
-                className="flex min-h-0 flex-1 flex-col px-5 pb-5 pt-4 max-[768px]:px-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <TabsList className="w-fit shrink-0 rounded-md border border-[#ECECEC] bg-white p-[3px] shadow-none">
-                    {SUBJECT_TABS.map((tab) => (
-                      <TabsTrigger
-                        key={tab.value}
-                        value={tab.value}
-                        className="min-w-0 rounded px-3 py-0.5 text-sm font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:bg-blue-500/[0.07] data-[state=active]:font-medium data-[state=active]:text-blue-500 data-[state=active]:shadow-none"
-                      >
-                        {localize(tab.labelKey)}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-
-                  {canAddPermission && (
+              <div className="flex min-h-0 flex-1 flex-col px-5 pb-5 pt-4 max-[768px]:px-4">
+                <Tabs
+                  size="small"
+                  activeKey={subjectType}
+                  onChange={(value) => setSubjectType(value as SubjectType)}
+                  items={SUBJECT_TABS.map((tab) => ({
+                    key: tab.value,
+                    label: localize(tab.labelKey),
+                  }))}
+                  extra={canAddPermission && (
                     <Button
                       type="button"
                       className="h-8 shrink-0 rounded-md px-3 text-sm leading-[22px]"
@@ -208,12 +187,8 @@ export function PermissionDialog({
                       {localize("com_permission.tab_grant")}
                     </Button>
                   )}
-                </div>
-
-                <TabsContent
-                  value={subjectType}
-                  className="mt-3 min-h-0 flex-1 overflow-hidden p-0"
-                >
+                />
+                <div className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
                   <PermissionListTab
                     resourceType={resourceType}
                     resourceId={resourceId}
@@ -223,8 +198,8 @@ export function PermissionDialog({
                     onRosterChange={setAssignees}
                     onMutationSuccess={handleGrantSuccess}
                   />
-                </TabsContent>
-              </Tabs>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -267,7 +242,7 @@ export function PermissionDialog({
 
                 {grantSubjectType === "department" && (
                   <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm leading-[22px] text-[#212121]">
-                    <Checkbox
+                    <Checkbox className="peer"
                       checked={grantIncludeChildren}
                       onCheckedChange={(checked) =>
                         setGrantIncludeChildren(checked === true)

@@ -32,7 +32,7 @@
 | # | 约束 | 来源 | 对方案的影响 |
 |---|---|---|---|
 | K1 | 配不配技能必须走同一条技术路径，不维护两套 | 用户拍板（2026-10-16） | 决策 1 |
-| K2 | 未配置技能的助手节点和助手应用行为与改动前一致 | spec AC-25、V3-INV-5 | 决策 1 否决整体 deepagents |
+| K2 | 未配置技能的助手节点和助手应用行为与改动前一致 | spec AC-25、SEC-INV-5 | 决策 1 否决整体 deepagents |
 | K3 | workflow 节点同步执行：Celery `workflow_celery` 队列线程池里调用 `node.run`，`async_mode=False` | `B/worker/workflow/tasks.py:79-90`、`B/workflow/nodes/base.py:250` | 决策 4 |
 | K4 | 多节点部署是默认假设，本地盘只能做缓存 | C8 | 决策 3：工作区以 MinIO 为准 |
 | K5 | 技能查询依赖当前租户上下文（`strict_tenant_filter`，不回落 Root） | `B/linsight/domain/models/linsight_skill.py:212-218` | 运行前必须设置租户上下文 |
@@ -47,7 +47,7 @@
 | C2 双 DB | 合规。第一期不改表结构；第二期的新列用 `JsonType`，不用 `JSON_EXTRACT` 类查询。 |
 | C3 多租户 | 合规。技能查询依赖自动注入的租户上下文；Celery 线程里由 runner 设置上下文，不手写 tenant 条件。 |
 | C4 权限 | 合规。会话归属不是 ReBAC 资源，沿用 chat_session 现有的 `SessionSubject` 归属校验；workflow 与助手的使用权限仍由既有入口校验。 |
-| C5 错误码 | 合规。使用 11075–11077，并在 release-contract 登记（原用 11061–11063，与发版线技能中心撞号，2026-10-20 顺延）。 |
+| C5 错误码 | 合规。使用 11077–11079，并在 release-contract 登记（原用 11061–11063，与发版线技能中心撞号，2026-10-20 顺延）。 |
 | C6、C7 | 不涉及新密钥；前端 store 不直接发 HTTP。 |
 | C8 本地盘 | 合规。工作区与交付文件以 MinIO 为准，本地目录每次运行新建、结束即删。 |
 
@@ -205,7 +205,7 @@
 3. 每次调用模型前，`_invoke_function_call_agent` 调用 `AgentNodeSkills.prepare(...)`（`agent.py:766-779`）。它登记临时会话（只在调试时）、拷入上游文件，再经 `run_async_safe` 调用 `AgentRunner.aprepare`：判定技能可用性、准备工作区、构建代码执行工具，返回 middleware 和工具列表。没有配置技能时不进这条分支，不建工作区。
 4. 用 `create_agent(llm, tools, system_prompt=..., middleware=...)` 构建 Agent 并 `invoke`。ReAct 分支不变；配置了技能但模型是 ReAct 时报错 11077（AC-13）。批量模式下每个批次各自做基线和交付文件收集（AC-17）。
 5. 运行结束后，`AgentNodeSkills.finish()` 经 `AgentRunner.afinish` 收集交付文件、上传为会话附件，返回文件描述列表。节点把它放进 `StreamMsgOverData.files`，并写入输出变量 `{node_id}.<输出键>_deliverables`（AC-16）：单个模式是 `output_deliverables`，批量模式是每个批次的 `output_xxx_deliverables`。变量名以 `output` 开头，是为了让 platform 的变量选择器沿用「本节点 output 开头的参数即输出变量」这一现有规则。
-6. 技能错误（11075–11077）由 `AgentSkillRunError` 带进失败原因：`<节点名>: <文案> -- agent skill error --<错误 JSON>`。`RedisCallback` 用 `parse_agent_skill_error` 解析出错误码和技能名，发给前端翻译（§6.1）。
+6. 技能错误（11077–11079）由 `AgentSkillRunError` 带进失败原因：`<节点名>: <文案> -- agent skill error --<错误 JSON>`。`RedisCallback` 用 `parse_agent_skill_error` 解析出错误码和技能名，发给前端翻译（§6.1）。
 
 **助手应用（第二期，未实现）**
 
@@ -299,7 +299,7 @@
 | 节点构造参数 `chat_id`、`tmp_session_id` | `Workflow → GraphEngine → 节点` 的关键字参数；Celery 任务 `execute_workflow` 新增关键字参数 `tmp_session_id` | 助手节点；F086 子工作流节点把两者原样传给子引擎 |
 | 助手节点模板 `v: "3"`：`skill_list`、`input_files`、`output_deliverables` | 前端节点模板 + `flowCompatible` 升级规则 | platform 编辑器。旧节点（v2）加载时补参数；后端对缺少这些参数的节点按「未配置技能」处理 |
 | `assistant.skill_names`、`AssistantUpdateReq.skill_names`（第二期，未实现） | 表列、HTTP 字段 | platform 助手配置页 |
-| 错误码 11075（已停用）、11076（已删除）、11077（执行方式不支持） | 错误码 | 前端 `api_errors` |
+| 错误码 11078（已停用）、11079（已删除）、11077（执行方式不支持） | 错误码 | 前端 `api_errors` |
 | `AgentRunner` | 内部 Python API | workflow 节点；第二期的助手应用；以后的日常对话 |
 
 ### 6.2 我依赖别人的（Incoming）
@@ -316,7 +316,7 @@
 
 ### 6.3 错误码分配
 
-技能相关错误放在 linsight 模块（110）的段内，紧接技能中心已用到的 11074，用 11075、11076、11077（`B/common/errcode/linsight.py` 末尾）。原分配 11061–11063（当时以为技能管理段 11050–11069 还有空位），2026-10-20 合并发版线时发现技能中心已占用 11061–11074，于是顺延。11060 在前端 locale 里有残留键，跳过不用。三种语言的文案放在 `F/packages/locales/src/api_errors/`。release-contract 的「已分配模块编码」同步登记。
+技能相关错误放在 linsight 模块（110）的段内，紧接技能中心已用到的 11074，用 11078、11079、11077（`B/common/errcode/linsight.py` 末尾）。原分配 11061–11063（当时以为技能管理段 11050–11069 还有空位），2026-10-20 合并发版线时发现技能中心已占用 11061–11074，于是顺延。11060 在前端 locale 里有残留键，跳过不用。三种语言的文案放在 `F/packages/locales/src/api_errors/`。release-contract 的「已分配模块编码」同步登记。
 
 ---
 
@@ -361,5 +361,7 @@
 |---|---|---|
 | 2026-10-16 | 初版 | spec 定稿后编写 |
 | 2026-10-16 | 同步第一期实现：决策 10 判定口径、交付文件字段、变量命名、开放 API 下载路由、新增模块 | 实现偏差，见 tasks.md「实际偏差记录」 |
-| 2026-10-20 | 错误码由 11061–11063 改为 11075–11077（§6.3） | 合并发版线时与技能中心撞号 |
+| 2026-10-20 | 错误码由 11061–11063 改为 11077–11079（§6.3） | 合并发版线时与技能中心撞号 |
 | 2026-10-20 | 标出第二期未实现的助手应用内容；删除预埋的一次性工作区与 `TEXT_ONLY` 变体；workflow 调试临时会话改用连接级 `hash_key`，关闭钩子不再依赖 `self.workflow`（决策 8、坑 19）；准备失败时释放本地目录（坑 6）；补 §6.1 技能错误标记、节点参数、模板 v3、开放 API `files[]` 结构；§4.3 补前端模块；新增坑 20 与 §8 两项 | `/sdd-code-review --base feat/3.0.0` 的 HIGH #2、#3 与 MEDIUM #10、#12 |
+
+2026-10-27 合并公共发版线：11075、11076 已用于任务模式上下文错误，技能停用/删除改用 11078、11079，执行方式错误保持 11077。

@@ -49,21 +49,12 @@ export interface SkillRecord {
   enabled: boolean;
   contentHash: string;
   bundleMissing: boolean;
+  /** Last change, or the creation time when a row has never been updated. */
+  updatedAt: string;
   preview: string;
   /** Raw SKILL.md, including the YAML header. Present on the detail response. */
   sourceText?: string;
   files: string[];
-}
-
-export class SkillRequestError extends Error {
-  constructor(
-    readonly statusCode: number,
-    readonly data?: Record<string, unknown>,
-    readonly statusMessage?: string,
-  ) {
-    super(String(statusCode));
-    this.name = 'SkillRequestError';
-  }
 }
 
 export class SkillError extends Error {

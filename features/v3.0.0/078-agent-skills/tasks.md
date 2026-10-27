@@ -44,12 +44,12 @@
 
 - [x] **T01**：错误码
   **文件**: `B/common/errcode/linsight.py`、`features/v3.0.0/release-contract.md`
-  **逻辑**: 新增 11075（技能已被管理员停用，消息参数为技能名）、11076（技能已被管理员删除）、11077（当前模型的执行方式不支持技能）；跳过 locale 残留的 11060；在 release-contract「已分配模块编码」登记。决策见 design §6.3。
+  **逻辑**: 新增 11078（技能已被管理员停用，消息参数为技能名）、11079（技能已被管理员删除）、11077（当前模型的执行方式不支持技能）；跳过 locale 残留的 11060；在 release-contract「已分配模块编码」登记。决策见 design §6.3。
   **依赖**: 无
 
 - [x] **T02**：错误码文案三语
   **文件**: `F/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`
-  **逻辑**: 为 11075、11076、11077 写三语文案，中文分别为「{name} 技能已被管理员停用」「{name} 技能已被管理员删除」「当前模型的执行方式不支持技能」；运行生成脚本，不手改生成产物。
+  **逻辑**: 为 11078、11079、11077 写三语文案，中文分别为「{name} 技能已被管理员停用」「{name} 技能已被管理员删除」「当前模型的执行方式不支持技能」；运行生成脚本，不手改生成产物。
   **验证**: `pnpm --filter @bisheng/locales check`、`pnpm check-i18n` 通过。
   **依赖**: T01
 
@@ -80,7 +80,7 @@
 
 - [x] **T07**：技能可用性判定测试
   **文件**: `T/agent_runtime/test_skill_resolver.py`
-  **测试**: 已停用技能抛 11075，且消息带技能名；不存在的技能抛 11076；`None` 与 `[]` 返回空；全部可用时按配置顺序返回。
+  **测试**: 已停用技能抛 11078，且消息带技能名；不存在的技能抛 11079；`None` 与 `[]` 返回空；全部可用时按配置顺序返回。
   **覆盖 AC**: AC-06、AC-12、AC-25、AC-30
   **依赖**: T01
 
@@ -232,7 +232,7 @@
   - 第二次运行能修改上一次的文件；
   - 未勾选「输出给用户」时，`deliverables` 变量仍有值；
   - 无交付文件时变量为空；
-  - ReAct 模型报 11077，技能停用报 11075，技能删除报 11076；
+  - ReAct 模型报 11077，技能停用报 11078，技能删除报 11079；
   - 运行日志包含技能名、工具调用和执行器缺失提示；
   - 输入文件进入 `uploads/`。
   **覆盖 AC**: AC-04、AC-10、AC-13、AC-16、AC-17、AC-19、AC-21、AC-26
@@ -389,7 +389,7 @@
 - T35 偏离 → 新增开放 API 下载路由 `GET /api/v2/workflow/files/{chat_id}/{file_id}`，已登记 scope、API 契约与两份接口文档（design §6.1 已更新）。
 - T36 偏离 → 助手节点模板升到 v3，旧节点加载时由 `flowCompatible` 补参数；SelectVar 新增 `findFilePath` 模式。
 - 基线记录：backend `test/workflow` 既有 14 个失败、platform vitest 既有 16 个失败（与 origin/feat/3.0.0 一致），本特性未新增失败。
-- 错误码：原分配 11061–11063，2026-10-20 合并发版线时与技能中心（11061–11074）撞号，改为 11075–11077（含后端、三语文案、测试与 release-contract）；判断与扫描结果见 design §6.3。
+- 错误码：原分配 11061–11063，2026-10-20 合并发版线时与技能中心（11061–11074）撞号，改为 11077–11079（含后端、三语文案、测试与 release-contract）；判断与扫描结果见 design §6.3。
 - 2026-10-20 `/sdd-code-review --base feat/3.0.0` 修复（design 修订历史同日条目）：
   - 调试窗口临时会话改用连接级 `hash_key`，关闭钩子不再依赖 `self.workflow`，「停止」不清理 → design 决策 8、坑 19；测试 `T/workflow/test_workflow_client_tmp_session.py`。
   - `AgentRunner.aprepare` 失败时释放本地目录 → design 坑 6；测试 `T/agent_runtime/test_agent_runner.py` 的 `TestPrepareFailure`。
@@ -397,3 +397,5 @@
   - 删除第二期预埋、无调用方的 `WorkspaceKey.once`、`AgentWorkspace.adelete`、`AgentRunSpec.text_only`、`SkillPromptVariant.TEXT_ONLY`、`TmpSessionService.new_id`；第二期按自己的调用方补回。
   - platform `WorkflowMessage` 类型补 `notices`。
   - 未改：上游文件下载无超时（发版线共享函数 `file_download`）、开放 API `session_id` 非安全字符（需新增错误码）→ design §8。
+
+2026-10-27 合并公共发版线：11075、11076 已用于任务模式上下文错误，技能停用/删除改用 11078、11079，执行方式错误保持 11077。

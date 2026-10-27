@@ -1,17 +1,19 @@
-import { Check } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { BrandTickSpinner } from "@/components/bs-icons/loading/BrandTickSpinner";
+import { notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
 import { LoadingIcon } from "@/components/bs-icons/loading";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import {
-    BrandConfig,
-    WorkbenchTheme,
-    getBrandConfigApi,
-    saveBrandConfigApi,
-} from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { BrandTickSpinner } from "@/components/bs-icons/loading/BrandTickSpinner";
+
 import { cname } from "@/components/bs-ui/utils";
+import {
+BrandConfig,
+WorkbenchTheme,
+getBrandConfigApi,
+saveBrandConfigApi,
+} from "@/controllers/API";
+import { showApiError } from "@/controllers/request";
+import { useEffect,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // Preset accent colors must mirror `.theme-green` / default `--primary` in the
 // client app's style.css, so the preview here matches what the workbench renders.
@@ -33,18 +35,18 @@ function toUpdatePayload(config: BrandConfig, workbenchTheme: WorkbenchTheme) {
  */
 export default function WorkbenchThemeSettings() {
     const { t } = useTranslation();
-    const { toast } = useToast();
+
     const [config, setConfig] = useState<BrandConfig | null>(null);
     const [selected, setSelected] = useState<WorkbenchTheme>("blue");
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         (async () => {
-            const data = await captureAndAlertRequestErrorHoc(getBrandConfigApi());
+            const data = await getBrandConfigApi();
             if (!data) return;
             setConfig(data);
             setSelected(data.workbenchTheme === "green" ? "green" : "blue");
-        })();
+        })().catch(showApiError);
     }, []);
 
     const handleSelect = async (value: WorkbenchTheme) => {
@@ -52,16 +54,16 @@ export default function WorkbenchThemeSettings() {
         setSaving(true);
         const prev = selected;
         setSelected(value); // optimistic
-        const saved = await captureAndAlertRequestErrorHoc(
-            saveBrandConfigApi(toUpdatePayload(config, value)),
-        );
-        setSaving(false);
-        if (!saved) {
-            setSelected(prev); // rollback
-            return;
-        }
+        try {
+        const saved = await saveBrandConfigApi(toUpdatePayload(config, value));
         setConfig(saved);
-        toast({ title: t("prompt"), variant: "success", description: t("theme.workbenchThemeSaved") });
+        notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.workbenchThemeSaved") ?? '') });
+        } catch (error) {
+            setSelected(prev); // rollback
+            showApiError(error);
+        } finally {
+            setSaving(false);
+        }
     };
 
     if (!config) {
@@ -94,7 +96,7 @@ export default function WorkbenchThemeSettings() {
                         >
                             {active && (
                                 <span className="absolute right-2 top-2 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                                    <Check className="size-3.5" />
+                                    <Outlined.Check className="size-3.5" />
                                 </span>
                             )}
                             {/* Preview the workbench spinner tinted with the preset color. */}

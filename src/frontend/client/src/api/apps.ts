@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { historyForHost } from "@bisheng/chat/core";
 import { generateUUID } from "~/utils";
 import request from "./request";
 
@@ -114,8 +115,20 @@ export const trackingApi = (data: { message_id: string, operation_type: 'dislike
 /**
  * 技能 工作流详情
  */
+export interface AppChatHistoryRequest { flowId: string; chatId: string; flowType: string; id?: number; shareToken?: string; apiVersion?: string }
+
+export async function getRawAppChatHistoryApi({ flowId, chatId, id, shareToken, apiVersion = 'v1' }: AppChatHistoryRequest): Promise<unknown[]> {
+    const headers = shareToken ? { 'share-token': shareToken } : {};
+    const res = await request.get(`/api/${apiVersion}/chat/history?flow_id=${flowId}&chat_id=${chatId}&page_size=40&id=${id || ''}`, { headers });
+    return res.status_code === 200 && Array.isArray(res.data) ? res.data : [];
+}
+
 export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareToken, apiVersion = 'v1' }
     : { flowId: string, chatId: string, flowType: string, id?: number, shareToken?: string, apiVersion?: string }): Promise<any> {
+    if ([5, 10].includes(Number(flowType))) {
+        const rows = await getRawAppChatHistoryApi({ flowId, chatId, flowType, id, shareToken, apiVersion });
+        return historyForHost(rows, { mode: Number(flowType) === 10 ? 'workflow' : 'assistant', sessionKey: chatId, pageKey: String(id ?? 'first') });
+    }
     const filterFlowMsg = (data) => {
         return data.filter(item =>
             ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
@@ -400,6 +413,11 @@ export async function unpinUsedAppApi(flowId: string) {
         data: { flow_id: flowId }
     });
 }
+/** Record that the user opened a hosted app so it lands in the recently-used list */
+export async function recordUsedAppApi(flowId: string) {
+    return await request.post('/api/v1/workstation/app/used/record', { flow_id: flowId });
+}
+
 /** F027 cursor waterfall. Pass the previous response's `nextCursor` to load more;
  * omit for the first page. Returns { list, hasMore, nextCursor }. */
 export async function getUncategorized(cursor: string | null = null, pageSize: number = 8, keyword?: string) {

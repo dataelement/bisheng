@@ -1,13 +1,14 @@
 // @ts-strict-ignore
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
-import Tip from "@/components/bs-ui/tooltip/tip";
+import { Select,SelectContent,SelectTrigger } from "@/components/bs-ui/select";
 import { cname } from "@/components/bs-ui/utils";
+import { FlowTooltip as Tip } from "@/pages/BuildPage/flow/FlowTooltip";
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { cloneDeep } from "lodash-es";
-import { ChevronRight } from "lucide-react";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import useFlowStore from "../../flowStore";
+
 import { acceptsImages } from "@/util/fileAcceptUtils";
+import { forwardRef,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
+import useFlowStore from "../../flowStore";
 import NodeLogo from "../NodeLogo";
 
 // 全选 半选 未选
@@ -29,7 +30,7 @@ const isMatch = (obj, expression) => {
 // 特殊结构提取变量
 const getSpecialVar = ({ obj, group, onlyImg = false, onlyPath = false }) => {
     const type = obj.global
-    
+
     switch (type) {
         case 'item:form_input':
             return obj.value.reduce((res, item) => {
@@ -81,9 +82,22 @@ const getSpecialVar = ({ obj, group, onlyImg = false, onlyPath = false }) => {
 /**
  * 深度定制组件
  * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
- * @returns 
+ * @returns
  */
-const SelectVar = forwardRef(({
+interface SelectVarProps {
+    nodeId?: string;
+    align?: string;
+    findInputFile?: boolean;
+    itemKey: string;
+    multip?: boolean;
+    value?: string[];
+    children?: import('react').ReactNode;
+    onSelect?: (node: { id: string; name: string }, variable: { value: string; label: string }, inputOpen?: boolean) => void;
+    onCheck?: (checked: boolean, tasks: unknown[]) => void;
+    className?: string;
+}
+interface SelectVarHandle { open: (inputOpen?: boolean) => void }
+const SelectVar = forwardRef<SelectVarHandle, SelectVarProps>(({
     nodeId,
     align = "left",
     findInputFile = false, // 只展示input节点file_image变量(视觉表单项使用)
@@ -452,7 +466,7 @@ const SelectVar = forwardRef(({
                             {onCheck && <Checkbox checked={checkKeys[item.id]} onCheckedChange={(bln) => handleCheckClick(bln, item.id)} className="mr-1" />}
                             {item.icon}
                             <span className="w-28 overflow-hidden text-ellipsis ml-2">{item.name}</span>
-                            <ChevronRight className="size-4" />
+                            <Outlined.Right className="size-4" />
                         </div>
                     )}
                 </div>
@@ -476,7 +490,7 @@ const SelectVar = forwardRef(({
                                 onClick={e => e.stopPropagation()}
                             />}
                             <span className="w-28 overflow-hidden text-ellipsis">{v.label}</span>
-                            {v.param && <ChevronRight className="size-4" />}
+                            {v.param && <Outlined.Right className="size-4" />}
                             {/* {value.includes(`${currentMenuRef.current.id}.${v.value}`) && <Check size={14} />} */}
                         </div>
                     )}

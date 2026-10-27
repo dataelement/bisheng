@@ -1,0 +1,8 @@
+# Explicit developer-only source build override. Production uses published images.
+services:
+  runtime-manager:
+    build: {context: ../src/runtime-manager}
+  egress-proxy:
+    build: {context: ../src/runtime-manager}
+  app-proxy:
+    build: {context: ../src/app-proxy}

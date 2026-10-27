@@ -277,3 +277,15 @@ it("preserves the existing ten-minute automatic pause", async () => {
   expect(cb.onEnd).toHaveBeenCalledOnce();
   expect(cb.onError).not.toHaveBeenCalled();
 });
+
+it('preserves the transcription failure for caller-specific presentation', async () => {
+  const error = new Error('transcription failed');
+  const cb = callbacks();
+  const session = new VoiceSession({ realtime: false, modelId: '1', websocketUrl: '', transcribe: vi.fn().mockRejectedValue(error) }, cb);
+  await session.start();
+  session.stop();
+  await tick();
+  expect(cb.onError).toHaveBeenCalledWith(error);
+  expect(cb.onEnd).toHaveBeenCalledOnce();
+  expect(cb.onText).not.toHaveBeenCalled();
+});

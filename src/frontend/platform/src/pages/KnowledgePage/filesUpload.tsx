@@ -1,18 +1,20 @@
 // @ts-strict-ignore
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { Button } from "@/components/bs-ui/button";
+import { Button, toast } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
+
 import StepProgress from "@/components/bs-ui/step";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
+
+import { retryKnowledgeFileApi,subUploadLibFile } from "@/controllers/API";
 import { checkResourceActionApi } from "@/controllers/API/permission";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { ChevronLeft } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { showApiError } from "@/controllers/request";
+
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate,useParams } from "react-router-dom";
 import { DialogWithRepeatFiles } from "./components/DuplicateFileDialog";
 import FileUploadStep1 from "./components/FileUploadStep1";
-import FileUploadStep2, { Step2PersistState } from "./components/FileUploadStep2";
+import FileUploadStep2,{ Step2PersistState } from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
 
@@ -40,7 +42,7 @@ export default function FilesUpload() {
   const { t } = useTranslation('knowledge');
   const navigate = useNavigate();
   const { id: knowledgeId } = useParams(); // Get knowledge base ID from route
-  const { message } = useToast();
+
   const [permissionChecked, setPermissionChecked] = useState(false);
   const [hasEditPermission, setHasEditPermission] = useState(false);
 
@@ -74,18 +76,16 @@ export default function FilesUpload() {
         setHasEditPermission(false);
         return;
       }
-      const result = await captureAndAlertRequestErrorHoc(
-        checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' })
-      );
+      const result = await checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' });
       const allowed = !!result?.allowed;
       setHasEditPermission(allowed);
       setPermissionChecked(true);
       if (!allowed) {
-        message({ variant: 'warning', description: t('noOperationPermission') });
+        toast.show({ type: 'warning', message: String(t('noOperationPermission') ?? '') });
         navigate(`/filelib/${knowledgeId}`);
       }
     };
-    guardByPermission();
+    void guardByPermission().catch(showApiError).finally(() => setPermissionChecked(true));
   }, [knowledgeId]);
 
   // Step 1: File upload completed, jump to step 2
@@ -197,7 +197,7 @@ export default function FilesUpload() {
       max_chunk_size: Number(_config.rules.maxChunkSize)
     };
 
-    captureAndAlertRequestErrorHoc(subUploadLibFile(apiConfig).then(res => {
+    subUploadLibFile(apiConfig).then(res => {
       const repeatFilesRes = res.filter(e => e.status === 3);
       if (repeatFilesRes.length) {
         const newRepeatFiles = repeatFilesRes.filter(file =>
@@ -208,7 +208,7 @@ export default function FilesUpload() {
           handleRetry(repeatFilesRes)
         }
       } else {
-        message({ variant: 'success', description: t('addSuccess') });
+        toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
       }
 
       // Update file ID
@@ -218,10 +218,10 @@ export default function FilesUpload() {
         resultId: res[index]?.id
       })));
       setCurrentStep(4)
-    }).finally(() => {
+    }).catch(showApiError).finally(() => {
       submittingRef.current = false;
       setIsSubmitting(false);
-    }));
+    });
 
     _tempConfigRef.current = apiConfig;
   };
@@ -230,16 +230,16 @@ export default function FilesUpload() {
   const handleSaveByDefaultConfig = async (_config) => {
     isNextBtnClickRef.current = false;
 
-    await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
+    await subUploadLibFile(_config).then(res => {
       const _repeatFiles = res.filter(e => e.status === 3);
       if (_repeatFiles.length) {
         setRepeatFiles(repeatFileI18nRmark(_repeatFiles, t));
         repeatCallBackRef.current = () => navigate(-1);
       } else {
-        message({ variant: 'success', description: t('addSuccess') });
+        toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
         navigate(-1);
       }
-    }));
+    });
   };
 
   function dedupeWithRemovedPaths(objs) {
@@ -292,12 +292,12 @@ export default function FilesUpload() {
       setResultFiles(newResultFiles);
     }
 
-    captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {
+    retryKnowledgeFileApi(params).then(res => {
       setRepeatFiles([]);
       setRetryLoad(false);
-      message({ variant: 'success', description: t('addSuccess') });
+      toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
       repeatCallBackRef.current();
-    }), () => {
+    }).catch(showApiError).finally(() => {
       setRetryLoad(false);
     });
   };
@@ -326,19 +326,14 @@ export default function FilesUpload() {
     <div className="relative h-full flex flex-col">
       {!permissionChecked && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60">
-          <LoadingIcon />
+          <Outlined.Loading  className="size-4 animate-spin"/>
         </div>
       )}
       <div className="relative px-4 pt-4">
         <div className="absolute left-4 top-1/2 z-10 -translate-y-1/4">
           <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background"
-              onClick={() => navigate(-1)}
-            >
-              <ChevronLeft className="size-4" />
+            <Button variant="outlined" size="medium" className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background" onClick={() => navigate(-1)} color="default" iconOnly>
+              <Outlined.Left className="size-4" />
             </Button>
             <span className="text-sm font-medium text-[#0f172a]">{t('backToKnowledge')}</span>
           </div>
@@ -422,11 +417,11 @@ export default function FilesUpload() {
                   />
 
                   <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
-                    <Button variant="outline" onClick={handleBack}>
+                    <Button variant="outlined" onClick={handleBack} color="default">
                       {t('previousStep')}
                     </Button>
                     <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting || resultFiles.length === 0}>
-                      {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
+                      {isSubmitting ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : null}
                       {t('nextStep')}
                     </Button>
                   </div>

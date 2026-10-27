@@ -1,0 +1,177 @@
+---
+status: done
+component: InputNumber
+---
+
+# 数字输入框 InputNumber
+
+录入**一个要拿来计算的数**——数量、比例、时长、阈值。组件库 `@bisheng/ui` 导出 **`InputNumber`**。规范全文见「文档 → 组件规范 → 数字输入框 InputNumber」。
+
+**外壳就是输入框的外壳**：24 / 32 / 40 三档、灰色聚焦链、错误 / 警告 / 只读 / 禁用四种外壳、触屏 16px 防缩放，全部与 `Input` 一致。数字输入框只多一列 20px 宽的步进按钮：**悬停才显形、位置常驻预留**，数值不会跳。
+
+**组件不替用户改值**：越界不回正、超精度不四舍五入、清空不补 0——失焦时报错，改对立刻消红。滚轮不改值；触屏不显示步进按钮。这些没有 prop。
+
+手机号、验证码这类「由数字组成的文本」不能加减，用 `Input`。
+
+## 基础用法
+
+宽度按最大值的位数给（`className` 落在最外层），范围写进 placeholder，让用户在输入前就知道边界。鼠标移上来看步进按钮；键盘 ↑ / ↓ 加减一个步长，Shift + ↑ / ↓ 加减 10 个步长；按住按钮连续加减。
+
+```tsx
+import { InputNumber } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+    <InputNumber className="w-32" min={1} max={100} defaultValue={10} placeholder="1～100" increaseLabel="增加" decreaseLabel="减少" />
+    <InputNumber className="w-32" placeholder="不限范围" increaseLabel="增加" decreaseLabel="减少" />
+  </div>
+);
+```
+
+## 三档尺寸
+
+跟输入框同一套阶梯；步进列各档都是 20px 宽、图标固定 12px。
+
+```tsx
+import { InputNumber } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+    {['small', 'medium', 'large'].map((size) => (
+      <InputNumber key={size} size={size} className="w-28" defaultValue={3} min={0} max={10} increaseLabel="增加" decreaseLabel="减少" />
+    ))}
+  </div>
+);
+```
+
+## 单位、小数步长与精度
+
+单位放 `suffix`，排在步进按钮右边、收住框的右端——**不写进数值本身**。步进列平时隐藏，单位若排在它左边，右侧就会空出一块。小数步长同时决定默认精度（`step={0.1}` → 1 位小数），显示时按精度补齐；也可以用 `precision` 单独指定。步进用十进制运算，0.1 + 0.2 就是 0.3。
+
+```tsx
+import { InputNumber } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+    <InputNumber className="w-32" min={0} max={600} defaultValue={30} suffix="秒" increaseLabel="增加" decreaseLabel="减少" />
+    <InputNumber className="w-32" min={0} max={1} step={0.1} defaultValue={0.7} increaseLabel="增加" decreaseLabel="减少" />
+    <InputNumber className="w-32" min={0} max={100} precision={2} defaultValue={12.5} suffix="%" increaseLabel="增加" decreaseLabel="减少" />
+  </div>
+);
+```
+
+## 越界与精度报错
+
+失焦时校验：超出范围、或小数位超出精度，外壳转错误态。**报错文案由调用方给**（组件库不带文案）——`errorMessage` 拿到错误类型和 `min` / `max` / `precision`，拼出「怎么改」的那句话。报错之后边打字边校验，一回到合法范围就消红。
+
+越界时点步进按钮，先落到最近的边界值：输入 150 失焦，再点「减」变成 100。到了边界，那一侧按钮禁用。
+
+```tsx
+import React from 'react';
+import { InputNumber } from '@bisheng/ui';
+
+const message = (error) =>
+  error.type === 'range'
+    ? `请输入 ${error.min}～${error.max} 之间的数`
+    : error.precision === 0
+      ? '请输入整数'
+      : `最多保留 ${error.precision} 位小数`;
+
+export default () => {
+  const [state, setState] = React.useState({ value: 150, error: null });
+
+  return (
+    <div style={{ display: 'grid', gap: 12, maxWidth: 320 }}>
+      <InputNumber
+        className="w-40"
+        min={1}
+        max={100}
+        defaultValue={150}
+        placeholder="1～100"
+        errorMessage={message}
+        onChange={(value, { error }) => setState({ value, error })}
+        increaseLabel="增加"
+        decreaseLabel="减少"
+      />
+      <InputNumber
+        className="w-40"
+        min={0}
+        max={10}
+        precision={2}
+        placeholder="试试输入 1.234"
+        errorMessage={message}
+        increaseLabel="增加"
+        decreaseLabel="减少"
+      />
+      <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>
+        onChange：value = {String(state.value)}，error = {state.error ? state.error.type : 'null'}
+      </span>
+    </div>
+  );
+};
+```
+
+`onChange` 第二个参数里的 `error` 是**当前**的校验结果（不管有没有显示出来），表单用它阻断提交；`onErrorChange` 只在「显示出来的错误」变化时触发。清空时 `value` 为 `null`——「没填」和「填了 0」是两回事，必填交给表单校验。
+
+## 受控：滑块旁并排
+
+既要拖又要精确时，滑块旁并排一个 **small 档**数字输入框，两边共用一个 `value`。外部改了 `value`，框里的文字随之更新；用户敲到一半的「1.」不会被打回「1」。
+
+```tsx
+import React from 'react';
+import { Button, InputNumber, Slider } from '@bisheng/ui';
+
+export default () => {
+  const [value, setValue] = React.useState(5);
+
+  return (
+    <div style={{ display: 'flex', gap: 16, alignItems: 'center', maxWidth: 480 }}>
+      <div style={{ flex: 1 }}>
+        <Slider min={0} max={10} value={value ?? 0} onValueChange={setValue} thumbLabel="数值" />
+      </div>
+      <InputNumber size="small" className="w-20" min={0} max={10} value={value} onChange={(v) => setValue(v)} increaseLabel="增加" decreaseLabel="减少" />
+      <Button size="small" color="default" variant="outlined" onClick={() => setValue(null)}>清空</Button>
+    </div>
+  );
+};
+```
+
+一般场景直接用 `Slider` 的 `valueDisplay="input"`，它内置了这套同步，见「滑块 Slider」。
+
+## 状态
+
+外壳与输入框完全一致。**只读、禁用时步进按钮不出现**，悬停也不出；错误、警告态下照常可用，用户可以直接点着改回范围内。
+
+```tsx
+import { InputNumber } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+    <InputNumber className="w-28" status="warning" defaultValue={95} max={100} increaseLabel="增加" decreaseLabel="减少" />
+    <InputNumber className="w-28" readOnly defaultValue={20} />
+    <InputNumber className="w-28" disabled defaultValue={20} />
+  </div>
+);
+```
+
+## API
+
+继承原生 `<input>` 属性（`type` / `value` / `onChange` / `min` / `max` / `step` 除外）。
+
+| prop | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `value` / `defaultValue` | `number \| null` | — | `null` 表示空 |
+| `onChange` | `(value: number \| null, detail: { error }) => void` | — | 解析后的数变化时触发；`error` 为当前校验结果 |
+| `min` / `max` | `number` | — | 有边界就设；`min` ≥ 0 时负号输不进 |
+| `step` | `number` | `1` | 小数步长同时决定默认精度 |
+| `precision` | `number` | 步长的小数位 | 超出报错、不四舍五入；显示按精度补齐 |
+| `errorMessage` | `(error: InputNumberError) => ReactNode` | — | 报错时框下方的危险色文字；不传则只变红 |
+| `onErrorChange` | `(error: InputNumberError \| null) => void` | — | 显示出来的错误变化时触发（失焦报错 / 改对消红） |
+| `size` | `'small' \| 'medium' \| 'large'` | `'medium'` | 同输入框 |
+| `status` | `'default' \| 'error' \| 'warning'` | `'default'` | 外部校验结果；组件自己的报错优先 |
+| `prefix` / `suffix` | `ReactNode` | — | 单位放 `suffix` |
+| `increaseLabel` / `decreaseLabel` | `string` | — | 两个步进按钮的无障碍名称（文案由调用方给） |
+| `borderless` | `boolean` | `false` | 同输入框 |
+| `className` / `inputClassName` | `string` | — | 前者落在最外层（宽度写这里），后者落在 `<input>` |
+
+`InputNumberError`：`{ type: 'range' | 'precision'; min?: number; max?: number; precision: number }`。

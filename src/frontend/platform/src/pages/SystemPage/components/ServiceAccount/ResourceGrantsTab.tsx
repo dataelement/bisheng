@@ -1,63 +1,49 @@
+import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
+import { Button, SearchInput, Select, notification, toast } from '@bisheng/ui';
+import { Tooltip as SharedTooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import {
-  LoadIcon,
-  PlusIcon,
-  ThunmbIcon,
-  TipIcon,
-  TrashIcon,
-} from "@/components/bs-icons"
-import { Button } from "@/components/bs-ui/button"
-import { SearchInput } from "@/components/bs-ui/input"
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow,
+} from "@/components/bs-ui/table";
+
+
+import { getResourcePermissionContextApi } from "@/controllers/API/permission";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/bs-ui/table"
-import {
-  Portal,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/bs-ui/tooltip"
-import { message, toast } from "@/components/bs-ui/toast/use-toast"
-import {
-  listServiceAccountKeysApi,
-  listServiceAccountResourceGrantsApi,
-  mutateServiceAccountResourceGrantsApi,
-} from "@/controllers/API/serviceAccount"
-import { getResourcePermissionContextApi } from "@/controllers/API/permission"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+listServiceAccountKeysApi,
+listServiceAccountResourceGrantsApi,
+mutateServiceAccountResourceGrantsApi,
+} from "@/controllers/API/serviceAccount";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import type {
-  ApiKeyItem,
-  ServiceAccountResourceGrant,
-} from "@/types/api/openApi"
-import { copyText } from "@/utils"
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { GrantScopeNotice } from "./GrantScopeNotice"
-import { ResourceGrantDialog } from "./ResourceGrantDialog"
-import { ResourceGrantRevokeDialogs } from "./ResourceGrantRevokeDialogs"
+ApiKeyItem,
+ServiceAccountResourceGrant,
+} from "@/types/api/openApi";
+import { copyText } from "@/utils";
+import { useCallback,useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { GrantScopeNotice } from "./GrantScopeNotice";
+import { ResourceGrantDialog } from "./ResourceGrantDialog";
+import { ResourceGrantRevokeDialogs } from "./ResourceGrantRevokeDialogs";
 import {
-  createResourceGrantIdempotencyKey,
-  getRequiredScope,
-  formatServiceAccountGrantTime,
-  isServiceAccountGrantEffective,
-  isServiceAccountPermissionTier,
-  RESOURCE_GRANT_FILTER_ALL,
-  SERVICE_ACCOUNT_PERMISSION_TIERS,
-  SERVICE_ACCOUNT_RESOURCE_TYPES,
-  splitGrantKeys,
-} from "./resourceGrantUtils"
+createResourceGrantIdempotencyKey,
+formatServiceAccountGrantTime,
+getRequiredScope,
+isServiceAccountGrantEffective,
+isServiceAccountPermissionTier,
+RESOURCE_GRANT_FILTER_ALL,
+SERVICE_ACCOUNT_PERMISSION_TIERS,
+SERVICE_ACCOUNT_RESOURCE_TYPES,
+splitGrantKeys,
+} from "./resourceGrantUtils";
 
 export interface ResourceGrantsTabProps {
   serviceAccountId: number
@@ -69,6 +55,7 @@ export function ResourceGrantsTab({
   serviceAccountName,
 }: ResourceGrantsTabProps) {
   const { t } = useTranslation()
+  const selectLabels = useSelectLabels()
   const [grants, setGrants] = useState<ServiceAccountResourceGrant[]>([])
   const [keys, setKeys] = useState<ApiKeyItem[]>([])
   const [keyword, setKeyword] = useState("")
@@ -86,12 +73,8 @@ export function ResourceGrantsTab({
     setLoadingData(true)
     try {
       const [grantRows, keyRows] = await Promise.all([
-        captureAndAlertRequestErrorHoc(
-          listServiceAccountResourceGrantsApi(serviceAccountId),
-        ),
-        captureAndAlertRequestErrorHoc(
-          listServiceAccountKeysApi(serviceAccountId),
-        ),
+        listServiceAccountResourceGrantsApi(serviceAccountId),
+        listServiceAccountKeysApi(serviceAccountId),
       ])
       if (grantRows) setGrants(grantRows)
       if (keyRows) setKeys(keyRows)
@@ -101,7 +84,7 @@ export function ResourceGrantsTab({
   }, [serviceAccountId])
 
   useEffect(() => {
-    void load()
+    void load().catch(showApiError)
   }, [load])
 
   const filteredGrants = useMemo(() => {
@@ -143,18 +126,15 @@ export function ResourceGrantsTab({
       for (const group of Object.values(groups)) {
         if (!group?.length) continue
         const resource = group[0]
-        const context = await captureAndAlertRequestErrorHoc(
-          getResourcePermissionContextApi(
+        const context = await getResourcePermissionContextApi(
             resource.resource_type as never,
             resource.resource_id,
-          ),
-        )
+          )
         if (!context) {
           completed = false
           break
         }
-        const result = await captureAndAlertRequestErrorHoc(
-          mutateServiceAccountResourceGrantsApi(
+        const result = await mutateServiceAccountResourceGrantsApi(
             serviceAccountId,
             resource.resource_type,
             resource.resource_id,
@@ -168,22 +148,20 @@ export function ResourceGrantsTab({
                 expected_assignee_version: grant.assignee_version,
               })),
             },
-          ),
-        )
+          )
         if (!result) {
           completed = false
           break
         }
       }
       if (completed) {
-        toast({
-          title: t("openApiManagement.serviceAccount.grants"),
-          description: t("openApiManagement.feedback.grantRevoked"),
-          variant: "success",
-        })
+        notification.open({ type: "success", title: String(t("openApiManagement.serviceAccount.grants") ?? ''), description: String(t("openApiManagement.feedback.grantRevoked") ?? '') })
       }
       await load()
       return completed
+    } catch (error) {
+      await load().catch(showApiError)
+      throw error
     } finally {
       setLoading(false)
     }
@@ -196,15 +174,12 @@ export function ResourceGrantsTab({
     if (targetModelKey === grant.model_key) return
     setUpdatingGrantId(grant.assignee_id)
     try {
-      const context = await captureAndAlertRequestErrorHoc(
-        getResourcePermissionContextApi(
+      const context = await getResourcePermissionContextApi(
           grant.resource_type as never,
           grant.resource_id,
-        ),
-      )
+        )
       if (!context) return
-      const result = await captureAndAlertRequestErrorHoc(
-        mutateServiceAccountResourceGrantsApi(
+      const result = await mutateServiceAccountResourceGrantsApi(
           serviceAccountId,
           grant.resource_type,
           grant.resource_id,
@@ -221,14 +196,9 @@ export function ResourceGrantsTab({
               },
             ],
           },
-        ),
-      )
+        )
       if (!result) return
-      toast({
-        title: t("openApiManagement.grants.change"),
-        description: t("openApiManagement.feedback.grantUpdated"),
-        variant: "success",
-      })
+      notification.open({ type: "success", title: String(t("openApiManagement.grants.change") ?? ''), description: String(t("openApiManagement.feedback.grantUpdated") ?? '') })
       await load()
     } finally {
       setUpdatingGrantId(null)
@@ -238,13 +208,9 @@ export function ResourceGrantsTab({
   const handleCopyResource = async (grant: ServiceAccountResourceGrant) => {
     const resource = `${grant.resource_type}:${grant.resource_id}`
     await copyText(resource)
-    message({
-      className: "fixed bottom-6 left-1/2 mt-0 w-auto -translate-x-1/2 pr-4",
-      description: t("openApiManagement.feedback.resourceCopied", {
+    toast.show({ type: "success", message: String(t("openApiManagement.feedback.resourceCopied", {
         resource,
-      }),
-      variant: "success",
-    })
+      }) ?? '') })
   }
 
   const handleConfirmRevoke = async () => {
@@ -257,72 +223,47 @@ export function ResourceGrantsTab({
   }
 
   return (
-    <TooltipProvider delayDuration={100}>
-      <div className="space-y-4 py-4">
+    <SharedTooltipProvider delayDuration={100}><div className="space-y-4 py-4">
         {!loadingData ? <GrantScopeNotice keys={keys} /> : null}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <SearchInput
-              className="w-52"
-              value={keyword}
-              aria-label={t("openApiManagement.grants.resourceSearch")}
-              placeholder={t("openApiManagement.grants.resourceSearch")}
-              onChange={(event) => setKeyword(event.target.value)}
+            <SearchInput value={keyword} aria-label={t("openApiManagement.grants.resourceSearch")} placeholder={t("openApiManagement.grants.resourceSearch")} onChange={(event) => setKeyword(event.target.value)} className={"w-52"} />
+            <Select
+              {...selectLabels}
+              className="w-36"
+              options={[
+                { value: RESOURCE_GRANT_FILTER_ALL, label: t("openApiManagement.grants.allTypes") },
+                ...SERVICE_ACCOUNT_RESOURCE_TYPES.map((type) => ({
+                  value: type,
+                  label: t(`openApiManagement.resourceTypes.${type}`),
+                })),
+              ]}
+              value={resourceType}
+              onChange={(value) => { if (value != null) setResourceType(String(value)) }}
+              aria-label={t("openApiManagement.grants.typeFilter")}
             />
-            <Select value={resourceType} onValueChange={setResourceType}>
-              <SelectTrigger
-                className="w-36"
-                aria-label={t("openApiManagement.grants.typeFilter")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={RESOURCE_GRANT_FILTER_ALL}>
-                  {t("openApiManagement.grants.allTypes")}
-                </SelectItem>
-                {SERVICE_ACCOUNT_RESOURCE_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {t(`openApiManagement.resourceTypes.${type}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={sourceType} onValueChange={setSourceType}>
-              <SelectTrigger
-                className="w-44"
-                aria-label={t("openApiManagement.grants.sourceFilter")}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={RESOURCE_GRANT_FILTER_ALL}>
-                  {t("openApiManagement.grants.allSources")}
-                </SelectItem>
-                <SelectItem value="DIRECT">
-                  {t("openApiManagement.grantSources.DIRECT")}
-                </SelectItem>
-                <SelectItem value="CREATOR_GRANT">
-                  {t("openApiManagement.grantSources.CREATOR_GRANT")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <Select
+              {...selectLabels}
+              className="w-44"
+              options={[
+                { value: RESOURCE_GRANT_FILTER_ALL, label: t("openApiManagement.grants.allSources") },
+                { value: "DIRECT", label: t("openApiManagement.grantSources.DIRECT") },
+                { value: "CREATOR_GRANT", label: t("openApiManagement.grantSources.CREATOR_GRANT") },
+              ]}
+              value={sourceType}
+              onChange={(value) => { if (value != null) setSourceType(String(value)) }}
+              aria-label={t("openApiManagement.grants.sourceFilter")}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {directGrants.length ? (
-              <Button
-                variant="outline"
-                disabled={loading || loadingData}
-                onClick={() => setRevokeAllOpen(true)}
-              >
+              <Button variant="outlined" disabled={loading || loadingData} onClick={() => setRevokeAllOpen(true)} color="default">
                 {t("openApiManagement.grants.revokeAll")}
               </Button>
             ) : null}
-            <Button
-              disabled={loading || loadingData}
-              onClick={() => setDialogOpen(true)}
-            >
-              <PlusIcon className="mr-1 size-4 text-primary" />
+            <Button disabled={loading || loadingData} onClick={() => setDialogOpen(true)}>
+              <Outlined.Plus className="mr-1 size-4 text-primary" />
               {t("openApiManagement.grants.add")}
             </Button>
           </div>
@@ -361,32 +302,16 @@ export function ResourceGrantsTab({
                         <span className="font-medium">
                           {grant.resource_name}
                         </span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="size-7"
-                              aria-label={t(
+                        <SharedTooltip content={t("openApiManagement.actions.copy")}><Button type="button" variant="text" size="medium" className="size-7" aria-label={t(
                                 "openApiManagement.grants.copyResource",
                                 { name: grant.resource_name },
-                              )}
-                              onClick={() => void handleCopyResource(grant)}
-                            >
-                              <ThunmbIcon type="copy" className="size-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <Portal>
-                            <TooltipContent>
-                              {t("openApiManagement.actions.copy")}
-                            </TooltipContent>
-                          </Portal>
-                        </Tooltip>
+                              )} onClick={() => void handleCopyResource(grant)} color="default" iconOnly>
+                              <Outlined.Copy  className="size-4" />
+                            </Button></SharedTooltip>
                       </div>
                       {!effective && requiredScope && hasOwnKeys ? (
                         <p className="mt-1 flex items-center gap-1 text-xs text-orange-500">
-                          <TipIcon className="size-3.5 shrink-0" />
+                          <Outlined.Info className="size-3.5 shrink-0" />
                           {t("openApiManagement.grants.missingScope", {
                             scope: t(
                               `openApiManagement.scopes.${requiredScope.replace(":", "_")}.label`,
@@ -404,33 +329,26 @@ export function ResourceGrantsTab({
                   <TableCell>
                     {isServiceAccountPermissionTier(grant.model_key) ? (
                       <Select
+                        {...selectLabels}
+                        className="w-28"
+                        options={SERVICE_ACCOUNT_PERMISSION_TIERS.map((key) => ({
+                          value: key,
+                          label: t(`openApiManagement.permissionTiers.${key}`),
+                        }))}
                         value={grant.model_key}
                         disabled={
                           !canChangeTier ||
                           loading ||
                           updatingGrantId === grant.assignee_id
                         }
-                        onValueChange={(value) =>
-                          void handleTierChange(grant, value)
-                        }
-                      >
-                        <SelectTrigger
-                          className="h-8 w-28 shadow-none"
-                          aria-label={t(
-                            "openApiManagement.grants.changeTierFor",
-                            { name: grant.resource_name },
-                          )}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SERVICE_ACCOUNT_PERMISSION_TIERS.map((key) => (
-                            <SelectItem key={key} value={key}>
-                              {t(`openApiManagement.permissionTiers.${key}`)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onChange={(value) => {
+                          if (value != null) void handleTierChange(grant, String(value)).catch(showApiError)
+                        }}
+                        aria-label={t(
+                          "openApiManagement.grants.changeTierFor",
+                          { name: grant.resource_name },
+                        )}
+                      />
                     ) : (
                       grant.model_name
                     )}
@@ -469,31 +387,14 @@ export function ResourceGrantsTab({
                     {formatServiceAccountGrantTime(grant.granted_at)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8"
-                          disabled={
+                    <SharedTooltip content={t("openApiManagement.actions.revoke")}><Button type="button" variant="text" size="medium" className="size-8" disabled={
                             loading || !grant.editable || grant.protected
-                          }
-                          aria-label={t(
+                          } aria-label={t(
                             "openApiManagement.grants.revokeResource",
                             { name: grant.resource_name },
-                          )}
-                          onClick={() => setRevokeGrant(grant)}
-                        >
-                          <TrashIcon className="size-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <Portal>
-                        <TooltipContent>
-                          {t("openApiManagement.actions.revoke")}
-                        </TooltipContent>
-                      </Portal>
-                    </Tooltip>
+                          )} onClick={() => setRevokeGrant(grant)} color="default" iconOnly>
+                          <Outlined.Delete className="size-4" />
+                        </Button></SharedTooltip>
                   </TableCell>
                 </TableRow>
               )
@@ -502,7 +403,7 @@ export function ResourceGrantsTab({
               <TableRow>
                 <TableCell colSpan={7} className="py-8 text-center">
                   <span role="status" aria-label={t("loading")}>
-                    <LoadIcon className="mx-auto size-5" />
+                    <Outlined.Loading className="mx-auto size-5 animate-spin" />
                   </span>
                 </TableCell>
               </TableRow>
@@ -551,10 +452,9 @@ export function ResourceGrantsTab({
             if (!open) setRevokeGrant(null)
           }}
           onRevokeAllOpenChange={setRevokeAllOpen}
-          onConfirmGrant={() => void handleConfirmRevoke()}
-          onConfirmAll={() => void handleConfirmRevokeAll()}
+          onConfirmGrant={handleUiRequest(handleConfirmRevoke)}
+          onConfirmAll={handleUiRequest(handleConfirmRevokeAll)}
         />
-      </div>
-    </TooltipProvider>
+      </div></SharedTooltipProvider>
   )
 }

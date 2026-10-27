@@ -1,21 +1,24 @@
 // @ts-strict-ignore
+import { captureQaOperation, type QaOperation } from '@bisheng/chat/core';
+import { Button, Input, toast } from '@bisheng/ui';
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { LoadingIcon } from "@/components/bs-icons/loading";
-import { Button } from "@/components/bs-ui/button";
-import { Checkbox } from "@/components/bs-ui/checkBox";
+
+import { Checkbox } from "@bisheng/ui";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { addSimilarQa, getQaList } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useTable } from "@/util/hook";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 
-const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
+import { addSimilarQa, getQaList } from "@/controllers/API";
+import { showApiError } from "@/controllers/request";
+import { useTable } from "@/util/hook";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { AnnotationFormHandle, AnnotationFormProps } from "./annotationTypes";
+
+const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ onMarked }, ref) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [knowledgeLib, setKnowledgeLib] = useState([]);
@@ -27,9 +30,24 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
     );
 
     const qRef = useRef('');
+    const operationRef = useRef<Readonly<QaOperation>>();
+    const generationRef = useRef(0);
+    const pendingRef = useRef(false);
+    const [saving, setSaving] = useState(false);
+    useEffect(() => () => {
+        generationRef.current += 1;
+        pendingRef.current = false;
+        operationRef.current = undefined;
+    }, []);
 
     useImperativeHandle(ref, () => ({
-        open(id, qa) {
+        close,
+        open(_id, qa, operation) {
+            generationRef.current += 1;
+            operationRef.current = operation ? captureQaOperation(operation) : undefined;
+            pendingRef.current = false;
+            setSaving(false);
+            setError(false);
             qRef.current = qa.q;
             setOpen(true);
             setKnowledgeLib([]);
@@ -50,8 +68,9 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
         );
     };
 
-    const { message } = useToast();
+
     const handleSubmit = async () => {
+        if (pendingRef.current) return;
         const errors = [];
         if (knowledgeLib.length === 0) {
             errors.push(t('log.qaLibRequired'));
@@ -61,23 +80,32 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
         }
         if (errors.length > 0) {
             setError(true);
-            return message({ variant: 'warning', description: errors });
+            return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') });
         }
 
-        captureAndAlertRequestErrorHoc(addSimilarQa({
+        const generation = generationRef.current;
+        const operation = operationRef.current;
+        pendingRef.current = true;
+        setSaving(true);
+        await addSimilarQa({
             ids: selectedItems,
             question: qRef.current
-        }).then(res => {
-            message({
-                variant: 'success',
-                description: t('log.addSuccess')
-            });
-            onMarked?.()
-            close();
-        }));
+        }).then(async () => {
+            if (generation === generationRef.current) {
+                toast.show({ type: 'success', message: String(t('log.addSuccess') ?? '') });
+                close();
+            }
+            await onMarked?.(operation);
+        }).catch(showApiError).finally(() => {
+            if (generation === generationRef.current) { pendingRef.current = false; setSaving(false); }
+        });
     };
 
     const close = () => {
+        generationRef.current += 1;
+        operationRef.current = undefined;
+        pendingRef.current = false;
+        setSaving(false);
         qRef.current = '';
         setKnowledgeLib([]);
         setSelectedItems([]);
@@ -122,7 +150,7 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
                                     {datalist.map((el) => (
                                         <TableRow key={el.id}>
                                             <TableCell className="font-medium">
-                                                <Checkbox checked={selectedItems.includes(el.id)} onCheckedChange={() => handleCheckboxChange(el.id)} />
+                                                <Checkbox size="small" aria-label={String(el.questions)} checked={selectedItems.includes(el.id)} onCheckedChange={() => handleCheckboxChange(el.id)} />
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 <div className="max-w-[360px] whitespace-nowrap text-ellipsis overflow-hidden">{el.questions}</div>
@@ -154,10 +182,10 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
                         </div>
                     </div>
                     <DialogFooter>
-                        <DialogClose>
-                            <Button variant="outline" className="px-11" type="button" onClick={close}>{t('log.cancel')}</Button>
+                        <DialogClose asChild>
+                            <Button variant="outlined" type="button" onClick={close} color="default">{t('log.cancel')}</Button>
                         </DialogClose>
-                        <Button type="submit" className="px-11" onClick={handleSubmit}>{t('log.confirm')}</Button>
+                        <Button type="submit" loading={saving} disabled={saving} onClick={handleSubmit}>{t('log.confirm')}</Button>
                     </DialogFooter>
                 </div>
             </DialogContent>

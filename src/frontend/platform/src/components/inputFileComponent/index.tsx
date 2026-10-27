@@ -1,4 +1,7 @@
 // @ts-strict-ignore
+import type { WorkflowFileFieldProps } from '@bisheng/chat';
+import type { ReactNode } from 'react';
+import { Button, notification } from '@bisheng/ui';
 import { locationContext } from "@/contexts/locationContext";
 import { MAX_MEDIA_FILES, isMediaFileName } from "@/util/fileAcceptUtils";
 import { FileSearch2 } from "lucide-react";
@@ -10,8 +13,8 @@ import { uploadFile } from "../../controllers/API";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 import { FileComponentType } from "../../types/components";
 import { LoadIcon } from "../bs-icons/loading";
-import { Button } from "../bs-ui/button";
-import { useToast } from "../bs-ui/toast/use-toast";
+
+
 
 export default function InputFileComponent({
   value,
@@ -23,8 +26,9 @@ export default function InputFileComponent({
   onFileChange,
   editNode = false,
   isSSO = false,
-  multiple = false
-}: FileComponentType) {
+  multiple = false,
+  renderControl,
+}: FileComponentType & { renderControl?: (props: WorkflowFileFieldProps) => ReactNode }) {
   const { t } = useTranslation();
   const [myValue, setMyValue] = useState(value);
   const [loading, setLoading] = useState(false);
@@ -56,7 +60,7 @@ export default function InputFileComponent({
   }, [value]);
 
   const { appConfig } = useContext(locationContext)
-  const { toast } = useToast()
+
   const checkFileSize = (file) => {
     const maxSize = (appConfig.uploadFileMaxSize || 50) * 1024 * 1024;
     if (file.size > maxSize) {
@@ -82,10 +86,7 @@ export default function InputFileComponent({
 
       const errorMsg = checkFileSize(file)
       if (errorMsg) {
-        toast({
-          variant: 'error',
-          description: errorMsg
-        })
+        notification.open({ type: 'error', description: String(errorMsg ?? '') })
         return setLoading(false);
       }
       // Check if the file type is correct
@@ -93,10 +94,7 @@ export default function InputFileComponent({
       // Upload the file
       isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
         setLoading(false);
-        if (typeof res === 'string') return toast({
-          variant: 'error',
-          description: res
-        })
+        if (typeof res === 'string') return notification.open({ type: 'error', description: String(res ?? '') })
         const { file_path } = res;
         setMyValue(file.name);
         onChange(file.name);
@@ -160,10 +158,7 @@ export default function InputFileComponent({
         }
 
         if (errorMsgs.length) {
-          toast({
-            variant: 'error',
-            description: errorMsgs
-          })
+          notification.open({ type: 'error', description: errorMsgs.filter(Boolean).join('\n') })
           // 文件都不符合要求 结束上传
           if (errorMsgs.length === _files.length) {
             return setLoading(false);
@@ -174,10 +169,7 @@ export default function InputFileComponent({
         // slot for the whole run. Same cap the end-user chat enforces, applied to
         // the picked batch — a form field replaces its value rather than appending.
         if (files.filter((file) => isMediaFileName(file.name)).length > MAX_MEDIA_FILES) {
-          toast({
-            variant: 'error',
-            description: t('chat.mediaFileTooMany')
-          })
+          notification.open({ type: 'error', description: String(t('chat.mediaFileTooMany') ?? '') })
           return setLoading(false);
         }
 
@@ -190,10 +182,7 @@ export default function InputFileComponent({
               .then(res => {
                 if (typeof res === 'string') {
                   setErrorData({ title: "Error", list: [res] });
-                  toast({
-                    variant: 'error',
-                    description: res
-                  })
+                  notification.open({ type: 'error', description: String(res ?? '') })
                   setLoading(false);
                   throw new Error(res); // Exit the upload if error occurs
                 }
@@ -220,10 +209,7 @@ export default function InputFileComponent({
             setLoading(false); // Hide loading state if an error occurs
           });
       } else {
-        toast({
-          variant: 'error',
-          description: t('chat.noFileSelected')
-        })
+        notification.open({ type: 'error', description: String(t('chat.noFileSelected') ?? '') })
         setLoading(false); // Hide loading state if no files were selected
       }
     };
@@ -233,6 +219,9 @@ export default function InputFileComponent({
   };
 
 
+
+  if (renderControl) return renderControl({ value: myValue, placeholder, disabled, loading,
+    onClick: () => { if (!disabled && !loading) handleButtonClick(); } });
 
   return (
     <div className={disabled ? "input-component-div" : "w-full"}>
@@ -249,7 +238,7 @@ export default function InputFileComponent({
         >
           {myValue !== "" ? myValue : placeholder}
         </span>
-        <Button size="icon" variant="ghost" onClick={handleButtonClick}>
+        <Button size="medium" variant="text" onClick={handleButtonClick} color="default" iconOnly>
           {!editNode && !loading && (
             <FileSearch2
               strokeWidth={1.5}

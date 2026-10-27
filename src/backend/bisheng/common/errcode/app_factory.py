@@ -1,0 +1,328 @@
+"""App-factory error codes — module 161 (F054 design §4.2 ⑥ / K11).
+
+Module 161 is the F054 slice of the app-factory band; F055 owns 162, F056 163
+and F059 164. 161 was verified free before it was claimed (the 16x band held
+only 160 = dataset), and 260 is **taken** by F049 open API auth — do not treat
+either as spare.
+
+Sub-ranges (design §4.2 ⑥):
+
+* ``16100-16119`` domain / state machine
+* ``16120-16139`` runtime / orchestration
+* ``16140-16159`` entry & identity injection
+* ``16160-16179`` data plane / logs
+* ``16180-16199`` deployment switch / ops
+
+Two constraints that are easy to miss:
+
+* **Never return 403/404 to the platform SPA for an "app I may not see"
+  answer.** The platform request interceptor turns a GET with HTTP 403 / 404
+  into a full-page redirect to ``/403`` / ``/404`` (design pit 25), so the
+  detail page and the log tab must answer with these business codes inside a
+  200 envelope instead.
+* Copy for every code lives in
+  ``src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`` and
+  ships in the same change (CI ``pnpm check-i18n``). The generated artifacts
+  under ``platform/public/locales`` / ``client/src/locales`` are never edited
+  by hand.
+"""
+
+from bisheng.common.errcode.base import BaseErrorCode
+
+
+class AppFactoryError(BaseErrorCode):
+    """Base of the 161xx family (hosted application domain + runtime)."""
+
+    Code: int = 16100
+    Msg: str = "App factory error"
+
+
+# ---------------------------------------------------------------------------
+# 16100-16119 — domain / state machine
+# ---------------------------------------------------------------------------
+
+
+class AppNotFoundError(AppFactoryError):
+    """No such application, or it is deleted / invisible to the caller.
+
+    Deliberately the same answer for "does not exist" and "exists but you may
+    not know that": the entry path treats draft / pending / deleted / unknown
+    alike (AC-29).
+    """
+
+    Code: int = 16101
+    Msg: str = "Application does not exist"
+
+
+class AppStateConflictError(AppFactoryError):
+    """A state action ran against an unexpected prior state.
+
+    Raised when the compare-and-set UPDATE in ``AppDao.aupdate_state_cas``
+    matches zero rows — i.e. a concurrent action already moved the app, or the
+    transition is not in ``ALLOWED_TRANSITIONS``.
+    """
+
+    Code: int = 16102
+    Msg: str = "Application state conflict: the current state does not allow this action"
+
+
+class AppSlugConflictError(AppFactoryError):
+    """``slug`` is unique across **all** tenants — it is the public entry segment."""
+
+    Code: int = 16103
+    Msg: str = "Application identifier is already taken"
+
+
+class AppOnlineCannotDeleteError(AppFactoryError):
+    """Deleting an online app is blocked; stop it first (AC-42)."""
+
+    Code: int = 16104
+    Msg: str = "An online application cannot be deleted; stop it first"
+
+
+class AppOwnerOnlyError(AppFactoryError):
+    """Owner-only action (delete / data tab).
+
+    A **business** pre-check, not a permission-runtime verdict: tenant
+    administrators are short-circuited to allow by the permission runtime, so
+    "owner only" can never be expressed as an FGA check (constitution C4 note /
+    design §2).
+    """
+
+    Code: int = 16105
+    Msg: str = "Only the application owner may perform this action"
+
+
+class AppManageForbiddenError(AppFactoryError):
+    """Management action reserved to the owner, a tenant administrator or a super admin.
+
+    Kept apart from :class:`AppOwnerOnlyError` because the two answer different
+    questions and the copy differs accordingly: 16105 means "**only** the owner"
+    (delete, the data tab — a tenant admin is refused there too), 16106 means
+    "you are none of the three". Folding them together would tell a tenant
+    administrator who just stopped an app that only its owner may do so.
+    """
+
+    Code: int = 16106
+    Msg: str = "Only the application owner or an administrator may perform this action"
+
+
+# ---------------------------------------------------------------------------
+# 16120-16139 — runtime / orchestration
+# ---------------------------------------------------------------------------
+
+
+class AppOrchestratorUnavailableError(AppFactoryError):
+    """runtime-manager unreachable, or its orchestration backend is down."""
+
+    Code: int = 16121
+    Msg: str = "The application runtime is unavailable"
+
+
+class AppBuildFailedError(AppFactoryError):
+    """Build failed; ``data`` carries ``stage`` / ``message`` / ``tail`` (AC-15)."""
+
+    Code: int = 16122
+    Msg: str = "Application build failed"
+
+
+class AppRuntimeNotSupportedError(AppFactoryError):
+    """``runtime`` is not among the templates this deployment actually ships.
+
+    The supported set is reported by runtime-manager (``GET /v1/runtime/status``),
+    not hardcoded here — it is whatever template directories that install ships
+    (``python3.11`` / ``node20`` / ``static`` in a full install).
+    """
+
+    Code: int = 16123
+    Msg: str = "Unsupported runtime"
+
+
+class AppProbeFailedError(AppFactoryError):
+    """The instance started but never became ready within the probe budget (AC-18)."""
+
+    Code: int = 16124
+    Msg: str = "The application failed to start: readiness probe did not pass"
+
+
+class AppCapacityInsufficientError(AppFactoryError):
+    """Capacity admission rejected the request (AC-19 / AC-65).
+
+    Applies to builds as well as starts — a build that is admitted "because it
+    is only a build" is exactly how 114 ran out of memory (design K2).
+    """
+
+    Code: int = 16125
+    Msg: str = "Insufficient runtime capacity"
+
+
+# ---------------------------------------------------------------------------
+# 16140-16159 — entry & identity injection
+# ---------------------------------------------------------------------------
+
+
+class AppEntryLoginRequiredError(AppFactoryError):
+    """No platform session on the entry path — hand off to the login page (AC-27)."""
+
+    Code: int = 16141
+    Msg: str = "Sign in to open this application"
+
+
+class AppEntryForbiddenError(AppFactoryError):
+    """Signed in, but outside the application's visible scope (AC-28)."""
+
+    Code: int = 16142
+    Msg: str = "You do not have access to this application"
+
+
+class AppEntryStoppedError(AppFactoryError):
+    """The application is stopped — shown only to users inside its visible scope (AC-29)."""
+
+    Code: int = 16143
+    Msg: str = "This application is currently stopped"
+
+
+class AppEntryNotOnlineError(AppFactoryError):
+    """Draft / pending / deleted / unknown all collapse into this one answer (AC-29)."""
+
+    Code: int = 16144
+    Msg: str = "This application does not exist or is not online"
+
+
+class AppFactoryNotEnabledError(AppFactoryError):
+    """The app factory switch is off for this deployment (AC-30 / AC-62)."""
+
+    Code: int = 16145
+    Msg: str = "The app factory is not enabled in this environment"
+
+
+class AppPermissionEngineUnavailableError(AppFactoryError):
+    """The permission engine could not answer — **deny**, never pass through (AC-12).
+
+    Mapped from ``PermissionServiceUnavailableError`` /
+    ``PermissionBackendUnavailableError``; fail-closed is the whole point.
+    """
+
+    Code: int = 16146
+    Msg: str = "The permission service is unavailable; access is denied"
+
+
+class AppEntryDeployingError(AppFactoryError):
+    """Publish window: a deploy is in flight and nothing serves yet (AC-48).
+
+    Raised by nobody in this process — app-proxy emits the code to
+    non-navigation callers (the page itself auto-retries). Registered here so
+    the code has exactly one meaning and copy in the three ``api_errors``
+    bundles, like the six entry verdicts above.
+    """
+
+    Code: int = 16147
+    Msg: str = "The application is being published; retry shortly"
+
+
+class AppEntryRecoveringError(AppFactoryError):
+    """Crash / restart window: the instance is not answering yet (AC-36).
+
+    Same emitter as :class:`AppEntryDeployingError`. Distinct from 16121
+    (orchestrator unavailable): the manager is fine, the app is not back yet.
+    """
+
+    Code: int = 16148
+    Msg: str = "The application is restarting; retry shortly"
+
+
+# ---------------------------------------------------------------------------
+# 16160-16179 — data plane / logs
+# ---------------------------------------------------------------------------
+
+
+class AppLogForbiddenError(AppFactoryError):
+    """Log tab is visible to the owner or a tenant administrator (AC-55)."""
+
+    Code: int = 16161
+    Msg: str = "You do not have permission to view this application's logs"
+
+
+# ``16170``-``16174`` are reserved for the attachment storage handle (AC-45,
+# F054 T084/T085; runtime-manager ``storage.py``). The manager's error codes
+# map onto them once a backend caller (F052 MCP tools / a data tab) exists —
+# today the only consumer is the hosted app itself via its per-app bearer
+# token, so nothing here raises them yet:
+#   16170  storage_unavailable  (503)   MinIO not configured / unreachable
+#   16171  invalid_object_key   (400)   key leaves ``apps/{app_id}/attachments/``
+#   16172  payload_too_large    (413)   over ``RTM_STORAGE_MAX_FILE_MB``
+#   16173  not_found            (404)   attachment does not exist
+#   16174  unauthorized         (401)   storage token not bound to this app
+# Declare them with their locale copy in the wave that first raises them.
+
+
+class AppDataForbiddenError(AppFactoryError):
+    """Data tab / data tools are **owner only** (AC-56).
+
+    Narrower than the log tab on purpose: a tenant administrator may read what
+    an app printed, not the rows it stores. Like :class:`AppOwnerOnlyError`
+    this is a business pre-check — the permission runtime would wave an
+    administrator through.
+    """
+
+    Code: int = 16162
+    Msg: str = "You do not have permission to access this application's data"
+
+
+class AppDataNotReadyError(AppFactoryError):
+    """The application has not created its database yet (manager ``db_not_found``)."""
+
+    Code: int = 16163
+    Msg: str = "The application has not created its database yet"
+
+
+class AppDataTableNotFoundError(AppFactoryError):
+    """No such table in the application's database (manager ``table_not_found``)."""
+
+    Code: int = 16164
+    Msg: str = "The table does not exist in the application's database"
+
+
+class AppDataRowNotFoundError(AppFactoryError):
+    """No row with that key — or the update would have touched ≠ 1 rows and was rolled back."""
+
+    Code: int = 16165
+    Msg: str = "The row does not exist or has been changed by the application"
+
+
+class AppDataInvalidError(AppFactoryError):
+    """Bad identifier / unknown column / binary column / non-scalar value / key change.
+
+    Raised on the backend for anything that is obviously not a plain
+    identifier (the manager checks again against the live schema): the data
+    plane carries **no DDL**, and a table name that is really a statement is
+    refused before it leaves this process.
+    """
+
+    Code: int = 16166
+    Msg: str = "The data request is invalid"
+
+
+class AppDataBusyError(AppFactoryError):
+    """The application holds its database write lock; retry (manager ``data_busy``)."""
+
+    Code: int = 16167
+    Msg: str = "The application's database is busy; please try again"
+
+
+# ---------------------------------------------------------------------------
+# 16180-16199 — deployment switch / ops
+# ---------------------------------------------------------------------------
+
+
+class AppRuntimeLayerNotDeployedError(AppFactoryError):
+    """The runtime layer (runtime-manager / app-proxy) is not deployed here.
+
+    Distinct from :class:`AppFactoryNotEnabledError`: 16145 answers the *entry*
+    path ("this environment has the factory switched off"), 16181 answers the
+    *management* surfaces ("the switch is on but the runtime processes are not
+    installed"), which is what makes AC-59..AC-62 separable.
+    """
+
+    Code: int = 16181
+    Msg: str = "The app factory runtime layer is not deployed in this environment"

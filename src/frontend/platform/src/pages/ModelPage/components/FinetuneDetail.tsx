@@ -1,14 +1,16 @@
 // @ts-strict-ignore
-import { Loader2 } from "lucide-react";
+import { Button } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge } from "../../../components/bs-ui/badge";
-import { Button } from "../../../components/bs-ui/button";
+import { Tag } from "@bisheng/ui";
+
 import EditLabel from "../../../components/bs-ui/editLabel";
 import { alertContext } from "../../../contexts/alertContext";
 import { getModelInfoApi } from "../../../controllers/API";
 import { cancelTaskApi, getTaskInfoApi, publishTaskApi, unPublishTaskApi, updataTaskNameApi } from "../../../controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { handleUiRequest, showApiError } from "../../../controllers/request";
 import { TaskDB } from "../../../types/api/finetune";
 import FinetuneResult from "./FinetuneResult";
 import { formatMilliseconds } from "../../../util/utils";
@@ -32,9 +34,8 @@ export const BadgeView = ({ value }) => {
     const { t } = useTranslation()
     // 训练成功
     // return null
-    const colors = ['', '', 'text-red-500', '', 'text-green-500', 'text-green-500']
     const texts = ['', t('finetune.trainingInProgress'), t('finetune.trainingFailed'), t('finetune.taskAborted'), t('finetune.trainingSuccess'), t('finetune.publishSuccess')]
-    return <Badge size="sm" variant="secondary" className={`${colors[value]} break-keep`}>{texts[value]}</Badge>
+    return <Tag size="small" dot className="shrink-0 whitespace-nowrap" color={value === 2 ? "danger" : value >= 4 ? "success" : value === 1 ? "warning" : "default"}>{texts[value]}</Tag>
 }
 
 const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete, onStop }) => {
@@ -46,23 +47,32 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
             bsConfirm({
                 desc: t('finetune.confirmCancelPublish'),
                 async onOk(next) {
-                    next()
                     setLoading(true)
-                    await onUnPublish()
-                    setLoading(false)
+                    try {
+                        await onUnPublish()
+                        next()
+                    } finally {
+                        setLoading(false)
+                    }
                 }
             })
         } else {
             setLoading(true)
-            await onUnPublish()
-            setLoading(false)
+            try {
+                await onUnPublish()
+            } finally {
+                setLoading(false)
+            }
         }
     }
 
     const handlePublish = async () => {
         setLoading(true)
-        await onPublish()
-        setLoading(false)
+        try {
+            await onPublish()
+        } finally {
+            setLoading(false)
+        }
     }
 
     const deleteClick = () => {
@@ -74,8 +84,8 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
         }
         bsConfirm({
             desc: tip,
-            onOk(next) {
-                onDelete()
+            async onOk(next) {
+                await onDelete()
                 next()
             }
         })
@@ -84,8 +94,8 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
     const stopClick = () => {
         bsConfirm({
             desc: t('finetune.confirmStopTraining'),
-            onOk(next) {
-                onStop()
+            async onOk(next) {
+                await onStop()
                 next()
             }
         })
@@ -93,19 +103,19 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     return <div className="absolute right-4 flex gap-2">
         {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="sm" disabled={loading} onClick={cancelPublish}>
-                {loading && <Loader2 className="animate-spin mr-2" size={14} />}
+            <Button size="small" disabled={loading} onClick={handleUiRequest(cancelPublish)}>
+                {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
                 {t('finetune.cancelPublish')}
             </Button> :
             status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="sm" disabled={loading} onClick={handlePublish}>
-                    {loading && <Loader2 className="animate-spin mr-2" size={14} />}
+                <Button size="small" disabled={loading} onClick={handleUiRequest(handlePublish)}>
+                    {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
                     {t('finetune.publish')}
                 </Button> : null
         }
         {status === TaskStatus.TRAINING_IN_PROGRESS ?
-            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
-            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('bs:delete')}</Button>
+            <Button size="small" color="danger" onClick={stopClick}>{t('finetune.stop')}</Button> :
+            <Button size="small" color="danger" onClick={deleteClick}>{t('bs:delete')}</Button>
         }
     </div>
 }
@@ -132,16 +142,14 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
     }
 
     useEffect(() => {
-        captureAndAlertRequestErrorHoc(getTaskInfoApi(id).then((data) => {
+        getTaskInfoApi(id).then((data) => {
             setBaseInfo(data.finetune)
-            getOnlineState(data.finetune.model_id)
-        }), (err) => {
-            setBaseInfo(null)
-        })
+            return getOnlineState(data.finetune.model_id)
+        }).catch(showApiError)
     }, [id])
 
     const handlePublish = async () => {
-        const res = await captureAndAlertRequestErrorHoc(publishTaskApi(id))
+        const res = await publishTaskApi(id)
         if (!res) return
         // 成功
         onStatusChange(TaskStatus.PUBLISH_SUCCESS)
@@ -150,14 +158,14 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
     }
 
     const handleUnPublish = async () => {
-        const res = await captureAndAlertRequestErrorHoc(unPublishTaskApi(id))
+        const res = await unPublishTaskApi(id)
         if (!res) return
         onStatusChange(TaskStatus.TRAIN_SUCCESS)
         setBaseInfo({ ...baseInfo, status: TaskStatus.TRAIN_SUCCESS })
     }
 
     const handleStopTrain = async () => {
-        const res = await captureAndAlertRequestErrorHoc(cancelTaskApi(id))
+        const res = await cancelTaskApi(id)
         if (!res) return
 
         onStatusChange(TaskStatus.TASK_ABORTED)
@@ -165,7 +173,7 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
     }
 
     const handleChangeName = async (name) => {
-        const res = await captureAndAlertRequestErrorHoc(updataTaskNameApi(id, name))
+        const res = await updataTaskNameApi(id, name)
         if (!res) return
 
         onStatusChange(baseInfo.status)
@@ -195,7 +203,7 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
                         }
                     ]}
                     str={baseInfo.model_name}
-                    onChange={(model_name) => handleChangeName(model_name)}>
+                    onChange={handleChangeName}>
                     {(val) => <div className="text-lg font-semibold">{val}</div>}
                 </EditLabel>
                 <BadgeView value={baseInfo.status} />

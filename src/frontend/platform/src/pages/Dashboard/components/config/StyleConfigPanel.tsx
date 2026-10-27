@@ -1,276 +1,49 @@
 // @ts-strict-ignore
-"use client"
+import { Button, Input, Select } from '@bisheng/ui';
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown, AlignLeft, AlignCenter, AlignRight, ChevronUp, Bold, Italic, Underline, Strikethrough } from "lucide-react"
-import { Button } from "@/components/bs-ui/button"
-import { Input } from "@/components/bs-ui/input"
+
+
+import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+// The theme-color picker renders color swatches as its options, which the
+// shared Select (plain-text labels) cannot show, so it stays on the old one.
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select"
-import { Checkbox } from "@/components/bs-ui/checkBox"
-import { ComponentStyleConfig } from "../../types/dataConfig"
-import { useTranslation } from "react-i18next"
-import { colorSchemes } from "../../colorSchemes"
-import { useComponentEditorStore } from "@/store/dashboardStore"
+Select as LegacySelect,
+SelectContent,
+SelectItem,
+SelectTrigger,
+SelectValue,
+} from "@/components/bs-ui/select";
+import { useComponentEditorStore } from "@/store/dashboardStore";
+import { cn } from "@/utils";
+import { Checkbox } from "@bisheng/ui";
+import { useEffect,useMemo,useState } from "react";
 import { SketchPicker } from 'react-color';
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
-import { cn } from "@/utils"
+import { useTranslation } from "react-i18next";
+import { colorSchemes } from "../../colorSchemes";
+import { ComponentStyleConfig } from "../../types/dataConfig";
+import { CollapsibleBlock,FormBlock,TextFormat,type TextFormatProps } from "./StyleConfigControls";
 
 interface StyleConfigPanelProps {
+  FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig;
   config: ComponentStyleConfig
   onChange: (newConfig: ComponentStyleConfig) => void
   type?: string
 }
 
 // 文本格式组件
-interface TextFormatProps {
-  fontSize: number
-  setFontSize: (size: number) => void
-  bold: boolean
-  setBold: (bold: boolean) => void
-  italic: boolean
-  setItalic: (italic: boolean) => void
-  strikethrough: boolean
-  setStrikethrough: (strikethrough: boolean) => void
-  align: "left" | "center" | "right"
-  setAlign: (align: "left" | "center" | "right") => void
-  color?: string
-  setColor?: (color: string) => void,
-  underline?: boolean
-  setUnderline?: (underline: boolean) => void
-}
-
-function TextFormat({
-  fontSize,
-  setFontSize,
-  bold,
-  setBold,
-  italic,
-  setItalic,
-  strikethrough,
-  setStrikethrough,
-  align,
-  setAlign,
-  color = "#000000",
-  setColor,
-  underline = false,
-  setUnderline = () => { }
-}: TextFormatProps) {
-  const { t } = useTranslation("dashboard")
-
-  const alignIcon =
-    align === "left" ? (
-      <AlignLeft className="w-3.5 h-3.5" />
-    ) : align === "center" ? (
-      <AlignCenter className="w-3.5 h-3.5" />
-    ) : (
-      <AlignRight className="w-3.5 h-3.5" />
-    )
-  return (
-    <div
-      className="
-      flex items-center
-      w-[230px] h-8
-      border rounded-md
-      overflow-hidden
-    "
-    >
-      {/* 字号 */}
-      <Select
-        value={String(fontSize)}
-        onValueChange={(v) => setFontSize(Number(v))}
-      >
-        <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-background">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {[10, 12, 14, 16, 18, 20, 24, 28].map((v) => (
-            <SelectItem key={v} value={String(v)} className="text-xs">
-              {v}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* 颜色 */}
-      {setColor && (
-        <Select
-        >
-          <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-background">
-            <div className="size-4 border-[#EBECF0]">
-              <div
-                className="h-full w-full rounded shadow-sm border"
-                style={{ backgroundColor: color }}
-              />
-            </div>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="border-none shadow-none">
-            <SketchPicker
-              color={color}
+function StyleTextFormat(props: TextFormatProps) { return <TextFormat {...props} colorPicker={<SketchPicker
+              color={props.color}
               presetColors={[
                 '#D9E3F0', '#F47373', '#697689', '#37D67A',
                 '#2CCCE4', '#555555', '#dce775', '#ff8a65', '#ba68c8'
               ]}
-              onChangeComplete={(e) => setColor(e.hex)}
-            />
-          </SelectContent>
-        </Select>
-
-        //   <div className="relative shrink-0 mr-2">
-        //   <Input
-        //     type="color"
-        //     className="absolute inset-0 opacity-0 cursor-pointer"
-        //     value={color}
-        //     onChange={(e) => setColor(e.target.value)}
-        //   />
-        //   <div
-        //     className="w-6 h-6 rounded"
-        //     style={{ backgroundColor: color }}
-        //   />
-        // </div>
-      )}
-
-      {/* 对齐 */}
-      <Select
-        value={align}
-        onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
-      >
-        <SelectTrigger className="w-12 h-7 px-1 border-0 shadow-none bg-background">
-          <SelectValue asChild>{alignIcon}</SelectValue>
-        </SelectTrigger>
-
-        <SelectContent>
-          <SelectItem value="left" className="flex justify-center">
-            <AlignLeft className="w-3 h-3" />
-          </SelectItem>
-          <SelectItem value="center" className="flex justify-center">
-            <AlignCenter className="w-3 h-3" />
-          </SelectItem>
-          <SelectItem value="right" className="flex justify-center">
-            <AlignRight className="w-3 h-3" />
-          </SelectItem>
-        </SelectContent>
-      </Select>
-
-      {/* 样式 */}
-      <div className="flex w-[88px] m-1 gap-1">
-        <IconBtn active={bold} onClick={() => setBold(!bold)}>
-          <Bold className="w-3.5 h-3.5" />
-        </IconBtn>
-        <IconBtn active={italic} onClick={() => setItalic(!italic)}>
-          <Italic className="w-3.5 h-3.5" />
-        </IconBtn>
-        {/* <IconBtn active={underline} onClick={() => setUnderline(!underline)}>
-          <Underline className="w-3 h-3" />
-        </IconBtn>
-        <IconBtn
-          active={strikethrough}
-          onClick={() => setStrikethrough(!strikethrough)}
-        >
-          <Strikethrough className="w-3 h-3" />
-        </IconBtn> */}
-      </div>
-    </div>
-  )
-
-}
-
-/** 小按钮统一组件 */
-function IconBtn({
-  active,
-  children,
-  onClick
-}: {
-  active?: boolean
-  children: React.ReactNode
-  onClick: () => void
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={onClick}
-      className={`w-7 h-5 px-0 rounded-[3px] ${active ? "bg-blue-100 text-blue-600" : ""}`}
-    >
-      {children}
-    </Button>
-  )
-}
-
-
-
-
-// 内联的折叠区块组件
-function CollapsibleBlock({
-  title,
-  children,
-  isOpen = false,
-  collapsed,
-  onCollapse,
-  rightContent
-}: {
-  title: string
-  children: React.ReactNode
-  isOpen: boolean
-  collapsed: boolean
-  onCollapse: () => void
-  rightContent?: React.ReactNode
-}) {
-  const { t } = useTranslation("dashboard")
-
-  return (
-    <div className="space-y-3">
-      <div
-        className="flex items-center justify-between bg-gray-50 dark:bg-gray-400 rounded-md h-[28px] w-[228px] cursor-pointer"
-        onClick={onCollapse}
-      >
-        <div className="flex items-center">
-          <div className="h-3 w-[3px] bg-blue-500 ml-2 rounded-[2px]"></div>
-          <label className="text-sm font-medium text-black ml-2">{title}</label>
-        </div>
-        <div className="flex items-center gap-2 mr-2">
-          {rightContent}
-          {!isOpen && (
-            <Button variant="ghost" size="icon" className="h-6 w-6">
-              {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-            </Button>
-          )}
-        </div>
-      </div>
-      {(isOpen || !collapsed) && (
-        <div className="w-[228px]">
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// 内联的表单区块组件
-function FormBlock({ label, children }: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium">{label}</label>
-      <div className="w-[228px]">
-        {children}
-      </div>
-    </div>
-  )
-}
-
+              onChangeComplete={(e) => props.setColor?.(e.hex)}
+            />} />; }
 export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CONFIG }: StyleConfigPanelProps) {
 
   const { t } = useTranslation("dashboard")
-
+  const selectLabels = useSelectLabels()
 
   const editingComponent = useComponentEditorStore(state => state.editingComponent)
 
@@ -375,7 +148,7 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
       >
         {type !== 'metric' &&
           <FormBlock label={t('styleConfigPanel.labels.themeColor')}>
-            <Select
+            <LegacySelect
               value={localConfig.themeColor || ""}
               onValueChange={(id) => {
                 handleChange("themeColor", id); // 直接存 id
@@ -418,20 +191,17 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+            </LegacySelect>
           </FormBlock>
         }
 
         <FormBlock label={t('styleConfigPanel.labels.bgColor')}>
           <Popover>
             <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn(
+              <Button variant="outlined" className={cn(
                   "w-full h-[32px] p-1 justify-start font-normal",
                   !localConfig.bgColor && "text-muted-foreground"
-                )}
-              >
+                )} color="default">
                 <div className="size-5">
                   <div
                     className="h-full w-full border rounded-[4px]"
@@ -468,20 +238,15 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
         isOpen={type === 'metric'}
       >
         <FormBlock label={type === 'metric' ? t('styleConfigPanel.labels.textContent') : t('styleConfigPanel.labels.titleContent')}>
-          <Input
-            placeholder={t('styleConfigPanel.placeholders.enterTitle')}
-            value={localConfig.title || ""}
-            onChange={(e) => {
+          <Input placeholder={t('styleConfigPanel.placeholders.enterTitle')} value={localConfig.title || ""} onChange={(e) => {
               const value = e.target.value
               if (value.length <= 15) {
                 handleChange("title", value)
               }
-            }}
-            maxLength={15}
-          />
+            }} maxLength={15} showCount />
         </FormBlock>
         <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
-          <TextFormat
+          <StyleTextFormat
             fontSize={localConfig.titleFontSize}
             setFontSize={(v) => handleChange("titleFontSize", v)}
             bold={localConfig.titleBold || false}
@@ -510,7 +275,7 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
               onCollapse={() => { }}
             >
               <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
-                <TextFormat
+                <StyleTextFormat
                   fontSize={localConfig.metricFontSize || 14}
                   setFontSize={(v) => handleChange("metricFontSize", v)}
                   bold={localConfig.metricBold || false}
@@ -546,20 +311,15 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
               {localConfig.showSubtitle && (
                 <>
                   <FormBlock label={t('styleConfigPanel.labels.textContent')}>
-                    <Input
-                      placeholder={t('styleConfigPanel.placeholders.enterSubtitle')}
-                      value={localConfig.subtitle || ""}
-                      onChange={(e) => {
+                    <Input placeholder={t('styleConfigPanel.placeholders.enterSubtitle')} value={localConfig.subtitle || ""} onChange={(e) => {
                         const value = e.target.value
                         if (value.length <= 24) {
                           handleChange("subtitle", e.target.value)
                         }
-                      }}
-                      maxLength={24}
-                    />
+                      }} maxLength={24} showCount />
                   </FormBlock>
                   <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
-                    <TextFormat
+                    <StyleTextFormat
                       fontSize={localConfig.subtitleFontSize || 14}
                       setFontSize={(v) => handleChange("subtitleFontSize", v)}
                       bold={localConfig.subtitleBold || false}
@@ -588,21 +348,16 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
             >
               <div className="space-y-3">
                 <FormBlock label={t('styleConfigPanel.labels.xAxisTitleContent')}>
-                  <Input
-                    placeholder={t('styleConfigPanel.placeholders.enterXAxisTitle')}
-                    value={localConfig.xAxisTitle || ""}
-                    onChange={(e) => {
+                  <Input placeholder={t('styleConfigPanel.placeholders.enterXAxisTitle')} value={localConfig.xAxisTitle || ""} onChange={(e) => {
                       const value = e.target.value
-                      if (value.length <= 24) {
+                      if (value.length <= 15) {
                         handleChange("xAxisTitle", e.target.value)
                       }
-                    }}
-                    maxLength={15}
-                  />
+                    }} maxLength={15} showCount />
                 </FormBlock>
 
                 <FormBlock label={t('styleConfigPanel.labels.xAxisTextFormat')}>
-                  <TextFormat
+                  <StyleTextFormat
                     fontSize={localConfig.xAxisFontSize || 14}
                     setFontSize={(v) => handleChange("xAxisFontSize", v)}
                     bold={localConfig.xAxisBold || false}
@@ -622,21 +377,16 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
 
                 <div className="pt-2 border-t">
                   <FormBlock label={t('styleConfigPanel.labels.yAxisTitleContent')}>
-                    <Input
-                      placeholder={t('styleConfigPanel.placeholders.enterYAxisTitle')}
-                      value={localConfig.yAxisTitle || ""}
-                      onChange={(e) => {
+                    <Input placeholder={t('styleConfigPanel.placeholders.enterYAxisTitle')} value={localConfig.yAxisTitle || ""} onChange={(e) => {
                         const value = e.target.value
-                        if (value.length <= 24) {
+                        if (value.length <= 15) {
                           handleChange("yAxisTitle", e.target.value)
                         }
-                      }}
-                      maxLength={15}
-                    />
+                      }} maxLength={15} showCount />
                   </FormBlock>
 
                   <FormBlock label={t('styleConfigPanel.labels.yAxisTextFormat')}>
-                    <TextFormat
+                    <StyleTextFormat
                       fontSize={localConfig.yAxisFontSize || 14}
                       setFontSize={(v) => handleChange("yAxisFontSize", v)}
                       bold={localConfig.yAxisBold || false}
@@ -665,25 +415,24 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
             >
               <FormBlock label={t('styleConfigPanel.labels.legendPosition')}>
                 <Select
-                  value={localConfig.legendPosition}
-                  onValueChange={(v) =>
-                    handleChange("legendPosition", v as "top" | "bottom" | "left" | "right")
-                  }
-                >
-                  <SelectTrigger className="w-full h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="top">{t('styleConfigPanel.positions.top')}</SelectItem>
-                    <SelectItem value="bottom">{t('styleConfigPanel.positions.bottom')}</SelectItem>
-                    <SelectItem value="left">{t('styleConfigPanel.positions.left')}</SelectItem>
-                    <SelectItem value="right">{t('styleConfigPanel.positions.right')}</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {...selectLabels}
+                  className="w-full"
+                  options={[
+                    { value: "top", label: t('styleConfigPanel.positions.top') },
+                    { value: "bottom", label: t('styleConfigPanel.positions.bottom') },
+                    { value: "left", label: t('styleConfigPanel.positions.left') },
+                    { value: "right", label: t('styleConfigPanel.positions.right') },
+                  ]}
+                  value={localConfig.legendPosition || null}
+                  onChange={(v) => {
+                    if (v != null) handleChange("legendPosition", v as "top" | "bottom" | "left" | "right")
+                  }}
+                  aria-label={t('styleConfigPanel.labels.legendPosition')}
+                />
               </FormBlock>
 
               <FormBlock label={t('styleConfigPanel.labels.legendTextFormat')}>
-                <TextFormat
+                <StyleTextFormat
                   fontSize={localConfig.legendFontSize}
                   setFontSize={(v) => handleChange("legendFontSize", v)}
                   bold={localConfig.legendBold}

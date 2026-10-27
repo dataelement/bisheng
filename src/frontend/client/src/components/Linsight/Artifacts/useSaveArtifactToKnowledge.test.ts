@@ -1,3 +1,5 @@
+jest.mock('~/hooks', () => ({ useLocalize: jest.fn() }));
+jest.mock('~/Providers', () => ({ useToastContext: jest.fn() }));
 import request from '~/api/request';
 import { fetchArtifactBlob } from './artifactUtils';
 import { resolveUniqueFileName } from './useSaveArtifactToKnowledge';
@@ -55,6 +57,7 @@ describe('fetchArtifactBlob naming', () => {
         global.fetch = jest.fn().mockResolvedValue({
             ok: true,
             blob: async () => new Blob([body], { type }),
+            text: async () => body,
         }) as unknown as typeof fetch;
     };
 
@@ -101,6 +104,15 @@ describe('fetchArtifactBlob naming', () => {
             'SV-1',
         );
 
-        expect(await blob.text()).toBe('a,b');
+        expect(await readBlob(blob)).toBe('a,b');
     });
 });
+
+function readBlob(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(blob);
+    });
+}

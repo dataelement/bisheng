@@ -1,3 +1,4 @@
+import { shouldRetryApiError } from '@bisheng/api-client';
 import debounce from 'lodash/debounce';
 import { Tools, AuthType } from '~/types/chat';
 import { TerminalSquareIcon, Loader } from 'lucide-react';
@@ -24,7 +25,7 @@ const RunCode: React.FC<CodeBarProps> = React.memo(({ lang, codeRef, blockIndex 
   const { data } = useVerifyAgentToolAuth(
     { toolId: Tools.execute_code },
     {
-      retry: 1,
+      retry: (failureCount, error) => shouldRetryApiError(error) && failureCount < 1,
     },
   );
   const authType = useMemo(() => data?.message ?? false, [data?.message]);

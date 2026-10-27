@@ -9,12 +9,14 @@
 // shared cache invalidation across the rest of the page) and a
 // different config shape, so its inline destructure stays.
 
+import { showApiError } from "@/controllers/request";
 import { useEffect, useState } from "react";
 import type { SystemModelConfigEnvelope } from "@/controllers/API/finetune";
 
 interface UseEnvelopeResult<T> {
     config: T | null;
     loading: boolean;
+    error: unknown;
     inheritedFromRoot: boolean;
     fallbackBlocked: boolean;
     clearInherited: () => void;
@@ -23,6 +25,7 @@ interface UseEnvelopeResult<T> {
 export function useSystemConfigEnvelope<T = any>(
     fetcher: () => Promise<SystemModelConfigEnvelope<T>>,
 ): UseEnvelopeResult<T> {
+    const [error, setError] = useState<unknown>(null);
     const [config, setConfig] = useState<T | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [inheritedFromRoot, setInheritedFromRoot] = useState<boolean>(false);
@@ -38,6 +41,11 @@ export function useSystemConfigEnvelope<T = any>(
                 setInheritedFromRoot(!!env?.inherited_from_root);
                 setFallbackBlocked(!!env?.fallback_blocked);
             })
+            .catch((cause: unknown) => {
+                if (cancelled) return;
+                setError(cause);
+                showApiError(cause);
+            })
             .finally(() => {
                 if (!cancelled) setLoading(false);
             });
@@ -52,5 +60,5 @@ export function useSystemConfigEnvelope<T = any>(
         setInheritedFromRoot((prev) => prev ? false : prev);
     };
 
-    return { config, loading, inheritedFromRoot, fallbackBlocked, clearInherited };
+    return { config, loading, error, inheritedFromRoot, fallbackBlocked, clearInherited };
 }

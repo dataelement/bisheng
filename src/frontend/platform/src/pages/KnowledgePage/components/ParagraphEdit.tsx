@@ -1,12 +1,17 @@
 // @ts-strict-ignore
+import { PlatformImagePreview } from '@/components/bs-comp/preview/DocumentPreview';
+import { Button, toast } from '@bisheng/ui';
+import type { PdfScrollContext } from '@/components/bs-comp/preview/PlatformPdfPreview';
+import { labelTop as pdfLabelTop } from '@/components/bs-comp/preview/pdfEditing';
 import FileView from "@/components/bs-comp/FileView";
-import { LoadIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, updateChunkApi, updatePreviewChunkApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Crosshair, Info, X } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Outlined } from "bisheng-icons";
+
+
+
+import { getFileBboxApi,getFilePathApi,getKnowledgeChunkApi,updateChunkApi,updatePreviewChunkApi } from "@/controllers/API";
+import { showApiError } from "@/controllers/request";
+import { Crosshair } from "lucide-react";
+import React,{ useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import DocxPreview from "./DocxFileViewer";
@@ -92,7 +97,7 @@ const ParagraphEdit = ({
     const markDownRef = useRef(null)
     const { leftPanelWidth, handleMouseDown } = useDragSize(!isUns)
     const [labelChange, setLabelChange] = useState(false)
-    const { message } = useToast()
+
 
     const [loading, setLoading] = useState(false)
     const handleSave = async () => {
@@ -116,12 +121,11 @@ const ParagraphEdit = ({
         }) : updateChunkApi({
             knowledge_id: Number(id), file_id: fileId, chunk_index: chunkId, text: _value, bbox: JSON.stringify(bbox)
         })
-        await captureAndAlertRequestErrorHoc(promise.then(res => {
-            message({ variant: 'success', description: t('editSuccess') })
+        await promise.then(() => {
+            toast.show({ type: 'success', message: String(t('editSuccess') ?? '') })
             onClose()
             onChange(_value)
-        }))
-        setLoading(false)
+        }).catch(showApiError).finally(() => setLoading(false))
     }
 
     const labels = useMemo(() => {
@@ -205,13 +209,13 @@ const ParagraphEdit = ({
     }, [random])
 
     const [showPos, setShowPos] = useState(false)
-    const handlePageChange = (offset, h, paperSize, scale) => {
+    const handlePageChange = (offset, h, paperSize, scale, context?: PdfScrollContext) => {
         if (offset === 0) return
         // console.log('data :>> ', data, offset, h, paperSize, scale);
         setShowPos(!data.some(item => {
             const pageHeight = (item.page - 1) * paperSize
-            const labelTop = pageHeight + item.label[1] / scale
-            return item.active && labelTop > offset && labelTop < (offset + h)
+            const labelTop = context ? pdfLabelTop(item.page, item.label[1], context.startIndex, context.layout) : pageHeight + item.label[1] / scale
+            return item.active && labelTop !== null && labelTop > offset && labelTop < (offset + h)
         }))
     }
 
@@ -247,9 +251,7 @@ const ParagraphEdit = ({
             case 'png':
             case 'jpg':
             case 'jpeg':
-            case 'bmp': return <img
-                className="border"
-                src={previewFileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
+            case 'bmp': return <PlatformImagePreview filePath={previewFileUrl} />
             default:
                 return <div className="flex justify-center items-center h-full text-gray-400">
                     <div className="text-center">
@@ -269,8 +271,8 @@ const ParagraphEdit = ({
                 <Markdown ref={markDownRef} edit={edit} isUns={isUns} title={fileName} q={chunkId + 1} value={value} />
                 {!value && <p className="absolute left-0 text-red-500 text-xs mt-2">{t('inputNotEmpty')}</p>}
                 {!isUns && <div className="flex justify-end gap-4">
-                    <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>
-                    <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>
+                    <Button variant="outlined" onClick={onClose} color="default">{t('cancel', { ns: 'bs' })}</Button>
+                    <Button loading={loading} disabled={loading} onClick={handleSave}>{t('save', { ns: 'bs' })}</Button>
                 </div>}
             </div>
             {isUns && <>
@@ -287,19 +289,19 @@ const ParagraphEdit = ({
                     <div className="flex justify-between items-center relative h-10 mb-2 text-sm">
                         <span>{fileName}</span>
                         <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
-                            <Info className='mr-1 text-red-500' />
+                            <Outlined.Info className='mr-1 text-red-500' />
                             <span className="text-red-500">{t('segmentRangeDetected')}</span>
                             <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
                         </div>
                         <div className="flex justify-end gap-4">
-                            {edit && <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>}
-                            {edit && <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>}
-                            {!edit && <X className="cursor-pointer size-5 text-gray-500" onClick={onClose} />}
+                            {edit && <Button variant="outlined" onClick={onClose} color="default">{t('cancel', { ns: 'bs' })}</Button>}
+                            {edit && <Button loading={loading} disabled={loading} onClick={handleSave}>{t('save', { ns: 'bs' })}</Button>}
+                            {!edit && <Outlined.Close className="cursor-pointer size-5 text-gray-500" onClick={onClose} />}
                         </div>
                     </div>
                     {/* file view */}
                     <div className="bg-gray-100 relative">
-                        {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10 bg-background" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair className="mr-1" size={16} />{t('backToPosition')}</Button>}
+                        {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10 bg-background" variant="outlined" onClick={() => setRandom(Math.random() / 10000)} color="default"><Crosshair className="mr-1" size={16} />{t('backToPosition')}</Button>}
                         <div className="h-[calc(100vh-104px-var(--license-banner-h,0px))] overflow-auto"
                             style={{
                                 width: 'calc(100vh - 104px)',
@@ -389,7 +391,7 @@ export const convertJsonData = (inputObj: Record<string, any>) => {
 
         return finalResult
     } catch (error) {
-        console.error('数据转换错误:', error)
+        console.error('Preview data conversion failed:', error)
         return []
     }
 }

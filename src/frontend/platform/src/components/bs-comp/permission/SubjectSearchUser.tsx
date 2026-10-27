@@ -1,4 +1,4 @@
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Checkbox } from '@bisheng/ui';
 import { Search, User as UserIcon } from "lucide-react"
 import { getGrantSubjectUsersApi, type GrantSubjectUser } from "@/controllers/API/permission"
 import { useTranslation } from "react-i18next"
@@ -42,7 +42,7 @@ export function SubjectSearchUser({ value, onChange, resourceType, resourceId, d
     }}>
       <SubjectSearchStatus permission tooLong={search.tooLong} failed={search.failed} loading={search.loading} empty={search.rows.length === 0} onRetry={search.retry} />
       {!search.loading && !search.failed && !search.tooLong && search.rows.map(user => <div key={user.user_id} className={`flex min-w-0 items-center gap-2 px-3 py-2 ${disabled.has(user.user_id) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-accent'}`} onClick={() => toggle(user)}>
-        <Checkbox checked={selectedIds.has(user.user_id) || disabled.has(user.user_id)} disabled={disabled.has(user.user_id)} />
+        <Checkbox className="peer" checked={selectedIds.has(user.user_id) || disabled.has(user.user_id)} disabled={disabled.has(user.user_id)} />
         <UserIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm" title={user.user_name}>{user.user_name}</div>

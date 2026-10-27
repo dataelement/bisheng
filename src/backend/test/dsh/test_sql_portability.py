@@ -17,9 +17,12 @@ from bisheng.dsh.domain.models.admin_operation import DshAdminOperation
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
+from test.dsh.model_audit_fixtures import AUDIT_MODELS
 
 BACKEND = Path(__file__).resolve().parents[2]
 MODELS = (DshUserPolicy, DshAdminOperation, DshMonthlyUsage, DshModelCall)
+
+MODELS += AUDIT_MODELS
 
 
 def _call_name(node):

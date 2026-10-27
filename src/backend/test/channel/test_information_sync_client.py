@@ -101,7 +101,8 @@ async def test_single_source_mutations_and_dynamic_key():
     assert second.kwargs["headers"]["X-API-Key"] == "key-two"
 
 
-async def test_get_information_articles_page_is_async_and_preserves_boundary():
+@pytest.mark.parametrize("return_information", [False, True])
+async def test_get_information_articles_page_is_async_and_preserves_boundary(return_information):
     body = _response(
         {
             "information": _subscription("A"),
@@ -127,6 +128,7 @@ async def test_get_information_articles_page_is_async_and_preserves_boundary():
 
     result = await client.get_information_articles_page(
         "A",
+        return_information=return_information,
         min_create_time=123,
         max_create_time=456,
         page=2,
@@ -137,7 +139,7 @@ async def test_get_information_articles_page_is_async_and_preserves_boundary():
     assert result.articles[0].id == "article-1"
     assert result.snapshot_max_create_time == 456
     assert http_client.get.await_args.kwargs["params"] == {
-        "return_information": "false",
+        "return_information": str(return_information).lower(),
         "page": 2,
         "page_size": 10,
         "min_create_time": 123,

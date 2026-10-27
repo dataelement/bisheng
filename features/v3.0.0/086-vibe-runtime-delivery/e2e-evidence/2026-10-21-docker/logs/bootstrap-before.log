@@ -1,0 +1,201 @@
+...FF....F                                                               [100%]
+=================================== FAILURES ===================================
+_____ test_bootstrap_binds_each_verified_tenant_and_restores_caller[False] _____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x135795790>
+fail = False
+
+    @pytest.mark.parametrize("fail", [False, True])
+    async def test_bootstrap_binds_each_verified_tenant_and_restores_caller(monkeypatch, fail):
+        from dataclasses import replace
+
+        from bisheng.core.context import tenant
+
+        resources = (_spec("6"), replace(_spec("16"), tenant_id=2))
+        missing = tuple(SystemOwnedResourceState(resource=one, state="MISSING") for one in resources)
+        current = tuple(SystemOwnedResourceState(resource=one, state="CURRENT") for one in resources)
+        monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", AsyncMock(side_effect=[missing, current]))
+        initial = [(tenant.current_tenant_id, None), (tenant.visible_tenant_ids, frozenset({99})),
+                   (tenant._admin_scope_tenant_id, 99), (tenant._bypass_tenant_filter, False)]
+        tokens = [(variable, variable.set(value)) for variable, value in initial]
+        observed = []
+
+        async def project(**kwargs):
+            target = kwargs["target"]
+            assert tenant.get_current_tenant_id() == target.tenant_id
+            assert tenant.get_visible_tenant_ids() == frozenset({target.tenant_id})
+            assert not tenant.is_tenant_filter_bypassed()
+            observed.append(target.tenant_id)
+            if fail:
+                raise RuntimeError("projection unavailable")
+
+        try:
+            runtime = AsyncMock()
+            runtime.authorize_system_owned.side_effect = project
+            if fail:
+                with pytest.raises(RuntimeError, match="projection unavailable"):
+                    await reconcile_system_owned_resources(runtime, resources, apply=True, operator_id=1)
+            else:
+>               await reconcile_system_owned_resources(runtime, resources, apply=True, operator_id=1)
+
+test/permission/test_f048_system_resource_reconcile.py:149:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+bisheng/permission/application/system_resource_reconcile.py:150: in reconcile_system_owned_resources
+    await runtime.authorize_system_owned(
+../../../../../../.local/share/uv/python/cpython-3.11.13-macos-aarch64-none/lib/python3.11/unittest/mock.py:2251: in _execute_mock_call
+    result = await effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+kwargs = {'action_codes': ('use', 'visible'), 'actor': PermissionActor(subject_type='user', subject_id=1, tenant_id=1, super_ad...resource_type='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6')}
+target = VerifiedPermissionTarget(tenant_id=1, resource_type='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6')
+@py_assert1 = <function get_current_tenant_id at 0x10b8f5620>, @py_assert3 = 99
+@py_assert7 = 1, @py_assert5 = False
+@py_format9 = "99\n{99 = <function get_current_tenant_id at 0x10b8f5620>\n{<function get_current_tenant_id at 0x10b8f5620> = <module...='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6').tenant_id\n}"
+@py_format11 = "assert 99\n{99 = <function get_current_tenant_id at 0x10b8f5620>\n{<function get_current_tenant_id at 0x10b8f5620> = ...='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6').tenant_id\n}"
+
+    async def project(**kwargs):
+        target = kwargs["target"]
+>       assert tenant.get_current_tenant_id() == target.tenant_id
+E       AssertionError: assert 99 == 1
+E        +  where 99 = <function get_current_tenant_id at 0x10b8f5620>()
+E        +    where <function get_current_tenant_id at 0x10b8f5620> = <module 'bisheng.core.context.tenant' from '/Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/bisheng/core/context/tenant.py'>.get_current_tenant_id
+E        +  and   1 = VerifiedPermissionTarget(tenant_id=1, resource_type='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6').tenant_id
+
+test/permission/test_f048_system_resource_reconcile.py:135: AssertionError
+_____ test_bootstrap_binds_each_verified_tenant_and_restores_caller[True] ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x135988b90>
+fail = True
+
+    @pytest.mark.parametrize("fail", [False, True])
+    async def test_bootstrap_binds_each_verified_tenant_and_restores_caller(monkeypatch, fail):
+        from dataclasses import replace
+
+        from bisheng.core.context import tenant
+
+        resources = (_spec("6"), replace(_spec("16"), tenant_id=2))
+        missing = tuple(SystemOwnedResourceState(resource=one, state="MISSING") for one in resources)
+        current = tuple(SystemOwnedResourceState(resource=one, state="CURRENT") for one in resources)
+        monkeypatch.setattr(reconcile_module, "inspect_system_owned_resources", AsyncMock(side_effect=[missing, current]))
+        initial = [(tenant.current_tenant_id, None), (tenant.visible_tenant_ids, frozenset({99})),
+                   (tenant._admin_scope_tenant_id, 99), (tenant._bypass_tenant_filter, False)]
+        tokens = [(variable, variable.set(value)) for variable, value in initial]
+        observed = []
+
+        async def project(**kwargs):
+            target = kwargs["target"]
+            assert tenant.get_current_tenant_id() == target.tenant_id
+            assert tenant.get_visible_tenant_ids() == frozenset({target.tenant_id})
+            assert not tenant.is_tenant_filter_bypassed()
+            observed.append(target.tenant_id)
+            if fail:
+                raise RuntimeError("projection unavailable")
+
+        try:
+            runtime = AsyncMock()
+            runtime.authorize_system_owned.side_effect = project
+            if fail:
+                with pytest.raises(RuntimeError, match="projection unavailable"):
+>                   await reconcile_system_owned_resources(runtime, resources, apply=True, operator_id=1)
+
+test/permission/test_f048_system_resource_reconcile.py:147:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+bisheng/permission/application/system_resource_reconcile.py:150: in reconcile_system_owned_resources
+    await runtime.authorize_system_owned(
+../../../../../../.local/share/uv/python/cpython-3.11.13-macos-aarch64-none/lib/python3.11/unittest/mock.py:2251: in _execute_mock_call
+    result = await effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+kwargs = {'action_codes': ('use', 'visible'), 'actor': PermissionActor(subject_type='user', subject_id=1, tenant_id=1, super_ad...resource_type='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6')}
+target = VerifiedPermissionTarget(tenant_id=1, resource_type='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6')
+@py_assert1 = <function get_current_tenant_id at 0x10b8f5620>, @py_assert3 = 99
+@py_assert7 = 1, @py_assert5 = False
+@py_format9 = "99\n{99 = <function get_current_tenant_id at 0x10b8f5620>\n{<function get_current_tenant_id at 0x10b8f5620> = <module...='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6').tenant_id\n}"
+@py_format11 = "assert 99\n{99 = <function get_current_tenant_id at 0x10b8f5620>\n{<function get_current_tenant_id at 0x10b8f5620> = ...='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6').tenant_id\n}"
+
+    async def project(**kwargs):
+        target = kwargs["target"]
+>       assert tenant.get_current_tenant_id() == target.tenant_id
+E       AssertionError: assert 99 == 1
+E        +  where 99 = <function get_current_tenant_id at 0x10b8f5620>()
+E        +    where <function get_current_tenant_id at 0x10b8f5620> = <module 'bisheng.core.context.tenant' from '/Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/bisheng/core/context/tenant.py'>.get_current_tenant_id
+E        +  and   1 = VerifiedPermissionTarget(tenant_id=1, resource_type='tool', resource_id='6', resource_version=0, parent_type=None, parent_id=None, context_version='tool-6').tenant_id
+
+test/permission/test_f048_system_resource_reconcile.py:135: AssertionError
+__ test_first_admin_dashboard_projection_has_a_tenant_without_request_context __
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x135abe550>
+
+    async def test_first_admin_dashboard_projection_has_a_tenant_without_request_context(monkeypatch):
+        from bisheng.core.context import tenant
+
+        dashboards = (_dashboard(10),)
+        current_modes = {"10": SimpleNamespace(resource_id="10", projection_state="CURRENT")}
+        monkeypatch.setattr(bootstrap, "_load_preset_dashboards_and_modes", AsyncMock(side_effect=[(dashboards, {}), (dashboards, current_modes)]))
+        monkeypatch.setattr(bootstrap, "_owner_is_ready", AsyncMock(return_value=True))
+        marker = SimpleNamespace(wait_until_ready=AsyncMock())
+        facade = SimpleNamespace(authorize_created=AsyncMock())
+
+        async def project(**kwargs):
+            assert tenant.get_current_tenant_id() == kwargs["target"].tenant_id == 1
+            assert tenant.get_visible_tenant_ids() == frozenset({1})
+            assert not tenant.is_tenant_filter_bypassed()
+
+        facade.authorize_created.side_effect = project
+        monkeypatch.setattr(bootstrap, "get_f048_process_runtime", AsyncMock(return_value=SimpleNamespace(components=SimpleNamespace(marker=marker, facade=facade))))
+        token = tenant.current_tenant_id.set(None)
+        try:
+>           assert (await bootstrap.reconcile_preset_dashboard_permissions()).current_count == 1
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/permission/test_f048_preset_dashboard_bootstrap.py:125:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+bisheng/api/services/f048_preset_dashboard_bootstrap.py:131: in reconcile_preset_dashboard_permissions
+    await components.facade.authorize_created(
+../../../../../../.local/share/uv/python/cpython-3.11.13-macos-aarch64-none/lib/python3.11/unittest/mock.py:2251: in _execute_mock_call
+    result = await effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+kwargs = {'actor': PermissionActor(subject_type='user', subject_id=1, tenant_id=1, super_admin=True, tenant_admin_tenant_ids=fr...scope='all_visible'), 'idempotency_key': 'f048:preset-dashboard-owner:10:1', 'mode': 'CUSTOM', 'owner_user_id': 1, ...}
+@py_assert1 = <function get_current_tenant_id at 0x10b8f5620>
+@py_assert3 = None
+@py_assert7 = VerifiedPermissionTarget(tenant_id=1, resource_type='dashboard', resource_id='10', resource_version=0, parent_type=None, parent_id=None, context_version='c9988e308a56d06007bcdc9e9a94146711688d7b8ff88786d031e8333845e0f5')
+@py_assert9 = 1, @py_assert5 = False, @py_assert11 = 1, @py_assert6 = True
+
+    async def project(**kwargs):
+>       assert tenant.get_current_tenant_id() == kwargs["target"].tenant_id == 1
+E       AssertionError: assert None == 1
+E        +  where None = <function get_current_tenant_id at 0x10b8f5620>()
+E        +    where <function get_current_tenant_id at 0x10b8f5620> = <module 'bisheng.core.context.tenant' from '/Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/bisheng/core/context/tenant.py'>.get_current_tenant_id
+E        +  and   1 = VerifiedPermissionTarget(tenant_id=1, resource_type='dashboard', resource_id='10', resource_version=0, parent_type=None, parent_id=None, context_version='c9988e308a56d06007bcdc9e9a94146711688d7b8ff88786d031e8333845e0f5').tenant_id
+
+test/permission/test_f048_preset_dashboard_bootstrap.py:117: AssertionError
+=============================== warnings summary ===============================
+bisheng/core/ai/__init__.py:2
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/bisheng/core/ai/__init__.py:2: DeprecationWarning: `langchain-community` is being sunset and is no longer actively maintained. See https://github.com/langchain-ai/langchain-community/issues/674 for details and migration guidance toward standalone integration packages.
+    from langchain_community.chat_models import ChatTongyi, ChatZhipuAI, MoonshotChat
+
+<frozen importlib._bootstrap>:241
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18
+  /Users/zhangguoqing/works/bisheng/src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/permission/test_f048_system_resource_reconcile.py::test_bootstrap_binds_each_verified_tenant_and_restores_caller[False]
+FAILED test/permission/test_f048_system_resource_reconcile.py::test_bootstrap_binds_each_verified_tenant_and_restores_caller[True]
+FAILED test/permission/test_f048_preset_dashboard_bootstrap.py::test_first_admin_dashboard_projection_has_a_tenant_without_request_context
+3 failed, 7 passed, 7 warnings in 0.44s

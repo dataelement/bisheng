@@ -144,9 +144,16 @@ class LocalExecutor(BaseExecutor):
 
         # todo: 如果生成的代码中已经有了设置字体的代码，可能会导致该段代码失效
         if "matplotlib" in code:
-            pattern = re.compile(r"(import matplotlib|from matplotlib)")
-            index = max(i for i, line in enumerate(split_code) if pattern.search(line))
-            split_code.insert(index + 1, 'import matplotlib\nmatplotlib.rc("font", family="WenQuanYi Zen Hei")')
+            # The substring check above also fires on `import pandas, matplotlib`, comments
+            # and string literals, so look for a real import line and skip when there is none.
+            pattern = re.compile(r"^\s*(import\s.*\bmatplotlib\b|from\s+matplotlib\b)")
+            index = max((i for i, line in enumerate(split_code) if pattern.search(line)), default=None)
+            if index is not None:
+                # Keep the import's indentation so a match inside try/if stays valid Python.
+                indent = re.match(r"\s*", split_code[index]).group()
+                split_code.insert(
+                    index + 1, f'{indent}import matplotlib\n{indent}matplotlib.rc("font", family="WenQuanYi Zen Hei")'
+                )
 
         return "\n".join(split_code)
 

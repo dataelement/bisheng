@@ -1,3 +1,4 @@
+/* global beforeEach, jest */
 /* This file is automatically executed before running tests
  * https://create-react-app.dev/docs/running-tests/#initializing-test-environment
  */
@@ -45,3 +46,16 @@ jest.mock('react-i18next', () => {
     },
   };
 });
+
+// Shared tabs and overflow-aware controls measure their elements in the browser.
+// jsdom needs measurement and scroll shims for those controls to mount.
+if (!global.ResizeObserver) {
+  global.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = jest.fn();
+}

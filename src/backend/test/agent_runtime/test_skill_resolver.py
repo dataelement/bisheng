@@ -39,19 +39,19 @@ class TestResolveSkills:
         rows = await resolve_skills(["pdf", "pdf"], repository=repo)
         assert [row.name for row in rows] == ["pdf"]
 
-    async def test_disabled_skill_raises_11075_with_name(self):
+    async def test_disabled_skill_raises_11078_with_name(self):
         repo = _FakeRepo([_row("pdf"), _row("docx", enabled=0)])
         with pytest.raises(AgentSkillDisabledError) as exc_info:
             await resolve_skills(["pdf", "docx"], repository=repo)
-        assert exc_info.value.code == 11075
+        assert exc_info.value.code == 11078
         assert exc_info.value.kwargs["skill_name"] == "docx"
         assert "docx" in exc_info.value.message
 
-    async def test_deleted_skill_raises_11076_with_name(self):
+    async def test_deleted_skill_raises_11079_with_name(self):
         repo = _FakeRepo([_row("pdf")])
         with pytest.raises(AgentSkillDeletedError) as exc_info:
             await resolve_skills(["pdf", "gone"], repository=repo)
-        assert exc_info.value.code == 11076
+        assert exc_info.value.code == 11079
         assert exc_info.value.kwargs["skill_name"] == "gone"
 
     async def test_first_unavailable_skill_in_config_order_is_reported(self):

@@ -1,3 +1,5 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 /**
  * KnowledgeAiBottomDock — bottom-anchored AI dock for a single knowledge space.
  *
@@ -24,12 +26,7 @@ import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useResetRecoilState } from "recoil";
 import { knowledgeSelectedFilesState } from "../../selectionStore";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "~/components/ui/Tooltip2";
+
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
@@ -156,6 +153,9 @@ export function KnowledgeAiBottomDock({
         sessions,
         activeChatId,
         isLoading,
+        historyError,
+        isClearing,
+        retryHistory,
         isStreaming,
         sendMessage,
         stopGenerating,
@@ -273,7 +273,7 @@ export function KnowledgeAiBottomDock({
                 <div className="relative min-h-0 flex-1">
                     {/* AiChatMessages owns the empty state; pass the brand ArticleQA
                         illustration so it follows the blue ⇄ green theme. */}
-                    <AiChatMessages
+                    {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                         messages={messages}
                         conversationId={activeChatId}
                         title=""
@@ -289,7 +289,7 @@ export function KnowledgeAiBottomDock({
                         emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                         onPresetClick={() => { }}
                         onRegenerate={regenerate}
-                    />
+                    />)}
                     <div
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-10 bg-gradient-to-t from-white to-white/0"
@@ -314,7 +314,7 @@ export function KnowledgeAiBottomDock({
                         onModelChange={selectModel}
                         onModelAutoChange={repairModel}
                         isStreaming={isStreaming}
-                        disabled={!bsConfig?.models?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length}
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant="box"
@@ -386,23 +386,14 @@ export function KnowledgeAiBottomDock({
                         persist. Restores the conversation open before collapse (does not start
                         a new one). Shared by desktop + mobile-collapsed docks. */}
                     {!open && (sessions.length > 0 || messages.length > 0) && (
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
+                        <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_ui_expand")}</p></>} ><button
                                         type="button"
                                         onClick={handleExpand}
                                         aria-label={localize("com_ui_expand")}
                                         className="absolute bottom-full right-0 z-10 mb-2 mr-3 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
                                     >
                                         <Outlined.DoubleDown className="size-4 rotate-180" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{localize("com_ui_expand")}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                                    </button></SharedTooltip></SharedTooltipProvider>
                     )}
 
                     {/* Header + messages grow upward above the input. Height scales with the
@@ -423,10 +414,7 @@ export function KnowledgeAiBottomDock({
                                 <div className="min-w-0 flex-1" aria-hidden />
                                 {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}
                                 <div className="flex shrink-0 items-center justify-end gap-3 py-1">
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <button
+                                    <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_knowledge.history_chat")}</p></>} ><button
                                                     type="button"
                                                     onClick={() => setShowHistory((v) => !v)}
                                                     aria-label={localize("com_knowledge.history_chat")}
@@ -436,54 +424,30 @@ export function KnowledgeAiBottomDock({
                                                     )}
                                                 >
                                                     <Outlined.History className="size-4 shrink-0" />
-                                                </button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p>{localize("com_knowledge.history_chat")}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <button
+                                                </button></SharedTooltip></SharedTooltipProvider>
+                                    <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_knowledge.create_chat")}</p></>} ><button
                                                     type="button"
                                                     onClick={handleNewChat}
                                                     aria-label={localize("com_knowledge.create_chat")}
                                                     className="inline-flex size-4 shrink-0 items-center justify-center text-text-1 transition-colors hover:text-text-2"
                                                 >
                                                     <Outlined.MessagePlus className="size-4 shrink-0" />
-                                                </button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p>{localize("com_knowledge.create_chat")}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <button
+                                                </button></SharedTooltip></SharedTooltipProvider>
+                                    <SharedTooltipProvider ><SharedTooltip  content={<><p>{localize("com_ui_collapse")}</p></>} side="top" ><button
                                                     type="button"
                                                     onClick={() => setOpen(false)}
                                                     aria-label={localize("com_ui_collapse")}
                                                     className="inline-flex size-4 shrink-0 items-center justify-center text-text-3 transition-colors hover:text-text-2"
                                                 >
                                                     <Outlined.DoubleDown className="size-4 shrink-0" />
-                                                </button>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="top">
-                                                <p>{localize("com_ui_collapse")}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
+                                                </button></SharedTooltip></SharedTooltipProvider>
                                 </div>
                             </div>
 
                             {/* AiChatMessages owns the empty state; pass the brand ArticleQA
                                 illustration so it follows the blue ⇄ green theme. */}
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                                <AiChatMessages
+                                {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                                     messages={messages}
                                     conversationId={activeChatId}
                                     title=""
@@ -499,7 +463,7 @@ export function KnowledgeAiBottomDock({
                                     emptyStateIllustration={<ArticleQAIllustration grey className="mx-auto block size-[80px]" />}
                                     onPresetClick={() => { }}
                                     onRegenerate={regenerate}
-                                />
+                                />)}
                             </div>
                         </div>
                     </div>
@@ -513,7 +477,7 @@ export function KnowledgeAiBottomDock({
                         onModelChange={selectModel}
                         onModelAutoChange={repairModel}
                         isStreaming={isStreaming}
-                        disabled={!bsConfig?.models?.length}
+                        disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length}
                         onSend={handleSend}
                         onStop={stopGenerating}
                         variant={open ? "line" : "box"}

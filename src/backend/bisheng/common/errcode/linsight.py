@@ -62,6 +62,22 @@ class LinsightBishengLLMError(BaseErrorCode):
     Msg: str = "InspirationBisheng LLMRelated Errors"
 
 
+# F087: the task's context still exceeded the model's context window after the
+# framework compressed history and retried. Written as ``error_code`` by
+# ``classify_for_event`` for the ``context_overflow`` error type.
+class LinsightContextOverflowError(BaseErrorCode):
+    Code: int = 11075
+    Msg: str = "The task content exceeds the model's context length"
+
+
+# F087: generating the summary while compressing task history failed twice.
+# Raised by the task-mode summarization middleware; the classifier matches it by
+# class name (``common`` must not import ``linsight``), so keep the name stable.
+class LinsightContextCompressFailedError(BaseErrorCode):
+    Code: int = 11076
+    Msg: str = "Failed to compress the task history"
+
+
 # The Inspiration session version has been completed or is being executed and cannot be executed again
 class LinsightSessionVersionRunningError(BaseErrorCode):
     Code: int = 11120
@@ -235,7 +251,7 @@ class SkillEntryLimitError(BaseErrorCode):
 
 
 # ---------------------------------------------------------------------------
-# F078 skills in workflow agent nodes and assistants (11075-11077). Raised when a
+# F078 skills in workflow agent nodes and assistants (11077-11079). Raised when a
 # configured skill cannot be used at run time. 11061-11074 belong to the skill
 # center on the release line; 11060 is skipped (stale frontend locale key).
 # ---------------------------------------------------------------------------
@@ -243,13 +259,13 @@ class SkillEntryLimitError(BaseErrorCode):
 
 # A configured skill exists but an administrator disabled it
 class AgentSkillDisabledError(BaseErrorCode):
-    Code: int = 11075
+    Code: int = 11078
     Msg: str = "Skill {skill_name} has been disabled by an administrator"
 
 
 # A configured skill no longer exists in the tenant skill library
 class AgentSkillDeletedError(BaseErrorCode):
-    Code: int = 11076
+    Code: int = 11079
     Msg: str = "Skill {skill_name} has been deleted by an administrator"
 
 

@@ -35,6 +35,12 @@ def _tar_gz(members: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
+def _framed(tar: bytes, manifest: dict | None = None) -> bytes:
+    """4-byte length + UTF-8 JSON manifest + tar.gz. Same layout the runner reads."""
+    raw = json.dumps(manifest or {}, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return len(raw).to_bytes(4, "big") + raw + tar
+
+
 def _untar(payload: bytes) -> dict[str, bytes]:
     buf = io.BytesIO(payload)
     out: dict[str, bytes] = {}
@@ -66,7 +72,11 @@ def test_put_requires_lease_token(client):
     http, _app = client
     sid, headers = _session(http)
     assert http.put(f"/v1/sessions/{sid}/files", content=_tar_gz({"a.txt": b"x"})).status_code in {401, 403, 404}
-    ok = http.put(f"/v1/sessions/{sid}/files", headers=headers, content=_tar_gz({"a.txt": b"x"}))
+    ok = http.put(
+        f"/v1/sessions/{sid}/files",
+        headers=headers,
+        content=_framed(_tar_gz({"a.txt": b"x"})),
+    )
     assert ok.status_code == 200
 
 
@@ -74,7 +84,7 @@ def test_zip_slip_rejected_and_does_not_escape(client, tmp_path):
     http, _app = client
     sid, headers = _session(http)
     outside = tmp_path / "escaped.txt"
-    payload = _tar_gz({"../escaped.txt": b"nope"})
+    payload = _framed(_tar_gz({"../escaped.txt": b"nope"}))
     resp = http.put(f"/v1/sessions/{sid}/files", headers=headers, content=payload)
     assert resp.status_code == 400
     assert not outside.exists()
@@ -88,16 +98,13 @@ def test_md5_hit_does_not_overwrite(client):
     sid, headers = _session(http)
     data = b"same-bytes"
     digest = _md5(data)
-    manifest = json.dumps({"keep.txt": digest})
-    headers = {**headers, "X-File-Manifest": manifest}
-    assert (
-        http.put(f"/v1/sessions/{sid}/files", headers=headers, content=_tar_gz({"keep.txt": data})).status_code == 200
-    )
+    body = _framed(_tar_gz({"keep.txt": data}), {"keep.txt": digest})
+    assert http.put(f"/v1/sessions/{sid}/files", headers=headers, content=body).status_code == 200
     lease = app.state.store._leases[sid]
     on_disk = os.path.join(lease.work_dir, "keep.txt")
     with open(on_disk, "w", encoding="utf-8") as fh:
         fh.write("mutated")
-    again = http.put(f"/v1/sessions/{sid}/files", headers=headers, content=_tar_gz({"keep.txt": data}))
+    again = http.put(f"/v1/sessions/{sid}/files", headers=headers, content=body)
     assert again.status_code == 200
     assert open(on_disk, encoding="utf-8").read() == "mutated"
 
@@ -105,7 +112,7 @@ def test_md5_hit_does_not_overwrite(client):
 def test_get_is_recursive_diff_against_pre_exec_snapshot(client):
     http, _app = client
     sid, headers = _session(http)
-    first = _tar_gz({"keep.txt": b"old"})
+    first = _framed(_tar_gz({"keep.txt": b"old"}))
     http.put(f"/v1/sessions/{sid}/files", headers=headers, content=first)
     exec_resp = http.post(
         f"/v1/sessions/{sid}/exec",
@@ -134,7 +141,7 @@ def test_oversized_member_skipped_and_named(client):
     resp = http.put(
         f"/v1/sessions/{sid}/files",
         headers=headers,
-        content=_tar_gz({"big.bin": big, "small.txt": small}),
+        content=_framed(_tar_gz({"big.bin": big, "small.txt": small})),
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -146,12 +153,11 @@ def test_chinese_workspace_paths_round_trip_and_print(client):
     http, _app = client
     sid, headers = _session(http)
     rel = "uploads/工作台_工作流输入支持音视频.docx"
-    payload = _tar_gz({rel: "中文内容".encode()})
-    manifest = json.dumps({rel: _md5("中文内容".encode())}, ensure_ascii=True)
+    text = "中文内容".encode()
     put = http.put(
         f"/v1/sessions/{sid}/files",
-        headers={**headers, "X-File-Manifest": manifest},
-        content=payload,
+        headers=headers,
+        content=_framed(_tar_gz({rel: text}), {rel: _md5(text)}),
     )
     assert put.status_code == 200
     assert rel in put.json()["written"]
@@ -176,3 +182,44 @@ def test_chinese_workspace_paths_round_trip_and_print(client):
     members = _untar(got.content)
     assert "output/报告.txt" in members
     assert members["output/报告.txt"] == "中文内容已处理".encode()
+
+
+def test_manifest_larger_than_header_limit_is_in_the_body(client):
+    http, _app = client
+    sid, headers = _session(http)
+    data = b"only-this"
+    manifest = {f"dir/file-{i:04d}.txt": "0" * 32 for i in range(400)}
+    manifest["keep.txt"] = _md5(data)
+    raw = json.dumps(manifest, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    assert len(raw) > 16384
+    resp = http.put(
+        f"/v1/sessions/{sid}/files",
+        headers=headers,
+        content=_framed(_tar_gz({"keep.txt": data}), manifest),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["written"] == ["keep.txt"]
+
+
+def test_bare_tar_and_bad_length_are_rejected(client):
+    http, _app = client
+    sid, headers = _session(http)
+    bare = http.put(
+        f"/v1/sessions/{sid}/files",
+        headers=headers,
+        content=_tar_gz({"a.txt": b"x"}),
+    )
+    assert bare.status_code == 400
+    short = http.put(
+        f"/v1/sessions/{sid}/files",
+        headers=headers,
+        content=(100).to_bytes(4, "big") + b"{}",
+    )
+    assert short.status_code == 400
+    raw = b"[]"
+    listed = http.put(
+        f"/v1/sessions/{sid}/files",
+        headers=headers,
+        content=len(raw).to_bytes(4, "big") + raw,
+    )
+    assert listed.status_code == 400

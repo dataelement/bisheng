@@ -1,0 +1,657 @@
+"""Bringing an approved version online, and the retry after it parked (design D9 / AC-31 / AC-32 / AC-36).
+
+Two entry points over one body:
+
+* :meth:`PublishOnlineService.bring_online` — the approval outbox's ``on_approved``.
+* :meth:`PublishOnlineService.manual_publish` — the owner pressing "手动上线"
+  after the app parked. **No second approval round**: the decision already
+  exists, what failed was the machine.
+
+They share ``_settle`` because the interesting part is identical — what does a
+start attempt mean, and what does the version record say afterwards — and two
+copies of that would answer "did it go online" differently the first time
+either side changed.
+
+**The return-vs-raise boundary is the whole reason this file is careful.** The
+approval outbox judges success purely by "did the callback raise": a normal
+return marks the instance ``executed``, an exception marks it ``execute_failed``,
+files an exception record and pages the administrators. But "待上线" — approved,
+did not start — is a *product terminal state* (AC-31): the approval stands, the
+app has a state, the owner has a button. Raising there would tell everybody the
+approval failed.
+
+The rule, in one sentence: **will the application get better on its own or with
+one human click? then return. Is something actually broken? then raise.**
+
+* return — capacity refused the start; the start or probe failed; the app was
+  deleted while the request was in flight; the app is stopped so the version is
+  only staged.
+* raise — the orchestrator is unreachable, the version record is missing, the
+  state machine refuses the transition. Those need an administrator, and the
+  outbox's exception record is exactly how one is summoned.
+
+F055 never writes ``app.state``. Every transition goes through F054's
+``AppStateService``, which is the single writer (决议-8) and the only place the
+compare-and-set against a concurrent stop lives.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+
+from loguru import logger
+
+from bisheng.app_publish.domain.constants import AppReleaseAuditAction
+from bisheng.app_publish.domain.models.app_deployment import (
+    STAGE_ONLINE,
+    STAGE_PENDING_ONLINE,
+    STAGE_PUBLISHING,
+    STATUS_FAILED,
+    STATUS_SUCCEEDED,
+    AppDeploymentDao,
+)
+from bisheng.app_publish.domain.schemas.failure import failure_from_error
+from bisheng.app_publish.domain.services import publish_notification_service, schema_evolution_service
+from bisheng.app_publish.domain.services.preview_instance_service import PreviewInstanceService
+from bisheng.app_publish.domain.services.release_audit import write_release_audit
+from bisheng.app_publish.domain.services.version_service import VersionService
+from bisheng.common.errcode.app_publish import (
+    AppCapacityInsufficientError,
+    AppSchemaMigrationFailedError,
+    AppStartupProbeFailedError,
+    AppVersionNotFoundError,
+)
+from bisheng.core.database import get_async_db_session
+from bisheng.database.models.app import AppDao
+from bisheng.database.models.app_version import TERMINAL_STATE_ONLINE
+
+#: Outcomes of one start attempt. Returned to the outbox as ``{"status": ...}``
+#: so the approval-handler audit trail records *which* branch was taken rather
+#: than only "it returned".
+STATUS_ONLINE = "online"
+STATUS_PENDING_CAPACITY = "pending_capacity"
+STATUS_PENDING_DEPLOY_FAILED = "pending_deploy_failed"
+#: The start failed but the application stayed online on its previous version.
+#: Not a parked outcome: nothing is waiting, the submission just did not land.
+STATUS_ITERATION_FAILED = "iteration_failed"
+#: The declared application tables would not take the release's shape, so the
+#: new version was never started (AC-42). A *failed* run, never a parked one:
+#: the remedy is a different manifest, and a parked application refuses the
+#: submission that would carry it (16252).
+STATUS_SCHEMA_MIGRATION_FAILED = "schema_migration_failed"
+STATUS_STAGED_ONLY = "staged_only"
+STATUS_APP_DELETED = "app_deleted"
+
+#: ``ActionResult.detail["stage"]`` values F054 sets when it parks an app. This
+#: is the only discriminator between "no room" and "it crashed", and the two
+#: need different copy and a different action code.
+_STAGE_ADMISSION = "admission"
+
+#: Codes carried by a parked release's failure tuple. Referenced from the
+#: error classes rather than written as literals so the "one code, one meaning"
+#: split (16226 = no capacity, 16225 = scenario not seeded) cannot drift here.
+CODE_CAPACITY_INSUFFICIENT = AppCapacityInsufficientError.Code
+CODE_STARTUP_PROBE_FAILED = AppStartupProbeFailedError.Code
+
+_APP_STATE_STOPPED = "stopped"
+_APP_STATE_DELETED = "deleted"
+_APP_STATE_ONLINE = "online"
+
+
+class PublishOnlineService:
+    """Approved → running, and everything that happens when it does not get there."""
+
+    # ------------------------------------------------------------------
+    # entry points
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def bring_online(cls, instance_id: int, payload_snapshot: dict) -> dict[str, Any]:
+        """The approval outbox's business execution (AC-31 / AC-36).
+
+        Order: load → stage → dispatch on the application state. Staging first
+        matters — ``pending_version_id`` is what makes "approved while stopped,
+        takes effect on resume" (AC-36) true without a sixth application state,
+        so it is written even on the branch that deliberately does not start
+        anything.
+        """
+        app_id = str(payload_snapshot.get("app_id") or "")
+        version_id = str(payload_snapshot.get("version_id") or "")
+
+        app = await cls._load_app(app_id)
+        if app is None:
+            # The application was deleted while the request was in flight.
+            # Deleting cancels the request, so this is the losing side of a
+            # race, not an error: return and let the outbox mark it executed.
+            logger.info(f"app_publish.on_approved app_id={app_id} vanished; treating as cancelled")
+            return {"status": STATUS_APP_DELETED, "app_id": app_id}
+
+        version = await VersionService.get_version(app_id, version_id)
+        if version is None:
+            # A missing version record is a broken system, not a product state:
+            # there is nothing to publish now or later.
+            raise AppVersionNotFoundError(
+                msg="版本记录不存在, 无法上线",
+                details={"app_id": app_id, "version_id": version_id},
+                hints=["请重新执行 bisheng deploy 提交一次发布"],
+            )
+
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+
+        await AppStateService.stage_version(app_id, version_id)
+
+        # AC-28: approval reached a terminal state — 通过 is one of the four —
+        # so every approver's trial instance of this version goes away. Done
+        # here rather than only on the three refusals in ``publish_terminal_
+        # service``, or an approved release would leave its previews running
+        # for the full seven-day timeout beside the real thing.
+        await PreviewInstanceService.reclaim_on_release_terminal(payload_snapshot)
+
+        if app.state == _APP_STATE_STOPPED:
+            # AC-36: approval landing on a stopped application records the
+            # version and stops. Auto-restarting an app somebody deliberately
+            # stopped would undo an operator action nobody asked us to undo;
+            # ``resume`` picks ``pending_version_id`` up later.
+            await write_release_audit(
+                AppReleaseAuditAction.APPROVED,
+                deployment=await cls._deployment_ref(payload_snapshot, app),
+                version_no=version.version_no,
+                operator_id=int(app.owner_user_id or 0),
+                metadata={"status": STATUS_STAGED_ONLY, "app_state": app.state},
+            )
+            return {"status": STATUS_STAGED_ONLY, "app_id": app_id, "version_id": version_id}
+
+        return await cls._settle(
+            app,
+            version,
+            payload_snapshot,
+            action=AppStateService.publish,
+            audit_action=AppReleaseAuditAction.APPROVED,
+            instance_id=instance_id,
+        )
+
+    @classmethod
+    async def manual_publish(cls, app_id: str, *, actor) -> dict[str, Any]:
+        """Retry a parked application (AC-32). Owner-only, checked by the caller.
+
+        No new approval request and **no new version record** — the same version
+        simply gets another attempt, and a success latches ``terminal_state``
+        exactly as the automatic path would (决议-6).
+        """
+        app = await cls._load_app(app_id)
+        if app is None:
+            raise AppVersionNotFoundError(
+                msg="应用不存在或已删除",
+                details={"app_id": app_id, "reason": "app_missing"},
+                hints=["请刷新页面确认应用是否已被删除"],
+            )
+        version_id = app.pending_version_id or app.current_version_id
+        version = await VersionService.get_version(app_id, str(version_id or ""))
+        if version is None:
+            raise AppVersionNotFoundError(
+                msg="该应用没有可上线的版本",
+                details={"app_id": app_id, "version_id": version_id},
+                hints=["请先通过 bisheng deploy 提交一个版本并完成审批"],
+            )
+
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+
+        payload = {
+            "app_id": app_id,
+            "version_id": version.id,
+            "version_no": version.version_no,
+            "owner_user_id": app.owner_user_id,
+            "app_name": app.name,
+        }
+        return await cls._settle(
+            app,
+            version,
+            payload,
+            action=AppStateService.manual_publish,
+            audit_action=AppReleaseAuditAction.MANUAL_PUBLISH,
+            instance_id=None,
+            actor=actor,
+        )
+
+    # ------------------------------------------------------------------
+    # the shared body
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def _settle(
+        cls,
+        app,
+        version,
+        payload_snapshot: dict,
+        *,
+        action,
+        audit_action: AppReleaseAuditAction,
+        instance_id: int | None,
+        actor=None,
+    ) -> dict[str, Any]:
+        """Run one start attempt and record whichever of the three outcomes happened.
+
+        ``action`` is F054's ``publish`` or ``manual_publish``. Both answer with
+        an ``ActionResult`` whose ``ok=False`` means "handled, and here is why"
+        rather than "error" — a distinction this method exists to preserve all
+        the way to the publish face. Anything that *raises* out of them is a
+        system failure and is deliberately not caught.
+
+        The declared-table migration runs **before** the start attempt (AC-42 /
+        T062) and nowhere else. Before, because a refusal then costs the
+        application nothing: whatever was serving is still serving, on a
+        database nobody touched. Nowhere else, because this is the one moment
+        at which the version is known to be the one that will run — a migration
+        at approval time would change the schema under whichever version is
+        live if the start later fails.
+        """
+        deployment = await cls._deployment_ref(payload_snapshot, app)
+        try:
+            from bisheng.common.services.config_service import settings
+
+            if settings.app_runtime.runtime_protocol_version != 2:
+                await schema_evolution_service.migrate_for_release(app.id, version.manifest)
+        except AppSchemaMigrationFailedError as error:
+            return await cls._settle_schema_failure(
+                app, version, deployment, payload_snapshot, error=error, instance_id=instance_id
+            )
+        result = await action(app.id, actor=actor if actor is not None else cls._owner_actor(app))
+
+        if result.ok:
+            # The one authorised UPDATE of app_version, and the only place a
+            # release becomes "online" in the version list.
+            await VersionService.mark_terminal_state(app.id, version.id, TERMINAL_STATE_ONLINE)
+            await cls._advance_deployment(deployment, stage=STAGE_ONLINE)
+            await write_release_audit(
+                AppReleaseAuditAction.ONLINE,
+                deployment=deployment,
+                version_no=version.version_no,
+                operator_id=int(app.owner_user_id or 0),
+                metadata={"status": STATUS_ONLINE, "trigger": str(audit_action), "app_state": result.state},
+            )
+            logger.info(f"app_publish.online app_id={app.id} version_id={version.id} state={result.state}")
+            return {"status": STATUS_ONLINE, "app_id": app.id, "version_id": version.id, "app_state": result.state}
+
+        if result.state == _APP_STATE_ONLINE:
+            # The start failed and the application is *still online*: this was an
+            # iteration, and the version it was already running never stopped
+            # serving (F054 keeps an online app online precisely so that a bad
+            # new version costs its users nothing). Calling this "待上线" would be
+            # false twice — the app is up, and its owner is not blocked from
+            # deploying again — so it gets its own outcome instead.
+            return await cls._settle_iteration_failed(
+                app,
+                version,
+                deployment,
+                payload_snapshot,
+                result=result,
+                audit_action=audit_action,
+                instance_id=instance_id,
+            )
+
+        # Parked. terminal_state stays NULL on purpose: "待上线" is derived from
+        # app.state + app.pending_version_id, not stored as a fourth outcome —
+        # the version-outcome line and the availability line stay orthogonal.
+        reason_kind = "capacity" if cls._is_capacity(result) else "deploy_failed"
+        status = STATUS_PENDING_CAPACITY if reason_kind == "capacity" else STATUS_PENDING_DEPLOY_FAILED
+        await cls._advance_deployment(
+            deployment,
+            stage=STAGE_PENDING_ONLINE,
+            failure=cls._parked_failure(reason_kind, result),
+        )
+        await write_release_audit(
+            AppReleaseAuditAction.PENDING_ONLINE,
+            deployment=deployment,
+            version_no=version.version_no,
+            operator_id=int(app.owner_user_id or 0),
+            reason=result.reason,
+            metadata={
+                "status": status,
+                "reason_kind": reason_kind,
+                "app_state": result.state,
+                "detail": result.detail,
+            },
+        )
+        await publish_notification_service.notify_pending_online(
+            tenant_id=int(app.tenant_id or 0),
+            owner_user_id=int(app.owner_user_id or 0),
+            business_name=str(payload_snapshot.get("app_name") or app.name),
+            instance_id=int(instance_id or 0),
+            reason_kind=reason_kind,
+            reason=result.reason,
+        )
+        logger.info(
+            f"app_publish.pending_online app_id={app.id} version_id={version.id} "
+            f"reason_kind={reason_kind} state={result.state}"
+        )
+        return {
+            "status": status,
+            "app_id": app.id,
+            "version_id": version.id,
+            "app_state": result.state,
+            "reason": result.reason,
+        }
+
+    @classmethod
+    async def _settle_schema_failure(
+        cls,
+        app,
+        version,
+        deployment,
+        payload_snapshot: dict,
+        *,
+        error: AppSchemaMigrationFailedError,
+        instance_id: int | None,
+    ) -> dict[str, Any]:
+        """The declared tables would not take the new shape, so nothing was started (AC-42).
+
+        Recorded as a **failed pipeline run**, never as 待上线. Parking is for
+        releases one click or one free gigabyte away from serving; this one is
+        waiting on a different ``bisheng-app.yaml``, and parking it would block
+        that fix outright — a parked application refuses new submissions with
+        16252.
+
+        A station message goes out only when the application is online, where
+        the existing ``com_notifications_action_app_publish_iteration_failed``
+        copy ("approved, but the new version did not go live; the online one is
+        still serving") says exactly what happened. When it was not online
+        there is no message: nothing was
+        serving before and nothing is serving now, which makes this the same
+        kind of event as a failed build or a failed probe — reported on the
+        publish face and by ``bisheng deploy``, not pushed. That row and its
+        reasoning are pinned in ``test_notification_matrix.py`` (T068).
+        """
+        online = app.state == _APP_STATE_ONLINE
+        failure = cls._schema_failure(error, online=online)
+        reason = str(failure["details"].get("reason") or STATUS_SCHEMA_MIGRATION_FAILED)
+        await cls._advance_deployment(deployment, stage=STAGE_PUBLISHING, status=STATUS_FAILED, failure=failure)
+        await write_release_audit(
+            AppReleaseAuditAction.SCHEMA_MIGRATION_FAILED,
+            deployment=deployment,
+            version_no=version.version_no,
+            operator_id=int(app.owner_user_id or 0),
+            reason=reason,
+            metadata={
+                "status": STATUS_SCHEMA_MIGRATION_FAILED,
+                "reason_kind": STATUS_SCHEMA_MIGRATION_FAILED,
+                "app_state": app.state,
+                "detail": failure["details"],
+            },
+        )
+        if online:
+            await publish_notification_service.notify_pending_online(
+                tenant_id=int(app.tenant_id or 0),
+                owner_user_id=int(app.owner_user_id or 0),
+                business_name=str(payload_snapshot.get("app_name") or app.name),
+                instance_id=int(instance_id or 0),
+                reason_kind="iteration_failed",
+                reason=reason,
+            )
+        logger.info(
+            f"app_publish.schema_migration_failed app_id={app.id} version_id={version.id} "
+            f"reason={reason} app_state={app.state}"
+        )
+        return {
+            "status": STATUS_SCHEMA_MIGRATION_FAILED,
+            "app_id": app.id,
+            "version_id": version.id,
+            "app_state": app.state,
+            "reason": reason,
+        }
+
+    @staticmethod
+    def _schema_failure(error: AppSchemaMigrationFailedError, *, online: bool) -> dict[str, Any]:
+        """The failure tuple the publish face and ``bisheng deploy --wait`` read.
+
+        The manager's own message is kept verbatim — it names the table and the
+        column, which is the whole of what the owner has to go and change. Its
+        structured verdict arrives as *error kwargs* rather than under
+        ``details`` (``orchestrator_client`` spreads the manager's detail body
+        into them), so it is folded in here; the hints differ only in whether
+        there is a live version to reassure the owner about.
+        """
+        failure = failure_from_error(error, stage=STAGE_PUBLISHING)
+        extras = {
+            key: value
+            for key, value in (getattr(error, "kwargs", None) or {}).items()
+            if key not in ("stage", "details", "hints")
+        }
+        failure["details"] = {"reason": STATUS_SCHEMA_MIGRATION_FAILED, **extras, **failure["details"]}
+        failure["hints"] = [
+            "按提示修改 bisheng-app.yaml 的 database.tables 声明后重新执行 bisheng deploy",
+            "线上版本仍在服务, 未受本次发布影响" if online else "本次发布未上线, 应用数据未被修改",
+        ]
+        return failure
+
+    @classmethod
+    async def _settle_iteration_failed(
+        cls,
+        app,
+        version,
+        deployment,
+        payload_snapshot: dict,
+        *,
+        result,
+        audit_action: AppReleaseAuditAction,
+        instance_id: int | None,
+    ) -> dict[str, Any]:
+        """The new version did not go up and the live one never went down.
+
+        Unlike the parked outcome, this **is** a failed pipeline run: nothing is
+        waiting for capacity or for a human to press a button, the submission
+        simply did not make it. Reporting ``status=failed`` is what lets
+        ``bisheng deploy --wait`` say so and what makes "fix it and deploy
+        again" the obvious next step — the option AC-31 already offers.
+        """
+        await cls._advance_deployment(
+            deployment,
+            stage=STAGE_PUBLISHING,
+            status=STATUS_FAILED,
+            failure=cls._iteration_failure(result),
+        )
+        await write_release_audit(
+            AppReleaseAuditAction.ITERATION_FAILED,
+            deployment=deployment,
+            version_no=version.version_no,
+            operator_id=int(app.owner_user_id or 0),
+            reason=result.reason,
+            metadata={
+                "status": STATUS_ITERATION_FAILED,
+                "reason_kind": "iteration_failed",
+                "app_state": result.state,
+                "live_version_id": app.current_version_id,
+                "detail": result.detail,
+            },
+        )
+        await publish_notification_service.notify_pending_online(
+            tenant_id=int(app.tenant_id or 0),
+            owner_user_id=int(app.owner_user_id or 0),
+            business_name=str(payload_snapshot.get("app_name") or app.name),
+            instance_id=int(instance_id or 0),
+            reason_kind="deploy_failed" if (result.detail or {}).get("maintenance") else "iteration_failed",
+            reason=result.reason,
+        )
+        logger.info(
+            f"app_publish.iteration_failed app_id={app.id} version_id={version.id} "
+            f"live_version_id={app.current_version_id} reason={result.reason}"
+        )
+        return {
+            "status": STATUS_ITERATION_FAILED,
+            "app_id": app.id,
+            "version_id": version.id,
+            "app_state": result.state,
+            "reason": result.reason,
+        }
+
+    @staticmethod
+    def _iteration_failure(result) -> dict[str, Any]:
+        """Failure tuple for a release that did not go up while the app stayed up."""
+        detail = result.detail if isinstance(result.detail, dict) else {}
+        capacity = PublishOnlineService._is_capacity(result)
+        if detail.get("maintenance"):
+            return {
+                "stage": STAGE_PUBLISHING,
+                "code": CODE_STARTUP_PROBE_FAILED,
+                "message": "应用上线失败, 当前处于维护状态, 请核查数据迁移和快照",
+                "details": {"reason": "maintenance_failed", **detail},
+                "hints": ["查看本次操作及快照, 确认数据库状态后再恢复服务", "代码回滚不会自动恢复数据库"],
+            }
+        return {
+            "stage": STAGE_PUBLISHING,
+            "code": CODE_CAPACITY_INSUFFICIENT if capacity else CODE_STARTUP_PROBE_FAILED,
+            "message": (
+                "运行环境容量不足, 新版本未能上线; 线上版本未受影响"
+                if capacity
+                else "新版本启动失败, 未能上线; 线上版本未受影响"
+            ),
+            "details": {
+                "reason": "iteration_failed",
+                "app_reason": result.reason,
+                "park_stage": detail.get("stage"),
+                "park_code": detail.get("code"),
+            },
+            "hints": (
+                ["线上版本仍在服务, 可等运行环境释放资源后重新执行 bisheng deploy"]
+                if capacity
+                else ["线上版本仍在服务, 查看运行日志定位启动失败原因后重新执行 bisheng deploy"]
+            ),
+        }
+
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_capacity(result) -> bool:
+        """Capacity refused it, as opposed to it having failed to start.
+
+        The **error code** decides, not the stage name. There are two capacity
+        gates and only the first one runs at stage ``admission``: the
+        orchestrator evaluates capacity a second time inside ``deploy``, and a
+        refusal there arrives tagged ``stage="deploy"``. Reading the stage
+        therefore called a genuine shortage "it failed to start" and sent the
+        owner to debug code that was fine. The stage is still the fallback for
+        the pre-flight refusal, which carries no code.
+        """
+        detail = result.detail if isinstance(result.detail, dict) else {}
+        code = detail.get("code")
+        if code is not None:
+            return int(code) == CODE_CAPACITY_INSUFFICIENT
+        return str(detail.get("stage") or "") == _STAGE_ADMISSION
+
+    @staticmethod
+    def _owner_actor(app):
+        """Act as the owner.
+
+        F054's operator check passes the owner, a tenant administrator or a
+        super admin. Publishing after approval is done *for* the owner, so
+        borrowing their identity keeps the audit trail truthful — an
+        ``is_global_super`` shortcut would record the platform as the actor and
+        would also skip the very check we want exercised.
+        """
+        return SimpleNamespace(
+            user_id=int(app.owner_user_id or 0),
+            tenant_id=int(app.tenant_id or 0),
+            is_global_super=False,
+        )
+
+    @staticmethod
+    async def _load_app(app_id: str):
+        """The app row, or ``None`` when it is gone or tombstoned."""
+        if not app_id:
+            return None
+        async with get_async_db_session() as session:
+            row = await AppDao.aget(session, app_id)
+        if row is None or row.state == _APP_STATE_DELETED:
+            return None
+        return row
+
+    @staticmethod
+    async def _deployment_ref(payload_snapshot: dict, app):
+        """The ``app_deployment`` row this release came from, or a stand-in.
+
+        The audit writer reads ``id`` / ``app_id`` / ``tenant_id`` /
+        ``version_id`` / ``submitted_by_user_id`` off it. A manual publish has
+        no deployment at all, and an old release's row may have been swept, so
+        a namespace with the same five attributes keeps the audit family
+        complete instead of dropping the event.
+        """
+        deployment_id = str(payload_snapshot.get("deployment_id") or "")
+        if deployment_id:
+            async with get_async_db_session() as session:
+                row = await AppDeploymentDao.aget(session, deployment_id)
+            if row is not None:
+                return row
+        return SimpleNamespace(
+            id=deployment_id or None,
+            app_id=app.id,
+            tenant_id=int(app.tenant_id or 0),
+            version_id=str(payload_snapshot.get("version_id") or ""),
+            submitted_by_user_id=int(app.owner_user_id or 0),
+            stage=None,
+        )
+
+    @staticmethod
+    def _parked_failure(reason_kind: str, result) -> dict[str, Any]:
+        """The five-tuple explaining a parked release.
+
+        Written even though the attempt is ``succeeded``: the pipeline did
+        everything it was asked to, and the owner still needs to know why the
+        application is not serving. It is also the only durable record of
+        *which* of the two causes it was — the publish face derives
+        ``pending_reason`` from ``code`` rather than re-deriving it from audit
+        rows, which are best-effort.
+        """
+        if reason_kind == "capacity":
+            return {
+                "stage": STAGE_PENDING_ONLINE,
+                "code": CODE_CAPACITY_INSUFFICIENT,
+                "message": "运行环境容量不足, 应用已进入待上线",
+                "details": {"reason": "capacity", "app_reason": result.reason, **_detail_dict(result)},
+                "hints": ["等待运行环境释放资源后在发布面点击「手动上线」", "或联系管理员为该环境扩容"],
+            }
+        return {
+            "stage": STAGE_PENDING_ONLINE,
+            "code": CODE_STARTUP_PROBE_FAILED,
+            "message": "应用启动失败, 已进入待上线",
+            "details": {"reason": "deploy_failed", "app_reason": result.reason, **_detail_dict(result)},
+            "hints": [
+                "查看运行日志定位启动失败原因",
+                "修复后可重新执行 bisheng deploy, 或在发布面点击「手动上线」重试",
+            ],
+        }
+
+    @staticmethod
+    async def _advance_deployment(
+        deployment,
+        *,
+        stage: str,
+        status: str = STATUS_SUCCEEDED,
+        failure: dict[str, Any] | None = None,
+    ) -> None:
+        """Move the attempt to its terminal stage.
+
+        Online and parked are both ``succeeded``: "待上线" is a successful
+        *pipeline* outcome — everything the pipeline was asked to do happened,
+        and what remains is capacity or a code fix. The CLI reads ``stage`` for
+        that distinction, not ``status``. The one run that is genuinely
+        ``failed`` is an iteration whose new version never went up: there the
+        pipeline's own job did not finish, and the caller says so explicitly.
+        """
+        if not getattr(deployment, "id", None):
+            return
+        async with get_async_db_session() as session:
+            await AppDeploymentDao.aadvance_stage(session, deployment.id, stage=stage, status=status, failure=failure)
+            await session.commit()
+
+
+def _detail_dict(result) -> dict[str, Any]:
+    """The parts of F054's parking detail worth keeping in the failure tuple.
+
+    ``park_code`` is here because it, not the stage, is what tells the two
+    capacity gates apart — dropping it was how a shortage inside ``deploy``
+    became indistinguishable from a crash once the row was written.
+    """
+    detail = result.detail if isinstance(result.detail, dict) else {}
+    return {"park_stage": detail.get("stage"), "park_code": detail.get("code")}

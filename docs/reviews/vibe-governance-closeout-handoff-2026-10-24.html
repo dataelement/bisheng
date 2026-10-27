@@ -1,0 +1,234 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vibe 应用治理收尾提测报告</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f4f6f9;color:#172b43;font:16px/1.7 system-ui,-apple-system,"PingFang SC",sans-serif}.layout{max-width:1440px;margin:auto;display:grid;grid-template-columns:240px minmax(0,1fr);gap:32px;padding:36px 28px}nav{position:sticky;top:24px;align-self:start;font-size:14px;max-height:90vh;overflow:auto}nav ul{padding-left:18px}nav a{color:#405d78}main{min-width:0;background:white;padding:36px;border:1px solid #dce3eb;border-radius:12px}h1{font-size:29px;line-height:1.4}h2{font-size:23px;margin-top:42px;border-top:1px solid #dce3eb;padding-top:22px;scroll-margin-top:20px}a{color:#1264af;text-decoration:none;overflow-wrap:anywhere}a:hover{text-decoration:underline}code{font:13px/1.6 ui-monospace,monospace;overflow-wrap:anywhere;background:#edf1f6;padding:2px 4px;border-radius:3px}pre{white-space:pre-wrap;background:#edf1f6;padding:16px;overflow:auto}pre code{padding:0}table{width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed}th,td{border:1px solid #dce3eb;padding:10px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eaf1f8}li{margin:5px 0}p{overflow-wrap:anywhere}.badge{color:#774c00;background:#fff1ce;padding:8px 12px;border-radius:4px;font-size:14px}@media(max-width:800px){.layout{display:block;padding:12px}nav{position:static;max-height:none;padding:0 10px 20px}main{padding:18px}h1{font-size:24px}h2{font-size:20px}table{font-size:12px}td,th{padding:6px}pre{font-size:12px}}@media print{body{background:#fff;color:#000;font-size:10pt}.layout{display:block;padding:0}nav,.badge{display:none}main{padding:0;border:none}h1{font-size:20pt}h2{font-size:15pt;break-after:avoid}a{color:#000}table{font-size:9pt;table-layout:auto}tr{break-inside:avoid}pre{font-size:8pt}thead{display:table-header-group}@page{size:A4;margin:15mm}}</style></head><body><div class="layout"><nav aria-label="目录"><strong>提测报告 · 2026-10-24</strong><div class="toc">
+<ul>
+<li><a href="#vibe">Vibe 应用治理收尾提测报告</a><ul>
+<li><a href="#1">1. 当前结论</a></li>
+<li><a href="#2">2. 交付位置与调用链</a></li>
+<li><a href="#3">3. 已执行的必要验证</a></li>
+<li><a href="#4">4. 部署前置条件</a></li>
+<li><a href="#5">5. 提测执行顺序</a></li>
+</ul>
+</li>
+<li><a href="#from-srcbackend-credentials-are-already-injected-by-the-test-environment">From src/backend; credentials are already injected by the test environment.</a><ul>
+<li><a href="#6">6. 暂缓和已知边界</a></li>
+<li><a href="#_1">源码版本说明</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav><main><div class="badge">主功能已编码 · 真实部署 E2E / 最终 L2 待完成</div><h1 id="vibe">Vibe 应用治理收尾提测报告</h1>
+<p>日期：2026-10-24。分支：<code>codex/vibe-governance-closeout</code>。本轮起点：<code>818a12968</code>。实现提交见本报告的源码版本说明。</p>
+<h2 id="1">1. 当前结论</h2>
+<p><strong>F055 环境变量、F054 两项安全收尾、F056 运行记录查询和导出的主功能已编码，进入集中提测。</strong> F055 简化设计及 F054/F056 修订设计均已获用户确认。按用户要求，本轮只做本功能定向验证，没有运行项目全量测试。</p>
+<p>本报告区分本地验证和真实部署：本轮没有向 109/189 部署这些改动，没有执行宿主防火墙、真实 Docker/K8s 业务 E2E，也未完成最终 SDD L2 或合入。历史主流程验收不能代替本轮增量验收。没有公开推送、创建 tag 或发行镜像。</p>
+<table>
+<thead>
+<tr>
+<th>功能</th>
+<th>实现内容</th>
+<th>本地状态</th>
+<th>提测重点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F055 环境变量</td>
+<td>单表加密保存；保存不重启；显示运行配置与最新配置的差异；owner 确认后复用部署流程重建；预检和审批预览不注入真实值</td>
+<td>前序定向结果见 F055 验证记录</td>
+<td>保存/确认重建/失败恢复，Docker 与 Pod 实际注入</td>
+</tr>
+<tr>
+<td>F054 OBO</td>
+<td>正式及预览入口检查专用非空签名密钥；保持登录、存在性、租户和权限检查顺序；校验与签发使用同一配置快照；代理不复用允许缓存</td>
+<td>定向通过</td>
+<td>无效配置拒绝，正常 HTTP/WebSocket 可用，三语提示</td>
+</tr>
+<tr>
+<td>F054 宿主隔离</td>
+<td>独立 root 宿主 timer 维护规则并执行真实 canary；独立角色签名上报；证明过期/失效阻断新执行和路由提交；manager 保持非 root</td>
+<td>规则、适配器和报告模拟通过</td>
+<td>真实 INPUT/FORWARD、iptables/nft、规则漂移和证明 TTL</td>
+</tr>
+<tr>
+<td>F056 运行记录</td>
+<td>审计页新增模型、能力、访问三类记录；管理员当前作用域校验；历史候选、冻结游标、异步完整 CSV、受权下载及取消/清理</td>
+<td>定向通过</td>
+<td>真实记录可见、分页完整、权限允许/拒绝配对、导出一致</td>
+</tr>
+<tr>
+<td>F056 凭据审计</td>
+<td>从可信应用主体建立 app 关联；真实 binding 回收与审计同事务；旧实例回收/失败/停用/删除接线，重放不重复记回收</td>
+<td>本地真实 SQLite 事务通过</td>
+<td>部署/更新/停用的实际签发及回收事件可查</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2">2. 交付位置与调用链</h2>
+<ul>
+<li><a href="../../features/v3.0.0/054-app-domain-runtime/design.md">F054 设计</a>、<a href="../../features/v3.0.0/054-app-domain-runtime/tasks.md">任务</a>、<a href="../../features/v3.0.0/054-app-domain-runtime/closeout-validation.json">验证与 AC 映射</a>。</li>
+<li><a href="../../features/v3.0.0/055-app-publish-pipeline/manual-apply-validation.md">F055 验证</a>、<a href="../../features/v3.0.0/055-app-publish-pipeline/e2e-checklist.md">E2E 清单</a>。部署加密密钥轮换仅是运维说明，没有新增轮换功能。</li>
+<li><a href="../../features/v3.0.0/056-app-square-governance/design.md">F056 设计</a>、<a href="../../features/v3.0.0/056-app-square-governance/tasks.md">任务</a>、<a href="../../features/v3.0.0/056-app-square-governance/closeout-validation.json">验证与 AC 映射</a>。</li>
+<li><a href="../../deploy/runtime-manager/README.md">宿主隔离安装说明</a>、<a href="./evidence/vibe-governance-closeout-2026-10-24/">定向执行证据</a>。</li>
+</ul>
+<pre><code class="language-text">浏览器 → nginx → app-proxy → backend 入口授权/OBO 校验 → 应用
+应用 → 既有 SDK/平台接口 → 三类事实记录
+管理员 → backend 查询/导出任务 → Celery → 私有 MinIO 分块+manifest
+管理员 → backend 再次校验作用域 → 流式下载 CSV
+
+Docker 宿主 root timer → Engine 检查+自有防火墙+canary
+                       → 独立 HMAC 上报 backend（60 秒证明）
+manager → backend 读取证明 + 实际 Engine descriptor 比对 → 允许新执行
+K8s → 延用 F059 能力证明，不读取 Docker 宿主证明
+</code></pre>
+<p>查询接口为 <code>/api/v1/app-runtime-audit/records/{kind}</code> 与 <code>/candidates/{dimension}</code>；导出为 <code>/exports</code>、状态、取消和 <code>/download</code>。只接受平台自然人会话，服务凭据不获得管理查询权。源记录只返回白名单元数据，不导出 prompt、响应正文、环境变量值、密钥或 OBO token。凭据只显示掩码。</p>
+<h2 id="3">3. 已执行的必要验证</h2>
+<p>下列是分批定向结果，跨命令用例存在重叠，<strong>不能直接相加为独立总数</strong>。原始输出保存在证据目录；机器可读验证文件记录源码和输出摘要。</p>
+<table>
+<thead>
+<tr>
+<th>范围</th>
+<th>实际结果</th>
+<th>证据边界</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新查询、导出、凭据审计、报告等收尾批</td>
+<td>30 passed；后续逐问题补测</td>
+<td>SQLite/替身资源，不是真实平台部署</td>
+</tr>
+<tr>
+<td>OBO 正式及预览</td>
+<td>48 passed</td>
+<td>包括无效 key、配置快照、签发和拒绝顺序</td>
+</tr>
+<tr>
+<td>代理页面和旧 allow 缓存</td>
+<td>5 passed；HTTP 缓存回归另 4 passed</td>
+<td>渲染/MockTransport、loopback fake upstream</td>
+</tr>
+<tr>
+<td>manager 隔离、门禁和 legacy 状态</td>
+<td>9 passed</td>
+<td>未执行真实防火墙命令</td>
+</tr>
+<tr>
+<td>宿主报告与导出租约交接</td>
+<td>5 passed</td>
+<td>模拟证明和本地数据库</td>
+</tr>
+<tr>
+<td>下载完整字节数</td>
+<td>1 passed</td>
+<td>固定 CSV/manifest</td>
+</tr>
+<tr>
+<td>审计页</td>
+<td>两文件 9 passed；候选分页修改后只重跑对应组件 4 passed</td>
+<td>组件测试，非浏览器业务部署</td>
+</tr>
+<tr>
+<td>真实环境脚本</td>
+<td>4 条 collected</td>
+<td><strong>未执行，不计通过</strong></td>
+</tr>
+<tr>
+<td>Python / 架构 / 打包配置</td>
+<td>Ruff 通过；逐文件架构守卫无 VIOLATION；单 Alembic head；Compose/角色配置、bash 语法和三语 keys 检查通过</td>
+<td>settings.py 一条既有 RULE7 warning 保留</td>
+</tr>
+<tr>
+<td>前端</td>
+<td>改动文件 ESLint 通过，无新增类型错误</td>
+<td>全部类型检查仍被两条既有问题阻塞，见下</td>
+</tr>
+</tbody>
+</table>
+<p>两条类型基线问题：<code>BuildPage/bench/OrgKbConfig.tsx</code> 缺 <code>@hello-pangea/dnd</code> 声明；<code>test/clientVoiceDraft.test.tsx</code> 参数签名不符。本轮未更改这两个文件，也没有新增豁免。F055 前序审批卡 Jest 用例因缺少 <code>canvas.node</code> 未执行，仍如实保留。</p>
+<p>L1 七维度阶段结果为 <strong>PASS_WITH_NOTES</strong>，详见两个 feature 的 closeout-validation.md；任务拆解审查已完成。真实 E2E、最终 <code>/sdd-code-review</code> 和合入门禁仍待完成，不能据此宣称整个 Vibe 全部 AC 通过。</p>
+<p>HTML 为离线文件，章节、链接和响应式/打印 CSS 已静态检查；浏览器安全策略拒绝 file: 协议，本轮未完成宽屏、窄屏与打印的视觉验收。</p>
+<h2 id="4">4. 部署前置条件</h2>
+<ol>
+<li>backend、默认 Celery worker、Beat、app-proxy、runtime-manager 和前端使用本轮源码构建。Compose 中既有公开镜像标签不会自动包含这些代码；本轮没有发行新镜像。</li>
+<li>对已有数据库执行 <code>alembic upgrade head</code>，新增 <code>app_access_log.app_name_snapshot</code> 可空列，无历史回填。新查询快照、导出任务、宿主证明表通过项目现有模型发现/create_all 路径创建。升级时确认实际 schema 齐备，不只检查进程健康。</li>
+<li>backend/worker 使用一致的平台存储和加密配置，私有 <code>bisheng-apps</code> 桶允许创建、读写和按任务前缀清理。导出不依赖 API 主机本地目录；Beat 每 30 秒续办/清理，默认 worker 必须消费相应任务。</li>
+<li><code>BISHENG_RUNTIME_AUDIT_SOURCE_TIMEZONE</code> 应匹配现有三类记录的无时区数据库时间约定；未设置时使用进程 <code>TZ</code>，再回落 UTC。查询将请求 UTC 转为源时区，输出转回 UTC，快照冻结源时区；不做旧记录重写。</li>
+<li>F055 部署加密密钥沿用运维配置，勿在聊天、仓库、日志或测试报告内写真实环境变量值。配置保存不触发重启，只有用户确认应用后进入既有重建流程。</li>
+<li><strong>Docker 必须先按安装说明启用宿主隔离单元</strong>：宿主 Python 包、可用 Engine API、明确的 iptables/nft 后端、IPv4 internal 应用/构建网络、受控 egress、固定 digest 的 Python canary 镜像，以及实际监听的管理探测目标。宿主工具可用宿主 socket；使用受限 API 代理时需明确允许检查和 canary 的 create/exec/start/stop 操作。不要求宿主 Docker CLI，不给 manager root/NET_ADMIN。</li>
+<li>backend 独立配置 <code>host-isolation</code> 角色 HMAC 密钥和 node descriptor，manager 保留 <code>manager</code> 角色。先生成 descriptor、更新映射，再启动宿主 timer 和 manager。报告有效期 60 秒，每 30 秒真实重探；心跳不能代替宿主证明。每 Engine 一个宿主单元，覆盖该节点应用和构建网络。</li>
+<li>K8s 不安装 Docker 宿主单元，保留 F059 的集群准入、CNI、PVC、镜像与权限前置条件。</li>
+</ol>
+<h2 id="5">5. 提测执行顺序</h2>
+<p>优先覆盖核心功能，不进行项目全量回归。所有测试使用专用应用和非生产资源，记录源码 SHA、镜像 digest、部署配置及脱敏请求结果。</p>
+<table>
+<thead>
+<tr>
+<th>顺序</th>
+<th>场景</th>
+<th>通过标准</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>109 Docker 宿主安装</td>
+<td>证明 ready；实际 host/gateway 管理端口拒绝、egress 允许；HTTP 入站回包可用；明确记录采用的防火墙后端</td>
+</tr>
+<tr>
+<td>2</td>
+<td>F055 保存与应用</td>
+<td>修改后实例 ID 不变，界面显示差异；owner 确认后才重建，运行值更新；失败不错误显示已生效；缺值可见且不泄露值</td>
+</tr>
+<tr>
+<td>3</td>
+<td>正式发布与审批预览</td>
+<td>正式批准实例注入真实值；未批准预检/预览只得到声明名与空值；正常 HTTP/WebSocket、升级、停用及恢复可用</td>
+</tr>
+<tr>
+<td>4</td>
+<td>三类真实记录</td>
+<td>经应用 SDK 发起模型与能力调用、经入口访问，查询对应应用/访问者/凭据/时间，空值及历史名称正确</td>
+</tr>
+<tr>
+<td>5</td>
+<td>查询与完整导出</td>
+<td>全部筛选记录跨页无重复遗漏；异步状态和取消可用；CSV 与冻结选择一致，包含全部行；下载无公开对象 URL</td>
+</tr>
+<tr>
+<td>6</td>
+<td>权限配对</td>
+<td>当前租户管理员允许；普通用户、跨租户、服务凭据拒绝；超管切换管理范围后不能继续读旧范围任务或下载</td>
+</tr>
+<tr>
+<td>7</td>
+<td>凭据审计</td>
+<td>发布签发/旧实例回收/停用的事件从可信绑定归属到应用；回收重放不重复，失败事务不留下虚假审计</td>
+</tr>
+<tr>
+<td>8</td>
+<td>安全增量</td>
+<td>OBO 空/空白/共用会话 key 拒绝，不泄露身份；修复后下一请求恢复。宿主证明过期/规则漂移拒绝新执行及路由，清理入口仍可用</td>
+</tr>
+<tr>
+<td>9</td>
+<td>189 K8s 对应业务</td>
+<td>复验上述环境变量、发布/预览、三源查询/导出、权限和回收；保持 F059 网络能力约束，记录 Pod/Secret 实际行为</td>
+</tr>
+</tbody>
+</table>
+<p>真实 API 脚本：<a href="../../src/backend/test/e2e/test_e2e_vibe_governance_closeout.py">test_e2e_vibe_governance_closeout.py</a>。它要求预先发布一个 <code>e2e-f056-</code> 开头的专用应用，并经真实入口/SDK 生成至少一条模型、能力和访问记录。它不负责部署、播种或修改宿主规则，不能作为全部场景的自动覆盖。</p>
+<p>测试机安全注入 <code>F056_E2E=1</code>、<code>E2E_API_BASE</code>、<code>F056_E2E_APP_ID</code>、<code>F056_E2E_TENANT_ID</code>、<code>F056_E2E_TENANT_ADMIN_TOKEN</code>、<code>F056_E2E_USER_TOKEN</code>、<code>F056_E2E_FOREIGN_TENANT_ID</code>。管理员必须是租户管理员而非全局超管；执行期间专用应用的模型调用记录保持静止，便于核对冻结导出的完整 ID 集。</p>
+<pre><code class="language-bash"># From src/backend; credentials are already injected by the test environment.
+uv run pytest -q test/e2e/test_e2e_vibe_governance_closeout.py
+</code></pre>
+<p>脚本只取消自己创建的导出任务；不删除应用、源记录、容器或 PVC。快照与导出产物由到期清理管理。</p>
+<h2 id="6">6. 暂缓和已知边界</h2>
+<ul>
+<li>按用户口径，DM8 只核对通用模型/DDL/约束，未实测驱动或流式导出；arm64 暂不测试；189 单节点不证明跨节点恢复。</li>
+<li>真实 nft 版本兼容、INPUT/FORWARD 与 canary 必须在部署验收验证，本地生成规则通过不能替代。</li>
+<li>低概率组合先列待验：超长暂停旧导出 worker 在 GC 后晚到上传、跨节点时钟偏差、历史混合/DST 时区、宿主网络单向分区和组合故障收敛。本轮不继续扩展状态机。</li>
+<li>F055 重建进入维护态后失败，使用既有下线/重新上线入口恢复；界面有提示，不新增自动重试/自动重启。</li>
+<li>原 F056 AC-32 涉及的<strong>既有系统操作审计导出仍有历史行数上限</strong>；本轮批准设计保留旧审计实现，完整异步导出覆盖新增三类运行记录。该历史差异未修复，不标记整个 F056 所有旧 AC 完成。</li>
+<li>尚未完成：真实部署 E2E、剩余任务验收勾选、最终 L2、分支合入及正式镜像发行。</li>
+</ul>
+<h2 id="_1">源码版本说明</h2>
+<p>本报告与源码一并本地保存；本轮实现提交为 <code>932fa37e1aa68f04d3e60a09b5af09394863d65f</code>，机器可读验证文件的 <code>source_commit</code> 指向同一源码提交。它固定的是源码版本，不代表镜像已发行或环境已升级。</p></main></div></body></html>

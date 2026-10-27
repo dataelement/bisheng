@@ -1,16 +1,15 @@
 import userEvent from "@testing-library/user-event"
-import type { InputHTMLAttributes } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   getPersonalTokenSettingApi,
   listPersonalTokensApi,
   updatePersonalTokenSettingApi,
 } from "@/controllers/API/personalToken"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { PersonalToken } from "@/pages/SystemPage/components/PersonalToken"
 import { render, screen, waitFor } from "@/test/test-utils"
 import type { PersonalTokenSetting } from "@/types/api/openApi"
-import { message } from "@/components/bs-ui/toast/use-toast"
+import { toast } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { revokePersonalTokenApi } from "@/controllers/API/personalToken"
 
@@ -25,21 +24,25 @@ vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: vi.fn(),
 }))
 
-vi.mock("@/controllers/request", () => ({
-  captureAndAlertRequestErrorHoc: vi.fn(),
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
+  showApiError: vi.fn(),
 }))
 
 vi.mock("@/components/bs-icons", () => ({
   LoadIcon: () => <span data-testid="loading-icon" />,
 }))
 
-vi.mock("@/components/bs-ui/input", () => ({
-  Input: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-}))
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   message: vi.fn(),
-}))
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 
 const initialSetting: PersonalTokenSetting = {
   deployment_enabled: true,
@@ -62,13 +65,6 @@ describe("personal-token tenant settings interaction", () => {
     vi.clearAllMocks()
     vi.mocked(getPersonalTokenSettingApi).mockResolvedValue(initialSetting)
     vi.mocked(listPersonalTokensApi).mockResolvedValue({ data: [], total: 0 })
-    vi.mocked(captureAndAlertRequestErrorHoc).mockImplementation(async (request) => {
-      try {
-        return await request
-      } catch {
-        return undefined
-      }
-    })
   })
 
   it("locks the settings while saving and reports success", async () => {
@@ -100,24 +96,24 @@ describe("personal-token tenant settings interaction", () => {
     pending.resolve({ ...initialSetting, pat_enabled: true, effective_enabled: true })
 
     await waitFor(() => expect(saveButton).toBeEnabled())
-    expect(message).toHaveBeenCalledWith({
-      title: "prompt",
-      variant: "success",
-      description: "openApiManagement.personalToken.settingsSaved",
+    expect(toast.show).toHaveBeenCalledWith({
+      type: "success",
+      message: "prompt\nopenApiManagement.personalToken.settingsSavedSingle",
     })
   })
 
   it("delegates a failed save to the shared error interaction and unlocks the settings", async () => {
-    vi.mocked(updatePersonalTokenSettingApi).mockRejectedValue(new Error("save failed"))
+    const error = new Error("save failed")
+    vi.mocked(updatePersonalTokenSettingApi).mockRejectedValue(error)
     const user = userEvent.setup()
 
     render(<PersonalToken />)
     const saveButton = await screen.findByRole("button", { name: "save" })
     await user.click(saveButton)
 
-    expect(captureAndAlertRequestErrorHoc).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(showApiError).toHaveBeenCalledWith(error))
     await waitFor(() => expect(saveButton).toBeEnabled())
-    expect(message).not.toHaveBeenCalled()
+    expect(toast.show).not.toHaveBeenCalled()
   })
 
   it("renders localized permission names instead of raw scope codes", async () => {

@@ -1,7 +1,8 @@
 // @ts-strict-ignore
+import { toast } from '@bisheng/ui';
 import { Camera, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useToast } from "../toast/use-toast";
+
 import { cname } from "../utils";
 
 // 头像
@@ -14,7 +15,7 @@ export default function Avator({
     onChange,
     children
 }) {
-    const { message } = useToast();
+
     const { t } = useTranslation()
     const defaultButtonName = t('build.uploadAvator');
 
@@ -28,10 +29,7 @@ export default function Avator({
             if (!isValidSize) errormgs.push(`${t('build.fileSizeLimit')} ${size / 1024 / 1024}MB`)
             if (!isValidType) errormgs.push(`${t('build.fileTypeLimit')} ${accept}`)
 
-            errormgs.length ? message({
-                variant: 'error',
-                description: errormgs
-            }) : onChange(file)
+            errormgs.length ? toast.show({ type: 'error', message: errormgs.filter(Boolean).join('\n') }) : onChange(file)
         }
     };
 

@@ -1,16 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, ChevronDown } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem
-} from '~/components/ui/DropdownMenu';
-import { knowledgeSpaceDropdownSurfaceClassName } from '~/components/SidebarListMoreMenu';
+import { Select } from '@bisheng/ui';
 import { cn } from '~/utils';
 import { SpaceTag, getSpaceTagsApi } from '~/api/knowledge';
+import { showApiError } from '~/api/request';
 import { useLocalize } from "~/hooks";
+import useSelectCopy from "~/hooks/useSelectCopy";
 
 export interface SearchParams {
     scope: 'current' | 'all';
@@ -39,6 +35,7 @@ export interface CompoundSearchInputProps {
 
 export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false, toolbarMode = false, pageMode = false, trailing }: CompoundSearchInputProps) {
     const localize = useLocalize();
+    const selectCopy = useSelectCopy();
     const [scope, setScope] = useState<'current' | 'all'>('current');
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
     const [keyword, setKeyword] = useState('');
@@ -47,7 +44,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
 
     // The search field is "expanded" whenever the user is interacting with it,
-    // either via input focus / tag dropdown or the scope DropdownMenu. The parent
+    // either via input focus / tag dropdown or the scope Select. The parent
     // toolbar reads this via has-[[data-expanded=true]] to keep its width stable
     // even when Radix portals the menu out of the focus tree.
     const isExpanded = isFocused || isScopeMenuOpen || pageMode;
@@ -55,6 +52,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const debounceTimerRef = useRef<number | null>(null);
+    const tagsRequestRef = useRef(0);
 
     useEffect(() => {
         setScope(isRoot ? 'all' : 'current');
@@ -63,7 +61,12 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     // Fetch space tags from API
     const refreshTags = useCallback(() => {
         if (!spaceId) return;
-        getSpaceTagsApi(spaceId).then(setSpaceTags).catch(() => { });
+        const revision = ++tagsRequestRef.current;
+        void getSpaceTagsApi(spaceId).then(tags => {
+            if (revision === tagsRequestRef.current) setSpaceTags(tags);
+        }).catch(error => {
+            if (revision === tagsRequestRef.current) showApiError(error);
+        });
     }, [spaceId]);
 
     // Reset search state when switching to a different space
@@ -73,10 +76,11 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         setIsFocused(false);
         setSpaceTags([]);
         refreshTags();
+        return () => { tagsRequestRef.current += 1; };
     }, [spaceId, refreshTags]);
 
     // Handle clicking outside to close the dropdown.
-    // While the scope DropdownMenu is open its portaled content lives outside
+    // While the scope Select is open its portaled content lives outside
     // containerRef — skip the reset so the search field doesn't collapse.
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -156,7 +160,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         onSearch?.({ scope: isRoot ? 'all' : scope, tagIds: [], keyword: '' });
     };
 
-    const scopeLabel = scope === 'current' ? localize("com_knowledge.current_location") : localize("com_knowledge.current_space");
+    const scopeOptions = [
+        { value: 'current', label: localize("com_knowledge.current_location") },
+        { value: 'all', label: localize("com_knowledge.current_space") },
+    ];
 
     // Toolbar variant, collapsed: a borderless icon+label button that matches the
     // 筛选 / 排序 / 视图 buttons beside it. Any other state keeps the field skin.
@@ -198,25 +205,26 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
                 {/* 范围选择：仅在输入框聚焦（或菜单已打开）时显示，高亮表示已选范围；仅文案随 current / all 切换 */}
                 {!isRoot && isExpanded && (
-                    <DropdownMenu open={isScopeMenuOpen} onOpenChange={setIsScopeMenuOpen}>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                type="button"
-                                className="flex items-center gap-1 h-6 max-w-[min(120px,40vw)] shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#F7F7F7] text-text-1 hover:bg-[#F1F1F1]"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <span className="truncate">{scopeLabel}</span>
-                                <ChevronDown className="size-3 shrink-0 opacity-80" />
-                            </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                            align="start"
-                            className={cn('min-w-[120px]', knowledgeSpaceDropdownSurfaceClassName)}
-                        >
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('current'); inputRef.current?.focus(); setIsFocused(true); }}>{localize("com_knowledge.current_location")}</DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('all'); inputRef.current?.focus(); setIsFocused(true); }}>{localize("com_knowledge.current_space")}</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    // The container's onClick refocuses the input; keep trigger clicks from reaching it.
+                    <span className="contents" onClick={(e) => e.stopPropagation()}>
+                        <Select
+                            {...selectCopy}
+                            variant="ghost"
+                            size="small"
+                            className="shrink-0 max-w-[min(120px,40vw)]"
+                            aria-label={localize("com_knowledge.current_location") + ' / ' + localize("com_knowledge.current_space")}
+                            open={isScopeMenuOpen}
+                            onOpenChange={setIsScopeMenuOpen}
+                            options={scopeOptions}
+                            value={scope}
+                            onChange={(value) => {
+                                if (value !== 'current' && value !== 'all') return;
+                                setScope(value);
+                                inputRef.current?.focus();
+                                setIsFocused(true);
+                            }}
+                        />
+                    </span>
                 )}
 
                 <input

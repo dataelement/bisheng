@@ -17,6 +17,144 @@
       "imageLoadFailed": "画像の読み込みに失敗しました",
       "imageRef": "画像参照",
       "imagesOutsideTable": "表領域外の画像"
+    },
+    "preview": {
+      "loading": "読み込み中...",
+      "docLoading": "ドキュメントを読み込み中...",
+      "failed": "ファイルの読み込みに失敗しました",
+      "imageAlt": "画像プレビュー",
+      "htmlTitle": "HTMLプレビュー",
+      "recognizedText": "認識テキスト",
+      "entryText": "ナレッジ本文",
+      "media": {
+        "download": "ダウンロード",
+        "exit_fullscreen": "全画面を終了",
+        "fullscreen": "全画面",
+        "more": "その他",
+        "mute": "ミュート",
+        "pause": "一時停止",
+        "picture_in_picture": "ピクチャーインピクチャー",
+        "play": "再生",
+        "playback_speed": "再生速度",
+        "progress": "再生位置",
+        "unmute": "ミュート解除",
+        "volume": "音量"
+      },
+      "select": {
+        "emptyText": "データがありません",
+        "noMatchText": "一致する結果がありません",
+        "loadingText": "読み込み中…",
+        "clearLabel": "クリア",
+        "removeLabel": "削除"
+      },
+      "empty": "ファイルは空です",
+      "unsupported": "このファイル形式はプレビューできません",
+      "fileExpired": "ファイルが無効です。新しいファイルをアップロードして再試行してください。"
     }
+  },
+  "hostedApp": {
+    "versionDiff": {
+      "loading": "比較しています…",
+      "identical": "2 つのバージョンの内容は同じです。",
+      "filesChanged": "{{count}} 件のファイルに変更があります",
+      "additions": "{{count}} 行追加",
+      "deletions": "{{count}} 行削除",
+      "listTruncated": "変更ファイルが多すぎるため、一部のみ表示しています。",
+      "selectFile": "左側でファイルを選ぶと、変更内容が表示されます。",
+      "notComparable": "比較できません",
+      "reasonBinary": "バイナリファイルのため、内容は比較しません。",
+      "reasonTooLarge": "ファイルが大きすぎるため、内容は比較しません。",
+      "patchTruncated": "このファイルは変更が多すぎるため、先頭部分のみ表示しています。",
+      "patchOmitted": "全ファイルの変更量が大きすぎるため、このファイルは表示していません。",
+      "maskedSecrets": "秘密情報の疑いがある箇所を {{count}} 件隠しました",
+      "changeAdded": "追加されたファイル",
+      "changeRemoved": "削除されたファイル",
+      "changeModified": "変更されたファイル"
+    }
+  },
+  "app_chat": {
+    "citation": {
+      "badge_aria": "{{source}}の引用 {{index}}",
+      "loading": "出典の詳細を読み込み中...",
+      "no_detail": "出典の詳細がありません",
+      "no_permission": "このソースを閲覧する権限がありません",
+      "no_snippet": "抜粋がありません",
+      "source_expired": "このソースは無効になりました",
+      "source_temp_kb": "一時ナレッジベース",
+      "untitled": "引用 {{index}}",
+      "source_web": "ウェブページ",
+      "source_article": "記事",
+      "source_document": "ドキュメント"
+    },
+    "page": "{{0}} ページ",
+    "chunk": "第 {{0}} 段落",
+    "document_preview": "ドキュメントプレビュー",
+    "source_document": "政策文書",
+    "source_web": "ウェブページ",
+    "copy_code": "コードをコピー",
+    "copied": "コピーしました！",
+    "chart": "チャート",
+    "code": "コード",
+    "download": "ダウンロード",
+    "loading": "読み込み中…",
+    "zoom_in": "拡大",
+    "zoom_out": "縮小",
+    "diagram_failed": "グラフを読み込めませんでした。コードを確認できます。",
+    "send": "送信",
+    "stop": "停止",
+    "restart": "再実行",
+    "copy": "コピー",
+    "attachment_download": "クリックしてダウンロード",
+    "attachment_unavailable": "ファイルを利用できません",
+    "close": "閉じる",
+    "image_preview": "画像プレビュー",
+    "timestamp_format": "MM 月 dd 日 HH:mm",
+    "run": {
+      "used": "使用済み",
+      "using": "使用中",
+      "searched": "検索済み",
+      "searching": "検索中",
+      "offline": "オフライン",
+      "flowDeleted": "スキルが削除されたため、スキル名を取得できません",
+      "toolDeleted": "ツールが削除されたため、ツール名を取得できません",
+      "knowledgeDeleted": "ナレッジベースが削除されたため、名称を取得できません",
+      "thinking": "思考中",
+      "done": "完了",
+      "interrupted": "ツール呼び出しは結果を返しませんでした（セッション終了）"
+    },
+    "attach": "ファイルを添付"
+  },
+  "citations": {
+    "com_citation": {
+      "close_document_preview": "ドキュメントのプレビューを閉じる",
+      "document_preview": "ドキュメントのプレビュー",
+      "locate_missed": "引用箇所を自動で特定できませんでした。引用された原文は次のとおりです:",
+      "no_download_url": "ダウンロード可能なファイルアドレスがありません",
+      "preview_loading": "プレビューを読み込み中…",
+      "preview_unavailable": "このファイルはプレビューできません",
+      "source_article": "記事",
+      "source_document": "ドキュメント",
+      "source_temp_kb": "一時ナレッジベース",
+      "source_web": "ウェブページ"
+    },
+    "com_knowledge": {
+      "download_file": "ファイルのダウンロード"
+    },
+    "com_message": {
+      "document_preview": "ドキュメントプレビュー",
+      "source_empty": "参考資料はありません",
+      "source_load_failed": "参照元の詳細を読み込めませんでした",
+      "source_loading": "参照元の詳細を読み込み中...",
+      "source_name_fallback_document": "政策文書",
+      "source_name_fallback_web": "ウェブページ",
+      "source_panel_back": "参考資料一覧に戻る",
+      "source_panel_close": "参考資料を閉じる",
+      "source_panel_download": "ドキュメントをダウンロード",
+      "source_panel_label": "参考資料",
+      "source_type_document": "ドキュメント",
+      "source_type_web": "ウェブページ",
+      "source_untitled": "タイトルなし"
+    },
+    "com_msg_source_reference": "参照元"
   }
 }

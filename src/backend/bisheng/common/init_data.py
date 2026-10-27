@@ -128,6 +128,12 @@ async def init_default_data():
                 # Initialize preset approval scenarios (channel / knowledge-space subscribe)
                 await _init_default_approval_scenarios(session)
 
+                # Initialize the three hosted-app resource tiers (F055 AC-44).
+                # Runs in its own session on purpose — it is a startup step, not
+                # part of this unit of work — and is idempotent by ``code``, so
+                # an upgrade never resets a tier a super admin retuned.
+                await _init_resource_tiers()
+
                 # Initialize preset application templates
                 templates = await session.exec(select(Template).limit(1))
                 templates = templates.all()
@@ -355,127 +361,57 @@ async def _init_default_root_department(session):
     logger.info(f"Default root department ready (id={root_dept.id}), guest dept ready (dept_id={guest_dept_id})")
 
 
-# Preset approval scenarios seeded on first deploy. Each scenario gets one
-# catch-all "default branch" routed to a single-node "default flow"; the node is
-# OR-mode (或签, any one approver passes) and resolves approvers from the
-# resource's owner + manager roles.
-_DEFAULT_APPROVAL_SCENARIO_SEEDS = [
-    {
-        "scenario_code": "channel_subscribe_request",
-        "scenario_name": "频道订阅审批",
-        "flow_code": "channel_subscribe_default_flow",
-        "flow_name": "默认流程",
-        "node_code": "channel_owner_manager",
-        "node_name": "频道负责人审批",
-        "sources": [{"type": "channel_owner"}, {"type": "channel_manager"}],
-    },
-    {
-        "scenario_code": "knowledge_space_subscribe_request",
-        "scenario_name": "知识空间加入审批",
-        "flow_code": "knowledge_space_subscribe_default_flow",
-        "flow_name": "默认流程",
-        "node_code": "knowledge_space_owner_manager",
-        "node_name": "知识空间负责人审批",
-        "sources": [{"type": "knowledge_space_owner"}, {"type": "knowledge_space_manager"}],
-    },
-]
+# Preset approval scenarios now live with the approval module
+# (``approval/domain/services/approval_seed_service.py``): the same list has to
+# be seeded both at boot (here) and whenever a tenant is created, and a second
+# copy of it is how "the new tenant has no publish scenario" bugs get born.
 
 
-async def _init_default_approval_scenarios(session):
-    """Idempotently seed preset approval scenarios for the default tenant.
+async def _init_resource_tiers():
+    """Idempotently seed the three hosted-app resource tiers (F055 AC-44).
 
-    Mirrors what the admin UI builds when an operator configures a scenario:
-    scenario → catch-all route (default branch) → flow definition → active flow
-    version → single OR-mode node. Existing scenarios (matched by
-    ``tenant_id + scenario_code``) are left untouched so re-running init or a
-    later manual edit is never overwritten.
+    Delegates to ``ResourceTierService`` rather than writing rows here: the
+    unit conversion between F054's vCPU floats and the table's integer
+    millicores, and the "deployment configuration overrides the constant"
+    precedence, both have exactly one implementation (F055 design D11).
+
+    Imported lazily inside the function — ``common/`` must not carry a
+    top-level import of a domain module (arch-guard RULE-1), and a boot step
+    that only some deployments need has no business widening this module's
+    import graph.
+
+    Best-effort: a deployment whose tier table cannot be seeded must still
+    finish booting. The publish pipeline fails loudly with 16223 on the first
+    ``deploy`` instead, which is a far more locatable symptom than a backend
+    that refuses to start.
     """
-    from bisheng.approval.domain.models.approval_scenario import (
-        ApprovalFlowDefinition,
-        ApprovalFlowVersion,
-        ApprovalNodeDefinition,
-        ApprovalRouteRule,
-        ApprovalScenario,
-    )
-    from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+    try:
+        from bisheng.app_publish.domain.services.resource_tier_service import ResourceTierService
 
-    with bypass_tenant_filter():
-        for seed in _DEFAULT_APPROVAL_SCENARIO_SEEDS:
-            existing = (
-                await session.exec(
-                    select(ApprovalScenario).where(
-                        ApprovalScenario.tenant_id == DEFAULT_TENANT_ID,
-                        ApprovalScenario.scenario_code == seed["scenario_code"],
-                    )
-                )
-            ).first()
-            if existing:
-                continue
+        await ResourceTierService.seed_resource_tiers()
+    except Exception as exc:
+        # Best effort by design: see the docstring — the publish pipeline fails
+        # loudly with 16223 on the first deploy, which is far easier to locate
+        # than a backend that refuses to start.
+        logger.warning(f"resource tier seed skipped: {exc}")
 
-            scenario = ApprovalScenario(
-                tenant_id=DEFAULT_TENANT_ID,
-                scenario_code=seed["scenario_code"],
-                scenario_name=seed["scenario_name"],
-                enabled=True,
-            )
-            session.add(scenario)
-            await session.flush()
-            await session.refresh(scenario)
 
-            flow = ApprovalFlowDefinition(
-                tenant_id=DEFAULT_TENANT_ID,
-                scenario_id=scenario.id,
-                flow_code=seed["flow_code"],
-                flow_name=seed["flow_name"],
-                is_active=True,
-            )
-            session.add(flow)
-            await session.flush()
-            await session.refresh(flow)
+async def _init_default_approval_scenarios(session, tenant_id: int | None = None):
+    """Idempotently seed the preset approval scenarios for one tenant.
 
-            node_snapshot = {
-                "node_code": seed["node_code"],
-                "node_name": seed["node_name"],
-                "node_order": 1,
-                "node_mode": "or",
-                "approver_config": {"sources": seed["sources"]},
-            }
-            version = ApprovalFlowVersion(
-                tenant_id=DEFAULT_TENANT_ID,
-                flow_definition_id=flow.id,
-                version_no=1,
-                is_active=True,
-                definition_snapshot={"nodes": [node_snapshot]},
-            )
-            session.add(version)
-            await session.flush()
-            await session.refresh(version)
+    Boot calls it without a tenant and gets the default one, which is the
+    historical behaviour. The tenant-scoped entry point used by both
+    tenant-creation paths is
+    ``approval_seed_service.seed_approval_scenarios_for_tenant``.
 
-            session.add(
-                ApprovalNodeDefinition(
-                    tenant_id=DEFAULT_TENANT_ID,
-                    flow_version_id=version.id,
-                    node_code=seed["node_code"],
-                    node_name=seed["node_name"],
-                    node_order=1,
-                    node_mode="or",
-                    approver_config={"sources": seed["sources"]},
-                )
-            )
-            session.add(
-                ApprovalRouteRule(
-                    tenant_id=DEFAULT_TENANT_ID,
-                    scenario_id=scenario.id,
-                    route_name="默认分支",
-                    route_type="flow",
-                    sort_order=1,
-                    flow_definition_id=flow.id,
-                    match_config={},
-                    enabled=True,
-                )
-            )
-            await session.commit()
-            logger.info(f"Seeded approval scenario {seed['scenario_code']} (id={scenario.id}) for default tenant")
+    Imported lazily: ``common/`` must not carry a top-level import of a domain
+    module (arch-guard RULE-1), and the seed data belongs with the module that
+    owns the scenarios.
+    """
+    from bisheng.approval.domain.services.approval_seed_service import seed_approval_scenarios_in_session
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+
+    await seed_approval_scenarios_in_session(session, DEFAULT_TENANT_ID if tenant_id is None else tenant_id)
 
 
 async def _backfill_guest_department_membership(session):

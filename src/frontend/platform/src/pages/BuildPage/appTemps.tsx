@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { AppType } from "@/types/app";
 import { useEffect, useState } from "react";
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
-import { Button } from "../../components/bs-ui/button";
+
 import {
     Table,
     TableBody,
@@ -15,7 +16,7 @@ import {
     TableRow
 } from "../../components/bs-ui/table";
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { showApiError } from "../../controllers/request";
 import { SelectType } from "./apps";
 
 export default function Templates() {
@@ -27,14 +28,15 @@ export default function Templates() {
     const { type } = useParams()
     const [temps, setTemps] = useState([])
     useEffect(() => {
-        readTempsDatabase(type).then(setTemps)
+        readTempsDatabase(type).then(setTemps).catch(showApiError)
     }, [type])
 
     const handleDragEnd = ({ source, destination }: any) => {
         if (!destination || source.index === destination.index) {
             return;
         }
-        const updatedList = [...temps];
+        const previousList = temps;
+        const updatedList = temps.map(temp => ({ ...temp }));
         const [removed] = updatedList.splice(source.index, 1);
         updatedList.splice(destination.index, 0, removed);
         setTemps(updatedList);
@@ -54,7 +56,10 @@ export default function Templates() {
         currentItem.order_num = sort
         const { name, description, order_num } = currentItem
 
-        captureAndAlertRequestErrorHoc(updateTempApi(currentItem.id, { name, description, order_num }).then(onChange))
+        updateTempApi(currentItem.id, { name, description, order_num }).then(onChange).catch(error => {
+            setTemps(previousList)
+            showApiError(error)
+        })
     }
 
     const handleDelTemp = (index: number, id: number) => {
@@ -67,11 +72,11 @@ export default function Templates() {
             desc: t('confirmDeleteTemplate', { type: labelName }),
             okTxt: t('delete'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteTempApi(id).then((res) => {
+                return deleteTempApi(id).then((res) => {
                     onChange(res)
                     setTemps(temps.filter((temp, i) => index !== i));
                     next()
-                }))
+                })
             }
         })
     }
@@ -80,7 +85,7 @@ export default function Templates() {
         <div className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide">
             <div className="flex justify-between">
                 <SelectType defaultValue={type} onChange={(v) => navigate(`/build/temps/${v}`)} />
-                <Button size="sm" onClick={() => navigate('/build/apps')}>{t('returnToAppList')}</Button>
+                <Button size="small" onClick={() => navigate('/build/apps')}>{t('returnToAppList')}</Button>
             </div>
             <Table className="mb-[50px]">
                 <TableHeader>
@@ -110,12 +115,13 @@ export default function Templates() {
                                                 <TableCell className="font-medium min-w-[400px]">{temp.name}</TableCell>
                                                 <TableCell className={snapshot.isDragging ? 'break-words' : `max-w-0 break-words`}>{temp.description}</TableCell>
                                                 <TableCell className="text-right pr-5">
-                                                    <Button variant="link" className="text-destructive" onClick={() => handleDelTemp(index, temp.id)}>{t('delete')}</Button>
+                                                    <Button size="small" variant="link" color="danger" onClick={() => handleDelTemp(index, temp.id)}>{t('delete')}</Button>
                                                 </TableCell>
                                             </tr>
                                         )}
                                     </Draggable>
                                 )}
+                                {provided.placeholder}
                             </TableBody>
                         )}
                     </Droppable>

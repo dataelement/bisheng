@@ -1,0 +1,15 @@
+# 表单问卷 —— BiSheng 托管应用示例
+#
+# 这份 manifest 是 `bisheng deploy` 读的唯一配置文件。字段定义见
+# src/backend/bisheng/app_publish/domain/schemas/app_manifest.py（未知字段会被
+# 拒绝，不是忽略——写错的键名会当场告诉你，而不是静默不生效）。
+manifest_version: 1
+
+name: 表单问卷
+description: 一个零依赖的问卷示例：收集回答、落 SQLite、给出统计。用来验证「本地开发的应用能部署到 BiSheng 平台」这条最小闭环。
+slug: form-survey
+
+runtime: python3.11
+port: 8080
+
+# 不写 tier 即「轻量」档。示例应用没有任何理由占更多资源。

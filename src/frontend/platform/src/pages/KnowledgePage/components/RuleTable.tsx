@@ -1,18 +1,21 @@
 // @ts-strict-ignore
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Input } from '@bisheng/ui';
 import { FileIcon } from "@/components/bs-icons/file";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
+Accordion,
+AccordionContent,
+AccordionItem,
+AccordionTrigger,
 } from "@/components/bs-ui/accordion";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Input } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import Tip from "@/components/bs-ui/tooltip/tip";
+import { Checkbox } from "@bisheng/ui";
+import { KnowledgeHint,KnowledgeTooltip } from "./KnowledgeTooltip";
+
+
 import { cn } from "@/util/utils";
-import { useId, useMemo } from "react";
+import { useId,useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 
@@ -20,18 +23,7 @@ import { useTranslation } from "react-i18next";
  *  sits at the edge of the content box, so anything absolutely positioned inside
  *  ends up fighting it. */
 const RowInput = ({ value, onChange, onEmpty, disabled = false, max, maxLength }) => (
-  <Input
-    type="number"
-    min={1}
-    max={max}
-    maxLength={maxLength}
-    value={value}
-    disabled={disabled}
-    onChange={onChange}
-    onBlur={(e) => { !e.target.value && onEmpty() }}
-    boxClassName="w-24 shrink-0"
-    className="h-8 border-[#ebecf0] bg-white"
-  />
+  <Input type="number" min={1} max={max} maxLength={maxLength} value={value} disabled={disabled} onChange={(event) => { if (!isNumberDraftWithinBounds(event.currentTarget.value, { min: 1, max: max, maxLength: maxLength })) return; onChange(event); }} onBlur={(e) => { !e.target.value && onEmpty() }} className={["w-24 shrink-0", "h-8 border-[#ebecf0] bg-white"].filter(Boolean).join(" ")} showCount />
 )
 
 const ItemForm = ({ data, setData }) => {
@@ -51,7 +43,7 @@ const ItemForm = ({ data, setData }) => {
         onEmpty={() => setData('slice_length', 10)}
       />
       <span className="shrink-0">{t('row')}</span>
-      <QuestionTooltip className="ml-0.5 text-[#94a3b8]" content={t('sliceLengthTooltip')} />
+      <KnowledgeHint className="ml-0.5 text-[#94a3b8]" content={t('sliceLengthTooltip')} />
     </div>
 
     {/* 表头：子设置缩进对齐到勾选框标签，未启用时置灰而非留白 */}
@@ -163,12 +155,12 @@ export default function RuleTable({
                   className="overflow-hidden rounded-[10px] border border-[#e4e8ee] bg-white"
                 >
                   <AccordionTrigger className="flex flex-row-reverse items-center justify-between gap-3 px-4 py-3 text-[14px] font-normal text-[#0f172a] hover:no-underline">
-                    <Tip content={file.fileName} align="start">
+                    <KnowledgeTooltip content={file.fileName} align="start">
                       <div className="flex min-w-0 items-center gap-2 text-left">
                         <FileIcon type='xls' className="size-[30px] min-w-8" />
                         <span className="min-w-0 truncate">{file.fileName}</span>
                       </div>
-                    </Tip>
+                    </KnowledgeTooltip>
                   </AccordionTrigger>
                   <AccordionContent className="px-4 pb-4 pt-0">
                     <ItemForm data={file.excelRule} setData={(key, value) => {

@@ -67,7 +67,7 @@ const ARROW_STYLE: React.CSSProperties = { fill: 'rgb(var(--tooltip-bg))' };
 const BUBBLE_CLASS =
   `${SURFACE_CLASS} z-tooltip max-w-[250px] break-words rounded-md px-3 py-1.5 text-body shadow-popup ` +
   'data-[state=delayed-open]:animate-tooltip-in data-[state=instant-open]:animate-tooltip-in ' +
-  'data-[state=closed]:animate-tooltip-out motion-reduce:animate-none';
+  'data-[state=closed]:animate-tooltip-out data-[state=closed]:[animation-fill-mode:forwards] motion-reduce:animate-none';
 
 /**
  * True when a `TooltipProvider` is above us. Radix's own provider context is

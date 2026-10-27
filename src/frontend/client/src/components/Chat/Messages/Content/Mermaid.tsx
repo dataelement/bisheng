@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 "use client"
 
+import { loadDiagramLibrary } from '@bisheng/diagram-runtime';
 import type React from "react"
 
 import { Copy, DownloadIcon, ZoomIn, ZoomOut } from "lucide-react"
@@ -34,29 +35,8 @@ function normalizeMindmapIndent(src: string): string {
 }
 
 // 动态加载 mermaid
-export const loadScript = async (fileName) => {
-    if (window[fileName]) {
-        return window[fileName]
-    }
-
-    const script = document.createElement("script")
-    script.src = `${__APP_ENV__.BASE_URL}/${fileName}.min.js`
-    script.type = "module"
-
-    return new Promise((resolve, reject) => {
-        script.onload = () => {
-            // 等待 mermaid 初始化
-            const checkMermaid = setInterval(() => {
-                if (window[fileName]) {
-                    clearInterval(checkMermaid)
-                    resolve(window[fileName])
-                }
-            }, 100)
-        }
-        script.onerror = reject
-        document.head.appendChild(script)
-    })
-}
+export const loadScript = (fileName: 'echarts' | 'mermaid') =>
+    loadDiagramLibrary(fileName, { baseUrl: __APP_ENV__.BASE_URL });
 
 export default function MermaidBlock({ children }: { children: string }) {
     const ref = useRef<HTMLDivElement>(null)

@@ -1,0 +1,49 @@
+/usr/local/bin/kubectl
+{
+  "clientVersion": {
+    "major": "1",
+    "minor": "28",
+    "gitVersion": "v1.28.15",
+    "gitCommit": "841856557ef0f6a399096c42635d114d6f2cf7f4",
+    "gitTreeState": "clean",
+    "buildDate": "2024-10-22T20:34:56Z",
+    "goVersion": "go1.22.8",
+    "compiler": "gc",
+    "platform": "linux/amd64"
+  },
+  "kustomizeVersion": "v5.0.4-0.20230601165947-6ce0bf390ce3",
+  "serverVersion": {
+    "major": "1",
+    "minor": "28",
+    "gitVersion": "v1.28.15",
+    "gitCommit": "841856557ef0f6a399096c42635d114d6f2cf7f4",
+    "gitTreeState": "clean",
+    "buildDate": "2024-10-22T20:26:27Z",
+    "goVersion": "go1.22.8",
+    "compiler": "gc",
+    "platform": "linux/amd64"
+  }
+}
+NAME                  STATUS   ROLES                  AGE   VERSION    INTERNAL-IP       EXTERNAL-IP   OS-IMAGE                KERNEL-VERSION                 CONTAINER-RUNTIME
+binfeng-k8s-node189   Ready    control-plane,worker   27d   v1.28.15   192.168.106.189   <none>        CentOS Linux 7 (Core)   3.10.0-1160.119.1.el7.x86_64   docker://24.0.9
+NAME              STATUS   AGE
+default           Active   27d
+kube-node-lease   Active   27d
+kube-public       Active   27d
+kube-system       Active   27d
+kubekey-system    Active   27d
+NAMESPACE     NAME                                          READY   STATUS    RESTARTS      AGE   IP                NODE                  NOMINATED NODE   READINESS GATES
+kube-system   calico-kube-controllers-568d4f5458-n89hv      1/1     Running   1 (26d ago)   27d   10.233.64.4       binfeng-k8s-node189   <none>           <none>
+kube-system   calico-node-66b7f                             1/1     Running   1 (26d ago)   27d   192.168.106.189   binfeng-k8s-node189   <none>           <none>
+kube-system   coredns-7cd54bf556-4rslr                      1/1     Running   1 (26d ago)   27d   10.233.64.6       binfeng-k8s-node189   <none>           <none>
+kube-system   coredns-7cd54bf556-j9m5r                      1/1     Running   1 (26d ago)   27d   10.233.64.5       binfeng-k8s-node189   <none>           <none>
+kube-system   kube-apiserver-binfeng-k8s-node189            1/1     Running   1 (26d ago)   27d   192.168.106.189   binfeng-k8s-node189   <none>           <none>
+kube-system   kube-controller-manager-binfeng-k8s-node189   1/1     Running   1 (26d ago)   27d   192.168.106.189   binfeng-k8s-node189   <none>           <none>
+kube-system   kube-proxy-rstd2                              1/1     Running   1 (26d ago)   27d   192.168.106.189   binfeng-k8s-node189   <none>           <none>
+kube-system   kube-scheduler-binfeng-k8s-node189            1/1     Running   1 (26d ago)   27d   192.168.106.189   binfeng-k8s-node189   <none>           <none>
+kube-system   nodelocaldns-6xn54                            1/1     Running   1 (26d ago)   27d   192.168.106.189   binfeng-k8s-node189   <none>           <none>
+
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+/bin/sh: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+No resources found
+No resources found

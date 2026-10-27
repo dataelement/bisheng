@@ -59,7 +59,7 @@ const buttonStyles = cva(
         outlined: 'border bg-bg-page',
         filled: '',
         text: '',
-        link: 'underline-offset-4',
+        link: '',
       },
       // Heights/radii per §2 (24/32/40, 4/6/8px). Font sizes reference the
       // PRIMITIVE type scale vars on purpose: the semantic --text-body remaps
@@ -91,14 +91,19 @@ const buttonStyles = cva(
              follow the same ramp logic: hover one step, active one deeper).
              Active steps are TOUCH-ONLY (coarse-pointer): on hover-capable
              devices a pressed button keeps its hover color — no click flash;
-             on touch, where hover is disabled, active is the only feedback. ---- */
+             on touch, where hover is disabled, active is the only feedback.
+             `data-[menu-open]` repeats the hover step while a Dropdown / Select
+             panel this button opened is showing (Dropdown §3: the trigger
+             keeps its hover look so the panel visibly comes from it). A
+             dedicated attribute, not Radix's `data-state=open`, so a button
+             used as a collapsible / popover trigger keeps today's look. ---- */
       {
         color: 'primary',
         variant: 'solid',
         // btn-brand-primary = green-theme !important override (style.css) —
         // kept as agreed tech debt until the theme mechanism is reworked (§6.2).
         class:
-          'btn-brand-primary bg-blue-500 text-white hover:bg-blue-400 coarse-pointer:active:bg-blue-600',
+          'btn-brand-primary bg-blue-500 text-white hover:bg-blue-400 data-[menu-open]:bg-blue-400 coarse-pointer:active:bg-blue-600',
       },
       {
         color: 'primary',
@@ -109,25 +114,25 @@ const buttonStyles = cva(
         // (tokens.css .dark), so blue-50/100 become deep navy washes and
         // blue-500 the bright dark main on its own.
         class:
-          'border-blue-500 text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100',
+          'border-blue-500 text-blue-500 hover:bg-blue-50 data-[menu-open]:bg-blue-50 coarse-pointer:active:bg-blue-100',
       },
       {
         color: 'primary',
         variant: 'filled',
         class:
-          'bg-blue-50 text-blue-600 hover:bg-blue-100 coarse-pointer:active:bg-blue-200',
+          'bg-blue-50 text-blue-600 hover:bg-blue-100 data-[menu-open]:bg-blue-100 coarse-pointer:active:bg-blue-200',
       },
       {
         color: 'primary',
         variant: 'text',
         class:
-          'text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100',
+          'text-blue-500 hover:bg-blue-50 data-[menu-open]:bg-blue-50 coarse-pointer:active:bg-blue-100',
       },
       {
         color: 'primary',
         variant: 'link',
         class:
-          'text-blue-500 hover:text-blue-400 hover:underline coarse-pointer:active:text-blue-600',
+          'text-blue-500 hover:text-blue-400 data-[menu-open]:text-blue-400 coarse-pointer:active:text-blue-600',
       },
       {
         color: 'default',
@@ -135,62 +140,62 @@ const buttonStyles = cva(
         // Fill uses its own token (not gray-text) so dark flips the text role
         // light while the solid fill stays a mid-gray that keeps white legible.
         class:
-          'bg-btn-gray-solid-bg text-white hover:bg-btn-gray-solid-bg/90 coarse-pointer:active:bg-btn-gray-solid-bg/80',
+          'bg-btn-gray-solid-bg text-white hover:bg-btn-gray-solid-bg/90 data-[menu-open]:bg-btn-gray-solid-bg/90 coarse-pointer:active:bg-btn-gray-solid-bg/80',
       },
       {
         color: 'default',
         variant: 'outlined',
         class:
-          'border-btn-gray-border text-btn-gray-text hover:bg-btn-fill-1 coarse-pointer:active:bg-btn-fill-2',
+          'border-btn-gray-border text-btn-gray-text hover:bg-btn-fill-1 data-[menu-open]:bg-btn-fill-1 coarse-pointer:active:bg-btn-fill-2',
       },
       {
         color: 'default',
         variant: 'filled',
         class:
-          'bg-btn-fill-2 text-btn-gray-text hover:bg-btn-fill-3 coarse-pointer:active:bg-btn-fill-4',
+          'bg-btn-fill-2 text-btn-gray-text hover:bg-btn-fill-3 data-[menu-open]:bg-btn-fill-3 coarse-pointer:active:bg-btn-fill-4',
       },
       {
         color: 'default',
         variant: 'text',
         class:
-          'text-btn-gray-text hover:bg-btn-fill-1 coarse-pointer:active:bg-btn-fill-2',
+          'text-btn-gray-text hover:bg-btn-fill-1 data-[menu-open]:bg-btn-fill-1 coarse-pointer:active:bg-btn-fill-2',
       },
       {
         color: 'default',
         variant: 'link',
         class:
-          'text-btn-gray-text hover:text-btn-gray-text/80 hover:underline coarse-pointer:active:text-btn-gray-text',
+          'text-btn-gray-text hover:text-btn-gray-text/80 data-[menu-open]:text-btn-gray-text/80 coarse-pointer:active:text-btn-gray-text',
       },
       {
         color: 'danger',
         variant: 'solid',
         class:
-          'bg-btn-danger text-white hover:bg-btn-danger-hover coarse-pointer:active:bg-btn-danger-active',
+          'bg-btn-danger text-white hover:bg-btn-danger-hover data-[menu-open]:bg-btn-danger-hover coarse-pointer:active:bg-btn-danger-active',
       },
       {
         color: 'danger',
         variant: 'outlined',
         // Same faint-tint hover as primary outlined, on the red alpha ladder.
         class:
-          'border-btn-danger text-btn-danger hover:bg-btn-danger/10 coarse-pointer:active:bg-btn-danger/[0.15]',
+          'border-btn-danger text-btn-danger hover:bg-btn-danger/10 data-[menu-open]:bg-btn-danger/10 coarse-pointer:active:bg-btn-danger/[0.15]',
       },
       {
         color: 'danger',
         variant: 'filled',
         class:
-          'bg-btn-danger/10 text-btn-danger hover:bg-btn-danger/[0.15] coarse-pointer:active:bg-btn-danger/20',
+          'bg-btn-danger/10 text-btn-danger hover:bg-btn-danger/[0.15] data-[menu-open]:bg-btn-danger/[0.15] coarse-pointer:active:bg-btn-danger/20',
       },
       {
         color: 'danger',
         variant: 'text',
         class:
-          'text-btn-danger hover:bg-btn-danger/10 coarse-pointer:active:bg-btn-danger/[0.15]',
+          'text-btn-danger hover:bg-btn-danger/10 data-[menu-open]:bg-btn-danger/10 coarse-pointer:active:bg-btn-danger/[0.15]',
       },
       {
         color: 'danger',
         variant: 'link',
         class:
-          'text-btn-danger hover:text-btn-danger-hover hover:underline coarse-pointer:active:text-btn-danger-active',
+          'text-btn-danger hover:text-btn-danger-hover data-[menu-open]:text-btn-danger-hover coarse-pointer:active:text-btn-danger-active',
       },
       /* ---- bordered padding 7/15/15 incl. 1px border (§2 visual parity) ---- */
       { variant: 'outlined', size: 'small', class: 'px-[7px]' },

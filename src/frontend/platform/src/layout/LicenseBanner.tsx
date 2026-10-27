@@ -1,20 +1,17 @@
+import { Alert } from "@bisheng/ui";
+
+import { locationContext } from "@/contexts/locationContext";
 import {
     getCommercialLicenseStatus,
     getLicenseStatus,
     reportGatewayLicense,
     type CommercialLicenseItem,
 } from "@/controllers/API/license";
-import { locationContext } from "@/contexts/locationContext";
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { buildLicenseBannerCopy } from "./licenseBannerCopy";
 import { shouldFetchGatewayLicenseStatus } from "./licenseBannerGateway";
-
-// Sampled from the design PNG (not the warning token #FF7D00 / #FFF7E8):
-// border+accent #E69739, fill #FFF8E6, body text #7A4B19.
-const BANNER_CARD =
-    "flex items-center justify-center gap-2 rounded-t-2xl rounded-b-none border-2 border-[#E69739] bg-[#FFF8E6] px-4 py-2.5 text-center text-sm text-[#7A4B19] dark:border-[#FF9626] dark:bg-[#4D1B00] dark:text-amber-100";
 
 /**
  * Persistent top banner for commercial license expiry.
@@ -68,16 +65,12 @@ export function LicenseBanner() {
     if (!visible) return null;
 
     return (
-        <div ref={ref} className="shrink-0 bg-background-main px-4 pt-3">
-            <div role="alert" className={BANNER_CARD}>
-                <span
-                    aria-hidden="true"
-                    className="flex size-5 shrink-0 items-center justify-center rounded bg-[#E69739] text-[12px] font-semibold leading-none text-white dark:bg-[#FF9626]"
-                >
-                    !
-                </span>
-                <span>{message}</span>
-            </div>
+        // Alert brings its own 8px margin and 12px radius, so the strip adds no
+        // padding of its own. `flex` keeps those margins inside the measured
+        // box — collapsed through a plain block they would leave
+        // `--license-banner-h` 16px short of what the strip actually occupies.
+        <div ref={ref} className="flex shrink-0 flex-col bg-background-main">
+            <Alert live type="warning" description={message} />
         </div>
     );
 }

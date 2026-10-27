@@ -1,224 +1,35 @@
 // @ts-strict-ignore
+import { Button, SearchInput, notification } from '@bisheng/ui';
 import { checkSassUrl } from "@/components/bs-comp/FileView";
-import { LoadIcon } from "@/components/bs-icons";
+import { Outlined } from "bisheng-icons";
+import { EditQa } from "./components/EditQa";
+import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Switch } from "@/components/bs-ui/switch";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { downloadFile, formatDate } from "@/util/utils";
-import { ArrowLeft, SquareCheckBig, SquareX, Trash2 } from "lucide-react";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+
+import { downloadFile,formatDate } from "@/util/utils";
+import { Checkbox,Switch } from "@bisheng/ui";
+
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
-import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Button, LoadButton } from "../../components/bs-ui/button";
-import { Input, InputList, SearchInput, Textarea } from "../../components/bs-ui/input";
+import { Link,useParams } from "react-router-dom";
+
+
+
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow
 } from "../../components/bs-ui/table";
-import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
+import { deleteQa,getQaFile,getQaList,updateQaStatus } from "../../controllers/API";
 import { checkResourceActionApi } from "../../controllers/API/permission";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { showApiError } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { ImportQa } from "./components/ImportQa";
-
-const defaultQa = {
-    question: '',
-    similarQuestions: [''],
-    answer: ''
-}
-
-// 添加&编辑qa
-const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
-    const { t } = useTranslation('knowledge');
-    const [open, setOpen] = useState(false);
-    const [form, setForm] = useState({ ...defaultQa });
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState({
-        question: false,
-        answer: false
-    });
-
-    const idRef = useRef('');
-    const sourceRef = useRef('');
-    useImperativeHandle(ref, () => ({
-        open() {
-            setOpen(true);
-        },
-        edit(item) {
-            const { id, source } = item;
-            idRef.current = id;
-            sourceRef.current = source;
-            setOpen(true);
-
-            getQaDetail(id).then(res => {
-                const { questions, answers } = res;
-                const [question, ...similarQuestions] = questions;
-                setForm({
-                    question,
-                    similarQuestions: [...similarQuestions, ''],
-                    answer: answers
-                });
-            });
-        }
-    }));
-
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setForm((prevForm) => ({
-            ...prevForm,
-            [name]: value
-        }));
-    };
-
-    const handleSimilarQuestionsChange = (list) => {
-        setForm((prevForm) => ({
-            ...prevForm,
-            similarQuestions: list
-        }));
-    };
-
-    // 模型生成
-    const handleModelGenerate = async () => {
-        if (!form.question) {
-            return message({
-                variant: 'warning',
-                description: t('pleaseEnterQuestion')
-            });
-        }
-        setLoading(true);
-        captureAndAlertRequestErrorHoc(generateSimilarQa(form.question, form.answer).then(res => {
-            setForm((prevForm) => {
-                const updatedSimilarQuestions = [...prevForm.similarQuestions];
-                updatedSimilarQuestions.splice(updatedSimilarQuestions.length - 1, 0, ...res.questions);
-                return {
-                    ...prevForm,
-                    similarQuestions: updatedSimilarQuestions
-                };
-            });
-            setLoading(false);
-        }));
-    };
-
-    const { message } = useToast();
-    const [saveLoad, setSaveLoad] = useState(false);
-    const handleSubmit = async () => {
-        const isQuestionEmpty = !form.question.trim();
-        const isAnswerEmpty = !form.answer.trim();
-
-        if (isQuestionEmpty || isAnswerEmpty) {
-            setError({
-                question: isQuestionEmpty,
-                answer: isAnswerEmpty
-            });
-
-            return message({
-                variant: 'warning',
-                description: t('questionAndAnswerCannotBeEmpty')
-            });
-        }
-
-        const _similarQuestions = form.similarQuestions.filter((question) => question.trim() !== '');
-        if (_similarQuestions.some((q) => q.length > 100)) {
-            return message({
-                variant: 'warning',
-                description: t('max100CharactersForSimilarQuestion')
-            });
-        }
-        if (form.answer.length > 10000) {
-            return message({
-                variant: 'warning',
-                description: t('max1000CharactersForAnswer')
-            });
-        }
-
-        setSaveLoad(true);
-        await captureAndAlertRequestErrorHoc(updateQa(idRef.current, {
-            questions: [form.question, ..._similarQuestions],
-            answers: [form.answer],
-            knowledge_id: knowlageId,
-            source: sourceRef.current || 1
-        }));
-
-        onChange();
-        setSaveLoad(false);
-        close();
-    };
-
-    const close = () => {
-        idRef.current = '';
-        sourceRef.current = '';
-        setForm({ ...defaultQa });
-        setOpen(false);
-        setError({
-            question: false,
-            answer: false
-        });
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
-            <DialogContent className="sm:max-w-[625px]">
-                <DialogHeader>
-                    <DialogTitle>{idRef.current ? t('updateQa') : t('createQa')}</DialogTitle>
-                </DialogHeader>
-                <div className="flex flex-col gap-4 py-2">
-                    <div>
-                        <label htmlFor="question" className="bisheng-label">
-                            <span className="text-red-500">*</span>{t('question')}
-                        </label>
-                        <Input
-                            name="question"
-                            className={`col-span-3 ${error.question && 'border-red-400'}`}
-                            value={form.question}
-                            onChange={handleInputChange}
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="similarQuestions" className="bisheng-label">{t('similarQuestions')}</label>
-                        <InputList
-                            className="max-h-60 overflow-y-auto"
-                            value={form.similarQuestions}
-                            onChange={handleSimilarQuestionsChange}
-                        />
-                        <Button className="mt-2" size="sm" onClick={handleModelGenerate} disabled={loading}>
-                            {loading && <LoadIcon />} {t('aiGenerate')}
-                        </Button>
-                    </div>
-                    <div>
-                        <label htmlFor="answer" className="bisheng-label">
-                            <span className="text-red-500">*</span>{t('answer')}
-                        </label>
-                        <Textarea
-                            name="answer"
-                            className={`col-span-3 h-36 ${error.answer && 'border-red-400'}`}
-                            value={form.answer}
-                            onChange={handleInputChange}
-                        />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <DialogClose>
-                        <Button variant="outline" className="px-11" type="button" onClick={close}>
-                            {t('cancel2')}
-                        </Button>
-                    </DialogClose>
-                    <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit}>
-                        {t('confirm')}
-                    </LoadButton>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-});
-
 
 export default function QasPage() {
     const { t } = useTranslation('knowledge')
@@ -231,7 +42,7 @@ export default function QasPage() {
     const importRef = useRef(null)
     const [canEditKb, setCanEditKb] = useState(false)
     const [canDeleteKb, setCanDeleteKb] = useState(false)
-    const { toast } = useToast();
+
 
       const sourceTypeKeys = [
         'source_unknown',      // 0: 未知
@@ -255,14 +66,14 @@ export default function QasPage() {
                 return;
             }
             const [editResult, deleteResult] = await Promise.all([
-                captureAndAlertRequestErrorHoc(checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'edit' })),
-                captureAndAlertRequestErrorHoc(checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'delete' })),
+                checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'edit' }),
+                checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(id), action: 'delete' }),
             ]);
             if (cancelled) return;
             setCanEditKb(!!editResult?.allowed);
             setCanDeleteKb(!!deleteResult?.allowed);
         };
-        loadPermissions();
+        void loadPermissions().catch(showApiError);
         return () => {
             cancelled = true;
         };
@@ -308,7 +119,7 @@ export default function QasPage() {
             });
 
             if (itemsToEnable.length === 0) {
-                toast({ variant: 'info', description: t('theSelectedItemsAlreadyEnabled') });
+                notification.open({ type: 'info', description: String(t('theSelectedItemsAlreadyEnabled') ?? '') });
                 return;
             }
 
@@ -331,16 +142,13 @@ export default function QasPage() {
             setSelectAll(false);
 
             if (successCount > 0) {
-                toast({ variant: 'success', description: t('successfullyEnabled', { count: successCount }) });
+                notification.open({ type: 'success', description: String(t('successfullyEnabled', { count: successCount }) ?? '') });
             }
             if (failedIds.length > 0) {
-                toast({
-                    variant: 'warning',
-                    description: t('someItemsFailedToEnable', { ids: failedIds.join(', ') })
-                });
+                notification.open({ type: 'warning', description: String(t('someItemsFailedToEnable', { ids: failedIds.join(', ') }) ?? '') });
             }
         } catch (error) {
-            toast({ variant: 'error', description: t('batchEnableOperationFailed') });
+            showApiError(error);
         }
     };
 
@@ -355,7 +163,7 @@ export default function QasPage() {
             });
 
             if (itemsToDisable.length === 0) {
-                toast({ variant: 'info', description: t('theSelectedItemsAlreadyDisabled') });
+                notification.open({ type: 'info', description: String(t('theSelectedItemsAlreadyDisabled') ?? '') });
                 return;
             }
 
@@ -373,16 +181,13 @@ export default function QasPage() {
             setSelectAll(false);
 
             if (successCount > 0) {
-                toast({ variant: 'success', description: t('successfullyDisabled', { count: successCount }) });
+                notification.open({ type: 'success', description: String(t('successfullyDisabled', { count: successCount }) ?? '') });
             }
             if (failedIds.length > 0) {
-                toast({
-                    variant: 'warning',
-                    description: t('someItemsFailedToDisable', { ids: failedIds.join(', ') })
-                });
+                notification.open({ type: 'warning', description: String(t('someItemsFailedToDisable', { ids: failedIds.join(', ') }) ?? '') });
             }
         } catch (error) {
-            toast({ variant: 'error', description: t('batchDisableOperationFailed') });
+            showApiError(error);
         }
     };
 
@@ -428,10 +233,10 @@ export default function QasPage() {
         bsConfirm({
             desc: t('confirmDeleteSelectedQaData'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteQa([id]).then(res => {
+                return deleteQa([id]).then(() => {
                     reload()
-                }))
-                next()
+                    next()
+                })
             },
         })
     }
@@ -443,15 +248,13 @@ export default function QasPage() {
         bsConfirm({
             desc: t('confirmDeleteSelectedQaData', { count: selectedItems.length }), // Display the total number of selected items
             onOk(next) {
-                captureAndAlertRequestErrorHoc(
-                    deleteQa(selectedItems) // Pass all selected IDs
+                return deleteQa(selectedItems) // Pass all selected IDs
                         .then(res => {
                             reload(); // Refresh all data
                             setSelectedItems([]); // Clear selected items
                             setSelectAll(false);
-                        })
-                );
-                next();
+                            next();
+                        });
             },
         });
     };
@@ -473,10 +276,7 @@ export default function QasPage() {
             await updateQaStatus(id, targetStatus);
             refreshData(item => item.id === id, { status: targetStatus });
         } catch (error) {
-            toast({
-                variant: 'error',
-                description: error
-            });
+            showApiError(error);
             refreshData(item => item.id === id, {
                 status: 3
             });
@@ -489,29 +289,29 @@ export default function QasPage() {
                 <div className="flex justify-between">
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex items-center">
-                            <ShadTooltip content={t('back')} side="top">
+                            <KnowledgeTooltip content={t('back')} side="top">
                                 <button className="extra-side-bar-buttons w-[36px]" onClick={() => { }} >
-                                    <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
+                                    <Link to='/filelib'><Outlined.ArrowLeft className="side-bar-button-size" /></Link>
                                 </button>
-                            </ShadTooltip>
+                            </KnowledgeTooltip>
                             <span className="text-gray-700 text-sm font-black pl-4 dark:text-white truncate max-w-80">{title}</span>
                         </div>
                     </div>
                     {selectedItems.length > 0 && hasSelectableActions && (
                     <div>
                         {canDeleteKb && (
-                            <Button variant="outline" className="ml-2" onClick={handleDeleteSelected}>
-                                <Trash2 className="mr-2 h-4 w-4" ></Trash2> {t('delete')}
+                            <Button variant="outlined" className="ml-2" onClick={handleDeleteSelected} color="default">
+                                <Outlined.Delete className="mr-2 h-4 w-4" ></Outlined.Delete> {t('delete')}
                             </Button>
                         )}
                         {canEditKb && (
-                            <Button variant="outline" className="ml-2" onClick={handleDisableSelected}>
-                                <SquareX className="mr-2 h-4 w-4" /> {t('disable')}
+                            <Button variant="outlined" className="ml-2" onClick={handleDisableSelected} color="default">
+                                <Outlined.CloseCircle className="mr-2 h-4 w-4" /> {t('disable')}
                             </Button>
                         )}
                         {canEditKb && (
-                            <Button variant="outline" className="ml-2" onClick={handleEnableSelected}>
-                                <SquareCheckBig className="mr-2 h-4 w-4" /> {t('enable')}
+                            <Button variant="outlined" className="ml-2" onClick={handleEnableSelected} color="default">
+                                <Outlined.Check className="mr-2 h-4 w-4" /> {t('enable')}
                             </Button>
                         )}
                     </div>
@@ -519,14 +319,14 @@ export default function QasPage() {
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex gap-4 items-center">
                             <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
-                            {canEditKb && <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>{t('import')}</Button>}
-                            {canEditKb && <Button variant="outline" className="px-8" onClick={() => {
+                            {canEditKb && <Button variant="outlined" onClick={() => importRef.current.open()} color="default">{t('import')}</Button>}
+                            {canEditKb && <Button variant="outlined" onClick={() => {
                                 getQaFile(id).then(res => {
                                     const fileUrl = res.file_list[0];
                                     downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
                                 })
-                            }}>{t('export')}</Button>}
-                            {canEditKb && <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>}
+                            }} color="default">{t('export')}</Button>}
+                            {canEditKb && <Button onClick={() => editRef.current.open()}>{t('createQA')}</Button>}
                         </div>
                     </div>
                 </div>
@@ -603,16 +403,11 @@ export default function QasPage() {
                                                 )}
                                             </div>}
                                             {canDeleteKb && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="disabled:pointer-events-auto"
-                                                    onClick={(e) => {
+                                                <Button variant="text" size="medium" className="disabled:pointer-events-auto" onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleDelete(el.id);
-                                                    }}
-                                                >
-                                                    <Trash2 size={16} />
+                                                    }} color="default" iconOnly>
+                                                    <Outlined.Delete size={16} />
                                                 </Button>
                                             )}
                                         </div>

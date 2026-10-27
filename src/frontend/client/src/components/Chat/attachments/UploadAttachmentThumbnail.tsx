@@ -1,7 +1,8 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Outlined } from 'bisheng-icons';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import {
     getMediaDisplayBaseName,
     getMediaFileExtensionLabel,
@@ -146,12 +147,7 @@ export function UploadAttachmentThumbnailShell({
     );
 
     return (
-        <Tooltip>
-            <TooltipTrigger asChild>{card}</TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6} className="max-w-xs break-all">
-                {fileName}
-            </TooltipContent>
-        </Tooltip>
+        <SharedTooltip  content={fileName} side="bottom" ><span className="inline-flex" tabIndex={0}>{card}</span></SharedTooltip>
     );
 }
 

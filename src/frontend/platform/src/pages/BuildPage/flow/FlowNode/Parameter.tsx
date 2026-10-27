@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { WorkflowNode, WorkflowNodeParam } from "@/types/flow";
+import { WorkflowNode,WorkflowNodeParam } from "@/types/flow";
 import CodeInputItem from "./component/CodeInputItem";
 import CodeOutputItem from "./component/CodeOutputItem";
 import CodePythonItem from "./component/CodePythonItem";
@@ -18,7 +18,7 @@ import ModelItem from "./component/ModelItem";
 import OutputItem from "./component/OutputItem";
 import ReportItem from "./component/ReportItem";
 import RetrievalWeightSlider from "./component/RetrievalWeightSlider";
-import SliderItem, { SwitchSliderItem } from "./component/SliderItem";
+import SliderItem,{ SwitchSliderItem } from "./component/SliderItem";
 import SqlConfigItem from "./component/SqlConfigItem";
 import SwitchItem from "./component/SwitchItem";
 import TextAreaItem from "./component/TextAreaItem";
@@ -26,7 +26,7 @@ import ToolItem from "./component/ToolItem";
 import { SkillItem } from "./component/SkillItem";
 import { InputFileItem } from "./component/InputFileItem";
 import VarItem from "./component/VarItem";
-import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
+import VarSelectItem,{ VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
 import GlobalVarItem from "./component/GlobalVarItem";

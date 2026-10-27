@@ -8,6 +8,7 @@ import logging
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 
+from bisheng.common.utils.message_content import extract_message_text
 from bisheng.core.prompts.manager import get_prompt_manager, get_prompt_manager_sync
 
 logger = logging.getLogger(__name__)
@@ -17,8 +18,8 @@ DEFAULT_TITLE = "New Chat"
 
 
 async def generate_conversation_title_async(
-        question: str,
-        llm: BaseChatModel,
+    question: str,
+    llm: BaseChatModel,
 ) -> str:
     """Generate a conversation title asynchronously, from the QUESTION alone.
 
@@ -45,7 +46,7 @@ async def generate_conversation_title_async(
         messages = [HumanMessage(content=prompt_obj.prompt)]
 
         response = await llm.ainvoke(messages)
-        title = response.content.strip() if response.content else ""
+        title = extract_message_text(response).strip()
 
         return title if title else DEFAULT_TITLE
     except Exception as e:
@@ -54,8 +55,8 @@ async def generate_conversation_title_async(
 
 
 def generate_conversation_title_sync(
-        question: str,
-        llm: BaseChatModel,
+    question: str,
+    llm: BaseChatModel,
 ) -> str:
     """Generate a conversation title synchronously, from the QUESTION alone.
 
@@ -79,7 +80,7 @@ def generate_conversation_title_sync(
         messages = [HumanMessage(content=prompt_obj.prompt)]
 
         response = llm.invoke(messages)
-        title = response.content.strip() if response.content else ""
+        title = extract_message_text(response).strip()
 
         return title if title else DEFAULT_TITLE
     except Exception as e:

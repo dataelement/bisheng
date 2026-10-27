@@ -1,10 +1,10 @@
 // @ts-strict-ignore
-import { InputList } from "@/components/bs-ui/input";
+import { InputList } from '@/components/bs-comp/formFields/InputList';
 import { Label } from "@/components/bs-ui/label";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { generateUUID } from "@/components/bs-ui/utils";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
 import { debounce } from "lodash-es";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback,useEffect,useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useUpdateVariableState } from "../flowNodeStore";
 

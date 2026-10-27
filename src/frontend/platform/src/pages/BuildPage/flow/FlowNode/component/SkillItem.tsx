@@ -1,6 +1,6 @@
 import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
 import { getAssistantModelConfig } from "@/controllers/API/finetune";
 import { skillApi } from "@/controllers/API/linsight";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";

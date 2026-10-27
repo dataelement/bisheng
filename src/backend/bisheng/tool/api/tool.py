@@ -2,8 +2,10 @@ import json
 from typing import Literal
 
 from fastapi import APIRouter, Body, Depends, Request
+from pydantic import BaseModel, Field
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
@@ -11,7 +13,9 @@ from bisheng.role.domain.services.quota_service import QuotaResourceType, requir
 from bisheng.tool.domain.models.gpts_tools import GptsToolsTypeRead
 from bisheng.tool.domain.schemas import TestToolReq
 from bisheng.tool.domain.services.openapi import OpenApiSchema
+from bisheng.tool.domain.services.sandbox_conf_service import SandboxConfService
 from bisheng.tool.domain.services.tool import ToolServices
+from bisheng.utils import get_request_ip
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
 router = APIRouter(prefix="/tool", tags=["Tool"])
@@ -153,3 +157,42 @@ async def get_linsight_tools():
     """
     tools = await ToolServices.get_linsight_tools()
     return resp_200(data=tools)
+
+
+class SandboxEndpointBody(BaseModel):
+    endpoints: list[str] = Field(default_factory=list)
+    token: str = ""
+
+
+def _require_sandbox_admin(login_user: UserPayload) -> None:
+    if not login_user.is_global_super:
+        raise UnAuthorizedError()
+
+
+@router.get("/sandbox_conf")
+async def get_sandbox_conf(login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """Page view of sandbox addresses and the masked token."""
+    _require_sandbox_admin(login_user)
+    return resp_200(data=SandboxConfService.get())
+
+
+@router.post("/sandbox_conf")
+async def save_sandbox_conf(
+    request: Request,
+    body: SandboxEndpointBody,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Store sandbox addresses and token. Does not require a successful probe."""
+    _require_sandbox_admin(login_user)
+    await SandboxConfService.save(body.endpoints, body.token, login_user, get_request_ip(request))
+    return resp_200()
+
+
+@router.post("/sandbox_conf/test")
+async def test_sandbox_conf(
+    body: SandboxEndpointBody,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Probe the addresses currently typed in the dialog."""
+    _require_sandbox_admin(login_user)
+    return resp_200(data=await SandboxConfService.test(body.endpoints, body.token))
