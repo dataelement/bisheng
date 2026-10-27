@@ -40,6 +40,14 @@
 - 部署：基于 3006 当前 `tools-skills-auth-20261026-root-membership` 源码合入两个上传组件，发布为 `workbench-logo-upload-20261027-100846`。669 个构建文件及 7,436 个保留文件逐一核验；仅重建 3006 前端，其余 3006 容器保持原实例。原发布目录保留用于回退。
 - 真实验收：修复前两个 PNG 上传请求已可成功，原始服务端失败未复现；本次定位并修复前端失败处理与重试缺陷。修复后在管理员「构建 → 工作台」分别上传原有两张 Logo，看到“配置保存成功”，刷新后两处新图片地址保留且图片正常显示。验证保持原有图案。
 - 证据：主工作区 `outputs/workbench-logo-upload-20261027/` 的 `deployment.json`、`browser-verification.json`、`saved.png`、`verified.png` 与构建日志。真实验证覆盖后台上传、保存及刷新；本次桌面 Work/Chat 共享逻辑保持源码原状，桌面展示联动验收单列。
+## 2026-10-27 — 聊天输入框资源图标统一
+
+- 需求：输入框内技能、工具、知识空间统一显示菜单同款图标与资源名称；每项保留整体选中、删除和撤销。
+- 实现：ComposerReference 明确携带 skill/tool/space 类型，复用 Outlined.Skill、Outlined.Hammer、Outlined.FolderClose；标签与文字共享输入区，长名称省略并保留完整 title，颜色沿用品牌主题。资源名称以文本节点写入，ID、工具 children 与发送关联继续独立保存。
+- 基线：已核对远端 `dataelement/bisheng:feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6`；工作目录 `.worktrees/bisheng-composer-resource-icons`，分支 `codex/composer-resource-icons`。
+- 验证：13 项 ComposerEditor 回归通过，1,467 个严格类型文件检查、修改文件 lint、生产构建、三语言一致性、架构检查与 diff 检查通过。全量 client lint 首次检查保留 23 项存量问题，本次已将所修改测试内的 2 处中文输入数据改为引用现有语言资源，其余 21 项位于未改动文件。
+- 隔离 macOS Electron 窗口使用真实 ComposerEditor，确认三类 SVG、完整名称、contenteditable=false、整体删除及撤销恢复；浅深色截图已检查。该证据为实际组件验证，真实账号页面及发布环境验收待执行。
+- 配套 Work 实现位于 `codex/v120-composer-resource-icons`，支持 skill/tool/folder 图标与草稿持久化。
 
 ## 2026-10-23 — 工具统一开关与 Work 手动选择
 
