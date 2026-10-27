@@ -184,7 +184,7 @@ async def test_stream_does_not_yield_first_round_tool_tokens(monkeypatch):
             "R", (), {"ok": True, "data_uri": "data:image/png;base64,aaa", "error": None, "reason": None}
         )()
     )
-    monkeypatch.setattr("bisheng.common.image_view.react_loop.fetch_and_encode", fetch)
+    monkeypatch.setattr("bisheng.common.image_view.tool.fetch_and_encode", fetch)
     monkeypatch.setattr(ChannelChatService, "_resolve_workbench_visual", AsyncMock(return_value=True))
 
     class _Vision:
@@ -199,7 +199,7 @@ async def test_stream_does_not_yield_first_round_tool_tokens(monkeypatch):
 
     llm = _FakeLLM(
         first=AIMessage(content="calling tool"),
-        second=AIMessage(content="unused"),
+        second=AIMessage(content="走势向上。"),
     )
 
     texts = [
@@ -207,7 +207,7 @@ async def test_stream_does_not_yield_first_round_tool_tokens(monkeypatch):
         async for event in ChannelChatService.stream_article_reply(
             llm=llm,
             article_content=f"see {_IMG}",
-            question="what trend",
+            question="这张图的走势",
             system_prompt="sys",
             user_prompt_template=_DEFAULT_USER_PROMPT,
             history_messages=[],
@@ -218,5 +218,6 @@ async def test_stream_does_not_yield_first_round_tool_tokens(monkeypatch):
 
     joined = "".join(texts)
     assert "calling tool" not in joined
-    assert "final from pixels" in joined
+    assert "final from pixels" not in joined
+    assert "走势向上。" in joined
     fetch.assert_awaited()

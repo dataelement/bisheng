@@ -6,6 +6,7 @@ Does not import domain modules. Does not fetch pixels.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # Keep citation private-use (U+E200) untouched; only rewrite markdown images.
 _MARKDOWN_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
@@ -21,7 +22,7 @@ class ImageRegistry:
         self._url_to_id: dict[str, str] = {}
         self._viewed: list[tuple[str, str]] = []
         # Survives pop_viewed: the queue feeds the next HumanMessage, this
-        # list is what the answer-side markdown splice uses.
+        # list records which pictures the model actually looked at.
         self._viewed_ids: list[str] = []
 
     def record_viewed(self, image_id: str, data_uri: str) -> None:
@@ -68,67 +69,10 @@ def annotate(text: str, registry: ImageRegistry) -> str:
     return _MARKDOWN_IMAGE_RE.sub(_replace, text)
 
 
-# Weak VL models claim they will show the image but omit `![](url)`.
-# Thinking models often put that claim in reasoning and leave the answer empty.
-# The model's decision is what we repair; a bare denial in the answer still wins.
-_CLAIMED_DISPLAY_RE = re.compile(
-    r"我将显示|如下图|相关图片如下|图片如下|见下图|该图片清晰"
-    r"|(?<!不)可以展示"
-    r"|I(?:['’]ll| will) (?:show|display)"
-    r"|here (?:is|are) the (?:image|picture|screenshot)s?",
-    re.IGNORECASE,
-)
-_ANSWER_DENIAL_RE = re.compile(r"^\s*没有[。.]?\s*$|因此没有|均未显示|所有图片均未|没有.{0,8}的图片")
-# A thinking model restates the prompt ("不出现 img#") while still deciding to show
-# the picture. Only a rejection of the picture itself blocks the single-image fill.
-_PICTURE_REJECT_RE = re.compile(r"因此没有|均未|不符合|不应展示|不应输出|不要展示|不要输出|无法展示|没有找到|没有相关")
-
-
-def should_splice_viewed_images(answer: str) -> bool:
-    """True when the model decided to show pictures but omitted `![](url)`."""
-    return bool(_CLAIMED_DISPLAY_RE.search(answer or ""))
-
-
-def _answer_denies_pictures(text: str) -> bool:
-    return bool(_ANSWER_DENIAL_RE.search(text or ""))
-
-
-def _rejects_picture(text: str) -> bool:
-    return _answer_denies_pictures(text) or bool(_PICTURE_REJECT_RE.search(text or ""))
-
-
-def resolve_display_decision(visible: str, reasoning: str = "") -> str:
-    """Text that decides whether a picture is shown.
-
-    A thinking model often leaves the answer empty and writes the decision in
-    reasoning. A non-empty answer that already claims a display, or that denies
-    one, still wins over reasoning.
-    """
-    text = visible or ""
-    if text.strip() and (_answer_denies_pictures(text) or should_splice_viewed_images(text)):
-        return text
-    if (reasoning or "").strip() and not _answer_denies_pictures(text):
-        return reasoning
-    return text
-
-
-def ids_named_on_display_claims(text: str) -> list[str]:
-    """img# ids written on a line that actually claims a picture should be shown."""
-    found: list[str] = []
-    for line in (text or "").splitlines():
-        if not should_splice_viewed_images(line):
-            continue
-        for image_id in cited_display_ids(line):
-            if image_id not in found:
-                found.append(image_id)
-    return found
-
-
 # "有哪些美女图片" wants the pictures on screen. Field / trend questions stay text.
+# Only decides whether picture answers drop citation markers, never which picture is shown.
 _SHOW_PICTURES_RE = re.compile(r"哪些.{0,12}图|美女|看图|显示图片|展示图片|有图|找出.{0,16}图")
 _TEXT_ONLY_RE = re.compile(r"字段|走势|图意|图里|图上")
-_FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
-_INLINE_CODE_RE = re.compile(r"`[^`]*`")
 
 
 def question_wants_pictures(question: str) -> bool:
@@ -152,90 +96,85 @@ def cited_display_ids(text: str, registry: ImageRegistry | None = None) -> list[
     return found
 
 
-def _has_rendered_image(content: str, url: str) -> bool:
-    """True when a real markdown image is outside code, so the UI will draw it."""
-    visible = _INLINE_CODE_RE.sub("", _FENCED_CODE_RE.sub("", content or ""))
-    return bool(re.search(r"!\[[^\]]*\]\(" + re.escape(url) + r"\)", visible))
+# The model shows a picture by writing its `![](url)` or a line that is only its id.
+# An id inside a sentence is a mention, not a request to show the picture.
+_ID_LINE_RE = re.compile(r"^[ \t]*[\u27e6\[［`]?(img#\d+)[\u27e7\]］`]?[ \t]*$")
+_ID_LINE_PREFIX_RE = re.compile(r"^[ \t]*[\u27e6\[［`]?(?:i(?:m(?:g(?:#\d*)?)?)?)?[\u27e7\]］`]?[ \t]*$")
 
 
-def missing_viewed_markdown(
-    content: str,
-    registry: ImageRegistry,
-    *,
-    question: str = "",
-    only_ids: list[str] | None = None,
-    decision: str | None = None,
-) -> str:
-    """Append markdown only when the model decided to show a picture and forgot `![](url)`.
+class ImageIdLineConverter:
+    """Stream filter that renders a line holding only `img#N` as that picture.
 
-    Which pictures match the question is the model's call: it writes `![](url)`
-    for those. This repair uses the ids it named. With no ids, it only fills in
-    a forgotten tag when exactly one picture was viewed. Several viewed pictures
-    and no named id must not be appended together.
-
-    ``decision`` is the text that carries the show/hide call. Thinking models
-    put that call in reasoning while ``content`` stays empty. A quoted
-    ``![](url)`` inside reasoning is not a picture the UI will draw, so the
-    already-rendered check stays on ``content``.
+    Text that cannot become such a line passes through at once; a line that
+    still could is held until its newline or the final flush. ``inner`` is an
+    optional downstream converter with the same feed / flush shape.
     """
-    del question
-    judge = content if decision is None else decision
-    if not should_splice_viewed_images(judge):
-        return ""
-    named = cited_display_ids(judge) if only_ids is None else only_ids
-    viewed = set(registry.viewed_ids())
-    source = [image_id for image_id in named if image_id in viewed]
-    if not source:
-        viewed_ids = registry.viewed_ids()
-        source = viewed_ids if len(viewed_ids) == 1 else []
-    blocks: list[str] = []
-    for image_id in source:
-        entry = registry.get(image_id)
+
+    def __init__(self, registry: ImageRegistry, inner: Any | None = None) -> None:
+        self._registry = registry
+        self._inner = inner
+        self._held = ""
+        self._passing = False
+        self.rendered_ids: list[str] = []
+
+    @property
+    def stats(self) -> Any:
+        return getattr(self._inner, "stats", None)
+
+    def _render(self, line: str) -> str:
+        match = _ID_LINE_RE.match(line)
+        if not match:
+            return line
+        image_id = match.group(1)
+        entry = self._registry.get(image_id)
         if not entry:
-            continue
+            return line
         url = entry["url"]
-        if _has_rendered_image(content, url):
-            continue
+        if image_id not in self.rendered_ids:
+            self.rendered_ids.append(image_id)
         alt = url.rstrip("/").rsplit("/", 1)[-1] or image_id
-        blocks.append(f"![{alt}]({url})")
-    if not blocks:
-        return ""
-    return "\n\n" + "\n\n".join(blocks)
+        return f"![{alt}]({url})"
+
+    def _convert(self, text: str) -> str:
+        out: list[str] = []
+        for piece in re.split(r"(\n)", text):
+            if piece == "\n":
+                out.append("\n" if self._passing else self._render(self._held) + "\n")
+                self._held = ""
+                self._passing = False
+                continue
+            if not piece:
+                continue
+            if self._passing:
+                out.append(piece)
+                continue
+            candidate = self._held + piece
+            if _ID_LINE_PREFIX_RE.match(candidate):
+                self._held = candidate
+            else:
+                out.append(candidate)
+                self._held = ""
+                self._passing = True
+        return "".join(out)
+
+    def feed(self, text: str) -> str:
+        out = self._convert(text or "")
+        return self._inner.feed(out) if self._inner is not None else out
+
+    def flush(self) -> str:
+        tail = "" if self._passing else self._render(self._held)
+        self._held = ""
+        self._passing = False
+        if self._inner is None:
+            return tail
+        return self._inner.feed(tail) + self._inner.flush()
 
 
-def markdown_for_viewed_decision(
-    visible: str,
-    registry: ImageRegistry,
-    *,
-    reasoning: str = "",
-    question: str = "",
-    cited_ids: list[str] | None = None,
-) -> str:
-    """Markdown to append after a vision answer, including a reasoning-only decision."""
-    decision = resolve_display_decision(visible, reasoning)
-    if decision == (visible or ""):
-        only_ids = cited_ids
-    else:
-        only_ids = ids_named_on_display_claims(decision)
-    extra = missing_viewed_markdown(
-        visible,
-        registry,
-        question=question,
-        only_ids=only_ids,
-        decision=decision,
-    )
-    if extra or not question_wants_pictures(question):
-        return extra
-    # "显示图片" with one viewed picture: thinking models describe the markdown
-    # line in reasoning and leave content empty, using wording the claim list misses.
-    if _rejects_picture(visible) or _rejects_picture(reasoning):
-        return ""
-    viewed = registry.viewed_ids()
-    if len(viewed) != 1:
-        return ""
-    entry = registry.get(viewed[0])
-    if not entry or _has_rendered_image(visible, entry["url"]):
-        return ""
-    url = entry["url"]
-    alt = url.rstrip("/").rsplit("/", 1)[-1] or viewed[0]
-    return f"\n\n![{alt}]({url})"
+def render_image_id_lines(text: str, registry: ImageRegistry) -> str:
+    """Non-streaming form of ImageIdLineConverter."""
+    converter = ImageIdLineConverter(registry)
+    return converter.feed(text) + converter.flush()
+
+
+def has_markdown_image(text: str) -> bool:
+    return bool(_MARKDOWN_IMAGE_RE.search(text or ""))

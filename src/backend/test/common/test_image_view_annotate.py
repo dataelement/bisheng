@@ -4,12 +4,11 @@ Covers AC: AC-01, AC-08
 """
 
 from bisheng.common.image_view.annotate import (
+    ImageIdLineConverter,
     ImageRegistry,
     annotate,
-    markdown_for_viewed_decision,
-    missing_viewed_markdown,
     question_wants_pictures,
-    should_splice_viewed_images,
+    render_image_id_lines,
 )
 
 _CHART = "/bucket/knowledge/images/1/2/chart.png"
@@ -78,195 +77,79 @@ def test_annotate_does_not_rewrite_citation_private_use():
     assert registry.get("img#1") == {"url": _CHART}
 
 
-def test_missing_viewed_markdown_appends_only_viewed_urls():
+def _two_images() -> ImageRegistry:
     registry = ImageRegistry()
     annotate(f"![chart]({_CHART}) ![table]({_TABLE})", registry)
-    registry.record_viewed("img#2", "data:image/png;base64,aaa")
-    registry.pop_viewed()
-
-    extra = missing_viewed_markdown("我将显示 img#2。", registry)
-
-    assert _TABLE in extra
-    assert _CHART not in extra
-    assert extra.startswith("\n\n")
-    assert f"![{_TABLE.rsplit('/', 1)[-1]}]({_TABLE})" in extra
+    return registry
 
 
-def test_missing_viewed_markdown_skips_when_url_already_present():
-    registry = ImageRegistry()
-    annotate(f"![chart]({_CHART})", registry)
+def test_id_only_line_renders_that_picture():
+    out = render_image_id_lines("这是第一张图片：\nimg#2\n说明结束。", _two_images())
+
+    assert out == f"这是第一张图片：\n![table.png]({_TABLE})\n说明结束。"
+
+
+def test_bracketed_id_lines_render_each_named_picture():
+    out = render_image_id_lines("图片如下：\n⟦img#1⟧\n[img#2]", _two_images())
+
+    assert f"![chart.png]({_CHART})" in out
+    assert f"![table.png]({_TABLE})" in out
+
+
+def test_id_inside_a_sentence_is_a_mention_not_a_picture():
+    text = "img#1 是走势图，img#2 不符合问题。"
+
+    assert render_image_id_lines(text, _two_images()) == text
+
+
+def test_claim_without_a_picture_line_is_not_filled_in():
+    registry = _two_images()
     registry.record_viewed("img#1", "data:image/png;base64,aaa")
+    registry.record_viewed("img#2", "data:image/png;base64,bbb")
+    text = "根据您的请求，这里是相关的图片展示："
 
-    extra = missing_viewed_markdown(f"see ![]({_CHART})", registry)
-
-    assert extra == ""
-
-
-def test_missing_viewed_markdown_empty_when_nothing_viewed():
-    registry = ImageRegistry()
-    annotate(f"![chart]({_CHART})", registry)
-
-    assert missing_viewed_markdown("我将显示 img#1。", registry) == ""
+    assert render_image_id_lines(text, registry) == text
 
 
-def test_missing_viewed_markdown_skips_when_answer_does_not_claim_display():
-    registry = ImageRegistry()
-    annotate(f"![chart]({_CHART})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-
-    extra = missing_viewed_markdown("单据编号、单位名称、账户类型。", registry)
-
-    assert extra == ""
+def test_unknown_id_line_is_left_alone():
+    assert render_image_id_lines("img#9", _two_images()) == "img#9"
 
 
-def test_picture_question_splices_viewed_images_even_when_url_is_in_code():
-    registry = ImageRegistry()
-    annotate(f"![chart]({_CHART})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+def test_stream_conversion_matches_whole_text_however_it_is_chunked():
+    text = "前言 img#1 提到。\n这是第一张图片：\nimg#1\n\n  img#2  \n结尾"
+    expected = render_image_id_lines(text, _two_images())
+    for size in (1, 2, 3, 5, 8):
+        converter = ImageIdLineConverter(_two_images())
+        parts = [text[i : i + size] for i in range(0, len(text), size)]
+        out = "".join(converter.feed(part) for part in parts) + converter.flush()
+        assert out == expected
+        assert converter.rendered_ids == ["img#1", "img#2"]
 
-    extra = missing_viewed_markdown(
-        f"我将显示 img#1：一位女性。`![]({_CHART})`",
-        registry,
-        question="有哪些美女图片？",
-    )
 
-    assert f"]({_CHART})" in extra
+def test_plain_text_is_not_held_back():
+    converter = ImageIdLineConverter(_two_images())
+
+    assert converter.feed("走势向上") == "走势向上"
+    assert converter.feed("img") == "img"
+
+
+def test_converter_feeds_its_output_to_the_inner_converter():
+    class _Upper:
+        stats = "inner-stats"
+
+        def feed(self, text: str) -> str:
+            return text.upper()
+
+        def flush(self) -> str:
+            return "!"
+
+    converter = ImageIdLineConverter(_two_images(), _Upper())
+
+    assert converter.feed("ok\nimg#1") == "OK\n"
+    assert converter.flush() == f"![CHART.PNG]({_CHART.upper()})!"
+    assert converter.stats == "inner-stats"
+
+
+def test_question_wants_pictures_only_gates_citation_stripping():
     assert question_wants_pictures("这张图的走势") is False
     assert question_wants_pictures("找出文档中美女的图片") is True
-
-
-def test_filter_question_splices_only_named_images():
-    registry = ImageRegistry()
-    annotate(f"![a]({_CHART}) ![b]({_TABLE})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-    registry.record_viewed("img#2", "data:image/png;base64,bbb")
-
-    extra = missing_viewed_markdown(
-        "我将显示 img#1。其余图片为风景，均不含“美女”。",
-        registry,
-        question="找出文档中美女的图片",
-        only_ids=["img#1"],
-    )
-
-    assert _CHART in extra
-    assert _TABLE not in extra
-
-
-def test_unnamed_claim_does_not_splice_every_viewed_image():
-    registry = ImageRegistry()
-    annotate(f"![a]({_CHART}) ![b]({_TABLE})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-    registry.record_viewed("img#2", "data:image/png;base64,bbb")
-
-    extra = missing_viewed_markdown("相关图片如下。", registry, question="是否有火车票的图片？")
-
-    assert extra == ""
-
-
-def test_single_viewed_image_splices_when_answer_describes_the_picture():
-    registry = ImageRegistry()
-    annotate(f"![a]({_CHART})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-
-    extra = missing_viewed_markdown("是的，其中是一张火车票的图片。该图片清晰显示了车票信息。", registry)
-
-    assert _CHART in extra
-
-
-def test_filter_question_does_not_splice_until_the_model_shows_pictures():
-    registry = ImageRegistry()
-    annotate(f"![a]({_CHART}) ![b]({_TABLE})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-    registry.record_viewed("img#2", "data:image/png;base64,bbb")
-
-    extra = missing_viewed_markdown(
-        "img#1 是证书。其余图片 (image1、image2) 不属证书类。其余图片内容如下：",
-        registry,
-        question="找出证书相关的图片",
-    )
-
-    assert extra == ""
-
-
-def test_should_splice_viewed_images_follows_model_answer():
-    assert should_splice_viewed_images("我将显示 img#7。")
-    assert should_splice_viewed_images("如下图所示。")
-    assert should_splice_viewed_images("该图片清晰显示了车票信息。")
-    assert should_splice_viewed_images("因此可以展示该图片。")
-    assert not should_splice_viewed_images("不可以展示该图片。")
-    assert not should_splice_viewed_images('是一张火车票（非证书），但问题仅问"是否有证书的图片"，因此满足条件。')
-    assert not should_splice_viewed_images("单据编号、单位名称。")
-    assert not should_splice_viewed_images("开户登记相关截图。")
-
-
-def test_reasoning_claim_splices_when_the_answer_is_empty():
-    registry = ImageRegistry()
-    annotate(f"![chart]({_CHART})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-    reasoning = f"S18 中包含图片引用 '![]({_CHART})⟦img#1⟧'。查看图像素与描述一致。因此可以展示该图片。"
-
-    extra = markdown_for_viewed_decision("", registry, reasoning=reasoning, cited_ids=[])
-
-    assert _CHART in extra
-
-
-def test_show_picture_question_fills_the_single_viewed_image_from_reasoning():
-    registry = ImageRegistry()
-    annotate(f"![chart]({_CHART})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-    reasoning = (
-        "问题不是问字段/走势，而是要求显示图片，因此应把符合问题的图片原样单独成行输出。"
-        f"图片路径为 {_CHART}。回答只需包含图片 Markdown 行。"
-    )
-
-    extra = markdown_for_viewed_decision("", registry, reasoning=reasoning, question="显示图片", cited_ids=[])
-
-    assert _CHART in extra
-
-
-def test_show_picture_question_does_not_fill_when_reasoning_rejects():
-    registry = ImageRegistry()
-    annotate(f"![chart]({_CHART})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-
-    extra = markdown_for_viewed_decision(
-        "",
-        registry,
-        reasoning="像素与证书无关，因此没有可展示的图片。",
-        question="显示图片",
-        cited_ids=[],
-    )
-
-    assert extra == ""
-
-
-def test_show_picture_question_does_not_fill_every_viewed_image():
-    registry = ImageRegistry()
-    annotate(f"![a]({_CHART}) ![b]({_TABLE})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-    registry.record_viewed("img#2", "data:image/png;base64,bbb")
-
-    extra = markdown_for_viewed_decision(
-        "",
-        registry,
-        reasoning="应把符合问题的图片原样单独成行输出。",
-        question="显示图片",
-        cited_ids=[],
-    )
-
-    assert extra == ""
-
-
-def test_answer_denial_blocks_a_reasoning_display_claim():
-    registry = ImageRegistry()
-    annotate(f"![chart]({_CHART})", registry)
-    registry.record_viewed("img#1", "data:image/png;base64,aaa")
-
-    extra = markdown_for_viewed_decision(
-        "没有。",
-        registry,
-        reasoning="因此可以展示该图片。",
-        cited_ids=[],
-    )
-
-    assert extra == ""

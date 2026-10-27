@@ -63,7 +63,9 @@ _VISION_OBSERVER_RULES = (
 _VISION_NOTE_TAIL = (
     "以上是图片查看模型看完像素后的记录，不是给用户的回复。"
     "请你回答用户。需要生成或导出文件时调用已有工具。"
-    "要展示的图片把记录里的 ![](url) 原样单独成行写进回答。"
+    "是否展示图片由你按用户的问题决定：要展示哪张，就把记录里它的 ![](url) 原样单独成行写进回答，"
+    "或者单独一行只写它的 img#N；不展示就都不写。"
+    "回答里说「图片如下」「这是第一张图片」时，必须紧接着写出对应的图片行，系统不会替你补图。"
 )
 
 
@@ -192,6 +194,7 @@ class _VisionCallRunnable(Runnable):
         retrieve_hint: bool = False,
         vision_llm: Any | None = None,
         note_holder: Any | None = None,
+        react_view: bool = False,
     ):
         self._bound = bound
         self._extra_rules = extra_rules
@@ -201,6 +204,10 @@ class _VisionCallRunnable(Runnable):
         self._retrieve_hint = retrieve_hint
         self._vision_llm = vision_llm
         self._note_holder = note_holder
+        # Knowledge space and channel run a view_image loop. The image model
+        # reads pixels only after that tool returns; it does not replace the
+        # conversation model's turn.
+        self._react_view = react_view
 
     def _prepare(self, inp: Any) -> list[BaseMessage]:
         messages = messages_from_model_input(inp)
@@ -217,54 +224,95 @@ class _VisionCallRunnable(Runnable):
 
     def _should_use_configured_vision(self, messages: list[BaseMessage]) -> bool:
         """Pixels go to the Image View model once retrieval has filled the registry."""
+        if self._react_view:
+            return False
         if self._vision_llm is None or len(self._registry) == 0:
             return False
         if pixels_were_viewed(messages):
             return False
         return question_needs_pixels(_last_user_question(messages))
 
-    async def _vision_observation(self, messages: list[BaseMessage]) -> str:
-        """Ask the image model what the pixels show. Not a user-facing answer."""
-        holder = self._note_holder
-        if holder is not None and holder._cached_vision_note is not None:
-            return holder._cached_vision_note
-        from bisheng.common.image_view.annotate import markdown_for_viewed_decision
-        from bisheng.common.image_view.react_loop import (
-            _attach_viewed_pixels,
-            _chunk_reasoning,
-            _strip_picture_citations,
-            cited_ids_on_shown_lines,
-            strip_picture_handles,
-            strip_view_narration,
+    def _should_handoff_after_view(self, messages: list[BaseMessage]) -> bool:
+        """Knowledge / channel: the image model reads pixels only after view_image."""
+        if not self._react_view or self._vision_llm is None:
+            return False
+        if not pixels_were_viewed(messages):
+            return False
+        return not any(
+            isinstance(message, HumanMessage)
+            and isinstance(message.content, str)
+            and message.content.startswith(_VISION_NOTE_PREFIX)
+            for message in messages
         )
 
-        prepared = await _attach_viewed_pixels(messages, self._registry)
-        prepared = [SystemMessage(content=_VISION_OBSERVER_RULES), *prepared]
+    async def _stream_vision(self, prepared: list[BaseMessage]) -> tuple[str, str]:
+        from bisheng.common.image_view.react_loop import _chunk_reasoning
+
         parts: list[str] = []
         reasoning_parts: list[str] = []
-        async for chunk in self._vision_llm.astream(prepared):
+        # Drop callbacks so this call does not show up as the user-facing stream.
+        async for chunk in self._vision_llm.astream(prepared, config={"callbacks": []}):
             content = getattr(chunk, "content", "") or ""
             if isinstance(content, str) and content:
                 parts.append(content)
             thought = _chunk_reasoning(chunk)
             if thought:
                 reasoning_parts.append(thought)
-        raw = "".join(parts)
-        question = _last_user_question(messages)
-        cited_ids = cited_ids_on_shown_lines(raw)
-        cleaned = strip_picture_handles(_strip_picture_citations(strip_view_narration(raw), question), question)
-        visible = cleaned or ""
-        extra = markdown_for_viewed_decision(
-            visible,
-            self._registry,
-            reasoning="".join(reasoning_parts),
-            question=question,
-            cited_ids=cited_ids,
+        return "".join(parts), "".join(reasoning_parts)
+
+    def _clean_vision_note(self, messages: list[BaseMessage], raw: str) -> str:
+        from bisheng.common.image_view.annotate import render_image_id_lines
+        from bisheng.common.image_view.react_loop import (
+            _strip_picture_citations,
+            strip_picture_handles,
+            strip_view_narration,
         )
-        note = (visible + extra).strip()
+
+        question = _last_user_question(messages)
+        # Render id-only lines first: narration stripping drops bare ids.
+        rendered = render_image_id_lines(raw, self._registry)
+        cleaned = strip_picture_handles(_strip_picture_citations(strip_view_narration(rendered), question), question)
+        return (cleaned or "").strip()
+
+    async def _vision_observation(self, messages: list[BaseMessage]) -> str:
+        """Ask the image model what the pixels show. Not a user-facing answer."""
+        holder = self._note_holder
+        if holder is not None and holder._cached_vision_note is not None:
+            return holder._cached_vision_note
+        from bisheng.common.image_view.react_loop import _attach_viewed_pixels
+
+        prepared = await _attach_viewed_pixels(messages, self._registry)
+        prepared = [SystemMessage(content=_VISION_OBSERVER_RULES), *prepared]
+        raw, _ = await self._stream_vision(prepared)
+        note = self._clean_vision_note(messages, raw)
         if holder is not None:
             holder._cached_vision_note = note
         return note
+
+    async def _messages_after_tool_view(self, messages: list[BaseMessage]) -> list[BaseMessage]:
+        """Turn view_image's pixels into a note, then let the conversation model answer."""
+        holder = self._note_holder
+        if holder is not None and holder._cached_vision_note is not None:
+            note = holder._cached_vision_note
+            self._registry.pop_viewed()
+        else:
+            viewed = self._registry.pop_viewed()
+            if not viewed:
+                return messages
+            prepared = [
+                SystemMessage(content=_VISION_OBSERVER_RULES),
+                *messages,
+                viewed_images_human_message(viewed, self._registry),
+            ]
+            raw, _ = await self._stream_vision(prepared)
+            note = self._clean_vision_note(messages, raw)
+            if holder is not None:
+                holder._cached_vision_note = note
+        body = note or "没有读到可用的图片说明。"
+        return [
+            *messages,
+            HumanMessage(content=f"{_VISION_NOTE_PREFIX}\n{body}\n\n{_VISION_NOTE_TAIL}"),
+        ]
 
     async def _messages_with_vision_note(self, messages: list[BaseMessage]) -> list[BaseMessage]:
         note = await self._vision_observation(messages)
@@ -278,9 +326,10 @@ class _VisionCallRunnable(Runnable):
     def _after_model(self, result: Any, messages: list[BaseMessage]) -> Any:
         if not isinstance(result, AIMessage):
             return result
-        # A configured image model already read the pixels. Injecting view_image
-        # here would replace the conversation model's tool call or final text.
-        if self._vision_llm is None:
+        # Daily chat with a configured image model already read the pixels.
+        # Injecting view_image here would replace the conversation model's tool
+        # call or final text. The knowledge / channel loop still needs the tool.
+        if self._vision_llm is None or self._react_view:
             result = maybe_inject_view_image(result, messages, self._registry)
         if self._retrieve_hint:
             result = maybe_inject_retrieve(result, messages, self._retrieve_tool_name)
@@ -304,6 +353,13 @@ class _VisionCallRunnable(Runnable):
 
     async def ainvoke(self, inp: Any, config=None, **kwargs: Any):
         messages = messages_from_model_input(inp)
+        if self._should_handoff_after_view(messages):
+            messages = await self._messages_after_tool_view(messages)
+            if hasattr(self._bound, "ainvoke"):
+                result = await self._bound.ainvoke(messages, config=config, **kwargs)
+            else:
+                result = self._bound.invoke(messages, config=config, **kwargs)
+            return self._after_model(result, messages)
         if self._should_use_configured_vision(messages):
             messages = await self._messages_with_vision_note(messages)
             if hasattr(self._bound, "ainvoke"):
@@ -326,6 +382,14 @@ class _VisionCallRunnable(Runnable):
 
     async def astream(self, inp: Any, config=None, **kwargs: Any):
         messages = messages_from_model_input(inp)
+        if self._should_handoff_after_view(messages):
+            messages = await self._messages_after_tool_view(messages)
+            if hasattr(self._bound, "astream"):
+                async for chunk in self._bound.astream(messages, config=config, **kwargs):
+                    yield chunk
+                return
+            yield await self._bound.ainvoke(messages, config=config, **kwargs)
+            return
         if self._should_use_configured_vision(messages):
             messages = await self._messages_with_vision_note(messages)
             if hasattr(self._bound, "astream"):
@@ -368,6 +432,7 @@ class VisionToolBindWrapper(Runnable):
         *,
         retrieve_tool_name: str | None = None,
         vision_llm: Any | None = None,
+        react_view: bool = False,
     ):
         self._llm = llm
         self._registry = registry
@@ -375,6 +440,7 @@ class VisionToolBindWrapper(Runnable):
         self._view_tool = build_view_image_tool(registry)
         self._retrieve_tool_name = retrieve_tool_name
         self._vision_llm = vision_llm
+        self._react_view = react_view
         self._cached_vision_note: str | None = None
 
     def bind_tools(self, tools, **kwargs):
@@ -402,7 +468,7 @@ class VisionToolBindWrapper(Runnable):
         viewed = _already_viewed(messages)
         bind_kwargs: dict[str, Any] = {}
         retrieve_hint = False
-        configured_vision = self._vision_llm is not None and len(self._registry) > 0
+        configured_vision = self._vision_llm is not None and len(self._registry) > 0 and not self._react_view
         if configured_vision:
             tools = list(self._base_tools)
             extra_rules = False
@@ -455,4 +521,5 @@ class VisionToolBindWrapper(Runnable):
             retrieve_hint=retrieve_hint,
             vision_llm=self._vision_llm,
             note_holder=self,
+            react_view=self._react_view,
         )

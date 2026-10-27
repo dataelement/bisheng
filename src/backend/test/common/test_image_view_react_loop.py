@@ -8,7 +8,11 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 import pytest
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from pydantic import ConfigDict
 
 from bisheng.common.image_view import IMAGE_VIEW_PROMPT_RULES, ImageRegistry, annotate
 from bisheng.common.image_view.react_loop import (
@@ -16,6 +20,7 @@ from bisheng.common.image_view.react_loop import (
     _strip_picture_citations,
     cited_ids_on_shown_lines,
     run_react_vision_stream,
+    strip_picture_handles,
     strip_view_narration,
 )
 from bisheng.common.image_view.vision_llm import VisionToolBindWrapper
@@ -33,6 +38,38 @@ _OPENING_HANDBOOK = """
 1.3.1.销户申请
 ![close](/bisheng/knowledge/images/1/6/image_10_28.jpeg)⟦img#28⟧
 """
+
+
+class _FakeChatModel(BaseChatModel):
+    """First turn: tool call or prose. After a ToolMessage: the user-facing answer."""
+
+    model_config = ConfigDict(extra="allow")
+
+    def __init__(self, first: AIMessage, second: AIMessage | None = None):
+        super().__init__()
+        self.first = first
+        self.second = second or AIMessage(content="The chart goes up.")
+        self.generate_inputs: list[list[BaseMessage]] = []
+
+    @property
+    def _llm_type(self) -> str:
+        return "fake-knowledge-react"
+
+    def bind_tools(self, tools, **kwargs):
+        del tools, kwargs
+        return self
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs,
+    ) -> ChatResult:
+        del stop, run_manager, kwargs
+        self.generate_inputs.append(list(messages))
+        msg = self.second if any(isinstance(message, ToolMessage) for message in messages) else self.first
+        return ChatResult(generations=[ChatGeneration(message=msg)])
 
 
 class _SkipGraphLLM:
@@ -95,6 +132,7 @@ def _bind_vision(monkeypatch, model: _VisionStream) -> None:
 def mock_fetch(monkeypatch):
     result = type("R", (), {"ok": True, "data_uri": _DATA_URI, "error": None, "reason": None})()
     fetch = AsyncMock(return_value=result)
+    monkeypatch.setattr("bisheng.common.image_view.tool.fetch_and_encode", fetch)
     monkeypatch.setattr("bisheng.common.image_view.react_loop.fetch_and_encode", fetch)
     return fetch
 
@@ -103,11 +141,11 @@ def test_recursion_limit_is_eight():
     assert REACT_RECURSION_LIMIT == 8
 
 
-async def test_visual_false_skips_configured_model(monkeypatch):
-    async def _boom(*args, **kwargs):
-        raise AssertionError("should not resolve the image view model")
+async def test_visual_false_skips_graph(monkeypatch):
+    def _boom(*args, **kwargs):
+        raise AssertionError("should not build graph")
 
-    monkeypatch.setattr("bisheng.common.image_view.react_loop.resolve_image_view_llm", _boom)
+    monkeypatch.setattr("bisheng.common.image_view.react_loop.create_react_agent", _boom)
     llm = _SkipGraphLLM()
     yielded: list[str] = []
     async for chunk in run_react_vision_stream(llm, _trend_messages(), _registry_one(), visual=False):
@@ -116,11 +154,11 @@ async def test_visual_false_skips_configured_model(monkeypatch):
     assert llm.bind_calls == []
 
 
-async def test_empty_registry_skips_configured_model(monkeypatch):
-    async def _boom(*args, **kwargs):
-        raise AssertionError("should not resolve the image view model")
+async def test_empty_registry_skips_graph(monkeypatch):
+    def _boom(*args, **kwargs):
+        raise AssertionError("should not build graph")
 
-    monkeypatch.setattr("bisheng.common.image_view.react_loop.resolve_image_view_llm", _boom)
+    monkeypatch.setattr("bisheng.common.image_view.react_loop.create_react_agent", _boom)
     llm = _SkipGraphLLM()
     async for _ in run_react_vision_stream(
         llm, [SystemMessage(content="sys"), HumanMessage(content="hi")], ImageRegistry(), visual=True
@@ -144,120 +182,177 @@ async def test_unconfigured_tool_streams_chat_model(mock_fetch, monkeypatch):
     mock_fetch.assert_not_awaited()
 
 
-async def test_configured_model_receives_pixels(mock_fetch, monkeypatch):
-    vision = _VisionStream(["The chart goes up. ![](/bisheng/knowledge/images/1/2/chart.png)"])
+def _view_call(image_id: str = "img#1") -> AIMessage:
+    return AIMessage(
+        content="calling tool",
+        tool_calls=[
+            {
+                "name": "view_image",
+                "args": {"image_ids": [image_id], "quality": "standard"},
+                "id": "call_1",
+                "type": "tool_call",
+            }
+        ],
+    )
+
+
+async def test_react_loop_image_model_reads_pixels_chat_model_answers(mock_fetch, monkeypatch):
+    vision = _VisionStream(["画面是一张走势图。\n![](/bisheng/knowledge/images/1/2/chart.png)"])
     _bind_vision(monkeypatch, vision)
+    llm = _FakeChatModel(first=_view_call(), second=AIMessage(content="走势向上。"))
     yielded: list[str] = []
-    async for chunk in run_react_vision_stream(_SkipGraphLLM(), _trend_messages(), _registry_one(), visual=True):
+    async for chunk in run_react_vision_stream(llm, _trend_messages(), _registry_one(), visual=True):
         yielded.append(getattr(chunk, "content", "") or "")
     joined = "".join(yielded)
-    assert joined.count("The chart goes up.") == 1
+    assert "calling tool" not in joined
+    assert joined.count("走势向上。") == 1
+    assert "画面是一张走势图" not in joined
     mock_fetch.assert_awaited()
     humans = [m for m in vision.inputs[0] if isinstance(m, HumanMessage) and isinstance(m.content, list)]
     image_blocks = [b for b in humans[-1].content if isinstance(b, dict) and b.get("type") == "image_url"]
     assert image_blocks[0]["image_url"]["url"] == _DATA_URI
+    second = next(inputs for inputs in llm.generate_inputs if any(isinstance(m, ToolMessage) for m in inputs))
+    dumped = repr(second)
+    assert "data:image" not in dumped
+    assert "图片查看结果：" in dumped
 
 
-async def test_configured_model_views_caption_matches(mock_fetch, monkeypatch):
-    vision = _VisionStream(["fields from the form screenshot"])
+async def test_react_loop_views_caption_matches(mock_fetch, monkeypatch):
+    vision = _VisionStream(["form fields"])
     _bind_vision(monkeypatch, vision)
+    llm = _FakeChatModel(
+        first=AIMessage(content="guessed fields from the surrounding handbook text"),
+        second=AIMessage(content="fields from the form screenshot"),
+    )
     messages = [
         SystemMessage(content="base system"),
         HumanMessage(content=f"{_OPENING_HANDBOOK}\n# 用户问题\n```\n开户申请表单上有哪些字段？\n```"),
     ]
     yielded: list[str] = []
-    async for chunk in run_react_vision_stream(_SkipGraphLLM(), messages, _numbered_registry(28), visual=True):
+    async for chunk in run_react_vision_stream(llm, messages, _numbered_registry(28), visual=True):
         yielded.append(getattr(chunk, "content", "") or "")
-    assert "".join(yielded) == "fields from the form screenshot"
+    joined = "".join(yielded)
+    assert "guessed fields" not in joined
+    assert joined.count("fields from the form screenshot") == 1
     urls = [call.args[0] for call in mock_fetch.await_args_list]
     assert any(url.endswith("image_9.png") or url.endswith("image_10.png") for url in urls)
     assert all(not url.endswith("image_1.png") for url in urls)
 
 
 async def test_trend_answer_does_not_splice_screenshot(mock_fetch, monkeypatch):
-    vision = _VisionStream(["final answer after viewing"])
+    vision = _VisionStream(["up"])
     _bind_vision(monkeypatch, vision)
+    llm = _FakeChatModel(first=_view_call(), second=AIMessage(content="final answer after viewing"))
     yielded: list[str] = []
-    async for chunk in run_react_vision_stream(_SkipGraphLLM(), _trend_messages(), _registry_one(), visual=True):
+    async for chunk in run_react_vision_stream(llm, _trend_messages(), _registry_one(), visual=True):
         yielded.append(getattr(chunk, "content", "") or "")
     joined = "".join(yielded)
-    assert joined == "final answer after viewing"
+    assert joined.count("final answer after viewing") == 1
     assert "chart.png" not in joined
 
 
-async def test_reasoning_display_claim_splices_when_answer_is_empty(mock_fetch, monkeypatch):
-    vision = _VisionStream(
-        [],
-        reasoning=[
-            "S18 中包含图片引用 '![](/bisheng/knowledge/images/1/2/chart.png)⟦img#1⟧'。"
-            "查看图像素与描述一致。因此可以展示该图片。"
-        ],
-    )
-    _bind_vision(monkeypatch, vision)
-    messages = [
-        SystemMessage(content="base system"),
-        HumanMessage(content="显示图片"),
-    ]
-    yielded: list[str] = []
-    async for chunk in run_react_vision_stream(_SkipGraphLLM(), messages, _registry_one(), visual=True):
-        yielded.append(getattr(chunk, "content", "") or "")
-    joined = "".join(yielded)
-    assert "chart.png](/bisheng/knowledge/images/1/2/chart.png)" in joined
-    assert "img#" not in joined
-
-
-async def test_answer_denial_is_not_overridden_by_reasoning(mock_fetch, monkeypatch):
+async def test_answer_denial_is_not_overridden(mock_fetch, monkeypatch):
     vision = _VisionStream(["没有。"], reasoning=["因此可以展示该图片。"])
     _bind_vision(monkeypatch, vision)
+    llm = _FakeChatModel(first=_view_call(), second=AIMessage(content="没有。"))
     messages = [
         SystemMessage(content="base system"),
         HumanMessage(content="显示图片"),
     ]
     yielded: list[str] = []
-    async for chunk in run_react_vision_stream(_SkipGraphLLM(), messages, _registry_one(), visual=True):
+    async for chunk in run_react_vision_stream(llm, messages, _registry_one(), visual=True):
         yielded.append(getattr(chunk, "content", "") or "")
     joined = "".join(yielded)
     assert joined == "没有。"
     assert "chart.png" not in joined
 
 
-async def test_claimed_display_splices_the_single_viewed_image(mock_fetch, monkeypatch):
-    vision = _VisionStream(["我将显示开户登记相关截图。"])
+async def test_claim_without_picture_line_is_not_filled_in(mock_fetch, monkeypatch):
+    vision = _VisionStream(["一张表单。\n![](/bisheng/knowledge/images/1/2/chart.png)"])
     _bind_vision(monkeypatch, vision)
+    llm = _FakeChatModel(first=_view_call(), second=AIMessage(content="根据您的请求，这里是相关的图片展示："))
     messages = [
         SystemMessage(content="base system"),
-        HumanMessage(content="把开户登记界面说明相关的图片显示出来"),
+        HumanMessage(content="显示图片"),
     ]
     yielded: list[str] = []
-    async for chunk in run_react_vision_stream(_SkipGraphLLM(), messages, _registry_one(), visual=True):
+    async for chunk in run_react_vision_stream(llm, messages, _registry_one(), visual=True):
         yielded.append(getattr(chunk, "content", "") or "")
     joined = "".join(yielded)
-    assert "我将显示开户登记相关截图。" in joined
-    assert "chart.png](/bisheng/knowledge/images/1/2/chart.png)" in joined
+    assert joined == "根据您的请求，这里是相关的图片展示："
 
 
-async def test_stream_deltas_are_joined_once(monkeypatch):
-    vision = _VisionStream(
-        [
-            "根据提供的参考资料，开户申请表单的图片是 img#4。",
-            "该图片位于开户登记章节中。",
-        ]
-    )
+async def test_id_line_chosen_by_chat_model_renders_the_picture(mock_fetch, monkeypatch):
+    vision = _VisionStream(["一张表单。\n![](/bisheng/knowledge/images/1/2/chart.png)"])
     _bind_vision(monkeypatch, vision)
-    monkeypatch.setattr(
-        "bisheng.common.image_view.react_loop.fetch_and_encode",
-        AsyncMock(return_value=type("R", (), {"ok": True, "data_uri": _DATA_URI, "reason": None})()),
-    )
+    llm = _FakeChatModel(first=_view_call(), second=AIMessage(content="这是第一张图片：\nimg#1"))
+    messages = [
+        SystemMessage(content="base system"),
+        HumanMessage(content="显示第一张图"),
+    ]
+    yielded: list[str] = []
+    async for chunk in run_react_vision_stream(llm, messages, _registry_one(), visual=True):
+        yielded.append(getattr(chunk, "content", "") or "")
+    joined = "".join(yielded)
+    assert joined == "这是第一张图片：\n![chart.png](/bisheng/knowledge/images/1/2/chart.png)"
+    assert "img#1" not in joined
+
+
+async def test_stream_deltas_are_not_repeated_by_chain_end(monkeypatch):
+    events = [
+        {"event": "on_chat_model_start", "name": "ChatOpenAI", "data": {}},
+        {
+            "event": "on_chat_model_stream",
+            "name": "ChatOpenAI",
+            "data": {"chunk": AIMessageChunk(content="根据提供的参考资料，开户申请表单的图片是 img#4。")},
+        },
+        {
+            "event": "on_chat_model_stream",
+            "name": "ChatOpenAI",
+            "data": {"chunk": AIMessageChunk(content="该图片位于开户登记章节中。")},
+        },
+        {
+            "event": "on_chat_model_end",
+            "name": "ChatOpenAI",
+            "data": {
+                "output": AIMessage(
+                    content="根据提供的参考资料，开户申请表单的图片是 img#4。该图片位于开户登记章节中。"
+                )
+            },
+        },
+        {
+            "event": "on_chain_end",
+            "name": "_VisionCallRunnable",
+            "data": {
+                "output": AIMessage(
+                    content="根据提供的参考资料，开户申请表单的图片是 img#4。该图片位于开户登记章节中。"
+                )
+            },
+        },
+    ]
+
+    class _FakeAgent:
+        async def astream_events(self, *args, **kwargs):
+            del args, kwargs
+            for event in events:
+                yield event
+
+    async def _vision(*args, **kwargs):
+        del args, kwargs
+        return object()
+
+    monkeypatch.setattr("bisheng.common.image_view.react_loop.resolve_image_view_llm", _vision)
+    monkeypatch.setattr("bisheng.common.image_view.react_loop.create_react_agent", lambda *args, **kwargs: _FakeAgent())
+    monkeypatch.setattr("bisheng.common.image_view.react_loop.ToolNode", lambda *args, **kwargs: object())
     yielded: list[str] = []
     async for chunk in run_react_vision_stream(_SkipGraphLLM(), _trend_messages(), _registry_one(), visual=True):
         yielded.append(getattr(chunk, "content", "") or "")
     joined = "".join(yielded)
-    assert joined == "根据提供的参考资料，开户申请表单的图片。该图片位于开户登记章节中。"
-    assert "img#" not in joined
+    assert joined == "根据提供的参考资料，开户申请表单的图片是 img#4。该图片位于开户登记章节中。"
     assert joined.count("该图片位于开户登记章节中。") == 1
 
 
-async def test_view_narration_catalog_is_stripped(monkeypatch):
+def test_view_narration_catalog_is_stripped():
     preamble = (
         "我需要查看您提到的风景图片。根据提供的参考资料，其中包含以下图片标识：\n"
         "- [img#1] → /bisheng/knowledge/images/1/12/image1.png\n"
@@ -265,16 +360,11 @@ async def test_view_narration_catalog_is_stripped(monkeypatch):
         "但当前没有明确说明哪张是风景图；为了准确判断并显示，请允许我先查看这些图片。\n"
     )
     answer = "其中包含一张明确为风景的图片（img#3）：\n![](/bisheng/knowledge/images/1/12/image3.png)\n[img#3]\n其余图片为人物肖像。"
-    vision = _VisionStream([preamble + answer])
-    _bind_vision(monkeypatch, vision)
-    monkeypatch.setattr(
-        "bisheng.common.image_view.react_loop.fetch_and_encode",
-        AsyncMock(return_value=type("R", (), {"ok": True, "data_uri": _DATA_URI, "reason": None})()),
+    question = "这张图的走势"
+    joined = strip_picture_handles(
+        _strip_picture_citations(strip_view_narration(preamble + answer), question),
+        question,
     )
-    yielded: list[str] = []
-    async for chunk in run_react_vision_stream(_SkipGraphLLM(), _trend_messages(), _registry_one(), visual=True):
-        yielded.append(getattr(chunk, "content", "") or "")
-    joined = "".join(yielded)
     assert "请允许我先查看" not in joined
     assert "image1.png" not in joined
     assert "[img#3]" not in joined
@@ -284,7 +374,7 @@ async def test_view_narration_catalog_is_stripped(monkeypatch):
     assert "其余图片" not in joined
 
 
-async def test_filename_catalog_and_cannot_view_preamble_are_stripped(monkeypatch):
+def test_filename_catalog_and_cannot_view_preamble_are_stripped():
     preamble = (
         "根据您提供的资料，文档中包含以下图片（共5张）：\n"
         "- image1.png [img#1]\n"
@@ -295,16 +385,11 @@ async def test_filename_catalog_and_cannot_view_preamble_are_stripped(monkeypatc
         "如您希望仅查找风景类图片。是否需要我继续帮您做此筛选？ - img#1：一位女性的特写照片。\n"
     )
     answer = "- img#2：一位穿白色连衣裙的年轻女性。\n因此，属于美女的图片是 img#1 和 img#2。\n如需进一步处理（如裁剪、放大），可继续说明。"
-    vision = _VisionStream([preamble + answer])
-    _bind_vision(monkeypatch, vision)
-    monkeypatch.setattr(
-        "bisheng.common.image_view.react_loop.fetch_and_encode",
-        AsyncMock(return_value=type("R", (), {"ok": True, "data_uri": _DATA_URI, "reason": None})()),
+    question = "是否有美女的图片"
+    joined = strip_picture_handles(
+        _strip_picture_citations(strip_view_narration(preamble + answer), question),
+        question,
     )
-    yielded: list[str] = []
-    async for chunk in run_react_vision_stream(_SkipGraphLLM(), _trend_messages(), _registry_one(), visual=True):
-        yielded.append(getattr(chunk, "content", "") or "")
-    joined = "".join(yielded)
     assert "包含以下图片" not in joined
     assert "image1.png" not in joined
     assert "无法查看图片" not in joined
