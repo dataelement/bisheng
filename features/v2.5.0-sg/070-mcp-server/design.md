@@ -1,5 +1,8 @@
 # MCP Server：组件设计与实现边界
 
+> 2026-10-22 身份契约更新：[F081](../081-mcp-external-user-identity/spec.md) 已获用户确认。十工具顶层必填 `external_id`，以目标用户及其当前有效租户执行；Token 保留接入、绑定有效性、IP/路由/限流校验。本文首期的绑定用户、禁止身份参数或原样兼容描述如与 F081 冲突，以 F081 为准；历史验证记录不代表新身份契约验收。
+
+
 **Feature ID**: 070-mcp-server  
 **Status**: CONFIRMED  
 **Created**: 2026-10-08  
@@ -83,7 +86,7 @@ src/backend/test/open_endpoints/       # 最小共享编排与 REST 兼容测试
 - 每个请求，包括握手、列表、通知、调用及不支持的方法，均按实际 HTTP 方法和规范 `/mcp` 路由鉴权。
 - 非 POST 请求完成鉴权后返回 405，不交给 SDK 自动开启 GET SSE；CORS 预检继续由 CORS 层处理。
 - 未配置或空白名单不启用路由过滤；非空白名单继续遵循既有 METHOD_PATH/PATH/PREFIX 匹配，不匹配仍返回 403，不新增白名单语法。
-- 身份保存在请求局部状态，在实际工具任务内明确恢复绑定用户/租户可见集；不使用模块全局当前用户。
+- 身份保存在请求局部状态，在实际工具任务内按 F081 建立目标用户/当前租户可见集；不使用模块全局当前用户。
 - 请求结束或工具结束都在对应上下文中释放资源；不得跨 AnyIO task reset 另一 task 创建的 ContextVar token。
 - 不以 JWT Cookie、Bearer 或默认操作员替代开发者 Token；不把 Token 放入工具输入输出。
 
@@ -92,7 +95,7 @@ src/backend/test/open_endpoints/       # 最小共享编排与 REST 兼容测试
 - 服务接收请求上下文、已确定业务用户、RetrieveReq、仓储和现有异步检索 runtime。
 - 复用现有空间 chat service 构造、filters 映射、aretrieve_chunks、授权结果引用去重、来源服务和 RetrieveResp 装配。
 - 总超时、来源超时降级、原始业务错误抛出与来源规则保持现状；REST endpoint 继续执行原 HTTP/业务响应映射。
-- REST 在原 external_id 作用域内调用；MCP 在 Token 绑定用户作用域内调用。
+- REST 在原 external_id 作用域内调用；MCP 按 F081 在目标用户作用域内调用。
 - MCP factory 使用现有数据库 session helper，在实际工具任务中装配 Repository，
   一个调用一个受管理会话；不得复用跨请求 AsyncSession，不能把 `Depends` 对象作为业务参数。
 - factory 属于 domain 层，只导入服务、仓储、schemas 和基础设施；不调用或跨导入 REST endpoint。

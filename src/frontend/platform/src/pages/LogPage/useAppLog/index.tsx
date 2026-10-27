@@ -24,6 +24,7 @@ import { useCallback, useContext, useMemo, useReducer, useRef, useState } from "
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useStandalonePrefix } from "@/routes/standalone";
+import AuditFeedbackButton from "./AuditFeedbackButton";
 
 const getStrTime = (date) => {
     const start_date = date[0] && (formatDate(date[0], 'yyyy-MM-dd') + ' 00:00:00')
@@ -412,13 +413,7 @@ export default function AppUseLog() {
                                                 />
                                                 <span className="left-4 top-[-4px] break-keep">{el.dislike_count}</span>
                                             </div>
-                                            <div className="text-center text-xs relative">
-                                                <ThunmbIcon
-                                                    type='copy'
-                                                    className={`cursor-pointer ${el.copied_count && 'text-primary hover:text-primary'}`}
-                                                />
-                                                <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
-                                            </div>
+                                            <AuditFeedbackButton count={el.comment_count} comments={el.feedback_comments} />
                                         </div>
                                     </TableCell>
                                     {appConfig.isPro && (

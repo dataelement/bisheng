@@ -3821,6 +3821,8 @@ export interface SimilarCandidateEntry {
     primary_uploader_name?: string;
     primary_upload_time?: string;
     primary_knowledge_file_id: number; // primary version's file id, used for preview
+    content_file_id?: number;
+    can_associate?: boolean;
 }
 
 /**
@@ -3842,6 +3844,7 @@ export interface PendingSimilarFileEntry {
     candidate_count: number;
     current_primary_version_no?: number | null;
     primary_uploader_name?: string | null;
+    can_associate?: boolean;
 }
 
 /**

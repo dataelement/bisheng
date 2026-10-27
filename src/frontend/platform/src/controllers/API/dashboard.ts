@@ -2,14 +2,16 @@
 
 import { generateUUID } from "@/components/bs-ui/utils";
 import { resolvePivotColumnLabels } from "@/pages/Dashboard/components/charts/pivotColumnAliases";
-import { ChartType, Dashboard, DashboardComponent, LayoutItem, TimeRangeMode, TimeRangeType } from "@/pages/Dashboard/types/dataConfig";
+import { ChartType, Dashboard, DashboardComponent, LayoutItem } from "@/pages/Dashboard/types/dataConfig";
+import { componentQueryFilters } from "@/pages/Dashboard/utils/componentQueryFilters";
 import {
     mergePersonDedupValues,
     resolveGroupDimensionIndex,
     resolvePersonDedupIndices,
 } from "@/pages/Dashboard/utils/groupCrossTabRows";
 import axios from "../request";
-import { documentRollupLookup } from "@/pages/Dashboard/utils/documentRollups";
+import { dimensionValueKey, documentRollupLookup } from "@/pages/Dashboard/utils/documentRollups";
+import { normalizeUserMetricLabels } from "@/pages/Dashboard/utils/userMetricLabels";
 
 // Simulate API delay
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -22,7 +24,8 @@ export async function getDashboards(): Promise<Dashboard[]> {
 
 export async function getDashboard(id: string, fromShare: boolean = false): Promise<Dashboard> {
     const query = fromShare ? `?from_share=true` : ''
-    return await axios.get(`/api/v1/telemetry/dashboard/${id}${query}`);
+    const dashboard: Dashboard = await axios.get(`/api/v1/telemetry/dashboard/${id}${query}`);
+    return { ...dashboard, components: dashboard.components?.map(normalizeUserMetricLabels) ?? [] };
 }
 
 export async function createDashboard(title: string): Promise<Dashboard> {
@@ -231,20 +234,21 @@ export function transformPivotData(
             : [];
     const columnDimensionCount = stackDimensions.length;
     const columnPaths: string[][] = [];
+    const rawColumnPaths: unknown[][] = [];
     const columnIndex = new Map<string, number>();
-    const rows = new Map<string, { key: string[], values: Map<string, number> }>();
+    const rows = new Map<string, { key: string[], rawKey: (string | number | null)[], values: Map<string, number> }>();
     let truncated = false;
 
     resData.dimensions.forEach((dimensionValues: unknown[], index: number) => {
-        const rowValues = dimensionValues
+        const rawRowValues = dimensionValues
             .slice(0, rowDimensionCount)
-            .map(value => String(value ?? '未分类'));
-        const columnPath = dimensionValues
-            .slice(rowDimensionCount, rowDimensionCount + columnDimensionCount)
-            .map(value => String(value ?? '未分类'));
+            .map(value => value == null ? null : typeof value === 'number' ? value : String(value));
+        const rowValues = rawRowValues.map(value => String(value ?? '未分类'));
+        const rawColumnPath = dimensionValues.slice(rowDimensionCount, rowDimensionCount + columnDimensionCount);
+        const columnPath = rawColumnPath.map(value => String(value ?? '未分类'));
         const normalizedColumnPath = columnPath.length > 0 ? columnPath : ['未分类'];
-        const rowKey = JSON.stringify(rowValues);
-        const columnKey = JSON.stringify(normalizedColumnPath);
+        const rowKey = dimensionValueKey(rawRowValues);
+        const columnKey = dimensionValueKey(rawColumnPath);
 
         if (!columnIndex.has(columnKey)) {
             if (columnPaths.length >= MAX_PIVOT_COLUMNS) {
@@ -253,20 +257,21 @@ export function transformPivotData(
             }
             columnIndex.set(columnKey, columnPaths.length);
             columnPaths.push(normalizedColumnPath);
+            rawColumnPaths.push(rawColumnPath);
         }
         if (!rows.has(rowKey)) {
             if (rows.size >= MAX_PIVOT_ROWS) {
                 truncated = true;
                 return;
             }
-            rows.set(rowKey, { key: rowValues, values: new Map() });
+            rows.set(rowKey, { key: rowValues, rawKey: rawRowValues, values: new Map() });
         }
         const metricValue = Number(resData.value[index]?.[0] ?? 0);
         const row = rows.get(rowKey)!;
         row.values.set(columnKey, (row.values.get(columnKey) ?? 0) + metricValue);
     });
 
-    const columnKeys = columnPaths.map(path => JSON.stringify(path));
+    const columnKeys = rawColumnPaths.map(dimensionValueKey);
     const exactTotal = documentRollupLookup(resData.rollups);
     const rowIndexes = Array.from({ length: rowDimensionCount }, (_, index) => index);
     const columnIndexes = Array.from({ length: columnDimensionCount }, (_, index) => rowDimensionCount + index);
@@ -278,14 +283,16 @@ export function transformPivotData(
             return value;
         });
         return {
+            id: dimensionValueKey(row.rawKey),
             key: row.key,
+            rawKey: row.rawKey,
             values,
-            total: exactTotal ? exactTotal(rowIndexes, row.key) : values.reduce((sum, value) => sum + value, 0),
+            total: exactTotal ? exactTotal(rowIndexes, row.rawKey) : values.reduce((sum, value) => sum + value, 0),
         };
     });
     if (exactTotal) {
-        columnPaths.forEach((path, index) => {
-            columnTotals[index] = exactTotal(columnIndexes, columnDimensionCount ? path : []);
+        rawColumnPaths.forEach((path, index) => {
+            columnTotals[index] = exactTotal(columnIndexes, path);
         });
     }
 
@@ -307,11 +314,12 @@ export function transformPivotData(
     if (personDedup) {
         pivotRows.forEach(row => {
             row.key = mergePersonDedupValues(row.key, personDedup.personIndex, personDedup.deptIndex);
+            row.rawKey = row.rawKey.filter((_value, index) => index !== personDedup.deptIndex);
         });
     }
     const rowLabels: Record<string, string[]> = {};
     pivotRows.forEach((row, index) => {
-        rowLabels[JSON.stringify(row.key)] = personDedup
+        rowLabels[row.id] = personDedup
             ? mergePersonDedupValues(displayRowKeys[index], personDedup.personIndex, personDedup.deptIndex)
             : displayRowKeys[index];
     });
@@ -344,11 +352,11 @@ export function transformPivotData(
         const field = mergedRowFieldIds[groupDimensionIndex];
         const rawIndex = rawRowFieldIds.indexOf(field);
         for (const row of pivotRows) {
-            const label = row.key[groupDimensionIndex];
-            groupTotals[label] = {
-                total: exactTotal([rawIndex], [label]),
-                values: columnPaths.map(path => exactTotal(
-                    [rawIndex, ...columnIndexes], [label, ...(columnDimensionCount ? path : [])],
+            const value = row.rawKey[groupDimensionIndex];
+            groupTotals[dimensionValueKey([value])] = {
+                total: exactTotal([rawIndex], [value]),
+                values: rawColumnPaths.map(path => exactTotal(
+                    [rawIndex, ...columnIndexes], [value, ...path],
                 )),
             };
         }
@@ -386,29 +394,13 @@ export async function queryChartData(params: {
 }): Promise<QueryDataResponse> {
     const { component, useId, dashboardId, queryParams = [] } = params;
 
-    const dimensionFilters = queryParams.flatMap(
-        param => param.dimensionFilters || []
-    );
+    const { timeFilters, dimensionFilters } = componentQueryFilters(queryParams);
 
     const resData = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
         dashboard_id: dashboardId,
         component_data: useId ? undefined : component,
         component_id: useId ? component.id : undefined,
-        time_filters: queryParams
-            .filter(p => p.queryComponentParams || (p.queryConditions && p.queryConditions.hasDefaultValue)) // all
-            .map(({ queryComponentParams: p, queryConditions: q }) => {
-                if (p) {
-                    return {
-                        type: p.shortcutKey ? TimeRangeType.RECENT_DAYS : TimeRangeType.CUSTOM,
-                        mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
-                        recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
-                        startDate: p.startTime,
-                        endDate: p.endTime,
-                    }
-                } else if (q) {
-                    return q.defaultValue
-                }
-            }),
+        time_filters: timeFilters,
         dimension_filters: dimensionFilters,
     });
 
@@ -473,7 +465,7 @@ export async function exportComponentDetail(params: {
     dashboardId: string
     componentId: string
     dimensionField: string
-    dimensionValue: string | number
+    dimensionValue: string | number | null
     timeFilters?: any[]
     dimensionFilters?: { fieldId: string, values: unknown[] }[]
 }): Promise<{ file_url: string }> {

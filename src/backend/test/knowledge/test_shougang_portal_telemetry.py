@@ -140,6 +140,16 @@ async def test_portal_home_event_counts(monkeypatch):
                 assert "query" not in kwargs["body"]
                 return {"aggregations": {"qa_count": {"value": 8}}}
             if kwargs["index"] == "mid_knowledge_space_content_stat":
+                if kwargs["body"]["query"]["bool"]["filter"][0] == {"term": {"record_type": "preview_daily"}}:
+                    assert kwargs["body"] == {
+                        "size": 0,
+                        "query": {"bool": {"filter": [
+                            {"term": {"record_type": "preview_daily"}},
+                            {"terms": {"space_level": ["public", "department", "team", "team_ks", "personal"]}},
+                        ]}},
+                        "aggs": {"preview_count": {"sum": {"field": "preview_count"}}},
+                    }
+                    return {"aggregations": {"preview_count": {"value": 42}}}
                 assert kwargs["body"] == {
                     "size": 0,
                     "query": {"bool": {"filter": [
@@ -195,10 +205,38 @@ async def test_portal_home_event_counts(monkeypatch):
     )
 
     assert await PortalTelemetryEventService.count_home_events() == {
-        "read_count": 11,
+        "read_count": 42,
         "favorite_count": 6,
         "qa_count": 8,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [None, 0])
+async def test_dashboard_reads_empty_sum_is_zero(monkeypatch, value):
+    class FakeEsClient:
+        async def search(self, **kwargs):
+            return {"aggregations": {"preview_count": {"value": value}}}
+
+    async def connection():
+        return FakeEsClient()
+
+    monkeypatch.setattr("bisheng.common.telemetry.portal_event_service.get_statistics_es_connection", connection)
+    assert await PortalTelemetryEventService.count_dashboard_reads() == 0
+
+
+@pytest.mark.asyncio
+async def test_dashboard_reads_does_not_hide_es_failure(monkeypatch):
+    class FailingEsClient:
+        async def search(self, **kwargs):
+            raise RuntimeError("statistics es unavailable")
+
+    async def connection():
+        return FailingEsClient()
+
+    monkeypatch.setattr("bisheng.common.telemetry.portal_event_service.get_statistics_es_connection", connection)
+    with pytest.raises(RuntimeError, match="statistics es unavailable"):
+        await PortalTelemetryEventService.count_dashboard_reads()
 
 
 @pytest.mark.asyncio

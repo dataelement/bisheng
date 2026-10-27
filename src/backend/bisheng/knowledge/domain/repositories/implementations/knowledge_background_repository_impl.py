@@ -19,6 +19,19 @@ class KnowledgeBackgroundRepositoryImpl(KnowledgeBackgroundRepository):
     def __init__(self, session):
         self.session = session
 
+    def request_similarity_refresh(self, file: KnowledgeFile) -> str | None:
+        if (
+            file.entry_type not in {"manager", "publish"} or file.entry_status != "active"
+            or file.reference_document_id is None
+            or file.deleted_at is not None or file.status != 2 or file.projection_status != "ready"
+            or file.applied_content_generation != file.desired_content_generation
+            or file.applied_entry_generation != file.desired_entry_generation
+        ):
+            return None
+        state = {"file_id": file.id, "knowledge_id": file.knowledge_id, "document_id": file.reference_document_id,
+                 "content_generation": file.applied_content_generation, "entry_generation": file.applied_entry_generation}
+        return self.request(tenant_id=int(file.tenant_id), kind="refresh_similarity", identity=":".join(str(v) for v in state.values()), payload=state)
+
     @staticmethod
     def key(tenant_id: int, kind: str, identity: str) -> str:
         return sha256(f"{tenant_id}:{kind}:{identity}".encode()).hexdigest()
@@ -277,6 +290,7 @@ class KnowledgeBackgroundRepositoryImpl(KnowledgeBackgroundRepository):
         files: list[dict],
         artifacts: list[dict],
         clear_minio: bool = True,
+        cleanup_permissions: bool = False,
     ) -> list[str]:
         ids = []
         for file in files:
@@ -292,6 +306,7 @@ class KnowledgeBackgroundRepositoryImpl(KnowledgeBackgroundRepository):
                         "file": file,
                         "artifacts": [a for a in artifacts if int(a.get("knowledge_file_id", 0)) == file_id],
                         "clear_minio": clear_minio,
+                        "cleanup_permissions": cleanup_permissions,
                         "completed_stages": [],
                     },
                 )

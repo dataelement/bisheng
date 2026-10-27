@@ -19,10 +19,10 @@
 
 按以下顺序完成首次调用：
 
-1. 管理员创建开发者 Token，绑定有权访问目标空间的用户；路由白名单可留空，若已配置规则则须覆盖 `POST /mcp`。
+1. 管理员创建有效开发者 Token，保留绑定用户及归属有效性；路由白名单可留空，若已配置规则则须覆盖 `POST /mcp`。
 2. 客户端选择 **Streamable HTTP**，填写后端实际地址及 `X-Developer-Token` 请求头。
 3. 客户端连接并完成 MCP 初始化，刷新工具列表。
-4. 调用 `list_knowledge` 取得空间 ID，再用 `list_folders`、`list_files` 浏览内容。
+4. 可信业务后端从已验证登录会话取 `external_id`，每次工具调用均传入该账号；调用 `list_knowledge` 取得空间 ID，再用 `list_folders`、`list_files` 浏览内容。
 5. 读取用 `get_file_detail`，问答取片段用 `retrieve_chunks`；保存内容用 `create_document` 或 `upload_file`。
 
 典型操作顺序：
@@ -72,9 +72,9 @@ MCP 默认开启，无需新增必填配置；已有配置显式关闭时仍保�
 X-Developer-Token: <完整Token>
 ```
 
-空路由白名单可以调用 MCP，仍需提供有效 Token，并通过 IP、限流及其他身份检查。路由放行不代表获得资源权限：读取、上传、租户范围仍按绑定用户的实际权限判断；不支持通过工具参数切换身份。非空白名单未覆盖 MCP 或当前方法时返回 HTTP `403` / `19812`。
+空路由白名单可以调用 MCP，仍需提供有效 Token，并通过 IP、限流及其他身份检查。路由放行不代表获得资源权限：读取、上传、租户范围按工具参数指定的目标用户判断；Token 绑定用户的资源权限不参与目标业务授权。Token 自身、绑定用户和归属租户仍须有效。非空白名单未覆盖 MCP 或当前方法时返回 HTTP `403` / `19812`。
 
-握手、通知、工具列表和工具调用都会验证 Token，并计入请求限流。刷新列表或轮询解析状态也会消耗请求额度。已有 `/mcp` Token 的绑定用户如果有上传权，可以调用两个写工具；当前没有逐工具的 Token 白名单。
+握手、通知、工具列表和工具调用都会验证 Token，并计入请求限流。刷新列表或轮询解析状态也会消耗请求额度。目标账号有上传权时可调用两个写工具，创建者、Owner、配额和投递任务租户使用目标身份；当前没有逐工具的 Token 白名单。
 
 ## 2. 工具总览
 
@@ -95,11 +95,23 @@ X-Developer-Token: <完整Token>
 
 ## 3. 公共约定
 
-### 3.1 资源 ID 与参数
+### 3.1 业务账号、资源 ID 与参数
 
-`knowledge_id`、`folder_id`、`file_id` 均使用正整数，不能传字符串或布尔值。`folder_id` 省略或为 `null` 表示根目录；指定目录时，目录必须属于目标空间且有相应权限。
+十个工具均新增顶层必填参数 `external_id`（严格字符串）：去掉首尾空白后长度为 1～255，保留大小写、内部字符和前导零，按精确值匹配唯一有效用户。数字、布尔、null、空白、未找到、禁用或跨来源重复账号均拒绝；缺参不会回退到 Token 用户。账号只出现在顶层，不放入 filters 或 folder_scope。
 
-新工具拒绝未声明字段，包括 `external_id`、`user_id`、`tenant_id`、`skip_approval`、`file_path` 等。Token 只放在请求头，不能作为工具参数传入。
+允许跨 Token 租户执行。多租户开启时使用目标用户唯一 `is_active=1` 的当前有效关系及启用租户；关系缺失/重复/失效或租户停用则拒绝，不选择历史关系、主部门、Token 租户或 Root 代替。单租户模式使用有效的默认租户 1。业务阶段恢复正常租户过滤和目标用户原有权限。
+
+有效 Token 的持有方可以指定包括管理员在内的目标账号。**生产环境仅可信业务后端持有 Token**：先验证真实登录用户，再从会话导出并覆盖 external_id，不直接信任终端、模型或检索内容提供的身份。知道账号字符串不等于证明本人身份。MCP 不新增用户登录或 OAuth 校验。
+
+这是必填参数及权限身份变化。旧客户端须补账号并刷新工具清单；列工具与握手仍只需要有效 Token。代码回退可恢复旧执行方式，但不会撤销已创建文件或其授权。
+
+九个新工具读总预算为 30 秒、写总预算为 120 秒，包含身份解析及业务装配；身份解析本身最多 30 秒。旧 search_knowledge 在原检索预算之前增加最多 30 秒身份阶段。超时、失败或取消均不回退 Token 用户。
+
+`knowledge_id`、`file_id` 等其他资源 ID 使用严格正整数，不能传字符串或布尔值。`folder_id` 同时接受正整数和纯 ASCII 数字的正数字符串，例如 `305`、`"305"`、`"000305"` 均表示目录 305；服务端统一转为整数后进行目录归属和权限校验，响应中的 ID 仍为整数。
+
+顶层 `folder_id` 省略或为 `null` 表示根目录。`folder_scope.folder_id` 同样兼容数字字符串，但必填且不能为 `null`。空字符串、空白、非数字、带符号/小数、布尔值及非正数均拒绝，不会自动落入根目录。
+
+新工具拒绝未声明字段，包括 `user_id`、`tenant_id`、`source`、`skip_approval`、`file_path` 等。Token 只放在请求头，不能作为工具参数传入。
 
 检索工具使用复数参数 `knowledge_base_ids`；文件搜索使用 `knowledge_ids`。它们的名称不同，不能互换。
 
@@ -114,7 +126,7 @@ X-Developer-Token: <完整Token>
   "method": "tools/call",
   "params": {
     "name": "list_knowledge",
-    "arguments": {"page_size": 20}
+    "arguments": {"external_id":"00012345","page_size": 20}
   }
 }
 ```
@@ -171,7 +183,7 @@ X-Developer-Token: <完整Token>
 | `writable_only` | boolean | `false` | 只返回根目录可上传，或至少有一个可访问目录可上传的空间 |
 
 ```json
-{"name":"list_knowledge","arguments":{"name":"规程","writable_only":true,"page_size":20}}
+{"name":"list_knowledge","arguments":{"external_id":"00012345","name":"规程","writable_only":true,"page_size":20}}
 ```
 
 `data` 中每项包含 `id`、`name`、`space_level`、`description`、`can_upload_to_root`、`has_writable_folders`。层级值为 `public`、`department`、`team`、`team_ks`（科室）、`personal`。
@@ -183,12 +195,12 @@ X-Developer-Token: <完整Token>
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `knowledge_id` | integer | 是 | 空间 ID |
-| `folder_id` | integer / null | 否 | 父目录 ID；省略表示空间根目录 |
+| `folder_id` | integer / string / null | 否 | 父目录 ID；数字字符串可用；省略表示空间根目录 |
 
 另支持公共分页参数。列根目录示例：
 
 ```json
-{"name":"list_folders","arguments":{"knowledge_id":118,"page_size":20}}
+{"name":"list_folders","arguments":{"external_id":"00012345","knowledge_id":118,"page_size":20}}
 ```
 
 返回目录项示例：
@@ -215,7 +227,7 @@ X-Developer-Token: <完整Token>
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `knowledge_id` | integer | 必填 | 空间 ID |
-| `folder_id` | integer / null | `null` | 目录 ID |
+| `folder_id` | integer / string / null | `null` | 目录 ID，兼容纯数字的正数字符串 |
 | `statuses` | integer[] / null | `null` | 最多 7 项，每项为 1～7；不传表示不额外筛选状态 |
 | `sort_by` | string | `update_time` | `file_name` 或 `update_time` |
 | `order` | string | `desc` | `asc` 或 `desc` |
@@ -223,7 +235,7 @@ X-Developer-Token: <完整Token>
 另支持公共分页参数。
 
 ```json
-{"name":"list_files","arguments":{"knowledge_id":118,"folder_id":305,"statuses":[2],"sort_by":"update_time","order":"desc","page_size":20}}
+{"name":"list_files","arguments":{"external_id":"00012345","knowledge_id":118,"folder_id":"305","statuses":[2],"sort_by":"update_time","order":"desc","page_size":20}}
 ```
 
 每项包含 `id`、`knowledge_id`、`name`、`size`（字节）、`status`、`update_time`、`parent_id`。只返回当前目录的直接子文件，不混入文件夹或递归子目录文件，默认排除回收、失效入口及历史非主版本。该操作不修正文件解析状态。
@@ -234,13 +246,13 @@ X-Developer-Token: <完整Token>
 |---|---|---|---|
 | `keyword` | string | 必填 | 去除首尾空白后为 1～200 字符 |
 | `knowledge_ids` | integer[] / null | `null` | 指定 1～20 个空间；不传则使用当前可读空间范围 |
-| `folder_scope` | object / null | `null` | `{knowledge_id,folder_id}`，限定该目录及子目录 |
+| `folder_scope` | object / null | `null` | `{knowledge_id,folder_id}`；目录 ID 为正整数或数字字符串，限定该目录及子目录 |
 | `search_mode` | string | `all` | `name` 文件名、`content` 正文、`all` 两者并集 |
 
 另支持公共分页参数。
 
 ```json
-{"name":"search_files","arguments":{"keyword":"安全操作","knowledge_ids":[118],"folder_scope":{"knowledge_id":118,"folder_id":305},"search_mode":"all","page_size":20}}
+{"name":"search_files","arguments":{"external_id":"00012345","keyword":"安全操作","knowledge_ids":[118],"folder_scope":{"knowledge_id":118,"folder_id":305},"search_mode":"all","page_size":20}}
 ```
 
 如果同时指定 `knowledge_ids` 和 `folder_scope`，目录所属空间必须在该集合内，实际只搜索该目录所在空间的子树。无权空间或跨空间目录会失败，不会自动扩大范围。
@@ -259,7 +271,7 @@ X-Developer-Token: <完整Token>
 | `cursor` | string / null | `null` | 本工具专属正文游标 |
 
 ```json
-{"name":"get_file_detail","arguments":{"knowledge_id":118,"file_id":901,"content_format":"text","max_chars":20000}}
+{"name":"get_file_detail","arguments":{"external_id":"00012345","knowledge_id":118,"file_id":901,"content_format":"text","max_chars":20000}}
 ```
 
 返回结构示例：
@@ -297,7 +309,7 @@ X-Developer-Token: <完整Token>
 | `source_type` | string | `auto` | `auto`、`preview`、`original` |
 
 ```json
-{"name":"get_file_source","arguments":{"knowledge_id":118,"file_id":901,"source_type":"auto"}}
+{"name":"get_file_source","arguments":{"external_id":"00012345","knowledge_id":118,"file_id":901,"source_type":"auto"}}
 ```
 
 返回包含 `file_id`、`knowledge_id`、`preview_url`、`original_url`、`expires_at`、`original_unavailable_reason`。
@@ -322,6 +334,7 @@ X-Developer-Token: <完整Token>
 {
   "name": "retrieve_chunks",
   "arguments": {
+    "external_id": "00012345",
     "query": "设备检修前需要完成哪些检查？",
     "knowledge_base_ids": [118],
     "top_k": 5,
@@ -366,12 +379,12 @@ X-Developer-Token: <完整Token>
 | `file_name` | string | 必填 | 1～200 字符的文件基名 |
 | `content` | string | 必填 | 非空正文，UTF-8 编码后不超过 10 MiB |
 | `content_format` | string | `markdown` | `markdown` 对应 `.md`，`text` 对应 `.txt` |
-| `folder_id` | integer / null | `null` | 指定已有目录；省略表示根目录 |
+| `folder_id` | integer / string / null | `null` | 指定已有目录，兼容数字字符串；省略表示根目录 |
 
 另支持 §5 的分类与标签参数。
 
 ```json
-{"name":"create_document","arguments":{"knowledge_id":118,"folder_id":305,"file_name":"会议纪要.md","content_format":"markdown","content":"# 会议纪要\n\n1. 完成设备检查。\n2. 更新操作规程。"}}
+{"name":"create_document","arguments":{"external_id":"00012345","knowledge_id":118,"folder_id":305,"file_name":"会议纪要.md","content_format":"markdown","content":"# 会议纪要\n\n1. 完成设备检查。\n2. 更新操作规程。"}}
 ```
 
 保存纯文本时须显式传 `content_format="text"` 并使用 `.txt` 后缀。成功返回写入受理结果，格式见 §6。
@@ -383,12 +396,12 @@ X-Developer-Token: <完整Token>
 | `knowledge_id` | integer | 必填 | 目标空间 ID |
 | `file_name` | string | 必填 | 1～200 字符的文件基名，保留真实扩展名 |
 | `content_base64` | string | 必填 | 严格 Base64，解码后非空且不超过 50 MiB |
-| `folder_id` | integer / null | `null` | 指定已有目录；省略表示根目录 |
+| `folder_id` | integer / string / null | `null` | 指定已有目录，兼容数字字符串；省略表示根目录 |
 
 另支持 §5 的分类与标签参数。
 
 ```json
-{"name":"upload_file","arguments":{"knowledge_id":118,"folder_id":305,"file_name":"hello.txt","content_base64":"aGVsbG8="}}
+{"name":"upload_file","arguments":{"external_id":"00012345","knowledge_id":118,"folder_id":"305","file_name":"hello.txt","content_base64":"aGVsbG8="}}
 ```
 
 示例上传的是五字节的 `hello` 文本。真实文件需由客户端读取原始字节后做标准 Base64 编码，传入不带换行和 `data:` 前缀的字符串。不能传文件 URL、客户端路径或服务器路径代替 Base64。
@@ -441,7 +454,7 @@ X-Developer-Token: <完整Token>
 随后查询：
 
 ```json
-{"name":"get_file_detail","arguments":{"knowledge_id":118,"file_id":901,"include_content":false}}
+{"name":"get_file_detail","arguments":{"external_id":"00012345","knowledge_id":118,"file_id":901,"include_content":false}}
 ```
 
 需要确认正文可读时，再将 `include_content` 设为 `true`。可间隔数秒查询，并结合 Token 限流调整频率；成功且内容就绪后可使用 `retrieve_chunks` 检索。
@@ -461,10 +474,13 @@ python -m pip install 'mcp==1.27.1' httpx
 ```bash
 export BISHENG_MCP_URL='https://bisheng.example.com/mcp'
 export BISHENG_DEVELOPER_TOKEN='<填写完整Token>'
+export BISHENG_EXTERNAL_ID='00012345'
 export BISHENG_KNOWLEDGE_ID='118'
 export BISHENG_FOLDER_ID='305'
 export UPLOAD_PATH='/absolute/path/hello.txt'
 ```
+
+示例环境变量 BISHENG_EXTERNAL_ID 仅用于受控接入测试；生产业务后端应从已认证会话取值，不能由终端随意覆盖。
 
 以下脚本默认列工具和空间。设置 `UPLOAD_PATH` 时还会上传该文件并查询一次状态；不设置时只执行读取操作。保存为 `bisheng_mcp_demo.py` 后运行 `python bisheng_mcp_demo.py`：
 
@@ -480,8 +496,9 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 
-async def call(client, name, arguments):
-    result = await client.call_tool(name, arguments)
+async def call(client, name, arguments, *, external_id):
+    # 最终覆盖工具参数，账号由可信调用方从已验证会话导出。
+    result = await client.call_tool(name, {**arguments, "external_id": external_id})
     if result.isError:
         details = " ".join(
             block.text for block in result.content if block.type == "text"
@@ -492,6 +509,7 @@ async def call(client, name, arguments):
 
 async def main():
     headers = {"X-Developer-Token": os.environ["BISHENG_DEVELOPER_TOKEN"]}
+    external_id = os.environ["BISHENG_EXTERNAL_ID"]
     async with httpx.AsyncClient(headers=headers, timeout=180) as http:
         async with streamable_http_client(
             os.environ["BISHENG_MCP_URL"],
@@ -507,7 +525,7 @@ async def main():
 
                 arguments = {"page_size": 20}
                 while True:
-                    page = await call(client, "list_knowledge", arguments)
+                    page = await call(client, "list_knowledge", arguments, external_id=external_id)
                     for space in page["data"]:
                         print(space["id"], space["name"], space["can_upload_to_root"])
                     if not page["has_more"]:
@@ -527,13 +545,13 @@ async def main():
                 }
                 if os.environ.get("BISHENG_FOLDER_ID"):
                     upload["folder_id"] = int(os.environ["BISHENG_FOLDER_ID"])
-                saved = await call(client, "upload_file", upload)
+                saved = await call(client, "upload_file", upload, external_id=external_id)
                 print("saved:", saved["file_id"], saved["status"], saved["accepted"])
                 detail = await call(client, "get_file_detail", {
                     "knowledge_id": knowledge_id,
                     "file_id": saved["file_id"],
                     "include_content": False,
-                })
+                }, external_id=external_id)
                 print("state:", detail["file"]["status"], detail["content_ready"])
 
 
@@ -556,7 +574,8 @@ asyncio.run(main())
 | HTTP `429` | Token 限流；降低并发、列表刷新或轮询频率 |
 | HTTP `503` | 鉴权或限流依赖不可用；由管理员检查相关服务 |
 | 工具列表只有旧 `search_knowledge` | 实际连接的后端可能仍为旧版本；核对地址和发布版本后刷新列表 |
-| `Resource denied or unavailable` | 资源无权、状态不可用、目标错误或原上传业务规则不满足；检查空间/目录/文件归属与绑定用户权限 |
+| `指定账号或当前租户不可用` | 目标账号或当前租户无法唯一确定、已禁用或不存在；由可信后端/管理员核对，不会回退 Token 用户 |
+| `Resource denied or unavailable` | 资源无权、状态不可用、目标错误或原上传业务规则不满足；检查空间/目录/文件归属与目标用户权限 |
 | `Invalid MCP input or pagination cursor` 或参数校验错误 | 检查参数名、ID 类型、Base64、文件名、大小及游标条件；无效游标从首页重新获取 |
 | `MCP operation timed out` | 操作超时；读取可缩小范围，写入先查询已有结果再决定是否重试 |
 | `Write outcome uncertain` | 创建/投递结果不确定；按返回的 `file_id` 或目录列表核对，不能当作已经回滚 |
@@ -569,14 +588,8 @@ asyncio.run(main())
 
 ## 9. 旧工具与相关资料
 
-`search_knowledge` 保留原名称、参数和知识资源范围，用于兼容已有客户端。其必填参数同样为 `query`、`knowledge_base_ids`，默认 `top_k=5`、`max_content=15000`，返回 `{chunks,total}`。新接入知识空间检索可使用 `retrieve_chunks`；前者的旧资源范围不因新工具限定知识空间而收窄。
+`search_knowledge` 保留原名称、业务参数和知识资源范围；与其余工具一样新增必填 `external_id`，旧调用方必须升级。其必填参数为 `external_id`、`query`、`knowledge_base_ids`，默认 `top_k=5`、`max_content=15000`，返回 `{chunks,total}`。新接入知识空间检索可使用 `retrieve_chunks`；前者的旧资源范围不因新工具限定知识空间而收窄。
 
 ```json
-{"name":"search_knowledge","arguments":{"query":"设备检修前需要完成哪些检查？","knowledge_base_ids":[118],"top_k":5}}
+{"name":"search_knowledge","arguments":{"external_id":"00012345","query":"设备检修前需要完成哪些检查？","knowledge_base_ids":[118],"top_k":5}}
 ```
-
-HTTP Filelib 接口属于另一套调用契约，不能直接照搬其 `external_id`、上传 URL、覆盖同步或响应外壳到 MCP。
-
-- [特性接入简表](../../features/v2.5.0-sg/078-mcp-knowledge-tools/usage.md)
-- [本地实现验证与真实环境待验收项](../../features/v2.5.0-sg/078-mcp-knowledge-tools/verification.md)
-- [Filelib HTTP 检索接口](filelib-retrieve.md)

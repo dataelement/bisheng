@@ -58,7 +58,7 @@ async def test_view_only_user_can_get_original_link():
     service.source_service.resolve_links.assert_awaited_once_with([RetrieveSourceRef(12)])
 
 
-@pytest.mark.parametrize("denial", ["file", "space", "missing", "folder", "invalid-reference"])
+@pytest.mark.parametrize("denial", ["file", "space", "missing", "folder", "invalid-reference", "recycled", "old-type", "cross-tenant"])
 async def test_rejected_file_never_reaches_signer(denial):
     service, entry = _service()
     if denial == "file":
@@ -69,11 +69,17 @@ async def test_rejected_file_never_reaches_signer(denial):
         service.file_repository.find_by_id.return_value = None
     elif denial == "folder":
         entry.file_type = 0
+    elif denial == 'recycled':
+        entry.deleted_at = 'deleted'
+    elif denial == 'old-type':
+        service.knowledge_repository.find_by_id.return_value.type = 0
+    elif denial == 'cross-tenant':
+        entry.tenant_id = 2
     else:
         entry.entry_type = "publish"
         entry.reference_document_id = 100
         entry.entry_status = "invalid"
-    with pytest.raises((SpacePermissionDeniedError, SpaceFileNotFoundError)):
+    with pytest.raises((SpacePermissionDeniedError, SpaceFileNotFoundError, HTTPException)):
         await service.get_source_url(12)
     service.source_service.resolve_links.assert_not_awaited()
 

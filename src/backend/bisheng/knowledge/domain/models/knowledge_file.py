@@ -181,6 +181,11 @@ class KnowledgeFileBase(SQLModelSerializable):
         default=None,
         description="Knowledge space ID where the canonical business document was first uploaded",
     )
+    belonging_organization_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True),
+        description="文件所属组织ID, 首次上传及个人库发布到科室或团队库成功时赋值",
+    )
     reference_document_id: int | None = Field(
         default=None,
         description="Canonical KnowledgeDocument referenced by this F059 entry",

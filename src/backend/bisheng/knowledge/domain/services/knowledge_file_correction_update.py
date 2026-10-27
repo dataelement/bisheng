@@ -145,6 +145,7 @@ def _copy_file_location(old_file: KnowledgeFile, new_file: KnowledgeFile) -> Non
     """把原文件所在目录和首次上传人抄到新文件, 避免提升后掉到知识库根目录."""
     new_file.file_level_path = old_file.file_level_path
     new_file.level = old_file.level
+    new_file.belonging_organization_id = old_file.belonging_organization_id
     if new_file.original_uploader_id is None:
         new_file.original_uploader_id = old_file.original_uploader_id
     if new_file.original_knowledge_id is None:

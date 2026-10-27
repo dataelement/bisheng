@@ -77,6 +77,17 @@ describe("FilePublishDialog", () => {
         mockSubmitApproval.mockResolvedValue({});
     });
 
+    test("已发布相似文件展示提示但不能作为版本关联目标", async () => {
+        mockGetSimilarCandidates.mockResolvedValue({ data: [{ target_document_id: 301, primary_knowledge_file_id: 110,
+            title: "已发布相似文件", similarity: 0.95, can_associate: false }] });
+        render(<FilePublishDialog open activeSpace={activeSpace} file={file} onOpenChange={jest.fn()} />);
+        expect(await screen.findByText("目标库已有相似文档（仅供参考）")).toBeInTheDocument();
+        expect(screen.getByText("已发布相似文件 · 相似度 95%")).toBeInTheDocument();
+        expect(screen.queryByRole("option", { name: "推荐：已发布相似文件" })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+        await waitFor(() => expect(mockSubmitApproval).toHaveBeenCalledWith(expect.objectContaining({ target_document_id: null, target_file_id: null })));
+    });
+
     test.each([null, 202])("独立打开弹窗恢复服务端目标和目录 %s，并提交正确位置", async (folderId) => {
         mockGetLastTarget.mockResolvedValue({ target_space_id: 21, target_folder_id: folderId, folder_path: folderId ? [201, 202] : [] });
         mockGetSimilarCandidates.mockResolvedValue({ data: [] });

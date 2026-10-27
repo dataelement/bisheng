@@ -36,6 +36,7 @@ from ..schemas.query_builder import (
     AggregationExpression,
     AggsTypeEnum,
     AtomFilter,
+    ExistsOp,
     FilterExpression,
     MatchPhraseOp,
     RangeOp,
@@ -44,8 +45,15 @@ from ..schemas.query_builder import (
     TermsOp,
 )
 from .department_label_resolver import resolve_dimension_labels
-from .login_participation import CHINA, LOGIN_FIELDS, load_login_population, query_login_participation
+from .login_participation import (
+    CHINA,
+    LOGIN_FIELDS,
+    load_login_population,
+    query_active_users,
+    query_login_participation,
+)
 from .search_engine_service import SearchEngineService, SearchParameters
+from .user_metric_definitions import USER_STAT_DATASETS
 
 TIMESTAMP_FIELD = "timestamp"
 REALTIME_TEMPORAL_DATASETS = {
@@ -68,8 +76,8 @@ class DataQueryService(BaseModel):
 
     @property
     def uses_login_participation(self) -> bool:
-        return self.dataset_code in {"mid_user_increment", "mid_user_daily_participation"} and any(
-            metric.field_id in LOGIN_FIELDS for metric in self.data_config.metrics
+        return self.dataset_code in USER_STAT_DATASETS and any(
+            metric.field_id in LOGIN_FIELDS or metric.field_id == "active_user_count" for metric in self.data_config.metrics
         )
 
     async def query_telemetry_data(self) -> DataQueryResult:
@@ -179,8 +187,10 @@ class DataQueryService(BaseModel):
         all_dimensions = {}
         res = []
         login_population = None
+        active_rows = None
         from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
         from bisheng.core.context.tenant import get_current_tenant_id
+
         from .knowledge_document_reader import document_reader, split_time_filters
         from .knowledge_document_statistics import DOCUMENT_METRICS, uses_category_fields
 
@@ -208,13 +218,20 @@ class DataQueryService(BaseModel):
             metric_config = metric_map.get(metric.field_id)
             if not metric_config:
                 raise QueryMetricNotFoundError()
+            if self.dataset_code in USER_STAT_DATASETS and metric.field_id in {"participation_rate", "active_user_count"}:
+                if active_rows is None:
+                    active_rows = await query_active_users(
+                        index_name=index_name, dimensions=dimensions, stack_dimension=stack_dimension, filters=filters,
+                    )
             # metric filters、dimensions、stack_dimension、index_name copy from search_kwargs
             if metric_config.calculation == VirtualMetricCalculationEnum.LOGIN_PARTICIPATION:
                 if login_population is None:
                     login_population = await load_login_population(
                         index_name=index_name, dimensions=dimensions, stack_dimension=stack_dimension, filters=filters,
                     )
-                one_metric_result = login_population.rows(metric_config.field)
+                one_metric_result = login_population.rows(metric_config.field, active_rows=active_rows)
+            elif self.dataset_code in USER_STAT_DATASETS and metric.field_id == "active_user_count":
+                one_metric_result = active_rows
             else:
                 one_metric_result = await self.query_one_metric(metric_config, metric.aggregation, dimension_index,
                                                                 index_name=index_name,
@@ -693,10 +710,19 @@ class DataQueryService(BaseModel):
                 # misconfiguration bug that should raise), a runtime filter that doesn't
                 # apply to THIS chart's dataset is expected and must be a no-op, not an error.
                 continue
+            values = [value for value in runtime_filter.values if value is not None]
+            alternatives = []
+            if values:
+                alternatives.append(TermsOp(field=dimension_config.field, value=values))
+            if any(value is None for value in runtime_filter.values):
+                # 空值分组必须匹配缺失字段, 不能用展示名称或 null 做 terms 查询。
+                alternatives.append(FilterExpression(
+                    bool_operator="must_not",
+                    filters=[ExistsOp(field=dimension_config.field)],
+                ))
             runtime_filters.append(
-                TermsOp(
-                    field=dimension_config.field,
-                    value=runtime_filter.values,
+                alternatives[0] if len(alternatives) == 1 else FilterExpression(
+                    bool_operator="should", filters=alternatives,
                 )
             )
         if runtime_filters:

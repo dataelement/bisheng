@@ -44,7 +44,20 @@ def persist_parse_result_with_fulltext_intent(
     constants.ensure_runtime_compatible(multi_tenant_enabled=resolved_multi_tenant)
     action = fulltext_action_for_parse_status(file.status)
     with session_factory() as session:
-        session.add(file)
+        from bisheng.knowledge.domain.services.knowledge_source_file_validation import unreadable_reason
+
+        discarded = False
+        if unreadable_reason(file) is not None:
+            from bisheng.knowledge.domain.repositories.implementations.unreadable_sync_file_repository_impl import (
+                UnreadableSyncFileRepositoryImpl,
+            )
+
+            outcome = UnreadableSyncFileRepositoryImpl(session).discard(file)
+            if outcome == "stale":
+                return
+            discarded = outcome == "deleted"
+        if not discarded:
+            session.add(file)
         if file.status == KnowledgeFileStatus.SUCCESS.value:
             from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import (
                 KnowledgeBackgroundRepositoryImpl,
@@ -60,4 +73,5 @@ def persist_parse_result_with_fulltext_intent(
                 max_retries=constants.KNOWLEDGE_FULLTEXT_MAX_RETRIES,
             )
         session.commit()
-        session.refresh(file)
+        if not discarded:
+            session.refresh(file)

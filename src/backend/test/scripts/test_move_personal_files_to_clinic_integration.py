@@ -873,6 +873,129 @@ async def setup_unversioned(direct):
     backend.store.read = AsyncMock(side_effect=AssertionError("unversioned file has no canonical index"))
 
 
+async def setup_selected_source(direct, level, kind="canonical"):
+    backend, unit, _, connection, _, _ = direct
+    if kind == "unversioned":
+        await setup_unversioned(direct)
+    async with connection() as session:
+        scope = (await session.exec(select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == 10))).one()
+        scope.level, scope.owner_type = level, "department" if level == "department" else "user"
+        session.add(scope)
+        session.add(Knowledge(id=40, name="其他个人库", type=3, user_id=8, tenant_id=1))
+        session.add(KnowledgeSpaceScope(space_id=40, level="personal", owner_type="user", owner_id=8, tenant_id=1))
+        session.add(KnowledgeFile(id=900, knowledge_id=40, tenant_id=1, file_name="other", status=3, user_id=8))
+        folder = await session.get(KnowledgeFile, 200)
+        folder.file_level_path, folder.level = "", 0
+        session.add(folder)
+        await session.commit()
+    snapshot = await backend.load_snapshot(1, source_space_id=10)
+    assert 900 not in {f.id for f in snapshot["files"]}
+    plan = m.build_plan(snapshot, 1, ("A", "B"), source_space_id=10)
+    assert plan["candidate_files"] == (1 if kind == "unversioned" else 2)
+    group = plan["groups"][0]
+    group["folder_id"] = 200
+    unit.clear()
+    unit.update(m.document_units(snapshot, group, plan)[0])
+    return backend, unit
+
+
+@pytest.mark.parametrize("level", ["personal", "team_ks", "department"])
+@pytest.mark.parametrize("kind", ["canonical", "unversioned"])
+async def test_selected_source_moves_only_selected_library_and_keeps_uploader(direct, level, kind):
+    backend, unit = await setup_selected_source(direct, level, kind)
+    _, _, checkpoint, connection, _, forbidden = direct
+    await backend.move_unit(unit, checkpoint)
+    assert unit["status"] == "succeeded"
+    async with connection() as session:
+        for item in unit["files"]:
+            file = await session.get(KnowledgeFile, item["file_id"])
+            assert file.knowledge_id == 20 and file.file_level_path == "/200" and file.user_id == 8
+        assert (await session.get(KnowledgeFile, 900)).knowledge_id == 40
+        assert (await session.get(Knowledge, 10)).user_id == 9
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["canonical", "unversioned"])
+@pytest.mark.parametrize("committed", [False, True])
+async def test_selected_source_report_recovers_fixed_scope(direct, kind, committed):
+    backend, unit = await setup_selected_source(direct, "department", kind)
+    _, _, checkpoint, connection, _, _ = direct
+    original_replace = backend.replace_permissions.side_effect
+    if committed:
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    elif kind == "unversioned":
+        backend.replace_permissions.side_effect = RuntimeError("permission response lost")
+    else:
+        backend.store.fail_side = "es"
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    backend.refresh_metadata.side_effect = None
+    backend.replace_permissions.side_effect = original_replace
+    restored = json.loads(json.dumps(unit))
+    await backend.move_unit(restored, checkpoint, recover=True)
+    assert restored["status"] == ("succeeded" if committed else "restored")
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).knowledge_id == (20 if committed else 10)
+        assert (await session.get(KnowledgeFile, 900)).knowledge_id == 40
+
+
+async def test_selected_source_sql_scan_stays_read_only_and_rejects_foreign_file_ids(direct):
+    from sqlalchemy import event
+
+    backend, _unit = await setup_selected_source(direct, "department")
+    _, _, _, connection, _, _ = direct
+    async with connection() as session:
+        engine = session.bind.sync_engine
+    statements = []
+
+    def record(_conn, _cursor, statement, *_args):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        snapshot = await backend.load_snapshot(1, source_space_id=10, file_ids={101, 900})
+        assert {f.id for f in snapshot["files"] if f.file_type == 1} == {101}
+        assert {v.knowledge_file_id for v in snapshot["versions"]} == {101, 106}
+        assert m.build_plan(snapshot, 1, source_space_id=10)["candidate_files"] == 0
+        assert all(sql.lstrip().upper().startswith("SELECT") for sql in statements)
+        default = await backend.load_snapshot(1)
+        assert {f.knowledge_id for f in default["files"] if f.file_type == 1} == {40}
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+
+@pytest.mark.parametrize("change", ["scope", "folder_filter", "library_filter", "source_metadata"])
+@pytest.mark.parametrize("recover", [False, True])
+async def test_selected_source_rejects_scope_drift_before_external_writes(direct, change, recover):
+    backend, unit = await setup_selected_source(direct, "department")
+    _, _, checkpoint, connection, _, _ = direct
+    if recover:
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+        with pytest.raises(RuntimeError):
+            await backend.move_unit(unit, checkpoint)
+        backend.refresh_metadata.side_effect = None
+    if change in {"scope", "source_metadata"}:
+        async with connection() as session:
+            if change == "scope":
+                row = (await session.exec(select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == 10))).one()
+                row.owner_id = 999
+            else:
+                row = await session.get(KnowledgeFile, 101)
+                row.user_metadata = {}
+            session.add(row)
+            await session.commit()
+    elif change == "folder_filter":
+        unit["source_filter"]["folder_parts"] = ["outside"]
+    else:
+        unit["source_filter"]["space_id"] = 40
+    backend.store.calls.clear()
+    backend.replace_permissions.reset_mock()
+    with pytest.raises(ValueError):
+        await backend.move_unit(unit, checkpoint, recover=recover)
+    assert backend.store.calls == []
+    backend.replace_permissions.assert_not_awaited()
+
+
 async def setup_leaf_destination(direct):
     _backend, unit, _checkpoint, connection, _, _ = direct
     async with connection() as session:

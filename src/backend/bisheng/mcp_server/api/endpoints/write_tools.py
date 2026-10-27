@@ -3,7 +3,8 @@ from typing import Literal
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ToolAnnotations
 
-from bisheng.mcp_server.domain.schemas.browse import ResourceId
+from bisheng.mcp_server.domain.schemas.browse import FolderId, ResourceId
+from bisheng.mcp_server.domain.schemas.identity import ExternalAccount
 from bisheng.mcp_server.domain.schemas.ingestion import (
     ClassificationCode,
     CreateDocumentRequest,
@@ -26,12 +27,13 @@ def register_write_tools(server: FastMCP, runtime: McpToolRuntime) -> None:
         annotations=annotations,
     )
     async def create_document(
+        external_id: ExternalAccount,
         knowledge_id: ResourceId,
         file_name: FileName,
         content: DocumentText,
         ctx: Context,
         content_format: Literal["text", "markdown"] = "markdown",
-        folder_id: ResourceId | None = None,
+        folder_id: FolderId | None = None,
         file_category_code: ClassificationCode | None = None,
         file_subcategory_code: ClassificationCode | None = None,
         business_domain_code: ClassificationCode | None = None,
@@ -39,6 +41,7 @@ def register_write_tools(server: FastMCP, runtime: McpToolRuntime) -> None:
         manual_tag_names: ManualTagNames | None = None,
     ) -> WriteResponse:
         params = CreateDocumentRequest(
+            external_id=external_id,
             knowledge_id=knowledge_id,
             file_name=file_name,
             content=content,
@@ -57,11 +60,12 @@ def register_write_tools(server: FastMCP, runtime: McpToolRuntime) -> None:
         annotations=annotations,
     )
     async def upload_file(
+        external_id: ExternalAccount,
         knowledge_id: ResourceId,
         file_name: FileName,
         content_base64: FileBase64,
         ctx: Context,
-        folder_id: ResourceId | None = None,
+        folder_id: FolderId | None = None,
         file_category_code: ClassificationCode | None = None,
         file_subcategory_code: ClassificationCode | None = None,
         business_domain_code: ClassificationCode | None = None,
@@ -69,6 +73,7 @@ def register_write_tools(server: FastMCP, runtime: McpToolRuntime) -> None:
         manual_tag_names: ManualTagNames | None = None,
     ) -> WriteResponse:
         params = UploadFileRequest(
+            external_id=external_id,
             knowledge_id=knowledge_id,
             file_name=file_name,
             content_base64=content_base64,

@@ -20,7 +20,10 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
 
 vi.mock("@/store/dashboardStore", () => ({
   useComponentEditorStore: () => ({ updateEditingComponent: vi.fn() }),
-  useEditorDashboardStore: () => ({ refreshChart: vi.fn() }),
+  useEditorDashboardStore: (selector?: (state: any) => unknown) => {
+    const state = { refreshChart: vi.fn(), savedDashboard: null, chartRefreshTriggers: {} }
+    return selector ? selector(state) : state
+  },
 }))
 
 const stackDimensions = [
@@ -159,6 +162,8 @@ describe("pivot table two column dimensions", () => {
       ["2026-08-21", "政策制度"],
     ])
     expect(data.rows[0]).toEqual({
+      id: '["张三","信息部"]',
+      rawKey: ["张三", "信息部"],
       key: ["张三", "信息部"],
       values: [3, 4, 0],
       total: 7,

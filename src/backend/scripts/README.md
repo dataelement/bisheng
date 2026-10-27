@@ -4,6 +4,46 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## General Database Scripts
 
+### `backfill_knowledge_file_organization.py`
+
+补齐门户知识库文件的 `belonging_organization_id` 空值。版本文档统一取**当前主版本上传人的当前唯一有效主组织**，同时补齐各版本及发布、分享入口；无版本链的普通文件取自身上传人。只用上传人 `user_id`，不改用原始上传人，也不按发布路径、科室绑定或团队创建人推导存量归属。
+
+```bash
+# 在 src/backend 执行。必须已完成 f118_file_belonging_organization 迁移。
+# 示例租户为1；默认只读，所有报告必须使用新路径。
+.venv/bin/python scripts/backfill_knowledge_file_organization.py \
+  --tenant-id 1 --output /tmp/file-org-plan.jsonl
+# 可增加 --space-id 或 --file-id 缩小种子范围，整份文档仍会展开到所有版本/入口。
+# 审核计划后，在维护窗口执行同一计划，写入前会重新校验。
+.venv/bin/python scripts/backfill_knowledge_file_organization.py \
+  --plan /tmp/file-org-plan.jsonl --apply --output /tmp/file-org-write.jsonl
+# 回退先预览；确认需要回退后再增加 --apply，并另换新的输出文件名。
+.venv/bin/python scripts/backfill_knowledge_file_organization.py \
+  --rollback /tmp/file-org-write.jsonl --output /tmp/file-org-rollback-preview.jsonl
+```
+
+- 仅补空值。某个版本或入口已有非空值且与推导结果不同，整份文档跳过。上传人没有唯一有效主组织、链路损坏、跨租户、不支持的旧发布引用或分发在途时跳过并记录原因；文件夹、收藏引用和投影墓碑不处理。软删除的正常版本仍随文档处理。
+- 预览支持 `--batch-size`（默认200）、`--limit`、`--start-after-id`。游标与限制针对扫描种子，不是改动行数；一个文档会展开全部版本和业务入口。未启用自动租户过滤的环境仍逐行复核租户，不写入其他租户；扫描计数可能包含被排除的其他租户种子。
+- 计划绑定数据库地址/库名摘要及租户，执行不允许再修改范围或直接扫描写入；逐组锁定、重新计算组织并比较计划快照，漂移时跳过。只写组织列并显式保留原更新时间，不改上传人、更新人、解析状态、权限或ES/Milvus索引。
+- JSONL报告独占创建、权限0600。写前意图和提交前读回结果会fsync落盘，提交后记确认。回退只清空本次从NULL补入且记录未漂移的值；已有非空值永不清理。提交未确认的组列为 `commit_outcome_unknown`，不盲目回退；末尾中断残片不会被当成已提交记录。
+- 必须在维护窗口暂停相关上传、移动、编辑、发布/分享、版本切换和组织同步；脚本不停止服务，也不取得全局维护锁。各文档独立提交，中断或失败前的成功组保留，以写入报告定向回退。未知提交结果需保留日志人工核对，不能直接视为全部回滚。
+- 容器临时目录会随重建丢失；正式操作应使用持久化路径保存计划和写入日志。退出码：0正常结束（预览可能含跳过），3实际执行有跳过需核对，2参数/报告错误，1数据库或执行失败，130人工中断。
+
+### `backfill_dashboard_original_organizations.py`
+
+补齐指定租户看板现有文件统计的“原始上传库、原始所属公司/部门/科室/班组”空值。复用当前投影规则；原始库ID缺失回退当前库并单独计数。原始组织按原始库当前组织映射，不能恢复首次上传时的组织历史。已有非空值不同则整条跳过；不写数据库、不新增统计记录、不改历史事件和计数，也不更新索引结构。
+
+```bash
+# 后端根目录执行，默认只读；所有输出必须是新文件。
+.venv/bin/python scripts/backfill_dashboard_original_organizations.py --tenant-id 1 --output /tmp/origin-plan.json
+# 可重复 --space-id 限定知识库。审核计划数量、冲突和回退数量后，再确认生产写入。
+.venv/bin/python scripts/backfill_dashboard_original_organizations.py --plan /tmp/origin-plan.json --apply --output /tmp/origin-write.jsonl
+# 回退先预览，确认后增加 --apply，输出换新路径。
+.venv/bin/python scripts/backfill_dashboard_original_organizations.py --rollback /tmp/origin-write.jsonl --output /tmp/origin-rollback-preview.jsonl
+```
+
+五字段必须已有 keyword mapping；预览绑定索引UUID和计划摘要。写入前重新计算来源并检查ES身份，局部更新使用版本并发保护。写前记录0600权限日志并fsync，写后读回；任何异常立即停止，部分成功记录保留在日志。回退只恢复本次涉及字段，字段已有并发变化时拒绝，不覆盖其他字段。重复扫描应无相同候选；旧计划重复执行会因漂移停止。容器 `/tmp` 文件随容器重建丢失，正式操作后需保存计划及日志到持久化存储。
+
 ### `audit_knowledge_document_categories.py`
 
 只读审计数据看板的文档分类冲突。指定租户，并按知识库或文档 ID 限定范围；123、91 为示例 ID。比对 ES 文件快照与数据库当前入口、主版本和管理入口，输出分类来源、身份差异及安全的定向刷新建议。不会修改数据库/ES、派发刷新或内容解析任务，没有 `--apply` 模式。
@@ -20,6 +60,21 @@ This directory contains manual maintenance and migration scripts for the backend
 - 输出文件使用 `0600` 权限且必须不存在；失败不会生成成功报告。`source_fingerprint` 只供来源核对，不是写入授权或并发保护令牌。线上修复必须先审阅实际范围与来源，单独确认后执行，并重新核对来源、定向刷新和读回；不能直接清空索引或改写分类。
 
 ### `move_personal_files_to_clinic.py`
+
+可通过 `--source-space-id` 指定来源知识库，支持个人库、科室库、部门库等有效已发布知识库。指定后自动只处理接口同步文件；`--folder-path` 使用相对该库根目录的目录名称路径，包含全部子目录。省略目录或指定 `/` 表示整个指定库。
+
+```bash
+# 只读预览指定来源库下的接口同步文件；1234 和目录路径替换为实际值
+.venv/bin/python scripts/move_personal_files_to_clinic.py \
+  --tenant-id 1 --source-space-id 1234 --folder-path '一级目录/二级目录'
+
+# 审核预览后，正式执行同一范围（必须处于维护窗口）
+.venv/bin/python scripts/move_personal_files_to_clinic.py \
+  --tenant-id 1 --source-space-id 1234 --folder-path '一级目录/二级目录' \
+  --operator-id 1 --apply
+```
+
+显式来源库不存在、跨租户、未发布、为收藏库或缺少有效范围时直接拒绝，不退回扫描其他库。来源 ID、目录及范围归属写入恢复单元；创建目标目录前和事务内复核，来源范围行锁到事务结束。恢复沿用报告，不能再传入 `--source-space-id` 或 `--folder-path` 改变范围。已处于上传人路由对应目标库的文件跳过。版本链跨库、跨目录范围或混有非接口文件时整链暂缓，分享/发布入口等既有保护继续生效。不指定来源库时保持原来的全部个人库扫描。
 
 扫描指定租户的全部有效个人知识库，将指定完整目录路径（含子目录）中的文件，按上传人的主组织迁入科室库，找不到时兜底部门库。独立单文件脚本，运行依赖当前后端环境。
 

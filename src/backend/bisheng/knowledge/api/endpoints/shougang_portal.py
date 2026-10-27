@@ -430,6 +430,18 @@ async def get_shougang_portal_home_favorite_count(
     return resp_200({"favorite_count": await PortalTelemetryEventService.count_dashboard_favorites()})
 
 
+@router.get("/home/engagement-counts")
+async def get_shougang_portal_home_engagement_counts(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    _ = login_user
+    read_count, favorite_count = await asyncio.gather(
+        PortalTelemetryEventService.count_dashboard_reads(),
+        PortalTelemetryEventService.count_dashboard_favorites(),
+    )
+    return resp_200({"read_count": read_count, "favorite_count": favorite_count})
+
+
 @router.get("/files/{space_id}/{file_id}/preview")
 async def get_shougang_portal_file_preview(
     space_id: int,

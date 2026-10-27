@@ -11,6 +11,7 @@ from bisheng.core.context.tenant import (
 )
 from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.developer_token.domain.services import DeveloperTokenService
+from bisheng.mcp_server.domain.schemas.identity import McpExecutionIdentity
 
 
 class McpAuthService:
@@ -36,10 +37,10 @@ class McpAuthService:
 
     @staticmethod
     @contextmanager
-    def use_identity(principal: DeveloperTokenPrincipal) -> Iterator[None]:
+    def use_identity(identity: McpExecutionIdentity) -> Iterator[None]:
         values = (
-            (current_tenant_id, principal.tenant_id),
-            (visible_tenant_ids, frozenset({principal.tenant_id})),
+            (current_tenant_id, identity.tenant_id),
+            (visible_tenant_ids, frozenset({identity.tenant_id})),
             (_admin_scope_tenant_id, None),
             (_bypass_tenant_filter, False),
             (_is_management_api, False),

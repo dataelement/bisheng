@@ -62,7 +62,7 @@ def time_dimension(granularity):
 
 RECORDS = [
     record(1, "2026-07-01"),
-    record(2, "2026-07-02"),
+    record(2, "2026-07-02", active_employee=0),
     record(1, "2026-08-01"),
     record(1, "2026-08-01"),
     record(1, "2026-08-02"),
@@ -76,34 +76,72 @@ RECORDS = [
 @pytest.mark.parametrize(
     "granularity, expected",
     [
-        (None, [(None, 2 / 3, 2)]),
-        ("month", [("2026-08-01", 1 / 2, 1), ("2026-09-01", 1 / 3, 1)]),
-        ("year", [("2026-01-01", 2 / 3, 2)]),
+        (None, [(None, 2 / 3, 3, 3, 2)]),
+        ("month", [("2026-08-01", 1 / 2, 2, 2, 1), ("2026-09-01", 1 / 3, 1, 3, 1)]),
+        ("year", [("2026-01-01", 2 / 3, 3, 3, 2)]),
     ],
 )
 def test_period_deduplication_and_historical_denominator(granularity, expected):
     population = LoginPopulation([time_dimension(granularity)] if granularity else [], LoginSelection(date_filters()))
     for source in RECORDS:
         population.add(source)
-    rates, counts = population.rows("participation_rate"), population.rows("logged_in_employee_count")
-    assert [row[-1] for row in rates] == pytest.approx([value for _, value, _ in expected])
-    assert [row[-1] for row in counts] == [count for _, _, count in expected]
+    counts = population.rows("logged_in_employee_count")
+    rates = population.rows("participation_rate", active_rows=[
+        [*row[:-1], active] for row, (_, _, _, _, active) in zip(counts, expected, strict=True)
+    ])
+    assert [row[-1] for row in rates] == pytest.approx([value for _, value, _, _, _ in expected])
+    assert [row[-1] for row in counts] == [count for _, _, count, _, _ in expected]
+    assert [row[-1] for row in population.rows("active_employee_count")] == [total for _, _, _, total, _ in expected]
     if granularity:
-        assert [row[0] for row in rates] == [midnight(date.fromisoformat(day)) for day, _, _ in expected]
+        assert [row[0] for row in rates] == [midnight(date.fromisoformat(day)) for day, _, _, _, _ in expected]
+
+
+@pytest.mark.parametrize("granularity, expected", [(None, [5]), ("day", [1, 1, 1, 1, 1, 0, 0]), ("week", [2, 3])])
+def test_cumulative_logins_count_user_days_within_selected_week(granularity, expected):
+    population = LoginPopulation(
+        [time_dimension(granularity)] if granularity else [],
+        LoginSelection(date_filters("2026-08-01", "2026-08-07")),
+    )
+    for day in range(1, 6):
+        for _ in range(5):
+            population.add(record(1, f"2026-08-{day:02d}", login_count=5))
+    population.add(record(1, "2026-07-31"))
+    population.add(record(1, "2026-08-08"))
+    population.add(record(2, "2026-08-01", logged_in=False))
+    population.add(record(3, "2026-08-01", metric_source="active_user"))
+    assert [row[-1] for row in population.rows("logged_in_employee_count")] == expected
+
+
+def test_cumulative_logins_use_only_selected_non_contiguous_china_days():
+    population = LoginPopulation([], LoginSelection([
+        FilterExpression(bool_operator="must", filters=[TermsOp(
+            field="local_date", value=["2026-08-01", "2026-08-03"],
+        )]),
+    ]))
+    population.add(record(1, "2026-08-01"))
+    population.add(record(1, "2026-08-02"))
+    population.add(record(1, "2026-08-02", timestamp=midnight(date(2026, 8, 2)) // 1000 - 1))
+    population.add(record(1, "2026-08-03"))
+    population.add(record(2, "2026-08-03"))
+    assert population.rows("logged_in_employee_count") == [[3]]
 
 
 def test_daily_cumulative_population_zero_days_and_zero_denominator():
     population = LoginPopulation([time_dimension("day")], LoginSelection(date_filters()))
     for source in RECORDS:
         population.add(source)
-    rates = dict(population.rows("participation_rate"))
+    rates = dict(population.rows("participation_rate", active_rows=population.rows("logged_in_employee_count")))
     assert rates[midnight(date(2026, 8, 1))] == 0.5
     assert rates[midnight(date(2026, 8, 2))] == 0.5
     assert rates[midnight(date(2026, 8, 3))] == 0
     assert rates[midnight(date(2026, 9, 21))] == 1 / 3
     assert len(rates) == 52
+    effective = dict(population.rows("active_employee_count"))
+    assert effective[midnight(date(2026, 8, 3))] == 2
+    assert effective[midnight(date(2026, 9, 21))] == 3
     empty = LoginPopulation([], LoginSelection(date_filters()))
-    assert empty.rows("participation_rate") == [[0.0]]
+    assert empty.rows("participation_rate", active_rows=[]) == [[0.0]]
+    assert empty.rows("active_employee_count") == [[0]]
 
 
 def test_china_week_boundary_and_department_group_population():
@@ -117,10 +155,16 @@ def test_china_week_boundary_and_department_group_population():
         (4, "2026-08-03", "二部"),
     ]:
         population.add(record(user, day, primary_department_name=dept))
-    rows = {(row[0], row[1]): row[2] for row in population.rows("participation_rate")}
+    rows = {(row[0], row[1]): row[2] for row in population.rows(
+        "participation_rate", active_rows=population.rows("logged_in_employee_count"),
+    )}
     assert rows["一部", midnight(date(2026, 7, 27))] == 0.5
     assert rows["一部", midnight(date(2026, 8, 3))] == 1 / 3
     assert rows["二部", midnight(date(2026, 8, 3))] == 1
+    effective = {(row[0], row[1]): row[2] for row in population.rows("active_employee_count")}
+    assert effective["一部", midnight(date(2026, 7, 27))] == 2
+    assert effective["一部", midnight(date(2026, 8, 3))] == 3
+    assert effective["二部", midnight(date(2026, 8, 3))] == 1
 
 
 def test_filters_preserve_organization_but_remove_history_lower_bound():
@@ -210,10 +254,16 @@ async def test_chart_entry_point_shares_snapshot_and_formats_china_month(monkeyp
             yield source
 
     monkeypatch.setattr(module, "read_login_records", records)
+    monkeypatch.setattr(component_module, "query_active_users", AsyncMock(return_value=[
+        [midnight(date(2026, 8, 1)), 2], [midnight(date(2026, 9, 1)), 1],
+    ]))
     service = component_module.DataQueryService(
         dataset_code="mid_user_increment",
         data_config=ComponentDataConfig(
-            metrics=[{"fieldId": "participation_rate"}, {"fieldId": "logged_in_employee_count"}],
+            metrics=[
+                {"fieldId": "participation_rate"}, {"fieldId": "logged_in_employee_count"},
+                {"fieldId": "active_employee_count"},
+            ],
             dimensions=[{"fieldId": "timestamp", "timeGranularity": "month"}],
             timeFilter={
                 "mode": "fixed",
@@ -224,14 +274,19 @@ async def test_chart_entry_point_shares_snapshot_and_formats_china_month(monkeyp
     )
     result = await service.query_telemetry_data()
     assert result.dimensions == [["2026-08"], ["2026-09"]]
-    assert result.value == [[0.5, 1], [1 / 3, 1]]
+    assert result.value == [[1.0, 2, 2], [1 / 3, 1, 3]]
     assert len(scans) == 1
 
 
-async def test_month_drilldown_exports_unique_login_users(monkeypatch):
+@pytest.mark.parametrize("field, history", [
+    ("participation_rate", False), ("active_user_count", False),
+    ("logged_in_employee_count", False), ("active_employee_count", True),
+])
+@pytest.mark.parametrize("dataset_code", ["mid_user_increment", "mid_user_daily_participation"])
+async def test_month_drilldown_exports_unique_login_users(monkeypatch, field, history, dataset_code):
     from bisheng.telemetry_search.domain.services import dashboard_export_detail as detail
 
-    dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == "mid_user_increment")
+    dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == dataset_code)
 
     class Session:
         async def __aenter__(self):
@@ -254,22 +309,36 @@ async def test_month_drilldown_exports_unique_login_users(monkeypatch):
     async def scan(*_args, **kwargs):
         queries.append(kwargs["query"]["query"])
         yield {"_source": record(1, "2026-08-01", user_name="张三")}
+        yield {"_source": record(
+            1, "2026-08-01", user_name="张三", login_count=5,
+            timestamp=midnight(date(2026, 8, 1)) + 60_000, local_date="2026-07-31",
+        )}
         yield {"_source": record(1, "2026-08-02", user_name="张三")}
+        if history:
+            yield {"_source": record(2, "2026-07-02", user_name="李四")}
+        if "logged_in" not in str(queries[-1]):
+            yield {"_source": record(3, "2026-08-01", user_name="王五", logged_in=False, metric_source="active_user")}
 
     monkeypatch.setattr(detail, "async_scan", scan)
     result = await detail.query_detail_rows(
-        dataset_code="mid_user_increment",
+        dataset_code=dataset_code,
         data_config=ComponentDataConfig(
-            metrics=[{"fieldId": "participation_rate"}],
+            metrics=[{"fieldId": field}],
             dimensions=[{"fieldId": "timestamp", "timeGranularity": "month"}],
         ),
         dimension_filters=[{"fieldId": "timestamp", "values": ["2026-08"]}],
         row_limit=100,
     )
-    assert len(result.rows) == 1
+    assert len(result.rows) == (2 if history or field == "logged_in_employee_count" else 1)
+    if field == "logged_in_employee_count":
+        assert {row["local_date"] for row in result.rows} == {"2026-08-01", "2026-08-02"}
+        assert "local_date" in {column.field for column in result.columns}
     query_text = str(queries[0])
+    bounds = next(item["range"]["timestamp"] for item in queries[0]["bool"]["filter"] if "range" in item)
+    assert ("gte" not in bounds) is history
     assert "participation" in query_text and "logged_in" in query_text
-    assert str(midnight(date(2026, 8, 1))) in query_text
+    if not history:
+        assert str(midnight(date(2026, 8, 1))) in query_text
     assert str(midnight(date(2026, 9, 1))) in query_text
 
 
@@ -282,6 +351,7 @@ async def test_query_keeps_history_and_applies_the_current_period(monkeypatch):
             yield source
 
     monkeypatch.setattr(module, "read_login_records", records)
+    monkeypatch.setattr(module, "query_active_users", AsyncMock(return_value=[[2]]))
     assert await query_login_participation(
         "participation_rate", index_name="users", dimensions=[], stack_dimension=None, filters=date_filters()
     ) == [[2 / 3]]
@@ -340,7 +410,7 @@ async def test_index_pagination_without_pit_checks_errors_and_accepts_refresh_ch
 def test_participation_configuration_uses_cumulative_login_population(code):
     dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == code)
     metrics = {item["field"]: MetricConfig(**item) for item in dataset.schema_config["metrics"]}
-    for field in ("participation_rate", "logged_in_employee_count"):
+    for field in ("logged_in_employee_count", "active_employee_count"):
         metric = metrics[field]
         assert metric.calculation == "login_participation"
         assert metric.formula is None
@@ -351,5 +421,7 @@ def test_participation_configuration_uses_cumulative_login_population(code):
             ]
         }
         assert _deduplicate_field(ComponentDataConfig(), metric) == "user_id"
-    assert metrics["active_employee_count"].calculation is None
+    assert metrics["participation_rate"].calculation == "login_participation"
+    assert _metric_filter(metrics["participation_rate"]) is None
+    assert metrics["active_employee_count"].name == "全员有效用户数"
     assert metrics["login_count"].is_virtual is False

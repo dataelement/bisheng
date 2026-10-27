@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints
 
-from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
+from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeRead
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 
 ExternalUserId = Annotated[
@@ -24,6 +24,13 @@ class APIAppendQAParam(BaseModel):
 
 class QueryQAParam(BaseModel):
     timeRange: list[str]
+
+
+class FilelibSpaceCreate(KnowledgeCreate):
+    type: Literal[3] = 3
+    space_level: KnowledgeSpaceLevelEnum = KnowledgeSpaceLevelEnum.TEAM
+    department_id: int | None = None
+    is_clinic: bool = False
 
 
 class FilelibKnowledgeRead(KnowledgeRead):

@@ -65,6 +65,33 @@ async def test_rating_transitions_and_comment_survive_refresh(feedback_db):
     assert result == {"liked": 1, "comment": "缺少依据"}
 
 
+async def test_audit_comments_include_history_once_and_only_selected_chats(feedback_db):
+    user = SimpleNamespace(user_id=7, tenant_id=1)
+    await feedback.ChatFeedbackService.update(321, user, comment="需要依据")
+    await feedback.ChatFeedbackService.update(321, user, comment="请补充出处")
+    for index, (chat_id, is_bot, remark) in enumerate([
+        ("feedback-chat", True, "历史意见"),
+        ("feedback-chat", True, "break_answer"),
+        ("feedback-chat", True, "inaction"),
+        ("feedback-chat", True, " \n\t"),
+        ("feedback-chat", False, "用户消息备注"),
+        ("other-chat", True, "不可见会话意见"),
+    ], start=400):
+        feedback_db.add(ChatMessage(
+            id=index, chat_id=chat_id, user_id=7, tenant_id=1, flow_id="",
+            is_bot=is_bot, type="end", category="agent_answer", message="回答", remark=remark,
+        ))
+    await feedback_db.commit()
+    result = await feedback.ChatFeedbackService.comments_for_chats(["feedback-chat", "empty-chat"])
+    assert result == {"feedback-chat": [
+        {"message_id": 321, "comment": "请补充出处", "liked": 0},
+        {"message_id": 400, "comment": "历史意见", "liked": 0},
+    ]}
+    assert await feedback.ChatFeedbackService.comments_for_chats([]) == {}
+    chat = await feedback_db.get(MessageSession, "feedback-chat")
+    assert (chat.like, chat.dislike, chat.copied) == (0, 0, 0)
+
+
 @pytest.mark.parametrize(
     "changes,user_id,tenant_id",
     [

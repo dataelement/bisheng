@@ -1,24 +1,16 @@
-import asyncio
-import logging
-import time
-
-from fastapi import HTTPException
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import ConfigDict
 
-from bisheng.common.errcode import BaseErrorCode
-from bisheng.core.logger import trace_id_var
 from bisheng.mcp_server.api.endpoints.content_tools import register_content_tools
 from bisheng.mcp_server.api.endpoints.query_tools import register_query_tools
 from bisheng.mcp_server.api.endpoints.write_tools import register_write_tools
+from bisheng.mcp_server.domain.schemas.identity import ExternalAccount
 from bisheng.mcp_server.domain.schemas.search import KnowledgeIds, MaxContent, McpSearchRequest, SearchQuery, TopK
 from bisheng.mcp_server.domain.services.search_service import McpSearchService
 from bisheng.mcp_server.domain.services.tool_runtime import McpToolRuntime
 from bisheng.open_endpoints.domain.schemas.filelib import RetrieveFilters, RetrieveResp
-
-logger = logging.getLogger(__name__)
 
 
 def register_tools(server: FastMCP, search_service: McpSearchService, runtime: McpToolRuntime) -> None:
@@ -27,6 +19,7 @@ def register_tools(server: FastMCP, search_service: McpSearchService, runtime: M
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False),
     )
     async def search_knowledge(
+        external_id: ExternalAccount,
         query: SearchQuery,
         knowledge_base_ids: KnowledgeIds,
         ctx: Context,
@@ -39,37 +32,15 @@ def register_tools(server: FastMCP, search_service: McpSearchService, runtime: M
         if request is None or "mcp_principal" not in request.scope.get("state", {}):
             raise ToolError("MCP authentication required")
         principal = request.scope["state"]["mcp_principal"]
-        started = time.monotonic()
-        outcome = "failed"
-        try:
-            req = McpSearchRequest(
-                query=query,
-                knowledge_base_ids=knowledge_base_ids,
-                top_k=top_k,
-                max_content=max_content,
-                filters=filters,
-            )
-            result = await search_service.search(request, principal, req)
-            outcome = "success"
-            return result
-        except asyncio.TimeoutError as exc:
-            raise ToolError("Knowledge retrieval timed out") from exc
-        except (BaseErrorCode, HTTPException) as exc:
-            raise ToolError("Knowledge retrieval denied or unavailable") from exc
-        except Exception as exc:
-            # Do not log exception text: it can include credentials, queries or signed URLs.
-            logger.error("mcp retrieval failed exception_type=%s token_id=%s", type(exc).__name__, principal.token_id)
-            raise ToolError("Knowledge retrieval failed") from exc
-        finally:
-            logger.info(
-                "mcp tool=search_knowledge token_id=%s user_id=%s tenant_id=%s trace_id=%s outcome=%s elapsed=%.3f",
-                principal.token_id,
-                principal.user.user_id,
-                principal.tenant_id,
-                trace_id_var.get(),
-                outcome,
-                time.monotonic() - started,
-            )
+        req = McpSearchRequest(
+            external_id=external_id,
+            query=query,
+            knowledge_base_ids=knowledge_base_ids,
+            top_k=top_k,
+            max_content=max_content,
+            filters=filters,
+        )
+        return await search_service.search(request, principal, req)
 
     register_query_tools(server, runtime)
     register_content_tools(server, runtime)

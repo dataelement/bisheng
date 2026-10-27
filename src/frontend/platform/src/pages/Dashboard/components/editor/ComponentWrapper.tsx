@@ -46,6 +46,8 @@ export const ComponentWrapper = memo(({
     } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
     const componentData = component
+    const isPivotTable = component.type === ChartType.PivotTable
+    const exportLabel = t(isPivotTable ? 'componentExport.exportAllDetails' : 'componentExport.exportAll')
     // F058 AC-10: whole-chart export, available to both editors and viewers (unlike the
     // rest of this component's toolbar, which is editor-only via isPreviewMode).
     const { exportAll, isExportingAll, canExport } = useComponentExport({
@@ -265,7 +267,7 @@ export const ComponentWrapper = memo(({
             <div className="w-full h-full p-2">
                 {/* Component title with rename ability - hidden for query type */}
                 {!['query', 'dimension-filter', 'metric'].includes(componentData.type) && (
-                    <div className="group mb-2 relative">
+                    <div className={cn("group mb-2 relative", isPivotTable && "pr-36")}>
                         {isEditing ? (
                             <Input
                                 ref={inputRef}
@@ -298,12 +300,14 @@ export const ComponentWrapper = memo(({
                         />}
                         <Button
                             variant="ghost"
-                            size="icon"
-                            title={canExport ? t('componentExport.exportAll') : t('componentExport.saveBeforeExport')}
+                            size={isPivotTable ? "sm" : "icon"}
+                            aria-label={exportLabel}
+                            title={canExport ? exportLabel : t('componentExport.saveBeforeExport')}
                             disabled={isExportingAll || !canExport}
                             className={cn(
-                                "no-drag absolute top-0 right-0 h-5 w-5 p-0 text-gray-400 transition-opacity",
-                                "opacity-0 group-hover:opacity-100"
+                                "no-drag absolute top-0 right-0 h-5 transition-opacity",
+                                isPivotTable ? "gap-1.5 px-2 text-xs text-primary" : "w-5 p-0 text-gray-400 opacity-0 group-hover:opacity-100",
+                                isPivotTable && !isPreviewMode && "right-8"
                             )}
                             onClick={(e) => {
                                 e.stopPropagation()
@@ -313,6 +317,7 @@ export const ComponentWrapper = memo(({
                             {isExportingAll
                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 : <Download className="h-3.5 w-3.5" />}
+                            {isPivotTable && <span>{exportLabel}</span>}
                         </Button>
                     </div>
                 )}

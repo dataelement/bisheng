@@ -1,6 +1,6 @@
 import logging
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, Query, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -51,6 +51,8 @@ from bisheng.open_endpoints.domain.services.filelib_file_source_service import F
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
     FilelibRetrieveSourceService,
 )
+from bisheng.open_endpoints.domain.services.filelib_space_command_service import FilelibSpaceCommandService
+from bisheng.open_endpoints.domain.services.filelib_space_query_service import FilelibSpaceQueryService
 from bisheng.open_endpoints.domain.services.filelib_sync_factory import (
     build_knowledge_space_service_for_filelib_sync,
 )
@@ -60,6 +62,7 @@ from bisheng.open_endpoints.domain.services.filelib_user_context_service import 
     FilelibUserContextService,
 )
 from bisheng.open_endpoints.domain.services.inspection_standard_sync_service import InspectionStandardSyncService
+from bisheng.open_endpoints.domain.utils import get_default_operator_async
 from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
 from bisheng.user.domain.repositories.interfaces.user_repository import UserRepository
 
@@ -68,6 +71,80 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+def build_filelib_space_query_service(
+    *, request: Request, user: UserPayload, session: AsyncSession, storage: Any
+) -> FilelibSpaceQueryService:
+    from bisheng.knowledge.domain.repositories.implementations.department_file_view_grant_repository_impl import (
+        DepartmentFileViewGrantRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.department_space_binding_repository_impl import (
+        DepartmentSpaceBindingRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.filelib_space_repository_impl import (
+        FilelibSpaceRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_space_scope_repository_impl import (
+        KnowledgeSpaceScopeRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.services.department_file_view_lifecycle_service import (
+        DepartmentFileViewLifecycleService,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import (
+        KnowledgeDocumentDurableReferenceResolver,
+        KnowledgeDocumentEntryResolver,
+    )
+    from bisheng.knowledge.domain.services.knowledge_space_retirement_service import KnowledgeSpaceRetirementService
+    from bisheng.open_endpoints.domain.services.filelib_space_content_service import FilelibSpaceContentService
+
+    owner = build_knowledge_space_service_for_filelib_sync(session=session, login_user=user, request=request)
+    owner.department_space_binding_repo = DepartmentSpaceBindingRepositoryImpl(session)
+    owner.knowledge_space_scope_repo = KnowledgeSpaceScopeRepositoryImpl(session)
+    owner.user_repository = UserRepositoryImpl(session)
+    owner.knowledge_space_retirement_service = KnowledgeSpaceRetirementService(session=session)
+    owner.department_file_view_lifecycle_service = DepartmentFileViewLifecycleService(
+        session=session,
+        file_repository=owner.knowledge_file_repo,
+        grant_repository=DepartmentFileViewGrantRepositoryImpl(session),
+    )
+
+    async def permissions(file_id: int, space_id: int) -> set[str]:
+        return await owner._get_effective_permission_ids("knowledge_file", file_id, space_id=space_id)
+
+    owner.document_entry_resolver = KnowledgeDocumentEntryResolver(
+        document_repository=owner.doc_repo,
+        version_repository=owner.version_repo,
+        file_repository=owner.knowledge_file_repo,
+        permission_loader=permissions,
+    )
+    owner.document_durable_reference_resolver = KnowledgeDocumentDurableReferenceResolver(
+        entry_resolver=owner.document_entry_resolver,
+        version_repository=owner.version_repo,
+        file_repository=owner.knowledge_file_repo,
+    )
+    query = FilelibSpaceQueryService(
+        request=request, user=user, repository=FilelibSpaceRepositoryImpl(session), space_service=owner
+    )
+    query.content_service = FilelibSpaceContentService(
+        repository=query.repository, resolver=owner.document_entry_resolver, storage=storage, guard=query, user=user
+    )
+    return query
+
+
+async def get_filelib_space_command_service(
+    request: Request,
+    user: UserPayload = Depends(get_default_operator_async),
+    session: AsyncSession = Depends(get_db_session),
+) -> FilelibSpaceCommandService:
+    return FilelibSpaceCommandService(
+        query=build_filelib_space_query_service(
+            request=request,
+            user=user,
+            session=session,
+            storage=await get_minio_storage(),
+        )
+    )
 
 
 async def get_filelib_sync_principal(
@@ -135,9 +212,7 @@ async def get_filelib_user_context_service(
 
 async def get_filelib_retrieve_source_service(
     file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
-    version_repository: KnowledgeDocumentVersionRepository = Depends(
-        get_knowledge_document_version_repository
-    ),
+    version_repository: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
     retrieval_runtime: AsyncRetrievalRuntime = Depends(get_async_retrieval_runtime),
 ) -> FilelibRetrieveSourceService:
     return FilelibRetrieveSourceService(
@@ -151,7 +226,7 @@ async def get_filelib_retrieve_source_service(
 
 async def get_filelib_source_origin() -> str | None:
     config = await settings.aget_all_config()
-    return (config.get('shougang') or {}).get('portal_base_url')
+    return (config.get("shougang") or {}).get("portal_base_url")
 
 
 async def get_filelib_developer_token_principal(
@@ -186,6 +261,16 @@ async def get_filelib_request_user(
 ) -> AsyncGenerator[UserPayload, None]:
     async with service.use_user(principal, external_id) as login_user:
         yield login_user
+
+
+async def get_filelib_space_query_service(
+    request: Request,
+    user: UserPayload = Depends(get_filelib_request_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> FilelibSpaceQueryService:
+    return build_filelib_space_query_service(
+        request=request, user=user, session=session, storage=await get_minio_storage()
+    )
 
 
 async def get_filelib_file_source_service(

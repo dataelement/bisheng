@@ -101,7 +101,7 @@
 | 实时问答统计 | 文档内 AI 对话数 | `document_qa_count` | `qa_type = document` | `value_count(question_id)` | 文档场景问答成功记录数 | 问答成功事件时间 | 每个问题一条记录 |
 | 实时问答统计 | 提问人数 | `qa_user_count` | 无 | `cardinality(user_id)` | 查询范围内至少产生一次问答的用户数 | 问题创建或成功时间；支持年/月/周/日/小时 | 按 `user_id` 去重 |
 | 全员每日参与度 | 全员参与占比 | `participation_rate` | 分子：`logged_in=true`；分母：当天范围内全部名册记录 | 分子、分母分别 `value_count(user_id)` | 当天实际登录人数 ÷ 当天名册人数 | 中国自然日；默认查询当天 | 每天每租户每用户只有一条记录 |
-| 全员每日参与度 | 实际登录人数 | `logged_in_employee_count` | `logged_in = true` | `value_count(user_id)` | 当天至少成功登录一次的员工数 | 中国自然日；默认查询当天 | 每天每个用户一条记录 |
+| 用户数据统计（兼容全员每日参与度） | 累积登录人数 | `logged_in_employee_count` | `metric_source=participation AND logged_in=true` | 按 `(user_id, 北京自然日)` 精确去重计数 | 每日登录去重人数跨天累加；同人一天登录 5 次计 1，7 天中登录 5 天计 5 | 所选时间范围或年/月/周/日时间桶 | 同人同日只计一次；导出每行代表一个用户的一个登录日；参与度仍使用活跃用户数作分子 |
 | 全员每日参与度 | 全员总数 | `active_employee_count` | `active_employee = 1` | `value_count(user_id)` | 当天有效员工名册数量 | 中国自然日；默认查询当天 | 每天每个有效员工一条记录 |
 | 全员每日参与度 | 实际登录次数 | `login_count` | 无 | 实体字段；默认 `sum(login_count)`，可配置其他聚合 | 成功登录事件的累计次数 | 中国自然日；默认查询当天 | 不按用户去重；同一用户每次成功登录均加 1 |
 

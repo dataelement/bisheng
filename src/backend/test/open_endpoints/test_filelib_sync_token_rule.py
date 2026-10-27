@@ -538,3 +538,6 @@ def test_rule_and_token_id_are_not_accepted_from_request_params() -> None:
     assert not hasattr(params, "token_id")
     assert not hasattr(params, "business_domain_code")
     assert not hasattr(params, "knowledge_id")
+
+
+pytestmark = pytest.mark.usefixtures("stub_file_organization_lookup")

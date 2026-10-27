@@ -1,5 +1,8 @@
 # F070：对外 MCP 知识检索服务
 
+> 2026-10-22 身份契约更新：[F081](../081-mcp-external-user-identity/spec.md) 已获用户确认。十工具顶层必填 `external_id`，以目标用户及其当前有效租户执行；Token 保留接入、绑定有效性、IP/路由/限流校验。本文首期的绑定用户、禁止身份参数或原样兼容描述如与 F081 冲突，以 F081 为准；历史验证记录不代表新身份契约验收。
+
+
 **Feature ID**: 070-mcp-server  
 **Status**: CONFIRMED  
 **Mode**: Feature  
@@ -40,7 +43,7 @@
 | REQ-001 | 在现有后端提供 `/mcp`，支持 Streamable HTTP、无状态请求与 JSON 工具结果，默认开启；可选关闭开关在重启后生效。仅 MCP 路径允许任意跨域来源和主机，不要求 Host/Origin 配置；Token 与资源权限保持原规则。 |
 | REQ-002 | 每个 MCP HTTP 请求必须先校验 `X-Developer-Token`，复用有效性、启用状态、绑定用户/租户、IP、路由白名单及限流检查。 |
 | REQ-003 | MCP 与其他开发者 Token 入口统一：白名单未配置或为空时不启用路由过滤；非空时必须匹配现有路由规则。Token 有效性、IP、限流及绑定资源权限仍检查。 |
-| REQ-004 | 首期只注册和允许调用 `search_knowledge`；业务身份固定为 Token 绑定用户，禁止通过工具参数指定 `external_id`、`user_id` 或 `tenant_id`。 |
+| REQ-004 | 首期只注册和允许调用 `search_knowledge`；业务身份现按 F081 必填 external_id 指定，仍禁止 user_id 或 tenant_id；工具数量由 F078 扩展。 |
 | REQ-005 | MCP 和 REST 复用共享检索编排，继续执行知识资源、文件权限、版本与共享投影过滤，只有最终授权结果可以解析来源链接。 |
 | REQ-006 | 工具输入有明确上限，结果包含片段与来源，支持正常空结果；失败必须使用真实 HTTP 错误或 MCP 错误，不能伪装成成功。 |
 | REQ-007 | 成功、拒绝、异常、超时和取消后可靠关闭请求资源并恢复身份/租户上下文；并发及多个后端实例不得串用身份。 |
@@ -77,7 +80,7 @@ REQ 与 AC 的映射、验证方法见 [requirements.md](requirements.md)。
 | AD-03 | 业务复用 | 从 REST endpoint 提取共享检索 Service，两种入口调用同一业务编排 | 保留权限、超时与来源行为，避免复制检索逻辑。 |
 | AD-04 | 鉴权 | 复用开发者 Token 服务，路由过滤语义与 REST 一致 | 2026-10-16 用户确认移除 MCP 特例；空白名单不启用过滤，非空仍匹配，不改变资源权限。 |
 | AD-05 | 工具授权 | 首期静态注册唯一工具；只有通过入口鉴权的调用方可列出与调用 | 一个工具无需新增权限实体；未来多工具授权另做规格。 |
-| AD-06 | 身份 | 仅 Token 绑定身份，参数禁止切换用户 | 明确最小权限边界，避免复用 REST 外部身份代理能力造成范围扩大。 |
+| AD-06 | 身份 | 按 F081 使用必填 external_id 指定目标账号 | 可信后端代理；Token 校验与目标业务权限分离，REST 保持原语义。 |
 | AD-07 | 配置 | 在既有 `mcp` 配置中新增 `server` 子块，启动时加载 | 保留 `mcp.enable_stdio`；缺少 server 子块或 enabled 时默认开启，显式 enabled=false 仍关闭；不再读取 Host/Origin 白名单。 |
 | AD-08 | 协议包装 | `/mcp` 使用 MCP JSON-RPC；既有 REST 继续使用统一业务响应 | MCP 有独立协议契约，不能使用 `resp_200/resp_500` 替代协议结果。 |
 
@@ -107,7 +110,7 @@ SDK 支持的协议版本按 `initialize` 协商，不能宣称支持未通过�
 | `max_content` | integer | 否 | 15000 | 1～15000；保持现有按知识库合并内容的限制语义。 |
 | `filters` | RetrieveFilters / null | 否 | null | 复用现有结构；支持 `ANY`，`ALL` 按既有行为拒绝。 |
 
-拒绝未声明字段，不接收身份切换参数。MCP 的上限只影响 MCP，不收紧旧 REST 参数契约。
+按 F081 接收必填 external_id，拒绝其他未声明身份字段。MCP 的上限只影响 MCP，不收紧旧 REST 参数契约。
 
 请求示例：
 

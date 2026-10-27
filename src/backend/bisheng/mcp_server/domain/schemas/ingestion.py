@@ -2,7 +2,8 @@ from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints, model_validator
 
-from bisheng.mcp_server.domain.schemas.browse import ResourceId, StrictRequest
+from bisheng.mcp_server.domain.schemas.browse import FolderId, ResourceId, StrictRequest
+from bisheng.mcp_server.domain.schemas.identity import McpIdentityRequest
 
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_TEXT_BYTES = 10 * 1024 * 1024
@@ -16,9 +17,9 @@ ManualTagIds = Annotated[list[ResourceId], Field(max_length=100)]
 ManualTagNames = Annotated[list[Annotated[str, StringConstraints(min_length=1, max_length=200)]], Field(max_length=100)]
 
 
-class IngestionRequest(StrictRequest):
+class IngestionRequest(McpIdentityRequest):
     knowledge_id: ResourceId
-    folder_id: ResourceId | None = None
+    folder_id: FolderId | None = None
     file_name: FileName
     file_category_code: ClassificationCode | None = None
     file_subcategory_code: ClassificationCode | None = None

@@ -143,6 +143,16 @@ class TimeFilter(BaseModel):
         return start_date, end_date
 
 
+class ComponentDetailExportRequest(BaseModel):
+    """维度值必须提供, 但允许 null 表示缺失值分组。"""
+
+    dashboard_id: int
+    dimension_field: str
+    dimension_value: Any
+    time_filters: list[TimeFilter] | None = None
+    dimension_filters: list[DimensionQueryFilter] | None = None
+
+
 class ResultLimit(BaseModel):
     limit_type: str = Field(alias='limitType', description="all or limited")
     limit: int = Field(default=0, alias='limit', description="number of results to limit")

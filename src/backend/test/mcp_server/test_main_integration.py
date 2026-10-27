@@ -103,7 +103,9 @@ async def test_real_network_sdk_through_main_middleware(monkeypatch):
                     async with ClientSession(read, write) as client:
                         await client.initialize()
                         assert {t.name for t in (await client.list_tools()).tools} == EXPECTED_TOOL_NAMES
-                        result = await client.call_tool("search_knowledge", {"query": "q", "knowledge_base_ids": [118]})
+                        result = await client.call_tool(
+                            "search_knowledge", {"external_id": "0007", "query": "q", "knowledge_base_ids": [118]}
+                        )
                         assert result.structuredContent["total"] == 1
                         assert not result.isError
             assert not active
@@ -178,15 +180,29 @@ async def test_mcp_cors_preflight_and_errors_are_open_only_for_mcp(monkeypatch, 
         assert not calls and not active
 
 
-async def test_real_network_disconnect_closes_tool_scope(monkeypatch):
+@pytest.mark.parametrize("stage", ["identity", "business"])
+async def test_real_network_disconnect_closes_tool_scope(monkeypatch, stage):
     """AC-10: a TCP disconnect cancels business work before its retrieval deadline."""
     entered = asyncio.Event()
+    identity_active = set()
+
+    async def resolve(principal, external_id):
+        identity_active.add(external_id)
+        try:
+            entered.set()
+            await asyncio.Event().wait()
+        finally:
+            identity_active.remove(external_id)
 
     async def retrieve(req):
         entered.set()
         await asyncio.Event().wait()
 
-    async with server(monkeypatch, search=retrieve) as (app, _, active):
+    async with server(monkeypatch, search=retrieve, identity_resolver=resolve if stage == "identity" else None) as (
+        app,
+        _,
+        active,
+    ):
         async with network_server(app) as url:
             async with httpx.AsyncClient() as client:
                 task = asyncio.create_task(
@@ -199,7 +215,7 @@ async def test_real_network_disconnect_closes_tool_scope(monkeypatch):
                             "method": "tools/call",
                             "params": {
                                 "name": "search_knowledge",
-                                "arguments": {"query": "cancel", "knowledge_base_ids": [118]},
+                                "arguments": {"external_id": "0007", "query": "cancel", "knowledge_base_ids": [118]},
                             },
                         },
                     )
@@ -210,7 +226,7 @@ async def test_real_network_disconnect_closes_tool_scope(monkeypatch):
                     await task
 
                 async def released():
-                    while active:
+                    while active or identity_active:
                         await asyncio.sleep(0.01)
 
                 await asyncio.wait_for(released(), 0.5)

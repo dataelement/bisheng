@@ -113,6 +113,11 @@ class KnowledgeFileAliasGenerateError(BaseErrorCode):
     Msg: str = 'AI file alias generation failed, file_name remains unchanged'
 
 
+class KnowledgeSourceFileUnreadableError(BaseErrorCode):
+    Code: int = 10958
+    Msg: str = '原始文件已加密或结构损坏。无法读取。请检查后重新上传'
+
+
 # Is notQAThe knowledge base upon
 class KnowledgeNotQAError(BaseErrorCode):
     Code: int = 10960
@@ -139,6 +144,18 @@ class KnowledgeFileNotExistError(BaseErrorCode):
 class KnowledgeTenantMismatchError(BaseErrorCode):
     Code: int = 10972
     Msg: str = '当前租户与知识库归属租户不一致，暂不支持上传文件，请切换到知识库所属租户后重试'
+
+
+class KnowledgeSharedStorageUnavailableError(BaseErrorCode):
+    Code: int = 10973
+    Msg: str = '共享知识存储暂不可用，请稍后重试'
+    http_status: int = 503
+
+
+class KnowledgeSharedContentNotReadyError(BaseErrorCode):
+    Code: int = 10974
+    Msg: str = '共享文档正文尚未就绪，请稍后重试'
+    http_status: int = 409
 
 
 # Conflicts with built-in metadata field name

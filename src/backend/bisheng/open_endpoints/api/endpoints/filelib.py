@@ -1,8 +1,7 @@
 import asyncio
 import json
 import os
-from datetime import datetime
-from typing import Annotated, Any, List, Literal, Optional
+from typing import Annotated, List, Literal, Optional
 
 from fastapi import (
     APIRouter,
@@ -18,33 +17,22 @@ from fastapi import (
     UploadFile,
 )
 from loguru import logger
-from sqlmodel import col, select
-from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.knowledge_imp import text_knowledge
 from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200, resp_500
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
+from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import UnifiedResponseModel
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import async_file_download, save_download_file
-from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
-from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
-from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate
-from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate
 from bisheng.knowledge.domain.models.knowledge_file import (
-    FileType,
-    KnowledgeFile,
-    KnowledgeFileDao,
-    KnowledgeFileStatus,
     QAKnoweldgeDao,
     QAKnowledgeUpsert,
 )
@@ -57,12 +45,12 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
     KnowledgeFileRepository,
 )
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.rag.async_retrieval_runtime import (
     AsyncRetrievalRuntime,
     get_async_retrieval_runtime,
 )
 from bisheng.open_endpoints.api.dependencies import (
+    build_filelib_space_query_service,
     build_knowledge_space_chat_service_for_openapi,
     get_filelib_developer_token_principal,
     get_filelib_file_source_service,
@@ -70,14 +58,15 @@ from bisheng.open_endpoints.api.dependencies import (
     get_filelib_knowledge_document_version_repository,
     get_filelib_request_user,
     get_filelib_retrieve_source_service,
+    get_filelib_space_command_service,
+    get_filelib_space_query_service,
     get_filelib_user_context_service,
     get_knowledge_file_repository,
 )
 from bisheng.open_endpoints.domain.schemas.filelib import (
     APIAddQAParam,
     APIAppendQAParam,
-    FileDetailFile,
-    FileDetailResp,
+    FilelibSpaceCreate,
     FileSourceUrlResp,
     QueryQAParam,
     RetrieveReq,
@@ -88,17 +77,23 @@ from bisheng.open_endpoints.domain.services.filelib_retrieve_service import File
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
     FilelibRetrieveSourceService,
 )
+from bisheng.open_endpoints.domain.services.filelib_space_command_service import FilelibSpaceCommandService
+from bisheng.open_endpoints.domain.services.filelib_space_query_service import (
+    FilelibSpaceQueryService,
+)
+from bisheng.open_endpoints.domain.services.filelib_space_query_service import (
+    _parse_document_type_code as _parse_document_type_code,
+)
 from bisheng.open_endpoints.domain.services.filelib_user_context_service import FilelibUserContextService
-from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
-from bisheng.role.domain.services.quota_service import QuotaService
+from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.utils.util import sync_func_to_async
 
 # build router
-router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
-OPENAPI_FILE_CATEGORY_ID = '入库分类测试'
-OPENAPI_FILE_CATEGORY_GROUP_CLASS_CODE = '分类编码测试'
-OPENAPI_FILE_DOC_TYPE_CODE = '分类赋码测试'
-OPENAPI_TEXT_OBJECT_SUFFIXES = ('.md', '.markdown', '.txt')
+router = APIRouter(prefix="/filelib", tags=["OpenAPI", "Knowledge"])
+OPENAPI_FILE_CATEGORY_ID = "入库分类测试"
+OPENAPI_FILE_CATEGORY_GROUP_CLASS_CODE = "分类编码测试"
+OPENAPI_FILE_DOC_TYPE_CODE = "分类赋码测试"
+OPENAPI_TEXT_OBJECT_SUFFIXES = (".md", ".markdown", ".txt")
 OPENAPI_FILE_CONTENT_PAGE_SIZE = 1000
 
 
@@ -115,511 +110,250 @@ def _resolve_filelib_knowledge_type(
         )
     raw_value = compatibility_value if compatibility_value is not None and not type_was_provided else type_value
     try:
-        return KnowledgeTypeEnum(raw_value)
+        resolved = KnowledgeTypeEnum(raw_value)
+        if resolved is not KnowledgeTypeEnum.SPACE:
+            raise HTTPException(status_code=422, detail="filelib file APIs require SPACE knowledge")
+        return resolved
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="unsupported knowledge resource type") from exc
 
 
-def _get_file_item_id(file_item: Any) -> int | None:
-    raw_file_id = file_item.get('id') if isinstance(file_item, dict) else getattr(file_item, 'id', None)
-    if raw_file_id is None:
-        return None
-    try:
-        return int(raw_file_id)
-    except (TypeError, ValueError):
-        return None
+@router.post("/", status_code=201)
+async def create(
+    request: Request,
+    knowledge: FilelibSpaceCreate,
+    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+):
+    return resp_200(await service.create(knowledge))
 
 
-def _parse_document_type_code(file_encoding: str | None) -> str:
-    if not isinstance(file_encoding, str):
-        return ''
-    parts = [part.strip().upper() for part in file_encoding.split('-') if part.strip()]
-    if len(parts) >= 3:
-        return parts[1]
-    if len(parts) >= 2:
-        return parts[0]
-    return ''
+@router.put("/", status_code=201)
+async def update_knowledge(
+    *,
+    request: Request,
+    knowledge: KnowledgeUpdate,
+    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+):
+    result = await service.update(knowledge.knowledge_id, name=knowledge.name, description=knowledge.description)
+    return resp_200(result)
 
 
-def _serialize_openapi_file_item(file_item: Any, *, is_primary: bool) -> dict:
-    if hasattr(file_item, 'model_dump'):
-        item = file_item.model_dump()
-    elif isinstance(file_item, dict):
-        item = dict(file_item)
-    else:
-        item = dict(vars(file_item))
-
-    file_encoding = item.get('file_encoding') or ''
-    item.update({
-        'file_encoding': file_encoding,
-        'is_primary': is_primary,
-        'document_type': _parse_document_type_code(file_encoding),
-        'categoryID': OPENAPI_FILE_CATEGORY_ID,
-        'categoryGroupClassCode': OPENAPI_FILE_CATEGORY_GROUP_CLASS_CODE,
-        'docTypeCode': OPENAPI_FILE_DOC_TYPE_CODE,
-    })
-    return item
-
-
-def _format_openapi_datetime(value: Any) -> str:
-    if value is None:
-        return ''
-    if isinstance(value, datetime):
-        return value.isoformat(sep=' ')
-    return str(value)
-
-
-def _serialize_openapi_file_detail(file_item: KnowledgeFile, *, is_primary: bool) -> FileDetailFile:
-    file_encoding = file_item.file_encoding or ''
-    return FileDetailFile(
-        id=int(file_item.id),
-        knowledge_id=int(file_item.knowledge_id),
-        file_encoding=file_encoding,
-        file_name=file_item.file_name,
-        file_size=file_item.file_size,
-        status=file_item.status,
-        update_time=_format_openapi_datetime(file_item.update_time),
-        is_primary=is_primary,
-        document_type=_parse_document_type_code(file_encoding),
-        categoryID=OPENAPI_FILE_CATEGORY_ID,
-        categoryGroupClassCode=OPENAPI_FILE_CATEGORY_GROUP_CLASS_CODE,
-        docTypeCode=OPENAPI_FILE_DOC_TYPE_CODE,
-    )
-
-
-def _unique_text_object_candidates(
-        file_item: KnowledgeFile,
-        content_format: Literal['text', 'markdown'],
-) -> list[str]:
-    if content_format == 'markdown':
-        generated_candidates = [
-            f'preview/{file_item.id}.md',
-            f'markdown/{file_item.id}.md',
-            f'preview/{file_item.id}.txt',
-            f'text/{file_item.id}.txt',
-        ]
-    else:
-        generated_candidates = [
-            f'preview/{file_item.id}.txt',
-            f'text/{file_item.id}.txt',
-            f'preview/{file_item.id}.md',
-            f'markdown/{file_item.id}.md',
-        ]
-    candidates = [
-        getattr(file_item, 'preview_file_object_name', None),
-        KnowledgeService.resolve_preview_object_name(
-            file_item.id,
-            file_item.file_name,
-            getattr(file_item, 'preview_file_object_name', None),
-        ),
-        *generated_candidates,
-    ]
-    seen = set()
-    result = []
-    for candidate in candidates:
-        if not candidate or candidate in seen:
-            continue
-        seen.add(candidate)
-        if str(candidate).lower().endswith(OPENAPI_TEXT_OBJECT_SUFFIXES):
-            result.append(candidate)
-    return result
-
-
-async def _load_file_content_from_text_object(
-        file_item: KnowledgeFile,
-        content_format: Literal['text', 'markdown'],
-) -> str | None:
-    candidates = _unique_text_object_candidates(file_item, content_format)
-    if not candidates:
-        return None
-
-    minio_client = await get_minio_storage()
-    for object_name in candidates:
-        try:
-            if not await minio_client.object_exists(minio_client.bucket, object_name):
-                continue
-            content = await minio_client.get_object(minio_client.bucket, object_name)
-            if content is None:
-                continue
-            return content.decode('utf-8')
-        except UnicodeDecodeError:
-            logger.warning('openapi file detail text object is not utf-8 object_name={}', object_name)
-        except Exception as exc:
-            logger.warning('openapi file detail read text object failed object_name={} error={}', object_name, exc)
-    return None
-
-
-async def _load_file_content_from_es(db_knowledge: Any, file_id: int) -> tuple[str, int]:
-    es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=db_knowledge)
-    chunks = []
-    search_after = None
-    while True:
-        search_data = {
-            'size': OPENAPI_FILE_CONTENT_PAGE_SIZE,
-            'sort': [
-                {
-                    'metadata.chunk_index': {
-                        'order': 'asc',
-                        'missing': 0,
-                        'unmapped_type': 'long',
-                    },
-                },
-            ],
-            'query': {
-                'bool': {
-                    'filter': [
-                        {'term': {'metadata.document_id': file_id}},
-                    ],
-                },
-            },
-        }
-        if search_after:
-            search_data['search_after'] = search_after
-        try:
-            es_res = await es_client.client.search(index=db_knowledge.index_name, body=search_data)
-        except Exception as exc:
-            logger.warning('openapi file detail read es chunks failed file_id={} error={}', file_id, exc)
-            raise
-        hits = es_res.get('hits', {}).get('hits', [])
-        if not hits:
-            break
-        for hit in hits:
-            source = hit.get('_source', {})
-            chunks.append(KnowledgeService.split_chunk_metadata(source.get('text') or ''))
-        if len(hits) < OPENAPI_FILE_CONTENT_PAGE_SIZE:
-            break
-        search_after = hits[-1].get('sort')
-        if not search_after:
-            break
-    return '\n'.join(chunks), len(chunks)
-
-
-async def _load_file_primary_flags(file_ids: list[int | None]) -> dict[int, bool]:
-    unique_file_ids = list(dict.fromkeys(file_id for file_id in file_ids if file_id is not None))
-    if not unique_file_ids:
-        return {}
-
-    statement = select(
-        KnowledgeDocumentVersion.knowledge_file_id,
-        KnowledgeDocumentVersion.is_primary,
-    ).where(col(KnowledgeDocumentVersion.knowledge_file_id).in_(unique_file_ids))
-    async with get_async_db_session() as session:
-        result = await session.execute(statement)
-        return {
-            int(knowledge_file_id): bool(is_primary)
-            for knowledge_file_id, is_primary in result.all()
-            if knowledge_file_id is not None
-        }
-
-
-@router.post('/', status_code=201)
-def create(request: Request, knowledge: KnowledgeCreate):
-    """Create Knowledge Base."""
-    login_user = get_default_operator()
-    db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
-    return resp_200(db_knowledge)
-
-
-@router.put('/', status_code=201)
-def update_knowledge(*, request: Request, knowledge: KnowledgeUpdate):
-    """ Update Knowledge Base."""
-    login_user = get_default_operator()
-    db_knowledge = KnowledgeService.update_knowledge(request, login_user, knowledge)
-    return resp_200(db_knowledge)
-
-
-@router.get('/', status_code=200)
-async def get_knowledge(*,
-                        request: Request,
-                        knowledge_type: Annotated[int, Query(alias='type')] = KnowledgeTypeEnum.NORMAL.value,
-                        compatibility_knowledge_type: Annotated[
-                            int | None,
-                            Query(alias='knowledge_type'),
-                        ] = None,
-                        name: str | None = None,
-                        page_size: Annotated[int, Query(ge=1)] = 10,
-                        cursor: str | None = None,
-                        login_user: UserPayload = Depends(get_filelib_request_user)):
-    """ Read all knowledge base information. """
-    resolved_type = _resolve_filelib_knowledge_type(
+@router.get("/", status_code=200)
+async def get_knowledge(
+    *,
+    request: Request,
+    knowledge_type: Annotated[int, Query(alias="type")] = KnowledgeTypeEnum.SPACE.value,
+    compatibility_knowledge_type: Annotated[
+        int | None,
+        Query(alias="knowledge_type"),
+    ] = None,
+    name: str | None = None,
+    page_size: Annotated[int, Query(ge=1)] = 10,
+    cursor: str | None = None,
+    login_user: UserPayload = Depends(get_filelib_request_user),
+):
+    """Read all knowledge base information."""
+    _resolve_filelib_knowledge_type(
         knowledge_type,
         compatibility_knowledge_type,
-        type_was_provided='type' in request.query_params,
+        type_was_provided="type" in request.query_params,
     )
-    if resolved_type is KnowledgeTypeEnum.SPACE:
-        result = await FilelibKnowledgeListService(request=request, login_user=login_user).list_spaces(
-            name=name,
-            cursor=cursor,
-            page_size=page_size,
-        )
-    else:
-        result = await KnowledgeService.get_knowledge(
-            request,
-            login_user,
-            resolved_type,
-            name=name,
-            cursor=cursor,
-            page_size=page_size,
-        )
+    result = await FilelibKnowledgeListService(request=request, login_user=login_user).list_spaces(
+        name=name,
+        cursor=cursor,
+        page_size=page_size,
+    )
     return resp_200(data=result)
 
 
-@router.delete('/{knowledge_id}', status_code=200)
-def delete_knowledge_api(*, request: Request, knowledge_id: int):
-    """ Delete Knowledge Base Information. """
-    login_user = get_default_operator()
-    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
-    return resp_200(message='knowledge deleted successfully')
+@router.delete("/{knowledge_id}", status_code=200)
+async def delete_knowledge_api(
+    *,
+    request: Request,
+    knowledge_id: int,
+    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+):
+    await service.delete_space(knowledge_id)
+    return resp_200(message="knowledge deleted successfully")
 
 
 # Empty all Knowledge Base file contents
-@router.delete('/clear/{knowledge_id}', status_code=200)
-def clear_knowledge_files(*, request: Request, knowledge_id: int):
-    """ Empty Knowledge Base Contents. """
-    login_user = get_default_operator()
-    KnowledgeService.delete_knowledge(request, login_user, knowledge_id, only_clear=True)
-    return resp_200(message='knowledge clear successfully')
-
-
-@router.post('/file/{knowledge_id}')
-async def upload_file(
-        request: Request,
-        knowledge_id: int,
-        split_mode: Optional[Literal['auto', 'custom', 'hierarchical']] = Form(default='auto'),
-        separator: Optional[List[str]] = Form(default=None,
-                                              description='Split text rule, If not passed on, it is the default'),
-        separator_rule: Optional[List[str]] = Form(
-            default=None, description='Segmentation before or after the segmentation rule;before/after'),
-        chunk_size: Optional[int] = Form(default=None, description='Split text length, default if not passed'),
-        chunk_overlap: Optional[int] = Form(default=None,
-                                            description='Split text overlap length, default if not passed'),
-        hierarchy_level: Optional[int] = Form(default=3),
-        append_title: Optional[bool] = Form(default=False),
-        max_chunk_size: Optional[int] = Form(default=1000),
-        callback_url: Optional[str] = Form(default=None, description='Return URL'),
-        file_url: Optional[str] = Form(default=None, description='File URL'),
-        file: Optional[UploadFile] = File(default=None, description='Upload file'),
-        background_tasks: BackgroundTasks = None,
-        retain_images: Optional[int] = Form(default=1, description='Keep document image'),
-        force_ocr: Optional[int] = Form(default=0, description='EnableOCR'),
-        enable_formula: Optional[int] = Form(default=1, description='latexFormula Recognition'),
-        filter_page_header_footer: Optional[int] = Form(default=0, description='Filter Header Footer'),
-        excel_rule: Optional[ExcelRule] = Form(default={}, description="excel rule"),
+@router.delete("/clear/{knowledge_id}", status_code=200)
+async def clear_knowledge_files(
+    *,
+    request: Request,
+    knowledge_id: int,
+    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
 ):
+    await service.clear(knowledge_id)
+    return resp_200(message="knowledge clear successfully")
+
+
+@router.post("/file/{knowledge_id}")
+async def upload_file(
+    request: Request,
+    knowledge_id: int,
+    split_mode: Optional[Literal["auto", "custom", "hierarchical"]] = Form(default="auto"),
+    separator: Optional[List[str]] = Form(
+        default=None, description="Split text rule, If not passed on, it is the default"
+    ),
+    separator_rule: Optional[List[str]] = Form(
+        default=None, description="Segmentation before or after the segmentation rule;before/after"
+    ),
+    chunk_size: Optional[int] = Form(default=None, description="Split text length, default if not passed"),
+    chunk_overlap: Optional[int] = Form(default=None, description="Split text overlap length, default if not passed"),
+    hierarchy_level: Optional[int] = Form(default=3),
+    append_title: Optional[bool] = Form(default=False),
+    max_chunk_size: Optional[int] = Form(default=1000),
+    callback_url: Optional[str] = Form(default=None, description="Return URL"),
+    file_url: Optional[str] = Form(default=None, description="File URL"),
+    file: Optional[UploadFile] = File(default=None, description="Upload file"),
+    background_tasks: BackgroundTasks = None,
+    retain_images: Optional[int] = Form(default=1, description="Keep document image"),
+    force_ocr: Optional[int] = Form(default=0, description="EnableOCR"),
+    enable_formula: Optional[int] = Form(default=1, description="latexFormula Recognition"),
+    filter_page_header_footer: Optional[int] = Form(default=0, description="Filter Header Footer"),
+    excel_rule: Optional[ExcelRule] = Form(default={}, description="excel rule"),
+    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+):
+    await service.prepare_upload(knowledge_id)
     if file:
         file_name = file.filename
         if not file_name:
-            return resp_500(message='file name must be not empty')
+            return resp_500(message="file name must be not empty")
         # Cache Local
-        file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file_name)
+        file_path = await sync_func_to_async(save_download_file)(file.file, "bisheng", file_name)
     else:
         file_path, file_name = await async_file_download(file_url)
 
-    loging_user = await get_default_operator_async()
-    req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
-                                    split_mode=split_mode,
-                                    separator=separator,
-                                    separator_rule=separator_rule,
-                                    chunk_size=chunk_size,
-                                    chunk_overlap=chunk_overlap,
-                                    hierarchy_level=hierarchy_level,
-                                    append_title=append_title,
-                                    max_chunk_size=max_chunk_size,
-                                    retain_images=retain_images,
-                                    force_ocr=force_ocr,
-                                    enable_formula=enable_formula,
-                                    filter_page_header_footer=filter_page_header_footer,
-                                    callback_url=callback_url,
-                                    file_list=[KnowledgeFileOne(file_path=file_path, excel_rule=excel_rule)])
+    req_data = KnowledgeFileProcess(
+        knowledge_id=knowledge_id,
+        split_mode=split_mode,
+        separator=separator,
+        separator_rule=separator_rule,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        hierarchy_level=hierarchy_level,
+        append_title=append_title,
+        max_chunk_size=max_chunk_size,
+        retain_images=retain_images,
+        force_ocr=force_ocr,
+        enable_formula=enable_formula,
+        filter_page_header_footer=filter_page_header_footer,
+        callback_url=callback_url,
+        file_list=[KnowledgeFileOne(file_path=file_path, excel_rule=excel_rule)],
+    )
 
-    upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(loging_user)
-    res = await KnowledgeService.aprocess_knowledge_file(request=request,
-                                                         login_user=loging_user,
-                                                         background_tasks=background_tasks,
-                                                         req_data=req_data,
-                                                         upload_limit_bytes=upload_limit_bytes)
+    res = await service.upload(req_data, background_tasks=background_tasks)
     return resp_200(data=res[0])
 
 
-@router.delete('/file/{file_id}', status_code=200)
-def delete_knowledge_file(request: Request, file_id: int):
-    """ Delete files in the Knowledge Base """
-    login_user = get_default_operator()
-    KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
-    return resp_200()
-
-
-@router.post('/delete_file', status_code=200)
-def delete_file_batch_api(request: Request, file_ids: List[int]):
-    """ Bulk delete knowledge file information """
-    login_user = get_default_operator()
-    KnowledgeService.delete_knowledge_file(request, login_user, file_ids)
-    return resp_200()
-
-
-@router.get('/file/list', status_code=200)
-async def get_filelist(request: Request,
-                       knowledge_id: int,
-                       login_user: UserPayload = Depends(get_filelib_request_user),
-                       keyword: str = None,
-                       status: List[int] = Query(default=None),
-                       page_size: int = 10,
-                       page_num: int = 1):
-    """ Get knowledge base file information. """
-    data, total, flag = await KnowledgeService.aget_knowledge_files(
-        request, login_user, knowledge_id,
-        keyword, status, page_num, page_size,
-        file_type=FileType.FILE.value,
-    )
-    file_ids = [_get_file_item_id(item) for item in data]
-    primary_flags = await _load_file_primary_flags(file_ids)
-    data = [
-        _serialize_openapi_file_item(
-            item,
-            is_primary=primary_flags.get(file_id, True),
-        )
-        for item, file_id in zip(data, file_ids, strict=True)
-    ]
-    return resp_200(data={'data': data, 'total': total, 'writeable': flag})
-
-
-@router.get('/file/detail', status_code=200)
-async def get_file_detail(
-        request: Request,
-        file_encoding: str = Query(..., description='File encoding'),
-        knowledge_id: Optional[int] = Query(default=None, description='Knowledge resource id'),
-        content_format: Literal['text', 'markdown'] = Query(default='text', description='Content format'),
-        login_user: UserPayload = Depends(get_filelib_request_user),
+@router.delete("/file/{file_id}", status_code=200)
+async def delete_knowledge_file(
+    request: Request, file_id: int, service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service)
 ):
-    """Query one file by file encoding and return metadata plus full parsed content."""
-    cleaned_file_encoding = file_encoding.strip()
-    if not cleaned_file_encoding:
-        raise HTTPException(status_code=400, detail='file_encoding must not be empty')
+    await service.delete_files([file_id])
+    return resp_200()
 
-    files = await KnowledgeFileDao.aget_files_by_file_encoding(
-        cleaned_file_encoding,
-        knowledge_id=knowledge_id,
-    )
-    if not files:
-        raise HTTPException(status_code=404, detail='file not found')
-    if len(files) > 1:
-        raise HTTPException(status_code=409, detail='duplicate file_encoding found')
 
-    file_record = files[0]
-    db_knowledge = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
-    if not db_knowledge:
-        raise HTTPException(status_code=404, detail='knowledge not found')
+@router.post("/delete_file", status_code=200)
+async def delete_file_batch_api(
+    request: Request,
+    file_ids: List[int],
+    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+):
+    await service.delete_files(file_ids)
+    return resp_200()
 
-    try:
-        await KnowledgeService.permission_service.ensure_knowledge_read_async(
-            login_user=login_user,
-            owner_user_id=db_knowledge.user_id,
-            knowledge_id=db_knowledge.id,
+
+@router.get("/file/list", status_code=200)
+async def get_filelist(
+    request: Request,
+    knowledge_id: int,
+    login_user: UserPayload = Depends(get_filelib_request_user),
+    keyword: str = None,
+    status: List[int] = Query(default=None),
+    page_size: int = 10,
+    page_num: int = 1,
+    service: FilelibSpaceQueryService = Depends(get_filelib_space_query_service),
+):
+    return resp_200(
+        data=await service.list_files(
+            knowledge_id, keyword=keyword, status=status, page_num=page_num, page_size=page_size
         )
-    except UnAuthorizedError:
-        raise UnAuthorizedError.http_exception()
-
-    if file_record.status != KnowledgeFileStatus.SUCCESS.value:
-        return resp_200(data=FileDetailResp())
-
-    primary_flags = await _load_file_primary_flags([file_record.id])
-    content = await _load_file_content_from_text_object(file_record, content_format)
-    if content is None:
-        content, chunk_count = await _load_file_content_from_es(db_knowledge, int(file_record.id))
-    else:
-        chunk_count = 1 if content else 0
-
-    data = FileDetailResp(
-        file=_serialize_openapi_file_detail(
-            file_record,
-            is_primary=primary_flags.get(int(file_record.id), True),
-        ),
-        content=content,
-        chunk_count=chunk_count,
     )
-    return resp_200(data=data)
 
 
-@router.get('/file/source_url', response_model=UnifiedResponseModel[FileSourceUrlResp])
+@router.get("/file/detail", status_code=200)
+async def get_file_detail(
+    request: Request,
+    file_encoding: str = Query(..., description="File encoding"),
+    knowledge_id: Optional[int] = Query(default=None, description="Knowledge resource id"),
+    content_format: Literal["text", "markdown"] = Query(default="text", description="Content format"),
+    login_user: UserPayload = Depends(get_filelib_request_user),
+    service: FilelibSpaceQueryService = Depends(get_filelib_space_query_service),
+):
+    return resp_200(data=await service.detail(file_encoding, knowledge_id, content_format))
+
+
+@router.get("/file/source_url", response_model=UnifiedResponseModel[FileSourceUrlResp])
 async def get_file_source_url(
-        response: Response,
-        file_id: int = Query(..., gt=0, description='KnowledgeFile ID, same as retrieve document_id'),
-        service: FilelibFileSourceService = Depends(get_filelib_file_source_service),
+    response: Response,
+    file_id: int = Query(..., gt=0, description="KnowledgeFile ID, same as retrieve document_id"),
+    service: FilelibFileSourceService = Depends(get_filelib_file_source_service),
 ) -> UnifiedResponseModel:
     """Return a seven-day original-file link for an authorized file entry."""
-    response.headers['Cache-Control'] = 'no-store'
+    response.headers["Cache-Control"] = "no-store"
     return resp_200(data=await service.get_source_url(file_id))
 
 
-@router.post('/chunks')
-async def post_chunks(request: Request,
-                      knowledge_id: int = Form(...),
-                      metadata: str = Form(...),
-                      split_mode: Optional[Literal['auto', 'custom', 'hierarchical']] = Form(default='auto'),
-                      separator: Optional[List[str]] = Form(default=None),
-                      separator_rule: Optional[List[str]] = Form(default=None),
-                      chunk_size: Optional[int] = Form(default=None),
-                      chunk_overlap: Optional[int] = Form(default=None),
-                      hierarchy_level: Optional[int] = Form(default=3),
-                      append_title: Optional[bool] = Form(default=False),
-                      max_chunk_size: Optional[int] = Form(default=1000),
-                      file: UploadFile = File(...)):
-    """ Upload files to the knowledge base and sync the interface """
+@router.post("/chunks")
+async def post_chunks(
+    request: Request,
+    knowledge_id: int = Form(...),
+    metadata: str = Form(...),
+    split_mode: Optional[Literal["auto", "custom", "hierarchical"]] = Form(default="auto"),
+    separator: Optional[List[str]] = Form(default=None),
+    separator_rule: Optional[List[str]] = Form(default=None),
+    chunk_size: Optional[int] = Form(default=None),
+    chunk_overlap: Optional[int] = Form(default=None),
+    hierarchy_level: Optional[int] = Form(default=3),
+    append_title: Optional[bool] = Form(default=False),
+    max_chunk_size: Optional[int] = Form(default=1000),
+    file: UploadFile = File(...),
+    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+):
+    """Upload files to the knowledge base and sync the interface"""
+    await service.prepare_upload(knowledge_id)
     file_name = file.filename
     if not file_name:
-        return resp_500(message='file name must be not empty')
-    file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file_name)
+        return resp_500(message="file name must be not empty")
+    file_path = await sync_func_to_async(save_download_file)(file.file, "bisheng", file_name)
 
-    login_user = await get_default_operator_async()
-
-    req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
-                                    split_mode=split_mode,
-                                    separator=separator,
-                                    separator_rule=separator_rule,
-                                    chunk_size=chunk_size,
-                                    chunk_overlap=chunk_overlap,
-                                    hierarchy_level=hierarchy_level,
-                                    append_title=append_title,
-                                    max_chunk_size=max_chunk_size,
-                                    file_list=[KnowledgeFileOne(file_path=file_path)])
-
-    upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
-    res = await run_in_threadpool(
-        KnowledgeService.sync_process_knowledge_file,
-        request, login_user, req_data, upload_limit_bytes=upload_limit_bytes,
+    req_data = KnowledgeFileProcess(
+        knowledge_id=knowledge_id,
+        split_mode=split_mode,
+        separator=separator,
+        separator_rule=separator_rule,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        hierarchy_level=hierarchy_level,
+        append_title=append_title,
+        max_chunk_size=max_chunk_size,
+        file_list=[KnowledgeFileOne(file_path=file_path)],
     )
+
+    res = await service.upload(req_data, synchronous=True)
     return resp_200(data=res[0])
 
 
-@router.post('/chunks_string')
-async def post_string_chunks(request: Request, document: ChunkInput):
-    """ Get knowledge base file information. """
-
-    # String saved to file
-    content = '\n\n'.join([doc.page_content for doc in document.documents])
-    content_bytes = bytes(content, encoding='utf-8')
-    file_name = document.documents[0].metadata.get('source')
-    file_path = await sync_func_to_async(save_download_file)(content_bytes, 'bisheng', file_name)
-
-    login_user = await get_default_operator_async()
-
-    req_data = KnowledgeFileProcess(knowledge_id=document.knowledge_id,
-                                    separator=['\n\n'],
-                                    separator_rule=['after'],
-                                    file_list=[KnowledgeFileOne(file_path=file_path)],
-                                    extra=json.dumps(document.documents[0].metadata,
-                                                     ensure_ascii=False))
-
-    upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
-    knowledge, failed_files, process_files, _ = await KnowledgeService.asave_knowledge_file(
-        login_user, req_data, upload_limit_bytes=upload_limit_bytes,
-    )
-    if failed_files:
-        return resp_200(data=failed_files[0])
-
-    res = await run_in_threadpool(text_knowledge, knowledge, process_files[0], document.documents)
-
-    return resp_200(data=res)
+@router.post("/chunks_string")
+async def post_string_chunks(
+    request: Request,
+    document: ChunkInput,
+    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+):
+    return resp_200(data=await service.ingest_strings(document.knowledge_id, document.documents))
 
 
 @router.get('/download_statistic')
@@ -741,29 +475,33 @@ def detail_qa(*, id: int):
     return resp_200(qa)
 
 
-@router.post('/retrieve')
+@router.post("/retrieve")
 async def retrieve_chunks(
-        request: Request,
-        req: RetrieveReq,
-        principal: DeveloperTokenPrincipal = Depends(get_filelib_developer_token_principal),
-        user_context_service: FilelibUserContextService = Depends(get_filelib_user_context_service),
-        version_repo: KnowledgeDocumentVersionRepository = Depends(
-            get_filelib_knowledge_document_version_repository
-        ),
-        doc_repo: KnowledgeDocumentRepository = Depends(get_filelib_knowledge_document_repository),
-        source_service: FilelibRetrieveSourceService = Depends(
-            get_filelib_retrieve_source_service
-        ),
-        file_repo: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
-        retrieval_runtime: AsyncRetrievalRuntime = Depends(get_async_retrieval_runtime),
+    request: Request,
+    req: RetrieveReq,
+    principal: DeveloperTokenPrincipal = Depends(get_filelib_developer_token_principal),
+    user_context_service: FilelibUserContextService = Depends(get_filelib_user_context_service),
+    version_repo: KnowledgeDocumentVersionRepository = Depends(get_filelib_knowledge_document_version_repository),
+    doc_repo: KnowledgeDocumentRepository = Depends(get_filelib_knowledge_document_repository),
+    source_service: FilelibRetrieveSourceService = Depends(get_filelib_retrieve_source_service),
+    file_repo: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+    retrieval_runtime: AsyncRetrievalRuntime = Depends(get_async_retrieval_runtime),
 ):
     """Retrieve top-k chunks across one or more knowledge bases (no LLM generation).
 
     Designed for external retrieval-tool integrations (e.g. agents that bring
     their own LLM). The resolved request user controls permissions and scope.
     """
+
     async def _execute_retrieval():
         async with user_context_service.use_user(principal, req.external_id) as login_user:
+            query = build_filelib_space_query_service(
+                request=request,
+                user=login_user,
+                session=file_repo.session,
+                storage=getattr(source_service, "storage", None),
+            )
+            await query.require_spaces(req.knowledge_base_ids)
             chat_svc = build_knowledge_space_chat_service_for_openapi(
                 request=request,
                 request_user=login_user,
@@ -780,6 +518,8 @@ async def retrieve_chunks(
             timeout=retrieval_runtime.config.total_timeout_seconds,
         )
     except BaseErrorCode as e:
+        if getattr(e, "http_status", 200) != 200:
+            raise
         return e.return_resp_instance()
     except asyncio.TimeoutError as exc:
         raise HTTPException(status_code=504, detail="knowledge retrieval timed out") from exc

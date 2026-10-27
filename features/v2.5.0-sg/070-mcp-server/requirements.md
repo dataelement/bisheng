@@ -1,5 +1,8 @@
 # MCP Server：需求与验收方法
 
+> 2026-10-22 身份契约更新：[F081](../081-mcp-external-user-identity/spec.md) 已获用户确认。十工具顶层必填 `external_id`，以目标用户及其当前有效租户执行；Token 保留接入、绑定有效性、IP/路由/限流校验。本文首期的绑定用户、禁止身份参数或原样兼容描述如与 F081 冲突，以 F081 为准；历史验证记录不代表新身份契约验收。
+
+
 **Feature ID**: 070-mcp-server  
 **Status**: CONFIRMED  
 **Created**: 2026-10-08  

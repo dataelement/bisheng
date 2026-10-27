@@ -16962,11 +16962,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 new_parent_id=parent_resource_id,
             )
 
+        from bisheng.knowledge.domain.services.knowledge_file_organization_service import (
+            KnowledgeFileOrganizationService,
+        )
+
+        organization_id = await KnowledgeFileOrganizationService.uploader_organization(
+            self.login_user.user_id, tenant_id=int(db_knowledge.tenant_id)
+        )
         db_file = KnowledgeFile(
             knowledge_id=knowledge_id,
             tenant_id=db_knowledge.tenant_id,
             original_uploader_id=self.login_user.user_id,
             original_knowledge_id=knowledge_id,
+            belonging_organization_id=organization_id,
             file_name=file_name,
             file_size=result.content_length,
             md5=result.content_hash,

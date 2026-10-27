@@ -2,14 +2,11 @@
 
 from sqlalchemy import delete, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import aliased
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
-from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import (
     KnowledgeFileSimilarityCandidate,
 )
@@ -76,39 +73,39 @@ class KnowledgeFileSimilarityCandidateRepositoryImpl(
         """
         if not source_file_ids:
             return set()
-        source_file = aliased(KnowledgeFile)
-        candidate_file = aliased(KnowledgeFile)
-        primary_version = aliased(KnowledgeDocumentVersion)
-        stmt = (
-            select(KnowledgeFileSimilarityCandidate.source_file_id)
-            .join(
-                source_file,
-                source_file.id == KnowledgeFileSimilarityCandidate.source_file_id,
-            )
-            .join(
-                KnowledgeDocument,
-                KnowledgeDocument.id == KnowledgeFileSimilarityCandidate.candidate_document_id,
-            )
-            .join(
-                primary_version,
-                primary_version.id == KnowledgeDocument.primary_version_id,
-            )
-            .join(
-                candidate_file,
-                candidate_file.id == primary_version.knowledge_file_id,
-            )
-            .where(
-                col(KnowledgeFileSimilarityCandidate.source_file_id).in_(source_file_ids),
-                KnowledgeFileSimilarityCandidate.knowledge_id == source_file.knowledge_id,
-                KnowledgeDocument.knowledge_id == source_file.knowledge_id,
-                primary_version.knowledge_file_id == KnowledgeFileSimilarityCandidate.candidate_file_id,
-                candidate_file.file_type == FileType.FILE.value,
-                candidate_file.status == KnowledgeFileStatus.SUCCESS.value,
-            )
-            .distinct()
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+            KnowledgeFileRepositoryImpl,
         )
-        result = await self.session.execute(stmt)
-        return {int(source_file_id) for source_file_id in result.scalars().all()}
+
+        rows = await self.find_by_source_file_ids(source_file_ids)
+        ids = sorted({value for row in rows for value in (row.source_file_id, row.candidate_file_id)})
+        files = KnowledgeFileRepositoryImpl(self.session)
+        contexts = {}
+        for start in range(0, len(ids), 500):
+            contexts.update(await files.resolve_similarity_files(ids[start : start + 500]))
+        actionable = set()
+        for row in rows:
+            source, candidate = contexts.get(row.source_file_id), contexts.get(row.candidate_file_id)
+            if (
+                source is None
+                or candidate is None
+                or not source.valid
+                or not candidate.valid
+                or candidate.document is None
+            ):
+                continue
+            if source.entry.knowledge_id != row.knowledge_id or candidate.entry.knowledge_id != row.knowledge_id:
+                continue
+            if (
+                source.entry.tenant_id != candidate.entry.tenant_id
+                or candidate.document.id != row.candidate_document_id
+            ):
+                continue
+            if source.document is not None and source.document.id == candidate.document.id:
+                continue
+            if source.cached_with(candidate):
+                actionable.add(row.source_file_id)
+        return actionable
 
     async def replace_for_source_file(
         self,

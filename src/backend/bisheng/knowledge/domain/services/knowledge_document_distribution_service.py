@@ -40,6 +40,7 @@ from bisheng.knowledge.domain.services.knowledge_document_permission_activation_
     KnowledgeDocumentPermissionActivationError,
     KnowledgeDocumentPermissionActivationService,
 )
+from bisheng.knowledge.domain.services.knowledge_file_organization_service import KnowledgeFileOrganizationService
 from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
     commit_tracked_fulltext_changes,
     track_fulltext_file_changes,
@@ -1246,6 +1247,7 @@ class KnowledgeDocumentDistributionService:
             target_file.original_uploader_id = current_manager.original_uploader_id
         if target_file.original_knowledge_id is None:
             target_file.original_knowledge_id = current_manager.original_knowledge_id
+        target_file.belonging_organization_id = current_manager.belonging_organization_id
         target_file.file_level_path = previous_manager_path
         target_file.level = previous_manager_level
         target_file.reference_document_id = document_id
@@ -1488,6 +1490,7 @@ class KnowledgeDocumentDistributionService:
             preview_file_object_name=None,
             bbox_object_name="",
             object_name=None,
+            belonging_organization_id=manager.belonging_organization_id,
             status=manager.status,
             user_metadata=dict(manager.user_metadata or {}),
             remark=manager.remark,
@@ -1736,6 +1739,11 @@ class KnowledgeDocumentDistributionService:
             raise KnowledgeDocumentDistributionError("canonical document has missing physical versions")
 
         if not command.metadata_only_migration:
+            await KnowledgeFileOrganizationService(self.session).apply_publish(
+                document_id=int(document.id), source_space_id=int(document.knowledge_id),
+                target_space_id=command.target_space_id, tenant_id=command.tenant_id,
+            )
+        if not command.metadata_only_migration:
             document.content_generation += 1
         document.knowledge_id = command.target_space_id
         document.file_level_path = command.target_file_level_path
@@ -1862,6 +1870,7 @@ class KnowledgeDocumentDistributionService:
         manager.knowledge_id = command.target_space_id
         manager.original_uploader_id = target_origin_uploader_id
         manager.original_knowledge_id = target_origin_knowledge_id
+        manager.belonging_organization_id = target_old_manager.belonging_organization_id
         manager.file_level_path = command.target_file_level_path
         manager.level = command.target_level
         manager.reference_document_id = int(target_document.id)
@@ -1877,6 +1886,7 @@ class KnowledgeDocumentDistributionService:
             entry.reference_document_id = int(target_document.id)
             entry.original_uploader_id = target_origin_uploader_id
             entry.original_knowledge_id = target_origin_knowledge_id
+            entry.belonging_organization_id = target_old_manager.belonging_organization_id
             self.session.add(entry)
         publish.original_uploader_id = target_origin_uploader_id
         publish.original_knowledge_id = target_origin_knowledge_id
@@ -1903,6 +1913,15 @@ class KnowledgeDocumentDistributionService:
         self.session.add(publish)
         self.session.add(target_document)
         await self.session.flush()
+        organization_service = KnowledgeFileOrganizationService(self.session)
+        await organization_service.repository.set_document_organization(
+            int(target_document.id), command.tenant_id, target_old_manager.belonging_organization_id
+        )
+        if not command.metadata_only_migration:
+            await organization_service.apply_publish(
+                document_id=int(target_document.id), source_space_id=int(source_document.knowledge_id),
+                target_space_id=command.target_space_id, tenant_id=command.tenant_id,
+            )
         await self.file_repository.mark_document_entries_content_generation(
             int(target_document.id),
             target_document.content_generation,
@@ -2129,6 +2148,7 @@ class KnowledgeDocumentDistributionService:
             updater_name=source_entry.updater_name,
             original_uploader_id=source_entry.original_uploader_id,
             original_knowledge_id=source_entry.original_knowledge_id,
+            belonging_organization_id=source_entry.belonging_organization_id,
             knowledge_id=command.target_space_id,
             file_name=source_entry.file_name,
             alias_name=source_entry.alias_name,

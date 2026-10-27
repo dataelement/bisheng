@@ -149,6 +149,7 @@
   "componentExport": {
     "exportDetail": "导出该分类明细",
     "exportAll": "导出",
+    "exportAllDetails": "导出全部明细",
     "exportFailed": "导出失败，请稍后重试",
     "saveBeforeExport": "请先保存看板后再导出"
   },
@@ -528,9 +529,9 @@
   "scene": "问答场景",
   "source_app": "来源应用",
   "mid_user_daily_participation": "全员每日参与度",
-  "participation_rate": "全员参与占比",
-  "logged_in_employee_count": "实际登录人数",
-  "active_employee_count": "全员总数",
+  "participation_rate": "全员参与度占比",
+  "logged_in_employee_count": "累积登录人数",
+  "active_employee_count": "全员有效用户数",
   "login_count": "实际登录次数",
   "local_date": "自然日",
   "space_level": "知识库大类编码",

@@ -4,10 +4,29 @@ from typing import Any
 
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.schemas.knowledge_similarity_context import KnowledgeSimilarityContext
 
 
 class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
     """Knowledge Base File Repository Interface Class"""
+
+    async def find_similarity_files_in_space(
+        self, knowledge_id: int, exclude_file_id: int | None = None
+    ) -> list[KnowledgeFile]:
+        """相似比较候选入口, 包括当前主版本及发布引用。"""
+        ...
+
+    async def resolve_similarity_file(self, file_id: int) -> KnowledgeSimilarityContext | None:
+        """同一查询读取入口、文档、当前主版本和正文快照。"""
+        ...
+
+    async def resolve_similarity_files(self, file_ids: list[int]) -> dict[int, KnowledgeSimilarityContext]:
+        """批量读取相似比较快照。"""
+        ...
+
+    async def store_similarity_state(self, file_id: int, snapshot: dict | None, has_candidates: bool) -> None:
+        """锁定后合并内部快照并保留已处理状态。"""
+        ...
 
     async def list_qa_favorite_page(self, *, space_id: int, after_id: int, limit: int) -> list[KnowledgeFile]:
         """按 ID 分页读取未删除的收藏引用，不展开源库。"""

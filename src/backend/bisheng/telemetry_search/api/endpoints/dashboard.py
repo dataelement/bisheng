@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import List
 
 from fastapi import APIRouter, Request, Depends, Body, Query
 
@@ -8,7 +8,7 @@ from bisheng.common.schemas.api import PageData
 from bisheng.telemetry_search.domain.models.dashboard import DashboardStatus, DashboardComponent
 from bisheng.telemetry_search.domain.schemas.dashboard import DashboardCreate, DashboardRead
 from bisheng.telemetry_search.domain.services.component import TimeFilter
-from bisheng.telemetry_search.domain.schemas.component import DimensionQueryFilter
+from bisheng.telemetry_search.domain.schemas.component import ComponentDetailExportRequest, DimensionQueryFilter
 from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from bisheng.telemetry_search.domain.services.dashboard_export_service import DashboardExportService
 
@@ -110,20 +110,16 @@ async def query_component_data(request: Request,
 @router.post("/component/{component_id}/export", summary="F058: export one drill-down category as Excel")
 async def export_component_detail(request: Request,
                                   component_id: str,
-                                  dashboard_id: int = Body(..., embed=True),
-                                  dimension_field: str = Body(..., embed=True),
-                                  dimension_value: Any = Body(..., embed=True),
-                                  time_filters: List[TimeFilter] = Body(None, embed=True),
-                                  dimension_filters: List[DimensionQueryFilter] = Body(None, embed=True),
+                                  data: ComponentDetailExportRequest,
                                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
     export_service = DashboardExportService(request=request, login_user=login_user)
     file_url = await export_service.export_component_detail(
-        dashboard_id,
+        data.dashboard_id,
         component_id,
-        dimension_field,
-        dimension_value,
-        time_filters,
-        dimension_filters,
+        data.dimension_field,
+        data.dimension_value,
+        data.time_filters,
+        data.dimension_filters,
     )
     return resp_200(data={"file_url": file_url})
 

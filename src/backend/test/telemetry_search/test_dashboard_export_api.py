@@ -52,14 +52,15 @@ def client(monkeypatch):
         yield c, export_service
 
 
-def test_export_detail_endpoint_returns_file_url(client):
+@pytest.mark.parametrize("dimension_value", ["生产制造部", None, "未分类", ""])
+def test_export_detail_endpoint_returns_file_url(client, dimension_value):
     test_client, export_service = client
     resp = test_client.post(
         "/api/v1/telemetry/dashboard/component/comp-1/export",
         json={
             "dashboard_id": 1,
             "dimension_field": "belonging_department_name",
-            "dimension_value": "生产制造部",
+            "dimension_value": dimension_value,
         },
     )
     assert resp.status_code == 200
@@ -72,7 +73,7 @@ def test_export_detail_endpoint_returns_file_url(client):
     assert call_args[0] == 1  # dashboard_id
     assert call_args[1] == "comp-1"  # component_id (from path)
     assert call_args[2] == "belonging_department_name"
-    assert call_args[3] == "生产制造部"
+    assert call_args[3] == dimension_value
 
 
 def test_export_all_endpoint_returns_file_url(client):
@@ -90,3 +91,13 @@ def test_export_all_endpoint_returns_file_url(client):
     call_args = export_service.export_component_all.call_args.args
     assert call_args[0] == 1
     assert call_args[1] == "comp-1"
+
+
+def test_export_detail_requires_dimension_value_even_when_null_is_allowed(client):
+    test_client, export_service = client
+    response = test_client.post(
+        "/api/v1/telemetry/dashboard/component/comp-1/export",
+        json={"dashboard_id": 1, "dimension_field": "uploader_department_name"},
+    )
+    assert response.status_code == 422
+    export_service.export_component_detail.assert_not_awaited()

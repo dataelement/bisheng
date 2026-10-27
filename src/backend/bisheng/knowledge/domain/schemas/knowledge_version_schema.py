@@ -88,6 +88,8 @@ class SimilarCandidateEntry(BaseModel):
     primary_uploader_name: str | None = None
     primary_upload_time: datetime | None = None
     primary_knowledge_file_id: int  # primary version's knowledge_file_id, used for preview
+    content_file_id: int | None = None
+    can_associate: bool = True
 
 
 class PendingSimilarFileEntry(BaseModel):
@@ -97,6 +99,7 @@ class PendingSimilarFileEntry(BaseModel):
     candidate_count: int  # how many similar candidates currently >= threshold
     current_primary_version_no: int = 1
     primary_uploader_name: str | None = None
+    can_associate: bool = True
 
 
 class DismissSimilarResponse(BaseModel):
