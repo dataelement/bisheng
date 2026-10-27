@@ -8,10 +8,6 @@ from fastapi import WebSocket, Request
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
 from loguru import logger
 
-from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
-from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
     save_message_citations,
@@ -32,7 +28,6 @@ from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.llm.domain import LLMService
 from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import thread_pool
 from bisheng_langchain.gpts.message_types import LiberalToolMessage
@@ -53,7 +48,7 @@ class ChatClient:
 
         # Business Custom Parameters
         self.db_assistant = None
-        self.gpts_agent: AssistantAgent | None = None
+        self.gpts_agent: 'AssistantAgent | None' = None
         self.gpts_async_callback = None
         self.chat_history = []
         self.new_session = None
@@ -71,7 +66,7 @@ class ChatClient:
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
 
-    async def send_json(self, message: ChatMessage):
+    async def send_json(self, message: 'ChatMessage'):
         await self.websocket.send_json(message.dict())
 
     async def handle_message(self, message: Dict[any, any]):
@@ -146,6 +141,9 @@ class ChatClient:
                 user_id=self.user_id,
             ))
 
+            # common 不能在模块顶格导入 api.
+            from bisheng.api.services.audit_log import AuditLogService
+
             # RecordTelemetryJournal
             await telemetry_service.log_event(user_id=self.user_id,
                                               event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
@@ -170,6 +168,9 @@ class ChatClient:
             citation_registry_items: List[CitationRegistryItemSchema] | None = None,
             citations: List[CitationRegistryItemSchema] | None = None,
     ):
+        # common 不能在模块顶格导入 api.
+        from bisheng.api.v1.schemas import ChatResponse
+
         is_bot = 0 if msg_type == 'human' else 1
         if citations is None:
             citations = citation_registry_items
@@ -189,6 +190,9 @@ class ChatClient:
         ))
 
     async def init_gpts_agent(self):
+        # common 不能在模块顶格导入 api.
+        from bisheng.api.services.assistant_agent import AssistantAgent
+
         await self.init_chat_history()
         await self.init_gpts_callback()
         try:
@@ -273,6 +277,9 @@ class ChatClient:
     async def init_gpts_callback(self):
         if self.gpts_async_callback is not None:
             return
+        # common 不能在模块顶格导入 api.
+        from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
+
         async_callbacks = [AsyncGptsDebugCallbackHandler(**{
             'websocket': self.websocket,
             'flow_id': self.client_id,
@@ -409,11 +416,13 @@ class ChatClient:
 
         except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')
+            await self.add_message('bot', '回答失败', 'error')
             await self.send_response('system', 'start', '')
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         except Exception as e:
             e = AssistantOtherError(exception=e)
             logger.exception('handle gpts message error: ')
+            await self.add_message('bot', '回答失败', 'error')
             await self.send_response('system', 'start', '')
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         finally:
@@ -425,6 +434,9 @@ class ChatClient:
         if self.new_session.name:
             return
         self.new_session.name = "New Chat"
+
+        # common 不能在模块顶格导入领域模块.
+        from bisheng.llm.domain import LLMService
 
         llm_conf = await LLMService.get_workbench_llm()
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:

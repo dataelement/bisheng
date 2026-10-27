@@ -1,19 +1,6 @@
 {
   "version": 1,
   "hooks": {
-    "postToolUse": [
-      {
-        "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent_hooks.py\" cursor-post-edit",
-        "timeout": 20
-      }
-    ],
-    "stop": [
-      {
-        "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent_hooks.py\" cursor-stop",
-        "timeout": 30,
-        "loop_limit": 2
-      }
-    ],
     "beforeShellExecution": [
       {
         "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent_hooks.py\" cursor-git-safety",

@@ -39,6 +39,7 @@ from bisheng.common.stream_errors import (
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowType
+from bisheng.database.models.answer_failure import tool_output_error
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
@@ -1343,6 +1344,42 @@ async def _process_agent_files(data, model_info, login_user, ws_config, *, porta
     return text[:getattr(ws_config, 'maxTokens', 15000) or 15000], images
 
 
+def _answer_failure_text(exc: BaseException) -> str:
+    lowered = str(exc).lower()
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)) or 'timeout' in lowered or 'budget' in lowered:
+        return '回答超时'
+    return '回答失败'
+
+
+async def _store_answer_failure(chat_id: str | None, user_id: int | None, text: str) -> None:
+    """把回答失败写成消息. 插入时会把已有会话标成异常.
+
+    Args:
+        chat_id: 会话 id. 为空则不写.
+        user_id: 用户 id.
+        text: 展示给审计详情的失败说明.
+    """
+    if not chat_id or user_id is None:
+        return
+    try:
+        await ChatMessageDao.ainsert_one(
+            ChatMessage(
+                user_id=user_id,
+                chat_id=chat_id,
+                flow_id='',
+                type='end',
+                is_bot=True,
+                message=text,
+                category='answer',
+                extra=json.dumps({'error': True, 'error_msg': text}, ensure_ascii=False),
+                source=0,
+            )
+        )
+    except Exception:
+        # 失败提示写不进去时, 前面的错误事件仍然要返回给用户.
+        logger.exception('store answer failure failed chat_id={}', chat_id)
+
+
 async def _agent_stream_chat_completion(
         request: Request,
         data: APIChatCompletion,
@@ -1403,6 +1440,7 @@ async def _agent_stream_chat_completion(
                 initialized_chat if initialized_chat is not None else await _agent_initialize_chat(data, login_user)
             )
             conversation_id = conversation.chat_id
+            stream_stage['conversation_id'] = conversation_id
         except Exception as exc:
             yield stream_error_sse(exc, stage='config' if isinstance(exc, ValueError) else 'system')
             return
@@ -1818,7 +1856,7 @@ async def _agent_stream_chat_completion(
                             tool_event = events[idx]
                             results = _parse_tool_results(raw_output, tool_event.get('tool_name'))
                             tool_event['results'] = results
-                            tool_event['error'] = None
+                            tool_event['error'] = tool_output_error(raw_output)
                             tool_event['ended_at'] = ended_ms
                             if tool_event.get('started_at') is not None:
                                 tool_event['duration_ms'] = max(0, ended_ms - tool_event['started_at'])
@@ -1834,7 +1872,7 @@ async def _agent_stream_chat_completion(
                                 'tool_type': 'tool',
                                 'args': {},
                                 'results': results,
-                                'error': None,
+                                'error': tool_output_error(raw_output),
                                 'started_at': ended_ms,
                                 'ended_at': ended_ms,
                                 'duration_ms': 0,
@@ -1906,6 +1944,7 @@ async def _agent_stream_chat_completion(
                 and not str(event.get('tool_call_id', '')).startswith('init_fail_')
                 for event in events
             )
+            await _store_answer_failure(conversation_id, login_user.user_id, _answer_failure_text(exc))
             yield stream_error_sse(
                 exc,
                 stage=failure_stage,
@@ -1922,6 +1961,7 @@ async def _agent_stream_chat_completion(
                 and not str(event.get('tool_call_id', '')).startswith('init_fail_')
                 for event in events
             )
+            await _store_answer_failure(conversation_id, login_user.user_id, _answer_failure_text(exc))
             yield stream_error_sse(
                 exc,
                 stage=failure_stage,
@@ -2064,6 +2104,9 @@ async def _agent_stream_chat_completion(
                     errors.extend(state.get('errors', []) or [attachment_error(state, code='QUESTION_TIMEOUT',
                         reason='问答总时限已到，该附件处理尚未完成。', suggestion='请重试或拆分文件后重新上传。')])
                 timeout_error = AttachmentQuestionError(errors)
+            await _store_answer_failure(
+                stream_stage.get('conversation_id'), login_user.user_id, '回答超时',
+            )
             yield stream_error_sse(timeout_error,
                                    stage=stream_stage['value'], had_output=stream_stage['had_output'])
         finally:

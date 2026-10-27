@@ -1955,6 +1955,7 @@
     "unratedFeedback": "Unrated",
     "viewFeedback": "View feedback",
     "feedbackOpinions": "Feedback comments",
+    "answerAbnormal": "Abnormal",
     "noFeedback": "No feedback comments",
     "enterQuestion": "Please enter a question first",
     "qaLibQuestionAnswerRequired": "QA Knowledge Base, Question, and Answer cannot be empty",
@@ -1992,7 +1993,8 @@
       "messageContent": "Message Content",
       "like": "Like",
       "dislike": "Dislike",
-      "copy": "Copy",
+      "copy": "Feedback comments",
+      "answerAbnormal": "Abnormal",
       "sensitiveStatus": "Sensitive Content Hit"
     },
     "userRole": "User",
