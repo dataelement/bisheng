@@ -64,6 +64,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFileEncodingDuplicateError,
     SpaceFileExtensionError,
     SpaceFileNameDuplicateError,
+    AbnormalFileStateConflictError,
     SpaceFileNameSensitiveWordError,
     SpaceFileNotFoundError,
     SpaceFileSizeLimitError,
@@ -18302,10 +18303,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await lifecycle_service.session.rollback()
             raise
 
-    async def delete_file(self, file_id: int):
+    async def delete_file(
+        self,
+        file_id: int,
+        *,
+        skip_space_permission: bool = False,
+        require_statuses: set[int] | None = None,
+    ):
         file_record = await self._get_file_for_action(file_id)
+        if getattr(file_record, "deleted_at", None) is not None:
+            raise SpaceFileNotFoundError()
+        if require_statuses is not None and int(file_record.status or -1) not in require_statuses:
+            raise AbnormalFileStateConflictError()
         await _require_not_write_frozen(int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID))
-        await self._require_permission_id("knowledge_file", file_id, "delete_file", space_id=file_record.knowledge_id)
+        if not skip_space_permission:
+            await self._require_permission_id(
+                "knowledge_file", file_id, "delete_file", space_id=file_record.knowledge_id
+            )
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
             raise SpaceNotFoundError()
