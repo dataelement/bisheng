@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CompositionEvent, type ClipboardEvent } from "react"
 
 export function normalizeSubjectKeyword(value: string): string {
-  return value.replace(/\r\n|[\r\n]/g, " ").replace(/^[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+|[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+$/g, "")
+  return value.replace(/\r\n|[\r\n]/g, " ").replace(/^[\t\n\v\f\r\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+|[\t\n\v\f\r\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+$/g, "")
 }
 
 export function isSubjectKeywordTooLong(value: string): boolean {

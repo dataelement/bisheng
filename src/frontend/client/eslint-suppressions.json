@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 15
+      "count": 13
     }
   },
   "src/api/index.ts": {
@@ -91,7 +91,7 @@
   },
   "src/api/linsight.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 14
+      "count": 13
     },
     "no-console": {
       "count": 1
@@ -334,7 +334,7 @@
   },
   "src/components/Chat/Input/ChatKnowledge.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 11
+      "count": 10
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4
@@ -510,11 +510,6 @@
       "count": 1
     }
   },
-  "src/components/Chat/MessageFeedbackButtons.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
   "src/components/Chat/MessageSelection/ExportFormatSheet.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -550,9 +545,6 @@
     }
   },
   "src/components/Chat/Messages/Content/CitationReferencesDrawer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
     "no-restricted-imports": {
       "count": 1
     },
@@ -2351,9 +2343,6 @@
   },
   "src/pages/Subscription/AiChat/ArticleAiDock.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-imports": {
       "count": 1
     }
   },

@@ -16,21 +16,22 @@ from pydantic import ValidationError
 from starlette.responses import Response
 
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.core.config.dsh import normalize_dsh_origin
 from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
 
 current_work_service: ContextVar[WorkCapabilitiesService] = ContextVar("current_work_service")
 
 
 def work_transport_security(public_url: str) -> TransportSecuritySettings:
-    origin = urlsplit(public_url)
-    if origin.scheme not in {"http", "https"} or not origin.hostname or origin.username or origin.password:
-        raise ValueError("Work MCP requires a valid platform origin")
-    # The ingress forwards Host without its public port; both forms identify this platform.
+    public_origin = normalize_dsh_origin(public_url)
+    origin = urlsplit(public_origin)
+    # Existing ingress installations may forward the hostname without its port.
+    # Both entries derive from the single configured platform origin.
     hostname = f"[{origin.hostname}]" if ":" in origin.hostname else origin.hostname
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=list(dict.fromkeys([origin.netloc, hostname])),
-        allowed_origins=[f"{origin.scheme}://{origin.netloc}"],
+        allowed_origins=[public_origin],
     )
 
 

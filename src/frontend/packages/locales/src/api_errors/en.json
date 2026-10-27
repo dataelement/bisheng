@@ -536,5 +536,5 @@
   "28006": "The isolated code execution environment returned invalid data. Try again later or contact your administrator.",
   "28007": "The code node result is too large. Reduce the output.",
   "28008": "The code node finished, but the main function did not return a result.",
-  "28009": "The isolated code execution environment is not configured for task mode. Contact your administrator to configure it, then try again."
+  "28009": "The task mode code executor configuration is invalid. Contact your administrator to check the local, container, or e2b configuration, then try again."
 }

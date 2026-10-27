@@ -37,6 +37,7 @@ MIGRATED_RESOURCE_TYPES: frozenset[str] = frozenset(
         "workflow",
         "assistant",
         "tool",
+        "linsight_skill",
         "channel",
         "dashboard",
     }
@@ -52,6 +53,7 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
             "workflow",
             "assistant",
             "tool",
+            "linsight_skill",
             "channel",
             "dashboard",
         }
@@ -62,7 +64,7 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
     "download": frozenset({"folder", "knowledge_file"}),
     "delete": MIGRATED_RESOURCE_TYPES,
     "share": frozenset({"knowledge_space", "knowledge_file", "workflow", "assistant"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool"}),
+    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "linsight_skill"}),
     "publish": frozenset({"workflow", "assistant"}),
     "unpublish": frozenset({"workflow", "assistant"}),
 }

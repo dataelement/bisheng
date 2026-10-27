@@ -1,4 +1,3 @@
-// @ts-strict-ignore
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
@@ -47,7 +46,7 @@ export type WorkbenchSensitivePolicyHandle = {
 function toWordsType(wordsTypes: SensitiveWordType[] = []) {
     return wordsTypes
         .map((item) => item === "builtin" ? 1 : item === "custom" ? 2 : null)
-        .filter((item): item is number => item !== null);
+        .filter((item): item is 1 | 2 => item !== null);
 }
 
 function toApiWordsType(wordsType: number[] = []): SensitiveWordType[] {
@@ -123,7 +122,7 @@ function WorkbenchSensitivePolicy(_, ref) {
                 toast({
                     title: t("prompt"),
                     variant: "error",
-                    description: t("build.errors.sensitivePolicyLoading", "敏感词配置加载中，请稍后再试"),
+                    description: t("build.errors.sensitivePolicyLoading"),
                 });
                 return false;
             }
@@ -135,7 +134,7 @@ function WorkbenchSensitivePolicy(_, ref) {
             if (!validateForm(nextForm)) return false;
             return savePolicy(nextForm);
         },
-    }), [form, loaded, t, toast]);
+    }));
 
     const handleSwitchChange = (checked: boolean) => {
         setForm((prev) => ({ ...prev, isCheck: checked }));
@@ -174,7 +173,7 @@ function WorkbenchSensitivePolicy(_, ref) {
                     <div>
                         <div className="flex items-center gap-2">
                             <p className="text-lg font-bold">
-                                {t("build.contentSecurityReview", "内容安全审查")}
+                                {t("build.contentSecurityR")}
                             </p>
                         </div>
                         <p className="mt-1 text-sm text-[#86909C]">

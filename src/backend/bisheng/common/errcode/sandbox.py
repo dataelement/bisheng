@@ -43,4 +43,4 @@ class SandboxCodeNodeNoResultError(BaseErrorCode):
 
 class SandboxConfigurationError(BaseErrorCode):
     Code: int = 28009
-    Msg: str = "请为任务模式配置隔离代码执行环境 (container 或 e2b) 后重试"
+    Msg: str = "请为任务模式配置有效的代码执行器 (local、container 或 e2b) 后重试"

@@ -2833,6 +2833,27 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
   **逻辑与验证**：复用冻结原生PKCE/自有模型/租户策略CAS fixture，七请求在真实109串行执行；无上游/无账本变化/两轮精确空审计，不把请求解析拒绝虚构成内容安全ERROR事件。**依赖**：T204。
 
 
+### Wave 44 — 2026-10-27 用户确认的采集边界与说明
+
+- [x] **T206 租户关闭时不写安全事件的回归**
+  **类型**：测试。**目标文件**：G `src/test/java/com/dataelem/gateway/service/DshSafetyRequestManagerTest.java`。
+  **覆盖 AC**：AC-60。**逻辑与验证**：Chat/Responses × 流式/非流式，关闭租户策略后正文及凭据原样转发、仅一次模型调用、无 Outbox 写入；原“关闭仍生成 DISABLED 事件”断言按用户新约定替换。
+- [x] **T207 停止关闭租户的新安全事件采集**
+  **类型**：实现。**目标文件**：G `src/main/java/com/dataelem/gateway/service/DshSafetyRequestManager.java`。
+  **逻辑与验证**：仅在至少一个检查方向开启时创建 Recorder，不让 Gateway 感知 backend 审计模式；已有积压回传、模型权限和计量不变。**依赖**：T206。
+- [x] **T208 常驻采集说明的回归**
+  **类型**：测试。**目标文件**：B `src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditMode.test.tsx`。
+  **覆盖 AC**：AC-61。**逻辑与验证**：三种采集模式 × 可配置/只读用户，说明无需展开设置即可见，不触发保存。
+- [x] **T209 审计采集状态旁常驻说明**
+  **类型**：实现。**目标文件**：B `src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditMode.tsx`。
+  **逻辑与验证**：复用现有辅助文字布局，说明两项开关组合及正文不采集语义，状态栏关联说明；无新 API。**依赖**：T208、T210、T211。
+- [x] **T210 中文与英文采集说明**
+  **类型**：实现。**目标文件**：B `src/frontend/platform/public/locales/zh-Hans/bs.json`；`src/frontend/platform/public/locales/en-US/bs.json`。
+  **逻辑与验证**：新增 collectionHint，修正原 modeHint，两个语言 JSON 与键对齐检查。
+- [x] **T211 日文采集说明**
+  **类型**：实现。**目标文件**：B `src/frontend/platform/public/locales/ja/bs.json`。
+  **逻辑与验证**：与中英文同义的 collectionHint/modeHint，三语键对齐检查。
+
 ## 5. AC → 测试任务追溯
 
 本表只列测试/验收任务；配对实现见各任务依赖。每条 AC 至少一个针对性测试或端到端场景，末端 E2E 和特性审查不能代替前置测试。
@@ -2898,6 +2919,8 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 | AC-57 | T085、T089、T121、T125、T128、T129、T132 |
 | AC-58 | T029、T077、T079、T081、T097、T120、T123、T125、T131、T132、T161、T172 |
 | AC-59 | T059、T122、T125、T127、T129、T132 |
+| AC-60 | T206 |
+| AC-61 | T208 |
 
 ## 6. 共享文件与发布边界
 
@@ -2911,7 +2934,7 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 
 ## 8. 文档与执行检查
 
-初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后当前205项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。59条AC追溯表按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
+初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后205项；2026-10-27补充T206–T211后当前211项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。61条AC追溯表按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
 
 ## 9. 执行记录
 
@@ -2971,3 +2994,6 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 2026-10-24现场最终子集：35协议PASS（380.29s）、7身份/管理PASS（29.83s）、12实际请求的只读审计4参数PASS（12.47s）。两协议真实Desktop read成功各1且nonce匹配，BLOCKED各0调度，无自动重试；原生实际输出BLOCKED仍SUCCEEDED/SETTLED/raw80。Gateway64f602be经404成功构建并仅109部署。T202/T203新48/旧SDK33/计数13由主和独立B复核通过，已更新唯一测试Provider。T121/T122/T123完整故障/双租户/无Gateway/UNKNOWN和容量仍未完成，不以这些子集勾全任务。T204/T205已完成真实7项边界和49本地配对复验；许可证由用户追加授权生成官方兼容trial，2026-11-23到期且实际expired=false。详细结果见implementation-verification与deployment-execution。
 
 2026-10-24 T204/T205 PASS：主读全部420行单源，发现capabilities错用config_ready，C以真实@JsonProperty("configuration_ready")反例3RED→9GREEN修正；最终主真实执行56PASS（49本地+7现场，78.03s）。七请求均400 invalid_request、公开UUID一致/无Backend header、物理global+scenario0、两轮完整精确空审计与无额度变化。32MiB+1实际33554433bytes，未打印请求正文。测试退出原策略字段已恢复disabled/version111；其他109既有容器ID/image/StartedAt再次逐字节不变。当前190/205，完整T121/T122/T123、DM8、容量和最终T132保留未完成。
+
+
+2026-10-27：用户确认 AC-60/AC-61 后新增 Wave44 T206–T211；Gateway 4 RED→GREEN，定向107PASS、完整896PASS/10真实DB SKIP；DSH 前端258PASS、workspace typecheck/i18n/locales、生产构建和目标lint通过，完整lint仍95项既有错误。主已逐文件自审两仓实际实现及配对、旧记录补报/冻结快照/不改模型计量边界，通过后勾选，当前196/211；既有完整现场、DM8、容量与T132门禁仍保留未完成。详细见 implementation-verification 的2026-10-27章节，未提交/推送/部署。
