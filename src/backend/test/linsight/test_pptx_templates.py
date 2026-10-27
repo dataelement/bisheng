@@ -232,7 +232,7 @@ def test_cloned_chart_pages_do_not_share_a_chart_part(tmp_path):
     prs = Presentation(str(out))
     parts = [s.chart.part.partname for slide in prs.slides for s in slide.shapes if s.has_chart]
     assert len(parts) == 2 and len(set(parts)) == 2
-    first = [s for s in prs.slides[0].shapes if s.has_chart][0].chart
+    first = next(s for s in prs.slides[0].shapes if s.has_chart).chart
     assert list(first.plots[0].series[0].values) == [1, 2, 3]
 
 
@@ -244,8 +244,13 @@ def test_waterfall_and_footer_removal(tmp_path):
     deck.save(str(out), manifest_dir=str(tmp_path))
     slide = Presentation(str(out)).slides[0]
     assert not [sh for sh in slide.shapes if sh.name == "footer"], "footer=None removes the footer slot"
-    chart = [sh for sh in slide.shapes if sh.has_chart][0].chart
-    assert list(chart.plots[0].series[0].values) == [0.0, 100.0, 102.0, 0.0]  # invisible base: +5 sits on 100, -3 hangs from 105
+    chart = next(sh for sh in slide.shapes if sh.has_chart).chart
+    assert list(chart.plots[0].series[0].values) == [
+        0.0,
+        100.0,
+        102.0,
+        0.0,
+    ]  # invisible base: +5 sits on 100, -3 hangs from 105
     assert list(chart.plots[0].series[1].values) == [100.0, 5.0, 3.0, 102.0]
 
 
@@ -276,7 +281,7 @@ def test_helpful_errors_for_unknown_names():
     with pytest.raises(KeyError, match="可用插槽"):
         deck.fill(s, "nope", "x")
     chart_page = deck.add("chart-insight")
-    with pytest.raises(ValueError, match="deck.chart"):
+    with pytest.raises(ValueError, match=r"deck\.chart"):
         deck.fill(chart_page, "chart", "x")
     with pytest.raises(ValueError, match="未知模板"):
         Deck.open("does-not-exist")
@@ -285,7 +290,14 @@ def test_helpful_errors_for_unknown_names():
 # --------------------------------------------------------------------------- #
 # inspect_deck + deck_checks (AC-10, AC-11, AC-12)
 # --------------------------------------------------------------------------- #
-NEW_CHECK_PHRASES = ("超过该位置建议容量", "残留模板示例文字", "仍是模板示例值", "连续", "封面缺少首读焦点", "图表区没有放图表")
+NEW_CHECK_PHRASES = (
+    "超过该位置建议容量",
+    "残留模板示例文字",
+    "仍是模板示例值",
+    "连续",
+    "封面缺少首读焦点",
+    "图表区没有放图表",
+)
 
 
 def _inspect(pptx_path: Path, cwd: Path, *extra) -> str:
@@ -293,7 +305,9 @@ def _inspect(pptx_path: Path, cwd: Path, *extra) -> str:
 
     proc = subprocess.run(
         [sys.executable, str(SCRIPTS / "inspect_deck.py"), str(pptx_path), "--checks-only", *extra],
-        capture_output=True, text=True, cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        cwd=str(cwd),
     )
     assert proc.returncode == 0, proc.stderr[-2000:]
     return proc.stdout
@@ -320,8 +334,13 @@ def test_template_checks_fire_on_a_bad_deck(tmp_path):
     out = tmp_path / "output" / "bad.pptx"
     deck.save(str(out), manifest_dir=str(tmp_path / "scratch"))
     report = _inspect(out, tmp_path)
-    for phrase in ("超过该位置建议容量", "残留模板示例文字", "仍是模板示例值", "连续 3 页使用版式 cards-3",
-                   "图表区没有放图表"):
+    for phrase in (
+        "超过该位置建议容量",
+        "残留模板示例文字",
+        "仍是模板示例值",
+        "连续 3 页使用版式 cards-3",
+        "图表区没有放图表",
+    ):
         assert phrase in report, f"missing {phrase!r}\n{report}"
     assert "第2页 「title」" in report, "capacity findings name the page and the slot"
     for line in report.splitlines():

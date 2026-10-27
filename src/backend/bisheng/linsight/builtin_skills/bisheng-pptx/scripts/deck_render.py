@@ -219,7 +219,7 @@ def fill_table(table, header, rows, style, col_widths=None, total_w=None, row_h=
     style_id.text = "{2D5ABB26-0587-4C30-8999-92F81FD0307C}"  # "No Style, No Grid"
     if col_widths and total_w:
         scale = total_w / sum(col_widths)
-        for col, cw in zip(table.columns, col_widths):
+        for col, cw in zip(table.columns, col_widths, strict=False):
             col.width = Pt(cw * scale)
     for row in table.rows:
         row.height = Pt(row_h)

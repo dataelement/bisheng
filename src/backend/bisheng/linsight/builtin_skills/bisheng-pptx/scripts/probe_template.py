@@ -158,7 +158,9 @@ def main() -> int:
         print("[FATAL] 解析模板时出错：")
         traceback.print_exc(file=sys.stdout)
         print("常见原因：文件损坏、是加密文档、或其实是老式 .ppt/.pot（python-pptx 只认 .pptx/.potx）。")
-        print("→ 请用户另存为 .pptx 后重传；拿不到就放弃套模板，改用内置模板（SKILL.md §2–§4）或从零创建（references/freeform.md），并告知用户。")
+        print(
+            "→ 请用户另存为 .pptx 后重传；拿不到就放弃套模板，改用内置模板（SKILL.md §2–§4）或从零创建（references/freeform.md），并告知用户。"
+        )
     return 0
 
 

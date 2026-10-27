@@ -24,8 +24,9 @@ from pptx.util import Pt
 from themes import Theme
 
 _SKILL_SCRIPTS = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "bisheng", "linsight", "builtin_skills", "bisheng-pptx",
-                 "scripts")
+    os.path.join(
+        os.path.dirname(__file__), "..", "..", "bisheng", "linsight", "builtin_skills", "bisheng-pptx", "scripts"
+    )
 )
 if _SKILL_SCRIPTS not in sys.path:
     sys.path.insert(0, _SKILL_SCRIPTS)
@@ -243,13 +244,29 @@ class SlideBuilder:
     def table(self, name, x, y, w, header, rows, col_widths=None, row_h=34.0, highlight_rows=()):
         """Sample native table; ``Deck.table`` rebuilds it from the stored style."""
         style = table_style(self.theme)
-        frame = build_table(self.slide.shapes, x, y, w, header, rows, style, col_widths=col_widths, row_h=row_h,
-                            highlight_rows=highlight_rows)
+        frame = build_table(
+            self.slide.shapes,
+            x,
+            y,
+            w,
+            header,
+            rows,
+            style,
+            col_widths=col_widths,
+            row_h=row_h,
+            highlight_rows=highlight_rows,
+        )
         self._register(frame, name)
-        self.slots.append({
-            "name": name, "role": "table", "bounds": [x, y, w, row_h * (len(rows) + 1)], "row_h": row_h,
-            "col_widths": col_widths, "style": style,
-        })
+        self.slots.append(
+            {
+                "name": name,
+                "role": "table",
+                "bounds": [x, y, w, row_h * (len(rows) + 1)],
+                "row_h": row_h,
+                "col_widths": col_widths,
+                "style": style,
+            }
+        )
         for cell_text in header + [c for r in rows for c in r]:
             self.samples.append(cell_text)
         return frame
@@ -353,7 +370,7 @@ def prepare_presentation(prs, theme: Theme) -> None:
     prs.slide_height = Pt(SLIDE_H)
     master = prs.slide_masters[0]
     layouts = master.slide_layouts
-    blank = next(l for l in layouts if l.name == "Blank")
+    blank = next(layout for layout in layouts if layout.name == "Blank")
     for layout in list(layouts):
         if layout is not blank:
             layouts.remove(layout)

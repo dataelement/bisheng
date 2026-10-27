@@ -56,7 +56,9 @@ def list_one(template_id: str) -> None:
         return
     spec = _load(path)
     print(f"模板 {spec['id']}（{spec['name']}）：{spec['scenes']}")
-    print("插槽名≤N 是建议字数上限（汉字算 1，字母数字算 0.5），「·分条」表示传 list 逐条写；超了就精简或拆页，不要缩字号。")
+    print(
+        "插槽名≤N 是建议字数上限（汉字算 1，字母数字算 0.5），「·分条」表示传 list 逐条写；超了就精简或拆页，不要缩字号。"
+    )
     print('带「.」的插槽属于同一分组，deck.drop(slide, "分组名") 可整组删除（例如不用第三张卡片就 drop "card3"）。\n')
     for layout in spec["layouts"]:
         print(f"● {layout['layout_id']} — {layout['name']}：{layout['use_for']}")

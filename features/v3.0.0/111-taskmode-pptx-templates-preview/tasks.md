@@ -258,4 +258,5 @@
 - T010：不属于该会话版本、含 `..`、非 ppt/pptx 的 `file_url` 一律按 `UnAuthorizedError` 拒绝（与下载接口的拒绝方式一致）；源对象在 MinIO 不存在时返回 11025（而非 404）。
 - T011：SKILL.md 正文改为「内容先行 + 内置模板默认」；原「从零创建」与排版底线移到 `references/freeform.md`，环境事实移到 `references/environment.md`；inspect/probe/cookbook 中引用旧章节号的提示语同步更新。
 - T012：本地 client 依赖安装落后于 workspace（缺 `@bisheng/chat`、`@bisheng/api-client`），tsc-strict 用临时 paths 映射验证：改动文件零错误；全量结论以 CI 为准。
+- T016（部分）：`arch-guard` 对改动文件 exit 0；ruff 只剩全角中文标点类（RUF001–003，与既有技能脚本同类、后端 CI 不跑 ruff）；`test/linsight/` 全量 1627 passed / 6 failed，6 条失败（`test_citation_handles_switch.py` ×5、`test_personal_skill_api.py` ×1）在未改动的 `origin/feat/3.0.0` 上同样失败，属既有问题。
 - T008：为让模板自身通过既有检查（不依赖基线扣除），调整了模板：封面标题 44pt、页脚上移并改 10pt、装饰圆环与光晕收进画布内、页码字段声明段落字号 → design §5 第 13 条。

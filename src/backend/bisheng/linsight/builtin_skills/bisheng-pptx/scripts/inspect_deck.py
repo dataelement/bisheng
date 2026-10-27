@@ -47,7 +47,7 @@ from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
 from pptx.util import Length
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import deck_checks  # noqa: E402
+import deck_checks
 
 # --- tunables -------------------------------------------------------------
 #
