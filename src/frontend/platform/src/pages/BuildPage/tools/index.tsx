@@ -250,7 +250,7 @@ export const useMcpRefrensh = () => {
             const res = await refreshMcpApi()
             if (res.length) {
                 setLoading(false);
-                return notification.open({ type: "error", description: (res.map(e => `${e} ${t("toolFetchFailed")}`)).filter(Boolean).join('\n') })
+                return notification.open({ type: "error", description: (res.map(e => typeof e === "string" ? `${e} ${t("toolFetchFailed")}` : `${e.name}：${t(`api_errors:${e.code}`)}`)).filter(Boolean).join('\n') })
             }
             toast.show({ type: "success", message: String(t("refreshSuccess") ?? '') })
             } catch (error) {

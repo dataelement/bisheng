@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.common.errcode.permission import PermissionInvalidResourceError, PermissionSubjectUnavailableError
 from bisheng.database.models.department import (
     DepartmentDao,
     UserDepartmentDao,
@@ -175,6 +175,8 @@ class TenantPermissionSubjectDirectory:
             # design K15 / K17), so no per-row type check is needed here.
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
+            if not valid:
+                raise PermissionSubjectUnavailableError()
             source_type = "DIRECT"
         elif normalized_type == "service_account":
             row = await ServiceAccountRepository.get(identifier)
