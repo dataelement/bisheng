@@ -976,7 +976,7 @@
     "assistant": "アシスタント",
     "workflow": "ワークフロー",
     "skill": "スキル",
-    "tools": "ツール",
+    "tools": "ツールとスキル",
     "tagLibrary": "タグライブラリ",
     "createTagLibrary": "タグライブラリを作成",
     "editTagLibrary": "タグライブラリを編集",

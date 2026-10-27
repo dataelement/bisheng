@@ -170,6 +170,7 @@ async def test_preset_tool_requires_both_predicate_and_read_allowlist() -> None:
         loader=_Loader((preset,)),
         permission=_Permission(),
     )
+    assert await adapter.check_action(resource_id="10", actor=_actor(), action="manage_permission")
     assert await adapter.check_action(
         resource_id="10",
         actor=_actor(),
@@ -327,6 +328,10 @@ async def test_visible_tool_list_enumerates_ids_before_database_query(
         user_role=[],
     )
 
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.batch_check_business_actions",
+        AsyncMock(return_value={"10": {"visible"}, "20": {"visible"}}),
+    )
     result = await ToolServices(login_user=login_user).get_tool_list(action="visible")
 
     assert [item.id for item in result] == [20, 10]
@@ -363,7 +368,11 @@ async def test_visible_preset_tool_list_is_visible_to_regular_users(monkeypatch)
     )
     login_user = UserPayload(user_id=7, tenant_id=1, user_role=[])
 
+    decisions = AsyncMock(return_value={"20": {"visible"}})
+    monkeypatch.setattr("bisheng.tool.domain.services.tool.batch_check_business_actions", decisions)
     result = await ToolServices(login_user=login_user).get_tool_list(is_preset=1, action="visible")
+    decisions.return_value = {}
+    assert await ToolServices(login_user=login_user).get_tool_list(is_preset=1, action="visible") == []
 
     assert [item.id for item in result] == [20]
     assert result[0].write is False

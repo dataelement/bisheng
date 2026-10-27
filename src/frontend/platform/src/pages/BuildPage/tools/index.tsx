@@ -52,14 +52,12 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
     const isBuiltinTool = type === "";
     const { actions, load: loadToolActions } = useLazyResourceActions('tool', ['edit', 'delete', 'manage_permission']);
-    // Built-in tools expose no resource-level management actions. Their separate
-    // configuration entry is restricted to the global super admin below.
     const canManageTool = (id: string | number) =>
-        !isBuiltinTool && hasResourceAction(actions, id, 'manage_permission');
+        hasResourceAction(actions, id, 'manage_permission');
     const handleHoverToolPermissions = useCallback((tool) => {
-        if (isBuiltinTool || !tool?.id) return;
+        if (!tool?.id) return;
         void loadToolActions(String(tool.id));
-    }, [isBuiltinTool, loadToolActions]);
+    }, [loadToolActions]);
 
     const loadData = async (_type = "custom") => {
         await getToolsApi(_type, { action: 'visible' }).then((res) => {
@@ -247,6 +245,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                 <PermissionDialog
                     open={permDialogOpen}
                     onOpenChange={setPermDialogOpen}
+                    allowAllMembers={isBuiltinTool}
                     resourceType="tool"
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
