@@ -1,3 +1,4 @@
+import { permissionModelLabel } from "./permissionModelLabel";
 import { Outlined } from "bisheng-icons";
 // `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
 import { LockKeyhole } from "lucide-react";
@@ -153,12 +154,12 @@ function RosterRow({
               >
                 {!currentIsGrantable && (
                   <option value={assignee.model.key}>
-                    {assignee.model.name}
+                    {permissionModelLabel(assignee.model.key, assignee.model.name, localize)}
                   </option>
                 )}
                 {models.map((model) => (
                   <option key={model.key} value={model.key}>
-                    {model.name}
+                    {permissionModelLabel(model.key, model.name, localize)}
                   </option>
                 ))}
               </select>
@@ -181,7 +182,7 @@ function RosterRow({
           </>
         ) : (
           <span className="inline-flex items-center gap-1 truncate text-sm text-[#86909C]">
-            {assignee.model.name}
+            {permissionModelLabel(assignee.model.key, assignee.model.name, localize)}
             {assignee.protected && (
               <LockKeyhole
                 aria-label={localize("f048_permission.roster.protected")}
@@ -339,7 +340,7 @@ export function PermissionListTab({
       return [
         assignee.subject.name,
         assignee.subject.id,
-        assignee.model.name,
+        permissionModelLabel(assignee.model.key, assignee.model.name, localize),
         assignee.source.type,
         assignee.inherited_from,
       ]
@@ -348,7 +349,7 @@ export function PermissionListTab({
         .toLowerCase()
         .includes(query);
     });
-  }, [assignees, fixedSubjectType, searchQuery]);
+  }, [assignees, fixedSubjectType, localize, searchQuery]);
 
   const mutateAssignee = async (
     assignee: PermissionGrantAssignee,

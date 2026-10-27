@@ -22,9 +22,15 @@ jest.mock("~/hooks", () => ({
     key: string,
     options?: Record<string, string | number>,
   ) => {
+    const labels = jest.requireActual("~/locales/en/translation.json").com_permission;
+    if (key.startsWith("com_permission.level_")) return labels[key.split(".")[1]];
     if (!options) return key;
     return `${key}:${Object.values(options).join(",")}`;
   },
+}));
+
+jest.mock("~/Providers", () => ({
+  useConfirm: () => jest.fn(),
 }));
 
 const mockedGetGrants = getResourcePermissionGrants as jest.MockedFunction<
@@ -100,12 +106,31 @@ describe("F048 Client PermissionListTab", () => {
     );
     expect(screen.getByRole("searchbox")).toBeInTheDocument();
     expect(screen.getByText("f048_permission.source.direct")).toBeInTheDocument();
-    expect(
-      screen.getByText("f048_permission.source.department"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/f048_permission\.source\.include_children/),
-    ).toBeInTheDocument();
+    const departmentRow = screen.getByTestId("permission-assignee-2");
+    expect(departmentRow).toHaveTextContent("f048_permission.source.department");
+    expect(departmentRow).toHaveTextContent("f048_permission.source.include_children");
+  });
+
+  it("displays and searches the localized standard role from the server key", async () => {
+    mockedGetGrants.mockResolvedValueOnce({
+      data: [assignee("owner-locale", "DIRECT", {
+        model: {
+          key: "owner",
+          name: jest.requireActual("~/locales/zh-Hans/translation.json").com_permission.level_owner,
+          level: 4,
+          active: true,
+        },
+        protected: true,
+        editable: false,
+      })],
+      page_size: 50,
+      has_more: false,
+      next_cursor: null,
+    });
+    render(<PermissionListTab resourceType="knowledge_space" resourceId="space-1" context={context} />);
+    expect(await screen.findByText("Owner")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Owner" } });
+    expect(screen.getByTestId("permission-assignee-owner-locale")).toHaveTextContent("Owner");
   });
 
   it("keeps an owner row read-only when owner is not grantable", async () => {

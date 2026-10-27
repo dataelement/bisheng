@@ -71,7 +71,10 @@ body[data-dsh-chat-theme] .dsh-add-menu [role^="menuitem"]:not(.dsh-command-skil
 .dsh-composer-writing { position:relative; width:100%; min-width:0; overflow:hidden; }
 .dsh-composer-editor { position:relative; width:100%; min-height:52px; max-height:240px; overflow-y:auto; white-space:pre-wrap; overflow-wrap:anywhere; outline:none; background:transparent; color:rgb(var(--text-1)); font:inherit; }
 .dsh-composer-editor[data-empty=true]::before { content:attr(data-placeholder); position:absolute; inset:0; padding:inherit; color:rgb(var(--text-3)); pointer-events:none; }
-.dsh-inline-reference { display:inline; color:rgb(var(--brand-500)); font:inherit; cursor:text; }
+.dsh-inline-reference { display:inline-flex; align-items:baseline; gap:3px; max-width:min(240px,100%); margin-inline-end:4px; padding-inline:4px; vertical-align:baseline; border-radius:4px; color:rgb(var(--brand-500)); font:inherit; cursor:text; user-select:none; }
+.dsh-inline-reference > svg { flex:none; align-self:center; }
+.dsh-inline-reference-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (hover:hover) { .dsh-inline-reference:hover { background:rgb(var(--brand-500) / 7%); } }
 @media (pointer:coarse) { .dsh-resource-remove { opacity:1; } }
 /* Radix portals inherit the Chat palette explicitly, outside the embedded root. */
 body[data-dsh-chat-theme] .dsh-chat-menu {

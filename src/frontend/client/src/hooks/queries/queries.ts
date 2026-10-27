@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { modelConfigRefresh, normalizeModelNames } from './modelConfig';
 import type {
   QueryObserverResult,
   UseInfiniteQueryOptions,
@@ -564,20 +565,13 @@ export const useGetWorkbenchModelsQuery = () => {
       const envelope = data?.data;
       const cfg = envelope?.data ?? envelope;
       if (cfg) {
+        if (cfg.models) cfg.models = normalizeModelNames(cfg.models);
         // Compatible with historical data
         if (!cfg.asr_model) cfg.asr_model = {};
         if (!cfg.tts_model) cfg.tts_model = {};
       }
       return cfg;
     },
-    // Was refetchOnMount:false with no staleTime, so the workbench model config
-    // (models / asr_model / tts_model) was fetched once per SPA session and never
-    // refreshed — after an admin configured the ASR model the input kept the
-    // stale (empty asr_model) cache and never showed the voice button. Allow a
-    // mount-time refetch with a short staleTime so config changes surface without
-    // a full hard reload, while still avoiding refetch storms.
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    ...modelConfigRefresh,
   });
 }

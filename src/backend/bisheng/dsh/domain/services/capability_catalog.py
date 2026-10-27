@@ -48,6 +48,7 @@ class CapabilityCatalogService:
                         "resource_id": tool.id,
                         "kind": {0: "api", 1: "builtin", 2: "mcp"}[tool.is_preset],
                         "name": tool.name,
+                        "tool_key": tool.tool_key if tool.is_preset == 1 else None,
                         "description": tool.desc or "",
                         "provider": group.name,
                         "ready": tool.id not in disabled,
@@ -85,7 +86,7 @@ class CapabilityCatalogService:
                     "invocation_name": skill["name"],
                 }
             )
-        return {"items": sorted(rows, key=lambda row: (not row["ready"], row["kind"], row["id"]))}
+        return {"items": sorted(rows, key=lambda row: (row["kind"], row["id"]))}
 
     async def picker_tools(self):
         """Safe grouped catalog for per-task selection, independent of workbench curation."""

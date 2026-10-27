@@ -13,7 +13,7 @@ import { SkillCenterPane } from '~/pages/skills/SkillCenterPane';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
 import { SkillListSkeleton } from '~/pages/skills/SkillList';
 import { CapabilityDetail } from './CapabilityDetail';
-import { CAPABILITY_TABS, capabilityCounts, filterCapabilities } from './catalog';
+import { CAPABILITY_TABS, capabilityCounts, filterCapabilities, localizeCapability } from './catalog';
 
 const ICONS = { skill: Outlined.Skill, builtin: Wrench, api: Wrench, mcp: Wrench };
 function CapabilityIcon({ item }: { item: Capability }) {
@@ -42,13 +42,12 @@ export function CapabilityCenterPage() {
       ]);
     },
   });
-  const items = catalog.data ?? [];
+  const items = (catalog.data ?? []).map(item => localizeCapability(item, localize));
   const counts = capabilityCounts(items);
   counts.skill = (skillCenter.platform.data?.length ?? 0) + (skillCenter.personal.data?.length ?? 0);
   counts.all = counts.skill + counts.tool;
   const filtered = filterCapabilities(items, 'tool', search, false);
   const selected = items.find(item => item.id === params.get('capability'));
-  const displayName = (item: Capability) => item.trial ? t(`scenario_${item.trial.scenario}`) : item.name;
   const handleSelect = (id?: string) => {
     const next = new URLSearchParams(params);
     availability.reset();
@@ -72,17 +71,17 @@ export function CapabilityCenterPage() {
         : (identity.isLoading || catalog.isLoading) ? <SkillListSkeleton />
         : filtered.length ? <ul className="flex w-full flex-col">
           {filtered.map(item => <li key={item.id} className="relative flex w-full items-center gap-4 border-b-[0.5px] border-border-base px-2 py-3 transition-colors hover:bg-fill-1">
-            <button type="button" aria-label={displayName(item)} onClick={() => handleSelect(item.id)}
+            <button type="button" aria-label={item.name} onClick={() => handleSelect(item.id)}
               className="absolute inset-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500" />
             <CapabilityIcon item={item} />
             <div className="pointer-events-none min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-1.5"><h3 className="min-w-0 truncate text-body font-medium text-text-1">{displayName(item)}</h3></div>
+              <div className="flex min-w-0 items-center gap-1.5"><h3 className="min-w-0 truncate text-body font-medium text-text-1">{item.name}</h3></div>
               <p className="mt-0.5 truncate text-caption text-text-3">{item.provider}<span aria-hidden className="mx-1.5">·</span>{item.description}</p>
             </div>
             <Switch size="small" className="relative z-[1] shrink-0" checked={item.availability_enabled === true}
               loading={availability.isLoading && availability.variables?.id === item.resource_id}
               disabled={availability.isLoading}
-              aria-label={`${t('tool_enabled_setting')}: ${displayName(item)}`}
+              aria-label={`${t('tool_enabled_setting')}: ${item.name}`}
               onCheckedChange={enabled => availability.mutate({ id: item.resource_id, enabled })} />
           </li>)}
         </ul> : <StateView title={t('empty')} />)}

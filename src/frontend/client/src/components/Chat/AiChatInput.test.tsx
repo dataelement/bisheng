@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AiChatInput from './AiChatInput';
 
 // jsdom has no layout observer; behavior tests use deterministic geometry.
@@ -11,11 +11,15 @@ beforeAll(() => {
 });
 
 const mockSetSkills = jest.fn();
+const mockToast = jest.fn();
+let mockImageSequence = 0;
+let mockUseRealUploader = false;
+const mockUpload = jest.fn();
 const mockSkills = [{ name: 'research' }];
 let mockAvailableSkills = mockSkills;
 jest.mock('~/store', () => ({ __esModule: true, default: { selectedAgentTools: 'tools' } }));
 jest.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mockAvailableSkills }) }));
-jest.mock('~/api/linsight', () => ({ getSelectableSkills: jest.fn() }));
+jest.mock('~/api/linsight', () => ({ getSelectableSkills: jest.fn(), checkFileParseStatus: jest.fn() }));
 jest.mock('react-router-dom', () => ({ useNavigate: () => jest.fn() }));
 jest.mock('recoil', () => ({
   useRecoilValue: () => ({}),
@@ -31,10 +35,15 @@ jest.mock('~/pages/appChat/store/atoms', () => ({ bishengConfState: 'config' }))
 jest.mock('~/hooks/queries/data-provider', () => ({ useGetWorkbenchModelsQuery: () => ({ data: {} }) }));
 jest.mock('~/hooks', () => ({ useContainerCompact: () => ({ ref: null, compact: false }) }));
 jest.mock('~/hooks/useLocalize', () => () => (key: string) => key);
-jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
-jest.mock('~/pages/appChat/useFileDropAndPaste', () => ({ useFileDropAndPaste: () => ({ isDragging: false }) }));
-jest.mock('~/pages/knowledge/knowledgeUtils', () => ({ resolveUploadSizeLimits: () => ({}) }));
-jest.mock('~/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' '), checkIfScrollable: () => false }));
+jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: mockToast }) }));
+jest.mock('~/pages/knowledge/knowledgeUtils', () => ({
+  resolveUploadSizeLimits: () => ({}), getMaxFileSizeBytesForFile: () => 50 * 1024 * 1024,
+  isMediaFileName: () => false, isHiddenPath: () => false,
+}));
+jest.mock('~/api/apps', () => ({ uploadChatFile: (...args) => mockUpload(...args) }));
+jest.mock('~/components/Chat/attachments/MediaAttachmentChip', () => ({ MediaAttachmentChip: () => null }));
+jest.mock('~/components/Chat/attachments/UploadAttachmentThumbnail', () => ({ FileUploadThumbnail: () => null }));
+jest.mock('~/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' '), checkIfScrollable: () => false, generateUUID: () => String(++mockImageSequence) }));
 jest.mock('~/components/svg', () => ({ SendIcon: () => null }));
 jest.mock('~/components/ui', () => {
   const React = jest.requireActual('react');
@@ -64,11 +73,22 @@ jest.mock('~/components/Voice/SpeechToText', () => () => null);
 jest.mock('./AiModelSelect', () => () => <button>model</button>);
 jest.mock('~/pages/appChat/components/InputFiles', () => {
   const React = jest.requireActual('react');
-  return React.forwardRef(({ onChange }, ref) => {
+  const StubInputFiles = React.forwardRef(({ onChange, accepts }, ref) => {
     React.useImperativeHandle(ref, () => ({
       openPicker: () => onChange([{ name: 'notes.txt', filepath: '/notes.txt' }]), clear: () => {},
+      upload: (files: FileList | File[]) => {
+        const { isFileNameAccepted } = jest.requireActual('~/common/chatAccept');
+        onChange(Array.from(files).filter((file: File) => isFileNameAccepted(file.name, accepts))
+          .map((file: File) => ({ name: file.name, filepath: `/uploads/${file.name}` })));
+      },
     }));
     return null;
+  });
+  return React.forwardRef((props, ref) => {
+    const Component = mockUseRealUploader
+      ? jest.requireActual('~/pages/appChat/components/InputFiles').default
+      : StubInputFiles;
+    return <Component {...props} ref={ref} />;
   });
 });
 
@@ -81,7 +101,7 @@ function props() {
     onSend: jest.fn(), onStop: jest.fn(), onScrollToBottom: jest.fn(), onToggleTaskMode: jest.fn(),
   };
 }
-beforeEach(() => { mockSetSkills.mockClear(); mockAvailableSkills = mockSkills; });
+beforeEach(() => { mockSetSkills.mockClear(); mockAvailableSkills = mockSkills; mockUseRealUploader = false; });
 
 test('new chat offers setup, established chat hides setup while preserving context', () => {
   const input = props();
@@ -213,4 +233,75 @@ test('account availability removes a selected skill while the picker stays close
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
   expect(mockSetSkills).toHaveBeenCalledWith([]);
   expect(screen.queryByText('/research')).toBeNull();
+});
+
+function pasteImage() {
+  const file = new File(['test image'], 'image.png', { type: 'image/png' });
+  fireEvent.paste(screen.getByRole('textbox'), {
+    clipboardData: { items: [{ kind: 'file', getAsFile: () => file }], getData: () => '' },
+  });
+}
+
+function enterImageQuestion() {
+  screen.getByRole('textbox').append(document.createTextNode('Describe this image'));
+  fireEvent.input(screen.getByRole('textbox'));
+}
+
+test.each([true, false])('pastes an image with visual=%s and image parsing disabled', (visual) => {
+  const input = { ...props(), features: { taskMode: false }, modelValue: 'model', modelOptions: [{ id: 'model', visual }] };
+  render(<AiChatInput {...input} />);
+  pasteImage();
+  expect(screen.getByTestId('attachments')).toHaveTextContent(/image-.*\.png/);
+  expect(input.onSend).not.toHaveBeenCalled();
+});
+
+test('keeps image and text on an unsupported send, then sends after selecting a vision model', () => {
+  const input = { ...props(), features: { taskMode: false }, modelValue: 'text', modelOptions: [{ id: 'text', visual: false }, { id: 'vision', visual: true }] };
+  const view = render(<AiChatInput {...input} />);
+  pasteImage();
+  enterImageQuestion();
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(input.onSend).not.toHaveBeenCalled();
+  expect(mockToast).toHaveBeenCalledWith({ message: 'chatImage.processingRequired', status: 'warning' });
+  expect(screen.getByTestId('attachments')).toHaveTextContent(/image-.*\.png/);
+  expect(screen.getByRole('textbox')).toHaveTextContent('Describe this image');
+  view.rerender(<AiChatInput {...input} modelValue="vision" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(input.onSend).toHaveBeenCalledWith('Describe this image', [expect.objectContaining({ filepath: expect.stringMatching(/image-.*\.png/) })]);
+});
+
+test('sends through image parsing with a text model', () => {
+  const input = { ...props(), bsConfig: { ...config, enable_etl4lm: true }, features: { taskMode: false }, modelValue: 'model' };
+  render(<AiChatInput {...input} />);
+  pasteImage();
+  enterImageQuestion();
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(input.onSend).toHaveBeenCalledTimes(1);
+});
+
+test('retains pasted images when leaving task mode', () => {
+  const input = props();
+  const view = render(<AiChatInput {...input} />);
+  pasteImage();
+  view.rerender(<AiChatInput {...input} features={{ taskMode: false }} />);
+  expect(screen.getByTestId('attachments')).toHaveTextContent(/image-.*\.png/);
+});
+
+test('clipboard image passes the real uploader and reaches the send payload without ETL', async () => {
+  mockUseRealUploader = true;
+  URL.createObjectURL = jest.fn(() => 'blob:clipboard-preview');
+  URL.revokeObjectURL = jest.fn();
+  mockUpload.mockResolvedValue({ status_code: 200, data: { filepath: '/uploads/pasted-image.png', file_id: 'uploaded-image' } });
+  const input = { ...props(), features: { taskMode: false }, modelValue: 'vision', modelOptions: [{ id: 'vision', visual: true }] };
+  render(<AiChatInput {...input} />);
+  pasteImage();
+  await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByTestId('attachments')).toHaveTextContent(/image-.*\.png/));
+  enterImageQuestion();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(input.onSend).toHaveBeenCalledWith('Describe this image', [expect.objectContaining({
+    filepath: '/uploads/pasted-image.png', file_id: 'uploaded-image', type: 'image/png',
+  })]);
+  expect(mockToast).not.toHaveBeenCalled();
 });

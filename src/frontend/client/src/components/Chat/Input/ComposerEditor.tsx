@@ -1,8 +1,11 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Outlined } from 'bisheng-icons';
 import type { ClipboardEvent, CompositionEvent, KeyboardEvent, UIEvent } from 'react';
 
 export interface ComposerReference {
     key: string;
+    kind: 'skill' | 'tool' | 'space';
     label: string;
 }
 
@@ -39,12 +42,26 @@ export function readComposerDocument(root: HTMLElement) {
     return { text: visit(root), keys };
 }
 
+const referenceIcons = { skill: Outlined.Skill, tool: Outlined.Hammer, space: Outlined.FolderClose };
+const iconMarkup = new Map<ComposerReference['kind'], string>();
+
 function createReference(reference: ComposerReference) {
     const token = document.createElement('span');
     token.dataset.composerReference = reference.key;
-    token.contentEditable = 'false';
+    token.setAttribute('contenteditable', 'false');
     token.className = 'dsh-inline-reference';
-    token.textContent = reference.label;
+    token.dataset.referenceKind = reference.kind;
+    token.title = reference.label;
+    // Only trusted icon components produce markup; resource names stay text nodes.
+    if (!iconMarkup.has(reference.kind)) {
+        const Icon = referenceIcons[reference.kind];
+        iconMarkup.set(reference.kind, renderToStaticMarkup(<Icon size={14} aria-hidden="true" focusable="false" />));
+    }
+    token.innerHTML = iconMarkup.get(reference.kind)!;
+    const label = document.createElement('span');
+    label.className = 'dsh-inline-reference-label';
+    label.textContent = reference.label;
+    token.append(label);
     return token;
 }
 

@@ -2252,43 +2252,28 @@ class LinsightWorkbenchImpl:
             return []
         code_config = ToolExecutor.parse_preset_extra(bisheng_code_tool, tool_type)
         executor_type = code_config.get("type") or "local"
-        if executor_type not in {"container", "e2b"}:
+        if executor_type not in {"local", "container", "e2b"}:
             raise SandboxConfigurationError()
-        if "config" not in code_config:
-            code_config["config"] = {}
-        if "container" not in code_config["config"]:
-            code_config["config"]["container"] = {}
-        code_config["config"]["container"]["local_sync_path"] = file_dir
-        # Sticky replica + work dir across tool_calls in one Linsight task (AC-06).
-        code_config["config"]["container"]["keep_session"] = True
-        code_config["config"]["container"]["timeout"] = 600
+        # Normalize the default before the factory selects config[executor_type].
+        code_config["type"] = executor_type
+        executor_config = code_config.setdefault("config", {}).setdefault(executor_type, {})
+        executor_config["local_sync_path"] = file_dir
         if session_version_id:
             from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
-            # Lets the executor mirror what it writes into ``workspace/<svid>/``.
-            # Without it the local working dir is the ONLY copy, so the file tools
-            # cannot see a code-generated deliverable and the next turn's
-            # seed-from-previous finds an empty ``output/``.
-            workspace_prefix = f"{WORKSPACE_PREFIX}/{session_version_id}"
-            code_config["config"]["container"]["workspace_prefix"] = workspace_prefix
-        if "e2b" not in code_config["config"]:
-            code_config["config"]["e2b"] = {}
-        code_config["config"]["e2b"]["local_sync_path"] = file_dir
-        # Default60Validity period of minutes
-        code_config["config"]["e2b"]["timeout"] = 3600
-        code_config["config"]["e2b"]["keep_sandbox"] = True
-        # ``file_list`` is the E2B copy-in set: E2bCodeExecutor.__init__ reads every
-        # entry fully into worker memory and pushes it into the sandbox up front.
-        # E2B's own contract caps that at SIZE_AUTOPUSH — anything larger is meant to
-        # be requested explicitly per run — while the dual-track ingest keeps
-        # originals up to _RAW_KEEP_MAX_BYTES (50MB), which LocalExecutor serves for
-        # free through local_sync_path. Filter here so the E2B ceiling is honoured
-        # without shrinking what the local executor can reach.
-        # Container mode copy-in happens at run() (AC-11); do not pre-scan.
-        if executor_type != "container":
+            # File tools and follow-up turns read the same durable workspace.
+            executor_config["workspace_prefix"] = f"{WORKSPACE_PREFIX}/{session_version_id}"
+        if executor_type == "container":
+            executor_config["keep_session"] = True
+            executor_config["timeout"] = 600
+        elif executor_type == "e2b":
+            executor_config["timeout"] = 3600
+            executor_config["keep_sandbox"] = True
+            # E2B eagerly reads this copy-in set. Local uses the task directory
+            # directly; container copies its working set at run().
             file_list = []
             oversized: list[str] = []
-            for root, dirs, files in os.walk(file_dir):
+            for root, _dirs, files in os.walk(file_dir):
                 for file in files:
                     file_path = os.path.join(root, file)
                     try:
@@ -2310,7 +2295,7 @@ class LinsightWorkbenchImpl:
                     SIZE_AUTOPUSH,
                     ", ".join(os.path.basename(p) for p in oversized),
                 )
-            code_config["config"]["e2b"]["file_list"] = file_list
+            executor_config["file_list"] = file_list
 
         bisheng_code_tool = GptsTools(**bisheng_code_tool.model_dump())
         bisheng_code_tool.extra = code_config

@@ -18,7 +18,6 @@ export function CapabilityDetail({ item, onClose, availability, availabilityErro
   const [result, setResult] = useState<CapabilityResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const title = item.trial ? t(`scenario_${item.trial.scenario}`) : item.name;
   const handleRun = async () => {
     if (busy || availability?.checked === false) return;
     setBusy(true); setError(''); setResult(null);
@@ -29,7 +28,7 @@ export function CapabilityDetail({ item, onClose, availability, availabilityErro
   return <Dialog open onOpenChange={next => { if (!next && !busy) onClose(); }}>
     <DialogContent close={false} className="flex max-h-[85dvh] w-[calc(100%-40px)] max-w-[720px] flex-col gap-0 overflow-hidden rounded-2xl border-border-base bg-bg-page p-0">
       <header className="flex items-center justify-between gap-4 border-b border-border-base px-6 py-4">
-        <div className="min-w-0"><DialogTitle className="text-h4 text-text-1">{title}</DialogTitle>
+        <div className="min-w-0"><DialogTitle className="text-h4 text-text-1">{item.name}</DialogTitle>
           <DialogDescription className="mt-1 text-caption text-text-3">{t(item.kind === 'skill' ? 'skill' : 'tool')} · {item.provider}</DialogDescription></div>
         <Button color="default" variant="text" size="small" disabled={busy} onClick={onClose}>{t('close')}</Button>
       </header>
