@@ -12,6 +12,30 @@ dsh:
   platform_public_url: https://bisheng.example
 ```
 
+### 统一公开地址
+
+13001 测试环境的现场证据、配置核对及部署验收清单见 [公开地址修复部署验收](./public-origin-13001-validation.md)。
+
+部署者在 `docker/bisheng/config/config.yaml` 的 `dsh.platform_public_url` 配置一次用户实际访问的地址。桌面客户端连接该地址后，登录授权、嵌入 Chat 和 Work 工具共用这套入口；MCP 的 Host 与 Origin 允许值由该配置派生。地址包含协议和对外端口，例如 `https://work.example.com`、`http://192.0.2.15:18081`、`https://work.example.com:18443`。路径由客户端和服务端协议各自拼接。
+
+服务端加载配置时统一域名大小写、默认端口、国际化域名和 IPv6 表示。修改地址后重新启动 API 进程，并让客户端连接新的公开地址。工具的身份、租户和资源权限继续使用当前登录账号。
+
+仓库两套 Nginx API 入口均通过 `proxy_set_header Host $http_host` 保留公开地址和端口。额外部署的负载均衡或 TLS 代理也应原样传递 Host；以下通用转发规则适用于不同部署地址：
+
+```nginx
+location / {
+    proxy_pass http://bisheng_ingress;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+`bisheng_ingress` 是该代理可访问的毕昇内部 upstream。最外层代理写入公开协议，内层毕昇入口沿用它。工具地址校验以实际 Host 和已配置的公开地址为准；`X-Forwarded-Host` 用于原有链接生成流程。
+
+部署验收依次覆盖：通过公开地址完成桌面登录、打开 Chat、MCP `initialize` / `tools/list`、原生 Work 工具菜单和一次受权工具调用。若工具初始化返回 421，核对 API 实际加载的公开地址、各层代理转发的 Host 及运行版本；保留服务端原始错误用于定位具体拒绝层。
+
+开发回归包含真实 MCP SDK 和可选的本机 Nginx 测试：在后端目录运行 `NGINX_BIN=/path/to/nginx python -m pytest --noconftest -o asyncio_mode=auto test/dsh/test_public_origin.py test/dsh/test_public_origin_nginx.py test/dsh/test_work_capabilities.py`。Nginx 测试从两套生产模板读取 map 和请求头转发指令，验证单层 HTTP、双层 HTTPS 及错误 Host/Origin 拒绝；完整生产路由和真实账号操作在部署环境验收。
+
 部署开关开放管理模块后，还需在 DSH 设置中启用业务访问并配置模型及人员/部门额度。原 Gateway URL 和 introspection_timeout 配置作为弃用字段兼容旧配置，但不会产生网络调用。保留既有额度 Redis 拓扑、账期时区和审计密钥配置；它们属于计量和安全能力。
 
 反向代理将 `/api/v1/dsh/*` 和兼容 `/api/dsh/*` 指向 Python API，并将 `/desktop-login` 指向平台 SPA。删除旧路由到 Java 的转发、认证拦截和验席中间层。若部署环境启用了 BISHENG_PRO/Java SSO 入口，按标准原生登录部署关闭对应商业登录代理；其他 Java 商业功能不能视为已迁入。
