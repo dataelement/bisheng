@@ -193,6 +193,7 @@
 |---|---|---|
 | `src/backend/scripts/pptx_templates/{themes,layouts,build_templates}.py` | 开发期产出 5 份 `template.pptx`、`layouts.json` 和 `catalog.json` | 不随技能包下发 |
 | `bisheng-pptx/scripts/deck_template.py` | `Deck.open/add/fill/drop/table/chart/image/save`；克隆页面并改写 rId；填写时记录超容量；保存时删除原型页并写 manifest | 不做检查判定（交给 `deck_checks`） |
+| `bisheng-pptx/scripts/deck_render.py` | 原生图表（含瀑布图）与表格的渲染，生成脚本和 `Deck` 共用 | 不读写模板清单 |
 | `bisheng-pptx/scripts/list_templates.py` | 以纯文本列出模板、适用场景和版式表 | 不渲染图片 |
 | `bisheng-pptx/scripts/deck_checks.py` | 实现四项新检查和基线差分 | 不打印"结论: 通过"（只有 `inspect_*` 可以打印） |
 | `bisheng-pptx/scripts/inspect_deck.py` | 新增 `--manifest` 参数并能自动查找；合并输出 | 不改变既有检查的阈值 |

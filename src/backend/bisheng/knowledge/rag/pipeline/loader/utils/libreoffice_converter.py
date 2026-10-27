@@ -144,7 +144,7 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
     return _convert_file_extension(input_doc_path, "docx:Office Open XML Text", output_dir, except_file_ext="docx")
 
 
-def convert_ppt_to_pdf(input_path, output_dir=None):
+def convert_ppt_to_pdf(input_path, output_dir=None, timeout=180):
     """
     Converts .ppt or .pptx to PDF using LibreOffice soffice command.
 
@@ -152,12 +152,13 @@ def convert_ppt_to_pdf(input_path, output_dir=None):
         input_path (str): Path to the .ppt or .pptx file.
         output_dir (str, optional): Directory to save the PDF.
                                     Defaults to the same directory as the input file.
+        timeout (int, optional): Seconds before the LibreOffice run is abandoned.
     """
     if not input_path.lower().endswith((".ppt", ".pptx")):
         logger.debug(f"Error: {input_path} is not a .ppt or .pptx file.")
         return False
 
-    return _convert_file_extension(input_path, "pdf", output_dir, except_file_ext="pdf")
+    return _convert_file_extension(input_path, "pdf", output_dir, except_file_ext="pdf", timeout=timeout)
 
 
 def convert_ppt_to_pptx(input_path, output_dir=None):

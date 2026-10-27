@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-10-27 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-27 用户确认 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 一轮修订后 LGTM（拆分 T001→T017、T012→T018） |
-| 实现 | 🔲 未开始 | 0 / 18 完成 |
+| 实现 | 🔄 进行中 | 6 / 18 完成 |
 
 ---
 
@@ -28,7 +28,7 @@
 
 ## Wave 1：模板与基础设施（互不依赖）
 
-- [ ] **T001**: 模板生成脚本与 5 套模板（共用版式）
+- [x] **T001**: 模板生成脚本与 5 套模板（共用版式）
   - **文件**：
     - `src/backend/scripts/pptx_templates/{themes.py, layouts.py, build_templates.py}`
     - 产物：`src/backend/bisheng/linsight/builtin_skills/bisheng-pptx/templates/{catalog.json, <id>/template.pptx, <id>/layouts.json}`
@@ -44,7 +44,7 @@
   - **覆盖 AC**：AC-01、AC-07
   - **依赖**：无
 
-- [ ] **T017**: 各套专属版式
+- [x] **T017**: 各套专属版式
   - **文件**：`src/backend/scripts/pptx_templates/layouts_special.py`，以及重新生成的 `templates/**` 产物
   - **逻辑**：
     - 增加 8 个专属版式：`architecture`、`risk-register`、`scorecard`、`bridge`、`objectives`、`quiz`、`honor-wall`、`feature-hero`。
@@ -54,7 +54,7 @@
   - **覆盖 AC**：AC-01
   - **依赖**：T001
 
-- [ ] **T002**: 错误码 11025 与三语文案
+- [x] **T002**: 错误码 11025 与三语文案
   - **文件**：
     - `src/backend/bisheng/common/errcode/linsight.py`
     - `src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`
@@ -63,7 +63,7 @@
   - **覆盖 AC**：AC-23、AC-29
   - **依赖**：无
 
-- [ ] **T003**: `convert_ppt_to_pdf` 增加可选 `timeout` 参数
+- [x] **T003**: `convert_ppt_to_pdf` 增加可选 `timeout` 参数
   - **文件**：`src/backend/bisheng/knowledge/rag/pipeline/loader/utils/libreoffice_converter.py`
   - **逻辑**：增加可选参数 `timeout`，默认值保持 180，并透传给 `_convert_file_extension`。既有调用方的行为不变。
   - **覆盖 AC**：AC-21（为其提供条件）
@@ -71,7 +71,7 @@
 
 ## Wave 2：技能脚本与预览后端
 
-- [ ] **T004**: `Deck` 库单测
+- [x] **T004**: `Deck` 库单测
   - **文件**：`src/backend/test/linsight/test_pptx_templates.py`
   - **测试**：
     - 每份模板都能打开；`layouts.json` 中的每个插槽在 pptx 里都存在；示例文字一致。（AC-01）
@@ -80,7 +80,7 @@
   - **覆盖 AC**：AC-01、AC-05、AC-06
   - **依赖**：T001
 
-- [ ] **T005**: `deck_template.py` 实现
+- [x] **T005**: `deck_template.py` 实现
   - **文件**：`src/backend/bisheng/linsight/builtin_skills/bisheng-pptx/scripts/deck_template.py`
   - **逻辑**：
     - 实现 `Deck.open/add/fill/drop/table/chart/image/save`。
@@ -251,3 +251,7 @@
 ## 实际偏差记录
 
 （实现中如有偏离，在此留一行指针，论证写在 design.md。）
+
+- T001/T005：图表与表格渲染抽成技能包内共享模块 `scripts/deck_render.py`，生成脚本与 `Deck` 共用一份实现（模板样例与真实产出不漂移）→ design §4.5 已补该模块。
+- T001：新增 `scripts/pptx_templates/builder.py`（形状、插槽登记、主题 XML 底层），与 themes/layouts/build 并列。
+- T017：`bridge` 用瀑布图实现，`deck_render` 增加 `waterfall` 图表类型。
