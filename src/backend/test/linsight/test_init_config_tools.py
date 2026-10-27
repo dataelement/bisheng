@@ -179,8 +179,8 @@ async def test_e2b_file_list_honours_autopush_ceiling(monkeypatch: pytest.Monkey
     pushed = {entry.path for entry in bound_row.extra["config"]["e2b"]["file_list"]}
     assert "./uploads/small.xlsx" in pushed
     assert "./uploads/huge.xlsx" not in pushed
-    # LocalExecutor still reaches the big one through the shared directory.
-    assert bound_row.extra["config"]["container"]["local_sync_path"] == str(tmp_path)
+    assert bound_row.extra["config"]["e2b"]["local_sync_path"] == str(tmp_path)
+    assert bound_row.extra["config"]["e2b"]["workspace_prefix"] == "workspace/SV-1"
 
 
 async def test_container_binds_workspace_without_e2b_file_list(monkeypatch: pytest.MonkeyPatch, tmp_path):
@@ -280,12 +280,18 @@ async def test_tool_row_extra_wins_over_category(monkeypatch: pytest.MonkeyPatch
 
     bound_row = init_one.await_args.kwargs["tool"]
     assert bound_row.extra["type"] == "e2b"
-    # local / e2b still pre-scan; category container must not leak into this run.
+    # E2B pre-scans its copy-in set using the tool-level configuration.
     assert "file_list" in bound_row.extra["config"]["e2b"]
 
 
+@pytest.mark.parametrize("executor_type", ["local", "container", "e2b"])
 @pytest.mark.parametrize("explicit", [False, True])
-async def test_permission_denial_preserves_optional_tools(monkeypatch, tmp_path, explicit):
+async def test_permission_denial_preserves_optional_tools(monkeypatch, tmp_path, explicit, executor_type):
+    monkeypatch.setattr(
+        GptsToolsDao,
+        "aget_one_tool_type",
+        AsyncMock(return_value=SimpleNamespace(id=6, tenant_id=7, extra={"type": executor_type})),
+    )
     monkeypatch.setattr(ToolExecutor, "_ensure_use_permission_async", AsyncMock(side_effect=PermissionError("denied")))
     init_one = AsyncMock()
     monkeypatch.setattr(ToolExecutor, "init_by_tool_id", init_one)
@@ -306,11 +312,77 @@ async def test_initialization_failure_surfaces_before_model_execution(monkeypatc
         await LinsightWorkbenchImpl.init_linsight_config_tools(_session_with_tools(), object(), True, str(tmp_path))
 
 
-async def test_local_executor_requires_isolated_configuration(monkeypatch, tmp_path):
+@pytest.mark.parametrize("executor_type", ["local", None, ""])
+@pytest.mark.parametrize("selected", [[], [CODE_TOOL_ID], [100, CODE_TOOL_ID]])
+async def test_local_executor_binds_task_workspace(monkeypatch, tmp_path, executor_type, selected):
+    from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
+
+    extra = {"type": executor_type} if executor_type is not None else {}
+    category = SimpleNamespace(id=6, tenant_id=7, extra=extra)
+    monkeypatch.setattr(GptsToolsDao, "aget_one_tool_type", AsyncMock(return_value=category))
+    init_one = AsyncMock(side_effect=lambda tool, **kwargs: ToolExecutor._init_preset_tool(tool, category))
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_id", init_one)
+    init_many = AsyncMock(return_value=[])
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_ids", init_many)
+    session = _session_with_tools()
+    session.tools = [{"children": [{"id": tid} for tid in selected]}]
+
+    tools = await LinsightWorkbenchImpl.init_linsight_config_tools(session, object(), True, str(tmp_path))
+
+    init_one.assert_awaited_once()
+    assert len(tools) == 1
+    assert isinstance(tools[0].executor, LocalExecutor)
+    assert tools[0].executor.local_sync_path == str(tmp_path)
+    assert tools[0].executor.workspace_prefix == "workspace/SV-1"
+    assert init_one.await_args.kwargs["tool"].extra["config"] == {
+        "local": {"local_sync_path": str(tmp_path), "workspace_prefix": "workspace/SV-1"}
+    }
+    assert category.extra == extra
+    if 100 in selected:
+        assert init_many.await_args.args[0] == [100]
+    else:
+        init_many.assert_not_awaited()
+
+
+async def test_local_workspace_binding_preserves_admin_options(monkeypatch, tmp_path):
+    extra = {
+        "type": "local",
+        "config": {
+            "local": {
+                "local_sync_path": "/previous/task",
+                "workspace_prefix": "workspace/previous",
+                "timeout": 90,
+            }
+        },
+    }
+    row = GptsTools(id=CODE_TOOL_ID, type=6, tool_key="bisheng_code_interpreter", extra=json.dumps(extra))
+    monkeypatch.setattr(GptsToolsDao, "aget_tool_by_tool_key", AsyncMock(return_value=row))
+    init_one = AsyncMock(return_value=object())
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_id", init_one)
+
+    # Local execution uses the workspace directly, including large input files.
+    def unexpected_scan(*args, **kwargs):
+        pytest.fail("Local initialization should use the task directory directly")
+
+    monkeypatch.setattr("bisheng.linsight.domain.services.workbench_impl.os.walk", unexpected_scan)
+
+    await LinsightWorkbenchImpl._init_bisheng_code_tool([], str(tmp_path), 42, "current")
+
+    assert init_one.await_args.kwargs["tool"].extra["config"] == {
+        "local": {
+            "local_sync_path": str(tmp_path),
+            "workspace_prefix": "workspace/current",
+            "timeout": 90,
+        }
+    }
+    assert json.loads(row.extra) == extra
+
+
+async def test_unknown_executor_type_reports_configuration_error(monkeypatch, tmp_path):
     from bisheng.common.errcode.sandbox import SandboxConfigurationError
 
     monkeypatch.setattr(
-        GptsToolsDao, "aget_one_tool_type", AsyncMock(return_value=SimpleNamespace(id=6, extra={"type": "local"}))
+        GptsToolsDao, "aget_one_tool_type", AsyncMock(return_value=SimpleNamespace(id=6, extra={"type": "unknown"}))
     )
     with pytest.raises(SandboxConfigurationError):
         await LinsightWorkbenchImpl.init_linsight_config_tools(_session_with_tools(), object(), True, str(tmp_path))
@@ -329,12 +401,26 @@ def test_task_metadata_uses_host_runner_credentials(monkeypatch, tmp_path):
     from bisheng.common.services.config_service import settings
     from bisheng.core.config.settings import SandboxConf
 
-    monkeypatch.setattr(settings, "sandbox_conf", SandboxConf(endpoints=["http://trusted:8080"], token="host-only"))
-    row = GptsTools(tool_key="bisheng_code_interpreter", extra={
-        "type": "container", "config": {"container": {
-            "local_sync_path": str(tmp_path), "endpoints": ["http://untrusted:8080"], "token": "task-value",
-        }},
-    })
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.executor.settings",
+        SimpleNamespace(
+            sandbox_conf=SandboxConf(endpoints=["http://trusted:8080"], token="host-only"),
+            get_minio_conf=settings.get_minio_conf,
+        ),
+    )
+    row = GptsTools(
+        tool_key="bisheng_code_interpreter",
+        extra={
+            "type": "container",
+            "config": {
+                "container": {
+                    "local_sync_path": str(tmp_path),
+                    "endpoints": ["http://untrusted:8080"],
+                    "token": "task-value",
+                }
+            },
+        },
+    )
     tool = ToolExecutor._init_preset_tool(row, SimpleNamespace(extra=None))
     assert tool.executor.endpoints == ["http://trusted:8080"]
     assert tool.executor.token == "host-only"

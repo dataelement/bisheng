@@ -239,6 +239,8 @@ T064 实施约定：SharedCache 发布传入读取起点建立的固定单调截
 
 ### 4.7 持久事件与接收事务
 
+按 2026-10-27 用户确认的 AC-60 调整采集边界：Gateway 仅在该请求冻结策略中至少一个输入/输出检查方向实际开启时创建 Recorder。租户策略关闭时仍沿原独立模型转发链路，不写新 Outbox、不生成 FINAL/DISABLED 事件，也不回传请求摘要；backend 按自身审计模式决定是否采集，不查询 Gateway、不增加相互依赖。审计也为 OFF 时没有新的原生审计或外部安全摘要；鉴权、额度和 dsh_model_call 计量不变。旧版 DISABLED 事件和关闭前的积压仍可按既有幂等/保留规则补报，不能因当前关闭而丢弃历史事实。正在执行的请求沿用入站策略快照。
+
 Gateway 事件种类为 DECISION、FINAL、DRAIN。普通已检查请求通常一条 FINAL；命中立即 DECISION，有后续续读状态时再写 DRAIN。每条包含输入、输出的完整阶段快照，事件量按模型 HTTP 请求增长，不按 Token 或 SSE 片段增长。
 
 每个 Gateway 请求生成 UUID，原始事件 event_id 和 event_version 在成功记录时固定，重试不再生成新事件或版本。gt_dsh_safety_outbox 保存不可变事件及独立投递字段：event_id 主键、source_id、gateway_request_id、payload、payload_hash、status、attempts、next_attempt_at、lease_owner、lease_until、last_error_code、created_at、acked_at。
@@ -322,6 +324,8 @@ NULL 表示未知的可选关联可由真实原审计补齐；安全事件采用
 - 清理租户内按时间及 ID 有限批次进行。回放仅覆盖仍有事实或归档的窗口；已经清理的明细不承诺可任意重建。接收过期补报返回 410，保留最小拒绝诊断，不复活记录。
 
 ### 4.10 前端和 Desktop
+
+AC-61 的采集说明放在 ModelAuditMode 状态栏下方，始终占满既有网格一行，采用相邻说明文字样式并由 aria-describedby 关联状态栏。无需查询 Gateway 当前策略即可解释两个开关的组合，对只读用户同样展示。三语新增 collectionHint；原 modeHint 删除“关闭后不再记录新的模型请求”的绝对表述，避免与开启敏感词时的安全摘要冲突。不新增样式、组件、状态库或 API。
 
 平台沿 DshPage 当前入口增加“敏感词控制”配置区域，沿用现有租户选择。配置走 Gateway；审计请求、详情、未关联安全事件走 backend 的既有审计权限边界。Gateway 不可达时配置区域明确不可用，不影响无 Gateway 部署的模型、额度和审计功能。
 

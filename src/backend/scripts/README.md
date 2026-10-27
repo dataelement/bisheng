@@ -1149,3 +1149,7 @@ type-only errors; importing it does not change the host logging configuration.
 Errors omit SQL, credentials and payloads. MySQL/DM8 concurrency, interruption and
 recovery require the separate real-database acceptance; SQLite CLI tests do not
 establish those guarantees.
+
+## 工具与技能全员授权升级（f048-v6）
+
+`migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。

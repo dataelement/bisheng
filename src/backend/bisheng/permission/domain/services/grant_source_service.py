@@ -18,6 +18,7 @@ SOURCE_TYPES = frozenset(
         "DIRECT",
         "DEPARTMENT",
         "USER_GROUP",
+        "TENANT",
         "CREATOR",
         "CREATOR_GRANT",
         "SPACE_MEMBERSHIP",
@@ -130,6 +131,11 @@ class GrantSourceService:
                 raise ValueError("direct subjects cannot use userset options")
             relation = None
             projected_subject = f"{normalized_subject_type}:{normalized_subject_id}"
+        elif normalized_subject_type == "tenant":
+            if userset_relation not in {None, "member"} or include_children:
+                raise ValueError("tenant grants use the member relation")
+            relation = "member"
+            projected_subject = f"tenant:{normalized_subject_id}#member"
         elif normalized_subject_type == "department":
             expected_relation = "subtree_member" if include_children else "member"
             if userset_relation not in {None, expected_relation}:
@@ -182,6 +188,7 @@ class GrantSourceService:
     ) -> None:
         expected_subjects = {
             "DIRECT": {"user", "service_account"},
+            "TENANT": {"tenant"},
             "DEPARTMENT": {"department"},
             "USER_GROUP": {"user_group"},
             "CREATOR": {"user"},
@@ -204,6 +211,9 @@ class GrantSourceService:
         if source_type == "DIRECT":
             ref = f"{subject_type}:{subject_id}"
             return f"direct:{ref}", ref
+        if source_type == "TENANT":
+            ref = f"tenant:{subject_id}#member"
+            return ref, ref
         if source_type == "DEPARTMENT":
             ref = f"{subject_id}#{relation}"
             return (

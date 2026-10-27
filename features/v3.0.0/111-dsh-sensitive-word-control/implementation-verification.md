@@ -683,3 +683,45 @@ B测试资料提交d5b026557b76bb57af223520c11aeecd4e83473e正常推work120并�
 启动窗口业务读取失败及四模式烟测2PASS后策略teardown503保留原日志；主核最后版本114/自有合成词和提示后CAS恢复115，不覆盖外部编辑。Gateway私有日志确实包含对旧172.31.62.10和新172.31.62.9的连接拒绝，127.0.0.1:17860/health及真实管理APIready后仅同镜像重建指定Gateway刷新连接，受保护capabilities连续三读成功。最终同源四模式烟测4PASS/31deselected/40.27s（post5625-stable-protocol-four），策略正常恢复；不放宽测试/不加模型自动重试。13001/health可被SPA兜底，不能当Backend就绪证据，运维步骤已同步。
 
 最终只读：官方trial许可证2026-11-23/expired=false；原默认模型四组和原审计设置完整值不变；租户原enabled/input/output/custom_words恢复关闭/空；verify-scope再次逐字节确认全部非四目标既有容器身份不变。190/205及完整AC0PASS/30PARTIAL/29NOT_RUN保持；DM8/双租户多副本/容量/设施故障/无Gateway/回退等待实际环境与验收。最后纯features文档提交不改构建上下文，不再次重建服务。
+
+
+## 2026-10-27：关闭采集边界与审计说明（T206–T211）
+
+用户明确要求：敏感词与审计采集均关闭时不再采集新请求；敏感词开启、审计关闭时仍保留安全摘要，并在审计界面常驻解释。新增 AC-60、AC-61，既有 AC 与编号不变。
+
+- Gateway 单一生产改动：DshSafetyRequestManager 仅在冻结策略至少一个检查方向开启时创建 Recorder。策略关闭时不写新 Outbox，backend 仍独立按 OFF/METADATA/CONTENT 工作；不增加 Gateway 对审计开关的感知。旧事件补报、请求入站快照、模型鉴权、额度和真实计量不变。
+- Platform：采集状态下方始终显示 collectionHint，管理员未展开设置或只读用户也可见；通过 aria-describedby 关联状态栏。三语同义，原 modeHint 不再声称关闭采集会停止全部请求摘要。复用相邻辅助文字布局，无新组件或设计样式。
+- 未修改 backend 业务代码、SQL/DDL、凭据、客户端、其他工作区或部署环境；本轮不删除历史事件和记录，不暂停积压投递。
+
+| 验证 | 实际结果 |
+|---|---|
+| Gateway 新契约 RED | 两协议 × 流式/非流式 4 项均因仍写 Outbox 失败；原正文透传和单次调用断言保留 |
+| Gateway 定向 GREEN | RequestManager / RoutingFilter / OutboxService / Dispatcher：107 通过 |
+| Gateway 全量 | Maven Java 17 离线执行，906 项：896 通过、10 跳过、0 失败/错误；跳过项均为 DshSafetyDatabaseIntegrationTest 的真实数据库验收 |
+| 常驻说明 RED → GREEN | 新增三种模式 × 可配置/只读 6 项先失败；修复后审计模式及相邻 4 文件 59 通过 |
+| DSH 全部前端回归 | 25 文件、258 项全部通过 |
+| 类型检查 | src/frontend 下 pnpm typecheck 通过，包括两应用及 file-viewers |
+| lint | 本次两个 UI 文件精确检查通过；workspace pnpm lint 被 Platform 原有 95 项错误阻断，均不在修改文件，未修改抑制清单，不标全量通过 |
+| i18n | pnpm check-i18n、pnpm locales:check、三语 JSON 校验通过 |
+| 生产构建 | pnpm build:platform 通过；构建仅给出原有体积提示 |
+| 架构和差异 | 两个修改 UI 文件 arch-guard 无违规；两库 schema、接口和数据权限未改变；两仓 git diff --check 通过；AC 1–61 定义/任务追溯完整 |
+
+任务自审：T206/T208 的旧断言更改来自上述用户新契约，不放宽模型交付、调用次数和安全命中测试。T207 的唯一采集闸门在每请求固定策略下，不影响已创建 Recorder 的收尾和补报；T209 说明不依赖额外请求，也不改变任何设置值或可配置权限。T210/T211 三语键完整。架构分层、文件归属、依赖配对、信息保护、设计同步均 PASS；全量 lint 的既有错误和未执行的真实数据库/部署验收单列保留。
+
+本轮本地验证日志：/private/tmp/dsh-audit-disabled-{gateway-red,gateway-green,gateway-full,frontend-red,frontend-green,frontend-dsh,typecheck,target-lint,lint,i18n,locales,platform-build}.log。没有使用 SQLite 或 mock 代替真实 MySQL/DM8 验收；现有定向业务测试使用既有传输/SQL 端口夹具，结果仅表示本地回归。
+
+
+本地组件显示核验：在仅监听127.0.0.1的临时预览中挂载实际 ModelAuditMode，使用本轮生产构建CSS及真实三语资源、固定OFF的API夹具。Chrome已确认中/英/日说明在未展开配置时可见；中文已保存组件截图。该证据只覆盖组件显示，不代表109环境已部署、真实接口端到端或窄屏验收。预览与应用登录相隔离，没有修改任何部署环境。
+
+### T206–T211 任务自审结果
+
+| 任务 | 架构分层 | 命名 | 序列化 | 数据库 | 前端约定 | 信息保护 | 设计同步 | 文件/配对/依赖 |
+|---|---|---|---|---|---|---|---|---|
+| T206 测试 | N/A | PASS | N/A | N/A | N/A | PASS | PASS | PASS：单测试文件，4项RED后GREEN |
+| T207 实现 | PASS | PASS | PASS：事件格式未改 | N/A | N/A | PASS | PASS：design §4.7 | PASS：仅Manager；T206已通过 |
+| T208 测试 | N/A | PASS | N/A | N/A | PASS | PASS | PASS | PASS：单测试文件，6项RED后GREEN |
+| T209 实现 | PASS | PASS | N/A | N/A | PASS | PASS | PASS：design §4.10 | PASS：仅Mode；T208/T210/T211已通过 |
+| T210 三语 | N/A | PASS | PASS：JSON | N/A | PASS | PASS | PASS | PASS：中/英两文件、键一致 |
+| T211 三语 | N/A | PASS | PASS：JSON | N/A | PASS | PASS | PASS | PASS：日文单文件、键一致 |
+
+结论：六项任务本身 PASS；workspace完整lint为既有问题记录，真实数据库与部署未执行，不计为本轮通过。

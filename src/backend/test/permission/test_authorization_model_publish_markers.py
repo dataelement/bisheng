@@ -151,7 +151,7 @@ def publication(monkeypatch):
     monkeypatch.setattr(cli, "_assert_apply_window", state.window)
     monkeypatch.setattr(cli, "_authorization_release_id", AsyncMock(return_value=5))
     monkeypatch.setattr(cli, "_activate_model_release", state.activate)
-    monkeypatch.setattr(cli, "_publish_noop_catalog_cutover", state.cutover)
+    monkeypatch.setattr(cli, "_publish_catalog_cutover", state.cutover)
     monkeypatch.setattr(cli, "_retire_other_active_models", AsyncMock())
     monkeypatch.setattr(
         cli, "OpenFGAMigrationModelPublisher", lambda **_kwargs: SimpleNamespace(aget_or_publish=state.publisher)

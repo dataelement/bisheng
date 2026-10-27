@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsList, TabsTrigger } from '@/components/bs-ui/tabs'
 import { getCreditRules, getPolicySubjects, saveCreditRule, type CreditRule, type PolicySubject, type PolicySubjectOption } from '@/controllers/API/dshUnified'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
-import { useEffect, useState } from 'react'
+import { MAX_MONTHLY_CREDITS, isValidMonthlyCredits } from '@/utils/dshCreditAmount'
+import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 type CreditDraft = {
@@ -21,6 +22,7 @@ type CreditDraft = {
 
 export function CreditRulesView() {
     const { t } = useTranslation()
+    const creditHintId = useId()
     const [rules, setRules] = useState<CreditRule[]>([])
     const [options, setOptions] = useState<PolicySubjectOption[]>([])
     const [kind, setKind] = useState<PolicySubject['kind']>('USER')
@@ -46,7 +48,7 @@ export function CreditRulesView() {
             credits: rule?.monthly_credits ?? old.credits, enabled: rule?.enabled ?? old.enabled }))
     }
     const save = async () => {
-        if (!draft?.subject || pending) return
+        if (!draft?.subject || pending || !isValidMonthlyCredits(draft.credits)) return
         setPending(true); setError(null)
         try {
             const saved = await saveCreditRule(draft.subject, {
@@ -62,9 +64,16 @@ export function CreditRulesView() {
         finally { setPending(false) }
     }
     const visibleRules = rules.filter(rule => rule.subject_type === kind)
-    const validCredits = !!draft && /^(0|[1-9][0-9]{0,12})(\.[0-9]{1,6})?$/.test(draft.credits)
-    const creditInput = draft && <Input aria-label={t('dsh.unified.monthlyCredits')} className="w-40" inputMode="decimal" disabled={pending}
-        value={draft.credits} onChange={event => setDraft({ ...draft, credits: event.target.value })} />
+    const validCredits = !!draft && isValidMonthlyCredits(draft.credits)
+    const creditInput = draft && <div className="space-y-1">
+        <Input aria-label={t('dsh.unified.monthlyCredits')} className="w-40" inputMode="decimal" disabled={pending}
+            aria-invalid={!validCredits} aria-describedby={creditHintId}
+            value={draft.credits} onChange={event => setDraft({ ...draft, credits: event.target.value })} />
+        <p id={creditHintId} role={!validCredits ? 'alert' : undefined}
+            className={validCredits ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
+            {t('dsh.unified.creditRangeHint', { max: MAX_MONTHLY_CREDITS })}
+        </p>
+    </div>
     const enabledInput = draft && <Checkbox aria-label={t('dsh.unified.enabled')} disabled={pending} checked={draft.enabled}
         onCheckedChange={checked => setDraft({ ...draft, enabled: checked === true })} />
     const actions = <div className="flex items-center justify-end gap-2">

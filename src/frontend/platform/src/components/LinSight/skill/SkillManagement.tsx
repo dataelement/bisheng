@@ -1,6 +1,8 @@
 // Tenant skill management inside Build > Tools.
 // List shows display_name only — the skill ID stays detail-level; no
 // migration-source badge (FR-5.1).
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -32,6 +34,8 @@ interface SkillManagementProps {
 export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
     const { t } = useTranslation();
     const [skills, setSkills] = useState<SkillBrief[]>([]);
+    const [permissionSkill, setPermissionSkill] = useState<SkillBrief | null>(null);
+    const { actions } = useResourceActions('linsight_skill', skills.map(skill => String(skill.id)), ['manage_permission']);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [keyword, setKeyword] = useState('');
@@ -169,13 +173,14 @@ export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
                             <TableHead>{t('skillManage.columns.description')}</TableHead>
                             <TableHead className="w-24">{t('skillManage.columns.status')}</TableHead>
                             <TableHead className="w-40">{t('skillManage.columns.updateTime')}</TableHead>
+                            <TableHead className="w-24">{t("permission:dialog.tabGrant")}</TableHead>
                             <TableHead className="w-8" />
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {skills.length === 0 && !loading && (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center text-muted-foreground py-10">{emptyHint}</TableCell>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-10">{emptyHint}</TableCell>
                             </TableRow>
                         )}
                         {skills.map(skill => (
@@ -200,6 +205,11 @@ export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
                                 <TableCell className="text-muted-foreground text-xs">
                                     {(skill.update_time ?? skill.create_time)?.replace('T', ' ').slice(0, 16) ?? '--'}
                                 </TableCell>
+                                <TableCell onClick={event => event.stopPropagation()}>
+                                    {hasResourceAction(actions, skill.id, 'manage_permission') && <Button
+                                        variant="ghost" size="sm" onClick={() => setPermissionSkill(skill)}
+                                    >{t("permission:dialog.tabGrant")}</Button>}
+                                </TableCell>
                                 {/* chevron nudges right + turns brand-blue on row hover — a quiet "clickable" cue */}
                                 <TableCell className="text-[#C4C9D4] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary">
                                     <ChevronRight className="size-4" />
@@ -217,6 +227,11 @@ export function SkillManagement({ scopeVersion = 0 }: SkillManagementProps) {
                     )}
                 </div>
             )}
+            {permissionSkill && <PermissionDialog
+                open onOpenChange={open => { if (!open) setPermissionSkill(null); }}
+                resourceType="linsight_skill" resourceId={String(permissionSkill.id)}
+                resourceName={permissionSkill.display_name} allowAllMembers
+            />}
             <SkillUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} onUploaded={refresh} />
             <SkillFormDrawer open={formOpen} editing={editing} onOpenChange={setFormOpen} onSaved={refresh} />
             <SkillDetailSheet

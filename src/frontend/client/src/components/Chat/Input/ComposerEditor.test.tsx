@@ -152,14 +152,14 @@ test('empty focused editor keeps its hint until IME draft text arrives and resto
     expect(editor).toHaveAttribute('data-empty', 'true');
 
     fireEvent.compositionStart(editor);
-    editor.textContent = "ni'hao";
+    editor.textContent = "konnichiha";
     fireEvent.input(editor);
     expect(editor).toHaveAttribute('data-empty', 'false');
     expect(screen.getByTestId('text')).toBeEmptyDOMElement();
 
-    editor.textContent = '你好';
+    editor.textContent = 'こんにちは';
     fireEvent.compositionEnd(editor);
-    expect(screen.getByTestId('text')).toHaveTextContent('你好');
+    expect(screen.getByTestId('text')).toHaveTextContent('こんにちは');
     expect(editor).toHaveAttribute('data-empty', 'false');
 
     editor.replaceChildren();

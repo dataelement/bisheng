@@ -86,7 +86,7 @@ class CapabilityCatalogService:
                     "invocation_name": skill["name"],
                 }
             )
-        return {"items": sorted(rows, key=lambda row: (not row["ready"], row["kind"], row["id"]))}
+        return {"items": sorted(rows, key=lambda row: (row["kind"], row["id"]))}
 
     async def picker_tools(self):
         """Safe grouped catalog for per-task selection, independent of workbench curation."""
