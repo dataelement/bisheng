@@ -12,12 +12,8 @@ import json
 from hashlib import sha256
 from typing import Any
 
-# v4 was claimed twice in parallel: F053 added the service-account subject
-# and its technical markers, F054 replaced the recursive department subtree
-# with contextual membership. This model carries both, so it is neither of
-# those v4s and gets its own version. The checksum changes with it, which
-# means the model has to be published again wherever either v4 was.
-MODEL_VERSION = "f048-v5"
+# v6 supports revocable tenant-member grants and the full skill action catalog.
+MODEL_VERSION = "f048-v6"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -42,11 +38,12 @@ MIGRATED_RESOURCE_TYPES: tuple[str, ...] = (
     "workflow",
     "assistant",
     "tool",
+    "linsight_skill",
     "channel",
     "dashboard",
 )
 
-OWNER_PROJECTION_RESOURCE_TYPES: tuple[str, ...] = ("linsight_skill",)
+OWNER_PROJECTION_RESOURCE_TYPES: tuple[str, ...] = ()
 
 LEGACY_RESOURCE_TYPES: tuple[str, ...] = ("llm_server", "llm_model")
 
@@ -67,6 +64,7 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
             "workflow",
             "assistant",
             "tool",
+            "linsight_skill",
             "channel",
             "dashboard",
         }
@@ -77,7 +75,7 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
     "download": frozenset({"folder", "knowledge_file"}),
     "delete": frozenset(MIGRATED_RESOURCE_TYPES),
     "share": frozenset({"knowledge_space", "knowledge_file", "workflow", "assistant"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool"}),
+    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "linsight_skill"}),
     "publish": frozenset({"workflow", "assistant"}),
     "unpublish": frozenset({"workflow", "assistant"}),
 }
@@ -97,7 +95,7 @@ PARENT_TYPES: dict[str, tuple[str, ...]] = {
 
 SYSTEM_SHARED_ACTION_TYPES: dict[str, frozenset[str]] = {
     "download": frozenset({"knowledge_space", "folder", "knowledge_file"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool"}),
+    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "linsight_skill"}),
 }
 
 # These resource types are enumerated directly by ListObjects.  Folder and
@@ -315,7 +313,9 @@ def _permission_grant_type(action_codes: tuple[str, ...]) -> dict:
     }
     metadata = {
         "model": {"directly_related_user_types": [{"type": "permission_model"}]},
-        "ordinary_assignee": {"directly_related_user_types": _subject_types()},
+        "ordinary_assignee": {
+            "directly_related_user_types": [*_subject_types(), {"type": "tenant", "relation": "member"}]
+        },
         "protected_assignee": {"directly_related_user_types": [{"type": "user"}]},
     }
     for action in action_codes:

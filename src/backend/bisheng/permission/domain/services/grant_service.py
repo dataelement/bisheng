@@ -216,8 +216,7 @@ class GrantService:
         if context.system_authorized:
             return
         if not any(
-            capability.model.derived_level is not None
-            and "manage_permission" in capability.model.action_codes
+            capability.model.derived_level is not None and "manage_permission" in capability.model.action_codes
             for capability in context.capabilities
         ):
             raise GrantLevelForbiddenError(msg="Actor has no effective manage_permission model source")
@@ -230,6 +229,7 @@ class GrantService:
         expected_resource_version: int,
         expected_catalog_release_id: int,
         idempotency_key: str,
+        migration_deltas: tuple[ProjectionTupleDelta, ...] = (),
     ) -> GrantMutationResult:
         self._validate_request_versions(
             context,
@@ -241,6 +241,8 @@ class GrantService:
         if not 1 <= len(changes) <= 50:
             raise PermissionMutationTooLargeError(msg="Grant mutation accepts between 1 and 50 changes")
         self.assert_roster_access(context)
+        if migration_deltas and not context.system_authorized:
+            raise GrantLevelForbiddenError()
 
         model_by_key = {model.model_key: model for model in context.models}
         grant_order = [grant.model.model_key for grant in context.grants]
@@ -253,6 +255,24 @@ class GrantService:
         }
         compiled: list[ProjectionTupleDelta] = []
         for change in changes:
+            source = change.source
+            if source is None and change.assignee_id is not None:
+                source = next(
+                    (s for g in grants.values() for s in g.sources if s.source_id == change.assignee_id), None
+                )
+            if source is not None and source.subject_type == "tenant":
+                if context.target.resource_type not in {"tool", "linsight_skill"} or source.subject_id != str(
+                    context.target.tenant_id
+                ):
+                    raise GrantLevelForbiddenError(msg="Tenant grant belongs to another resource scope")
+                if change.operation != "REMOVE":
+                    model = model_by_key.get(change.target_model_key or change.model_key)
+                    if (
+                        model is None
+                        or "use" not in model.action_codes
+                        or set(model.action_codes) - {"use", "download"}
+                    ):
+                        raise GrantLevelForbiddenError(msg="All-member grants require a use-only permission model")
             deltas = self._apply_change(context, grants, change)
             compiled.extend(deltas)
 
@@ -265,6 +285,7 @@ class GrantService:
         net_deltas = merge_projection_deltas(
             self._net_deltas(tuple(compiled)),
             visibility.deltas,
+            migration_deltas,
         )
         plan = ProjectionPlan(
             tenant_id=context.target.tenant_id,

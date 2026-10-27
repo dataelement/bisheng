@@ -1,7 +1,7 @@
 import axios from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 
-export type PermissionSubjectType = "user" | "service_account" | "department" | "user_group"
+export type PermissionSubjectType = "user" | "service_account" | "department" | "user_group" | "tenant"
 
 export type PermissionResourceType =
   | "knowledge_space"
@@ -19,7 +19,7 @@ export type PermissionActionLevel = 1 | 2 | 3 | 4
 export type PermissionModelKind = "STANDARD" | "CUSTOM"
 export type ResourcePermissionMode = "INHERIT" | "CUSTOM"
 export type GrantMutationOperation = "ADD" | "MOVE" | "REMOVE"
-export type PermissionSubjectKind = "user" | "service_account" | "department" | "user_group"
+export type PermissionSubjectKind = "user" | "service_account" | "department" | "user_group" | "tenant"
 
 export interface PermissionCatalogAction {
   code: string
@@ -147,6 +147,9 @@ export interface GrantablePermissionModel {
 }
 
 export interface ResourcePermissionContext {
+  tenant_id?: string
+  all_members_model_key?: string
+  all_members_sources?: Array<{ assignee_id: string; assignee_version: number }>
   mode: ResourcePermissionMode
   parent_type: PermissionResourceType | null
   parent_id: string | null

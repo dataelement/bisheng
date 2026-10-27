@@ -192,16 +192,21 @@ class OpenTaskModeService:
             raise OpenApiModelUnavailableError(model=model_id)
 
     @staticmethod
-    async def enabled_skill_rows() -> list:
+    async def enabled_skill_rows(login_user: UserPayload) -> list:
         from bisheng.linsight.domain.models.linsight_skill import LinsightSkillDao
+        from bisheng.permission.application.business_authorization import batch_check_business_actions
 
-        return list(await LinsightSkillDao.list_enabled())
+        rows = [row for row in await LinsightSkillDao.list_enabled() if row.source != "personal"]
+        actions = await batch_check_business_actions(
+            login_user, resource_type="linsight_skill", resource_ids=(row.id for row in rows), actions=("use",)
+        )
+        return [row for row in rows if "use" in actions.get(str(row.id), ())]
 
     @classmethod
-    async def check_skills(cls, names: list[str] | None) -> None:
+    async def check_skills(cls, names: list[str] | None, login_user: UserPayload) -> None:
         if not names:
             return
-        enabled = {row.name for row in await cls.enabled_skill_rows()}
+        enabled = {row.name for row in await cls.enabled_skill_rows(login_user)}
         missing = [name for name in names if name not in enabled]
         if missing:
             raise OpenApiTaskSkillUnavailableError(unavailable=missing)
@@ -285,7 +290,7 @@ class OpenTaskModeService:
         await TempUploadService.assert_owned_references(req.file_refs(), subject)
         config = await WorkStationService.get_open_api_daily_config(login_user)
         await cls.check_model(req.model, config)
-        await cls.check_skills(req.skills)
+        await cls.check_skills(req.skills, login_user)
         cls.check_tools(req.tools, config)
         await cls.check_knowledge_libraries(login_user, req.knowledge_ids)
         await cls.check_knowledge_spaces(login_user, req.knowledge_space_ids)
@@ -505,7 +510,7 @@ class OpenTaskModeService:
         allowed_models = {str(item.get("id")) for item in models}
         skills = [
             OpenTaskSkill(name=row.name, display_name=row.display_name or row.name, description=row.description)
-            for row in await cls.enabled_skill_rows()
+            for row in await cls.enabled_skill_rows(login_user)
         ]
         return {
             "models": models,

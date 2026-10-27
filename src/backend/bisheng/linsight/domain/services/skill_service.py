@@ -92,6 +92,7 @@ class LinsightSkillOwnerProjectionPort(Protocol):
         resource_version: int,
         context_version: str,
         idempotency_key: str,
+        shared_with_tenant: bool = False,
     ): ...
 
 
@@ -460,5 +461,6 @@ class SkillService:
             resource_version=0,
             context_version=f"{SKILL_OBJECT_TYPE}:{skill.id}:v0",
             idempotency_key=(f"{SKILL_OBJECT_TYPE}:create:{tenant_id}:{skill.id}"),
+            shared_with_tenant=self.personal_owner is None,
         )
         return await self.get_detail(tenant_id, name)
