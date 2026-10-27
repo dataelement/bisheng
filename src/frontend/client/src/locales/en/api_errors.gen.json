@@ -301,6 +301,7 @@
   "16230": "Secrets and secret references in bisheng-app.yaml are not supported in this version",
   "16231": "This deployment cannot issue the open capability this declaration needs; ask an administrator to enable it, or remove the declaration",
   "16232": "WebSocket needs no declaration in bisheng-app.yaml; remove the key and publish again",
+  "16233": "Release notes must not exceed 2,000 characters",
   "16241": "The pre-publish secret scan found credentials in the package",
   "16251": "This application already has a publish request under approval",
   "16252": "This application is waiting to go online; resolve that first",

@@ -327,6 +327,7 @@ async def _build_payload(
         "tenant_id": int(deployment.tenant_id or app.tenant_id or 0),
         "version_id": deployment.version_id,
         "version_no": version_no,
+        "release_notes": deployment.release_notes,
         "deployment_id": deployment.id,
         "release_kind": release_kind,
         "owner_user_id": owner_user_id,
