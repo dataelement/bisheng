@@ -364,6 +364,20 @@ class KnowledgeViolationDocumentBusyError(BaseErrorCode):
     Msg: str = "文档正在发布或分享, 请稍后重试"
 
 
+class AbnormalFileStateConflictError(BaseErrorCode):
+    """异常上传处理时, 文件已不再处于可处理的失败状态."""
+
+    Code: int = 18055
+    Msg: str = "文件已不在异常状态"
+
+
+class AbnormalUploadRetryFailedError(BaseErrorCode):
+    """重新解析任务没有入队, 文件状态已回到原来的异常状态."""
+
+    Code: int = 18056
+    Msg: str = "重新解析失败"
+
+
 class PortalManualRecommendationInvalidError(BaseErrorCode):
     Code: int = 18080
     Msg: str = "人工推荐知识无效，请检查知识库范围、文件状态及归属"
