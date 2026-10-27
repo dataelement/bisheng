@@ -1,8 +1,8 @@
 // @ts-strict-ignore
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { delChunkInPreviewApi, previewFileSplitApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { Outlined } from "bisheng-icons";
+
+import { previewFileSplitApi } from "@/controllers/API";
+import { forwardRef,useEffect,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
@@ -108,22 +108,11 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         // loadchunks(fileValue)
     }
 
-    // const handleDeleteChunk = async (data) => {
-    //     await captureAndAlertRequestErrorHoc(delChunkInPreviewApi({
-    //         knowledge_id: id,
-    //         file_path: fileValue,
-    //         text: data.text,
-    //         chunk_index: data.metadata.chunk_index
-    //     }))
-    //     const res = paragraphs.filter(el => el.metadata.chunk_index !== data.metadata.chunk_index)
-    //     setParagraphs(res)
-    // }
-
     if (!open) return null
 
     if (loading) return (
         <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <LoadingIcon />
+            <Outlined.Loading  className="size-4 animate-spin"/>
         </div>
     )
 
@@ -140,7 +129,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 }}>
             </SelectSearch>
             <div className={`${change ? '' : 'hidden'} flex items-center`}>
-                <Info className='mr-1 text-red-500' />
+                <Outlined.Info className='mr-1 text-red-500' />
                 <span className="text-red-500">{t('policyChangeDetected', { ns: 'knowledge' })}</span>
                 <span className="text-primary cursor-pointer" onClick={handleReload}>{t('regeneratePreview', { ns: 'knowledge' })}</span>
             </div>

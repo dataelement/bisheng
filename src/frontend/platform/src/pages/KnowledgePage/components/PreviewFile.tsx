@@ -1,17 +1,22 @@
 // @ts-strict-ignore
+import { PlatformImagePreview } from '@/components/bs-comp/preview/DocumentPreview';
+import { usePreviewLocale } from '@bisheng/file-viewers/locale';
+import type { PdfScrollContext } from '@/components/bs-comp/preview/PlatformPdfPreview';
+import { labelTop as pdfLabelTop } from '@/components/bs-comp/preview/pdfEditing';
 import FileView from "@/components/bs-comp/FileView";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { cn } from "@/utils";
-import { Info } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+
+import { ExcelPreview } from "@bisheng/file-viewers";
+import React,{ useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import useKnowledgeStore from "../useKnowledgeStore";
 import DocxPreview from "./DocxFileViewer";
 import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
-import { ExcelPreview } from "@bisheng/file-viewers";
+import RichPreviewFile,{ isRichKnowledgePreview } from "./RichPreviewFile";
 import TxtFileViewer from "./TxtFileViewer";
-import RichPreviewFile, { isRichKnowledgePreview } from "./RichPreviewFile";
 
 export default function PreviewFile({
   urlState,
@@ -39,6 +44,7 @@ export default function PreviewFile({
   previewErrorMessage?: string;
 }) {
   const { t } = useTranslation('knowledge')
+  const previewLocale = usePreviewLocale();
   const MemoizedFileView = React.memo(FileView);
   const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
   const selectedChunkDistanceFactor = useKnowledgeStore((state) => state.selectedChunkDistanceFactor);
@@ -214,13 +220,13 @@ export default function PreviewFile({
   };
 
   // 8. 页面滚动检测（新增，与ParagraphEdit的handlePageChange一致）
-  const handlePageChange = (offset, h, paperSize, scale) => {
+  const handlePageChange = (offset, h, paperSize, scale, context?: PdfScrollContext) => {
     if (offset === 0) return;
     const labelsArray = Array.from(labelsMap.values());
     setShowPos(!labelsArray.some(item => {
       const pageHeight = (item.page - 1) * paperSize;
-      const labelTop = pageHeight + item.label[1] / scale;
-      return item.active && labelTop > offset && labelTop < (offset + h);
+      const labelTop = context ? pdfLabelTop(item.page, item.label[1], context.startIndex, context.layout) : pageHeight + item.label[1] / scale;
+      return item.active && labelTop !== null && labelTop > offset && labelTop < (offset + h);
     }));
   };
 
@@ -239,7 +245,7 @@ export default function PreviewFile({
       }
       return <div className="flex justify-center items-center h-full text-gray-400">{t('previewFailed')}</div>;
     }
-    if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
+    if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><Outlined.Loading  className="size-4 animate-spin"/></div>;
     if (isRichKnowledgePreview(previewData)) {
       return <RichPreviewFile file={file} previewData={previewData} />;
     }
@@ -253,7 +259,7 @@ export default function PreviewFile({
           <img
             className="size-52 block"
             src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
-          <p>此文件类型不支持预览</p>
+          <p>{previewLocale.unsupported}</p>
         </div>
       </div>
       case 'pdf':
@@ -278,11 +284,7 @@ export default function PreviewFile({
       case 'jpg':
       case 'jpeg':
       case 'bmp': return (
-        <img
-          className="border"
-          src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)}
-          alt="预览图片"
-        />
+        <PlatformImagePreview filePath={url} />
       );
       case 'xlsx':
       case 'xls':
@@ -310,7 +312,7 @@ export default function PreviewFile({
 
     Array.from(labelsMap.values()).forEach((item) => {
       if (typeof labelTextRef.current[item.id] === 'string') {
-        return alert('文件已失效，请上传新文件后重试');
+        return alert(previewLocale.fileExpired);
       }
 
       if (item.active) {
@@ -360,7 +362,7 @@ export default function PreviewFile({
   }}>
     <div className={`${edit ? 'absolute -top-8 right-0 z-10' : 'relative'} flex justify-center items-center mb-2 text-sm h-10`}>
       <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
-        <Info className='mr-1 text-red-500' size={14} />
+        <Outlined.Info className='mr-1 text-red-500' size={14} />
         <span className="text-red-500">{t('segmentRangeDetected')}</span>
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>

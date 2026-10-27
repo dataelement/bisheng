@@ -1,10 +1,11 @@
 // @ts-strict-ignore
-import { Checkbox } from "@/components/bs-ui/checkBox";
+import { Button } from '@bisheng/ui';
+import { Checkbox } from '@bisheng/ui';
 import { Download } from "lucide-react";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import EditFlowSettings from "../../components/EditFlowSettingsComponent";
-import { Button } from "../../components/bs-ui/button";
+
 import {
   Dialog,
   DialogContent,
@@ -83,7 +84,7 @@ export default function ExportModal() {
           setDescription={setDescription}
         />
         <div className="flex items-center space-x-2">
-          <Checkbox
+          <Checkbox className="peer"
             id="terms"
             onCheckedChange={(event: boolean) => {
               setChecked(event);
@@ -93,10 +94,7 @@ export default function ExportModal() {
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={handleClose}
-            type="submit"
-          >
+          <Button onClick={handleClose} type="submit">
             {t('code.exportSkill')}
           </Button>
         </DialogFooter>

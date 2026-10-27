@@ -10,6 +10,14 @@ export class VoiceDraft {
     this.start = this.end = Math.max(0, Math.min(value.length, position));
   }
 
+  freeze(): void {
+    this.frozen = true;
+  }
+
+  isFrozen(): boolean {
+    return this.frozen;
+  }
+
   reconcile(value: string): boolean {
     if (this.frozen) return false;
     if (value === this.previous) return true;
@@ -47,5 +55,10 @@ export class VoiceDraft {
     this.end = this.start + transcript.length;
     this.previous = next;
     return next;
+  }
+
+  /** Index just after the dictated span, where the caret should stay. */
+  caret(): number {
+    return this.end;
   }
 }

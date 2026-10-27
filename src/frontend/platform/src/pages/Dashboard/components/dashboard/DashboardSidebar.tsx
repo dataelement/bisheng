@@ -1,27 +1,28 @@
 // @ts-strict-ignore
-"use client"
+import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 
-import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog"
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
-import { SearchInput } from "@/components/bs-ui/input"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import Tip from "@/components/bs-ui/tooltip/tip"
-import { userContext } from "@/contexts/userContext"
-import { copyDashboard, createDashboard, deleteDashboard } from "@/controllers/API/dashboard"
-import { useMiniDebounce } from "@/util/hook"
-import { generateUniqueName } from "@/util/utils"
-import { cn } from "@/utils"
-import { ListIndentDecrease, ListIndentIncrease, SquarePlusIcon } from "lucide-react"
-import type React from "react"
-import { useContext, useMemo, useState } from "react"
-import { useMutation, useQueryClient } from "react-query"
-import { useNavigate } from "react-router-dom"
-import { DashboardsQueryKey } from "../../hook"
-import { Dashboard } from "../../types/dataConfig"
-import { DashboardListItem } from "./DashboardListItem"
-import { useTranslation } from "react-i18next"
-import { ExpandIcon } from "@/components/bs-icons/expand"
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+
+
+
+import { userContext } from "@/contexts/userContext";
+import { showApiError } from "@/controllers/request";
+import { copyDashboard,createDashboard,deleteDashboard } from "@/controllers/API/dashboard";
+import { useMiniDebounce } from "@/util/hook";
+import { generateUniqueName } from "@/util/utils";
+import { cn } from "@/utils";
+import { Tooltip as Tip } from "@bisheng/ui";
+
+import type React from "react";
+import { useContext,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useMutation,useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { DashboardsQueryKey } from "../../hook";
+import { Dashboard } from "../../types/dataConfig";
+import { DashboardListItem } from "./DashboardListItem";
 
 interface DashboardSidebarProps {
     dashboards: Dashboard[]
@@ -73,7 +74,7 @@ export function DashboardSidebar({
         }
     }
     const navigator = useNavigate()
-    const { toast } = useToast()
+
     const queryClient = useQueryClient()
     const createMutation = useMutation({
         mutationFn: createDashboard,
@@ -82,19 +83,11 @@ export function DashboardSidebar({
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             navigator(`/dashboard/${res.id}`)
         },
-        onError: (msg: string) => {
-            toast({
-                description: msg,
-                variant: "error",
-            })
-        },
+        onError: showApiError,
     })
     const handleCreate = () => {
         if (dashboards.length >= 20) {
-            toast({
-                description: t('maxLimitReached', { count: 20 }),
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String(t('maxLimitReached', { count: 20 }) ?? '') })
             return
         }
 
@@ -110,28 +103,17 @@ export function DashboardSidebar({
             // jump to new dashboard
             navigator(`/dashboard/${newDashboard.id}`)
         },
-        onError: () => {
-            toast({
-                description: t('copyFailed'),
-                variant: "error",
-            })
-        },
+        onError: showApiError,
     })
     const handleDuplicate = (dashboard: Dashboard) => {
         if (dashboards.length >= 20) {
-            toast({
-                description: t('maxLimitReached', { count: 20 }),
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String(t('maxLimitReached', { count: 20 }) ?? '') })
             return
         }
 
         const newTitle = generateUniqueName(dashboards, 'title', t('dashboardCopyName', { title: dashboard.title }), '(x)')
         if (newTitle.length > 200) {
-            return toast({
-                description: t('charLimit200b'),
-                variant: "error",
-            })
+            return notification.open({ type: "error", description: String(t('charLimit200b') ?? '') })
         }
 
         duplicateMutation.mutate({ id: dashboard.id, title: newTitle })
@@ -153,12 +135,7 @@ export function DashboardSidebar({
                 onSelect(null)
             }
         },
-        onError: () => {
-            toast({
-                description: "delete error",
-                variant: "error",
-            })
-        },
+        onError: showApiError,
     })
     const handleDelete = (id: string) => {
         const dashboard = dashboards.find((d) => d.id === id)
@@ -167,8 +144,8 @@ export function DashboardSidebar({
         bsConfirm({
             desc: t('confirmDeleteDashboard', { title: dashboard.title }),
             okTxt: t('delete'),
-            onOk(next) {
-                deleteMutation.mutate(id)
+            async onOk(next) {
+                await deleteMutation.mutateAsync(id)
                 next()
             },
         })
@@ -182,38 +159,35 @@ export function DashboardSidebar({
             )}
         >
             {
-                !isCollapsed && <div className="header relative flex items-center justify-between h-[52px] px-2 pr-11 border-b">
+                // Both header buttons share this row: centring them in the same
+                // 52px flex line is what keeps them aligned — the collapse
+                // button used to be absolutely positioned at top-2, which left
+                // it 2px above the 32px add button.
+                //
+                // The condition also has to sit outside Tip: it reads
+                // children.props, so a falsy child crashes the whole page.
+                !isCollapsed && <div className="header flex items-center justify-between h-[52px] px-2 border-b">
                     <p className="text-base font-bold">{t('dashboardList')}</p>
-                    {
-                        canCreate && <Tip content={t('addDashboard')} >
-                            <Button variant="ghost" size="icon" onClick={handleCreate}><SquarePlusIcon size={16} /></Button>
+                    <div className="flex items-center gap-1">
+                        {
+                            canCreate && <Tip content={t('addDashboard')} >
+                                <Button variant="text" size="medium" onClick={handleCreate} color="default" iconOnly><Outlined.Plus size={16} /></Button>
+                            </Tip>
+                        }
+                        <Tip content={t('collapseList')}>
+                            <Button variant="text" size="medium" className="hover:text-primary" onClick={() => setIsCollapsed(!isCollapsed)} color="default" iconOnly>
+                                <Outlined.Left className="h-4 w-4" />
+                            </Button>
                         </Tip>
-                    }
+                    </div>
                 </div>
             }
-            <Tip content={t('collapseList')}>
-                {
-                    !isCollapsed && <Button
-                        variant="ghost"
-                        size="icon"
-                        className={"absolute top-2 z-10 hover:text-primary bg-background right-2"}
-                        onClick={() => setIsCollapsed(!isCollapsed)}
-                    >
-                        <ExpandIcon className="h-4 w-4 rotate-180" />
-                    </Button>
-                }
-            </Tip>
 
 
             {!isCollapsed && (
                 <div className="flex flex-col p-2 gap-2">
                     <div className="relative">
-                        <SearchInput
-                            placeholder={t('system.boardName', { ns: 'bs' })}
-                            value={searchQuery}
-                            onChange={handleSearch}
-                            onKeyDown={handleKeyDown}
-                        />
+                        <SearchInput placeholder={t('system.boardName', { ns: 'bs' })} value={searchQuery} onChange={handleSearch} onKeyDown={handleKeyDown} />
                     </div>
 
                     <div className="overflow-y-auto space-y-2 h-[calc(100vh-174px-var(--license-banner-h,0px))]">

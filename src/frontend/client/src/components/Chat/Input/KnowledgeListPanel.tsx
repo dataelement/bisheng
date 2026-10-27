@@ -11,7 +11,7 @@
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenuItem } from "~/components/ui";
-import { Checkbox } from "~/components/ui/Checkbox";
+import { Checkbox } from '@bisheng/ui';
 import { SearchInput, StateView } from "@bisheng/ui";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { cn } from "~/utils";
@@ -196,7 +196,7 @@ export const KnowledgeListPanel = ({
                     <Checkbox
                       checked={isChecked}
                       tabIndex={-1}
-                      className="pointer-events-none shrink-0 border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                      className="peer pointer-events-none shrink-0 border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                     />
                     <span className="truncate flex-1 text-[14px] text-slate-700 leading-[22px]">
                       {item.name}

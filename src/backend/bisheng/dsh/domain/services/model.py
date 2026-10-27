@@ -8,6 +8,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from loguru import logger
+from pydantic import ValidationError
 
 from bisheng.common.errcode.dsh import (
     DshContextLengthExceededError,
@@ -21,11 +22,14 @@ from bisheng.common.errcode.dsh import (
 )
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities, DshChatRequest
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
+from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
+from bisheng.dsh.infrastructure.model_errors import model_failure_code
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
+from bisheng.dsh.infrastructure.responses_adapter import DshResponsesAdapter
 from bisheng.dsh.infrastructure.telemetry import record_settlement, request_trace
 
 
@@ -63,12 +67,15 @@ class DshModelService:
         usage,
         now,
         billing_timezone: str = "Asia/Shanghai",
+        audit_factory=None,
     ):
         self.policy_reader, self.model_loader, self.llm_builder = policy_reader, model_loader, llm_builder
         self.capabilities_for, self.usage, self.now = capabilities_for, usage, now
         self.billing_timezone = billing_timezone
         self.timezone = ZoneInfo(billing_timezone)
         self.adapter = DshChatAdapter()
+        self.responses_adapter = DshResponsesAdapter()
+        self.audit_factory = audit_factory
 
     async def list_models(self, principal: DshPrincipal) -> dict:
         with principal_scope(principal):
@@ -79,9 +86,13 @@ class DshModelService:
                     model, server = await self.model_loader(model_id)
                 except DshModelNotAllowedError:
                     continue
-                capabilities = self.capabilities_for(model, server)
-                if isawaitable(capabilities):
-                    capabilities = await capabilities
+                try:
+                    capabilities = self.capabilities_for(model, server)
+                    if isawaitable(capabilities):
+                        capabilities = await capabilities
+                except (ValueError, ValidationError):
+                    logger.warning("DSH model {} has invalid protocol configuration", model.id)
+                    continue
                 if capabilities is None:
                     continue
                 created = model.create_time
@@ -98,12 +109,26 @@ class DshModelService:
                         "owned_by": "bisheng",
                         "display_name": model_display_name(model, server),
                         "capabilities": capabilities.client_fields(),
+                        **(
+                            {"reasoning": capabilities.reasoning.model_dump(exclude_none=True)}
+                            if capabilities.reasoning
+                            else {}
+                        ),
                     }
                 )
             return {"object": "list", "data": result}
 
-    async def complete(self, principal: DshPrincipal, request: DshChatRequest):
-        request_id = str(uuid4())
+    async def complete(
+        self,
+        principal: DshPrincipal,
+        request: DshChatRequest | DshResponsesRequest,
+        *,
+        request_id: str | None = None,
+        audit_context=None,
+        audit_callback=None,
+        conversation=None,
+    ):
+        request_id = request_id or str(uuid4())
         with principal_scope(principal), request_trace(request_id):
             policy = await self.policy_reader(int(principal.user_id))
             if policy is None or request.model_id not in policy.allowed_model_ids:
@@ -114,15 +139,25 @@ class DshModelService:
             model, server = await self.model_loader(request.model_id)
             if model.id != request.model_id:
                 raise DshModelNotAllowedError()
-            capabilities: ChatCapabilities | None = self.capabilities_for(model, server)
-            if isawaitable(capabilities):
-                capabilities = await capabilities
+            try:
+                capabilities: ChatCapabilities | None = self.capabilities_for(model, server)
+                if isawaitable(capabilities):
+                    capabilities = await capabilities
+            except (ValueError, ValidationError) as exc:
+                raise DshUnsupportedParameterError() from exc
             if capabilities is None:
                 raise DshUnsupportedParameterError()
             llm = self.llm_builder(model, server, principal, request)
-            execution = self.adapter.prepare(
+            native = isinstance(request, DshResponsesRequest)
+            adapter = self.responses_adapter if native else self.adapter
+            execution = adapter.prepare(
                 request, llm, capabilities, max_output_tokens=(model.config or {}).get("max_tokens")
             )
+            if conversation is not None:
+                headers = conversation.upstream_headers(principal, model.id)
+                execution.parameters["extra_headers"] = headers
+                if native or capabilities.prompt_cache_key:
+                    execution.parameters["prompt_cache_key"] = headers["session_id"]
             started = self.now()
             started = started.replace(tzinfo=UTC) if started.tzinfo is None else started
             event = UsageEvent(
@@ -150,6 +185,17 @@ class DshModelService:
                 if error.reason == "model_not_allowed":
                     raise DshModelNotAllowedError() from error
                 raise DshQuotaUnavailableError() from error
+            if self.audit_factory is not None:
+                try:
+                    execution.capture = await self.audit_factory(
+                        principal, request, request_id, started, model, server, audit_context
+                    )
+                    execution.audit_input = request
+                    if audit_callback is not None:
+                        audit_callback(execution.capture)
+                except Exception as error:
+                    # Optional audit composition never invalidates an admitted model call.
+                    logger.warning("DSH audit capture unavailable ({})", type(error).__name__)
             if request.stream:
                 return PreparedStream(self, principal, request, execution, event)
             try:
@@ -158,9 +204,11 @@ class DshModelService:
                 await asyncio.shield(self._settle(event, execution, "CANCELLED", "cancelled"))
                 raise
             except Exception as error:
-                await self._settle(event, execution, "FAILED", "upstream_error")
+                await self._settle(event, execution, "FAILED", model_failure_code(error))
                 raise self._public_error(error) from error
-            await self._settle(event, execution, "SUCCEEDED")
+            await self._settle(event, execution, getattr(execution, "status", "SUCCEEDED"))
+            if native:
+                return result
             return {
                 "id": "chatcmpl-" + event.request_id,
                 "object": "chat.completion",
@@ -202,7 +250,9 @@ class DshModelService:
                     "ended_at": now,
                     "settled_at": now if usage.total_tokens is not None else None,
                     "provider_request_id": execution.provider_request_id,
-                    "error_code": error_code or ("usage_missing" if usage.total_tokens is None else None),
+                    "error_code": error_code
+                    or getattr(execution, "failure_code", None)
+                    or ("usage_missing" if usage.total_tokens is None else None),
                     "latency_ms": max(0, int((now - event.started_at).total_seconds() * 1000)),
                 }
             ).model_dump()
@@ -215,12 +265,24 @@ class DshModelService:
                 current = await self.usage.get_request(event)
             except Exception:
                 logger.exception("DSH settlement could not be confirmed for request {}", event.request_id)
+                execution.audit("usage", "UNCERTAIN")
                 raise DshUsageUnavailableError() from error
             if current is None or current.model_dump() != terminal.model_dump():
+                execution.audit("usage", "UNCERTAIN")
                 raise DshUsageUnavailableError() from error
+        execution.audit("usage", "SETTLED" if usage.total_tokens is not None else "USAGE_UNKNOWN")
         record_settlement(terminal)
 
     async def _stream(self, principal, request, execution, event):
+        if isinstance(request, DshResponsesRequest):
+            source = self._stream_responses(execution, event)
+            try:
+                async for frame in source:
+                    yield frame
+            finally:
+                # Closing this generator does not close the inner one; do it explicitly.
+                await source.aclose()
+            return
         source = execution.stream()
         common = {
             "id": "chatcmpl-" + event.request_id,
@@ -241,7 +303,7 @@ class DshModelService:
             raise
         except Exception as error:
             try:
-                await self._settle(event, execution, "FAILED", "upstream_error")
+                await self._settle(event, execution, "FAILED", model_failure_code(error))
                 public = self._public_error(error)
             except DshUsageUnavailableError as settlement_error:
                 public = settlement_error
@@ -258,6 +320,35 @@ class DshModelService:
         if request.stream_options is not None:
             yield sse({**common, "choices": [], "usage": usage_response(execution.usage)})
         yield "data: [DONE]\n\n"
+
+    async def _stream_responses(self, execution, event):
+        source = execution.stream()
+        try:
+            async for item in source:
+                if item["type"] in {"response.completed", "response.failed", "response.incomplete"}:
+                    terminal = item
+                else:
+                    yield "event: " + item["type"] + "\n" + sse(item)
+        except (asyncio.CancelledError, GeneratorExit):
+            await source.aclose()
+            await asyncio.shield(self._settle(event, execution, "CANCELLED", "cancelled"))
+            raise
+        except Exception as error:
+            try:
+                await self._settle(event, execution, "FAILED", model_failure_code(error))
+                public = self._public_error(error)
+            except DshUsageUnavailableError as settlement_error:
+                public = settlement_error
+            yield "event: error\n" + sse({"type": "error", **error_response(public, event.request_id)})
+            return
+        finally:
+            await source.aclose()
+        try:
+            await self._settle(event, execution, execution.status)
+        except DshUsageUnavailableError as error:
+            yield "event: error\n" + sse({"type": "error", **error_response(error, event.request_id)})
+            return
+        yield "event: " + terminal["type"] + "\n" + sse(terminal)
 
 
 class PreparedStream:

@@ -1,11 +1,5 @@
 import { Outlined } from "bisheng-icons";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+import { Dropdown, DropdownGroup, DropdownItem } from "@bisheng/ui";
 
 interface SortOption {
     value: string;
@@ -140,42 +134,38 @@ export function SectionHeader({
                     </button>
                 )}
                 {/* Sort field dropdown — opens a menu of sort options with the
-                    currently-selected one marked, mirroring the right-side panel. */}
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                    currently-selected one checked. The menu is portaled, but React events
+                    still bubble to the row's onClick/onKeyDown toggle — stop both here. */}
+                <span
+                    className="contents"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                >
+                    <Dropdown
+                        align="end"
+                        menu={
+                            <DropdownGroup label={sortFieldLabel}>
+                                {sortOptions.map((opt) => (
+                                    <DropdownItem
+                                        key={opt.value}
+                                        checked={opt.value === sortValue}
+                                        onSelect={() => onSortChange(opt.value)}
+                                    >
+                                        {opt.label}
+                                    </DropdownItem>
+                                ))}
+                            </DropdownGroup>
+                        }
+                    >
                         <button
-                            onClick={(e) => e.stopPropagation()}
                             title={sortFieldLabel}
                             aria-label={sortFieldLabel}
                             className={`${rightIconBtn} data-[state=open]:bg-fill-2`}
                         >
                             <Outlined.Sort className="size-4" />
                         </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        align="end"
-                        className={`${knowledgeSpaceDropdownSurfaceClassName} z-[100]`}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="px-2 py-1.5 text-xs font-medium text-text-3">{sortFieldLabel}</div>
-                        {sortOptions.map((opt) => {
-                            const active = opt.value === sortValue;
-                            return (
-                                <DropdownMenuItem
-                                    key={opt.value}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onSortChange(opt.value);
-                                    }}
-                                    className="flex items-center justify-between gap-6"
-                                >
-                                    <span>{opt.label}</span>
-                                    {active && <Outlined.Check className="size-4 shrink-0" />}
-                                </DropdownMenuItem>
-                            );
-                        })}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                    </Dropdown>
+                </span>
             </div>
         </div>
     );

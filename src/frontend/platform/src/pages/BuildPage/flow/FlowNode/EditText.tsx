@@ -1,5 +1,6 @@
-import { Input, Textarea } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Input, Textarea, toast } from '@bisheng/ui';
+
+
 import { cname } from "@/components/bs-ui/utils";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -9,7 +10,7 @@ export default function EditText({ type = 'input', reDefaultValue = false, child
     const [value, setValue] = useState(defaultValue)
     const { t } = useTranslation('flow')
 
-    const { message } = useToast()
+
 
     const handleChange = (e) => {
         const nval = e.target.value
@@ -18,10 +19,7 @@ export default function EditText({ type = 'input', reDefaultValue = false, child
 
     const handleBlur = () => {
         if (maxLength && value.length > maxLength) {
-            return message({
-                variant: 'warning',
-                description: t('cannotExceedMaxLength', { maxLength })
-            })
+            return toast.show({ type: 'warning', message: String(t('cannotExceedMaxLength', { maxLength }) ?? '') })
         }
         setEdit(false)
         if (reDefaultValue && !value.trim()) {
@@ -36,32 +34,17 @@ export default function EditText({ type = 'input', reDefaultValue = false, child
 
     return <div className="cursor-text">
         {edit ?
-            type === 'input' ? <Input
-                type="text"
-                className={cname("h-6", className)}
-                autoFocus={edit}
-                value={value}
-                onBlur={handleBlur}
-                onChange={handleChange}
-                onKeyDown={(e) => {
+            type === 'input' ? <Input type="text" autoFocus={edit} value={value} onBlur={handleBlur} onChange={handleChange} onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
                         handleBlur();
                     }
-                }}
-            /> : <Textarea
-                className={className}
-                autoFocus={edit}
-                value={value}
-                onBlur={handleBlur}
-                onChange={handleChange}
-                onKeyDown={(e) => {
+                }} className={cname("h-6", className)} /> : <Textarea autoFocus={edit} value={value} onBlur={handleBlur} onChange={handleChange} onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
                         handleBlur();
                     }
-                }}
-            />
+                }} textareaClassName={className} />
             : <div onClick={() => setEdit(true)}>{children}</div>}
     </div>
 };

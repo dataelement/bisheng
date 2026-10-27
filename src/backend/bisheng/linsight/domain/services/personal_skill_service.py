@@ -54,6 +54,16 @@ class PersonalSkillUsage(NamedTuple):
     bytes_limit: int
 
 
+class SkillUploadPreview(NamedTuple):
+    """A parsed upload that has not been saved."""
+
+    name: str
+    display_name: str
+    description: str
+    size: int
+    files: tuple[str, ...]
+
+
 class SkillCenter(NamedTuple):
     personal: list[LinsightSkill]
     enterprise: list[LinsightSkill]
@@ -241,6 +251,50 @@ class PersonalSkillService:
         )
         return None
 
+    async def inspect_upload(
+        self,
+        *,
+        user_id: int,
+        filename: str,
+        data: bytes,
+        content_type: str | None = None,
+        skill_id: int | None = None,
+    ) -> SkillUploadPreview:
+        """Parse and check one upload. Nothing is written until create or overwrite."""
+        work = Path(tempfile.mkdtemp(dir=self.unpack_root))
+        try:
+            files = await accept_skill_upload(filename, data, owner_user_id=user_id, content_type=content_type)
+            _stage_unpack(work, files)
+            meta = object.__new__(SkillService)._extract_meta(files)
+            if skill_id is not None:
+                skill = await self._load_own_skill(user_id, skill_id)
+                meta = SkillService._keep_skill_id(
+                    files, meta, skill.name, current_display_name=skill.display_name or ""
+                )
+            size = sum(len(content) for content in files.values())
+            if skill_id is not None:
+                _, total = await LinsightSkillDao.personal_usage(user_id)
+                if total - int(skill.size or 0) + size > PERSONAL_SKILL_BYTES_LIMIT:
+                    raise SkillStorageLimitError()
+            else:
+                existing = await LinsightSkillDao.get_by_name(meta.name, owner_user_id=user_id)
+                if existing is not None:
+                    raise SkillNameDuplicateError(skill_id=existing.id, content_hash=existing.content_hash)
+                count, total = await LinsightSkillDao.personal_usage(user_id)
+                if count >= PERSONAL_SKILL_COUNT_LIMIT:
+                    raise SkillCountLimitError()
+                if total + size > PERSONAL_SKILL_BYTES_LIMIT:
+                    raise SkillStorageLimitError()
+            return SkillUploadPreview(
+                name=meta.name,
+                display_name=meta.display_name,
+                description=meta.description,
+                size=size,
+                files=tuple(sorted(files)),
+            )
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
     async def create(
         self,
         *,
@@ -340,8 +394,7 @@ class PersonalSkillService:
             files = await accept_skill_upload(filename, data, owner_user_id=user_id, content_type=content_type)
             _stage_unpack(work, files)
             meta = object.__new__(SkillService)._extract_meta(files)
-            if meta.name != skill.name:
-                raise SkillValidationError(msg="skill ID cannot be changed when editing")
+            meta = SkillService._keep_skill_id(files, meta, skill.name, current_display_name=skill.display_name or "")
             new_hash = bundle_content_hash(files)
             new_size = sum(len(content) for content in files.values())
             _, total = await LinsightSkillDao.personal_usage(user_id)

@@ -1,3 +1,5 @@
+import { isApiError } from '@bisheng/api-client';
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -44,7 +46,7 @@ import {
   importMessagesToKnowledgeApi,
   listUploadableSpacesApi,
 } from '~/api/messageExport';
-import { translateApiErrorMessage } from '~/api/request';
+import { showApiError } from '~/api/request';
 import {
   ExportFormatSheet,
   MessageSelectionToolbar,
@@ -229,6 +231,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     conversationId: activeConvoId,
     title: chatTitle,
     isLoading,
+    historyError,
+        isClearing,
+        retryHistory,
     isStreaming,
     isParsingMedia,
     sendMessage,
@@ -278,14 +283,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         });
         setImportModalOpen(false);
         exitSelectionMode();
-      } catch (e: any) {
-        // Prefer the backend business message (e.g. 12065 知识空间不存在 /
-        // 12066 文件夹不存在 / 12067 暂无权限) so the user sees the real reason
-        // instead of a generic failure — and never a false "success".
-        showToast({
-          message:
-            translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
-            || t('workstation.messageExport.renderFailed'),
+      } catch (error) {
+        if (isApiError(error)) showApiError(error);
+        else showToast({
+          message: t('workstation.messageExport.renderFailed'),
           severity: NotificationSeverity.WARNING,
         });
       }
@@ -813,7 +814,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       aria-hidden={taskArtifacts.comparing && !isTouchLayout ? true : undefined}
                     >
                       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-                        <AiChatMessages
+                        {historyError ? <ApiRequestFailure error={historyError} onRetry={retryHistory} /> : (<AiChatMessages
                           messages={messages}
                           conversationId={activeConvoId}
                           title={chatTitle}
@@ -836,7 +837,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           onPreviewFile={taskArtifacts.openPreview}
                           hideEmptyState
                           flatMode
-                        />
+                          scrollOnUserMessage
+                        />)}
                         {/* Soft translucent fade so the scrolling step flow
                             dissolves into the pinned task panel / input instead of
                             ending on a hard cut. */}
@@ -863,7 +865,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full shrink-0 pb-3">
                             {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
                             <AiChatInput
-                              disabled={!bsConfig?.models?.length || !!shareToken}
+                              disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
                               sendDisabled={taskRunning}
                               isStreaming={isStreaming}
                               isParsingMedia={isParsingMedia}
@@ -1052,7 +1054,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         <div className="w-full max-w-[800px] mx-auto px-4 mt-10 max-md:max-w-full pb-3">
                           <AiChatInput
                             elevated
-                            disabled={!bsConfig?.models?.length || !!shareToken}
+                            disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
                             sendDisabled={taskRunning}
                             isStreaming={isStreaming}
                             isParsingMedia={isParsingMedia}

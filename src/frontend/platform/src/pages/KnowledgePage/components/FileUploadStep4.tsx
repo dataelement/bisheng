@@ -1,19 +1,21 @@
 // @ts-strict-ignore
+import { Button, toast } from '@bisheng/ui';
 import CardComponent from "@/components/bs-comp/cardComponent";
 import ProgressItem from "@/components/bs-comp/knowledgeUploadComponent/ProgressItem";
-import { Button } from "@/components/bs-ui/button";
+
+
 import { generateUUID } from "@/components/bs-ui/utils";
 import { readFileByLibDatabase } from "@/controllers/API";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";
-import { createWorkflowApi, getWorkflowNodeTemplate } from "@/controllers/API/workflow";
+import { createWorkflowApi,getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { handleUiRequest } from "@/controllers/request";
 import { initNode } from "@/util/flowUtils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate,useParams } from "react-router-dom";
 import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
+import { normalizeApiError } from "@bisheng/api-client";
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
@@ -21,15 +23,13 @@ function resolveParseFailureReason(remark: unknown, t: TranslateFn) {
     const resolved = resolveKnowledgeParseFailure(remark, t);
     if (resolved) return resolved;
 
-    const trimmedRemark = typeof remark === "string" ? remark.trim() : "";
-    if (!trimmedRemark) return t("parseFailed");
-    return trimmedRemark;
+    return t("parseFailed");
 }
 
 export default function FileUploadStep4({ data, kId, hasRepeat }) {
     const { t } = useTranslation('knowledge');
     const { t: flowT } = useTranslation('flow');
-    const { message } = useToast();
+
     const [finish, setFinish] = useState(true)
     const navigate = useNavigate()
     const { id: kid } = useParams()
@@ -117,9 +117,9 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
                             const reason = resolveParseFailureReason(resItem.remark, t);
                             if (!notifiedFailedFileIdsRef.current.has(file.id)) {
                                 notifiedFailedFileIdsRef.current.add(file.id);
-                                message({ variant: 'error', description: reason });
+                                toast.show({ type: 'error', message: String(reason ?? '') });
                             }
-                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason };
+                            updatedFiles[index] = { ...file, progress: 'end', error: true, reason, failureEvidence: resItem };
                         }
                     });
 
@@ -155,7 +155,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [kid, kId, t, data, message]); // Add t to dependencies
+    }, [kid, kId, t, data]); // Add t to dependencies
 
     useEffect(() => {
         return () => {
@@ -178,24 +178,27 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
         }
     }, [files]); // Depend on file status changes
 
-    console.log('files :>> ', files);
 
     let finalId = kid;
     if (kId) {
         finalId = kId.replace(/\D/g, '');
     }
 
-    const [details] = useKnowledgeDetails([finalId])
+    const [, fetchDetails] = useKnowledgeDetails([finalId])
 
     const handleCreateFlow = async (params) => {
+        const details = await fetchDetails([finalId])
+        if (!details[0]?.name) {
+            throw normalizeApiError(details, { message: t('api_errors:fallback') })
+        }
         const model = await getLlmDefaultModel()
 
-        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0]?.name || '', model.model_id, flowT)
-        const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(
+        const flow = await getKnowledgeDefaultFlowTemplate(finalId, details[0].name, model.model_id, flowT)
+        const res = await createWorkflowApi(
             t('documentKnowledgeQa') + generateUUID(5),
             t('retrieveDocumentKnowledge'),
             "",
-            flow))
+            flow)
         history.pushState(null, null, __APP_ENV__.BASE_URL + '/build/apps');
 
         navigate('/flow/' + res.id);
@@ -221,7 +224,7 @@ export default function FileUploadStep4({ data, kId, hasRepeat }) {
                     type='assist'
                     title={t('buildKnowledgeBaseQaAgent')}
                     description={<p>{t('afterDocumentParsing')}</p>}
-                    onClick={handleCreateFlow}
+                    onClick={handleUiRequest(handleCreateFlow)}
                 ></CardComponent>
             </div>}
         </div>

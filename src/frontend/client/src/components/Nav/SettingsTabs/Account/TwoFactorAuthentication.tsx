@@ -247,7 +247,6 @@ const TwoFactorAuthentication: React.FC = () => {
                   isGenerating={isGenerating}
                   onGenerate={handleGenerateQRCode}
                   onNext={() => setPhase('qr')}
-                  onError={(error) => showToast({ message: error.message, status: 'warning' })}
                 />
               )}
 
@@ -256,7 +255,6 @@ const TwoFactorAuthentication: React.FC = () => {
                   secret={secret}
                   otpauthUrl={otpauthUrl}
                   onNext={() => setPhase('verify')}
-                  onError={(error) => showToast({ message: error.message, status: 'warning' })}
                 />
               )}
 
@@ -266,7 +264,6 @@ const TwoFactorAuthentication: React.FC = () => {
                   onTokenChange={setVerificationToken}
                   isVerifying={isVerifying}
                   onNext={handleVerify}
-                  onError={(error) => showToast({ message: error.message, status: 'warning' })}
                 />
               )}
 
@@ -276,7 +273,6 @@ const TwoFactorAuthentication: React.FC = () => {
                   onDownload={handleDownload}
                   downloaded={downloaded}
                   onNext={handleConfirm}
-                  onError={(error) => showToast({ message: error.message, status: 'warning' })}
                 />
               )}
 
@@ -284,7 +280,6 @@ const TwoFactorAuthentication: React.FC = () => {
                 <DisablePhase
                   onDisable={handleDisableVerify}
                   isDisabling={isDisabling}
-                  onError={(error) => showToast({ message: error.message, status: 'warning' })}
                 />
               )}
             </AnimatePresence>

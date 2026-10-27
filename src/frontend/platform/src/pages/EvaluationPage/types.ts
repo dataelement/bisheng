@@ -44,14 +44,14 @@ export enum EvaluationStatusEnum {
 export const EvaluationStatusLabelMap = {
   [EvaluationStatusEnum.running]: {
     label: "inProgress",
-    variant: "secondary",
+    color: "brand" as const,
   },
   [EvaluationStatusEnum.failed]: {
     label: "failed",
-    variant: "destructive",
+    color: "danger" as const,
   },
   [EvaluationStatusEnum.success]: {
     label: "success",
-    variant: "default",
+    color: "success" as const,
   },
 };

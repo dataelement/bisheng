@@ -1,4 +1,5 @@
-import { Button } from "@/components/bs-ui/button"
+import { Alert, Button } from '@bisheng/ui';
+
 import {
   Dialog,
   DialogContent,
@@ -99,18 +100,10 @@ export function ResourceGrantRevokeDialogs({
                 </div>
               </dl>
               <DialogFooter>
-                <Button
-                  variant="outline"
-                  disabled={loading}
-                  onClick={() => onGrantOpenChange(false)}
-                >
+                <Button variant="outlined" disabled={loading} onClick={() => onGrantOpenChange(false)} color="default">
                   {t("cancel")}
                 </Button>
-                <Button
-                  variant="destructive"
-                  disabled={loading}
-                  onClick={onConfirmGrant}
-                >
+                <Button variant="solid" disabled={loading} onClick={onConfirmGrant} color="danger">
                   {t(
                     grant.source_type === "CREATOR_GRANT"
                       ? "openApiManagement.grants.revokeAnyway"
@@ -153,30 +146,19 @@ export function ResourceGrantRevokeDialogs({
             ))}
           </div>
           {automaticGrantCount ? (
-            <div className="rounded-md border border-success-foreground/40 bg-success-background p-3 text-sm">
-              <p className="font-medium">
-                {t("openApiManagement.grants.revokeAllRetainedTitle", {
-                  count: automaticGrantCount,
-                })}
-              </p>
-              <p className="mt-1">
-                {t("openApiManagement.grants.revokeAllRetainedHint")}
-              </p>
-            </div>
+            <Alert
+              type="success"
+              title={t("openApiManagement.grants.revokeAllRetainedTitle", {
+                count: automaticGrantCount,
+              })}
+              description={t("openApiManagement.grants.revokeAllRetainedHint")}
+            />
           ) : null}
           <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={loading}
-              onClick={() => onRevokeAllOpenChange(false)}
-            >
+            <Button variant="outlined" disabled={loading} onClick={() => onRevokeAllOpenChange(false)} color="default">
               {t("cancel")}
             </Button>
-            <Button
-              variant="destructive"
-              disabled={loading}
-              onClick={onConfirmAll}
-            >
+            <Button variant="solid" disabled={loading} onClick={onConfirmAll} color="danger">
               {t("openApiManagement.grants.revokeCount", {
                 count: directGrants.length,
               })}

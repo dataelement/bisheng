@@ -9,6 +9,9 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from bisheng.api.router import router, router_rpc
+from bisheng.app_runtime.api.endpoints.runtime_material import router as runtime_material_router
+from bisheng.app_runtime.api.exception_handlers import register_app_runtime_exception_handlers
+from bisheng.app_runtime.domain.services.app_access_log_service import flush_pending_access_records
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
@@ -20,6 +23,7 @@ from bisheng.open_api.api.exception_handlers import register_open_api_exception_
 from bisheng.open_api.api.middleware import OpenApiAuditMiddleware
 from bisheng.open_api.api.openapi_schema import install_open_api_schema
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
+from bisheng.open_api.domain.services.model_call_record_writer import model_call_record_writer
 from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_runtime
 from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
 from bisheng.public_endpoints.api.router import router_public
@@ -30,10 +34,13 @@ from bisheng.utils.threadpool import thread_pool
 def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
     http_status = status.HTTP_200_OK
     if isinstance(exc, HTTPException):
+        detail = exc.detail
         msg = {
             "status_code": exc.status_code,
-            "status_message": exc.detail["error"] if isinstance(exc.detail, dict) else exc.detail,
+            "status_message": detail["error"] if isinstance(detail, dict) else detail,
         }
+        if isinstance(detail, dict) and isinstance(detail.get("code"), str):
+            msg["data"] = {"code": detail["code"]}
     elif isinstance(exc, BaseErrorCode):
         data = {"exception": str(exc), **exc.kwargs} if exc.kwargs else {"exception": str(exc)}
         msg = {"status_code": exc.code, "status_message": exc.message, "data": data}
@@ -88,12 +95,36 @@ def _register_permission_runtime_contexts() -> None:
     register_department_projection_runtime_context()
 
 
+def _register_app_publish_composition() -> None:
+    """Subscribe F055 to F054's deletion event in this process.
+
+    Also installed in ``worker/main.py``: the API process serves the detail
+    page's delete button, the Celery worker runs the approval outbox. Wiring
+    only one of them looks correct in every manual test and silently fails in
+    production (F055 design D16).
+    """
+    try:
+        from bisheng.app_publish.composition import register as register_app_publish
+
+        register_app_publish()
+    except Exception:
+        logger.exception("app_publish composition root failed to register; continuing startup")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with app.state.open_mcp_runtime.lifespan():
         await initialize_app_context(config=settings)
         _register_permission_runtime_contexts()
+        _register_app_publish_composition()
+        from bisheng.app_runtime.domain.services.entry_authz_service import diagnose_obo_configuration
+
+        diagnose_obo_configuration()
         open_api_call_audit_service.start()
+        # F051: the model protocol face writes one model_call_record per call
+        # write-behind. Own writer, own table — the audit page must not be drowned
+        # by a face a local coding agent calls in a loop.
+        model_call_record_writer.start()
         try:
             await init_default_data()
             # F035 task-mode compatibility data remains unrelated to F048 resource
@@ -140,6 +171,11 @@ async def lifespan(app: FastAPI):
             yield
         finally:
             await open_api_call_audit_service.stop()
+            await model_call_record_writer.stop()
+            # Hosted-app access records are written fire-and-forget (F054 AC-38);
+            # give the in-flight ones a bounded chance to land before the database
+            # goes away, so a deploy restart is not a silent gap in an audit asset.
+            await flush_pending_access_records(timeout=5.0)
             try:
                 dsh_runtime = getattr(app.state, "dsh_runtime", None)
                 if dsh_runtime is not None:
@@ -157,9 +193,19 @@ def create_app():
         lifespan=lifespan,
     )
     app.state.open_mcp_runtime = create_open_mcp_runtime()
+    # /api/v2 and /api/v3 answer with real HTTP status codes while keeping the
+    # platform envelope in the body. Registered via add_exception_handler rather
+    # than in ``_EXCEPTION_HANDLERS`` because they must sit *below*
+    # ``BaseErrorCode`` in the lookup — Starlette walks ``type(exc).__mro__``
+    # and picks the first registered class, so the narrower handlers win for
+    # their own errors and ``handle_http_exception`` keeps every other error
+    # unchanged.
     register_open_api_exception_handlers(app)
     install_open_api_schema(app)
     register_public_exception_handlers(app)
+    # F054: app-proxy branches on a real 401 to tell "our shared secret is
+    # wrong" from "this visitor may not enter" (which is 200 + a decision).
+    register_app_runtime_exception_handlers(app)
 
     # Browsers reject ACAO=* when axios uses withCredentials=true.
     # Override with comma-separated BISHENG_CORS_ORIGINS when needed.
@@ -205,8 +251,12 @@ def create_app():
         return JSONResponse(status_code=401, content={"detail": str(exc)})
 
     app.include_router(router)
+    from bisheng.dsh.api.router import compatibility_router
+
+    app.include_router(compatibility_router)
     app.include_router(router_rpc)
     app.include_router(router_public)
+    app.include_router(runtime_material_router)
     from bisheng.department.api.endpoints.department_limit import (
         router as department_limit_router,
     )

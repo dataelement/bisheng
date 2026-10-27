@@ -7,10 +7,12 @@ from typing import Any
 from pydantic import BaseModel
 
 from bisheng.open_mcp.registry import TOOL_REGISTRY
+from bisheng.open_mcp.tools.apps import APP_HANDLERS
 from bisheng.open_mcp.tools.file import FILE_HANDLERS
+from bisheng.open_mcp.tools.identity import IDENTITY_HANDLERS
 from bisheng.open_mcp.tools.knowledge import KNOWLEDGE_HANDLERS
 
-TOOL_HANDLERS = {**KNOWLEDGE_HANDLERS, **FILE_HANDLERS}
+TOOL_HANDLERS = {**KNOWLEDGE_HANDLERS, **FILE_HANDLERS, **IDENTITY_HANDLERS, **APP_HANDLERS}
 
 
 async def execute_tool(name: str, arguments: dict[str, Any]) -> BaseModel:

@@ -5,9 +5,10 @@ Backend Service:  {{ include "bisheng.backendService" . }}:{{ .Values.backend.se
 
 {{- if .Values.sandbox.enabled }}
 
-Sandbox discovery (worker):
-  pattern={{ .Values.sandbox.discoverHostPattern }}
-  index_start={{ .Values.sandbox.discoverIndexStart }}
+Sandbox endpoints (one URL per replica, not the Service VIP):
+{{- range .Values.sandbox.endpoints }}
+  {{ . }}
+{{- end }}
 
 Install the sibling chart first, for example:
 

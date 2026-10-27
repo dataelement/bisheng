@@ -4,7 +4,7 @@
 drives one ``AgentRunner`` per run. The node stays synchronous: the async
 preparation and clean-up run through ``run_async_safe`` (design decision 4).
 
-Errors a user must see with their own code (11075-11077) are re-raised as
+Errors a user must see with their own code (11077-11079) are re-raised as
 ``AgentSkillRunError``, whose text carries the error as JSON behind a marker so
 the workflow failure event can hand the code and the skill name to the
 frontend for translation.

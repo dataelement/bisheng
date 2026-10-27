@@ -1,13 +1,15 @@
 // @ts-strict-ignore
+import { MessageStoreProvider as AssistantMessageStoreProvider } from '@/components/bs-comp/chatComponent/messageStore';
+import { Button, toast } from '@bisheng/ui';
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { changeAssistantStatusApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
 import { checkAppEditPermission } from "@/controllers/API/flow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleUiRequest, showApiError } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
 import { OnlineState } from "@/types/flow";
 import { useEffect, useRef, useState } from "react";
@@ -20,7 +22,7 @@ import Setting from "./Setting";
 import TestChat from "./TestChat";
 import { useAutoDescription } from "./useAutoDescription";
 
-export default function EditAssistant() {
+function EditAssistantContent() {
     const { t } = useTranslation()
     const { id: assisId } = useParams()
     const navigate = useNavigate()
@@ -41,17 +43,17 @@ export default function EditAssistant() {
     const flowInit = async () => {
         await checkAppEditPermission(assisId, 5)
 
-        captureAndAlertRequestErrorHoc(getAssistantDetailApi(assisId, 'v1').then((res) => {
+        await getAssistantDetailApi(assisId, 'v1').then((res) => {
             setAssistantDetail(res)
             setChecking(false)
             setShowGuideQuestion(true)
             setGuideQuestion(res.guide_question?.filter((item) => item) || [])
             res.guide_word && insetBsMsg(res.guide_word)
-        }))
+        })
     }
 
     useEffect(() => {
-        flowInit()
+        void flowInit().catch(showApiError).finally(() => setChecking(false))
     }, [])
 
     // Store displayed guide words independently
@@ -62,33 +64,32 @@ export default function EditAssistant() {
         if (save && !canEdit) return
         destory()
         setOpenChat(false)
+        try {
         save ? await handleSave(true) : await new Promise((resolve) => setTimeout(resolve, 0))
         saveAfter()
         startNewRound(t('build.configurationUpdated'))
         setGuideQuestion(assistantState.guide_question.filter((item) => item))
         assistantState.guide_word && insetBsMsg(assistantState.guide_word)
-        setOpenChat(true)
+        } finally {
+            setOpenChat(true)
+        }
     }
 
-    const { message, toast } = useToast()
+
     // Save assistant details
     const handleSave = async (showMessage = false) => {
         if (!canEdit) return
         if (!handleCheck()) return
-        await captureAndAlertRequestErrorHoc(saveAssistanttApi({
+        await saveAssistanttApi({
             ...assistantState,
             flow_list: assistantState.flow_list.map(item => item.id),
             tool_list: assistantState.tool_list.map(item => item.id),
             knowledge_list: assistantState.knowledge_list.map(item => item.id),
             guide_question: assistantState.guide_question.filter((item) => item),
             logo: assistantState.viewLogo ? assistantState.logo : '',
-        })).then(res => {
+        }).then(res => {
             if (!res) return
-            showMessage && message({
-                title: t('prompt'),
-                variant: 'success',
-                description: t('skills.saveSuccessful')
-            })
+            showMessage && toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('skills.saveSuccessful') ?? '')].filter(Boolean).join('\n') })
         })
         saveAfter()
     }
@@ -98,20 +99,14 @@ export default function EditAssistant() {
         if (!handleCheck()) return
         if (online) {
             await handleSave()
-            await captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 2)).then(res => {
-                if (res === false) return
-                message({
-                    title: t('prompt'),
-                    variant: 'success',
-                    description: t('skills.onlineSuccessful')
-                })
+            await changeAssistantStatusApi(assistantState.id, 2).then(() => {
+                toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('skills.onlineSuccessful') ?? '')].filter(Boolean).join('\n') })
             })
             setTimeout(() => {
                 navigate('/build')
             }, 1200);
         } else {
-            captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 1)).then(res => {
-                if (res === false) return
+            await changeAssistantStatusApi(assistantState.id, 1).then(() => {
                 changeStatus(1)
             })
         }
@@ -139,11 +134,7 @@ export default function EditAssistant() {
         }
 
         if (errors.length) {
-            message({
-                title: t('prompt'),
-                variant: 'error',
-                description: errors
-            })
+            toast.show({ type: 'error', message: [String(t('prompt') ?? ''), errors.filter(Boolean).join('\n')].filter(Boolean).join('\n') })
             return false
         }
         return true
@@ -166,7 +157,7 @@ export default function EditAssistant() {
     if (checking) return null
 
     return <div className="bg-background-main">
-        <Header loca={loca} canEdit={canEdit} onSave={() => handleSave(true)} onLine={handleOnline} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
+        <Header loca={loca} canEdit={canEdit} onSave={handleUiRequest(() => handleSave(true))} onLine={handleUiRequest(handleOnline)} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
         <div className="h-[calc(100vh-70px-var(--license-banner-h,0px))]">
             <div className={`flex h-full ${showApiPage ? 'hidden' : ''}`}>
                 <div className="w-[60%]">
@@ -177,9 +168,9 @@ export default function EditAssistant() {
                     </div>
                 </div>
                 <div className="w-[40%] h-full bg-[#fff] dark:bg-background-main relative">
-                    {openChat && <TestChat guideQuestion={guideQuestion} assisId={assisId} onClear={() => handleStartChat(false)}></TestChat>}
+                    {openChat && <TestChat guideQuestion={guideQuestion} assisId={assisId} onClear={handleUiRequest(() => handleStartChat(false))}></TestChat>}
                     {/* Mask button triggered by changes to save */}
-                    {changed && <div className="absolute w-full bottom-0 h-60" onClick={() => handleStartChat(true)}></div>}
+                    {changed && <div className="absolute w-full bottom-0 h-60" onClick={handleUiRequest(() => handleStartChat(true))}></div>}
                 </div>
             </div>
             <div className={`h-full ${showApiPage ? '' : 'hidden'}`}>
@@ -194,16 +185,16 @@ export default function EditAssistant() {
                 </DialogHeader>
                 <DialogFooter>
                     {
-                        assistantState.status !== OnlineState.OnLine && <Button className="leave h-8" onClick={handleSaveAndClose}>
+                        assistantState.status !== OnlineState.OnLine && <Button className="leave" onClick={handleUiRequest(handleSaveAndClose)}>
                             {t('build.leaveAndSave')}
                         </Button>
                     }
-                    <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>
+                    <Button variant="solid" onClick={() => blocker.proceed?.()} color="danger">
                         {t('build.leaveWithoutSave')}
                     </Button>
-                    <Button className="h-8" variant="outline" onClick={() => {
+                    <Button variant="outlined" onClick={() => {
                         blocker.reset?.()
-                    }}>
+                    }} color="default">
                         {t('cancel')}
                     </Button>
                 </DialogFooter>
@@ -231,4 +222,8 @@ const useBeforeUnload = (changed, checking) => {
     }, [checking, changed])
 
     return useBlocker(changed);
+}
+
+export default function EditAssistant() {
+    return <AssistantMessageStoreProvider><EditAssistantContent /></AssistantMessageStoreProvider>;
 }

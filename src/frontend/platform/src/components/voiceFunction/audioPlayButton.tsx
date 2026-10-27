@@ -1,19 +1,23 @@
 // @ts-strict-ignore
+import { notification } from '@bisheng/ui';
 // components/AudioPlayButton.tsx
 import { textToSpeech } from '@/controllers/API/workbench';
-import { Loader, Volume2 } from 'lucide-react';
+import { showApiError } from '@/controllers/request';
+import { isApiError } from '@bisheng/api-client';
+import { Outlined } from "bisheng-icons";
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from '../bs-ui/toast/use-toast';
+
 import { useAudioPlayerStore } from './audioPlayerStore';
 
 interface AudioPlayButtonProps {
   messageId: string;
+  compact?: boolean;
   msg?: string;
   version?: string;
 }
 
-export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps) => {
+export const AudioPlayComponent = ({ messageId, msg = '', compact = false }: AudioPlayButtonProps) => {
   const [error, setError] = useState('');
   const { t } = useTranslation('flow')
   const [version] = useState(window.chat_version || 'v1');
@@ -98,11 +102,8 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
       });
     } catch (err) {
       console.error('播放请求异常详情:', err);
-      toast({
-        title: t('prompt'),
-        variant: 'error',
-        description: t('playbackUnavailable')
-      });
+      if (isApiError(err)) showApiError(err);
+      else notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(t('playbackUnavailable') ?? '') });
       setLoading(false);
       setCurrentPlayingId(null);
     }
@@ -113,12 +114,14 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
       <button
         onClick={handlePlay}
         disabled={isThisLoading}
+        className={compact ? "inline-flex items-center justify-center text-text-3" : undefined}
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isThisLoading ? (
-          <Loader size={20} strokeWidth={1.8} color="#9ca3af" className={'mt-0.5 mr-1 animate-spin'} />
+          <Outlined.Loading size={compact ? 14 : 20} color={compact ? undefined : "#9ca3af"} className={compact ? "animate-spin" : "mt-0.5 mr-1 animate-spin"} />
         ) : (
-          <Volume2 size={20} strokeWidth={1.8} color="#9ca3af" className={`cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary`} />
+          compact ? (isPlaying ? <Outlined.PlayerPause size={14} /> : <Outlined.VolumeNotice size={14} />)
+            : <Outlined.VolumeNotice size={20} color="#9ca3af" className="cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary" />
 
         )}
       </button>

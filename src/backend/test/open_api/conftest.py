@@ -26,6 +26,20 @@ class FakeRedis:
 
 
 @pytest.fixture
+def open_platform_enabled(monkeypatch):
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.open_platform, "enabled", True)
+
+
+@pytest.fixture
+def open_platform_disabled(monkeypatch):
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(settings.open_platform, "enabled", False)
+
+
+@pytest.fixture
 async def open_api_db(monkeypatch):
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.pool import StaticPool
@@ -94,6 +108,92 @@ def fake_redis(monkeypatch):
         module = importlib.import_module(module_name)
         monkeypatch.setattr(module, "get_redis_client", get_fake_redis)
     return redis
+
+
+@asynccontextmanager
+async def _mcp_app():
+    """A FastAPI app carrying only the MCP path (F067 ``open_mcp``), with its session manager running.
+
+    Not ``bisheng.main.app``, so a test does not pull in the whole router. Each
+    caller gets its own runtime because ``StreamableHTTPSessionManager.run()``
+    may be entered once per instance.
+
+    This is a plain context manager rather than an async fixture on purpose. The
+    session manager's ``run()`` opens an anyio task group, and a task group has
+    to be closed in the task that opened it — pytest-asyncio tears async
+    fixtures down in a different task, which fails with "attempted to exit
+    cancel scope in a different task". Entering it inside the test's own body
+    keeps both ends in one task.
+    """
+
+    from fastapi import FastAPI
+
+    from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
+    from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_runtime
+
+    runtime = create_open_mcp_runtime()
+    app = FastAPI()
+    register_open_api_exception_handlers(app)
+    app.add_middleware(OpenMcpDispatchMiddleware, mcp_app=runtime.app)
+    async with runtime.lifespan():
+        yield app
+
+
+@pytest.fixture
+def mcp_http():
+    """``async with mcp_http(headers) as client`` → raw HTTP against the MCP route.
+
+    For the transport-level facts a protocol client hides: the status code of a
+    refusal, whether the bare path redirects, what a real ``Host`` header does.
+    """
+
+    import httpx
+
+    @asynccontextmanager
+    async def open_client(headers: dict[str, str] | None = None, **client_kwargs):
+        async with _mcp_app() as app:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://testserver",
+                headers=headers or {},
+                **client_kwargs,
+            ) as client:
+                yield client
+
+    return open_client
+
+
+@pytest.fixture
+def mcp_session():
+    """``async with mcp_session(headers) as session`` → a real initialised ``ClientSession``.
+
+    A genuine MCP client over the app in-process, because "any standard client
+    connects with no changes" is only verified by a standard client: hand-rolled
+    JSON-RPC posts would keep passing with a broken handshake.
+    """
+
+    import httpx
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    @asynccontextmanager
+    async def connect(headers: dict[str, str] | None = None):
+        async with _mcp_app() as app:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://testserver",
+                headers=headers or {},
+            ) as http_client:
+                async with streamable_http_client("http://testserver/api/v2/mcp", http_client=http_client) as (
+                    read_stream,
+                    write_stream,
+                    _get_session_id,
+                ):
+                    async with ClientSession(read_stream, write_stream) as session:
+                        await session.initialize()
+                        yield session
+
+    return connect
 
 
 @pytest.fixture

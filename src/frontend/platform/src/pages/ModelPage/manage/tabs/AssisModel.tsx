@@ -1,28 +1,41 @@
 // @ts-strict-ignore
-import { TrashIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input, Select, toast } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
+
+
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+
+import { ModelFieldHint } from "../ModelFieldHint";
 import { generateUUID } from "@/components/bs-ui/utils";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio-group";
+import { RadioGroup, Radio as RadioGroupItem } from "@bisheng/ui";
 import { getAssistantModelEnvelope, updateAssistantModelConfig } from "@/controllers/API/finetune";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { useSystemConfigEnvelope } from "../useSystemConfigEnvelope";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import uniqBy from "lodash-es/uniqBy";
-import { Plus } from "lucide-react";
+
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ModelSelect } from "./KnowledgeModel";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 
+
+
+const executorTypeOptions = [
+    { value: "function call", label: "Function call" },
+    { value: "ReAct", label: "ReAct" },
+]
 
 const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
     const { t } = useTranslation('model')
+    const selectLabels = useSelectLabels()
+    const yesNoOptions = [
+        { value: "1", label: t('model.yes') },
+        { value: "0", label: t('model.no') },
+    ]
 
     return <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 110px 76px 90px 40px" }}>
         <div className="pr-2">
@@ -34,52 +47,34 @@ const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
             />
         </div>
         <div className="pr-2">
-            <Select value={item.agent_executor_type} onValueChange={(val) => updateField(index, 'agent_executor_type', val)}>
-                <SelectTrigger>
-                    <SelectValue placeholder="" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectItem value="function call">Function call</SelectItem>
-                        <SelectItem value="ReAct">ReAct</SelectItem>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
-        </div>
-        <div className="pr-2">
-            <Select value={item.streaming ? "1" : "0"} onValueChange={(val) => updateField(index, 'streaming', val === "1")}>
-                <SelectTrigger>
-                    <SelectValue placeholder="" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectItem value="1">{t('model.yes')}</SelectItem>
-                        <SelectItem value="0">{t('model.no')}</SelectItem>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
-        </div>
-        <div className="pr-2">
-            <Input
-                type="number"
-                value={item.knowledge_max_content}
-                onChange={(e) => updateField(index, 'knowledge_max_content', Math.min(parseInt(e.target.value), 15000))}
-                min={1}
-                max={15000}
+            <Select
+                {...selectLabels}
+                aria-label={t('model.assistantExecutionMode')}
+                options={executorTypeOptions}
+                value={item.agent_executor_type || null}
+                onChange={(val) => { if (val != null) updateField(index, 'agent_executor_type', String(val)) }}
             />
         </div>
         <div className="pr-2">
-            <Select value={item.knowledge_sort_index ? "1" : "0"} onValueChange={(val) => updateField(index, 'knowledge_sort_index', val === "1")}>
-                <SelectTrigger>
-                    <SelectValue placeholder="" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectItem value="1">{t('model.yes')}</SelectItem>
-                        <SelectItem value="0">{t('model.no')}</SelectItem>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
+            <Select
+                {...selectLabels}
+                aria-label={t('model.streamingOutput')}
+                options={yesNoOptions}
+                value={item.streaming ? "1" : "0"}
+                onChange={(val) => updateField(index, 'streaming', val === "1")}
+            />
+        </div>
+        <div className="pr-2">
+            <Input type="number" value={item.knowledge_max_content} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 1, max: 15000 })) return; return updateField(index, 'knowledge_max_content', Math.min(parseInt(e.target.value), 15000)); }} min={1} max={15000} />
+        </div>
+        <div className="pr-2">
+            <Select
+                {...selectLabels}
+                aria-label={t('model.reorderAfterRetrieval')}
+                options={yesNoOptions}
+                value={item.knowledge_sort_index ? "1" : "0"}
+                onChange={(val) => updateField(index, 'knowledge_sort_index', val === "1")}
+            />
         </div>
         <div className="m-auto">
             <RadioGroup value={item.default ? "1" : "0"} onValueChange={(val) => updateField(index, 'default', val === "1")}>
@@ -87,7 +82,7 @@ const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
             </RadioGroup>
         </div>
         <div className="m-auto">
-            <TrashIcon className="text-gray-500 cursor-pointer size-4" onClick={() => deleteRow(index)} />
+            <Outlined.Delete className="text-gray-500 cursor-pointer size-4" onClick={() => deleteRow(index)} />
         </div>
     </div>
 };
@@ -114,6 +109,7 @@ const defaultValue = {
 export default function AssisModel({ llmOptions, onBack }) {
     const [form, setForm] = useState({ ...defaultValue });
     const { t } = useTranslation('model')
+    const selectLabels = useSelectLabels()
     const queryClient = useQueryClient()
 
     const { config, loading, inheritedFromRoot, fallbackBlocked, clearInherited: markEdited } =
@@ -176,32 +172,32 @@ export default function AssisModel({ llmOptions, onBack }) {
         setForm({ ...form, llm_list: updatedList });
     };
 
-    const { message } = useToast()
+
     const handleSave = () => {
         console.log('Form data to save:', form);
         if (form.llm_list.some(el => el.model_id === null)) {
-            return message({ variant: 'error', description: t('model.assistantInferenceModel') + t('bs:required') })
+            return toast.show({ type: 'error', message: String(t('model.assistantInferenceModel') + t('bs:required')) })
         }
         if (form.auto_llm.model_id === null) {
-            return message({ variant: 'error', description: t('model.assistantAutoOptimizationModel') + t('bs:required') })
+            return toast.show({ type: 'error', message: String(t('model.assistantAutoOptimizationModel') + t('bs:required')) })
         }
         const uniqueList = uniqBy(form.llm_list, 'model_id');
         if (uniqueList.length !== form.llm_list.length) {
-            return message({ variant: 'error', description: t('model.assistantInferenceModelRepetition') })
+            return toast.show({ type: 'error', message: String(t('model.assistantInferenceModelRepetition') ?? '') })
         }
 
-        captureAndAlertRequestErrorHoc(updateAssistantModelConfig(form).then(res => {
-            message({ variant: 'success', description: t('model.saveSuccess') })
+        void updateAssistantModelConfig(form).then(() => {
+            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') })
             // The root QueryClient sets refetchOnMount: false globally, so
             // invalidateQueries only marks the entry stale and the workbench
             // dropdown still serves cached data on next mount. removeQueries
             // drops the cache entirely, forcing a fresh fetch on next read.
-            queryClient.removeQueries('QueryAssistantModelsKey')
-        }));
+            queryClient.removeQueries({ queryKey: ['QueryAssistantModelsKey'] })
+        }).catch(showApiError);
     };
 
     if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <LoadingIcon />
+        <Outlined.Loading  className="size-4 animate-spin"/>
     </div>
 
     return (
@@ -217,16 +213,16 @@ export default function AssisModel({ llmOptions, onBack }) {
                         <Label className="bisheng-label">{t('model.model')}<span className="text-red-500 text-xs">*</span></Label>
                         <Label className="bisheng-label">
                             <span>{t('model.assistantExecutionMode')}</span>
-                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.assistantExecutionModeTooltip')} />
+                            <ModelFieldHint className="ml-1" content={t('model.assistantExecutionModeTooltip')} />
                         </Label>
                         <Label className="bisheng-label">{t('model.streamingOutput')}</Label>
                         <Label className="bisheng-label">
                             <span>{t('model.assistantKnowledgeBaseMaxCharacters')}</span>
-                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.assistantKnowledgeBaseMaxCharactersTooltip')} />
+                            <ModelFieldHint className="ml-1" content={t('model.assistantKnowledgeBaseMaxCharactersTooltip')} />
                         </Label>
                         <Label className="bisheng-label">
                             <span>{t('model.reorderAfterRetrieval')}</span>
-                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.reorderAfterRetrievalTooltip')} />
+                            <ModelFieldHint className="ml-1" content={t('model.reorderAfterRetrievalTooltip')} />
                         </Label>
                         <Label className="bisheng-label text-center">{t('model.setAsDefault')}</Label>
                         <div></div>
@@ -241,8 +237,8 @@ export default function AssisModel({ llmOptions, onBack }) {
                             deleteRow={deleteRow}
                         />
                     ))}
-                    <Button variant="outline" size="icon" onClick={addNewRow}>
-                        <Plus className="size-5" />
+                    <Button variant="outlined" size="medium" onClick={addNewRow} color="default" iconOnly>
+                        <Outlined.Plus className="size-5" />
                     </Button>
                 </div>
             </div>
@@ -260,23 +256,22 @@ export default function AssisModel({ llmOptions, onBack }) {
                             options={llmOptions}
                             onChange={(val) => updateAutoLLMField('model_id', val)}
                         />
-                        <Select value={form.auto_llm.streaming ? "1" : "0"} onValueChange={(val) => updateAutoLLMField('streaming', val === "1")}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectItem value="1">{t('model.yes')}</SelectItem>
-                                    <SelectItem value="0">{t('model.no')}</SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+                        <Select
+                            {...selectLabels}
+                            aria-label={t('model.streamingOutput')}
+                            options={[
+                                { value: "1", label: t('model.yes') },
+                                { value: "0", label: t('model.no') },
+                            ]}
+                            value={form.auto_llm.streaming ? "1" : "0"}
+                            onChange={(val) => updateAutoLLMField('streaming', val === "1")}
+                        />
                     </div>
                 </div>
             </div>
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
-                <Button className="px-10" onClick={handleSave}>{t('model.save')}</Button>
+                <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
+                <Button disabled={!config} onClick={handleSave}>{t('model.save')}</Button>
             </div>
         </div>
     );

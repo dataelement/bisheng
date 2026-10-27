@@ -1,0 +1,66 @@
+import { act,cleanup,fireEvent,render,waitFor } from '@testing-library/react';
+import { afterEach,expect,it,vi } from 'vitest';
+import { CitationDocumentPreview } from './CitationDocumentPreview';
+import { CitationReferences } from './CitationReferences';
+import type { CitationServices,ChatCitation } from './types';
+import type { CitationFileProps } from './viewTypes';
+const detail:ChatCitation={citationId:'knowledgeSearch_doc',type:'knowledgeSearch',sourcePayload:{documentName:'test.mp4',fileType:'mp4',items:[{itemId:'a',content:'cited passage'}]}};
+function services():CitationServices {return {scopeKey:'A',localize:key=>key,getCitationDetail:vi.fn().mockResolvedValue(detail),resolveCitationDetails:vi.fn().mockResolvedValue([detail]),getCitationUnresolvedReason:()=>undefined,resolveDocumentUrls:vi.fn().mockResolvedValue({originalUrl:'/movie.mp4',previewUrl:'/transcript.md'}),download:vi.fn(),openArticle:vi.fn()};}
+const renderFile=(props:CitationFileProps)=><div data-testid="viewer">{props.fileUrl}|{props.transcriptUrl}<button onClick={props.onDownloadFile}>download</button></div>;
+afterEach(cleanup);
+it('renders original media alongside its transcript and downloads the original without writes',async()=>{
+ const api=services();const view=render(<CitationDocumentPreview preview={{detail}} services={api} renderFile={renderFile}/>);
+ await waitFor(()=>expect(view.getByTestId('viewer').textContent).toContain('/movie.mp4|/transcript.md'));
+ fireEvent.click(view.getByText('download'));expect(api.download).toHaveBeenCalledWith('/movie.mp4','test.mp4');
+ expect(api.getCitationDetail).not.toHaveBeenCalled();
+});
+it('shows an unavailable state after a resource failure without mounting a successful viewer',async()=>{
+ const api=services();vi.mocked(api.resolveDocumentUrls).mockRejectedValue(new Error('403'));
+ const view=render(<CitationDocumentPreview preview={{detail}} services={api} renderFile={renderFile}/>);
+ await waitFor(()=>expect(view.getByText('shared:citations.com_citation.preview_unavailable')).toBeTruthy());
+ expect(view.queryByTestId('viewer')).toBeNull();
+});
+it('keeps local-only audit sources read-only while exposing the shared source card',async()=>{
+ const api=services();const view=render(<CitationReferences content="knowledgeSearch_doc:a" citations={[detail]} services={api} renderFile={renderFile} allowRemoteResolve={false} panelOnly/>);
+ await waitFor(()=>expect(view.getByRole('button',{name:/test.*\.mp4/})).toBeTruthy());
+ fireEvent.click(view.getByRole('button',{name:/test.*\.mp4/}));
+ await waitFor(()=>expect(view.getByTestId('viewer')).toBeTruthy());
+ expect(api.getCitationDetail).not.toHaveBeenCalled();expect(api.resolveCitationDetails).not.toHaveBeenCalled();
+});
+it('does not mount a denied preview from a stale seed or call its file resolver',async()=>{
+ const api=services();api.getCitationUnresolvedReason=()=> 'forbidden';
+ const view=render(<CitationReferences content="knowledgeSearch_doc:a" citations={[detail]} services={api} renderFile={renderFile} panelOnly/>);
+ await waitFor(()=>expect(view.getByText('shared:citations.com_message.source_load_failed')).toBeTruthy());
+ expect(view.queryByTestId('viewer')).toBeNull();expect(api.resolveDocumentUrls).not.toHaveBeenCalled();
+});
+it.each(['webSearch','articleSearch','tempSearch'])('retains seeded %s sources without requiring a private registry lookup',async type=>{
+ const api=services();const seeded:ChatCitation={citationId:type+'_cached',type,sourcePayload:{title:'Cached source',documentName:'temporary.txt',sourceUrl:'/cached.txt',url:'https://example.com/source'}};
+ vi.mocked(api.resolveCitationDetails).mockRejectedValue(new Error('Registry no longer available'));
+ const view=render(<CitationReferences content={`${seeded.citationId}:a`} citations={[seeded]} services={api} renderFile={renderFile} panelOnly/>);
+ await waitFor(()=>expect(api.resolveCitationDetails).not.toHaveBeenCalled());
+ expect(view.container.textContent).toContain(type==='tempSearch'?'temporary':'Cached source');
+});
+
+it('opens a complete temporary source seed without asking its unavailable registry',async()=>{
+ const api=services();const seeded:ChatCitation={citationId:'tempSearch_legacy',type:'tempSearch',sourcePayload:{documentName:'temporary.txt',sourceUrl:'/temporary.txt'}};
+ vi.mocked(api.getCitationDetail).mockRejectedValue(new Error('Registry expired'));
+ const view=render(<CitationReferences content="tempSearch_legacy:a" citations={[seeded]} services={api} renderFile={renderFile} panelOnly/>);
+ fireEvent.click(await view.findByRole('button',{name:/temporary.*\.txt/}));
+ await waitFor(()=>expect(view.getByTestId('viewer')).toBeTruthy());
+ expect(api.getCitationDetail).not.toHaveBeenCalled();
+ expect(api.resolveDocumentUrls).toHaveBeenCalledWith(seeded);
+});
+it.each(['close','unmount','scope'])('ignores a source request failure after %s',async mode=>{
+ const api=services();const unavailable=vi.fn();let fail!:(error:Error)=>void;
+ vi.mocked(api.getCitationDetail).mockImplementation(()=>new Promise((_,reject)=>{fail=reject;}));
+ const props={content:'knowledgeSearch_doc:a',citations:[detail],services:api,renderFile,onUnavailable:unavailable};
+ const view=render(<CitationReferences {...props}/>);
+ fireEvent.click(view.container.querySelector('[data-citation-references-trigger]')!);
+ fireEvent.click(await view.findByRole('button',{name:/test.*\.mp4/}));
+ expect(api.getCitationDetail).toHaveBeenCalledTimes(1);
+ if(mode==='unmount')view.unmount();
+ else if(mode==='close')fireEvent.click(view.getByRole('button',{name:'shared:citations.com_message.source_panel_close'}));
+ else view.rerender(<CitationReferences {...props} services={{...api,scopeKey:'B'}}/>);
+ await act(async()=>fail(new Error('Old source failed')));
+ expect(unavailable).not.toHaveBeenCalled();
+});

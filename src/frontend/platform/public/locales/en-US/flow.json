@@ -8,6 +8,9 @@
   "chooseTemplateOrCreateBlank": "You can choose a template to start with or create a blank application.",
   "workflow": "Workflow",
   "assistant": "Assistant",
+  "hostedApp": "Hosted App",
+  "hostedAppDesc": "Write your own code and deploy it",
+  "viewTutorial": "Read the deploy guide",
   "skill": "Skill",
   "search": "Search",
   "confirmDeleteTemplate": "Are you sure you want to delete the {{type}} template?",
@@ -620,13 +623,13 @@
       }
     },
     "tool": {
-      "parameterGroup": "Tool Parameters",
-      "outputGroup": "Output",
       "工具参数": "Tool Parameters",
       "输出": "Output",
       "output": {
         "label": "Output Variable"
-      }
+      },
+      "parameterGroup": "Tool Parameters",
+      "outputGroup": "Output"
     },
     "subflow": {
       "name": "Subflow",
@@ -661,6 +664,10 @@
       }
     }
   },
+  "rerunWorkflow": "Run again",
+  "type": "Type",
+  "valueType": "Value type",
+  "selectDbType": "Select a database type",
   "agentRuntime": {
     "formatError": "The file content does not match its format and may not open",
     "notice": {

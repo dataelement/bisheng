@@ -1,9 +1,10 @@
+import { Button, SearchInput } from '@bisheng/ui';
 import { useSubjectSearch } from "./useSubjectSearch"
 import { SubjectBusinessId, SubjectSearchStatus } from "./SubjectSearchStatus"
 import { useLazyDepartmentTree } from "@/components/bs-comp/department"
-import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
-import { SearchInput } from "@/components/bs-ui/input"
+
+import { Checkbox } from '@bisheng/ui';
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import {
   getDepartmentChildrenApi,
@@ -12,7 +13,7 @@ import {
   searchGlobalMembersApi,
 } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { Building2, ChevronDown, ChevronRight, Loader2, User as UserIcon, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -133,7 +134,7 @@ export default function DepartmentUsersSelect({
       } catch (error) {
         // Never expose unvalidated candidates or retry indefinitely from render.
         setDeptUsersMap((prev) => ({ ...prev, [did]: [] }))
-        await captureAndAlertRequestErrorHoc(Promise.reject(error))
+        showApiError(error)
       } finally {
         setLoadingDeptIds((prev) => {
           const next = new Set(prev)
@@ -162,7 +163,8 @@ export default function DepartmentUsersSelect({
   })
   const searchingUsers = search.loading
   const searchedUsers = search.rows
-  useEffect(() => { if (!open) search.changeKeyword("") }, [open])
+  const changeSearchKeyword = search.changeKeyword
+  useEffect(() => { if (!open) changeSearchKeyword("") }, [open, changeSearchKeyword])
 
   const setPicked = (user: DepartmentUserOption, departmentPath: string) => {
     const id = Number(user.value)
@@ -207,7 +209,7 @@ export default function DepartmentUsersSelect({
         onClick={() => setPicked(u, departmentPath)}
       >
         <div className="relative shrink-0 self-stretch" style={{ width: depth * TREE_INDENT_PER_LEVEL }} aria-hidden />
-        <Checkbox checked={selected} disabled={locked} onClick={(e) => e.stopPropagation()} onCheckedChange={() => setPicked(u, departmentPath)} />
+        <Checkbox className="peer" checked={selected} disabled={locked} onClick={(e) => e.stopPropagation()} onCheckedChange={() => setPicked(u, departmentPath)} />
         <UserIcon className="mx-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate">{u.label}</span>
         <SubjectBusinessId value={u.external_id} />
@@ -286,12 +288,7 @@ export default function DepartmentUsersSelect({
     <Popover open={open} onOpenChange={setOpen} modal={false}>
       <div className={`w-full ${className}`.trim()}>
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            className="h-auto min-h-9 w-full justify-between px-3 py-1.5 font-normal"
-          >
+          <Button type="button" variant="outlined" disabled={disabled} className="h-auto min-h-9 w-full justify-between px-3 py-1.5 font-normal" color="default">
             <span className="min-w-0 flex-1 truncate text-left">{displayText}</span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
           </Button>
@@ -330,11 +327,7 @@ export default function DepartmentUsersSelect({
           className="flex min-h-0 flex-col gap-2 overflow-hidden"
           style={{ maxHeight: "min(504px, calc(var(--radix-popover-content-available-height, 520px) - 1rem))" }}
         >
-          <SearchInput
-            placeholder={searchPlaceholder || t("subjectSearch.userPlaceholder")}
-            className="mb-1 shrink-0"
-            {...search.inputProps}
-          />
+          <SearchInput placeholder={searchPlaceholder || t("subjectSearch.userPlaceholder")} {...search.inputProps} className={"mb-1 shrink-0"} />
           <div
             className="min-h-0 flex-1 overflow-y-auto rounded-md border"
             // Radix popover portaled outside the Dialog's react-remove-scroll
@@ -370,7 +363,7 @@ export default function DepartmentUsersSelect({
                         setPicked({ value: u.user_id, label: u.user_name, external_id: u.external_id }, deptLabel)
                       }
                     >
-                      <Checkbox
+                      <Checkbox className="peer"
                         checked={selectedMap.has(Number(u.user_id))}
                         disabled={lockedSet.has(Number(u.user_id))}
                         onClick={(e) => e.stopPropagation()}

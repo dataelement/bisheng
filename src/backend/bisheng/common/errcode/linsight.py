@@ -8,7 +8,7 @@ class FileUploadError(BaseErrorCode):
 
 
 # ---------------------------------------------------------------------------
-# Task-mode FOLDER upload limits (11021–11023). Numbered next to FileUploadError
+# Task-mode FOLDER upload limits (11021-11023). Numbered next to FileUploadError
 # (11020) because they belong to the same upload family. The frontend enforces
 # the same three numbers for instant feedback; these are the server-side gate,
 # so a user normally never sees them.
@@ -62,6 +62,22 @@ class LinsightBishengLLMError(BaseErrorCode):
     Msg: str = "InspirationBisheng LLMRelated Errors"
 
 
+# F087: the task's context still exceeded the model's context window after the
+# framework compressed history and retried. Written as ``error_code`` by
+# ``classify_for_event`` for the ``context_overflow`` error type.
+class LinsightContextOverflowError(BaseErrorCode):
+    Code: int = 11075
+    Msg: str = "The task content exceeds the model's context length"
+
+
+# F087: generating the summary while compressing task history failed twice.
+# Raised by the task-mode summarization middleware; the classifier matches it by
+# class name (``common`` must not import ``linsight``), so keep the name stable.
+class LinsightContextCompressFailedError(BaseErrorCode):
+    Code: int = 11076
+    Msg: str = "Failed to compress the task history"
+
+
 # The Inspiration session version has been completed or is being executed and cannot be executed again
 class LinsightSessionVersionRunningError(BaseErrorCode):
     Code: int = 11120
@@ -91,13 +107,12 @@ class InviteCodeBindError(BaseErrorCode):
 
 
 # ---------------------------------------------------------------------------
-# F035 灵思任务模式 · Skill 管理错误码（段位 11050–11069）
-#
-# 契约 release-contract 表 3 将 Skill 管理分配在 11050–11069 段。原占用该段的存量
-# SOP 检索/管理错误码（LinsightVectorModelError 11050 / LinsightDocSearchError 11060
-# / LinsightDocNotFoundError 11070，design §8.6「计划下线的 SOP 动态生成链路」）已
-# 随 SOP 残留代码整体移除（2026-06-17，sop_manage.py 等已删，段位腾空）。
-# Skill 错误码沿用已发布编号 11051–11058，不回迁到腾空的 11050（已发布编码不重编）。
+# F035 skill-management errors (11050-11069).
+# The release contract reserves this band for skills. Legacy SOP errors
+# LinsightVectorModelError (11050), LinsightDocSearchError (11060) and
+# LinsightDocNotFoundError (11070) were removed with the SOP implementation
+# on 2026-06-17 (design section 8.6). Keep published skill codes 11051-11058
+# unchanged rather than moving them into the newly vacant 11050 slot.
 # ---------------------------------------------------------------------------
 
 
@@ -135,7 +150,7 @@ class SkillNameDuplicateError(BaseErrorCode):
 
 
 # ---------------------------------------------------------------------------
-# Skill import-from-GitHub errors (11056–11058). Transport/parse concerns only;
+# Skill import-from-GitHub errors (11056-11058). Transport/parse concerns only;
 # the downloaded directory then flows through the same create chain as upload,
 # so frontmatter/size/duplicate failures still reuse 11051/11052/11055.
 # ---------------------------------------------------------------------------
@@ -235,7 +250,7 @@ class SkillEntryLimitError(BaseErrorCode):
 
 
 # ---------------------------------------------------------------------------
-# F078 skills in workflow agent nodes and assistants (11075-11077). Raised when a
+# F078 skills in workflow agent nodes and assistants (11077-11079). Raised when a
 # configured skill cannot be used at run time. 11061-11074 belong to the skill
 # center on the release line; 11060 is skipped (stale frontend locale key).
 # ---------------------------------------------------------------------------
@@ -243,13 +258,13 @@ class SkillEntryLimitError(BaseErrorCode):
 
 # A configured skill exists but an administrator disabled it
 class AgentSkillDisabledError(BaseErrorCode):
-    Code: int = 11075
+    Code: int = 11078
     Msg: str = "Skill {skill_name} has been disabled by an administrator"
 
 
 # A configured skill no longer exists in the tenant skill library
 class AgentSkillDeletedError(BaseErrorCode):
-    Code: int = 11076
+    Code: int = 11079
     Msg: str = "Skill {skill_name} has been deleted by an administrator"
 
 

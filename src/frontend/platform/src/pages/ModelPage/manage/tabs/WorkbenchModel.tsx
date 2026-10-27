@@ -1,55 +1,55 @@
 // @ts-strict-ignore
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { shouldRetryApiError } from '@bisheng/api-client';
+import { Button, Cascader, toast } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+
 import { Label } from "@/components/bs-ui/label";
-import Cascader from "@/components/bs-ui/select/cascader";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import {
+    fromModelCascaderValue,
+    toModelCascaderOptions,
+    toModelCascaderValue,
+} from "@/components/bs-comp/formFields/modelOptions";
+
+import { ModelFieldHint } from "../ModelFieldHint";
 import { getLinsightModelEnvelope, updateLinsightModelConfig } from "@/controllers/API/finetune";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useModel } from "..";
 import { ModelManagement } from "@/pages/BuildPage/bench/ModelManagement";
 import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
 
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, placeholder = '' }) => {
-    const defaultValue = useMemo(() => {
-        let _defaultValue = []
-        if (!value || !options || options.length === 0) return _defaultValue
-
-        options.forEach(option => {
-            const model = option.children?.find(el => el.value == value)
-            if (model) {
-                _defaultValue = [
-                    { value: option.value, label: option.label },
-                    { value: model.value, label: model.label }
-                ]
-                return true
-            }
-            return false
-        })
-        return _defaultValue
-    }, [value, options])
+    const { t } = useTranslation()
+    const selectLabels = useSelectLabels()
+    const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options])
+    const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value])
 
     return (
-        <div>
+        <div className="min-w-0">
             <Label className="bisheng-label">
                 <span>{label}</span>
                 {required && <span className="text-red-500 text-xs">*</span>}
-                {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText}></QuestionTooltip>}
+                {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText}></ModelFieldHint>}
             </Label>
             <Cascader
-                key={`model-select-${value}-${options.length}`}
-                defaultValue={defaultValue}
-                options={options}
-                close={close}
-                onChange={(val) => onChange(val?.[1])}
-                placeholder={placeholder}
+                {...selectLabels}
+                className="w-full"
+                options={cascaderOptions}
+                value={cascaderValue}
+                allowClear={close}
+                onChange={(path) => onChange(fromModelCascaderValue(path))}
+                placeholder={placeholder || t('build.selectModel')}
+                aria-label={typeof label === 'string' && label ? label : t('build.selectModel')}
+                backLabel={t('sharedUi.back')}
+                doneLabel={t('sharedUi.done')}
+                searchPlaceholder={t('sharedUi.searchModels')}
             />
         </div>
     )
@@ -58,7 +58,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 export default function WorkbenchModel({ onBack }) {
     const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
     const { t } = useTranslation('model')
-    const { message } = useToast()
+
     const modelRefs = useRef<(HTMLDivElement | null)[]>([])
 
     const [form, setForm] = useState<any>({
@@ -109,11 +109,19 @@ export default function WorkbenchModel({ onBack }) {
                 chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
             };
 
-            // 提交更新并通过 refetch 获取最新配置（无需再次调用 getLinsightModelConfig）
-            const response = await captureAndAlertRequestErrorHoc(updateLinsightModelConfig(data));
-            const updatedConfig = await refetchConfig();
+            await updateLinsightModelConfig(data);
+            lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...data };
+            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') });
+            let updatedConfig;
+            try {
+                updatedConfig = await refetchConfig({ throwOnError: true });
+            } catch (refreshError) {
+                // The write committed. Keep the accepted form and report only the failed refresh.
+                showApiError(refreshError);
+                return;
+            }
 
-            // 直接使用 refetch 返回的最新数据更新状态
+            // Apply refreshed data only when the refresh succeeds.
             const newConfig = updatedConfig.data;
             setForm({
                 sourceModelId: newConfig?.embedding_model?.id || null,
@@ -137,11 +145,9 @@ export default function WorkbenchModel({ onBack }) {
                 knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
                 models: newConfig?.models || [],
             };
-            if (response !== false) {
-                message({ variant: 'success', description: t('model.saveSuccess') });
-            }
         } catch (err) {
-            message({ variant: 'error', description: t('model.saveFailed') });
+            showApiError(err);
+            throw err;
         } finally {
             setSaveLoad(false);
         }
@@ -155,22 +161,23 @@ export default function WorkbenchModel({ onBack }) {
     };
 
     const handleSave = () => {
+        if (form.models.some(model => String(model.description ?? "").length > 50)) return;
         const errors = [];
         if (!form.models.length) {
-            errors.push('请至少配置一个对话模型');
+            errors.push(t('model.chatModelRequired'));
         }
         // Reject blank rows: a model without an id serializes to `{ id: '' }`,
         // which reaches the client model picker as <SelectItem value="">
         // (empty string) and crashes the whole page in Radix. Force the admin
         // to pick a model or remove the empty row before saving.
         if (form.models.some((model) => !model.id)) {
-            errors.push('存在未选择模型的对话模型行，请选择模型或删除该行');
+            errors.push(t('model.emptyChatModelRow'));
         }
         if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
             errors.push(t('model.workVectorModel') + t('bs:required'));
         }
         if (errors.length) {
-            message({ variant: 'error', description: errors });
+            toast.show({ type: 'error', message: errors.filter(Boolean).join('\n') });
             return;
         }
 
@@ -182,18 +189,17 @@ export default function WorkbenchModel({ onBack }) {
                 okTxt: t('model.confirm'),
                 canelTxt: t('model.cancel'),
                 onOk(next) {
-                    submitConfig().then(next);
+                    return submitConfig().then(next);
                 },
                 onCancel() { }
             });
         } else {
-            submitConfig();
+            void submitConfig().catch(showApiError);
         }
     };
 
     useEffect(() => {
         if (error) {
-            message({ variant: 'error', description: t('model.fetchConfigFailed') });
             return;
         }
 
@@ -222,11 +228,11 @@ export default function WorkbenchModel({ onBack }) {
                 models: linsightConfig.models || [],
             };
         }
-    }, [linsightConfig, error, message, defalutPrompt, t]);
+    }, [linsightConfig, error, defalutPrompt, t]);
 
     if (loading) return (
         <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <LoadingIcon />
+            <Outlined.Loading  className="size-4 animate-spin"/>
         </div>
     );
     // console.log('ASR Model Options structure:', JSON.stringify(asrModel, null, 2));
@@ -234,7 +240,7 @@ export default function WorkbenchModel({ onBack }) {
     const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
     const fallbackBlocked = !!linsightConfig?.fallback_blocked;
     return (
-        <div className="max-w-[880px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+        <div className="max-w-[1120px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <FallbackBlockedBanner visible={fallbackBlocked} />
             {inheritedFromRoot && (
                 <div className="-mb-2 text-xs text-muted-foreground flex items-center">
@@ -242,7 +248,7 @@ export default function WorkbenchModel({ onBack }) {
                 </div>
             )}
             <div>
-                <h3 className="bisheng-label mb-2">日常模式/知识空间/订阅对话模型</h3>
+                <h3 className="bisheng-label mb-2">{t('model.workbenchConversationModels')}</h3>
                 <ModelManagement
                     ref={modelRefs}
                     models={form.models}
@@ -273,10 +279,24 @@ export default function WorkbenchModel({ onBack }) {
                             chatDefaultModelId,
                         };
                     })}
-                    onModelChange={(index, id) => setForm((prev) => ({
-                        ...prev,
-                        models: prev.models.map((item, i) => i === index ? { ...item, id } : item),
-                    }))}
+                    onModelChange={(index, id) => setForm((prev) => {
+                        const replaced = prev.models[index];
+                        // A default is bound to its row: when the row switches to another model,
+                        // move the default along instead of leaving it on the old id, which is
+                        // no longer in the list and gets rejected on save (10811).
+                        const linsightDefaultModelId = replaced?.id && replaced.id === prev.linsightDefaultModelId
+                            ? id
+                            : prev.linsightDefaultModelId;
+                        const chatDefaultModelId = replaced?.id && String(replaced.id) === String(prev.chatDefaultModelId ?? '')
+                            ? id
+                            : prev.chatDefaultModelId;
+                        return {
+                            ...prev,
+                            models: prev.models.map((item, i) => i === index ? { ...item, id } : item),
+                            linsightDefaultModelId,
+                            chatDefaultModelId,
+                        };
+                    })}
                     onNameChange={(index, displayName) => setForm((prev) => ({
                         ...prev,
                         models: prev.models.map((item, i) => i === index ? { ...item, displayName } : item),
@@ -327,13 +347,9 @@ export default function WorkbenchModel({ onBack }) {
                 onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}
             />
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
-                <Button
-                    className="px-10"
-                    disabled={saveload}
-                    onClick={handleSave}
-                >
-                    {saveload && <LoadIcon className="mr-2" />}
+                <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
+                <Button disabled={saveload || !linsightConfig} onClick={handleSave}>
+                    {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>
             </div>
@@ -344,7 +360,8 @@ export default function WorkbenchModel({ onBack }) {
 export function useLinsightConfig() {
     return useQuery({
         queryKey: ["linsightModelEnvelope"],
-        queryFn: () => captureAndAlertRequestErrorHoc(getLinsightModelEnvelope()),
+        queryFn: () => getLinsightModelEnvelope({ showError: false }),
+        onError: showApiError,
         select: (env) => {
             // F022: backend returns {data, inherited_from_root, fallback_blocked}.
             // Hand the destructured shape back so the component can render the
@@ -366,7 +383,7 @@ export function useLinsightConfig() {
                 fallback_blocked: !!env?.fallback_blocked,
             };
         },
-        retry: 1,
+        retry: (failureCount, error) => shouldRetryApiError(error) && failureCount < 1,
     });
 }
 

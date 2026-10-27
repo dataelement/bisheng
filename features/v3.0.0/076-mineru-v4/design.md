@@ -87,7 +87,7 @@
 | V1 上传/任务 | `/v1/uploads` → 字节上传/完成 → `/v1/parse/jobs` → 轮询任务 → `/v1/files/{id}/content` | 新 HTTP 客户端；只以远端返回的文件 ID 下载 ZIP，不能用旧 `/file_parse` |
 | V1 任务状态 | `queued`、`running`、`completed`、`partial`、`failed`、`canceled` | 单文件任务及文件均 `completed` 且 ZIP 校验成功才算成功；其余终态失败 |
 | Middle JSON | `schema=docvortex.middle`、`schema_version=2.0`、`pages[].page_idx/blocks[]` | 新 Loader；源页号 0 基；文本、标题、表格、公式、图片块按真实样本映射 |
-| `Document` 与 Loader 侧产物 | 正文及 `metadata.pages/types/bboxes/indexes`；`bbox_list`、平铺的 `local_image_dir`、`preview_file_path` | 分块、`ImageUploadTransformer`、`ExtraFileTransformer`；图片引用替换完毕后计算 `indexes` |
+| `Document` 与 Loader 侧产物 | 正文及 `metadata.pages/types/bboxes/indexes`；`bbox_list`、平铺的 `local_image_dir`、`preview_file_path`；bbox 在 Loader 内缩放到页面坐标后统一用 `int()` 截断，元数据与 `bbox_list` 使用相同整数坐标值 | 分块、`ImageUploadTransformer`、`ExtraFileTransformer`；图片引用替换完毕后计算 `indexes` |
 | `/api/v1/knowledge/preview` 与 `/preview/status` | 既有创建任务/轮询接口，无新增前端路由 | 预览页面；进程中断后刷新重新提交会拿到新任务 ID |
 
 建议配置形态（`api_url` 为 `/v1` 之前的服务根地址；部署值以目标环境为准）：
@@ -144,6 +144,7 @@ ZIP 下载先写受大小限制的临时文件；解包时限制成员数、单�
 | 9 | 旧 Loader 的 `request_kwargs` 合入业务请求体，V1 则有上传、建任务等多个请求 | 误把配置展开为 `httpx` 参数、或注入上传/轮询，会让参数失效或改变鉴权与传输行为 | `MineruV4Conf` 和 `MineruV4Loader` 只在建任务 JSON 中浅合并，并拒绝与 `files/tier/ocr_mode/output_formats` 冲突 |
 | 10 | ZIP 中图片可累计数百 MiB，且素材路径可嵌入 `./images/...` 或带子目录 | 全量读入内存会放大占用，平铺文件名碰撞或引用截断会导致错误链接或误报缺素材 | `MineruV4Loader` 限制成员及解压规模、逐块写图片、拒绝平铺碰撞、按完整相对路径替换引用 |
 | 11 | `ImageUploadTransformer` 在 `retain_images=0` 时跳过上传 | Loader 若仍写最终 URL，预览和入库正文会留下从未上传的失效链接 | `BaseFilePipeline` 将开关传给新 Loader；Loader 同步省略图片暂存与引用，保留文字和图注 |
+| 12 | 文件与预览的 bbox 标识按整数坐标生成，前端按分块坐标拼接标识；小数坐标会导致标识不匹配（116 真实文件已核验，离线回归覆盖 Loader → 分块 → bbox 上传） | 坐标存在但分段无法激活定位框 | `MineruV4Loader._bbox()` 统一产出整数坐标值，后续匹配逻辑不变；旧文件及预览缓存中的小数坐标需重新解析后更新；图片维持现有预览，不新增定位功能 |
 
 ## 6. 对外契约与依赖
 

@@ -37,10 +37,10 @@ class AuthorizationIntent(DshContract):
 
 
 class IdentityService:
-    def __init__(self, tickets: TicketRepository, identities: IdentityRecords, gateway):
+    def __init__(self, tickets: TicketRepository, identities: IdentityRecords, authorizations):
         self.tickets = tickets
         self.identities = identities
-        self.gateway = gateway
+        self.authorizations = authorizations
 
     async def check(self, tenant_id: str, user_id: str) -> DshIdentitySnapshot:
         if not re.fullmatch(r"[1-9][0-9]*", tenant_id) or not re.fullmatch(r"[1-9][0-9]*", user_id):
@@ -83,7 +83,8 @@ class IdentityService:
         if not snapshot.active:
             raise DshUserDisabledError()
         try:
-            intent = AuthorizationIntent.model_validate(await self.gateway.resolve(auth_id))
+            binding = await self.authorizations.resolve(auth_id)
+            intent = AuthorizationIntent.model_validate({key: binding[key] for key in AuthorizationIntent.model_fields})
             parsed = urlsplit(intent.redirect_uri)
             valid_redirect = (
                 parsed.scheme == "http"

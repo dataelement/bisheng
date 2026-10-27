@@ -1,9 +1,10 @@
 // @ts-strict-ignore
-import { Badge } from '@/components/bs-ui/badge';
+import { toast } from '@bisheng/ui';
+import { Tag } from '@bisheng/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/bs-ui/tabs';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
+import { Tabs } from '@bisheng/ui';
+
 import { getCurlCode, getPythonApiCode } from '@/constants';
 import { TabsContext } from '@/contexts/tabsContext';
 import { copyText } from '@/utils';
@@ -21,10 +22,10 @@ const ApiAccessSkill = ({ }) => {
     const curl_code = getCurlCode(flow, getTweak, tabsState);
     const pythonCode = getPythonApiCode(flow, getTweak, tabsState);
 
-    const { message } = useToast()
+
     const handleCopyLink = (e) => {
         copyText(e.target).then(() => {
-            message({ variant: 'success', description: t('api.copySuccess') })
+            toast.show({ type: 'success', message: String(t('api.copySuccess') ?? '') })
         })
     }
 
@@ -46,46 +47,33 @@ const ApiAccessSkill = ({ }) => {
                 </CardHeader>
                 <CardContent>
                     <h3 className="mb-2 bg-secondary px-4 py-2 inline-flex items-center rounded-md gap-1">
-                        <Badge>POST</Badge> <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>/api/v1/process/{flow.id}</span>
+                        <Tag>POST</Tag> <span className='hover:underline cursor-pointer' onClick={handleCopyLink}>/api/v1/process/{flow.id}</span>
                     </h3>
                     <p className='my-2'>{t('api.exampleCode')}：</p>
-                    <Tabs defaultValue="curl" className="w-full mb-[40px]">
-                        <TabsList className="">
-                            <TabsTrigger value="curl" className="">cURL</TabsTrigger>
-                            <TabsTrigger value="python">Python API</TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="curl" className='relative'>
-                            <button
+                    <Tabs defaultActiveKey="curl" className="w-full mb-[40px]" items={[{ key: "curl", label: <>cURL</>, children: <div className='relative'><button
                                 className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
                                 onClick={() => copyToClipboard(curl_code)}
                             >
                                 {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
-                            </button>
-                            <SyntaxHighlighter
+                            </button><SyntaxHighlighter
                                 className="w-full overflow-auto custom-scroll"
                                 language={'bash'}
                                 style={oneDark}
                             >
                                 {curl_code}
-                            </SyntaxHighlighter>
-                        </TabsContent>
-                        <TabsContent value="python" className='relative'>
-                            <button
+                            </SyntaxHighlighter></div> },
+{ key: "python", label: <>Python API</>, children: <div className='relative'><button
                                 className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
                                 onClick={() => copyToClipboard(pythonCode)}
                             >
                                 {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
-                            </button>
-                            <SyntaxHighlighter
+                            </button><SyntaxHighlighter
                                 className="w-full overflow-auto custom-scroll"
                                 language={'python'}
                                 style={oneDark}
                             >
                                 {pythonCode}
-                            </SyntaxHighlighter>
-                        </TabsContent>
-                    </Tabs>
+                            </SyntaxHighlighter></div> }]} />
                 </CardContent>
             </Card>
 
@@ -270,7 +258,7 @@ def upload_file(local_path: str):
     res = requests.post(url, headers=headers, files=files)
     file_path = res.json()['data'].get('file_path', '')
     return file_path
-    
+
  financeA = upload_file("caibao.pdf")
  financeB = upload_file("caibao2.pdf")`}
                     </SyntaxHighlighter>
@@ -284,7 +272,7 @@ def upload_file(local_path: str):
                         {`tweaks = {
   "InputFileNode-ozsI2": {"file_path": financeA},
   "InputFileNode-16U46": {"file_path": financeB},
-  "Milvus-6HDPE": {"collection_name": "tmp", "drop_old": True} 
+  "Milvus-6HDPE": {"collection_name": "tmp", "drop_old": True}
 }`}
                     </SyntaxHighlighter>
 

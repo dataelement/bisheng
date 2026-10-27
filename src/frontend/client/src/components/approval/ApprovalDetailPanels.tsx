@@ -1,13 +1,14 @@
 import { Tag } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
 import type { ApprovalInstanceDetail, ApprovalTaskDetail } from "~/api/approval";
 import { useLocalize } from "~/hooks";
 import { type TranslationKeys } from "~/hooks/useLocalize";
 import { cn } from "~/utils";
+import { AppPublishDetailPanel, isAppPublishScenario } from "./AppPublishDetailPanel";
+import type { AppReviewTarget } from "./AppReviewView";
 import {
   DETAIL_INTERNAL_KEYS,
+  DetailHeader,
   InfoGrid,
-  StatusBadge,
   type ApprovalTone,
   TimelineStep,
   formatSerialNo,
@@ -28,43 +29,7 @@ type TimelineNode = {
   status?: string | null;
 };
 
-export function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenarioName, createTime, localize, onBack }: {
-  title?: string; status?: string; instanceStatus?: string; scope: "task" | "instance"; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>; onBack?: () => void;
-}) {
-  return (
-    // Pinned to the top of the scrolling detail pane so the title/status/serial stay visible while the body scrolls.
-    <div className="sticky top-0 z-10 -mx-5 mb-5 border-b border-fill-2 bg-white px-5 pb-3 pt-4">
-      <div className="flex items-start gap-3">
-        {/* Compact-only back control — sits to the left of the detail title, split by a short vertical divider.
-            h-8 matches the title line so the arrow centers against it under items-start. */}
-        {onBack && (
-          <div className="flex h-8 shrink-0 items-center gap-3 md:hidden">
-            <button type="button" onClick={onBack} aria-label={localize("com_approval_back")} className="flex items-center text-text-3">
-              <Outlined.ArrowLeft className="h-4 w-4" />
-            </button>
-            <span className="h-4 w-px bg-fill-3" />
-          </div>
-        )}
-        {/* Title + serial share one column so the serial line aligns with the title, not the back arrow. */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            {/* Same line box as the list column's section heading (text-base/leading-8 at pt-4),
-                so both titles sit on one line across the two columns. */}
-            <h3 className="min-w-0 flex-1 text-base font-semibold leading-8 text-text-primary">{title || "--"}</h3>
-            {/* §4 — one object's status, meant to be seen from across the page,
-                so the medium rung; the dot comes from StatusBadge itself. */}
-            <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} size="medium" />
-          </div>
-          <p className="mt-1.5 text-[13px] text-text-3">
-            {serialNo} · {scenarioName || "--"} · {formatTime(createTime)}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void }) {
+export function TaskDetailPanel({ detail, localize, onBack, onOpenReview }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void; onOpenReview?: (target: AppReviewTarget) => void }) {
   const instanceId = detail.instance_id;
   const serialNo = instanceId ? formatSerialNo(instanceId, detail.create_time) : "--";
 
@@ -83,36 +48,45 @@ export function TaskDetailPanel({ detail, localize, onBack }: { detail: Approval
   );
   const showContent = detailEntries.length > 0;
 
+  // Early dispatch, not a scenario registry — one scenario does not earn one.
+  const isAppPublish = isAppPublishScenario(detail.scenario_code);
+
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
-        serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
+      {isAppPublish ? (
+        <AppPublishDetailPanel detail={detail} scope="task" localize={localize} onBack={onBack} onOpenReview={onOpenReview} />
+      ) : (
+        <>
+          <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
+            serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
 
-      <div>
-        <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
-        <InfoGrid rows={basicRows} />
-      </div>
-
-      {showContent && (
-        <div>
-          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-fill-2 bg-fill-2">
-            {detailEntries.map(([k, v]) => (
-              <div key={k} className="bg-white px-3 py-2">
-                <div className="text-[12px] text-text-3">{localizeFieldKey(k, localize)}</div>
-                <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
-              </div>
-            ))}
-            {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
+          <div>
+            <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
+            <InfoGrid rows={basicRows} />
           </div>
-        </div>
-      )}
 
-      {detail.reason && (
-        <div>
-          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
-          <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-text-2 break-all">{detail.reason}</div>
-        </div>
+          {showContent && (
+            <div>
+              <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-fill-2 bg-fill-2">
+                {detailEntries.map(([k, v]) => (
+                  <div key={k} className="bg-white px-3 py-2">
+                    <div className="text-[12px] text-text-3">{localizeFieldKey(k, localize)}</div>
+                    <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+                  </div>
+                ))}
+                {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
+              </div>
+            </div>
+          )}
+
+          {detail.reason && (
+            <div>
+              <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
+              <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-text-2 break-all">{detail.reason}</div>
+            </div>
+          )}
+        </>
       )}
 
       {((detail.action_logs && detail.action_logs.length > 0) || (detail.tasks && detail.tasks.length > 0) || detail.current_node_name) ? (
@@ -235,7 +209,7 @@ export function TaskDetailPanel({ detail, localize, onBack }: { detail: Approval
   );
 }
 
-export function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void }) {
+export function RequestDetailPanel({ detail, localize, onBack, onOpenReview }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void; onOpenReview?: (target: AppReviewTarget) => void }) {
   const id = detail.instance_id ?? detail.id;
   const serialNo = id ? formatSerialNo(Number(id), detail.create_time) : "--";
 
@@ -255,36 +229,45 @@ export function RequestDetailPanel({ detail, localize, onBack }: { detail: Appro
     ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && k !== "reason" && v !== undefined && v !== null && v !== "",
   );
 
+  // Early dispatch, not a scenario registry — one scenario does not earn one.
+  const isAppPublish = isAppPublishScenario(detail.scenario_code);
+
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="instance" serialNo={serialNo}
-        scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
+      {isAppPublish ? (
+        <AppPublishDetailPanel detail={detail} scope="instance" localize={localize} onBack={onBack} onOpenReview={onOpenReview} />
+      ) : (
+        <>
+          <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="instance" serialNo={serialNo}
+            scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
 
-      <div>
-        <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
-        <InfoGrid rows={basicRows} />
-      </div>
-
-      {detailEntries.length > 0 && (
-        <div>
-          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-fill-2 bg-fill-2">
-            {detailEntries.map(([k, v]) => (
-              <div key={k} className="bg-white px-3 py-2">
-                <div className="text-[12px] text-text-3">{localizeFieldKey(k, localize)}</div>
-                <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
-              </div>
-            ))}
-            {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
+          <div>
+            <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
+            <InfoGrid rows={basicRows} />
           </div>
-        </div>
-      )}
 
-      {detail.reason && (
-        <div>
-          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
-          <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-text-2 break-all">{detail.reason}</div>
-        </div>
+          {detailEntries.length > 0 && (
+            <div>
+              <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-fill-2 bg-fill-2">
+                {detailEntries.map(([k, v]) => (
+                  <div key={k} className="bg-white px-3 py-2">
+                    <div className="text-[12px] text-text-3">{localizeFieldKey(k, localize)}</div>
+                    <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+                  </div>
+                ))}
+                {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
+              </div>
+            </div>
+          )}
+
+          {detail.reason && (
+            <div>
+              <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
+              <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-text-2 break-all">{detail.reason}</div>
+            </div>
+          )}
+        </>
       )}
 
       {((detail.action_logs && detail.action_logs.length > 0) || (detail.tasks && detail.tasks.length > 0)) && (

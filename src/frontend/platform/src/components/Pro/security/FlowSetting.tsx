@@ -1,9 +1,11 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
+import { notification, toast } from '@bisheng/ui';
 import { SettingIcon } from "@/components/bs-icons";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
-import { Switch } from "@/components/bs-ui/switch";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { Switch } from '@bisheng/ui';
+
+
 import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
 import { CircleHelp } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -15,7 +17,7 @@ export default function FlowSetting({ id, type, isOnline, onSubTask }) {
     const { t } = useTranslation();
 
     const [open, setOpen] = useState(false);
-    const { toast, message } = useToast();
+
     const [form, setForm] = useState({
         isCheck: false,
         autoReply: "",
@@ -41,14 +43,14 @@ export default function FlowSetting({ id, type, isOnline, onSubTask }) {
         if (_form.wordsType.length === 0) errors.push(t('build.errors.selectAtLeastOneWordType'));
         if (_form.autoReply === '') errors.push(t('build.errors.autoReplyNotEmpty'));
         if (errors.length) {
-            return toast({ title: t('prompt'), variant: 'error', description: errors.join(', ') });
+            return notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(errors.join(', ') ?? '') });
         }
 
         setForm(_form);
         if (isOnline) return; // 在线状态不允许修改
         const callBack = async (id) => {
             await sensitiveSaveApi({ ..._form, id, type });
-            message({ title: t('prompt'), variant: 'success', description: t('build.saveSuccess') });
+            toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('build.saveSuccess') ?? '')].filter(Boolean).join('\n') });
         }
         id ? callBack(id) : onSubTask?.(callBack);
     };
@@ -69,16 +71,7 @@ export default function FlowSetting({ id, type, isOnline, onSubTask }) {
                 {/* <span className="text-sm font-medium leading-none">开启内容安全审查</span> */}
                 <div className="flex items-center space-x-2">
                     <span>{t('build.enableContentSecurityReview')}</span>
-                    <TooltipProvider delayDuration={0}>
-                        <Tooltip>
-                            <TooltipTrigger>
-                                <CircleHelp className="w-4 h-4" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p className="text-[white]">{t('build.contentSecurityDesc')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    <SharedTooltipProvider delayDuration={0}><SharedTooltip  content={<><p className="text-[white]">{t('build.contentSecurityDesc')}</p></>} ><button type="button" ><CircleHelp className="w-4 h-4" /></button></SharedTooltip></SharedTooltipProvider>
                 </div>
                 <div className="flex items-center ml-6">
                     <Sheet open={open} onOpenChange={(bln) => setOpen(bln)}>
@@ -91,7 +84,7 @@ export default function FlowSetting({ id, type, isOnline, onSubTask }) {
                         </SheetContent>
                     </Sheet>
                     <Switch
-                        className="mx-4"
+                        className="peer mx-4"
                         onClick={(e) => e.stopPropagation()}
                         checked={form.isCheck}
                         onCheckedChange={onOff}

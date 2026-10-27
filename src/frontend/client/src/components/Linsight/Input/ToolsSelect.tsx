@@ -1,17 +1,14 @@
 /**
- * F035 Track H: tools dropdown of the task-mode input. One row per tool with
- * a toggle switch (spec §1, fig.7 — e.g. web search / TianYanCha / drawing).
+ * F035 Track H: tools picker of the task-mode input — a multiple Select, one
+ * option per tool (spec §1, fig.7 — e.g. web search / TianYanCha / drawing);
+ * the pill itself shows whether any tool is on.
  * Tool list source is the same as the legacy LinsiTools: admin-configured
  * bsConfig.linsightConfig.tools. No chips are generated for tools.
  */
 import { ChevronDown, Hammer } from 'lucide-react';
-import { Switch } from '~/components/ui';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuTrigger,
-} from '~/components/ui';
+import { Select } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
+import useSelectCopy from '~/hooks/useSelectCopy';
 import type { TaskModeToolItem } from '~/store/linsight';
 import { cn } from '~/utils';
 
@@ -25,15 +22,31 @@ interface ToolsSelectProps {
 
 export function ToolsSelect({ tools, disabled = false, onChange, compact = false }: ToolsSelectProps) {
     const localize = useLocalize();
+    const selectCopy = useSelectCopy();
     const active = tools.some((tool) => tool.checked);
 
     if (tools.length === 0) return null;
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild disabled={disabled}>
+        <Select
+            {...selectCopy}
+            multiple
+            disabled={disabled}
+            options={tools.map((tool) => ({
+                value: String(tool.id),
+                label: tool.name,
+                icon: <Hammer />,
+            }))}
+            value={tools.filter((tool) => tool.checked).map((tool) => String(tool.id))}
+            onChange={(next) =>
+                onChange(tools.map((tool) => ({ ...tool, checked: next.includes(String(tool.id)) })))
+            }
+            aria-label={localize('com_tools_title')}
+            trigger={
                 <button
                     type="button"
+                    disabled={disabled}
+                    aria-label={localize('com_tools_title')}
                     className={cn(
                         'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-normal outline-none transition-colors hover:bg-black/5',
                         // Active highlight uses brand-600 to match the checked-checkbox
@@ -46,31 +59,7 @@ export function ToolsSelect({ tools, disabled = false, onChange, compact = false
                     {!compact && <span className="truncate">{localize('com_tools_title')}</span>}
                     <ChevronDown size={14} className="text-slate-400" />
                 </button>
-            </DropdownMenuTrigger>
-
-            <DropdownMenuContent
-                align="start"
-                className="flex max-h-[320px] w-64 flex-col gap-0 overflow-y-auto rounded-2xl border-slate-100 p-2 shadow-xl"
-            >
-                {tools.map((tool) => (
-                    <div key={String(tool.id)} className="flex items-center justify-between gap-2 rounded-lg px-1.5 py-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                            <Hammer size={16} className="shrink-0 text-slate-600" />
-                            <span className="line-clamp-1 max-w-40 text-xs font-normal text-slate-700">
-                                {tool.name}
-                            </span>
-                        </div>
-                        <Switch
-                            className="data-[state=checked]:bg-blue-600"
-                            disabled={disabled}
-                            checked={tool.checked}
-                            onCheckedChange={(checked) =>
-                                onChange(tools.map((t) => (t.id === tool.id ? { ...t, checked } : t)))
-                            }
-                        />
-                    </div>
-                ))}
-            </DropdownMenuContent>
-        </DropdownMenu>
+            }
+        />
     );
 }

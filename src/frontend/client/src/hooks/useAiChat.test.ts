@@ -342,3 +342,27 @@ describe("useAiChat adopts a new conversation id", () => {
         expect(result.current.messages).toHaveLength(0);
     });
 });
+
+
+describe("history failure recovery", () => {
+    it("retries a failed history request without changing the conversation", async () => {
+        const failure = new Error("history unavailable");
+        mockGetAgentMessages.mockRejectedValueOnce(failure);
+        const { result } = renderChat("retry-history");
+        await waitFor(() => expect(result.current.historyError).toBe(failure));
+        act(() => result.current.retryHistory());
+        await waitFor(() => expect(result.current.messages[0]?.text).toBe("retry-history history"));
+        expect(result.current.historyError).toBeNull();
+        expect(result.current.isLoading).toBe(false);
+    });
+    it("ignores a history failure from a conversation that was left behind", async () => {
+        let failOld: (reason: unknown) => void = () => undefined;
+        mockGetAgentMessages.mockImplementationOnce(() => new Promise((_resolve, reject) => { failOld = reject; }));
+        const { result, rerender } = renderChat("old-history");
+        rerender({ cid: "current-history" });
+        await waitFor(() => expect(result.current.messages[0]?.text).toBe("current-history history"));
+        await act(async () => { failOld(new Error("old failure")); });
+        expect(result.current.historyError).toBeNull();
+        expect(result.current.messages[0]?.text).toBe("current-history history");
+    });
+});

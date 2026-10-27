@@ -1,22 +1,24 @@
 // @ts-strict-ignore
+import { Button, Input, Textarea } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
-import { LoadIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { Accordion } from "@/components/bs-ui/accordion";
-import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
+
+import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+
 import Avator from "@/components/bs-ui/input/avator";
 import { generateUUID } from "@/components/bs-ui/utils";
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { locationContext } from "@/contexts/locationContext";
 import { readTempsDatabase } from "@/controllers/API";
 import { createAssistantsApi } from "@/controllers/API/assistant";
-import { getAssistantModelConfig, getLlmDefaultModel } from "@/controllers/API/finetune";
-import { copyReportTemplate, createWorkflowApi } from "@/controllers/API/workflow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { getAssistantModelConfig,getLlmDefaultModel } from "@/controllers/API/finetune";
+import { copyReportTemplate,createWorkflowApi } from "@/controllers/API/workflow";
+import { showApiError } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
-import { AppType, AppTypeToNum } from "@/types/app";
-import { forwardRef, useContext, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { AppType,AppTypeToNum } from "@/types/app";
+import { forwardRef,useContext,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { assistantRoleExample } from "./assistant/editAssistant/roleExample";
@@ -130,20 +132,23 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
         // Handle form submission
         const navigate = useNavigate()
         const handleSubmit = async (e: React.FormEvent) => {
+        if ((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) return;
+
             e.preventDefault();
             const isValid = validateForm();
             if (!isValid) return;
 
             setLoading(true);
+            try {
             if (isEditMode) {
-                setLoading(false);
-                setOpen(false);
-                return onSave({
+                await onSave({
                     name: formData.name,
                     description: formData.desc,
                     logo: formData.url,
                     viewUrl: formData.viewUrl,
                 })
+                setOpen(false);
+                return;
             }
 
             if (tempDataRef.current) {
@@ -177,20 +182,20 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                             )
                         }
                     })
-                    const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current));
+                    const res = await createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current);
                     if (res) navigate('/flow/' + res.id);
                 }
             } else {
                 if (appType === AppType.ASSISTANT) {
-                    const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.desc, formData.url));
+                    const res = await createAssistantsApi(formData.name, formData.desc, formData.url);
                     if (res) {
                         //@ts-ignore
-                        window.assistantCreate = true // Mark the created assistant 
+                        window.assistantCreate = true // Mark the created assistant
                         navigate('/assistant/' + res.id)
                     }
                 } else {
                     if (appId) return navigate('/flow/' + appId);
-                    const workflow = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url));
+                    const workflow = await createWorkflowApi(formData.name, formData.desc, formData.url);
                     if (workflow) {
                         const navigateToFlow = (id) => navigate(`/flow/${id}`);
                         if (!appConfig.isPro) return navigateToFlow(workflow.id);
@@ -201,7 +206,11 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                     }
                 }
             }
-            setLoading(false);
+            } catch (error) {
+                showApiError(error);
+            } finally {
+                setLoading(false);
+            }
         };
 
         const uploadAvator = (file: File) => {
@@ -234,31 +243,14 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                                 {appType === AppType.ASSISTANT ? t('build_assistantName') : t('name')}
                                 <span className="bisheng-tip">*</span>
                             </label>
-                            <Input
-                                id="name"
-                                name="name"
-                                maxLength={50}
-                                showCount
-                                placeholder={appType === AppType.ASSISTANT ? t('giveAssistantAName') : t('giveWorkflowAName')}
-                                className="mt-3"
-                                value={formData.name}
-                                onChange={handleChange}
-                            />
+                            <Input id="name" name="name" maxLength={50} showCount placeholder={appType === AppType.ASSISTANT ? t('giveAssistantAName') : t('giveWorkflowAName')} value={formData.name} onChange={handleChange} className={"mt-3"} />
                             {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
                         </div>
                         <div className="mb-6">
                             <label htmlFor="desc" className="bisheng-label">
                                 {appType === AppType.ASSISTANT ? t('build_roleAndTasks') : t('description')}
                             </label>
-                            <Textarea
-                                id="desc"
-                                name="desc"
-                                placeholder={appType === AppType.ASSISTANT ? assistantRoleExample() : t('enterWorkflowDescription')}
-                                maxLength={1000}
-                                className="mt-3 min-h-32 pt-3"
-                                value={formData.desc}
-                                onChange={handleChange}
-                            />
+                            <Textarea id="desc" name="desc" placeholder={appType === AppType.ASSISTANT ? assistantRoleExample() : t('enterWorkflowDescription')} maxLength={1000} value={formData.desc} onChange={handleChange} textareaClassName={"mt-3 min-h-32 pt-3"} showCount />
                             {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
                         </div>
                     </div>
@@ -270,12 +262,12 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                     </div>
                     <DialogFooter>
                         <DialogClose>
-                            <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })}>
+                            <Button variant="outlined" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })} color="default">
                                 {t('cancel')}
                             </Button>
                         </DialogClose>
-                        <Button disabled={!formData.name || loading} type="submit" className="px-11" onClick={handleSubmit}>
-                            {loading && <LoadIcon className="mr-2" />}
+                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading)} type="submit" onClick={handleSubmit}>
+                            {loading && <Outlined.Loading className="animate-spin mr-2" />}
                             {t(isEditMode ? 'save' : 'create')}
                         </Button>
                     </DialogFooter>

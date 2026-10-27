@@ -1,10 +1,12 @@
 // @ts-strict-ignore
+import { Button, Input } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Plus } from "lucide-react";
+
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/bs-ui/button";
-import { Input } from "../../../components/bs-ui/input";
+
+
 import {
     Table,
     TableBody,
@@ -14,7 +16,7 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { addServiceApi, deleteServiceApi, getServicesApi } from "../../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 import { useCopyText } from "../../../util/hook";
 
 export default function RTConfig({ open, onChange }) {
@@ -61,7 +63,7 @@ export default function RTConfig({ open, onChange }) {
                                 <TableCell className="py-2">
                                     <p className="cursor-pointer" onClick={e => copyText(el.ftUrl)}>{el.ftUrl}</p>
                                 </TableCell>
-                                <TableCell className="py-2 text-right"><Button variant="link" className="h-8 rounded-full text-red-500 px-5" onClick={() => handleDel(el.id)}>{t('bs:delete')}</Button></TableCell>
+                                <TableCell className="py-2 text-right"><Button size="small" variant="link" color="danger" onClick={() => handleDel(el.id)}>{t('bs:delete')}</Button></TableCell>
                             </TableRow>
                         ))}
                         {showAdd && <TableRow>
@@ -69,8 +71,10 @@ export default function RTConfig({ open, onChange }) {
                             {/* <TableCell><Input ref={urlRef} placeholder="IP:PORT"></Input></TableCell> */}
                             <TableCell><Input ref={ftUrlRef} placeholder="IP:PORT"></Input></TableCell>
                             <TableCell>
-                                <Button variant="link" className="h-8 rounded-full" onClick={handleAdd}>{t('bs:confirmButton')}</Button>
-                                <Button variant="link" className="h-8 rounded-full text-gray-400" onClick={() => setShowAdd(false)}>{t('bs:cancel')}</Button>
+                                <div className="flex justify-end gap-2">
+                                    <Button size="small" variant="link" onClick={handleAdd}>{t('bs:confirmButton')}</Button>
+                                    <Button size="small" variant="link" color="default" onClick={() => setShowAdd(false)}>{t('bs:cancel')}</Button>
+                                </div>
                             </TableCell>
                         </TableRow>}
                     </TableBody>
@@ -78,7 +82,7 @@ export default function RTConfig({ open, onChange }) {
             </div>
             <DialogFooter>
                 <div className="flex justify-start mt-4">
-                    <Button variant='outline' className="flex w-[120px]" onClick={() => setShowAdd(true)}><Plus className="mr-2 size-5" />{t('bs:create')}</Button>
+                    <Button variant="outlined" className="flex" onClick={() => setShowAdd(true)} color="default"><Outlined.Plus className="mr-2 size-5" />{t('bs:create')}</Button>
                 </div>
             </DialogFooter>
         </DialogContent>
@@ -100,7 +104,7 @@ const useRTService = (onChange) => {
     const [showAdd, setShowAdd] = useState(false)
 
     useEffect(() => {
-        loadData()
+        void loadData().catch(showApiError)
     }, [])
 
     const loadData = async () => {
@@ -113,20 +117,20 @@ const useRTService = (onChange) => {
     }
 
     const addItem = (name, ftUrl) => {
-        captureAndAlertRequestErrorHoc(addServiceApi(name, ftUrl).then(data => {
+        addServiceApi(name, ftUrl).then(data => {
             setServices([...services, {
                 id: data.id,
                 name,
                 ftUrl
             }])
             setShowAdd(false)
-        }))
+        }).catch(showApiError)
     }
 
     const handleDel = (id) => {
-        captureAndAlertRequestErrorHoc(deleteServiceApi(id).then(res =>
+        deleteServiceApi(id).then(res =>
             setServices(services.filter(el => el.id !== id))
-        ))
+        ).catch(showApiError)
     }
 
     const create = () => {

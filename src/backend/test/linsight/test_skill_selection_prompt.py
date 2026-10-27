@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from deepagents.backends.filesystem import FilesystemBackend
-from deepagents.middleware.skills import SkillsMiddleware
 from langchain_core.messages import SystemMessage
 
 from bisheng.linsight.domain.services.agent_factory import (
@@ -17,6 +16,7 @@ from bisheng.linsight.domain.services.agent_factory import (
     create_linsight_agent,
     task_tool_names,
 )
+from bisheng.linsight.domain.services.skills_prompt import LinsightSkillsMiddleware
 
 
 def _skill_md(name: str, description: str, allowed: str | None = None) -> str:
@@ -65,7 +65,7 @@ def _row(text: str, name: str) -> str:
 
 
 def _listed(root, state):
-    skills = SkillsMiddleware(
+    skills = LinsightSkillsMiddleware(
         backend=FilesystemBackend(root_dir=str(root), virtual_mode=True),
         sources=[("/skills/", "Skills")],
     )
@@ -170,4 +170,4 @@ class TestSelectionPrompt:
 
     def test_factory_wraps_the_skills_middleware(self):
         source = inspect.getsource(create_linsight_agent)
-        assert source.index("SkillsMiddleware(") < source.index("SkillSelectionMiddleware(")
+        assert source.index("LinsightSkillsMiddleware(") < source.index("SkillSelectionMiddleware(")

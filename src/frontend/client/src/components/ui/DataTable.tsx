@@ -13,17 +13,8 @@ import {
   getFilteredRowModel,
 } from '@tanstack/react-table';
 import type { Table as TTable } from '@tanstack/react-table';
-import {
-  Button,
-  Table,
-  Checkbox,
-  TableRow,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  AnimatedSearchInput,
-} from './';
+import { Button, Table, TableRow, TableBody, TableCell, TableHead, TableHeader, AnimatedSearchInput } from './';
+import { Checkbox } from '@bisheng/ui';
 import { TrashIcon, Spinner } from '~/components/svg';
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
@@ -54,7 +45,7 @@ const SelectionCheckbox = memo(
       className="flex h-full w-[30px] items-center justify-center"
       onClick={(e) => e.stopPropagation()}
     >
-      <Checkbox checked={checked} onCheckedChange={onChange} aria-label={ariaLabel} />
+      <Checkbox className="peer" checked={checked} onCheckedChange={onChange} aria-label={ariaLabel} />
     </div>
   ),
 );
@@ -238,7 +229,7 @@ export default function DataTable<TData, TValue>({
       id: 'select',
       header: ({ table }: { table: TTable<TData> }) => (
         <div className="flex h-full w-[30px] items-center justify-center">
-          <Checkbox
+          <Checkbox className="peer"
             checked={table.getIsAllPageRowsSelected()}
             onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
             aria-label="Select all"

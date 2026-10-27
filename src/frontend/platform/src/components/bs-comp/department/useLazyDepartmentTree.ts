@@ -4,10 +4,10 @@ import {
   getDepartmentPathTreeApi,
   searchDepartmentsApi,
 } from "@/controllers/API/department"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { useCallback, useEffect, useRef, useState, type InputHTMLAttributes } from "react"
-import { useQueryClient } from "react-query"
+import { useQueryClient } from "@tanstack/react-query"
 
 /**
  * F038: per-layer lazy department tree (browse / server search / locate), shared
@@ -67,7 +67,7 @@ export interface LazyDepartmentTree {
   searchFailed: boolean
   searchTooLong: boolean
   retrySearch: () => void
-  searchInputProps: InputHTMLAttributes<HTMLInputElement>
+  searchInputProps: Omit<InputHTMLAttributes<HTMLInputElement>, "size" | "prefix">
   truncated: boolean
   matchedIds: Set<number>
   // locate / echo a deep value
@@ -147,13 +147,11 @@ export function useLazyDepartmentTree(
 
   const fetchLayer = useCallback(
     async (parentId: number | null): Promise<DepartmentTreeNode[] | null> => {
-      const res = await captureAndAlertRequestErrorHoc(
-        queryClient.fetchQuery(
+      const res = await queryClient.fetchQuery(
           [cacheKey, "children", parentId],
           () => sourceRef.current.children(parentId),
           { staleTime: 30_000 }
         )
-      )
       return (res as DepartmentTreeNode[] | null) ?? null
     },
     [queryClient, cacheKey]
@@ -179,13 +177,16 @@ export function useLazyDepartmentTree(
     async (parentId: number): Promise<void> => {
       if (childIdsRef.current[parentId]) return // already loaded
       setLoadingIds((prev) => new Set(prev).add(parentId))
+      try {
       const layer = await fetchLayer(parentId)
       if (layer) storeLayer(parentId, layer)
+      } finally {
       setLoadingIds((prev) => {
         const next = new Set(prev)
         next.delete(parentId)
         return next
       })
+      }
     },
     [fetchLayer, storeLayer]
   )
@@ -199,7 +200,7 @@ export function useLazyDepartmentTree(
           next.delete(node.id)
         } else {
           next.add(node.id)
-          void loadChildren(node.id)
+          void loadChildren(node.id).catch(showApiError)
         }
         return next
       })
@@ -258,7 +259,7 @@ export function useLazyDepartmentTree(
         await Promise.all(roots.filter((n) => n.has_children).map((n) => loadChildren(n.id)))
       }
       setInitialLoading(false)
-    })()
+    })().catch(showApiError).finally(() => { if (!cancelled) setInitialLoading(false) })
     return () => {
       cancelled = true
     }
@@ -267,7 +268,7 @@ export function useLazyDepartmentTree(
 
   const reveal = useCallback(
     async (deptInternalId: number): Promise<number[]> => {
-      const res = await captureAndAlertRequestErrorHoc(sourceRef.current.pathTree(deptInternalId))
+      const res = await sourceRef.current.pathTree(deptInternalId)
       const tree = (res as DepartmentSearchResult | null) ?? null
       if (!tree || !tree.roots.length) return []
       const chain = chainOf(tree.roots)

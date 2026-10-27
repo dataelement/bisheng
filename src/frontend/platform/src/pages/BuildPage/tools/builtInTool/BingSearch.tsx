@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button } from '@/components/bs-ui/button';
+import { Button } from '@bisheng/ui';
+
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
 import { useState } from 'react';
 import { useTranslation } from "react-i18next";
@@ -67,11 +68,11 @@ const BingToolForm = ({ formData, onSubmit }) => {
             {/*  DialogFooter */}
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button">
+                    <Button variant="outlined" type="button" color="default">
                         {t('build.cancel')}
                     </Button>
                 </DialogClose>
-                <Button className="px-11" type="submit">
+                <Button type="submit">
                     {t('build.confirm')}
                 </Button>
             </DialogFooter>

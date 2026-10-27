@@ -1,23 +1,18 @@
 // @ts-strict-ignore
-"use client"
+import { Button, notification, Select } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 
-import { useEffect, useState } from "react"
-import { Button } from "@/components/bs-ui/button"
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem
-} from "@/components/bs-ui/select"
-import { Checkbox } from "@/components/bs-ui/checkBox"
-import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
-import { AdvancedDatePicker } from "../AdvancedDatePicker"
-import { ListIndentIncrease, ListIndentDecrease } from "lucide-react"
-import { toast } from "@/components/bs-ui/toast/use-toast"
-import { useTranslation } from "react-i18next"
-import { useQuery } from "react-query"
-import { getDatasets } from "@/controllers/API/dashboard"
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { useComponentEditorStore,useEditorDashboardStore } from "@/store/dashboardStore";
+import { Checkbox } from "@bisheng/ui";
+import { useEffect,useState } from "react";
+import { AdvancedDatePicker } from "../AdvancedDatePicker";
+
+
+import { getDatasets } from "@/controllers/API/dashboard";
+import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 
 /* ================== 类型 ================== */
 export interface ChartLinkConfig {
@@ -26,8 +21,8 @@ export interface ChartLinkConfig {
   timeGranularity: string
   isDefault: boolean
   dateRange: {
-    start: string
-    end: string
+    start: number | ""
+    end: number | ""
     shortcutKey?: string
     isDynamic?: boolean
   }
@@ -43,9 +38,10 @@ export default function ChartSelector({
   onSave,
 }: ChartSelectorProps) {
   const { t } = useTranslation("dashboard")
+  const selectLabels = useSelectLabels()
   const [selectedCharts, setSelectedCharts] = useState<string[]>([])
-  const [displayType, setDisplayType] = useState(t("chartSelector.displayTypes.timeRange", "时间范围"))
-  const [timeGranularity, setTimeGranularity] = useState(t("chartSelector.granularities.yearMonthDay", "年月日"))
+  const [displayType, setDisplayType] = useState(t("chartSelector.displayTypes.timeRange"))
+  const [timeGranularity, setTimeGranularity] = useState(t("chartSelector.granularities.yearMonthDay"))
   const [isDefault, setIsDefault] = useState(false)
   const [timeFilter, setTimeFilter] = useState<any>(null)
   const [collapsed, setCollapsed] = useState(false)
@@ -68,18 +64,18 @@ export default function ChartSelector({
 
         if (queryCond.displayType) {
           const displayTypeValue = queryCond.displayType === "single"
-            ? t("chartSelector.displayTypes.time", "时间")
-            : t("chartSelector.displayTypes.timeRange", "时间范围")
+            ? t("chartSelector.displayTypes.time")
+            : t("chartSelector.displayTypes.timeRange")
           setDisplayType(displayTypeValue)
         }
 
         // 映射时间粒度
         if (queryCond.timeGranularity) {
-          let timeGranularityValue = t("chartSelector.granularities.yearMonthDay", "年月日")
+          let timeGranularityValue = t("chartSelector.granularities.yearMonthDay")
           if (queryCond.timeGranularity === "year_month") {
-            timeGranularityValue = t("chartSelector.granularities.yearMonth", "年月")
+            timeGranularityValue = t("chartSelector.granularities.yearMonth")
           } else if (queryCond.timeGranularity === "year_month_day_hour") {
-            timeGranularityValue = t("chartSelector.granularities.yearMonthDayHour", "年月日时")
+            timeGranularityValue = t("chartSelector.granularities.yearMonthDayHour")
           }
           setTimeGranularity(timeGranularityValue)
         }
@@ -140,18 +136,18 @@ export default function ChartSelector({
 
         if (queryCond.displayType) {
           const displayTypeValue = queryCond.displayType === "single"
-            ? t("chartSelector.displayTypes.time", "时间")
-            : t("chartSelector.displayTypes.timeRange", "时间范围")
+            ? t("chartSelector.displayTypes.time")
+            : t("chartSelector.displayTypes.timeRange")
           setDisplayType(displayTypeValue)
         }
 
         // 映射时间粒度
         if (queryCond.timeGranularity) {
-          let timeGranularityValue = t("chartSelector.granularities.yearMonthDay", "年月日")
+          let timeGranularityValue = t("chartSelector.granularities.yearMonthDay")
           if (queryCond.timeGranularity === "year_month") {
-            timeGranularityValue = t("chartSelector.granularities.yearMonth", "年月")
+            timeGranularityValue = t("chartSelector.granularities.yearMonth")
           } else if (queryCond.timeGranularity === "year_month_day_hour") {
-            timeGranularityValue = t("chartSelector.granularities.yearMonthDayHour", "年月日时")
+            timeGranularityValue = t("chartSelector.granularities.yearMonthDayHour")
           }
           setTimeGranularity(timeGranularityValue)
         }
@@ -260,10 +256,7 @@ export default function ChartSelector({
       }
     }
 
-    e.isTrusted && toast({
-      variant: 'success',
-      description: t("chartSelector.messages.saveSuccess"),
-    })
+    e.isTrusted && notification.open({ type: 'success', description: String(t("chartSelector.messages.saveSuccess") ?? '') })
     onSave?.(config)
   }
 
@@ -294,7 +287,7 @@ export default function ChartSelector({
             {t("chartSelector.messages.collapse")}
           </div>
           <div className="mt-2">
-            <ListIndentDecrease className="h-4 w-4" />
+            <Outlined.Left className="h-4 w-4" />
           </div>
         </div>
       </div>
@@ -310,8 +303,8 @@ export default function ChartSelector({
             {t("chartSelector.title")}
           </h3>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCollapsed(true)}>
-          <ListIndentIncrease className="h-4 w-4" />
+        <Button variant="text" size="medium" className="h-8 w-8" onClick={() => setCollapsed(true)} color="default" iconOnly>
+          <Outlined.Right className="h-4 w-4" />
         </Button>
       </div>
 
@@ -374,19 +367,16 @@ export default function ChartSelector({
               <label className="text-sm">
                 {t("chartSelector.displayType")}
               </label>
-              <Select value={displayType} onValueChange={setDisplayType}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={t("chartSelector.displayTypes.timeRange")}>
-                    {t("chartSelector.displayTypes.timeRange")}
-                  </SelectItem>
-                  <SelectItem value={t("chartSelector.displayTypes.time")}>
-                    {t("chartSelector.displayTypes.time")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Select
+                {...selectLabels}
+                options={[
+                  { value: t("chartSelector.displayTypes.timeRange"), label: t("chartSelector.displayTypes.timeRange") },
+                  { value: t("chartSelector.displayTypes.time"), label: t("chartSelector.displayTypes.time") },
+                ]}
+                value={displayType || null}
+                onChange={(v) => { if (v != null) setDisplayType(String(v)) }}
+                aria-label={t("chartSelector.displayType")}
+              />
             </div>
 
             {/* 时间粒度 */}
@@ -394,22 +384,17 @@ export default function ChartSelector({
               <label className="text-sm">
                 {t("chartSelector.timeGranularity")}
               </label>
-              <Select value={timeGranularity} onValueChange={setTimeGranularity}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={t("chartSelector.granularities.yearMonth")}>
-                    {t("chartSelector.granularities.yearMonth")}
-                  </SelectItem>
-                  <SelectItem value={t("chartSelector.granularities.yearMonthDay")}>
-                    {t("chartSelector.granularities.yearMonthDay")}
-                  </SelectItem>
-                  <SelectItem value={t("chartSelector.granularities.yearMonthDayHour")}>
-                    {t("chartSelector.granularities.yearMonthDayHour")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Select
+                {...selectLabels}
+                options={[
+                  { value: t("chartSelector.granularities.yearMonth"), label: t("chartSelector.granularities.yearMonth") },
+                  { value: t("chartSelector.granularities.yearMonthDay"), label: t("chartSelector.granularities.yearMonthDay") },
+                  { value: t("chartSelector.granularities.yearMonthDayHour"), label: t("chartSelector.granularities.yearMonthDayHour") },
+                ]}
+                value={timeGranularity || null}
+                onChange={(v) => { if (v != null) setTimeGranularity(String(v)) }}
+                aria-label={t("chartSelector.timeGranularity")}
+              />
             </div>
 
             {/* 默认值 */}
@@ -439,18 +424,10 @@ export default function ChartSelector({
       </div>
       <div className="border-t bg-background p-4 shrink-0">
         <div className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            onClick={onCancel}
-            className="flex-1"
-          >
+          <Button variant="outlined" onClick={onCancel} className="flex-1" color="default">
             {t("chartSelector.buttons.cancel")}
           </Button>
-          <Button
-            id="query_save"
-            onClick={handleSave}
-            className="flex-1"
-          >
+          <Button id="query_save" onClick={handleSave} className="flex-1">
             {t("chartSelector.buttons.save")}
           </Button>
         </div>

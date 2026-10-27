@@ -3,7 +3,8 @@ import { QueryKeys } from '~/types/chat';
 import { Controller, useForm } from 'react-hook-form';
 import { useQueryClient } from '@tanstack/react-query';
 import type { TConversationTag, TConversationTagRequest } from '~/types/chat';
-import { Checkbox, Label, TextareaAutosize, Input } from '~/components';
+import { Label, TextareaAutosize, Input } from '~/components';
+import { Checkbox } from '@bisheng/ui';
 import { useBookmarkContext } from '~/Providers/BookmarkContext';
 import { useConversationTagMutation } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
@@ -148,7 +149,7 @@ const BookmarkForm = ({
                   {...field}
                   checked={field.value}
                   onCheckedChange={field.onChange}
-                  className="relative float-left mr-2 inline-flex h-4 w-4 cursor-pointer"
+                  className="peer relative float-left mr-2 inline-flex h-4 w-4 cursor-pointer"
                   value={field.value?.toString()}
                 />
               )}

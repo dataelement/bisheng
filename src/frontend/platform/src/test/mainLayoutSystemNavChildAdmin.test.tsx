@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import { darkContext } from "@/contexts/darkContext";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
@@ -41,34 +39,11 @@ vi.mock("@/components/bs-icons/menu/system", () => ({
   DashboardIcon: () => <span aria-hidden="true" />,
 }));
 
-vi.mock("@/components/bs-ui/select/hover", () => ({
-  SelectHover: ({ triagger, children }: { triagger: ReactNode; children: ReactNode }) => (
-    <div>
-      {triagger}
-      <div>{children}</div>
-    </div>
-  ),
-  SelectHoverItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>
-      {children}
-    </button>
-  ),
-}));
-
 vi.mock("@/components/bs-ui/separator", () => ({
   Separator: () => null,
 }));
 
-vi.mock("@/components/bs-ui/tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
-  ),
-}));
+
 
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: vi.fn(),
@@ -82,7 +57,8 @@ vi.mock("@/controllers/API/tenant", () => ({
   getUserTenantsApi: vi.fn(),
 }));
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => Promise.resolve(promise)),
 }));
 
@@ -237,7 +213,7 @@ describe("MainLayout identity-specific navigation", () => {
     expect(link).toHaveAttribute("href", "/dsh");
     expect(link).toHaveClass("inline-flex", "items-center", "px-6", "w-full", "h-12");
     expect(modelLink).toHaveClass("inline-flex", "px-6", "w-full", "h-12");
-    expect(link.querySelector("svg")).toHaveClass("h-6", "w-6", "shrink-0");
+    expect(link.querySelector("svg")).toHaveClass("h-4", "w-4", "mr-2", "shrink-0");
     const label = link.querySelector("span[aria-hidden='true']");
     expect(label).toHaveClass("mx-[14px]", "inline-flex", "w-[3em]", "justify-between", "text-sm");
     expect(screen.getByText("menu.models")).toHaveClass("mx-[14px]");

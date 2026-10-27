@@ -1,11 +1,14 @@
 import json
 import zipfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 from bisheng.knowledge.rag.pipeline.loader.mineru_v4 import MineruV4Loader
 from bisheng.knowledge.rag.pipeline.loader.mineru_v4_client import MineruV4Error
+from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
+from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 
 
 @pytest.fixture(autouse=True)
@@ -99,6 +102,42 @@ def test_loader_preserves_text_equation_image_bbox_and_indexes(tmp_path):
     for start, end in document.metadata["indexes"]:
         assert text[start:end].strip()
     assert (tmp_path / "images" / "page_0_image_2.png").read_bytes() == b"image"
+
+
+def test_fractional_bbox_matches_saved_labels_after_splitting(tmp_path):
+    loader = _loader(tmp_path)
+    middle = _middle_json()
+    middle["extensions"]["docvortex_layout"]["pages"][0].update(width_pt=595.32, height_pt=841.92)
+    block = middle["pages"][0]["blocks"][0]
+    block["bbox"] = [0.1234, 0.2345, 0.8765, 0.3456]
+    middle["pages"][0]["blocks"] = [block]
+    result = _zip(tmp_path, middle=middle, image=None)
+    with patch.object(loader.client, "parse", return_value=str(result)):
+        documents = loader.load()
+
+    expected = [73, 197, 521, 290]
+    assert documents[0].metadata["bboxes"] == [expected]
+    assert all(type(value) is int for value in documents[0].metadata["bboxes"][0])
+    assert loader.bbox_list[0].bbox == expected
+
+    chunks = SplitterTransformer(separator=["\n\n"], chunk_size=1000, chunk_overlap=0).transform_documents(documents)
+    knowledge_file = SimpleNamespace(bbox_object_name="")
+    with (
+        patch("bisheng.knowledge.rag.pipeline.transformer.extra_file.get_minio_storage_sync") as get_minio,
+        patch(
+            "bisheng.knowledge.rag.pipeline.transformer.extra_file.KnowledgeUtils.get_knowledge_bbox_file_object_name",
+            return_value="bbox/1.json",
+            create=True,
+        ),
+    ):
+        ExtraFileTransformer(loader, "1", 1, knowledge_file=knowledge_file).transform_documents(chunks)
+    saved_labels = json.loads(get_minio.return_value.put_object_sync.call_args.kwargs["file"])
+    chunk_boxes = json.loads(chunks[0].metadata["bbox"])["chunk_bboxes"]
+    assert chunk_boxes == [{"page": 0, "bbox": expected}]
+    for box in chunk_boxes:
+        label_id = "-".join(map(str, [box["page"], *box["bbox"]]))
+        assert label_id in saved_labels
+        assert saved_labels[label_id]["bbox"] == box["bbox"]
 
 
 @pytest.mark.parametrize(

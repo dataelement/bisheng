@@ -1,8 +1,10 @@
+import { Button } from '@bisheng/ui';
 
 import KnowledgeUploadComponent from "@/components/bs-comp/knowledgeUploadComponent";
-import { Button } from "@/components/bs-ui/button";
+
 import { locationContext } from "@/contexts/locationContext";
-import { useContext, useEffect, useRef, useState } from "react";
+import { showApiError } from "@/controllers/request";
+import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
@@ -54,8 +56,13 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
         }
 
         setLoading(true)
-        await onSave(params)
-        setLoading(false)
+        try {
+            await onSave(params)
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setLoading(false)
+        }
     }
     useEffect(() => {
         if (initialFiles.length > 0) {
@@ -77,10 +84,10 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
             initialFiles={initialFiles}
         />
         <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
-            <Button disabled={loading || !finish} variant="outline" onClick={handleSave}>{t("uploadDirectly")}</Button>
+            <Button disabled={loading || !finish} variant="outlined" onClick={handleSave} color="default">{t("uploadDirectly")}</Button>
             <Button disabled={loading || !finish} onClick={() => {
                 onNext(filesRef.current)
-            }} >
+            }}>
                 {fileCount ? <span>{t('totalFiles', { count: fileCount })}</span> : null}&nbsp;{t('nextStep')}</Button>
         </div>
     </div>

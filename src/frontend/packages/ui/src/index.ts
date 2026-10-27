@@ -10,6 +10,11 @@ export * from './components/Toast';
 // (组件-Notification通知提醒.md): imperative `notification.*` API + the single
 // <Notifier /> container. Shares Toast's queue core; copy comes from the caller.
 export * from './components/Notification';
+// Alert — the notice that stays: one line embedded in the page saying what
+// state this page or block is in (组件-Alert警告提示.md). JSX-mounted and
+// driven by the host's state, unlike the imperative pair above — a condition
+// that holds is not an event that happened.
+export * from './components/Alert';
 // Crash screen. Shared because the identifiers, the QR payload and the log file
 // have to be identical across the apps for a support handover to work — the
 // copy and the artwork are passed in, so the contract above still holds.
@@ -24,6 +29,14 @@ export * from './components/Modal';
 // (组件-Input输入框.md). Sizes, the gray focus chain, the four states and the
 // touch rules are baked in; every string (placeholder, a11y labels) is a prop.
 export * from './components/Input';
+// InputNumber — one number to compute with (组件-InputNumber数字输入框.md). The
+// Input shell plus a hover-only stepper column; never clamps or rounds what the
+// user typed, reports range / precision on blur. Every string is a prop.
+export * from './components/InputNumber';
+// Slider — a rough value in a bounded range, live while dragging
+// (组件-Slider滑块.md). One size, single + range, marks with optional snapping,
+// and either a number box beside it or a tooltip bubble — never both.
+export * from './components/Slider';
 // State page shell — illustration + copy + buttons for an area with no normal
 // content (组件-State状态页.md). Every string comes from the caller.
 export * from './components/StateView';
@@ -67,3 +80,24 @@ export * from './components/Tag';
 // (组件-Breadcrumb面包屑.md). The collapse rules, the 96px name cap and the
 // ellipsis menu are baked in; the page passes the full chain and the copy.
 export * from './components/Breadcrumb';
+// Select — pick one or several values from a given list and show the pick in
+// the box (组件-Select选择器.md). The trigger is the Input shell; the panel
+// (shell, 32px rows, groups, radius ladder) is shared with Dropdown below via
+// shared/menuSurface.ts. Every string (placeholder, empty / loading copy, a11y
+// labels) is a prop.
+export * from './components/Select';
+// Cascader — follow a hierarchy to one or several values
+// (组件-Cascader级联选择.md). It reuses Select's trigger and menu surface, then
+// adds desktop columns, phone drill-down, path values, strict selection,
+// search and lazy children. Copy and data stay with the caller.
+export * from './components/Cascader';
+// Dropdown — a set of related ACTIONS behind one trigger; picking runs it and
+// the trigger never changes (组件-Dropdown下拉菜单.md). Danger rows, disabled
+// rows, toggle rows, one submenu level and click / hover triggering are baked
+// in; confirmation stays the caller's (`useConfirm` in `onSelect`).
+export * from './components/Dropdown';
+// Pagination — cut a long list into pages for finding, comparing and coming
+// back (组件-Pagination分页.md). The ellipsis rule, the brand-tinted current page,
+// the always-present pager, the jumper past 10 pages and the phone's simple
+// type are baked in; every string comes in through `locale`.
+export * from './components/Pagination';

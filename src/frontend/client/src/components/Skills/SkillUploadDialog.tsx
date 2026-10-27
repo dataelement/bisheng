@@ -1,11 +1,13 @@
+import { isApiError } from '@bisheng/api-client';
 import { useQuery } from '@tanstack/react-query';
-import { useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Outlined } from 'bisheng-icons';
 import { Button } from '@bisheng/ui';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '~/components/ui/Dialog';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import {
+  checkPersonalSkill,
   createPersonalSkill,
   findPersonalSkillByImport,
   getPersonalSkillUsage,
@@ -13,7 +15,7 @@ import {
 } from '~/api/skillCenter';
 import { translateApiErrorMessage } from '~/api/request';
 import { useSkillCenter } from './useSkillCenter';
-import { SkillRequestError, type SkillRecord } from './types';
+import { type SkillRecord } from './types';
 
 interface SkillUploadDialogProps {
   open: boolean;
@@ -23,6 +25,8 @@ interface SkillUploadDialogProps {
 }
 
 const MIB = 1024 * 1024;
+const MAX_UPLOAD_BYTES = 50 * MIB;
+const QUOTA_ERROR_CODES = new Set([11061, 11062]);
 
 export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: SkillUploadDialogProps) {
   const localize = useLocalize();
@@ -30,30 +34,87 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
   const usage = useQuery(['skill-center', 'usage'], getPersonalSkillUsage, { enabled: open, retry: false });
   const [file, setFile] = useState<File>();
   const [dragging, setDragging] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<number>();
   const [duplicate, setDuplicate] = useState<{ skillId: number; contentHash: string }>();
   const [saving, setSaving] = useState(false);
+  const checkSeq = useRef(0);
   const importId = useRef(globalThis.crypto?.randomUUID?.() ?? `import-${Date.now()}`);
   const input = useRef<HTMLInputElement>(null);
   const atCountLimit = !target && (usage.data?.count ?? 0) >= (usage.data?.countLimit ?? 20);
   const atByteLimit = !target && (usage.data?.usedBytes ?? 0) >= (usage.data?.bytesLimit ?? 209715200);
+  const quotaBlocked = atCountLimit || atByteLimit;
+  const showFileError = Boolean(error) && !(quotaBlocked && errorCode != null && QUOTA_ERROR_CODES.has(errorCode));
+
+  useEffect(() => () => {
+    checkSeq.current += 1;
+  }, []);
 
   const choose = (files: FileList | null) => {
     setError('');
+    setErrorCode(undefined);
     setDuplicate(undefined);
-    setFile(files?.length === 1 ? files[0] : undefined);
-    if (files && files.length > 1) setError(localize('com_skill_center_error_multiple'));
+    setReady(false);
+    const selected = files?.length === 1 ? files[0] : undefined;
+    setFile(selected);
+    if (files && files.length > 1) {
+      setError(localize('com_skill_center_error_multiple'));
+      setChecking(false);
+      return;
+    }
+    if (selected && !/\.(md|zip|skill)$/i.test(selected.name)) {
+      setChecking(false);
+      setError(localize('com_skill_center_error_format'));
+      return;
+    }
+    if (selected && (!selected.size || selected.size > MAX_UPLOAD_BYTES)) {
+      setChecking(false);
+      setError(localize('com_skill_center_error_size'));
+      return;
+    }
+    if (!selected) return;
+    if (quotaBlocked) {
+      setChecking(false);
+      return;
+    }
+    void inspect(selected);
+  };
+
+  const inspect = async (selected: File) => {
+    const seq = checkSeq.current + 1;
+    checkSeq.current = seq;
+    setChecking(true);
+    try {
+      await checkPersonalSkill(selected, target?.id);
+      if (checkSeq.current !== seq) return;
+      setReady(true);
+    } catch (cause) {
+      if (checkSeq.current !== seq) return;
+      const sameName = isApiError(cause)
+        && cause.status_code === 11055
+        && Number.isInteger(Number((cause.data as Record<string, unknown> | undefined)?.skill_id))
+        && Boolean((cause.data as Record<string, unknown> | undefined)?.content_hash || target?.contentHash);
+      if (sameName) setReady(true);
+      fail(cause);
+    } finally {
+      if (checkSeq.current === seq) setChecking(false);
+    }
   };
   const allowDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    event.stopPropagation();
     if (!saving) setDragging(true);
   };
   const endDrag = (event: DragEvent<HTMLDivElement>) => {
+    event.stopPropagation();
     if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
     setDragging(false);
   };
   const dropFile = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
+    event.stopPropagation();
     setDragging(false);
     if (saving) return;
     choose(event.dataTransfer.files);
@@ -63,27 +124,30 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
     onOpenChange(false);
   };
   const fail = (cause: unknown) => {
-    if (cause instanceof SkillRequestError && cause.statusCode === 11055) {
-      const skillId = Number(cause.data?.skill_id);
-      const contentHash = String(cause.data?.content_hash ?? target?.contentHash ?? '');
+    if (isApiError(cause) && cause.status_code === 11055) {
+      const skillId = Number((cause.data as Record<string, unknown> | undefined)?.skill_id);
+      const contentHash = String((cause.data as Record<string, unknown> | undefined)?.content_hash ?? target?.contentHash ?? '');
       if (Number.isInteger(skillId) && contentHash) {
         setDuplicate({ skillId, contentHash });
         setError('');
+        setErrorCode(undefined);
         return;
       }
     }
-    if (cause instanceof SkillRequestError) {
+    if (isApiError(cause)) {
+      setErrorCode(cause.status_code);
       setError(translateApiErrorMessage({
-        status_code: cause.statusCode,
-        status_message: cause.statusMessage,
+        status_code: cause.status_code,
+        status_message: cause.status_message,
         data: cause.data,
       }));
       return;
     }
+    setErrorCode(undefined);
     setError(localize('com_skill_center_error_storage'));
   };
   const save = async () => {
-    if (!file || saving || atCountLimit || atByteLimit) return;
+    if (!file || !ready || saving || atCountLimit || atByteLimit) return;
     setSaving(true);
     setError('');
     try {
@@ -123,6 +187,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
             bytesLimit: limit,
           })}
         </DialogDescription>
+        <p className="text-body-sm text-text-3">{localize('com_skill_center_formats')}</p>
         <input ref={input} type="file" accept=".md,.zip,.skill" className="hidden" onChange={(event) => { choose(event.target.files); event.target.value = ''; }} />
         <div
           className={cn(
@@ -136,11 +201,12 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
         >
           <Outlined.Skill className="size-8 text-text-3" aria-hidden />
           <p className="text-body text-text-1">{file ? file.name : localize('com_skill_center_drop')}</p>
+          {checking && <p role="status" className="text-body-sm text-text-3">{localize('com_skill_center_parsing')}</p>}
           <Button color="default" variant="outlined" disabled={saving} onClick={() => input.current?.click()}>
-            {localize(file || error ? 'com_skill_center_reselect' : 'com_skill_center_choose')}
+            {localize(file || showFileError ? 'com_skill_center_reselect' : 'com_skill_center_choose')}
           </Button>
         </div>
-        {error && (
+        {showFileError && (
           <div role="alert" className="space-y-2">
             <p className="text-body-sm text-red-600">{error}</p>
             <Button color="default" variant="outlined" onClick={() => input.current?.click()}>{localize('com_skill_center_reselect')}</Button>
@@ -159,7 +225,11 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
         <div className="flex justify-end gap-2">
           <Button color="default" variant="outlined" disabled={saving} onClick={close}>{localize('com_skill_center_cancel')}</Button>
           {!duplicate && (
-            <Button loading={saving} disabled={!file || atCountLimit || atByteLimit} onClick={() => void save()}>
+            <Button
+              loading={saving}
+              disabled={!file || checking || !ready || atCountLimit || atByteLimit}
+              onClick={() => void save()}
+            >
               {localize(target ? 'com_skill_center_save_update' : 'com_skill_center_add')}
             </Button>
           )}

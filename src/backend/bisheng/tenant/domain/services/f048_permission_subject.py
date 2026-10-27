@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.common.errcode.permission import PermissionInvalidResourceError, PermissionSubjectUnavailableError
 from bisheng.database.models.department import (
     DepartmentDao,
     UserDepartmentDao,
@@ -170,8 +170,13 @@ class TenantPermissionSubjectDirectory:
             raise PermissionInvalidResourceError()
         identifier = int(normalized_id)
         if normalized_type == "user":
+            # A ``user`` subject is always a natural person: service accounts
+            # are their own subject type below, not rows of ``user`` (F053
+            # design K15 / K17), so no per-row type check is needed here.
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
+            if not valid:
+                raise PermissionSubjectUnavailableError()
             source_type = "DIRECT"
         elif normalized_type == "service_account":
             row = await ServiceAccountRepository.get(identifier)
@@ -287,6 +292,7 @@ class TenantPermissionSubjectDirectory:
 
         from bisheng.channel.domain.models.channel import Channel
         from bisheng.core.database import get_async_db_session
+        from bisheng.database.models.app import APP_STATE_DELETED, App
         from bisheng.database.models.assistant import Assistant
         from bisheng.database.models.flow import Flow
         from bisheng.telemetry_search.domain.models.dashboard import Dashboard
@@ -294,7 +300,7 @@ class TenantPermissionSubjectDirectory:
 
         ids_by_type = {
             resource_type: tuple(resource_id for item_type, resource_id in resources if item_type == resource_type)
-            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard")
+            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard", "app")
         }
         if not any(ids_by_type.values()):
             return {}
@@ -316,6 +322,18 @@ class TenantPermissionSubjectDirectory:
             if ids_by_type["channel"]:
                 rows = (await session.exec(select(Channel).where(col(Channel.id).in_(ids_by_type["channel"])))).all()
                 labels.update({("channel", str(row.id)): row.name for row in rows})
+            if ids_by_type["app"]:
+                # Hosted applications (F054): ``app.id`` is a str like Flow /
+                # Assistant, and "deleted" is a state, not an ``is_delete`` flag.
+                rows = (
+                    await session.exec(
+                        select(App).where(
+                            col(App.id).in_(ids_by_type["app"]),
+                            App.state != APP_STATE_DELETED,
+                        )
+                    )
+                ).all()
+                labels.update({("app", str(row.id)): row.name for row in rows})
 
             tool_ids = tuple(int(value) for value in ids_by_type["tool"] if value.isdigit())
             if tool_ids:

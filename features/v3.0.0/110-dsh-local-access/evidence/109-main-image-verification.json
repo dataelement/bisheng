@@ -1,0 +1,25 @@
+{
+  "main": {
+    "revision": "4218ba7c138a90764a304681c3d8a5875b2c9c1a",
+    "image": "dataelement/bisheng-backend:work110-main-baseline-4218ba7c1",
+    "image_id": "sha256:3dc6ca958297565536229dafa8fbf845da4a8562d067d9c6b8367f41d9222633",
+    "source_comparison": {
+      "expected_files": 1453,
+      "missing": [],
+      "changed": [],
+      "extra": []
+    }
+  },
+  "feature": {
+    "revision": "fdb9ae81b254e4ecdda785f247e119560fc4fd78",
+    "image": "cr.dataelem.com/dataelement/bisheng-backend:feat_bisheng-work-110",
+    "image_id": "sha256:c63324c8b0f8e3ca0bfc96c7668eacf13a1fc248d767b08844da1e4f5cf5b3e9",
+    "digest": "sha256:869488b0ec5152fc3ed9ac02165d839503396782724c112ae3d92516e3ad839b",
+    "source_comparison": {
+      "expected_files": 1501,
+      "missing": [],
+      "changed": [],
+      "extra": []
+    }
+  }
+}

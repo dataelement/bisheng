@@ -56,6 +56,36 @@ scope、租户、数据范围和资源权限判定。`tools/list` 只返回当�
 - 成功返回的知识资源动作字段保留为 `actions`，文件标签保留为结构化
   `TagItem[]`，不转成 `permission_ids` 或标签名数组。
 
+## 应用工场工具（本地开发工具包）
+
+除上面 10 个知识工具外，同一个 MCP 服务还提供 9 个应用工场工具，供开发者的本地
+coding agent 查组织信息、查看和维护自己的托管应用。它们没有对应的 `/api/v2` HTTP
+路由，也不计入上面「10 个知识资源和知识文件工具」的冻结合同。
+
+| 工具 | scope | 依赖工场运行时层 | 主要输入 | 成功输出 |
+|---|---|---|---|---|
+| `bisheng_identity_get_user` | `identity:read` | 否 | `target_user_id` | `{user_id, user_name, status, departments, roles}` |
+| `bisheng_org_tree` | `identity:read` | 否 | — | `{departments:[…树形…]}` |
+| `bisheng_dept_members` | `identity:read` | 否 | `dept_id`, `page?`, `size?`（≤200）, `keyword?` | `{members, total}` |
+| `bisheng_app_status` | `app:manage` | 是 | `app_id` | `{app_id, app_state, instance, publish}`，含审批终态与驳回理由全文 |
+| `bisheng_app_logs` | `app:manage` | 是 | `app_id`, `tail?`（≤2000）, `since?`, `keyword?` | `{lines, app_state, pending_reason}` |
+| `bisheng_app_db_tables` | `app:manage` | 是 | `app_id` | `{result}` |
+| `bisheng_app_db_schema` | `app:manage` | 是 | `app_id`, `table` | `{result}` |
+| `bisheng_app_db_rows` | `app:manage` | 是 | `app_id`, `table`, `page?`, `size?`（≤200）, `order?` | `{result}` |
+| `bisheng_app_db_row_update` | `app:manage` | 是 | `app_id`, `table`, `key`, `values` | `{result}` |
+
+这 9 个工具的使用规则如下：
+
+- 只接受服务账号自身身份（S）。PAT 看不到它们。持 `delegate` 的 API Key 也看不到它们，
+  因为本地开发工具包与委托互斥。
+- 部署未启用工场运行时层时，6 个应用工具不出现在 `tools/list` 中；直接调用返回 `16207`。
+- 应用工具只能操作 API Key 资源归属人名下的应用。应用不存在、属于其他租户、属于他人，
+  都返回同一个 `26305`，载荷只含 `app_id`。
+- `identity:read` 是高危 scope：授予后本租户组织架构全量可读，没有按部门收窄的机制。
+  其他租户的用户与不存在的用户返回同一个 `26306`。结果只含自然人，不含服务账号。
+- 应用数据工具不做 DDL。表结构在 `bisheng-app.yaml` 中声明，变更走发布流程；每次写操作都审计修改前后的值。
+- 查询可调用的模型名请直接调用模型协议面的 `GET /api/v2/model/v1/models`，MCP 不提供模型清单工具。
+
 ## 成功与错误输出
 
 成功时，业务结果直接放入 MCP `structuredContent`，并同时返回内容等价的 JSON

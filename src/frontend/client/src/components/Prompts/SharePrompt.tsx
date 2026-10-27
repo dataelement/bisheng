@@ -7,15 +7,8 @@ import type {
   TUpdatePromptGroupPayload,
 } from '~/types/chat';
 import { ShareOutlineIcon } from '~/components/icons';
-import {
-  Button,
-  Switch,
-  OGDialog,
-  OGDialogTitle,
-  OGDialogClose,
-  OGDialogContent,
-  OGDialogTrigger,
-} from '~/components/ui';
+import { Button, OGDialog, OGDialogTitle, OGDialogClose, OGDialogContent, OGDialogTrigger } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useUpdatePromptGroup, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
@@ -112,7 +105,7 @@ const SharePrompt = ({ group, disabled }: { group?: TPromptGroup; disabled: bool
               control={control}
               disabled={isFetching === true || updateGroup.isLoading || !instanceProjectId}
               render={({ field }) => (
-                <Switch
+                <Switch className="peer"
                   {...field}
                   checked={field.value}
                   onCheckedChange={field.onChange}

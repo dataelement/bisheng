@@ -1,0 +1,463 @@
+...............................................................FF....... [  5%]
+.................sssssss................................................ [ 11%]
+............s....s....s....s....s....s.................................. [ 17%]
+........................................................................ [ 23%]
+........................................................................ [ 29%]
+...........................................sssss........................ [ 34%]
+........................................................................ [ 40%]
+........................................................................ [ 46%]
+........................................................................ [ 52%]
+........................................................................ [ 58%]
+........................................................................ [ 63%]
+........................................................................ [ 69%]
+........................................................................ [ 75%]
+........................................................................ [ 81%]
+........................................................................ [ 87%]
+........................................................................ [ 92%]
+........................................................................ [ 98%]
+..........ssssss                                                         [100%]
+=================================== FAILURES ===================================
+_ test_grant_subjects_five_endpoints_accept_app[list_grant_subject_users-list_candidate_users-kwargs0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13b286110>
+endpoint_name = 'list_grant_subject_users'
+service_name = 'list_candidate_users'
+kwargs = {'keyword': '', 'page': 1, 'page_size': 50}
+
+    @pytest.mark.parametrize(("endpoint_name", "service_name", "kwargs"), _GRANT_SUBJECT_ENDPOINTS)
+    async def test_grant_subjects_five_endpoints_accept_app(
+        monkeypatch, endpoint_name: str, service_name: str, kwargs: dict
+    ) -> None:
+        """Each of the five hard gates lets ``resource_type='app'`` through to the service.
+
+        Driven through the real endpoint functions rather than by re-reading the
+        constant: the gate is five separate ``if resource_type not in ...`` lines,
+        and only calling all five proves none was missed. Authorization itself is
+        stubbed out — this asserts the type gate, not the predicate.
+        """
+        called: dict[str, object] = {}
+
+        async def _scope(resource_type, resource_id, login_user):
+            del login_user
+            called["scope"] = (resource_type, resource_id)
+            return SimpleNamespace(tenant_id=TENANT_ID, department_path=None)
+
+        async def _service(*args, **service_kwargs):
+            called["service"] = (args, service_kwargs)
+            return []
+
+        monkeypatch.setattr(grant_subjects, "_authorized_scope", _scope)
+        monkeypatch.setattr(grant_subjects.grant_subject_service, service_name, _service)
+
+        endpoint = getattr(grant_subjects, endpoint_name)
+>       response = await endpoint(resource_type="app", resource_id="app-1", login_user=object(), **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/app_runtime/test_app_permission_registration.py:309:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+bisheng/permission/api/endpoints/grant_subjects.py:107: in list_grant_subject_users
+    total = await grant_subject_service.count_candidate_users(scope, keyword=keyword)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bisheng/permission/domain/services/grant_subject_service.py:101: in count_candidate_users
+    directory = await get_grant_subject_directory()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bisheng/permission/application/access.py:62: in get_grant_subject_directory
+    await _ensure_f048_runtime()
+bisheng/permission/application/access.py:36: in _ensure_f048_runtime
+    await get_f048_process_runtime()
+bisheng/permission/application/process_runtime.py:152: in get_f048_process_runtime
+    context: ProcessPermissionRuntime = await app_context.async_get_instance(F048_PERMISSION_RUNTIME_CONTEXT)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bisheng/core/context/manager.py:171: in async_get_instance
+    await self._initialize_context_with_dependencies(name, set())
+bisheng/core/context/manager.py:157: in _initialize_context_with_dependencies
+    context = self._registry.get_context(context_name)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ContextRegistry(contexts=[])>, name = 'permission_runtime'
+
+    def get_context(self, name: str) -> BaseContextManager:
+        """Get Context Manager
+
+        Args:
+            name: Context Name
+
+        Returns:
+            BaseContextManager: Corresponding context manager
+
+        Raises:
+            KeyError: If the context does not exist
+        """
+        if name not in self._contexts:
+>           raise KeyError(f"Context '{name}' not found. Available contexts: {list(self._contexts.keys())}")
+E           KeyError: "Context 'permission_runtime' not found. Available contexts: []"
+
+bisheng/core/context/base.py:512: KeyError
+----------------------------- Captured stderr call -----------------------------
+2026-10-20 21:26:39.812 | ERROR    | bisheng.core.context.manager:_initialize_context_with_dependencies:166 - Failed to initialize context 'permission_runtime': "Context 'permission_runtime' not found. Available contexts: []"
+_ test_grant_subjects_five_endpoints_accept_app[list_grant_subject_user_groups-list_candidate_user_groups-kwargs1] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x13b4fd5d0>
+endpoint_name = 'list_grant_subject_user_groups'
+service_name = 'list_candidate_user_groups'
+kwargs = {'keyword': '', 'page': 1, 'page_size': 50}
+
+    @pytest.mark.parametrize(("endpoint_name", "service_name", "kwargs"), _GRANT_SUBJECT_ENDPOINTS)
+    async def test_grant_subjects_five_endpoints_accept_app(
+        monkeypatch, endpoint_name: str, service_name: str, kwargs: dict
+    ) -> None:
+        """Each of the five hard gates lets ``resource_type='app'`` through to the service.
+
+        Driven through the real endpoint functions rather than by re-reading the
+        constant: the gate is five separate ``if resource_type not in ...`` lines,
+        and only calling all five proves none was missed. Authorization itself is
+        stubbed out — this asserts the type gate, not the predicate.
+        """
+        called: dict[str, object] = {}
+
+        async def _scope(resource_type, resource_id, login_user):
+            del login_user
+            called["scope"] = (resource_type, resource_id)
+            return SimpleNamespace(tenant_id=TENANT_ID, department_path=None)
+
+        async def _service(*args, **service_kwargs):
+            called["service"] = (args, service_kwargs)
+            return []
+
+        monkeypatch.setattr(grant_subjects, "_authorized_scope", _scope)
+        monkeypatch.setattr(grant_subjects.grant_subject_service, service_name, _service)
+
+        endpoint = getattr(grant_subjects, endpoint_name)
+>       response = await endpoint(resource_type="app", resource_id="app-1", login_user=object(), **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test/app_runtime/test_app_permission_registration.py:309:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+bisheng/permission/api/endpoints/grant_subjects.py:132: in list_grant_subject_user_groups
+    total = await grant_subject_service.count_candidate_user_groups(scope, keyword=keyword)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bisheng/permission/domain/services/grant_subject_service.py:152: in count_candidate_user_groups
+    directory = await get_grant_subject_directory()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bisheng/permission/application/access.py:62: in get_grant_subject_directory
+    await _ensure_f048_runtime()
+bisheng/permission/application/access.py:36: in _ensure_f048_runtime
+    await get_f048_process_runtime()
+bisheng/permission/application/process_runtime.py:152: in get_f048_process_runtime
+    context: ProcessPermissionRuntime = await app_context.async_get_instance(F048_PERMISSION_RUNTIME_CONTEXT)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+bisheng/core/context/manager.py:171: in async_get_instance
+    await self._initialize_context_with_dependencies(name, set())
+bisheng/core/context/manager.py:157: in _initialize_context_with_dependencies
+    context = self._registry.get_context(context_name)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ContextRegistry(contexts=[])>, name = 'permission_runtime'
+
+    def get_context(self, name: str) -> BaseContextManager:
+        """Get Context Manager
+
+        Args:
+            name: Context Name
+
+        Returns:
+            BaseContextManager: Corresponding context manager
+
+        Raises:
+            KeyError: If the context does not exist
+        """
+        if name not in self._contexts:
+>           raise KeyError(f"Context '{name}' not found. Available contexts: {list(self._contexts.keys())}")
+E           KeyError: "Context 'permission_runtime' not found. Available contexts: []"
+
+bisheng/core/context/base.py:512: KeyError
+----------------------------- Captured stderr call -----------------------------
+2026-10-20 21:26:40.066 | ERROR    | bisheng.core.context.manager:_initialize_context_with_dependencies:166 - Failed to initialize context 'permission_runtime': "Context 'permission_runtime' not found. Available contexts: []"
+=============================== warnings summary ===============================
+bisheng/core/ai/__init__.py:2
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/bisheng/core/ai/__init__.py:2: DeprecationWarning: `langchain-community` is being sunset and is no longer actively maintained. See https://github.com/langchain-ai/langchain-community/issues/674 for details and migration guidance toward standalone integration packages.
+    from langchain_community.chat_models import ChatTongyi, ChatZhipuAI, MoonshotChat
+
+<frozen importlib._bootstrap>:241
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:241
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18
+  /Users/zhangguoqing/works/bisheng/src/backend/.venv/lib/python3.11/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+test/app_runtime/test_upgrade_authorization_model.py: 24 warnings
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:170: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    await session.execute(
+
+test/app_runtime/test_upgrade_authorization_model.py: 24 warnings
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:189: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    (await session.execute(select(PermissionCatalogRelease).where(PermissionCatalogRelease.status == "CURRENT")))
+
+test/app_runtime/test_upgrade_authorization_model.py: 29 warnings
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:203: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    await session.execute(
+
+test/app_runtime/test_upgrade_authorization_model.py: 21 warnings
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:219: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    await session.execute(
+
+test/app_runtime/test_upgrade_authorization_model.py: 13 warnings
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:259: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    await session.execute(
+
+test/app_runtime/test_upgrade_authorization_model.py::test_preflight_blocks_on_live_heartbeats
+test/app_runtime/test_upgrade_authorization_model.py::test_apply_publishes_model_idempotently
+test/app_runtime/test_upgrade_authorization_model.py::test_apply_reuses_a_model_already_in_the_store
+test/app_runtime/test_upgrade_authorization_model.py::test_apply_writes_release_rows_in_one_sql_txn
+test/app_runtime/test_upgrade_authorization_model.py::test_a_failure_in_the_last_step_rolls_back_the_first_three
+test/app_runtime/test_upgrade_authorization_model.py::test_verify_asserts_read_side
+test/app_runtime/test_upgrade_authorization_model.py::test_step1_not_rollbackable_documented
+test/app_runtime/test_upgrade_authorization_model.py::test_step1_not_rollbackable_documented
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:404: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    await session.execute(
+
+test/app_runtime/test_upgrade_authorization_model.py::test_preflight_blocks_on_live_heartbeats
+test/app_runtime/test_upgrade_authorization_model.py::test_apply_publishes_model_idempotently
+test/app_runtime/test_upgrade_authorization_model.py::test_apply_reuses_a_model_already_in_the_store
+test/app_runtime/test_upgrade_authorization_model.py::test_apply_writes_release_rows_in_one_sql_txn
+test/app_runtime/test_upgrade_authorization_model.py::test_a_failure_in_the_last_step_rolls_back_the_first_three
+test/app_runtime/test_upgrade_authorization_model.py::test_verify_asserts_read_side
+test/app_runtime/test_upgrade_authorization_model.py::test_step1_not_rollbackable_documented
+test/app_runtime/test_upgrade_authorization_model.py::test_step1_not_rollbackable_documented
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:435: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    await session.execute(
+
+test/app_runtime/test_upgrade_authorization_model.py::test_verify_asserts_read_side
+test/app_runtime/test_upgrade_authorization_model.py::test_verify_asserts_read_side
+test/app_runtime/test_upgrade_authorization_model.py::test_verify_asserts_read_side
+test/app_runtime/test_upgrade_authorization_model.py::test_verify_asserts_read_side
+test/app_runtime/test_upgrade_authorization_model.py::test_verify_asserts_read_side
+test/app_runtime/test_upgrade_authorization_model.py::test_verify_asserts_read_side
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:490: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    return (await session.execute(statement)).scalar_one_or_none() is not None
+
+test/app_runtime/test_upgrade_authorization_model.py::test_step1_not_rollbackable_documented
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:533: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    await session.execute(
+
+test/app_runtime/test_upgrade_authorization_model.py::test_step1_not_rollbackable_documented
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/scripts/upgrade_f048_authorization_model.py:556: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    await session.execute(
+
+test/app_publish/test_deploy_api.py::test_session_cookie_cannot_call_v2_endpoints
+  /Users/zhangguoqing/works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+test/app_publish/test_schema_migration_snapshot.py::TestMigrateForRelease::test_the_reference_is_the_online_version
+test/app_publish/test_schema_migration_snapshot.py::TestMigrateForRelease::test_a_breaking_plan_asks_for_the_snapshot
+test/app_publish/test_schema_migration_snapshot.py::TestMigrateForRelease::test_an_unchanged_declaration_costs_no_rpc
+  /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/test/app_publish/test_schema_migration_snapshot.py:190: DeprecationWarning:
+          🚨 You probably want to use `session.exec()` instead of `session.execute()`.
+
+          This is the original SQLAlchemy `session.execute()` method that returns objects
+          of type `Row`, and that you have to call `scalars()` to get the model objects.
+
+          For example:
+
+          ```Python
+          heroes = await session.execute(select(Hero)).scalars().all()
+          ```
+
+          instead you could use `exec()`:
+
+          ```Python
+          heroes = await session.exec(select(Hero)).all()
+          ```
+
+    row = (await session.execute(select(AppVersion).where(AppVersion.id == version_id))).scalars().first()
+
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/_pytest/cacheprovider.py:475
+  /Users/zhangguoqing/works/bisheng/src/backend/.venv/lib/python3.11/site-packages/_pytest/cacheprovider.py:475: PytestCacheWarning: cache could not write path /Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/.pytest_cache/v/cache/nodeids: [Errno 1] Operation not permitted: '/Users/zhangguoqing/.codex/worktrees/vibe-runtime-delivery/bisheng/src/backend/.pytest_cache/v/cache/nodeids'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/app_runtime/test_app_permission_registration.py::test_grant_subjects_five_endpoints_accept_app[list_grant_subject_users-list_candidate_users-kwargs0]
+FAILED test/app_runtime/test_app_permission_registration.py::test_grant_subjects_five_endpoints_accept_app[list_grant_subject_user_groups-list_candidate_user_groups-kwargs1]
+2 failed, 1214 passed, 24 skipped, 147 warnings in 30.65s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

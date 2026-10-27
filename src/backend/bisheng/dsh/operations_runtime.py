@@ -14,7 +14,6 @@ from bisheng.dsh.domain.services.projection import DshProjectionService
 from bisheng.dsh.domain.services.usage import DshUsageService
 from bisheng.dsh.infrastructure.quota_redis import QuotaRedis
 from bisheng.dsh.infrastructure.quota_topology import QuotaTopology, create_quota_redis
-from bisheng.dsh.infrastructure.shared_trust import OUTBOUND_KEY_ID, configured_key
 
 
 def _decode_admin_token(token: str) -> dict:
@@ -128,11 +127,8 @@ class OperationsRuntime:
     def __init__(self, config: DshSettings):
         self.config = config
         self.settings = config
-        self.http = None
-        self.gateway = None
         self.admin = None
         self.policy = None
-        self.profiles = None
         self.repository_scope = None
         self.authentication = OperationsAuthentication()
         from bisheng.common.services.config_service import settings as application_settings
@@ -179,30 +175,13 @@ class OperationsRuntime:
     async def _initialize_admin(self):
         if self.admin is not None:
             return
-        import httpx
 
-        from bisheng.core.cache.redis_manager import get_redis_client
         from bisheng.dsh.admin_runtime import get_admin_runtime
-        from bisheng.dsh.infrastructure.gateway_client import GatewayClient
-        from bisheng.dsh.infrastructure.service_auth import RedisNonceStore, ServiceAuth, ServiceKey
 
-        redis = (await get_redis_client()).async_connection
-        key = ServiceKey(
-            OUTBOUND_KEY_ID,
-            configured_key(OUTBOUND_KEY_ID).hex().encode(),
-        )
-        self.http = httpx.AsyncClient(verify=True, follow_redirects=False)
-        self.gateway = GatewayClient(
-            self.config.gateway_internal_url,
-            ServiceAuth(key, RedisNonceStore(redis)),
-            self.http,
-            self.config.introspection_timeout_seconds,
-        )
         services = await get_admin_runtime(self, quota=_ActivatedQuotaProxy(self), usage=self.usage)
-        self.admin, self.policy, self.profiles, self.repository_scope = (
+        self.admin, self.policy, self.repository_scope = (
             services.admin,
             services.policy,
-            services.profiles,
             services.repository_scope,
         )
 
@@ -210,8 +189,6 @@ class OperationsRuntime:
         self.quota.topology.close()
         try:
             await self.quota.redis.aclose()
-            if self.http is not None:
-                await self.http.aclose()
         finally:
             self.authentication.reset()
 

@@ -1,13 +1,21 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Button, Input, Select } from '@bisheng/ui';
+
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from 'react-i18next';
+
+const TYPE_OPTIONS = [
+    { value: 'str', label: 'String' },
+    { value: 'list', label: 'List' },
+];
 
 const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
     const { t } = useTranslation('flow');
+    const selectLabels = useSelectLabels();
 
     const handleTypeChange = (newType) => {
         onUpdateItem(index, { ...item, type: newType });
@@ -32,18 +40,20 @@ const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
             {/* key */}
             <Input value={item.key} placeholder={t('parameterName')} onChange={handleKeyChange} className={`${error && 'border-red-500'} h-8`} />
             {/* type */}
-            <Select value={item.type} onValueChange={handleTypeChange}>
-                <SelectTrigger className="max-w-32 w-24 h-8">
-                    <SelectValue placeholder={t('dataType')} />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectItem value="str">String</SelectItem>
-                        <SelectItem value="list">List</SelectItem>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
-            <Trash2 onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
+            <Select
+                {...selectLabels}
+                options={TYPE_OPTIONS}
+                value={item.type || null}
+                onChange={(v) => {
+                    // Re-picking the current type is a no-op (Radix never fired for it).
+                    const next = v == null ? '' : String(v);
+                    if (next !== item.type) handleTypeChange(next);
+                }}
+                placeholder={t('dataType')}
+                aria-label={t('dataType')}
+                className="nodrag w-24 shrink-0"
+            />
+            <Outlined.Delete size={16} onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
         </div>
     );
 };
@@ -121,7 +131,7 @@ export default function CodeOutputItem({ nodeId, data, onValidate, onChange, i18
                     onDeleteItem={handleDeleteItem}
                 />
             ))}
-            <Button onClick={handleAddItem} variant="outline" className="border-primary text-primary mt-2 h-8">
+            <Button onClick={handleAddItem} variant="outlined" className="border-primary text-primary mt-2 h-8" color="default">
                 {t('addNewParameter')}
             </Button>
         </div>

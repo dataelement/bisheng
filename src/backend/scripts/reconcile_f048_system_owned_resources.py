@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Audit or repair missing F048 projections for canonical system resources.
 
-The default is dry-run. Apply creates missing preset-tool projections through
-the online F048 facade so the durable ledger, SQL mirrors, and OpenFGA tuples
-stay consistent. Preset dashboards are user-owned examples and are deliberately
+The default is dry-run. Apply creates missing preset-tool projections and adds
+missing system tuples on CURRENT resources through the F048 facade. The durable
+ledger, SQL mirrors, and OpenFGA tuples stay consistent; existing grants remain
+unchanged. Preset dashboards are user-owned examples and are deliberately
 outside this system-resource reconciler.
 
 Run from ``src/backend`` with the live config:
@@ -112,6 +113,8 @@ async def run(args: argparse.Namespace) -> int:
         "selected_resource_types": ["tool"],
         "resource_count": len(resources),
         "missing_count": report.missing_count,
+        "incomplete_count": report.incomplete_count,
+        "missing_tuple_count": report.missing_tuple_count,
         "blocked_count": report.blocked_count,
         "current_count": report.current_count,
         "invalid": [asdict(item) for item in invalid],

@@ -1,6 +1,6 @@
-import { Badge } from "@/components/bs-ui/badge";
+import { Tag } from "@bisheng/ui";
 import { Label } from "@/components/bs-ui/label";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
 import { isVarInFlow } from "@/util/flowUtils";
 import { ChevronDown, X } from "lucide-react";
 import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
@@ -124,14 +124,12 @@ export function InputFileItem({ nodeId, data, onChange, onVarEvent, i18nPrefix }
                     <div className="flex flex-wrap size-full max-h-32 overflow-y-auto">
                         {value.length ? (
                             value.map((key) => (
-                                <Badge
-                                    onPointerDown={(e) => e.stopPropagation()}
-                                    key={key}
+                                <span key={key} onPointerDown={(e) => e.stopPropagation()}><Tag size="small" color="brand"
                                     className={`flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] ${errorKeys.includes(key) && "bg-red-100 border-red-600"}`}
                                 >
                                     {data.varZh?.[key] || key}
                                     <X className="h-3 w-3 min-w-3" onClick={() => updateValue(value.filter((one) => one !== key))} />
-                                </Badge>
+                                </Tag></span>
                             ))
                         ) : (
                             <span className="text-gray-400 mt-0.5">{t(`${i18nPrefix}placeholder`)}</span>

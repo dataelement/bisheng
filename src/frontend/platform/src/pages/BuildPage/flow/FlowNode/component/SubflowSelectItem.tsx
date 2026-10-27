@@ -1,6 +1,6 @@
 import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
 import { getSubflowCandidatesApi, getSubflowInterfaceApi, SubflowInterface } from "@/controllers/API/workflow";
 import { WorkflowNode, WorkflowNodeParam } from "@/types/flow";
 import { useEffect, useRef, useState } from "react";

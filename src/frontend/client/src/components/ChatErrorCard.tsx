@@ -49,6 +49,11 @@ const KNOWN_TYPES = new Set([
     'service_unavailable',
     'network_timeout',
     'auth_error',
+    // The content no longer fits the model's context window (F087). Terminal: a
+    // retry would send the same content again.
+    'context_overflow',
+    // Task mode only: condensing earlier steps into a summary failed (F087).
+    'context_compress_failed',
     // Attachment parsing (OCR / ETL) — daily-mode chat only.
     'file_parse_busy',
     'file_parse_failed',

@@ -20,9 +20,7 @@ vi.mock("@/controllers/API/serviceAccount", () => ({
   updateServiceAccountApi: vi.fn(),
 }))
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: () => null,
-}))
+
 
 vi.mock("@/pages/SystemPage/components/ServiceAccount/ApiKeysTab", () => ({
   ApiKeysTab: () => null,

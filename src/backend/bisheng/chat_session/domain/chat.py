@@ -10,7 +10,9 @@ from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatList
+from bisheng.chat_session.domain.repositories.workflow_file_repository import WorkflowFileRepository
 from bisheng.chat_session.domain.services.chat_message_service import _resolve_leaf_tenant_id
+from bisheng.chat_session.domain.services.workflow_file_service import WorkflowFileService
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.chat_session.utils import get_session_app_type
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
@@ -138,6 +140,19 @@ class ChatSessionService:
         return attachments
 
     @staticmethod
+    def _attachment_objects(messages: list, owner) -> list[dict]:
+        attachments = ChatSessionService._attachments_of(messages)
+        return [
+            *attachments,
+            *[
+                {**asset, "_workflow_image": True}
+                for attachment in attachments
+                for asset in (attachment.get("derived_assets") or [])
+                if isinstance(asset, dict) and WorkflowFileService.is_owned_image(asset, owner.tenant_id, owner.user_id)
+            ],
+        ]
+
+    @staticmethod
     async def _remove_attachments(chat_id: str) -> None:
         """Drop the files a deleted conversation was holding.
 
@@ -146,9 +161,14 @@ class ChatSessionService:
         the user staring at a conversation that refuses to disappear.
         """
         try:
-            messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000)
+            messages = await WorkflowFileRepository.attachment_messages(chat_id)
+            owner = await MessageSessionDao.async_get_one(chat_id)
+            if owner is None:
+                return
             object_names = {
-                f["object_name"] for f in ChatSessionService._attachments_of(messages) if f.get("object_name")
+                f["object_name"]
+                for f in ChatSessionService._attachment_objects(messages, owner)
+                if f.get("object_name")
             }
             if not object_names:
                 return
@@ -188,8 +208,8 @@ class ChatSessionService:
         caller-supplied name would open the whole bucket to anyone with an
         account.
         """
-        await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
-        return await ChatSessionService._signed_attachment_url(chat_id, file_id)
+        owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+        return await ChatSessionService._signed_attachment_url(chat_id, file_id, owner)
 
     @staticmethod
     async def resolve_subject_attachment_url(chat_id: str, file_id: str, subject: SessionSubject) -> str:
@@ -198,16 +218,18 @@ class ChatSessionService:
         Same rule: the subject must own the conversation, and the object name
         comes from the stored messages.
         """
-        await ChatSessionService.get_subject_session(chat_id, subject)
-        return await ChatSessionService._signed_attachment_url(chat_id, file_id)
+        owner = await ChatSessionService.get_subject_session(chat_id, subject)
+        return await ChatSessionService._signed_attachment_url(chat_id, file_id, owner)
 
     @staticmethod
-    async def _signed_attachment_url(chat_id: str, file_id: str) -> str:
-        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000)
-        for attachment in ChatSessionService._attachments_of(messages):
+    async def _signed_attachment_url(chat_id: str, file_id: str, owner: MessageSession) -> str:
+        messages = await WorkflowFileRepository.attachment_messages(chat_id)
+        for attachment in ChatSessionService._attachment_objects(messages, owner):
             if str(attachment.get("file_id")) != str(file_id):
                 continue
             object_name = attachment.get("object_name")
+            if attachment.get("_workflow_image") and attachment.get("state") != "ready":
+                raise NotFoundError.http_exception()
             if not object_name:
                 # Written before attachments were made permanent: the file is
                 # gone with the temp bucket. Say so rather than guess.
@@ -222,7 +244,17 @@ class ChatSessionService:
         """Delete a session with audit logging and telemetry."""
         session_chat = await MessageSessionDao.async_get_one(chat_id)
 
-        if not session_chat or session_chat.is_delete:
+        if not session_chat:
+            return
+        if (
+            session_chat.user_id != login_user.user_id
+            or session_chat.tenant_id != _resolve_leaf_tenant_id(login_user)
+            or session_chat.api_subject_type is not None
+        ):
+            raise NotFoundError.http_exception()
+        if session_chat.is_delete:
+            # Keep manifests after soft deletion so a failed object removal can be retried.
+            await ChatSessionService._remove_attachments(chat_id)
             return
 
         if session_chat.flow_type == FlowType.ASSISTANT.value:
@@ -236,7 +268,9 @@ class ChatSessionService:
             if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
                 await AuditLogService.delete_chat_workflow(login_user, request_ip, flow_info)
 
-        await MessageSessionDao.delete_session(chat_id)
+        await WorkflowFileRepository.soft_delete_owned_session(
+            chat_id, user_id=login_user.user_id, tenant_id=session_chat.tenant_id
+        )
         await ChatSessionService._remove_attachments(chat_id)
         await ChatSessionService._remove_agent_workspaces(chat_id)
 

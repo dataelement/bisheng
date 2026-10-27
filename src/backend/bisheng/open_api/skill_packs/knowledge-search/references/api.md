@@ -75,7 +75,10 @@ before choosing retrieval keywords.
 | 26030 | permission backend temporarily unavailable | retry once later; if it persists, tell the user to contact their administrator |
 | 26040 | the administrator turned the capability off | the key is intact and resumes working when re-enabled — tell the user to contact their administrator, do not re-issue |
 | 26043 | the key's holder was deactivated or removed | tell the user to contact their administrator; re-issuing an identical key will not help |
-| **26044** | **the administrator restricted retrieval to the user's own knowledge bases** | do **not** retry and do not re-issue; the listing endpoints already reflect the restricted set — work within it, and tell the user to contact their administrator if they need wider access |
+| **26044** | **the administrator restricted access to the user's own knowledge bases** | do **not** retry and do not re-issue; the listing endpoints already reflect the restricted set — work within it, and tell the user to contact their administrator if they need wider access. Retrieval no longer answers with this code: a knowledge base outside the restricted set is simply unreachable (`26321`) |
+| **26321** | **a named knowledge base is unreachable for this key** (missing, not granted, restricted away, or of a type retrieval does not support — deliberately indistinguishable) | `data.unreachable_ids` names which ones; drop them or re-list the knowledge bases and work from that set. Do **not** retry the same request, and do not read anything into *which* reason applies — you cannot tell, by design |
+| **26322** | a knowledge base the application declared has been removed | the capability was revoked, not narrowed; tell the user, do not silently search the rest |
+| **26323** | the retrieval scope is too large to enumerate | name the knowledge bases explicitly in `knowledge_base_ids` |
 | 404 | resource not found *or* not visible to the holder | treat as non-existent; never probe for existence |
 
 Data-scope note: an administrator may narrow every personal token to the

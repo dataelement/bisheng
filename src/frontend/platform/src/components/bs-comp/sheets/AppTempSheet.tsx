@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { SearchInput } from '@bisheng/ui';
 import { FlowIcon, HelperIcon } from "@/components/bs-icons/app";
 import { readTempsDatabase } from "@/controllers/API";
 import { AppType, AppTypeToNum } from "@/types/app";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SearchInput } from "../../bs-ui/input";
+
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
 import AppAvator from "../cardComponent/avatar";
@@ -55,7 +56,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                 <div className="w-fit p-6">
                     <SheetTitle>{t('appTemplate')}</SheetTitle>
                     <SheetDescription>{t('chooseTemplateOrCreateBlank')}</SheetDescription>
-                    <SearchInput value={keyword} placeholder={t('search')} className="my-6" onChange={(e) => setKeyword(e.target.value)} />
+                    <SearchInput value={keyword} placeholder={t('search')} onChange={(e) => setKeyword(e.target.value)} className={"my-6"} />
                     {/* type */}
                     <div className="mt-4">
                         <div
@@ -71,6 +72,26 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                         >
                             <HelperIcon />
                             <span>{t('assistant')}</span>
+                        </div>
+                    </div>
+                    {/* Hosted app: not a template category — a shortcut to the
+                        "write your own code and deploy it" tutorial. Opens in a new
+                        tab so the drawer / builder stays put. */}
+                    <div className="mt-4 pt-4 border-t border-border w-[210px]">
+                        <div
+                            className="group flex flex-col gap-1.5 px-4 py-3 rounded-lg cursor-pointer border border-dashed border-border transition-all hover:border-primary/60 hover:bg-primary/5"
+                            onClick={() => window.open('/tutorial/hosted-app.html', '_blank', 'noopener')}
+                        >
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                                    <polyline points="8 9 11 12 8 15" />
+                                    <line x1="14" y1="15" x2="16" y2="15" />
+                                </svg>
+                                <span>{t('hostedApp')}</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground leading-snug">{t('hostedAppDesc')}</span>
+                            <span className="text-xs font-medium text-primary group-hover:underline">{t('viewTutorial')} →</span>
                         </div>
                     </div>
                 </div>

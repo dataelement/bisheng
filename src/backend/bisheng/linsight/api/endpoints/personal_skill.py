@@ -21,6 +21,13 @@ def _service() -> PersonalSkillService:
     return PersonalSkillService()
 
 
+def _updated_at(skill) -> str | None:
+    stamp = skill.update_time or skill.create_time
+    if stamp is None:
+        return None
+    return stamp.isoformat() if hasattr(stamp, "isoformat") else str(stamp)
+
+
 def _card(service: PersonalSkillService, skill) -> dict:
     return {
         "id": skill.id,
@@ -31,6 +38,7 @@ def _card(service: PersonalSkillService, skill) -> dict:
         "enabled": bool(skill.enabled),
         "content_hash": skill.content_hash,
         "bundle_missing": service.is_bundle_missing(skill),
+        "update_time": _updated_at(skill),
     }
 
 
@@ -95,6 +103,30 @@ async def personal_skill_by_import(
     service = _service()
     skill = await service.find_by_import(login_user.user_id, import_id)
     return resp_200(_card(service, skill))
+
+
+@router.post("/personal/check", summary="Validate a personal skill upload without saving")
+async def check_personal_skill(
+    file: UploadFile = File(...),
+    skill_id: int | None = Form(default=None),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    preview = await _service().inspect_upload(
+        user_id=login_user.user_id,
+        filename=file.filename or "",
+        data=await file.read(),
+        content_type=file.content_type,
+        skill_id=skill_id,
+    )
+    return resp_200(
+        {
+            "name": preview.name,
+            "display_name": preview.display_name,
+            "description": preview.description,
+            "size": preview.size,
+            "files": [{"path": path} for path in preview.files],
+        }
+    )
 
 
 @router.post("/personal", summary="Create a personal skill")

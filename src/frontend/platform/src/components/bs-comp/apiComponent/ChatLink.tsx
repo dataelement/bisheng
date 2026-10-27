@@ -1,17 +1,17 @@
 // @ts-strict-ignore
-import { Alert, AlertDescription } from '@/components/bs-ui/alert';
-import { Button } from '@/components/bs-ui/button';
+import { Alert, Button, Select, notification } from '@bisheng/ui';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
-import { SearchInput } from '@/components/bs-ui/input';
+
 import { Label } from '@/components/bs-ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
 import Skeleton from '@/components/bs-ui/skeleton';
-import { Switch } from '@/components/bs-ui/switch';
-import { toast } from '@/components/bs-ui/toast/use-toast';
+import { Switch } from '@bisheng/ui';
+
 import { getGuestLinkApi, GuestLinkKind, GuestLinkSettings, patchGuestLinkApi } from '@/controllers/API/guestLink';
-import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { showApiError } from '@/controllers/request';
 import { copyText } from '@/utils';
-import { Check, CircleX, Clipboard, Info } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
@@ -44,7 +44,7 @@ const BorwserSkeleton = ({ size = '' }) => {
               <Skeleton className="h-6 w-16 ml-2 rounded" /> {/* 发送按钮骨架 */}
             </div>
           </div>
-          <CircleX className='h-6 w-6 text-foreground' />
+          <Outlined.CloseCircle className='h-6 w-6 text-foreground' />
         </div>
           : <div className="p-4 bg-white">
             <div className="border border-border rounded-lg p-4 space-y-4">
@@ -85,15 +85,17 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
   const [saving, setSaving] = useState(false)
   const [operatorQuery, setOperatorQuery] = useState('')
   const [searchedCandidates, setSearchedCandidates] = useState<GuestLinkSettings['candidates'] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const selectLabels = useSelectLabels()
 
   useEffect(() => {
     let cancelled = false
-    captureAndAlertRequestErrorHoc(getGuestLinkApi(kind, appId)).then((data) => {
+    getGuestLinkApi(kind, appId).then((data) => {
       if (!cancelled && data) {
         setSettings(data)
         onAvailabilityChange(Boolean(data.system_guest_access && data.enabled))
       }
-    })
+    }).catch(showApiError)
     return () => {
       cancelled = true
     }
@@ -103,34 +105,38 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
     const keyword = operatorQuery.trim()
     if (!keyword) {
       setSearchedCandidates(null)
+      setSearching(false)
       return
     }
+    // The shared Select already debounces onSearch (300ms), so query right away.
     let cancelled = false
-    const timer = window.setTimeout(() => {
-      captureAndAlertRequestErrorHoc(getGuestLinkApi(kind, appId, keyword)).then((data) => {
-        if (!cancelled && data) {
-          setSearchedCandidates(data.candidates || [])
-        }
-      })
-    }, 300)
+    setSearching(true)
+    getGuestLinkApi(kind, appId, keyword).then((data) => {
+      if (cancelled) return
+      setSearching(false)
+      if (data) {
+        setSearchedCandidates(data.candidates || [])
+      }
+    }).catch(showApiError).finally(() => { if (!cancelled) setSearching(false) })
     return () => {
       cancelled = true
-      window.clearTimeout(timer)
     }
   }, [kind, appId, operatorQuery])
 
   const persist = async (patch: { enabled?: boolean; user_id?: number | null }, previous: GuestLinkSettings) => {
     setSaving(true)
-    const result = await captureAndAlertRequestErrorHoc(patchGuestLinkApi(kind, appId, patch))
-    setSaving(false)
-    if (result === false || !result) {
-      setSettings(previous)
-      onAvailabilityChange(Boolean(previous.system_guest_access && previous.enabled))
-      return
-    }
+    try {
+    const result = await patchGuestLinkApi(kind, appId, patch)
     setSettings(result)
     onAvailabilityChange(Boolean(result.system_guest_access && result.enabled))
-    toast({ variant: 'success', description: t('api.guestSaved') })
+    notification.open({ type: 'success', description: String(t('api.guestSaved') ?? '') })
+    } catch (error) {
+      setSettings(previous)
+      onAvailabilityChange(Boolean(previous.system_guest_access && previous.enabled))
+      showApiError(error)
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!settings) {
@@ -149,15 +155,33 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
         return name.includes(keyword) || String(item.user_id) === selectValue
       })
     : candidates
+  // Keep the current operator among the options so the trigger can still name it
+  // while a server search returns a list without them.
+  const selectedCandidate = selectValue
+    ? (settings.candidates ?? []).find((item) => String(item?.user_id) === selectValue)
+    : undefined
+  const optionCandidates = selectedCandidate && !visibleCandidates.some((item) => String(item.user_id) === selectValue)
+    ? [selectedCandidate, ...visibleCandidates]
+    : visibleCandidates
+  const operatorOptions = optionCandidates.map((item) => ({
+    value: String(item.user_id),
+    label: `${item.user_name ?? ''}${settings.follow_system_default && item.user_id === settings.default_operator_user_id
+      ? ` · ${t('api.systemDefault')}`
+      : ''}`,
+  }))
+  const warningMessages = [
+    settings.warnings?.operator_is_admin ? t('api.guestWarnAdmin') : null,
+    settings.warnings?.default_not_in_tenant ? t('api.guestWarnDefaultNotInTenant') : null,
+    settings.warnings?.operator_inactive ? t('api.guestWarnOperatorInactive') : null,
+  ].filter((message): message is string => typeof message === 'string' && message.length > 0)
 
   return (
     <>
-      <Alert className="mb-4">
-        <Info className="h-4 w-4" />
-        <AlertDescription className="mt-0.5">
-          {systemOff ? t('api.guestAccessDisabledSystem') : t('api.noLoginLinkDescription')}
-        </AlertDescription>
-      </Alert>
+      <Alert
+        type={systemOff ? 'error' : 'info'}
+        className="mb-4"
+        description={String(systemOff ? t('api.guestAccessDisabledSystem') : t('api.noLoginLinkDescription'))}
+      />
 
       <div className="mb-6 flex items-center justify-between gap-4">
         <Label htmlFor="guest-link-enabled">{t('api.allowGuestAccess')}</Label>
@@ -179,13 +203,20 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
           <div className="flex items-center gap-3">
             <Label className="shrink-0">{t('api.guestOperator')}</Label>
             <Select
-              value={selectValue}
+              {...selectLabels}
+              aria-label={t('api.guestOperator')}
+              className="max-w-sm"
+              showSearch
+              placeholder={t('api.guestSelectOperator')}
+              noMatchText={t('api.guestOperatorNotFound')}
+              emptyText={t('api.guestOperatorNotFound')}
+              options={operatorOptions}
+              loading={searching}
+              onSearch={setOperatorQuery}
+              value={selectValue ?? null}
               disabled={readOnly}
-              onOpenChange={(open) => {
-                if (!open) setOperatorQuery('')
-              }}
-              onValueChange={(value) => {
-                if (!value) return
+              onChange={(value) => {
+                if (value == null || String(value) === selectValue) return
                 const previous = settings
                 const userId = Number(value)
                 setSettings({
@@ -196,81 +227,32 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
                 })
                 void persist({ user_id: userId }, previous)
               }}
-            >
-              <SelectTrigger className="max-w-sm">
-                <SelectValue placeholder={t('api.guestSelectOperator')} />
-              </SelectTrigger>
-              <SelectContent
-                headNode={
-                  <div className="shrink-0 bg-popover p-2" onPointerDown={(event) => event.stopPropagation()}>
-                    <SearchInput
-                      value={operatorQuery}
-                      inputClassName="h-8 dark:border-gray-700"
-                      placeholder={t('api.guestSearchOperator')}
-                      onChange={(event) => setOperatorQuery(event.target.value)}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      iconClassName="w-4 h-4"
-                    />
-                  </div>
-                }
-              >
-                {visibleCandidates.map((item) => (
-                  <SelectItem key={item.user_id} value={String(item.user_id)}>
-                    {item.user_name}
-                    {settings.follow_system_default && item.user_id === settings.default_operator_user_id
-                      ? ` · ${t('api.systemDefault')}`
-                      : ''}
-                  </SelectItem>
-                ))}
-                {visibleCandidates.length === 0 && (
-                  <div className="px-2 py-3 text-sm text-muted-foreground">
-                    {t('api.guestOperatorNotFound')}
-                  </div>
-                )}
-              </SelectContent>
-            </Select>
+            />
             {settings.follow_system_default && (
               <span className="text-xs text-muted-foreground">{t('api.systemDefault')}</span>
             )}
             {!settings.follow_system_default && settings.can_edit && !systemOff && (
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                disabled={saving}
-                onClick={() => {
+              <Button type="button" variant="link" size="small" disabled={saving} onClick={() => {
                   const previous = settings
                   setSettings({ ...settings, follow_system_default: true, user_id: null })
                   void persist({ user_id: null }, previous)
-                }}
-              >
+                }}>
                 {t('api.restoreSystemDefault')}
               </Button>
             )}
           </div>
           <p className="text-sm text-muted-foreground">{t('api.guestOperatorHint')}</p>
-          {settings.warnings?.operator_is_admin && (
-            <Alert className="border-orange-300 text-orange-800">
-              <AlertDescription>{t('api.guestWarnAdmin')}</AlertDescription>
-            </Alert>
-          )}
-          {settings.warnings?.default_not_in_tenant && (
-            <Alert className="border-orange-300 text-orange-800">
-              <AlertDescription>{t('api.guestWarnDefaultNotInTenant')}</AlertDescription>
-            </Alert>
-          )}
-          {settings.warnings?.operator_inactive && (
-            <Alert className="border-orange-300 text-orange-800">
-              <AlertDescription>{t('api.guestWarnOperatorInactive')}</AlertDescription>
-            </Alert>
+          {warningMessages.length > 0 && (
+            <Alert
+              type="warning"
+              description={warningMessages.join(' ')}
+            />
           )}
         </div>
       )}
 
       {controlsOff && !systemOff && (
-        <Alert className="mb-4">
-          <AlertDescription>{t('api.guestLinkDisabled')}</AlertDescription>
-        </Alert>
+        <Alert className="mb-4" description={String(t('api.guestLinkDisabled'))} />
       )}
     </>
   )
@@ -326,14 +308,12 @@ const NoLoginLink = ({ type, noLogin = false }) => {
       {noLogin && kind && id ? (
         <GuestLinkPanel kind={kind} appId={String(id)} onAvailabilityChange={setGuestAvailable} />
       ) : (
-        <Alert className='mb-4'>
-          <Info className="h-4 w-4" />
-          <AlertDescription className='mt-0.5'>
-            {noLogin
+        <Alert
+          className="mb-4"
+          description={String(noLogin
               ? t('api.noLoginLinkDescription')
-              : t('api.loginLinkDescription')}
-          </AlertDescription>
-        </Alert>
+              : t('api.loginLinkDescription'))}
+        />
       )}
 
       <div className={noLogin && !guestAvailable ? 'pointer-events-none opacity-50' : undefined}>
@@ -347,7 +327,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
                 className="flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
                 onClick={() => copyToClipboard(url)}
               >
-                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
+                {isCopied ? <Outlined.Check size={18} /> : <Outlined.Copy size={15} />}
               </button>
             </div>
           </CardTitle>
@@ -392,7 +372,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
                 className="flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
                 onClick={() => copyToClipboard(embedCode)}
               >
-                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
+                {isCopied ? <Outlined.Check size={18} /> : <Outlined.Copy size={15} />}
               </button>
             </div>
           </CardTitle>

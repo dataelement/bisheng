@@ -1,17 +1,12 @@
-import { Button } from '@/components/bs-ui/button'
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/bs-ui/select'
+import { Button, Select } from '@bisheng/ui';
+
+import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels'
 import { useTranslation } from 'react-i18next'
 
 interface ChoiceProps {
     label: string
     value: string
-    options: { value: string; label: string }[]
+    options: { value: string; label: string; disabled?: boolean }[]
     onChange: (value: string) => void
     disabled?: boolean
 }
@@ -22,19 +17,18 @@ export function DshChoice({
     onChange,
     disabled,
 }: ChoiceProps) {
+    const selectLabels = useSelectLabels()
     return (
-        <Select value={value} onValueChange={onChange} disabled={disabled}>
-            <SelectTrigger aria-label={label} className="w-auto min-w-40">
-                <SelectValue placeholder={label} />
-            </SelectTrigger>
-            <SelectContent>
-                {options.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                    </SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
+        <Select
+            {...selectLabels}
+            className="w-auto min-w-40"
+            options={options.filter((option) => option.value != null && option.value !== '')}
+            value={value || null}
+            onChange={(v) => { if (v != null) onChange(String(v)) }}
+            disabled={disabled}
+            placeholder={label}
+            aria-label={label}
+        />
     )
 }
 interface PagerProps {
@@ -59,12 +53,12 @@ export function DshPager({
     return (
         <div className={`flex gap-2 ${className}`}>
             {(!hideUnavailable || previous) && (
-                <Button variant="outline" disabled={!previous || loading} onClick={onPrevious}>
+                <Button variant="outlined" disabled={!previous || loading} onClick={onPrevious} color="default">
                     {t('dsh.previous')}
                 </Button>
             )}
             {(!hideUnavailable || next) && (
-                <Button variant="outline" disabled={!next || loading} onClick={onNext}>
+                <Button variant="outlined" disabled={!next || loading} onClick={onNext} color="default">
                     {t('dsh.next')}
                 </Button>
             )}

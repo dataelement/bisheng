@@ -1,5 +1,5 @@
 import { ActionLevelBoard } from "@/pages/SystemPage/components/permission/ActionLevelBoard"
-import { fireEvent, render, screen, selectMenuOption, waitFor, within } from "@/test/test-utils"
+import { fireEvent, render, screen, selectOption, waitFor, within } from "@/test/test-utils"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -92,7 +92,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    await selectMenuOption("actionLevel.change.edit", 3)
+    await selectOption("actionLevel.change.edit", 3)
     expect(
       screen.getByTestId("action-level-zone-3"),
     ).toContainElement(screen.getByTestId("permission-action-edit"))
@@ -138,11 +138,11 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    await selectMenuOption("actionLevel.change.visible", 3)
+    await selectOption("actionLevel.change.visible", 3)
     expect(screen.getByRole("status")).toBeInTheDocument()
 
     // Re-query: moving zones remounts the card, so the old node is detached.
-    await selectMenuOption("actionLevel.change.visible", 1)
+    await selectOption("actionLevel.change.visible", 1)
     expect(screen.queryByRole("status")).not.toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
@@ -158,7 +158,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    await selectMenuOption("actionLevel.change.edit", 3)
+    await selectOption("actionLevel.change.edit", 3)
     fireEvent.click(screen.getByLabelText("actionLevel.active.delete"))
     expect(screen.getByRole("status")).toBeInTheDocument()
 
@@ -183,7 +183,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    await selectMenuOption("actionLevel.change.edit", 3)
+    await selectOption("actionLevel.change.edit", 3)
     fireEvent.click(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
     )
@@ -206,7 +206,7 @@ describe("ActionLevelBoard", () => {
       />,
     )
 
-    await selectMenuOption("actionLevel.change.edit", 3)
+    await selectOption("actionLevel.change.edit", 3)
     fireEvent.click(
       screen.getByRole("button", { name: "actionLevel.publishChanges" }),
     )

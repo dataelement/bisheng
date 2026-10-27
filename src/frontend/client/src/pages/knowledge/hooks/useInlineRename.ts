@@ -1,3 +1,4 @@
+import { showApiError } from "~/api/request";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
@@ -10,7 +11,7 @@ interface UseInlineRenameOptions {
     /** Whether this is a brand-new folder being created inline */
     isCreating: boolean;
     /** Commit rename to parent */
-    onRename: (newName: string) => void;
+    onRename: (newName: string) => void | Promise<void>;
     /** Optional name validator — returns error message or null */
     onValidateName?: (newName: string) => string | null;
     /** Called when an in-progress creation is cancelled (Escape on new folder) */
@@ -34,6 +35,8 @@ export function useInlineRename({
     const localize = useLocalize();
     const [isRenaming, setIsRenaming] = useState(isCreating);
     const [renameValue, setRenameValue] = useState(fileName);
+    const pendingRef = useRef(false);
+    const renameAfterMenuCloseRef = useRef(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const { showToast } = useToastContext();
     // Mirrors isRenaming so a commit can tell it already ran. An outside click
@@ -50,33 +53,20 @@ export function useInlineRename({
     useEffect(() => {
         if (isRenaming && inputRef.current) {
             const input = inputRef.current;
-            // Focus MUST be synchronous to immediately capture focus and prevent onBlur
-            // from being accidentally triggered by surrounding UI interactions (like Radix dropdown).
+            // Menu actions enter this state only after their focus scope closes.
             input.focus();
-
-            // Text selection is delayed to ensure the browser doesn't clear it immediately after focus
-            const timerId = setTimeout(() => {
-                // Rename is entered from a Radix dropdown item, and Radix restores
-                // focus to the menu trigger as it unmounts — after the synchronous
-                // focus above. Re-assert focus here, once that restore has run:
-                // an input that never held focus never fires blur, which is why
-                // clicking outside used to leave the field open and unsaved.
-                input.focus();
-                // Select text before extension for files, or select all for folders
-                const dotIndex = fileName.lastIndexOf(".");
-                if (dotIndex > 0 && !isFolder) {
-                    input.setSelectionRange(0, dotIndex);
-                } else {
-                    input.select();
-                }
-            }, 10);
-
-            return () => clearTimeout(timerId);
+            // Select text before extension for files, or select all for folders.
+            const dotIndex = fileName.lastIndexOf(".");
+            if (dotIndex > 0 && !isFolder) {
+                input.setSelectionRange(0, dotIndex);
+            } else {
+                input.select();
+            }
         }
     }, [isRenaming, isFolder, fileName]);
 
     const handleRenameSubmit = useCallback(() => {
-        if (!isRenamingRef.current) return;
+        if (!isRenamingRef.current || pendingRef.current) return;
 
         const trimmed = renameValue.trim();
 
@@ -110,8 +100,18 @@ export function useInlineRename({
             }
         }
 
-        onRename(trimmed);
-        stopRenaming();
+        try {
+            const saved = onRename(trimmed);
+            if (saved && typeof saved.then === 'function') {
+                pendingRef.current = true;
+                void saved.then(stopRenaming).catch(error => {
+                    showApiError(error);
+                    inputRef.current?.focus();
+                }).finally(() => { pendingRef.current = false; });
+            } else stopRenaming();
+        } catch (error) {
+            showApiError(error);
+        }
     }, [renameValue, isCreating, fileName, onRename, onValidateName, showToast, stopRenaming]);
 
     // Commit on a click anywhere outside the field. The input's own onBlur can't
@@ -156,6 +156,18 @@ export function useInlineRename({
         setIsRenaming(true);
     }, [fileName]);
 
+    const startRenamingFromMenu = useCallback(() => {
+        renameAfterMenuCloseRef.current = true;
+    }, []);
+
+    const handleMenuCloseAutoFocus = useCallback((event: Event) => {
+        if (!renameAfterMenuCloseRef.current) return;
+        renameAfterMenuCloseRef.current = false;
+        // The menu has finished its exit animation. Keep it from reclaiming focus.
+        event.preventDefault();
+        startRenaming();
+    }, [startRenaming]);
+
     return {
         isRenaming,
         renameValue,
@@ -164,5 +176,7 @@ export function useInlineRename({
         handleRenameSubmit,
         handleKeyDown,
         startRenaming,
+        startRenamingFromMenu,
+        handleMenuCloseAutoFocus,
     };
 }

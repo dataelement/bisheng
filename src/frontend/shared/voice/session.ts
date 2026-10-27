@@ -28,7 +28,7 @@ export class Transcript {
 export interface VoiceCallbacks {
   onState: (recording: boolean, busy: boolean) => void;
   onText: (text: string) => void;
-  onError: () => void;
+  onError: (error?: unknown) => void;
   onEnd: () => void;
 }
 export interface VoiceOptions {
@@ -227,7 +227,7 @@ export class VoiceSession {
   private fail(error: unknown) {
     if (this.ended) return;
     console.error("Voice input failed", error);
-    this.callbacks.onError();
+    this.callbacks.onError(error);
     this.complete();
   }
 

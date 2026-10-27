@@ -1,5 +1,6 @@
-import { Tabs, Tag } from "@bisheng/ui";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { showApiError } from "~/api/request";
+import { Button, Tabs, Tag } from "@bisheng/ui";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   decideApprovalTaskApi,
   getApprovalInstanceDetailApi,
@@ -21,6 +22,7 @@ import { cn } from "~/utils";
 import { Dialog, DialogContent } from "../ui/Dialog";
 import { ExpandableSearchField } from "../ui/ExpandableSearchField";
 import { RequestDetailPanel, TaskDetailPanel } from "./ApprovalDetailPanels";
+import { AppReviewView, type AppReviewTarget } from "./AppReviewView";
 import {
   IN_PROGRESS_STATUSES,
   StatusBadge,
@@ -70,6 +72,10 @@ export function ApprovalPane({
   const [selectedInstanceId, setSelectedInstanceId] = useState<number | null>(null);
   const [taskDetail, setTaskDetail] = useState<ApprovalTaskDetail | null>(null);
   const [requestDetail, setRequestDetail] = useState<ApprovalInstanceDetail | null>(null);
+  const [listError, setListError] = useState<unknown>(null);
+  const [detailError, setDetailError] = useState<unknown>(null);
+  const detailRequest = useRef(0);
+  const listRequest = useRef(0);
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -79,6 +85,14 @@ export function ApprovalPane({
   const [withdrawReason, setWithdrawReason] = useState("");
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [revokeReason, setRevokeReason] = useState("");
+  /**
+   * The review view (AC-25) is a second mode of this same surface, not a second
+   * surface — design D14 案 A, read on the page the approval centre became: it
+   * takes over both columns so the file tree and the code get the full content
+   * panel, and 「返回」 puts the list back with the selection intact. A route of
+   * its own would need a permission guard and a return state for nothing.
+   */
+  const [reviewTarget, setReviewTarget] = useState<AppReviewTarget | null>(null);
 
   const filteredTaskItems = useMemo(() => {
     const byStatus = taskFilter === "pending_me"
@@ -114,10 +128,33 @@ export function ApprovalPane({
     severity: ok ? NotificationSeverity.SUCCESS : NotificationSeverity.INFO,
   });
 
+  const loadDetail = async (id: number | null, kind: "task" | "request") => {
+    const revision = ++detailRequest.current;
+    setTaskDetail(null); setRequestDetail(null); setDetailError(null);
+    setLoadingDetail(Boolean(id));
+    if (!id) return;
+    try {
+      const detail = kind === "task" ? await getMyApprovalTaskDetailApi(id) : await getApprovalInstanceDetailApi(id);
+      if (revision !== detailRequest.current) return;
+      if (kind === "task") setTaskDetail(detail);
+      else setRequestDetail(detail);
+    } catch (error) {
+      if (revision !== detailRequest.current) return;
+      setDetailError(error);
+      showApiError(error);
+    } finally {
+      if (revision === detailRequest.current) setLoadingDetail(false);
+    }
+  };
+
   const loadTasks = async (preferredId?: number | null, preferredInstanceId?: number | null) => {
-    setLoadingList(true);
+    const revision = ++listRequest.current;
+    ++detailRequest.current;
+    setLoadingDetail(false);
+    setLoadingList(true); setListError(null);
     try {
       const resp = await listMyApprovalTasksApi();
+      if (revision !== listRequest.current) return;
       setTaskItems(resp.data);
       // Prefer the explicit task id; otherwise resolve the task from the notification's
       // instance id. Channel/space subscribe approval notifications only carry instance_id,
@@ -139,15 +176,22 @@ export function ApprovalPane({
         : resp.data.filter((t) => t.status !== "pending");
       const nextId = (resolvedTask ? getId(resolvedTask, "task") : null) ?? getId(visibleItems[0], "task");
       setSelectedTaskId(nextId);
-      if (nextId) { setLoadingDetail(true); setTaskDetail(await getMyApprovalTaskDetailApi(nextId)); }
-      else setTaskDetail(null);
-    } finally { setLoadingList(false); setLoadingDetail(false); }
+      await loadDetail(nextId, "task");
+    } catch (error) {
+      if (revision !== listRequest.current) return;
+      setListError(error); setTaskDetail(null); setRequestDetail(null);
+      showApiError(error);
+    } finally { if (revision === listRequest.current) setLoadingList(false); }
   };
 
   const loadRequests = async (preferredId?: number | null) => {
-    setLoadingList(true);
+    const revision = ++listRequest.current;
+    ++detailRequest.current;
+    setLoadingDetail(false);
+    setLoadingList(true); setListError(null);
     try {
       const resp = await listMyApprovalRequestsApi();
+      if (revision !== listRequest.current) return;
       setRequestItems(resp.data);
       // If there's a preferred instance, derive the correct filter tab from its status so
       // the item is actually visible in the left panel (not hidden by the current filter).
@@ -166,9 +210,12 @@ export function ApprovalPane({
       const validPreferred = preferredId && resp.data.some((i) => getId(i, "instance") === preferredId) ? preferredId : null;
       const nextId = validPreferred ?? getId(visibleItems[0], "instance");
       setSelectedInstanceId(nextId);
-      if (nextId) { setLoadingDetail(true); setRequestDetail(await getApprovalInstanceDetailApi(nextId)); }
-      else setRequestDetail(null);
-    } finally { setLoadingList(false); setLoadingDetail(false); }
+      await loadDetail(nextId, "request");
+    } catch (error) {
+      if (revision !== listRequest.current) return;
+      setListError(error); setTaskDetail(null); setRequestDetail(null);
+      showApiError(error);
+    } finally { if (revision === listRequest.current) setLoadingList(false); }
   };
 
   useEffect(() => {
@@ -176,15 +223,19 @@ export function ApprovalPane({
     setSelectedTaskId(target?.taskId ?? null);
     setSelectedInstanceId(target?.instanceId ?? null);
     setSearchQuery("");
+    setReviewTarget(null);
     // Deep-links (from a notification) open straight to the detail; otherwise land on the list.
     setCompactView(target?.taskId || target?.instanceId ? "detail" : "list");
     // setCompactView is owned by the shell and stable; excluding it keeps this to a mount/deep-link reset.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, target?.instanceId, target?.taskId]);
 
-  // Switching the nav section clears the search box so the new list starts unfiltered.
+  // Switching the nav section clears the search box so the new list starts
+  // unfiltered, and closes the review view — its release belongs to the
+  // request that was open, not to whatever the other list shows.
   useEffect(() => {
     setSearchQuery("");
+    setReviewTarget(null);
   }, [activeTab]);
 
   useEffect(() => {
@@ -200,14 +251,12 @@ export function ApprovalPane({
   const autoSelectTask = (items: ApprovalTaskItem[]) => {
     const first = getId(items[0], "task");
     setSelectedTaskId(first);
-    if (first) { setLoadingDetail(true); getMyApprovalTaskDetailApi(first).then(setTaskDetail).finally(() => setLoadingDetail(false)); }
-    else setTaskDetail(null);
+    void loadDetail(first, "task");
   };
   const autoSelectRequest = (items: ApprovalInstanceItem[]) => {
     const first = getId(items[0], "instance");
     setSelectedInstanceId(first);
-    if (first) { setLoadingDetail(true); getApprovalInstanceDetailApi(first).then(setRequestDetail).finally(() => setLoadingDetail(false)); }
-    else setRequestDetail(null);
+    void loadDetail(first, "request");
   };
 
   // Re-select only when the sub-filter itself changes — following the item lists would fight the
@@ -219,27 +268,30 @@ export function ApprovalPane({
 
   const openTask = async (id: number) => {
     setSelectedTaskId(id); setLoadingDetail(true); setDecisionComment(""); setCompactView("detail");
-    try { setTaskDetail(await getMyApprovalTaskDetailApi(id)); } finally { setLoadingDetail(false); }
+    await loadDetail(id, "task");
   };
   const openRequest = async (id: number) => {
     setSelectedInstanceId(id); setLoadingDetail(true); setCompactView("detail");
-    try { setRequestDetail(await getApprovalInstanceDetailApi(id)); } finally { setLoadingDetail(false); }
+    await loadDetail(id, "request");
   };
 
   const runTaskDecision = async (action: "approve" | "reject") => {
-    if (!selectedTaskId) return;
+    if (!selectedTaskId || !taskDetail || getId(taskDetail, "task") !== selectedTaskId || loadingDetail || detailError) return;
+    const comment = decisionComment.trim();
+    // A rejection must say why; approving without a comment stays allowed.
+    if (action === "reject" && !comment) {
+      showToast({ message: localize("com_approval_reject_reason_required"), severity: NotificationSeverity.WARNING });
+      return;
+    }
     setActionLoading(true);
-    const comment =
-      decisionComment.trim() ||
-      localize(action === "approve" ? "com_approval_action_approve" : "com_approval_action_reject");
     try {
-      await decideApprovalTaskApi(selectedTaskId, { action, comment });
+      await decideApprovalTaskApi(selectedTaskId, { action, comment: comment || undefined });
       setDecisionComment("");
       await loadTasks(selectedTaskId);
       onPendingCountMaybeChanged?.();
       toast(true);
     }
-    catch { toast(false); } finally { setActionLoading(false); }
+    catch (error) { showApiError(error); } finally { setActionLoading(false); }
   };
   const runWithdraw = () => {
     setWithdrawReason("");
@@ -247,18 +299,14 @@ export function ApprovalPane({
   };
   const confirmWithdraw = async () => {
     if (!selectedInstanceId) return;
-    setWithdrawDialogOpen(false);
     setActionLoading(true);
     try {
       await withdrawApprovalInstanceApi(selectedInstanceId, { reason: withdrawReason.trim() || undefined });
+      setWithdrawDialogOpen(false);
       toast(true);
-      const resp = await listMyApprovalRequestsApi();
-      setRequestItems(resp.data);
-      setRequestsFilter("completed");
-      setLoadingDetail(true);
-      setRequestDetail(await getApprovalInstanceDetailApi(selectedInstanceId));
+      await loadRequests(selectedInstanceId);
       onPendingCountMaybeChanged?.();
-    } catch { toast(false); } finally { setActionLoading(false); setLoadingDetail(false); }
+    } catch (error) { showApiError(error); } finally { setActionLoading(false); }
   };
   const runRevokeGrant = () => {
     if (!taskDetail?.instance_id) return;
@@ -276,25 +324,37 @@ export function ApprovalPane({
       });
       return;
     }
-    setRevokeDialogOpen(false);
     setActionLoading(true);
     try {
       await revokeMenuAccessGrantApi(instanceId, { reason });
+      setRevokeDialogOpen(false);
       await loadTasks(selectedTaskId);
       onPendingCountMaybeChanged?.();
       toast(true);
     }
-    catch { toast(false); } finally { setActionLoading(false); }
+    catch (error) { showApiError(error); } finally { setActionLoading(false); }
   };
 
-  const isTaskPending = activeTab === "my_tasks" && taskDetail?.status === "pending";
-  const isInstancePending = activeTab === "my_requests" && requestDetail?.status === "pending";
+  const isTaskPending = !loadingDetail && !loadingList && !detailError && !listError && activeTab === "my_tasks" && taskDetail?.status === "pending";
+  const isInstancePending = !loadingDetail && !loadingList && !detailError && !listError && activeTab === "my_requests" && requestDetail?.status === "pending";
   // Only the approver (my_tasks) can revoke a granted menu permission, and only if not already revoked
   const canRevoke =
     activeTab === "my_tasks" &&
     String(taskDetail?.scenario_code ?? "").toLowerCase() === "menu_access_request" &&
     ["approved", "executed"].includes(String(taskDetail?.instance_status ?? "").toLowerCase()) &&
     !taskDetail?.grant_revoked;
+
+  if (reviewTarget) {
+    return (
+      <div className="col-span-full flex min-h-0 flex-col bg-white">
+        <AppReviewView
+          target={reviewTarget}
+          localize={localize}
+          onBack={() => setReviewTarget(null)}
+        />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -342,6 +402,11 @@ export function ApprovalPane({
 
               {loadingList ? (
                 <div className="flex flex-1 items-center justify-center text-[14px] text-text-3">{localize("com_approval_loading")}</div>
+              ) : listError ? (
+                <div role="alert">
+                  {listError instanceof Error ? listError.message : localize('com_ui_error')}
+                  <Button variant="outlined" onClick={() => void (activeTab === "my_tasks" ? loadTasks() : loadRequests())}>{localize('com_ui_retry')}</Button>
+                </div>
               ) : (
                 <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-3 pb-3">
                   {(activeTab === "my_tasks" ? filteredTaskItems : filteredRequestItems).length === 0 ? (
@@ -408,10 +473,15 @@ export function ApprovalPane({
               <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-5 pb-3">
                 {loadingDetail ? (
                   <div className="flex h-full items-center justify-center text-[14px] text-text-3">{localize("com_approval_loading")}</div>
+                ) : detailError ? (
+                  <div role="alert">
+                    {detailError instanceof Error ? detailError.message : localize('com_ui_error')}
+                    <Button variant="outlined" onClick={() => void loadDetail(activeTab === "my_tasks" ? selectedTaskId : selectedInstanceId, activeTab === "my_tasks" ? "task" : "request")}>{localize('com_ui_retry')}</Button>
+                  </div>
                 ) : activeTab === "my_tasks" && taskDetail ? (
-                  <TaskDetailPanel detail={taskDetail} localize={localize} onBack={() => setCompactView("list")} />
+                  <TaskDetailPanel detail={taskDetail} localize={localize} onBack={() => setCompactView("list")} onOpenReview={setReviewTarget} />
                 ) : activeTab === "my_requests" && requestDetail ? (
-                  <RequestDetailPanel detail={requestDetail} localize={localize} onBack={() => setCompactView("list")} />
+                  <RequestDetailPanel detail={requestDetail} localize={localize} onBack={() => setCompactView("list")} onOpenReview={setReviewTarget} />
                 ) : (
                   <div className="flex h-full items-center justify-center text-[14px] text-text-3">{localize("com_approval_empty_detail")}</div>
                 )}
@@ -432,7 +502,7 @@ export function ApprovalPane({
                   <div className="flex items-center justify-end gap-3">
                   {isTaskPending && (
                     <>
-                      <button type="button" disabled={actionLoading}
+                      <button type="button" disabled={actionLoading || !decisionComment.trim()}
                         className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-[#f53f3f] px-4 text-[14px] font-normal text-[#f53f3f] hover:bg-[#fff2f0] disabled:opacity-60 md:flex-none"
                         onClick={() => runTaskDecision("reject")}>
                         {localize("com_approval_action_reject")}

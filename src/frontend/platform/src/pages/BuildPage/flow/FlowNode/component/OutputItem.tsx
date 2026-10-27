@@ -1,8 +1,7 @@
-import { Badge } from "@/components/bs-ui/badge";
 import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { useEffect, useMemo, useState } from "react";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
+import { RadioGroup,Radio as RadioGroupItem,Tag } from "@bisheng/ui";
+import { useEffect,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next"; // 引入国际化
 import { CustomHandle } from "..";
 import DragOptions from "./DragOptions";
@@ -49,12 +48,9 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate, onVarEvent, i18n
                             <Label className="bisheng-label">
                                 {t("userInputLabel")} {/* 用户输入框展示内容 */}
                             </Label>
-                            <Badge
-                                variant="outline"
-                                className="bg-[#E6ECF6] text-[#2B53A0]"
-                            >
+                            <Tag size="small" color="brand" className="">
                                 {data.key}
-                            </Badge>
+                            </Tag>
                         </div>
                         <VarInput
                             error={error}

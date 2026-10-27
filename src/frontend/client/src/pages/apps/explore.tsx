@@ -3,7 +3,7 @@ import { LoadingIcon } from "~/components/ui/icon/Loading"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useToastContext } from "~/Providers"
-import { getChatOnlineApi, getUncategorized } from "~/api/apps"
+import { getChatOnlineApi, getUncategorized, recordUsedAppApi } from "~/api/apps"
 import { NotificationSeverity } from "~/common"
 import { Button } from "~/components/ui/Button"
 import { EmptyStateIllustration } from "~/components/illustrations"
@@ -17,6 +17,12 @@ import { AppSearchBar } from './components/AppSearchBar'
 
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = 'app-last-origin';
+/** F054 hosted application — the one card type that leaves this SPA. */
+const HOSTED_APP_FLOW_TYPE = 35;
+/** Catch-all tab id shared with AgentNavigation — apps carrying no home tag. */
+const UNCATEGORIZED = 'uncategorized';
+/** Sentinel understood by `getChatOnlineApi` as "do not filter by tag". */
+const ALL_CATEGORIES = -1;
 
 export default function ExplorePlaza() {
     // Null until the navigation has its tags and can say which tab is the
@@ -33,6 +39,9 @@ export default function ExplorePlaza() {
     const cursorRef = useRef<string | null>(null);
     const loaderRef = useRef<HTMLDivElement>(null);
     const loadMoreLockRef = useRef(false);
+    // Bumped by every first-page request. A response whose ticket no longer
+    // matches has been superseded by a newer tab/keyword and is discarded.
+    const listSeqRef = useRef(0);
     const pageSize = 20;
 
     const navigate = useNavigate()
@@ -51,16 +60,40 @@ export default function ExplorePlaza() {
         return 1;
     }, [isAtLeast768, isAtLeast1024]);
 
+    // Tab and keyword are alternative filters, never combined: a search spans
+    // every category, so picking a tab drops the keyword and gives the user
+    // that tab's own contents back. Must stay referentially stable —
+    // AgentNavigation keys its initial tag load off this callback.
+    const handleCategoryChange = useCallback((categoryId: number | string) => {
+        setActiveTabId(categoryId);
+        setSearchQuery('');
+    }, []);
+
     // Fetch one cursor page. `cursor === null` starts a fresh list (first page).
     const fetchAgents = useCallback(async (query: string, categoryId: number | string, cursor: string | null, isAppend: boolean) => {
-        if (loading || loadingMore) return;
+        // Infinite scroll stays serialized. A first-page request never is: it
+        // carries a new tab or keyword, and the old shared lock silently dropped
+        // it whenever one was still in flight — the grid then kept showing the
+        // previous filter's apps with the new keyword sitting in the box.
+        if (isAppend && (loading || loadingMore)) return;
+        const seq = isAppend ? listSeqRef.current : ++listSeqRef.current;
         if (isAppend) setLoadingMore(true);
         else setLoading(true);
         try {
-            const result = categoryId === 'uncategorized'
-                ? await getUncategorized(cursor, pageSize, query)
-                : await getChatOnlineApi(cursor, query, categoryId as number, pageSize);
+            const keyword = query.trim();
+            // Search spans every category. An app carrying no home tag only ever
+            // shows up under the "uncategorised" tab, so a tag-scoped search made
+            // it unfindable from any other tab — the tab the plaza lands on by
+            // default whenever home tags are configured (F056 AC-08). While a
+            // keyword is present the tab filter is therefore dropped, and the
+            // active tab is un-highlighted so the widened scope is visible.
+            const result = keyword
+                ? await getChatOnlineApi(cursor, keyword, ALL_CATEGORIES, pageSize)
+                : categoryId === UNCATEGORIZED
+                    ? await getUncategorized(cursor, pageSize)
+                    : await getChatOnlineApi(cursor, '', categoryId as number, pageSize);
 
+            if (seq !== listSeqRef.current) return;
             const pageData = result.list || [];
 
             const formattedResults = pageData.map((item: any) => ({
@@ -75,10 +108,14 @@ export default function ExplorePlaza() {
             setHasMore(!!result.hasMore);
         } catch (error) {
             console.error("Failed to fetch agents:", error);
+            if (seq !== listSeqRef.current) return;
             if (!isAppend) setAgents([]);
         } finally {
+            // The append lane owns `loadingMore` alone, so it always clears it.
+            // A superseded first page must NOT clear `loading` — the request
+            // that replaced it is still running and owns the spinner.
             if (isAppend) setLoadingMore(false);
-            else setLoading(false);
+            else if (seq === listSeqRef.current) setLoading(false);
         }
     }, [loading, loadingMore]);
 
@@ -128,6 +165,25 @@ export default function ExplorePlaza() {
     const handleCardClick = (agent: any) => {
         const flowId = agent.id
         const flowType = agent.flow_type || agent.type
+        if (flowType === HOSTED_APP_FLOW_TYPE) {
+            // Hosted apps live outside this SPA at `/apps/{slug}` (served by the
+            // app proxy). Open them in a NEW tab so the app square stays put and
+            // the user can return to it — a same-tab navigation left them with no
+            // way back.
+            //
+            // The URL must be the bare origin-absolute path: no router basename,
+            // no `__APP_ENV__.BASE_URL`, no `/workspace` prefix (each of those
+            // 404s). `noopener` stops the app from reaching back into this tab via
+            // `window.opener` — it may run arbitrary code.
+            //
+            // Open FIRST, synchronously inside the click gesture, or the popup is
+            // blocked. Then record the open for "recently used" as fire-and-forget:
+            // this tab does not navigate, so the request is not cancelled and need
+            // not be awaited (hosted apps have no MessageSession to infer use from).
+            window.open(`/apps/${agent.slug}`, '_blank', 'noopener');
+            recordUsedAppApi(String(flowId)).catch(() => {});
+            return;
+        }
         try {
             sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'explore');
             sessionStorage.setItem(appLastOriginKey, 'explore');
@@ -216,7 +272,11 @@ export default function ExplorePlaza() {
                     <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
                 </div>
                 <div className="order-1 max-[576px]:order-2 w-full min-w-0">
-                    <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
+                    <AgentNavigation
+                        onCategoryChange={handleCategoryChange}
+                        onRefresh={() => setRefreshTrigger(prev => prev + 1)}
+                        searchActive={searchQuery.trim().length > 0}
+                    />
                 </div>
             </div>
 

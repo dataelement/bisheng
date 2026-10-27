@@ -1,0 +1,133 @@
+bash: warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)
+2026-10-21 04:22:01.648 | DEBUG    | bisheng.common.services.config_service:load_settings_from_yaml:108 - Loading database_url from /run/f086-config.yaml
+2026-10-21 04:22:01.648 | DEBUG    | bisheng.common.services.config_service:load_settings_from_yaml:108 - Loading redis_url from /run/f086-config.yaml
+2026-10-21 04:22:01.648 | DEBUG    | bisheng.common.services.config_service:load_settings_from_yaml:108 - Loading celery_redis_url from /run/f086-config.yaml
+2026-10-21 04:22:01.648 | DEBUG    | bisheng.common.services.config_service:load_settings_from_yaml:108 - Loading multi_tenant from /run/f086-config.yaml
+2026-10-21 04:22:01.648 | DEBUG    | bisheng.common.services.config_service:load_settings_from_yaml:108 - Loading open_platform from /run/f086-config.yaml
+2026-10-21 04:22:01.648 | DEBUG    | bisheng.common.services.config_service:load_settings_from_yaml:108 - Loading openfga from /run/f086-config.yaml
+2026-10-21 04:22:01.649 | DEBUG    | bisheng.common.services.config_service:load_settings_from_yaml:108 - Loading app_runtime from /run/f086-config.yaml
+2026-10-21 04:22:01.649 | DEBUG    | bisheng.common.services.config_service:load_settings_from_yaml:108 - Loading object_storage from /run/f086-config.yaml
+2026-10-21 04:22:01.653 | DEBUG    | bisheng.core.context.base:register:480 - Registered context: 'database'
+2026-10-21 04:22:01.653 | DEBUG    | bisheng.core.context.manager:register_context:232 - Registered context 'database' with dependencies: []
+2026-10-21 04:22:01.653 | DEBUG    | bisheng.core.context.base:register:480 - Registered context: 'redis'
+2026-10-21 04:22:01.654 | DEBUG    | bisheng.core.context.manager:register_context:232 - Registered context 'redis' with dependencies: []
+2026-10-21 04:22:02.108 | DEBUG    | bisheng.core.context.base:register:480 - Registered context: 'minio'
+2026-10-21 04:22:02.109 | DEBUG    | bisheng.core.context.manager:register_context:232 - Registered context 'minio' with dependencies: []
+2026-10-21 04:22:02.109 | DEBUG    | bisheng.core.context.base:register:480 - Registered context: 'elasticsearch'
+2026-10-21 04:22:02.109 | DEBUG    | bisheng.core.context.manager:register_context:232 - Registered context 'elasticsearch' with dependencies: []
+2026-10-21 04:22:02.109 | DEBUG    | bisheng.core.context.base:register:480 - Registered context: 'statistics_elasticsearch'
+2026-10-21 04:22:02.109 | DEBUG    | bisheng.core.context.manager:register_context:232 - Registered context 'statistics_elasticsearch' with dependencies: []
+2026-10-21 04:22:02.111 | DEBUG    | bisheng.core.context.base:register:480 - Registered context: 'http_client'
+2026-10-21 04:22:02.112 | DEBUG    | bisheng.core.context.manager:register_context:232 - Registered context 'http_client' with dependencies: []
+2026-10-21 04:22:02.114 | DEBUG    | bisheng.core.context.base:register:480 - Registered context: 'prompts'
+2026-10-21 04:22:02.114 | DEBUG    | bisheng.core.context.manager:register_context:232 - Registered context 'prompts' with dependencies: []
+2026-10-21 04:22:02.120 | DEBUG    | bisheng.core.context.base:register:480 - Registered context: 'openfga'
+2026-10-21 04:22:02.120 | DEBUG    | bisheng.core.context.manager:register_context:232 - Registered context 'openfga' with dependencies: []
+2026-10-21 04:22:02.120 | DEBUG    | bisheng.core.context.manager:_register_default_contexts:123 - Default contexts registered
+2026-10-21 04:22:02.120 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:155 - Initializing context 'database' (attempt 1/3)
+None of PyTorch, TensorFlow >= 2.0, or Flax have been found. Models won't be available and only tokenizers, configuration and file/data utilities can be used.
+2026-10-21 04:22:08.713 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:160 - Context 'database' initialized successfully
+2026-10-21 04:22:08.713 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:08.713 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:155 - Initializing context 'redis' (attempt 1/3)
+2026-10-21 04:22:08.714 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:160 - Context 'redis' initialized successfully
+2026-10-21 04:22:08.714 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'redis'
+2026-10-21 04:22:08.714 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:155 - Initializing context 'minio' (attempt 1/3)
+2026-10-21 04:22:08.733 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:160 - Context 'minio' initialized successfully
+2026-10-21 04:22:08.733 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'minio'
+2026-10-21 04:22:08.733 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:155 - Initializing context 'elasticsearch' (attempt 1/3)
+2026-10-21 04:22:08.734 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:160 - Context 'elasticsearch' initialized successfully
+2026-10-21 04:22:08.734 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'elasticsearch'
+2026-10-21 04:22:08.734 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:155 - Initializing context 'statistics_elasticsearch' (attempt 1/3)
+2026-10-21 04:22:08.734 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:160 - Context 'statistics_elasticsearch' initialized successfully
+2026-10-21 04:22:08.734 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'statistics_elasticsearch'
+2026-10-21 04:22:08.734 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:155 - Initializing context 'http_client' (attempt 1/3)
+2026-10-21 04:22:08.734 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:160 - Context 'http_client' initialized successfully
+2026-10-21 04:22:08.734 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'http_client'
+2026-10-21 04:22:08.734 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:155 - Initializing context 'prompts' (attempt 1/3)
+2026-10-21 04:22:08.744 | DEBUG    | bisheng.core.context.base:_perform_initialization_async:160 - Context 'prompts' initialized successfully
+2026-10-21 04:22:08.744 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'prompts'
+2026-10-21 04:22:08.744 | INFO     | bisheng.core.context.manager:initialize:57 - Application context initialized successfully
+Submitted node fault compile-timeout 21d7555bc22c48b29b12be8d63d07284
+2026-10-21 04:22:13.281 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:13.475 | INFO     | bisheng.common.services.metric_log:emit_metric:94 - BS_METRIC domain=db_pool engine=async checked_out=1 idle=0 size=100 capacity=120 at_capacity=0
+Publish 86b7d788bfd4419c9fe331203d4f6eef precheck_build running
+Publish 86b7d788bfd4419c9fe331203d4f6eef precheck_build failed
+2026-10-21 04:22:14.556 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:14.766 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:14.970 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:15.175 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:15.380 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:15.584 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:15.789 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:15.993 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:16.197 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:16.401 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:16.606 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:16.810 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:17.014 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:17.219 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:17.423 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:17.627 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:17.832 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:18.036 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:18.240 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:18.444 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:18.649 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:18.853 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:19.057 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:19.262 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:19.467 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:19.671 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:19.877 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:20.082 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:20.287 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:20.492 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:20.697 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:20.901 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:21.106 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:21.311 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:21.515 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:21.720 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:21.924 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:22.130 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:22.335 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:22.539 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:22.744 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:22.949 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:23.154 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:23.358 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:23.564 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:23.567 | INFO     | bisheng.common.services.metric_log:emit_metric:94 - BS_METRIC domain=db_query_agg window_s=10.092 count=47 sum_ms=53.212 le_5=47 le_10=47 le_25=47 le_50=47 le_100=47 le_250=47 le_500=47 le_1000=47 le_inf=47
+2026-10-21 04:22:23.567 | INFO     | bisheng.common.services.metric_log:emit_metric:94 - BS_METRIC domain=db_pool engine=async checked_out=1 idle=0 size=100 capacity=120 at_capacity=0
+2026-10-21 04:22:23.769 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:23.974 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:24.179 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:24.383 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:24.588 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+2026-10-21 04:22:24.592 | DEBUG    | bisheng.core.context.manager:_initialize_context_with_dependencies:160 - Initialized context: 'database'
+PASS compile-timeout real compile interrupted, no approval, cleanup complete, reservations released
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.manager:_close_contexts_in_reverse_order:300 - Closed context: 'openfga'
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.base:async_close:259 - Closing context 'prompts'
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.base:async_close:262 - Context 'prompts' closed successfully
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.manager:_close_contexts_in_reverse_order:300 - Closed context: 'prompts'
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.base:async_close:259 - Closing context 'http_client'
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.base:async_close:262 - Context 'http_client' closed successfully
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.manager:_close_contexts_in_reverse_order:300 - Closed context: 'http_client'
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.base:async_close:259 - Closing context 'statistics_elasticsearch'
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.base:async_close:262 - Context 'statistics_elasticsearch' closed successfully
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.manager:_close_contexts_in_reverse_order:300 - Closed context: 'statistics_elasticsearch'
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.base:async_close:259 - Closing context 'elasticsearch'
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.base:async_close:262 - Context 'elasticsearch' closed successfully
+2026-10-21 04:22:24.598 | DEBUG    | bisheng.core.context.manager:_close_contexts_in_reverse_order:300 - Closed context: 'elasticsearch'
+2026-10-21 04:22:24.599 | DEBUG    | bisheng.core.context.base:async_close:259 - Closing context 'minio'
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x7fbe92ef1490>
+2026-10-21 04:22:24.600 | DEBUG    | bisheng.core.context.base:async_close:262 - Context 'minio' closed successfully
+2026-10-21 04:22:24.601 | DEBUG    | bisheng.core.context.manager:_close_contexts_in_reverse_order:300 - Closed context: 'minio'
+2026-10-21 04:22:24.601 | DEBUG    | bisheng.core.context.base:async_close:259 - Closing context 'redis'
+2026-10-21 04:22:24.601 | DEBUG    | bisheng.core.context.base:async_close:262 - Context 'redis' closed successfully
+2026-10-21 04:22:24.601 | DEBUG    | bisheng.core.context.manager:_close_contexts_in_reverse_order:300 - Closed context: 'redis'
+2026-10-21 04:22:24.601 | DEBUG    | bisheng.core.context.base:async_close:259 - Closing context 'database'
+2026-10-21 04:22:24.602 | DEBUG    | bisheng.core.context.base:async_close:262 - Context 'database' closed successfully
+2026-10-21 04:22:24.602 | DEBUG    | bisheng.core.context.manager:_close_contexts_in_reverse_order:300 - Closed context: 'database'
+2026-10-21 04:22:24.602 | INFO     | bisheng.core.context.manager:async_close:286 - Application context closed successfully

@@ -1,0 +1,57 @@
+{
+  "operation": {
+    "id": "ee391343ad4b47dca3708bd07a2e4c9d",
+    "kind": "prepare",
+    "stage": "cancelled",
+    "status": "cancelled",
+    "cleanup_status": "complete",
+    "failure": {
+      "reason": "operation_cancelled",
+      "maintenance": false,
+      "failed_stage": "preparing",
+      "diagnostic_tail": "",
+      "data_may_have_changed": false
+    },
+    "version_id": "bc88e5784dd1463a9c766073fde7c20d",
+    "generation": 1
+  },
+  "deployment": {
+    "deployment_id": "24667787a8014c36a0c887da9c980104",
+    "app_id": "fbedd729679c451c8a178884c039f19e",
+    "version_id": "bc88e5784dd1463a9c766073fde7c20d",
+    "version_no": null,
+    "stage": "precheck_build",
+    "status": "failed",
+    "failure": {
+      "code": 16227,
+      "hints": [],
+      "stage": "precheck_build",
+      "details": {
+        "reason": "operation_cancelled",
+        "maintenance": false,
+        "operation_id": "ee391343ad4b47dca3708bd07a2e4c9d",
+        "runtime_stage": "preparing",
+        "data_may_have_changed": false
+      },
+      "message": "\u5e94\u7528\u4f9d\u8d56\u6216\u4ea4\u4ed8\u51c6\u5907\u5931\u8d25"
+    },
+    "approval": null,
+    "app_state": "draft",
+    "entry_url": "http://nginx:3001/apps/e2e-f086-install-cancel",
+    "scan_result": {
+      "hits": [],
+      "blocked": false,
+      "skipped": [],
+      "files_scanned": 4,
+      "files_skipped": 0
+    }
+  },
+  "actual_phase": "resolve",
+  "container": {
+    "operation_id": "ee391343ad4b47dca3708bd07a2e4c9d",
+    "container_id": "3628dc19bf1cc9d2f28bf319fb0fa7e2fdfc9a1ee7a7d5a1cb085a56b32c4b3b",
+    "network_mode": "none",
+    "read_only": true
+  },
+  "reservations_released": true
+}

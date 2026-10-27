@@ -1,25 +1,18 @@
-import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
-import { Input } from "@/components/bs-ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select"
-import { Switch } from "@/components/bs-ui/switch"
+import { Alert, Button, Input, Select } from '@bisheng/ui';
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import type {
-  PermissionCatalogAction,
-  PermissionCatalogChange,
-  PermissionCatalogDraft,
-  PermissionCatalogModel,
-} from "@/controllers/API/permission"
-import { ShieldAlert } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { actionLabel } from "./actionLabels"
+PermissionCatalogAction,
+PermissionCatalogChange,
+PermissionCatalogDraft,
+PermissionCatalogModel,
+} from "@/controllers/API/permission";
+import { Checkbox,Switch } from "@bisheng/ui";
+import { useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { actionLabel } from "./actionLabels";
 
 const BLANK_PRESET_KEY = "__blank__"
 
@@ -65,6 +58,7 @@ export function ModelEditor({
   onReviewImpact,
 }: ModelEditorProps) {
   const { t } = useTranslation("permission")
+  const selectLabels = useSelectLabels()
   const [name, setName] = useState(model.name)
   const [active, setActive] = useState(model.active)
   const [allowSameLevel, setAllowSameLevel] = useState(
@@ -305,35 +299,22 @@ export function ModelEditor({
             <div className="text-sm font-medium text-foreground">
               <span className="mb-1 block">{t("model.preset.label")}</span>
               <Select
-                value={selectedPreset}
+                {...selectLabels}
+                className="w-full"
+                options={[
+                  { value: BLANK_PRESET_KEY, label: t("model.preset.blank") },
+                  ...presets
+                    .filter((preset) => preset.key != null && preset.key !== "")
+                    .map((preset) => ({ value: preset.key, label: preset.name })),
+                ]}
+                value={selectedPreset || null}
                 disabled={disabled}
-                onValueChange={setSelectedPreset}
-              >
-                <SelectTrigger
-                  aria-label={t("model.preset.label")}
-                  className="w-full bg-background"
-                >
-                  <SelectValue placeholder={t("model.preset.select")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={BLANK_PRESET_KEY}>
-                    {t("model.preset.blank")}
-                  </SelectItem>
-                  {presets.map((preset) => (
-                    <SelectItem key={preset.key} value={preset.key}>
-                      {preset.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setSelectedPreset(value == null ? "" : String(value))}
+                placeholder={t("model.preset.select")}
+                aria-label={t("model.preset.label")}
+              />
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="self-end"
-              disabled={disabled || !selectedPreset}
-              onClick={handleApplyPreset}
-            >
+            <Button type="button" variant="outlined" className="self-end" disabled={disabled || !selectedPreset} onClick={handleApplyPreset} color="default">
               {t("model.preset.apply")}
             </Button>
           </div>
@@ -341,13 +322,7 @@ export function ModelEditor({
 
         <label className="text-sm font-medium text-foreground">
           <span className="mb-1 block">{t("model.name")}</span>
-          <Input
-            aria-label={t("model.name")}
-            value={name}
-            disabled={disabled || isStandard}
-            
-            onChange={(event) => setName(event.target.value)}
-          />
+          <Input aria-label={t("model.name")} value={name} disabled={disabled || isStandard} onChange={(event) => setName(event.target.value)} />
         </label>
 
         {/* Grouped by level, because the level is what the selection produces:
@@ -458,41 +433,22 @@ export function ModelEditor({
           nothing happen. It belongs beside the button that produced it. */}
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t p-4">
         {draft && (
-          <div
-            className="mr-auto flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-foreground"
-            role="status"
-          >
-            <ShieldAlert
-              aria-hidden="true"
-              className="size-4 shrink-0 text-primary"
-            />
-            <span className="min-w-0">
-              {t("impact.unpublished")}
-              {" · "}
-              {t("impact.pending", {
+          <Alert
+            className="mr-auto min-w-0 flex-1"
+            description={`${t("impact.unpublished")} · ${t("impact.pending", {
                 resources: draft.impact.resource_count,
                 grants: draft.impact.grant_count,
-              })}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              className="ml-auto shrink-0"
-              onClick={() => onReviewImpact(draft)}
-            >
-              {t("impact.publishChanges")}
-            </Button>
-          </div>
+              })}`}
+            actions={[{
+              label: t("impact.publishChanges"),
+              onClick: () => onReviewImpact(draft),
+            }]}
+            live
+          />
         )}
         {!isStandard && !createMode && (
           <div className="mr-auto flex min-w-0 items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="shrink-0 text-destructive"
-              disabled={disabled || saving}
-              onClick={handleDelete}
-            >
+            <Button type="button" variant="outlined" className="shrink-0" disabled={disabled || saving} onClick={handleDelete} color="danger">
               {t("model.delete")}
             </Button>
             <span
@@ -505,19 +461,14 @@ export function ModelEditor({
             </span>
           </div>
         )}
-        <Button
-          type="button"
-          
-          disabled={
+        <Button type="button" disabled={
             disabled ||
             saving ||
             (!isStandard &&
               (name.trim().length === 0 ||
                 effectiveSelectedActions.length === 0 ||
                 hasInvalidSelection))
-          }
-          onClick={() => void handleSave()}
-        >
+          } onClick={() => void handleSave()}>
           {saving ? t("model.saving") : t("model.save")}
         </Button>
       </div>

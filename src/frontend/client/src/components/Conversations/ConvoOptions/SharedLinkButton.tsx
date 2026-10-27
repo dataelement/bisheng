@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { showApiError } from "~/api/request";
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useState, useCallback } from 'react';
 import { QrCode, RotateCw, Trash2 } from 'lucide-react';
 import type { TSharedLinkGetResponse } from '~/types/chat';
@@ -7,7 +9,7 @@ import {
   useUpdateSharedLinkMutation,
   useDeleteSharedLinkMutation,
 } from '~/hooks/queries/data-provider';
-import { Button, OGDialog, Spinner, TooltipAnchor, Label } from '~/components';
+import { Button, OGDialog, Spinner, Label } from '~/components';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { NotificationSeverity } from '~/common';
 import { useToastContext } from '~/Providers';
@@ -34,23 +36,11 @@ export default function SharedLinkButton({
   const shareId = share?.shareId ?? '';
 
   const { mutateAsync: mutate, isLoading: isCreateLoading } = useCreateSharedLinkMutation({
-    onError: () => {
-      showToast({
-        message: localize('com_ui_share_error'),
-        severity: NotificationSeverity.WARNING,
-        showIcon: true,
-      });
-    },
+    onError: showApiError,
   });
 
   const { mutateAsync, isLoading: isUpdateLoading } = useUpdateSharedLinkMutation({
-    onError: () => {
-      showToast({
-        message: localize('com_ui_share_error'),
-        severity: NotificationSeverity.WARNING,
-        showIcon: true,
-      });
-    },
+    onError: showApiError,
   });
 
   const deleteMutation = useDeleteSharedLinkMutation({
@@ -58,13 +48,7 @@ export default function SharedLinkButton({
       setShowDeleteDialog(false);
       setShareDialogOpen(false);
     },
-    onError: (error) => {
-      console.error('Delete error:', error);
-      showToast({
-        message: localize('com_ui_share_delete_error'),
-        severity: NotificationSeverity.WARNING,
-      });
-    },
+    onError: showApiError,
   });
 
   const generateShareLink = useCallback((shareId: string) => {
@@ -98,11 +82,7 @@ export default function SharedLinkButton({
         severity: NotificationSeverity.SUCCESS,
       });
     } catch (error) {
-      console.error('Failed to delete shared link:', error);
-      showToast({
-        message: localize('com_ui_share_delete_error'),
-        severity: NotificationSeverity.WARNING,
-      });
+      showApiError(error);
     }
   };
 
@@ -110,19 +90,17 @@ export default function SharedLinkButton({
     <>
       <div className="flex gap-2">
         {!shareId && (
-          <Button disabled={isCreateLoading} variant="submit" onClick={createShareLink}>
+          <Button disabled={isCreateLoading} variant="submit" onClick={() => void createShareLink().catch(showApiError)}>
             {!isCreateLoading && localize('com_ui_create_link')}
             {isCreateLoading && <Spinner className="size-4" />}
           </Button>
         )}
         {shareId && (
           <div className="flex items-center gap-2">
-            <TooltipAnchor
-              description={localize('com_ui_refresh_link')}
-              render={(props) => (
+            <SharedTooltip  content={localize('com_ui_refresh_link')}  >
                 <Button
-                  {...props}
-                  onClick={() => updateSharedLink()}
+
+                  onClick={() => void updateSharedLink().catch(showApiError)}
                   variant="outline"
                   disabled={isUpdateLoading}
                 >
@@ -132,26 +110,19 @@ export default function SharedLinkButton({
                     <RotateCw className="size-4" />
                   )}
                 </Button>
-              )}
-            />
+              </SharedTooltip>
 
-            <TooltipAnchor
-              description={showQR ? localize('com_ui_hide_qr') : localize('com_ui_show_qr')}
-              render={(props) => (
-                <Button {...props} onClick={() => setShowQR(!showQR)} variant="outline">
+            <SharedTooltip  content={showQR ? localize('com_ui_hide_qr') : localize('com_ui_show_qr')}  >
+                <Button  onClick={() => setShowQR(!showQR)} variant="outline">
                   <QrCode className="size-4" />
                 </Button>
-              )}
-            />
+              </SharedTooltip>
 
-            <TooltipAnchor
-              description={localize('com_ui_delete')}
-              render={(props) => (
-                <Button {...props} onClick={() => setShowDeleteDialog(true)} variant="destructive">
+            <SharedTooltip  content={localize('com_ui_delete')}  >
+                <Button  onClick={() => setShowDeleteDialog(true)} variant="destructive">
                   <Trash2 className="size-4" />
                 </Button>
-              )}
-            />
+              </SharedTooltip>
           </div>
         )}
         <OGDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

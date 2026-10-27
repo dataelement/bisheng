@@ -1,13 +1,16 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { RbDragIcon } from "@/components/bs-icons/rbDrag";
-import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/bs-ui/dialog";
+
+import { Dialog,DialogContent,DialogTrigger } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import Tip from "@/components/bs-ui/tooltip/tip";
-import { isVarInFlow, updateVariableName } from "@/util/flowUtils";
-import { Expand, UploadCloud } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Tooltip as SharedTooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+import { FlowTooltip as Tip } from "@/pages/BuildPage/flow/FlowTooltip";
+import { isVarInFlow,updateVariableName } from "@/util/flowUtils";
+
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import { useUpdateVariableState } from "../flowNodeStore";
@@ -64,7 +67,7 @@ export default function VarInput({
     itemKey,
     placeholder = '',
     paramItem,
-    label = undefined,
+    label = undefined as string | undefined,
     full = false,
     value,
     mini = false,
@@ -72,7 +75,7 @@ export default function VarInput({
     children = null,
     onUpload = undefined,
     onChange,
-    onVarEvent = undefined,
+    onVarEvent = undefined as ((validate: () => unknown) => void) | undefined,
 }) {
     const { textareaRef, handleFocus, handleBlur, placeholderInit, removePlaceholder } = usePlaceholder(placeholder);
     const valueRef = useRef(value || '');
@@ -145,10 +148,10 @@ export default function VarInput({
         }
     }, [])
 
-    // Update Preset Questions 
+    // Update Preset Questions
     const [updateVariable] = useUpdateVariableState()
     useEffect(() => {
-        if (!paramItem.varZh) return // No variables, no processing 
+        if (!paramItem.varZh) return // No variables, no processing
         if (!updateVariable) return
         const { action } = updateVariable
         if (action === 'd') {
@@ -322,26 +325,13 @@ export default function VarInput({
                             </Tip>
                         </SelectVar>
                         {onUpload && (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            className="p-0 h-4 text-muted-foreground"
-                                            onClick={onUpload}
-                                        >
-                                            <UploadCloud size={16} />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>{t('uploadFile')}</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
+                            <><SharedTooltip   content={<><p>{t('uploadFile')}</p></>}><Button variant="text" className="p-0 h-4 text-muted-foreground" onClick={onUpload} color="default">
+                                            <Outlined.Upload size={16} />
+                                        </Button></SharedTooltip></>
                         )}
                         {!full && <Dialog >
                             <DialogTrigger asChild>
-                                <Button className="text-muted-foreground absolute right-2 top-6 size-5" size="icon" variant="ghost"><Expand size={14} /></Button>
+                                <Button className="text-muted-foreground absolute right-2 top-6 size-5" size="medium" variant="text" color="default" iconOnly><Outlined.FullScreen size={14} /></Button>
                             </DialogTrigger>
                             <DialogContent className="max-w-[94vw] lg:max-w-[1280px] translate-x-[-50%]">
                                 {/* <DialogHeader>

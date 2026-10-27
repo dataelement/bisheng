@@ -1,11 +1,13 @@
 // @ts-strict-ignore
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
+import { useKnowledgeSpaceLists } from "./hooks/useKnowledgeSpaceLists";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState, useRecoilValue } from "recoil";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import store from "~/store";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -13,7 +15,6 @@ import {
     Button,
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -25,8 +26,6 @@ import {
     VisibilityType,
     getSpaceInfoApi,
     getMineSpacesApi,
-    getJoinedSpacesApi,
-    getDepartmentSpacesApi,
     deleteSpaceApi,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -126,24 +125,10 @@ export default function Knowledge() {
     // sidebar owns auto-select, so activeSpace stays null until those lists load;
     // this lets the PC view show a loading state instead of flashing the "no
     // space, create one" empty state before auto-select can land.
-    const { isFetched: mineSpacesFetched, data: mineSpaces = [] } = useQuery({
-        queryKey: ["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME],
-        queryFn: () => getMineSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
-        enabled: knowledgePluginEnabled,
-        placeholderData: (prev) => prev,
-    });
-    const { isFetched: joinedSpacesFetched, data: joinedSpaces = [] } = useQuery({
-        queryKey: ["knowledgeSpaces", "joined", SpaceSortType.UPDATE_TIME],
-        queryFn: () => getJoinedSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
-        enabled: knowledgePluginEnabled,
-        placeholderData: (prev) => prev,
-    });
-    const { isFetched: departmentSpacesFetched, data: departmentSpaces = [] } = useQuery({
-        queryKey: ["knowledgeSpaces", "department", SpaceSortType.UPDATE_TIME],
-        queryFn: () => getDepartmentSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
-        enabled: knowledgePluginEnabled,
-        placeholderData: (prev) => prev,
-    });
+    const { mine: { isFetched: mineSpacesFetched, data: mineSpaces = [] },
+        joined: { isFetched: joinedSpacesFetched, data: joinedSpaces = [] },
+        department: { isFetched: departmentSpacesFetched, data: departmentSpaces = [] },
+        error: spacesError, retry: retrySpaces } = useKnowledgeSpaceLists({ enabled: knowledgePluginEnabled });
 
     // True while we still can't tell whether the user has any space: the plugin
     // gate is resolving, or the space lists haven't finished their first fetch.
@@ -153,7 +138,7 @@ export default function Knowledge() {
 
     // No space in any section — drives the mobile full-page empty state.
     const hasNoSpace =
-        !spacesResolving &&
+        !spacesError && !spacesResolving &&
         mineSpaces.length === 0 &&
         joinedSpaces.length === 0 &&
         departmentSpaces.length === 0;
@@ -590,7 +575,6 @@ export default function Knowledge() {
         setDragError(error || null);
     };
 
-    const locationKey = fileManager.currentFolderId || activeSpace?.id || "";
     const contextLabel = fileManager.currentFolderId ? localize("com_knowledge.folder") : localize("com_knowledge.knowledge_space");
 
     if (knowledgePluginGate === "disabled") {
@@ -890,7 +874,7 @@ export default function Knowledge() {
                             <span className="size-5 shrink-0" aria-hidden />
                         </div>
                     </div>
-                    {hasNoSpace ? (
+                    {spacesError ? <ApiRequestFailure error={spacesError} onRetry={retrySpaces} /> : hasNoSpace ? (
                         /* Empty state: no space in any section. Drop the section list +
                            bottom bar and center an illustration with two actions
                            (mirrors the subscription channel empty state). */
@@ -942,7 +926,7 @@ export default function Knowledge() {
                         </>
                     )}
                 </div>
-            ) : spacesResolving ? (
+            ) : spacesError ? <ApiRequestFailure error={spacesError} onRetry={retrySpaces} /> : spacesResolving ? (
                 /* PC loading state — keep the loading view up until the space lists
                    settle so the empty state never flashes before auto-select. */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">

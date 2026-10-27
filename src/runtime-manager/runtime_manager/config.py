@@ -1,0 +1,455 @@
+"""Process configuration — environment variables only, no platform config.yaml.
+
+Protocol v2 consumes scoped operations, immutable profiles, capacity and route facts
+from backend APIs. It holds no platform database or MinIO credentials. The local
+configuration describes physical execution paths, service identities, package
+sources and limits. Protocol v1 configuration below remains a compatibility
+surface for a planned maintenance-window upgrade.
+
+Inbound platform control identity, outbound manager identity, entry routing and
+egress policy identities are distinct. Backend/worker share the deployment's
+payload encryption key; applications receive none of those keys.
+
+``RTM_HOST_DATA_ROOT`` exists because ``HostConfig.Binds`` is resolved by the
+**dockerd that creates the container**, not by this process. In the systemd
+shape the manager runs on the host and the two views of the data root are the
+same path, so it may stay empty. Under docker-compose the manager is itself a
+container: ``RTM_DATA_ROOT=/app-data`` is the path *inside* it, while the bind
+handed to dockerd has to be the host side of that same volume — set them both
+and they cannot drift. Getting this wrong is silent: dockerd happily creates a
+brand-new empty directory at the container-internal path on the host, every app
+starts, and its SQLite lives somewhere nobody ever looks.
+
+``RTM_DOCKER_HOST`` is the D2-A → D2-B switch: empty means the local
+``/var/run/docker.sock``; pointing it at ``tcp://127.0.0.1:2375`` moves the
+whole process behind ``tecnativa/docker-socket-proxy`` with **zero code
+change**. That is the entire reason the docker client is funnelled through
+``runtime_manager.docker_backend``.
+
+``RTM_EGRESS_PROXY`` is the switch for the outbound whitelist (D12 / AC-16) and
+it follows the same "configuration presence *is* the switch" rule as
+``RTM_MINIO_ENDPOINT``: empty means the egress layer is **not deployed**, so no
+proxy variables are injected into instances and ``GET /v1/runtime/status`` says
+so in its pre-flight. There is deliberately no ``RTM_EGRESS_ENABLED=true`` that
+can be set without an address behind it — that combination would point every
+hosted app at a proxy which is not there and take their outbound traffic down
+in a way no health check can see.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8091
+DEFAULT_NETWORK = "bisheng-apps"
+DEFAULT_DATA_ROOT = "/opt/bisheng/app-data"
+DEFAULT_IMAGE_PREFIX = "bisheng-app"
+#: Attachment bucket. A *separate* bucket from the platform's ``bisheng``
+#: (pit 20): no nginx location, no anonymous policy, ever.
+DEFAULT_STORAGE_BUCKET = "bisheng-apps"
+DEFAULT_STORAGE_MAX_FILE_MB = 20
+#: Where ``python -m runtime_manager.egress_proxy`` binds by default. It must be
+#: reachable from the application network, so loopback is wrong here in both
+#: deployment shapes — unlike the intent API, which is loopback-only on purpose.
+DEFAULT_EGRESS_LISTEN = "0.0.0.0:3128"
+
+#: Container name prefix. Also the orphan-reclaim selector (T029) and the
+#: "managed by us" marker that keeps the reconciler away from foreign
+#: containers running on the same daemon (114 also runs onlyoffice etc.).
+CONTAINER_NAME_PREFIX = "bisheng-app-"
+
+#: Approval-time preview instances (F055 AC-26). A separate name space *and* a
+#: separate ``bisheng.managed`` value: the reconciler filters on
+#: ``bisheng.managed=true``, so a preview is invisible to it — it is neither
+#: adopted into the desired state nor reclaimed as an orphan, which is what
+#: makes "a preview consumes no instance slot" true rather than merely intended.
+PREVIEW_NAME_PREFIX = "bisheng-preview-"
+PREVIEW_MANAGED_VALUE = "preview"
+
+#: Label namespace written on every managed container. Labels are the disaster
+#: recovery source of truth for the desired-state store (AC-50).
+LABEL_MANAGED = "bisheng.managed"
+LABEL_APP_ID = "bisheng.app.id"
+LABEL_APP_SLUG = "bisheng.app.slug"
+LABEL_VERSION_ID = "bisheng.version.id"
+LABEL_VERSION_NO = "bisheng.version.no"
+LABEL_TIER_CPU = "bisheng.tier.cpu"
+LABEL_TIER_MEM_MB = "bisheng.tier.mem_mb"
+LABEL_PORT = "bisheng.port"
+LABEL_HEALTH_PATH = "bisheng.health.path"
+LABEL_GENERATION = "bisheng.generation"
+#: The application's declared outbound domains (AC-16). Labelled for the same
+#: reason the tier is: after a lost state file the reconciler rebuilds the
+#: instance from labels alone, and an instance rebuilt without its declarations
+#: would come back with a *narrower* whitelist than its owner published — an
+#: application that silently stops reaching its own API, with nothing anywhere
+#: saying why.
+LABEL_EGRESS_DOMAINS = "bisheng.egress.domains"
+#: Preview session this container belongs to — the only way back from a
+#: container to its session after a manager restart (there is no state file).
+LABEL_PREVIEW_SESSION = "bisheng.preview.session"
+#: Unix epoch seconds after which the preview may be reclaimed. The deadline
+#: rides on the container rather than in a platform timer because this process
+#: is the one that has to be alive for the container to exist at all — and
+#: because the platform image is not allowed a resident worker for the app
+#: factory (F054 AC-59).
+LABEL_PREVIEW_EXPIRES_AT = "bisheng.preview.expires_at"
+
+#: Variables a deployment must set explicitly — the dataclass defaults below are
+#: development conveniences, not deployment values. ``docker/verify-app-runtime-
+#: compose.sh`` asserts the compose file provides every one of them, which is the
+#: gate that would have caught the 3.0 compose file shipping ``APP_PROXY_*``
+#: names nothing reads.
+REQUIRED_ENV: tuple[str, ...] = (
+    "RTM_HOST",  # default is loopback; inside a container that means "nobody can reach me"
+    "RTM_PORT",
+    "RTM_HMAC_SECRET",  # empty = fail closed, every intent answered 401
+    "RTM_DATA_ROOT",
+    # Empty is a legal *value* (the egress layer is not deployed) but leaving the
+    # variable out of a deployment file is how it goes missing by accident, and
+    # the accident is invisible: apps keep working, with unrestricted outbound.
+    "RTM_EGRESS_PROXY",
+)
+
+#: Additionally required when *this process itself* runs in a container, where
+#: its filesystem view and the host dockerd's no longer coincide.
+CONTAINERISED_REQUIRED_ENV: tuple[str, ...] = ("RTM_HOST_DATA_ROOT",)
+
+
+def _env_str(name: str, default: str = "") -> str:
+    value = os.environ.get(name)
+    return default if value is None else value.strip()
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = _env_str(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = _env_str(name).lower()
+    if not raw:
+        return default
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = _env_str(name)
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _env_path(name: str) -> Path | None:
+    """Optional path variable — unset and empty both mean "not configured"."""
+    raw = _env_str(name)
+    return Path(raw) if raw else None
+
+
+def _env_tuple(name: str) -> tuple[str, ...]:
+    """Comma- or whitespace-separated list variable."""
+    raw = _env_str(name).replace(",", " ")
+    return tuple(item for item in raw.split() if item)
+
+
+@dataclass(frozen=True)
+class Config:
+    """Immutable process configuration.
+
+    Frozen on purpose: tests swap the whole object via :func:`set_config`
+    instead of mutating shared state, which keeps parallel test files from
+    leaking capacity / path settings into each other.
+    """
+
+    # --- transport / auth -------------------------------------------------
+    host: str = DEFAULT_HOST
+    port: int = DEFAULT_PORT
+    hmac_secret: str = ""
+    signature_header: str = "X-Signature"
+    node_id: str = ""
+    platform_key_id: str = ""
+    platform_secret: str = field(default="", repr=False)
+    platform_ca_file: Path | None = None
+    material_issuer_key_file: Path | None = field(default=None, repr=False)
+    inbound_key_id: str = ""
+    inbound_secret: str = field(default="", repr=False)
+    task_timeout_seconds: int = 1800
+    cleanup_seconds: int = 900
+    protocol_version: int = 1
+    image_pull_policy: str = "if-not-present"
+    data_helper_image: str = ""
+    data_helper_uid: int = 10001
+    data_helper_gid: int = 10001
+
+    # --- orchestration backend -------------------------------------------
+    executor_kind: str = "docker"
+    docker_host: str = ""
+    network: str = DEFAULT_NETWORK
+
+    # --- outbound whitelist (D12, AC-16) ---------------------------------
+    #: ``host:port`` of the egress proxy **as an application container reaches
+    #: it**. Empty = the layer is not deployed (see the module docstring).
+    egress_proxy: str = ""
+    #: Where the proxy process itself binds, ``host:port``. Only read by
+    #: ``python -m runtime_manager.egress_proxy``.
+    egress_listen: str = DEFAULT_EGRESS_LISTEN
+    #: Always-allowed destinations on top of the ones derived from the
+    #: deployment (platform API, this process). ``host`` or ``host:port``;
+    #: a leading dot allows the subdomains of a zone.
+    egress_allow: tuple[str, ...] = ()
+    #: The same, for the **build** phase, which otherwise reaches only the
+    #: configured package index and the platform's own distribution endpoint.
+    egress_build_allow: tuple[str, ...] = ()
+    #: Platform base URL used by the *build* phase — where ``pip install
+    #: bisheng-sdk`` fetches the platform's own wheel from (AC-16 "平台自身的分
+    #: 发端点"). The run phase learns the platform address from the deploy
+    #: intent instead, which is the value the backend actually advertises.
+    platform_base_url: str = ""
+    #: Network ``docker build`` runs on. Empty = the daemon's default bridge.
+    #: An ``--internal`` network here is what makes the build-phase allowlist
+    #: an enforcement rather than a preference.
+    build_network: str = ""
+    #: Application subnet, for the L2 ``DOCKER-USER`` fallback. Empty = the
+    #: fallback is not generated (the pre-flight says so).
+    apps_subnet: str = ""
+    #: ``iptables`` | ``nftables`` | empty to probe. Docker 29 defaults to the
+    #: nftables backend, which has **no DOCKER-USER chain** (design pit 22):
+    #: rules go in "successfully" and filter nothing.
+    firewall_backend: str = ""
+
+    # --- storage ----------------------------------------------------------
+    #: Where *this process* reads and writes app data, build contexts and the
+    #: desired-state file.
+    data_root: Path = Path(DEFAULT_DATA_ROOT)
+    #: The same directory as the **host** dockerd sees it. ``None`` means "the
+    #: process and the daemon share one filesystem view" — true for the systemd
+    #: shape and for the whole test suite. Only bind mount sources may use it;
+    #: everything this process opens itself must keep using ``data_root``.
+    host_data_root: Path | None = None
+
+    # --- capacity admission (D11) ----------------------------------------
+    reserve_mb: int = 2048
+    overcommit_ratio: float = 0.8
+    build_reserve_mb: int = 2048
+
+    # --- build (D3) -------------------------------------------------------
+    build_index_url: str = ""
+    build_trusted_host: str = ""
+    #: Secondary pip index, in practice the platform's own PEP 503 index at
+    #: ``{platform}/api/v1/dev-toolkit/simple/`` — where ``bisheng-sdk`` comes
+    #: from (F057 AC-02). It is a *second* index rather than a replacement
+    #: because an application's third-party dependencies still resolve from the
+    #: deployment's mirror above; only this one package lives on the platform.
+    #: ⚠️ The value must be reachable **from the build container**: on a bridge
+    #: network ``localhost`` is the container itself, so a host address is
+    #: required and the failure otherwise reads as "pip cannot reach the index".
+    build_extra_index_url: str = ""
+    build_extra_trusted_host: str = ""
+    #: npm registry for the node20 template — the pip index's twin. Empty means
+    #: the base image's default (the public registry).
+    build_npm_registry: str = ""
+    image_prefix: str = DEFAULT_IMAGE_PREFIX
+    image_retention: int = 2  # current + previous (AC-21 grace retirement)
+    build_timeout_seconds: int = 1800
+
+    # --- lifecycle / probe (D4) ------------------------------------------
+    retire_grace_seconds: int = 30
+    reconcile_interval_seconds: int = 15
+    #: Whether the process runs the reconcile loop. Always on in production (it
+    #: is the AC-20 self-healing mechanism); off in the unit suite, which drives
+    #: ``reconcile_once()`` by hand so nothing races the assertions.
+    reconcile_enabled: bool = True
+    probe_timeout_seconds: int = 90
+    probe_interval_seconds: float = 1.0
+    stop_timeout_seconds: int = 10
+    log_max_size: str = "10m"
+    log_max_file: str = "3"
+
+    # --- attachment storage (D10, AC-45) ---------------------------------
+    #: MinIO endpoint (``host:port``, no scheme). Empty = the attachment handle
+    #: is not configured: it is still *injected* into every instance (the env
+    #: contract must not depend on deployment state) but every call answers
+    #: 503 ``storage_unavailable`` and the pre-flight names the fix.
+    minio_endpoint: str = ""
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_secure: bool = False
+    #: Never the platform's public ``bisheng`` bucket: nginx forwards any key
+    #: under ``/bisheng/`` to MinIO, so the only thing between an attachment
+    #: and the internet there is the bucket policy (design pit 20).
+    storage_bucket: str = DEFAULT_STORAGE_BUCKET
+    #: Single-file cap, a deployment setting (AC-45). Injected as
+    #: ``BISHENG_APP_STORAGE_MAX_FILE_MB`` so the SDK can refuse before sending.
+    storage_max_file_mb: int = DEFAULT_STORAGE_MAX_FILE_MB
+    #: Base URL at which *hosted app containers* reach this process — the value
+    #: behind ``BISHENG_APP_STORAGE_ENDPOINT``. Empty = derived from
+    #: ``host``/``port``, which is right for compose (``0.0.0.0`` is replaced
+    #: by the service name there) and wrong for the systemd shape, where
+    #: ``127.0.0.1`` is unreachable from the bridge; the pre-flight says so.
+    app_facing_base_url: str = ""
+
+    @property
+    def apps_root(self) -> Path:
+        """Per-app host volumes: ``{data_root}/apps/{app_id}/db`` → ``/data``."""
+        return self.data_root / "apps"
+
+    @property
+    def state_dir(self) -> Path:
+        return self.data_root / "state"
+
+    @property
+    def state_path(self) -> Path:
+        return self.state_dir / "desired-state.json"
+
+    @property
+    def build_root(self) -> Path:
+        return self.data_root / "builds"
+
+    def app_data_dir(self, app_id: str) -> Path:
+        """Process-side view of the only writable persistent path of an instance."""
+        return self.apps_root / app_id / "db"
+
+    @property
+    def host_apps_root(self) -> Path:
+        """``apps_root`` as the host dockerd sees it (see ``host_data_root``)."""
+        return (self.host_data_root or self.data_root) / "apps"
+
+    def host_app_data_dir(self, app_id: str) -> Path:
+        """Bind mount **source** for an instance — always a host path.
+
+        The single caller is ``lifecycle.build_container_payload``. Anything
+        that ``mkdir``s, ``chown``s or ``rmtree``s must use
+        :meth:`app_data_dir` instead: those run in this process.
+        """
+        return self.host_apps_root / app_id / "db"
+
+    @property
+    def egress_dir(self) -> Path:
+        """Where the rendered egress policy lives — read by the proxy process."""
+        return self.data_root / "egress"
+
+    @property
+    def egress_policy_path(self) -> Path:
+        return self.egress_dir / "policy.json"
+
+    @property
+    def egress_enabled(self) -> bool:
+        """The address *is* the switch — see the module docstring."""
+        return bool(self.egress_proxy)
+
+    @property
+    def storage_configured(self) -> bool:
+        return bool(self.minio_endpoint and self.minio_access_key and self.minio_secret_key)
+
+    @property
+    def storage_max_file_bytes(self) -> int:
+        return max(self.storage_max_file_mb, 1) * 1024 * 1024
+
+    @property
+    def app_facing_base(self) -> str:
+        """Where an app container dials this process (see ``app_facing_base_url``)."""
+        if self.app_facing_base_url:
+            return self.app_facing_base_url.rstrip("/")
+        return f"http://{self.host}:{self.port}"
+
+    def __post_init__(self):
+        for path in (self.platform_ca_file, self.material_issuer_key_file):
+            if path is not None and (not isinstance(path, Path) or not path.is_absolute()):
+                raise ValueError("runtime_identity_path_invalid")
+        if self.executor_kind not in {"docker", "kubernetes"}:
+            raise ValueError("runtime_executor_invalid")
+        if self.executor_kind == "kubernetes" and self.protocol_version != 2:
+            raise ValueError("kubernetes_requires_protocol_v2")
+
+    def with_overrides(self, **kwargs) -> Config:
+        return replace(self, **kwargs)
+
+
+def load_config() -> Config:
+    """Build a :class:`Config` from the ``RTM_*`` environment variables."""
+    return Config(
+        host=_env_str("RTM_HOST", DEFAULT_HOST),
+        port=_env_int("RTM_PORT", DEFAULT_PORT),
+        hmac_secret=_env_str("RTM_HMAC_SECRET"),
+        signature_header=_env_str("RTM_SIGNATURE_HEADER", "X-Signature") or "X-Signature",
+        node_id=_env_str("RTM_NODE_ID"),
+        platform_key_id=_env_str("RTM_PLATFORM_KEY_ID"),
+        platform_secret=_env_str("RTM_PLATFORM_SECRET"),
+        platform_ca_file=Path(value) if (value := _env_str("RTM_PLATFORM_CA_FILE")) else None,
+        material_issuer_key_file=Path(value) if (value := _env_str("RTM_MATERIAL_ISSUER_KEY_FILE")) else None,
+        inbound_key_id=_env_str("RTM_INBOUND_KEY_ID"),
+        inbound_secret=_env_str("RTM_INBOUND_SECRET"),
+        task_timeout_seconds=_env_int("RTM_TASK_TIMEOUT_SECONDS", 1800),
+        cleanup_seconds=_env_int("RTM_CLEANUP_SECONDS", 900),
+        protocol_version=_env_int("RTM_PROTOCOL_VERSION", 1),
+        image_pull_policy=_env_str("RTM_IMAGE_PULL_POLICY", "if-not-present"),
+        data_helper_image=_env_str("RTM_DATA_HELPER_IMAGE"),
+        executor_kind=_env_str("RTM_EXECUTOR", "docker"),
+        docker_host=_env_str("RTM_DOCKER_HOST"),
+        network=_env_str("RTM_NETWORK", DEFAULT_NETWORK) or DEFAULT_NETWORK,
+        data_root=Path(_env_str("RTM_DATA_ROOT", DEFAULT_DATA_ROOT) or DEFAULT_DATA_ROOT),
+        host_data_root=_env_path("RTM_HOST_DATA_ROOT"),
+        reserve_mb=_env_int("RTM_RESERVE_MB", 2048),
+        overcommit_ratio=_env_float("RTM_OVERCOMMIT_RATIO", 0.8),
+        build_reserve_mb=_env_int("RTM_BUILD_RESERVE_MB", 2048),
+        build_index_url=_env_str("RTM_BUILD_INDEX_URL"),
+        build_trusted_host=_env_str("RTM_BUILD_TRUSTED_HOST"),
+        build_extra_index_url=_env_str("RTM_BUILD_EXTRA_INDEX_URL"),
+        build_extra_trusted_host=_env_str("RTM_BUILD_EXTRA_TRUSTED_HOST"),
+        build_npm_registry=_env_str("RTM_BUILD_NPM_REGISTRY"),
+        egress_proxy=_env_str("RTM_EGRESS_PROXY"),
+        egress_listen=_env_str("RTM_EGRESS_LISTEN", DEFAULT_EGRESS_LISTEN) or DEFAULT_EGRESS_LISTEN,
+        egress_allow=_env_tuple("RTM_EGRESS_ALLOW"),
+        egress_build_allow=_env_tuple("RTM_EGRESS_BUILD_ALLOW"),
+        platform_base_url=_env_str("RTM_PLATFORM_BASE_URL"),
+        build_network=_env_str("RTM_BUILD_NETWORK"),
+        apps_subnet=_env_str("RTM_APPS_SUBNET"),
+        firewall_backend=_env_str("RTM_FIREWALL_BACKEND"),
+        image_prefix=_env_str("RTM_IMAGE_PREFIX", DEFAULT_IMAGE_PREFIX) or DEFAULT_IMAGE_PREFIX,
+        image_retention=_env_int("RTM_IMAGE_RETENTION", 2),
+        build_timeout_seconds=_env_int("RTM_BUILD_TIMEOUT_SECONDS", 1800),
+        retire_grace_seconds=_env_int("RTM_RETIRE_GRACE_SECONDS", 30),
+        reconcile_interval_seconds=_env_int(
+            "RTM_RECONCILE_INTERVAL_SECONDS", 5 if _env_int("RTM_PROTOCOL_VERSION", 1) == 2 else 15
+        ),
+        reconcile_enabled=_env_bool("RTM_RECONCILE_ENABLED", True),
+        probe_timeout_seconds=_env_int("RTM_PROBE_TIMEOUT_SECONDS", 90),
+        probe_interval_seconds=_env_float("RTM_PROBE_INTERVAL_SECONDS", 1.0),
+        stop_timeout_seconds=_env_int("RTM_STOP_TIMEOUT_SECONDS", 10),
+        log_max_size=_env_str("RTM_LOG_MAX_SIZE", "10m") or "10m",
+        log_max_file=_env_str("RTM_LOG_MAX_FILE", "3") or "3",
+        minio_endpoint=_env_str("RTM_MINIO_ENDPOINT"),
+        minio_access_key=_env_str("RTM_MINIO_ACCESS_KEY"),
+        minio_secret_key=_env_str("RTM_MINIO_SECRET_KEY"),
+        minio_secure=_env_bool("RTM_MINIO_SECURE", False),
+        storage_bucket=_env_str("RTM_STORAGE_BUCKET", DEFAULT_STORAGE_BUCKET) or DEFAULT_STORAGE_BUCKET,
+        storage_max_file_mb=_env_int("RTM_STORAGE_MAX_FILE_MB", DEFAULT_STORAGE_MAX_FILE_MB),
+        app_facing_base_url=_env_str("RTM_APP_FACING_BASE_URL"),
+    )
+
+
+_config: Config | None = None
+
+
+def get_config() -> Config:
+    global _config
+    if _config is None:
+        _config = load_config()
+    return _config
+
+
+def set_config(config: Config | None) -> None:
+    """Test / bootstrap seam. Passing ``None`` re-reads the environment."""
+    global _config
+    _config = config

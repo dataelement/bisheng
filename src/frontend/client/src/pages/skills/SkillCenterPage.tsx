@@ -1,17 +1,17 @@
+import { isApiError } from '@bisheng/api-client';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
-import { Button, SearchInput, StateView, Tooltip } from '@bisheng/ui';
+import { Button, SearchInput, Select, StateView, Tooltip } from '@bisheng/ui';
 import { translateApiErrorMessage } from '~/api/request';
 import { NotificationSeverity } from '~/common';
-import { ActionMenuCheckboxItem, ActionMenuContent } from '~/components/ActionMenu';
 import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
 import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { SkillUploadDialog } from '~/components/Skills/SkillUploadDialog';
-import { SkillRequestError, type SkillRecord } from '~/components/Skills/types';
+import { type SkillRecord } from '~/components/Skills/types';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
-import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { useLocalize } from '~/hooks';
+import useSelectCopy from '~/hooks/useSelectCopy';
 import { useToastContext } from '~/Providers';
 import { cn } from '~/utils';
 import { SkillList, SkillListSkeleton, type SkillSort } from './SkillList';
@@ -24,6 +24,7 @@ import { SkillList, SkillListSkeleton, type SkillSort } from './SkillList';
 
 export function SkillCenterPage() {
   const localize = useLocalize();
+  const selectCopy = useSelectCopy();
   const { showToast } = useToastContext();
   const { platform, personal, mutation, personalCount, enterpriseCount } = useSkillCenter();
   const [search, setSearch] = useState('');
@@ -37,8 +38,7 @@ export function SkillCenterPage() {
   const skills = useMemo<SkillRecord[]>(() => [
     ...(platform.data ?? []),
     ...(personal.data ?? []),
-  ].map((skill) => (skill.id in enabledOverride ? { ...skill, enabled: enabledOverride[skill.id] } : skill))
-    .sort((left, right) => left.displayName.localeCompare(right.displayName)), [platform.data, personal.data, enabledOverride]);
+  ].map((skill) => (skill.id in enabledOverride ? { ...skill, enabled: enabledOverride[skill.id] } : skill)), [platform.data, personal.data, enabledOverride]);
   const requestedId = Number(params.get('skill'));
   const selected = Number.isInteger(requestedId) ? skills.find((skill) => skill.id === requestedId) : undefined;
   const keyword = search.trim().toLocaleLowerCase();
@@ -60,18 +60,11 @@ export function SkillCenterPage() {
     mutation.mutate({ kind: 'toggle', target: skill, enabled }, {
       onError: (error) => {
         setEnabledOverride((prev) => ({ ...prev, [skill.id]: skill.enabled }));
-        // skip403Redirect already toasts the translated business error and rejects
-        // with status_code set. A maintenance overlay covers HTTP 500.
-        const explained = typeof error === 'object' && error !== null && 'status_code' in error
-          && !(error instanceof SkillRequestError);
-        const httpStatus = typeof error === 'object' && error !== null && 'response' in error
-          ? (error as { response?: { status?: number } }).response?.status
-          : undefined;
-        if (explained || httpStatus === 500) return;
-        const message = error instanceof SkillRequestError
+        if (isApiError(error) && (error.presentation !== 'none' || error.kind === 'canceled')) return;
+        const message = isApiError(error)
           ? translateApiErrorMessage({
-            status_code: error.statusCode,
-            status_message: error.statusMessage,
+            status_code: error.status_code,
+            status_message: error.status_message,
             data: error.data,
           })
           : '';
@@ -79,6 +72,7 @@ export function SkillCenterPage() {
           message: message || localize('com_skill_center_error_storage'),
           severity: NotificationSeverity.ERROR,
         });
+        if (isApiError(error)) error.presentation = 'toast';
       },
     });
   };
@@ -114,23 +108,29 @@ export function SkillCenterPage() {
   const mineTools = (
     <>
       {searchInput}
-      <DropdownMenu>
-        <Tooltip content={localize('com_skill_center_sort')}>
-          <DropdownMenuTrigger asChild>
-            <Button color="default" variant="outlined" iconOnly aria-label={localize('com_skill_center_sort')}>
-              <Outlined.Sort />
-            </Button>
-          </DropdownMenuTrigger>
-        </Tooltip>
-        <ActionMenuContent>
-          <ActionMenuCheckboxItem checked={sort === 'recent'} onCheckedChange={() => setSort('recent')}>
-            {localize('com_skill_center_sort_recent')}
-          </ActionMenuCheckboxItem>
-          <ActionMenuCheckboxItem checked={sort === 'name'} onCheckedChange={() => setSort('name')}>
-            {localize('com_skill_center_sort_name')}
-          </ActionMenuCheckboxItem>
-        </ActionMenuContent>
-      </DropdownMenu>
+      {/* Arrow-entry Select: the list order is the echo of the picked value.
+          The Tooltip sits on a wrapper because Select clones its trigger. */}
+      <Tooltip content={localize('com_skill_center_sort')}>
+        <span className="inline-flex">
+          <Select
+            {...selectCopy}
+            aria-label={localize('com_skill_center_sort')}
+            options={[
+              { value: 'recent', label: localize('com_skill_center_sort_recent') },
+              { value: 'name', label: localize('com_skill_center_sort_name') },
+            ]}
+            value={sort}
+            onChange={(next) => {
+              if (next === 'recent' || next === 'name') setSort(next);
+            }}
+            trigger={
+              <Button color="default" variant="outlined" iconOnly aria-label={localize('com_skill_center_sort')}>
+                <Outlined.Sort />
+              </Button>
+            }
+          />
+        </span>
+      </Tooltip>
       <Button disabled={personal.isError || personal.isLoading} onClick={handleStartUpload} className="max-[575px]:w-full">
         <Outlined.Plus />{localize('com_skill_center_upload')}
       </Button>

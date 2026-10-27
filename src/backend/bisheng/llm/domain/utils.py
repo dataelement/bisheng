@@ -6,6 +6,7 @@ from typing import Any, Union
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.outputs import ChatGenerationChunk, ChatResult, GenerationChunk
 from loguru import logger
 
@@ -21,6 +22,17 @@ from bisheng.llm.domain.const import LLM_CACHE, LLMModelStatus
 
 # httpx / langchain reject values without a scheme (``URL('admin')``).
 _PROXY_URL_SCHEMES = ("http://", "https://", "socks://", "socks4://", "socks5://", "socks5h://")
+
+
+class LlmProviderDailyLimitExceededError(Exception):
+    """The provider's daily call limit configured in model management is used up.
+
+    Same base class and same message as the bare ``Exception`` it replaced, so
+    every existing ``except Exception`` caller is unaffected. It exists so a
+    caller that needs to answer differently — the model protocol face returns
+    HTTP 429 rather than a generic 502 — can tell this apart from an upstream
+    failure without matching on message text.
+    """
 
 
 def usable_proxy_url(value: object) -> str | None:
@@ -126,7 +138,9 @@ async def bisheng_model_limit_check(self: "BishengBase"):
         redis_client = await get_redis_client()
         use_num = await redis_client.aincr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f"{self.server_info.name}/{self.model_info.model_name} Quota used up")
+            raise LlmProviderDailyLimitExceededError(
+                f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
+            )
 
 
 def sync_bisheng_model_limit_check(self: "BishengBase"):
@@ -136,7 +150,9 @@ def sync_bisheng_model_limit_check(self: "BishengBase"):
         cache_key = f"model_limit:{now}:{self.server_info.id}"
         use_num = get_redis_client_sync().incr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f"{self.server_info.name}/{self.model_info.model_name} Quota used up")
+            raise LlmProviderDailyLimitExceededError(
+                f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
+            )
 
 
 def get_token_from_usage(token_usage: dict[str, Any] | None) -> tuple[int, int, int, int]:
@@ -297,6 +313,12 @@ def wrapper_bisheng_model_limit_check(func):
             result = func(*args, **kwargs)
 
             return result
+        except ContextOverflowError:
+            # F087: the request was too long for the model, not a broken model —
+            # record the failed call but leave the model's status alone.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
             remark = str(e)
@@ -307,7 +329,8 @@ def wrapper_bisheng_model_limit_check(func):
             # Avoid blocking the main thread by uploading logs asynchronously using the thread pool
             first_token_cost_time = telemetry_callback.first_token_time if telemetry_callback else 0
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, result=result)
-            self.sync_update_model_status(status, remark)
+            if status is not None:
+                self.sync_update_model_status(status, remark)
 
     return wrapper
 
@@ -338,6 +361,12 @@ def wrapper_bisheng_model_limit_check_async(func):
             # The caller gave up (a probe timeout, a closed request). The call did
             # not succeed, but nothing says the model is broken either: record a
             # failed invocation and leave the model status to the caller.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
+        except ContextOverflowError:
+            # F087: the request was too long for the model, not a broken model —
+            # record the failed call but leave the model's status alone.
             status = None
             telemetry_status = StatusEnum.FAILED
             raise
@@ -377,6 +406,12 @@ def wrapper_bisheng_model_generator(func):
                 yield item
                 if first_token_cost_time == 0:
                     first_token_cost_time = int((time.time() - start_time) * 1000)
+        except ContextOverflowError:
+            # F087: the request was too long for the model, not a broken model —
+            # record the failed call but leave the model's status alone.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
             remark = str(e)
@@ -385,7 +420,8 @@ def wrapper_bisheng_model_generator(func):
         finally:
             end_time = time.time()
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, True, result=item)
-            self.sync_update_model_status(status, remark)
+            if status is not None:
+                self.sync_update_model_status(status, remark)
 
     return wrapper
 
@@ -410,6 +446,12 @@ def wrapper_bisheng_model_generator_async(func):
                 yield item
                 if first_token_cost_time == 0:
                     first_token_cost_time = int((time.time() - start_time) * 1000)
+        except ContextOverflowError:
+            # F087: the request was too long for the model, not a broken model —
+            # record the failed call but leave the model's status alone.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
             remark = str(e)
@@ -418,7 +460,8 @@ def wrapper_bisheng_model_generator_async(func):
         finally:
             end_time = time.time()
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, True, result=item)
-            await self.update_model_status(status, remark)
+            if status is not None:
+                await self.update_model_status(status, remark)
 
     return wrapper
 

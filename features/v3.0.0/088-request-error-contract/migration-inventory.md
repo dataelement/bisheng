@@ -1,0 +1,465 @@
+# F088 迁移候选清单
+
+基线：`bc6ca25ba`（React Query 升级 `219bb0e8a`），2026-10-22。
+
+本清单按源文本引用自动生成，不代表这些路径全部活跃，也不代表已经完成迁移。每批必须追踪实际 API → hook/页面 → 路由入口及 guard；定义文件、辅助文件和不同组重复项不可算成独立业务入口。未经过统一请求入口的通道只识别边界，不纳入改造。
+
+## 必须保护与重写的升级回归
+
+| 文件 | F088 要求 |
+|---|---|
+| `src/frontend/platform/src/queryClient.test.ts` | 保留内网离线、保存和重连刷新断言；新增真实错误与提示归属回归 |
+| `src/frontend/platform/src/pages/ModelPage/manage/queryModelMigration.test.tsx` | 保留模型类型缓存隔离、刷新和清理，补失败不伪装空成功 |
+| `src/frontend/platform/src/pages/ModelPage/manage/tabs/queryConfigMigration.test.tsx` | 失败路径由 null 缓存/isSuccess 改为真实错误；成功继承 metadata 保持可用 |
+| `src/frontend/platform/src/pages/Dashboard/components/charts/ChartContainer.test.tsx` | 保留 disabled 查询的 isInitialLoading；新增失败可辨认与再次刷新 |
+| `src/frontend/platform/src/pages/Dashboard/publishDashboard.test.tsx` | 验证保存失败不发布、不跳转、不触发成功缓存更新，且提示去重 |
+
+## 消费与迁移检查规则
+
+- Query/Mutation 的函数返回真实 Promise 失败；禁止旧包装层或通用 catch 空值进入成功缓存。
+- refetch 默认返回结果；有顺序依赖者显式抛错或判断 isError。mutateAsync 在最外层事件终点处理 rejection。
+- 特殊业务恢复须注明依据（许可证不可用隐藏、权限惰性读取等）；不是清单上看到 catch 就删除。
+- 每个活跃调用链在 tasks 中记录对应 AC、实际改动和测试；只改 import/字段名不算迁移完成。
+- 清理后再做文本与调用关系双向扫描，排除静态检索漏掉的再导出或间接调用。
+
+## platform 旧包装层引用（111 文件）
+
+- [ ] `src/frontend/platform/src/components/LinSight/skill/SkillManagement.tsx`
+- [ ] `src/frontend/platform/src/components/VariablesComponent/index.tsx`
+- [ ] `src/frontend/platform/src/components/bs-comp/apiComponent/ChatLink.tsx`
+- [ ] `src/frontend/platform/src/components/bs-comp/department/TreeDepartmentSelect.tsx`
+- [ ] `src/frontend/platform/src/components/bs-comp/department/useLazyDepartmentTree.ts`
+- [ ] `src/frontend/platform/src/components/bs-comp/selectComponent/DepartmentUsersSelect.tsx`
+- [ ] `src/frontend/platform/src/components/bs-comp/selectComponent/LabelSelect.tsx`
+- [ ] `src/frontend/platform/src/contexts/tabsContext.tsx`
+- [ ] `src/frontend/platform/src/contexts/userContext.tsx`
+- [ ] `src/frontend/platform/src/controllers/request.ts`
+- [ ] `src/frontend/platform/src/layout/MainLayout.tsx`
+- [ ] `src/frontend/platform/src/modals/codeAreaModal/index.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/CardSelectVersion.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/CreateApp.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/CreateTemp.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/appTemps.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/apps.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/assistant/CreateAssistant.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/assistant/editAssistant/index.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/AppCenter.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpace.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpaceSensitivePolicy.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpaceTagLibrarySection.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/Subscribe.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/SubscriptionSensitivePolicy.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/WorkbenchSensitivePolicy.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/index.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/flow/FlowNode/RunTest.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/flow/FlowNode/component/ReportWordEdit.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/flow/Header.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/tools/EditMcp.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/tools/EditTool.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/tools/index.tsx`
+- [ ] `src/frontend/platform/src/pages/DataSetPage/CreateDataSet.tsx`
+- [ ] `src/frontend/platform/src/pages/DataSetPage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/AddMemberDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/CreateDepartmentDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/CreateLocalMemberDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/DepartmentSettings.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/DepartmentSettingsView.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/DepartmentTrafficControl.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/MemberTable.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/MountTenantDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/OrganizationMemberEditDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/EvaluationPage/EvaluationCreate.tsx`
+- [ ] `src/frontend/platform/src/pages/EvaluationPage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/AdjustFilesUpload.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/KnowledgeFile.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/KnowledgeQa.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/DepartmentSpaceDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/EditQa.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/FileUploadParagraphs.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/FileUploadStep4.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/Header.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/ImportQa.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/KnowledgeLibraryDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/ParagraphEdit.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/Paragraphs.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/PreviewResult.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/QaLibraryDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/tags/KnowledgeTagSelect.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/detail.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/filesUpload.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/qas.tsx`
+- [ ] `src/frontend/platform/src/pages/LabelPage/AddSimilarQuestions.tsx`
+- [ ] `src/frontend/platform/src/pages/LabelPage/SaveQaLibForm.tsx`
+- [ ] `src/frontend/platform/src/pages/LabelPage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/LabelPage/taskAppChats.tsx`
+- [ ] `src/frontend/platform/src/pages/LogPage/useAppLog/appChatDetail.tsx`
+- [ ] `src/frontend/platform/src/pages/LoginPage/TenantSelect.tsx`
+- [ ] `src/frontend/platform/src/pages/LoginPage/UserPwdModal.tsx`
+- [ ] `src/frontend/platform/src/pages/LoginPage/login.tsx`
+- [ ] `src/frontend/platform/src/pages/LoginPage/resetPwd.tsx`
+- [ ] `src/frontend/platform/src/pages/MenuPermissionPlaceholder.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/components/CreateTask.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/components/FinetuneDetail.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/components/RTConfig.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/finetune.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/ModelConfig.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/AssisModel.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/EvaluationModel.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/KnowledgeModel.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/WorkbenchModel.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/WorkflowModel.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/Config.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/CreateUser.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/Departments.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/OrgSync/index.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/PersonalToken/index.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/Roles.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ApiKeysTab.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/CreateServiceAccountDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/KeyIssueDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/OverviewTab.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ResourceGrantDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ResourceGrantsTab.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/index.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/UserGroup.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/UserRoleModal.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/Users.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/theme/BrandAssetUpload.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/theme/BrandCustomization.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/theme/WorkbenchThemeSettings.tsx`
+- [ ] `src/frontend/platform/src/pages/TenantPage/components/CreateTenantDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/TenantPage/components/TenantQuotaDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/TenantPage/components/TenantUserDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/TenantPage/index.tsx`
+
+## platform React Query 引用（含升级新增/迁移入口）（20 文件）
+
+- [ ] `src/frontend/platform/src/components/bs-comp/department/useLazyDepartmentTree.ts`
+- [ ] `src/frontend/platform/src/index.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/flow/Sidebar.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/hook.ts`
+- [ ] `src/frontend/platform/src/pages/Dashboard/components/charts/ChartContainer.tsx`
+- [ ] `src/frontend/platform/src/pages/Dashboard/components/config/ChartSelector.tsx`
+- [ ] `src/frontend/platform/src/pages/Dashboard/components/config/DatasetSelector.tsx`
+- [ ] `src/frontend/platform/src/pages/Dashboard/components/dashboard/DashboardSidebar.tsx`
+- [ ] `src/frontend/platform/src/pages/Dashboard/components/editor/EditorCanvas.tsx`
+- [ ] `src/frontend/platform/src/pages/Dashboard/components/editor/EditorHeader.tsx`
+- [ ] `src/frontend/platform/src/pages/Dashboard/editor.tsx`
+- [ ] `src/frontend/platform/src/pages/Dashboard/hook.ts`
+- [ ] `src/frontend/platform/src/pages/Dashboard/index.tsx`
+- [ ] `src/frontend/platform/src/pages/Dashboard/share.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/ScopeBar.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/AssisModel.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/WorkbenchModel.tsx`
+- [ ] `src/frontend/platform/src/queryClient.ts`
+- [ ] `src/frontend/platform/src/test/test-utils.tsx`
+
+## platform 直接导入统一 request（147 文件）
+
+- [ ] `src/frontend/platform/src/components/LinSight/skill/SkillManagement.tsx`
+- [ ] `src/frontend/platform/src/components/VariablesComponent/index.tsx`
+- [ ] `src/frontend/platform/src/components/bs-comp/apiComponent/ChatLink.tsx`
+- [ ] `src/frontend/platform/src/components/bs-comp/department/TreeDepartmentSelect.tsx`
+- [ ] `src/frontend/platform/src/components/bs-comp/department/useLazyDepartmentTree.ts`
+- [ ] `src/frontend/platform/src/components/bs-comp/selectComponent/DepartmentUsersSelect.tsx`
+- [ ] `src/frontend/platform/src/components/bs-comp/selectComponent/LabelSelect.tsx`
+- [ ] `src/frontend/platform/src/components/bs-ui/upload/simple.tsx`
+- [ ] `src/frontend/platform/src/contexts/tabsContext.tsx`
+- [ ] `src/frontend/platform/src/contexts/userContext.tsx`
+- [ ] `src/frontend/platform/src/controllers/API/admin.ts`
+- [ ] `src/frontend/platform/src/controllers/API/approval.ts`
+- [ ] `src/frontend/platform/src/controllers/API/assistant.ts`
+- [ ] `src/frontend/platform/src/controllers/API/dashboard.ts`
+- [ ] `src/frontend/platform/src/controllers/API/department.ts`
+- [ ] `src/frontend/platform/src/controllers/API/departmentKnowledgeSpace.ts`
+- [ ] `src/frontend/platform/src/controllers/API/dsh.ts`
+- [ ] `src/frontend/platform/src/controllers/API/dshAudit.ts`
+- [ ] `src/frontend/platform/src/controllers/API/dshMarket.ts`
+- [ ] `src/frontend/platform/src/controllers/API/dshSettings.ts`
+- [ ] `src/frontend/platform/src/controllers/API/evaluate.ts`
+- [ ] `src/frontend/platform/src/controllers/API/finetune.ts`
+- [ ] `src/frontend/platform/src/controllers/API/flow.ts`
+- [ ] `src/frontend/platform/src/controllers/API/guestLink.ts`
+- [ ] `src/frontend/platform/src/controllers/API/index.ts`
+- [ ] `src/frontend/platform/src/controllers/API/knowledgeSpace.ts`
+- [ ] `src/frontend/platform/src/controllers/API/knowledgeSpaceTagLibrary.ts`
+- [ ] `src/frontend/platform/src/controllers/API/knowledgeTags.ts`
+- [ ] `src/frontend/platform/src/controllers/API/label.ts`
+- [ ] `src/frontend/platform/src/controllers/API/license.ts`
+- [ ] `src/frontend/platform/src/controllers/API/linsight.ts`
+- [ ] `src/frontend/platform/src/controllers/API/llm.ts`
+- [ ] `src/frontend/platform/src/controllers/API/log.ts`
+- [ ] `src/frontend/platform/src/controllers/API/orgSync.ts`
+- [ ] `src/frontend/platform/src/controllers/API/permission.ts`
+- [ ] `src/frontend/platform/src/controllers/API/personalToken.ts`
+- [ ] `src/frontend/platform/src/controllers/API/pro.ts`
+- [ ] `src/frontend/platform/src/controllers/API/sensitiveWordPolicy.ts`
+- [ ] `src/frontend/platform/src/controllers/API/serviceAccount.ts`
+- [ ] `src/frontend/platform/src/controllers/API/tenant.ts`
+- [ ] `src/frontend/platform/src/controllers/API/tools.ts`
+- [ ] `src/frontend/platform/src/controllers/API/user.ts`
+- [ ] `src/frontend/platform/src/controllers/API/userGroups.ts`
+- [ ] `src/frontend/platform/src/controllers/API/workbench.ts`
+- [ ] `src/frontend/platform/src/controllers/API/workflow.ts`
+- [ ] `src/frontend/platform/src/hooks/useDshProfile.ts`
+- [ ] `src/frontend/platform/src/layout/MainLayout.tsx`
+- [ ] `src/frontend/platform/src/modals/codeAreaModal/index.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/CardSelectVersion.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/CreateApp.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/CreateTemp.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/appTemps.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/apps.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/assistant/CreateAssistant.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/assistant/editAssistant/index.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/AppCenter.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpace.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpaceSensitivePolicy.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/KnowledgeSpaceTagLibrarySection.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/Subscribe.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/SubscriptionSensitivePolicy.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/WorkbenchSensitivePolicy.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/bench/index.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/flow/FlowNode/RunTest.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/flow/FlowNode/component/ReportWordEdit.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/flow/Header.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/tools/EditMcp.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/tools/EditTool.tsx`
+- [ ] `src/frontend/platform/src/pages/BuildPage/tools/index.tsx`
+- [ ] `src/frontend/platform/src/pages/DataSetPage/CreateDataSet.tsx`
+- [ ] `src/frontend/platform/src/pages/DataSetPage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/AddMemberDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/CreateDepartmentDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/CreateLocalMemberDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/DepartmentSettings.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/DepartmentSettingsView.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/DepartmentTrafficControl.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/MemberTable.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/MountTenantDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/components/OrganizationMemberEditDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/DepartmentPage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/EvaluationPage/EvaluationCreate.tsx`
+- [ ] `src/frontend/platform/src/pages/EvaluationPage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/AdjustFilesUpload.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/KnowledgeFile.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/KnowledgeQa.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/DepartmentSpaceDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/EditQa.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/FileUploadStep4.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/Header.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/ImportQa.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/KnowledgeLibraryDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/ParagraphEdit.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/Paragraphs.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/PreviewResult.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/QaLibraryDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/components/tags/KnowledgeTagSelect.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/detail.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/filesUpload.tsx`
+- [ ] `src/frontend/platform/src/pages/KnowledgePage/qas.tsx`
+- [ ] `src/frontend/platform/src/pages/LabelPage/AddSimilarQuestions.tsx`
+- [ ] `src/frontend/platform/src/pages/LabelPage/SaveQaLibForm.tsx`
+- [ ] `src/frontend/platform/src/pages/LabelPage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/LabelPage/taskAppChats.tsx`
+- [ ] `src/frontend/platform/src/pages/LogPage/useAppLog/appChatDetail.tsx`
+- [ ] `src/frontend/platform/src/pages/LoginPage/TenantSelect.tsx`
+- [ ] `src/frontend/platform/src/pages/LoginPage/UserPwdModal.tsx`
+- [ ] `src/frontend/platform/src/pages/LoginPage/login.tsx`
+- [ ] `src/frontend/platform/src/pages/LoginPage/resetPwd.tsx`
+- [ ] `src/frontend/platform/src/pages/MenuPermissionPlaceholder.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/components/CreateTask.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/components/FinetuneDetail.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/components/RTConfig.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/finetune.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/ModelConfig.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/dsh/ModelVisionSwitch.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/index.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/AssisModel.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/EvaluationModel.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/KnowledgeModel.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/WorkbenchModel.tsx`
+- [ ] `src/frontend/platform/src/pages/ModelPage/manage/tabs/WorkflowModel.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/Config.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/CreateUser.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/Departments.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/OrgSync/index.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/PersonalToken/index.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/Roles.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ApiKeysTab.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/CreateServiceAccountDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/KeyIssueDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/OverviewTab.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ResourceGrantDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ResourceGrantsTab.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/index.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/UserGroup.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/UserRoleModal.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/components/Users.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/theme/BrandAssetUpload.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/theme/BrandCustomization.tsx`
+- [ ] `src/frontend/platform/src/pages/SystemPage/theme/WorkbenchThemeSettings.tsx`
+- [ ] `src/frontend/platform/src/pages/TenantPage/components/CreateTenantDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/TenantPage/components/TenantQuotaDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/TenantPage/components/TenantUserDialog.tsx`
+- [ ] `src/frontend/platform/src/pages/TenantPage/index.tsx`
+
+## client API 直接导入统一 request（18 文件）
+
+- [ ] `src/frontend/client/src/api/approval.ts`
+- [ ] `src/frontend/client/src/api/apps.ts`
+- [ ] `src/frontend/client/src/api/channels.ts`
+- [ ] `src/frontend/client/src/api/chat/data-service.ts`
+- [ ] `src/frontend/client/src/api/chatApi.ts`
+- [ ] `src/frontend/client/src/api/dsh.ts`
+- [ ] `src/frontend/client/src/api/index.ts`
+- [ ] `src/frontend/client/src/api/knowledge.ts`
+- [ ] `src/frontend/client/src/api/linsight.ts`
+- [ ] `src/frontend/client/src/api/message.ts`
+- [ ] `src/frontend/client/src/api/messageExport.ts`
+- [ ] `src/frontend/client/src/api/notifications.ts`
+- [ ] `src/frontend/client/src/api/permission.ts`
+- [ ] `src/frontend/client/src/api/personalToken.ts`
+- [ ] `src/frontend/client/src/api/quota.ts`
+- [ ] `src/frontend/client/src/api/skillCenter.ts`
+- [ ] `src/frontend/client/src/api/user.ts`
+- [ ] `src/frontend/client/src/api/voice.ts`
+
+## client API 自行检查业务状态（14 文件）
+
+- [ ] `src/frontend/client/src/api/approval.ts`
+- [ ] `src/frontend/client/src/api/apps.ts`
+- [ ] `src/frontend/client/src/api/channels.ts`
+- [ ] `src/frontend/client/src/api/chatApi.ts`
+- [ ] `src/frontend/client/src/api/dsh.ts`
+- [ ] `src/frontend/client/src/api/knowledge.ts`
+- [ ] `src/frontend/client/src/api/knowledgeParseFailureMessage.ts`
+- [ ] `src/frontend/client/src/api/message.ts`
+- [ ] `src/frontend/client/src/api/messageExport.ts`
+- [ ] `src/frontend/client/src/api/permission.ts`
+- [ ] `src/frontend/client/src/api/personalToken.ts`
+- [ ] `src/frontend/client/src/api/request.ts`
+- [ ] `src/frontend/client/src/api/skillCenter.ts`
+- [ ] `src/frontend/client/src/api/user.ts`
+
+## client React Query 消费候选（105 文件）
+
+- [ ] `src/frontend/client/src/App.jsx`
+- [ ] `src/frontend/client/src/common/types.ts`
+- [ ] `src/frontend/client/src/components/Bookmarks/BookmarkForm.tsx`
+- [ ] `src/frontend/client/src/components/Chat/AiChatMessages.tsx`
+- [ ] `src/frontend/client/src/components/Chat/ChatView.tsx`
+- [ ] `src/frontend/client/src/components/Chat/Input/StreamAudio.tsx`
+- [ ] `src/frontend/client/src/components/Chat/Menus/BookmarkMenu.tsx`
+- [ ] `src/frontend/client/src/components/Chat/Menus/HeaderNewChat.tsx`
+- [ ] `src/frontend/client/src/components/Chat/Menus/Presets/EditPresetDialog.tsx`
+- [ ] `src/frontend/client/src/components/Conversations/ConvoOptions/useDeleteConversationConfirm.ts`
+- [ ] `src/frontend/client/src/components/Linsight/Input/KnowledgeSpaceSelect.tsx`
+- [ ] `src/frontend/client/src/components/Linsight/Input/ModelSelector.tsx`
+- [ ] `src/frontend/client/src/components/Linsight/Input/SkillSelector.tsx`
+- [ ] `src/frontend/client/src/components/Linsight/Input/useDefaultCheckedSkills.ts`
+- [ ] `src/frontend/client/src/components/Nav/MobileNav.tsx`
+- [ ] `src/frontend/client/src/components/Nav/NewChat.tsx`
+- [ ] `src/frontend/client/src/components/Nav/SearchBar.tsx`
+- [ ] `src/frontend/client/src/components/Settings/sections/AccountSection.tsx`
+- [ ] `src/frontend/client/src/components/SidePanel/Agents/AgentAvatar.tsx`
+- [ ] `src/frontend/client/src/components/SidePanel/Agents/AgentConfig.tsx`
+- [ ] `src/frontend/client/src/components/SidePanel/Agents/AgentSelect.tsx`
+- [ ] `src/frontend/client/src/components/SidePanel/Agents/DeleteButton.tsx`
+- [ ] `src/frontend/client/src/components/SidePanel/Builder/AssistantAvatar.tsx`
+- [ ] `src/frontend/client/src/components/SidePanel/Builder/AssistantSelect.tsx`
+- [ ] `src/frontend/client/src/components/SidePanel/Builder/ContextButton.tsx`
+- [ ] `src/frontend/client/src/components/Skills/SkillDetails.tsx`
+- [ ] `src/frontend/client/src/components/Skills/SkillUploadDialog.tsx`
+- [ ] `src/frontend/client/src/components/Skills/useSkillCenter.ts`
+- [ ] `src/frontend/client/src/components/dsh/DshDesktopPanel.tsx`
+- [ ] `src/frontend/client/src/hooks/Agents/useSelectAgent.ts`
+- [ ] `src/frontend/client/src/hooks/Chat/useAddedHelpers.ts`
+- [ ] `src/frontend/client/src/hooks/Chat/useChatHelpers.ts`
+- [ ] `src/frontend/client/src/hooks/Config/useConfigOverride.ts`
+- [ ] `src/frontend/client/src/hooks/Conversations/useExportConversation.ts`
+- [ ] `src/frontend/client/src/hooks/Conversations/useNavigateToConvo.tsx`
+- [ ] `src/frontend/client/src/hooks/Conversations/usePresets.ts`
+- [ ] `src/frontend/client/src/hooks/Conversations/useSearch.ts`
+- [ ] `src/frontend/client/src/hooks/Conversations/useUpdateTagsInConvo.ts`
+- [ ] `src/frontend/client/src/hooks/Files/useDeleteFilesFromTable.tsx`
+- [ ] `src/frontend/client/src/hooks/Files/useDragHelpers.ts`
+- [ ] `src/frontend/client/src/hooks/Files/useFileDeletion.ts`
+- [ ] `src/frontend/client/src/hooks/Files/useFileHandling.ts`
+- [ ] `src/frontend/client/src/hooks/Input/useQueryParams.ts`
+- [ ] `src/frontend/client/src/hooks/Nav/useNavScrolling.ts`
+- [ ] `src/frontend/client/src/hooks/Plugins/useAuthCodeTool.ts`
+- [ ] `src/frontend/client/src/hooks/Prompts/usePromptGroupsNav.ts`
+- [ ] `src/frontend/client/src/hooks/SSE/useContentHandler.ts`
+- [ ] `src/frontend/client/src/hooks/SSE/useEventHandlers.ts`
+- [ ] `src/frontend/client/src/hooks/queries/agents/mutations.ts`
+- [ ] `src/frontend/client/src/hooks/queries/agents/queries.ts`
+- [ ] `src/frontend/client/src/hooks/queries/auth/mutations.ts`
+- [ ] `src/frontend/client/src/hooks/queries/auth/queries.ts`
+- [ ] `src/frontend/client/src/hooks/queries/connection.ts`
+- [ ] `src/frontend/client/src/hooks/queries/endpoints/queries.ts`
+- [ ] `src/frontend/client/src/hooks/queries/files/mutations.ts`
+- [ ] `src/frontend/client/src/hooks/queries/files/queries.ts`
+- [ ] `src/frontend/client/src/hooks/queries/messages/mutations.ts`
+- [ ] `src/frontend/client/src/hooks/queries/misc/queries.ts`
+- [ ] `src/frontend/client/src/hooks/queries/mutations.ts`
+- [ ] `src/frontend/client/src/hooks/queries/prompts.ts`
+- [ ] `src/frontend/client/src/hooks/queries/queries.ts`
+- [ ] `src/frontend/client/src/hooks/queries/react-query-service.ts`
+- [ ] `src/frontend/client/src/hooks/queries/roles.ts`
+- [ ] `src/frontend/client/src/hooks/queries/tags.ts`
+- [ ] `src/frontend/client/src/hooks/queries/tools/mutations.ts`
+- [ ] `src/frontend/client/src/hooks/queries/tools/queries.ts`
+- [ ] `src/frontend/client/src/hooks/useAiChat.ts`
+- [ ] `src/frontend/client/src/hooks/useCategorizedKnowledgeSpaces.ts`
+- [ ] `src/frontend/client/src/hooks/useDshDesktop.ts`
+- [ ] `src/frontend/client/src/hooks/useEffectiveQuota.ts`
+- [ ] `src/frontend/client/src/hooks/useLinsightManager.tsx`
+- [ ] `src/frontend/client/src/hooks/useVoice.ts`
+- [ ] `src/frontend/client/src/pages/Subscription/Article/ArticlePage.tsx`
+- [ ] `src/frontend/client/src/pages/Subscription/ArticleList/ArticleList.tsx`
+- [ ] `src/frontend/client/src/pages/Subscription/ArticleList/ChannelActionsMenu.tsx`
+- [ ] `src/frontend/client/src/pages/Subscription/ArticleList/ChannelSwitcher.tsx`
+- [ ] `src/frontend/client/src/pages/Subscription/ChannelDiscoveryHome.tsx`
+- [ ] `src/frontend/client/src/pages/Subscription/ChannelPreviewDrawer.tsx`
+- [ ] `src/frontend/client/src/pages/Subscription/ChannelSettings/useChannelSettingsForm.ts`
+- [ ] `src/frontend/client/src/pages/Subscription/Sidebar/ChannelSidebar.tsx`
+- [ ] `src/frontend/client/src/pages/Subscription/hooks/useChannelActions.ts`
+- [ ] `src/frontend/client/src/pages/Subscription/hooks/useSourceManager.ts`
+- [ ] `src/frontend/client/src/pages/Subscription/index.tsx`
+- [ ] `src/frontend/client/src/pages/appChat/components/AppSidebarConvoItem.tsx`
+- [ ] `src/frontend/client/src/pages/apps/hooks/useLazyAppSharePermission.ts`
+- [ ] `src/frontend/client/src/pages/knowledge/SpaceDetail/AiChat/KnowledgeAiBottomDock.tsx`
+- [ ] `src/frontend/client/src/pages/knowledge/SpaceDetail/EditTagsModal.tsx`
+- [ ] `src/frontend/client/src/pages/knowledge/SpaceDetail/MoveToDialog.tsx`
+- [ ] `src/frontend/client/src/pages/knowledge/SpaceDetail/RelateDocumentPanel.tsx`
+- [ ] `src/frontend/client/src/pages/knowledge/SpaceDetail/SimilarDocumentDialog.tsx`
+- [ ] `src/frontend/client/src/pages/knowledge/SpaceDetail/VersionHistorySheet.tsx`
+- [ ] `src/frontend/client/src/pages/knowledge/SpaceDetail/index.tsx`
+- [ ] `src/frontend/client/src/pages/knowledge/SpaceDetail/useSelectionPath.ts`
+- [ ] `src/frontend/client/src/pages/knowledge/SpaceSettings/useKnowledgeSpaceSettingsForm.ts`
+- [ ] `src/frontend/client/src/pages/knowledge/hooks/useSpaceActions.ts`
+- [ ] `src/frontend/client/src/pages/knowledge/index.tsx`
+- [ ] `src/frontend/client/src/pages/knowledge/sidebar/KnowledgeSpaceSidebar.tsx`
+- [ ] `src/frontend/client/src/pages/settings/sections/AiAccessPane.tsx`
+- [ ] `src/frontend/client/src/routes/Layouts/Dashboard.tsx`
+- [ ] `src/frontend/client/src/types/chat/queries.ts`
+- [ ] `src/frontend/client/src/types/chat/types.ts`
+- [ ] `src/frontend/client/src/utils/collection.ts`
+- [ ] `src/frontend/client/src/utils/convos.ts`
+- [ ] `src/frontend/client/src/utils/files.ts`
+- [ ] `src/frontend/client/src/utils/promptGroups.ts`
+
+
+## 实施闭环与范围（2026-10-22）
+
+以上是基线候选清单，不等于逐个文件已被运行时验收。活跃调用链、命名恢复、失败终点与独立复核依据见platform-migration-report.md、platform-fix-report.md、platform-code-review.md，以及client-migration-report.md、client-final-fix-report.md、client-code-review.md。旧HOC生产调用已清零，兼容导出继续reject；不能将这一文本扫描独自当作AC-21验收。
+
+client已核实分享/技能/上传/审批/引用/导出制品/语音、导航会话/来源/文章、知识与频道列表、聊天历史及清空等活跃链。原LibreChat侧面板与旧Dashboard路径未接线，AppChat resolved失败后重接已删除应用分支在基线不可达，未复活这些死代码。辅助badge/标题等既有非关键降级保留；SSE/native fetch/WebSocket遵从spec排除边界。
+
+全量门禁、基线差异及真实后端页面待验清单见verification-report.md、e2e-checklist.md。独立审查报告只证明其中实际检查的活跃链，不伪装为每条旧路径的完整运行时认证。

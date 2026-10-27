@@ -1,5 +1,7 @@
+import { ApiRequestFailure } from "~/components/ApiRequestFailure";
+import { useChannelLists } from "./hooks/useChannelLists";
 import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -10,7 +12,6 @@ import {
     ChannelRole,
     SortType,
     getChannelDetailApi,
-    getChannelsApi,
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
@@ -394,18 +395,9 @@ export default function Subscription() {
     // Page owns channel list + auto-select on both PC and H5 so the page lands on a real channel
     // by default. Channel switching UI is route-driven (system menu reveal on H5).
     const channelPluginEnabled = channelPluginGate === "enabled";
-    const { data: createdChannelsForAuto = [], isFetched: createdAutoFetched } = useQuery({
-        queryKey: ["channels", "created", SortType.RECENT_UPDATE],
-        queryFn: () => getChannelsApi({ type: "created", sortBy: SortType.RECENT_UPDATE }),
-        enabled: channelPluginEnabled,
-        placeholderData: (prev) => prev,
-    });
-    const { data: subscribedChannelsForAuto = [], isFetched: subscribedAutoFetched } = useQuery({
-        queryKey: ["channels", "subscribed", SortType.RECENT_UPDATE],
-        queryFn: () => getChannelsApi({ type: "subscribed", sortBy: SortType.RECENT_UPDATE }),
-        enabled: channelPluginEnabled,
-        placeholderData: (prev) => prev,
-    });
+    const { created: { data: createdChannelsForAuto = [], isFetched: createdAutoFetched },
+        subscribed: { data: subscribedChannelsForAuto = [], isFetched: subscribedAutoFetched },
+        error: channelsError, retry: retryChannels } = useChannelLists({ enabled: channelPluginEnabled });
 
     // True while we still can't tell whether the user has channels: the plugin
     // gate is resolving, or the channel lists haven't finished their first fetch.
@@ -576,7 +568,7 @@ export default function Subscription() {
                                     setShowFullScreenBtn(true);
                                 }}
                             />
-                        ) : channelsResolving ? (
+                        ) : channelsError ? <ApiRequestFailure error={channelsError} onRetry={retryChannels} /> : channelsResolving ? (
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
                                 {isH5 ? (
                                     <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">

@@ -8,6 +8,7 @@
  * to track open/close and the message list.
  */
 
+import { isApiError } from '@bisheng/api-client';
 import { useCallback, useState, type ComponentType } from 'react';
 import { Outlined } from 'bisheng-icons';
 import {
@@ -15,7 +16,7 @@ import {
     exportMessagesApi,
     triggerBrowserDownload,
 } from '~/api/messageExport';
-import { translateApiErrorMessage } from '~/api/request';
+import { showApiError } from '~/api/request';
 import {
     Sheet,
     SheetContent,
@@ -73,7 +74,7 @@ export function ExportFormatSheet({
             const ids = getSelectedIds(messages);
             if (!ids.length) {
                 showToast({
-                    message: localize('workstation.messageExport.noSelection') ?? '请先选择消息',
+                    message: localize('workstation.messageExport.noSelection'),
                     severity: NotificationSeverity.WARNING,
                 });
                 return;
@@ -94,11 +95,10 @@ export function ExportFormatSheet({
                 });
                 triggerBrowserDownload(file);
                 onOpenChange(false);
-            } catch (e: any) {
-                showToast({
-                    message:
-                        translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
-                        || localize('workstation.messageExport.renderFailed'),
+            } catch (error) {
+                if (isApiError(error)) showApiError(error);
+                else showToast({
+                    message: localize('workstation.messageExport.renderFailed'),
                     severity: NotificationSeverity.WARNING,
                 });
             } finally {

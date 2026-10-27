@@ -84,7 +84,7 @@ class BishengASR(BishengBase):
 
         if not model_info:
             raise AsrModelConfigDeletedError()
-        if model_info.model_type != LLMModelType.ASR.value:
+        if not LLMModelType.is_speech(model_info.model_type):
             raise AsrModelTypeError(model_type=model_info.model_type)
         if not server_info:
             raise AsrProviderDeletedError()
@@ -97,28 +97,63 @@ class BishengASR(BishengBase):
         return cls(model_id=model_id, asr=asr_client, model_info=model_info, server_info=server_info, **kwargs)
 
     @classmethod
+    def uses_realtime(cls, model_info: LLMModel | None, server_info: LLMServer | None) -> bool:
+        """Realtime when the row says so, or when it is a legacy file row for a streaming engine.
+
+        Volcengine, Baidu, and Tencent rows saved before ``asr_rt`` still have
+        ``model_type=asr``. They have no file client, so the workbench must
+        open the streaming session instead of posting the recording.
+        """
+        if model_info is None or server_info is None:
+            return False
+        if model_info.model_type == LLMModelType.ASR_RT.value:
+            return True
+        return realtime_protocol(server_info.type, model_info.model_name) is not None
+
+    @classmethod
     async def init_asr_client(cls, model_info: LLMModel, server_info: LLMServer) -> BaseASRClient:
+        if cls.uses_realtime(model_info, server_info):
+            return cls._realtime_client(model_info, server_info)
+        if model_info.model_type == LLMModelType.ASR.value:
+            return await cls._file_client(model_info, server_info)
+        raise AsrModelTypeError(model_type=model_info.model_type)
+
+    @classmethod
+    def _merged_asr_params(cls, model_info: LLMModel, server_info: LLMServer) -> dict:
         params = {}
         if server_info.config:
             params.update(server_info.config)
         if model_info.config:
             params.update(model_info.config)
-        if server_info.type in _streaming_client_type:
-            return _streaming_client_type[server_info.type](model=model_info.model_name, config=params)
-        if realtime_protocol(server_info.type, model_info.model_name):
+        return params
+
+    @classmethod
+    def _realtime_client(cls, model_info: LLMModel, server_info: LLMServer) -> BaseASRClient:
+        model_name = str(model_info.model_name or "").strip()
+        if not model_name:
+            raise ValueError("ASR model name is required")
+        params = cls._merged_asr_params(model_info, server_info)
+        client_cls = _streaming_client_type.get(server_info.type)
+        if client_cls:
+            return client_cls(model=model_name, config=params)
+        if server_info.type == LLMServerType.QWEN.value:
+            if not realtime_protocol(server_info.type, model_name):
+                raise ValueError("This realtime ASR model has no registered protocol adapter")
             return RealtimeASRClient(
                 api_key=params.get("openai_api_key") or params.get("api_key"),
-                model=model_info.model_name,
+                model=model_name,
                 base_url=params.get("openai_api_base", ""),
             )
-        if server_info.type == LLMServerType.QWEN.value and "realtime" in model_info.model_name:
-            raise ValueError("This realtime ASR model has no registered protocol adapter")
-        if server_info.type not in _asr_client_type:
-            raise Exception(f"asrModel not supported{server_info.type}Type of service provider")
+        raise ValueError(f"This provider has no realtime ASR client: {server_info.type}")
+
+    @classmethod
+    async def _file_client(cls, model_info: LLMModel, server_info: LLMServer) -> BaseASRClient:
+        if server_info.type in _streaming_client_type or server_info.type not in _asr_client_type:
+            raise ValueError(f"This provider has no file ASR client: {server_info.type}")
+        params = cls._merged_asr_params(model_info, server_info)
         params_handler = _asr_client_type[server_info.type]["params_handler"]
         new_params = await params_handler(params, server_info, model_info)
-        client = _asr_client_type[server_info.type]["client"](**new_params)
-        return client
+        return _asr_client_type[server_info.type]["client"](**new_params)
 
     @wrapper_bisheng_model_limit_check_async
     async def ainvoke(self, audio: Union[str, bytes, BinaryIO], **kwargs) -> str:

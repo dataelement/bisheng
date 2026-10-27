@@ -1,39 +1,43 @@
-import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
-import DepartmentUsersSelect, {
-  type DepartmentUserOption,
-} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
-import { Button } from "@/components/bs-ui/button"
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker"
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Button, Input, notification } from '@bisheng/ui';
+import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect";
+import DepartmentUsersSelect,{
+type DepartmentUserOption,
+} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect";
+
+import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
-import { Label } from "@/components/bs-ui/label"
-import { toast } from "@/components/bs-ui/toast/use-toast"
-import { QuestionTooltip } from "@/components/bs-ui/tooltip"
+Dialog,
+DialogContent,
+DialogDescription,
+DialogFooter,
+DialogHeader,
+DialogTitle,
+} from "@/components/bs-ui/dialog";
+
+import { Label } from "@/components/bs-ui/label";
+
+
+import { QuestionHint as QuestionTooltip } from '@/components/bs-comp/QuestionHint';
 import {
-  issueServiceAccountKeyApi,
-  updateServiceAccountKeyApi,
-} from "@/controllers/API/serviceAccount"
-import { createDelegateCandidateSource } from "@/controllers/API/serviceAccountCandidates"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+issueServiceAccountKeyApi,
+updateServiceAccountKeyApi,
+} from "@/controllers/API/serviceAccount";
+import { createDelegateCandidateSource } from "@/controllers/API/serviceAccountCandidates";
+import { showApiError } from "@/controllers/request";
 import type {
-  ApiKeyIssued,
-  ApiKeyItem,
-  ApiKeyUpdateForm,
-  DelegateScopeInput,
-  OpenApiScopeItem,
-} from "@/types/api/openApi"
-import { formatDate } from "@/util/utils"
-import { Loader2 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
+ApiKeyIssued,
+ApiKeyItem,
+ApiKeyUpdateForm,
+DelegateScopeInput,
+OpenApiScopeItem,
+} from "@/types/api/openApi";
+import { formatDate } from "@/util/utils";
+
+import { useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface KeyIssueDialogProps {
   serviceAccountId: number
@@ -46,6 +50,16 @@ export interface KeyIssueDialogProps {
 }
 
 type DelegateDepartment = { id: number; name: string }
+
+// 伴生 PRD §4.2.4 / AC-48: a key that acts on behalf of someone else and the
+// local development toolkit scopes cannot live on the same key — a delegated
+// key must carry an identity header on every call, which the toolkit surfaces
+// never send. The backend refuses the combination at issue / edit time (26050);
+// the form must not let it be built at all. Which codes belong to the toolkit
+// is read off the scope catalog's `group` (GET /service-accounts/scopes), never
+// from a code list copied into the frontend.
+const DELEGATE_SCOPE_CODE = "delegate"
+const LOCAL_DEV_TOOLKIT_GROUP = "local_dev_toolkit"
 
 function toBackendDateTime(date: Date): string {
   return formatDate(date, "yyyy-MM-ddTHH:mm:ss")
@@ -83,14 +97,33 @@ export function KeyIssueDialog({
   const [loading, setLoading] = useState(false)
   const candidates = useMemo(() => createDelegateCandidateSource(serviceAccountId), [serviceAccountId])
 
+  const localDevToolkitCodes = useMemo(
+    () =>
+      new Set(
+        scopes
+          .filter((scope) => scope.group === LOCAL_DEV_TOOLKIT_GROUP)
+          .map((scope) => scope.code),
+      ),
+    [scopes],
+  )
+
+  const delegateSelected = selectedScopes.includes(DELEGATE_SCOPE_CODE)
+  const localDevToolkitSelected = selectedScopes.some((code) =>
+    localDevToolkitCodes.has(code),
+  )
+  // Only a key issued before the backend gate can arrive with both sides
+  // ticked. Every ticked box stays clickable so the admin can clear one side;
+  // saving is what gets blocked until they do.
+  const scopeConflict = delegateSelected && localDevToolkitSelected
+
   const delegateInvalid =
-    selectedScopes.includes("delegate") &&
-    !delegateUsers.length &&
-    !delegateDepartments.length
+    delegateSelected && !delegateUsers.length && !delegateDepartments.length
 
   const groupedScopes = useMemo(() => {
     const groups = new Map<string, OpenApiScopeItem[]>()
-    for (const scope of scopes.filter((item) => item.code !== "delegate")) {
+    for (const scope of scopes.filter(
+      (item) => item.code !== DELEGATE_SCOPE_CODE,
+    )) {
       const items = groups.get(scope.group) || []
       items.push(scope)
       groups.set(scope.group, items)
@@ -98,7 +131,9 @@ export function KeyIssueDialog({
     return Array.from(groups, ([group, items]) => ({ group, items }))
   }, [scopes])
 
-  const delegateScope = scopes.find((scope) => scope.code === "delegate")
+  const delegateScope = scopes.find(
+    (scope) => scope.code === DELEGATE_SCOPE_CODE,
+  )
 
   useEffect(() => {
     if (!open) return
@@ -130,20 +165,28 @@ export function KeyIssueDialog({
 
   const toggleScope = (code: string, checked: boolean) => {
     setSelectedScopes((current) => {
-      if (checked) return current.includes(code) ? current : [...current, code]
-      return current.filter((item) => item !== code)
+      if (!checked) return current.filter((item) => item !== code)
+      if (current.includes(code)) return current
+      // Guards the same pair the checkboxes disable, so no other path (keyboard,
+      // a future bulk "select all") can assemble the refused combination.
+      const wouldConflict =
+        code === DELEGATE_SCOPE_CODE
+          ? current.some((item) => localDevToolkitCodes.has(item))
+          : localDevToolkitCodes.has(code) &&
+            current.includes(DELEGATE_SCOPE_CODE)
+      if (wouldConflict) return current
+      return [...current, code]
     })
-    if (code === "delegate" && !checked) {
+    if (code === DELEGATE_SCOPE_CODE && !checked) {
       setDelegateUsers([])
       setDelegateDepartments([])
     }
   }
 
   const handleSubmit = async () => {
-    if (!name.trim() || delegateInvalid) return
-    const delegateScopes: DelegateScopeInput[] = selectedScopes.includes(
-      "delegate",
-    )
+    if (name.length > 128) return;
+    if (!name.trim() || delegateInvalid || scopeConflict) return
+    const delegateScopes: DelegateScopeInput[] = delegateSelected
       ? [
           ...delegateUsers.map((user) => ({
             subject_type: "user" as const,
@@ -185,32 +228,22 @@ export function KeyIssueDialog({
           onOpenChange(false)
           return
         }
-        const updated = await captureAndAlertRequestErrorHoc(
-          updateServiceAccountKeyApi(
+        const updated = await updateServiceAccountKeyApi(
             serviceAccountId,
             editingKey.id,
             updatePayload,
-          ),
-        )
+          )
         if (!updated) return
-        toast({
-          title: t("openApiManagement.keys.edit"),
-          description: t("openApiManagement.feedback.keyUpdated"),
-          variant: "success",
-        })
+        notification.open({ type: "success", title: String(t("openApiManagement.keys.edit") ?? ''), description: String(t("openApiManagement.feedback.keyUpdated") ?? '') })
         onUpdated()
         return
       }
-      const issued = await captureAndAlertRequestErrorHoc(
-        issueServiceAccountKeyApi(serviceAccountId, payload),
-      )
+      const issued = await issueServiceAccountKeyApi(serviceAccountId, payload)
       if (!issued) return
-      toast({
-        title: t("openApiManagement.keys.issue"),
-        description: t("openApiManagement.feedback.keyIssued"),
-        variant: "success",
-      })
+      notification.open({ type: "success", title: String(t("openApiManagement.keys.issue") ?? ''), description: String(t("openApiManagement.feedback.keyIssued") ?? '') })
       onIssued(issued)
+    } catch (error) {
+      showApiError(error)
     } finally {
       setLoading(false)
     }
@@ -222,11 +255,20 @@ export function KeyIssueDialog({
           .map((endpoint) => `${endpoint.method} ${endpoint.path}`)
           .join("\n")
       : ""
+    const checked = selectedScopes.includes(scope.code)
+    const blocked =
+      !checked && delegateSelected && localDevToolkitCodes.has(scope.code)
     return (
-      <label key={scope.code} className="flex cursor-pointer items-start gap-2">
+      <label
+        key={scope.code}
+        className={`flex items-start gap-2 ${
+          blocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+        }`}
+      >
         <Checkbox
           className="mt-0.5"
-          checked={selectedScopes.includes(scope.code)}
+          checked={checked}
+          disabled={blocked}
           onCheckedChange={(checked) =>
             toggleScope(scope.code, checked === true)
           }
@@ -241,7 +283,11 @@ export function KeyIssueDialog({
                     {t("openApiManagement.keys.endpointsTitle")}\n{endpointText}
                   </span>
                 }
-              />
+              >
+                <Button type="button" size="small" variant="text" color="default" iconOnly aria-label={t("openApiManagement.keys.endpointsTitle")}>
+                  <Outlined.Question />
+                </Button>
+              </QuestionTooltip>
             ) : null}
           </span>
           <span className="block text-xs text-muted-foreground">
@@ -278,12 +324,7 @@ export function KeyIssueDialog({
         <div className="max-h-[60vh] space-y-4 overflow-y-auto py-2 pr-1">
           <div className="space-y-2">
             <Label>{t("openApiManagement.fields.name")} *</Label>
-            <Input
-              value={name}
-              maxLength={128}
-              placeholder={t("openApiManagement.keys.namePlaceholder")}
-              onChange={(event) => setName(event.target.value)}
-            />
+            <Input value={name} maxLength={128} placeholder={t("openApiManagement.keys.namePlaceholder")} onChange={(event) => setName(event.target.value)} showCount />
           </div>
           <div className="space-y-2">
             <Label>{t("openApiManagement.fields.expiresAt")}</Label>
@@ -295,12 +336,7 @@ export function KeyIssueDialog({
                 onChange={(date) => setExpiresAt(toBackendDateTime(date))}
               />
               {expiresAt ? (
-                <Button
-                  type="button"
-                  variant="link"
-                  className="shrink-0 px-0"
-                  onClick={() => setExpiresAt(null)}
-                >
+                <Button type="button" variant="link" className="shrink-0 px-0" onClick={() => setExpiresAt(null)}>
                   {t("openApiManagement.keys.clearExpiry")}
                 </Button>
               ) : null}
@@ -316,19 +352,36 @@ export function KeyIssueDialog({
                 <p className="text-sm font-medium">
                   {t(`openApiManagement.scopeGroups.${group}`)}
                 </p>
+                {group === LOCAL_DEV_TOOLKIT_GROUP && delegateSelected ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("openApiManagement.keys.localDevExclusiveHint")}
+                  </p>
+                ) : null}
                 <div className="space-y-3">{items.map(renderScope)}</div>
               </div>
             ))}
+            {scopeConflict ? (
+              <p className="text-xs text-destructive">
+                {t("openApiManagement.keys.scopeExclusiveConflict")}
+              </p>
+            ) : null}
           </div>
           {delegateScope ? (
             <div className="space-y-3 rounded-md border p-3 text-sm">
               <Label>{t("openApiManagement.keys.delegateConfig")}</Label>
-              <label className="flex cursor-pointer items-start gap-2">
+              <label
+                className={`flex items-start gap-2 ${
+                  localDevToolkitSelected && !delegateSelected
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer"
+                }`}
+              >
                 <Checkbox
                   className="mt-0.5"
-                  checked={selectedScopes.includes("delegate")}
+                  checked={delegateSelected}
+                  disabled={localDevToolkitSelected && !delegateSelected}
                   onCheckedChange={(checked) =>
-                    toggleScope("delegate", checked === true)
+                    toggleScope(DELEGATE_SCOPE_CODE, checked === true)
                   }
                 />
                 <span className="min-w-0 space-y-0.5">
@@ -340,7 +393,12 @@ export function KeyIssueDialog({
                   </span>
                 </span>
               </label>
-              {selectedScopes.includes("delegate") ? (
+              {localDevToolkitSelected && !delegateSelected ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("openApiManagement.keys.delegateExclusiveHint")}
+                </p>
+              ) : null}
+              {delegateSelected ? (
                 <>
                   {delegateScope.hint_keys.map((key) => (
                     <p
@@ -401,19 +459,13 @@ export function KeyIssueDialog({
                     {delegateDepartments.length ? (
                       <div className="flex flex-wrap gap-2 pt-1">
                         {delegateDepartments.map((department) => (
-                          <Button
-                            key={department.id}
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
+                          <Button key={department.id} type="button" size="small" variant="outlined" onClick={() =>
                               setDelegateDepartments((current) =>
                                 current.filter(
                                   (item) => item.id !== department.id,
                                 ),
                               )
-                            }
-                          >
+                            } color="default">
                             {department.name} ×
                           </Button>
                         ))}
@@ -431,19 +483,12 @@ export function KeyIssueDialog({
           ) : null}
         </div>
         <DialogFooter>
-          <Button
-            variant="outline"
-            disabled={loading}
-            onClick={() => handleOpenChange(false)}
-          >
+          <Button variant="outlined" disabled={loading} onClick={() => handleOpenChange(false)} color="default">
             {t("cancel")}
           </Button>
-          <Button
-            disabled={loading || !name.trim() || delegateInvalid}
-            onClick={handleSubmit}
-          >
+          <Button disabled={((String((name) ?? '').length > 128)) || (loading || !name.trim() || delegateInvalid || scopeConflict)} onClick={handleSubmit}>
             {loading ? (
-              <Loader2
+              <Outlined.Loading
                 aria-hidden="true"
                 className="mr-2 size-4 animate-spin"
               />

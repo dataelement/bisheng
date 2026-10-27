@@ -1,3 +1,4 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -10,16 +11,8 @@ import {
   type PersonalTokenItem,
   type PersonalTokenStatus,
 } from "~/api/personalToken";
-import {
-  Button,
-  Checkbox,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  TooltipAnchor,
-} from "~/components/ui";
+import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "~/components/ui";
+import { Checkbox } from '@bisheng/ui';
 import { useConfirm } from "~/Providers/ConfirmContext";
 import { useToastContext } from "~/Providers/ToastContext";
 import { useLocalize } from "~/hooks";
@@ -73,11 +66,9 @@ function TokenRevealDialog({ issued, baseUrl, onClose, onCopy }: TokenRevealDial
                 <span>{localize("com_ai_access.key_label")}: </span>
                 <code>{issued.plaintext}</code>
               </p>
-              <TooltipAnchor description={localize("com_ai_access.copy_key")}>
-                <Button color="default" variant="text" iconOnly aria-label={localize("com_ai_access.copy_key")} onClick={() => onCopy(issued.plaintext)}>
+              <SharedTooltip  content={localize("com_ai_access.copy_key")}  ><Button color="default" variant="text" iconOnly aria-label={localize("com_ai_access.copy_key")} onClick={() => onCopy(issued.plaintext)}>
                   <Outlined.Copy />
-                </Button>
-              </TooltipAnchor>
+                </Button></SharedTooltip>
             </div>
             <Button
               ref={copyAllRef}
@@ -259,16 +250,14 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
           <DialogDescription className="sr-only">
             {localize("com_ai_access.section_desc")}
           </DialogDescription>
-          <TooltipAnchor description={localize("com_ui_close")} className="absolute right-4 top-3">
-            <Button
+          <SharedTooltip  content={localize("com_ui_close")}  ><div className="absolute right-4 top-3"  ><Button
               color="default" variant="text" iconOnly
               aria-label={localize("com_ui_close")}
               disabled={action !== null}
               onClick={() => handleOpenChange(false)}
             >
               <Outlined.Close />
-            </Button>
-          </TooltipAnchor>
+            </Button></div></SharedTooltip>
         </DialogHeader>
 
         <div className="min-h-0 overflow-y-auto px-4 pb-6">
@@ -319,7 +308,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
                     <p className="font-medium text-text-1">{localize("com_ai_access.admin_confirm_title")}</p>
                     <p>{localize("com_ai_access.admin_confirm_body", { days: String(status?.ttl_days ?? "") })}</p>
                     <label className="flex items-start gap-2 text-body-sm">
-                      <Checkbox className="mt-1" checked={adminAcknowledged} onCheckedChange={(checked) => setAdminAcknowledged(checked === true)} />
+                      <Checkbox className="peer mt-1" checked={adminAcknowledged} onCheckedChange={(checked) => setAdminAcknowledged(checked === true)} />
                       {localize("com_ai_access.admin_confirm_check")}
                     </label>
                     <div className="mt-2 flex flex-wrap gap-3">

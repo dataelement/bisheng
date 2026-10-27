@@ -1,15 +1,16 @@
-import { asrHints, asrProviders, ttsProviders } from "./speechConfig";
-import { Badge } from "@/components/bs-ui/badge";
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input, Select, Textarea } from '@bisheng/ui';
+import { Switch, Tag } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { asrHintKey, speechModelTypes, ttsProviders } from "./speechConfig";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Switch } from "@/components/bs-ui/switch";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { ModelFieldHint } from "./ModelFieldHint";
 import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advancedParamsTemplates";
-import { Trash2Icon } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -56,6 +57,7 @@ const MODEL_TYPE_LABELS: Record<string, string> = {
     embedding: 'Embedding',
     rerank: 'Rerank',
     asr: 'ASR',
+    asr_rt: 'ASR Realtime',
     tts: 'TTS',
 };
 
@@ -87,6 +89,7 @@ function parseParamsObject(text: string): Record<string, unknown> | null {
 
 export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItemProps) {
     const { t } = useTranslation();
+    const selectLabels = useSelectLabels();
     const [nameError, setNameError] = useState('');
     const [dialogOpen, setDialogOpen] = useState(false);
     const [draftParams, setDraftParams] = useState('');
@@ -151,6 +154,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
     };
 
     const handleSaveParams = () => {
+        if ((String(config.max_tokens ?? '') !== '' && (!Number.isFinite(Number(config.max_tokens ?? '')) || Number(config.max_tokens ?? '') < 0))) return;
+
         const value = draftParams.trim();
         if (value && parseParamsObject(value) === null) {
             setJsonError(true);
@@ -161,6 +166,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
     };
 
     const displayName = data.model_name.trim() || t('model.untitledModel');
+    const hintKey = asrHintKey(type, modelType);
+    const typeOptions = speechModelTypes();
 
     return (
         <div className="rounded-md border p-4">
@@ -169,45 +176,39 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                     <span className={`truncate text-sm font-medium ${data.model_name.trim() ? '' : 'text-muted-foreground'}`}>
                         {displayName}
                     </span>
-                    <Badge variant="gray" className="shrink-0">{MODEL_TYPE_LABELS[modelType] ?? modelType}</Badge>
+                    <Tag size="small" className="shrink-0">{MODEL_TYPE_LABELS[modelType] ?? modelType}</Tag>
                 </div>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0 text-muted-foreground"
-                    aria-label={t('model.deleteModel')}
-                    onClick={handleDeleteClick}
-                >
-                    <Trash2Icon className="size-4" />
+                <Button variant="text" size="medium" className="size-8 shrink-0 text-muted-foreground" aria-label={t('model.deleteModel')} onClick={handleDeleteClick} color="default" iconOnly>
+                    <Outlined.Delete />
                 </Button>
             </div>
 
             <div className="mt-3 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
                 <div className="space-y-2">
-                    <Label className="bisheng-label">
+                    <Label className="bisheng-label flex h-8 items-center">
                         <span>{t('model.modelName')}</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.modelNameTooltip')} />
+                        <ModelFieldHint className="ml-1" content={t('model.modelNameTooltip')} />
                     </Label>
-                    <Input value={data.model_name} onChange={handleNameChange} className="h-8" />
+                    <Input aria-label={t('model.modelName')} value={data.model_name} onChange={handleNameChange} className={"h-8"} />
                     {nameError && <span className="text-xs text-red-500">{nameError}</span>}
-                    {modelType === "asr" && asrHints[type] && <p className="text-xs text-muted-foreground">{t(asrHints[type])}</p>}
+                    {hintKey && <p className="text-xs text-muted-foreground">{t(hintKey)}</p>}
                 </div>
                 <div className="space-y-2">
-                    <Label className="bisheng-label">{t('model.modelType')}</Label>
-                    <Select value={modelType} onValueChange={(val: string) => onInput(data.model_name, val)}>
-                        <SelectTrigger className="h-8">
-                            <SelectValue placeholder="" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="llm">LLM</SelectItem>
-                                <SelectItem value="embedding">Embedding</SelectItem>
-                                <SelectItem value="rerank">Rerank</SelectItem>
-                                {asrProviders.includes(type) && <SelectItem value="asr">ASR</SelectItem>}
-                                {ttsProviders.includes(type) && <SelectItem value="tts">TTS</SelectItem>}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                    <Label className="bisheng-label flex h-8 items-center">{t('model.modelType')}</Label>
+                    <Select
+                        {...selectLabels}
+                        aria-label={t('model.modelType')}
+                        options={[
+                            { value: 'llm', label: 'LLM' },
+                            { value: 'embedding', label: 'Embedding' },
+                            { value: 'rerank', label: 'Rerank' },
+                            ...(typeOptions.includes('asr') ? [{ value: 'asr', label: 'ASR' }] : []),
+                            ...(typeOptions.includes('asr_rt') ? [{ value: 'asr_rt', label: 'ASR Realtime' }] : []),
+                            ...(ttsProviders.includes(type) ? [{ value: 'tts', label: 'TTS' }] : []),
+                        ]}
+                        value={modelType || null}
+                        onChange={(val) => { if (val != null) onInput(data.model_name, String(val)) }}
+                    />
                 </div>
             </div>
 
@@ -216,13 +217,9 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                     <Label className="bisheng-label">
                         <span>{t('model.voiceType')}</span>
                         <span className="text-red-500">*</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.voiceTypeTooltip')} />
+                        <ModelFieldHint className="ml-1" content={t('model.voiceTypeTooltip')} />
                     </Label>
-                    <Input
-                        value={config.voice ?? data.voice ?? ''}
-                        onChange={(e) => applyConfig({ voice: e.target.value })}
-                        className="h-8"
-                    />
+                    <Input aria-label={t('model.voiceType')} value={config.voice ?? data.voice ?? ''} onChange={(e) => applyConfig({ voice: e.target.value })} className={"h-8"} />
                 </div>
             )}
 
@@ -230,18 +227,12 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                 <div className="mt-4 space-y-2">
                     <Label className="bisheng-label">
                         <span>{paramName === 'num_ctx' ? t('model.contextLength') : t('model.maxOutputTokens')}</span>
-                        <QuestionTooltip
-                            className="relative top-0.5 ml-1"
+                        <ModelFieldHint
+                            className="ml-1"
                             content={t('model.maxTokensTip', { param: paramName })}
                         />
                     </Label>
-                    <Input
-                        type="number"
-                        value={config.max_tokens ?? ''}
-                        onChange={handleMaxTokensChange}
-                        placeholder={t('model.maxTokensPlaceholder')}
-                        className="h-8"
-                    />
+                    <Input type="number" aria-label={paramName} value={config.max_tokens ?? ''} onChange={(event) => { if (!isNumberDraftWithinBounds(event.currentTarget.value, {  })) return; handleMaxTokensChange(event); }} placeholder={t('model.maxTokensPlaceholder')} className={"h-8"} />
                 </div>
             )}
 
@@ -249,9 +240,10 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                 <div className="mt-4 flex items-center justify-between gap-4 border-t pt-4">
                     <Label className="bisheng-label">
                         <span>{t('model.webSearch')}</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t(webSearchTipKey)} />
+                        <ModelFieldHint className="ml-1" content={t(webSearchTipKey)} />
                     </Label>
                     <Switch
+                        aria-label={t('model.webSearch')}
                         checked={!!config.enable_web_search}
                         onCheckedChange={(checked: boolean) => applyConfig({ enable_web_search: checked })}
                     />
@@ -268,7 +260,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                                 : t('model.advancedParamsNone')}
                         </span>
                     </div>
-                    <Button variant="link" size="sm" className="h-auto shrink-0 px-0" onClick={handleOpenParams}>
+                    <Button variant="link" size="small" className="h-auto shrink-0 px-0" onClick={handleOpenParams}>
                         {t('model.edit')}
                     </Button>
                 </div>
@@ -282,22 +274,11 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                     <div className="mt-4 text-gray-500">
                         <div className="flex items-center justify-between gap-4">
                             <Label>{t('model.pasteAdvancedParamsHere')}</Label>
-                            <Button
-                                variant="link"
-                                size="sm"
-                                className="h-auto shrink-0 px-0"
-                                onClick={() => handleDraftChange(paramsTemplate)}
-                            >
+                            <Button variant="link" size="small" className="h-auto shrink-0 px-0" onClick={() => handleDraftChange(paramsTemplate)}>
                                 {t('model.insertParamsExample')}
                             </Button>
                         </div>
-                        <Textarea
-                            value={draftParams}
-                            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleDraftChange(e.target.value)}
-                            className={`mt-1 font-mono text-sm ${jsonError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                            rows={10}
-                            placeholder={paramsTemplate}
-                        />
+                        <Textarea aria-label={t('model.pasteAdvancedParamsHere')} value={draftParams} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleDraftChange(e.target.value)} rows={10} placeholder={paramsTemplate} textareaClassName={`mt-1 font-mono text-sm ${jsonError ? 'border-red-500 focus-visible:ring-red-500' : ''}`} />
                         {jsonError && (
                             <span className="mt-1 inline-block text-xs text-red-500">
                                 {t('model.errorInvalidJsonFormat')}
@@ -305,8 +286,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                         )}
                     </div>
                     <DialogFooter className="mt-4">
-                        <Button variant="outline" onClick={() => setDialogOpen(false)}>{t('model.cancel')}</Button>
-                        <Button onClick={handleSaveParams}>{t('model.save')}</Button>
+                        <Button variant="outlined" onClick={() => setDialogOpen(false)} color="default">{t('model.cancel')}</Button>
+                        <Button onClick={handleSaveParams} disabled={(String(config.max_tokens ?? '') !== '' && (!Number.isFinite(Number(config.max_tokens ?? '')) || Number(config.max_tokens ?? '') < 0))}>{t('model.save')}</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

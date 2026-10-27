@@ -27,6 +27,10 @@ class ApplicationTypeEnum(str, Enum):
     EVALUATION = "evaluation"
     # Model Connectivity Testing
     MODEL_TEST = "model_test"
+    # OpenAI-compatible model protocol face (F051) — bare pass-through calls
+    # from local engines and hosted applications. Its own member so this usage
+    # never lands inside another surface's statistics.
+    MODEL_GATEWAY = "model_gateway"
     # ASR
     ASR = "asr"
     # TTS

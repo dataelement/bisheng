@@ -134,8 +134,6 @@ daily_chat:
 
 # 灵思模块相关配置
 linsight:
-  # 历史记录中工具消息的最大token，超过后需要总结下历史记录
-  tool_buffer: 100000
   # 单个任务最大执行步骤数（LangGraph recursion_limit），防止死循环。
   # ⚠️ 这里的“步骤”是 LangGraph super-step，不是模型轮次：一轮模型调用约消耗 4 个 super-step
   #   （model → 工具循环熔断器 after_model → TodoList after_model → tools）。
@@ -169,16 +167,8 @@ linsight:
   # 技能包解压后全部文件的总大小上限，单位 MB。实际生效值不低于上面的上传上限，
   # 也不超过 1024（每个选用该技能的任务启动时都会把整包拷进任务工作区，调大会拖慢任务启动）。
   skill_unpacked_max_size_mb: 500
-  # 生成SOP时，prompt里放的用户上传文件信息的数量
-  max_file_num: 5
-  # 生成SOP时，prompt里放的组织知识库的最大数量
-  max_knowledge_num: 20
-  # 拆分二级任务时读取文件内容的字符数，超过后会截断
-  file_content_length: 5000
   # 灵思模型默认温度
   default_temperature: 0
-  # 模型json格式失败重试时的温度
-  retry_temperature: 1
 
 information_conf:
   # 情报订阅服务的接口地址
