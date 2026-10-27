@@ -26,6 +26,8 @@ _USER_QUESTION_MARKERS = ("# 用户问题", "# User question")
 _USER_QUESTION_OPEN = "<user_question>"
 _USER_QUESTION_CLOSE = "</user_question>"
 _VIEWED_IMAGES_PREFIX = "Viewed images:"
+# Daily chat hands this note to the conversation model. It is not the user question.
+_VISION_NOTE_PREFIX = "图片查看结果："
 # URL path tokens that match every knowledge markdown image; must not rank picks.
 _ASCII_SCORE_STOP = frozenset(
     {"viewed", "images", "image", "knowledge", "bisheng", "http", "https", "jpeg", "jpg", "png", "html"}
@@ -95,7 +97,7 @@ def _last_user_question(messages: list[BaseMessage]) -> str:
         if not isinstance(message, HumanMessage):
             continue
         text = _message_text(message)
-        if not text or text.startswith(_VIEWED_IMAGES_PREFIX):
+        if not text or text.startswith(_VIEWED_IMAGES_PREFIX) or text.startswith(_VISION_NOTE_PREFIX):
             continue
         for marker in _USER_QUESTION_MARKERS:
             if marker in text:
