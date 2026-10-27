@@ -192,6 +192,17 @@ docker compose --profile app-runtime up -d runtime-manager app-proxy
 
 ## 形态二：systemd（信创 / 无 compose 环境）
 
+> ⚠️ **当前代码不能用这个形态运行。本节只适用于协议 1、且还没有 F054 宿主隔离的旧版本。**
+> 当前 runtime-manager 每次查应用路由前都校验宿主隔离证明（`docker_backend.py` 的 `assert_host_isolation`），
+> 没有关闭开关。宿主隔离工具要求出站代理是接在应用网络上的容器（配置项 `proxy_container`），
+> 并在应用网桥的 INPUT 链上只放行登记过的控制容器、其余全部 DROP。manager 和出站代理以宿主进程运行时，
+> 应用访问网关地址上的出站代理（3128）和附件存储（8091）都会被拦。
+>
+> 2026-10-27 在 114 验证：升级到含 F054 的版本后，所有托管应用显示「应用恢复中」，
+> manager 查路由返回 500（`service_identity_not_configured`）。114 已把这一层改为容器形态（协议 v2），
+> 存量应用按 [OPERATIONS.md](../../src/runtime-manager/OPERATIONS.md) 的 v2 升级流程迁移。
+> 新环境用形态一或 OPERATIONS.md 的 v2 安装；既有 systemd 部署升级前必须先规划 v2 迁移。
+
 两个进程作为宿主机上的独立单元运行，其余与 compose 形态一致：
 
 | 单元 | 监听 | 依赖 | 运行身份 |

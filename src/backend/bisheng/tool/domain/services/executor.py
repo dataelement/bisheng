@@ -1,3 +1,4 @@
+import copy
 import functools
 import json
 from inspect import signature
@@ -155,11 +156,16 @@ class ToolExecutor(BaseTool):
 
     @staticmethod
     def _coerce_preset_extra(raw) -> dict:
-        """Turn a stored extra payload into a new dict (never the ORM object)."""
+        """Turn a stored extra payload into a new dict (never the ORM object).
+
+        deepcopy, not a JSON round trip: callers such as the task-mode code
+        interpreter put runtime objects (E2B ``WriteEntry`` file lists) into the
+        dict before it reaches here, and ``json.dumps`` rejects them.
+        """
         if not raw:
             return {}
         if isinstance(raw, dict):
-            return json.loads(json.dumps(raw))
+            return copy.deepcopy(raw)
         if isinstance(raw, str):
             loaded = json.loads(raw)
             return loaded if isinstance(loaded, dict) else {}
