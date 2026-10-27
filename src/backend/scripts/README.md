@@ -2,6 +2,105 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Channel article primary-shard maintenance (F078)
+
+### `repartition_channel_articles.py`
+
+Read the target primary-shard count from the same live `config` and shared
+Settings as the service. `channel_article_index.number_of_shards` defaults to 3.
+This script initializes the normal app context and uses its default **search ES**
+connection; it does not use the telemetry/statistics ES connection. It creates no
+schema or statistics records and never calls `init_config` or `create_all`.
+
+Run from `src/backend/` with the service virtualenv active:
+
+```bash
+export config=config.yaml
+python scripts/repartition_channel_articles.py --run-id maintenance-20261027
+# Stop and drain every channel article writer across all nodes/tenants first.
+python scripts/repartition_channel_articles.py \
+  --apply --writers-paused --run-id maintenance-20261027
+python scripts/repartition_channel_articles.py \
+  --status --run-id maintenance-20261027
+```
+
+The first command is read-only; `--dry-run` can also be explicit. `--apply` needs
+an explicit run ID and `--writers-paused`. There is no command-line shard override.
+Already matching primary shards are skipped. Missing sources, multi-index aliases,
+pre-existing artifacts/blocks, template alias injection, red clusters and inadequate
+estimated disk/shard headroom stop the operation. Plan for the original index plus
+one full recovery copy and one target with the existing replica policy; the size
+estimate is a precheck, not a production capacity guarantee.
+
+The fixed recovery name (derived from the source UUID) is atomically reserved
+before changing the source. The script then establishes a write barrier, refreshes
+the source, copies a recovery index and a new target, and verifies every document's
+ID, routing and source content using bounded full-content fingerprints. Source
+mappings, analyzers, routing values and replica policy are preserved. Pipelines are
+disabled during copy and restored on the target before it becomes writable.
+
+For an original concrete `channel_articles`, the verified source is removed only
+in the aliases cutover after an independent recovery copy has passed validation.
+For an existing single-index alias, the old concrete source is retained. Related
+aliases preserve their metadata. A cutover timeout or unexpected relationship is
+an uncertain outcome: writers stay stopped until the actual state is inspected.
+Successful completion prints `mode=complete`, verified count/fingerprint and
+artifact names; then operators can restore application writes. Verify normal
+read/create/update/delete in an acceptance environment first.
+
+#### Failure and recovery
+
+No failure path automatically deletes artifacts, unlocks a source, resumes tasks
+or restores application writers. Re-running an existing run only reports its
+retained state/refuses replay. Use `--status` and inspect the named indices'
+`_mapping._meta.bisheng_article_reshard` for original settings, aliases, source
+UUID, run phase, task ID and baseline. Runtime JSON progress emits task IDs as soon
+as they are returned. If the process died between dispatch and task-ID recording,
+`COPY_PENDING` means the task outcome is unknown: inspect/cancel matching active
+reindex tasks before interpreting or changing any artifact.
+
+1. **Before cutover:** keep writers stopped. Confirm every copy task is stopped,
+   the original source UUID is unchanged and the source is complete. Restore only
+   its original block settings from the metadata; then restore application writes.
+   A `RESERVED`/partially copied index is not a verified recovery copy.
+2. **Cutover response unknown:** inspect `channel_articles` and every affected
+   alias, comparing actual target/UUID with the recorded plan. Do not repeat
+   `remove_index`, unblock arbitrary candidates or report success from HTTP 200.
+3. **After cutover, before writers resume:** keep all writers stopped. Select the
+   verified old concrete source or recovery copy. For a recovery copy, restore its
+   original default/final pipelines, refresh and other original dynamic settings
+   from metadata **before** it serves new writes. Repoint business/related aliases
+   using the recorded alias metadata, verify the unique write target, restore its
+   original write-block state and only then restore application writers. Do not
+   delete the failed/new target during recovery.
+4. **After writers resumed:** a backup is stale. Stop/drain writers again, freeze
+   and refresh the current authoritative target and migrate its complete current
+   data to the desired recovery target. Verify before switching; pointing directly
+   to an old backup would lose new changes.
+
+Example ES operations during operator-led recovery (replace names with the exact
+recorded plan; these are not automatic script actions):
+
+```text
+GET /channel_articles/_alias
+GET /<recorded-backup>/_mapping
+GET /_tasks/<recorded-task-id>
+POST /_tasks/<recorded-task-id>/_cancel
+PUT /<verified-recovery>/_settings
+{"index":{"default_pipeline":"<original-or-_none>","final_pipeline":"<original-or-_none>"}}
+# Repoint the recorded aliases, verify them, then restore original write settings.
+```
+
+The script never archives or deletes the fixed recovery reservation. Before a new
+apply following a failed run, an operator must audit the old run and preserve a
+verified independent recovery copy before explicitly resolving that exact reserved
+name. Do not use wildcard deletes. Retained same-cluster copies are recovery aids,
+not off-cluster disaster-recovery snapshots.
+
+Exit codes: 0 complete/no-op/read-only plan, 2 parameters/preconditions, 3 copy or
+write-barrier failure, 4 verification failure, 5 uncertain cutover, 6 manual recovery
+or unclassified external failure. No production migration is part of local tests.
+
 ## E+ Maintenance
 
 ### `clear_eplus_history.py`

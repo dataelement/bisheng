@@ -179,3 +179,8 @@ logger_conf:
 #     - mcp.example.com
 #   transport_allowed_origins:
 #     - https://mcp.example.com
+
+# Primary-shard count for newly created channel article indexes.
+# Existing indexes require scripts/repartition_channel_articles.py maintenance.
+channel_article_index:
+  number_of_shards: 3

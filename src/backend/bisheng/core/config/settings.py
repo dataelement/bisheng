@@ -786,6 +786,12 @@ class DatabasePoolConf(BaseModel):
         return engine_kwargs
 
 
+class ChannelArticleIndexConf(BaseModel):
+    """Primary-shard policy for newly created channel article indexes."""
+
+    number_of_shards: int = Field(default=3, strict=True, ge=1)
+
+
 class MetricLogConf(BaseModel):
     """Structured metric-log emission switches + thresholds (F042).
 
@@ -802,7 +808,8 @@ class MetricLogConf(BaseModel):
     db: bool = Field(default=True, description="Emit db_query / db_query_agg / db_pool")
     obj_storage: bool = Field(default=True, description="Emit obj_storage put/get metrics")
     model_invoke: bool = Field(default=True, description="Emit model_invoke TTFT/status metrics")
-    eplus: bool = Field(default=True, description="Emit eplus_notify call-event metrics")
+    eplus: bool = Field(default=True, description="Emit E+ notification and robot event metrics")
+    eplus_connection_stale_after_s: int = Field(default=90, strict=True, ge=1)
     db_slow_query_ms: int = Field(
         default=200,
         description="Emit a db_query detail line only for queries at/above this latency (ms)",
@@ -897,6 +904,7 @@ class Settings(BaseModel):
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
     database_pool: DatabasePoolConf = DatabasePoolConf()
     metric_log: MetricLogConf = MetricLogConf()
+    channel_article_index: ChannelArticleIndexConf = Field(default_factory=ChannelArticleIndexConf)
     approval_invite: ApprovalInviteConf = ApprovalInviteConf()
 
     @field_validator("database_url")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from loguru import logger
 from sqlalchemy import delete, func, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
@@ -20,6 +21,7 @@ from bisheng.eplus.domain.models.eplus import (
     EPlusTurn,
     EPlusTurnStatus,
 )
+from bisheng.eplus.domain.schemas.metric import METRIC_SNAPSHOTS_KEY, TerminalMetricSnapshot
 
 
 def _require_matching_tenant(tenant_id: int | None) -> int:
@@ -214,6 +216,7 @@ class EPlusMessageRepository:
         message_id: int | None,
         target: EPlusInboundStatus | str,
         error_code: str | None = None,
+        metric_source: EPlusInboundMessage | None = None,
     ) -> bool:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
         if message_id is None:
@@ -249,6 +252,19 @@ class EPlusMessageRepository:
         result = await self.session.exec(statement)
         if result.rowcount:
             await self.session.flush()
+            if metric_source is not None and target_status in {
+                EPlusInboundStatus.SUCCEEDED,
+                EPlusInboundStatus.FAILED,
+                EPlusInboundStatus.REJECTED_BUSY,
+            }:
+                try:
+                    snapshot = TerminalMetricSnapshot.from_message(
+                        metric_source, status=target_status.value, finished_at=now, error_code=error_code
+                    )
+                    self.session.info.setdefault(METRIC_SNAPSHOTS_KEY, []).append(snapshot)
+                except Exception as exc:
+                    # Snapshot formatting is optional and must not roll back business writes.
+                    logger.debug("E+ snapshot skipped error_type={}", type(exc).__name__)
             return True
         return False
 
@@ -494,9 +510,11 @@ class EPlusConversationRepository:
         extracted_text: str | None = None,
     ) -> EPlusTurn | None:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
-        turn = (
+        pair = (
             await self.session.exec(
-                select(EPlusTurn).where(
+                select(EPlusTurn, EPlusInboundMessage)
+                .outerjoin(EPlusInboundMessage, EPlusInboundMessage.id == EPlusTurn.inbound_message_id)
+                .where(
                     EPlusTurn.tenant_id == resolved_tenant_id,
                     EPlusTurn.id == str(turn_id),
                     EPlusTurn.status == EPlusTurnStatus.RUNNING.value,
@@ -504,8 +522,9 @@ class EPlusConversationRepository:
                 )
             )
         ).first()
-        if turn is None:
+        if pair is None:
             return None
+        turn, inbound = pair
         turn.status = EPlusTurnStatus.SUCCEEDED.value if succeeded else EPlusTurnStatus.FAILED.value
         turn.answer_text = answer_text
         turn.extracted_text = extracted_text
@@ -518,6 +537,7 @@ class EPlusConversationRepository:
             tenant_id=resolved_tenant_id,
             message_id=turn.inbound_message_id,
             target=inbound_target,
+            metric_source=inbound,
             error_code=error_code,
         )
         if not transitioned:
@@ -526,16 +546,19 @@ class EPlusConversationRepository:
 
     async def expire_waiting_turn(self, *, tenant_id: int, turn_id: str) -> bool:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
-        turn = (
+        pair = (
             await self.session.exec(
-                select(EPlusTurn).where(
+                select(EPlusTurn, EPlusInboundMessage)
+                .outerjoin(EPlusInboundMessage, EPlusInboundMessage.id == EPlusTurn.inbound_message_id)
+                .where(
                     EPlusTurn.tenant_id == resolved_tenant_id,
                     EPlusTurn.id == str(turn_id),
                 )
             )
         ).first()
-        if turn is None:
+        if pair is None:
             return False
+        turn, inbound = pair
         changed = await self.session.exec(
             update(EPlusTurn)
             .where(
@@ -552,6 +575,7 @@ class EPlusConversationRepository:
             tenant_id=resolved_tenant_id,
             message_id=turn.inbound_message_id,
             target=EPlusInboundStatus.FAILED,
+            metric_source=inbound,
             error_code="ASSISTANT_TIMEOUT",
         )
         if not transitioned:
@@ -561,7 +585,8 @@ class EPlusConversationRepository:
     async def recover_bot_turns(self, *, tenant_id: int, bot_config_id: int) -> tuple[str, ...]:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
         interrupted_statement = (
-            select(EPlusTurn)
+            select(EPlusTurn, EPlusInboundMessage)
+            .outerjoin(EPlusInboundMessage, EPlusInboundMessage.id == EPlusTurn.inbound_message_id)
             .join(EPlusConversation, EPlusConversation.id == EPlusTurn.conversation_id)
             .where(
                 EPlusTurn.tenant_id == resolved_tenant_id,
@@ -571,7 +596,7 @@ class EPlusConversationRepository:
             )
         )
         interrupted_turns = list((await self.session.exec(interrupted_statement)).all())
-        for turn in interrupted_turns:
+        for turn, inbound in interrupted_turns:
             error_code = (
                 "ADMISSION_INTERRUPTED" if turn.status == EPlusTurnStatus.PREPARING.value else "WORKER_INTERRUPTED"
             )
@@ -583,6 +608,7 @@ class EPlusConversationRepository:
                 tenant_id=resolved_tenant_id,
                 message_id=turn.inbound_message_id,
                 target=EPlusInboundStatus.FAILED,
+                metric_source=inbound,
                 error_code=error_code,
             )
             if not transitioned:

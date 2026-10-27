@@ -235,7 +235,7 @@ async def test_offline_disabled_or_deleted_target_disconnects_and_online_target_
     provider.target = _target()
     await supervisor.notify_config_changed(provider.ref)
     await _eventually(lambda: len(factory.clients) == 1)
-    assert EPlusConnectionStatus.AUTHENTICATED in provider.statuses
+    await _eventually(lambda: EPlusConnectionStatus.AUTHENTICATED in provider.statuses)
 
     provider.target = None
     await supervisor.notify_config_changed(provider.ref)

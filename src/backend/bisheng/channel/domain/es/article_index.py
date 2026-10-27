@@ -4,9 +4,12 @@ Article ES Index Definition and Management
 Defines the mappings and settings for the channel_articles index,
 provides index creation/validation methods.
 """
-import logging
 
-from elasticsearch import AsyncElasticsearch, exceptions as es_exceptions, Elasticsearch
+import logging
+from copy import deepcopy
+
+from elasticsearch import AsyncElasticsearch, Elasticsearch
+from elasticsearch import exceptions as es_exceptions
 
 from bisheng.core.search.elasticsearch.manager import get_es_connection
 
@@ -27,15 +30,9 @@ ARTICLE_MAPPINGS = {
         "type": "text",
         "analyzer": "single_char_analyzer",
         "search_analyzer": "single_char_analyzer",
-        "fields": {
-            "keyword": {"type": "keyword", "ignore_above": 256}
-        }
+        "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
     },
-    "content": {
-        "type": "text",
-        "analyzer": "single_char_analyzer",
-        "search_analyzer": "single_char_analyzer"
-    },
+    "content": {"type": "text", "analyzer": "single_char_analyzer", "search_analyzer": "single_char_analyzer"},
     "content_preview": {
         "type": "keyword",
         "ignore_above": 256,
@@ -67,29 +64,26 @@ ARTICLE_MAPPINGS = {
 
 # ES Settings (IK analyzer configuration, fallback to standard)
 ARTICLE_SETTINGS = {
-    "index": {
-        "max_ngram_diff": 2
-    },
+    "index": {"max_ngram_diff": 2},
     "analysis": {
-        "analyzer": {
-            "single_char_analyzer": {
-                "type": "custom",
-                "tokenizer": "single_char_tokenizer"
-            }
-        },
+        "analyzer": {"single_char_analyzer": {"type": "custom", "tokenizer": "single_char_tokenizer"}},
         "tokenizer": {
-            "single_char_tokenizer": {
-                "type": "ngram",
-                "min_gram": 1,
-                "max_gram": 3,
-                "token_chars": [
-                    "letter",
-                    "digit"
-                ]
-            }
-        }
-    }
+            "single_char_tokenizer": {"type": "ngram", "min_gram": 1, "max_gram": 3, "token_chars": ["letter", "digit"]}
+        },
+    },
 }
+
+
+def _configured_shards() -> int:
+    from bisheng.common.services.config_service import settings
+
+    return settings.channel_article_index.number_of_shards
+
+
+def get_article_index_settings() -> dict:
+    value = deepcopy(ARTICLE_SETTINGS)
+    value.setdefault("index", {})["number_of_shards"] = _configured_shards()
+    return value
 
 
 async def ensure_article_index_exists(es_client: AsyncElasticsearch = None) -> None:
@@ -108,9 +102,9 @@ async def ensure_article_index_exists(es_client: AsyncElasticsearch = None) -> N
             await es_client.indices.create(
                 index=ARTICLE_INDEX_NAME,
                 body={
-                    "settings": ARTICLE_SETTINGS,
+                    "settings": get_article_index_settings(),
                     "mappings": {"properties": ARTICLE_MAPPINGS},
-                }
+                },
             )
             logger.info(f"Successfully created ES index: {ARTICLE_INDEX_NAME}")
         else:
@@ -131,6 +125,7 @@ def ensure_article_index_exists_sync(es_client: Elasticsearch = None) -> None:
     """
     if es_client is None:
         from bisheng.core.search.elasticsearch.manager import get_es_connection_sync
+
         es_client = get_es_connection_sync()
 
     try:
@@ -139,9 +134,9 @@ def ensure_article_index_exists_sync(es_client: Elasticsearch = None) -> None:
             es_client.indices.create(
                 index=ARTICLE_INDEX_NAME,
                 body={
-                    "settings": ARTICLE_SETTINGS,
+                    "settings": get_article_index_settings(),
                     "mappings": {"properties": ARTICLE_MAPPINGS},
-                }
+                },
             )
             logger.info(f"Successfully created ES index: {ARTICLE_INDEX_NAME}")
         else:

@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.eplus.domain.models.eplus import EPlusTurn
 from bisheng.eplus.domain.repositories.eplus_repository import EPlusConversationRepository
+from bisheng.eplus.domain.services.metric_observer import terminal_metric_transaction
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,8 +34,9 @@ class ReadyEPlusTurn:
 class EPlusConversationScheduler:
     """Use process-local events only as wakeups; SQL remains queue truth."""
 
-    def __init__(self, *, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(self, *, session_factory: async_sessionmaker[AsyncSession], metric_observer=None) -> None:
         self._session_factory = session_factory
+        self._metric_observer = metric_observer
         self._events: dict[tuple[int, str], asyncio.Event] = {}
 
     async def next_ready_turn(
@@ -42,7 +44,7 @@ class EPlusConversationScheduler:
         tenant_id: int,
         conversation_id: str,
     ) -> ReadyEPlusTurn | None:
-        async with self._session_factory() as session, session.begin():
+        async with self._session_factory() as session, terminal_metric_transaction(session, self._metric_observer):
             repository = EPlusConversationRepository(session)
             turn = await repository.claim_next_turn(
                 tenant_id=tenant_id,
@@ -71,7 +73,7 @@ class EPlusConversationScheduler:
         execution_token: str,
         extracted_text: str | None = None,
     ) -> ReadyEPlusTurn | None:
-        async with self._session_factory() as session, session.begin():
+        async with self._session_factory() as session, terminal_metric_transaction(session, self._metric_observer):
             completed = await EPlusConversationRepository(session).complete_turn(
                 tenant_id=tenant_id,
                 turn_id=turn_id,
@@ -89,11 +91,11 @@ class EPlusConversationScheduler:
         return await self.next_ready_turn(tenant_id, conversation_id)
 
     async def expire_waiting_turn(self, *, tenant_id: int, turn_id: str) -> bool:
-        async with self._session_factory() as session, session.begin():
+        async with self._session_factory() as session, terminal_metric_transaction(session, self._metric_observer):
             return await EPlusConversationRepository(session).expire_waiting_turn(tenant_id=tenant_id, turn_id=turn_id)
 
     async def recover_queued(self, *, tenant_id: int, bot_config_id: int) -> tuple[str, ...]:
-        async with self._session_factory() as session, session.begin():
+        async with self._session_factory() as session, terminal_metric_transaction(session, self._metric_observer):
             conversation_ids = await EPlusConversationRepository(session).recover_bot_turns(
                 tenant_id=tenant_id,
                 bot_config_id=bot_config_id,

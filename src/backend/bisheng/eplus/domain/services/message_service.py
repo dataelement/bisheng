@@ -35,6 +35,7 @@ from bisheng.eplus.domain.services.media_service import (
     EPlusPreparedBlock,
     EPlusPreparedMessage,
 )
+from bisheng.eplus.domain.services.metric_observer import notify_duplicate_metric, terminal_metric_transaction
 from bisheng.eplus.infrastructure.protocol import stable_stream_id
 
 NO_PERMISSION_REPLY = "无权限使用"
@@ -89,10 +90,12 @@ class EPlusMessageAdmissionService:
         session_factory: async_sessionmaker[AsyncSession],
         identity_service: EPlusIdentityService,
         media_service: EPlusMediaService,
+        metric_observer=None,
     ) -> None:
         self._session_factory = session_factory
         self._identity_service = identity_service
         self._media_service = media_service
+        self._metric_observer = metric_observer
         self._admission_locks: dict[tuple[int, int], asyncio.Lock] = {}
 
     async def admit(self, context: EPlusAdmissionContext, callback: EPlusCallback) -> AdmissionResult:
@@ -119,7 +122,7 @@ class EPlusMessageAdmissionService:
         reservation: EPlusAdmissionReservation,
     ) -> AdmissionResult:
         prepared = await self._ingest_content(context, callback)
-        async with self._session_factory() as session, session.begin():
+        async with self._session_factory() as session, terminal_metric_transaction(session, self._metric_observer):
             finalized = await EPlusConversationRepository(session).finalize_prepared_turn(
                 tenant_id=context.tenant_id,
                 turn_id=reservation.turn_id,
@@ -154,6 +157,7 @@ class EPlusMessageAdmissionService:
             inbound, created = await repository.create_or_get_inbound(inbound)
             await session.commit()
         if not created:
+            notify_duplicate_metric(self._metric_observer, inbound)
             return AdmissionResult(
                 disposition=AdmissionDisposition.DUPLICATE,
                 inbound_message_id=int(inbound.id),
@@ -172,6 +176,7 @@ class EPlusMessageAdmissionService:
                 int(inbound.id),
                 target=EPlusInboundStatus.FAILED,
                 error_code="NO_PERMISSION",
+                metric_source=inbound,
             )
             return AdmissionResult(
                 disposition=AdmissionDisposition.NO_PERMISSION,
@@ -179,7 +184,7 @@ class EPlusMessageAdmissionService:
                 reply_text=NO_PERMISSION_REPLY,
             )
 
-        async with self._session_factory() as session, session.begin():
+        async with self._session_factory() as session, terminal_metric_transaction(session, self._metric_observer):
             messages = EPlusMessageRepository(session)
             conversations = EPlusConversationRepository(session)
             # The locking read must be the transaction's first database read.
@@ -211,6 +216,7 @@ class EPlusMessageAdmissionService:
                     tenant_id=context.tenant_id,
                     message_id=int(current.id),
                     target=EPlusInboundStatus.REJECTED_BUSY,
+                    metric_source=current,
                     error_code="BUSY",
                 )
                 if not transitioned:
@@ -310,13 +316,15 @@ class EPlusMessageAdmissionService:
         *,
         target: EPlusInboundStatus,
         error_code: str,
+        metric_source: EPlusInboundMessage | None = None,
     ) -> None:
-        async with self._session_factory() as session, session.begin():
+        async with self._session_factory() as session, terminal_metric_transaction(session, self._metric_observer):
             transitioned = await EPlusMessageRepository(session).transition(
                 tenant_id=context.tenant_id,
                 message_id=message_id,
                 target=target,
                 error_code=error_code,
+                metric_source=metric_source,
             )
             if not transitioned:
                 raise RuntimeError("E+ rejected admission lost its inbound state transition")

@@ -537,6 +537,16 @@ class WorkerConnection:
             on_message=self._on_message,
         )
 
+    def set_metric_observer(self, observer) -> None:
+        minimum = 2 * (self._client.config.heartbeat_interval_seconds + self._client.config.ack_timeout_seconds)
+        if observer.stale_after_s < minimum:
+            logger.warning("E+ connection metric expiry is below the protocol failure window")
+            return
+        self._client._event_sink = observer
+
+    def emit_metric_event(self, event: str) -> None:
+        self._client._emit(event)
+
     async def wait_authenticated(self) -> None:
         await self._client.wait_authenticated()
         self._sender.activate(self)
@@ -638,11 +648,14 @@ async def build_worker_runtime() -> EPlusWorkerRuntime:
         store=MinioEPlusMediaStore(),
         text_extractor=DailyChatImageTextExtractor(),
     )
-    scheduler = EPlusConversationScheduler(session_factory=session_factory)
+    from bisheng.eplus.infrastructure.metric_events import ConnectionMetricObserver, emit_request_metric
+
+    scheduler = EPlusConversationScheduler(session_factory=session_factory, metric_observer=emit_request_metric)
     robot = EPlusRobotService(
         admission_service=EPlusMessageAdmissionService(
             session_factory=session_factory,
             identity_service=EPlusIdentityService(),
+            metric_observer=emit_request_metric,
             media_service=media_service,
         ),
         scheduler=scheduler,
@@ -701,6 +714,13 @@ async def build_worker_runtime() -> EPlusWorkerRuntime:
         client_factory=client_factory,
         redis_client=redis,
         notification_source=RedisConfigNotificationSource(redis),
+        connection_observer_factory=lambda target, lease: ConnectionMetricObserver(
+            tenant_id=target.tenant_id,
+            bot_id=target.bot_id,
+            bot_config_id=target.bot_config_id,
+            lease=lease,
+            stale_after_s=settings.metric_log.eplus_connection_stale_after_s,
+        ),
     )
     return EPlusWorkerRuntime(
         supervisor=supervisor,
