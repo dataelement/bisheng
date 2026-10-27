@@ -12,6 +12,8 @@
     "linsightDefaultModelTooltip": "タスクモードはデフォルトでこのモデルを使ってタスクを実行します。ユーザーはタスク開始時に、このリストの別のモデルに切り替えられます。",
     "workbenchVoiceModel": "ワークベンチ音声モデル",
     "sessionTitleGenerationModel": "セッションタイトル生成モデル",
+    "imageReadModel": "画像読み取りモデル",
+    "imageReadModelTooltip": "文書内の画像を見て、質問に合う画像を判断します。ナレッジQ&A、チャンネルQ&A、日常会話は、ここで設定したモデルを使います。",
     "asrModel": "音声認識（ASR）モデル",
     "asrModelTooltip": "ワークベンチの会話での音声入力に使用し、ユーザーの発話をテキストに変換します。",
     "knowledgeAsrModelTooltip": "音声・動画解析の音声認識シナリオに使用",

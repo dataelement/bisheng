@@ -69,6 +69,7 @@ export default function WorkbenchModel({ onBack }) {
         ttsModelId: null,
         knowledgeSpaceLlmId: null,
         chatTitleLlmId: null,
+        imageReadModelId: null,
         models: [],
     });
 
@@ -91,7 +92,7 @@ export default function WorkbenchModel({ onBack }) {
     };
 
     const submitConfig = async () => {
-        const { linsightDefaultModelId, chatDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
+        const { linsightDefaultModelId, chatDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, imageReadModelId, models } = form;
         setSaveLoad(true);
         try {
             const data = {
@@ -107,6 +108,7 @@ export default function WorkbenchModel({ onBack }) {
                 tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
                 // “应用会话标题生成模型”
                 chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
+                image_read_model: imageReadModelId ? { id: String(imageReadModelId) } : null,
             };
 
             await updateLinsightModelConfig(data);
@@ -130,6 +132,7 @@ export default function WorkbenchModel({ onBack }) {
                 asrModelId: newConfig?.asr_model?.id || null,
                 ttsModelId: newConfig?.tts_model?.id || null,
                 chatTitleLlmId: newConfig?.chat_title_llm?.id || null,
+                imageReadModelId: newConfig?.image_read_model?.id || null,
                 knowledgeSpaceLlmId: newConfig?.knowledge_space_llm?.id || null,
                 models: newConfig?.models || [],
             });
@@ -142,6 +145,7 @@ export default function WorkbenchModel({ onBack }) {
                 asr_model: { id: newConfig?.asr_model?.id },
                 tts_model: { id: newConfig?.tts_model?.id },
                 chat_title_llm: { id: newConfig?.chat_title_llm?.id },
+                image_read_model: { id: newConfig?.image_read_model?.id },
                 knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
                 models: newConfig?.models || [],
             };
@@ -212,6 +216,7 @@ export default function WorkbenchModel({ onBack }) {
                 asrModelId: linsightConfig.asr_model?.id || null,
                 ttsModelId: linsightConfig.tts_model?.id || null,
                 chatTitleLlmId: linsightConfig.chat_title_llm?.id || null,
+                imageReadModelId: linsightConfig.image_read_model?.id || null,
                 knowledgeSpaceLlmId: linsightConfig.knowledge_space_llm?.id || null,
                 models: linsightConfig.models || [],
             });
@@ -224,6 +229,7 @@ export default function WorkbenchModel({ onBack }) {
                 asr_model: { id: linsightConfig.asr_model?.id },
                 tts_model: { id: linsightConfig.tts_model?.id },
                 chat_title_llm: { id: linsightConfig.chat_title_llm?.id },
+                image_read_model: { id: linsightConfig.image_read_model?.id },
                 knowledge_space_llm: { id: linsightConfig.knowledge_space_llm?.id },
                 models: linsightConfig.models || [],
             };
@@ -341,6 +347,14 @@ export default function WorkbenchModel({ onBack }) {
             </div>
             <ModelSelect
                 close
+                label={t('model.imageReadModel')}
+                tooltipText={t('model.imageReadModelTooltip')}
+                value={form.imageReadModelId}
+                options={llmOptions}
+                onChange={(val) => setForm({ ...form, imageReadModelId: val })}
+            />
+            <ModelSelect
+                close
                 label={t('model.sessionTitleGenerationModel')}
                 value={form.chatTitleLlmId}
                 options={llmOptions}
@@ -376,6 +390,7 @@ export function useLinsightConfig() {
                 tts_model: null,
                 knowledge_space_llm: null,
                 chat_title_llm: null,
+                image_read_model: null,
             };
             return {
                 ...cfg,

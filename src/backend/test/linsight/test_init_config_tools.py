@@ -89,7 +89,7 @@ async def test_code_interpreter_bound_once_when_selected(monkeypatch: pytest.Mon
 
 
 async def test_image_view_config_row_is_not_initialized(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    """Image View stores a visual model. Loading it as a tool aborts the task."""
+    """A saved Image View selection is skipped. Loading it as a tool aborts the task."""
     image_view_id = 39
 
     async def by_key(tool_key: str):

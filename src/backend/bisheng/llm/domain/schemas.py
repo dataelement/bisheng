@@ -98,6 +98,8 @@ class WorkbenchModelConfig(BaseModel):
     asr_model: WSModel | None = Field(default=None, description="Speech-to-text model")
     tts_model: WSModel | None = Field(default=None, description="Text-to-speech model")
     chat_title_llm: WSModel | None = Field(default=None, description="Chat Title Generation Model")
+    # Model that reads document images for knowledge Q&A, channel Q&A, and daily chat.
+    image_read_model: WSModel | None = Field(default=None, description="Image reading model")
 
 
 class LLMModelCreateReq(BaseModel):
