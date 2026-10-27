@@ -116,6 +116,8 @@ fi
 # and must survive a CLI rebuild untouched.
 MANIFEST="${ARTIFACTS_DIR}/manifest.json" \
 CLI_VERSION="${VERSION}" \
+CLI_MIN_COMPATIBLE="${CLI_MIN_COMPATIBLE:-}" \
+PLATFORM_VERSION="${PLATFORM_VERSION:-}" \
 CLI_FILENAME="${WHEEL_NAME}" \
 CLI_SHA256="${SHA256}" \
 python3 - <<'PY'
@@ -129,15 +131,18 @@ if path.is_file():
     manifest = json.loads(path.read_text(encoding="utf-8"))
 
 version = os.environ["CLI_VERSION"]
+# CI rebuilding a compatible post-release must not raise the old baseline.
+# Full releases retain their existing default of using their own version.
+release_version = version.partition(".post")[0]
 manifest["cli"] = {
     "version": version,
-    "min_compatible": version,
+    "min_compatible": os.environ["CLI_MIN_COMPATIBLE"] or release_version,
     "filename": os.environ["CLI_FILENAME"],
     "sha256": os.environ["CLI_SHA256"],
 }
-# The platform version is the CLI's release number by design (F053 决议-7: the
-# CLI ships with the platform and carries its number).
-manifest["platform"] = {"version": version}
+# Compatible CLI post-releases can retain the platform release and old minimum.
+# Defaults preserve the existing full-release behavior.
+manifest["platform"] = {"version": os.environ["PLATFORM_VERSION"] or release_version}
 # Both packing scripts write the same note, so the file does not flip between
 # two wordings depending on which of them ran last (the drift guard diffs it).
 manifest["_note"] = (

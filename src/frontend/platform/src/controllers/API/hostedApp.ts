@@ -20,11 +20,7 @@ import axios from "@/controllers/request"
 
 /** The five application states (design D8 / AC-03). */
 export type HostedAppState =
-  | "draft"
-  | "online"
-  | "pending_capacity"
-  | "stopped"
-  | "deleted"
+  "draft" | "online" | "pending_capacity" | "stopped" | "deleted"
 
 /** Instance phase reported by the orchestrator — deployment-shape agnostic. */
 export type HostedAppPhase =
@@ -64,6 +60,7 @@ export interface HostedAppInstance {
 }
 
 export interface HostedAppVersion {
+  release_notes?: string | null
   version_id: string
   version_no: number
   kind: "initial" | "iteration"
@@ -205,10 +202,9 @@ export async function getHostedAppLogsApi(
   if (query.since) params.set("since", query.since)
   if (query.keyword) params.set("keyword", query.keyword)
   const qs = params.toString()
-  return await axios.get(
-    `${APPS_BASE}/${appId}/logs${qs ? `?${qs}` : ""}`,
-    { silent: true },
-  )
+  return await axios.get(`${APPS_BASE}/${appId}/logs${qs ? `?${qs}` : ""}`, {
+    silent: true,
+  })
 }
 
 /** Super admin only; describes the host, not one application. */

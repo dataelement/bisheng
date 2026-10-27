@@ -506,6 +506,8 @@
   "com_linsight_deliverable_not_generated": "（未生成）",
   "com_linsight_deliverable_not_generated_hint": "模型提到了这个文件，但并未真正生成，因此无法预览或下载。",
   "com_linsight_preview_load_failed": "文件加载失败",
+  "com_linsight_preview_slides_generating": "正在生成预览…",
+  "com_linsight_preview_slides_notice": "预览由服务器渲染，字体与排版可能与 PowerPoint 略有差异，以下载文件为准",
   "com_linsight_download_failed": "下载失败，请稍后重试",
   "com_linsight_exporting": "正在导出，请稍候…",
   "com_linsight_export_success": "文件下载成功",
@@ -2612,6 +2614,10 @@
       "type": "环境变量",
       "missing": "提交时未配置",
       "present": "提交时已配置"
+    },
+    "app_release_notes": {
+      "title": "发布说明",
+      "empty": "未填写发布说明"
     }
   }
 }

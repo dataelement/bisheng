@@ -1,14 +1,21 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ApprovalTaskDetail } from "~/api/approval";
-import { AppPublishDetailPanel, isAppPublishScenario } from "./AppPublishDetailPanel";
+import {
+  AppPublishDetailPanel,
+  isAppPublishScenario,
+} from "./AppPublishDetailPanel";
 import type { LocalizeFn } from "./approvalPresentation";
 
 /** Echoes the key back so assertions read as the contract, plus the interpolated value. */
 const localize: LocalizeFn = (key, options) =>
-  options && "value" in options ? `${String(key)}:${String(options.value)}` : String(key);
+  options && "value" in options
+    ? `${String(key)}:${String(options.value)}`
+    : String(key);
 
 /** What app_publish_scenario_handler.build_detail ships (18 keys, no tenant field). */
-function buildDetail(overrides: Partial<ApprovalTaskDetail> = {}): ApprovalTaskDetail {
+function buildDetail(
+  overrides: Partial<ApprovalTaskDetail> = {},
+): ApprovalTaskDetail {
   return {
     task_id: 7,
     instance_id: 42,
@@ -33,19 +40,66 @@ function buildDetail(overrides: Partial<ApprovalTaskDetail> = {}): ApprovalTaskD
       version_id: "v-1",
       version_no: 3,
       submitted_at: "2026-08-19T10:00:00",
-      tier: { code: "light", name: "Light", cpu_millicores: 500, memory_mb: 512 },
+      tier: {
+        code: "light",
+        name: "Light",
+        cpu_millicores: 500,
+        memory_mb: 512,
+      },
       capabilities: [],
       visibility_snapshot: [],
       schema_change: null,
       approver_note: "no_department_admin_source",
     },
     // Also delivered by the API and deliberately never rendered by this panel.
-    payload_snapshot: { tenant_id: 99, deployment_id: 1234, app_name: "form-survey" },
+    payload_snapshot: {
+      tenant_id: 99,
+      deployment_id: 1234,
+      app_name: "form-survey",
+    },
     ...overrides,
   };
 }
 
 describe("AppPublishDetailPanel", () => {
+  it.each(["task", "instance"] as const)(
+    "shows frozen plain-text release notes for %s",
+    (scope) => {
+      const notes = "<script>evil()</script>\n  **New feature**";
+      const detail = buildDetail();
+      detail.detail_snapshot = {
+        ...detail.detail_snapshot,
+        release_notes: notes,
+      };
+      detail.payload_snapshot = { release_notes: "Never render this fallback" };
+      const { container } = render(
+        <AppPublishDetailPanel
+          detail={detail}
+          scope={scope}
+          localize={localize}
+        />,
+      );
+      expect(screen.getByText(/evil/).textContent).toBe(notes);
+      expect(container.querySelector("script")).toBeNull();
+      expect(
+        screen.queryByText("Never render this fallback"),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("shows the release-note empty state for an old snapshot", () => {
+    render(
+      <AppPublishDetailPanel
+        detail={buildDetail()}
+        scope="task"
+        localize={localize}
+      />,
+    );
+    expect(
+      screen.getByText("approval.app_release_notes.empty"),
+    ).toBeInTheDocument();
+  });
+
   it("recognises only the app publish scenario code", () => {
     expect(isAppPublishScenario("app_publish_request")).toBe(true);
     expect(isAppPublishScenario("APP_PUBLISH_REQUEST")).toBe(true);
@@ -55,31 +109,51 @@ describe("AppPublishDetailPanel", () => {
 
   it("renders the four regions and unpacks the tier instead of stringifying it", () => {
     const { container } = render(
-      <AppPublishDetailPanel detail={buildDetail()} scope="task" localize={localize} />,
+      <AppPublishDetailPanel
+        detail={buildDetail()}
+        scope="task"
+        localize={localize}
+      />,
     );
 
     // Region 1 — basic information, with the release kind localized from the code
     // rather than trusting the backend's pre-rendered text.
-    expect(screen.getByText("com_approval_section_basic_info")).toBeInTheDocument();
-    expect(screen.getByText("com_approval_app_publish_kind_initial")).toBeInTheDocument();
-    expect(screen.getByText("com_approval_app_publish_source_cli")).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_section_basic_info"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_app_publish_kind_initial"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_app_publish_source_cli"),
+    ).toBeInTheDocument();
     expect(screen.getByText("v3")).toBeInTheDocument();
     expect(container.textContent).not.toContain("raw-backend-text");
 
     // Regions 2 and 3 — empty this round, so they say so instead of rendering nothing.
-    expect(screen.getByText("com_approval_app_publish_capabilities_empty")).toBeInTheDocument();
-    expect(screen.getByText("com_approval_app_publish_visibility_empty")).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_app_publish_capabilities_empty"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_app_publish_visibility_empty"),
+    ).toBeInTheDocument();
 
     // Region 4 — the tier dict expanded into name / cpu / memory.
     expect(screen.getByText("Light")).toBeInTheDocument();
-    expect(screen.getByText("com_approval_app_publish_cpu_cores:0.5")).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_app_publish_cpu_cores:0.5"),
+    ).toBeInTheDocument();
     expect(screen.getByText("512 MB")).toBeInTheDocument();
     expect(container.textContent).not.toContain("[object Object]");
   });
 
   it("never spills payload_snapshot onto the card", () => {
     const { container } = render(
-      <AppPublishDetailPanel detail={buildDetail()} scope="task" localize={localize} />,
+      <AppPublishDetailPanel
+        detail={buildDetail()}
+        scope="task"
+        localize={localize}
+      />,
     );
     expect(container.textContent).not.toContain("99");
     expect(container.textContent).not.toContain("1234");
@@ -87,7 +161,13 @@ describe("AppPublishDetailPanel", () => {
   });
 
   it("explains a skipped department node without naming an administrator role", () => {
-    render(<AppPublishDetailPanel detail={buildDetail()} scope="task" localize={localize} />);
+    render(
+      <AppPublishDetailPanel
+        detail={buildDetail()}
+        scope="task"
+        localize={localize}
+      />,
+    );
     expect(
       screen.getByText("com_approval_app_publish_note_no_department_admin"),
     ).toBeInTheDocument();
@@ -98,22 +178,45 @@ describe("AppPublishDetailPanel", () => {
     const detail = buildDetail();
     detail.detail_snapshot = {
       ...detail.detail_snapshot,
-      capabilities: [{ kind: "secret", name: "COLOR", revoked: false, reason: "missing_value" }],
+      capabilities: [
+        {
+          kind: "secret",
+          name: "COLOR",
+          revoked: false,
+          reason: "missing_value",
+        },
+      ],
     };
-    render(<AppPublishDetailPanel detail={detail} scope="task" localize={localize} />);
+    render(
+      <AppPublishDetailPanel
+        detail={detail}
+        scope="task"
+        localize={localize}
+      />,
+    );
     expect(screen.getByText("COLOR")).toBeInTheDocument();
-    expect(screen.getByText("approval.app_environment.type · approval.app_environment.missing")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "approval.app_environment.type · approval.app_environment.missing",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("lists declared capabilities and visibility entries when they arrive", () => {
     const detail = buildDetail();
     detail.detail_snapshot = {
       ...detail.detail_snapshot,
-      capabilities: [{ type: "model", name: "qwen-max", description: "chat model" }],
+      capabilities: [
+        { type: "model", name: "qwen-max", description: "chat model" },
+      ],
       visibility_snapshot: [{ type: "department", name: "R&D" }],
     };
     const { container } = render(
-      <AppPublishDetailPanel detail={detail} scope="task" localize={localize} />,
+      <AppPublishDetailPanel
+        detail={detail}
+        scope="task"
+        localize={localize}
+      />,
     );
     expect(screen.getByText("qwen-max")).toBeInTheDocument();
     expect(screen.getByText("model · chat model")).toBeInTheDocument();
@@ -124,10 +227,18 @@ describe("AppPublishDetailPanel", () => {
   it("adds the structure-change row only when the release changes the declared tables", () => {
     // Default fixture: schema_change is null — the row must not exist at all.
     const { container, unmount } = render(
-      <AppPublishDetailPanel detail={buildDetail()} scope="task" localize={localize} />,
+      <AppPublishDetailPanel
+        detail={buildDetail()}
+        scope="task"
+        localize={localize}
+      />,
     );
-    expect(container.querySelector('[data-testid="app-publish-schema-change"]')).toBeNull();
-    expect(container.textContent).not.toContain("com_approval_app_publish_field_schema_change");
+    expect(
+      container.querySelector('[data-testid="app-publish-schema-change"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain(
+      "com_approval_app_publish_field_schema_change",
+    );
     unmount();
 
     const detail = buildDetail();
@@ -142,19 +253,37 @@ describe("AppPublishDetailPanel", () => {
         ],
       },
     };
-    render(<AppPublishDetailPanel detail={detail} scope="task" localize={localize} />);
+    render(
+      <AppPublishDetailPanel
+        detail={detail}
+        scope="task"
+        localize={localize}
+      />,
+    );
 
     expect(screen.getByTestId("app-publish-schema-change")).toBeInTheDocument();
-    expect(screen.getByText("com_approval_app_publish_field_schema_change")).toBeInTheDocument();
-    expect(screen.getByText("com_approval_app_publish_schema_breaking")).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_app_publish_field_schema_change"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_app_publish_schema_breaking"),
+    ).toBeInTheDocument();
     expect(screen.getByText("orders.amount")).toBeInTheDocument();
     expect(screen.getByText("orders.note")).toBeInTheDocument();
     expect(screen.getByText("settings")).toBeInTheDocument();
-    expect(screen.getByText("com_approval_app_publish_schema_op_modify_column")).toBeInTheDocument();
-    expect(screen.getByText("com_approval_app_publish_schema_op_add_table")).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_app_publish_schema_op_modify_column"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("com_approval_app_publish_schema_op_add_table"),
+    ).toBeInTheDocument();
     // Two breaking rows, one additive: the tag appears exactly twice.
-    expect(screen.getAllByText("com_approval_app_publish_schema_breaking_tag")).toHaveLength(2);
-    expect(screen.getByTestId("app-publish-schema-change").textContent).not.toContain("[object Object]");
+    expect(
+      screen.getAllByText("com_approval_app_publish_schema_breaking_tag"),
+    ).toHaveLength(2);
+    expect(
+      screen.getByTestId("app-publish-schema-change").textContent,
+    ).not.toContain("[object Object]");
   });
 
   it("offers the review-view entry only when there is a release to open and a handler to open it", () => {
@@ -162,15 +291,24 @@ describe("AppPublishDetailPanel", () => {
 
     // No handler wired: the review view is not reachable, so no button.
     const { unmount } = render(
-      <AppPublishDetailPanel detail={buildDetail()} scope="task" localize={localize} />,
+      <AppPublishDetailPanel
+        detail={buildDetail()}
+        scope="task"
+        localize={localize}
+      />,
     );
-    expect(screen.queryByTestId("app-publish-open-review")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("app-publish-open-review"),
+    ).not.toBeInTheDocument();
     unmount();
 
     // Handler wired but the snapshot names no version: a dead button is worse
     // than none, so it stays away.
     const noVersion = buildDetail();
-    noVersion.detail_snapshot = { ...noVersion.detail_snapshot, version_id: "" };
+    noVersion.detail_snapshot = {
+      ...noVersion.detail_snapshot,
+      version_id: "",
+    };
     const second = render(
       <AppPublishDetailPanel
         detail={noVersion}
@@ -179,7 +317,9 @@ describe("AppPublishDetailPanel", () => {
         onOpenReview={onOpenReview}
       />,
     );
-    expect(screen.queryByTestId("app-publish-open-review")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("app-publish-open-review"),
+    ).not.toBeInTheDocument();
     second.unmount();
 
     render(
@@ -206,9 +346,17 @@ describe("AppPublishDetailPanel", () => {
 
   it("falls back to placeholders when the tier is missing", () => {
     const detail = buildDetail();
-    detail.detail_snapshot = { ...detail.detail_snapshot, tier: {}, tier_name: "" };
+    detail.detail_snapshot = {
+      ...detail.detail_snapshot,
+      tier: {},
+      tier_name: "",
+    };
     const { container } = render(
-      <AppPublishDetailPanel detail={detail} scope="task" localize={localize} />,
+      <AppPublishDetailPanel
+        detail={detail}
+        scope="task"
+        localize={localize}
+      />,
     );
     expect(container.textContent).not.toContain("NaN");
     expect(container.textContent).not.toContain("[object Object]");

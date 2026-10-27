@@ -160,6 +160,7 @@
   "11022": "The folder exceeds the 500MB total size limit. Please reduce it and upload again.",
   "11023": "Folder nesting exceeds the 10-level limit. Please flatten it and upload again.",
   "11024": "The file exceeds the upload size limit. Please compress or split it and retry.",
+  "11025": "Failed to generate the slide preview. Please download the file to view it.",
   "11030": "Usage quota exceeded. Activate with a new invite code",
   "11040": "Failed to submit question",
   "11050": "Vector retrieval model error. Contact admin",
@@ -668,5 +669,6 @@
   "15030": "MCP service response does not match SSE. Check the transport type and endpoint.",
   "15031": "Invalid MCP service URL. Use a complete http:// or https:// address.",
   "15032": "Failed to retrieve MCP tools. Check the service status and configuration.",
-  "25016": "The selected user is no longer an active member of this tenant. Refresh the candidate list and select again."
+  "25016": "The selected user is no longer an active member of this tenant. Refresh the candidate list and select again.",
+  "16233": "Release notes must not exceed 2,000 characters"
 }

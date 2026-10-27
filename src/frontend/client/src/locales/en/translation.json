@@ -518,6 +518,8 @@
   "com_linsight_deliverable_not_generated": "(not generated)",
   "com_linsight_deliverable_not_generated_hint": "The model mentioned this file but never wrote it, so there is nothing to open.",
   "com_linsight_preview_load_failed": "Failed to load the file",
+  "com_linsight_preview_slides_generating": "Generating preview…",
+  "com_linsight_preview_slides_notice": "This preview is rendered on the server. Fonts and layout may differ slightly from PowerPoint; the downloaded file is authoritative.",
   "com_linsight_download_failed": "Download failed, please try again later",
   "com_linsight_exporting": "Exporting, please wait…",
   "com_linsight_export_success": "File downloaded",
@@ -2684,6 +2686,10 @@
       "type": "Environment variable",
       "missing": "Not configured at submission",
       "present": "Configured at submission"
+    },
+    "app_release_notes": {
+      "title": "Release notes",
+      "empty": "No release notes provided"
     }
   }
 }
