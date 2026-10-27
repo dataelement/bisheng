@@ -12,4 +12,5 @@ The cursor: default; property value restores the browser's default cursor style 
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  text-align: left;
 }

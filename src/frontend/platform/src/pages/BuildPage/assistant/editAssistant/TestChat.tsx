@@ -4,6 +4,8 @@ import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
+import { Button } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -11,7 +13,7 @@ export default function TestChat({ assisId, guideQuestion, onClear }) {
     const token = localStorage.getItem("ws_token") || '';
     const wsUrl = `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assisId}?t=${token}`
 
-    const { messages, changeChatId } = useMessageStore()
+    const { messages, changeChatId, inputLocked } = useMessageStore()
     const { assistantState } = useAssistantStore()
     const { t } = useTranslation()
 
@@ -43,11 +45,14 @@ export default function TestChat({ assisId, guideQuestion, onClear }) {
         <div className="absolute flex w-full left-0 top-0 gap-2 px-4 py-2 items-center z-10 bg-background-login shadow-sm">
             <AppAvator id={assistantState.name} url={assistantState.viewLogo || assistantState.logo} flowType={5} className=""></AppAvator>
             <span className="text-sm ">{t('build.debugPreview')}</span>
+            <Button className="ml-auto" size="small" variant="text" color="default" disabled={inputLocked} onClick={onClear}>
+                <Outlined.Delete size={16} />
+                {t('build.clearDebugConversation')}
+            </Button>
         </div>
         <ChatComponent
             chat={assistantState}
             debug
-            clear
             logo={<AppAvator id={assistantState.name} url={assistantState.viewLogo || assistantState.logo} flowType={5} className=""></AppAvator>}
             questions={guideQuestion}
             useName=''

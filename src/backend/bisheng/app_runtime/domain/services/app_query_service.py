@@ -231,9 +231,9 @@ class AppQueryService:
     def entry_url(slug: str) -> str:
         """The full address of the entry (AC-25).
 
-        Built here, never in the browser: the platform SPA runs on :3001 in dev
-        and ``/apps`` is not in its vite proxy, so a front end that composed
-        ``location.origin + '/apps/' + slug`` would hand out a dead link.
+        API/CLI consumers receive the configured base. The browser's publish
+        page uses its current origin and deployment prefix for the same app
+        route; its development server proxies ``/apps/`` to the installed entry.
         """
         base = (settings.app_runtime.entry_base_url or "").rstrip("/")
         return f"{base}/apps/{slug}"

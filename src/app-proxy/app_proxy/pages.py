@@ -45,6 +45,9 @@ from app_proxy.authz import (
     DECISION_STOPPED,
     DECISION_UNAVAILABLE,
 )
+from app_proxy.config import DEFAULT_SQUARE_URL
+from app_proxy.recovery_appearance import ILLUSTRATION as RECOVERY_ILLUSTRATION
+from app_proxy.recovery_appearance import STYLE as RECOVERY_STYLE
 
 #: Transitional, not a verdict: the app exists and you may enter, but nothing
 #: is answering right now. Two kinds, told apart by the manager's answer rather
@@ -423,7 +426,7 @@ def render_page(
     *,
     app_name: str | None = None,
     owner_name: str | None = None,
-    square_url: str = "/workspace",
+    square_url: str = DEFAULT_SQUARE_URL,
     request_id: str = "",
     accept_language: str | None = None,
     reason: str | None = None,
@@ -473,6 +476,8 @@ def render_page(
         hint = f'    <p class="hint">{html.escape(chrome.request_id.format(id=request_id))}</p>'
 
     refresh_meta, retry_script = _retry_markup(kind)
+    style = RECOVERY_STYLE if kind == PAGE_RECOVERING else _STYLE
+    mark = RECOVERY_ILLUSTRATION if kind == PAGE_RECOVERING else layout.mark
 
     return f"""<!doctype html>
 <html lang="{_HTML_LANG[locale]}">
@@ -481,11 +486,11 @@ def render_page(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 {refresh_meta}<title>{html.escape(copy.title)}</title>
-<style>{_STYLE}</style>
+<style>{style}</style>
 </head>
 <body>
   <div class="card">
-    <div class="mark">{layout.mark}</div>
+    <div class="mark">{mark}</div>
     <h1>{html.escape(copy.title)}</h1>
 {body}
 {actions}

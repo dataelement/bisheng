@@ -241,3 +241,17 @@ F054-B1 修订：宿主 unit 为规则漂移的实际消费者，先修复并配
 ### 2026-10-26 Docker 控制入口热修
 
 116 实测同一 canary 的 host HTTP200，而 manager/app-proxy 都 ConnectTimeout。根因：按应用 bridge 整段源地址执行出口拒绝时，也误拦在该 bridge 上的控制服务主动访问应用。host 工具新增可选 root-only ingress_containers；检查非托管、运行中的真实控制服务，将服务名和逐网络实际 IP 纳入既有签名 descriptor，只在 FORWARD 允许精确源 IP 到本子网的 ORIGINAL TCP。INPUT 拒绝和应用出口规则不变；canary 增加从已声明控制容器访问测试应用的实际验证。同地址的合法控制进程重建不改变绑定；地址变化、进程停止、替换为托管应用或网络变化均拒绝，重新生成期望 descriptor 后才准入。宿主与 manager 包须同时升级；这是既有控制入口合同的修复，不新增用户授权能力。
+
+### 2026-10-27 浏览器应用入口跟随当前访问地址
+
+用户指出发布页与应用教程的地址口径不一致：教程读 `window.location.origin`，发布页则把 `app_runtime.entry_base_url` 生成的 `entry_url` 原样展示。用户从另一个域名、协议或端口访问时，发布页会把访问者带回配置中的入口。
+
+发布页现以浏览器当前 origin、前端部署前缀 `__APP_ENV__.BASE_URL` 和应用 slug 生成带尾斜杠的 `/apps/{slug}/`；文字、复制、打开和二维码共用一个值。空入口的既有显隐规则保留。backend 的 `entry_url` 字段及 CLI/API 地址不变，不把浏览器地址用于容器回调、模型接口、附件接口或隔离白名单。
+
+旧版任务 T053、T065、T091 的“不能从 origin 拼”的实现约束由本次修订替代，其原因是开发环境缺少 `/apps` 代理，而非生产入口必须使用固定域名。现在平台 Vite 增加 `/apps/` HTTP/WebSocket 代理，开发者通过 `VITE_APP_PROXY_TARGET` 指向已部署的应用入口；默认复用 API 代理目标。若 API 目标只有 FastAPI，必须独立配置应用入口，不能认为 FastAPI 提供应用代理。未来若产品明确支持独立应用域名，应新增显式的域名选择口径，而不隐式混用当前页面和固定配置。
+
+定向证据：发布页4例（文字/复制/打开/二维码一致、停用、部署前缀/相对后端地址、空入口）及真实 Vite 配置加载1例通过；仅验证此次展示与代理配置，没有宣称116前端镜像已更新。
+
+### 2026-10-27 停用提示页返回应用广场
+
+“返回广场”服务于访问应用的业务用户，目标为 client 的 `/workspace/apps/explore`（ExplorePlaza），而非 platform 构建页；不假设访问者有构建权限。原默认 `/workspace` 在116命中 platform SPA 后进入404，且即使进入client首页也不是应用广场。`app_proxy.config.DEFAULT_SQUARE_URL` 与页面渲染器共享正确路由，保留 `APP_PROXY_SQUARE_URL` 供自定义前缀部署覆盖；不改认证、应用状态或可见性。定向覆盖默认/空配置回退、自定义前缀和实际停用页链接，8例通过。

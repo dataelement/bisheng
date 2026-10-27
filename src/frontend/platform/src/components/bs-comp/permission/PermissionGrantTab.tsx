@@ -12,6 +12,7 @@ import {
   type PermissionGrantMutationChange,
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
+import { showApiError } from "@/controllers/request"
 import { LockKeyhole } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -147,7 +148,8 @@ export function PermissionGrantTab({
   const [internalIncludeChildren, setInternalIncludeChildren] = useState(false)
   const [loadingModels, setLoadingModels] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
-  const [conflict, setConflict] = useState(false)
+  const [failureMessage, setFailureMessage] = useState("")
+  const [candidateRevision, setCandidateRevision] = useState(0)
   const includeChildren = includeChildrenProp ?? internalIncludeChildren
   const handleIncludeChildrenChange =
     onIncludeChildrenChange ?? setInternalIncludeChildren
@@ -155,7 +157,7 @@ export function PermissionGrantTab({
   useEffect(() => {
     let cancelled = false
     setLoadingModels(true)
-    setConflict(false)
+    setFailureMessage("")
     void getGrantablePermissionModelsApi(resourceType, resourceId)
       .then((result) => {
         if (cancelled) return
@@ -167,8 +169,8 @@ export function PermissionGrantTab({
             : (activeModels[0]?.key ?? ""),
         )
       })
-      .catch(() => {
-        if (!cancelled) setConflict(true)
+      .catch((cause: unknown) => {
+        if (!cancelled) setFailureMessage(showApiError(cause).message)
       })
       .finally(() => {
         if (!cancelled) setLoadingModels(false)
@@ -211,7 +213,7 @@ export function PermissionGrantTab({
   ) => {
     if (!canEdit || pendingKey) return
     setPendingKey(operationKey)
-    setConflict(false)
+    setFailureMessage("")
     try {
       const result = await mutateResourceGrantsApi(resourceType, resourceId, {
         idempotency_key: createMutationIdempotencyKey(),
@@ -221,8 +223,13 @@ export function PermissionGrantTab({
       })
       setSelectedSubjects([])
       onSuccess(result)
-    } catch {
-      setConflict(true)
+    } catch (cause) {
+      const error = showApiError(cause)
+      setFailureMessage(error.status_code === 25002 ? t("grant.conflict") : error.message)
+      if (error.status_code === 25016) {
+        setSelectedSubjects([])
+        setCandidateRevision(value => value + 1)
+      }
     } finally {
       setPendingKey(null)
     }
@@ -285,6 +292,7 @@ export function PermissionGrantTab({
     <>
       {subjectType === "user" && (
         <SubjectSearchUser
+          key={candidateRevision}
           value={selectedSubjects}
           onChange={setSelectedSubjects}
           resourceType={resourceType}
@@ -322,11 +330,11 @@ export function PermissionGrantTab({
         className="flex h-full min-h-0 flex-col overflow-hidden"
         data-testid="legacy-permission-grant-layout"
       >
-        {conflict && (
+        {failureMessage && (
           <Alert
             type="error"
             className="mb-3"
-            description={t("grant.conflict")}
+            description={failureMessage}
             live
           />
         )}
@@ -387,8 +395,8 @@ export function PermissionGrantTab({
       {!canEdit && (
         <Alert description={t("grant.readOnly")} />
       )}
-      {conflict && (
-        <Alert type="error" description={t("grant.conflict")} live />
+      {failureMessage && (
+        <Alert type="error" description={failureMessage} live />
       )}
 
       {showExistingAssignees && assignees.length > 0 && (

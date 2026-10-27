@@ -1174,7 +1174,8 @@
     "autoTagGenerationDesc": "开启后，用户在创建/编辑知识空间时可选择标签库，文件解析成功后自动从标签库挑选标签写入。",
     "searchTagLibrary": "搜索标签库名称",
     "tagLibraryEmpty": "暂无标签库",
-    "appTypeFilter": "应用类型"
+    "appTypeFilter": "应用类型",
+    "clearDebugConversation": "清空"
   },
   "bench": {
     "daily": "日常",
