@@ -245,7 +245,7 @@ export default function RecommendedAppsConfig({ selectedAppIds, onSelectedAppsCh
                         <div className="flex-1 overflow-y-auto p-2">
                             <div className="space-y-1">
                                 {APP_TYPE_TABS.map((tab) => (
-                                    <Button type="button" variant="text" key={tab.key} className={`flex items-center w-full text-left p-2 rounded ${
+                                    <Button type="button" variant="text" key={tab.key} className={`flex items-center justify-start w-full text-left p-2 rounded ${
                                             activeTab === tab.key ? "bg-blue-100 text-blue-600" : "hover:bg-gray-100"
                                         }`} onClick={() => setActiveTab(tab.key)} color="default">
                                         <AppAvator

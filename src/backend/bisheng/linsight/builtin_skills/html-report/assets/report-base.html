@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>报告标题</title>
+<!--
+  报告页组件底座。用法见 SKILL.md 第 3 节：
+  1. 整段复制本文件作为骨架，<style> 和末尾 <script> 原样保留；
+  2. 只改 :root 里的颜色 token（按设计计划），不要另起一套样式；
+  3. 用不到的版块整段删掉，不要留空壳；示例文字全部换成真实内容。
+-->
+<style>
+:root {
+  /* 颜色 token：设计计划只改这一组 */
+  --ink: #1d2733;          /* 正文 */
+  --ink-soft: #5a6573;     /* 次要文字、说明 */
+  --paper: #ffffff;        /* 页面底色 */
+  --paper-alt: #f4f6f8;    /* 表头、斑马纹、提示块底色 */
+  --rule: #d9dee4;         /* 分隔线、表格线 */
+  --accent: #1f5f8b;       /* 唯一强调色：标题区、链接、选中 */
+  --ok: #2e7d4f;    --ok-bg: #e8f4ec;
+  --warn: #9a6200;  --warn-bg: #fdf3e1;
+  --risk: #b3261e;  --risk-bg: #fbe9e7;
+  --info: #3d5a80;  --info-bg: #eaf0f7;
+
+  --font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+          "Source Han Sans SC", "WenQuanYi Micro Hei", system-ui, sans-serif;
+  --font-num: "SF Mono", "Cascadia Mono", "Consolas", "Noto Sans Mono CJK SC", monospace;
+
+  /* 字号层级：正文 16px，比例约 1.25 */
+  --fs-small: 13px; --fs-body: 16px; --fs-h3: 18px; --fs-h2: 22px; --fs-h1: 30px;
+  --measure: 46em;         /* 正文行长上限，约 46 个汉字 */
+  --page: 1080px;          /* 页面最大宽度 */
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e3e7ec; --ink-soft: #a3adb9; --paper: #15191e; --paper-alt: #1e242b; --rule: #343c46;
+    --accent: #7fb3dc;
+    --ok: #7cc79a; --ok-bg: #1b2e23; --warn: #e2b35c; --warn-bg: #33281a;
+    --risk: #f08c84; --risk-bg: #3a1f1d; --info: #9fb7d6; --info-bg: #1f2935;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font: var(--fs-body)/1.75 var(--font); font-variant-numeric: tabular-nums;
+}
+.page { max-width: var(--page); margin: 0 auto; padding: 40px 32px 64px; }
+p, li { max-width: var(--measure); }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible, summary:focus-visible, th:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+h1, h2, h3 { line-height: 1.35; margin: 0; font-weight: 600; }
+h1 { font-size: var(--fs-h1); letter-spacing: .01em; }
+h2 { font-size: var(--fs-h2); margin: 48px 0 16px; padding-top: 8px; border-top: 1px solid var(--rule); }
+h3 { font-size: var(--fs-h3); margin: 28px 0 10px; }
+.muted { color: var(--ink-soft); }
+.num { font-family: var(--font-num); }
+
+/* 标题区：报告对象 + 一句话结论。辨识度只放在这里 */
+.masthead { border-left: 4px solid var(--accent); padding: 4px 0 4px 20px; margin-bottom: 28px; }
+.masthead .meta { margin-top: 8px; color: var(--ink-soft); font-size: var(--fs-small); display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.verdict { margin: 0 0 32px; padding: 18px 22px; background: var(--paper-alt); border-radius: 6px; }
+.verdict .lead { font-size: 18px; font-weight: 600; margin: 0 0 8px; }
+.verdict ul { margin: 0; padding-left: 1.2em; }
+
+/* 目录：由脚本按 h2 生成；窄屏折叠成一行 */
+.toc { font-size: var(--fs-small); margin: 0 0 8px; }
+.toc ol { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0; padding: 0; list-style: none; counter-reset: t; }
+.toc li { max-width: none; }
+.toc a { color: var(--ink-soft); text-decoration: none; }
+.toc a:hover { color: var(--accent); }
+
+/* 指标块：只有数字本身是结论时才用，最多一行 4 个 */
+/* 1px 网格间隙露出底色当分隔线：换行后线条仍然对齐 */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; margin: 8px 0 24px; background: var(--rule); border-block: 1px solid var(--rule); }
+.metric { padding: 14px 16px; background: var(--paper); }
+.metric .v { font-size: 26px; font-weight: 600; font-family: var(--font-num); }
+.metric .k { font-size: var(--fs-small); color: var(--ink-soft); }
+
+/* 状态标记 */
+.tag { display: inline-block; padding: 0 8px; border-radius: 3px; font-size: var(--fs-small); line-height: 22px; white-space: nowrap; font-weight: 500; }
+.tag.ok { color: var(--ok); background: var(--ok-bg); }
+.tag.warn { color: var(--warn); background: var(--warn-bg); }
+.tag.risk { color: var(--risk); background: var(--risk-bg); }
+.tag.info { color: var(--info); background: var(--info-bg); }
+
+/* 表格：外层 .table-wrap 负责窄屏横向滚动 */
+.table-wrap { overflow-x: auto; margin: 12px 0 20px; border: 1px solid var(--rule); border-radius: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { padding: 10px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--rule); }
+th { background: var(--paper-alt); font-weight: 600; white-space: nowrap; position: sticky; top: 0; }
+th[data-sort] { cursor: pointer; }
+th[aria-sort="ascending"]::after { content: " ▲"; font-size: 10px; }
+th[aria-sort="descending"]::after { content: " ▼"; font-size: 10px; }
+tbody tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; font-family: var(--font-num); }
+/* 首列是要素名，不要被挤成一字一行 */
+th:first-child, td:first-child { min-width: 6.5em; }
+/* 对照表：不一致的行在左侧加色条，不给整行上色 */
+tr.diff td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+tr.conflict td:first-child { box-shadow: inset 3px 0 0 var(--risk); }
+
+/* 发现项：按严重程度排序，每条写清现象、依据、建议 */
+.finding { padding: 14px 0 14px 16px; border-left: 3px solid var(--rule); margin: 0 0 12px; }
+.finding.high { border-color: var(--risk); }
+.finding.mid { border-color: var(--warn); }
+.finding.low { border-color: var(--info); }
+.finding h3 { margin: 0 0 6px; font-size: 17px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.finding dl { margin: 0; display: grid; grid-template-columns: 4.5em 1fr; gap: 4px 12px; }
+.finding dt { color: var(--ink-soft); font-size: var(--fs-small); padding-top: 3px; }
+.finding dd { margin: 0; max-width: var(--measure); }
+
+/* 提示块 */
+.note { padding: 12px 16px; border-radius: 6px; background: var(--info-bg); margin: 12px 0; max-width: var(--measure); }
+.note.warn { background: var(--warn-bg); }
+
+/* 纯 CSS 条形图：--v 取 0-100 */
+.bars { margin: 12px 0 20px; max-width: 720px; }
+.bar { display: grid; grid-template-columns: 9em 1fr 5em; gap: 12px; align-items: center; margin: 6px 0; font-size: 15px; }
+.bar .track { display: block; height: 12px; background: var(--paper-alt); border-radius: 2px; overflow: hidden; }
+.bar .fill { display: block; height: 100%; width: calc(var(--v) * 1%); background: var(--accent); }
+.bar .val { text-align: right; font-family: var(--font-num); }
+
+/* 时间线 */
+.timeline { list-style: none; padding: 0; margin: 12px 0; border-left: 2px solid var(--rule); }
+.timeline li { position: relative; padding: 0 0 14px 20px; }
+.timeline li::before { content: ""; position: absolute; left: -6px; top: 9px; width: 10px; height: 10px; border-radius: 50%; background: var(--paper); border: 2px solid var(--accent); }
+.timeline time { display: block; font-size: var(--fs-small); color: var(--ink-soft); }
+
+/* 折叠：放明细、原文摘录 */
+details { border-top: 1px solid var(--rule); padding: 10px 0; }
+summary { cursor: pointer; font-weight: 500; }
+details[open] summary { margin-bottom: 8px; }
+
+/* 来源与附录 */
+.sources { font-size: var(--fs-small); color: var(--ink-soft); padding-left: 1.4em; }
+footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: var(--fs-small); color: var(--ink-soft); }
+
+@media (max-width: 640px) {
+  .page { padding: 24px 16px 48px; }
+  h1 { font-size: 24px; }
+  h2 { font-size: 20px; margin-top: 36px; }
+  .metrics { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+  /* 窄屏表格不挤压列宽，在 .table-wrap 里横向滚动 */
+  .table-wrap table { min-width: 600px; }
+  .bar { grid-template-columns: 6em 1fr 4em; }
+  .finding dl { grid-template-columns: 1fr; }
+  th { position: static; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+@media print {
+  :root { --paper: #fff; --ink: #000; }
+  .page { max-width: none; padding: 0; }
+  .toc, .no-print { display: none; }
+  h2 { break-after: avoid; }
+  tr, .finding, .metric { break-inside: avoid; }
+  details { display: block; }
+  details > :not(summary) { display: block !important; }
+  .table-wrap { overflow: visible; border: 0; }
+  th { position: static; }
+  a { color: inherit; text-decoration: none; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+
+  <!-- 槽位：标题区。h1 写报告对象和报告类型；meta 写依据的材料、日期、编制方 -->
+  <header class="masthead">
+    <h1>某某项目两份报告交叉一致性审核</h1>
+    <div class="meta">
+      <span>审核对象：可行性报告（初审定稿）、尽职调查报告（提交初审）</span>
+      <span>审核日期：2026-10-21</span>
+    </div>
+  </header>
+
+  <!-- 槽位：结论先行。lead 一句话给出总判断，下面不超过 4 条要点 -->
+  <section class="verdict" aria-label="审核结论">
+    <p class="lead">两份报告在主要要素上一致，有 3 处差异需要在终审前更正。</p>
+    <ul>
+      <li>项目要素、交易对手信息和财务数据逐项一致。</li>
+      <li>风险等级评估依据引用的制度名称不一致，需统一。</li>
+    </ul>
+  </section>
+
+  <nav class="toc" aria-label="目录"><ol></ol></nav>
+
+  <!-- 槽位：指标块。只有数字本身就是结论时才保留，否则整段删除 -->
+  <div class="metrics">
+    <div class="metric"><div class="v">25</div><div class="k">一致项</div></div>
+    <div class="metric"><div class="v">3</div><div class="k">需更正</div></div>
+    <div class="metric"><div class="v">2</div><div class="k">需关注</div></div>
+  </div>
+
+  <h2 id="s-findings">需要处理的问题</h2>
+  <!-- 槽位：发现项。高 → 中 → 低排序；每条写现象、依据、建议 -->
+  <article class="finding high">
+    <h3><span class="tag risk">需更正</span>风险等级评估依据的制度名称不一致</h3>
+    <dl>
+      <dt>现象</dt><dd>可行性报告引用《资产管理信托产品风险等级划分标准》，尽调报告引用《信托产品风险等级划分标准》。</dd>
+      <dt>依据</dt><dd>可行性报告第一部分（三）；尽调报告第二部分 2.4。</dd>
+      <dt>建议</dt><dd>核对公司现行制度全称，两份报告统一引用。</dd>
+    </dl>
+  </article>
+
+  <h2 id="s-compare">逐项比对</h2>
+  <!-- 槽位：对照表。一致的行不加类；有差异加 diff，相互矛盾加 conflict -->
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-sort>要素</th><th>可行性报告</th><th>尽职调查报告</th><th data-sort>结论</th></tr></thead>
+      <tbody>
+        <tr><td>信托规模</td><td>不超过 10 亿元</td><td>不超过 10 亿元</td><td><span class="tag ok">一致</span></td></tr>
+        <tr class="diff"><td>评级来源</td><td>中诚信国际 2026 年 6 月，AAA</td><td>AAA（未注明机构）</td><td><span class="tag warn">详略不同</span></td></tr>
+        <tr class="conflict"><td>风险等级依据</td><td>《资产管理信托产品风险等级划分标准》</td><td>《信托产品风险等级划分标准》</td><td><span class="tag risk">不一致</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 槽位：条形图。--v 写 0-100 的比例，val 写原始数值 -->
+  <h3>各类要素一致率</h3>
+  <div class="bars" role="img" aria-label="各类要素一致率">
+    <div class="bar"><span>项目要素</span><span class="track"><span class="fill" style="--v:100"></span></span><span class="val">100%</span></div>
+    <div class="bar"><span>风险与合规</span><span class="track"><span class="fill" style="--v:75"></span></span><span class="val">75%</span></div>
+  </div>
+
+  <details>
+    <summary>原文摘录</summary>
+    <p class="muted">需要时放原文段落，默认收起。</p>
+  </details>
+
+  <h2 id="s-sources">依据材料</h2>
+  <ol class="sources">
+    <li>可行性报告（初审定稿），2026-10-13</li>
+    <li>尽职调查报告（提交初审），2026-10</li>
+  </ol>
+
+  <footer>本页可直接打印或另存为 PDF。</footer>
+</main>
+<script>
+(() => {
+  // Table of contents from h2 headings; nothing to do when there are fewer than three.
+  const toc = document.querySelector('.toc ol');
+  const heads = [...document.querySelectorAll('main h2')];
+  if (toc && heads.length >= 3) {
+    heads.forEach((h, i) => {
+      if (!h.id) h.id = 's-' + (i + 1);
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.textContent;
+      li.appendChild(a);
+      toc.appendChild(li);
+    });
+  } else if (toc) {
+    toc.parentElement.remove();
+  }
+  // Click-to-sort for headers marked data-sort; numbers compare numerically.
+  document.querySelectorAll('th[data-sort]').forEach((th) => {
+    th.tabIndex = 0;
+    const sort = () => {
+      const table = th.closest('table');
+      const body = table.tBodies[0];
+      const col = [...th.parentElement.children].indexOf(th);
+      const asc = th.getAttribute('aria-sort') !== 'ascending';
+      table.querySelectorAll('th[data-sort]').forEach((x) => x.removeAttribute('aria-sort'));
+      th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+      const key = (tr) => tr.children[col].textContent.trim();
+      const rows = [...body.rows].sort((a, b) => {
+        const x = key(a), y = key(b);
+        const nx = parseFloat(x.replace(/[,，%]/g, '')), ny = parseFloat(y.replace(/[,，%]/g, ''));
+        const r = !isNaN(nx) && !isNaN(ny) ? nx - ny : x.localeCompare(y, 'zh-CN');
+        return asc ? r : -r;
+      });
+      rows.forEach((r) => body.appendChild(r));
+    };
+    th.addEventListener('click', sort);
+    th.addEventListener('keydown', (e) => { if (e.key === 'Enter') sort(); });
+  });
+})();
+</script>
+</body>
+</html>

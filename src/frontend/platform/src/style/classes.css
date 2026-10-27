@@ -3,3 +3,13 @@ The cursor: default; property value restores the browser's default cursor style 
 .react-flow__pane {
   cursor: default;
 }
+/* Keep the four-character tenant label on one line even beside a native scrollbar. */
+.navlink[href$="/tenant"] > span {
+  margin-right: 0;
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

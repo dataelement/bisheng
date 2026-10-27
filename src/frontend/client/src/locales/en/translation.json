@@ -1284,6 +1284,7 @@
     "history_deleted": "Conversation history deleted"
   },
   "com_knowledge": {
+    "department_private_disabled": "Department knowledge spaces cannot be private",
     "add_new": "Add",
     "web_link": "Web link",
     "web_link_import_title": "Import web link",

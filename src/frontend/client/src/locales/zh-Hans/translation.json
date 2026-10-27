@@ -1211,6 +1211,7 @@
     "history_deleted": "历史会话已删除"
   },
   "com_knowledge": {
+    "department_private_disabled": "部门知识空间不支持设为私有",
     "add_new": "新增",
     "web_link": "网页链接",
     "web_link_import_title": "导入网页链接",

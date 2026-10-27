@@ -1,3 +1,4 @@
+import { KnowledgeSpaceAccessMode } from "./KnowledgeSpaceAccessMode";
 import { Outlined } from "bisheng-icons";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -16,7 +17,6 @@ import {
   type PermissionDraftSearchApi,
 } from "~/components/permission/PermissionDraftPickerDialog";
 import {
-  AccessModeSelector,
   SettingsFooter,
   SettingsSectionHeader,
   SettingsSwitchRow,
@@ -28,7 +28,7 @@ import { Select, Tabs } from '@bisheng/ui';
 import { Textarea } from "@bisheng/ui";
 import { useAuthContext, useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
-import { useConfirm, useToastContext } from "~/Providers";
+import { useToastContext } from "~/Providers";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { extractApiStatusCode } from "~/pages/Subscription/errorUtils";
 import { resolveSettingsReturnPath } from "../knowledgeUtils";
@@ -46,7 +46,6 @@ export function KnowledgeSpaceSettingsPage() {
   const selectCopy = useSelectCopy();
   const navigate = useNavigate();
   const location = useLocation();
-  const confirm = useConfirm();
   const { user } = useAuthContext();
   const { showToast } = useToastContext();
   const { spaceId } = useParams<{ spaceId?: string }>();
@@ -135,24 +134,6 @@ export function KnowledgeSpaceSettingsPage() {
       .map((row) => row.subjectId),
     [displayedPermissionRows],
   );
-
-  const handleVisibilityModeChange = async (value: "private" | "shared") => {
-    if (value === "private") {
-      if (settings.mode === "edit" && !isPrivate) {
-        const accepted = await confirm({
-          description: localize(
-            "com_subscription.confirm_knowledge_change_to_private",
-          ),
-          confirmText: localize("com_subscription.change_to_private"),
-          cancelText: localize("com_unified_permission.cancel"),
-        });
-        if (!accepted) return;
-      }
-      settings.updateForm("visibility", VisibilityType.PRIVATE);
-      return;
-    }
-    if (isPrivate) settings.updateForm("visibility", VisibilityType.APPROVAL);
-  };
 
   const handleCustomTagsUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -476,62 +457,17 @@ export function KnowledgeSpaceSettingsPage() {
                   title={localize("com_unified_permission.access_and_share")}
                 />
                 <div className="space-y-4 px-6 max-[768px]:px-0">
-                  <div className="space-y-2">
-                    <Label className="text-body font-medium text-text-1">
-                      <span className="mr-1 text-danger">*</span>
-                      {localize("com_unified_permission.access_and_share")}
-                    </Label>
-                    <AccessModeSelector
-                      value={isPrivate ? "private" : "shared"}
-                      onValueChange={(value) =>
-                        void handleVisibilityModeChange(value)
-                      }
-                      disabled={!settings.canEdit}
-                      privateLabel={localize("com_unified_permission.private")}
-                      privateDescription={localize(
-                        "com_unified_permission.private_hint",
-                      )}
-                      sharedLabel={localize("com_unified_permission.shared")}
-                      sharedDescription={localize(
-                        "com_unified_permission.shared_hint",
-                      )}
-                    />
-                  </div>
+                  <KnowledgeSpaceAccessMode
+                    visibility={settings.form.visibility}
+                    mode={settings.mode}
+                    isDepartmentSpace={settings.isDepartmentSpace}
+                    disabled={!settings.canEdit}
+                    isReleased={settings.form.isReleased}
+                    onVisibilityChange={(value) => settings.updateForm("visibility", value)}
+                    onReleasedChange={(value) => settings.updateForm("isReleased", value)}
+                  />
                   {!isPrivate && (
                     <>
-                      <SettingsSwitchRow
-                        required
-                        label={localize("com_unified_permission.review_join")}
-                        description={localize(
-                          "com_unified_permission.review_join_hint",
-                        )}
-                        checked={
-                          settings.form.visibility === VisibilityType.APPROVAL
-                        }
-                        disabled={!settings.canEdit}
-                        onCheckedChange={(checked) =>
-                          settings.updateForm(
-                            "visibility",
-                            checked
-                              ? VisibilityType.APPROVAL
-                              : VisibilityType.PUBLIC,
-                          )
-                        }
-                      />
-                      <SettingsSwitchRow
-                        required
-                        label={localize(
-                          "com_unified_permission.publish_to_square",
-                        )}
-                        description={localize(
-                          "com_unified_permission.publish_space_hint",
-                        )}
-                        checked={settings.form.isReleased}
-                        disabled={!settings.canEdit}
-                        onCheckedChange={(checked) =>
-                          settings.updateForm("isReleased", checked)
-                        }
-                      />
                       <PermissionDraftPanel
                         value={displayedPermissionRows}
                         onChange={(rows) =>

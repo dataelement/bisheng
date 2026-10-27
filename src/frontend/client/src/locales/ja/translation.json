@@ -1208,6 +1208,7 @@
     "history_deleted": "会話履歴を削除しました"
   },
   "com_knowledge": {
+    "department_private_disabled": "部門ナレッジスペースは非公開に設定できません",
     "add_new": "新規追加",
     "web_link": "Webリンク",
     "web_link_import_title": "Webリンクをインポート",

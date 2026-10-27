@@ -285,10 +285,24 @@ export default function WorkbenchModel({ onBack }) {
                             chatDefaultModelId,
                         };
                     })}
-                    onModelChange={(index, id) => setForm((prev) => ({
-                        ...prev,
-                        models: prev.models.map((item, i) => i === index ? { ...item, id } : item),
-                    }))}
+                    onModelChange={(index, id) => setForm((prev) => {
+                        const replaced = prev.models[index];
+                        // A default is bound to its row: when the row switches to another model,
+                        // move the default along instead of leaving it on the old id, which is
+                        // no longer in the list and gets rejected on save (10811).
+                        const linsightDefaultModelId = replaced?.id && replaced.id === prev.linsightDefaultModelId
+                            ? id
+                            : prev.linsightDefaultModelId;
+                        const chatDefaultModelId = replaced?.id && String(replaced.id) === String(prev.chatDefaultModelId ?? '')
+                            ? id
+                            : prev.chatDefaultModelId;
+                        return {
+                            ...prev,
+                            models: prev.models.map((item, i) => i === index ? { ...item, id } : item),
+                            linsightDefaultModelId,
+                            chatDefaultModelId,
+                        };
+                    })}
                     onNameChange={(index, displayName) => setForm((prev) => ({
                         ...prev,
                         models: prev.models.map((item, i) => i === index ? { ...item, displayName } : item),

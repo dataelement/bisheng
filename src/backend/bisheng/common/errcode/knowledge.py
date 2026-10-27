@@ -12,6 +12,13 @@ class KnowledgeNoEmbeddingError(BaseErrorCode):
     Msg: str = "Knowledge Base must select oneembeddingModels"
 
 
+class KnowledgeEmbeddingUnavailableError(BaseErrorCode):
+    Code: int = 10903
+    Msg: str = (
+        'The embedding model for knowledge base "{knowledge_name}" is unavailable. Please check its configuration.'
+    )
+
+
 class KnowledgeLLMError(BaseErrorCode):
     Code: int = 10902
     Msg: str = "Documentation Knowledge Base Summary Model is no longer valid, please go to Model Management-Configure in System Model Settings.{exception}"
