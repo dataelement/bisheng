@@ -203,3 +203,13 @@
 - 自动化：53 项默认授权、普通成员有效权限、既有指定用户授权、跨租户隔离、失败回滚及模型 DAO 回归通过；变更 Ruff、格式检查、diff 检查通过。本机轻量 Python 环境缺少完整 provider 依赖，测试启动器跳过 `llm.domain` 聚合入口，实际 DAO、异步 SQLite、策略仓储及事务照常执行；完整 provider 导入链由 3006 正常启动验证。
 - 3006 发布：`new-model-visibility-20261023`，基于现场 `capability-polish-20261023-121446`，仅覆盖三个后端文件，保留现有前端及其他会话更新；发布前执行中会话为零，旧发布保留用于回滚。服务健康检查通过，已安装源码哈希匹配。
 - 现场验证：真实数据库事务中验证默认所有成员可见、已有显式限制保留及重复初始化幂等，测试数据全部回滚。业务模型及授权保持原值。管理员从界面新建真实模型及普通用户真实调用留待产品验收。
+
+
+## 2026-10-27 — Knowledge-space permission role localization
+
+- Baseline: `dataelement/bisheng:feat/bisheng-work-120-main@d2be34458dbfa19c40324f6916dfa75202743cf9`, verified remotely before implementation and PR delivery. Branch: `codex/work-knowledge-permission-locale`.
+- Root cause: permission components displayed the API model name directly, while the standard role names arrive in Chinese. The protected creator row therefore displayed Chinese in English mode.
+- Implementation: resolve `owner`, `manager`, `editor` and `viewer` through the existing Chinese/English/Japanese locale entries at render time. Draft rows, role menus, member lists, authorization selectors/badges and role-name search share the resolver. Custom role names and submitted role keys retain their original values.
+- Verification: 47 permission tests passed; 3 existing failures were reproduced with baseline production sources (department badge text assertion, source-comment Chinese scan, retired tab-selector assertion). The focused role/authorization suite passed 21 cases. Strict client type checking (1,469 files), changed-file ESLint, i18n parity, architecture guard, diff checks and production client build passed. Full client ESLint reports the same 23 errors against both baseline and modified sources in unrelated chat files.
+- Test fixtures use the existing English role dictionary; the list fixture now provides its required confirmation hook. Added tests cover all four standard roles in three languages, preserved custom names, protected creator rows, live English/Chinese switching, absent role options and localized role-name search.
+- Delivery: web-client change for the desktop embedded knowledge-space page. Target deployment and native visual acceptance remain pending. Local evidence: `outputs/knowledge-permission-locale-20261027/`.

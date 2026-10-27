@@ -1,3 +1,4 @@
+import { permissionModelLabel } from "./permissionModelLabel";
 import { useLocalize } from "~/hooks";
 import { PermissionLevelMenu } from "./PermissionLevelMenu";
 import { canMutatePermissionDraftRow } from "./permissionDraftPolicy";
@@ -74,13 +75,13 @@ export function PermissionDraftEditor({
           relationModels,
         );
         const activeModelId = row.modelKey;
-        const relationLabel =
+        const relationLabel = permissionModelLabel(
+          activeModelId,
           capabilities.relationModels.find((model) => model.id === activeModelId)?.name
-          ?? row.modelName
-          ?? row.modelKey;
-        // Meta line under the name. A protected row no longer prints「受保护」—
-        // the frozen relation label on the right already says it can't change —
-        // so only these three can put something on the line.
+            ?? row.modelName,
+          localize,
+        );
+        // Source, read-only state and inheritance provide the row metadata.
         const showReadOnly =
           !row.protected && (row.scope === "INHERITED" || row.editable === false);
         const showInheritedFrom = row.scope === "INHERITED" && !!row.inheritedFromName;
