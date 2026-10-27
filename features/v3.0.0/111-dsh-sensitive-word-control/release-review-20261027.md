@@ -19,3 +19,6 @@ B源c11c12b18与最新目标dfadd7ab3正常merge，自动合并三语bs.json，�
 合并后frontend完整lint、workspace typecheck、i18n和locales检查均PASS；最新目标分支已修复旧95项lint基线问题，历史记录不改写。Platform生产构建已执行；实际日志/private/tmp/dsh-id-audit-release-20261027/，CI镜像仍须另核Git SHA及digest。
 
 结论：本次增量允许发布；不以此勾选原T119–T132、T180。backend必须完成f111_matched_words迁移及全部实例升级后再升级Gateway，回退先Gateway且保留新增列。最新目标同时包含工具/技能权限f048-v6升级，按其upgrade.md在DSH隔离Store执行只读dry-run、确认Store/checksum及备份后完成必要维护，不影响其他环境。发布/现场结果单独记录。
+
+
+发布前补充T244：旧现场事件校验白名单需显式接纳新增matched_words；仅修改两个测试文件，新增11项严格反例，相关组合201PASS，Ruff PASS。七维复核无业务变更、无新增HIGH/MEDIUM。发布进度以后续确切CI提交与digest记录为准。

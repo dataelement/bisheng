@@ -877,3 +877,12 @@ config=/private/tmp/dsh-credit-limit-fix-20261027/test-config.yaml PYTHONDONTWRI
 七维：架构PASS；命名及AC标注PASS；序列化PASS；数据库PASS（本轮新增迁移真实MySQL，DM8待验）；前端PASS（复用原组件，无新库/样式、无硬编码中文、无新strict-ignore，维护文件均≤600行）；信息泄漏PASS（只有配置命中词进入受权详情，无正文上下文/凭据/普通日志泄漏）；设计同步PASS。原完整现场/双库/容量/最终特性审查仍未完成，本轮不是全feature最终验收。
 
 T225–T243共19项完成，当前**228/243**。原15项T119、T120、T121、T122、T123、T124、T125、T126、T127、T128、T129、T130、T131、T132、T180保持待验；Linux DM8按用户决定继续待验。未执行真实浏览器视觉验收、109部署或客户端联调；DOM测试和构建不替代这些验收。未提交、未推送、未部署。
+
+
+## 2026-10-27 授权发布与验收脚本补齐（T244）
+
+用户已明确授权本轮提交、合并最新feat/bisheng-work-120-main并推送、CI构建和仅109 DSH13001部署，覆盖前述仅本轮不提交的限制。合并最新dfadd7ab3后B190PASS、G905PASS/10真实DB SKIP、前端269PASS；完整frontend lint/typecheck/i18n/locales和Platform生产构建PASS（18.83s），最新目标分支已修复旧95项lint问题，历史证据保持不变。
+
+发布前自审确证既有test_content_safety_recovery_e2e.validate_event_shape使用严格旧字段白名单；新详情会固定返回matched_words，即使旧数据NULL也会被旧验收脚本错误拒绝。T244仅在该脚本增加可选字段严格校验，保留旧缺失/null，拒绝词值越界、错误阶段、重复/Unicode及其他额外字段；新增test_content_safety_recovery_contract.py共11项。相关最终组合**201PASS**（3.61s），Ruff通过，业务文件未增加修改。文件范围、配对、边界、泄漏与设计自审PASS。原全特性15项待验不变，当前229/244。
+
+本地本轮发布证据目录/private/tmp/dsh-id-audit-release-20261027。CI SHA/digest及实际部署、权限模型维护和现场验收结果继续单独记录，不以本条预告冒充部署完成。

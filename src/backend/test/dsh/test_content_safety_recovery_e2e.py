@@ -216,7 +216,7 @@ def stages(value, versions, *, event_version=None):
 
 def validate_event_shape(event):
     """Check the public metadata contract without cleaning or dropping returned fields."""
-    require(isinstance(event, dict) and set(event) == EVENT_KEYS, "Safety event whitelist changed")
+    require(isinstance(event, dict) and set(event) - {"matched_words"} == EVENT_KEYS, "Safety event whitelist changed")
     require(type(event["schema_version"]) is int and event["schema_version"] == 1, "Invalid event schema version")
     require(
         isinstance(event["source_id"], str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", event["source_id"]),
@@ -258,6 +258,23 @@ def validate_event_shape(event):
         and all(isinstance(ref, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", ref) for ref in refs),
         "Event exposed unbounded or raw rule references",
     )
+    matched = event.get("matched_words")
+    if matched is not None:
+        require(isinstance(matched, dict) and set(matched) == {"input", "output"}, "Invalid matched-word directions")
+        total = 0
+        for direction in ("input", "output"):
+            words = matched[direction]
+            require(isinstance(words, list) and len(words) <= 20, "Invalid matched-word bound")
+            total += len(words)
+            require(total <= 20, "Matched-word total exceeds bound")
+            require(not words or event["stage_results"][direction] == "BLOCKED", "Matched words require blocked stage")
+            for word in words:
+                require(isinstance(word, str) and bool(word.strip()) and len(word) <= 256, "Invalid matched word")
+                try:
+                    word.encode("utf8")
+                except UnicodeError:
+                    raise LiveSafetyError("Invalid matched-word Unicode") from None
+            require(len(set(words)) == len(words), "Duplicate matched words")
     hints = event["conversation"]
     if hints is None:
         return
