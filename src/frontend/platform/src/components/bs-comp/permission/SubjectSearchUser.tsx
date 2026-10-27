@@ -17,6 +17,7 @@ interface SubjectSearchUserProps {
 export function SubjectSearchUser({ value, onChange, resourceType, resourceId, disabledIds = [] }: SubjectSearchUserProps) {
   const { t } = useTranslation("permission")
   const search = useSubjectSearch<GrantSubjectUser>({
+    retainRowsOnAppend: true,
     scopeKey: `${resourceType}:${resourceId}`,
     fetchPage: async (keyword, page, signal) => {
       if (!resourceType || !resourceId) return { data: [], total: 0 }
@@ -50,7 +51,8 @@ export function SubjectSearchUser({ value, onChange, resourceType, resourceId, d
           <div className="truncate text-xs text-muted-foreground" title={user.department_path ?? user.primary_department_path ?? undefined}>{user.department_path || user.primary_department_path}</div>
         </div>
       </div>)}
-      {!search.loading && !search.failed && search.rows.length < search.total && <button type="button" onClick={search.loadMore}>{t("subjectSearch.loadMore", { ns: "bs" })}</button>}
+      <SubjectSearchStatus loading={search.loadingMore} failed={search.loadMoreFailed} onRetry={search.retry} />
+      {!search.loading && !search.loadingMore && !search.failed && !search.loadMoreFailed && search.rows.length < search.total && <button type="button" onClick={search.loadMore}>{t("subjectSearch.loadMore", { ns: "bs" })}</button>}
     </div>
   </div>
 }

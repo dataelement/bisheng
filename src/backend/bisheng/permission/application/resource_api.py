@@ -421,6 +421,8 @@ class F048ResourcePermissionApi:
         actor: PermissionActor,
         cursor: str | None,
         page_size: int,
+        keyword: str = "",
+        subject_type: str | None = None,
     ) -> dict:
         target = await self._target(
             resource_type,
@@ -434,12 +436,27 @@ class F048ResourcePermissionApi:
             target=target,
             catalog_release_id=catalog.release_id,
         )
-        selected, has_more = await self._runtime.list_permission_sources_page(
-            actor=actor,
-            target=target,
-            after_id=after_id,
-            limit=page_size,
-        )
+        if keyword.strip() or subject_type:
+            from .roster_search import search_source_page
+
+            selected, has_more = await search_source_page(
+                runtime=self._runtime,
+                subjects=self._subjects,
+                actor=actor,
+                target=target,
+                after_id=after_id,
+                page_size=page_size,
+                keyword=keyword,
+                subject_type=subject_type,
+                model_names={item.snapshot.model_key: item.name for item in catalog.models},
+            )
+        else:
+            selected, has_more = await self._runtime.list_permission_sources_page(
+                actor=actor,
+                target=target,
+                after_id=after_id,
+                limit=page_size,
+            )
         names = await self._subjects.display_names(
             tuple(dict.fromkeys((row.subject_type, row.subject_id) for row in selected))
         )

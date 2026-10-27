@@ -1168,7 +1168,8 @@
     "autoTagGenerationDesc": "有効にすると、ナレッジスペースの作成・編集時にタグライブラリを選択できます。ファイル解析後にライブラリから適切なタグを付けます。",
     "searchTagLibrary": "タグライブラリ名を検索",
     "tagLibraryEmpty": "タグライブラリはありません",
-    "appTypeFilter": "アプリの種類"
+    "appTypeFilter": "アプリの種類",
+    "clearDebugConversation": "クリア"
   },
   "bench": {
     "daily": "日常",

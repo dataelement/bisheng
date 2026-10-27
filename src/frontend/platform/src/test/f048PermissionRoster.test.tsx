@@ -60,6 +60,15 @@ const departmentAssignee = {
 }
 
 describe("F048 PermissionListTab", () => {
+  it("searches the server roster beyond the currently loaded page", async () => {
+    vi.mocked(getResourcePermissionGrantsApi).mockResolvedValueOnce({ data: [directAssignee], page_size: 50, has_more: true, next_cursor: "next" })
+      .mockResolvedValueOnce({ data: [{ ...directAssignee, assignee_id: "999", subject: { type: "user", id: "99", name: "Later user" } }], page_size: 50, has_more: false, next_cursor: null });
+    render(<PermissionListTab resourceType="workflow" resourceId="flow-1" context={customContext} />);
+    await screen.findByTestId("permission-assignee-101");
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Later" } });
+    await screen.findByTestId("permission-assignee-999");
+    expect(getResourcePermissionGrantsApi).toHaveBeenLastCalledWith("workflow", "flow-1", { cursor: null, page_size: 50, keyword: "Later", subject_type: "user" });
+  });
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getGrantablePermissionModelsApi).mockResolvedValue([
@@ -276,7 +285,7 @@ describe("F048 PermissionListTab", () => {
       2,
       "knowledge_file",
       "file-1",
-      { cursor: "opaque-next", page_size: 1 },
+      { cursor: "opaque-next", page_size: 1, keyword: "", subject_type: "user" },
     )
   })
 })
