@@ -50,10 +50,10 @@ ACCESS_TOKEN_COOKIE = "access_token_cookie"
 #: bounces to the IdP itself (D7).
 DEFAULT_LOGIN_PATH = "/admin"
 
-#: "返回广场" target on the fallback pages. The square is F056's page and its
-#: final route is not fixed yet, so this stays an env knob; the default points
-#: at the end-user SPA root.
-DEFAULT_SQUARE_URL = "/workspace"
+#: Visitor-facing app square, not the administrator's builder. Keep the full
+#: client route: bare `/workspace` can fall into the platform SPA and show 404.
+#: Deployments with an outer prefix can override APP_PROXY_SQUARE_URL.
+DEFAULT_SQUARE_URL = "/workspace/apps/explore"
 
 #: Variables a deployment must set explicitly. Every default below is a
 #: single-host loopback convenience, so a deployment that leaves any of these
