@@ -1,13 +1,15 @@
 """Access check and PDF preview for task-mode result files (F111).
 
 ``load_accessible_version`` is the single access rule for a task result: the
-session owner, an admin, or a share link to that session / version. Both the
-download and the preview endpoints call it.
+session owner, a share link to that session / version, or an admin of the
+tenant the request runs in. Both the download and the preview endpoints call it,
+and both require the requested key to belong to that version (``owned_file_key``).
 
 ``get_pptx_preview`` converts a task-generated ``.ppt``/``.pptx`` to PDF on first
 open and caches it in object storage, so every API node serves the same file.
 A Redis lock keeps concurrent first opens to one conversion; a per-process
-semaphore bounds how many LibreOffice runs one API process starts.
+semaphore bounds how many LibreOffice runs one API process starts; a short-lived
+failure marker stops a deck that cannot convert from being retried on every poll.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import os
 import posixpath
 import tempfile
 import time
+import uuid
 
 import fitz
 from loguru import logger
@@ -24,7 +27,7 @@ from loguru import logger
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.linsight import LinsightArtifactPreviewError
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.context.tenant import bypass_tenant_filter_if
+from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_tenant_id
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import convert_ppt_to_pdf
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
@@ -32,7 +35,13 @@ from bisheng.linsight.domain.models.linsight_session_version import LinsightSess
 SLIDE_EXTS = (".ppt", ".pptx")
 CONVERT_TIMEOUT_SECONDS = 120
 LOCK_TTL_SECONDS = 180
+# A deck LibreOffice cannot convert is not retried for this long, so polling
+# clients and reopened tabs do not each start another full conversion run.
+FAILURE_TTL_SECONDS = 300
 _CONVERT_SLOTS = asyncio.Semaphore(2)
+# Delete the lock only while it still holds our token: after a TTL expiry it may
+# belong to another request.
+_RELEASE_LOCK_LUA = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
 
 
 class LinsightArtifactPreviewService:
@@ -43,7 +52,7 @@ class LinsightArtifactPreviewService:
             version = await LinsightSessionVersionDao.get_by_id(session_version_id)
         if not version:
             raise NotFoundError()
-        if version.user_id == login_user.user_id or login_user.is_admin():
+        if version.user_id == login_user.user_id:
             return version
         # A workbench_chat share carries resource_id = the session and no versionId;
         # a version share carries meta_data.versionId. Either one grants read.
@@ -53,25 +62,40 @@ class LinsightArtifactPreviewService:
             and share_link.meta_data is not None
             and share_link.meta_data.get("versionId") == session_version_id
         )
-        if not (shared_to_session or shared_to_version):
-            raise UnAuthorizedError()
-        return version
+        if shared_to_session or shared_to_version:
+            return version
+        # Any share token switches the tenant filter off for the lookup above, so
+        # an admin is only trusted inside the tenant the request runs in.
+        if login_user.is_admin() and (share_link is None or version.tenant_id == get_current_tenant_id()):
+            return version
+        raise UnAuthorizedError()
 
     @staticmethod
-    def _owned_slide_key(version: LinsightSessionVersion, file_url: str, bucket: str) -> str:
-        """Normalise ``file_url`` to an object key and require it to be this version's slide deck."""
+    def owned_file_key(version: LinsightSessionVersion, file_url: str, bucket: str) -> str:
+        """Normalise ``file_url`` to an object key and require it to belong to this version.
+
+        Task files live under ``linsight/final_result/{svid}/``, intermediate files
+        under ``linsight/session_files/{svid}/`` and uploads under ``linsight/{session_id}/``.
+        """
         key = file_url.lstrip("/")
         if key.startswith(bucket + "/"):
             key = key[len(bucket) + 1 :]
-        prefix = f"linsight/final_result/{version.id}/"
+        prefixes = (
+            f"linsight/final_result/{version.id}/",
+            f"linsight/session_files/{version.id}/",
+            f"linsight/{version.session_id}/",
+        )
         parts = key.split("/")
-        if (
-            not key.startswith(prefix)
-            or ".." in parts
-            or "" in parts
-            or posixpath.normpath(key) != key
-            or not key.lower().endswith(SLIDE_EXTS)
-        ):
+        if not key.startswith(prefixes) or ".." in parts or "" in parts or posixpath.normpath(key) != key:
+            logger.warning(f"task file access: key outside version svid={version.id} key={key}")
+            raise UnAuthorizedError()
+        return key
+
+    @classmethod
+    def _owned_slide_key(cls, version: LinsightSessionVersion, file_url: str, bucket: str) -> str:
+        """Like ``owned_file_key`` but only a slide deck in this version's results."""
+        key = cls.owned_file_key(version, file_url, bucket)
+        if not key.startswith(f"linsight/final_result/{version.id}/") or not key.lower().endswith(SLIDE_EXTS):
             raise UnAuthorizedError()
         return key
 
@@ -88,14 +112,29 @@ class LinsightArtifactPreviewService:
 
         redis = await get_redis_client()
         lock_key = f"linsight:pptx_preview:{version.id}:{file_id}"
+        failed_key = f"linsight:pptx_preview_failed:{version.id}:{file_id}"
         await redis.acluster_nodes(lock_key)
-        if not await redis.async_connection.set(lock_key, b"1", nx=True, ex=LOCK_TTL_SECONDS):
-            return {"status": "converting"}
-        try:
-            pdf_bytes = await cls._convert(minio, key, version.id, file_id)
-            await minio.put_object(object_name=preview_key, file=pdf_bytes, content_type="application/pdf")
-        finally:
-            await redis.adelete(lock_key)
+        conn = redis.async_connection
+        if await conn.get(failed_key):
+            raise LinsightArtifactPreviewError()
+
+        # Take a conversion slot before the lock, so the lock TTL only has to
+        # cover the conversion itself and never a wait for a slot.
+        async with _CONVERT_SLOTS:
+            token = uuid.uuid4().hex
+            if not await conn.set(lock_key, token, nx=True, ex=LOCK_TTL_SECONDS):
+                return {"status": "converting"}
+            try:
+                # Another request may have finished while this one waited for a slot.
+                if not await minio.object_exists(object_name=preview_key):
+                    try:
+                        pdf_bytes = await cls._convert(minio, key, version.id, file_id)
+                    except LinsightArtifactPreviewError:
+                        await conn.set(failed_key, b"1", ex=FAILURE_TTL_SECONDS)
+                        raise
+                    await minio.put_object(object_name=preview_key, file=pdf_bytes, content_type="application/pdf")
+            finally:
+                await conn.eval(_RELEASE_LOCK_LUA, 1, lock_key, token)
         return {"status": "ready", "file_path": await minio.get_share_link(preview_key)}
 
     @staticmethod
@@ -104,30 +143,31 @@ class LinsightArtifactPreviewService:
         if not source:
             logger.warning(f"pptx preview: source object missing svid={svid} file_id={file_id}")
             raise LinsightArtifactPreviewError()
-        started = time.monotonic()
-        with tempfile.TemporaryDirectory(prefix="pptx_preview_") as tmp:
-            input_path = os.path.join(tmp, f"{file_id}{os.path.splitext(key)[1].lower()}")
-            with open(input_path, "wb") as fh:
-                fh.write(source)
-            async with _CONVERT_SLOTS:
-                # convert_ppt_to_pdf returns None/False on failure and only logs at debug level.
-                output = await asyncio.to_thread(
-                    convert_ppt_to_pdf, input_path, os.path.join(tmp, "out"), timeout=CONVERT_TIMEOUT_SECONDS
-                )
-            if not output or not os.path.exists(output):
-                logger.warning(f"pptx preview: conversion failed svid={svid} file_id={file_id}")
-                raise LinsightArtifactPreviewError()
-            pages = _page_count(output)
-            if pages <= 0:
-                logger.warning(f"pptx preview: conversion produced no pages svid={svid} file_id={file_id}")
-                raise LinsightArtifactPreviewError()
-            with open(output, "rb") as fh:
-                data = fh.read()
-        logger.info(
-            f"pptx preview: converted svid={svid} file_id={file_id} pages={pages} "
-            f"seconds={time.monotonic() - started:.1f}"
-        )
-        return data
+        # File IO, LibreOffice and the page count all block: keep them off the event loop.
+        return await asyncio.to_thread(_render_pdf, source, os.path.splitext(key)[1].lower(), svid, file_id)
+
+
+def _render_pdf(source: bytes, ext: str, svid: str, file_id: str) -> bytes:
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="pptx_preview_") as tmp:
+        input_path = os.path.join(tmp, f"{file_id}{ext}")
+        with open(input_path, "wb") as fh:
+            fh.write(source)
+        # convert_ppt_to_pdf returns None/False on failure and only logs at debug level.
+        output = convert_ppt_to_pdf(input_path, os.path.join(tmp, "out"), timeout=CONVERT_TIMEOUT_SECONDS)
+        if not output or not os.path.exists(output):
+            logger.warning(f"pptx preview: conversion failed svid={svid} file_id={file_id}")
+            raise LinsightArtifactPreviewError()
+        pages = _page_count(output)
+        if pages <= 0:
+            logger.warning(f"pptx preview: conversion produced no pages svid={svid} file_id={file_id}")
+            raise LinsightArtifactPreviewError()
+        with open(output, "rb") as fh:
+            data = fh.read()
+    logger.info(
+        f"pptx preview: converted svid={svid} file_id={file_id} pages={pages} seconds={time.monotonic() - started:.1f}"
+    )
+    return data
 
 
 def _page_count(path: str) -> int:
