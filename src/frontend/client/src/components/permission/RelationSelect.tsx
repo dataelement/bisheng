@@ -1,3 +1,5 @@
+import { useLocalize } from "~/hooks";
+import { permissionModelLabel } from "./permissionModelLabel";
 import {
   Select,
   SelectContent,
@@ -28,6 +30,7 @@ export function RelationSelect({
   disabled,
   options,
 }: RelationSelectProps) {
+  const localize = useLocalize();
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
@@ -50,7 +53,7 @@ export function RelationSelect({
             showIndicator={false}
             className="mb-1 min-h-[32px] rounded-lg px-2 py-[5px] pr-2 text-[14px] leading-[22px] last:mb-0"
           >
-            {model.name}
+            {permissionModelLabel(model.id, model.name, localize)}
           </SelectItem>
         ))}
       </SelectContent>
