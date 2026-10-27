@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { readCitationFailure } from "@/controllers/citationFailure";
 import { AppNumType, AppType } from "@/types/app";
 import originAxios from "axios";
 import { AppConfig } from "../../types/api/app";
@@ -81,20 +82,22 @@ export function getCitationUnresolvedReason(citationId: string): CitationUnresol
     return citationReasonCache[citationId];
 }
 
-function citationReasonFromPayload(payload: any): CitationUnresolvedReason {
-    const reason = payload?.data?.reason ?? payload?.reason;
+function citationReasonFromPayload(value: unknown): CitationUnresolvedReason {
+    const payload = readCitationFailure(value);
+    const reason = payload.data?.reason ?? payload.reason;
     if (reason === "expired") {
         return "expired";
     }
     return "forbidden";
 }
 
-function throwCitationResolveError(citationId: string, payload: any): never {
+function throwCitationResolveError(citationId: string, payload: unknown): never {
     const reason = citationReasonFromPayload(payload);
     citationReasonCache[citationId] = reason;
-    const err: any = new Error(reason === "expired" ? "citation expired" : "citation forbidden");
-    err.citationForbidden = reason !== "expired";
-    err.citationExpired = reason === "expired";
+    const err = Object.assign(new Error(`citation ${reason}`), {
+        citationForbidden: reason === "forbidden",
+        citationExpired: reason === "expired",
+    });
     throw err;
 }
 
@@ -104,11 +107,11 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
     }
 
     try {
-        const detail = await axios.get<any, ChatCitation>(
+        const detail = await axios.get<unknown, ChatCitation & { status_code?: number }>(
             `/api/v1/citations/${encodeURIComponent(citationId)}`,
-            { silent: true } as any,
+            { silent: true },
         );
-        if ((detail as any)?.status_code === 404) {
+        if (detail?.status_code === 404) {
             throwCitationResolveError(citationId, detail);
         }
         if (detail?.citationId) {
@@ -117,13 +120,14 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
         }
         citationDetailMemoryCache[citationId] = detail;
         return detail;
-    } catch (error: any) {
-        if (error?.citationForbidden || error?.citationExpired) {
+    } catch (error: unknown) {
+        const failure = readCitationFailure(error);
+        if (failure.citationForbidden || failure.citationExpired) {
             throw error;
         }
-        const status = error?.status_code || error?.response?.data?.status_code;
+        const status = failure.status_code || failure.response?.data?.status_code;
         if (status === 404) {
-            throwCitationResolveError(citationId, error?.response?.data ?? error);
+            throwCitationResolveError(citationId, failure.response?.data ?? error);
         }
         throw error;
     }
@@ -144,12 +148,12 @@ export async function resolveCitationDetails(citationIds: string[]): Promise<Cha
     const pendingRequest = citationResolveRequestCache[requestKey];
     const resolvedItems = pendingRequest
         ? await pendingRequest
-        : await (citationResolveRequestCache[requestKey] = axios.post<any, { items?: ChatCitation[]; unresolved?: { citationId?: string; reason?: string }[] }>(
+        : await (citationResolveRequestCache[requestKey] = axios.post<unknown, { items?: ChatCitation[]; unresolved?: { citationId?: string; reason?: string }[] }>(
             `/api/v1/citations/resolve`,
             {
                 citationIds: uniqueCitationIds,
             },
-            { silent: true } as any,
+            { silent: true },
         ).then((response) => {
             const items = Array.isArray(response?.items) ? response.items : [];
             items.forEach((detail) => {
@@ -544,7 +548,7 @@ export async function importKnowledgeWebLinkApi(
     knowledgeId: string | number,
     data: { url: string; title?: string; overwrite?: boolean }
 ) {
-    return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true } as any);
+    return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true });
 }
 
 //调整分段策略

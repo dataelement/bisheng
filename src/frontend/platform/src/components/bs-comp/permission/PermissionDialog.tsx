@@ -19,6 +19,7 @@ import { AlertTriangle, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { permissionDialogClassName, PermissionSubjectTabs } from "./PermissionSubjectLayout"
+import { AllMembersPermission } from "./AllMembersPermission"
 import { ModeHeader } from "./ModeHeader"
 import { PermissionGrantTab } from "./PermissionGrantTab"
 import { PermissionListTab } from "./PermissionListTab"
@@ -30,6 +31,7 @@ interface PermissionDialogProps {
   resourceType: ResourceType
   resourceId: string
   resourceName: string
+  allowAllMembers?: boolean
 }
 
 const SUBJECT_TABS: Array<{ value: SubjectType; labelKey: string }> = [
@@ -44,6 +46,7 @@ export function PermissionDialog({
   resourceType,
   resourceId,
   resourceName,
+  allowAllMembers = false,
 }: PermissionDialogProps) {
   const { t } = useTranslation("permission")
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -188,6 +191,10 @@ export function PermissionDialog({
                 onApplied={handleModeApplied}
               />
 
+              {allowAllMembers && <AllMembersPermission
+                resourceType={resourceType} resourceId={resourceId} context={context}
+                onChanged={async () => { await loadContext(); setRefreshKey(value => value + 1) }}
+              />}
               <Tabs
                 value={subjectType}
                 onValueChange={(value) =>

@@ -28,6 +28,24 @@ class UserSkillsService:
         from bisheng.linsight.domain.models.linsight_skill import LinsightSkillDao
 
         rows = [row for row in await LinsightSkillDao.list_enabled() if visible_to(row, self.user_id)]
+        if self.user_id is None:
+            return []
+        from bisheng.common.dependencies.user_deps import UserPayload
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.permission.application.business_authorization import batch_check_business_actions
+        from bisheng.utils.http_middleware import _check_is_global_super
+
+        user = UserPayload(
+            user_id=self.user_id,
+            user_name="",
+            user_role=[],
+            tenant_id=get_current_tenant_id(),
+            is_global_super=await _check_is_global_super(self.user_id),
+        )
+        actions = await batch_check_business_actions(
+            user, resource_type="linsight_skill", resource_ids=(row.id for row in rows), actions=("use",)
+        )
+        rows = [row for row in rows if "use" in actions.get(str(row.id), ())]
         disabled = await self.repository.disabled_ids(self.user_id) if self.user_id is not None else set()
         return [(row, row.id not in disabled) for row in rows if not available_only or row.id not in disabled]
 

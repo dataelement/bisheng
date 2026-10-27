@@ -4,7 +4,29 @@ from typing import Literal
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+def normalize_dsh_origin(value: str) -> str:
+    """Use the browser's canonical HTTP authority for every DSH consumer."""
+    if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value) or "\\" in value:
+        raise ValueError("DSH origin requires an unambiguous HTTP(S) address")
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in {"", "/"}
+    ):
+        raise ValueError("DSH endpoints require a credential-free HTTP(S) origin without a path")
+    if parsed.port == 0:
+        raise ValueError("DSH origin requires a port between 1 and 65535")
+    # URL consumers serialize DNS names, default ports and IPv6 literals this way.
+    # Normalize once so OAuth Origin checks and MCP use the same representation.
+    return str(AnyHttpUrl(value)).rstrip("/")
 
 
 class DshSettings(BaseModel):
@@ -28,7 +50,8 @@ class DshSettings(BaseModel):
         default="0.5.0", description="DSH wire contract version shared with Desktop."
     )
     platform_public_url: str | None = Field(
-        default=None, description="Public HTTP(S) origin of Bisheng used by the Desktop authorization flow; no path."
+        default=None,
+        description="Single public HTTP(S) origin shared by Desktop login, Chat and Work tools; include the public port and omit paths.",
     )
     web_session_cookie_name: str = Field(
         default="access_token_cookie",
@@ -131,22 +154,7 @@ class DshSettings(BaseModel):
     def validate_origin(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        parsed = urlsplit(value)
-        if (
-            parsed.scheme not in {"http", "https"}
-            or not parsed.hostname
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.query
-            or parsed.fragment
-            or parsed.path not in {"", "/"}
-        ):
-            raise ValueError("DSH endpoints require a credential-free HTTP(S) origin without a path")
-        try:
-            _ = parsed.port
-        except ValueError:
-            raise ValueError("Invalid DSH origin port") from None
-        return value.rstrip("/")
+        return normalize_dsh_origin(value)
 
     @field_validator("billing_timezone")
     @classmethod

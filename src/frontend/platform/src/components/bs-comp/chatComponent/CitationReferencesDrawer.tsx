@@ -1,3 +1,4 @@
+import { readCitationFailure } from "@/controllers/citationFailure";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Download, Loader2, X } from "lucide-react";
@@ -30,7 +31,7 @@ import {
 
 type CitationReferencesDrawerProps = {
   content: string;
-  webContent?: any;
+  webContent?: unknown;
   citations?: ChatCitation[] | null;
   buttonClassName?: string;
   allowRemoteCitationResolve?: boolean;
@@ -323,8 +324,9 @@ export default function CitationReferencesDrawer({
         }));
         return detail;
       })
-      .catch((error: any) => {
-        if (error?.citationForbidden || error?.citationExpired) {
+      .catch((error: unknown) => {
+        const failure = readCitationFailure(error);
+        if (failure.citationForbidden || failure.citationExpired) {
           return null;
         }
         console.error("Failed to load citation detail:", error);
