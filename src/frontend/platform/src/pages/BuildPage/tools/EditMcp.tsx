@@ -116,17 +116,8 @@ const TestDialog = forwardRef((props, ref) => {
     );
 });
 
-interface McpServerEditorDialogProps {
-    existingNames?: string[];
-    onReload: () => void;
-}
-
-interface McpServerEditorDialogHandle {
-    open: (serverData?: unknown) => void;
-}
-
 // Main component  TODO(refactor, state confusion)
-const McpServerEditorDialog = forwardRef<McpServerEditorDialogHandle, McpServerEditorDialogProps>(({ existingNames = [], onReload }, ref) => {
+const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [availableTools, setAvailableTools] = useState([]);

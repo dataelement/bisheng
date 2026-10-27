@@ -1,12 +1,11 @@
-import copy from "./fixtures/f067LicenseBannerCopy.zh.json"
 import { describe, expect, it } from "vitest"
 
 import { buildLicenseBannerCopy, type AggregatedLicense } from "@/layout/licenseBannerCopy"
 
 const NAMES: Record<string, string> = {
-    gateway: copy.gatewayName,
-    etl: copy.etlName,
-    dashboard: copy.dashboardName,
+    gateway: "Gateway 授权",
+    etl: "ETL 授权",
+    dashboard: "商业版看板授权",
 }
 
 function t(key: string, options?: Record<string, unknown>): string {
@@ -14,13 +13,13 @@ function t(key: string, options?: Record<string, unknown>): string {
         return NAMES[key.slice("license.name.".length)] ?? key
     }
     if (key === "license.expiring") {
-        return copy.expiring.replace('{{name}}', String(options?.name)).replace('{{date}}', String(options?.date)).replace('{{days}}', String(options?.days))
+        return `${options?.name}将于 ${options?.date} 到期，剩余 ${options?.days} 天`
     }
     if (key === "license.expired") {
-        return copy.expired.replace('{{name}}', String(options?.name)).replace('{{date}}', String(options?.date))
+        return `${options?.name}已于 ${options?.date} 过期`
     }
     if (key === "license.renewHint") {
-        return copy.renewHint
+        return "请联系授权提供方续期。"
     }
     return key
 }
@@ -52,7 +51,7 @@ describe("buildLicenseBannerCopy", () => {
                 [license({ license_code: "etl", display_state: "expiring", expire_date: "2026-09-30", days_remaining: 16 })],
                 t,
             ),
-        ).toBe(copy.singleExpiring)
+        ).toBe("ETL 授权将于 2026-09-30 到期，剩余 16 天。请联系授权提供方续期。")
     })
 
     it("builds an expired sentence with the business name", () => {
@@ -61,7 +60,7 @@ describe("buildLicenseBannerCopy", () => {
                 [license({ license_code: "gateway", display_state: "expired", expire_date: "2026-09-01" })],
                 t,
             ),
-        ).toBe(copy.singleExpired)
+        ).toBe("Gateway 授权已于 2026-09-01 过期。请联系授权提供方续期。")
     })
 
     it("joins multiple items without a count summary", () => {
@@ -72,11 +71,11 @@ describe("buildLicenseBannerCopy", () => {
             ],
             t,
         )
-        expect(text).toContain(copy.multipleExpired)
-        expect(text).toContain(copy.multipleExpiring)
+        expect(text).toContain("Gateway 授权已于 2026-09-30 过期")
+        expect(text).toContain("商业版看板授权将于 2026-09-30 到期，剩余 16 天")
         expect(text).toContain("；")
-        expect(text).not.toContain(copy.countSummary)
-        expect(text).toContain(copy.renewHint)
-        expect(text).not.toContain(copy.genericLicenseName)
+        expect(text).not.toContain("共")
+        expect(text).toContain("请联系授权提供方续期。")
+        expect(text).not.toContain("软件授权")
     })
 })

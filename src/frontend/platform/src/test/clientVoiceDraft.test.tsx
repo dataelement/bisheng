@@ -44,7 +44,7 @@ it('pauses realtime recognition when the dictated text is edited', () => {
     return { text, voice: useVoiceDraft(ref, text, setText) };
   });
   act(() => {
-    result.current.voice.props.onRecordingStart();
+    result.current.voice.props.onRecordingStart(true);
     result.current.voice.props.onChange('hello');
   });
   expect(result.current.text).toBe('Old hello');

@@ -1,4 +1,3 @@
-import expectedCopy from "./fixtures/sandboxEndpointExpected.zh.json"
 import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -69,10 +68,10 @@ describe("sandbox tool copy", () => {
       expect(copy.sandboxSourceDeployment.length).toBeGreaterThan(0)
       expect(copy.sandboxSourceDefault.length).toBeGreaterThan(0)
     }
-    expect(files[0].sandboxAddressHint).toContain(expectedCopy.loadBalancer)
+    expect(files[0].sandboxAddressHint).toContain("负载均衡")
     expect(files[1].sandboxAddressHint).toContain("load balancer")
     expect(files[2].sandboxAddressHint).toContain("ロードバランサ")
-    expect(files[0].sandboxTestScope).toContain(expectedCopy.platformService)
+    expect(files[0].sandboxTestScope).toContain("平台服务进程")
     expect(files[1].sandboxTestScope).toContain("platform service")
     expect(files[2].sandboxTestScope).toContain("プラットフォーム")
   })

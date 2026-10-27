@@ -38,7 +38,7 @@ export interface CommercialLicenseStatus {
  */
 export async function getLicenseStatus(): Promise<LicenseStatus | null> {
     try {
-        return await axios.get(`/api/license/status`, { silent: true })
+        return await axios.get(`/api/license/status`, { silent: true } as any)
     } catch {
         return null
     }
@@ -46,7 +46,7 @@ export async function getLicenseStatus(): Promise<LicenseStatus | null> {
 
 export async function reportGatewayLicense(data: LicenseStatus): Promise<void> {
     try {
-        await axios.post(`/api/v1/commercial-licenses/gateway`, data, { silent: true })
+        await axios.post(`/api/v1/commercial-licenses/gateway`, data, { silent: true } as any)
     } catch {
         // Best-effort write; aggregation still reads the last successful row.
     }
@@ -54,7 +54,7 @@ export async function reportGatewayLicense(data: LicenseStatus): Promise<void> {
 
 export async function getCommercialLicenseStatus(): Promise<CommercialLicenseStatus | null> {
     try {
-        return await axios.get(`/api/v1/commercial-licenses/status`, { silent: true })
+        return await axios.get(`/api/v1/commercial-licenses/status`, { silent: true } as any)
     } catch {
         return null
     }

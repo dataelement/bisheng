@@ -670,6 +670,11 @@
       "count": 18
     }
   },
+  "src/controllers/API/license.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
   "src/controllers/API/linsight.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
