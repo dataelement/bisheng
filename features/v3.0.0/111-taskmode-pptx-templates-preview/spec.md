@@ -70,7 +70,7 @@
 - **AC-21** — WHILE 预览正在生成, THE SYSTEM SHALL 显示"正在生成预览"的状态。IF 超过 90 秒仍未生成, THEN THE SYSTEM SHALL 结束等待，按 AC-23 处理。
 - **AC-22** — WHEN 同一文件的预览已经生成过, THE SYSTEM SHALL 直接展示已生成的预览，不再重新生成。这一条对其他用户、其他服务节点和重启后都成立。
 - **AC-23** — IF 预览生成失败或超时, THEN THE SYSTEM SHALL 结束加载状态，显示本地化的失败提示，并提供原文件下载。不得显示空白的成功状态。失败后 5 分钟内再次请求，THE SYSTEM SHALL 直接返回失败，不重复转换（避免轮询和多个标签页反复占用转换资源）；超过 5 分钟后再次打开，THE SYSTEM SHALL 重新尝试生成。
-- **AC-24** — THE SYSTEM SHALL 只向有权下载该文件的人提供预览，即任务所有者、管理员和持有效分享链接者，与现有下载权限一致。IF 请求者无权访问，或请求的文件不属于所指的任务结果, THEN THE SYSTEM SHALL 拒绝请求，且不生成预览。
+- **AC-24** — THE SYSTEM SHALL 只向有权下载该文件的人提供预览，即任务所有者、本租户管理员和持有效分享链接者，与现有下载权限一致。持有与该任务无关的分享链接，不能让其他租户的管理员读取该任务的文件。IF 请求者无权访问，或请求的文件不属于所指的任务结果, THEN THE SYSTEM SHALL 拒绝请求，且不生成预览。
 - **AC-25** — WHEN 分享链接的接收人在分享页打开 pptx 交付物, THE SYSTEM SHALL 按 AC-20 至 AC-23 提供同样的预览。
 - **AC-26** — WHILE 展示 pptx 预览, THE SYSTEM SHALL 提示"预览为服务器渲染，字体与排版可能与 PowerPoint 略有差异，以下载文件为准"。
 - **AC-27** — WHEN 多个请求同时首次打开同一文件, THE SYSTEM SHALL 只生成一次预览，其余请求等待同一结果。

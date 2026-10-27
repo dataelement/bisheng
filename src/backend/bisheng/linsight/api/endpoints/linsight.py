@@ -143,13 +143,11 @@ async def linsight_file_download(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ) -> UnifiedResponseModel:
-    await LinsightArtifactPreviewService.load_accessible_version(session_version_id, login_user, share_link)
+    version = await LinsightArtifactPreviewService.load_accessible_version(session_version_id, login_user, share_link)
 
     minio_client = await get_minio_storage()
-    file_url = file_url.lstrip("/")
-    if file_url.startswith(minio_client.bucket):
-        file_url = file_url[len(minio_client.bucket) + 1 :]
-    file_share_url = await minio_client.get_share_link(file_url)
+    file_key = LinsightArtifactPreviewService.owned_file_key(version, file_url, minio_client.bucket)
+    file_share_url = await minio_client.get_share_link(file_key)
     return resp_200(data={"file_path": file_share_url})
 
 

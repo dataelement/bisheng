@@ -1,8 +1,9 @@
 """Access check and PDF preview for task-mode result files (F111).
 
 ``load_accessible_version`` is the single access rule for a task result: the
-session owner, an admin, or a share link to that session / version. Both the
-download and the preview endpoints call it.
+session owner, a share link to that session / version, or an admin of the
+tenant the request runs in. Both the download and the preview endpoints call it,
+and both require the requested key to belong to that version (``owned_file_key``).
 
 ``get_pptx_preview`` converts a task-generated ``.ppt``/``.pptx`` to PDF on first
 open and caches it in object storage, so every API node serves the same file.
@@ -26,7 +27,7 @@ from loguru import logger
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.linsight import LinsightArtifactPreviewError
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.context.tenant import bypass_tenant_filter_if
+from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_tenant_id
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import convert_ppt_to_pdf
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
@@ -51,7 +52,7 @@ class LinsightArtifactPreviewService:
             version = await LinsightSessionVersionDao.get_by_id(session_version_id)
         if not version:
             raise NotFoundError()
-        if version.user_id == login_user.user_id or login_user.is_admin():
+        if version.user_id == login_user.user_id:
             return version
         # A workbench_chat share carries resource_id = the session and no versionId;
         # a version share carries meta_data.versionId. Either one grants read.
@@ -61,25 +62,40 @@ class LinsightArtifactPreviewService:
             and share_link.meta_data is not None
             and share_link.meta_data.get("versionId") == session_version_id
         )
-        if not (shared_to_session or shared_to_version):
-            raise UnAuthorizedError()
-        return version
+        if shared_to_session or shared_to_version:
+            return version
+        # Any share token switches the tenant filter off for the lookup above, so
+        # an admin is only trusted inside the tenant the request runs in.
+        if login_user.is_admin() and (share_link is None or version.tenant_id == get_current_tenant_id()):
+            return version
+        raise UnAuthorizedError()
 
     @staticmethod
-    def _owned_slide_key(version: LinsightSessionVersion, file_url: str, bucket: str) -> str:
-        """Normalise ``file_url`` to an object key and require it to be this version's slide deck."""
+    def owned_file_key(version: LinsightSessionVersion, file_url: str, bucket: str) -> str:
+        """Normalise ``file_url`` to an object key and require it to belong to this version.
+
+        Task files live under ``linsight/final_result/{svid}/``, intermediate files
+        under ``linsight/session_files/{svid}/`` and uploads under ``linsight/{session_id}/``.
+        """
         key = file_url.lstrip("/")
         if key.startswith(bucket + "/"):
             key = key[len(bucket) + 1 :]
-        prefix = f"linsight/final_result/{version.id}/"
+        prefixes = (
+            f"linsight/final_result/{version.id}/",
+            f"linsight/session_files/{version.id}/",
+            f"linsight/{version.session_id}/",
+        )
         parts = key.split("/")
-        if (
-            not key.startswith(prefix)
-            or ".." in parts
-            or "" in parts
-            or posixpath.normpath(key) != key
-            or not key.lower().endswith(SLIDE_EXTS)
-        ):
+        if not key.startswith(prefixes) or ".." in parts or "" in parts or posixpath.normpath(key) != key:
+            logger.warning(f"task file access: key outside version svid={version.id} key={key}")
+            raise UnAuthorizedError()
+        return key
+
+    @classmethod
+    def _owned_slide_key(cls, version: LinsightSessionVersion, file_url: str, bucket: str) -> str:
+        """Like ``owned_file_key`` but only a slide deck in this version's results."""
+        key = cls.owned_file_key(version, file_url, bucket)
+        if not key.startswith(f"linsight/final_result/{version.id}/") or not key.lower().endswith(SLIDE_EXTS):
             raise UnAuthorizedError()
         return key
 

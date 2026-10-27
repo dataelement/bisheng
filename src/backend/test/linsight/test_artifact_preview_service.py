@@ -3,7 +3,8 @@
 Covers AC-22 (cached preview reused), AC-23 (failure → 11025, nothing cached, retry
 on next open), AC-24 (download-equivalent access + file ownership), AC-25 (both
 share shapes), AC-27 (single flight) and AC-28 (the download endpoint keeps its
-behaviour after the shared access check is extracted). MinIO, Redis and
+behaviour after the shared access check is extracted, and only signs keys of
+that version). MinIO, Redis and
 LibreOffice are faked; CI needs none of them.
 """
 
@@ -165,6 +166,18 @@ async def test_stranger_is_rejected(env):
         await LinsightArtifactPreviewService.load_accessible_version(SVID, _user(99), wrong_link)
 
 
+async def test_admin_with_unrelated_share_token_is_limited_to_own_tenant(env, monkeypatch):
+    # Any share token switches the tenant filter off for the lookup; an unrelated
+    # token must not let an admin of another tenant read this version.
+    unrelated = SimpleNamespace(resource_id="other", meta_data=None)
+    monkeypatch.setattr(svc_mod, "get_current_tenant_id", lambda: 2)
+    with pytest.raises(UnAuthorizedError):
+        await LinsightArtifactPreviewService.load_accessible_version(SVID, _user(99, admin=True), unrelated)
+    monkeypatch.setattr(svc_mod, "get_current_tenant_id", lambda: 1)
+    version = await LinsightArtifactPreviewService.load_accessible_version(SVID, _user(99, admin=True), unrelated)
+    assert version.id == SVID
+
+
 async def test_missing_version_is_not_found(env):
     with pytest.raises(NotFoundError):
         await LinsightArtifactPreviewService.load_accessible_version("nope", _user(), None)
@@ -292,6 +305,20 @@ async def test_download_endpoint_still_signs_the_requested_key(env, monkeypatch)
         await endpoint.linsight_file_download(
             file_url=FILE_KEY, session_version_id=SVID, login_user=_user(99), share_link=None
         )
+    for own in (f"linsight/session_files/{SVID}/x.md", "linsight/sess-1/upload.pdf"):
+        resp = await endpoint.linsight_file_download(
+            file_url=own, session_version_id=SVID, login_user=_user(), share_link=None
+        )
+        assert resp.data == {"file_path": f"/bisheng/{own}?sig=1"}
+    for foreign in (
+        "linsight/final_result/ver-2/a.pptx",
+        "knowledge/original/1.pdf",
+        f"linsight/final_result/{SVID}/../x",
+    ):
+        with pytest.raises(UnAuthorizedError):
+            await endpoint.linsight_file_download(
+                file_url=foreign, session_version_id=SVID, login_user=_user(), share_link=None
+            )
 
 
 async def _awaitable(value):
