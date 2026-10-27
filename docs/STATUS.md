@@ -1,7 +1,36 @@
-## 2026-10-27 — PR #2520 同步与质量修复
+## 2026-10-27 — Work 1.2.0 五条 PR 同步验证
 
-- 已合入目标分支 `f834aa2b1` 与公共质量修复 `bb949d634`，逐项保留本功能及目标分支记录、测试和实现。
-- 合并后平台与客户端全量 ESLint 通过；6 项 Logo 上传回归通过。公共修复已完成全量类型、构建与 64 项定向回归，远端检查针对本 PR 新提交重新执行。
+- 本批功能分别在 PR #2519、#2520、#2521、#2523、#2524 交付；各分支同步目标 `f834aa2b1` 与公共质量修复 `bb949d634`（PR #2529）。本节记录分支验证，功能进入目标分支的状态以对应 PR 合并结果为准。
+- 合并后五个分支的平台和客户端全量 ESLint 通过；公共修复的全量类型、双前端构建与 64 项定向回归通过。GitHub 针对各 PR 最新提交执行 Frontend Quality 检查。
+- 定向回归：#2519 图片接收与输入框 44 项；#2520 Logo 上传 6 项；#2521 输入框图标 13 项；#2523 权限角色和授权列表 22 项；#2524 工具目录前端 18 项及后端完整目录组 23 项，均通过。
+- 部门来源断言校验现有完整行中的来源与子部门文案；目录测试同时保留翻译标识、稳定排序、权限及账户开关回归。后端使用 Python 3.11 完整依赖环境和项目测试夹具，外部服务由夹具隔离。
+- 五个分支采用相同的本批状态记录，保留每项功能原始证据，支持逐条合并时复用相同文档内容。真实账号与部署验收继续单列。
+
+## 2026-10-27 — Work 工具列表、详情与搜索复用共享翻译
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@d2be34458dbfa19c40324f6916dfa75202743cf9`；分支 `codex/work120-tool-localization`，目录 `.worktrees/bisheng-work120-tool-localization`。
+- 实现：现有工具中英日词典迁入 `packages/locales/src/tool`，生成平台与客户端资源；目录为内置工具提供稳定 `tool_key`。列表、详情、无障碍名称和搜索使用统一显示数据，搜索同时覆盖原始文案和工具标识。自定义 API/MCP/技能保留配置文案，旧接口与未知工具使用原始信息。知识库检索复用已有分类翻译，当前 39 个内置工具均有词典条目。
+- 自动验证：前端 23 项回归、隔离目录服务 5 项测试、1,471 个严格类型文件、变更文件 ESLint、Ruff、词典生成与 i18n 检查、生产构建通过。后端测试加载实际目录服务，提供方、可用性与技能依赖使用夹具；jsdom 将当前环境中缺失原生组件的可选 canvas 视为未安装。
+- 全量 client lint 的 23 项存量错误位于 chatApi.ts、ComposerEditor.test.tsx、CitationReferencesDrawer.tsx，已核对三文件及 lint 配置与目标分支一致；完整后端环境和真实账号网页/原生桌面验收待执行。发布需同步后端目录接口与 client 网页。
+- 本轮交付源码 PR；证据位于主工作区 `outputs/bisheng-work120-tool-localization-20261027/`。
+
+## 2026-10-27 — Knowledge-space permission role localization
+
+- Baseline: `dataelement/bisheng:feat/bisheng-work-120-main@d2be34458dbfa19c40324f6916dfa75202743cf9`, verified remotely before implementation and PR delivery. Branch: `codex/work-knowledge-permission-locale`.
+- Root cause: permission components displayed the API model name directly, while the standard role names arrive in Chinese. The protected creator row therefore displayed Chinese in English mode.
+- Implementation: resolve `owner`, `manager`, `editor` and `viewer` through the existing Chinese/English/Japanese locale entries at render time. Draft rows, role menus, member lists, authorization selectors/badges and role-name search share the resolver. Custom role names and submitted role keys retain their original values.
+- Verification: 47 permission tests passed; 3 existing failures were reproduced with baseline production sources (department badge text assertion, source-comment Chinese scan, retired tab-selector assertion). The focused role/authorization suite passed 21 cases. Strict client type checking (1,469 files), changed-file ESLint, i18n parity, architecture guard, diff checks and production client build passed. Full client ESLint reports the same 23 errors against both baseline and modified sources in unrelated chat files.
+- Test fixtures use the existing English role dictionary; the list fixture now provides its required confirmation hook. Added tests cover all four standard roles in three languages, preserved custom names, protected creator rows, live English/Chinese switching, absent role options and localized role-name search.
+- Delivery: web-client change for the desktop embedded knowledge-space page. Target deployment and native visual acceptance remain pending. Local evidence: `outputs/knowledge-permission-locale-20261027/`.
+
+## 2026-10-27 — 聊天输入框资源图标统一
+
+- 需求：输入框内技能、工具、知识空间统一显示菜单同款图标与资源名称；每项保留整体选中、删除和撤销。
+- 实现：ComposerReference 明确携带 skill/tool/space 类型，复用 Outlined.Skill、Outlined.Hammer、Outlined.FolderClose；标签与文字共享输入区，长名称省略并保留完整 title，颜色沿用品牌主题。资源名称以文本节点写入，ID、工具 children 与发送关联继续独立保存。
+- 基线：已核对远端 `dataelement/bisheng:feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6`；工作目录 `.worktrees/bisheng-composer-resource-icons`，分支 `codex/composer-resource-icons`。
+- 验证：13 项 ComposerEditor 回归通过，1,467 个严格类型文件检查、修改文件 lint、生产构建、三语言一致性、架构检查与 diff 检查通过。全量 client lint 首次检查保留 23 项存量问题，本次已将所修改测试内的 2 处中文输入数据改为引用现有语言资源，其余 21 项位于未改动文件。
+- 隔离 macOS Electron 窗口使用真实 ComposerEditor，确认三类 SVG、完整名称、contenteditable=false、整体删除及撤销恢复；浅深色截图已检查。该证据为实际组件验证，真实账号页面及发布环境验收待执行。
+- 配套 Work 实现位于 `codex/v120-composer-resource-icons`，支持 skill/tool/folder 图标与草稿持久化。
 
 ## 2026-10-27 — 工作台双 Logo 上传修复与 3006 验收
 
@@ -11,6 +40,15 @@
 - 部署：基于 3006 当前 `tools-skills-auth-20261026-root-membership` 源码合入两个上传组件，发布为 `workbench-logo-upload-20261027-100846`。669 个构建文件及 7,436 个保留文件逐一核验；仅重建 3006 前端，其余 3006 容器保持原实例。原发布目录保留用于回退。
 - 真实验收：修复前两个 PNG 上传请求已可成功，原始服务端失败未复现；本次定位并修复前端失败处理与重试缺陷。修复后在管理员「构建 → 工作台」分别上传原有两张 Logo，看到“配置保存成功”，刷新后两处新图片地址保留且图片正常显示。验证保持原有图案。
 - 证据：主工作区 `outputs/workbench-logo-upload-20261027/` 的 `deployment.json`、`browser-verification.json`、`saved.png`、`verified.png` 与构建日志。真实验证覆盖后台上传、保存及刷新；本次桌面 Work/Chat 共享逻辑保持源码原状，桌面展示联动验收单列。
+
+## 2026-10-26 — 聊天输入框图片粘贴修复
+
+- 基线：远端 `dataelement/bisheng:feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6`；独立修复分支 `codex/chat-image-paste`。
+- 根因：上传格式列表只依据 `enable_etl4lm` 选择图片格式，后台已配置的模型视觉能力在附件接收阶段没有参与判断。当前输入框将图片接收与处理能力分开：PNG/JPG/JPEG/WebP/GIF/BMP 可经粘贴、拖拽、选择文件进入附件区，任务模式切回普通聊天时保留图片。
+- 普通聊天发送时使用所选模型的 `visual` 与服务端图片解析能力判断。视觉模型直接走已有识图链路；具备解析能力时沿用文件解析链路；条件不足时提示用户切换模型或配置解析服务，保留图片和文字。全局附件权限、格式范围、大小限制及普通聊天配文字发送规则继续生效。
+- 自动验证：44 项定向回归通过，包括真实 ComposerEditor / 粘贴 Hook / InputFiles 组件组合（上传接口使用测试响应）；相同新增行为用例在旧代码下有 4 项失败。1,467 个严格类型文件检查、修改文件 lint、三语言一致性、架构检查、生产构建及 diff 检查通过。
+- 全量 client lint 仍有基线 23 项问题，位于未改动的 `api/chatApi.ts`、`ComposerEditor.test.tsx` 和 `CitationReferencesDrawer.tsx`；本轮保持修复范围。
+- 状态：代码及定向自动验证完成。运行环境部署、真实模型识图及 Windows/macOS 安装包端到端验收待执行；本轮仅修改平台聊天前端，桌面原生程序保持现状。
 
 ## 2026-10-27 — 恢复 Work 1.2.0 前端质量检查
 
