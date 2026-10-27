@@ -144,6 +144,37 @@ async def test_grant_identity_scope_dedup_and_exact_before_page(directory):
     assert await directory.candidate_users(scope(), keyword="0100", page=1, page_size=50) == []
 
 
+async def test_historical_membership_is_not_a_grant_candidate(directory):
+    async with queries.get_async_db_session() as session:
+        session.add(UserTenant(user_id=5, tenant_id=1, status="active", is_active=None))
+        await session.commit()
+    rows = await directory.candidate_users(scope(), keyword="jia-other", page=1, page_size=50)
+    assert rows == []
+    assert await directory.count_candidate_users(scope(), keyword="jia-other") == 0
+
+
+async def test_stale_selected_user_has_a_specific_membership_error(directory, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from bisheng.common.errcode.permission import PermissionSubjectUnavailableError
+    from bisheng.database.models.tenant import UserTenantDao
+
+    monkeypatch.setattr(
+        UserTenantDao,
+        "aget_user_tenants",
+        AsyncMock(
+            return_value=[
+                SimpleNamespace(tenant_id=1, status="active", is_active=None),
+                SimpleNamespace(tenant_id=2, status="active", is_active=1),
+            ]
+        ),
+    )
+    with pytest.raises(PermissionSubjectUnavailableError):
+        await directory.canonical_source(
+            tenant_id=1, source_id=0, subject_type="user", subject_id="5", userset_relation=None, include_children=False
+        )
+
+
 async def test_flat_grants_preserve_mainline_department_and_disabled_scope(directory):
     rows = await directory.candidate_users(scope(), keyword="jia", page=1, page_size=50)
     assert {row.user_id for row in rows} == {1, 2, 3, 6}

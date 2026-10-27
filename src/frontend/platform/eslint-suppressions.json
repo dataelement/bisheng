@@ -619,7 +619,7 @@
   },
   "src/controllers/API/assistant.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     }
   },
   "src/controllers/API/dashboard.ts": {
@@ -668,11 +668,6 @@
     },
     "no-restricted-syntax": {
       "count": 18
-    }
-  },
-  "src/controllers/API/license.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/controllers/API/linsight.ts": {

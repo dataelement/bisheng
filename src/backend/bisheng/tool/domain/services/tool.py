@@ -43,6 +43,7 @@ from bisheng.utils import get_request_ip, md5_hash
 from bisheng.utils.mask_data import JsonFieldMasker
 
 from .f048_tool_permission import ToolPermissionRecord
+from .mcp_errors import mcp_error_code
 
 _TOOL_VISIBLE_MAX_RESULTS = 5_000
 
@@ -409,7 +410,7 @@ class ToolServices(BaseModel):
                 if isinstance(e, (KeyboardInterrupt, SystemExit)):
                     raise
                 logger.exception("mcp tool connect/list error")
-                raise ToolMcpSchemaError(exception=Exception(_flatten_mcp_error(e))) from e
+                raise mcp_error_code(e)() from e
 
             for one in tools:
                 tool_type.children.append(
@@ -569,7 +570,7 @@ class ToolServices(BaseModel):
             preset=preset,
         )
 
-    async def refresh_all_mcp(self) -> list[str]:
+    async def refresh_all_mcp(self) -> list[dict[str, str | int]]:
         """return mcp server error msg"""
         # get user all mcp tool
         tool_types = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, is_preset=ToolPresetType.MCP)
@@ -592,9 +593,9 @@ class ToolServices(BaseModel):
                     action="edit",
                 )
                 await self.refresh_mcp_tools(one, tools_map.get(one.id, []))
-            except Exception:
+            except Exception as error:
                 logger.exception(f"{one.name} tool refresh failed")
-                error_name.append(one.name)
+                error_name.append({"name": one.name, "code": mcp_error_code(error).Code})
         return error_name
 
     async def refresh_mcp_tools(self, tool_type: GptsToolsType, old_tools: list[GptsTools]):

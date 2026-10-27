@@ -5,7 +5,7 @@ import { SkillList } from './SkillList';
 function skill(partial: Pick<SkillRecord, 'id' | 'displayName' | 'updatedAt'>): SkillRecord {
   return {
     name: partial.displayName,
-    description: '说明',
+    description: 'Description',
     source: 'personal',
     enabled: true,
     contentHash: 'hash',
