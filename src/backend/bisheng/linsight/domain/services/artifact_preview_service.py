@@ -7,7 +7,8 @@ download and the preview endpoints call it.
 ``get_pptx_preview`` converts a task-generated ``.ppt``/``.pptx`` to PDF on first
 open and caches it in object storage, so every API node serves the same file.
 A Redis lock keeps concurrent first opens to one conversion; a per-process
-semaphore bounds how many LibreOffice runs one API process starts.
+semaphore bounds how many LibreOffice runs one API process starts; a short-lived
+failure marker stops a deck that cannot convert from being retried on every poll.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import os
 import posixpath
 import tempfile
 import time
+import uuid
 
 import fitz
 from loguru import logger
@@ -32,7 +34,13 @@ from bisheng.linsight.domain.models.linsight_session_version import LinsightSess
 SLIDE_EXTS = (".ppt", ".pptx")
 CONVERT_TIMEOUT_SECONDS = 120
 LOCK_TTL_SECONDS = 180
+# A deck LibreOffice cannot convert is not retried for this long, so polling
+# clients and reopened tabs do not each start another full conversion run.
+FAILURE_TTL_SECONDS = 300
 _CONVERT_SLOTS = asyncio.Semaphore(2)
+# Delete the lock only while it still holds our token: after a TTL expiry it may
+# belong to another request.
+_RELEASE_LOCK_LUA = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
 
 
 class LinsightArtifactPreviewService:
@@ -88,14 +96,29 @@ class LinsightArtifactPreviewService:
 
         redis = await get_redis_client()
         lock_key = f"linsight:pptx_preview:{version.id}:{file_id}"
+        failed_key = f"linsight:pptx_preview_failed:{version.id}:{file_id}"
         await redis.acluster_nodes(lock_key)
-        if not await redis.async_connection.set(lock_key, b"1", nx=True, ex=LOCK_TTL_SECONDS):
-            return {"status": "converting"}
-        try:
-            pdf_bytes = await cls._convert(minio, key, version.id, file_id)
-            await minio.put_object(object_name=preview_key, file=pdf_bytes, content_type="application/pdf")
-        finally:
-            await redis.adelete(lock_key)
+        conn = redis.async_connection
+        if await conn.get(failed_key):
+            raise LinsightArtifactPreviewError()
+
+        # Take a conversion slot before the lock, so the lock TTL only has to
+        # cover the conversion itself and never a wait for a slot.
+        async with _CONVERT_SLOTS:
+            token = uuid.uuid4().hex
+            if not await conn.set(lock_key, token, nx=True, ex=LOCK_TTL_SECONDS):
+                return {"status": "converting"}
+            try:
+                # Another request may have finished while this one waited for a slot.
+                if not await minio.object_exists(object_name=preview_key):
+                    try:
+                        pdf_bytes = await cls._convert(minio, key, version.id, file_id)
+                    except LinsightArtifactPreviewError:
+                        await conn.set(failed_key, b"1", ex=FAILURE_TTL_SECONDS)
+                        raise
+                    await minio.put_object(object_name=preview_key, file=pdf_bytes, content_type="application/pdf")
+            finally:
+                await conn.eval(_RELEASE_LOCK_LUA, 1, lock_key, token)
         return {"status": "ready", "file_path": await minio.get_share_link(preview_key)}
 
     @staticmethod
@@ -104,30 +127,31 @@ class LinsightArtifactPreviewService:
         if not source:
             logger.warning(f"pptx preview: source object missing svid={svid} file_id={file_id}")
             raise LinsightArtifactPreviewError()
-        started = time.monotonic()
-        with tempfile.TemporaryDirectory(prefix="pptx_preview_") as tmp:
-            input_path = os.path.join(tmp, f"{file_id}{os.path.splitext(key)[1].lower()}")
-            with open(input_path, "wb") as fh:
-                fh.write(source)
-            async with _CONVERT_SLOTS:
-                # convert_ppt_to_pdf returns None/False on failure and only logs at debug level.
-                output = await asyncio.to_thread(
-                    convert_ppt_to_pdf, input_path, os.path.join(tmp, "out"), timeout=CONVERT_TIMEOUT_SECONDS
-                )
-            if not output or not os.path.exists(output):
-                logger.warning(f"pptx preview: conversion failed svid={svid} file_id={file_id}")
-                raise LinsightArtifactPreviewError()
-            pages = _page_count(output)
-            if pages <= 0:
-                logger.warning(f"pptx preview: conversion produced no pages svid={svid} file_id={file_id}")
-                raise LinsightArtifactPreviewError()
-            with open(output, "rb") as fh:
-                data = fh.read()
-        logger.info(
-            f"pptx preview: converted svid={svid} file_id={file_id} pages={pages} "
-            f"seconds={time.monotonic() - started:.1f}"
-        )
-        return data
+        # File IO, LibreOffice and the page count all block: keep them off the event loop.
+        return await asyncio.to_thread(_render_pdf, source, os.path.splitext(key)[1].lower(), svid, file_id)
+
+
+def _render_pdf(source: bytes, ext: str, svid: str, file_id: str) -> bytes:
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="pptx_preview_") as tmp:
+        input_path = os.path.join(tmp, f"{file_id}{ext}")
+        with open(input_path, "wb") as fh:
+            fh.write(source)
+        # convert_ppt_to_pdf returns None/False on failure and only logs at debug level.
+        output = convert_ppt_to_pdf(input_path, os.path.join(tmp, "out"), timeout=CONVERT_TIMEOUT_SECONDS)
+        if not output or not os.path.exists(output):
+            logger.warning(f"pptx preview: conversion failed svid={svid} file_id={file_id}")
+            raise LinsightArtifactPreviewError()
+        pages = _page_count(output)
+        if pages <= 0:
+            logger.warning(f"pptx preview: conversion produced no pages svid={svid} file_id={file_id}")
+            raise LinsightArtifactPreviewError()
+        with open(output, "rb") as fh:
+            data = fh.read()
+    logger.info(
+        f"pptx preview: converted svid={svid} file_id={file_id} pages={pages} seconds={time.monotonic() - started:.1f}"
+    )
+    return data
 
 
 def _page_count(path: str) -> int:

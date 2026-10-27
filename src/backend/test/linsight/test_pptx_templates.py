@@ -377,3 +377,91 @@ def test_stale_manifest_is_ignored(tmp_path, photo):
     manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     report = _inspect(out, tmp_path)
     assert "忽略清单" in report and "结论: 通过" in report
+
+
+# --------------------------------------------------------------------------- #
+# review follow-ups
+# --------------------------------------------------------------------------- #
+def test_waterfall_labels_keep_the_sign_and_reject_a_total_below_zero():
+    deck = Deck.open("operating", footer=None)
+    s = deck.add("bridge")
+    deck.chart(s, "chart", "waterfall", ["起点", "价格", "销量", "终点"], [("变动", [100, 5, -3, 102])], "0.0")
+    bars = next(sh for sh in s.shapes if sh.has_chart).chart.plots[0].series[1]
+    assert bars.points[2].data_label.text_frame.text == "-3.0"
+    s2 = deck.add("bridge")
+    with pytest.raises(ValueError, match="跌破 0"):
+        deck.chart(s2, "chart", "waterfall", ["起点", "降", "终点"], [("变动", [10, -30, -20])])
+
+
+def test_over_capacity_names_the_right_page_when_pages_look_alike(capsys):
+    deck = Deck.open("blueprint")
+    pages = [deck.add("statement"), deck.add("statement")]
+    for page in pages:
+        deck.fill(page, "statement", "超" * 200)
+    out = capsys.readouterr().out
+    assert "第1页 statement" in out and "第2页 statement" in out
+
+
+def test_table_ignores_template_widths_for_a_different_column_count(tmp_path):
+    deck = Deck.open("operating")
+    s = deck.add("table")
+    deck.table(s, "table", ["一", "二", "三", "四", "五"], [["a", "b", "c", "d", "e"]])
+    frame = next(sh for sh in s.shapes if sh.has_table)
+    total = sum(col.width for col in frame.table.columns) / 12700
+    assert abs(total - 864.0) < 1, "five columns fill the slot width, not 4 template widths + 1 default"
+
+
+def test_manifest_of_a_deck_rebuilt_from_scratch_is_ignored(tmp_path, photo):
+    from pptx.util import Pt
+
+    out, _ = _build_sample(tmp_path, photo)
+    pages = len(Presentation(str(out)).slides)
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Pt(960), Pt(540)
+    for i in range(pages):  # same file name and page count, different content
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        slide.shapes.add_textbox(Pt(60), Pt(60), Pt(800), Pt(80)).text_frame.text = f"重做的第{i + 1}页"
+    prs.save(str(out))
+    report = _inspect(out, tmp_path)
+    assert "页面对不上" in report and "忽略清单" in report
+
+
+def test_baseline_only_hides_findings_identical_to_the_prototype(tmp_path, photo):
+    from types import SimpleNamespace
+
+    import deck_checks
+
+    out, manifest_path = _build_sample(tmp_path, photo)
+    manifest, _ = deck_checks.load_manifest(str(manifest_path), Presentation(str(out)))
+    first = manifest["pages"][0]
+
+    def finding(message):
+        return SimpleNamespace(level="ERROR", where="body", message=message)
+
+    def proto_check(slide, index, w, h):
+        return [finding("文字预计需要 60pt，框高只有 40pt")]
+
+    by_slide = {
+        first["index"]: [finding("文字预计需要 60pt，框高只有 40pt"), finding("文字预计需要 180pt，框高只有 40pt")]
+    }
+    suppressed = deck_checks.apply_baseline(by_slide, manifest, proto_check, 960, 540)
+    assert suppressed == 1
+    assert [f.message for f in by_slide[first["index"]]] == ["文字预计需要 180pt，框高只有 40pt"]
+
+
+def test_inspect_still_reports_when_the_template_checks_cannot_load(tmp_path, photo):
+    import shutil
+    import subprocess
+
+    scripts = tmp_path / "scripts"
+    shutil.copytree(SCRIPTS, scripts)
+    (scripts / "deck_checks.py").write_text("raise ImportError('boom')\n", encoding="utf-8")
+    out, _ = _build_sample(tmp_path, photo)
+    proc = subprocess.run(
+        [sys.executable, str(scripts / "inspect_deck.py"), str(out), "--checks-only"],
+        capture_output=True,
+        text=True,
+        cwd=str(tmp_path),
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert "模板检查模块加载失败" in proc.stdout and "结论:" in proc.stdout

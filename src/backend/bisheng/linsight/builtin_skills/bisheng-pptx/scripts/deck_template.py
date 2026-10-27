@@ -141,6 +141,10 @@ class Deck:
         page = self._pages[index]
         return page, self.layouts[page["layout_id"]]
 
+    def _page_no(self, slide) -> int:
+        """1-based page number of an added slide, as the saved deck numbers it."""
+        return self._slide_position(slide) - self._prototype_count + 1
+
     def _slide_position(self, slide) -> int:
         for i, s in enumerate(self.prs.slides):
             if s.slide_id == slide.slide_id:
@@ -187,7 +191,7 @@ class Deck:
             entry = {"slot": slot, "used": used, "capacity": spec["capacity"]}
             page["over_capacity"].append(entry)
             print(
-                f"[超容量] 第{self._pages.index(page) + 1}页 {slot}: {used:g} 字 > 容量 {spec['capacity']} 字 → 精简文案或拆页"
+                f"[超容量] 第{self._page_no(slide)}页 {slot}: {used:g} 字 > 容量 {spec['capacity']} 字 → 精简文案或拆页"
             )
 
     def drop(self, slide, name: str) -> None:
@@ -239,9 +243,7 @@ class Deck:
             row_h = max(26.0, room / n)
         if n * row_h > room:
             page["over_capacity"].append({"slot": slot, "used": n, "capacity": int(room // 26)})
-            print(
-                f"[超容量] 第{self._pages.index(page) + 1}页 {slot}: {n} 行放不下（最多约 {int(room // 26)} 行）→ 拆成两页"
-            )
+            print(f"[超容量] 第{self._page_no(slide)}页 {slot}: {n} 行放不下（最多约 {int(room // 26)} 行）→ 拆成两页")
         frame = build_table(
             slide.shapes,
             x,
@@ -250,7 +252,7 @@ class Deck:
             header,
             rows,
             spec["style"],
-            col_widths=col_widths or spec.get("col_widths"),
+            col_widths=col_widths or _template_widths(spec, len(header)),
             row_h=row_h,
             highlight_rows=highlight_rows,
         )
@@ -308,6 +310,7 @@ class Deck:
         self.prs.save(path)
 
         pages = []
+        slides = list(self.prs.slides)
         for i, page in enumerate(self._pages, start=1):
             layout = self.layouts[page["layout_id"]]
             unfilled = []
@@ -325,6 +328,7 @@ class Deck:
                     "over_capacity": page["over_capacity"],
                     "unfilled": unfilled,
                     "objects": page["objects"],
+                    "shapes": sorted({shape.name for shape in slides[i - 1].shapes}),
                 }
             )
         manifest = {"template": self.spec["id"], "deck": os.path.basename(path), "pages": pages}
@@ -335,6 +339,12 @@ class Deck:
             json.dump(manifest, fh, ensure_ascii=False, indent=1)
         print(f"[saved] {path}（{len(pages)} 页，模板 {self.spec['id']}）；清单 {manifest_path}")
         return manifest_path
+
+
+def _template_widths(spec: dict, columns: int):
+    """The slot's column widths, only when they are for the same number of columns."""
+    widths = spec.get("col_widths")
+    return widths if widths and len(widths) == columns else None
 
 
 def _replace_paragraphs(shape, lines: list[str]) -> None:

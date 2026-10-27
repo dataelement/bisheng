@@ -47,7 +47,6 @@ from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
 from pptx.util import Length
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import deck_checks
 
 # --- tunables -------------------------------------------------------------
 #
@@ -566,6 +565,17 @@ def main() -> int:
     return 0
 
 
+def _load_deck_checks():
+    """Import the template checks here, not at module level: an import failure
+    must still leave the basic report on stdout (see main)."""
+    try:
+        import deck_checks
+
+        return deck_checks, None
+    except Exception as exc:
+        return None, f"[FATAL] 模板检查模块加载失败（{type(exc).__name__}: {exc}）→ 只做基础体检"
+
+
 def run_report(path: str, checks_only: bool, manifest_path: str | None = None) -> None:
     prs = Presentation(path)
     slide_w, slide_h = _pt(prs.slide_width), _pt(prs.slide_height)
@@ -580,11 +590,15 @@ def run_report(path: str, checks_only: bool, manifest_path: str | None = None) -
         by_slide[i] = check_slide(slide, i, slide_w, slide_h)
 
     manifest, note = None, "未找到模板清单：按从零生成的文稿检查（容量与示例残留检查只看「示例」字样）"
-    found = deck_checks.find_manifest(path, manifest_path)
-    if found:
-        manifest, note = deck_checks.load_manifest(found, slide_count)
-    elif manifest_path:
-        note = f"指定的模板清单 {manifest_path} 不存在 → 按从零生成的文稿检查"
+    deck_checks, load_error = _load_deck_checks()
+    if deck_checks is None:
+        note = load_error
+    else:
+        found = deck_checks.find_manifest(path, manifest_path)
+        if found:
+            manifest, note = deck_checks.load_manifest(found, prs)
+        elif manifest_path:
+            note = f"指定的模板清单 {manifest_path} 不存在 → 按从零生成的文稿检查"
     suppressed = 0
     if manifest is not None:
         suppressed = deck_checks.apply_baseline(by_slide, manifest, check_slide, slide_w, slide_h)
@@ -595,7 +609,8 @@ def run_report(path: str, checks_only: bool, manifest_path: str | None = None) -
     def size_of(shape, para, run):
         return _resolve_size_pt(run, para, shape, cover_sizes)
 
-    findings.extend(deck_checks.template_checks(prs, manifest, Finding, size_of, slide_w, slide_h))
+    if deck_checks is not None:
+        findings.extend(deck_checks.template_checks(prs, manifest, Finding, size_of, slide_w, slide_h))
 
     print(f"\n=== 体检 ===  ({slide_count} 页, 画布 {slide_w:.0f}×{slide_h:.0f}pt)")
     print(note)
