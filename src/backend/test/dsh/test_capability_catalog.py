@@ -12,6 +12,7 @@ from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogServ
 @pytest.fixture(autouse=True)
 def account_availability(monkeypatch):
     from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
+
     monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", AsyncMock(return_value=set()))
 
 
@@ -39,8 +40,10 @@ def make_service(monkeypatch, rows):
         call_tool=AsyncMock(return_value='{"available": 85, "demo_data": true}'),
     )
     from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
     async def records(self, available_only=True):
         return [(skill, True) for skill in (await work._skills()).values()]
+
     monkeypatch.setattr(UserSkillsService, "records", records)
     return CapabilityCatalogService(SimpleNamespace(tenant_id=2, user_id=7), work), work
 
@@ -262,3 +265,14 @@ async def test_tool_order_stays_stable_across_availability_changes_and_reload(mo
             target = next(item for item in items if item["resource_id"] == target_id)
             assert target["availability_enabled"] is enabled
             assert target["ready"] is enabled
+
+@pytest.mark.parametrize("kind", [0, 1, 2])
+async def test_catalog_exposes_stable_translation_identity_for_builtins(monkeypatch, kind):
+    app, _ = make_service(monkeypatch, [tool(9, kind, "Configured name", "tianyancha_get_company_baseinfo")])
+    row = (await app.list())["items"][0]
+    assert row["tool_key"] == ("tianyancha_get_company_baseinfo" if kind == 1 else None)
+    assert row["name"] == "Configured name"
+    assert row["description"] == "Description"
+    assert row["provider"] == "Enterprise tools"
+    assert row["resource_id"] == 9
+    assert row["invocation_name"] == "mcp__bisheng__bisheng_tool_9"

@@ -275,3 +275,11 @@
 - Verification: 47 permission tests passed; 3 existing failures were reproduced with baseline production sources (department badge text assertion, source-comment Chinese scan, retired tab-selector assertion). The focused role/authorization suite passed 21 cases. Strict client type checking (1,469 files), changed-file ESLint, i18n parity, architecture guard, diff checks and production client build passed. Full client ESLint reports the same 23 errors against both baseline and modified sources in unrelated chat files.
 - Test fixtures use the existing English role dictionary; the list fixture now provides its required confirmation hook. Added tests cover all four standard roles in three languages, preserved custom names, protected creator rows, live English/Chinese switching, absent role options and localized role-name search.
 - Delivery: web-client change for the desktop embedded knowledge-space page. Target deployment and native visual acceptance remain pending. Local evidence: `outputs/knowledge-permission-locale-20261027/`.
+
+## 2026-10-27 — Work 工具列表、详情与搜索复用共享翻译
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@d2be34458dbfa19c40324f6916dfa75202743cf9`；分支 `codex/work120-tool-localization`，目录 `.worktrees/bisheng-work120-tool-localization`。
+- 实现：现有工具中英日词典迁入 `packages/locales/src/tool`，生成平台与客户端资源；目录为内置工具提供稳定 `tool_key`。列表、详情、无障碍名称和搜索使用统一显示数据，搜索同时覆盖原始文案和工具标识。自定义 API/MCP/技能保留配置文案，旧接口与未知工具使用原始信息。知识库检索复用已有分类翻译，当前 39 个内置工具均有词典条目。
+- 自动验证：前端 23 项回归、隔离目录服务 5 项测试、1,471 个严格类型文件、变更文件 ESLint、Ruff、词典生成与 i18n 检查、生产构建通过。后端测试加载实际目录服务，提供方、可用性与技能依赖使用夹具；jsdom 将当前环境中缺失原生组件的可选 canvas 视为未安装。
+- 全量 client lint 的 23 项存量错误位于 chatApi.ts、ComposerEditor.test.tsx、CitationReferencesDrawer.tsx，已核对三文件及 lint 配置与目标分支一致；完整后端环境和真实账号网页/原生桌面验收待执行。发布需同步后端目录接口与 client 网页。
+- 本轮交付源码 PR；证据位于主工作区 `outputs/bisheng-work120-tool-localization-20261027/`。

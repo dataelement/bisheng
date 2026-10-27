@@ -6,6 +6,7 @@ export interface Capability {
   resource_id: number;
   kind: CapabilityKind;
   name: string;
+  tool_key?: string | null;
   description: string;
   provider: string;
   ready: boolean;
