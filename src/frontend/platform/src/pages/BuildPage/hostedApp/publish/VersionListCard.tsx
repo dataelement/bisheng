@@ -30,7 +30,7 @@ import {
   type HostedAppVersion,
 } from "@/controllers/API/hostedApp"
 import { useTable } from "@/util/hook"
-import { useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { versionOutcomeI18nKey } from "../types"
 import { formatTimestamp, Panel, StatusTag } from "./Panel"
@@ -49,7 +49,11 @@ interface VersionListCardProps {
   reloadKey?: string
 }
 
-export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps) {
+export function VersionListCard(props: VersionListCardProps) {
+  return <VersionHistory key={props.appId} {...props} />
+}
+
+function VersionHistory({ appId, reloadKey = "" }: VersionListCardProps) {
   const { t } = useTranslation()
   // `useTable` swallows a rejected fetch (it only clears `loading`), and a
   // non-owner is refused with a business code inside a 200 envelope. The
@@ -57,26 +61,35 @@ export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps)
   // versions yet".
   const [failure, setFailure] = useState("")
 
-  const { data, total, page, pageSize, loading, loaded, setPage, reload, filterData } =
-    useTable<HostedAppVersion>(
-      { pageSize: PAGE_SIZE },
-      (param: { page: number; pageSize: number }) =>
-        getHostedAppVersionPageApi(appId, {
-          page: param.page,
-          pageSize: param.pageSize,
+  const {
+    data,
+    total,
+    page,
+    pageSize,
+    loading,
+    loaded,
+    setPage,
+    reload,
+    filterData,
+  } = useTable<HostedAppVersion>(
+    { pageSize: PAGE_SIZE },
+    (param: { page: number; pageSize: number }) =>
+      getHostedAppVersionPageApi(appId, {
+        page: param.page,
+        pageSize: param.pageSize,
+      })
+        .then((res) => {
+          setFailure("")
+          return res
         })
-          .then((res) => {
-            setFailure("")
-            return res
-          })
-          .catch((error: unknown) => {
-            setFailure(
-              getHostedAppErrorMessage(error) ||
-                t("hostedApp.versionList.loadFailed"),
-            )
-            throw error
-          }),
-    )
+        .catch((error: unknown) => {
+          setFailure(
+            getHostedAppErrorMessage(error) ||
+              t("hostedApp.versionList.loadFailed"),
+          )
+          throw error
+        }),
+  )
 
   // The hook loads on mount by itself; these two only react to *changes*. A
   // different application starts over from page 1, a moved release re-reads
@@ -100,7 +113,6 @@ export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps)
       title={t("hostedApp.versionList.title")}
       description={t("hostedApp.versionList.readonlyHint")}
     >
-
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[560px] text-sm">
           <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -121,27 +133,42 @@ export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps)
           </thead>
           <tbody>
             {rows.map((version) => (
-              <tr key={version.version_id} className="border-t">
-                <td className="px-3 py-2">
-                  <span className="mr-2">{`v${version.version_no}`}</span>
-                  {version.is_current && (
-                    <StatusTag className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                      {t("hostedApp.versionList.current")}
-                    </StatusTag>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {t(
-                    version.kind === "initial"
-                      ? "hostedApp.versionList.kindInitial"
-                      : "hostedApp.versionList.kindIteration",
-                  )}
-                </td>
-                <td className="px-3 py-2 tabular-nums">
-                  {formatTimestamp(version.submitted_at)}
-                </td>
-                <td className="px-3 py-2">{t(versionOutcomeI18nKey(version))}</td>
-              </tr>
+              <Fragment key={version.version_id}>
+                <tr className="border-t">
+                  <td className="px-3 py-2">
+                    <span className="mr-2">{`v${version.version_no}`}</span>
+                    {version.is_current && (
+                      <StatusTag className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        {t("hostedApp.versionList.current")}
+                      </StatusTag>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {t(
+                      version.kind === "initial"
+                        ? "hostedApp.versionList.kindInitial"
+                        : "hostedApp.versionList.kindIteration",
+                    )}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {formatTimestamp(version.submitted_at)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {t(versionOutcomeI18nKey(version))}
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={4} className="max-w-0 px-3 py-2">
+                    <div className="text-caption text-text-3">
+                      {t("hostedApp.releaseNotes.title")}
+                    </div>
+                    <p className="max-w-[calc(100vw-6rem)] whitespace-pre-wrap break-words text-body-sm text-text-1 [overflow-wrap:anywhere] sm:max-w-none">
+                      {version.release_notes ||
+                        t("hostedApp.releaseNotes.empty")}
+                    </p>
+                  </td>
+                </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>

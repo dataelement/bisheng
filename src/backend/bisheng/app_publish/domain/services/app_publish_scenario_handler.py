@@ -118,6 +118,7 @@ class AppPublishScenarioHandler:
             "release_kind": release_kind,
             "version_id": payload.get("version_id"),
             "version_no": payload.get("version_no"),
+            "release_notes": payload.get("release_notes"),
             "submitted_at": payload.get("submitted_at"),
             "tier": tier,
             "capabilities": list(payload.get("capabilities") or []),

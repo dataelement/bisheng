@@ -3256,6 +3256,10 @@
         "unknown": "The current instance configuration cannot be confirmed yet. Refresh to check.",
         "not_running": "The app is offline. The next deployment will inject the latest saved values."
       }
+    },
+    "releaseNotes": {
+      "title": "Release notes",
+      "empty": "No release notes provided"
     }
   },
   "dsh": {

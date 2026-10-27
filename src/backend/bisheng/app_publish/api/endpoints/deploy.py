@@ -43,6 +43,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
+from bisheng.app_publish.domain.release_notes import MAX_RELEASE_NOTES_CODEPOINTS, RELEASE_NOTES_CONTRACT_VERSION
 from bisheng.app_publish.domain.services import package_service
 from bisheng.app_publish.domain.services.publish_pipeline_service import (
     PublishPipelineService,
@@ -122,7 +123,17 @@ async def deploy_limits(
     endpoint uploads anyway and gets 16201 — a soft check must never be able to
     block a publish.
     """
-    return resp_200(data=package_service.deploy_limits())
+    return resp_200(
+        data={
+            **package_service.deploy_limits(),
+            "features": {
+                "release_notes": {
+                    "version": RELEASE_NOTES_CONTRACT_VERSION,
+                    "max_codepoints": MAX_RELEASE_NOTES_CODEPOINTS,
+                }
+            },
+        }
+    )
 
 
 @router.post("/deploy", response_model=UnifiedResponseModel[dict], summary="Submit an application package")
@@ -131,6 +142,7 @@ async def deploy(
     package: UploadFile = File(..., description="tar.gz built by `bisheng deploy`"),
     app_id: str | None = Form(default=None, description="Omit on a first publish; required for an iteration"),
     confirm_schema_change: bool = Form(default=False),
+    release_notes: str | None = Form(default=None),
     _enabled: None = Depends(require_app_runtime_enabled),
 ):
     """Receive one package and start the pipeline (AC-01).
@@ -150,6 +162,7 @@ async def deploy(
             principal=_principal(),
             app_id=app_id or None,
             confirm_schema_change=confirm_schema_change,
+            release_notes=release_notes,
         )
     finally:
         spooled.unlink(missing_ok=True)
