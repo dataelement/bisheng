@@ -136,6 +136,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const [isLoading, setIsLoading] = useState(false); // Loading state
     const latestFormData = useRef(initialFormState); // Store latest form data
     const parseBeforeSaveRef = useRef(false); // Need to parse before saving
+    const parseRequestRef = useRef(0);
     const [canDelete, setCanDelete] = useState(false)
     useEffect(() => {
         latestFormData.current = formData;
@@ -170,6 +171,8 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     // Expose methods to parent component
     useImperativeHandle(ref, () => ({
         open: (serverData = null) => {
+            parseRequestRef.current += 1;
+            parseBeforeSaveRef.current = false;
             if (serverData) {
                 const newFormData = {
                     ...serverData,
@@ -181,7 +184,8 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 setCanDelete(serverData.delete)
                 originalName.current = serverData.name;
                 setIsEditMode(true);
-                void loadToolsFromSchema(serverData.openapi_schema).catch(showApiError);
+                setAvailableTools((serverData.children ?? []).map(tool => JSON.parse(tool.extra)));
+                parseBeforeSaveRef.current = true;
             } else {
                 resetFormState();
                 setIsEditMode(false);
@@ -199,20 +203,25 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         serverRef.current = initialFormState;
         setAvailableTools([]);
         setCanDelete(false);
+        originalName.current = "";
     };
 
     const loadToolsFromSchema = async (schemaContent) => {
-        if (!schemaContent.trim()) return;
+        if (!schemaContent.trim()) return false;
+        const requestId = ++parseRequestRef.current;
+        parseBeforeSaveRef.current = true;
 
         if (!isValidJSON(schemaContent)) {
             setAvailableTools([]);
-            return toast.show({ type: "warning", message: String(t('tools.configFormatError') ?? '') });
+            toast.show({ type: "warning", message: String(t('tools.configFormatError') ?? '') });
+            return false;
         }
 
         // setIsLoading(true);
         try {
             const tools = await getMcpServeByConfig({ file_content: schemaContent });
 
+            if (requestId !== parseRequestRef.current) return false;
             if (tools && typeof tools === 'object') {
                 serverRef.current = tools;
                 const parsedApis = tools.children.map(item => JSON.parse(item.extra));
@@ -225,14 +234,15 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 };
                 setFormData(newFormData);
                 latestFormData.current = newFormData;
+                parseBeforeSaveRef.current = false;
+                return true;
             }
+            return false;
         } catch (error) {
+            if (requestId !== parseRequestRef.current) return false;
             serverRef.current.children = [];
             setAvailableTools([]);
             throw error;
-        } finally {
-            // setIsLoading(false);
-            parseBeforeSaveRef.current = false;
         }
     };
 
@@ -267,17 +277,13 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const handleSubmit = async () => {
         setIsLoading(true);
         try {
-        if (parseBeforeSaveRef.current) {
-            await loadToolsFromSchema(textareaRef.current.value)
-            parseBeforeSaveRef.current = false
-        }
 
-        // Use latestFormData.current to get latest data
-        const validationErrors = validateForm();
-        if (validationErrors.length > 0) {
-            return toast.show({ type: "warning", message: String(validationErrors ?? '') });
-        }
+            const validationErrors = validateForm();
+            if (validationErrors.length > 0) {
+                return toast.show({ type: "warning", message: validationErrors.join("\n") });
+            }
 
+            if (parseBeforeSaveRef.current && !await loadToolsFromSchema(latestFormData.current.openapiSchema)) return;
             const apiMethod = isEditMode ? updateTool : createTool;
             const { openapiSchema, ...other } = latestFormData.current;
 
@@ -317,11 +323,13 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
     const handleExampleSelect = (exampleKey) => {
         const exampleSchema = exampleConfigs[exampleKey];
-        setFormData(prev => ({
-            ...prev,
-            openapiSchema: exampleSchema
-        }));
-        void loadToolsFromSchema(exampleSchema).catch(showApiError);
+        parseRequestRef.current += 1;
+        const next = { ...latestFormData.current, openapiSchema: exampleSchema, children: [] };
+        latestFormData.current = next;
+        setFormData(next);
+        setAvailableTools([]);
+        serverRef.current = initialFormState;
+        parseBeforeSaveRef.current = true;
     };
     return (
         <div>
@@ -360,19 +368,27 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                 </Dropdown>
                             </div>
                             <Textarea ref={textareaRef} value={formData.openapiSchema} placeholder={t('tools.enterOpenAPISchema')} onChange={(e) => {
-                                    setFormData(prev => ({
-                                        ...prev,
-                                        openapiSchema: e.target.value
-                                    }))
+                                    parseRequestRef.current += 1;
+                                    const next = { ...latestFormData.current, openapiSchema: e.target.value, children: [] };
+                                    latestFormData.current = next;
+                                    setFormData(next);
+                                    setAvailableTools([]);
                                     parseBeforeSaveRef.current = true;
-                                }} onBlur={handleUiRequest(() => loadToolsFromSchema(formData.openapiSchema))} textareaClassName={"min-h-[200px] font-mono"} />
+                                }} textareaClassName={"min-h-[200px] font-mono"} />
                         </div>
 
                         {/* Tool list */}
                         <div>
                             <div className="flex justify-between items-center mb-2">
                                 <label>{t('tools.availableTools')}</label>
-                                <Button variant="outlined" disabled={isLoading} onClick={handleUiRequest(() => loadToolsFromSchema(formData.openapiSchema))} color="default">
+                                <Button variant="outlined" disabled={isLoading} onClick={handleUiRequest(async () => {
+                                    setIsLoading(true);
+                                    try {
+                                        await loadToolsFromSchema(latestFormData.current.openapiSchema);
+                                    } finally {
+                                        setIsLoading(false);
+                                    }
+                                })} color="default">
                                     {t('build.refresh')}
                                 </Button>
                             </div>

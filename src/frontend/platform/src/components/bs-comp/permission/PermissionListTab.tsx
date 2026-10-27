@@ -24,7 +24,7 @@ import {
   User,
   Users,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { canMutatePermissionAssignee } from "./assigneePolicy"
 import { SourceBadge } from "./SourceBadge"
@@ -204,6 +204,12 @@ export function PermissionListTab({
   const [models, setModels] = useState<GrantablePermissionModel[]>([])
   const [summary, setSummary] = useState<MyResourcePermissions | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [rosterKeyword, setRosterKeyword] = useState("")
+  const rosterRevision = useRef(0)
+  useEffect(() => {
+    const timer = setTimeout(() => setRosterKeyword(searchQuery.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -239,22 +245,26 @@ export function PermissionListTab({
 
   const loadRosterPage = useCallback(
     async (cursor: string | null) => {
+      const revision = rosterRevision.current
       const page = await getResourcePermissionGrantsApi(
         resourceType,
         resourceId,
-        { cursor, page_size: pageSize },
+        { cursor, page_size: pageSize, keyword: rosterKeyword, subject_type: fixedSubjectType },
       )
+      if (revision !== rosterRevision.current) return
       setAssignees((current) =>
         cursor ? [...current, ...page.data] : page.data,
       )
       setNextCursor(page.next_cursor)
       setHasMore(page.has_more)
     },
-    [pageSize, resourceId, resourceType],
+    [pageSize, resourceId, resourceType, rosterKeyword, fixedSubjectType],
   )
 
   useEffect(() => {
     let cancelled = false
+    rosterRevision.current += 1
+    setLoadingMore(false)
     setAssignees([])
     setSummary(null)
     setNextCursor(null)
@@ -266,6 +276,8 @@ export function PermissionListTab({
       ? getResourcePermissionGrantsApi(resourceType, resourceId, {
           cursor: null,
           page_size: pageSize,
+          keyword: rosterKeyword,
+          subject_type: fixedSubjectType,
         })
       : getMyResourcePermissionsApi(resourceType, resourceId)
 
@@ -299,26 +311,13 @@ export function PermissionListTab({
     refreshKey,
     resourceId,
     resourceType,
+    rosterKeyword,
+    fixedSubjectType,
   ])
 
-  const visibleAssignees = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
-    return assignees.filter((assignee) => {
-      if (assignee.subject.type !== fixedSubjectType) return false
-      if (!query) return true
-      return [
-        assignee.subject.name,
-        assignee.subject.id,
-        assignee.model.name,
-        assignee.source.type,
-        assignee.inherited_from,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query)
-    })
-  }, [assignees, fixedSubjectType, searchQuery])
+  const visibleAssignees = useMemo(() => assignees.filter(
+    assignee => assignee.subject.type === fixedSubjectType,
+  ), [assignees, fixedSubjectType])
 
   const mutateAssignee = async (
     assignee: PermissionGrantAssignee,

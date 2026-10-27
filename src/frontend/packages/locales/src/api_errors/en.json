@@ -62,6 +62,7 @@
   "10422": "No inference model configured",
   "10423": "Inference model not configured",
   "10424": "Profile optimization model not configured",
+  "10425": "Assistant onboarding failed: the embedding model for knowledge base \"{knowledge_name}\" is unavailable. Please check its configuration.",
   "10499": "Assistant service error",
   "10500": "Skill version not found",
   "10501": "Cannot delete version in use",
@@ -112,6 +113,7 @@
   "10900": "Knowledge base name already exists",
   "10901": "Embedding model required",
   "10902": "Summary model invalid. Reconfigure in system model settings.",
+  "10903": "The embedding model for knowledge base \"{knowledge_name}\" is unavailable. Please check its configuration.",
   "10910": "This version does not support segmentation changes. Create a new knowledge base",
   "10911": "Parsed file is empty",
   "10912": "Segments too long. Add more separators (e.g. \\n, 、, 。, \\\\.)",
@@ -657,5 +659,14 @@
   "26205": "Workbench archive validation failed",
   "26206": "Workbench identity or version conflict; refresh and retry",
   "26207": "Workbench or current version not found",
-  "26208": "Workbench file is missing or failed integrity checks"
+  "26208": "Workbench file is missing or failed integrity checks",
+  "18081": "Department knowledge spaces cannot be private",
+  "15026": "Cannot connect to the MCP service. Check the address and network.",
+  "15027": "MCP service timed out. Try again later.",
+  "15028": "MCP service denied access. Check the API key and permissions.",
+  "15029": "MCP service address was not found. Check the endpoint.",
+  "15030": "MCP service response does not match SSE. Check the transport type and endpoint.",
+  "15031": "Invalid MCP service URL. Use a complete http:// or https:// address.",
+  "15032": "Failed to retrieve MCP tools. Check the service status and configuration.",
+  "25016": "The selected user is no longer an active member of this tenant. Refresh the candidate list and select again."
 }

@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { Button, Input, toast } from '@bisheng/ui';
-import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
+import { QaKnowledgeSelect } from './QaKnowledgeSelect';
 
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
@@ -121,7 +121,7 @@ const CreateDataSet = forwardRef<CreateDataSetHandle, CreateDataSetProps>(({ onC
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[625px]">
+            <DialogContent className="grid-cols-1 sm:max-w-[625px]">
                 <DialogHeader>
                     <DialogTitle>{t('dataset.createDataset')}</DialogTitle>
                 </DialogHeader>
@@ -172,12 +172,10 @@ const CreateDataSet = forwardRef<CreateDataSetHandle, CreateDataSetProps>(({ onC
                             <label htmlFor="knowledgeLib" className="bisheng-label">
                                 <span className="text-red-500">*</span>{t('dataset.selectQaKnowledgeLib')}
                             </label>
-                            <KnowledgeSelect
-                                type="qa"
-                                multiple
+                            <QaKnowledgeSelect
                                 value={form.knowledgeLib}
                                 onChange={handleKnowledgeLibChange}
-                                className={`${error.knowledgeLib ? 'border-red-400' : ''}`}
+                                error={error.knowledgeLib}
                             />
                         </div>
                     )}

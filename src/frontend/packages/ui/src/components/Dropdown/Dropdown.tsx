@@ -76,6 +76,8 @@ export interface DropdownProps {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Override focus restoration when an action moves focus into another control. */
+  onCloseAutoFocus?: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>['onCloseAutoFocus'];
   disabled?: boolean;
   /** Layout only — radius goes through `panelRadius`. */
   panelClassName?: string;
@@ -91,6 +93,7 @@ export function Dropdown({
   open: openProp,
   defaultOpen = false,
   onOpenChange,
+  onCloseAutoFocus,
   disabled = false,
   panelClassName,
 }: DropdownProps) {
@@ -138,6 +141,7 @@ export function Dropdown({
         </DropdownMenuPrimitive.Trigger>
         <DropdownMenuPrimitive.Portal>
           <DropdownMenuPrimitive.Content
+            onCloseAutoFocus={onCloseAutoFocus}
             side={side}
             align={align}
             sideOffset={PANEL_SIDE_OFFSET}
@@ -189,7 +193,7 @@ export interface DropdownItemProps {
    */
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
-  /** §7 — runs after the menu has closed. */
+  /** Runs on selection; use onCloseAutoFocus on Dropdown to hand focus off after dismissal. */
   onSelect?: () => void;
   className?: string;
 }

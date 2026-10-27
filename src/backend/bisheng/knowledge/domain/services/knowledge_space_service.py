@@ -27,6 +27,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    DepartmentKnowledgeSpacePrivateError,
     SpaceCreationRequestConflictError,
     SpaceFileDuplicateError,
     SpaceFileExtensionError,
@@ -1822,6 +1823,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
 
         await self._require_action("knowledge_space", space_id, "edit")
+
+        if auth_type == AuthTypeEnum.PRIVATE and await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id):
+            raise DepartmentKnowledgeSpacePrivateError()
 
         old_auth_type = space.auth_type
         if name is not None:

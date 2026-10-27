@@ -15,11 +15,13 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import (
     AssistantInitError,
+    AssistantKnowledgeEmbeddingUnavailableError,
     AssistantNameRepeatError,
     AssistantNotEditError,
     AssistantNotExistsError,
 )
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.knowledge import KnowledgeEmbeddingUnavailableError
 from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
@@ -604,6 +606,9 @@ class AssistantService(BaseService, AssistantUtils):
             tmp_agent = AssistantAgent(assistant, "", login_user.user_id)
             try:
                 await tmp_agent.init_assistant()
+            except KnowledgeEmbeddingUnavailableError as e:
+                logger.exception("online agent knowledge embedding init failed")
+                raise AssistantKnowledgeEmbeddingUnavailableError(**e.kwargs) from e
             except Exception as e:
                 logger.exception("online agent init failed")
                 raise AssistantInitError(exception=e, msg=f"Assistant onboarding failed: {e}") from e

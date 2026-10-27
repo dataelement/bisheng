@@ -289,7 +289,7 @@ describe("F048 PermissionGrantTab", () => {
 
   it("removes exactly one editable assignee and reports stale conflicts", async () => {
     vi.mocked(mutateResourceGrantsApi).mockRejectedValueOnce(
-      new Error("stale resource version"),
+      { status_code: 25002, status_message: "stale resource version" },
     )
     render(
       <PermissionGrantTab
@@ -320,6 +320,20 @@ describe("F048 PermissionGrantTab", () => {
       )
       expect(screen.getByText("grant.conflict")).toBeInTheDocument()
     })
+  })
+
+  it("does not misreport an unavailable tenant member as a version conflict", async () => {
+    vi.mocked(mutateResourceGrantsApi).mockRejectedValueOnce({ status_code: 25016, status_message: "Member is unavailable" })
+    const onSuccess = vi.fn()
+    render(<PermissionGrantTab resourceType="workflow" resourceId="flow-1" context={context} legacyAddLayout showExistingAssignees={false} onSuccess={onSuccess} />)
+    await screen.findByTestId("legacy-permission-grant-layout")
+    fireEvent.click(screen.getByRole("button", { name: "select-alice" }))
+    await selectOption("grant.addModel", "Editor")
+    fireEvent.click(screen.getByRole("button", { name: "grant.submit" }))
+    await screen.findByRole("alert")
+    expect(screen.queryByText("grant.conflict")).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "grant.submit" })).toBeDisabled()
+    expect(onSuccess).not.toHaveBeenCalled()
   })
 
   it("keeps an inactive existing row read-only when it is not grantable", async () => {

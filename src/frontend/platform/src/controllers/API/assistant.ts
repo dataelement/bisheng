@@ -91,7 +91,7 @@ export const getChatOnlineApi = async (
 // };
 
 // 刷新mcp服务
-export const refreshMcpApi = async (): Promise<any> => {
+export const refreshMcpApi = async (): Promise<Array<string | { name: string; code: number }>> => {
     return await axios.post(`/api/v1/tool/mcp/refresh`)
 }
 

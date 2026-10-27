@@ -122,3 +122,8 @@ class PermissionEnumerationIncompleteError(BaseErrorCode):
 class SameLevelGrantRequiresManagePermissionError(BaseErrorCode):
     Code: int = 25015
     Msg: str = "Same-level grants require the manage_permission action"
+
+
+class PermissionSubjectUnavailableError(BaseErrorCode):
+    Code: int = 25016
+    Msg: str = "The selected person is no longer an active member of this tenant. Refresh the candidate list and select again."

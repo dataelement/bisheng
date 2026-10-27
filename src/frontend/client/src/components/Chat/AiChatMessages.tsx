@@ -22,6 +22,7 @@ import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
 import { QueryKeys } from "~/types/chat";
 import type { ConversationData } from "~/types/chat/queries";
+import { useScrollOnUserMessage } from "~/hooks/useScrollOnUserMessage";
 
 interface AiChatMessagesProps {
     messages: ChatMessage[];
@@ -37,6 +38,7 @@ interface AiChatMessagesProps {
     hideHeaderTitle?: boolean;
     /** When true, renders messages as a flat list without tree/sibling navigation */
     flatMode?: boolean;
+    scrollOnUserMessage?: boolean;
     /** Knowledge space AI panel: full-width column, 14px body, gray user / borderless assistant */
     knowledgeChatLayout?: boolean;
     /** Show the export-session entry under assistant messages. The full homepage/task
@@ -186,6 +188,7 @@ export default function AiChatMessages({
     hideShare = false,
     hideHeaderTitle = false,
     flatMode = false,
+    scrollOnUserMessage = false,
     knowledgeChatLayout = false,
     allowExport = false,
     stripCitationHandlesOnCopy,
@@ -293,6 +296,13 @@ export default function AiChatMessages({
         isUserScrolledUp.current = false;
         endRef.current?.scrollIntoView({ behavior: "smooth" });
     };
+
+    useScrollOnUserMessage(messages, conversationId, scrollOnUserMessage, () => {
+        isUserScrolledUp.current = false;
+        setShowScrollBtn(false);
+        const container = scrollRef.current;
+        container?.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
+    });
 
     const hasMessages = messages.length > 0;
 

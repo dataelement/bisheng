@@ -1185,7 +1185,8 @@
     "autoTagGenerationDesc": "When enabled, users can choose a tag library for a knowledge space. After parsing, matching tags are selected from the library.",
     "searchTagLibrary": "Search tag libraries",
     "tagLibraryEmpty": "No tag libraries",
-    "appTypeFilter": "App type"
+    "appTypeFilter": "App type",
+    "clearDebugConversation": "Clear"
   },
   "bench": {
     "daily": "Daily",
@@ -1201,7 +1202,7 @@
     "modelDescription": "Description",
     "modelDescriptionPlaceholder": "Shown in the model picker",
     "vision": "Vision",
-    "visionText": "When enabled, the model will answer based on image content (supports PNG, JPEG, WEBP, non-animated GIF formats). Note that only multimodal models support this capability. While it is off, Linsight task mode will not hand images to this model either.",
+    "visionText": "When enabled, the model will answer based on image content (supports PNG, JPEG, WEBP, non-animated GIF formats). Note that only multimodal models support this capability. While it is off, task mode will not hand images to this model either.",
     "webSearchPrompt": "Web Search Prompt",
     "confirmDelete": "Are you sure you want to delete?",
     "deleteFailed": "Delete failed",

@@ -1168,7 +1168,8 @@
     "autoTagGenerationDesc": "有効にすると、ナレッジスペースの作成・編集時にタグライブラリを選択できます。ファイル解析後にライブラリから適切なタグを付けます。",
     "searchTagLibrary": "タグライブラリ名を検索",
     "tagLibraryEmpty": "タグライブラリはありません",
-    "appTypeFilter": "アプリの種類"
+    "appTypeFilter": "アプリの種類",
+    "clearDebugConversation": "クリア"
   },
   "bench": {
     "daily": "日常",
@@ -1184,7 +1185,7 @@
     "modelDescription": "説明",
     "modelDescriptionPlaceholder": "モデル選択に表示されます",
     "vision": "画像",
-    "visionText": "有効にすると、モデルは画像コンテンツ（PNG、JPEG、WEBP、非アニメーションGIF形式をサポート）を組み合わせて回答します。この機能はマルチモーダルモデルのみでサポートされています。無効の間は、Linsightタスクモードでもこのモデルに画像を渡しません。",
+    "visionText": "有効にすると、モデルは画像コンテンツ（PNG、JPEG、WEBP、非アニメーションGIF形式をサポート）を組み合わせて回答します。この機能はマルチモーダルモデルのみでサポートされています。無効の間は、タスクモードでもこのモデルに画像を渡しません。",
     "webSearchPrompt": "Web 検索プロンプト",
     "confirmDelete": "削除してよろしいですか？",
     "deleteFailed": "削除に失敗しました",

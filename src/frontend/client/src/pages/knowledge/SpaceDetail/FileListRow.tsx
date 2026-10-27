@@ -240,7 +240,8 @@ export function FileListRow({
         inputRef,
         handleRenameSubmit,
         handleKeyDown,
-        startRenaming,
+        startRenamingFromMenu,
+        handleMenuCloseAutoFocus,
     } = useInlineRename({
         fileName: file.name,
         isFolder,
@@ -281,7 +282,7 @@ export function FileListRow({
             )}
             {canRename && (
                 <DropdownItem
-                    onSelect={() => startRenaming()}
+                    onSelect={startRenamingFromMenu}
                     icon={<Outlined.Edit />}
                 >
                     {localize("com_knowledge.rename")}
@@ -553,6 +554,7 @@ export function FileListRow({
                         align="end"
                         open={moreMenuOpen}
                         onOpenChange={handleMoreMenuOpenChange}
+                        onCloseAutoFocus={handleMenuCloseAutoFocus}
                         menu={moreMenuItems}
                     >
                         {/* No Tooltip here: a tooltip on a menu trigger lingers over the
@@ -580,6 +582,7 @@ export function FileListRow({
                     <Dropdown
                         open={contextMenuOpen}
                         onOpenChange={setContextMenuOpen}
+                        onCloseAutoFocus={handleMenuCloseAutoFocus}
                         menu={moreMenuItems}
                     >
                         <button

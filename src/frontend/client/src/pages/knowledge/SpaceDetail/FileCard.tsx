@@ -180,7 +180,8 @@ export function FileCard({
         inputRef,
         handleRenameSubmit,
         handleKeyDown,
-        startRenaming,
+        startRenamingFromMenu,
+        handleMenuCloseAutoFocus,
     } = useInlineRename({
         fileName: file.name,
         isFolder,
@@ -400,7 +401,7 @@ export function FileCard({
                 </DropdownItem>
             )}
             {canRename && (
-                <DropdownItem onSelect={() => startRenaming()} icon={<Outlined.Edit />}>
+                <DropdownItem onSelect={startRenamingFromMenu} icon={<Outlined.Edit />}>
                     {localize("com_knowledge.rename")}
                 </DropdownItem>
             )}
@@ -574,7 +575,7 @@ export function FileCard({
             {/* Portaled menu clicks still bubble through the React tree; keep them off the card. */}
             {showMoreMenu && (
                 <span className="contents" onClick={(e) => e.stopPropagation()}>
-                    <Dropdown open={contextMenuOpen} onOpenChange={setContextMenuOpen} menu={moreMenuItems}>
+                    <Dropdown open={contextMenuOpen} onOpenChange={setContextMenuOpen} onCloseAutoFocus={handleMenuCloseAutoFocus} menu={moreMenuItems}>
                         <button
                             type="button"
                             aria-hidden="true"
@@ -671,7 +672,7 @@ export function FileCard({
                         >
                             {showMoreMenu && (
                                 <span className="contents" onClick={(e) => e.stopPropagation()}>
-                                    <Dropdown align="end" open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange} menu={moreMenuItems}>
+                                    <Dropdown align="end" open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange} onCloseAutoFocus={handleMenuCloseAutoFocus} menu={moreMenuItems}>
                                         <Button
                                             variant="outline"
                                             size="icon"
@@ -731,7 +732,7 @@ export function FileCard({
                     )}
                     {showMoreMenu && (
                         <span className="contents" onClick={(e) => e.stopPropagation()}>
-                            <Dropdown align="end" open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange} menu={moreMenuItems}>
+                            <Dropdown align="end" open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange} onCloseAutoFocus={handleMenuCloseAutoFocus} menu={moreMenuItems}>
                                 <Button variant="outline" size="icon" className="h-5 w-5 shrink-0 rounded-md">
                                     <MoreVertical className="size-4 text-text-2" />
                                 </Button>
