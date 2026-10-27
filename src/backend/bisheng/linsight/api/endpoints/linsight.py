@@ -49,6 +49,7 @@ from bisheng.linsight.domain.schemas.linsight_schema import (
     LinsightQuestionSubmitSchema,
     SubmitFileSchema,
 )
+from bisheng.linsight.domain.services.artifact_preview_service import LinsightArtifactPreviewService
 from bisheng.linsight.domain.services.message_stream_handle import MessageStreamHandle
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
@@ -142,25 +143,7 @@ async def linsight_file_download(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ) -> UnifiedResponseModel:
-    with bypass_tenant_filter_if(share_link is not None):
-        session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
-    if not session_version_model:
-        raise NotFoundError()
-
-    # judge permission
-    if session_version_model.user_id != login_user.user_id and not login_user.is_admin():
-        # Access by sharing a link. Both share shapes grant, same as
-        # session-version-list / execute-task-detail: a workbench_chat share
-        # carries resource_id = the session and no versionId, and its recipient
-        # must still be able to open the task's output files.
-        shared_to_session = share_link is not None and share_link.resource_id == session_version_model.session_id
-        shared_to_version = (
-            share_link is not None
-            and share_link.meta_data is not None
-            and share_link.meta_data.get("versionId") == session_version_id
-        )
-        if not (shared_to_session or shared_to_version):
-            raise UnAuthorizedError()
+    await LinsightArtifactPreviewService.load_accessible_version(session_version_id, login_user, share_link)
 
     minio_client = await get_minio_storage()
     file_url = file_url.lstrip("/")
@@ -168,6 +151,19 @@ async def linsight_file_download(
         file_url = file_url[len(minio_client.bucket) + 1 :]
     file_share_url = await minio_client.get_share_link(file_url)
     return resp_200(data={"file_path": file_share_url})
+
+
+@router.post("/workbench/file_preview", summary="Task Result Slide Preview", response_model=UnifiedResponseModel)
+async def linsight_file_preview(
+    file_url: str = Body(..., embed=True),
+    session_version_id: str = Body(..., embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
+) -> UnifiedResponseModel:
+    """PDF preview of a task-generated .ppt/.pptx: ready with a signed link, or still converting."""
+    version = await LinsightArtifactPreviewService.load_accessible_version(session_version_id, login_user, share_link)
+    result = await LinsightArtifactPreviewService.get_pptx_preview(version, file_url)
+    return resp_200(data=result)
 
 
 # Submit an Idea User Issue Request

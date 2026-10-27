@@ -1066,3 +1066,33 @@ export function getLinsightFileDownloadApi(fileUrl: string, vid: string, shareTo
     { headers, skip403Redirect: true } as any,
   );
 }
+
+/** F111: result of the task-result slide preview endpoint. */
+export interface LinsightFilePreviewResult {
+  status: 'ready' | 'converting';
+  /** Host-stripped signed URL of the cached PDF; present when status is 'ready'. */
+  file_path?: string;
+}
+
+/**
+ * F111: PDF preview of a task-generated .ppt/.pptx. The backend converts on first
+ * open and caches the PDF; while another request is converting it answers
+ * `converting` and the caller polls. Same access rule and headers as
+ * getLinsightFileDownloadApi.
+ */
+export function getLinsightFilePreviewApi(
+  fileUrl: string,
+  vid: string,
+  shareToken?: string,
+): Promise<{ data: LinsightFilePreviewResult }> {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(shareToken ? { 'share-token': shareToken } : {}),
+  };
+  return request.post(
+    '/api/v1/linsight/workbench/file_preview',
+    { file_url: fileUrl, session_version_id: vid },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- skip403Redirect is an ErrorOptions extra, not on AxiosRequestConfig
+    { headers, skip403Redirect: true } as any,
+  );
+}
