@@ -1,4 +1,7 @@
 {
+  "chatImage": {
+    "processingRequired": "Your images are kept. Choose a vision model or ask your administrator to configure image parsing before sending."
+  },
   "skillReference": {
     "readFile": "Read skill reference"
   },

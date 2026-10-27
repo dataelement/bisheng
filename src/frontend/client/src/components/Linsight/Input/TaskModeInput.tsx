@@ -301,7 +301,6 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
     // ofd originals into the workspace either way.
     const accept = buildChatAccept({
         enableMedia: !!(envConfig as any)?.enable_media_upload,
-        enableEtl4lm: !!(bsConfig as any)?.enable_etl4lm,
         includeOfd: true,
         taskMode: true,
     });
