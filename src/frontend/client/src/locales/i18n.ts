@@ -14,15 +14,18 @@ import apiErrorsZh_Hans from './zh-Hans/api_errors.gen.json';
 import sharedEn from './en/shared.gen.json';
 import sharedJa from './ja/shared.gen.json';
 import sharedZh_Hans from './zh-Hans/shared.gen.json';
+import toolEn from './en/tool.gen.json';
+import toolJa from './ja/tool.gen.json';
+import toolZh_Hans from './zh-Hans/tool.gen.json';
 
 export const defaultNS = 'translation';
 
 // 'shared' is a real namespace (addressed shared:<key>) so cross-app components
 // in packages/* use one addressing form on both apps.
 export const resources = {
-  'en': { translation: { ...translationEn, api_errors: apiErrorsEn }, shared: sharedEn },
-  'zh-Hans': { translation: { ...translationZh_Hans, api_errors: apiErrorsZh_Hans }, shared: sharedZh_Hans },
-  'ja': { translation: { ...translationJa, api_errors: apiErrorsJa }, shared: sharedJa },
+  'en': { translation: { ...translationEn, api_errors: apiErrorsEn }, shared: sharedEn, tool: toolEn },
+  'zh-Hans': { translation: { ...translationZh_Hans, api_errors: apiErrorsZh_Hans }, shared: sharedZh_Hans, tool: toolZh_Hans },
+  'ja': { translation: { ...translationJa, api_errors: apiErrorsJa }, shared: sharedJa, tool: toolJa },
 } as const;
 
 const config = window.BRAND_CONFIG || {};
@@ -58,7 +61,7 @@ i18n
       default: ['en'],
     },
     fallbackNS: 'translation',
-    ns: ['translation', 'shared'],
+    ns: ['translation', 'shared', 'tool'],
     debug: false,
     defaultNS,
     resources,

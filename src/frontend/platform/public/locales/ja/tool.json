@@ -358,6 +358,10 @@
       "name": "現在の時間",
       "desc": "現在の時間を取得します。タイムゾーンが指定されていない場合、UTC+8の時間が使用されます。",
       "params": {}
+    },
+    "bisheng_knowledge_search": {
+      "name": "$t(tool:categories.知识库检索.name)",
+      "desc": "$t(tool:categories.知识库检索.desc)"
     }
   },
   "addMcpServer": "MCPサーバーを追加",
