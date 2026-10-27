@@ -22,8 +22,6 @@ import { ModelAuditTenantSelect } from "./ModelAuditTenantSelect";
 import { useModelAudit } from "./useModelAudit";
 import { ModelAuditGroup } from "./ModelAuditGroup";
 import { ModelAuditTree } from "./ModelAuditTree";
-import { UnassociatedSafetyEvents } from "./UnassociatedSafetyEvents";
-import { Button as SafetyButton } from "@bisheng/ui";
 
 export function ModelAuditPanel() {
   const { user } = useContext(userContext);
@@ -81,7 +79,7 @@ export function ModelAuditPanel() {
 
 interface ModelAuditRequestsProps {
   tenantId?: number;
-  initialView?: "groups" | "unassociated" | "requests";
+  initialView?: "groups" | "unassociated";
 }
 export function ModelAuditRequests(props: ModelAuditRequestsProps) {
   const { user } = useContext(userContext);
@@ -102,45 +100,7 @@ export function ModelAuditRequests(props: ModelAuditRequestsProps) {
     identity?.is_global_super,
     identity?.is_child_admin,
   ]);
-  return <ModelAuditViews key={scope} {...props} />;
-}
-
-function ModelAuditViews(props: ModelAuditRequestsProps) {
-  const { t } = useTranslation();
-  const [eventsOpen, setEventsOpen] = useState(false);
-  const [eventsVisited, setEventsVisited] = useState(false);
-  return (
-    <div className="min-w-0 space-y-4">
-      <div className="dsh-content-safety">
-        <SafetyButton
-          type="button"
-          variant="outlined"
-          aria-pressed={eventsOpen}
-          onClick={() => {
-            setEventsVisited(true);
-            setEventsOpen((old) => !old);
-          }}
-        >
-          {t(
-            eventsOpen
-              ? "dsh.modelAuditView.return_results"
-              : "dsh.contentSafety.association.unassociated_title",
-          )}
-        </SafetyButton>
-      </div>
-      <div hidden={eventsOpen}>
-        <ModelAuditRequestPage {...props} />
-      </div>
-      {eventsVisited && (
-        <div hidden={!eventsOpen}>
-          <UnassociatedSafetyEvents
-            tenantId={props.tenantId}
-            active={eventsOpen}
-          />
-        </div>
-      )}
-    </div>
-  );
+  return <ModelAuditRequestPage key={scope} {...props} />;
 }
 
 function ModelAuditRequestPage({
@@ -165,17 +125,6 @@ function ModelAuditRequestPage({
   const [readiness, setReadiness] = useState<AuditQueryReadiness | null>(null);
   const [readinessFailed, setReadinessFailed] = useState(false);
   const groupMode = useRef<"tree" | "legacy" | null>(null);
-  const saved = useRef<{
-    view: typeof view;
-    query: ModelAuditQuery;
-    draft: ModelAuditQuery;
-    history: (string | undefined)[];
-    scroll: number;
-    container: HTMLElement | null;
-    openGroup: string | null;
-  } | null>(null);
-  const [hasReturn, setHasReturn] = useState(false);
-  const section = useRef<HTMLElement>(null);
   const requestQuery = useMemo(
     () => ({
       ...query,
@@ -254,48 +203,13 @@ function ModelAuditRequestPage({
   const pending = (
     Object.keys({ ...query, ...draft }) as (keyof ModelAuditQuery)[]
   ).some((key) => key !== "cursor" && query[key] !== draft[key]);
-  const handleApply = (next: ModelAuditQuery, preserveReturn = false) => {
-    if (!preserveReturn) {
-      setHasReturn(false);
-      saved.current = null;
-    }
+  const handleApply = (next: ModelAuditQuery) => {
     const firstPage = { ...next, cursor: undefined };
     setHistory([]);
     setExpanded(null);
     setOpenGroup(null);
     setDraft(firstPage);
     setQuery(firstPage);
-  };
-  const handleNavigate = (userId: number, conversationId: string) => {
-    if (!hasReturn) {
-      let container = section.current?.parentElement || null;
-      while (
-        container &&
-        (container.scrollHeight <= container.clientHeight ||
-          !/(auto|scroll)/.test(window.getComputedStyle(container).overflowY))
-      )
-        container = container.parentElement;
-      saved.current = {
-        view,
-        query,
-        draft,
-        history,
-        scroll: container?.scrollTop ?? window.scrollY,
-        container,
-        openGroup,
-      };
-      setHasReturn(true);
-    }
-    setView("requests");
-    handleApply(
-      {
-        tenant_id: tenantId,
-        limit: 20,
-        user_id: userId,
-        conversation_id: conversationId,
-      },
-      true,
-    );
   };
   const handleRefresh = () => {
     setExpanded(null);
@@ -306,7 +220,6 @@ function ModelAuditRequestPage({
   };
   return (
     <section
-      ref={section}
       tabIndex={-1}
       className="min-w-0 space-y-4"
       aria-label={t("dsh.modelAudit")}
@@ -346,7 +259,7 @@ function ModelAuditRequestPage({
         onReset={() => handleApply(initialQuery)}
       />
       <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-        {(["groups", "unassociated", "requests"] as const).map((value) => (
+        {(["groups", "unassociated"] as const).map((value) => (
           <Button
             key={value}
             type="button"
@@ -355,8 +268,6 @@ function ModelAuditRequestPage({
             aria-pressed={view === value}
             className="text-sm [@media(pointer:coarse)]:min-h-11"
             onClick={() => {
-              setHasReturn(false);
-              saved.current = null;
               setView(value);
               setHistory([]);
               setExpanded(null);
@@ -371,32 +282,6 @@ function ModelAuditRequestPage({
           <span className="text-xs text-muted-foreground">
             {t("dsh.modelAuditView.group_order")}
           </span>
-        )}
-        {hasReturn && (
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            onClick={() => {
-              const old = saved.current;
-              if (!old) return;
-              setView(old.view);
-              setQuery(old.query);
-              setDraft(old.draft);
-              setHistory(old.history);
-              setExpanded(null);
-              setOpenGroup(old.openGroup);
-              setHasReturn(false);
-              window.requestAnimationFrame(() => {
-                section.current?.focus({ preventScroll: true });
-                if (old.container?.isConnected)
-                  old.container.scrollTop = old.scroll;
-                else window.scrollTo(0, old.scroll);
-              });
-            }}
-          >
-            {t("dsh.modelAuditView.return_results")}
-          </Button>
         )}
       </div>
       {(readinessFailed ||
@@ -421,11 +306,6 @@ function ModelAuditRequestPage({
             )}
           </p>
         )}
-      {hasReturn && (
-        <p className="text-xs text-muted-foreground">
-          {t("dsh.modelAuditView.all_scope")}
-        </p>
-      )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
         <p>
           {t("dsh.modelAuditView.watermark")}:{" "}
@@ -501,7 +381,6 @@ function ModelAuditRequestPage({
                       : group.conversation_key,
                   )
                 }
-                onNavigate={handleNavigate}
                 onRefresh={handleRefresh}
               />
             ) : (
@@ -518,7 +397,6 @@ function ModelAuditRequestPage({
                       : group.conversation_key,
                   )
                 }
-                onNavigate={handleNavigate}
               />
             ),
           )}
@@ -535,7 +413,6 @@ function ModelAuditRequestPage({
             onToggle={() =>
               setExpanded(expanded === row.request_id ? null : row.request_id)
             }
-            onNavigate={handleNavigate}
           />
         ))
       )}

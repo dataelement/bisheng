@@ -6,6 +6,8 @@
 - **工作分支**：feat/bisheng-work-dsh-guardrails
 - **当前范围**：用户已授权持续按依赖实施至 T132，逐项测试、自审后更新状态；允许多 agent 并行。核心实现与配对自审已推进至 Wave 32，T119/T120的MySQL子项已独立通过；完整E2E、容量与演练仍待环境/前驱，DM8实测按用户决定保留待验收，用户已追加授权合入最新 feat/bisheng-work-120-main 并推送，经 Drone 构建后仅部署 109 DSH13001，再启动客户端联调；其他环境禁止变更。
 
+本轮追加限制（2026-10-27）：统一请求编号在两仓 `codex/dsh-unified-request-id` 上实现；不提交、不推送、不部署，不沿用此前其他改动的发布授权。B 基线 e59b249a3，G 基线 c999f9bf。
+
 ## 1. 状态
 
 | 步骤 | 状态 | 备注 |
@@ -13,7 +15,7 @@
 | spec.md | ✅ 已评审 | 用户已确认，后续取舍已同步 |
 | design.md | ✅ 已评审 | 用户于本轮明确“设计可以”，包含现有共享 HMAC、可信身份变化和既有分页取舍 |
 | tasks.md | ✅ 已拆解 | 经 sdd-review tasks 静态评审 LGTM；不代表任务已执行 |
-| 实现 | 🔄 进行中 | 190 / 205；核心实现及配对自审至Wave32，T119/T120 MySQL子项通过，DM8及完整E2E/容量/演练待验 |
+| 实现 | 🔄 进行中 | 228 / 243；本轮 Wave47 请求明细移除、命中词展示及本地自审完成，旧15项完整现场/双库/容量/最终门禁仍待验 |
 
 ## 2. 执行约定与仓库范围
 
@@ -86,6 +88,10 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 | 41 | T129 | 所列任务的验证完成并做 /task-review；失败不越过依赖 |
 | 42 | T131 | 所列任务的验证完成并做 /task-review；失败不越过依赖 |
 | 43 | T132 | 所列任务的验证完成并做 /task-review；失败不越过依赖 |
+| 44 | T206、T207、T208、T209、T210、T211 | 采集开关边界与常驻说明的配对验证和自审 |
+| 45 | T212、T213、T214、T215、T216、T217、T218 | 统一编号本地回归、跨仓回环 HTTP 与任务自审；不代表109或双库验收 |
+| 46 | T219、T220、T221、T222、T223、T224 | 未关联检查界面移除、配对回归、质量检查及任务自审 |
+| 47 | T225–T243 | 请求明细及跳转移除、命中词冻结快照/详情、真实MySQL与本地回归、自审；DM8及部署验收仍待执行 |
 
 ## 4. 任务清单
 
@@ -2854,6 +2860,111 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
   **类型**：实现。**目标文件**：B `src/frontend/platform/public/locales/ja/bs.json`。
   **逻辑与验证**：与中英文同义的 collectionHint/modeHint，三语键对齐检查。
 
+### Wave 45 — 2026-10-27 统一模型请求编号
+
+- [x] **T212 backend 请求编号和转发异常摘要回归**
+  **类型**：测试。**目标文件**：B `src/backend/test/dsh/test_unified_request_id.py`。
+  **覆盖 AC**：AC-62、AC-63。**逻辑与验证**：双协议/两种流模式透传、缺失/非法/多值/零 UUID 回退；真实 Chat 服务响应/错误/计量共用 ID；鉴权不被绕过；无响应头安全事实按会话关联摘要且不伪造模型/用量。
+- [x] **T213 backend 通用 HTTP UUID 复用**
+  **类型**：实现。**目标文件**：B `src/backend/bisheng/dsh/api/responses.py`。
+  **逻辑与验证**：唯一规范非零 UUID 转小写复用，其他情况生成；沿既有 request.state 下传，不引入 Gateway 配置。**依赖**：T212。
+- [x] **T214 Gateway 透传和无响应头关联回归**
+  **类型**：测试。**目标文件**：G `src/test/java/com/dataelem/gateway/client/DshModelProxyClientTest.java`；`src/test/java/com/dataelem/gateway/service/DshSafetyRequestManagerTest.java`。
+  **覆盖 AC**：AC-62、AC-63。**逻辑与验证**：双协议真实回环 HTTP，覆盖客户端多值/Connection 指定头的覆盖、收到请求后未发响应头即断开、缺失非法响应头不抹去编号、旧 backend 不同编号兼容、输入阻断及正常正文不变。
+- [x] **T215 Gateway 转发前固定编号**
+  **类型**：实现。**目标文件**：G `src/main/java/com/dataelem/gateway/client/DshModelProxyClient.java`；`src/main/java/com/dataelem/gateway/service/DshSafetyRequestManager.java`。
+  **逻辑与验证**：显式 UUID 参数经 hop-by-hop 过滤后写入；转发尝试之前记录 backend ID，失败或取消仍可关联；旧响应明确返回不同合法编号时兼容，缺失非法值不清空。**依赖**：T214。
+- [x] **T216 Gateway 过滤器配对调用夹具维护**
+  **类型**：测试。**目标文件**：G `src/test/java/com/dataelem/gateway/filter/DshContentSafetyFilterTest.java`；`src/test/java/com/dataelem/gateway/filter/DshModelRoutingFilterTest.java`。
+  **覆盖 AC**：AC-62。**逻辑与验证**：仅对齐 Proxy 的显式 UUID 参数，保留原鉴权/路由/正文断言。**依赖**：T215。
+- [x] **T217 Gateway 配置和遥测调用夹具维护**
+  **类型**：测试。**目标文件**：G `src/test/java/com/dataelem/gateway/config/DshSafetyRoutingConfigurationTest.java`；`src/test/java/com/dataelem/gateway/service/DshRequestTelemetryTest.java`。
+  **覆盖 AC**：AC-62。**逻辑与验证**：仅对齐显式 UUID 参数，不改变配置装配、遥测或关闭时不采集的语义。**依赖**：T215。
+- [x] **T218 统一编号交叉自审与本地验证记录**
+  **类型**：文档/验收。**目标文件**：B `features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md`；G `docs/dsh-content-safety-verification.md`。
+  **逻辑与验证**：逐文件 task-review、两仓回归、Ruff/架构检查与设计引用核验；如遇既有失败，以 HEAD 源复验作对照，不冒充真实部署/双库/完整 E2E。**依赖**：T213、T215、T216、T217。
+
+### Wave 46 — 2026-10-27 移除未关联检查界面
+
+- [x] **T219 审计界面移除入口的配对测试**
+  **类型**：测试。**目标文件**：B `src/frontend/platform/src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx`。
+  **覆盖 AC**：AC-64。**逻辑与验证**：三种既有审计视图都无未关联检查入口、区域和独立事件查询；未关联请求仍按原条件查询，保留请求内检查详情测试；删除已废弃独立页面的专属用例。
+- [x] **T220 移除独立检查页面与切换状态**
+  **类型**：实现。**目标文件**：B `src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditPanel.tsx`；删除 `src/frontend/platform/src/pages/SystemPage/dsh/UnassociatedSafetyEvents.tsx`。
+  **逻辑与验证**：直接渲染既有请求页并保留租户/身份key隔离，移除入口、隐藏缓存页和专属查询组件；会话、未关联请求及请求检查详情保留。**依赖**：T219。
+- [x] **T221 清理前端专属查询与类型**
+  **类型**：实现。**目标文件**：B `src/frontend/platform/src/controllers/API/dshContentSafety.ts`；`src/frontend/platform/src/types/dshContentSafety.ts`。
+  **逻辑与验证**：删除唯一独立未关联事件查询封装及其专用query类型；保留请求内事件查询和DTO；不改backend事件入库/查询/投影或数据库。**依赖**：T220。
+- [x] **T222 删除中文与英文废弃页面文案**
+  **类型**：实现。**目标文件**：B `src/frontend/platform/public/locales/zh-Hans/bs.json`；`src/frontend/platform/public/locales/en-US/bs.json`。
+  **逻辑与验证**：只移除独立页面标题、说明、专属筛选提示及两个专属校验文案，不动请求内事件关联状态文案。**依赖**：T220。
+- [x] **T223 删除日文废弃页面文案**
+  **类型**：实现。**目标文件**：B `src/frontend/platform/public/locales/ja/bs.json`。
+  **逻辑与验证**：与T222一致删除五个专属key，验证三语键对齐。**依赖**：T222。
+- [x] **T224 界面移除的验证和任务自审记录**
+  **类型**：文档/验收。**目标文件**：B `features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md`。
+  **逻辑与验证**：定向DSH组件回归、typecheck、目标lint/i18n及构建；更新spec/design的产品边界，核对无数据清理/数据库结构改动，记录完整lint既有问题。**依赖**：T221、T222、T223。
+
+### Wave 47 — 2026-10-27 简化审计导航并展示命中词
+
+- [x] **T225 移除导航和命中词展示配对测试**
+  **类型**：测试。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx；src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditTree.test.tsx。
+  **逻辑与验证**：AC-65、AC-66；两视图无请求明细/返回入口，树上限无跳转，旧值提示/安全文本/严格API校验。**依赖**：无。
+- [x] **T226 移除请求明细视图与树跳转**
+  **类型**：实现。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditPanel.tsx；src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditTree.tsx。
+  **逻辑与验证**：删除第三视图、导航及返回状态，保留内嵌请求和32层限制提示。**依赖**：T225。
+- [x] **T227 清理会话和请求卡导航端口**
+  **类型**：实现。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditCard.tsx；src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditGroup.tsx。
+  **逻辑与验证**：删除无消费者的onNavigate并保留元信息/原文展开。**依赖**：T226。
+- [x] **T228 迁移既有页面和筛选测试入口**
+  **类型**：测试。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditPanel.test.tsx；src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditFilters.test.tsx。
+  **逻辑与验证**：AC-65；改用未关联请求并明确保留UNASSOCIATED查询断言。**依赖**：T226。
+- [x] **T229 请求卡导航夹具维护**
+  **类型**：测试。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditCard.test.tsx。
+  **逻辑与验证**：AC-65；删除已废弃props夹具，原元信息和正文断言不变。**依赖**：T227。
+- [x] **T230 Gateway冻结词值和事件快照测试**
+  **类型**：测试。**目标文件**：G src/test/java/com/dataelem/gateway/service/DshMatchedWordsTest.java；G src/test/java/com/dataelem/gateway/service/DshSafetyRequestManagerTest.java。
+  **逻辑与验证**：AC-66；冻结版本、去重/容量/Unicode、深复制、输入/输出/续读，不采上下文或伪造用量。**依赖**：无。
+- [x] **T231 Gateway冻结词库解析与Outbox扩展**
+  **类型**：实现。**目标文件**：G src/main/java/com/dataelem/gateway/service/DshSensitiveMatcherCache.java；G src/main/java/com/dataelem/gateway/service/DshSafetyOutboxService.java。
+  **逻辑与验证**：按冻结规则提取词值，有界校验/深复制/日志脱敏，保留旧Observation构造兼容。**依赖**：T230。
+- [x] **T232 Gateway请求阶段词值接线**
+  **类型**：实现。**目标文件**：G src/main/java/com/dataelem/gateway/service/DshSafetyRequestManager.java。
+  **逻辑与验证**：复用阶段Outcome规则引用传入快照，不改模型执行/计量/阻断交付。**依赖**：T231。
+- [x] **T233 backend词值快照契约与持久化测试**
+  **类型**：测试。**目标文件**：src/backend/test/dsh/test_content_safety_matched_words.py。
+  **逻辑与验证**：AC-66；旧NULL、有界方向/UTF8校验、仓储元数据和幂等哈希。**依赖**：无。
+- [x] **T234 backend词值DTO与可空ORM字段**
+  **类型**：实现。**目标文件**：src/backend/bisheng/dsh/domain/schemas/content_safety.py；src/backend/bisheng/dsh/domain/models/content_safety_event.py。
+  **逻辑与验证**：可选v1加法字段，匹配词合计20/每词256，旧NULL不反推。**依赖**：T233。
+- [x] **T235 事件追加与归并词值一致性**
+  **类型**：实现。**目标文件**：src/backend/bisheng/dsh/domain/repositories/content_safety.py；src/backend/bisheng/dsh/domain/repositories/content_safety_projection.py。
+  **逻辑与验证**：保存规范JSON，重试比对快照，不覆盖原始wire哈希语义。**依赖**：T234。
+- [x] **T236 授权事件详情返回词值**
+  **类型**：实现。**目标文件**：src/backend/bisheng/dsh/domain/repositories/content_safety_queries.py。
+  **逻辑与验证**：沿既有租户/请求权限返回新字段；主列表无事件JOIN/N+1。**依赖**：T235。
+- [x] **T237 幂等词值列DDL及离线回归**
+  **类型**：基础设施/测试。**目标文件**：src/backend/bisheng/core/database/alembic/versions/v3_0_0_f111_matched_words.py；src/backend/test/dsh/test_matched_words_migration.py。
+  **逻辑与验证**：AC-66；唯一head、可空JsonType、旧数据保留、重复升级和拒绝破坏性回退。**依赖**：T234。
+- [x] **T238 前端词值类型及严格API解析**
+  **类型**：实现。**目标文件**：src/frontend/platform/src/types/dshContentSafety.ts；src/frontend/platform/src/controllers/API/dshContentSafety.ts。
+  **逻辑与验证**：兼容旧缺失/null，校验新字段方向/数量/字符/重复/Unicode。**依赖**：T225、T236。
+- [x] **T239 按方向展示命中词及历史缺失说明**
+  **类型**：实现。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ContentSafetyDetails.tsx。
+  **逻辑与验证**：只在请求检查详情显式查询后渲染文本，不反推、不增加主列表查询。**依赖**：T238。
+- [x] **T240 中英文词值和导航文案**
+  **类型**：实现。**目标文件**：src/frontend/platform/public/locales/zh-Hans/bs.json；src/frontend/platform/public/locales/en-US/bs.json。
+  **逻辑与验证**：新增命中词/无法还原/树上限提示，删除请求视图和跳转文案。**依赖**：T226、T239。
+- [x] **T241 日文词值和导航文案**
+  **类型**：实现。**目标文件**：src/frontend/platform/public/locales/ja/bs.json。
+  **逻辑与验证**：与中英文同键同义。**依赖**：T240。
+- [x] **T242 隔离MySQL迁移和跨仓契约核验**
+  **类型**：验收。**目标文件**：features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md。
+  **逻辑与验证**：只启动自有随机端口MySQL容器，验证幂等/旧NULL/Unicode/回退；DM8保留待验，不替代完整部署E2E。**依赖**：T232、T237。
+- [x] **T243 两仓任务自审与验证记录**
+  **类型**：文档/验收。**目标文件**：features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md；G docs/dsh-content-safety-verification.md。
+  **逻辑与验证**：实际相关回归、类型/lint/i18n/构建、baseline失败对照、权限/泄漏/设计同步；不提交推送部署。**依赖**：T228、T229、T236、T241、T242。
+
 ## 5. AC → 测试任务追溯
 
 本表只列测试/验收任务；配对实现见各任务依赖。每条 AC 至少一个针对性测试或端到端场景，末端 E2E 和特性审查不能代替前置测试。
@@ -2922,6 +3033,12 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 | AC-60 | T206 |
 | AC-61 | T208 |
 
+AC-62、AC-63 → T212、T214；实现与交叉自审见 T213、T215–T218。
+
+AC-64 → T219；界面、调用和文案清理及验收见 T220–T224。
+
+AC-65 → T225、T228、T229；AC-66 → T225、T230、T233、T237；实现及验收见 T226–T243。
+
 ## 6. 共享文件与发布边界
 
 共享 HMAC helper 只调整签名计算复用，旧 SSO 协议/错误码/正文回放原样回归；HTTP middleware 仅精确新接收路由，不改模型认证。model_audit_write/writer、会话查询及 ModelAuditPanel 分步只改本任务区域；状态、事件、投影和查询方法分工明确。Gateway 应用敏感词/PathRate/默认路由的改动必须跑旧应用与WS回归。Desktop 保持宿主插件边界，不改第三方 tgz 或直接修 node_modules。
@@ -2934,7 +3051,7 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 
 ## 8. 文档与执行检查
 
-初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后205项；2026-10-27补充T206–T211后当前211项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。61条AC追溯表按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
+初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后205项；2026-10-27补充至T243后当前243项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。66条AC追溯按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
 
 ## 9. 执行记录
 
@@ -2997,3 +3114,12 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
 
 
 2026-10-27：用户确认 AC-60/AC-61 后新增 Wave44 T206–T211；Gateway 4 RED→GREEN，定向107PASS、完整896PASS/10真实DB SKIP；DSH 前端258PASS、workspace typecheck/i18n/locales、生产构建和目标lint通过，完整lint仍95项既有错误。主已逐文件自审两仓实际实现及配对、旧记录补报/冻结快照/不改模型计量边界，通过后勾选，当前196/211；既有完整现场、DM8、容量与T132门禁仍保留未完成。详细见 implementation-verification 的2026-10-27章节，未提交/推送/部署。
+
+
+2026-10-27 Wave45：用户确认统一请求编号，B/G 从各自干净的最新已知 work120 基线创建 codex/dsh-unified-request-id，仅保留未提交改动。T212–T218 完成；B 20项新增测试所在定向组合81PASS，1项既有用量fixture失败经HEAD源对照复现；G完整902PASS/10真实DB SKIP；真实本机Java Proxy→Python路由/模型服务双协议流式2PASS。Ruff、架构检查、git diff --check及配对任务自审通过。当前203/218，原15项待验仍不勾选；没有提交、推送或部署。
+
+
+2026-10-27 Wave46：按用户要求移除未关联检查界面及前端专属查询、类型和三语五个专属键；保留数据库、后台事件处理和请求内检查详情。新增三个视图入口移除反例3RED→GREEN，DSH组件257PASS，workspace typecheck、i18n/locales、目标ESLint、Platform构建与差异检查通过；完整lint的95错误集中于8个HEAD未修改文件，未扩大修复。T219–T224完成，当前209/224；没有提交、推送、部署或修改数据库数据。
+
+
+2026-10-27 Wave47：用户确认移除请求明细及相关跳转，增加具体命中词。T225–T243完成，当前228/243；Gateway冻结策略词快照→严格事件DTO/可空JsonType迁移→授权检查详情按输入/输出显示，旧记录明确无法还原。B定向170PASS，G完整905PASS/10真实DB SKIP，Platform269PASS及typecheck/i18n/目标lint/构建通过；真实隔离MySQL8.0.46迁移往返通过且自有容器已清理，Java实际事件经Python真实DTO校验通过。扩大backend回归与干净HEAD完全相同16FAIL/102ERROR case ID，新增38PASS；完整前端lint仍95项既有错误。逐项/task-review见implementation-verification；原15项待验不勾选。必须全部backend先升级再升级Gateway；未提交、推送、部署。

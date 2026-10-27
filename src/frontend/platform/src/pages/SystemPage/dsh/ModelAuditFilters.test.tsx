@@ -42,7 +42,7 @@ function advanced() {
   );
 }
 function renderRequests() {
-  render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+  render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
 }
 function model() {
   return screen.getByRole("combobox", {
@@ -263,7 +263,7 @@ describe("unified audit filters", () => {
         total: 21,
       };
     });
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
     );
@@ -344,7 +344,7 @@ describe("unified audit filters", () => {
     api.users
       .mockRejectedValueOnce(new Error("unavailable"))
       .mockResolvedValueOnce({ data: [], total: 0 });
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
     );

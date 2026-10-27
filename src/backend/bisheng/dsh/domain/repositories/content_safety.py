@@ -119,6 +119,7 @@ def append_event(session: Session, event: ContentSafetyEvent, payload_hash: str)
         hit_count=event.hit_count,
         hit_count_truncated=event.hit_count_truncated,
         rule_refs=list(event.rule_refs),
+        matched_words=event.matched_words.model_dump(mode="json") if event.matched_words is not None else None,
         forwarded=event.forwarded,
         drain_status=event.drain_status,
         conversation=event.conversation.model_dump(exclude_none=True) if event.conversation else None,

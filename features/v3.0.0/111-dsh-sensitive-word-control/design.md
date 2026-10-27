@@ -4,7 +4,7 @@
 - **关联规格**：[spec.md](./spec.md)，用户于 2026-10-23 确认
 - **需求输入**：[已确认方案](../../../docs/architecture/proposals/2026-10-22-dsh-gateway-content-safety.md)
 - **状态**：已用户确认；核心实现及真实109单实例子集已完成，完整验收PARTIAL，详见tasks与交付记录
-- **最后更新**：2026-10-24
+- **最后更新**：2026-10-27
 - **工作分支**：feat/bisheng-work-dsh-guardrails
 - **执行流水**：[tasks.md](./tasks.md) 已按确认设计拆解并评审，用户已授权按依赖持续实施；验证证据见 [implementation-verification.md](./implementation-verification.md)
 
@@ -49,7 +49,7 @@ Gateway 根据可信租户身份，对 DSH Chat Completions、Responses 的输�
 | 后台续读 | 命中后最多 30 秒，剩余累计响应预算最多 32 MiB 减已读字节 |
 | 自定义词 / 生效词表 / 单词长度 | 自定义 UTF-8 1 MiB；合并后最多 30,000 词、1 MiB；每词 256 Unicode 码点 |
 | 匹配器编译 | 单副本最多 2 个编译任务；节点最多 200,000，缓存估算权重最多 128 MiB |
-| 外部事件 / JSON 深度 / 命中摘要 | 每事件 64 KiB，深度 16；至多 20 个 rule_ref、hit_count 超限截断并标记 |
+| 外部事件 / JSON 深度 / 命中摘要 | 每事件 64 KiB，深度 16；至多 20 个 rule_ref、20个按方向分组的命中词值（每词≤256 Unicode字符）；hit_count超限截断并标记 |
 | Outbox 领取 / 租约 / 单次回传超时 | 每批 100，租约 30 秒，回传 3 秒；重试退避 1 秒至 5 分钟，带抖动 |
 | SQL 接收与摘要事务 / 汇总批次 | 接收目标预算 2 秒；每次最多 200 个 dirty 请求，使用持久租约 |
 
@@ -126,7 +126,7 @@ Gateway 根据可信租户身份，对 DSH Chat Completions、Responses 的输�
 | bisheng-gateway | feat/bisheng-work-dsh-guardrails / main 基线 2995df6fdf9c51b70617a86a803aec9c6633b69e | DSH 认证与席位逻辑已移除；应用敏感词仍为旧资源策略 |
 | bisheng-work Desktop | feat/bisheng-work-dsh-guardrails / main 基线 01e09d027ba729f6021ec37c33937f5745cee992 | Chat 识别 content_filter；Responses 把错误事件统一归为 UPSTREAM_ERROR |
 
-当前 backend 入口在 models.py：desktop_principal → read_model_request → DshModelService.complete → Chat 或原生 Responses adapter。DshRoute 创建模型请求编号，并在响应头返回 X-Request-ID；AuditObservedResponse 只观察 backend 到直接下游的 ASGI 发送事实。
+当前 backend 入口在 models.py：desktop_principal → read_model_request → DshModelService.complete → Chat 或原生 Responses adapter。DshRoute 按通用 HTTP 约定复用入站唯一规范、非零 UUID（统一转小写）；缺失、非法、零 UUID 或多值时创建编号，并在响应头返回 X-Request-ID；AuditObservedResponse 只观察 backend 到直接下游的 ASGI 发送事实。
 
 审计主行由 DshModelAuditWriter 异步创建；upsert_request 对身份字段要求完全相等，mode 仅支持 METADATA/CONTENT。refresh_audit_status 主要依赖模型审计状态变化触发 group dirty，安全标志变化尚无入口。新增能力均未接线。
 
@@ -147,7 +147,7 @@ sequenceDiagram
         G->>O: 提交命中事实
         G-->>C: 内容阻断
     else 输入可转发
-        G->>B: 原始凭据及原始请求
+        G->>B: 原始凭据、原始请求和生成的 X-Request-ID
         B-->>G: X-Request-ID 和模型响应
         Note over G: 检查后按序交付，命中则停止交付
         G-->>C: 安全内容或明确终止
@@ -271,7 +271,7 @@ backend 新表 dsh_content_safety_event 采用现有 SQLModel 基类和 dialect_
 | event_version、schema_version、event_kind、protocol | 有界整数或枚举；版本按同一来源、同一 Gateway 请求单调产生 |
 | request_started_at、occurred_at、received_at | UTC 微秒时间；不把回传到达当事件发生 |
 | payload_hash、stage_results、policy_version、builtin_digest | 摘要和结构化事实；JSON 用 JsonType，正文缺省且禁止接收 |
-| hit_count、rule_refs、forwarded、drain_status、association_status | 有限诊断；rule_refs 为不含原词的规则标识 |
+| hit_count、rule_refs、matched_words、forwarded、drain_status、association_status | 有限诊断；rule_refs为稳定规则标识，matched_words为可空的冻结词值快照，旧记录NULL表示未保存 |
 
 每条事件按 Gateway 从毕昇成功取得的身份和本次模型事实归档；可信身份结果变化予以接受，不以首个事件冻结所有后续版本的租户、用户或模型，不增加独立请求绑定表。索引 (tenant_id, source_id, gateway_request_id, event_version, event_id) 用于租户范围内的请求事件查询，不作为跨事件身份冻结机制。历史补报复用原持久化载荷，不按用户当前调租、退出状态重新生成或拒绝历史事实。
 
@@ -287,7 +287,7 @@ backend 新表 dsh_content_safety_event 采用现有 SQLModel 基类和 dialect_
 | content_safety_state、content_safety_updated_at、policy_version、builtin_digest | 列表摘要；状态包含 UNREPORTED、PASSED、BLOCKED、ERROR、DISABLED、NOT_APPLICABLE |
 | safety_projection_version、group_indexed_sensitive_hit | 并发水位和已计入会话的命中状态；禁止按事件条数累加 |
 
-输入阻断用 gateway_request_id 建外部审计条目，model_entered=false，不生成 dsh_model_call；输出用模型响应 X-Request-ID 关联。转发后未取得模型编号时仅保存未关联事件，通过审计事件查询查看，不按用户、时间或模型猜关联。
+输入阻断用 gateway_request_id 建外部审计条目，model_entered=false，不生成 dsh_model_call。Gateway 转发前将该 UUID 作为 X-Request-ID 覆盖客户端同名头并透传，backend 复用；backend_request_id 在发起转发前即设为该编号，不依赖响应头。转发异常时依既有投影建立 EXTERNAL_SAFETY 摘要：model_entered=NULL，不生成模型调用或用量事实。有 conversation_id 的摘要进入会话记录，无 conversation_id 的摘要进入未关联请求。事件明细仍单独持久化在 dsh_content_safety_event，请求摘要在 dsh_model_audit_request。历史无编号、可信身份不匹配或唯一约束冲突时，事件继续保留在数据库供debug，不在界面提供“未关联检查”；不按用户、时间或模型猜关联。
 
 外部条目的 effective_mode、model_result、response_result、usage_settlement 和 session_id 等未确认字段允许 NULL；content_status=NOT_CAPTURED，audit_status=NOT_APPLICABLE，不计入模型 NORMAL/ABNORMAL。状态派生先按 record_origin 分支，停滞扫描仅扫描真实模型条目；外部条目不要求模型终态或原文 manifest，不参与原文密钥就绪门槛。未知 model_name 用空字符串及其摘要建立可索引占位，界面仅显示模型编号；原生审计后到补齐名称和摘要，不让未知名称卡住全租户 readiness。输入阻断展示“不适用”，缺少原生审计的输出条目展示“未观测”；usage 缺失为 null，不用数值 0 替代。
 
@@ -327,7 +327,7 @@ NULL 表示未知的可选关联可由真实原审计补齐；安全事件采用
 
 AC-61 的采集说明放在 ModelAuditMode 状态栏下方，始终占满既有网格一行，采用相邻说明文字样式并由 aria-describedby 关联状态栏。无需查询 Gateway 当前策略即可解释两个开关的组合，对只读用户同样展示。三语新增 collectionHint；原 modeHint 删除“关闭后不再记录新的模型请求”的绝对表述，避免与开启敏感词时的安全摘要冲突。不新增样式、组件、状态库或 API。
 
-平台沿 DshPage 当前入口增加“敏感词控制”配置区域，沿用现有租户选择。配置走 Gateway；审计请求、详情、未关联安全事件走 backend 的既有审计权限边界。Gateway 不可达时配置区域明确不可用，不影响无 Gateway 部署的模型、额度和审计功能。
+平台沿 DshPage 当前入口增加“敏感词控制”配置区域，沿用现有租户选择。配置走 Gateway；审计请求和请求内检查详情走 backend 的既有审计权限边界。Gateway 不可达时配置区域明确不可用，不影响无 Gateway 部署的模型、额度和审计功能。
 
 词库、输入/输出方向、提示等作为一次原子保存，使用 Checkbox 和保存按钮；不把“拨动后仍需保存”的行为伪装成 Switch 即时设置。运行开关若使用 Switch 则独立立即提交，等待锁定、失败回弹，并基于已保存的有效词库校验。沿用现有表单/审计布局，不增加新的组件样式。
 
@@ -356,7 +356,7 @@ Desktop 将 content_blocked/content_filter 统一映射为不可重试的 CONTEN
 | 1 | Chat 与 Responses 使用不同 adapter | 只包 LangChain 漏检 Responses | §4.6 两协议扫描 |
 | 2 | filterNormal 会输出原文并保存 BlockRecord | 新功能引入额外正文泄漏 | §4.3 仅复用词库/ACPlus |
 | 3 | 通用 WebClient DEBUG 输出请求头 | DSH Token 进入日志 | §4.4 独立 ProfileClient |
-| 4 | profile 请求和模型请求都有 X-Request-ID | 审计关联到身份请求 | §6.2 只取模型响应编号 |
+| 4 | profile 请求和模型请求都有 X-Request-ID | 审计关联到身份请求 | 模型使用 Gateway 独立生成并透传的编号；兼容旧 backend 时仅接受模型响应中的有效 UUID，不使用 profile 编号 |
 | 5 | 外部事件可能早于异步主行 | 命中丢失、重复主行或关联到其他归属 | §4.7–§4.8 短事务、可信事实接收与受控关联 |
 | 6 | 现有审计状态仅 NORMAL/ABNORMAL，mode 不可空 | 外部条目被误判失败或运行中 | §4.8 状态和来源约束 |
 | 7 | backend ASGI 完成只代表发给 Gateway | 输出拦截被误写成 backend 交付失败 | §6.3 安全结果独立于原执行结果 |
@@ -417,7 +417,8 @@ POST /api/v1/internal/dsh/content-safety-events，仅服务认证，无 query �
 | stage_results | input/output 各一个状态；PASSED/BLOCKED/ERROR/DISABLED/NOT_APPLICABLE/UNREPORTED |
 | stage_versions | input/output 各一个非负整数；UNREPORTED 对应 0，已观测状态版本为 1 至 event_version；状态改变取当次 event_version，后续快照保持未改变阶段的版本 |
 | policy_version / builtin_digest | 版本及 SHA-256 摘要；不回传词库正文 |
-| hit_count / hit_count_truncated / rule_refs | 非负整数、截断标志、有界规则标识；不含原词和原文片段 |
+| hit_count / hit_count_truncated / rule_refs | 非负整数、截断标志、有界规则标识；规则编号本身不含词值 |
+| matched_words（可选、可空） | `{input:[...],output:[...]}`；两方向合计≤20个、每词1–256 Unicode字符，非空词列表对应BLOCKED方向；不允许额外键、空白词、重复词或非法Unicode，不含周边正文 |
 | forwarded / drain_status | 明确是否转发；续读状态为 NOT_REQUIRED/RUNNING/FINISHED/TIMED_OUT/LIMITED/DISCONNECTED，仅表示观察，不当作执行/计量事实 |
 | conversation | 可空对象，仅含 conversation_id、request_kind、session_origin、parent_conversation_id 中经校验的字段；总 UTF-8 不超过 4 KiB，不含完整 audit_context 或 message_sources |
 
@@ -443,7 +444,9 @@ backend 数字业务码继续归 DSH 261，不新占模块。拟使用 26170–2
 
 Chat 终止 chunk 可附加 content_safety={code,message,request_id} 扩展，供新 Desktop 保留原因；旧客户端仍可识别 content_filter 和 [DONE]。Responses error 不是正常带 sequence_number 的模型事件，客户端先识别错误再校验正常事件序列。
 
-Gateway 生成的错误使用 Gateway 请求 UUID；已取得 backend 模型编号则另提供 X-Backend-Request-ID，backend 的正常 X-Request-ID 原样保留。内部事件明确区分两个编号，不从错误显示编号反推模型执行。错误不含命中原文、凭据或未经清理的上游报文。
+Gateway 生成的错误使用 Gateway 请求 UUID；发起转发即另提供 X-Backend-Request-ID，表示为 backend 分配的关联编号，不代表 backend 已收到或模型已执行。新 backend 复用该 UUID，正常 X-Request-ID 与安全事件编号一致。为兼容滚动升级，旧 backend 若明确返回不同的有效 UUID，后续事件和 X-Backend-Request-ID 使用该实际响应编号，正常正文和 X-Request-ID 保持原样；缺失、非法、零 UUID 或多值响应头不清空预分配编号。内部事件保留两个字段以兼容历史数据。错误不含命中原文、凭据或未经清理的上游报文。
+
+编号的格式校验仅用于关联和安全序列化，不是身份验证，也不是幂等重放接口。Gateway 每次请求生成新 UUID，拒绝客户端通过重复头或 Connection: X-Request-ID 控制该编号；代理在 hop-by-hop 过滤后设置生成编号。backend 的准入及原生/安全投影继续校验可信 tenant/user/model/session，不因编号相同而覆盖其他身份；冲突保留原有拒绝或未关联路径。直接访问 backend 的调用方须为每次请求使用新 UUID，不以复用编号实现重试。无 Gateway 的请求仍由 backend 生成编号或采用通用请求头，不查询 Gateway。输入阻断和未发起转发的检查失败不设置 backend_request_id。
 
 ### 6.4 审计查询与 DTO（backend 提供）
 
@@ -454,8 +457,15 @@ Gateway 生成的错误使用 Gateway 请求 UUID；已取得 backend 模型编�
 | GET /requests 及会话、目录查询：has_sensitive_hit、sensitive_direction=INPUT/OUTPUT/BOTH、content_safety_state | 平台组合过滤；BOTH 表示两方向都命中，不是任意方向 |
 | GET /requests/{id}：来源、model_entered、阶段状态、命中方向、策略/词库摘要、观察时间、details_status | 平台详情；NULL 状态按来源和是否执行显示未知或不适用 |
 | 新增 GET /requests/{id}/content-safety-events：cursor、limit，按 occurred_at/event_id 分页 | 单请求事件明细 |
-| 新增 GET /content-safety-events：时间、关联状态、请求编号和游标 | 未关联事实查看，不从事件列表替代主审计列表 |
 | /query-readiness、conversation-groups、conversation-tree | 安全汇总版本、更新时间、命中计数及 scan_limited |
+
+AC-64 移除独立未关联检查产品界面：删除 ModelAuditViews 的入口、隐藏页状态和访问缓存，ModelAuditRequests 按原 tenant/caller scope key 直接挂载既有 ModelAuditRequestPage。删除 UnassociatedSafetyEvents 组件、getUnassociatedSafetyEvents 前端调用封装、ContentSafetyEventQuery 专用类型及三语专属提示；保留请求内 getAuditSafetyEvents 和 ContentSafetyDetails。此前保留的请求明细已按AC-65移除：仅保留会话和未关联请求主视图，删除相关onNavigate回调、跨视图筛选/滚动返回状态及树深度上限跳转。会话内部列表、单条请求元信息展开、原文与检查详情保留；树达到32层时显示说明，不用已移除视图兜底。未关联事件仍保存在 dsh_content_safety_event，debug按tenant_id、gateway_request_id或event_id定位；不改事件接收、归并、保留或数据库结构，不清理历史数据。原后端独立事件诊断接口保留兼容，本轮没有前端消费者。
+
+AC-66命中词展示：CompiledPolicy.wordsForRules仅在有命中引用时对本请求不可变rules映射做一次有界检索（词库≤30000项），不请求当前配置、不复制整份词库或请求正文、不新增网络调用。Manager按输入/输出提取去重词值，Observation深复制并覆盖toString以不显示词值；DECISION与DRAIN沿同一冻结词值快照。Outbox把可选matched_words加入v1事件；新backend兼容旧发送方省略/null，旧backend严格拒绝未知字段，因此上线必须先迁移及更新全部backend实例、确认均能接收该字段，再更新Gateway，前端可独立兼容旧数据；回退先停止新Gateway字段，再退backend，新增列保留。
+
+事件表增加可空JsonType列matched_words，不回填旧记录，不改schema_version=1约束、请求摘要表或列表索引。append_event保存规范JSON，saved_fact严格比较新增字段，原始wire哈希仍区分省略/null/有值；metadata只通过原授权请求事件查询返回。主列表不联表、不逐行查词值，用户展开检查详情时按方向显示命中词；React按文本渲染，历史缺失或无可用快照明确提示无法还原，不从当前rule_ref配置反推。原命中截断标识继续提示有界观察，不能保证已发现全部命中。原审计OFF时也可保存这份配置词值证据，输入/输出正文仍按采集模式控制，两开关OFF仍不新增事件。
+
+迁移revision=f111_matched_words，down_revision由实际alembic heads核实为f111_dsh_content_safety；使用column_exists/table_exists与既有JsonType，只有幂等ADD COLUMN，NULL兼容历史，无数据迁移。默认拒绝破坏性downgrade；MySQL实测与Linux DM8实测分开记录，不把SQLite/类型编译当双库验收。命中词属于获授权的平台审计数据，AC-29的模型内容接收方仍不得收到命中词；普通日志、客户端错误/终止帧和指标标签不携带词值。
 
 AuditRequestMetadata 的 effective_mode、model_result、response_result、usage_settlement、session_id 增加可空支持；audit_status 增加 NOT_APPLICABLE，content_safety_state 单独含 NOT_APPLICABLE，不能与原模型审计状态混用。DTO 是加法及有限联合扩展，旧前端不认识这些状态，必须先兼容发布再开检查。
 
@@ -468,7 +478,7 @@ AuditRequestMetadata 的 effective_mode、model_result、response_result、usage
 | backend profile 的用户/租户响应及本地 DSH 凭据 | schema 变化或目标配置错误使检查不可用；不降级信任客户端租户 |
 | user/info、user/tenants、DSH 审计 settings 与租户详情 | 显示标志不独立授权；由既有 DSH 管理运行时校验目标，普通租户管理员不能使用超管专属详情接口 |
 | Gateway ACPlus、FileUtil、CustomerConfig | 修改分词或大小写语义会改变全部租户命中结果，必须版本化并回归旧应用 |
-| DshRoute 的 X-Request-ID 和错误包 | 丢头或反向代理改编号会产生未关联事实；不能用 profile 编号代替 |
+| DshRoute 的 X-Request-ID 和错误包 | 转发前已知编号；中间代理剥离入站头、旧 backend 替换编号且响应丢失时仍可能无法关联真实原生记录；不能用 profile 编号代替 |
 | Chat/Responses 的事件与工具完成语义 | 新事件类型需显式接入；不能按未知事件透传正文 |
 | MySQL/DM8、Redis、Celery 及现有审计查询 | Redis 故障有受限直查；SQL 故障显式缺口；worker 故障不伪装目录已完整 |
 | UI 规范及 Desktop 工具执行屏障 | 不新增视觉模式；未通过或轮次错误时不执行待调用工具 |
@@ -562,6 +572,9 @@ curl --fail-with-body -N "$GATEWAY_ORIGIN/api/v1/dsh/responses" \
 
 | 日期 | 改动 | 原因 |
 |---|---|---|
+| 2026-10-27 | AC-65、AC-66：移除请求明细导航；冻结命中词快照入库并在授权检查详情展示 | 用户明确要求；覆盖前版只保留规则编号的取舍，不记录周边正文或普通日志 |
+| 2026-10-27 | AC-64：移除未关联检查入口、专属页面和前端查询；未关联事件仅保留数据库用于debug | 用户明确移除产品功能，保留会话和未关联请求；不改数据保留与归并 |
+| 2026-10-27 | AC-62、AC-63：Gateway 预生成并透传模型 UUID，backend 通用复用；无响应头可关联外部摘要，保留历史异常入口 | 用户确认统一编号方案并要求实现、测试与文档同步；不提交、不推送、不部署 |
 | 2026-10-23 | 初版设计；承接已确认的 59 条 AC | 用户确认 spec，要求产出并评审 design；尚未实现 |
 | 2026-10-23 | 自审修正管理授权探针、专用代理生命周期和会话组合条件口径 | 静态代码与契约复核；保持已确认需求 |
 | 2026-10-23 | 撤回固定分页窗口与跨事件身份冻结两项复审意见，同步 spec、接收及分页契约 | 用户明确沿用既有分页并接受毕昇可信身份变化；未进入 tasks 或业务实现 |
@@ -613,7 +626,7 @@ Wave12 backend实施对齐：EXTERNAL_SAFETY的模型状态固定NOT_APPLICABLE�
 Wave12 Desktop实施对齐：Chat收到content_filter即结算明确错误与安全文字/推理前缀，return使SSE reader取消释放，不再等待DONE或允许坏尾帧/EOF覆盖确定命中。Responses transport在普通sequence校验前保留flat/nested安全错误及HTTP结构化错误，避免pi-ai包装成普通上游错误；工具block-end等待整轮正常done，并核对明确completed状态、wire完整object JSON及SDK实际对象/argumentsError。参数无效先记录，到正常终态才拒绝工具，后到安全错误仍优先；max-tokens保留安全文字、由既有BlockAssembler丢弃工具，不制造成功或自动重试。实际插件pi-ai为0.87.1；既有max-token replay hash不匹配时降级可见文字重放，不改写其hash为可匹配未执行工具的值。实际runner屏障及locale当前显示入口接线仍留T118/T117。
 
 
-T086请求管理器每副本唯一实例持有16检查/8续读槽及64MiB编码预算；Chat原事件与当前行存在两份编码缓冲，对待检查字节保守预留两份，原事件放行后转为单份delivery、退回额外份。上传先完整32MiB限长，idle与总截止复用既有注入I/O预算，不增加YAML。客户端通道为按demand交付的有界FIFO，慢或未订阅时限到停止持有；completion仅观察，不拥有上游。命中先冻结BLOCKED与check→drain所有权再回调安全prefix，避免同步取消降级/泄漏；独立hit起算30s及剩余响应字节，终止清空adapter真实引用和所有订阅/额度。DECISION/FINAL/DRAIN幂等串行调用既有boundedElastic Recorder，只保存有界快照；正常响应bytes不重编码，Gateway合成错误root.request_id固定为gateway UUID；已取得有效backend编号则另提供X-Backend-Request-ID，正常backend X-Request-ID与正文原样保留；未知backend编号仍留空，不虚构关联。
+T086请求管理器每副本唯一实例持有16检查/8续读槽及64MiB编码预算；Chat原事件与当前行存在两份编码缓冲，对待检查字节保守预留两份，原事件放行后转为单份delivery、退回额外份。上传先完整32MiB限长，idle与总截止复用既有注入I/O预算，不增加YAML。客户端通道为按demand交付的有界FIFO，慢或未订阅时限到停止持有；completion仅观察，不拥有上游。命中先冻结BLOCKED与check→drain所有权再回调安全prefix，避免同步取消降级/泄漏；独立hit起算30s及剩余响应字节，终止清空adapter真实引用和所有订阅/额度。DECISION/FINAL/DRAIN幂等串行调用既有boundedElastic Recorder，只保存有界快照；正常响应bytes不重编码，Gateway合成错误root.request_id固定为gateway UUID；已取得有效backend编号则另提供X-Backend-Request-ID，正常backend X-Request-ID与正文原样保留；此为 Wave11 历史行为；2026-10-27 起转发前预分配 backend 编号，按 AC-62、AC-63 关联，不据此虚构执行事实。
 
 
 T117接线复查补齐：Host Node的navigator不能代表renderer当前语言，现有failureMessage对两个安全码直接显示failure.message，不查询新字典。增加T136前置测试/T137两adapter可选同步localizeContentSafety(code,defaultMessage)回调后，T117的client/index才负责真实locale注册/当前语言构造/卸载，保持每任务最多两维护文件。仅CONTENT_CHECK_UNAVAILABLE已知Gateway固定英文及无自定义提示的fallback调用本地化；CONTENT_FILTERED任何非空安全租户提示保持，即使恰等固定英文。普通账号错误保持原行为；回调非法返回/异常不能覆盖明确安全分类。未提供回调保持兼容。此补齐不改变需求，不将只注册copy当已接通。
@@ -745,4 +758,4 @@ T192：当前Desktop既有Undici兼容patch使用Object.create克隆handler/cont
 T197/T198实际治理边界补齐：`get_dsh_model_metadata_snapshot`只供已授权管理员的visibility GET/PUT，复用原始tenant/Root共享/模型类型/provider owner核查但允许offline；`get_dsh_model_snapshot`固定要求online，所有模型调用及目录仍用原口。使新模型可offline创建→私有范围CAS并GET确认→上线，避免为设置权限制造可公开调用窗口，不更改既定敏感词架构。
 
 
-现场测试合同：Gateway合成错误的公开X-Request-ID为Gateway UUID，已知Backend ID另在X-Backend-Request-ID；普通转发保原编号并附已知Backend ID。MODEL审计使用Backend ID，输入EXTERNAL_SAFETY使用Gateway ID，测试不得互换。旧backend普通管理拒绝实际是HTTP200/业务19801，Gateway只对此已确证码精确映射403，未知业务失败仍503（T199/T200）。
+现场测试合同（2026-10-27 更新）：Gateway合成错误的公开X-Request-ID为Gateway UUID，转发前已分配的Backend ID另在X-Backend-Request-ID；新backend两者相同，普通转发正文保持原样。MODEL与EXTERNAL_SAFETY均复用统一UUID；旧backend显式返回不同编号时按模型响应关联，不混用历史两种编号。旧backend普通管理拒绝实际是HTTP200/业务19801，Gateway只对此已确证码精确映射403，未知业务失败仍503（T199/T200）。

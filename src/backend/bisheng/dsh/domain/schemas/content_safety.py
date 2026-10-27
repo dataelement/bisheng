@@ -96,6 +96,35 @@ class StageVersions(SafetyDTO):
     output: Version
 
 
+class MatchedWords(SafetyDTO):
+    input: tuple[str, ...] = Field(max_length=MAX_RULE_REFS)
+    output: tuple[str, ...] = Field(max_length=MAX_RULE_REFS)
+
+    @field_validator("input", "output", mode="before")
+    @classmethod
+    def bounded_words(cls, value):
+        if not isinstance(value, (list, tuple)):
+            return value
+        if len(value) > MAX_RULE_REFS:
+            raise ValueError("Matched word summary exceeds limit")
+        for word in value:
+            if not isinstance(word, str) or not word.strip() or len(word) > 256:
+                raise ValueError("Invalid matched word")
+            try:
+                word.encode("utf8")
+            except UnicodeError:
+                raise ValueError("Invalid matched word Unicode") from None
+        if len(set(value)) != len(value):
+            raise ValueError("Duplicate matched words")
+        return tuple(value)
+
+    @model_validator(mode="after")
+    def bounded_total(self):
+        if len(self.input) + len(self.output) > MAX_RULE_REFS:
+            raise ValueError("Matched word summary exceeds limit")
+        return self
+
+
 class ContentSafetyEvent(SafetyDTO):
     schema_version: Literal[1]
     source_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.:-]+$")
@@ -118,6 +147,7 @@ class ContentSafetyEvent(SafetyDTO):
     hit_count: int = Field(ge=0, le=MAX_INT64)
     hit_count_truncated: bool
     rule_refs: tuple[RuleRef, ...] = Field(max_length=MAX_RULE_REFS)
+    matched_words: MatchedWords | None = None
     forwarded: bool
     drain_status: DrainStatus
     conversation: SafetyConversation | None = None
@@ -141,6 +171,8 @@ class ContentSafetyEvent(SafetyDTO):
         for direction in ("input", "output"):
             version = getattr(self.stage_versions, direction)
             state = getattr(self.stage_results, direction)
+            if self.matched_words is not None and getattr(self.matched_words, direction) and state != "BLOCKED":
+                raise ValueError("Matched words require a blocked stage")
             if version > self.event_version or (state == "UNREPORTED") != (version == 0):
                 raise ValueError("Invalid stage version")
         start = datetime.fromisoformat(self.request_started_at.replace("Z", "+00:00"))

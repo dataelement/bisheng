@@ -29,6 +29,8 @@ export function ContentSafetyEventDetails({
   event,
 }: ContentSafetyEventDetailsProps) {
   const { t } = useTranslation();
+  const blocked = event.stage_results.input === "BLOCKED" || event.stage_results.output === "BLOCKED";
+  const matched = event.matched_words;
   const fields = [
     ["source", event.source_id],
     ["event_id", event.event_id],
@@ -60,6 +62,21 @@ export function ContentSafetyEventDetails({
             </Tag>
           ))}
         </div>
+        {blocked && (
+          <section aria-label={t("dsh.contentSafety.details.matched_words")} className="space-y-2 text-xs">
+            <h4 className="font-medium">{t("dsh.contentSafety.details.matched_words")}</h4>
+            {matched && (matched.input.length > 0 || matched.output.length > 0) ? (
+              <dl className="space-y-2">
+                {(["input", "output"] as const).filter((direction) => matched[direction].length > 0).map((direction) => (
+                  <div key={direction}>
+                    <dt className="text-muted-foreground">{t("dsh.contentSafety.details." + direction)}</dt>
+                    <dd className="break-all">{matched[direction].map((word) => <p key={word}>{word}</p>)}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : <p className="text-muted-foreground">{t("dsh.contentSafety.details.matched_words_unavailable")}</p>}
+          </section>
+        )}
         <dl className="grid min-w-0 gap-2 text-xs sm:grid-cols-2">
           {fields.map(([key, value]) => (
             <div key={key} className="min-w-0 space-y-1">

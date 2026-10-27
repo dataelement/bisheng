@@ -54,7 +54,6 @@ it("uses localized unavailable text when the user no longer exists", () => {
       row={{ ...row, user_name: null }}
       expanded={false}
       onToggle={vi.fn()}
-      onNavigate={vi.fn()}
     />,
   );
   expect(screen.getByText("dsh.modelAuditView.user_unavailable")).toBeVisible();
@@ -67,7 +66,6 @@ it("keeps request information compact, revealing exact IDs without fetching an o
       row={row}
       expanded={false}
       onToggle={vi.fn()}
-      onNavigate={vi.fn()}
     />,
   );
   const card = screen.getByRole("article");
@@ -88,7 +86,6 @@ it("keeps request information compact, revealing exact IDs without fetching an o
 });
 
 it("places the original between the request header and the independently colored status footer", () => {
-  const navigate = vi.fn();
   const toggle = vi.fn();
   render(
     <ModelAuditCard
@@ -96,7 +93,6 @@ it("places the original between the request header and the independently colored
       tenantId={2}
       expanded
       onToggle={toggle}
-      onNavigate={navigate}
     />,
   );
   const card = screen.getByRole("article");
@@ -127,7 +123,6 @@ it("places the original between the request header and the independently colored
   expect(
     screen.queryByRole("button", { name: "dsh.modelAuditView.sources.parent" }),
   ).toBeNull();
-  expect(navigate).not.toHaveBeenCalled();
   fireEvent.keyDown(body, { key: "Escape" });
   expect(toggle).toHaveBeenCalledOnce();
   expect(
@@ -146,7 +141,6 @@ it("does not make metadata-only or uncaptured records fetchable", () => {
       }}
       expanded={false}
       onToggle={onToggle}
-      onNavigate={vi.fn()}
     />,
   );
   const button = screen.getByRole("button", {
@@ -170,7 +164,6 @@ it("AC-12, AC-13: shows model and response reasons independently and handles old
       }}
       expanded={false}
       onToggle={vi.fn()}
-      onNavigate={vi.fn()}
     />,
   );
   fireEvent.click(
@@ -191,7 +184,6 @@ it("AC-12, AC-13: shows model and response reasons independently and handles old
       row={row}
       expanded={false}
       onToggle={vi.fn()}
-      onNavigate={vi.fn()}
     />,
   );
   expect(screen.queryByText("dsh.modelAuditView.failures.model")).toBeNull();
@@ -202,7 +194,7 @@ it("AC-12, AC-13: shows model and response reasons independently and handles old
 
 it("keeps the request start stable while separately showing actual model execution start", () => {
   const started = "2026-10-16T11:22:33Z";
-  render(<ModelAuditCard row={{ ...row, record_origin: "MODEL", model_entered: true, model_started_at: started }} expanded={false} onToggle={vi.fn()} onNavigate={vi.fn()} />);
+  render(<ModelAuditCard row={{ ...row, record_origin: "MODEL", model_entered: true, model_started_at: started }} expanded={false} onToggle={vi.fn()} />);
   expect(screen.getByRole("article").querySelector("header time")).toHaveTextContent(dshTime(row.started_at));
   fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }));
   const label = screen.getByText("dsh.contentSafety.details.model_started_at");
@@ -216,7 +208,7 @@ it.each([
   { origin: "EXTERNAL_SAFETY" as const, entered: null, expected: "dsh.contentSafety.details.unknown" },
   { origin: "EXTERNAL_SAFETY" as const, entered: false, expected: "dsh.contentSafety.model_entry.NOT_APPLICABLE" },
 ])("shows an explicit model start state for $origin/$entered", ({ origin, entered, expected }) => {
-  render(<ModelAuditCard row={{ ...row, record_origin: origin, model_entered: entered, model_started_at: null }} expanded={false} onToggle={vi.fn()} onNavigate={vi.fn()} />);
+  render(<ModelAuditCard row={{ ...row, record_origin: origin, model_entered: entered, model_started_at: null }} expanded={false} onToggle={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }));
   const label = screen.getByText("dsh.contentSafety.details.model_started_at");
   expect(label.nextElementSibling).toHaveTextContent(expected);

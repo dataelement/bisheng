@@ -60,6 +60,7 @@ def event_metadata(row):
         "hit_count",
         "hit_count_truncated",
         "rule_refs",
+        "matched_words",
         "forwarded",
         "drain_status",
         "conversation",

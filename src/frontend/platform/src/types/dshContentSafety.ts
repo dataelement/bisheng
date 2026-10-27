@@ -96,6 +96,7 @@ export type ContentSafetyEvent = {
   hit_count: number;
   hit_count_truncated: boolean;
   rule_refs: string[];
+  matched_words?: { input: string[]; output: string[] } | null;
   forwarded: boolean;
   drain_status: SafetyDrainStatus;
   conversation: SafetyConversation | null;
@@ -112,17 +113,4 @@ export type ContentSafetyEventPage = {
   items: ContentSafetyEventMetadata[];
   next_cursor: string | null;
   details_status: SafetyDetailsStatus;
-};
-
-export type ContentSafetyEventQuery = {
-  tenant_id?: number;
-  user_id?: number;
-  model_id?: number;
-  start_at?: string;
-  end_at?: string;
-  association_status?: "UNASSOCIATED";
-  gateway_request_id?: string;
-  backend_request_id?: string;
-  cursor?: string;
-  limit: number;
 };

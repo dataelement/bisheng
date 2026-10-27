@@ -725,3 +725,155 @@ B测试资料提交d5b026557b76bb57af223520c11aeecd4e83473e正常推work120并�
 | T211 三语 | N/A | PASS | PASS：JSON | N/A | PASS | PASS | PASS | PASS：日文单文件、键一致 |
 
 结论：六项任务本身 PASS；workspace完整lint为既有问题记录，真实数据库与部署未执行，不计为本轮通过。
+
+
+## 2026-10-27 Wave45：统一请求编号（T212–T218）
+
+### 范围和存储边界
+
+用户授权 Gateway/ backend 统一请求编号、补测试并同步设计，本轮明确不提交、不推送。B 在干净 e59b249a3、G 在干净 c999f9bf 上各创建 `codex/dsh-unified-request-id`；保留其他工作树，没有执行仓库级 stash/reset/restore/clean。没有修改前端、Desktop、数据库结构、真实数据或109部署。
+
+Gateway 仍为每次请求生成独立 UUID，Proxy 用显式 UUID 参数在 hop-by-hop 过滤后覆盖客户端头；客户端重复 X-Request-ID 及 Connection 指定该头均不能控制实际编号。Manager 在发起转发前设定 backend_request_id/forwarded；连接失败或响应头前取消仍可投影外部摘要。backend DshRoute 只实现通用 UUID 复用，不读取 Gateway 配置、不新增网络调用，模型准入和计量代码不改。无 Gateway、缺失/非法/零 UUID/多值头仍生成自己的编号。旧 backend 明确返回不同有效编号时兼容实际模型编号，缺失/非法/零 UUID/多值响应不抹掉预分配编号。
+
+事件明细仍存 `dsh_content_safety_event`；有安全摘要的请求仍存 `dsh_model_audit_request`。按会话字段进入会话记录或未关联请求；只有事件而无法安全关联请求的历史/冲突数据仍从未关联检查入口查看。分配 ID 或尝试发送不能证明模型执行，外部 `model_entered`/结果/用量保持未知，后到原生记录沿现有校验升级，不创建假 `dsh_model_call`。两开关都关闭时的零采集规则不变。
+
+### 验证命令与结果
+
+以下命令 B 从 src/backend 运行，使用已有 Python3.11 环境 `/Users/zhangguoqing/works/bisheng/src/backend/.venv/bin/python`，`config=/private/tmp/dsh-credit-limit-fix-20261027/test-config.yaml`、`PYTHONDONTWRITEBYTECODE=1`。G 使用现有 Java17 `/private/tmp/f111-gateway-tools/jdk-17.0.21+9/Contents/Home` 与 Maven3.9.9，不改锁定依赖。
+
+| 检查 | 命令/方法 | 结果 |
+|---|---|---|
+| 新 backend HTTP/仓储测试 | `pytest -q -p no:cacheprovider test/dsh/test_unified_request_id.py`（并入下列组合） | 20项新增覆盖；最初7个有效反例确认旧实现不复用ID，另2个Responses夹具非法input先纠正为现有消息列表契约，再转GREEN |
+| backend 相关回归 | `pytest -q -p no:cacheprovider test/dsh/test_unified_request_id.py test/dsh/test_content_safety_merge.py test/dsh/test_content_safety_native_writer.py test/dsh/test_model_audit_request_id.py test/dsh/test_models_api.py test/dsh/test_native_responses_middleware.py -k 'not usage_selected_model_cannot_borrow_another_allowance' --tb=short` | **81 PASS / 1 deselected**；1.42s |
+| 既有失败对照 | 不排除上述case时，旧test_models_api中的policy SimpleNamespace缺monthly_token_limit，AttributeError；新进程读取`git show HEAD:src/backend/bisheng/dsh/api/responses.py`并加载原DshRoute后单独运行同一case | 同一 AttributeError；证明该失败在HEAD基线存在，本轮未修改用量业务或放宽原断言。排除仅用于清楚报告本轮通过集合，不宣称整个backend回归全绿 |
+| Gateway 定向 | `mvn -o -q -Dtest=DshModelProxyClientTest,DshSafetyRequestManagerTest,DshModelRoutingFilterTest,DshContentSafetyFilterTest,DshRequestTelemetryTest,DshSafetyRoutingConfigurationTest test` | 初轮172 PASS；自审追加响应头前主动取消、多值/零UUID后纳入完整回归 |
+| Gateway 完整 | `mvn -o -q test` | **902 PASS / 10 SKIP / 0 FAIL / 0 ERROR**，912 cases；Manager39项通过。SKIP为原真实双库集成，没有用mock替代 |
+| 两仓实际回环HTTP | `/private/tmp/dsh-unified-request-id/run_probe.py`：真实Java DshModelProxyClient→随机127.0.0.1端口上的实际Python DshRoute/模型服务/原生协议adapter | **Chat流式1 PASS + Responses流式1 PASS**；供应商/鉴权/额度是合成fixture。backend准入及结算4条事件的request_id/trace_id与Gateway生成ID一致，2个SUCCEEDED；不冒充真实部署E2E |
+| Ruff | `ruff format --check --no-cache .../responses.py .../test_unified_request_id.py`、`ruff check --no-cache`同两文件 | PASS |
+| 架构和差异 | `bash scripts/arch-guard.sh`逐个修改Python文件；两仓`git diff --check`；设计引用核验 | PASS；无新增分层违规、无章节重编号 |
+
+本地日志：`/private/tmp/dsh-unified-request-id-backend-pass.log`、`/private/tmp/dsh-unified-request-id-backend-baseline.log`、`/private/tmp/dsh-unified-request-id-gateway-full.log`；跨仓合成证据与临时运行器在 `/private/tmp/dsh-unified-request-id/`。运行器退出后已停止其自有backend进程；全部凭据、内容和ID为合成值，没有访问109或输出真实Token。
+
+### Task Review（按仓库 /task-review，主agent自审）
+
+| 任务 | 文件范围 | 配对/依赖 | 结果 |
+|---|---|---|---|
+| T212 | 新增单一test_unified_request_id.py，HTTP透传/真实Chat执行/仓储投影/拒绝准入边界 | 覆盖AC-62、AC-63；20项新增测试通过 | PASS |
+| T213 | 仅responses.py请求ID解析与DshRoute赋值 | T212已通过；没有Gateway配置、身份或计量变更 | PASS |
+| T214 | ProxyClientTest、RequestManagerTest；真实回环收到请求未发头即断开、头前主动取消、正常回显及旧ID兼容 | AC-62、AC-63；正常正文不重编码、一次调用/订阅断言保留 | PASS |
+| T215 | ProxyClient、RequestManager；显式UUID、转发前固定编号、响应UUID安全选择 | T214通过；缺失/非法/多值/零UUID回退已覆盖；客户端取消释放物理连接 | PASS |
+| T216 | 两过滤器test；只更新Proxy调用及verify的UUID参数 | T215通过；原鉴权、路由和正文断言保留 | PASS |
+| T217 | RoutingConfigurationTest、RequestTelemetryTest；只更新调用UUID参数 | T215通过；原装配/遥测回归通过 | PASS |
+| T218 | B本记录及G验证记录；spec/design/tasks同步 | T213、T215、T216、T217通过；本地证据与未执行项分开 | PASS_WITH_NOTES |
+
+七项检查：架构分层PASS；命名及AC标注PASS；序列化PASS（保持既有OpenAI兼容DSH信封，不套通用平台响应）；数据库N/A（没有生产DDL或SQL写法变更，沿现有租户/身份校验）；前端N/A；信息泄漏PASS；设计同步PASS（spec新增AC-62、AC-63，design数据流、关联和对外编号契约均已更新）。T218注记为HEAD既有用量fixture失败与真实环境未验，并非本轮业务失败。
+
+没有进行真实MySQL/DM8本轮验收、109镜像或客户端联调、完整跨租户/故障/容量测试及总体T132审查，不据本地HTTP或SQLite仓储测试勾选原15项待验任务。统一编号也不能修复已丢失的历史conversation_id，滚动升级中旧backend替换ID且响应丢失仍无法自动合并到其实际模型记录。当前 **203/218**，仅本轮T212–T218新增勾选。
+
+
+## 2026-10-27 Wave46：移除未关联检查界面（T219–T224）
+
+用户明确要求“界面上去掉未关联检查功能，仅保留数据库以供debug排查定位”。该变更由用户直接确认，覆盖前版AC-63中独立界面兜底的取舍；spec新增AC-64，design的数据归并、前端职责和查询消费者均已同步。继续在两仓既有未提交分支上工作，不提交、不推送、不部署。
+
+### 改动与边界
+
+- ModelAuditRequests 以原 tenant/caller scope key 直接挂载原请求页，删除 ModelAuditViews 入口按钮、隐藏检查页、访问状态和页面缓存。
+- 删除 UnassociatedSafetyEvents.tsx（329行）、getUnassociatedSafetyEvents 前端封装及 ContentSafetyEventQuery 专用类型；生产前端没有这些名称或独立未关联事件取数调用残留。
+- zh-Hans、en-US、ja 同步删除专属标题/说明/筛选提示和两个专属UUID/身份校验文案，共五个键；保留共用关联状态、31天范围校验及请求检查详情文案。
+- 会话记录、未关联请求、请求明细以及请求内ContentSafetyDetails保留。未关联请求仍查询请求摘要的association_status=UNASSOCIATED，与被移除的未关联检查事件视图不同。
+- 本轮业务改动仅8个Platform文件；没有修改backend事件接收、投影、数据库模型、迁移、保留策略或实际数据，dsh_content_safety_event继续保存debug事实。前轮统一请求编号的未提交改动完整保留；其他工作树不变。
+
+### 实际验证
+
+| 检查 | 命令/方法 | 结果 |
+|---|---|---|
+| 配对反例 | `pnpm --dir src/frontend/platform exec vitest run src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx`，实现前 | **3 RED / 25 PASS**；groups/unassociated/requests均仍出现旧入口，三项均在预期“不应存在按钮”的断言失败 |
+| DSH组件回归 | `pnpm --dir src/frontend/platform exec vitest run src/pages/SystemPage/dsh` | **257 PASS / 25 files**，8.28s；覆盖三个入口移除、无独立查询、未关联请求条件保留、已有请求检查详情/会话/筛选/原文等 |
+| workspace类型 | frontend根目录`pnpm typecheck` | PASS；Platform610 strict文件、Client1467 strict文件、共享file-viewers均通过 |
+| 目标lint | Platform目录`pnpm exec eslint src/pages/SystemPage/dsh/ModelAuditPanel.tsx src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx src/controllers/API/dshContentSafety.ts src/types/dshContentSafety.ts --suppressions-location eslint-suppressions.json` | PASS；涉及文件无既有suppression条目，无新增豁免或strict-ignore |
+| 完整lint | frontend根目录`pnpm lint` | **95项既有错误**；日志8个诊断文件逐一用`git diff --quiet HEAD -- <files>`核对均未修改，目标文件单独lint全过；未改无关文件、规则或suppression |
+| 文案 | frontend根目录`pnpm check-i18n`、`pnpm locales:check` | PASS；三语键对齐，无新增drift，生成文案未改 |
+| 生产构建 | frontend根目录`pnpm build:platform` | PASS，17.21s；既有大chunk warning保留。没有发布或部署产物 |
+| 范围与结构 | 原组件已删除、生产导入/封装/类型无残留、三语专属key删除、原共享key保留；arch-guard、`git diff --check` | PASS；ModelAuditPanel525行、ContentSafetyDetails测试405行，均低于600行 |
+
+日志：`/private/tmp/dsh-remove-unassociated-check-{red,tests,typecheck,lint,target-lint,i18n,locales,build}.log`。界面验证为实际组件DOM断言和生产构建；没有将其表述为109已更新或真实浏览器/客户端验收。数据库没有执行查询、删除或修改命令。
+
+### Task Review
+
+| 任务 | 类型/文件范围 | 配对/依赖与结果 |
+|---|---|---|
+| T219 | 测试；ContentSafetyDetails.test.tsx | AC-64三反例先RED后GREEN；删除废弃页面专属测试，保留请求内详情及过滤测试；PASS |
+| T220 | 实现；ModelAuditPanel.tsx、明确删除的UnassociatedSafetyEvents.tsx | T219通过；原scope key隔离保留，未增加样式/组件/状态库；PASS，组件缺失是预期删除 |
+| T221 | 实现；API/dshContentSafety.ts、types/dshContentSafety.ts | T220通过；独立查询/类型无使用点，保留请求内事件API和DTO；PASS |
+| T222 | 实现；zh-Hans/bs.json、en-US/bs.json | T220通过；仅五个专属键删除；PASS |
+| T223 | 实现；ja/bs.json | T222通过；与中英文同键删除，i18n检查通过；PASS |
+| T224 | 文档/本地验收；本记录 | T221–T223通过；本轮spec/design/tasks同步，记录full lint既有失败和未部署范围；PASS_WITH_NOTES |
+
+七维检查：架构PASS（组件取数仍通过封装，未新增store HTTP）；命名PASS；序列化N/A（保留现有响应及DTO）；数据库N/A（无本轮生产数据库改动）；前端PASS（无硬编码中文/新库/新样式，实际类型与目标lint通过）；信息泄漏PASS（只用合成测试，无凭据）；设计同步PASS（AC-64及前端职责/数据保留明确）。本轮新增6项完成，当前 **209/224**；既有15项双库/完整现场/容量/最终门禁不勾选。未提交、未推送、未部署。
+
+
+## 2026-10-27 Wave47：移除请求明细视图并展示命中词（T225–T243）
+
+用户明确要求“请求明细去掉，把相关的跳转也去掉”“命中后展示具体的敏感词”。spec新增AC-65、AC-66，design同步存储、协议、权限、旧数据与发布顺序。该记录覆盖Wave46中保留请求明细的旧取舍；继续保留此前统一请求编号和移除未关联检查界面的未提交改动。不提交、不推送、不部署。
+
+### 实现边界
+
+- 审计只保留会话记录、未关联请求两个主视图；移除请求明细标签、跨视图跳转/返回状态和深层树继续跳转。树达到既有限制时显示普通说明。单条请求展开、原文和检查详情保留，未删除请求审计数据。
+- Gateway按本次请求冻结的CompiledPolicy将命中rule_refs映射为配置词快照；不读取命中后的新配置，不保存词周边正文。Observation深拷贝且toString不输出词值；既有客户端阻断消息和普通日志不增加词值。
+- 既有schema_version=1事件增加可选matched_words对象，包含input/output两个必需数组；允许旧字段缺失/null。两阶段合计至多20词，每词非空白、合法UTF-8、至多256个Unicode码点、阶段内不重复；非空方向必须BLOCKED。前后端和Gateway均校验边界。
+- backend的dsh_content_safety_event增加可空JsonType列，接收、投影事实一致性与已授权详情元数据均接入；不增加主列表JOIN或N+1查询，不改变用户/租户鉴权、模型准入和计量。迁移f111_matched_words基于实际唯一旧head f111_dsh_content_safety，仅幂等DDL，不回填旧数据，拒绝破坏性downgrade。
+- 检查详情按输入/输出显示命中词，采用React文本渲染；三语文案同步。旧记录没有词快照时显示“该检查记录未保存命中词，无法还原。”，不拿当前词库反推。命中词仍受既有请求详情权限保护。
+- 必须先完成迁移并升级**全部backend实例**再升级Gateway；旧严格DTO会拒绝未知字段。回退先回退Gateway，保留backend新增列及既有事实。Gateway继续使用既有MEDIUMTEXT/CLOB事件载荷，无新DDL。
+
+### 实际验证
+
+| 检查 | 命令/方法 | 结果 |
+|---|---|---|
+| backend配对反例 | 新test_content_safety_matched_words.py在实现前运行 | 5项预期RED / 11PASS；原DTO拒绝新字段、原模型缺属性；实现后16PASS |
+| backend定向 | config为隔离test-config.yaml，Python3.11，pytest -q -p no:cacheprovider：新词值/仓储/合并/查询/API/native writer/新迁移/单head共9文件 | **170PASS**，4.95s；命令及日志见下 |
+| backend扩大回归 | 当前test/dsh与相同命令/配置的只读git archive HEAD基线对照；共同排除此前已确证旧用量fixture case | 当前16FAIL /1466PASS /227SKIP /1 deselected /102ERROR；HEAD16FAIL /1428PASS /227SKIP /1 deselected /102ERROR。逐项Counter对照全部FAILED/ERROR case ID及次数完全相同；新增38PASS=统一编号20+词值16+迁移2。不宣称全量通过，不扩大修复旧失败 |
+| Gateway完整 | Java17、Maven3.9.9，mvn -o -q test | **905PASS /10SKIP /0FAIL /0ERROR**，915 cases；10项原真实双库测试未执行 |
+| Gateway生产mapper及跨语言 | 新DshMatchedWordsTest用SpringCustomConfig实际ObjectMapper；导出实际Java事件，再由真实Python ContentSafetyEvent.model_validate_json解析 | 3PASS；input合成词与output空数组一致，生产null序列化不会破坏协议；没有模拟拼接事件 |
+| Platform组件 | pnpm --dir src/frontend/platform exec vitest run src/pages/SystemPage/dsh | **269PASS /25 files**，9.60s；覆盖仅两入口/无跳转/树限制、过滤保留、方向词值/文本转义/旧数据及严格API解析 |
+| 类型、文案和目标lint | frontend根pnpm typecheck、pnpm check-i18n、pnpm locales:check；12个保留的修改TS文件单独ESLint | PASS；Platform610、Client1467 strict及共享文件通过，三语键一致，无新增豁免 |
+| 完整前端lint | frontend根pnpm lint | 95项既有错误；8个诊断文件逐项git diff --quiet HEAD确认未修改。没有修改无关文件或规则 |
+| Platform生产构建 | frontend根pnpm build:platform | PASS，16.67s；保留既有大chunk warning，构建产物未发布 |
+| Ruff/架构 | 8个修改Python源和测试的ruff format --check与ruff check；修改业务源逐项arch-guard | PASS；没有新增分层违规 |
+| 迁移结构 | alembic heads、离线重复upgrade/旧NULL/downgrade拒绝、既有JsonType双方言编译 | 单head f111_matched_words；迁移测试2PASS。静态方言检查不冒充DM8实测 |
+| 实际隔离MySQL | 本机Docker socket已核对；新随机名称/127.0.0.1随机端口/随机合成凭据/带任务label的mysql:8.0独立容器，mysql_check.py调用真实迁移两次 | **MySQL8.0.46 PASS**：旧NULL保留、可空原生JSON、中英文/HTML样式/256emoji词往返、拒绝破坏性回退。退出后仅移除本次自有容器及匿名卷，label查询确认无残留；其他容器和109不变 |
+
+完整定向backend命令：在src/backend目录，以既有Python3.11独立环境执行：
+
+```sh
+config=/private/tmp/dsh-credit-limit-fix-20261027/test-config.yaml PYTHONDONTWRITEBYTECODE=1 /Users/zhangguoqing/works/bisheng/src/backend/.venv/bin/python -m pytest -q -p no:cacheprovider test/dsh/test_content_safety_matched_words.py test/dsh/test_content_safety_repository.py test/dsh/test_content_safety_merge.py test/dsh/test_content_safety_queries.py test/dsh/test_content_safety_api.py test/dsh/test_content_safety_native_writer.py test/dsh/test_matched_words_migration.py test/database/test_alembic_single_head.py --tb=short
+```
+
+证据：`/private/tmp/dsh-matched-words-backend-final.log`、`/private/tmp/dsh-matched-words-backend-full.log`、`/private/tmp/dsh-matched-words-backend-head-baseline.log`；Gateway完整和生产mapper日志`/private/tmp/dsh-matched-words-gateway-full.log`、`/private/tmp/dsh-matched-words-gateway-production-mapper.log`；实际事件和MySQL脚本/回执`/private/tmp/dsh-matched-words/`（全部合成值）；前端`/private/tmp/dsh-request-view-words-{ui-final,typecheck-final,target-lint-final,lint,i18n,locales,build-final}.log`。HEAD对照来自`git archive`到本次独立临时目录，没有checkout/reset已有工作树。
+
+### Task Review（主agent逐文件自审）
+
+| 任务 | 范围/依赖核对 | 结论 |
+|---|---|---|
+| T225 | ContentSafetyDetails/Tree测试；AC-65、AC-66入口/无跳转/词值/旧数据反例及最终组件回归 | PASS |
+| T226 | Panel/Tree只保留两视图和深度提示，无相关跳转残留；T225通过 | PASS |
+| T227 | Card/Group移除onNavigate透传，保留单请求展开；T226通过 | PASS |
+| T228 | Panel/Filters测试改为真实未关联请求条件，断言association_status保留；T226通过 | PASS |
+| T229 | Card测试删除废弃callback fixture，原显示/展开断言保留；T227通过 | PASS |
+| T230 | 新词值与Manager测试；冻结版本、深拷贝、输入/输出决策和drain、隐私和边界；完整回归通过 | PASS |
+| T231 | MatcherCache/Outbox只从冻结规则还原词并校验持久化，无新配置RPC；T230通过 | PASS |
+| T232 | Manager构建方向快照，原请求编号/计量边界保留；T231通过 | PASS |
+| T233 | 新backend词值测试16项，旧协议和不合法值拒绝覆盖 | PASS |
+| T234 | DTO/ORM严格可选契约及可空字段；T233通过 | PASS |
+| T235 | repo append/projection同步字段与JSON事实比较，原wire hash不变；T234通过 | PASS |
+| T236 | 请求事件metadata白名单，原鉴权/租户过滤不变，主列表不变；T235通过 | PASS |
+| T237 | 新迁移及测试，唯一head/幂等/旧NULL/拒绝降级；T234通过，真实MySQL补验通过 | PASS |
+| T238 | API/types兼容缺失/null，新值数量/状态/字符/重复校验；T225、T236通过 | PASS |
+| T239 | 仅显式打开检查详情后显示文本和历史缺失提示；T238通过 | PASS |
+| T240 | 中英文同键增删，无硬编码中文；T226、T239通过 | PASS |
+| T241 | 日文同键同义，i18n检查通过；T240通过 | PASS |
+| T242 | 自有实际MySQL与真实Java→Python事件契约通过；DM8和部署E2E未冒充通过 | PASS_WITH_NOTES |
+| T243 | 两仓验证记录及spec/design/tasks一致，失败与未执行项如实保留 | PASS_WITH_NOTES |
+
+七维：架构PASS；命名及AC标注PASS；序列化PASS；数据库PASS（本轮新增迁移真实MySQL，DM8待验）；前端PASS（复用原组件，无新库/样式、无硬编码中文、无新strict-ignore，维护文件均≤600行）；信息泄漏PASS（只有配置命中词进入受权详情，无正文上下文/凭据/普通日志泄漏）；设计同步PASS。原完整现场/双库/容量/最终特性审查仍未完成，本轮不是全feature最终验收。
+
+T225–T243共19项完成，当前**228/243**。原15项T119、T120、T121、T122、T123、T124、T125、T126、T127、T128、T129、T130、T131、T132、T180保持待验；Linux DM8按用户决定继续待验。未执行真实浏览器视觉验收、109部署或客户端联调；DOM测试和构建不替代这些验收。未提交、未推送、未部署。

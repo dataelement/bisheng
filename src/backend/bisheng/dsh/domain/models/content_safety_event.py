@@ -61,6 +61,7 @@ class DshContentSafetyEvent(SQLModelSerializable, table=True):
         default=False, sa_column=Column(Boolean, nullable=False, server_default=text("0"))
     )
     rule_refs: list[str] = Field(default_factory=list, sa_column=Column(JsonType, nullable=False))
+    matched_words: dict | None = Field(default=None, sa_column=Column(JsonType, nullable=True))
     forwarded: bool = Field(sa_column=Column(Boolean, nullable=False))
     drain_status: str = Field(sa_column=Column(String(32), nullable=False))
     association_status: str = Field(default="UNASSOCIATED", sa_column=Column(String(32), nullable=False))

@@ -174,12 +174,12 @@ describe("audit tenant selection", () => {
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("button", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
     expect(api.page).toHaveBeenCalledWith(
-      { tenant_id: 2, limit: 20 },
+      { tenant_id: 2, limit: 20, association_status: "UNASSOCIATED" },
       expect.any(AbortSignal),
     );
     expect(api.mode).toHaveBeenCalledWith(2, expect.any(AbortSignal));
@@ -194,7 +194,7 @@ describe("audit tenant selection", () => {
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("button", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
@@ -275,7 +275,7 @@ describe("audit tenant selection", () => {
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("button", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
@@ -286,7 +286,7 @@ describe("audit tenant selection", () => {
       }),
     ).toBeNull();
     expect(api.page).toHaveBeenCalledWith(
-      { tenant_id: 2, limit: 20 },
+      { tenant_id: 2, limit: 20, association_status: "UNASSOCIATED" },
       expect.any(AbortSignal),
     );
     expect(screen.queryByRole("button", { name: "dsh.save" })).toBeNull();
@@ -351,7 +351,7 @@ describe("request-card audit UI", () => {
       audit_record_missing: true,
       gap: "MODE_UNKNOWN",
     });
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     fireEvent.click(
       screen.getByRole("button", {
         name: "dsh.modelAuditView.advancedFilters",
@@ -368,11 +368,11 @@ describe("request-card audit UI", () => {
     expect(api.body).not.toHaveBeenCalled();
   });
   it("retains exact-request filtering without redundant user conversation navigation", async () => {
-    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    render(<ModelAuditRequests tenantId={2} initialView="unassociated" />);
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("button", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
@@ -391,7 +391,7 @@ describe("request-card audit UI", () => {
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("button", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");
@@ -402,6 +402,7 @@ describe("request-card audit UI", () => {
           tenant_id: 2,
           limit: 20,
           request_id: "one",
+          association_status: "UNASSOCIATED",
         },
         expect.any(AbortSignal),
       ),
@@ -409,12 +410,12 @@ describe("request-card audit UI", () => {
   });
   it("does not prefetch originals; explicitly opened originals render as text and clear on pagination", async () => {
     const { container } = render(
-      <ModelAuditRequests tenantId={2} initialView="requests" />,
+      <ModelAuditRequests tenantId={2} initialView="unassociated" />,
     );
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
         screen.getByRole("button", {
-          name: "dsh.modelAuditView.views.requests",
+          name: "dsh.modelAuditView.views.unassociated",
         }),
       );
     await screen.findByText("Synthetic");

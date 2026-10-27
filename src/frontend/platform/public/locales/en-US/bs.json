@@ -2647,10 +2647,7 @@
       },
       "association": {
         "ASSOCIATED": "Linked to an audit record",
-        "UNASSOCIATED": "Not linked to an audit record",
-        "unassociated_hint": "The check result is saved, but its model audit record has not been confirmed.",
-        "unassociated_title": "Unlinked check records",
-        "filter_hint": "These filters are separate from the audit records and use the request start time. The default is the last 7 days, with a maximum of 31 days per query."
+        "UNASSOCIATED": "Not linked to an audit record"
       },
       "delivery": {
         "backlog": "Some check records have not arrived. The displayed results may be incomplete.",
@@ -2686,7 +2683,9 @@
         "source": "Record source",
         "summary": "Overall check result",
         "title": "Sensitive word check details",
-        "unknown": "Unconfirmed"
+        "unknown": "Unconfirmed",
+        "matched_words": "Matched sensitive words",
+        "matched_words_unavailable": "This check did not save the matched words; they cannot be recovered."
       },
       "details_status": {
         "AVAILABLE": "Details available",
@@ -2793,9 +2792,7 @@
         "words_required": "Select a valid word list or add custom words before enabling checks.",
         "checks_required": "Select input checks or output checks before enabling checks.",
         "reply_too_long": "The block message can contain up to 2048 characters. Shorten it and try again.",
-        "range_too_large": "Select a time range of 31 days or less.",
-        "invalid_identity": "Enter a complete, valid user or model ID.",
-        "invalid_request_id": "Enter a complete, valid request UUID."
+        "range_too_large": "Select a time range of 31 days or less."
       }
     },
     "modelAudit": "Model audit",
@@ -2834,7 +2831,6 @@
         "branch_pending": "Branch summary updating",
         "child_level": "Child Agent · level {{level}}",
         "children": "Child Agent conversations",
-        "continue": "Continue in this conversation",
         "known_abnormal": "Anomalies recorded · summary updating",
         "no_children": "No child conversations match these filters",
         "own_count": "{{count}} requests in this conversation",
@@ -2854,7 +2850,8 @@
         "refresh_required": "The conversation directory changed. Refresh records to continue.",
         "retry": "Retry",
         "summary_pending": "Summary updating",
-        "updating": "Relationships or totals are updating. Showing the last complete directory; request details remain available."
+        "updating": "Relationships or totals are updating. Showing the last complete directory; request details remain available.",
+        "depth_limit": "The conversation nesting display limit has been reached."
       },
       "summary_status": "Status",
       "status_pending": "In progress or awaiting audit updates",
@@ -2866,8 +2863,6 @@
       "group_abnormal": "{{count}} abnormal",
       "group_scope": "Only matching requests are shown. Group totals and status cover all indexed requests and may lag.",
       "group_all": "View all saved requests",
-      "all_scope": "Showing all saved requests for this user and conversation; other filters were cleared.",
-      "return_results": "Back to filtered results",
       "scan_limited": "No more matches in this batch. Continue to the next page.",
       "more_reasons": "{{count}} more",
       "summary": {
@@ -2878,8 +2873,7 @@
       },
       "views": {
         "groups": "Conversations",
-        "unassociated": "Unassociated requests",
-        "requests": "Request details"
+        "unassociated": "Unassociated requests"
       },
       "reasons": {
         "model_result_FAILED": "Model call failed",

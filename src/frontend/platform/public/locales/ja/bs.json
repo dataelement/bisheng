@@ -2592,10 +2592,7 @@
       },
       "association": {
         "ASSOCIATED": "監査記録に関連付け済み",
-        "UNASSOCIATED": "監査記録に未関連付け",
-        "unassociated_hint": "チェック結果は保存済みですが、対応するモデル監査記録はまだ確認できません。",
-        "unassociated_title": "未関連付けのチェック記録",
-        "filter_hint": "この絞り込みは監査記録とは独立し、リクエストの開始時刻を基準にします。既定は直近7日間、1回の検索は最大31日間です。"
+        "UNASSOCIATED": "監査記録に未関連付け"
       },
       "delivery": {
         "backlog": "一部のチェック記録はまだ届いていません。表示中の結果は不完全な可能性があります。",
@@ -2631,7 +2628,9 @@
         "source": "記録元",
         "summary": "全体のチェック結果",
         "title": "禁止語チェックの詳細",
-        "unknown": "未確認"
+        "unknown": "未確認",
+        "matched_words": "一致した機密ワード",
+        "matched_words_unavailable": "このチェック記録には一致したワードが保存されていないため、復元できません。"
       },
       "details_status": {
         "AVAILABLE": "詳細を表示可能",
@@ -2738,9 +2737,7 @@
         "words_required": "チェックを有効にする前に、有効な語句リストを選択するか、カスタム禁止語を入力してください。",
         "checks_required": "チェックを有効にする前に、入力または出力のチェックを選択してください。",
         "reply_too_long": "ブロック時のメッセージは2048文字以内にしてください。",
-        "range_too_large": "期間は31日以内で指定してください。",
-        "invalid_identity": "完全で有効なユーザーまたはモデルのIDを入力してください。",
-        "invalid_request_id": "完全で有効なリクエストUUIDを入力してください。"
+        "range_too_large": "期間は31日以内で指定してください。"
       }
     },
     "modelAudit": "モデル監査",
@@ -2779,7 +2776,6 @@
         "branch_pending": "子会話を含む集計を更新中",
         "child_level": "子 Agent · 第 {{level}} 階層",
         "children": "子 Agent の会話",
-        "continue": "この会話の詳細を表示",
         "known_abnormal": "異常を記録済み · 集計を更新中",
         "no_children": "条件に一致する子会話はありません",
         "own_count": "この会話 {{count}} 件",
@@ -2799,7 +2795,8 @@
         "refresh_required": "会話一覧が更新されました。レコードを再読み込みしてください。",
         "retry": "再試行",
         "summary_pending": "集計を更新中",
-        "updating": "最新の関係または集計を整理中です。完了済みの一覧を表示しています。リクエスト詳細は確認できます。"
+        "updating": "最新の関係または集計を整理中です。完了済みの一覧を表示しています。リクエスト詳細は確認できます。",
+        "depth_limit": "会話階層の表示上限に達しました。"
       },
       "summary_status": "状態",
       "status_pending": "処理中または記録の更新待ち",
@@ -2811,8 +2808,6 @@
       "group_abnormal": "異常 {{count}} 件",
       "group_scope": "条件に一致するリクエストのみ表示しています。集計は会話内の登録済み全件が対象で、反映が遅れる場合があります。",
       "group_all": "保存済み全リクエストを表示",
-      "all_scope": "このユーザーと会話の保存済み全件を表示中です。他の条件は解除されました。",
-      "return_results": "検索結果に戻る",
       "scan_limited": "このバッチには他の一致がありません。次のページで検索を続けられます。",
       "more_reasons": "他 {{count}} 件",
       "summary": {
@@ -2823,8 +2818,7 @@
       },
       "views": {
         "groups": "会話ログ",
-        "unassociated": "未関連リクエスト",
-        "requests": "リクエスト明細"
+        "unassociated": "未関連リクエスト"
       },
       "reasons": {
         "model_result_FAILED": "モデル呼び出し失敗",

@@ -81,8 +81,7 @@ it("AC-T08/AC-T09: titles render literally, preserve the ID, and fall back witho
   view.rerender(tree({ ...value, conversation_title: null }, false));
   expect(screen.getByText(value.conversation_id)).toBeVisible();
 });
-const navigate = vi.fn(),
-  refresh = vi.fn();
+const refresh = vi.fn();
 function tree(value: AuditTreeNode, expanded = true) {
   return (
     <ModelAuditTree
@@ -90,7 +89,6 @@ function tree(value: AuditTreeNode, expanded = true) {
       query={query}
       expanded={expanded}
       onToggle={vi.fn()}
-      onNavigate={navigate}
       onRefresh={refresh}
     />
   );
@@ -228,7 +226,6 @@ it("AC-H09: changed filters abort children and ignore the late response", async 
       query={{ ...query, model_name: "Provider / New" }}
       expanded
       onToggle={vi.fn()}
-      onNavigate={navigate}
       onRefresh={refresh}
     />,
   );
@@ -238,4 +235,12 @@ it("AC-H09: changed filters abort children and ignore the late response", async 
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: /conversation-b/ })).toBeNull(),
   );
+});
+
+// Coverage AC: AC-65.
+it("does not link to the removed request view at the tree depth limit", () => {
+  render(<ModelAuditTree node={node("a", { has_children: true })} query={query} expanded depth={31}
+    onToggle={vi.fn()} onRefresh={refresh} />);
+  expect(screen.queryByRole("button", { name: "dsh.modelAuditView.tree.continue" })).toBeNull();
+  expect(screen.getByText("dsh.modelAuditView.tree.depth_limit")).toBeVisible();
 });

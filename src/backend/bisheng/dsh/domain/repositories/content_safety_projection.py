@@ -49,6 +49,8 @@ def _saved_fact(session: Session, event: ContentSafetyEvent) -> DshContentSafety
             incoming, stored = _event_time(incoming), _utc(stored)
         elif name in {"stage_results", "stage_versions", "conversation"}:
             incoming = incoming.model_dump(exclude_none=True) if incoming is not None else None
+        elif name == "matched_words":
+            incoming = incoming.model_dump(mode="json") if incoming is not None else None
         elif name == "rule_refs":
             incoming = list(incoming)
         if incoming != stored:

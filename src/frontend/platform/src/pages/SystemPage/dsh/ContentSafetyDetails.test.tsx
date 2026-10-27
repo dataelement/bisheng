@@ -1,7 +1,7 @@
 import * as React from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userContext } from "@/contexts/userContext";
+import request from "@/controllers/request";
 import { contentSafetyStates } from "@/types/dshContentSafety";
 import type { ContentSafetyEventMetadata, ContentSafetyEventPage } from "@/types/dshContentSafety";
 import type { ModelAuditQuery, ModelAuditRecord } from "@/types/dshModelAudit";
@@ -10,14 +10,12 @@ import { ModelAuditCard } from "./ModelAuditCard";
 import { ModelAuditFilters } from "./ModelAuditFilters";
 import { ModelAuditModelSelect } from "./ModelAuditModelSelect";
 import { ModelAuditRequests } from "./ModelAuditPanel";
-import { UnassociatedSafetyEvents } from "./UnassociatedSafetyEvents";
 import en from "../../../../public/locales/en-US/bs.json";
 import zh from "../../../../public/locales/zh-Hans/bs.json";
 import ja from "../../../../public/locales/ja/bs.json";
 
 const api = vi.hoisted(() => ({
   events: vi.fn(),
-  unassociated: vi.fn(),
   page: vi.fn(),
   readiness: vi.fn(),
   groups: vi.fn(),
@@ -30,7 +28,6 @@ const api = vi.hoisted(() => ({
 vi.mock("@/controllers/API/dshContentSafety", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/controllers/API/dshContentSafety")>()),
   getAuditSafetyEvents: api.events,
-  getUnassociatedSafetyEvents: api.unassociated,
 }));
 vi.mock("@/controllers/API/dshModelAudit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/controllers/API/dshModelAudit")>()),
@@ -121,17 +118,6 @@ const page = (
 ): ContentSafetyEventPage => ({ items, next_cursor, details_status });
 const button = (name: string) => screen.getByRole("button", { name });
 const search = () => fireEvent.click(button("dsh.modelAuditView.search"));
-const enterEvents = () => fireEvent.click(button("dsh.contentSafety.association.unassociated_title"));
-const labels = {
-  user: "dsh.modelAuditView.user",
-  model: "dsh.auditHistory.fields.model_id",
-  gateway: "dsh.contentSafety.details.gateway_request_id",
-  backend: "dsh.contentSafety.details.backend_request_id",
-  start: "dsh.modelAuditView.filters.start_at",
-  end: "dsh.modelAuditView.filters.end_at",
-};
-const change = (key: keyof typeof labels, value: string) =>
-  fireEvent.change(screen.getByLabelText(labels[key]), { target: { value } });
 function card(extra: Partial<ModelAuditRecord> = {}, expanded = false) {
   return render(
     <ModelAuditCard
@@ -139,7 +125,6 @@ function card(extra: Partial<ModelAuditRecord> = {}, expanded = false) {
       tenantId={101}
       expanded={expanded}
       onToggle={vi.fn()}
-      onNavigate={vi.fn()}
     />,
   );
 }
@@ -168,11 +153,13 @@ function choose(key: string, value: string) {
   fireEvent.keyDown(screen.getByRole("combobox", { name: "dsh.contentSafety.filters." + key }), { key: "ArrowDown" });
   fireEvent.click(screen.getByRole("option", { name: value }));
 }
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 beforeEach(() => {
   vi.resetAllMocks();
   api.events.mockResolvedValue(page([], null, "UNREPORTED"));
-  api.unassociated.mockResolvedValue(page());
   api.page.mockResolvedValue({ items: [row], next_cursor: null, progress: ready });
   api.readiness.mockResolvedValue(ready);
   api.groups.mockResolvedValue({ items: [group], next_cursor: null, scan_limited: false, progress: ready });
@@ -388,202 +375,71 @@ describe("real audit filters and explicit cursor invalidation", () => {
   });
 });
 
-// Coverage AC: AC-44, AC-45, AC-46, AC-49, AC-51.
-describe("unassociated view uses its own filters and tenant/caller lifetime", () => {
-  it("is lazy, hides unsupported filters and forwards existing root progress without extra row requests", async () => {
-    render(<ModelAuditRequests tenantId={101} />);
-    await screen.findByLabelText("dsh.contentSafety.readiness.all_hits: 2");
-    expect(api.unassociated).not.toHaveBeenCalled();
-    enterEvents();
-    await screen.findByText(event.event_id);
-    expect(screen.queryByRole("combobox", { name: "dsh.contentSafety.filters.state" })).toBeNull();
-    expect(screen.queryByRole("combobox", { name: "dsh.contentSafety.filters.direction" })).toBeNull();
-    expect(api.groupRequests).not.toHaveBeenCalled();
-    expect(api.body).not.toHaveBeenCalled();
-    expect(api.unassociated).toHaveBeenCalledWith(
-      {
-        tenant_id: 101,
-        association_status: "UNASSOCIATED",
-        limit: 20,
-        user_id: undefined,
-        model_id: undefined,
-        gateway_request_id: undefined,
-        backend_request_id: undefined,
-        start_at: undefined,
-        end_at: undefined,
-        cursor: undefined,
-      },
-      expect.any(AbortSignal),
-    );
+// Coverage AC: AC-64.
+describe("audit views without detached safety checks", () => {
+  it.each(["groups", "unassociated"] as const)(
+    "keeps %s available without an unlinked-check entry or query",
+    async (initialView) => {
+      const transport = vi.spyOn(request, "get").mockRejectedValue(new Error("Unexpected query"));
+      render(<ModelAuditRequests tenantId={101} initialView={initialView} />);
+      await waitFor(() => expect(initialView === "groups" ? api.groups : api.page).toHaveBeenCalled());
+      expect(screen.queryByRole("button", {
+        name: "dsh.contentSafety.association.unassociated_title",
+      })).toBeNull();
+      expect(screen.queryByLabelText("dsh.contentSafety.association.unassociated_title")).toBeNull();
+      expect(screen.queryByRole("button", { name: "dsh.modelAuditView.views.requests" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "dsh.modelAuditView.return_results" })).toBeNull();
+      for (const view of ["groups", "unassociated"])
+        expect(screen.getByRole("button", { name: "dsh.modelAuditView.views." + view })).toBeVisible();
+      if (initialView === "unassociated")
+        expect(api.page).toHaveBeenCalledWith(
+          expect.objectContaining({ tenant_id: 101, association_status: "UNASSOCIATED" }),
+          expect.any(AbortSignal),
+        );
+      fireEvent.click(button("dsh.modelAuditView.refresh_records"));
+      fireEvent(window, new Event("focus"));
+      fireEvent(window, new Event("online"));
+      await waitFor(() => expect(initialView === "groups" ? api.groups : api.page).toHaveBeenCalledTimes(2));
+      expect(transport.mock.calls.some(([url]) => url === "/api/v1/dsh/admin/model-audit/content-safety-events")).toBe(false);
+    },
+  );
+});
+
+// Coverage AC: AC-66.
+describe("matched rule words in authorized check details", () => {
+  it.each(["input", "output"] as const)("renders %s matched words as text without injecting markup", (direction) => {
+    const word = "<img src=x onerror=synthetic>";
+    const words = { input: direction === "input" ? [word] : [], output: direction === "output" ? [word] : [] };
+    const stages = direction === "input" ? { input: "BLOCKED" as const, output: "NOT_APPLICABLE" as const } : event.stage_results;
+    render(<ContentSafetyEventDetails event={{ ...event, stage_results: stages, matched_words: words }} />);
+    expect(screen.getByText(word)).toBeVisible();
+    expect(document.querySelector("img")).toBeNull();
+    expect(screen.getByLabelText("dsh.contentSafety.details.matched_words")).toBeVisible();
   });
-  it("submits all six explicit conditions with uppercase UUIDs while preserving exact int64 metadata", async () => {
-    render(<UnassociatedSafetyEvents tenantId={101} />);
-    await screen.findByText(event.model_id);
-    expect(screen.getByText(event.user_id)).toBeVisible();
-    for (const [key, value] of [
-      ["user", "11"],
-      ["model", "7"],
-      ["gateway", event.gateway_request_id],
-      ["backend", "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB"],
-      ["start", "2026-01-01T00:00"],
-      ["end", "2026-01-08T00:00"],
-    ] as const)
-      change(key, value);
-    search();
-    await waitFor(() => expect(api.unassociated).toHaveBeenCalledTimes(2));
-    expect(api.unassociated.mock.calls[1][0]).toMatchObject({
-      tenant_id: 101,
-      user_id: 11,
-      model_id: 7,
-      gateway_request_id: event.gateway_request_id,
-      backend_request_id: "BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB",
-      start_at: new Date("2026-01-01T00:00").toISOString(),
-      end_at: new Date("2026-01-08T00:00").toISOString(),
-      cursor: undefined,
-    });
+  it("shows unknown instead of reconstructing words for legacy blocked events", () => {
+    render(<ContentSafetyEventDetails event={event} />);
+    expect(screen.getByText("dsh.contentSafety.details.matched_words_unavailable")).toBeVisible();
   });
-  it("marks only invalid IDs and both invalid time fields, blocking invalid transport", async () => {
-    render(<UnassociatedSafetyEvents tenantId={101} />);
-    await screen.findByText(event.event_id);
-    change("user", "9007199254740993");
-    expect(screen.getByLabelText(labels.user)).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByLabelText(labels.model)).not.toHaveAttribute("aria-invalid", "true");
-    expect(button("dsh.modelAuditView.search")).toBeDisabled();
-    change("user", "11");
-    change("gateway", "not-a-uuid");
-    expect(screen.getByLabelText(labels.gateway)).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByLabelText(labels.user)).not.toHaveAttribute("aria-invalid", "true");
-    change("gateway", "");
-    change("start", "2026-01-01T00:00");
-    change("end", "2026-03-01T00:00");
-    for (const key of ["start", "end"] as const)
-      expect(screen.getByLabelText(labels[key])).toHaveAttribute("aria-invalid", "true");
-    expect(api.unassociated).toHaveBeenCalledOnce();
+  it("validates and retains a captured word snapshot in the actual API wrapper", async () => {
+    const actual = await vi.importActual<typeof import("@/controllers/API/dshContentSafety")>("@/controllers/API/dshContentSafety");
+    const words = { input: [], output: ["synthetic-frozen"] };
+    vi.spyOn(request, "get").mockResolvedValue(page([{ ...event, rule_refs: ["custom:101:4:0"], matched_words: words } as unknown as ContentSafetyEventMetadata]));
+    expect((await actual.getAuditSafetyEvents("request-1", { limit: 20 })).items[0].matched_words).toEqual(words);
   });
-  it("clears event cursors on explicit filter change and refresh keeps the applied condition", async () => {
-    api.unassociated.mockResolvedValue(page([event], "next"));
-    render(<UnassociatedSafetyEvents tenantId={101} />);
-    await screen.findByText(event.event_id);
-    fireEvent.click(button("dsh.next"));
-    await waitFor(() => expect(api.unassociated.mock.calls.at(-1)?.[0].cursor).toBe("next"));
-    change("model", "7");
-    search();
-    await waitFor(() =>
-      expect(api.unassociated.mock.calls.at(-1)?.[0]).toMatchObject({ model_id: 7, cursor: undefined }),
-    );
-    expect(button("dsh.previous")).toBeDisabled();
-    change("model", "8");
-    fireEvent.click(button("dsh.contentSafety.actions.refresh"));
-    await waitFor(() => expect(api.unassociated).toHaveBeenCalledTimes(4));
-    expect(api.unassociated.mock.calls[3][0]).toMatchObject({ model_id: 7, cursor: undefined });
-    expect(screen.getByLabelText(labels.model)).toHaveValue("8");
+  it.each([undefined, null])("accepts legacy word availability %j without guessing", async (words) => {
+    const actual = await vi.importActual<typeof import("@/controllers/API/dshContentSafety")>("@/controllers/API/dshContentSafety");
+    const legacy = { ...event, rule_refs: ["custom:101:4:0"] };
+    if (words === null) Object.assign(legacy, { matched_words: null });
+    vi.spyOn(request, "get").mockResolvedValue(page([legacy]));
+    expect((await actual.getAuditSafetyEvents("request-1", { limit: 20 })).items[0].matched_words).toBe(words);
   });
-  it("retries the failed event cursor without dropping the active filter or leaking errors", async () => {
-    api.unassociated
-      .mockResolvedValueOnce(page([event], "next"))
-      .mockRejectedValueOnce(Error("private query SQL"))
-      .mockResolvedValue(page([]));
-    render(<UnassociatedSafetyEvents tenantId={101} />);
-    await screen.findByText(event.event_id);
-    fireEvent.click(button("dsh.next"));
-    await screen.findByRole("alert");
-    expect(screen.queryByText("private query SQL")).toBeNull();
-    expect(api.unassociated).toHaveBeenCalledTimes(2);
-    fireEvent.click(button("dsh.contentSafety.actions.retry"));
-    await screen.findByText("dsh.contentSafety.details.empty");
-    expect(api.unassociated.mock.calls.slice(1).every((call) => call[0].cursor === "next")).toBe(true);
-  });
-  it("aborts tenant changes and ignores a late old-tenant event", async () => {
-    let finish!: (value: ContentSafetyEventPage) => void;
-    api.unassociated
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            finish = resolve;
-          }),
-      )
-      .mockResolvedValue(page([{ ...event, event_id: "new-tenant" }]));
-    const view = render(<UnassociatedSafetyEvents tenantId={101} />);
-    await waitFor(() => expect(api.unassociated).toHaveBeenCalledOnce());
-    const signal = api.unassociated.mock.calls[0][1] as AbortSignal;
-    view.rerender(<UnassociatedSafetyEvents tenantId={202} />);
-    await screen.findByText("new-tenant");
-    expect(signal.aborted).toBe(true);
-    await act(async () => finish(page([{ ...event, event_id: "old-private" }])));
-    expect(screen.queryByText("old-private")).toBeNull();
-  });
-  it("clears hidden old-caller content on a same-tenant identity change", async () => {
-    let finish!: (value: ContentSafetyEventPage) => void;
-    api.unassociated.mockResolvedValueOnce(page([{ ...event, event_id: "old-visible" }])).mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-    );
-    const context = (id: number): React.ContextType<typeof userContext> => ({
-      user: { user_id: id, tenant_id: 101, role: "admin" },
-      setUser: vi.fn(),
-      savedComponents: [],
-      checkComponentsName: vi.fn(),
-      delComponent: vi.fn(),
-      addSavedComponent: vi.fn().mockResolvedValue(null),
-    });
-    const view = render(
-      <userContext.Provider value={context(11)}>
-        <ModelAuditRequests tenantId={101} />
-      </userContext.Provider>,
-    );
-    await screen.findByRole("button", { name: /Synthetic group/ });
-    enterEvents();
-    await screen.findByText("old-visible");
-    fireEvent.click(button("dsh.contentSafety.actions.refresh"));
-    await waitFor(() => expect(api.unassociated).toHaveBeenCalledTimes(2));
-    const signal = api.unassociated.mock.calls[1][1] as AbortSignal;
-    fireEvent.click(button("dsh.modelAuditView.return_results"));
-    view.rerender(
-      <userContext.Provider value={context(22)}>
-        <ModelAuditRequests tenantId={101} />
-      </userContext.Provider>,
-    );
-    await screen.findByRole("button", { name: /Synthetic group/ });
-    expect(signal.aborted).toBe(true);
-    await act(async () => finish(page([{ ...event, event_id: "previous-caller" }])));
-    expect(screen.queryByText("previous-caller")).toBeNull();
-    expect(screen.queryByText("old-visible")).toBeNull();
-    expect(screen.queryByRole("button", { name: "dsh.modelAuditView.return_results" })).toBeNull();
-  });
-  it("does not refetch a hidden visited event page on focus, reconnect or returning", async () => {
-    render(<ModelAuditRequests tenantId={101} />);
-    await screen.findByRole("button", { name: /Synthetic group/ });
-    enterEvents();
-    await screen.findByText(event.event_id);
-    fireEvent.click(button("dsh.modelAuditView.return_results"));
-    fireEvent(window, new Event("focus"));
-    fireEvent(window, new Event("online"));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    });
-    expect(api.unassociated).toHaveBeenCalledOnce();
-    enterEvents();
-    await screen.findByText(event.event_id);
-    expect(api.unassociated).toHaveBeenCalledOnce();
-  });
-  it("keeps prior audit pagination and event drafts separate across view switches", async () => {
-    api.page.mockResolvedValue({ items: [row], next_cursor: "audit-next", progress: ready });
-    render(<ModelAuditRequests tenantId={101} initialView="requests" />);
-    await screen.findByText(row.model_name);
-    fireEvent.click(button("dsh.next"));
-    await waitFor(() => expect(api.page.mock.calls.at(-1)?.[0].cursor).toBe("audit-next"));
-    const count = api.page.mock.calls.length;
-    enterEvents();
-    await screen.findByText(event.event_id);
-    change("user", "11");
-    fireEvent.click(button("dsh.modelAuditView.return_results"));
-    expect(screen.getByText(row.model_name)).toBeVisible();
-    expect(button("dsh.previous")).toBeEnabled();
-    expect(api.page).toHaveBeenCalledTimes(count);
-    enterEvents();
-    expect(screen.getByLabelText(labels.user)).toHaveValue("11");
-    expect(api.unassociated).toHaveBeenCalledOnce();
+  it.each([
+    { input: [], output: [123] }, { input: [], output: ["x".repeat(257)] },
+    { input: ["wrong-stage"], output: [] }, { input: [], output: Array.from({length: 21}, (_, i) => String(i)) },
+    { input: [], output: ["same", "same"] }, { input: [], output: [String.fromCharCode(0xd800)] },
+  ])("rejects malformed word snapshots without exposing them: %j", async (words) => {
+    const actual = await vi.importActual<typeof import("@/controllers/API/dshContentSafety")>("@/controllers/API/dshContentSafety");
+    vi.spyOn(request, "get").mockResolvedValue(page([{ ...event, rule_refs: ["custom:101:4:0"], matched_words: words } as unknown as ContentSafetyEventMetadata]));
+    await expect(actual.getAuditSafetyEvents("request-1", { limit: 20 })).rejects.toThrow("Invalid DSH content safety response");
   });
 });

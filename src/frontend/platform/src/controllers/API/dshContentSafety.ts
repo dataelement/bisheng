@@ -3,7 +3,6 @@ import { contentSafetyStates } from "@/types/dshContentSafety";
 import type {
   ContentSafetyEventMetadata,
   ContentSafetyEventPage,
-  ContentSafetyEventQuery,
   DshSafetyCapabilities,
   DshSafetyLimits,
   DshSensitivePolicy,
@@ -193,6 +192,24 @@ function validConversation(value: unknown): boolean {
   );
 }
 
+function validMatchedWords(value: unknown, stages: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (!object(value) || !object(stages) || Object.keys(value).length !== 2) return false;
+  let count = 0;
+  for (const direction of ["input", "output"]) {
+    const words = value[direction];
+    if (!Array.isArray(words) || words.length > 20 || new Set(words).size !== words.length) return false;
+    count += words.length;
+    if (count > 20 || (words.length && stages[direction] !== "BLOCKED")) return false;
+    if (!words.every((word) => typeof word === "string" && word.length <= 512 && word.trim().length > 0 &&
+      Array.from(word).length <= 256 && Array.from(word).every((part) => {
+        const point = part.codePointAt(0)!;
+        return point < 0xd800 || point > 0xdfff;
+      }))) return false;
+  }
+  return true;
+}
+
 function validEvent(value: unknown): value is ContentSafetyEventMetadata {
   if (
     !object(value) ||
@@ -216,6 +233,7 @@ function validEvent(value: unknown): value is ContentSafetyEventMetadata {
     !stamp(value.request_started_at) ||
     !stamp(value.occurred_at) ||
     !stamp(value.received_at) ||
+    !validMatchedWords(value.matched_words, value.stage_results) ||
     !integer(value.hit_count) ||
     typeof value.hit_count_truncated !== "boolean" ||
     typeof value.forwarded !== "boolean" ||
@@ -294,17 +312,6 @@ export async function getAuditSafetyEvents(
       "/requests/" +
       encodeURIComponent(requestId) +
       "/content-safety-events",
-    eventConfig(query, signal),
-  );
-  return parseEventPage(value, query.limit);
-}
-
-export async function getUnassociatedSafetyEvents(
-  query: ContentSafetyEventQuery,
-  signal?: AbortSignal,
-): Promise<ContentSafetyEventPage> {
-  const value: unknown = await request.get(
-    audit + "/content-safety-events",
     eventConfig(query, signal),
   );
   return parseEventPage(value, query.limit);

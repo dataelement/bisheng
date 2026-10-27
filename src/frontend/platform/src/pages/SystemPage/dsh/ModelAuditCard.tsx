@@ -14,7 +14,6 @@ interface ModelAuditCardProps {
   tenantId?: number;
   expanded: boolean;
   onToggle: () => void;
-  onNavigate: (userId: number, conversationId: string) => void;
 }
 
 const statusAxes = [

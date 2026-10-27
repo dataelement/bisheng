@@ -2592,10 +2592,7 @@
       },
       "association": {
         "ASSOCIATED": "已关联审计记录",
-        "UNASSOCIATED": "尚未关联审计记录",
-        "unassociated_hint": "检查结果已保存，但尚不能确认对应的模型审计记录。",
-        "unassociated_title": "未关联检查记录",
-        "filter_hint": "这里的筛选独立于审计记录，按请求开始时间查询；默认最近 7 天，单次最多 31 天。"
+        "UNASSOCIATED": "尚未关联审计记录"
       },
       "delivery": {
         "backlog": "部分检查记录尚未送达，当前结果可能不完整。",
@@ -2631,7 +2628,9 @@
         "source": "记录来源",
         "summary": "整体检查结果",
         "title": "敏感词检查详情",
-        "unknown": "未确认"
+        "unknown": "未确认",
+        "matched_words": "命中敏感词",
+        "matched_words_unavailable": "该检查记录未保存命中词，无法还原。"
       },
       "details_status": {
         "AVAILABLE": "明细可查看",
@@ -2738,9 +2737,7 @@
         "words_required": "启用检查前，请选择有效词库或填写自定义敏感词。",
         "checks_required": "启用检查前，请至少选择检查输入或检查输出。",
         "reply_too_long": "阻断提示最多 2048 个字符，请缩短后重试。",
-        "range_too_large": "单次查询最多 31 天，请缩小时间范围。",
-        "invalid_identity": "请输入完整、有效的用户或模型编号。",
-        "invalid_request_id": "请输入完整、有效的请求 UUID。"
+        "range_too_large": "单次查询最多 31 天，请缩小时间范围。"
       }
     },
     "modelAudit": "模型审计",
@@ -2779,7 +2776,6 @@
         "branch_pending": "含子会话汇总更新中",
         "child_level": "子 Agent · 第 {{level}} 级",
         "children": "子 Agent 会话",
-        "continue": "继续查看该会话",
         "known_abnormal": "已记录异常 · 汇总更新中",
         "no_children": "没有符合筛选条件的子会话",
         "own_count": "本会话 {{count}} 个请求",
@@ -2799,7 +2795,8 @@
         "refresh_required": "会话目录已更新，请刷新记录后继续查看。",
         "retry": "重试",
         "summary_pending": "汇总更新中",
-        "updating": "正在整理最新关系或统计，当前展示已完成的目录；请求明细仍可查看。"
+        "updating": "正在整理最新关系或统计，当前展示已完成的目录；请求明细仍可查看。",
+        "depth_limit": "已达到会话层级展示上限。"
       },
       "summary_status": "状态",
       "status_pending": "进行中或等待记录补齐",
@@ -2811,8 +2808,6 @@
       "group_abnormal": "异常 {{count}}",
       "group_scope": "当前仅显示筛选命中的请求；会话数量与状态汇总涵盖全部已索引请求，可能存在更新延迟。",
       "group_all": "查看全部已存请求",
-      "all_scope": "已切换到该用户会话的全部已存请求，其他筛选已解除。",
-      "return_results": "返回筛选结果",
       "scan_limited": "本批未找到更多匹配，可翻页继续查找。",
       "more_reasons": "另 {{count}} 项",
       "summary": {
@@ -2823,8 +2818,7 @@
       },
       "views": {
         "groups": "会话日志",
-        "unassociated": "未关联请求",
-        "requests": "请求明细"
+        "unassociated": "未关联请求"
       },
       "reasons": {
         "model_result_FAILED": "模型调用失败",

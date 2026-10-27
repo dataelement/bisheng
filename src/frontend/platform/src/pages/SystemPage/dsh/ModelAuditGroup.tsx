@@ -18,7 +18,6 @@ interface ModelAuditGroupProps {
   query: ModelAuditQuery;
   expanded: boolean;
   onToggle: () => void;
-  onNavigate: (userId: number, conversationId: string) => void;
 }
 export function ModelAuditGroup({
   group,
@@ -26,7 +25,6 @@ export function ModelAuditGroup({
   query,
   expanded,
   onToggle,
-  onNavigate,
 }: ModelAuditGroupProps) {
   const { t } = useTranslation();
   const id = useId();
@@ -85,7 +83,6 @@ export function ModelAuditGroup({
             key={JSON.stringify(query)}
             group={group}
             query={query}
-            onNavigate={onNavigate}
           />
         </div>
       )}
@@ -180,12 +177,10 @@ export function ModelAuditSafetySummary({
 interface GroupRequestsProps {
   group: AuditConversation;
   query: ModelAuditQuery;
-  onNavigate: (userId: number, conversationId: string) => void;
 }
 export function ModelAuditGroupRequests({
   group,
   query,
-  onNavigate,
 }: GroupRequestsProps) {
   const { t } = useTranslation();
   const [cursor, setCursor] = useState<string>();
@@ -225,7 +220,6 @@ export function ModelAuditGroupRequests({
                 old === row.request_id ? null : row.request_id,
               )
             }
-            onNavigate={onNavigate}
           />
         ))
       )}

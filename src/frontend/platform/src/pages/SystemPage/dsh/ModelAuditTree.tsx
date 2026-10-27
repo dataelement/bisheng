@@ -17,7 +17,6 @@ interface ModelAuditTreeProps {
   query: ModelAuditQuery;
   expanded: boolean;
   onToggle: () => void;
-  onNavigate: (userId: number, conversationId: string) => void;
   onRefresh: () => void;
   depth?: number;
 }
@@ -28,7 +27,6 @@ export function ModelAuditTree({
   query,
   expanded,
   onToggle,
-  onNavigate,
   onRefresh,
   depth = 0,
 }: ModelAuditTreeProps) {
@@ -149,7 +147,6 @@ export function ModelAuditTree({
                 key={JSON.stringify(query)}
                 group={node}
                 query={query}
-                onNavigate={onNavigate}
               />
             </>
           )}
@@ -160,13 +157,7 @@ export function ModelAuditTree({
             >
               <h3 className="text-sm font-medium">{t(prefix + "children")}</h3>
               {depth >= 31 ? (
-                <Button
-                  type="button"
-                  variant="link"
-                  onClick={() => onNavigate(node.user_id, node.conversation_id)}
-                >
-                  {t(prefix + "continue")}
-                </Button>
+                <p className="text-sm text-muted-foreground">{t(prefix + "depth_limit")}</p>
               ) : (
                 <TreeChildren
                   key={JSON.stringify([
@@ -177,7 +168,6 @@ export function ModelAuditTree({
                   node={node}
                   query={query}
                   depth={depth}
-                  onNavigate={onNavigate}
                   onRefresh={onRefresh}
                 />
               )}
@@ -193,7 +183,6 @@ interface TreeChildrenProps {
   node: AuditTreeNode;
   query: ModelAuditQuery;
   depth: number;
-  onNavigate: ModelAuditTreeProps["onNavigate"];
   onRefresh: () => void;
 }
 
@@ -201,7 +190,6 @@ function TreeChildren({
   node,
   query,
   depth,
-  onNavigate,
   onRefresh,
 }: TreeChildrenProps) {
   const { t } = useTranslation();
@@ -262,7 +250,6 @@ function TreeChildren({
                     : child.conversation_key,
                 )
               }
-              onNavigate={onNavigate}
               onRefresh={onRefresh}
             />
           ))}
