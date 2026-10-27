@@ -33,18 +33,18 @@
     {
      "name": "kicker",
      "role": "label",
-     "capacity": 33,
+     "capacity": 36,
      "max_lines": 1,
-     "font_size": 14,
+     "font_size": 13,
      "sample": "示例 · 2026 年度工作汇报",
      "bullets": false
     },
     {
      "name": "title",
      "role": "title",
-     "capacity": 23,
+     "capacity": 19,
      "max_lines": 2,
-     "font_size": 40,
+     "font_size": 44,
      "sample": "示例：主标题写一句核心判断或文稿名称",
      "bullets": false
     },
@@ -60,18 +60,18 @@
     {
      "name": "org",
      "role": "label",
-     "capacity": 30,
+     "capacity": 33,
      "max_lines": 1,
-     "font_size": 15,
+     "font_size": 14,
      "sample": "示例单位名称",
      "bullets": false
     },
     {
      "name": "date",
      "role": "label",
-     "capacity": 11,
+     "capacity": 12,
      "max_lines": 1,
-     "font_size": 14,
+     "font_size": 13,
      "sample": "2026 年 10 月",
      "bullets": false
     }
@@ -203,9 +203,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     }
@@ -290,9 +290,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     }
@@ -324,9 +324,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -395,9 +395,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -473,9 +473,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -634,9 +634,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -821,9 +821,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1075,9 +1075,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1177,9 +1177,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1286,9 +1286,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1480,9 +1480,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1703,9 +1703,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1806,9 +1806,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },

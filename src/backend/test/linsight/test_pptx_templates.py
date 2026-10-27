@@ -280,3 +280,81 @@ def test_helpful_errors_for_unknown_names():
         deck.fill(chart_page, "chart", "x")
     with pytest.raises(ValueError, match="未知模板"):
         Deck.open("does-not-exist")
+
+
+# --------------------------------------------------------------------------- #
+# inspect_deck + deck_checks (AC-10, AC-11, AC-12)
+# --------------------------------------------------------------------------- #
+NEW_CHECK_PHRASES = ("超过该位置建议容量", "残留模板示例文字", "仍是模板示例值", "连续", "封面缺少首读焦点", "图表区没有放图表")
+
+
+def _inspect(pptx_path: Path, cwd: Path, *extra) -> str:
+    import subprocess
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS / "inspect_deck.py"), str(pptx_path), "--checks-only", *extra],
+        capture_output=True, text=True, cwd=str(cwd),
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    return proc.stdout
+
+
+def test_a_correctly_filled_template_deck_passes_quietly(tmp_path, photo):
+    out, _ = _build_sample(tmp_path, photo)
+    report = _inspect(out, tmp_path)
+    assert "模板清单" in report and "结论: 通过" in report
+    hits = [p for p in NEW_CHECK_PHRASES if p in report]
+    assert not hits, f"good deck triggered new checks {hits}\n{report}"
+    assert "合计: 0 ERROR / 0 WARN" in report, report
+
+
+def test_template_checks_fire_on_a_bad_deck(tmp_path):
+    deck = Deck.open("blueprint", footer="示范")
+    s = deck.add("cover")
+    deck.fill(s, "title", "方案汇报")
+    s = deck.add("kpi-4")
+    deck.fill(s, "title", "这是一个远远超过标题建议容量的超长标题，会把版面挤爆，应该精简或者拆成两页来讲清楚")
+    for _ in range(3):
+        deck.add("cards-3")
+    deck.add("chart-insight")
+    out = tmp_path / "output" / "bad.pptx"
+    deck.save(str(out), manifest_dir=str(tmp_path / "scratch"))
+    report = _inspect(out, tmp_path)
+    for phrase in ("超过该位置建议容量", "残留模板示例文字", "仍是模板示例值", "连续 3 页使用版式 cards-3",
+                   "图表区没有放图表"):
+        assert phrase in report, f"missing {phrase!r}\n{report}"
+    assert "第2页 「title」" in report, "capacity findings name the page and the slot"
+    for line in report.splitlines():
+        if any(p in line for p in NEW_CHECK_PHRASES):
+            assert line.startswith("WARN"), f"new checks start as WARN (AC-12): {line}"
+
+
+def test_cover_focus_and_silhouette_repetition_without_manifest(tmp_path):
+    from pptx.util import Pt
+
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Pt(960), Pt(540)
+    blank = prs.slide_layouts[6]
+    for i in range(4):
+        slide = prs.slides.add_slide(blank)
+        for j, size in enumerate((24, 18, 16) if i == 0 else (28, 16, 16)):
+            left = 200 if i == 0 else 60  # the cover has its own composition
+            box = slide.shapes.add_textbox(Pt(left), Pt(60 + j * 90), Pt(700), Pt(70))
+            box.text_frame.word_wrap = True
+            box.text_frame.text = f"第{i}页文字{j}"
+            box.text_frame.paragraphs[0].runs[0].font.size = Pt(size)
+    out = tmp_path / "plain.pptx"
+    prs.save(str(out))
+    report = _inspect(out, tmp_path)
+    assert "未找到模板清单" in report
+    assert "封面缺少首读焦点" in report
+    assert "第 2–4 页连续 3 页使用相同构图" in report
+
+
+def test_stale_manifest_is_ignored(tmp_path, photo):
+    out, manifest_path = _build_sample(tmp_path, photo)
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data["pages"] = data["pages"][:-1]
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    report = _inspect(out, tmp_path)
+    assert "忽略清单" in report and "结论: 通过" in report

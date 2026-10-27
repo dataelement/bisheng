@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-10-27 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-27 用户确认 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 一轮修订后 LGTM（拆分 T001→T017、T012→T018） |
-| 实现 | 🔄 进行中 | 6 / 18 完成 |
+| 实现 | 🔄 进行中 | 10 / 18 完成 |
 
 ---
 
@@ -91,7 +91,7 @@
   - **覆盖 AC**：AC-05、AC-06
   - **依赖**：T004
 
-- [ ] **T006**: `list_templates.py`
+- [x] **T006**: `list_templates.py`
   - **文件**：`.../bisheng-pptx/scripts/list_templates.py`，测试并入 `test_pptx_templates.py`
   - **逻辑**：
     - 无参数时，以纯文本列出模板：id、名称、适用场景、配色说明、版式数。
@@ -100,7 +100,7 @@
   - **覆盖 AC**：AC-02
   - **依赖**：T001
 
-- [ ] **T007**: 新检查单测
+- [x] **T007**: 新检查单测
   - **文件**：`src/backend/test/linsight/test_pptx_templates.py`
   - **测试**：
     - 坏样本：超容量、示例残留、连续 3 页同一 `layout_id`、封面焦点不足，四项各命中一次，每条都带页码和元素名。
@@ -110,7 +110,7 @@
   - **覆盖 AC**：AC-10、AC-11、AC-12
   - **依赖**：T005
 
-- [ ] **T008**: `deck_checks.py` 与 `inspect_deck.py` 集成
+- [x] **T008**: `deck_checks.py` 与 `inspect_deck.py` 集成
   - **文件**：`.../scripts/deck_checks.py`、`.../scripts/inspect_deck.py`
   - **逻辑**：
     - 新增 `--manifest` 参数，未传时自动查找 `scratch/<名>.manifest.json`。
@@ -186,7 +186,7 @@
   - **覆盖 AC**：AC-20、AC-21、AC-23、AC-25、AC-26、AC-28、AC-29
   - **依赖**：T012
 
-- [ ] **T013**: 种子化回归测试
+- [x] **T013**: 种子化回归测试
   - **文件**：`src/backend/test/linsight/test_builtin_skill_seeder.py`
   - **测试**：
     - `discover_builtin_bundles()["bisheng-pptx"]` 包含 `templates/**`，字节与磁盘一致。（AC-13）
@@ -255,3 +255,4 @@
 - T001/T005：图表与表格渲染抽成技能包内共享模块 `scripts/deck_render.py`，生成脚本与 `Deck` 共用一份实现（模板样例与真实产出不漂移）→ design §4.5 已补该模块。
 - T001：新增 `scripts/pptx_templates/builder.py`（形状、插槽登记、主题 XML 底层），与 themes/layouts/build 并列。
 - T017：`bridge` 用瀑布图实现，`deck_render` 增加 `waterfall` 图表类型。
+- T008：为让模板自身通过既有检查（不依赖基线扣除），调整了模板：封面标题 44pt、页脚上移并改 10pt、装饰圆环与光晕收进画布内、页码字段声明段落字号 → design §5 第 13 条。

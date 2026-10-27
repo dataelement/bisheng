@@ -14,7 +14,7 @@ M = 48.0  # outer margin
 RIGHT = 912.0  # SLIDE_W - M
 CW = RIGHT - M  # content width
 TOP = 118.0  # content area top on light pages
-FOOT_Y = 508.0
+FOOT_Y = 492.0
 
 SAMPLE_ORG = "示例单位 · 文稿名称"
 
@@ -74,7 +74,7 @@ def light_page(b: SlideBuilder, title: str | None, kicker: str = "01 · 示例�
 def footer(b: SlideBuilder, on_dark: bool = False) -> None:
     t = b.theme
     color = t.on_dark_muted if on_dark else t.muted
-    b.text("footer", M, FOOT_Y + 2, 560, 14, SAMPLE_ORG, size=9, color=color, role="footer")
+    b.text("footer", M, FOOT_Y + 2, 560, 16, SAMPLE_ORG, size=10, color=color, role="footer")
     b.page_number("deco.page", RIGHT - 60, FOOT_Y, 60, 16, 10, color)
 
 
@@ -84,8 +84,8 @@ def dark_page(b: SlideBuilder, variant: str = "cover") -> None:
     bg = t.primary if t.marker == "sidebar" and variant != "cover" else t.dark_bg
     b.background(bg)
     if t.marker == "block":  # 红韵: concentric gold rings on the right
-        b.oval("deco.ring1", 600, 40, 460, 460, line=t.secondary, line_w=1.5)
-        b.oval("deco.ring2", 690, 130, 280, 280, line=t.secondary, line_w=0.75)
+        b.oval("deco.ring1", 540, 36, 400, 400, line=t.secondary, line_w=1.5)
+        b.oval("deco.ring2", 620, 116, 240, 240, line=t.secondary, line_w=0.75)
     elif t.marker == "rule":  # 蓝图: faint drafting grid
         grid = "2A5182"
         for i, x in enumerate(range(96, 960, 96)):
@@ -95,13 +95,13 @@ def dark_page(b: SlideBuilder, variant: str = "cover") -> None:
     elif t.marker == "tab":  # 经营: navy panel with a light side
         b.rect("deco.side", 600, 0, 360, 540, fill=t.surface)
     elif t.marker == "dot":  # 深空: two soft glows
-        b.oval("deco.glow1", 600, -120, 520, 520, fill=t.secondary, alpha=0.22)
-        b.oval("deco.glow2", 760, 230, 340, 340, fill=t.accent, alpha=0.16)
+        b.oval("deco.glow1", 520, 24, 420, 420, fill=t.secondary, alpha=0.22)
+        b.oval("deco.glow2", 700, 236, 240, 240, fill=t.accent, alpha=0.16)
     elif t.marker == "sidebar":  # 课堂: green panel on a light page / outline ring on green
         if variant == "cover":
             b.rect("deco.panel", 0, 0, 320, 540, fill=t.primary)
         else:
-            b.oval("deco.ring1", 660, 90, 380, 380, line=t.secondary, line_w=1.5)
+            b.oval("deco.ring1", 600, 80, 340, 340, line=t.secondary, line_w=1.5)
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ def cover(b: SlideBuilder) -> None:
         t.secondary if t.marker == "block" else (t.accent if t.marker in ("dot", "rule") else t.on_dark_muted)
     )
     b.text(
-        "kicker", x, 118, width, 20, "示例 · 2026 年度工作汇报", size=14, color=kicker_color, bold=True, role="label"
+        "kicker", x, 118, width, 20, "示例 · 2026 年度工作汇报", size=13, color=kicker_color, bold=True, role="label"
     )
     if t.marker in ("rule", "tab"):
         b.rect("deco.tab", x, 146, 44, 5, fill=t.accent)
@@ -156,7 +156,7 @@ def cover(b: SlideBuilder) -> None:
         width,
         130,
         "示例：主标题写一句核心判断或文稿名称",
-        size=40,
+        size=44,
         color=t.on_dark,
         bold=True,
         font="title",
@@ -175,8 +175,8 @@ def cover(b: SlideBuilder) -> None:
     )
     if t.marker == "block":  # 红韵: gold band carrying the organisation line
         b.rect("deco.band", 0, 456, 960, 84, fill=t.secondary)
-        b.text("org", x, 484, 520, 22, "示例单位名称", size=15, color=t.dark_bg, bold=True, role="label")
-        b.text("date", 700, 484, 188, 22, "2026 年 10 月", size=14, color=t.dark_bg, align="right", role="label")
+        b.text("org", x, 484, 520, 22, "示例单位名称", size=14, color=t.dark_bg, bold=True, role="label")
+        b.text("date", 700, 484, 188, 22, "2026 年 10 月", size=13, color=t.dark_bg, align="right", role="label")
     else:
         b.text("org", x, 462, 520, 20, "示例单位名称", size=14, color=t.on_dark, role="label")
         b.text("date", x, 488, 520, 18, "2026 年 10 月", size=12, color=t.on_dark_muted, role="label")

@@ -233,9 +233,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     }
@@ -320,9 +320,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     }
@@ -354,9 +354,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -425,9 +425,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -503,9 +503,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -664,9 +664,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -851,9 +851,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1105,9 +1105,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1207,9 +1207,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1316,9 +1316,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1510,9 +1510,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1733,9 +1733,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1836,9 +1836,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },
@@ -1942,9 +1942,9 @@
     {
      "name": "footer",
      "role": "footer",
-     "capacity": 55,
+     "capacity": 50,
      "max_lines": 1,
-     "font_size": 9,
+     "font_size": 10,
      "sample": "示例单位 · 文稿名称",
      "bullets": false
     },

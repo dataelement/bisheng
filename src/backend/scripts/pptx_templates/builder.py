@@ -215,10 +215,14 @@ class SlideBuilder:
         box = self.slide.shapes.add_textbox(Pt(x), Pt(y), Pt(w), Pt(h))
         self._register(box, name)
         tf = box.text_frame
+        tf.word_wrap = True
+        tf.auto_size = MSO_AUTO_SIZE.NONE
         tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
         para = tf.paragraphs[0]
         para.alignment = _ALIGN[align]
-        fld = etree.SubElement(para._p, qn("a:fld"), {"id": "{" + str(uuid.uuid4()).upper() + "}", "type": "slidenum"})
+        para.font.size = Pt(size)  # lets readers that skip <a:fld> resolve the size
+        field_id = "{" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{self.theme.id}/{self.layout_id}/{name}")).upper() + "}"
+        fld = etree.SubElement(para._p, qn("a:fld"), {"id": field_id, "type": "slidenum"})
         rpr = etree.SubElement(fld, qn("a:rPr"), {"lang": "zh-CN", "sz": str(int(size * 100))})
         fill = etree.SubElement(rpr, qn("a:solidFill"))
         etree.SubElement(fill, qn("a:srgbClr"), {"val": color})
