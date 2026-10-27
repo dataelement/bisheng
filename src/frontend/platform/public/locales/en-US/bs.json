@@ -1094,7 +1094,8 @@
       "autoReplyNotEmpty": "Auto-reply content cannot be empty",
       "workbenchSelectAtLeastOneWordType": "Please select at least one sensitive word list",
       "workbenchAutoReplyNotEmpty": "Auto-reply content cannot be empty",
-      "workbenchAutoReplyMaxLength": "Auto-reply cannot exceed 500 characters"
+      "workbenchAutoReplyMaxLength": "Auto-reply cannot exceed 500 characters",
+      "sensitivePolicyLoading": "The sensitive word settings are loading. Please try again shortly."
     },
     "saveSuccess": "Saved successfully",
     "contentSecurityDesc": "Review session content for safety with a sensitive word list or API",
