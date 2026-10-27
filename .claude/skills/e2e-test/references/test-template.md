@@ -170,7 +170,7 @@ class TestE2E<FeatureName>:
 3. **每个测试方法 docstring 标注 AC-NN** — 追溯到 spec.md 的 AC 表格
 4. **PREFIX 常量** — 所有测试数据以 `e2e-{feature}-` 开头
 5. **API 验证** — 数据变更后，通过 GET 断言最终状态
-6. **共享 helpers** — 认证/断言/清理使用 `test/e2e/helpers/`，不在文件内重定义
+6. **共享 helpers** — 认证/断言/清理使用 `e2e/helpers/`，不在文件内重定义
 7. **权限配对** — 每个 "允许" 操作配对一个 "拒绝" 测试
 
 ## 响应断言模式
