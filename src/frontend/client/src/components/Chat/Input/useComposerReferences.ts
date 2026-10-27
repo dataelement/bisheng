@@ -19,9 +19,9 @@ export function useComposerReferences<S extends Skill, K extends Space, T extend
     spaces.forEach((item) => catalog.current.spaces.set(spaceKey(item), item));
     tools.forEach((item) => catalog.current.tools.set(toolKey(item), item));
     const references = useMemo<ComposerReference[]>(() => [
-        ...skills.map((item) => ({ key: skillKey(item), label: `/${item.display_name || item.name}` })),
-        ...spaces.map((item) => ({ key: spaceKey(item), label: `@${item.name || item.id}` })),
-        ...tools.map((item) => ({ key: toolKey(item), label: `/${item.name}` })),
+        ...skills.map((item) => ({ key: skillKey(item), kind: 'skill' as const, label: item.display_name || item.name })),
+        ...spaces.map((item) => ({ key: spaceKey(item), kind: 'space' as const, label: String(item.name || item.id) })),
+        ...tools.map((item) => ({ key: toolKey(item), kind: 'tool' as const, label: item.name })),
     ], [skills, spaces, tools]);
     const onReferencesChange = (keys: string[]) => {
         const nextSkills = keys.flatMap((key) => {
