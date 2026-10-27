@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-10-27 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-27 用户确认 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 一轮修订后 LGTM（拆分 T001→T017、T012→T018） |
-| 实现 | 🔄 进行中 | 10 / 18 完成 |
+| 实现 | 🔄 进行中 | 15 / 18 完成（剩 T014 视觉签字、T015 端到端、T016 质量门） |
 
 ---
 
@@ -119,7 +119,7 @@
   - **覆盖 AC**：AC-10、AC-11、AC-12
   - **依赖**：T007
 
-- [ ] **T009**: 预览服务单测
+- [x] **T009**: 预览服务单测
   - **文件**：`src/backend/test/linsight/test_artifact_preview_service.py`
   - **测试**：
     - 鉴权：所有者、管理员、`workbench_chat` 分享（`resource_id` 等于会话）、按版本分享都放行；无权限的请求被拒绝。（AC-24、AC-25）
@@ -132,7 +132,7 @@
   - **覆盖 AC**：AC-22、AC-23、AC-24、AC-25、AC-27、AC-28
   - **依赖**：T002、T003
 
-- [ ] **T010**: 预览服务与接口实现
+- [x] **T010**: 预览服务与接口实现
   - **文件**：
     - `src/backend/bisheng/linsight/domain/services/artifact_preview_service.py`
     - `src/backend/bisheng/linsight/api/endpoints/linsight.py`
@@ -146,7 +146,7 @@
 
 ## Wave 3：技能指引、前端、分发
 
-- [ ] **T011**: 重写 SKILL.md 与 references
+- [x] **T011**: 重写 SKILL.md 与 references
   - **文件**：`.../bisheng-pptx/{SKILL.md, references/design-zh.md, references/environment.md(新), references/pptx-cookbook.md}`
   - **逻辑**：
     - 正文流程：先写大纲（首读结论、`layout_id`、证据），再用 `list_templates` 选模板，再用 `Deck` 构建，最后用 `inspect` 检查。
@@ -159,7 +159,7 @@
   - **覆盖 AC**：AC-02、AC-03、AC-04、AC-08、AC-09
   - **依赖**：T005、T006、T008
 
-- [ ] **T012**: 前端（Client）预览数据层
+- [x] **T012**: 前端（Client）预览数据层
   - **文件**：
     - `src/frontend/client/src/components/Linsight/Artifacts/{artifactUtils.ts, useSlidesPreview.ts(新)}`
     - `src/frontend/client/src/api/chat/data-service.ts`
@@ -172,7 +172,7 @@
   - **覆盖 AC**：AC-20、AC-21、AC-23、AC-25、AC-28
   - **依赖**：T010
 
-- [ ] **T018**: 前端（Client）预览渲染与文案
+- [x] **T018**: 前端（Client）预览渲染与文案
   - **文件**：
     - `src/frontend/client/src/components/Linsight/Artifacts/PreviewBody.tsx`
     - `src/frontend/client/src/locales/{zh-Hans,en,ja}/translation.json`
@@ -255,4 +255,7 @@
 - T001/T005：图表与表格渲染抽成技能包内共享模块 `scripts/deck_render.py`，生成脚本与 `Deck` 共用一份实现（模板样例与真实产出不漂移）→ design §4.5 已补该模块。
 - T001：新增 `scripts/pptx_templates/builder.py`（形状、插槽登记、主题 XML 底层），与 themes/layouts/build 并列。
 - T017：`bridge` 用瀑布图实现，`deck_render` 增加 `waterfall` 图表类型。
+- T010：不属于该会话版本、含 `..`、非 ppt/pptx 的 `file_url` 一律按 `UnAuthorizedError` 拒绝（与下载接口的拒绝方式一致）；源对象在 MinIO 不存在时返回 11025（而非 404）。
+- T011：SKILL.md 正文改为「内容先行 + 内置模板默认」；原「从零创建」与排版底线移到 `references/freeform.md`，环境事实移到 `references/environment.md`；inspect/probe/cookbook 中引用旧章节号的提示语同步更新。
+- T012：本地 client 依赖安装落后于 workspace（缺 `@bisheng/chat`、`@bisheng/api-client`），tsc-strict 用临时 paths 映射验证：改动文件零错误；全量结论以 CI 为准。
 - T008：为让模板自身通过既有检查（不依赖基线扣除），调整了模板：封面标题 44pt、页脚上移并改 10pt、装饰圆环与光晕收进画布内、页码字段声明段落字号 → design §5 第 13 条。

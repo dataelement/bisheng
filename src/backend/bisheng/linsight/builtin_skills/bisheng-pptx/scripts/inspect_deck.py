@@ -52,7 +52,7 @@ import deck_checks  # noqa: E402
 # --- tunables -------------------------------------------------------------
 #
 # House rule for every threshold below: the checker sits ONE NOTCH LOOSER than
-# the authoring spec (SKILL.md §7 and references/design-zh.md), and only shouts
+# the authoring spec (references/design-zh.md and references/freeform.md), and only shouts
 # on a clear violation. Rationale: an ERROR here is a hard delivery gate, so a
 # threshold set at the spec value would block decks that are merely at the edge
 # of the recommended range (e.g. design-zh allows 10-12pt captions — an ERROR at
@@ -613,7 +613,7 @@ def run_report(path: str, checks_only: bool, manifest_path: str | None = None) -
         print(f"结论: 不通过 —— 有 {errors} 项必须修复。改构建脚本重新生成，再跑一次本脚本。")
     else:
         print("结论: 通过 —— 无必须修复项。WARN 逐条复核后即可交付。")
-    print("提示：体检阈值比 SKILL.md §7 / design-zh 的规范松一档，只在明显违规时出声；")
+    print("提示：体检阈值比 design-zh 的排版规范松一档，只在明显违规时出声；")
     print("      没报 ERROR 不等于完全合规，排版仍以规范为准。溢出为估算值，不必为 WARN 反复调参。")
 
 
