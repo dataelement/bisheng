@@ -32,6 +32,14 @@
 - 自动验证：44 项定向回归通过，包括真实 ComposerEditor / 粘贴 Hook / InputFiles 组件组合（上传接口使用测试响应）；相同新增行为用例在旧代码下有 4 项失败。1,467 个严格类型文件检查、修改文件 lint、三语言一致性、架构检查、生产构建及 diff 检查通过。
 - 全量 client lint 仍有基线 23 项问题，位于未改动的 `api/chatApi.ts`、`ComposerEditor.test.tsx` 和 `CitationReferencesDrawer.tsx`；本轮保持修复范围。
 - 状态：代码及定向自动验证完成。运行环境部署、真实模型识图及 Windows/macOS 安装包端到端验收待执行；本轮仅修改平台聊天前端，桌面原生程序保持现状。
+## 2026-10-27 — 工作台双 Logo 上传修复与 3006 验收
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6`；独立分支 `codex/workbench-logo-upload`。
+- 根因修复：Logo 上传直接使用现有上传 API 和统一错误处理，成功后更新地址；接口拒绝或图片解码失败时保留当前 Logo 并显示原因。文件选择后重置输入值，同文件可再次选择；上传中禁用重复选择和删除。保留 PNG/JPG/JPEG 合同及现有 Work/Chat 共享助手图标配置。
+- 自动验证：6 项组件回归通过，覆盖两处上传入口、错误保留、同文件重试、压缩失败、请求中状态和绝对地址；同组用例在旧代码上有 3 项失败。612 个严格类型文件、变更文件 lint、架构检查、生产构建和 diff 检查通过。全量 platform lint 报告 95 项问题，涉及的 8 个文件均与基线一致。
+- 部署：基于 3006 当前 `tools-skills-auth-20261026-root-membership` 源码合入两个上传组件，发布为 `workbench-logo-upload-20261027-100846`。669 个构建文件及 7,436 个保留文件逐一核验；仅重建 3006 前端，其余 3006 容器保持原实例。原发布目录保留用于回退。
+- 真实验收：修复前两个 PNG 上传请求已可成功，原始服务端失败未复现；本次定位并修复前端失败处理与重试缺陷。修复后在管理员「构建 → 工作台」分别上传原有两张 Logo，看到“配置保存成功”，刷新后两处新图片地址保留且图片正常显示。验证保持原有图案。
+- 证据：主工作区 `outputs/workbench-logo-upload-20261027/` 的 `deployment.json`、`browser-verification.json`、`saved.png`、`verified.png` 与构建日志。真实验证覆盖后台上传、保存及刷新；本次桌面 Work/Chat 共享逻辑保持源码原状，桌面展示联动验收单列。
 
 ## 2026-10-23 — 工具统一开关与 Work 手动选择
 

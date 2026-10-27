@@ -724,9 +724,6 @@
   "src/components/bs-ui/input/avator.tsx": {
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/components/bs-ui/input/editTitle.tsx": {
@@ -1543,11 +1540,6 @@
   "src/pages/BuildPage/bench/DialogueWork.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    }
-  },
-  "src/pages/BuildPage/bench/IconUploadSection.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
     }
   },
   "src/pages/BuildPage/bench/KnowledgeSpace.tsx": {
