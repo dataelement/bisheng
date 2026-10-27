@@ -221,18 +221,8 @@ def test_suggest_skips_already_failed_too_small_ids():
     assert "img#32" not in suggested
 
 
-async def test_image_view_configured_requires_visual_model(monkeypatch):
-    tool = SimpleNamespace(type=17)
-    tool_type = SimpleNamespace(extra='{"model_id": "6"}')
-    monkeypatch.setattr(
-        "bisheng.tool.domain.models.gpts_tools.GptsToolsDao.aget_tool_by_tool_key",
-        AsyncMock(return_value=tool),
-    )
-    monkeypatch.setattr(
-        "bisheng.tool.domain.models.gpts_tools.GptsToolsDao.aget_one_tool_type",
-        AsyncMock(return_value=tool_type),
-    )
-    workbench = SimpleNamespace(models=[SimpleNamespace(id="6", visual=True), SimpleNamespace(id="2", visual=False)])
+async def test_image_view_configured_reads_workbench_image_read_model(monkeypatch):
+    workbench = SimpleNamespace(image_read_model=SimpleNamespace(id="6"))
     monkeypatch.setattr(
         "bisheng.llm.domain.services.llm.LLMService.get_workbench_llm",
         AsyncMock(return_value=workbench),
@@ -251,6 +241,6 @@ async def test_image_view_configured_requires_visual_model(monkeypatch):
     assert kwargs["app_name"]
     assert kwargs["app_type"] is not None
 
-    workbench.models[0].visual = False
+    workbench.image_read_model = None
     assert await image_view_configured() is False
-    assert await resolve_image_view_llm() is None
+    assert await resolve_image_view_llm(user_id=1) is None

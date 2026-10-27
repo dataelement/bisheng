@@ -208,9 +208,10 @@ class _VisionCallRunnable(Runnable):
         return question_needs_pixels(_last_user_question(messages))
 
     async def _configured_vision_answer(self, messages: list[BaseMessage]) -> AIMessage:
-        from bisheng.common.image_view.annotate import missing_viewed_markdown
+        from bisheng.common.image_view.annotate import markdown_for_viewed_decision
         from bisheng.common.image_view.react_loop import (
             _attach_viewed_pixels,
+            _chunk_reasoning,
             _strip_picture_citations,
             cited_ids_on_shown_lines,
             strip_picture_handles,
@@ -219,16 +220,26 @@ class _VisionCallRunnable(Runnable):
 
         prepared = await _attach_viewed_pixels(messages, self._registry)
         parts: list[str] = []
+        reasoning_parts: list[str] = []
         async for chunk in self._vision_llm.astream(prepared):
             content = getattr(chunk, "content", "") or ""
             if isinstance(content, str) and content:
                 parts.append(content)
+            thought = _chunk_reasoning(chunk)
+            if thought:
+                reasoning_parts.append(thought)
         raw = "".join(parts)
         question = _last_user_question(messages)
         cited_ids = cited_ids_on_shown_lines(raw)
         cleaned = strip_picture_handles(_strip_picture_citations(strip_view_narration(raw), question), question)
         visible = cleaned or ""
-        extra = missing_viewed_markdown(visible, self._registry, question=question, only_ids=cited_ids)
+        extra = markdown_for_viewed_decision(
+            visible,
+            self._registry,
+            reasoning="".join(reasoning_parts),
+            question=question,
+            cited_ids=cited_ids,
+        )
         return AIMessage(content=(visible + extra).strip())
 
     def _after_model(self, result: Any, messages: list[BaseMessage]) -> Any:

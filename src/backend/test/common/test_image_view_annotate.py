@@ -6,6 +6,7 @@ Covers AC: AC-01, AC-08
 from bisheng.common.image_view.annotate import (
     ImageRegistry,
     annotate,
+    markdown_for_viewed_decision,
     missing_viewed_markdown,
     question_wants_pictures,
     should_splice_viewed_images,
@@ -191,6 +192,81 @@ def test_should_splice_viewed_images_follows_model_answer():
     assert should_splice_viewed_images("我将显示 img#7。")
     assert should_splice_viewed_images("如下图所示。")
     assert should_splice_viewed_images("该图片清晰显示了车票信息。")
+    assert should_splice_viewed_images("因此可以展示该图片。")
+    assert not should_splice_viewed_images("不可以展示该图片。")
     assert not should_splice_viewed_images('是一张火车票（非证书），但问题仅问"是否有证书的图片"，因此满足条件。')
     assert not should_splice_viewed_images("单据编号、单位名称。")
     assert not should_splice_viewed_images("开户登记相关截图。")
+
+
+def test_reasoning_claim_splices_when_the_answer_is_empty():
+    registry = ImageRegistry()
+    annotate(f"![chart]({_CHART})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+    reasoning = f"S18 中包含图片引用 '![]({_CHART})⟦img#1⟧'。查看图像素与描述一致。因此可以展示该图片。"
+
+    extra = markdown_for_viewed_decision("", registry, reasoning=reasoning, cited_ids=[])
+
+    assert _CHART in extra
+
+
+def test_show_picture_question_fills_the_single_viewed_image_from_reasoning():
+    registry = ImageRegistry()
+    annotate(f"![chart]({_CHART})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+    reasoning = (
+        "问题不是问字段/走势，而是要求显示图片，因此应把符合问题的图片原样单独成行输出。"
+        f"图片路径为 {_CHART}。回答只需包含图片 Markdown 行。"
+    )
+
+    extra = markdown_for_viewed_decision("", registry, reasoning=reasoning, question="显示图片", cited_ids=[])
+
+    assert _CHART in extra
+
+
+def test_show_picture_question_does_not_fill_when_reasoning_rejects():
+    registry = ImageRegistry()
+    annotate(f"![chart]({_CHART})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+
+    extra = markdown_for_viewed_decision(
+        "",
+        registry,
+        reasoning="像素与证书无关，因此没有可展示的图片。",
+        question="显示图片",
+        cited_ids=[],
+    )
+
+    assert extra == ""
+
+
+def test_show_picture_question_does_not_fill_every_viewed_image():
+    registry = ImageRegistry()
+    annotate(f"![a]({_CHART}) ![b]({_TABLE})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+    registry.record_viewed("img#2", "data:image/png;base64,bbb")
+
+    extra = markdown_for_viewed_decision(
+        "",
+        registry,
+        reasoning="应把符合问题的图片原样单独成行输出。",
+        question="显示图片",
+        cited_ids=[],
+    )
+
+    assert extra == ""
+
+
+def test_answer_denial_blocks_a_reasoning_display_claim():
+    registry = ImageRegistry()
+    annotate(f"![chart]({_CHART})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+
+    extra = markdown_for_viewed_decision(
+        "没有。",
+        registry,
+        reasoning="因此可以展示该图片。",
+        cited_ids=[],
+    )
+
+    assert extra == ""

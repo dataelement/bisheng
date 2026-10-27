@@ -14,6 +14,8 @@
     "linsightDefaultModelTooltip": "This model is the default executor for $t(bs:linsight) tasks; users can switch to another model when starting a task",
     "workbenchVoiceModel": "Workbench Voice Model",
     "sessionTitleGenerationModel": "Session Title Generation Model",
+    "imageReadModel": "Image Reading Model",
+    "imageReadModelTooltip": "Reads pictures in documents and decides which ones match the question. Knowledge Q&A, channel Q&A, and daily chat all use the model set here.",
     "asrModel": "Speech-to-Text (ASR) Model",
     "asrModelTooltip": "Used for workbench speech-to-text scenarios",
     "knowledgeAsrModelTooltip": "Used for speech-to-text in audio/video parsing",

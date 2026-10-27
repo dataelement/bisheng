@@ -69,18 +69,59 @@ def annotate(text: str, registry: ImageRegistry) -> str:
 
 
 # Weak VL models claim they will show the image but omit `![](url)`.
-# The model's answer is the decision; we only repair a forgotten markdown tag.
+# Thinking models often put that claim in reasoning and leave the answer empty.
+# The model's decision is what we repair; a bare denial in the answer still wins.
 _CLAIMED_DISPLAY_RE = re.compile(
     r"我将显示|如下图|相关图片如下|图片如下|见下图|该图片清晰"
+    r"|(?<!不)可以展示"
     r"|I(?:['’]ll| will) (?:show|display)"
     r"|here (?:is|are) the (?:image|picture|screenshot)s?",
     re.IGNORECASE,
 )
+_ANSWER_DENIAL_RE = re.compile(r"^\s*没有[。.]?\s*$|因此没有|均未显示|所有图片均未|没有.{0,8}的图片")
+# A thinking model restates the prompt ("不出现 img#") while still deciding to show
+# the picture. Only a rejection of the picture itself blocks the single-image fill.
+_PICTURE_REJECT_RE = re.compile(r"因此没有|均未|不符合|不应展示|不应输出|不要展示|不要输出|无法展示|没有找到|没有相关")
 
 
 def should_splice_viewed_images(answer: str) -> bool:
     """True when the model decided to show pictures but omitted `![](url)`."""
     return bool(_CLAIMED_DISPLAY_RE.search(answer or ""))
+
+
+def _answer_denies_pictures(text: str) -> bool:
+    return bool(_ANSWER_DENIAL_RE.search(text or ""))
+
+
+def _rejects_picture(text: str) -> bool:
+    return _answer_denies_pictures(text) or bool(_PICTURE_REJECT_RE.search(text or ""))
+
+
+def resolve_display_decision(visible: str, reasoning: str = "") -> str:
+    """Text that decides whether a picture is shown.
+
+    A thinking model often leaves the answer empty and writes the decision in
+    reasoning. A non-empty answer that already claims a display, or that denies
+    one, still wins over reasoning.
+    """
+    text = visible or ""
+    if text.strip() and (_answer_denies_pictures(text) or should_splice_viewed_images(text)):
+        return text
+    if (reasoning or "").strip() and not _answer_denies_pictures(text):
+        return reasoning
+    return text
+
+
+def ids_named_on_display_claims(text: str) -> list[str]:
+    """img# ids written on a line that actually claims a picture should be shown."""
+    found: list[str] = []
+    for line in (text or "").splitlines():
+        if not should_splice_viewed_images(line):
+            continue
+        for image_id in cited_display_ids(line):
+            if image_id not in found:
+                found.append(image_id)
+    return found
 
 
 # "有哪些美女图片" wants the pictures on screen. Field / trend questions stay text.
@@ -123,6 +164,7 @@ def missing_viewed_markdown(
     *,
     question: str = "",
     only_ids: list[str] | None = None,
+    decision: str | None = None,
 ) -> str:
     """Append markdown only when the model decided to show a picture and forgot `![](url)`.
 
@@ -130,11 +172,17 @@ def missing_viewed_markdown(
     for those. This repair uses the ids it named. With no ids, it only fills in
     a forgotten tag when exactly one picture was viewed. Several viewed pictures
     and no named id must not be appended together.
+
+    ``decision`` is the text that carries the show/hide call. Thinking models
+    put that call in reasoning while ``content`` stays empty. A quoted
+    ``![](url)`` inside reasoning is not a picture the UI will draw, so the
+    already-rendered check stays on ``content``.
     """
     del question
-    if not should_splice_viewed_images(content):
+    judge = content if decision is None else decision
+    if not should_splice_viewed_images(judge):
         return ""
-    named = cited_display_ids(content) if only_ids is None else only_ids
+    named = cited_display_ids(judge) if only_ids is None else only_ids
     viewed = set(registry.viewed_ids())
     source = [image_id for image_id in named if image_id in viewed]
     if not source:
@@ -153,3 +201,41 @@ def missing_viewed_markdown(
     if not blocks:
         return ""
     return "\n\n" + "\n\n".join(blocks)
+
+
+def markdown_for_viewed_decision(
+    visible: str,
+    registry: ImageRegistry,
+    *,
+    reasoning: str = "",
+    question: str = "",
+    cited_ids: list[str] | None = None,
+) -> str:
+    """Markdown to append after a vision answer, including a reasoning-only decision."""
+    decision = resolve_display_decision(visible, reasoning)
+    if decision == (visible or ""):
+        only_ids = cited_ids
+    else:
+        only_ids = ids_named_on_display_claims(decision)
+    extra = missing_viewed_markdown(
+        visible,
+        registry,
+        question=question,
+        only_ids=only_ids,
+        decision=decision,
+    )
+    if extra or not question_wants_pictures(question):
+        return extra
+    # "显示图片" with one viewed picture: thinking models describe the markdown
+    # line in reasoning and leave content empty, using wording the claim list misses.
+    if _rejects_picture(visible) or _rejects_picture(reasoning):
+        return ""
+    viewed = registry.viewed_ids()
+    if len(viewed) != 1:
+        return ""
+    entry = registry.get(viewed[0])
+    if not entry or _has_rendered_image(visible, entry["url"]):
+        return ""
+    url = entry["url"]
+    alt = url.rstrip("/").rsplit("/", 1)[-1] or viewed[0]
+    return f"\n\n![{alt}]({url})"

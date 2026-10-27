@@ -393,42 +393,27 @@ def _as_call_dict(call: Any) -> dict:
 IMAGE_VIEW_TOOL_KEY = "image_view"
 
 
-async def _image_view_model_id() -> str | None:
-    """model_id saved on the Image View builtin tool, or None when unset."""
-    import json
-
-    from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
-
-    tool = await GptsToolsDao.aget_tool_by_tool_key(IMAGE_VIEW_TOOL_KEY)
-    if tool is None or not tool.type:
-        return None
-    tool_type = await GptsToolsDao.aget_one_tool_type(tool.type)
-    if tool_type is None or not tool_type.extra:
-        return None
-    try:
-        extra = json.loads(tool_type.extra)
-    except json.JSONDecodeError:
-        return None
-    model_id = str(extra.get("model_id") or "").strip()
-    return model_id or None
-
-
-async def _model_is_visual(model_id: str, tenant_id: int | None = None) -> bool:
+async def _image_view_model_id(tenant_id: int | None = None) -> str | None:
+    """Model id from the workbench image-reading model, or None when unset."""
     from bisheng.llm.domain.services.llm import LLMService
 
     workbench = await LLMService.get_workbench_llm(tenant_id=tenant_id)
-    return any(
-        str(getattr(entry, "id", "")) == str(model_id) and bool(getattr(entry, "visual", False))
-        for entry in (getattr(workbench, "models", None) or [])
-    )
+    model = getattr(workbench, "image_read_model", None)
+    raw = getattr(model, "id", None)
+    model_id = str(raw).strip() if raw is not None else ""
+    return model_id or None
 
 
 async def image_view_configured(tenant_id: int | None = None) -> bool:
-    """True when the builtin tool points at a workbench model marked visual."""
-    model_id = await _image_view_model_id()
+    """True when the workbench image-reading model is set."""
+    model_id = await _image_view_model_id(tenant_id)
     if not model_id:
         return False
-    return await _model_is_visual(model_id, tenant_id)
+    try:
+        int(model_id)
+    except ValueError:
+        return False
+    return True
 
 
 async def resolve_image_view_llm(
@@ -437,10 +422,10 @@ async def resolve_image_view_llm(
     user_id: int | None = None,
     app_type: Any | None = None,
 ) -> Any | None:
-    """Chat model for pixel viewing. The builtin tool's visual model, or None."""
-    model_id = await _image_view_model_id()
-    if not model_id or not await _model_is_visual(model_id, tenant_id):
-        logger.info("image_view skip: builtin tool has no visual model")
+    """Chat model for pixel viewing. The workbench image-reading model, or None."""
+    model_id = await _image_view_model_id(tenant_id)
+    if not model_id:
+        logger.info("image_view skip: workbench image reading model is unset")
         return None
     if user_id is None:
         logger.info("image_view skip: no invoke user")

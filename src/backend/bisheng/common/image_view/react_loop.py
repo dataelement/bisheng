@@ -16,7 +16,7 @@ from loguru import logger
 from bisheng.common.image_view.annotate import (
     ImageRegistry,
     cited_display_ids,
-    missing_viewed_markdown,
+    markdown_for_viewed_decision,
     question_wants_pictures,
 )
 from bisheng.common.image_view.fetch import fetch_and_encode
@@ -261,6 +261,14 @@ def _chunk_text(chunk: Any) -> str:
     return content if isinstance(content, str) else ""
 
 
+def _chunk_reasoning(chunk: Any) -> str:
+    extra = getattr(chunk, "additional_kwargs", None) or {}
+    if not isinstance(extra, dict):
+        return ""
+    reasoning = extra.get("reasoning_content") or extra.get("reasoning") or ""
+    return reasoning if isinstance(reasoning, str) else ""
+
+
 async def run_react_vision_stream(
     llm: Any,
     messages: list,
@@ -287,17 +295,27 @@ async def run_react_vision_stream(
     prepared = await _attach_viewed_pixels(messages, registry)
     question = _last_user_question(messages)
     parts: list[str] = []
+    reasoning_parts: list[str] = []
     async for chunk in vision_llm.astream(prepared):
         text = _chunk_text(chunk)
         if text:
             parts.append(text)
+        thought = _chunk_reasoning(chunk)
+        if thought:
+            reasoning_parts.append(thought)
     raw = "".join(parts)
     cited_ids = cited_ids_on_shown_lines(raw)
     cleaned = _strip_picture_citations(strip_view_narration(raw), question)
     visible = cleaned or ""
     if cleaned:
         yield AIMessage(content=cleaned)
-    extra = missing_viewed_markdown(visible, registry, question=question, only_ids=cited_ids)
+    extra = markdown_for_viewed_decision(
+        visible,
+        registry,
+        reasoning="".join(reasoning_parts),
+        question=question,
+        cited_ids=cited_ids,
+    )
     if extra:
         logger.info("image_view splice markdown cited_ids={}", cited_ids)
         yield AIMessage(content=extra)

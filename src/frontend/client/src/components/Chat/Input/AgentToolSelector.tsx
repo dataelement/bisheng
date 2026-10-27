@@ -51,11 +51,7 @@ function iconForGroup(group: AvailableToolGroup) {
   return <Outlined.Hammer className="text-text-2" />;
 }
 
-function labelForGroup(group: AvailableToolGroup, localize: (key: string) => string) {
-  const isImageView =
-    group.name === "Image View" ||
-    (group.children ?? []).some((child) => child.tool_key === "image_view");
-  if (isImageView) return localize("com_tools.image_view");
+function labelForGroup(group: AvailableToolGroup) {
   return group.name;
 }
 
@@ -121,7 +117,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
       disabled={disabled}
       options={availableTools.map((group) => ({
         value: group.id,
-        label: labelForGroup(group, localize),
+        label: labelForGroup(group),
         icon: iconForGroup(group),
       }))}
       value={selected.map((g) => g.id)}

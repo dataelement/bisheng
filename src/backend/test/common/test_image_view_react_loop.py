@@ -70,12 +70,15 @@ def _numbered_registry(count: int) -> ImageRegistry:
 
 
 class _VisionStream:
-    def __init__(self, parts: list[str]):
+    def __init__(self, parts: list[str], reasoning: list[str] | None = None):
         self.parts = parts
+        self.reasoning = reasoning or []
         self.inputs: list[list] = []
 
     async def astream(self, messages, **kwargs):
         self.inputs.append(list(messages))
+        for part in self.reasoning:
+            yield AIMessageChunk(content="", additional_kwargs={"reasoning_content": part})
         for part in self.parts:
             yield AIMessageChunk(content=part)
 
@@ -179,6 +182,42 @@ async def test_trend_answer_does_not_splice_screenshot(mock_fetch, monkeypatch):
         yielded.append(getattr(chunk, "content", "") or "")
     joined = "".join(yielded)
     assert joined == "final answer after viewing"
+    assert "chart.png" not in joined
+
+
+async def test_reasoning_display_claim_splices_when_answer_is_empty(mock_fetch, monkeypatch):
+    vision = _VisionStream(
+        [],
+        reasoning=[
+            "S18 中包含图片引用 '![](/bisheng/knowledge/images/1/2/chart.png)⟦img#1⟧'。"
+            "查看图像素与描述一致。因此可以展示该图片。"
+        ],
+    )
+    _bind_vision(monkeypatch, vision)
+    messages = [
+        SystemMessage(content="base system"),
+        HumanMessage(content="显示图片"),
+    ]
+    yielded: list[str] = []
+    async for chunk in run_react_vision_stream(_SkipGraphLLM(), messages, _registry_one(), visual=True):
+        yielded.append(getattr(chunk, "content", "") or "")
+    joined = "".join(yielded)
+    assert "chart.png](/bisheng/knowledge/images/1/2/chart.png)" in joined
+    assert "img#" not in joined
+
+
+async def test_answer_denial_is_not_overridden_by_reasoning(mock_fetch, monkeypatch):
+    vision = _VisionStream(["没有。"], reasoning=["因此可以展示该图片。"])
+    _bind_vision(monkeypatch, vision)
+    messages = [
+        SystemMessage(content="base system"),
+        HumanMessage(content="显示图片"),
+    ]
+    yielded: list[str] = []
+    async for chunk in run_react_vision_stream(_SkipGraphLLM(), messages, _registry_one(), visual=True):
+        yielded.append(getattr(chunk, "content", "") or "")
+    joined = "".join(yielded)
+    assert joined == "没有。"
     assert "chart.png" not in joined
 
 

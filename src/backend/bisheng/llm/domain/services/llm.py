@@ -137,6 +137,7 @@ def _workbench_model_ref_values(config: WorkbenchModelConfig) -> list[Any]:
         getattr(config.asr_model, "id", None),
         getattr(config.tts_model, "id", None),
         getattr(config.chat_title_llm, "id", None),
+        getattr(config.image_read_model, "id", None),
     ]
 
 
@@ -1594,6 +1595,7 @@ class LLMService:
                         config_obj.asr_model,
                         config_obj.tts_model,
                         config_obj.chat_title_llm,
+                        config_obj.image_read_model,
                     )
                 ),
             ],

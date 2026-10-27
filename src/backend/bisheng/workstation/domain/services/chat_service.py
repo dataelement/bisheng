@@ -1237,8 +1237,8 @@ async def _prepare_tools(
             continue
         tool_key = tp.get("tool_key") if isinstance(tp, dict) else getattr(tp, "tool_key", None)
         tool_id = tp.get("id") if isinstance(tp, dict) else getattr(tp, "id", None)
-        # Image View stores which visual model to use. Pixel viewing is wired
-        # separately, so loading this row as a LangChain tool always fails.
+        # Retired builtin row. Saved selections may still name it; loading it
+        # as a LangChain tool fails.
         if tool_key == IMAGE_VIEW_TOOL_KEY:
             continue
 

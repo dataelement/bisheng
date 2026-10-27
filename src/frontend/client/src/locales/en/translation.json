@@ -1981,9 +1981,6 @@
     "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it",
     "main_channel": "Channel name"
   },
-  "com_tools": {
-    "image_view": "Image View"
-  },
   "com_unified_permission": {
     "access_and_share": "Access and sharing",
     "add_authorization": "Add permission",
