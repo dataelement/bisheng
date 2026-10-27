@@ -1,5 +1,4 @@
 import type { UseLazyDepartmentTreeOptions } from "../department/useLazyDepartmentTree"
-import { SubjectBusinessId } from "../selectComponent/SubjectSearchStatus"
 import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import {

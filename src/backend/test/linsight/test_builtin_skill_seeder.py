@@ -14,6 +14,7 @@ non-obvious contracts:
 from __future__ import annotations
 
 import shutil
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -68,6 +69,9 @@ class _FakeDao:
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """A fake builtin dir + a real on-disk SkillStore + a fake DAO."""
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.skill_permission.ensure_builtin_skill_permission", AsyncMock()
+    )
     builtin = tmp_path / "builtin_skills"
     builtin.mkdir()
     monkeypatch.setattr(seeder, "BUILTIN_SKILLS_DIR", builtin)
@@ -295,7 +299,7 @@ async def test_tenant_context_is_restored_after_seeding(env):
     """Seeding runs inside per-tenant context; it must not leak into the caller's."""
     from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 
-    builtin, store, dao = env
+    builtin, store, _dao = env
     _write_bundle(builtin)
 
     token = set_current_tenant_id(99)

@@ -351,7 +351,11 @@ class ToolExecutor(BaseTool):
     ) -> list[BaseTool]:
         result = []
         for tool in tools:
-            if uses_account_availability(app_type) and manages_availability(tool) and not UserToolAvailabilityService(user_id).is_enabled_sync(tool.id):
+            if (
+                uses_account_availability(app_type)
+                and manages_availability(tool)
+                and not UserToolAvailabilityService(user_id).is_enabled_sync(tool.id)
+            ):
                 continue
 
             tool_type = tool_types_map.get(tool.type)
@@ -489,12 +493,22 @@ class ToolExecutor(BaseTool):
         kwargs.setdefault("ephemeral_source", True)
         return KnowledgeRagTool.init_knowledge_rag_tool(**kwargs)
 
+    async def _require_current_use(self):
+        tool = await GptsToolsDao.aget_one_tool(tool_id=self.tool_id)
+        if tool is None:
+            raise PermissionError("Tool is unavailable")
+        group = await GptsToolsDao.aget_one_tool_type(tool_type_id=tool.type)
+        if group is None or group.is_delete:
+            raise PermissionError("Tool is unavailable")
+        await self._ensure_use_permission_async(group, self.user_id)
+
     @wrapper_tool_sync
     def _run(
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
 
         if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
+            run_async_safe(self._require_current_use())
             UserToolAvailabilityService(self.user_id).ensure_enabled_sync(self.tool_id)
         if signature(self.tool_instance._run).parameters.get("config"):
             kwargs["config"] = config
@@ -507,6 +521,7 @@ class ToolExecutor(BaseTool):
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
         if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
+            await self._require_current_use()
             await UserToolAvailabilityService(self.user_id).ensure_enabled(self.tool_id)
         if signature(self.tool_instance._run).parameters.get("config"):
             kwargs["config"] = config

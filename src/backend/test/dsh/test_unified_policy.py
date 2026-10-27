@@ -95,3 +95,11 @@ def test_model_multiplier_uses_exact_fixed_point(multiplier, rate):
 def test_invalid_model_multiplier_is_rejected(multiplier):
     with pytest.raises(ValidationError):
         ModelVisibilityInput(version=0, credit_multiplier=multiplier)
+
+
+@pytest.mark.parametrize(
+    "credits,tokens",
+    [("9223372036854.775806", 9223372036854775806), ("9223372036854.775807", 9223372036854775807)],
+)
+def test_credit_allowance_accepts_the_exact_accounting_boundary(credits, tokens):
+    assert CreditRuleInput(version=0, monthly_credits=credits).monthly_token_limit == tokens

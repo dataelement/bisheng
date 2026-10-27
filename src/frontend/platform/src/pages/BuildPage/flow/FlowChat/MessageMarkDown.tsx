@@ -1,3 +1,4 @@
+import { readCitationFailure } from "@/controllers/citationFailure";
 import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
@@ -276,7 +277,7 @@ const Citation = ({
     initialDetail?: ChatCitation | null;
     initialNotPermitted?: boolean;
     initialExpired?: boolean;
-    webContent?: any;
+    webContent?: unknown;
     loadCitationDetail: CitationDetailLoader;
     popoverKey: string;
     activePopoverKey: string | null;
@@ -310,10 +311,11 @@ const Citation = ({
             const nextDetail = await loadCitationDetail(data.citationId);
             setDetail(nextDetail);
             return nextDetail;
-        } catch (err: any) {
-            if (err?.citationExpired) {
+        } catch (err: unknown) {
+            const failure = readCitationFailure(err);
+            if (failure.citationExpired) {
                 setExpired(true);
-            } else if (err?.citationForbidden) {
+            } else if (failure.citationForbidden) {
                 setNotPermitted(true);
             } else {
                 console.error("Failed to load citation detail:", err);
@@ -474,7 +476,7 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
     chat?: any;
     flowType?: number;
     citations?: ChatCitation[] | null;
-    webContent?: any;
+    webContent?: unknown;
     allowRemoteCitationResolve?: boolean;
 }) {
 

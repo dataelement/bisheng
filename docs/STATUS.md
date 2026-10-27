@@ -1,3 +1,36 @@
+## 2026-10-27 — PR #2523 同步与质量修复
+
+- 已合入目标分支 `f834aa2b1` 与公共质量修复 `bb949d634`，逐项保留本功能及目标分支记录、测试和实现。
+- 合并后平台与客户端全量 ESLint 通过；22 项权限角色与授权列表回归通过。公共修复已完成全量类型、构建与 64 项定向回归，远端检查针对本 PR 新提交重新执行。
+- 部门来源断言按现有完整行文案校验来源与子部门信息。
+
+## 2026-10-27 — 恢复 Work 1.2.0 前端质量检查
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@f834aa2b1`；工作目录 `.worktrees/bisheng-work120-frontend-quality`。
+- 实现：引用请求与展示组件以明确的错误结构处理失效、权限和传输失败；复用请求层已有的 `silent` 类型；敏感词表单保存始终读取当前值，加载提示补齐中英日翻译；主体搜索保持 Unicode 空白边界规则；测试使用国际化样例文案。
+- 全量前端 ESLint、严格类型检查、语言资源一致性、平台与客户端生产构建通过。64 项定向回归覆盖引用接口失败与成功、Unicode 空白、主体搜索、输入法和授权提示。
+- ESLint 历史豁免由工具自动清理，仅减少计数；质量规则保持原合同。依赖按锁文件安装；客户端 jsdom 测试将本机缺失原生二进制的可选 canvas 作为未安装处理，相关用例覆盖 DOM 与请求逻辑。
+- 交付范围为代码及自动化验证；真实账号与发布环境验收待执行。
+
+## 2026-10-27 — 工具开关保持列表位置
+
+- 工具目录按类型和固定资源标识排序，账户启停只更新可用状态；关闭、重新开启、刷新和重新进入目录时保持同一顺序。
+- 根因：目录原来将 `ready` 放在排序首位，账户关闭工具后进入列表末尾。修复由目录服务直接使用稳定字段排序，客户端继续消费服务端顺序。
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@0d6080902`，工作分支 `codex/work120-stable-tool-order`。
+- 验证：新增 API / 内置 / MCP 三类工具启停与重新加载回归，原实现 3 项失败，修复后 3 项通过；使用实际目录服务及隔离的数据依赖运行相关目录、权限入口、只读试用和可用状态共 10 项通过；架构守卫、F821 静态检查与差异检查通过。
+- 本轮交付服务端代码。运行环境更新与用户界面验收待执行；证据位于主工作区 `outputs/tool-order-20261027/`。
+
+## 2026-10-27 — 任务模式恢复 local 执行器（定向自动化通过）
+
+- 基线：`dataelement/bisheng:feat/bisheng-work-120-main@e59b249a3a2fc5672f14aa012f04d867a28f7049`；工作目录 `.worktrees/bisheng-work120-main-integration`。本轮修复后端任务执行链路。
+- 实现：按 `local`、`container`、`e2b` 分别绑定当前任务工作目录和持久化 workspace 路径；缺省类型归一为 `local`，E2B 文件预上传由 E2B 分支处理。自动装配、资源使用权限、账户工具开关与调用审计沿用现有入口。
+- 连续性：local 生成和修改的文件回写当前轮对象存储；追问通过已有工作区继承及文件恢复逻辑装入新目录，并按文件指纹识别本轮修改后的交付物。
+- 验证：324 项测试及 9 个子测试通过，覆盖三类执行器初始化、代码执行超时、工作区边界、文件回传、追问恢复、交付物筛选、工具权限与账户可用性、开放 API 任务模式提交/配置/查询/端点。新增 12 项 local 回归在基线代码上全部失败，在修复后全部通过。两轮连续性测试启动真实 Python 子进程生成 CSV，清除首轮本地目录后通过对象存储继承并修改原文件，验证最终文件内容；对象存储和权限使用测试替身。
+- 测试环境：macOS、Python 3.11.15，独立环境按 `uv.lock` 执行 `uv sync --frozen --extra test`，额外安装 `pypandoc-binary==1.15` 供既有模块导入；测试配置使用空 YAML。原有凭据边界测试在基线和修复版均因真实 Settings 赋值校验失败，本轮改为注入独立配置替身后通过。
+- 静态检查：变更 Python 文件格式、测试与错误码 Ruff、架构检查、差异空白检查和中英日错误文案生成一致性通过。`workbench_impl.py` 全文件 Ruff 既有问题由 58 项降为 57 项，新增诊断为 0。
+- 验收边界：本轮完成代码与定向自动化验证。真实部署、普通账号与开放 API 全链路验收待执行。
+- 执行边界：`local` 使用后端 worker 的本机子进程；部署方负责该运行环境的隔离。当前代码继续使用现有的工具授权、账户可用性检查、路径检查和调用审计。
+
 ## 2026-10-27 — Desktop 公开地址统一与 Nginx 转发
 
 - 源码基线：实时核对 `upstream/feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6`；独立工作区 `.worktrees/bisheng-work-public-origin`，分支 `codex/work-public-origin`。现场安装包为 BISHENG `1.2.0-test.2`、Harness `0.2.1-rc.2`；本轮修改范围为服务端、部署模板和回归测试。
@@ -213,3 +246,23 @@
 - Verification: 47 permission tests passed; 3 existing failures were reproduced with baseline production sources (department badge text assertion, source-comment Chinese scan, retired tab-selector assertion). The focused role/authorization suite passed 21 cases. Strict client type checking (1,469 files), changed-file ESLint, i18n parity, architecture guard, diff checks and production client build passed. Full client ESLint reports the same 23 errors against both baseline and modified sources in unrelated chat files.
 - Test fixtures use the existing English role dictionary; the list fixture now provides its required confirmation hook. Added tests cover all four standard roles in three languages, preserved custom names, protected creator rows, live English/Chinese switching, absent role options and localized role-name search.
 - Delivery: web-client change for the desktop embedded knowledge-space page. Target deployment and native visual acceptance remain pending. Local evidence: `outputs/knowledge-permission-locale-20261027/`.
+
+## 2026-10-26 — 工具与技能授权
+
+- 基线：dataelement/bisheng feat/bisheng-work-120-main@d4d60f77e41d58753a76969c6f40465a36054fa6，提交前再次核验远端 SHA 一致。
+- 实现：顶部“工具与技能”中英日同步；内置工具、企业技能复用授权弹窗与 F048 资源授权服务。用户确认保留全员可用，管理员可关闭全员并授权指定人员、部门或用户组。
+- 全员使用采用所属租户成员的普通 Grant；模型升级至 f048-v6，迁移将旧系统全员标记转换为可撤销 Grant。重跑迁移及初始化保留已撤销结果。个人技能持续校验所属账户。
+- 使用边界：工具列表和每次调用、技能目录/直接下载/装载、开放 API 配置/提交按当前使用授权过滤；个人启停在企业授权范围内生效。
+- 自动验证：123 项权限与技能回归通过；隔离提供方实现后，24 项工具业务测试及 9 个子场景通过。前端 4 项回归、611 个严格类型文件、变更 lint、生产构建、i18n 与架构检查通过。
+- 扩大回归：技能业务组基线 69 通过/20 失败，本分支 72 通过/18 失败（补齐 runtime 测试身份与 DAO fixture，增加撤销下载回归）；余下为原有 selectable/provisioning fixture 与业务入口不匹配。授权主体路由组基线和本分支均 9 通过/1 失败，原因是本地 FastAPI 路由结构变化。完整提供方导入、真实 OpenFGA/数据库迁移、普通账号网页及任务端到端验收待上线环境执行。
+- 上线步骤与回退：[upgrade.md](../features/local/tools-skills-authorization/upgrade.md)。已提交 [PR #2518](https://github.com/dataelement/bisheng/pull/2518)，部署与合并单独执行。
+
+
+### 2026-10-26 — 3006 授权部署与根租户成员兼容
+
+- 已发布 f048-v6 / Catalog 3，迁移 18 项内置工具、7 项企业技能；重复迁移检查全部 preserved。API、worker、Linsight 各 20 个发布文件哈希一致；后台健康、页面与 browser-config 返回 200。
+- 管理员页面已确认“工具与技能”、内置工具授权盾牌、技能授权按钮，以及默认开启的全员可用和用户/部门/用户组入口。实际权限配置保持原值。
+- 真实成员核验发现根租户沿用动态归属而没有持久 member 元组。组织关系适配器现从 active UserTenant 快照补充请求级根租户成员事实；迁出、停用、历史记录均移除该事实。子租户沿用持久投影。
+- 根租户归属变更、停用、历史状态、请求上下文及原授权模型共 53 项定向回归通过，变更 Ruff / 格式 / diff 检查通过。最终发布 `tools-skills-auth-20261026-root-membership` 已完成，后台三个进程各 23 个源文件哈希一致。真实 OpenFGA 抽样 3 位 active 成员、25 项资源共 75 次 can_use 全部允许；无成员身份的 25 次检查全部拒绝，旧 user:* 工具公开标记归零。API 两个实例均就绪并使用 Catalog 3。
+
+- 3006 最终健康与 browser-config 返回 200，管理员授权弹窗重新读取成功。业务权限开关和指定人员保存、普通账号完整任务调用由用户继续验收。首次发布后检查触发自动回退导致服务中断，已恢复并收敛部署检查范围；最终版本、备份和验收日志已留存。

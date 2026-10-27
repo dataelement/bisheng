@@ -106,12 +106,9 @@ describe("F048 Client PermissionListTab", () => {
     );
     expect(screen.getByRole("searchbox")).toBeInTheDocument();
     expect(screen.getByText("f048_permission.source.direct")).toBeInTheDocument();
-    expect(
-      screen.getByText("f048_permission.source.department"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/f048_permission\.source\.include_children/),
-    ).toBeInTheDocument();
+    const departmentRow = screen.getByTestId("permission-assignee-2");
+    expect(departmentRow).toHaveTextContent("f048_permission.source.department");
+    expect(departmentRow).toHaveTextContent("f048_permission.source.include_children");
   });
 
   it("displays and searches the localized standard role from the server key", async () => {

@@ -21,6 +21,7 @@ _GRANT_SOURCE_TYPES = frozenset(
         "DIRECT",
         "DEPARTMENT",
         "USER_GROUP",
+        "TENANT",
         "CREATOR",
         "CREATOR_GRANT",
         "SPACE_MEMBERSHIP",
