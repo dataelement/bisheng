@@ -55,7 +55,8 @@ def _waterfall_data(categories, values):
 
     ``values[0]`` is the starting total, ``values[-1]`` the ending total, the
     rest are signed contributions. Negative contributions hang down from the
-    running total.
+    running total. Stacked columns cannot float a bar below zero, so a running
+    total that drops under zero is rejected.
     """
     base, bars = [], []
     running = 0.0
@@ -67,6 +68,8 @@ def _waterfall_data(categories, values):
             running = v
         else:
             low = running + min(v, 0.0)
+            if low < 0:
+                raise ValueError("waterfall 的累计值不能跌破 0；这组数据请改用 column 或 bar")
             base.append(low)
             bars.append(abs(v))
             running += v
@@ -160,6 +163,8 @@ def _style_chart(chart, kind, style, number_format, series):
                 fill.fore_color.rgb = _rgb(palette[0])
             else:
                 fill.fore_color.rgb = _rgb(palette[1] if values[i] >= 0 else style.get("negative", palette[2]))
+                if values[i] < 0:  # the bar stores abs(v); put the sign back on its label
+                    _point_label(bars.points[i], "-" + _format_number(abs(values[i]), number_format), style)
     for axis in (chart.category_axis, chart.value_axis):
         axis.format.line.color.rgb = _rgb(style["line"])
         axis.tick_labels.font.size = Pt(10)
@@ -167,6 +172,23 @@ def _style_chart(chart, kind, style, number_format, series):
     chart.value_axis.has_major_gridlines = True
     chart.value_axis.major_gridlines.format.line.color.rgb = _rgb(style["line"])
     chart.value_axis.format.line.fill.background()
+
+
+def _format_number(value: float, number_format: str) -> str:
+    """Python rendering of the simple Excel formats used here (``0``, ``0.0``, ``#,##0.00``)."""
+    decimals = len(number_format.split(".", 1)[1].rstrip("%")) if "." in number_format else 0
+    text = f"{value:,.{decimals}f}" if "," in number_format else f"{value:.{decimals}f}"
+    return text + "%" if number_format.endswith("%") else text
+
+
+def _point_label(point, text: str, style) -> None:
+    label = point.data_label
+    label.has_text_frame = True
+    label.text_frame.text = text
+    run = label.text_frame.paragraphs[0].runs[0]
+    run.font.size = Pt(10)
+    run.font.color.rgb = _rgb(style["text"])
+    label.position = XL_LABEL_POSITION.OUTSIDE_END
 
 
 # ---------------------------------------------------------------------------

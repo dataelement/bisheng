@@ -3,388 +3,518 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>说三句话，做出全公司的应用 · 托管应用部署</title>
+<meta name="color-scheme" content="light" />
+<title>托管应用部署教程</title>
 <style>
+  /* Colors follow BRAND.blue / gray in packages/ui/design-token.cjs. */
   :root{
+    --ink:#1D2129;
+    --ink-2:#4E5969;
+    --ink-3:#6B7785;
+    --line:#E5E6EB;
+    --line-2:#D6D9E0;
+    --canvas:#F7F8FA;
     --paper:#FFFFFF;
-    --mist:#F3F6FC;
-    --mist-2:#EAF0FB;
-    --ink:#0C1626;
-    --ink-2:#47596F;
-    --ink-3:#7688A0;
-    --brand:#2E5CF6;
-    --brand-ink:#1F42C4;
-    --brand-soft:#E7EDFE;
-    --amber:#EF8F22;
-    --amber-soft:#FCEBD3;
-    --ok:#17A66B;
-    --line:#E4EAF3;
-    --line-2:#D3DCEC;
-    --term:#0E1A2E;
-    --term-2:#16233B;
-    --term-ink:#D7E5FF;
-    --term-dim:#5D7BA6;
-    --term-green:#6BE0A0;
-    --term-blue:#7FB0FF;
-    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
-    --cjk: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    --brand:#165DFF;
+    --brand-hover:#4080FF;
+    --brand-press:#024DE3;
+    --brand-soft:#E8F3FF;
+    --wait:#FF7D00;
+    --wait-ink:#B35400;
+    --wait-soft:#FFF3E8;
+    --ok:#169C47;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+    --col:720px;
+    --rail:184px;
+    --gutter:72px;
+    --frame:var(--col);
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", Roboto, sans-serif;
   }
   *{box-sizing:border-box}
-  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
-  body{
-    margin:0;background:var(--paper);color:var(--ink);
-    font-family:var(--cjk);font-size:16px;line-height:1.72;
-    -webkit-font-smoothing:antialiased;letter-spacing:.005em;
+  [hidden]{display:none !important}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:80px}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:26px;-webkit-font-smoothing:antialiased}
+  a{color:var(--brand)}
+  p{margin:0;text-wrap:pretty}
+  h1,h2,h3{margin:0;color:var(--ink)}
+  code{font-family:var(--mono);font-size:.875em;background:var(--canvas);border:1px solid var(--line);
+    border-radius:4px;padding:0 5px}
+  button{font-family:inherit}
+  :focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:4px}
+  ::selection{background:var(--brand-soft)}
+
+  /* ---------- top bar ---------- */
+  .topbar{position:sticky;top:0;z-index:10;background:var(--paper);border-bottom:1px solid var(--line)}
+  .topbar-in{max-width:calc(var(--frame) + 48px);margin:0 auto;padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px}
+  .brand-logo{height:24px;width:auto;max-width:160px;object-fit:contain;display:block}
+  .brand-name{font-weight:600}
+  .brand-sep{width:1px;height:16px;background:var(--line-2)}
+  .topbar-link{font-size:14px;line-height:22px;color:var(--ink-2);text-decoration:none;padding:4px 0}
+  .topbar-link:hover{color:var(--brand)}
+
+  /* ---------- layout: rail + content ---------- */
+  .layout{max-width:calc(var(--frame) + 48px);margin:0 auto;padding:0 24px 96px}
+  .content{max-width:var(--col)}
+  .rail{display:none}
+  @media (min-width:1080px){
+    :root{--frame:calc(var(--rail) + var(--gutter) + var(--col))}
+    .layout{display:grid;grid-template-columns:var(--rail) minmax(0,var(--col));gap:var(--gutter)}
+    .rail{display:block}
   }
-  a{color:var(--brand-ink);text-decoration:none}
-  a:hover{text-decoration:underline}
-  ::selection{background:rgba(46,92,246,.16)}
-  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
 
-  /* ---- top bar ---- */
-  .topbar{border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(255,255,255,.94);z-index:20}
-  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:58px;gap:16px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.01em;font-size:16px}
-  .brand .mark{width:26px;height:26px;flex:0 0 26px}
-  .topmeta{font-size:13px;color:var(--ink-3);font-weight:500}
+  .rail-in{position:sticky;top:88px;margin-top:56px}
+  .rail ol{list-style:none;margin:0;padding:0}
+  .rail-group{font-size:12px;line-height:20px;color:var(--ink-3);margin:20px 0 6px}
+  .rail-group:first-child{margin-top:0}
+  .rail a{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:14px;line-height:22px;
+    color:var(--ink-2);text-decoration:none}
+  .rail a:hover{color:var(--ink)}
+  .rail .dot{width:20px;height:20px;flex:0 0 20px;border-radius:50%;border:1px solid var(--line-2);
+    font-size:11px;line-height:18px;text-align:center;color:var(--ink-3);font-weight:600}
+  .rail a.say .dot{border-color:var(--brand);color:var(--brand)}
+  .rail a[aria-current="true"]{color:var(--brand);font-weight:600}
+  .rail a.say[aria-current="true"] .dot{background:var(--brand);color:#fff}
+  .rail a.ui[aria-current="true"] .dot{border-color:var(--brand);color:var(--brand)}
 
-  /* ---- hero ---- */
-  .hero{text-align:center;padding:64px 0 8px}
-  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;
-    letter-spacing:.16em;text-transform:uppercase;color:var(--brand);font-weight:600;
-    background:var(--brand-soft);border-radius:999px;padding:6px 14px;margin:0 0 22px}
-  h1{font-size:clamp(32px,5.6vw,58px);line-height:1.08;letter-spacing:-.02em;font-weight:800;
-    margin:0 auto 20px;max-width:16ch}
-  h1 .u{position:relative;white-space:nowrap}
-  h1 .u:after{content:"";position:absolute;left:-.04em;right:-.04em;bottom:.06em;height:.34em;
-    background:var(--amber-soft);z-index:-1;border-radius:3px}
-  .lede{font-size:clamp(16px,2.1vw,19px);color:var(--ink-2);max-width:40ch;margin:0 auto}
+  /* ---------- sections ---------- */
+  .section{padding-top:72px}
+  .section-h{font-size:24px;line-height:32px;font-weight:700;letter-spacing:-.005em}
+  .section-intro{margin-top:8px;color:var(--ink-2)}
 
-  /* ---- role strip ---- */
-  .roles{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin:28px 0 6px}
-  .role{display:inline-flex;align-items:center;gap:9px;background:var(--paper);border:1px solid var(--line);
-    border-radius:999px;padding:8px 15px;font-size:13.5px;color:var(--ink-2)}
-  .role b{color:var(--ink);font-weight:700}
-  .role .who{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--brand);
-    background:var(--brand-soft);border-radius:5px;padding:2px 7px;font-weight:600}
-  .role.live .who{color:var(--amber);background:var(--amber-soft)}
+  /* ---------- hero ---------- */
+  .hero{padding-top:56px}
+  .hero h1{font-size:40px;line-height:48px;font-weight:700;letter-spacing:-.01em}
+  .hero .lede{margin-top:16px;font-size:18px;line-height:28px;color:var(--ink-2)}
 
-  /* ---- install module (feishu-style) ---- */
-  .install{margin:38px auto 8px}
-  .tabs{display:flex;justify-content:center;gap:6px;margin-bottom:18px}
-  .tab{font-size:15px;font-weight:600;color:var(--ink-3);background:transparent;border:0;cursor:pointer;
-    padding:9px 18px;border-radius:10px;position:relative;font-family:inherit;transition:.15s}
-  .tab[aria-selected="true"]{color:var(--brand-ink);background:var(--brand-soft)}
-  .tab:hover{color:var(--brand-ink)}
-  .panel{display:none}
-  .panel.on{display:block;animation:fade .25s ease}
-  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  /* ---------- prerequisites ---------- */
+  .prereq{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+  .need{border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px;
+    transition:border-color .15s,background-color .15s}
+  .need h3{font-size:16px;line-height:24px;font-weight:600}
+  .need p{font-size:14px;line-height:22px;color:var(--ink-2)}
+  .need.done{border-color:#A3D2B0}
+  .check{margin-top:auto;padding-top:6px;display:inline-flex;align-items:center;gap:8px;font-size:14px;
+    line-height:22px;color:var(--ink-2);cursor:pointer;user-select:none}
+  .check input{width:16px;height:16px;margin:0;accent-color:var(--ok);cursor:pointer}
+  .logos{display:flex;flex-wrap:wrap;gap:8px}
+  .logo{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:4px 10px 4px 6px;
+    font-size:13px;line-height:20px;color:var(--ink-2);background:var(--paper)}
+  .logo img{width:18px;height:18px;object-fit:contain;display:block}
 
-  .promptcard{background:var(--mist);border:1px solid var(--line);border-radius:18px;
-    padding:20px;max-width:760px;margin:0 auto}
-  .promptcard .lead{font-size:14.5px;color:var(--ink-2);margin:0 0 14px;text-align:center}
-  .promptcard .lead b{color:var(--ink);font-weight:700}
+  /* ---------- conversation ---------- */
+  .chat{margin-top:24px;background:var(--canvas);border-radius:16px;padding:8px 24px 28px}
+  .turn{padding-top:24px}
+  .turn + .turn{margin-top:20px;border-top:1px solid var(--line)}
+  .turn-h{display:flex;align-items:center;gap:10px}
+  .turn-h .num{width:24px;height:24px;flex:0 0 24px;border-radius:50%;background:var(--brand);color:#fff;
+    font-size:13px;line-height:24px;text-align:center;font-weight:600}
+  .turn-h h3{font-size:18px;line-height:26px;font-weight:600}
 
-  .term{background:var(--term);border-radius:13px;overflow:hidden;border:1px solid #10203a;text-align:left;
-    box-shadow:0 18px 40px -24px rgba(12,22,38,.55)}
-  .term .bar{display:flex;align-items:center;gap:7px;padding:11px 15px;border-bottom:1px solid var(--term-2)}
-  .term .bar i{width:10px;height:10px;border-radius:50%;background:#2a3c58;display:inline-block}
-  .term .bar .name{margin-left:8px;font-family:var(--mono);font-size:11.5px;color:var(--term-dim);letter-spacing:.04em}
-  .term .bar .copy{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);
-    font-size:11.5px;color:var(--term-blue);background:rgba(127,176,255,.1);border:1px solid #24406a;
-    border-radius:7px;padding:5px 11px;cursor:pointer;transition:.15s}
-  .term .bar .copy:hover{background:rgba(127,176,255,.2);color:#fff}
-  .term pre{margin:0;padding:17px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;
-    line-height:1.85;color:var(--term-ink);tab-size:2;white-space:pre-wrap;word-break:break-word}
-  .term pre::-webkit-scrollbar{height:8px}
-  .term pre::-webkit-scrollbar-thumb{background:#26405f;border-radius:8px}
-  .tok-c{color:var(--term-dim)}
-  .tok-p{color:var(--term-green)}
-  .tok-k{color:var(--amber)}
-  .tok-a{color:#A9C7FF}
+  .msg{margin-top:14px;border-radius:16px;padding:14px 16px;max-width:92%}
+  .msg-who{font-size:12px;line-height:20px}
+  .msg-body{margin:2px 0 0;font-family:inherit;font-size:15px;line-height:24px;white-space:pre-wrap;word-break:break-word}
 
-  .fillnote{font-size:12.5px;color:var(--ink-3);margin:12px 2px 0;text-align:center}
-  .fillnote b{color:var(--brand-ink)}
-  .restart{display:flex;align-items:center;justify-content:center;gap:9px;margin:16px auto 0;
-    font-size:13.5px;color:var(--ink-2);max-width:760px}
-  .restart .ok{color:var(--ok);font-weight:700}
-  .warn{display:flex;gap:11px;max-width:760px;margin:14px auto 0;background:var(--amber-soft);
-    border:1px solid #F1D3A6;border-radius:11px;padding:11px 14px;font-size:13px;color:#7a4c12}
-  .warn b{color:#5f3a0c}
+  .msg.you{margin-left:auto;background:var(--brand);color:#fff;border-bottom-right-radius:4px}
+  .msg.you .msg-who{color:rgba(255,255,255,.78)}
+  .msg.you .addr{color:#fff;opacity:.85}
+  .msg.you .key{background:rgba(255,255,255,.16);border-bottom:2px solid #FFB65D;padding:0 3px;border-radius:2px}
+  .msg-foot{display:flex;justify-content:flex-end;margin-top:10px}
+  .copy{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:6px;cursor:pointer;
+    font-size:13px;line-height:20px;font-weight:500;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;
+    transition:background-color .15s}
+  .copy:hover{background:rgba(255,255,255,.14)}
+  .copy:active{background:rgba(255,255,255,.24)}
+  .copy svg{width:14px;height:14px}
+  .copy.is-done{background:#fff;color:var(--brand);border-color:#fff}
 
-  /* ---- install helper line (one line under the card, feishu-style) ---- */
-  .helper{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 6px;
-    margin:16px auto 0;max-width:780px;font-size:13px;color:var(--ink-2);text-align:center;line-height:1.7}
-  .helper .ok{color:var(--ok);font-weight:700}
-  .helper b{color:var(--ink);font-weight:600}
-  .helper .sec{color:var(--ink-3)}
+  .msg.reply{max-width:none;background:var(--paper);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .msg.reply .msg-who{color:var(--ink-3)}
+  .msg.reply .msg-body{color:var(--ink-2)}
 
-  /* ---- AI tools strip (compact, one row) ---- */
-  .tools{padding:36px 24px 6px;text-align:center}
-  .tools .th{font-size:14px;color:var(--ink);font-weight:700;margin:0 auto 20px;max-width:70ch;line-height:1.6}
-  .tools .th span{font-weight:400;color:var(--ink-3)}
-  .agents{display:flex;justify-content:center;flex-wrap:wrap;gap:16px 26px;max-width:720px;margin:0 auto}
-  .agent{display:flex;flex-direction:column;align-items:center;gap:8px;width:74px}
-  .agent .tile{width:52px;height:52px;border-radius:14px;background:var(--paper);border:1px solid var(--line-2);
-    display:flex;align-items:center;justify-content:center;transition:.16s}
-  .agent .tile img{width:28px;height:28px;object-fit:contain;display:block}
-  .agent:hover .tile{transform:translateY(-2px);border-color:var(--brand);box-shadow:0 8px 18px -12px rgba(46,92,246,.5)}
-  .agent .nm{font-size:12px;color:var(--ink-2);font-weight:500}
+  .aside{margin-top:12px;font-size:14px;line-height:22px;color:var(--ink-2);max-width:92%;margin-left:auto}
+  .aside.left{margin-left:0}
+  .aside b{color:var(--ink);font-weight:600}
 
-  /* ---- journey ---- */
-  .steps-h{text-align:center;padding:52px 0 4px}
-  .steps-h .k{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
-    color:var(--brand);font-weight:600;margin:0 0 10px}
-  .steps-h h2{font-size:clamp(22px,3.4vw,30px);margin:0;letter-spacing:-.01em}
-  .steps-h p{color:var(--ink-2);margin:10px auto 0;max-width:44ch;font-size:15px}
+  .tip{margin-top:12px;display:flex;gap:10px;font-size:14px;line-height:22px;color:var(--ink-2);
+    background:var(--paper);border-radius:8px;padding:10px 14px}
+  .tip svg{width:16px;height:16px;flex:0 0 16px;margin-top:3px;color:var(--ink-3)}
+  .tip b{color:var(--ink);font-weight:600}
+  .tip.warn{background:var(--wait-soft)}
+  .tip.warn svg{color:var(--wait)}
 
-  .steps{position:relative;margin:34px auto 0;padding-left:62px;max-width:760px}
-  .steps:before{content:"";position:absolute;left:19px;top:12px;bottom:38px;width:2.5px;
-    background:linear-gradient(180deg,var(--brand),var(--brand) 80%,var(--amber));border-radius:2px}
-  .step{position:relative;padding:0 0 34px}
-  .step .node{position:absolute;left:-62px;top:-2px;width:40px;height:40px;border-radius:50%;
-    background:var(--paper);border:2.5px solid var(--brand);display:flex;align-items:center;justify-content:center;
-    font-family:var(--mono);font-weight:700;font-size:15px;color:var(--brand)}
-  .step.arrive .node{border-color:var(--amber);color:var(--amber)}
-  .step .hd{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin:3px 0 8px}
-  .step h3{margin:0;font-size:clamp(19px,2.6vw,23px);letter-spacing:-.01em}
-  .who-chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;font-weight:600;
-    padding:3px 9px;border-radius:6px;color:var(--brand);background:var(--brand-soft)}
-  .who-chip.mgr{color:#8a5a12;background:var(--amber-soft)}
-  .who-chip.peer{color:var(--ok);background:#DBF3E8}
-  .step .say{margin:0;color:var(--ink-2);font-size:15px}
-  .step .say b{color:var(--ink);font-weight:600}
-  .step .say code{font-family:var(--mono);font-size:.9em;color:var(--brand-ink);background:var(--brand-soft);
-    padding:1px 6px;border-radius:5px}
+  .seg{margin-top:14px;margin-left:auto;display:flex;width:max-content;max-width:100%;gap:2px;padding:2px;
+    border-radius:8px;background:var(--line)}
+  .seg button{border:0;background:transparent;border-radius:6px;padding:3px 12px;font-size:13px;line-height:22px;
+    color:var(--ink-2);cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--paper);color:var(--ink);font-weight:500;
+    box-shadow:0 1px 2px rgba(29,33,41,.08)}
 
-  .quote{margin:12px 0 0;border-left:3px solid var(--brand);background:var(--mist);border-radius:0 10px 10px 0;
-    padding:11px 15px;font-size:14px;color:var(--ink);display:flex;flex-direction:column;gap:8px}
-  .quote .q{position:relative}
-  .quote .q:before{content:"“";color:var(--brand);font-weight:800;margin-right:2px}
-  .quote .q:after{content:"”";color:var(--brand);font-weight:800;margin-left:1px}
-  .hint{display:flex;gap:9px;margin-top:11px;font-size:13px;color:var(--ink-2)}
-  .hint .t{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);
-    font-weight:700;padding-top:2px;white-space:nowrap}
-  .hint b{color:var(--ink)}
+  .pipeline{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 0}
+  .pipeline li{font-size:13px;line-height:20px;color:var(--ink-2);background:var(--canvas);border-radius:6px;padding:2px 8px}
+  .pipeline li + li::before{content:"";display:inline-block;width:12px;height:1px;background:var(--line-2);
+    vertical-align:middle;margin:0 6px 0 -14px;position:relative;left:-6px}
+  .pipeline li + li{margin-left:20px}
+  .pipeline li.last{background:var(--wait-soft);color:var(--wait-ink)}
 
-  .stub{background:var(--paper);border:1px solid var(--line);border-radius:13px;overflow:hidden;margin-top:12px}
-  .stub .head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
-    background:linear-gradient(90deg,var(--amber-soft),transparent)}
-  .stub .head .l{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;color:#8a5a12;font-weight:600}
-  .stub .head .stamp{font-family:var(--mono);font-size:10.5px;color:var(--amber);border:1.5px solid var(--amber);
-    border-radius:6px;padding:2px 8px;letter-spacing:.14em;font-weight:700}
-  .stub .r{display:flex;justify-content:space-between;gap:16px;padding:9px 16px;border-top:1px dashed var(--line-2);font-size:13.5px}
-  .stub .r .kk{color:var(--ink-3)}
-  .stub .r .vv{color:var(--ink);font-weight:600;text-align:right}
+  details.alt{margin-top:16px}
+  details.alt summary{cursor:pointer;font-size:14px;line-height:22px;color:var(--ink-2);width:max-content;max-width:100%}
+  details.alt summary:hover{color:var(--ink)}
+  details.alt[open] summary{color:var(--ink)}
+  .term{margin-top:10px;background:#1D2129;border-radius:12px;overflow:hidden}
+  .term-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 8px 16px;
+    border-bottom:1px solid #2E333D;font-size:12px;line-height:20px;color:#A9AEB8}
+  .term pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:22px;color:#E5E6EB;
+    white-space:pre-wrap;word-break:break-all}
+  .term .c{color:#86909C}
+  .term .p{color:#7BE188;user-select:none}
+  .term .k{color:#FFB65D}
+  .term .copy{border-color:#4E5969;color:#E5E6EB}
+  .term .copy:hover{background:#2E333D}
+  .term .copy.is-done{background:#E5E6EB;color:#1D2129;border-color:#E5E6EB}
 
-  /* ---- help ---- */
-  .help{background:var(--ink);color:#E6ECF4;border-radius:22px;padding:34px clamp(22px,4vw,46px);margin:50px 0 0}
-  .help h2{margin:0 0 10px;font-size:clamp(20px,3vw,26px);color:#fff;letter-spacing:-.01em}
-  .help p{margin:0 0 12px;color:#BDCADC;font-size:14.5px;line-height:1.75}
-  .help p:last-child{margin-bottom:0}
-  .help b{color:#fff}
-  .help code{font-family:var(--mono);color:var(--term-green);font-size:.9em}
+  /* ---------- UI steps ---------- */
+  .ui-step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:4px 12px;margin-top:28px}
+  .ui-step .num{width:24px;height:24px;border-radius:50%;border:1px solid var(--line-2);color:var(--ink-2);
+    font-size:13px;line-height:22px;text-align:center;font-weight:600;margin-top:1px}
+  .ui-step h3{font-size:18px;line-height:26px;font-weight:600}
+  .ui-step .body{grid-column:2;display:flex;flex-direction:column;gap:12px;color:var(--ink-2)}
+  .ui-step .body b{color:var(--ink);font-weight:600}
+  .who{font-size:13px;line-height:22px;color:var(--ink-3);font-weight:400;margin-left:8px}
+  .path{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:14px;line-height:22px}
+  .path span{background:var(--canvas);border:1px solid var(--line);border-radius:6px;padding:1px 8px;color:var(--ink)}
+  .path svg{width:12px;height:12px;color:var(--ink-3)}
+  .cases{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:8px 20px;font-size:14px;line-height:22px;
+    border-top:1px solid var(--line);padding-top:12px}
+  .cases dt{color:var(--ink);font-weight:500}
+  .cases dd{margin:0}
+  .status-online{color:var(--ok);font-weight:600}
 
-  /* ---- outro / footer ---- */
-  .outro{text-align:center;padding:56px 0 24px}
-  .outro .big{font-size:clamp(24px,3.6vw,34px);font-weight:800;letter-spacing:-.01em;margin:0 0 12px}
-  .outro p{color:var(--ink-2);margin:0 auto 26px;max-width:46ch}
-  .cta{display:inline-flex;align-items:center;gap:9px;background:var(--brand);color:#fff;
-    font-weight:600;padding:13px 24px;border-radius:12px;transition:.16s;
-    box-shadow:0 12px 26px -12px rgba(46,92,246,.65)}
-  .cta:hover{transform:translateY(-2px);text-decoration:none}
-  .foot{border-top:1px solid var(--line)}
-  .foot .wrap{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between;
-    padding:22px 24px;font-size:13px;color:var(--ink-3)}
-  .foot code{font-family:var(--mono);color:var(--brand-ink);font-size:12.5px;background:var(--brand-soft);
-    padding:2px 8px;border-radius:6px}
+  /* ---------- result ---------- */
+  .result{margin-top:24px;display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:40px;align-items:start}
+  .result-text{display:flex;flex-direction:column;gap:12px;color:var(--ink-2)}
+  .result-text b{color:var(--ink);font-weight:600}
+  .appcard{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--paper);
+    box-shadow:0 4px 16px rgba(29,33,41,.06)}
+  .appcard-top{display:flex;gap:12px;align-items:center}
+  .appcard-icon{width:40px;height:40px;border-radius:10px;background:var(--brand-soft);color:var(--brand);
+    display:flex;align-items:center;justify-content:center}
+  .appcard-icon svg{width:22px;height:22px}
+  .appcard-name{font-size:15px;line-height:22px;font-weight:600}
+  .appcard-by{font-size:12px;line-height:20px;color:var(--ink-3)}
+  .appcard-desc{margin-top:10px;font-size:13px;line-height:20px;color:var(--ink-2)}
+  .appcard-btn{margin-top:14px;display:block;width:100%;text-align:center;font-size:14px;line-height:32px;
+    border-radius:6px;background:var(--brand);color:#fff;font-weight:500}
+  .appcard-cap{margin-top:8px;font-size:12px;line-height:20px;color:var(--ink-3);text-align:center}
 
-  :focus-visible{outline:3px solid rgba(46,92,246,.5);outline-offset:3px;border-radius:6px}
+  /* ---------- troubleshooting ---------- */
+  .faq{margin-top:20px;border-top:1px solid var(--line)}
+  .faq details{border-bottom:1px solid var(--line)}
+  .faq summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:16px 0;font-weight:500}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary svg{width:16px;height:16px;flex:0 0 16px;color:var(--ink-3);transition:transform .2s}
+  .faq details[open] summary svg{transform:rotate(180deg)}
+  .faq .ans{padding:0 0 18px;display:flex;flex-direction:column;gap:8px;color:var(--ink-2);font-size:15px;line-height:24px}
 
-  @media (max-width:760px){
-    .agents{grid-template-columns:repeat(3,1fr);gap:18px 10px}
-    .roles{gap:8px}
-    .steps{padding-left:50px}
-    .step .node{left:-50px;width:34px;height:34px;font-size:13px}
-    .steps:before{left:16px}
+  .foot{border-top:1px solid var(--line);font-size:13px;line-height:20px;color:var(--ink-3)}
+  .foot-in{max-width:calc(var(--frame) + 48px);margin:0 auto;padding:20px 24px}
+
+  /* ---------- small screens ---------- */
+  @media (max-width:720px){
+    .topbar-in,.layout,.foot-in{padding-left:16px;padding-right:16px}
+    .hero{padding-top:36px}
+    .hero h1{font-size:26px;line-height:34px}
+    .hero .lede{font-size:16px;line-height:26px}
+    .section{padding-top:56px}
+    .section-h{font-size:20px;line-height:28px}
+    .prereq{grid-template-columns:1fr}
+    .chat{padding:4px 14px 20px;margin-left:-4px;margin-right:-4px}
+    .msg,.aside{max-width:100%}
+    .pipeline{gap:6px}
+    .pipeline li + li{margin-left:0}
+    .pipeline li + li::before{display:none}
+    .result{grid-template-columns:1fr}
+    .cases{grid-template-columns:1fr;gap:2px}
+    .cases dd{margin-bottom:8px}
   }
   @media (prefers-reduced-motion:reduce){
     html{scroll-behavior:auto}
-    .panel.on{animation:none}
-    .cta:hover,.agent:hover .tile{transform:none}
+    *{transition:none !important}
   }
 </style>
 </head>
 <body>
 
-  <div class="topbar">
-    <div class="wrap">
-      <div class="brand">
-        <svg class="mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-          <rect x="2" y="2" width="28" height="28" rx="8" fill="#2E5CF6"/>
-          <path d="M10 22V10h5.2a3.4 3.4 0 0 1 .3 6.8H10" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="21.4" cy="20.4" r="2.1" fill="#EF8F22"/>
-        </svg>
-        毕昇 · 应用工场
-      </div>
-      <div class="topmeta">托管应用 · 上手手册</div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-copy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5A1 1 0 0 0 9.5 2.5h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></symbol>
+  <symbol id="i-info" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.3"/><path d="M8 7.2v4M8 4.9v.1" stroke-linecap="round"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2.2 14.3 13H1.7Z" stroke-linejoin="round"/><path d="M8 6.5v3M8 11.2v.1" stroke-linecap="round"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-next" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m4.5 2.5 3.5 3.5-3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <img class="brand-logo js-brand-logo" src="/assets/bisheng/login-logo-small.png" alt="BISHENG" height="24" />
+      <span class="brand-name js-brand-name" hidden>BISHENG</span>
+      <span class="brand-sep" aria-hidden="true"></span>
+      应用工场
     </div>
+    <a class="topbar-link" href="/build/apps">打开应用列表</a>
   </div>
+</header>
 
-  <header class="hero">
-    <div class="wrap">
-      <h1>说三句话，<br>把想法变成<span class="u">全公司能用</span>的应用</h1>
-      <p class="lede">代码和命令全交给 AI —— 你只负责复制提示词、描述想法，在界面点两下。</p>
+<div class="layout">
+
+  <nav class="rail" aria-label="本页步骤">
+    <div class="rail-in">
+      <ol>
+        <li><a href="#prep" class="ui"><span class="dot" aria-hidden="true"></span>开始前</a></li>
+      </ol>
+      <p class="rail-group">对 AI 说三句话</p>
+      <ol>
+        <li><a href="#s1" class="say"><span class="dot">1</span>安装并登录</a></li>
+        <li><a href="#s2" class="say"><span class="dot">2</span>描述你的应用</a></li>
+        <li><a href="#s3" class="say"><span class="dot">3</span>部署</a></li>
+      </ol>
+      <p class="rail-group">在界面上操作两步</p>
+      <ol>
+        <li><a href="#s4" class="ui"><span class="dot">4</span>等管理员审批</a></li>
+        <li><a href="#s5" class="ui"><span class="dot">5</span>授权给部门</a></li>
+      </ol>
+      <p class="rail-group">之后</p>
+      <ol>
+        <li><a href="#result" class="ui"><span class="dot" aria-hidden="true"></span>同事打开使用</a></li>
+        <li><a href="#help" class="ui"><span class="dot" aria-hidden="true"></span>遇到问题</a></li>
+      </ol>
     </div>
-  </header>
+  </nav>
 
-  <!-- ===== install module (第 1 句) ===== -->
-  <section class="wrap install">
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" aria-selected="true" data-tab="ai">通过 AI 助手安装</button>
-      <button class="tab" role="tab" aria-selected="false" data-tab="manual">手动安装</button>
-    </div>
+  <main class="content">
 
-    <!-- AI panel -->
-    <div class="panel on" data-panel="ai">
-      <div class="promptcard">
-        <p class="lead">把下面这段<b>复制</b>给你的 AI 助手（Claude Code、Codex、Cursor、Trae…），<b>把密钥换成管理员给你的</b>，回车即可 —— 它会替你装好命令行、登录、接好平台规矩。</p>
-        <div class="term">
-          <div class="bar"><i></i><i></i><i></i><span class="name">提示词 · 复制给 AI</span>
-            <button class="copy" data-copy="prompt">▢ 复制提示词</button></div>
-<pre id="ai-prompt">帮我安装并登录 bisheng 命令行。安装与登录指引见：
-<span class="tok-a js-guide-url">http://你的毕昇地址/api/v1/dev-toolkit/install-guide.md</span>
-登录地址用同一个 <span class="tok-a js-platform-addr">http://你的毕昇地址</span>，我的密钥是 <span class="tok-k">bs-sak-把这里换成你的密钥</span>
-装好后确认 bisheng --help 能运行，并告诉我接入了哪些 AI 工具。</pre>
+    <section class="hero">
+      <h1>说三句话，<br />把想法变成全公司能用的应用</h1>
+      <p class="lede">AI 负责写代码和部署，平台负责构建和运行。<br />你只需对 AI 说三句话，再在界面上操作两步。</p>
+    </section>
+
+    <!-- ===== prerequisites ===== -->
+    <section class="section" id="prep" data-rail="prep">
+      <h2 class="section-h">开始前，准备两样东西</h2>
+      <div class="prereq">
+        <div class="need" data-need="agent">
+          <h3>一个 AI 编程工具</h3>
+          <div class="logos">
+            <span class="logo"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAAB11BMVEVHcEzZd1fYd1fad1bZdlfYdlbYdlfYd1fZdlf/AADlf0zfb0/Yd1fZdlbYd1fYd1fcc1zYdVfYdlXaf1vYeFfZdlbYd1fabUjYd1fdd1XYd1fYd1bYdlfZd1bZd1f/VVXZdlfXd1e/fz/ZdlbYdlfXdVXZdlXZdljZdlbZdlfSeFrZd1fYd1bYdlbicVXYd1bbdljYd1fbeFXZdlbZd1bUcVXbeFXYdlbMZmbYdVbYd1fXdVjYd1bff1/YdlfYd1fYd1fYdlbYdlfZdlbXdVjZd1fYdlbUdFXZdlfVdVnXdU7Yd1fYd1fYdlbYd1fYeVbZd1bYdlfXdVbad1jQc1zZd1bXd1Xdd1XYd1bYd1fZeFfXdVbYd1baeVXYd1bZd1fYd1fWelvYd1XYdlfZdlbYc1XZd1bZdlbZd1bYd1XYdlbYd1bYdlfYdlfZdlfZd1fZd1fZd1bXeFXYeFbZd1bZd1bZdlfYdlfXdlbZdlXYdVbZd1bad1bUf1XYdlfYdlbZd1b/f3/adljYdlfZd1fYd1bYeFjYd1bZd1bZd1fZd1bZdlbYdlfYdlbZd1jZd1bZeFbZeFXYd1bZdlfYd1fZd1fZdlfYdlbZdlXYdFjYdlfZd1bZd1fureenAAAAnXRSTlMA3phN+ffb/PsBChD+7qDvFl1WDlW/aQf4D/Ct6o2+A3RABN/kJzZuiJ0ReovICeMrfjmw0RIkuQVQxzTCCKyaeN3GkBpg6BjzJQ3PzeLAO5xJQTEL2mIepYZmW5MqusP2GVy7gSHFjj48hdbQ1VKk5+BoNXN8ynJHZWovUwz1iuUCRbXy3EiE67j6t2POUfREWdR7p9jMcF8usl7/Ut56FQAAAYNJREFUKJFdkQVXQkEQhYd8pKiYGNhiNwYioWJ3d3d3d3f3/bG+Rwnec3Zn537nzO7OEHHyjW3r4GKTH3mrG4hgQ7qGkXmDeAYaNVEfwtmkOkD9R0qBDaJoFBOF1oLvMHuGpSQPR4aR/NFLwfWAj+NiIEdOW0AiJaKdGgFVlR1I+wHxjjYXi7JUtAQBCoGzvjZFAtH2JhDVKWwQAl1/VyfMAWGz4OWr6oCBGI/nBk9LwCqEXYNjdKTfzSp0oZUZODSuizxlQxEF1kSWmHQp5YVpcOny6uJ8j/x9wkbS7iwWm8huSk5u47278vXuAAyjVMbl3iQ47QoTU/nGgf0AwYH1Gsiw2+kvlcj/FFo5IponkkVH6Tk/WwxleZlN/INUHAYyy67qAgYlFQXFQoNZZDxDFh9rTpC9cM/1/YNeY+lYEZK5KpmQut/0hG8piYuIkrAeMxnnnnDmw3MeJSty2DEtIYjy5C6QxCsjerRPboqJ8PhdazK7mTHKnYcK6J8MvGaP7BfPYXNt8t8f+AAAAABJRU5ErkJggg==" alt="" width="18" height="18" />Claude Code</span>
+            <span class="logo"><img src="data:image/png;base64,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" alt="" width="18" height="18" />Codex</span>
+            <span class="logo"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAAA21BMVEVHcEwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAChqpsaAAAASXRSTlMAEEmB0z8WhlVeFwLPqoADb+jtiPj6qydICbP739lWfgcr9LslG6TAMPOZ/P6iFJr9OTfYR7LW73MGyNDaAePJkWGL5koMtrX/HWmIzAAAAMVJREFUKJF10scWgjAUBNAgIoLYxd5777135/+/SAwHJEFnk5y5myQvhNjxeL0e4k49CyO1ClcL8QRo9O7QUQeUKOzEImGrl3ZgspzTWk3ClaRqgLhX/HwWogEyjsqBPcpmJlMAtlMG1rAA44H67X2rLwCdUNmCEZwAFNJm3+5xgJwJLfAA2hfxGzL5P1DCb2hUbRAZaJq70Oc6QQdM+nQT9JnPrlkQOH0WTeIHRS7soOzRPm7QzwI39dQTuOKVIu7cme/zBrD2RjflETZCAAAAAElFTkSuQmCC" alt="" width="18" height="18" />Cursor</span>
+            <span class="logo"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAAMFBMVEUy8IwKCw0jml0ZYT0PKB0jmlwMGRUt03wNGRUefkwefUwrxXQqxXQmqWUlqGUURC2UZZeGAAAAf0lEQVRIie3SSQrAIAxA0cShTh3uf9sS7aKDkhQKbcG/yiIPVAS8GXTQAQM00wUA01/AZKrNTaDqL6meBwMeBhYYF7b90UqAcQCh7ANYHtB+FrSfhQhERJ9kIItIAwnBkUjEMvgkuvTuWT3KwKm3AKXvfO+PgkW1qwJJHXTQaAXCqQltbqZ4fgAAAABJRU5ErkJggg==" alt="" width="18" height="18" />Trae</span>
+            <span class="logo"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAABMlBMVEVHcEwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADEAmovAAAAZnRSTlMAxn70+rAC/YAk5+X+vF4J+a/82ffkDDjxN9x6vwrCu6Ft6BLMNgQq84kzmWmzK2pSUy0sjtXWB2t/bEX440e6dmiudRNl6gsUYOvbP2JAZNob7Zqg7JI6kTmYHN/exYxxtHCNxP/pK7erAAABF0lEQVQokZ2QV1fCUBCELyQQSA+99yqiohQ79t577/P//4LxZjkn8uRxH2Y2892H2TD239ldb0fN5RXfdvZ3vn8Amh3dFQczcE0mOMr3lEQ6HsueAsdGLJ5ORLcIbEpJ7v0et6S6RqCQctzjcTy1QSBPgSzTA41A7ozbFFDny2GOOklq1bbBO9Ae2EtVlXivjgJZsLqffXy8offatQQZygxjqxLw2HoyhS/7o/MimM8P54C0xML2SeP/x47CP8LBrG+OhDnZCHjhJSEQIhBAgISDkL07YBqTJBwsMLYYQdFgzD/hJzGKiMzzi/O4vruvOYVqtzcXGNap3olPREO7ajYLWgOideRqXtYvKyVRLFVaenn8qr/ON1btOi6BSz8DAAAAAElFTkSuQmCC" alt="" width="18" height="18" />Copilot</span>
+            <span class="logo"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAAA7VBMVEVHcEwAtNcAtNcAtNgAtNgAtNcAs9gAf/8AttoAtNgAtNcAtNcAtNcAstgA//8As9gAv98As9gAtNgAtNcAtNgAs9gAt9YAqv8AtNcAtdcAs9gAttoAtNcAtNcAs9gAtdgAs9gAtNcAsswAudwAtNgAtNcAtNgAs9cAs9gAstgAs9cAs9cAs9gAs9gAs9cAtNgAtNcAs9kAtNcAs9gAs9cAtNgAstgAs9gAtNgAtNQAtNcAttoAs9cAtdYAs9gAtNcAtNcAtNkAtNgAs9kAs9cAs9cAtdcAsdgAs9cAs9gAtNgAttoAtNcAs9kAtNhiuwwKAAAAT3RSTlMAtd6doKjSAgfTe4nKcgGLCMtxjZ6EGQPdWuYOOqGDSaYzChaZp7Lq+lD+nJLf43f8G67tlKQUn5MY/TG9Jop00DCQL/j3LS7BmO4c9lj/tGTGlQAAANFJREFUKJHFkGdTAlEMRUNxd+mwIFUE6UU6KiqKFFGK9///HLLZt8A3PjlkJvPOnTOTvAnRNWvjQLnWCaQUG+0u4U8FD4B7xSGAsN3ZIciif2fziyXwq0uIsYA7J+xlsQfMk4DnKOLA91pGheaPbJoiJh8U1YAvg8Mn9xCov/IbsKb/rIAIUZibnrOAK0wUl4Ez4M2/XNxYXGgBlXdTE6FPZa0IGgv77F8PRicR9Z0JylihavNDg1lz7lTk0FPsZ35yRCmfThiK9Vu3K3nh8v9dB9LDJB4b1ULFAAAAAElFTkSuQmCC" alt="" width="18" height="18" />Windsurf</span>
+          </div>
+          <p>登录 bisheng 命令行时，它会把平台的技能包放进 Claude Code 和 Codex 的技能目录。技能包是一组写给 AI 看的开发和部署规则。</p>
+          <p>使用 Cursor、Trae 等其他工具时，第一次部署会在项目里写入 <code>AGENTS.md</code>，告诉 AI 技能包在哪里。</p>
+          <label class="check"><input type="checkbox" data-need-check="agent" />我已装好其中一个</label>
         </div>
-        <p class="fillnote"><b>平台地址已自动填好</b>为你打开本页的地址，你只需替换最后那把 <b>bs-sak-…</b> 密钥。</p>
-      </div>
-      <p class="helper"><span class="ok">✓</span> 装好后<b>重启 AI 助手</b>即可进入第 2 句<span class="sec">　·　🔒 密钥只粘进你本机的 AI 助手，勿贴到共享 / 公开处</span></p>
-    </div>
-
-    <!-- manual panel -->
-    <div class="panel" data-panel="manual">
-      <div class="promptcard">
-        <p class="lead">更喜欢自己动手？在终端里依次执行（<b>命令行从你们自己的平台下载，不连公网</b>）：</p>
-        <div class="term">
-          <div class="bar"><i></i><i></i><i></i><span class="name">终端</span>
-            <button class="copy" data-copy="manual">▢ 复制命令</button></div>
-<pre id="manual-cmds"><span class="tok-c"># 下载安装件（-OJ 让 curl 用平台给的正确文件名，pip 只认这个名字）</span>
-<span class="tok-p">$</span> curl -OJ <span class="js-platform-addr">http://你的毕昇地址</span>/api/v1/dev-toolkit/cli/download
-<span class="tok-p">$</span> pip install ./bisheng_cli-*.whl
-<span class="tok-c"># 用管理员给的密钥登录一次（凭据存本机，以后不用再输）</span>
-<span class="tok-p">$</span> bisheng login <span class="js-platform-addr">http://你的毕昇地址</span> <span class="tok-k">--api-key bs-sak-…</span></pre>
-        </div>
-        <p class="fillnote">装完 <b>bisheng --help</b> 能看到 login / deploy 就对了；登录会自动接好《部署纳管》技能。</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== AI tools strip ===== -->
-  <section class="tools wrap">
-    <p class="th">支持你手上的 AI 工具　<span>—— 安装任意 Agent 都行；Claude Code、Codex 自动接好平台规矩，其余靠首次部署写入项目的 AGENTS.md 兜底。</span></p>
-    <div class="agents">
-      <div class="agent"><div class="tile"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAAB11BMVEVHcEzZd1fYd1fad1bZdlfYdlbYdlfYd1fZdlf/AADlf0zfb0/Yd1fZdlbYd1fYd1fcc1zYdVfYdlXaf1vYeFfZdlbYd1fabUjYd1fdd1XYd1fYd1bYdlfZd1bZd1f/VVXZdlfXd1e/fz/ZdlbYdlfXdVXZdlXZdljZdlbZdlfSeFrZd1fYd1bYdlbicVXYd1bbdljYd1fbeFXZdlbZd1bUcVXbeFXYdlbMZmbYdVbYd1fXdVjYd1bff1/YdlfYd1fYd1fYdlbYdlfZdlbXdVjZd1fYdlbUdFXZdlfVdVnXdU7Yd1fYd1fYdlbYd1fYeVbZd1bYdlfXdVbad1jQc1zZd1bXd1Xdd1XYd1bYd1fZeFfXdVbYd1baeVXYd1bZd1fYd1fWelvYd1XYdlfZdlbYc1XZd1bZdlbZd1bYd1XYdlbYd1bYdlfYdlfZdlfZd1fZd1fZd1bXeFXYeFbZd1bZd1bZdlfYdlfXdlbZdlXYdVbZd1bad1bUf1XYdlfYdlbZd1b/f3/adljYdlfZd1fYd1bYeFjYd1bZd1bZd1fZd1bZdlbYdlfYdlbZd1jZd1bZeFbZeFXYd1bZdlfYd1fZd1fZdlfYdlbZdlXYdFjYdlfZd1bZd1fureenAAAAnXRSTlMA3phN+ffb/PsBChD+7qDvFl1WDlW/aQf4D/Ct6o2+A3RABN/kJzZuiJ0ReovICeMrfjmw0RIkuQVQxzTCCKyaeN3GkBpg6BjzJQ3PzeLAO5xJQTEL2mIepYZmW5MqusP2GVy7gSHFjj48hdbQ1VKk5+BoNXN8ynJHZWovUwz1iuUCRbXy3EiE67j6t2POUfREWdR7p9jMcF8usl7/Ut56FQAAAYNJREFUKJFdkQVXQkEQhYd8pKiYGNhiNwYioWJ3d3d3d3f3/bG+Rwnec3Zn537nzO7OEHHyjW3r4GKTH3mrG4hgQ7qGkXmDeAYaNVEfwtmkOkD9R0qBDaJoFBOF1oLvMHuGpSQPR4aR/NFLwfWAj+NiIEdOW0AiJaKdGgFVlR1I+wHxjjYXi7JUtAQBCoGzvjZFAtH2JhDVKWwQAl1/VyfMAWGz4OWr6oCBGI/nBk9LwCqEXYNjdKTfzSp0oZUZODSuizxlQxEF1kSWmHQp5YVpcOny6uJ8j/x9wkbS7iwWm8huSk5u47278vXuAAyjVMbl3iQ47QoTU/nGgf0AwYH1Gsiw2+kvlcj/FFo5IponkkVH6Tk/WwxleZlN/INUHAYyy67qAgYlFQXFQoNZZDxDFh9rTpC9cM/1/YNeY+lYEZK5KpmQut/0hG8piYuIkrAeMxnnnnDmw3MeJSty2DEtIYjy5C6QxCsjerRPboqJ8PhdazK7mTHKnYcK6J8MvGaP7BfPYXNt8t8f+AAAAABJRU5ErkJggg==" alt="Claude Code" width="28" height="28" loading="lazy" /></div><span class="nm">Claude Code</span></div>
-      <div class="agent"><div class="tile"><img src="data:image/png;base64,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" alt="Codex" width="28" height="28" loading="lazy" /></div><span class="nm">Codex</span></div>
-      <div class="agent"><div class="tile"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAAA21BMVEVHcEwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAChqpsaAAAASXRSTlMAEEmB0z8WhlVeFwLPqoADb+jtiPj6qydICbP739lWfgcr9LslG6TAMPOZ/P6iFJr9OTfYR7LW73MGyNDaAePJkWGL5koMtrX/HWmIzAAAAMVJREFUKJF10scWgjAUBNAgIoLYxd5777135/+/SAwHJEFnk5y5myQvhNjxeL0e4k49CyO1ClcL8QRo9O7QUQeUKOzEImGrl3ZgspzTWk3ClaRqgLhX/HwWogEyjsqBPcpmJlMAtlMG1rAA44H67X2rLwCdUNmCEZwAFNJm3+5xgJwJLfAA2hfxGzL5P1DCb2hUbRAZaJq70Oc6QQdM+nQT9JnPrlkQOH0WTeIHRS7soOzRPm7QzwI39dQTuOKVIu7cme/zBrD2RjflETZCAAAAAElFTkSuQmCC" alt="Cursor" width="28" height="28" loading="lazy" /></div><span class="nm">Cursor</span></div>
-      <div class="agent"><div class="tile"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAMAAABg3Am1AAAAMFBMVEUy8IwKCw0jml0ZYT0PKB0jmlwMGRUt03wNGRUefkwefUwrxXQqxXQmqWUlqGUURC2UZZeGAAAAf0lEQVRIie3SSQrAIAxA0cShTh3uf9sS7aKDkhQKbcG/yiIPVAS8GXTQAQM00wUA01/AZKrNTaDqL6meBwMeBhYYF7b90UqAcQCh7ANYHtB+FrSfhQhERJ9kIItIAwnBkUjEMvgkuvTuWT3KwKm3AKXvfO+PgkW1qwJJHXTQaAXCqQltbqZ4fgAAAABJRU5ErkJggg==" alt="Trae" width="28" height="28" loading="lazy" /></div><span class="nm">Trae</span></div>
-      <div class="agent"><div class="tile"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAABMlBMVEVHcEwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADEAmovAAAAZnRSTlMAxn70+rAC/YAk5+X+vF4J+a/82ffkDDjxN9x6vwrCu6Ft6BLMNgQq84kzmWmzK2pSUy0sjtXWB2t/bEX440e6dmiudRNl6gsUYOvbP2JAZNob7Zqg7JI6kTmYHN/exYxxtHCNxP/pK7erAAABF0lEQVQokZ2QV1fCUBCELyQQSA+99yqiohQ79t577/P//4LxZjkn8uRxH2Y2892H2TD239ldb0fN5RXfdvZ3vn8Amh3dFQczcE0mOMr3lEQ6HsueAsdGLJ5ORLcIbEpJ7v0et6S6RqCQctzjcTy1QSBPgSzTA41A7ozbFFDny2GOOklq1bbBO9Ae2EtVlXivjgJZsLqffXy8offatQQZygxjqxLw2HoyhS/7o/MimM8P54C0xML2SeP/x47CP8LBrG+OhDnZCHjhJSEQIhBAgISDkL07YBqTJBwsMLYYQdFgzD/hJzGKiMzzi/O4vruvOYVqtzcXGNap3olPREO7ajYLWgOideRqXtYvKyVRLFVaenn8qr/ON1btOi6BSz8DAAAAAElFTkSuQmCC" alt="Copilot" width="28" height="28" loading="lazy" /></div><span class="nm">Copilot</span></div>
-      <div class="agent"><div class="tile"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAAA7VBMVEVHcEwAtNcAtNcAtNgAtNgAtNcAs9gAf/8AttoAtNgAtNcAtNcAtNcAstgA//8As9gAv98As9gAtNgAtNcAtNgAs9gAt9YAqv8AtNcAtdcAs9gAttoAtNcAtNcAs9gAtdgAs9gAtNcAsswAudwAtNgAtNcAtNgAs9cAs9gAstgAs9cAs9cAs9gAs9gAs9cAtNgAtNcAs9kAtNcAs9gAs9cAtNgAstgAs9gAtNgAtNQAtNcAttoAs9cAtdYAs9gAtNcAtNcAtNkAtNgAs9kAs9cAs9cAtdcAsdgAs9cAs9gAtNgAttoAtNcAs9kAtNhiuwwKAAAAT3RSTlMAtd6doKjSAgfTe4nKcgGLCMtxjZ6EGQPdWuYOOqGDSaYzChaZp7Lq+lD+nJLf43f8G67tlKQUn5MY/TG9Jop00DCQL/j3LS7BmO4c9lj/tGTGlQAAANFJREFUKJHFkGdTAlEMRUNxd+mwIFUE6UU6KiqKFFGK9///HLLZt8A3PjlkJvPOnTOTvAnRNWvjQLnWCaQUG+0u4U8FD4B7xSGAsN3ZIciif2fziyXwq0uIsYA7J+xlsQfMk4DnKOLA91pGheaPbJoiJh8U1YAvg8Mn9xCov/IbsKb/rIAIUZibnrOAK0wUl4Ez4M2/XNxYXGgBlXdTE6FPZa0IGgv77F8PRicR9Z0JylihavNDg1lz7lTk0FPsZ35yRCmfThiK9Vu3K3nh8v9dB9LDJB4b1ULFAAAAAElFTkSuQmCC" alt="Windsurf" width="28" height="28" loading="lazy" /></div><span class="nm">Windsurf</span></div>
-    </div>
-  </section>
-
-  <!-- ===== journey ===== -->
-  <div class="steps-h wrap">
-    <p class="k">接下来 · 两句话 + 界面两下</p>
-    <h2>剩下的路，一样简单</h2>
-    <p>命令行装好了，下面每一步你要做的，几乎就是再对 AI 说句话。</p>
-  </div>
-
-  <section class="wrap">
-    <div class="steps">
-
-      <!-- step 2 -->
-      <div class="step">
-        <div class="node">2</div>
-        <div class="hd"><h3>让 AI 做出你的应用</h3><span class="who-chip">你 → AI</span></div>
-        <p class="say"><b>新开一个 AI 会话</b>（重启后的新会话才读得到技能），用大白话说你要什么。它会照平台规矩，把<b>应用代码</b>和一个叫 <code>bisheng-app.yaml</code> 的小配置一起写好。</p>
-        <div class="quote">
-          <span class="q">帮我做一个部门费用报销小工具：填写人、金额、事由、日期，提交后存下来，我能看到一张汇总表。</span>
-          <span class="q">做一个满意度问卷：5 道单选题，提交后按选项统计比例，给我一个结果页。</span>
-        </div>
-        <div class="hint"><span class="t">建议</span><p><b>让 AI 先在本地跑给你看</b>，你点一点确认样子对了再往下——不满意就继续说「按钮改蓝色」「加一列备注」，这一步不花平台任何资源，尽管改。</p></div>
-      </div>
-
-      <!-- step 3 -->
-      <div class="step">
-        <div class="node">3</div>
-        <div class="hd"><h3>让 AI 部署上去</h3><span class="who-chip">你 → AI</span></div>
-        <p class="say">满意了，再对 AI 说一句。平台会自动<b>打包 → 密钥扫描 → 构建镜像 → 启动检查</b>，最后生成一张<b>发布审批单</b>——中间那些活儿你都不用管。</p>
-        <div class="quote"><span class="q">帮我把这个应用部署到毕昇平台。</span></div>
-        <div class="hint"><span class="t">注意</span><p>部署成功 <b>不等于上线</b>——要等管理员审批通过，应用才真正上线。</p></div>
-      </div>
-
-      <!-- step 4 -->
-      <div class="step">
-        <div class="node">4</div>
-        <div class="hd"><h3>等管理员审批</h3><span class="who-chip mgr">管理员</span></div>
-        <p class="say">发布要过一道人工审批（可能跨天，属正常）。管理员在<b>审批中心 → 待我审批</b>点「通过」，你的应用就会<b>自动上线</b>。你不用守着——AI 会跟踪审批结果告诉你；回「构建 → 应用」看到卡片显示 <b>「已上线」</b> 就成了。</p>
-        <div class="hint"><span class="t">若被驳回</span><p>会给出驳回理由，让 AI 改完再部署一版即可。<b>小团队里你自己就是管理员时</b>，可自审自批（会记审计）。</p></div>
-      </div>
-
-      <!-- step 5 -->
-      <div class="step">
-        <div class="node">5</div>
-        <div class="hd"><h3>把应用授权给部门</h3><span class="who-chip">你</span></div>
-        <p class="say"><b>上线 ≠ 公开</b>，刚上线时只有你自己能进。到「构建 → 应用」找到它，点卡片齿轮 → <b>管理权限 → 添加权限</b>，把「查看者」授权给<b>部门 / 用户组</b>；想全员就勾顶层部门并「包含子部门」。</p>
-        <div class="hint"><span class="t">一步到位</span><p>授权就在这个界面点几下完成，<b>不用找后台、不用改配置</b>。</p></div>
-      </div>
-
-      <!-- step 6 -->
-      <div class="step arrive">
-        <div class="node">6</div>
-        <div class="hd"><h3>大家用起来</h3><span class="who-chip peer">同事</span></div>
-        <p class="say">被授权的同事打开<b>应用中心</b>，在「探索更多应用」里就能看到你的应用，点<b>「进入应用」</b>在新标签打开。用过一次，它会自动出现在每个人的「最近使用」里。</p>
-        <div class="stub">
-          <div class="head"><span class="l">你的应用 · 应用广场</span><span class="stamp">LIVE</span></div>
-          <div class="r"><span class="kk">入口</span><span class="vv">应用中心 → 进入应用</span></div>
-          <div class="r"><span class="kk">谁能看到</span><span class="vv">你授权过的部门 / 用户组</span></div>
-          <div class="r"><span class="kk">以后要改</span><span class="vv">让 AI 改完再发一版，数据不丢</span></div>
+        <div class="need" data-need="key">
+          <h3>一个平台密钥</h3>
+          <p>向平台管理员申请一个密钥，格式是 <code>bs-sak-</code> 开头的一串字符。第 1 句话里要用到它。</p>
+          <p>密钥只粘贴到你本机的 AI 编程工具里。不要发到群聊、文档或代码仓库。</p>
+          <label class="check"><input type="checkbox" data-need-check="key" />我已拿到密钥</label>
         </div>
       </div>
+    </section>
 
-    </div>
-  </section>
+    <!-- ===== the three sentences ===== -->
+    <section class="section" id="say">
+      <h2 class="section-h">对 AI 说三句话</h2>
+      <p class="section-intro">按顺序把下面三条消息发给 AI。每发一条，等 AI 做完再发下一条。</p>
 
-  <!-- ===== help ===== -->
-  <section class="wrap">
-    <div class="help">
-      <h2>卡住了怎么办？</h2>
-      <p><b>本地跑得好、平台上起不来</b> —— 几乎都是没照平台规矩来。这些规矩和常见错误<b>都写在《部署纳管》技能里</b>，你不用自己读懂：<b>把报错原样贴给 AI，让它「对照技能排查」</b>，通常一两轮就好。</p>
-      <p><b>做的是聊天室 / 实时看板这类「实时推送」，上线后连不上</b> —— 本版托管环境<b>不支持 WebSocket</b>：连接会被平台入口直接关掉（close <code>4501</code>），页面上只表现为「连不上」，平台日志里却什么都看不到，所以<b>本地跑得通不代表线上通</b>。做这类应用之前，先对 AI 多说一句「实时推送用 SSE 或轮询实现，不要用 WebSocket」，就能绕开。</p>
-      <p><b>登录说「未接入任何 AI 编程工具」</b> —— 本机没检测到 Claude Code / Codex。用这两个的，让 AI 再跑一次 <code>bisheng skills sync</code>；用 Cursor / Trae 等的，首次部署会写 <code>AGENTS.md</code> 指明技能位置，AI 读它即可。</p>
-      <p><b>平台升级后想更新规矩</b> —— 让 AI 跑一次 <code>bisheng skills sync</code> 重新同步并接入，最后一行会写明接进了哪些工具。</p>
-    </div>
-  </section>
+      <div class="chat">
 
-  <!-- ===== outro ===== -->
-  <section class="outro wrap">
-    <p class="big">就这么多。</p>
-    <p>从一个想法，到全公司都能点开用的应用——你说三句话，写代码、打包、构建、上线，AI 和平台替你干完。</p>
-    <a class="cta" href="#top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ 回到顶部，复制第 1 句</a>
-  </section>
+        <!-- sentence 1 -->
+        <article class="turn" id="s1" data-rail="s1">
+          <div class="turn-h"><span class="num">1</span><h3>安装并登录</h3></div>
+          <div class="msg you">
+            <div class="msg-who">你发给 AI</div>
+<pre class="msg-body" id="say-1">帮我安装并登录 bisheng 命令行。安装与登录指引见：
+<span class="addr js-guide-url">http://你的平台地址/api/v1/dev-toolkit/install-guide.md</span>
+登录地址用 <span class="addr js-platform-addr">http://你的平台地址</span>，我的密钥是 <span class="key">bs-sak-把这里换成你的密钥</span>
+装好后确认 bisheng --help 能运行，并告诉我接入了哪些 AI 编程工具。</pre>
+            <div class="msg-foot"><button class="copy" type="button" data-copy="say-1"><svg aria-hidden="true"><use href="#i-copy"/></svg><span>复制</span></button></div>
+          </div>
+          <p class="aside">平台地址已按本页地址填好。你只需把带下划线的部分换成自己的密钥。</p>
+          <div class="msg reply">
+            <div class="msg-who">AI 会做</div>
+            <p class="msg-body">AI 从平台下载并安装 bisheng 命令行，再用你的密钥登录。登录时，命令行会把技能包放进你的 AI 编程工具。最后 AI 会告诉你接入了哪些工具。</p>
+          </div>
+          <div class="tip warn">
+            <svg aria-hidden="true"><use href="#i-warn"/></svg>
+            <p><b>安装完成后，重启 AI 编程工具，新开一个会话。</b>已经打开的会话读不到新安装的技能包。</p>
+          </div>
+          <details class="alt">
+            <summary>不用 AI，自己在终端安装</summary>
+            <div class="term">
+              <div class="term-bar"><span>终端</span><button class="copy" type="button" data-copy="manual-cmds" data-strip="shell"><svg aria-hidden="true"><use href="#i-copy"/></svg><span>复制命令</span></button></div>
+<pre id="manual-cmds"><span class="c"># 下载安装包。-OJ 让 curl 使用平台返回的文件名，pip 只认这个文件名</span>
+<span class="p">$ </span>curl -OJ <span class="js-platform-addr">http://你的平台地址</span>/api/v1/dev-toolkit/cli/download
+<span class="c"># 用 pipx 安装到用户目录。新开的终端也能运行 bisheng</span>
+<span class="p">$ </span>python3 -m pip install --user pipx
+<span class="p">$ </span>python3 -m pipx ensurepath
+<span class="p">$ </span>python3 -m pipx install ./bisheng_cli-*.whl --force
+<span class="c"># 用管理员给的密钥登录。凭据保存在本机，以后不用再输入</span>
+<span class="p">$ </span>bisheng login <span class="js-platform-addr">http://你的平台地址</span> <span class="k">--api-key bs-sak-…</span></pre>
+            </div>
+            <p class="aside left">以上是 macOS 和 Linux 的命令。Windows 用户在 PowerShell 里执行，把 <code>curl</code> 换成 <code>curl.exe</code>，把 <code>python3</code> 换成 <code>py</code>。</p>
+            <p class="aside left">安装包从你们的<span class="js-brand"> BISHENG </span>平台下载，不需要访问公网。安装后新开一个终端，运行 <code>bisheng --help</code>。能看到 login 和 deploy 两个命令，就说明安装成功。</p>
+          </details>
+        </article>
 
-  <div class="foot">
-    <div class="wrap">
-      <span>毕昇 · 应用工场 · 托管应用上手手册</span>
-      <span>开发者也可让 AI 跑 <code>bisheng skills sync</code> 获取《部署纳管》技能</span>
-    </div>
-  </div>
+        <!-- sentence 2 -->
+        <article class="turn" id="s2" data-rail="s2">
+          <div class="turn-h"><span class="num">2</span><h3>描述你的应用</h3></div>
+          <div class="seg" role="group" aria-label="选择示例">
+            <button type="button" aria-pressed="true" data-example="0">报销小工具</button>
+            <button type="button" aria-pressed="false" data-example="1">满意度问卷</button>
+          </div>
+          <div class="msg you">
+            <div class="msg-who">你发给 AI（示例，换成你要做的应用）</div>
+<pre class="msg-body" id="say-2">帮我做一个部门费用报销小工具：填写人、金额、事由、日期，提交后存下来，我能看到一张汇总表。先在本地运行给我看。</pre>
+            <div class="msg-foot"><button class="copy" type="button" data-copy="say-2"><svg aria-hidden="true"><use href="#i-copy"/></svg><span>复制</span></button></div>
+          </div>
+          <div class="msg reply">
+            <div class="msg-who">AI 会做</div>
+            <p class="msg-body">AI 按技能包里的规则编写应用代码和配置文件 <code>bisheng-app.yaml</code>，然后在你的电脑上运行应用。你可以先在本地查看效果。</p>
+          </div>
+          <div class="tip">
+            <svg aria-hidden="true"><use href="#i-info"/></svg>
+            <p><b>需要修改时，继续对 AI 说，</b>比如「按钮改成蓝色」「加一列备注」。在本地修改不占用平台资源。</p>
+          </div>
+        </article>
+
+        <!-- sentence 3 -->
+        <article class="turn" id="s3" data-rail="s3">
+          <div class="turn-h"><span class="num">3</span><h3>部署</h3></div>
+          <div class="msg you">
+            <div class="msg-who">你发给 AI</div>
+<pre class="msg-body" id="say-3">帮我把这个应用部署到<span class="js-brand"> BISHENG </span>平台。</pre>
+            <div class="msg-foot"><button class="copy" type="button" data-copy="say-3"><svg aria-hidden="true"><use href="#i-copy"/></svg><span>复制</span></button></div>
+          </div>
+          <div class="msg reply">
+            <div class="msg-who">平台会做</div>
+            <ol class="pipeline" aria-label="部署过程">
+              <li>打包上传</li><li>敏感信息扫描</li><li>构建镜像</li><li>启动检查</li><li class="last">生成发布审批单</li>
+            </ol>
+          </div>
+          <div class="tip warn">
+            <svg aria-hidden="true"><use href="#i-warn"/></svg>
+            <p><b>部署成功不等于上线。</b>管理员审批通过后，应用才会上线。</p>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ===== UI steps ===== -->
+    <section class="section" id="click">
+      <h2 class="section-h">在界面上操作两步</h2>
+      <p class="section-intro">下面两步在平台界面上完成，不需要再给 AI 发消息。</p>
+
+      <div class="ui-step" id="s4" data-rail="s4">
+        <span class="num">4</span>
+        <h3>等管理员审批<span class="who">管理员操作，你等结果</span></h3>
+        <div class="body">
+          <p>管理员在审批中心点「通过」后，你的应用会自动上线。审批由人工处理，可能需要一天以上。</p>
+          <p>部署后，AI 会等待审批结果，最多等 30 分钟。超过 30 分钟还没有结果，不代表审批失败。之后让 AI 再查一次部署状态即可。</p>
+          <div class="path" aria-label="管理员的操作路径"><span>审批中心</span><svg aria-hidden="true"><use href="#i-next"/></svg><span>我的审批</span><svg aria-hidden="true"><use href="#i-next"/></svg><span>通过</span></div>
+          <dl class="cases">
+            <dt>怎么确认已上线</dt><dd>打开「构建 → 应用」，应用卡片显示 <span class="status-online">已上线</span>。</dd>
+            <dt>被驳回了</dt><dd>AI 会告诉你驳回理由。让 AI 按理由修改，然后重新部署。</dd>
+            <dt>你自己就是管理员</dt><dd>你可以审批自己提交的应用。平台会在审计日志里记录这次操作。</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="ui-step" id="s5" data-rail="s5">
+        <span class="num">5</span>
+        <h3>授权给部门<span class="who">你操作</span></h3>
+        <div class="body">
+          <p><b>刚上线的应用只有你自己能打开。</b>要让同事使用，你需要给他们授权。</p>
+          <div class="path" aria-label="授权的操作路径"><span>构建</span><svg aria-hidden="true"><use href="#i-next"/></svg><span>应用</span><svg aria-hidden="true"><use href="#i-next"/></svg><span>卡片上的齿轮</span><svg aria-hidden="true"><use href="#i-next"/></svg><span>管理权限</span><svg aria-hidden="true"><use href="#i-next"/></svg><span>添加权限</span></div>
+          <p>选择「查看者」，再选部门或用户组。要给全公司使用，选择顶层部门并勾选「包含子部门」。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== result ===== -->
+    <section class="section" id="result" data-rail="result">
+      <h2 class="section-h">之后，同事在应用中心打开它</h2>
+      <div class="result">
+        <div class="result-text">
+          <p>被授权的同事打开<b>应用中心</b>，在「探索更多应用」里找到你的应用，点「进入应用」在新标签页打开。</p>
+          <p>同事用过一次后，应用会出现在他们最近使用过的应用里。</p>
+          <p><b>以后要修改应用，</b>让 AI 修改后重新部署。应用里已有的数据会保留。</p>
+        </div>
+        <div aria-hidden="true">
+          <div class="appcard">
+            <div class="appcard-top">
+              <div class="appcard-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M8 8.5h8M8 12h8M8 15.5h5" stroke-linecap="round"/></svg></div>
+              <div><div class="appcard-name">部门费用报销</div><div class="appcard-by">由你发布</div></div>
+            </div>
+            <p class="appcard-desc">填写报销信息，查看部门汇总表。</p>
+            <span class="appcard-btn">进入应用</span>
+          </div>
+          <p class="appcard-cap">同事在应用中心看到的样子（示意）</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== troubleshooting ===== -->
+    <section class="section" id="help" data-rail="help">
+      <h2 class="section-h">遇到问题</h2>
+      <p class="section-intro">遇到报错时，先把报错原文发给 AI。大多数问题 AI 能自己解决。</p>
+      <div class="faq">
+        <details>
+          <summary>本地运行正常，部署到平台后起不来<svg aria-hidden="true"><use href="#i-chev"/></svg></summary>
+          <div class="ans">
+            <p>这类问题通常是应用不符合平台的托管要求，例如把端口写死在代码里，没有读取平台分配的端口。</p>
+            <p>技能包里写明了这些要求和常见错误。把报错原文发给 AI，让它对照技能包排查。</p>
+          </div>
+        </details>
+        <details>
+          <summary>实时推送的连接用一段时间后断开<svg aria-hidden="true"><use href="#i-chev"/></svg></summary>
+          <div class="ans">
+            <p>平台给每条 WebSocket 连接设了最长时长，默认 8 小时。同事的访问权限被收回时，平台也会断开这个同事的连接。</p>
+            <p>让 AI 给页面加上断线自动重连，然后重新部署。</p>
+          </div>
+        </details>
+        <details>
+          <summary>登录时提示「未接入任何 AI 编程工具」<svg aria-hidden="true"><use href="#i-chev"/></svg></summary>
+          <div class="ans">
+            <p>本机没有检测到 Claude Code 或 Codex。</p>
+            <p>如果你用的是这两个工具，让 AI 运行一次 <code>bisheng skills sync</code>。如果你用的是 Cursor、Trae 等其他工具，可以忽略这条提示。第一次部署时，命令行会在项目里写入 <code>AGENTS.md</code>，AI 读取它就能找到技能包。</p>
+          </div>
+        </details>
+        <details>
+          <summary>平台升级后，更新技能包<svg aria-hidden="true"><use href="#i-chev"/></svg></summary>
+          <div class="ans">
+            <p>让 AI 运行一次 <code>bisheng skills sync</code>。这个命令会下载新版技能包。输出的最后一行列出接入了哪些 AI 编程工具。</p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer class="foot"><div class="foot-in"><span class="js-brand">BISHENG </span>应用工场：托管应用部署教程</div></footer>
 
 <script>
   // Inject the real platform address (this page is served by the platform, so
   // its own origin is the address the developer logs in to) in place of every
-  // "http://你的毕昇地址" placeholder — including inside the copy-paste prompt.
+  // "http://你的平台地址" placeholder — including inside the copy-paste prompt.
   (function(){
     try{
       var origin = window.location.origin;
@@ -397,35 +527,153 @@
     }catch(e){/* leave the placeholder */}
   })();
 
-  // Tab switch.
-  document.querySelectorAll('.tab').forEach(function(tab){
-    tab.addEventListener('click', function(){
-      var name = tab.getAttribute('data-tab');
-      document.querySelectorAll('.tab').forEach(function(t){
-        t.setAttribute('aria-selected', String(t === tab));
-      });
-      document.querySelectorAll('.panel').forEach(function(p){
-        p.classList.toggle('on', p.getAttribute('data-panel') === name);
+  // Brand (OEM). Follow the platform's brand settings: the same public endpoint
+  // brand-runtime.js reads. Not loading brand-runtime.js itself, because it would
+  // retitle the tab with the brand name. Paint the copy the platform already
+  // cached in this origin first, then refresh from the server.
+  (function(){
+    var CACHE_KEY = 'bs_brand_runtime_config';
+    var ENDPOINT = '/api/v1/brand/runtime-config';
+
+    // Only image sources; anything else (javascript:, odd schemes) is ignored.
+    function safeUrl(url){
+      if(!url || typeof url !== 'string') return '';
+      if(/^(https?:|data:image\/|\/)/i.test(url)) return url;
+      if(/^[a-z][a-z0-9+.-]*:/i.test(url)) return '';
+      return '/' + url;
+    }
+    // A Latin brand name gets a space on each side that touches Chinese text.
+    function padded(name){
+      return (/^[A-Za-z0-9]/.test(name) ? ' ' : '') + name + (/[A-Za-z0-9]$/.test(name) ? ' ' : '');
+    }
+    function setIcon(url){
+      var link = document.querySelector('link[rel~="icon"]');
+      if(!link){
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = url;
+    }
+    var logoEl = document.querySelector('.js-brand-logo');
+    var nameEl = document.querySelector('.js-brand-name');
+    function showLogo(loaded){
+      logoEl.hidden = !loaded;
+      nameEl.hidden = loaded;
+    }
+    logoEl.addEventListener('load', function(){ showLogo(true); });
+    logoEl.addEventListener('error', function(){ showLogo(false); });
+    // The image may have failed before this script ran.
+    if(logoEl.complete && !logoEl.naturalWidth){ showLogo(false); }
+
+    function apply(config){
+      if(!config || typeof config !== 'object') return;
+      var brandName = config.brandName || {};
+      var name = String(brandName.zh || brandName.en || '').trim();
+      if(name){
+        document.querySelectorAll('.js-brand').forEach(function(el){ el.textContent = padded(name); });
+        nameEl.textContent = name;
+        logoEl.alt = name;
+      }
+      var assets = config.assets || {};
+      var logo = safeUrl(assets.headerLogoLight && assets.headerLogoLight.url);
+      if(logo && logo !== logoEl.getAttribute('src')){ logoEl.src = logo; }
+      var icon = safeUrl(assets.favicon && assets.favicon.url);
+      if(icon){ setIcon(icon); }
+    }
+
+    try{ apply(JSON.parse(localStorage.getItem(CACHE_KEY) || 'null')); }catch(e){/* no cached brand */}
+    if(!window.fetch) return;
+    fetch(ENDPOINT, { cache: 'no-store' })
+      .then(function(res){ return res.ok ? res.json() : null; })
+      .then(function(body){ apply(body && Object.prototype.hasOwnProperty.call(body, 'data') ? body.data : body); })
+      .catch(function(){/* keep the default or cached brand */});
+  })();
+
+  // Sentence 2 examples. The copied text is whatever the bubble shows.
+  (function(){
+    var examples = [
+      '帮我做一个部门费用报销小工具：填写人、金额、事由、日期，提交后存下来，我能看到一张汇总表。先在本地运行给我看。',
+      '帮我做一个满意度问卷：5 道单选题，提交后按选项统计比例，给我一个结果页。先在本地运行给我看。'
+    ];
+    var target = document.getElementById('say-2');
+    var buttons = document.querySelectorAll('[data-example]');
+    buttons.forEach(function(btn){
+      btn.addEventListener('click', function(){
+        buttons.forEach(function(b){ b.setAttribute('aria-pressed', String(b === btn)); });
+        target.textContent = examples[Number(btn.getAttribute('data-example'))];
       });
     });
-  });
+  })();
 
-  // Copy. The AI prompt copies verbatim (it is prose for the agent); the manual
-  // block strips the leading "$ " prompts and "# " comments so it pastes clean.
-  function flash(btn, msg){
-    var old = btn.getAttribute('data-label') || btn.textContent;
-    btn.setAttribute('data-label', old);
-    btn.textContent = msg;
-    setTimeout(function(){ btn.textContent = btn.getAttribute('data-label'); }, 1600);
+  // Prerequisite checklist. Stored per viewer; the page works without storage.
+  (function(){
+    var KEY = 'bisheng-hosted-app-tutorial-ready';
+    var state = {};
+    try{ state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; }catch(e){ state = {}; }
+    document.querySelectorAll('[data-need-check]').forEach(function(box){
+      var name = box.getAttribute('data-need-check');
+      var card = document.querySelector('[data-need="' + name + '"]');
+      function render(){ card.classList.toggle('done', box.checked); }
+      box.checked = !!state[name];
+      render();
+      box.addEventListener('change', function(){
+        state[name] = box.checked;
+        render();
+        try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){/* storage unavailable */}
+      });
+    });
+  })();
+
+  // Highlight the rail entry for the section currently in view.
+  (function(){
+    if(!('IntersectionObserver' in window)) return;
+    var links = {};
+    document.querySelectorAll('.rail a').forEach(function(a){ links[a.getAttribute('href').slice(1)] = a; });
+    var visible = {};
+    function mark(current){
+      Object.keys(links).forEach(function(id){
+        if(id === current) links[id].setAttribute('aria-current', 'true');
+        else links[id].removeAttribute('aria-current');
+      });
+    }
+    function atBottom(){
+      return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+    }
+    var observer = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ visible[en.target.id] = en.isIntersecting ? en.boundingClientRect.top : null; });
+      // The last section is too short to reach the top band, so the page end selects it.
+      if(atBottom()){ mark('help'); return; }
+      var current = null, best = Infinity;
+      Object.keys(visible).forEach(function(id){
+        var top = visible[id];
+        if(top !== null && Math.abs(top) < best){ best = Math.abs(top); current = id; }
+      });
+      if(current) mark(current);
+    }, { rootMargin: '-80px 0px -55% 0px' });
+    document.querySelectorAll('[data-rail]').forEach(function(el){ observer.observe(el); });
+    window.addEventListener('scroll', function(){ if(atBottom()) mark('help'); }, { passive: true });
+  })();
+
+  // Copy. navigator.clipboard only exists in a secure context (https or
+  // localhost) — over plain http on a LAN IP it is undefined, which is exactly
+  // how the platform is reached, so fall back to execCommand('copy'); if even
+  // that fails, select the source node so the reader can copy by hand rather
+  // than silently getting nothing.
+  function flash(btn, msg, done){
+    var label = btn.querySelector('span');
+    if(!btn.hasAttribute('data-label')) btn.setAttribute('data-label', label.textContent);
+    label.textContent = msg;
+    btn.classList.toggle('is-done', !!done);
+    clearTimeout(btn._t);
+    btn._t = setTimeout(function(){
+      label.textContent = btn.getAttribute('data-label');
+      btn.classList.remove('is-done');
+    }, 1800);
   }
 
-  // Copy the given text, then confirm on the button. navigator.clipboard only
-  // exists in a secure context (https or localhost) — over plain http on a LAN
-  // IP it is undefined, which is exactly how the platform is reached, so fall
-  // back to execCommand('copy'); if even that fails, select the source node so
-  // the reader can copy by hand rather than silently getting nothing.
   function copyText(text, btn, sourceEl){
-    var ok = function(){ flash(btn, '已复制 ✓'); };
+    var ok = function(){ flash(btn, '已复制', true); };
     if(navigator.clipboard && window.isSecureContext){
       navigator.clipboard.writeText(text).then(ok).catch(function(){ legacyCopy(text, btn, sourceEl, ok); });
       return;
@@ -446,6 +694,7 @@
       ta.setSelectionRange(0, text.length);
       var done = document.execCommand('copy');
       document.body.removeChild(ta);
+      btn.focus();
       if(done){ ok(); return; }
     }catch(e){/* fall through to manual selection */}
     // Last resort: select the visible text so the reader can press Ctrl/Cmd+C.
@@ -461,17 +710,13 @@
 
   document.querySelectorAll('[data-copy]').forEach(function(btn){
     btn.addEventListener('click', function(){
-      var kind = btn.getAttribute('data-copy');
-      var sourceEl, text;
-      if(kind === 'prompt'){
-        sourceEl = document.getElementById('ai-prompt');
-        text = sourceEl.innerText.trim();
-      }else{
-        sourceEl = document.getElementById('manual-cmds');
-        text = sourceEl.innerText
-          .replace(/^\s*\$\s?/gm,'').replace(/^\s*#.*$/gm,'').replace(/\n{2,}/g,'\n').trim();
+      var sourceEl = document.getElementById(btn.getAttribute('data-copy'));
+      var text = sourceEl.textContent;
+      // Shell blocks drop "# " comments and the "$ " prompt so they paste clean.
+      if(btn.getAttribute('data-strip') === 'shell'){
+        text = text.replace(/^\s*#.*$/gm, '').replace(/^\s*\$\s?/gm, '').replace(/\n{2,}/g, '\n');
       }
-      copyText(text, btn, sourceEl);
+      copyText(text.trim(), btn, sourceEl);
     });
   });
 </script>

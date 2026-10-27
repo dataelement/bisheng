@@ -3,7 +3,8 @@
 Covers AC-22 (cached preview reused), AC-23 (failure → 11025, nothing cached, retry
 on next open), AC-24 (download-equivalent access + file ownership), AC-25 (both
 share shapes), AC-27 (single flight) and AC-28 (the download endpoint keeps its
-behaviour after the shared access check is extracted). MinIO, Redis and
+behaviour after the shared access check is extracted, and only signs keys of
+that version). MinIO, Redis and
 LibreOffice are faked; CI needs none of them.
 """
 
@@ -24,6 +25,8 @@ SVID = "ver-1"
 OWNER = 7
 FILE_KEY = f"linsight/final_result/{SVID}/abc123.pptx"
 PREVIEW_KEY = f"linsight/preview/{SVID}/abc123.pdf"
+LOCK = f"linsight:pptx_preview:{SVID}:abc123"
+FAILED = f"linsight:pptx_preview_failed:{SVID}:abc123"
 
 
 # --------------------------------------------------------------------------- #
@@ -53,35 +56,40 @@ class FakeMinio:
 
 
 class FakeRedisConn:
-    def __init__(self, held=False):
-        self.keys = {"held"} if held else set()
+    def __init__(self):
+        self.values = {}
         self.set_calls = []
 
     async def set(self, key, value, nx=False, ex=None):
         self.set_calls.append((key, nx, ex))
-        if nx and key in self.keys:
+        if nx and key in self.values:
             return None
-        self.keys.add(key)
+        self.values[key] = value
         return True
+
+    async def get(self, key):
+        return self.values.get(key)
+
+    async def eval(self, script, numkeys, key, token):
+        # compare-and-delete, as _RELEASE_LOCK_LUA does
+        if self.values.get(key) == token:
+            del self.values[key]
+            return 1
+        return 0
 
 
 class FakeRedis:
     def __init__(self, held=False):
         self.async_connection = FakeRedisConn()
         if held:
-            self.async_connection.keys.add(f"linsight:pptx_preview:{SVID}:abc123")
-        self.deleted = []
+            self.async_connection.values[LOCK] = "someone-else"
 
     async def acluster_nodes(self, key):
         return None
 
-    async def adelete(self, key):
-        self.deleted.append(key)
-        self.async_connection.keys.discard(key)
 
-
-def _version(user_id=OWNER, session_id="sess-1"):
-    return SimpleNamespace(id=SVID, user_id=user_id, session_id=session_id)
+def _version(user_id=OWNER, session_id="sess-1", tenant_id=1):
+    return SimpleNamespace(id=SVID, user_id=user_id, session_id=session_id, tenant_id=tenant_id)
 
 
 def _user(user_id=OWNER, admin=False):
@@ -158,6 +166,18 @@ async def test_stranger_is_rejected(env):
         await LinsightArtifactPreviewService.load_accessible_version(SVID, _user(99), wrong_link)
 
 
+async def test_admin_with_unrelated_share_token_is_limited_to_own_tenant(env, monkeypatch):
+    # Any share token switches the tenant filter off for the lookup; an unrelated
+    # token must not let an admin of another tenant read this version.
+    unrelated = SimpleNamespace(resource_id="other", meta_data=None)
+    monkeypatch.setattr(svc_mod, "get_current_tenant_id", lambda: 2)
+    with pytest.raises(UnAuthorizedError):
+        await LinsightArtifactPreviewService.load_accessible_version(SVID, _user(99, admin=True), unrelated)
+    monkeypatch.setattr(svc_mod, "get_current_tenant_id", lambda: 1)
+    version = await LinsightArtifactPreviewService.load_accessible_version(SVID, _user(99, admin=True), unrelated)
+    assert version.id == SVID
+
+
 async def test_missing_version_is_not_found(env):
     with pytest.raises(NotFoundError):
         await LinsightArtifactPreviewService.load_accessible_version("nope", _user(), None)
@@ -191,9 +211,8 @@ async def test_first_open_converts_caches_and_releases_lock(env):
     assert result == {"status": "ready", "file_path": f"/bisheng/{PREVIEW_KEY}?sig=1"}
     assert env.minio.puts == [PREVIEW_KEY]
     assert env.converted and env.converted[0][1] == 120
-    lock = f"linsight:pptx_preview:{SVID}:abc123"
-    assert (lock, True, 180) in env.redis.async_connection.set_calls
-    assert env.redis.deleted == [lock]
+    assert (LOCK, True, 180) in env.redis.async_connection.set_calls
+    assert LOCK not in env.redis.async_connection.values
 
 
 async def test_cached_preview_is_returned_without_converting(env):
@@ -207,11 +226,41 @@ async def test_lock_held_elsewhere_reports_converting(env):
     env.redis = FakeRedis(held=True)
     result = await LinsightArtifactPreviewService.get_pptx_preview(env.version, FILE_KEY)
     assert result == {"status": "converting"}
-    assert env.converted == [] and env.redis.deleted == []
+    assert env.converted == []
+    assert env.redis.async_connection.values[LOCK] == "someone-else", "another request's lock is left alone"
+
+
+async def test_lock_is_not_deleted_once_it_belongs_to_someone_else(env, monkeypatch):
+    real_convert = svc_mod.LinsightArtifactPreviewService._convert
+
+    async def convert_then_lose_lock(minio, key, svid, file_id):
+        data = await real_convert(minio, key, svid, file_id)
+        env.redis.async_connection.values[LOCK] = "next-owner"  # our TTL expired, another node took it
+        return data
+
+    monkeypatch.setattr(svc_mod.LinsightArtifactPreviewService, "_convert", staticmethod(convert_then_lose_lock))
+    await LinsightArtifactPreviewService.get_pptx_preview(env.version, FILE_KEY)
+    assert env.redis.async_connection.values[LOCK] == "next-owner"
+
+
+async def test_preview_finished_while_waiting_is_not_converted_again(env, monkeypatch):
+    real_exists = env.minio.object_exists
+    calls = []
+
+    async def exists_appears_after_first_check(bucket_name=None, object_name=None):
+        calls.append(object_name)
+        if len(calls) == 2:  # the re-check after taking the lock
+            env.minio.objects[PREVIEW_KEY] = b"%PDF"
+        return await real_exists(object_name=object_name)
+
+    monkeypatch.setattr(env.minio, "object_exists", exists_appears_after_first_check)
+    result = await LinsightArtifactPreviewService.get_pptx_preview(env.version, FILE_KEY)
+    assert result["status"] == "ready"
+    assert env.converted == [] and env.minio.puts == []
 
 
 @pytest.mark.parametrize("mode", ["none", "zero_pages"])
-async def test_failed_conversion_raises_11025_caches_nothing_and_retries(env, mode):
+async def test_failed_conversion_raises_11025_caches_nothing_and_retries_after_cooldown(env, mode):
     if mode == "none":
         env.convert_result = None
     else:
@@ -219,9 +268,17 @@ async def test_failed_conversion_raises_11025_caches_nothing_and_retries(env, mo
     with pytest.raises(LinsightArtifactPreviewError):
         await LinsightArtifactPreviewService.get_pptx_preview(env.version, FILE_KEY)
     assert env.minio.puts == []
-    assert env.redis.deleted == [f"linsight:pptx_preview:{SVID}:abc123"], "lock released after failure"
+    conn = env.redis.async_connection
+    assert LOCK not in conn.values, "lock released after failure"
+    assert (FAILED, False, svc_mod.FAILURE_TTL_SECONDS) in conn.set_calls
 
+    # Within the cooldown a poll fails fast instead of converting again.
     env.convert_result, env.pages = "ok", 2
+    with pytest.raises(LinsightArtifactPreviewError):
+        await LinsightArtifactPreviewService.get_pptx_preview(env.version, FILE_KEY)
+    assert len(env.converted) == 1
+
+    del conn.values[FAILED]  # cooldown expired
     result = await LinsightArtifactPreviewService.get_pptx_preview(env.version, FILE_KEY)
     assert result["status"] == "ready" and len(env.converted) == 2
 
@@ -248,6 +305,20 @@ async def test_download_endpoint_still_signs_the_requested_key(env, monkeypatch)
         await endpoint.linsight_file_download(
             file_url=FILE_KEY, session_version_id=SVID, login_user=_user(99), share_link=None
         )
+    for own in (f"linsight/session_files/{SVID}/x.md", "linsight/sess-1/upload.pdf"):
+        resp = await endpoint.linsight_file_download(
+            file_url=own, session_version_id=SVID, login_user=_user(), share_link=None
+        )
+        assert resp.data == {"file_path": f"/bisheng/{own}?sig=1"}
+    for foreign in (
+        "linsight/final_result/ver-2/a.pptx",
+        "knowledge/original/1.pdf",
+        f"linsight/final_result/{SVID}/../x",
+    ):
+        with pytest.raises(UnAuthorizedError):
+            await endpoint.linsight_file_download(
+                file_url=foreign, session_version_id=SVID, login_user=_user(), share_link=None
+            )
 
 
 async def _awaitable(value):

@@ -22,7 +22,7 @@
  * WS (sendInput).
  */
 import { OctagonX } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
@@ -37,6 +37,7 @@ import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { QueueCard } from './QueueCard';
 import { ExecutionLiveContext } from './executionLive';
+import { useReportTaskTurnLoadFailed } from './taskTurnLoad';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
 import { ChatErrorCard } from '~/components/ChatErrorCard';
@@ -70,7 +71,17 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     const { sendInput, stop } = useLinsightWebSocket(versionId);
 
     const linsight = getLinsight(versionId);
-    const [loadFailed, setLoadFailed] = useState(false);
+    const [loadFailed, setLoadFailedState] = useState(false);
+    // Also tell the hosting ChatView, whose workspace panel would otherwise show
+    // a failed load as an empty deliverable list.
+    const reportLoadFailed = useReportTaskTurnLoadFailed();
+    const setLoadFailed = useCallback(
+        (failed: boolean) => {
+            setLoadFailedState(failed);
+            reportLoadFailed(versionId, failed);
+        },
+        [versionId, reportLoadFailed],
+    );
     // On a share page (/workspace/share/:token) the lazy-load hits the same
     // workbench list/detail endpoints, which 403 a non-owner unless the share-token
     // header is sent. Pull it from the route so the backend's header_share_token_parser
@@ -83,6 +94,8 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         if (!versionId || linsight || loadedRef.current) return;
         if (!conversationId || conversationId === 'new') return;
         loadedRef.current = true;
+        // A remount retries the load; drop a stale failure marker first.
+        setLoadFailed(false);
         (async () => {
             try {
                 const versions = await getLinsightSessionVersionList(conversationId, shareToken || '');
@@ -98,7 +111,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                 setLoadFailed(true);
             }
         })();
-    }, [versionId, conversationId, linsight, switchAndUpdateLinsight]);
+    }, [versionId, conversationId, linsight, switchAndUpdateLinsight, setLoadFailed]);
 
     // On reload, session-level steps come back inside the "执行准备" pseudo-task;
     // lift them out so the rebuilt view matches the live one (inline + IntentRow).
