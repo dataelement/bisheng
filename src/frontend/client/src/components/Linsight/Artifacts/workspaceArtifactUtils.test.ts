@@ -1,8 +1,7 @@
-/** @jest-environment node */
-
 import {
     type ArtifactFile,
     collectConversationWorkspaceFiles,
+    getWorkspaceLoadState,
 } from './artifactUtils';
 
 const makeArtifact = (overrides: Partial<ArtifactFile>): ArtifactFile => ({
@@ -63,5 +62,26 @@ describe('collectConversationWorkspaceFiles', () => {
 
         expect(files).toHaveLength(2);
         expect(files.map((file) => file.source)).toEqual(['upload', 'output']);
+    });
+});
+
+describe('getWorkspaceLoadState', () => {
+    const none = new Set<string>();
+
+    it('is loading while a task turn has neither detail nor a failure marker', () => {
+        expect(getWorkspaceLoadState(['a', 'b'], new Set(['a']), none)).toBe('loading');
+    });
+
+    it('stays loading while another turn is pending even if one failed', () => {
+        expect(getWorkspaceLoadState(['a', 'b'], none, new Set(['a']))).toBe('loading');
+    });
+
+    it('reports failed once every unloaded turn has failed', () => {
+        expect(getWorkspaceLoadState(['a', 'b'], new Set(['b']), new Set(['a']))).toBe('failed');
+    });
+
+    it('is ready when every turn is loaded or there are no task turns', () => {
+        expect(getWorkspaceLoadState(['a'], new Map([['a', {}]]), none)).toBe('ready');
+        expect(getWorkspaceLoadState([], none, none)).toBe('ready');
     });
 });
