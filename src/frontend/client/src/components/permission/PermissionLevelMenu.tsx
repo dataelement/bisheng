@@ -1,3 +1,4 @@
+import { permissionModelLabel } from "./permissionModelLabel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +19,7 @@ interface PermissionLevelMenuProps {
   /** When false the level items are hidden — the menu then only offers removal. */
   canChangeLevel: boolean;
   onChange: (modelId: string) => void;
-  /** Renders the destructive "移除" item. Omit to hide it. */
+  /** Renders the destructive "Remove" item. Omit to hide it. */
   onRemove?: () => void;
   className?: string;
 }
@@ -84,7 +85,7 @@ export function PermissionLevelMenu({
               )}
               onSelect={() => onChange(model.id)}
             >
-              {model.name}
+              {permissionModelLabel(model.id, model.name, localize)}
             </DropdownMenuItem>
           );
         })}

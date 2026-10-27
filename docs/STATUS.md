@@ -266,3 +266,12 @@
 - 根租户归属变更、停用、历史状态、请求上下文及原授权模型共 53 项定向回归通过，变更 Ruff / 格式 / diff 检查通过。最终发布 `tools-skills-auth-20261026-root-membership` 已完成，后台三个进程各 23 个源文件哈希一致。真实 OpenFGA 抽样 3 位 active 成员、25 项资源共 75 次 can_use 全部允许；无成员身份的 25 次检查全部拒绝，旧 user:* 工具公开标记归零。API 两个实例均就绪并使用 Catalog 3。
 
 - 3006 最终健康与 browser-config 返回 200，管理员授权弹窗重新读取成功。业务权限开关和指定人员保存、普通账号完整任务调用由用户继续验收。首次发布后检查触发自动回退导致服务中断，已恢复并收敛部署检查范围；最终版本、备份和验收日志已留存。
+
+## 2026-10-27 — Knowledge-space permission role localization
+
+- Baseline: `dataelement/bisheng:feat/bisheng-work-120-main@d2be34458dbfa19c40324f6916dfa75202743cf9`, verified remotely before implementation and PR delivery. Branch: `codex/work-knowledge-permission-locale`.
+- Root cause: permission components displayed the API model name directly, while the standard role names arrive in Chinese. The protected creator row therefore displayed Chinese in English mode.
+- Implementation: resolve `owner`, `manager`, `editor` and `viewer` through the existing Chinese/English/Japanese locale entries at render time. Draft rows, role menus, member lists, authorization selectors/badges and role-name search share the resolver. Custom role names and submitted role keys retain their original values.
+- Verification: 47 permission tests passed; 3 existing failures were reproduced with baseline production sources (department badge text assertion, source-comment Chinese scan, retired tab-selector assertion). The focused role/authorization suite passed 21 cases. Strict client type checking (1,469 files), changed-file ESLint, i18n parity, architecture guard, diff checks and production client build passed. Full client ESLint reports the same 23 errors against both baseline and modified sources in unrelated chat files.
+- Test fixtures use the existing English role dictionary; the list fixture now provides its required confirmation hook. Added tests cover all four standard roles in three languages, preserved custom names, protected creator rows, live English/Chinese switching, absent role options and localized role-name search.
+- Delivery: web-client change for the desktop embedded knowledge-space page. Target deployment and native visual acceptance remain pending. Local evidence: `outputs/knowledge-permission-locale-20261027/`.
