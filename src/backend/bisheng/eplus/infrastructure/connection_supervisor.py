@@ -36,6 +36,10 @@ class ConnectionTargetProvider(Protocol):
 
 
 class SupervisedConnection(Protocol):
+    def set_metric_observer(self, observer) -> None: ...
+
+    def emit_metric_event(self, event: str) -> None: ...
+
     async def wait_authenticated(self) -> None: ...
 
     async def run_connection_once(self) -> EPlusConnectionExitReason: ...
@@ -131,6 +135,7 @@ class EPlusConnectionSupervisor:
         lease_renewal_seconds: float = 5.0,
         lease_check_interval_seconds: float = 1.0,
         backoff_waiter: BackoffWaiter | None = None,
+        connection_observer_factory=None,
     ) -> None:
         if reconcile_interval_seconds <= 0 or lease_check_interval_seconds <= 0:
             raise ValueError("E+ supervisor intervals must be positive")
@@ -146,6 +151,7 @@ class EPlusConnectionSupervisor:
                     renewal_interval_seconds=lease_renewal_seconds,
                 )
 
+        self._connection_observer_factory = connection_observer_factory
         self._provider = target_provider
         self._client_factory = client_factory
         self._lease_factory = lease_factory
@@ -254,7 +260,7 @@ class EPlusConnectionSupervisor:
                 lease_task = asyncio.create_task(self._monitor_lease(lease))
                 try:
                     while not self._stopping and not runtime.stop_event.is_set():
-                        outcome = await self._run_connection_attempt(runtime, lease_task)
+                        outcome = await self._run_connection_attempt(runtime, lease_task, lease)
                         if outcome == "stop":
                             return
                         if outcome == "lease_lost":
@@ -265,6 +271,11 @@ class EPlusConnectionSupervisor:
                             await self._provider.set_status(runtime.ref, EPlusConnectionStatus.TAKEN_OVER)
                             return
 
+                        if self._connection_observer_factory is not None and runtime.client is not None:
+                            try:
+                                runtime.client.emit_metric_event("connection.retrying")
+                            except Exception as exc:
+                                logger.debug("E+ retry metric failed error_type={}", type(exc).__name__)
                         await self._provider.set_status(runtime.ref, EPlusConnectionStatus.RETRYING)
                         delay = min(2**retry_index, 30)
                         retry_index += 1
@@ -298,9 +309,16 @@ class EPlusConnectionSupervisor:
         self,
         runtime: _BotRuntime,
         lease_task: asyncio.Task[None],
+        lease: Lease | None = None,
     ) -> EPlusConnectionExitReason | str:
         ca_pem = await self._provider.read_ca(runtime.target)
         client = self._client_factory(runtime.target, ca_pem)
+        if self._connection_observer_factory is not None:
+            try:
+                client.set_metric_observer(self._connection_observer_factory(runtime.target, lease))
+            except Exception as exc:
+                # Optional diagnostics must not change connection ownership or availability.
+                logger.debug("E+ connection observer setup failed error_type={}", type(exc).__name__)
         runtime.client = client
         await self._provider.set_status(runtime.ref, EPlusConnectionStatus.CONNECTING)
         connection_task = asyncio.create_task(client.run_connection_once())

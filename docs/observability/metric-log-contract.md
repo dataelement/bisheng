@@ -99,3 +99,52 @@ quantile_over_time(0.95, {app="bisheng"} |= "BS_METRIC domain=model_invoke" | lo
 - **新增字段**：向后兼容，可直接加。
 - **重命名 / 删除字段、改 `domain`、改 marker `BS_METRIC`**：破坏性变更，**必须通知监控团队**同步解析/告警规则。
 - 字段单位固定：`*_ms` 恒为毫秒；`le_*` 桶恒为累积计数。
+
+
+## F078：E+ 机器人请求终态与连接事件
+
+新增域 `eplus_robot_request` 和 `eplus_robot_connection` 复用
+`metric_log.enabled` 与 `metric_log.eplus`；原 `eplus_notify` 仍只表示通知推送。
+不需要 Redis 聚合、统计接口或开始/结束两条日志关联。
+
+### 请求终态
+
+每条日志自包含：`schema_version=1 source=eplus_robot tenant_id bot_id
+bot_config_id user_id message_id conversation_id event_id admitted result reason
+reply_status event_time_ms elapsed_ms`。不存在的可选值省略。
+`user_id` 是 `["eplus-user-v1", tenant_id, sender_external_id]` 的规范 JSON
+（UTF-8、不转义非 ASCII、紧凑分隔符）完整 SHA256 摘要，同租户跨机器人/节点稳定；
+`message_id` 保持原业务 msgid。日志不携带消息、答案、原外部用户 ID 或凭据。
+
+- `success`：已准入、问答正常完成且最终回复获得 E+ 成功确认。
+- `failed`：已准入问答失败，包括准备/排队/执行超时、恢复确认中断与发送失败。
+- `rejected`：未准入的无权限、繁忙或其他准入前错误。
+- `duplicate`：重复回调处理结果，既不是新的问答也不覆盖原终态。
+- `event_time_ms` 为业务结果发生时间，窗口不采用日志采集时间；
+  `elapsed_ms` 从持久化接收时间算至终态，包含准备与排队。
+
+监控先以 `event_id` 去重重复采集；排除 duplicate 后，以
+`(tenant_id, bot_id, message_id)` 去重业务消息。duplicate 本身只按 event_id
+计回调重复量。拒绝量单列，不进入正常问答成功率。
+
+对窗口内已结束的已准入问答，成功率 = success / (success + failed)，
+分母为零时无样本；用户数按 `(tenant_id, user_id)` 去重，完成回答人数只看
+success，会话数按 tenant/bot/conversation 去重。跨机器人用户数须重新去重。
+这表示“窗口内有问答结束的人数”，并非实时在线人数或窗口内全部新发请求人数。
+例如 23:59 开始、次日 00:01 结束的问答归入 00:01 窗口。
+
+### 连接事件
+
+字段为公共租户/机器人字段、`connection_id event_seq event event_time_ms`，
+存活事件还带 `expires_at_ms`。event 为 opening、authenticated、auth_failed、
+retrying、heartbeat_ok、heartbeat_failed、closed 或 taken_over。
+仅认证成功与成功的协议心跳构成持有有效业务租约的存活证据。
+
+监控按 connection_id 保留最大 event_seq，旧心跳不覆盖后续关闭事件；取最近
+authenticated/heartbeat_ok 且尚未过期/关闭的连接，再按 tenant_id/bot_id 去重。
+heartbeat_failed 不延长最近成功证据的有效期；closed/taken_over 立即终止该连接的存活状态。
+`metric_log.eplus_connection_stale_after_s` 默认 90 秒，不能小于两个协议心跳及
+ACK 等待窗口。不改变既有连接心跳、租约、续租或回复限额。
+
+两类指标均为尽力日志：进程崩溃/采集丢失可能造成缺失。不会为日志完整性重放
+请求或建立持久投递。调试入口默认不注入正式指标输出器。

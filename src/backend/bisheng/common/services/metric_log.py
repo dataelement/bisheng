@@ -35,6 +35,8 @@ _DOMAIN_SWITCH = {
     "obj_storage": "obj_storage",
     "model_invoke": "model_invoke",
     "eplus_notify": "eplus",
+    "eplus_robot_request": "eplus",
+    "eplus_robot_connection": "eplus",
 }
 
 # Characters that make a bare logfmt value ambiguous; such values are quoted.

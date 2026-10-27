@@ -125,6 +125,7 @@ class EPlusConnectionClient:
         if parsed.scheme == "wss":
             connect_kwargs["ssl"] = self._ssl_context
 
+        failure_reason: str | None = None
         receiver_task: asyncio.Task[None] | None = None
         heartbeat_task: asyncio.Task[None] | None = None
         try:
@@ -136,6 +137,7 @@ class EPlusConnectionClient:
                 req_id = _new_req_id("aibot_subscribe")
                 ack = await self.send_with_ack(build_subscribe_frame(self.config.bot_id, self.config.secret, req_id))
                 if _ack_error(ack):
+                    self._emit("connection.auth_failed", reason="subscription_rejected")
                     raise EPlusSubscriptionError(f"E+ subscription rejected with errcode={ack.get('errcode')}")
                 self._authenticated.set()
                 self._emit("subscription.authenticated", req_id=req_id, bot_id=self.config.bot_id)
@@ -149,7 +151,13 @@ class EPlusConnectionClient:
                         code=websocket.close_code,
                         reason=websocket.close_reason,
                     )
+        except BaseException as exc:
+            failure_reason = type(exc).__name__
+            raise
         finally:
+            self._emit(
+                "connection.ended", reason="taken_over" if self._taken_over else failure_reason or "disconnected"
+            )
             await _cancel_task(heartbeat_task)
             await _cancel_task(receiver_task)
             await self._finish_message_tasks()
@@ -159,7 +167,6 @@ class EPlusConnectionClient:
             self._websocket = None
 
         reason = EPlusConnectionExitReason.TAKEN_OVER if self._taken_over else EPlusConnectionExitReason.DISCONNECTED
-        self._emit("connection.ended", reason=reason.value)
         return reason
 
     async def close(self) -> None:
@@ -257,7 +264,7 @@ class EPlusConnectionClient:
         self._emit("event.received", event_type=event_type)
         if event_type == "disconnected_event":
             self._taken_over = True
-            self._emit("connection.taken_over")
+            self._emit("connection.taken_over", reason="taken_over")
             websocket = self._websocket
             if websocket is not None:
                 await websocket.close(code=1000, reason="replaced by another E+ connection")
@@ -350,7 +357,11 @@ class EPlusConnectionClient:
         }
         safe_fields = sanitize_for_log(fields, secrets=(self.config.secret,))
         if self._event_sink is not None:
-            self._event_sink(event, safe_fields)
+            try:
+                self._event_sink(event, safe_fields)
+            except Exception as exc:
+                # An optional diagnostic sink cannot interrupt the transport.
+                logger.debug("E+ event sink failed error_type={}", type(exc).__name__)
         # Keep fields visible with the production plain-text logger format too.
         logger.bind(eplus_event=event, **safe_fields).info("E+ connection event={} fields={}", event, safe_fields)
 
