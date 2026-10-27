@@ -105,7 +105,6 @@ async def test_unrelated_identity_relations_do_not_load_organization(client):
     client._post = AsyncMock(return_value={"allowed": True, "objects": []})
     for object_type, relation in (
         ("system", "super_admin"),
-        ("tenant", "member"),
         ("department", "admin"),
         ("department", "member"),
         ("user_group", "member"),
@@ -158,3 +157,18 @@ async def test_invalid_principal_never_reaches_openfga(client):
             await client.check(user, "visible", "knowledge_space:1")
     source.load.assert_not_awaited()
     client._post.assert_not_awaited()
+
+
+async def test_root_member_grant_uses_fresh_tenant_context(client):
+    source = provider()
+    source.load.side_effect = lambda uid: ActorDepartmentContext(uid, (), (1,))
+    configure_department_context(client, source)
+    client._post = AsyncMock(return_value={"allowed": True})
+    for kind in ("tool", "linsight_skill"):
+        await client.check("user:10", "can_use", f"{kind}:5")
+        assert client._post.call_args.args[1]["contextual_tuples"]["tuple_keys"] == [
+            {"user": "user:10", "relation": "member", "object": "tenant:1"}
+        ]
+    source.load.side_effect = lambda uid: ActorDepartmentContext(uid, ())
+    await client.check("user:10", "can_use", "linsight_skill:5")
+    assert "contextual_tuples" not in client._post.call_args.args[1]

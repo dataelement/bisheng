@@ -1,3 +1,4 @@
+import { readCitationFailure } from "~/api/citationFailure";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Outlined } from 'bisheng-icons';
@@ -36,7 +37,7 @@ import {
 
 type CitationReferencesDrawerProps = {
   content: string;
-  webContent?: any;
+  webContent?: unknown;
   citations?: ChatCitation[] | null;
   referenceItems?: CitationReferenceItem[];
   buttonClassName?: string;
@@ -57,7 +58,7 @@ type CitationReferencesDrawerProps = {
 export type CitationReferencesDesktopPayload = {
   messageId?: string;
   content: string;
-  webContent?: any;
+  webContent?: unknown;
   citations?: ChatCitation[] | null;
   referenceItems: CitationReferenceItem[];
   initialDocumentPreview?: CitationDocumentPreviewState | null;
@@ -364,8 +365,9 @@ export default function CitationReferencesDrawer({
         }));
         return detail;
       })
-      .catch((error: any) => {
-        if (error?.citationForbidden || error?.citationExpired) {
+      .catch((error: unknown) => {
+        const failure = readCitationFailure(error);
+        if (failure.citationForbidden || failure.citationExpired) {
           return null;
         }
         console.error('Failed to load citation detail:', error);

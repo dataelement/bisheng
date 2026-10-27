@@ -168,3 +168,27 @@ describe("audit encryption readiness", () => {
     expect(api.save).not.toHaveBeenCalled();
   });
 });
+
+// Coverage AC: AC-61. Readers must see why summaries can exist while capture is off.
+describe("audit collection explanation", () => {
+  it.each([
+    ["OFF", true],
+    ["OFF", false],
+    ["METADATA", true],
+    ["METADATA", false],
+    ["CONTENT", true],
+    ["CONTENT", false],
+  ] as const)(
+    "explains safety summaries with mode %s and configurable=%s",
+    async (mode, canConfigure) => {
+      api.mode.mockResolvedValue({ mode, version: 1, content_available: true });
+      render(<ModelAuditMode tenantId={2} canConfigure={canConfigure} />);
+      await screen.findByText("dsh.modelAuditView.modes." + mode);
+      expect(
+        screen.getByText("dsh.modelAuditView.collectionHint"),
+      ).toBeVisible();
+      expect(screen.queryByRole("combobox")).toBeNull();
+      expect(api.save).not.toHaveBeenCalled();
+    },
+  );
+});

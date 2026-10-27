@@ -117,7 +117,7 @@ class TenantPermissionSubjectDirectory:
     ) -> frozenset[str]:
         if actor.subject_type == "service_account":
             return frozenset({actor.fga_subject})
-        projected = {actor.fga_subject}
+        projected = {actor.fga_subject, f"tenant:{actor.current_tenant_id}#member"}
         memberships = await UserDepartmentDao.aget_user_departments(actor.user_id)
         departments = await DepartmentDao.aget_by_ids([row.department_id for row in memberships])
         for department in departments:
@@ -152,7 +152,10 @@ class TenantPermissionSubjectDirectory:
         if not normalized_id.isdigit():
             raise PermissionInvalidResourceError()
         identifier = int(normalized_id)
-        if normalized_type == "user":
+        if normalized_type == "tenant":
+            valid = identifier == tenant_id
+            source_type = "TENANT"
+        elif normalized_type == "user":
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
             source_type = "DIRECT"
@@ -276,11 +279,7 @@ class TenantPermissionSubjectDirectory:
         from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 
         ids_by_type = {
-            resource_type: tuple(
-                resource_id
-                for item_type, resource_id in resources
-                if item_type == resource_type
-            )
+            resource_type: tuple(resource_id for item_type, resource_id in resources if item_type == resource_type)
             for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard")
         }
         if not any(ids_by_type.values()):
@@ -288,11 +287,7 @@ class TenantPermissionSubjectDirectory:
         labels: dict[tuple[str, str], str] = {}
         async with get_async_db_session() as session:
             if ids_by_type["workflow"]:
-                rows = (
-                    await session.exec(
-                        select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"]))
-                    )
-                ).all()
+                rows = (await session.exec(select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"])))).all()
                 labels.update({("workflow", str(row.id)): row.name for row in rows})
             if ids_by_type["assistant"]:
                 rows = (
@@ -305,11 +300,7 @@ class TenantPermissionSubjectDirectory:
                 ).all()
                 labels.update({("assistant", str(row.id)): row.name for row in rows})
             if ids_by_type["channel"]:
-                rows = (
-                    await session.exec(
-                        select(Channel).where(col(Channel.id).in_(ids_by_type["channel"]))
-                    )
-                ).all()
+                rows = (await session.exec(select(Channel).where(col(Channel.id).in_(ids_by_type["channel"])))).all()
                 labels.update({("channel", str(row.id)): row.name for row in rows})
 
             tool_ids = tuple(int(value) for value in ids_by_type["tool"] if value.isdigit())
@@ -324,14 +315,8 @@ class TenantPermissionSubjectDirectory:
                 ).all()
                 labels.update({("tool", str(row.id)): row.name for row in rows})
 
-            dashboard_ids = tuple(
-                int(value) for value in ids_by_type["dashboard"] if value.isdigit()
-            )
+            dashboard_ids = tuple(int(value) for value in ids_by_type["dashboard"] if value.isdigit())
             if dashboard_ids:
-                rows = (
-                    await session.exec(
-                        select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids))
-                    )
-                ).all()
+                rows = (await session.exec(select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids)))).all()
                 labels.update({("dashboard", str(row.id)): row.title for row in rows})
         return labels
