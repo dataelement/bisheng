@@ -84,8 +84,8 @@ def dark_page(b: SlideBuilder, variant: str = "cover") -> None:
     bg = t.primary if t.marker == "sidebar" and variant != "cover" else t.dark_bg
     b.background(bg)
     if t.marker == "block":  # 红韵: concentric gold rings on the right
-        b.oval("deco.ring1", 540, 36, 400, 400, line=t.secondary, line_w=1.5)
-        b.oval("deco.ring2", 620, 116, 240, 240, line=t.secondary, line_w=0.75)
+        b.oval("deco.ring1", 580, 50, 360, 360, line=t.secondary, line_w=1.5)
+        b.oval("deco.ring2", 650, 120, 220, 220, line=t.secondary, line_w=0.75)
     elif t.marker == "rule":  # 蓝图: faint drafting grid
         grid = "2A5182"
         for i, x in enumerate(range(96, 960, 96)):
@@ -140,7 +140,7 @@ def cover(b: SlideBuilder) -> None:
         return
 
     x = 72.0
-    width = {"block": 520.0, "tab": 480.0}.get(t.marker, 620.0)
+    width = {"block": 480.0, "tab": 480.0}.get(t.marker, 620.0)
     kicker_color = (
         t.secondary if t.marker == "block" else (t.accent if t.marker in ("dot", "rule") else t.on_dark_muted)
     )

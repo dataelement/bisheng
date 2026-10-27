@@ -33,7 +33,7 @@
     {
      "name": "kicker",
      "role": "label",
-     "capacity": 36,
+     "capacity": 32,
      "max_lines": 1,
      "font_size": 13,
      "sample": "示例 · 2026 年度工作汇报",
@@ -42,7 +42,7 @@
     {
      "name": "title",
      "role": "title",
-     "capacity": 19,
+     "capacity": 18,
      "max_lines": 2,
      "font_size": 44,
      "sample": "示例：主标题写一句核心判断或文稿名称",
@@ -51,7 +51,7 @@
     {
      "name": "subtitle",
      "role": "subtitle",
-     "capacity": 50,
+     "capacity": 46,
      "max_lines": 2,
      "font_size": 18,
      "sample": "示例：副标题补充范围、时间或汇报对象",
