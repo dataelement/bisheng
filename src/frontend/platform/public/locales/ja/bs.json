@@ -1077,7 +1077,8 @@
       "autoReplyNotEmpty": "自動返信内容は空にできません",
       "workbenchSelectAtLeastOneWordType": "少なくとも1つのセンシティブワードリストを選択してください",
       "workbenchAutoReplyNotEmpty": "自動返信内容は空にできません",
-      "workbenchAutoReplyMaxLength": "自動返信内容は500文字以内にしてください"
+      "workbenchAutoReplyMaxLength": "自動返信内容は500文字以内にしてください",
+      "sensitivePolicyLoading": "センシティブワード設定を読み込み中です。しばらくしてから再試行してください。"
     },
     "saveSuccess": "保存に成功しました",
     "contentSecurityDesc": "センシティブワードリストまたは API によって会話内容のセキュリティ審査を行います",

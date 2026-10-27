@@ -1,4 +1,7 @@
 {
+  "chatImage": {
+    "processingRequired": "画像は保持されています。画像対応モデルを選ぶか、管理者に画像解析サービスの設定を依頼してから送信してください。"
+  },
   "skillReference": {
     "readFile": "スキルの参照ファイルを読む"
   },

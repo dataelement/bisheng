@@ -1,15 +1,14 @@
-import { buildChatAccept, isFileNameAccepted } from "./chatAccept";
+import { buildChatAccept, canProcessChatImage, isFileNameAccepted } from "./chatAccept";
 
-const DAILY = { enableMedia: false, enableEtl4lm: false, includeOfd: true };
+const DAILY = { enableMedia: false, includeOfd: true };
 
 describe("buildChatAccept", () => {
-    it("keeps daily chat on the document-only list", () => {
-        // Daily chat extracts attachment text into the prompt via the document
-        // parser, so an unparseable type fails the whole turn rather than being
-        // ignored. This string is a regression pin, not a preference.
-        expect(buildChatAccept(DAILY)).toBe(
-            ".pdf,.txt,.docx,.doc,.ppt,.pptx,.md,.html,.xls,.xlsx,.wps,.dps,.et,.ofd",
-        );
+    it("accepts images before a processing capability is chosen", () => {
+        const accept = buildChatAccept(DAILY);
+        for (const extension of ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']) {
+            expect(isFileNameAccepted(`clipboard.${extension}`, accept)).toBe(true);
+        }
+        expect(isFileNameAccepted('report.pdf', accept)).toBe(true);
     });
 
     it("is unchanged by taskMode:false", () => {
@@ -25,10 +24,9 @@ describe("buildChatAccept", () => {
         expect(accept.split(",")).toContain(".pdf");
     });
 
-    it("still honours the image and media switches in task mode", () => {
+    it("keeps images and optional media in task mode", () => {
         const accept = buildChatAccept({
             enableMedia: true,
-            enableEtl4lm: true,
             includeOfd: true,
             taskMode: true,
         });
@@ -63,5 +61,19 @@ describe("isFileNameAccepted", () => {
     it("treats an empty or wildcard accept as no restriction", () => {
         expect(isFileNameAccepted("anything.bin", "")).toBe(true);
         expect(isFileNameAccepted("anything.bin", "*")).toBe(true);
+    });
+});
+
+describe('image processing at send time', () => {
+    test.each([
+        ['image.png', false, false, false],
+        ['image.png', true, false, true],
+        ['image.png', false, true, true],
+        ['image.WEBP', true, false, true],
+        ['image.bmp', true, false, false],
+        ['image.bmp', false, true, true],
+        ['notes.txt', false, false, true],
+    ])('%s vision=%s parser=%s yields %s', (name, vision, parser, expected) => {
+        expect(canProcessChatImage(name, vision, parser)).toBe(expected);
     });
 });

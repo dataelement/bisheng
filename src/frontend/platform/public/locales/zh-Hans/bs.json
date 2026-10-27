@@ -1083,7 +1083,8 @@
       "autoReplyNotEmpty": "自动回复内容不可为空",
       "workbenchSelectAtLeastOneWordType": "请至少选择一个敏感词表",
       "workbenchAutoReplyNotEmpty": "自动回复内容不能为空",
-      "workbenchAutoReplyMaxLength": "自动回复内容不能超过500字"
+      "workbenchAutoReplyMaxLength": "自动回复内容不能超过500字",
+      "sensitivePolicyLoading": "敏感词配置加载中，请稍后再试"
     },
     "saveSuccess": "保存成功",
     "contentSecurityDesc": "通过敏感词表或 API 对会话内容进行安全审查",

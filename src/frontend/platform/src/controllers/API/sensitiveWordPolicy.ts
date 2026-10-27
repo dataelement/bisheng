@@ -27,12 +27,12 @@ export interface SensitiveWordPolicyPayload {
 }
 
 export function getSensitiveWordPolicyApi(businessType = KNOWLEDGE_SPACE_FILE_PARSE_POLICY) {
-    return axios.get(`/api/v1/sensitive-word-policies/${businessType}`);
+    return axios.get<unknown, SensitiveWordPolicy>(`/api/v1/sensitive-word-policies/${businessType}`);
 }
 
 export function updateSensitiveWordPolicyApi(
     data: SensitiveWordPolicyPayload,
     businessType = KNOWLEDGE_SPACE_FILE_PARSE_POLICY,
 ) {
-    return axios.put(`/api/v1/sensitive-word-policies/${businessType}`, data);
+    return axios.put<unknown, SensitiveWordPolicy>(`/api/v1/sensitive-word-policies/${businessType}`, data);
 }
