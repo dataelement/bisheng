@@ -14,11 +14,10 @@
  * then the danger zone. The tab fills the content width like its sibling
  * tabs; the left column carries two panels so the columns end level.
  *
- * The entry link — and the QR code, which encodes the very same string — is
- * rendered from `app.entry_url` exactly as the backend sent it. Composing it
- * from `location.origin` would produce `localhost:3001/apps/…` in dev — a link
- * that goes nowhere, since `/apps` is not in the vite proxy, and a QR code that
- * scans to nowhere.
+ * The displayed address, copy action, open action and QR code share the
+ * browser's current origin and deployment prefix, just like the app tutorial.
+ * The backend's configured address remains available to API/CLI consumers.
+ * Local development forwards `/apps/` to the installed app entry via Vite.
  */
 import { Button } from "@bisheng/ui"
 import { notification } from "@bisheng/ui"
@@ -103,6 +102,9 @@ export function PublishTab({
   const online = app.state === "online"
   const stopped = app.state === "stopped"
   const parked = app.state === "pending_capacity"
+  const entryUrl = app.entry_url
+    ? `${window.location.origin}${__APP_ENV__.BASE_URL}/apps/${encodeURIComponent(app.slug)}/`
+    : ""
 
   // These calls wait on the orchestrator — taking an app offline sits through
   // `docker stop`'s 10s SIGTERM grace. Without a busy button the wait reads as
@@ -122,7 +124,7 @@ export function PublishTab({
   }
 
   const handleCopy = async () => {
-    await copyText(app.entry_url)
+    await copyText(entryUrl)
     notification.open({
       title: t("prompt"),
       type: "success",
@@ -178,14 +180,14 @@ export function PublishTab({
             below covers both — a scanned code lands on the same notice page
             the link does.
           */}
-          {app.entry_url && (
+          {entryUrl && (
             <div
               className="flex shrink-0 flex-col items-center gap-1.5"
               data-testid="hosted-app-entry-qr"
             >
               <div className="rounded-md border bg-white p-2">
                 <QRCodeSVG
-                  value={app.entry_url}
+                  value={entryUrl}
                   size={88}
                   aria-label={t("hostedApp.publish.qrLabel")}
                 />
@@ -202,14 +204,14 @@ export function PublishTab({
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <code className="min-w-0 max-w-full break-all rounded bg-muted px-2 py-1 font-mono text-sm">
-                  {app.entry_url}
+                  {entryUrl}
                 </code>
                 <Button variant="outline" size="sm" onClick={handleCopy}>
                   <Copy className="mr-1 size-3.5" />
                   {t("hostedApp.publish.copy")}
                 </Button>
                 <Button variant="outline" size="sm" asChild>
-                  <a href={app.entry_url} target="_blank" rel="noreferrer">
+                  <a href={entryUrl} target="_blank" rel="noreferrer">
                     <ExternalLink className="mr-1 size-3.5" />
                     {t("hostedApp.publish.open")}
                   </a>

@@ -86,7 +86,7 @@ async def list_apps(user: UserPayload = Depends(UserPayload.get_login_user)):
 
 @router.get("/{app_id}", response_model=UnifiedResponseModel[dict], summary="Application detail")
 async def get_app(app_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
-    """AC-25 — includes ``entry_url`` as a full address; the front end must not compose it."""
+    """AC-25 — includes the configured full ``entry_url``; browser links use their current origin."""
     return resp_200(data=await AppQueryService.get_detail(app_id, actor=user))
 
 

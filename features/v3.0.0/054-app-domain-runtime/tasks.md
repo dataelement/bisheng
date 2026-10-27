@@ -1123,3 +1123,10 @@
 ## 2026-10-25 部署定向修复
 
 - [x] **T118**（hotfix）：父链读取按规范化字段比较，保留 first-N 及精确子网围栏。文件：`src/runtime-manager/runtime_manager/host_isolation.py`、`src/runtime-manager/tests/test_host_isolation.py`。覆盖 AC: AC-66、AC-68。单文件 11 passed，Ruff 通过；真实宿主复验尚待记录。
+
+### 2026-10-27 入口展示热修（T053 / T065 / T091 后续）
+
+- [x] 发布页文字、复制、打开和二维码统一使用浏览器当前 origin、部署前缀及应用 slug；不更改 backend/CLI 接口地址。
+- [x] 开发环境补 `/apps/` HTTP/WebSocket 代理和 `VITE_APP_PROXY_TARGET` 说明，消除历史上禁止 origin 拼接的开发环境原因。决策见 design.md「2026-10-27 浏览器应用入口跟随当前访问地址」。
+- [x] 本功能定向验证：PublishTab 4例、实际 Vite 配置加载1例通过；更改组件及API类型的ESLint、架构守卫和diff检查通过。SDD热修7维度自审通过；未运行全量回归。
+- [ ] 116前端镜像部署及浏览器实机验证；不以本地组件测试代替部署结果。
