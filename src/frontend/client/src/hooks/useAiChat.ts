@@ -16,6 +16,7 @@ import type { ChatMessage } from "~/api/chatApi";
 import { getAgentMessages, getSessionName } from "~/api/chatApi";
 import { openChatStream, type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { refreshInviteQuota } from "~/hooks/inviteQuotaRefresh";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
 import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
 import { SopStatus, taskModeSkillsState } from "~/store/linsight";
@@ -730,6 +731,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 // seed the per-SV store, and kick off execution. The inline task
                 // bubble (TJ-7) hosts the WS and renders the live run from there.
                 onTaskHandoff: ({ session_version_id: svid, chat_id }) => {
+                    // Consume is committed before this event. Reload the badge
+                    // so the remaining count drops without a full page refresh.
+                    if (taskMode) {
+                        refreshInviteQuota();
+                    }
                     if (!svid) return;
 
                     // The handoff is the daily SSE's last act: the task now runs via

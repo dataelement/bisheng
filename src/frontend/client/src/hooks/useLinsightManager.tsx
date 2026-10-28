@@ -14,6 +14,7 @@ import { ConversationData, QueryKeys } from '~/types/chat';
 import { useToastContext } from '~/Providers';
 import store from '~/store';
 import { activeSessionIdState, LinsightInfo, linsightMapState, SopStatus, submissionState, SubmissionState } from '~/store/linsight';
+import { refreshInviteQuota } from '~/hooks/inviteQuotaRefresh';
 import { taskErrorInfoFromOutput } from '~/hooks/linsightErrorInfo';
 import {
     addConversation,
@@ -333,6 +334,8 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                 sse.addEventListener('linsight_workbench_submit', (e: MessageEvent) => {
                     const data = JSON.parse(e.data);
                     const { linsight_session_version, message_session } = data;
+                    // A new-task submit has already committed its invite use, if the switch is on.
+                    refreshInviteQuota();
 
                     versionId = linsight_session_version.id
                     setVersionId(versionId)

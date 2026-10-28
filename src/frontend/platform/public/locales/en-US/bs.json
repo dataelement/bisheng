@@ -465,6 +465,71 @@
     "viewPermission": "View permission",
     "themeColor": "Theme color",
     "appearanceSettings": "Appearance",
+    "inviteCode": {
+      "tab": "Invite codes",
+      "hint": "Generate a code and send it to the user. They bind it in task mode. Each new task uses one time.",
+      "searchPlaceholder": "Search code or batch name",
+      "create": "Generate codes",
+      "empty": "No invite codes yet",
+      "loading": "Loading",
+      "unbound": "Unbound",
+      "columns": {
+        "code": "Code",
+        "batch": "Batch",
+        "limit": "Limit",
+        "used": "Used",
+        "remaining": "Remaining",
+        "user": "Bound user",
+        "created": "Created"
+      },
+      "actions": {
+        "edit": "Edit",
+        "delete": "Delete",
+        "save": "Save",
+        "cancel": "Cancel",
+        "copy": "Copy",
+        "done": "Done",
+        "increase": "Increase",
+        "decrease": "Decrease"
+      },
+      "createDialog": {
+        "title": "Generate invite codes",
+        "name": "Batch name",
+        "namePlaceholder": "For example: trial batch",
+        "num": "How many",
+        "limit": "Uses per code",
+        "submit": "Generate",
+        "result": "{{count}} codes generated",
+        "rangeHint": "Count is 1–100. Uses per code are 1–100000"
+      },
+      "editDialog": {
+        "title": "Edit invite code",
+        "name": "Batch name",
+        "limit": "Usage limit",
+        "limitHint": "Cannot be lower than the {{used}} times already used"
+      },
+      "deleteConfirm": {
+        "title": "Delete invite code",
+        "desc": "Deleting {{code}} cannot be undone. A bound user loses the remaining uses on this code."
+      },
+      "feedback": {
+        "created": "Invite codes generated",
+        "saved": "Saved",
+        "deleted": "Deleted",
+        "copied": "Copied",
+        "invalid": "Enter a batch name. Count is 1–100 and the limit is 1–100000"
+      },
+      "pagination": {
+        "total": "{{total}} in total",
+        "pageSize": "{{size}} / page",
+        "jumpPrefix": "Go to",
+        "jumpSuffix": "",
+        "jumpError": "Enter 1–{{totalPages}}",
+        "prev": "Previous page",
+        "next": "Next page",
+        "nav": "Pagination"
+      }
+    },
     "toolAuthorization": "Tool",
     "createUser": "Create User",
     "usernamePlaceholder": "This username will be used to log in, and cannot be changed",

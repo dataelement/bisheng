@@ -2576,7 +2576,13 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     # failures stay best-effort here: the client's start-execute is the fallback.
     from bisheng.workstation.domain.services.task_submit_service import submit_task_turn
 
-    _session, session_version = await submit_task_turn(data, login_user)
+    try:
+        _session, session_version = await submit_task_turn(data, login_user)
+    except BaseErrorCode as exc:
+        return StreamingResponse(
+            iter([exc.to_sse_event_instance_str()]),
+            media_type="text/event-stream",
+        )
 
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode

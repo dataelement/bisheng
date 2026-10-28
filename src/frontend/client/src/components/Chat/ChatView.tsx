@@ -9,6 +9,7 @@ import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
 import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import AiChatInput from '~/components/Chat/AiChatInput';
+import { useTaskInviteQuota } from '~/components/Chat/TaskInviteQuota';
 import { resolveTaskModeOnNavigation } from '~/components/Chat/resolveTaskMode';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
@@ -386,6 +387,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     return Array.isArray(plugins) ? plugins.includes('linsight_task_mode') : true;
   }, [user]);
 
+  const inviteOn = taskMode && canUseTaskMode && !!(bsConfig as { linsight_invitation_code?: boolean } | undefined)?.linsight_invitation_code;
+  const { bar: inviteQuotaBar, dialog: inviteQuotaDialog, allowSend: allowInviteSend } = useTaskInviteQuota(inviteOn);
+
   const handleSend = useCallback((text: string, files?: any[] | null) => {
     // F035 Track J (TJ-6): both modes go through the SAME unified entry now.
     // Task mode is just a per-turn flag — no /linsight navigation, no separate
@@ -399,6 +403,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     if (taskMode && canUseTaskMode) {
       const trimmed = text.trim();
       if (!trimmed) return;
+      if (!allowInviteSend()) return;
       sendMessage(trimmed, files, { taskMode: true });
       setInputText('');
       return;
@@ -406,7 +411,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
     sendMessage(text, files);
     setInputText('');
-  }, [taskMode, canUseTaskMode, sendMessage]);
+  }, [taskMode, canUseTaskMode, sendMessage, allowInviteSend]);
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
@@ -781,6 +786,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   return (
     <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
     <Presentation isLingsi={false}>
+      {inviteQuotaDialog}
       <div className={cn('h-full')}>
         <div
           ref={chatContainerRef}
@@ -883,6 +889,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         ) : (
                           <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full shrink-0 pb-3">
                             {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
+                            {inviteQuotaBar}
                             <AiChatInput
                               disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
                               sendDisabled={taskRunning}
@@ -1075,6 +1082,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       {/* Input area for landing page */}
                       {!shareToken && (
                         <div className="w-full max-w-[800px] mx-auto px-4 mt-10 max-md:max-w-full pb-3">
+                          {inviteQuotaBar}
                           <AiChatInput
                             elevated
                             disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}

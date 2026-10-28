@@ -461,6 +461,71 @@
     "viewPermission": "閲覧権限",
     "themeColor": "テーマ配色",
     "appearanceSettings": "外観設定",
+    "inviteCode": {
+      "tab": "招待コード",
+      "hint": "招待コードを生成してユーザーに渡します。ユーザーはタスクモードで紐づけます。新しいタスクごとに 1 回消費します。",
+      "searchPlaceholder": "招待コードまたはバッチ名を検索",
+      "create": "招待コードを生成",
+      "empty": "招待コードはまだありません",
+      "loading": "読み込み中",
+      "unbound": "未紐づけ",
+      "columns": {
+        "code": "招待コード",
+        "batch": "バッチ",
+        "limit": "利用可能回数",
+        "used": "使用済み",
+        "remaining": "残り回数",
+        "user": "紐づけユーザー",
+        "created": "作成日時"
+      },
+      "actions": {
+        "edit": "編集",
+        "delete": "削除",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "copy": "コピー",
+        "done": "完了",
+        "increase": "増やす",
+        "decrease": "減らす"
+      },
+      "createDialog": {
+        "title": "招待コードを生成",
+        "name": "バッチ名",
+        "namePlaceholder": "例：体験バッチ",
+        "num": "生成数",
+        "limit": "1 コードあたりの回数",
+        "submit": "生成",
+        "result": "{{count}} 件の招待コードを生成しました",
+        "rangeHint": "生成数は 1～100、回数は 1～100000 です"
+      },
+      "editDialog": {
+        "title": "招待コードを編集",
+        "name": "バッチ名",
+        "limit": "利用可能回数",
+        "limitHint": "使用済みの {{used}} 回より小さくできません"
+      },
+      "deleteConfirm": {
+        "title": "招待コードを削除",
+        "desc": "{{code}} を削除すると元に戻せません。紐づけ済みのユーザーは、このコードの残り回数を失います。"
+      },
+      "feedback": {
+        "created": "招待コードを生成しました",
+        "saved": "保存しました",
+        "deleted": "削除しました",
+        "copied": "コピーしました",
+        "invalid": "バッチ名を入力してください。生成数は 1～100、回数は 1～100000 です"
+      },
+      "pagination": {
+        "total": "全 {{total}} 件",
+        "pageSize": "{{size}} 件/ページ",
+        "jumpPrefix": "移動",
+        "jumpSuffix": "ページ",
+        "jumpError": "1～{{totalPages}} を入力",
+        "prev": "前のページ",
+        "next": "次のページ",
+        "nav": "ページング"
+      }
+    },
     "toolAuthorization": "ツール権限付与",
     "createUser": "ユーザー作成",
     "usernamePlaceholder": "今後このユーザー名でログインします。ユーザー名は変更できません。",

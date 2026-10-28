@@ -113,6 +113,21 @@ class InviteCodeBindError(BaseErrorCode):
     Msg: str = "Additional invite codes bound"
 
 
+class InviteCodeNotFoundError(BaseErrorCode):
+    Code: int = 11191
+    Msg: str = "Invite code does not exist"
+
+
+class InviteCodeLimitError(BaseErrorCode):
+    Code: int = 11192
+    Msg: str = "The usage limit cannot be lower than the times already used"
+
+
+class InviteCodeBatchInvalidError(BaseErrorCode):
+    Code: int = 11193
+    Msg: str = "Invalid invite-code batch. Name is required, count is 1-100, and the limit is 1-100000"
+
+
 # ---------------------------------------------------------------------------
 # F035 灵思任务模式 · Skill 管理错误码（段位 11050–11069）
 #

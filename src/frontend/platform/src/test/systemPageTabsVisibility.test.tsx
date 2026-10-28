@@ -74,6 +74,7 @@ const ORG = "system.orgAndMembers";
 const ROLE = "system.roleAndPermissions";
 const SYSCFG = "system.systemConfiguration";
 const THEME = "system.appearanceSettings";
+const INVITE = "system.inviteCode.tab";
 const ORG_SYNC = "orgSync:title";
 const USER_GROUP = "system.userGroupsM";
 const LEGACY = "system.userManagement";
@@ -94,6 +95,7 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.getByRole("tab", { name: ORG_SYNC })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: SYSCFG })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: THEME })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: INVITE })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: LEGACY })).toBeNull();
     expect(screen.getByRole("tab", { name: SERVICE_ACCOUNT })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: PERSONAL_TOKEN })).toBeInTheDocument();
@@ -107,6 +109,7 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.getByRole("tab", { name: ROLE })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: SYSCFG })).toBeNull();
     expect(screen.queryByRole("tab", { name: THEME })).toBeNull();
+    expect(screen.queryByRole("tab", { name: INVITE })).toBeNull();
     expect(screen.queryByRole("tab", { name: ORG_SYNC })).toBeNull();
     expect(screen.queryByRole("tab", { name: LEGACY })).toBeNull();
     expect(screen.getByRole("tab", { name: SERVICE_ACCOUNT })).toBeInTheDocument();
@@ -136,6 +139,7 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.getByRole("tab", { name: ROLE })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: SYSCFG })).toBeNull();
     expect(screen.queryByRole("tab", { name: THEME })).toBeNull();
+    expect(screen.queryByRole("tab", { name: INVITE })).toBeNull();
     expect(screen.queryByRole("tab", { name: ORG_SYNC })).toBeNull();
     expect(screen.queryByRole("tab", { name: SERVICE_ACCOUNT })).toBeNull();
     expect(screen.queryByRole("tab", { name: PERSONAL_TOKEN })).toBeNull();
@@ -148,6 +152,7 @@ describe("SystemPage tab visibility (PRD §3.3)", () => {
     expect(screen.queryByRole("tab", { name: ROLE })).toBeNull();
     expect(screen.queryByRole("tab", { name: SYSCFG })).toBeNull();
     expect(screen.queryByRole("tab", { name: THEME })).toBeNull();
+    expect(screen.queryByRole("tab", { name: INVITE })).toBeNull();
     expect(screen.queryByRole("tab", { name: ORG_SYNC })).toBeNull();
     expect(screen.getByRole("tab", { name: LEGACY })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: SERVICE_ACCOUNT })).toBeNull();
