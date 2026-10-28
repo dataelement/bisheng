@@ -253,14 +253,14 @@ export default function SystemLog() {
                     options={tenants.filter(tenant => tenant.id != null).map(tenant => ({ value: String(tenant.id), label: tenant.tenant_name }))}
                     value={keys.tenantId || null} onOpenChange={open => { if (open) loadTenants() }}
                     onChange={value => setKeys({ ...keys, tenantId: value == null ? '' : String(value) })} />}
-                <div>
-                    <Button className="mr-3" onClick={handleSearch}>
+                <div className="flex items-center gap-2">
+                    <Button size="medium" onClick={handleSearch}>
                         {t('log.searchButton')}
                     </Button>
-                    <Button variant="outlined" onClick={handleReset} color="default">
+                    <Button size="medium" variant="outlined" onClick={handleReset} color="default">
                         {t('log.resetButton')}
                     </Button>
-                    <Button variant="outlined" color="default" className="px-6" disabled={exporting} onClick={handleExport}>
+                    <Button size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
                         {t('log.exportButton')}
                     </Button>
                 </div>
@@ -319,9 +319,6 @@ export default function SystemLog() {
         {/* Pagination */}
 
         <div className="bisheng-table-footer px-6 bg-background-login">
-            <div className="flex items-center gap-2">
-                <p className="desc">{t('log.auditManagement')}</p>
-            </div>
             <Pagination locale={paginationLocale}
                 className="float-right justify-end w-full mr-6"
                 current={page}

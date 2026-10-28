@@ -194,9 +194,6 @@ export default function Management() {
                 </div>
             </div>
         </div>
-        <div className="bisheng-table-footer bg-background-login px-6">
-            <p className="desc">{t('model.modelCollectionCaption')}.</p>
-        </div>
     </div>
 
 }
