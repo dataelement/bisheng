@@ -1,12 +1,12 @@
 // @ts-strict-ignore
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Pagination, Button, SearchInput, notification } from '@bisheng/ui';
 
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { deleteDatasetApi, getFileUrlApi, getPresetFileApi } from "@/controllers/API/finetune";
@@ -16,8 +16,9 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import CreateDataSet from "./CreateDataSet";
 
-export default function index() {
+export default function DataSetPage() {
     const { t } = useTranslation();
+    const paginationLocale = usePaginationLocale();
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
         getPresetFileApi({ page_size: 20, page_num: param.page, keyword: param.keyword })
     );
@@ -53,7 +54,7 @@ export default function index() {
                 </div>
             )}
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10">
-                <div className="flex justify-end gap-4 items-center">
+                <div className="mr-2 flex justify-end gap-4 items-center">
                     <SearchInput placeholder={t('dataset.name')} onChange={(e) => search(e.target.value)} className={"w-56 shrink-0"} />
                     <Button onClick={() => modelRef.current.open()}>{t('dataset.create')}</Button>
                 </div>
@@ -91,10 +92,9 @@ export default function index() {
                 </Table>
             </div>
             <div className="bisheng-table-footer px-6 bg-background-login">
-                <p className="desc">{t('dataset.collection')}</p>
-                <div>
-                    <AutoPagination
-                        page={page}
+                <div className="ml-auto">
+                    <Pagination locale={paginationLocale}
+                        current={page}
                         pageSize={pageSize}
                         total={total}
                         onChange={(newPage) => setPage(newPage)}

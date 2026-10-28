@@ -14,7 +14,7 @@ export function LogPage() {
     const showRuntime = !!appConfig.appRuntimeEnabled && (user?.role === "admin" || !!user?.is_child_admin)
 
     return <div id="model-scroll" className="w-full h-full px-2 pt-4">
-        <Tabs defaultActiveKey="app" className="w-full mb-10" items={[
+        <Tabs defaultActiveKey="app" className="w-full mb-10 [&>div:first-child]:mx-2" items={[
             { key: 'app', label: t('log.appUsage'), children: <div className="pt-2"><AppUseLog /></div> },
             { key: 'system', label: t('log.systemOperations'), children: <div className="pt-2"><SystemLog /></div> },
             ...(showRuntime ? [{ key: "runtime", label: t("log.runtime.title"), children: <RuntimeAuditPanel /> }] : []),

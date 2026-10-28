@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, act } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDshBrowserConfig, saveDshManagementSettings } from '@/controllers/API/dshSettings'
 import { getModelListApi } from '@/controllers/API/finetune'
+import { toast } from '@bisheng/ui'
 import { SettingsPanel } from './SettingsPanel'
 import { DshManagement } from './index'
 
@@ -15,6 +16,7 @@ vi.mock('@/pages/ModelPage/manage/dsh/DshDesktopModelConfig', () => ({ DshDeskto
 
 beforeEach(() => {
     vi.resetAllMocks()
+    vi.spyOn(toast, 'show').mockImplementation(() => '')
     vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: false, download_url: null, launch_url: 'dsh-desktop://login' })
     vi.mocked(getModelListApi).mockResolvedValue([])
 })
@@ -42,15 +44,28 @@ describe('DSH deployment and business settings', () => {
     it('saves the typed fields and never submits License settings', async () => {
         vi.mocked(saveDshManagementSettings).mockResolvedValue({ enabled: true, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop-test://login' })
         render(<SettingsPanel settings={{ enabled: false, download_url: null, launch_url: 'dsh-desktop://login' }} canEdit />)
+        expect(screen.getByRole('textbox', { name: /dsh.downloadAddress/ })).toBeDisabled()
+        expect(screen.getByRole('textbox', { name: /dsh.launchAddress/ })).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: 'dsh.editSettings' }))
+        expect(screen.getByRole('textbox', { name: /dsh.downloadAddress/ })).toBeEnabled()
+        expect(saveDshManagementSettings).not.toHaveBeenCalled()
         fireEvent.change(screen.getByRole('textbox', { name: /dsh.downloadAddress/ }), { target: { value: 'http://downloads.test/dsh' } })
         fireEvent.change(screen.getByRole('textbox', { name: /dsh.launchAddress/ }), { target: { value: 'dsh-desktop-test://login' } })
         fireEvent.click(screen.getByText('dsh.saveSettings'))
-        await screen.findByText('dsh.settingsSaved')
+        await waitFor(() => expect(toast.show).toHaveBeenCalledWith({ type: 'success', message: 'dsh.settingsSaved' }))
+        expect(screen.queryByText('dsh.settingsSaved')).toBeNull()
+        expect(screen.getByRole('button', { name: 'dsh.editSettings' })).toBeEnabled()
+        expect(screen.getByRole('textbox', { name: /dsh.downloadAddress/ })).toBeDisabled()
         expect(saveDshManagementSettings).toHaveBeenCalledWith({ enabled: true, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop-test://login' })
     })
     it('retains the draft and shows a failure without claiming success', async () => {
         vi.mocked(saveDshManagementSettings).mockRejectedValue(new Error('Invalid URL'))
         render(<SettingsPanel settings={{ enabled: false, download_url: null, launch_url: 'dsh-desktop://login' }} canEdit />)
+        expect(screen.getByRole('textbox', { name: /dsh.downloadAddress/ })).toBeDisabled()
+        expect(screen.getByRole('textbox', { name: /dsh.launchAddress/ })).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: 'dsh.editSettings' }))
+        expect(screen.getByRole('textbox', { name: /dsh.downloadAddress/ })).toBeEnabled()
+        expect(saveDshManagementSettings).not.toHaveBeenCalled()
         fireEvent.change(screen.getByRole('textbox', { name: /dsh.downloadAddress/ }), { target: { value: 'invalid' } })
         fireEvent.click(screen.getByText('dsh.saveSettings'))
         await screen.findByRole('alert')

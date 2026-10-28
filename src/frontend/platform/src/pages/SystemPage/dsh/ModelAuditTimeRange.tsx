@@ -1,6 +1,7 @@
 import { Button } from "@bisheng/ui";
 import { Input } from "@bisheng/ui";
-import { CalendarDays, ChevronDown } from "lucide-react";
+import { CalendarDays } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -60,7 +61,7 @@ export function ModelAuditTimeRange({
       </span>
       <details
         ref={details}
-        className="relative min-w-0"
+        className="group relative min-w-0"
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
@@ -71,13 +72,13 @@ export function ModelAuditTimeRange({
         <summary
           ref={trigger}
           aria-label={t("dsh.modelAuditView.time_range")}
-          className="flex h-8 cursor-pointer list-none items-center gap-2 rounded-md border border-input bg-search-input px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden [@media(pointer:coarse)]:min-h-11"
+          className="input-touch-hit relative flex h-8 w-full min-w-0 cursor-pointer list-none items-center gap-2 overflow-hidden rounded-md border border-border-base bg-bg-page px-[11px] text-left text-[length:var(--font-size-3)] font-normal leading-[var(--line-height-3)] text-text-1 outline-none transition-colors hover:border-border-deep focus-visible:border-border-deep focus-visible:shadow-focus group-open:border-border-deep group-open:shadow-focus [&::-webkit-details-marker]:hidden"
         >
           <CalendarDays className="size-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate" title={label}>
             {label}
           </span>
-          <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+          <Outlined.Down className="size-4 shrink-0 text-text-3 transition-transform group-open:rotate-180" aria-hidden="true" />
         </summary>
         <div className="relative mt-2 space-y-3 rounded-xl border bg-popover p-4 text-popover-foreground min-[576px]:absolute min-[576px]:right-0 min-[576px]:z-20 min-[576px]:mt-1 min-[576px]:w-80 min-[576px]:max-w-[calc(100vw-2rem)] min-[576px]:shadow-md">
           {(["start_at", "end_at"] as const).map((key) => (

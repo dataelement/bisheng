@@ -1,11 +1,10 @@
 // @ts-strict-ignore
-import { Button, Select } from '@bisheng/ui';
+import { Pagination, Button, Select } from '@bisheng/ui';
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import ColFilterUser from "@/components/bs-comp/tableComponent/ColFilterUser";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { FilterIcon } from "@/components/bs-icons/filter";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -19,6 +18,7 @@ export default function TaskApps() {
     const { id } = useParams()
     const navigator = useNavigate()
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
     const selectLabels = useSelectLabels()
     const [markStatus, setMarkStatus] = useState<string | null>(null)
     const markStatusOptions = [
@@ -70,7 +70,7 @@ export default function TaskApps() {
                                         }}
                                         trigger={
                                             <button type="button" className="outline-none" aria-label={`${t('label.annotationStatus')}: ${markStatusLabel}`}>
-                                                <FilterIcon className={markStatus ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
+                                                <Outlined.Filter size={16} aria-hidden className={markStatus ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
                                             </button>
                                         }
                                     />
@@ -138,9 +138,9 @@ export default function TaskApps() {
                 </Table>
             </div>
             <div className="bisheng-table-footer bg-background-login px-2">
-                <AutoPagination
+                <Pagination locale={paginationLocale}
                     className="float-right justify-end w-full mr-6"
-                    page={page}
+                    current={page}
                     pageSize={pageSize}
                     total={total}
                     onChange={(newPage) => setPage(newPage)}

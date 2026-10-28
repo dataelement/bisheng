@@ -95,7 +95,8 @@ describe("DSH market administration", () => {
         render(view()); await screen.findByText("Company Demo");
         expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
         expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-        expect(screen.getAllByRole("button").map(button => button.textContent)).toEqual(["import", "details", "delete"]);
+        expect(screen.getByRole("button", { name: "import", exact: true })).toBeInTheDocument();
+        expect(within(screen.getByRole("table")).getAllByRole("button").map(button => button.textContent)).toEqual(["details", "delete"]);
         expect(screen.getAllByRole("columnheader").map(cell => cell.textContent)).toEqual(["name", "version", "platform", "updated", "actions"]);
     });
     it("resets the page and tenant-bound data when the login tenant changes", async () => {
@@ -148,14 +149,14 @@ describe("DSH market administration", () => {
     it("returns to the preceding page when the last row is deleted", async () => {
         vi.mocked(listMarketPlugins).mockResolvedValue({ data: [plugin], total: 21 });
         render(view()); await screen.findByText("Company Demo");
-        fireEvent.click(screen.getByRole("button", { name: "next" }));
+        fireEvent.click(screen.getByRole("button", { name: "pagination.next" }));
         await waitFor(() => expect(listMarketPlugins).toHaveBeenLastCalledWith({ page: 2 }, 2, expect.any(AbortSignal)));
         await screen.findByText("Company Demo");
         fireEvent.click(screen.getByRole("button", { name: "delete" }));
         vi.mocked(listMarketPlugins).mockImplementation(async ({ page }) => ({ data: page === 1 ? [plugin] : [], total: 20 }));
         await act(async () => { await vi.mocked(bsConfirm).mock.calls[0][0].onOk?.(vi.fn()); });
         await waitFor(() => expect(listMarketPlugins).toHaveBeenLastCalledWith({ page: 1 }, 2, expect.any(AbortSignal)));
-        expect(screen.queryByRole("button", { name: "next" })).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "pagination.next" })).toBeDisabled();
     });
     it("keeps version details as a read-only view", async () => {
         render(view()); await screen.findByText("Company Demo");
@@ -167,7 +168,7 @@ describe("DSH market administration", () => {
     });
     it("previews and imports a workbench archive in its own section", async () => {
         render(view());
-        await userEvent.setup().click(screen.getByRole("tab", { name: "workbenchSection" }));
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
         await screen.findByText("Workbench Demo");
         fireEvent.click(screen.getByRole("button", { name: "workbenchImport" }));
         const file = new File(["archive"], "workbench.tgz", { type: "application/gzip" });

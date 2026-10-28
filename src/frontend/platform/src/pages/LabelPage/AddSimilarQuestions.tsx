@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { captureQaOperation, type QaOperation } from '@bisheng/chat/core';
-import { Button, Input, toast } from '@bisheng/ui';
+import { Pagination, Button, Input, toast } from '@bisheng/ui';
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
@@ -8,7 +8,7 @@ import { Checkbox } from "@bisheng/ui";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { addSimilarQa, getQaList } from "@/controllers/API";
@@ -20,6 +20,7 @@ import type { AnnotationFormHandle, AnnotationFormProps } from "./annotationType
 
 const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps>(({ onMarked }, ref) => {
     const { t } = useTranslation();
+    const paginationLocale = usePaginationLocale();
     const [open, setOpen] = useState(false);
     const [knowledgeLib, setKnowledgeLib] = useState([]);
     const [selectedItems, setSelectedItems] = useState([]);
@@ -172,9 +173,9 @@ const AddSimilarQuestions = forwardRef<AnnotationFormHandle, AnnotationFormProps
                             </Table>
                         </div>
                         <div className="bisheng-table-footer px-6 bg-transparent">
-                            <AutoPagination
+                            <Pagination locale={paginationLocale} size="small" simple
                                 className="justify-end"
-                                page={page}
+                                current={page}
                                 pageSize={pageSize}
                                 total={total}
                                 onChange={(newPage) => setPage(newPage)}

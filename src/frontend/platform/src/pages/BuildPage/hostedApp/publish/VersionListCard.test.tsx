@@ -17,9 +17,6 @@ vi.mock("@/util/hook", () => ({
     filterData: vi.fn(),
   }),
 }))
-vi.mock("@/components/bs-ui/pagination/autoPagination", () => ({
-  default: () => null,
-}))
 vi.mock("@/controllers/API/hostedApp", () => ({
   getHostedAppVersionPageApi: vi.fn(),
   getHostedAppErrorMessage: vi.fn(),

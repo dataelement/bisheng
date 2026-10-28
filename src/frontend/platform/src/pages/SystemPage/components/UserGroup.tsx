@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, SearchInput, toast } from '@bisheng/ui';
+import { Pagination, Button, SearchInput, toast } from '@bisheng/ui';
 import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useTranslation } from "react-i18next";
@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import {
 ColumnResizeHandle,
 useResizableColumns,
@@ -57,6 +57,7 @@ export const canEditUserGroup = (user: any, ug: UserGroupV2) => {
 
 export default function UserGroups() {
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
     const { user } = useContext(userContext)
     const [userGroups, setUserGroups] = useState<UserGroupV2[]>([])
     const [total, setTotal] = useState(0)
@@ -255,11 +256,12 @@ export default function UserGroups() {
         <div className="bisheng-table-footer px-6 bg-background-login">
             <div className="flex items-center gap-2">
                 <p className="desc">{t('system.userGroupList')}.</p>
-                <span className="text-sm text-[#86909c]">{t('pagination.totalRecords', { ns: 'bs', total })}</span>
             </div>
-            <AutoPagination
-                className={cname("m-0 w-auto justify-end", loading && "pointer-events-none opacity-60")}
-                page={page}
+            <Pagination locale={paginationLocale}
+                className="m-0 w-auto justify-end"
+                disabled={loading}
+                showTotal
+                current={page}
                 pageSize={PAGE_SIZE}
                 total={total}
                 onChange={(nextPage) => {

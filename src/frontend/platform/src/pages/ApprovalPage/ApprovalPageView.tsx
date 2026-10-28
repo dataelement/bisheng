@@ -1,4 +1,6 @@
-import { Alert, Tabs } from "@bisheng/ui";
+import { Alert, Segmented } from "@bisheng/ui";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { showApiError } from '@/controllers/request';
 import { isApiError } from '@bisheng/api-client';
 import { ApprovalDialogs } from "./ApprovalDialogs";
@@ -10,28 +12,30 @@ interface ApprovalPageViewProps {
 }
 export function ApprovalPageView({ controller }: ApprovalPageViewProps) {
   const { t, setActiveTab, loadPage, loadError, activeTab } = controller;
+  const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setHeaderTarget(document.getElementById("approval-header-menu"));
+  }, []);
   const showLoadError = !!loadError && (!isApiError(loadError)
     || (loadError.kind !== 'canceled' && loadError.presentation !== 'global'));
   return (
     <div className="flex h-full flex-col bg-background-main-content">
-      {/* page header */}
-      <div className="border-b border-border px-6 pt-6 pb-0">
-        <h1 className="text-xl font-semibold text-foreground">{t("approvalPage.title")}</h1>
-        {/* tabs */}
-        <Tabs
-          activeKey={activeTab}
-          onChange={(key) => {
-            setActiveTab(key as "flow" | "exception");
+      {headerTarget && createPortal(
+        <Segmented
+          size="large"
+          aria-label={t("approvalPage.title")}
+          value={activeTab}
+          onChange={(value) => {
+            setActiveTab(value as "flow" | "exception");
             void loadPage().catch(showApiError);
           }}
-          items={[
-            { key: "flow", label: t("approvalPage.tabFlow") },
-            { key: "exception", label: t("approvalPage.tabException") },
+          options={[
+            { value: "flow", label: t("approvalPage.tabFlow") },
+            { value: "exception", label: t("approvalPage.tabException") },
           ]}
-          className="mt-4"
-          divider={false}
-        />
-      </div>
+        />,
+        headerTarget,
+      )}
 
       {showLoadError && <Alert type="error" live
         description={loadError instanceof Error ? loadError.message : t('api_errors:fallback')}
