@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button } from '@bisheng/ui';
+import { Pagination, Button } from '@bisheng/ui';
 
 import {
   Table,
@@ -17,7 +17,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Tag, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 
 import {
   Evaluation,
@@ -44,6 +44,7 @@ import {
 export default function EvaluationPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const paginationLocale = usePaginationLocale();
 
   const {
     page,
@@ -200,8 +201,8 @@ export default function EvaluationPage() {
       <div className="bisheng-table-footer px-6 bg-background-login">
         <p className="desc">{t("evaluation.evaluationCollection")}</p>
         <div>
-          <AutoPagination
-            page={page}
+          <Pagination locale={paginationLocale}
+            current={page}
             pageSize={pageSize}
             total={total}
             onChange={(newPage) => setPage(newPage)}

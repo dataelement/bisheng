@@ -14,8 +14,8 @@
  * app). Ordering is server-side with the row key as tiebreaker, so paging
  * never repeats or skips a row.
  */
-import { Button } from "@bisheng/ui"
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
+import { Button, Pagination } from "@bisheng/ui"
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import {
   Table,
   TableBody,
@@ -71,6 +71,7 @@ type TableListState = "loading" | "ready" | "forbidden" | "not_ready" | "failed"
 
 export function DataTab({ appId, appName }: DataTabProps) {
   const { t } = useTranslation()
+  const paginationLocale = usePaginationLocale();
 
   // -- table list ----------------------------------------------------------
   const [listState, setListState] = useState<TableListState>("loading")
@@ -385,9 +386,9 @@ export function DataTab({ appId, appName }: DataTabProps) {
           )}
         </div>
 
-        {pageData && pageData.total > DATA_PAGE_SIZE && (
-          <AutoPagination
-            page={page}
+        {pageData && (
+          <Pagination locale={paginationLocale}
+            current={page}
             pageSize={DATA_PAGE_SIZE}
             total={pageData.total}
             onChange={(next) => setPage(next)}

@@ -22,12 +22,12 @@ import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDial
 import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
-import { FilterIcon } from "@/components/bs-icons/filter";
 
 
 
 
 import { useContext,useEffect,useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import LoadMore from "../../components/bs-comp/loadMore";
 import { userContext } from "../../contexts/userContext";
@@ -60,7 +60,11 @@ interface KnowledgeListRow {
 }
 
 const doing = {} // Record knowledge bases being copied
-export default function KnowledgeFile() {
+interface KnowledgeFileProps {
+    toolbarTarget?: HTMLDivElement | null;
+}
+
+export default function KnowledgeFile({ toolbarTarget }: KnowledgeFileProps) {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
 
@@ -310,16 +314,20 @@ export default function KnowledgeFile() {
         </>;
     };
 
+    const toolbar = (
+        <div className="flex items-center justify-end gap-4">
+            <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
+            {canCreateLibrary && <Button onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
+        </div>
+    );
+
     return (
         <div className="relative">
+            {toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbarTarget === undefined ? toolbar : null}
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <Outlined.Loading  className="size-4 animate-spin"/>
             </div>}
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
-                <div className="flex justify-end gap-4 items-center absolute right-0 top-[-40px]">
-                    <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-                    {canCreateLibrary && <Button onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
-                </div>
                 <Table noScroll>
                     <TableHeader>
                         <TableRow>
@@ -346,7 +354,7 @@ export default function KnowledgeFile() {
                                                     value: fileStatusFilterOptions.find(option => option.value === fileStatusFilter)?.label ?? t('fileStatusFilterAll'),
                                                 })}
                                             >
-                                                <FilterIcon className={fileStatusFilter ? 'text-primary' : 'text-gray-400'} />
+                                                <Outlined.Filter size={16} aria-hidden className={fileStatusFilter ? 'text-primary' : 'text-gray-400'} />
                                             </button>
                                         }
                                     />

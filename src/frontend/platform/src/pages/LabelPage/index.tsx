@@ -1,12 +1,12 @@
 // @ts-strict-ignore
-import { Button, Select, toast } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+import { Pagination, Button, Select, toast } from '@bisheng/ui';
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import UsersSelect from "@/components/bs-comp/selectComponent/Users";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { FilterIcon } from "@/components/bs-icons/filter";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { userContext } from "@/contexts/userContext";
@@ -155,6 +155,7 @@ const TASK_STATUS_OPTIONS = [
 
 export default function Tasks() {
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
     const selectLabels = useSelectLabels()
     const [statusFilter, setStatusFilter] = useState<string | null>(null)
     const statusOptions = TASK_STATUS_OPTIONS.map(o => ({ value: o.value, label: t(o.labelKey) }))
@@ -207,7 +208,7 @@ export default function Tasks() {
                                         }}
                                         trigger={
                                             <button type="button" className="outline-none" aria-label={`${t('label.taskStatus')}: ${statusFilterLabel}`}>
-                                                <FilterIcon className={statusFilter ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
+                                                <Outlined.Filter size={16} aria-hidden className={statusFilter ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
                                             </button>
                                         }
                                     />
@@ -245,9 +246,9 @@ export default function Tasks() {
                 </Table>
             </div>
             <div className="bisheng-table-footer bg-background-login px-2">
-                <AutoPagination
+                <Pagination locale={paginationLocale}
                     className="float-right justify-end w-full mr-6"
-                    page={page}
+                    current={page}
                     pageSize={pageSize}
                     total={total}
                     showTotal={true}

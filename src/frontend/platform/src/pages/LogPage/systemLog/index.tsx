@@ -1,9 +1,9 @@
 // @ts-strict-ignore
-import { Button, Select } from '@bisheng/ui';
+import { Pagination, Button, Select } from '@bisheng/ui';
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { notification } from "@bisheng/ui";
 import {
@@ -127,6 +127,7 @@ const toFilters = (keys: FilterKeys): AuditLogFilters => ({
 
 export default function SystemLog() {
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
     const { appConfig } = useContext(locationContext)
     const { user } = useContext(userContext)
     const multiTenantEnabled = !!appConfig.multiTenantEnabled
@@ -316,14 +317,14 @@ export default function SystemLog() {
             {!logs.length && <div className="h-[700px]"></div>}
         </div>
         {/* Pagination */}
-        {/* <Pagination count={10}></Pagination> */}
+
         <div className="bisheng-table-footer px-6 bg-background-login">
             <div className="flex items-center gap-2">
                 <p className="desc">{t('log.auditManagement')}</p>
             </div>
-            <AutoPagination
+            <Pagination locale={paginationLocale}
                 className="float-right justify-end w-full mr-6"
-                page={page}
+                current={page}
                 pageSize={pageSize}
                 total={total}
                 showTotal={true}

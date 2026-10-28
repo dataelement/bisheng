@@ -25,6 +25,21 @@ import { getBrandAssetUrl } from "../utils/brand";
 import { HeaderMenu } from "./HeaderMenu";
 import { LicenseBanner } from "./LicenseBanner";
 
+const PRIMARY_PAGE_PATHS = new Set([
+    "/dashboard",
+    "/filelib",
+    "/dataset",
+    "/model/management",
+    "/model/finetune",
+    "/dsh",
+    "/evaluation",
+    "/label",
+    "/log",
+    "/approval",
+    "/sys",
+    "/tenant",
+]);
+
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
     const { appConfig } = useContext(locationContext);
@@ -96,6 +111,7 @@ export default function MainLayout() {
     // NavLink matches on pathname only, so every link falling back to
     // /menu-pending?menu=<key> would light up together; disambiguate by `menu`.
     const location = useLocation();
+    const isPrimaryPage = PRIMARY_PAGE_PATHS.has(location.pathname.replace(/\/$/, ""));
     const pendingNavClass =
         (menuKey: string) =>
         ({ isActive }: { isActive: boolean }) => {
@@ -431,7 +447,8 @@ export default function MainLayout() {
                     document scrollbar, so calc(100vw-184px) overshot the free space
                     by the scrollbar width and forced a horizontal document scrollbar
                     (which then cost vertical space and produced a second, outer scrollbar). */}
-                    <div className="flex-1 min-w-0 bg-background-main-content rounded-lg">
+                    {/* Clip child backgrounds to the shared radius without creating a scroll container. */}
+                    <div className={`flex-1 min-w-0 bg-background-main-content rounded-lg${isPrimaryPage ? " overflow-clip" : ""}`}>
                         <Suspense
                             fallback={
                                 <div className="flex items-center justify-center h-full">
@@ -468,11 +485,14 @@ export default function MainLayout() {
 }
 
 const useLanguage = (user: User) => {
+    const { t } = useTranslation();
     // APP_CONFIG.disableJa (config.js) hides Japanese from the switcher.
     const jaDisabled = !!(window as any).APP_CONFIG?.disableJa;
-    const options: Record<string, string> = jaDisabled
-        ? { "zh-Hans": "中文", "en-US": "English" }
-        : { "zh-Hans": "中文", "en-US": "English", ja: "日本語" };
+    const options: Record<string, string> = {
+        "zh-Hans": t("menu.languageChinese"),
+        "en-US": "English",
+        ...(!jaDisabled && { ja: t("menu.languageJapanese") }),
+    };
     // Source of truth for the displayed label is whatever i18next resolved
     // during init (which already honors disableJa).
     const initialLanguage = options[i18next.language] ? i18next.language : "zh-Hans";
@@ -485,7 +505,6 @@ const useLanguage = (user: User) => {
         }
     }, [user]);
 
-    const { t } = useTranslation();
     const changLanguage = (ln: string) => {
         setLanguage(ln);
         localStorage.setItem("i18nextLng", ln);

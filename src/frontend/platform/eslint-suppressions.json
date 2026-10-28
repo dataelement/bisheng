@@ -266,9 +266,6 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     },
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -289,11 +286,6 @@
     },
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    }
-  },
-  "src/components/bs-icons/filter/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/components/bs-icons/flag/index.tsx": {
@@ -871,9 +863,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -1913,11 +1902,6 @@
       "count": 2
     }
   },
-  "src/pages/DataSetPage/index.tsx": {
-    "react-hooks/rules-of-hooks": {
-      "count": 3
-    }
-  },
   "src/pages/DepartmentPage/components/DepartmentSettings.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -1947,9 +1931,6 @@
     }
   },
   "src/pages/KnowledgePage/KnowledgeQa.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2031,9 +2012,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2209,11 +2187,6 @@
       "count": 3
     },
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/index.tsx": {
-    "react-hooks/rules-of-hooks": {
       "count": 1
     }
   },

@@ -10,9 +10,8 @@
  *
  * The list is paged through `useTable` (design K11: `react-query` is frozen
  * on the platform, and this hook is the platform's own table state). It asks
- * the backend for `{ data, total }` one page at a time; the pager only appears
- * once there is a second page, because a card with a single row does not need
- * to announce that it has one page.
+ * the backend for `{ data, total }` one page at a time; the shared pager also
+ * stays visible for a single page or an empty list.
  *
  * The outcome column is mapped through i18n rather than printing the enum:
  * `online` / `rejected` / `withdrawn` are wire values, and an owner reading
@@ -23,7 +22,8 @@
  * states that look identical in the row data and completely different to the
  * person waiting on them.
  */
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
+import { Pagination } from "@bisheng/ui";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import {
   getHostedAppErrorMessage,
   getHostedAppVersionPageApi,
@@ -55,6 +55,7 @@ export function VersionListCard(props: VersionListCardProps) {
 
 function VersionHistory({ appId, reloadKey = "" }: VersionListCardProps) {
   const { t } = useTranslation()
+  const paginationLocale = usePaginationLocale();
   // `useTable` swallows a rejected fetch (it only clears `loading`), and a
   // non-owner is refused with a business code inside a 200 envelope. The
   // message is captured here so the refusal is shown, not rendered as "no
@@ -187,10 +188,10 @@ function VersionHistory({ appId, reloadKey = "" }: VersionListCardProps) {
       {!!failure && (
         <p className="mt-3 text-sm text-muted-foreground">{failure}</p>
       )}
-      {!failure && total > pageSize && (
-        <AutoPagination
+      {!failure && (
+        <Pagination locale={paginationLocale} size="small"
           className="mt-3 justify-end"
-          page={page}
+          current={page}
           pageSize={pageSize}
           total={total}
           showTotal={true}

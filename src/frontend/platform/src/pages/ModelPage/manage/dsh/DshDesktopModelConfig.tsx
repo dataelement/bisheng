@@ -41,7 +41,7 @@ export function DshDesktopModelConfig({ data }: DshDesktopModelConfigProps) {
 
   return (
     <div className="space-y-5">
-      <div className="overflow-hidden rounded-lg border bg-background">
+      <div className="overflow-hidden rounded-lg bg-background">
         <Table>
           <TableHeader>
             <TableRow>

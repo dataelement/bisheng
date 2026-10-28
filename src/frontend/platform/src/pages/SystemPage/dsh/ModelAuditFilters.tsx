@@ -1,7 +1,7 @@
 import { Button } from "@bisheng/ui";
 import { Input } from "@bisheng/ui";
 import type { ModelAuditQuery } from "@/types/dshModelAudit";
-import { SlidersHorizontal } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshChoice } from "./common";
@@ -97,7 +97,7 @@ export function ModelAuditFilters({
             aria-controls="audit-advanced-filters"
             onClick={() => setAdvancedOpen((old) => !old)}
           >
-            <SlidersHorizontal className="mr-2 size-4" aria-hidden="true" />
+            <Outlined.Filter className="mr-2 size-4" aria-hidden="true" />
             {t("dsh.modelAuditView.advancedFilters")}
             {count ? " (" + count + ")" : ""}
           </Button>

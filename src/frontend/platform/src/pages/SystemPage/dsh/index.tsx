@@ -23,7 +23,7 @@ export function DshManagement({ section = 'models', usageToolbarTarget }: DshMan
     if (!config) return <div role={failed ? 'alert' : 'status'}>{t(failed ? 'dsh.unavailable' : 'dsh.loading')}</div>
     if (!config.management_enabled) return <p>{t('dsh.managementUnavailable')}</p>
     const activeSection = config.enabled ? section : 'access'
-    return <div className="flex h-full min-h-0 flex-col px-6 py-5">
+    return <div className="flex h-full min-h-0 flex-col px-2 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}
             {activeSection === 'usage' && <PolicyView toolbarTarget={usageToolbarTarget} />}

@@ -38,7 +38,7 @@ it('renders real source rows and distinguishes failed loading from empty records
   expect(await screen.findByRole('alert')).toHaveTextContent('log.runtime.loadFailed')
   fireEvent.click(screen.getAllByRole('button', { name: 'log.runtime.refresh' })[0])
   await waitFor(() => expect(screen.getByText('log.runtime.empty')).toBeVisible())
-  fireEvent.mouseDown(screen.getByRole('tab', { name: 'log.runtime.accessTab' }), { button: 0, ctrlKey: false })
+  fireEvent.click(screen.getByRole('radio', { name: 'log.runtime.accessTab' }))
   expect(await screen.findByText('log.runtime.accessHint')).toBeVisible()
 })
 

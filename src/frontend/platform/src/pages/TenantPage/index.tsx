@@ -1,9 +1,9 @@
-import { Button, Input, SearchInput, notification } from '@bisheng/ui';
+import { Pagination, Button, Input, SearchInput, notification } from '@bisheng/ui';
 import { Tag, type TagColor } from "@bisheng/ui";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { deleteTenantApi, getTenantsApi, updateTenantStatusApi } from "@/controllers/API/tenant";
@@ -44,6 +44,7 @@ export default function TenantPage() {
 
 function TenantPageInner() {
   const { t } = useTranslation("bs");
+  const paginationLocale = usePaginationLocale();
   const { appConfig } = useContext(locationContext);
   const multiTenantEnabled = !!appConfig?.multiTenantEnabled;
   const [createOpen, setCreateOpen] = useState(false);
@@ -236,8 +237,8 @@ function TenantPageInner() {
 
       <div className="bisheng-table-footer bg-background-login">
         <p className="desc">{t("tenant.management")}</p>
-        <AutoPagination
-          page={page}
+        <Pagination locale={paginationLocale}
+          current={page}
           pageSize={pageSize}
           total={total}
           onChange={(newPage: number) => setPage(newPage)}
