@@ -59,7 +59,7 @@ const handleHistoryMsg = (data: any[]): WorkflowMessage[] => {
         .replace(/'/g, '"');                    // 将单引号替换为双引号
 
     return data.filter(item =>
-        ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
+        ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer", "error"].includes(item.category)
         && (item.message || item.reasoning_log)).map(item => {
             let { message, files, is_bot, intermediate_steps, category, ...other } = item
             try {

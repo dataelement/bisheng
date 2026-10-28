@@ -16,6 +16,16 @@ import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 
+function workflowErrorText(message: unknown): string {
+    if (typeof message === "string") return message;
+    if (!message || typeof message !== "object") return "";
+    const record = message as { status_message?: unknown; data?: { exception?: unknown } };
+    const exception = record.data?.exception;
+    if (typeof exception === "string" && exception.trim()) return exception.trim();
+    if (typeof record.status_message === "string" && record.status_message.trim()) return record.status_message.trim();
+    return "";
+}
+
 export default function ChatMessages({
     debug,
     mark = false,
@@ -153,6 +163,8 @@ export default function ChatMessages({
                         return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} />;
                     case 'node_run':
                         return <MessageNodeRun key={msg.message_id} data={msg} />;
+                    case 'error':
+                        return <div className="text-sm mt-2 border rounded-md p-2 whitespace-pre-wrap" key={msg.message_id}>{workflowErrorText(msg.message)}</div>;
                     default:
                         return <div className="text-sm mt-2 border rounded-md p-2" key={msg.message_id}>Unknown message type</div>;
                 }

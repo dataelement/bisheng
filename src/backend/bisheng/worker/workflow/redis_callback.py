@@ -33,7 +33,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.common.utils.title_generator import generate_conversation_title_sync
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.answer_failure import note_answer_failure
+from bisheng.database.models.answer_failure import node_failure_should_persist, note_answer_failure
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -680,6 +680,17 @@ class RedisCallback(BaseCallback):
                 chat_id=self.chat_id,
             )
         )
+        # 节点执行失败要留在会话里, 审计详情才能看到原因. 用户停止不记.
+        if node_failure_should_persist(data.reason):
+            self.save_chat_message(
+                ChatResponse(
+                    message={"name": data.name, "reason": data.reason},
+                    category=WorkflowEventType.NodeRun.value,
+                    type="end",
+                    flow_id=self.workflow_id,
+                    chat_id=self.chat_id,
+                )
+            )
 
     def on_user_input(self, data: UserInputData):
         """user input event"""
