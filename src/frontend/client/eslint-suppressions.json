@@ -2841,13 +2841,7 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     },
-    "no-console": {
-      "count": 1
-    },
     "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -2879,9 +2873,6 @@
       "count": 4
     },
     "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
