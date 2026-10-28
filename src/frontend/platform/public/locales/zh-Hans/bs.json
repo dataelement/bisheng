@@ -2587,7 +2587,7 @@
         "refresh": "刷新",
         "retry": "重试",
         "save": "保存",
-        "saved": "已保存",
+        "saved": "已保存，5 秒内对新请求生效。",
         "saving": "保存中",
         "view_details": "查看检查详情"
       },
@@ -2705,11 +2705,11 @@
       "settings": {
         "activation_hint": "保存后最多 5 秒对新请求生效；已开始的请求继续使用开始时的配置。",
         "auto_reply": "阻断提示",
-        "auto_reply_hint": "命中时向用户显示此提示。请勿填写命中原文或敏感信息。",
+        "auto_reply_hint": "命中时向用户显示，请勿包含敏感信息。",
         "builtin_digest": "内置词库标识",
         "builtin_words": "内置词库",
         "custom_words": "自定义敏感词",
-        "custom_words_hint": "按现有词库规则分隔词条；按字面匹配，区分大小写。",
+        "custom_words_hint": "每行一个词，按字面匹配，区分大小写。",
         "custom_words_limit": "自定义词最多 {{bytes}} 字节。",
         "default_off": "尚未设置，默认不检查。",
         "disabled_hint": "关闭后停止检查新请求，已记录的检查结果仍然保留。",

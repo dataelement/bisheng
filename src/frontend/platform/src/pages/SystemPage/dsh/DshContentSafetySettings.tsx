@@ -128,6 +128,13 @@ function DshContentSafetyForm({
       locked.current = false;
     }
   }
+  const showRefresh =
+    hasTenant &&
+    !controls.capabilities.isLoading &&
+    (!controls.ready ||
+      controls.policy.isError ||
+      conflict ||
+      feedback === "errors.load_failed");
   const capabilityError =
     controls.capabilities.isError || !controls.capabilities.data
       ? "errors.capabilities_unknown"
@@ -143,12 +150,6 @@ function DshContentSafetyForm({
         <h3 id={id + "-title"} className="text-sm font-medium">
           {t("dsh.contentSafety.title")}
         </h3>
-        <p className="text-sm text-muted-foreground">
-          {t("dsh.contentSafety.description")}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {t("dsh.contentSafety.settings.scope_hint")}
-        </p>
       </header>
       {!hasTenant ? (
         <p role="status">{t("dsh.modelAuditView.selectTenant")}</p>
@@ -156,7 +157,7 @@ function DshContentSafetyForm({
         <p role="status">{t("dsh.loading")}</p>
       ) : !controls.ready ? (
         <p role="alert">{t("dsh.contentSafety." + capabilityError)}</p>
-      ) : controls.policy.isError ? (
+      ) : controls.policy.isError && !draft ? (
         <p role="alert">{t("dsh.contentSafety.errors.load_failed")}</p>
       ) : !draft || !snapshot ? (
         <p role="status">{t("dsh.loading")}</p>
@@ -249,11 +250,6 @@ function DshContentSafetyForm({
               >
                 {t("dsh.contentSafety.settings.custom_words_hint")}
               </span>
-              <span className="block text-sm text-muted-foreground">
-                {t("dsh.contentSafety.settings.custom_words_limit", {
-                  bytes: snapshot.limits.custom_words_max_bytes,
-                })}
-              </span>
             </div>
             <div className="space-y-1">
               <label htmlFor={id + "-reply"} className="text-sm">
@@ -281,38 +277,6 @@ function DshContentSafetyForm({
               {t("dsh.contentSafety.validation." + validation)}
             </p>
           )}
-          <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <div>
-              <dt className="inline">
-                {t("dsh.contentSafety.settings.version")}
-                {": "}
-              </dt>
-              <dd className="inline tabular-nums">{snapshot.version}</dd>
-            </div>
-            <div>
-              <dt className="inline">
-                {t("dsh.contentSafety.settings.effective_words")}
-                {": "}
-              </dt>
-              <dd className="inline tabular-nums">
-                {snapshot.effective_word_count}
-              </dd>
-            </div>
-            <div className="min-w-0 break-all">
-              <dt>{t("dsh.contentSafety.settings.builtin_digest")}</dt>
-              <dd className="font-mono">{snapshot.builtin_digest}</dd>
-            </div>
-          </dl>
-          <p className="text-sm text-muted-foreground">
-            {t("dsh.contentSafety.settings.effective_words_limit", {
-              count: snapshot.limits.effective_words_max_count,
-              bytes: snapshot.limits.effective_words_max_bytes,
-              length: snapshot.limits.word_max_codepoints,
-            })}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            {t("dsh.contentSafety.settings.activation_hint")}
-          </p>
           {!draft.enabled && (
             <p className="text-sm text-muted-foreground">
               {t(
@@ -338,7 +302,7 @@ function DshContentSafetyForm({
           )}
         </form>
       )}
-      {feedback && (
+      {feedback && (feedback !== "errors.load_failed" || (controls.ready && !!draft)) && (
         <p
           role={feedback === "actions.saved" ? "status" : "alert"}
           className="text-sm"
@@ -351,15 +315,17 @@ function DshContentSafetyForm({
           {t("dsh.contentSafety.errors.version_conflict")}
         </p>
       )}
-      <Button
-        type="button"
-        variant="outlined"
-        disabled={!hasTenant || busy}
-        loading={refreshing}
-        onClick={() => void handleRefresh()}
-      >
-        {t("dsh.contentSafety.actions.refresh")}
-      </Button>
+      {showRefresh && (
+        <Button
+          type="button"
+          variant="outlined"
+          disabled={busy}
+          loading={refreshing}
+          onClick={() => void handleRefresh()}
+        >
+          {t("dsh.contentSafety.actions.refresh")}
+        </Button>
+      )}
     </section>
   );
 }

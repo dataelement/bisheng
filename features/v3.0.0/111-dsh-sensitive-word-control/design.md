@@ -337,6 +337,8 @@ AC-68、AC-69界面收敛：ModelAuditMode移除配置旁的“刷新状态”�
 
 ModelAuditCard仅在汇总与两个阶段均PASSED且has_sensitive_hit/input_sensitive_hit/output_sensitive_hit均不为true时隐藏检查详情，未知字段不补成通过；条件更新后立即卸载详情并由原cleanup中止请求。ContentSafetyEventDetails只保留命中词和事件occurred_at，不显示重复阶段状态、来源、UUID、规则编号、策略/词库版本、读取状态及计量提示；词值合并去重后用React纯文本显示，缺失的旧阻断快照明确无法还原，其他无词值状态显示“无已记录的命中词”，不等同通过。明细原有分页、刷新、失败重试和租户隔离继续保留，每个已保存事件分别显示其检查时间，不改变后端快照和保留规则。
 
+AC-70配置页收敛：DshContentSafetySettings保留全部五个复选框和两个文本域、原子保存及只读权限；移除description/scope_hint、version/builtin_digest/effective_word_count诊断区和custom/effective词库大小说明。自定义词说明改为“每行一个词，按字面匹配，区分大小写”，仅说明既有支持的录入方式，不修改分隔解析；阻断提示保留安全文案约束，5秒生效说明合入保存成功反馈。正常可用状态不显示刷新；有效租户下，能力读取结束且不可用、策略读取失败、版本冲突或本轮刷新失败时显示原刷新按钮。首次策略读取失败仍不显示空配置；已有草稿的策略刷新失败不再隐藏表单，并由feedback唯一显示加载失败，conflict锁继续禁止保存；成功重读保留本地修改并刷新expected_version，后续仍需用户明确保存。useDshContentSafety、API wrapper、限制/CAS/租户缓存和Gateway不改，技术字段仍参与原验证和保存协议。
+
 API wrapper 留在 controllers/API，新取数遵循当前根 AGENTS 约定的 @tanstack/react-query v4，不新增 react-query v3 用法或开展全站迁移。当前分支 platform/package.json 只直接声明 v3；tasks 单列补充 workspace 已锁定的 v4.44.0 直接依赖，并在本特性设置组件内提供局部 QueryClientProvider，不更换全站 v3 Provider。新键补齐 zh-Hans/en/ja；错误文案只写 packages/locales 源文件并走生成流程，触及旧硬编码文件时按项目规则迁出。
 
 Desktop 将 content_blocked/content_filter 统一映射为不可重试的 CONTENT_FILTERED，check_unavailable 映射为 CONTENT_CHECK_UNAVAILABLE。Responses 必须在普通事件 sequence_number 校验前识别合法 error 事件；不把阻断变成 UPSTREAM_ERROR。终止时清掉当前轮次的待执行工具，不用错误结束的 block-end 触发执行；只有完整参数通过并且该轮正常结束才进入工具执行。实现阶段必须沿 adapter 的 finish 事件追到实际工具 runner 调用点验证该屏障；若现有 runner 提前执行，应在该消费边界阻止错误轮次的执行，不只修改提示文案。
@@ -576,6 +578,7 @@ curl --fail-with-body -N "$GATEWAY_ORIGIN/api/v1/dsh/responses" \
 
 | 日期 | 改动 | 原因 |
 |---|---|---|
+| 2026-10-28 | AC-70：敏感词配置页按相同原则精简，保留完整配置与异常恢复 | 用户要求配置界面同样简化；不改变检查策略或存储 |
 | 2026-10-28 | AC-68、AC-69：审计界面简化，全部通过隐藏检查详情；保留全部高级筛选与后端诊断数据 | 用户确认demo并补充全部通过不展示详情，授权修改项目代码 |
 | 2026-10-27 | AC-65、AC-66：移除请求明细导航；冻结命中词快照入库并在授权检查详情展示 | 用户明确要求；覆盖前版只保留规则编号的取舍，不记录周边正文或普通日志 |
 | 2026-10-27 | AC-64：移除未关联检查入口、专属页面和前端查询；未关联事件仅保留数据库用于debug | 用户明确移除产品功能，保留会话和未关联请求；不改数据保留与归并 |

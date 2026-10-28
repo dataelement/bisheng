@@ -2642,7 +2642,7 @@
         "refresh": "Refresh",
         "retry": "Retry",
         "save": "Save",
-        "saved": "Saved",
+        "saved": "Saved. Changes apply to new requests within 5 seconds.",
         "saving": "Saving",
         "view_details": "View check details"
       },
@@ -2760,11 +2760,11 @@
       "settings": {
         "activation_hint": "Saved changes apply to new requests within 5 seconds. Requests already in progress keep their original settings.",
         "auto_reply": "Block message",
-        "auto_reply_hint": "Show this message when content is blocked. Do not include matched text or sensitive information.",
+        "auto_reply_hint": "Shown when content is blocked. Do not include sensitive information.",
         "builtin_digest": "Built-in word list fingerprint",
         "builtin_words": "Built-in word lists",
         "custom_words": "Custom sensitive words",
-        "custom_words_hint": "Separate entries using the existing word list rules. Matching is literal and case-sensitive.",
+        "custom_words_hint": "Enter one word per line. Matching is literal and case-sensitive.",
         "custom_words_limit": "Custom words can use up to {{bytes}} bytes.",
         "default_off": "No settings saved. Checks are off by default.",
         "disabled_hint": "Turning checks off affects new requests. Recorded results are retained.",

@@ -71,7 +71,53 @@ describe("content safety settings with the real local v4 lifecycle", () => {
     await waitFor(() => expect(words().value).toBe("Synthetic word"));
     expect(transport.caps.mock.calls[0][0]).toBe(101);
     expect(transport.caps.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
-    expect(screen.getByText("dsh.contentSafety.settings.activation_hint")).toBeTruthy();
+    expect(screen.queryByText("dsh.contentSafety.settings.activation_hint")).toBeNull();
+  });
+  // Coverage AC: AC-70.
+  it("keeps every configuration control while hiding diagnostics and normal-state refresh", async () => {
+    await mounted();
+    for (const key of ["enabled", "input_enabled", "output_enabled", "builtin_words", "custom_words"])
+      expect(checkbox(key)).toBeVisible();
+    expect(words()).toBeVisible();
+    expect(reply()).toBeVisible();
+    expect(saveButton()).toBeVisible();
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.refresh" })).toBeNull();
+    for (const key of ["version", "builtin_digest", "effective_words", "custom_words_limit", "effective_words_limit", "activation_hint", "scope_hint"])
+      expect(screen.queryByText("dsh.contentSafety.settings." + key)).toBeNull();
+    expect(screen.queryByText("dsh.contentSafety.description")).toBeNull();
+    expect(screen.queryByText(base.builtin_digest)).toBeNull();
+    expect(screen.getByText("dsh.contentSafety.settings.custom_words_hint")).toBeVisible();
+    expect(screen.getByText("dsh.contentSafety.settings.auto_reply_hint")).toBeVisible();
+  });
+  it("retains a conflicting draft and its refresh recovery after a failed reload", async () => {
+    await mounted();
+    fireEvent.change(words(), { target: { value: "Retained conflicting words" } });
+    transport.save.mockRejectedValueOnce({ response: { status: 409 } });
+    fireEvent.click(saveButton());
+    await screen.findByText("dsh.contentSafety.errors.version_conflict");
+    transport.get.mockRejectedValueOnce(Error("Synthetic private reload failure"));
+    fireEvent.click(refreshButton());
+    await screen.findByText("dsh.contentSafety.errors.load_failed");
+    expect(words().value).toBe("Retained conflicting words");
+    expect(saveButton()).toBeDisabled();
+    expect(screen.queryByText("Synthetic private reload failure")).toBeNull();
+    transport.get.mockResolvedValueOnce({ ...base, version: 8 });
+    fireEvent.click(refreshButton());
+    await waitFor(() => expect(saveButton()).not.toBeDisabled());
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.refresh" })).toBeNull();
+    expect(words().value).toBe("Retained conflicting words");
+    fireEvent.click(saveButton());
+    await screen.findByText("dsh.contentSafety.actions.saved");
+    expect(transport.save.mock.calls[1][1].expected_version).toBe(8);
+  });
+  it("offers recovery for a failed policy read and hides refresh once loading succeeds", async () => {
+    transport.get.mockRejectedValueOnce(Error("Synthetic private read failure"));
+    render(<DshContentSafetySettings tenantId={101} canConfigure />);
+    await screen.findByText("dsh.contentSafety.errors.load_failed");
+    fireEvent.click(refreshButton());
+    await waitFor(() => expect(words().value).toBe("Synthetic word"));
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.refresh" })).toBeNull();
+    expect(transport.save).not.toHaveBeenCalled();
   });
   it.each([undefined, 409])("keeps a failed save private while retaining feedback and draft: %s", async (status) => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -208,6 +254,7 @@ describe("content safety settings with the real local v4 lifecycle", () => {
     expect(checkbox("enabled").disabled).toBe(true);
     expect(words().disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.refresh" })).toBeNull();
   });
   it.each([
     [{ ...caps, enabled: false }, "deployment_disabled"],

@@ -3019,6 +3019,28 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
   **类型**：验收。**目标文件**：features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md。
   **覆盖 AC**：AC-68、AC-69。定向回归、完整前端lint/typecheck/i18n、构建、真实组件桌面及500px核验；不等同109部署验收。**依赖**：T251、T252、T253、T254。
 
+### Wave 50 — 2026-10-28 敏感词配置界面简化
+
+- [x] **T256 配置页简化与恢复回归**
+  **类型**：测试。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/DshContentSafetySettings.test.tsx。
+  **覆盖 AC**：AC-70。全部配置保留、技术字段/静态限制/正常刷新消失、失败读取恢复、冲突刷新失败保留可见草稿、成功重读最新CAS及只读行为。**依赖**：T255。
+
+- [x] **T257 精简配置页并保留条件恢复**
+  **类型**：实现。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/DshContentSafetySettings.tsx。
+  **逻辑与验证**：配对T256；仅收敛展示及刷新失败后的草稿可见性、错误去重，保留配置/权限/原子保存/校验/租户取消。**依赖**：T256。
+
+- [x] **T258 中文和英文简短提示**
+  **类型**：实现。**目标文件**：src/frontend/platform/public/locales/zh-Hans/bs.json；src/frontend/platform/public/locales/en-US/bs.json。
+  **逻辑与验证**：配对T256；精简词条/阻断提示说明、保存反馈包含5秒生效，不改其他域的同名键。**依赖**：T256、T257。
+
+- [x] **T259 日文简短提示**
+  **类型**：实现。**目标文件**：src/frontend/platform/public/locales/ja/bs.json。
+  **逻辑与验证**：与T258一致，三语键和语义同步。**依赖**：T256、T258。
+
+- [x] **T260 配置界面一致性验收与自审**
+  **类型**：验收。**目标文件**：features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md。
+  **覆盖 AC**：AC-70。DSH回归、完整前端lint/typecheck、i18n/生成检查、Platform构建、桌面及500px实际组件核验，保留旧15项环境待验。**依赖**：T257、T258、T259。
+
 ## 5. AC → 测试任务追溯
 
 本表只列测试/验收任务；配对实现见各任务依赖。每条 AC 至少一个针对性测试或端到端场景，末端 E2E 和特性审查不能代替前置测试。
@@ -3097,6 +3119,8 @@ AC-67 → T245；标题、名称投影与生产接线见 T246–T248。
 
 AC-68 → T249、T250、T255；AC-69 → T249、T255；界面与三语实现见T251–T254。
 
+AC-70 → T256、T260；配置页与三语实现见T257–T259。
+
 ## 6. 共享文件与发布边界
 
 共享 HMAC helper 只调整签名计算复用，旧 SSO 协议/错误码/正文回放原样回归；HTTP middleware 仅精确新接收路由，不改模型认证。model_audit_write/writer、会话查询及 ModelAuditPanel 分步只改本任务区域；状态、事件、投影和查询方法分工明确。Gateway 应用敏感词/PathRate/默认路由的改动必须跑旧应用与WS回归。Desktop 保持宿主插件边界，不改第三方 tgz 或直接修 node_modules。
@@ -3109,7 +3133,7 @@ AC-68 → T249、T250、T255；AC-69 → T249、T255；界面与三语实现见T
 
 ## 8. 文档与执行检查
 
-初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后205项；2026-10-27补充至T244；2026-10-28补充至T255后当前255项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。69条AC追溯按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
+初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后205项；2026-10-27补充至T244；2026-10-28补充至T260后当前260项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。70条AC追溯按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
 
 ## 9. 执行记录
 
@@ -3189,3 +3213,6 @@ AC-68 → T249、T250、T255；AC-69 → T249、T255；界面与三语实现见T
 
 
 2026-10-28 Wave49：用户确认审计简化及全部通过不展示详情，T249–T255逐项验证和task-review自审PASS，当前240/255。完整七项高级筛选零业务改动；明细仅命中词/检查时间，全部通过无事件查询且更新取消旧查询，已知历史命中继续可定位。DSH 25文件276PASS；完整前端lint/typecheck、三语、生成检查、Platform构建、架构守卫和diff检查通过；实际组件1440px/500px合成数据核验通过，临时核验设施已清理。没有109生产验收，无backend/Gateway/数据库改动；原15项待验保留。未提交、推送或部署，细节见implementation-verification。
+
+
+2026-10-28 Wave50：按用户要求精简敏感词配置页，T256–T260逐项验证及task-review自审PASS，当前245/260。所有配置项保留，移除技术展示/冗余说明，正常仅保存、失败或冲突时刷新；保留可见草稿、错误去重、最新CAS后显式保存。DSH 25文件279PASS，完整前端lint/typecheck/i18n/生成检查、Platform构建、架构和diff通过，1440px及500px真实组件合成数据核验通过。原15项待验保留；无backend/Gateway/数据库改动，未提交、推送或部署。细节见implementation-verification同日小节。

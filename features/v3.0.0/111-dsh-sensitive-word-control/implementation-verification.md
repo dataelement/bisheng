@@ -961,3 +961,34 @@ python -m pytest -q -p no:cacheprovider test/dsh/test_safety_summary_metadata.py
 | T255 | 验收 | PASS；真实组件及质量门禁 | PASS；仅合成数据 | PASS；spec AC-46、AC-66、AC-68、AC-69及design§4.10、§6已同步 | PASS / T251–T254 / PASS | PASS |
 
 后端分层、序列化、双库项本轮N/A，没有新增接口、状态库或组件库。无章节重编号；原15项DM8/容量/完整特性验收保持待验。本轮完成后任务为240/255；未提交、推送、合并或部署。
+
+
+## 2026-10-28 Wave50：敏感词配置界面简化（T256–T260）
+
+用户要求配置页沿用审计页的简化原则。仅修改DshContentSafetySettings、对应既有测试和三语bs.json，保留全部五个复选框、两个文本域及保存动作。移除配置版本、词库标识、词数、字节限制和重复说明；限制校验仍由原hook/Gateway执行，API版本、摘要及CAS字段继续保留。录入与阻断提示说明缩短，5秒新请求生效说明放入保存成功反馈；已开始请求的原策略快照逻辑不变。
+
+正常读取成功时只显示保存；能力不可用、策略读取失败、配置冲突或刷新失败时显示原刷新恢复。保留原草稿、锁、权限及租户切换生命周期。新增失败恢复测试发现原界面在策略刷新失败时会隐藏已有草稿且重复显示load_failed，现改为有草稿时保持表单可见并只显示一次加载失败，原conflict继续禁用保存，成功重读更新expected_version后仍须显式保存。不改hook、API、Gateway、backend或真实配置。
+
+| 检查 | 命令 / 证据 | 结果 |
+|---|---|---|
+| 配对反例 | cwd=src/frontend；pnpm --filter bisheng exec vitest run src/pages/SystemPage/dsh/DshContentSafetySettings.test.tsx --reporter=dot | 修改前5 FAIL / 22 PASS；/private/tmp/dsh-safety-settings-simplification-red.log |
+| 最终DSH回归 | cwd=src/frontend；pnpm --filter bisheng exec vitest run src/pages/SystemPage/dsh --reporter=dot | **25文件279 PASS**，新增3项完整配置/读取恢复/冲突失败恢复；/private/tmp/dsh-safety-settings-simplification-tests.log |
+| 完整前端门禁 | cwd=src/frontend；pnpm lint；pnpm typecheck；pnpm check-i18n；pnpm locales:check | **全部PASS**；/private/tmp/dsh-safety-settings-simplification-{lint,typecheck,i18n}.log；无冻结基线或生成文件改动 |
+| Platform构建 | cwd=src/frontend；pnpm --filter bisheng build | **PASS**，15.03秒；/private/tmp/dsh-safety-settings-simplification-build.log；仅既有chunk体积提示 |
+| 架构 / 差异 | 两个修改TSX逐文件arch-guard；git diff --check | **PASS**，其他同名saved翻译未改动 |
+| 实际组件 | 本机Vite挂载实际设置组件，真实wrapper下方以合成GET/PUT替换传输；1440px / 500px触摸 | **PASS**；5个复选框及2个文本域齐全，无诊断信息/正常刷新；500px的clientWidth=scrollWidth=500；一次PUT后显示“已保存，5秒内对新请求生效” |
+| 读取失败恢复 | 实际组件首次合成策略GET失败→仅错误和刷新→手动刷新→完整表单 | **PASS**；两轮能力/策略GET，恢复后无错误、无刷新，未发生PUT |
+
+截图：[桌面](/private/tmp/dsh-safety-settings-simplification-desktop.png)、[500px保存反馈](/private/tmp/dsh-safety-settings-simplification-mobile-500.png)。临时核验入口、配置及服务已清理。组件/API传输均为合成数据，没有连接或修改109，不能视为真实部署验收；未安装依赖或更改锁文件。
+
+主agent按/task-review清单读取实际文件并自审：
+
+| 任务 | 类型 | 命名/前端 | 信息泄漏 | 设计同步 | 范围/配对/依赖 | 结果 |
+|---|---|---|---|---|---|---|
+| T256 | 测试 | PASS；AC-70完整标注 | PASS；合成错误不显示原始内容 | PASS | PASS / N/A / T255 | PASS |
+| T257 | 实现 | PASS；沿用原组件，无新样式或状态库 | PASS；原安全logger及固定错误保留 | PASS；spec AC-70、design§4.10 | PASS / T256 / PASS | PASS |
+| T258 | 中文/英文 | PASS；仅contentSafety域三个既有键 | PASS | PASS | PASS / T256 / PASS | PASS |
+| T259 | 日文 | PASS；三语键/语义一致 | PASS | PASS | PASS / T256 / PASS | PASS |
+| T260 | 验收 | PASS；质量门禁和真实组件核验 | PASS；只用合成配置 | PASS | PASS / T257–T259 / PASS | PASS |
+
+后端分层/序列化/数据库项N/A；没有修改权限或过滤条件，没有新增明文凭据、正文、HTTP客户端或库依赖。无章节重编号。T256–T260完成后为245/260，原15项真实DM8/容量/完整特性待验保持不变。本轮未提交、推送或部署。
