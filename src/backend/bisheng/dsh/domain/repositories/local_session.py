@@ -1,8 +1,9 @@
 """Short SQL transactions for desktop credential rotation and ownership."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 
+from loguru import logger
 from sqlmodel import select
 
 from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
@@ -72,7 +73,7 @@ class DshSessionRepository:
             self.session.add(token)
 
     @strict_tenant_filter()
-    def rotate(self, session_id: str, digest: str, next_digest: str, now: datetime):
+    def rotate(self, session_id: str, digest: str, next_digest: str, now: datetime, grace_seconds: int = 0):
         row = self.get(session_id, lock=True)
         token = self.session.exec(
             select(DshRefreshToken)
@@ -85,6 +86,13 @@ class DshSessionRepository:
         if row is None or token is None:
             return None, "invalid_refresh_token"
         if token.state == "USED":
+            if self._return_unspent_successor(row, token, next_digest, now, grace_seconds):
+                logger.info(
+                    "dsh refresh grace return session_id={} generation={}",
+                    row.session_id,
+                    token.generation + 1,
+                )
+                return self.snapshot(row), None
             self.revoke(row)
             return None, "refresh_token_reused"
         if row.state != "ACTIVE":
@@ -94,6 +102,7 @@ class DshSessionRepository:
         if token.state != "ACTIVE" or token.generation >= 9223372036854775807:
             return None, "invalid_refresh_token"
         token.state = "USED"
+        token.used_at = now
         self.session.add(token)
         self.session.add(
             DshRefreshToken(
@@ -106,6 +115,32 @@ class DshSessionRepository:
         )
         self.session.flush()
         return self.snapshot(row), None
+
+    def _return_unspent_successor(self, row, token, next_digest: str, now: datetime, grace_seconds: int) -> bool:
+        """Return the already issued successor when the client never received it.
+
+        The successor digest is derived from the presented token, so a retry names
+        the same row. Returning it leaves the database unchanged.
+        """
+        if (
+            grace_seconds <= 0
+            or token.used_at is None
+            or now - token.used_at > timedelta(seconds=grace_seconds)
+            or row.state != "ACTIVE"
+            or now >= row.expires_at
+            or now >= token.expires_at
+        ):
+            return False
+        successor = self.session.exec(
+            select(DshRefreshToken)
+            .where(
+                DshRefreshToken.session_id == row.session_id,
+                DshRefreshToken.token_hash == next_digest,
+                DshRefreshToken.generation == token.generation + 1,
+            )
+            .execution_options(populate_existing=True)
+        ).one_or_none()
+        return successor is not None and successor.state == "ACTIVE"
 
     @strict_tenant_filter()
     def page(self, user_id, *, cursor=None, limit=20):

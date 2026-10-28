@@ -503,6 +503,23 @@ async def test_ac05_session_refresh_logout_revoke_reassign(seat_user):
         refreshed["refresh_token"] != first["refresh_token"] and refreshed["session_id"] == first["session_id"],
         "Refresh did not rotate within its session",
     )
+    # The successor was never presented, so retrying the previous token is a lost response.
+    recovered = raw(
+        await live.request(
+            "POST", "/api/dsh/token", json={"grant_type": "refresh_token", "refresh_token": first["refresh_token"]}
+        )
+    )
+    require(recovered["session_id"] == first["session_id"], "Lost refresh retry did not stay in its session")
+    require(
+        recovered["refresh_token"] == refreshed["refresh_token"],
+        "Lost refresh retry did not return the same successor",
+    )
+    raw(await live.request("GET", "/api/v1/dsh/models", access=recovered["access_token"]))
+    raw(
+        await live.request(
+            "POST", "/api/dsh/token", json={"grant_type": "refresh_token", "refresh_token": recovered["refresh_token"]}
+        )
+    )
     desktop_error(
         await live.request(
             "POST", "/api/dsh/token", json={"grant_type": "refresh_token", "refresh_token": first["refresh_token"]}
