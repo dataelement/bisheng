@@ -165,3 +165,31 @@ test('hands consecutive article uploads to the input after the fresh chat is rea
   expect(result.current.attachmentAsk?.key).not.toBe(firstKey);
   expect(sendMessage).toHaveBeenCalledTimes(0);
 });
+
+// Idempotent selection setters are valid: preparing an ask must advance even
+// when the model and knowledge scope already match the requested values.
+test.each([
+  { text: 'same model and space', modelId: 1, space },
+  { text: 'same space', space },
+  { text: 'empty scope' },
+  { text: 'article', attachment: new File(['article'], 'article.md') },
+])('advances preparation with unchanged selections: $text', (ask) => {
+  const sendMessage = jest.fn(() => true);
+  const setSelectedKbs = jest.fn();
+  const selectModel = jest.fn(() => true);
+  parkChatAsk(ask);
+  const { result } = renderHook(() => useChatAskHandoff({
+    conversationId: 'new', activeConversationId: 'new', locationKey: 'landing',
+    selectedKbs: 'space' in ask ? selection : [], setSelectedKbs, sendMessage,
+    ready: true, selectedModelId: 1, selectModel, onModelUnavailable: rejected,
+  }), { wrapper: StrictMode });
+  if ('attachment' in ask) {
+    expect(result.current.attachmentAsk).toEqual({ key: expect.any(String), text: ask.text, file: ask.attachment });
+    expect(sendMessage).toHaveBeenCalledTimes(0);
+  } else {
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith(ask.text);
+  }
+  act(() => { mockActivate(); mockActivate(); });
+  expect(sendMessage).toHaveBeenCalledTimes('attachment' in ask ? 0 : 1);
+});

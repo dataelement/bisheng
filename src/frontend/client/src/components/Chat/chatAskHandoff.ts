@@ -80,7 +80,7 @@ export function useChatAskHandoff({
 }: UseChatAskHandoffParams) {
   const [mountedAsk, setMountedAsk] = useState<ChatAsk | null>(null);
   const submittedAskRef = useRef<ChatAsk | null>(null);
-  const preparedAskRef = useRef<ChatAsk | null>(null);
+  const [preparedAsk, setPreparedAsk] = useState<ChatAsk | null>(null);
   const [attachmentAsk, setAttachmentAsk] = useState<AttachmentAsk | null>(null);
 
   const takePendingAsk = useCallback(() => {
@@ -88,7 +88,7 @@ export function useChatAskHandoff({
     if (!pendingAsk || conversationId !== 'new' || activeConversationId !== 'new') return;
     const ask = pendingAsk;
     pendingAsk = null;
-    preparedAskRef.current = null;
+    setPreparedAsk(null);
     onTake?.();
     setMountedAsk(ask);
   }, [conversationId, activeConversationId, onTake]);
@@ -100,7 +100,7 @@ export function useChatAskHandoff({
     const ask = mountedAsk;
     if (!ask || submittedAskRef.current === ask) return;
     if (conversationId !== 'new' || activeConversationId !== 'new' || !ready) return;
-    if (preparedAskRef.current !== ask) {
+    if (preparedAsk !== ask) {
       setSelectedKbs(ask.space
         ? [{ id: ask.space.id, name: ask.space.name, type: 'space' }]
         : []);
@@ -109,8 +109,9 @@ export function useChatAskHandoff({
         onModelUnavailable(ask);
         return;
       }
-      preparedAskRef.current = ask;
-      // Apply after config hydration; send reads both selections on the next render.
+      // Preparation owns its render transition, including when both selections
+      // already match and their setters preserve the existing state.
+      setPreparedAsk(ask);
       return;
     }
     if (ask.modelId !== undefined && selectedModelId !== ask.modelId) return;
@@ -128,7 +129,7 @@ export function useChatAskHandoff({
       submittedAskRef.current = ask;
       setMountedAsk(null);
     }
-  }, [mountedAsk, conversationId, activeConversationId, ready, selectedModelId, selectModel, onModelUnavailable, selectedKbs, setSelectedKbs, sendMessage]);
+  }, [mountedAsk, preparedAsk, conversationId, activeConversationId, ready, selectedModelId, selectModel, onModelUnavailable, selectedKbs, setSelectedKbs, sendMessage]);
 
   const retireAttachmentAsk = useCallback(() => setAttachmentAsk(null), []);
 
