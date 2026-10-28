@@ -41,4 +41,7 @@ class DshRefreshToken(SQLModelSerializable, table=True):
     session_id: str = Field(sa_column=Column(String(36), nullable=False))
     generation: int = Field(sa_column=Column(BigInteger, nullable=False))
     state: str = Field(default="ACTIVE", sa_column=Column(String(16), nullable=False))
+    # Set once, when an active token is first consumed. Null means a historical
+    # row that predates the lost-response grace and keeps the strict replay rule.
+    used_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     expires_at: datetime = Field(sa_column=Column(DateTime, nullable=False))

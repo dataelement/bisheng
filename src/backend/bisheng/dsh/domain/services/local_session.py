@@ -24,9 +24,20 @@ from bisheng.dsh.infrastructure.token_keys import ISSUER, KEY_ID
 
 
 class DshLocalSessionService:
-    def __init__(self, repository_scope, identities, keys, *, access_seconds=300, session_seconds=2592000, now=None):
+    def __init__(
+        self,
+        repository_scope,
+        identities,
+        keys,
+        *,
+        access_seconds=300,
+        session_seconds=2592000,
+        refresh_grace_seconds=0,
+        now=None,
+    ):
         self.repository_scope, self.identities, self.keys = repository_scope, identities, keys
         self.access_seconds, self.session_seconds = access_seconds, session_seconds
+        self.refresh_grace_seconds = refresh_grace_seconds
         self.now = now or (lambda: datetime.now(UTC).replace(tzinfo=None))
 
     async def run(self, action):
@@ -87,6 +98,7 @@ class DshLocalSessionService:
                     digest,
                     self.digest(next_refresh),
                     self.now(),
+                    self.refresh_grace_seconds,
                 )
             )
         # Replay revocation must commit before raising the public error.

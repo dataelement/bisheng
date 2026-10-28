@@ -64,6 +64,12 @@ def test_config_default_off_and_enabled_requires_trust():
     from bisheng.dsh.config import DshSettings
 
     assert DshSettings().enabled is False
+    assert DshSettings().refresh_reuse_grace_seconds == 600
+    assert DshSettings(refresh_reuse_grace_seconds=0).refresh_reuse_grace_seconds == 0
+    with pytest.raises(ValidationError):
+        DshSettings(refresh_reuse_grace_seconds=-1)
+    with pytest.raises(ValidationError):
+        DshSettings(refresh_reuse_grace_seconds=3601)
     with pytest.raises(ValidationError):
         DshSettings(enabled=True)
     with pytest.raises(ValidationError):

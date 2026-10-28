@@ -1,10 +1,12 @@
 """Native DSH flow with real SQL and cryptography. 覆盖 AC: AC-01, AC-02, AC-03, AC-09, AC-11."""
 
+import asyncio
 import base64
 import hashlib
 import json
 import time
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -15,7 +17,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlmodel import Session, select
 
-from bisheng.common.errcode.dsh import DshInvalidAccessTokenError, DshSessionRevokedError, DshUserDisabledError
+from bisheng.common.errcode.dsh import (
+    DshInvalidAccessTokenError,
+    DshRefreshTokenReusedError,
+    DshSessionRevokedError,
+    DshUserDisabledError,
+)
 from bisheng.dsh.access_runtime import DshRuntime, get_logout_runtime, get_runtime
 from bisheng.dsh.api.endpoints.local_auth import router
 from bisheng.dsh.domain.models.local_session import DshRefreshToken, DshSession
@@ -101,7 +108,7 @@ def native(tmp_path):
     authorizations = DshAuthorizationService(store, "https://platform.example")
     identity = IdentityService(TicketRepository(store), records, authorizations)
     keys = LocalTokenKeys(lambda: "synthetic-persistent-master-for-native-tests")
-    sessions = DshLocalSessionService(scope, identity, keys)
+    sessions = DshLocalSessionService(scope, identity, keys, refresh_grace_seconds=600)
     access = DshAccessService(ISSUER, keys, identity, sessions)
     runtime = DshRuntime(
         SimpleNamespace(platform_public_url="https://platform.example"), identity, access, sessions, authorizations
@@ -125,8 +132,11 @@ async def test_native_tokens_validate_and_replay_revokes_the_family(native):
         rotated = await runtime.sessions.refresh(result["refresh_token"])
     assert rotated["session_id"] == result["session_id"]
     assert rotated["refresh_token"] != result["refresh_token"]
-    from bisheng.common.errcode.dsh import DshRefreshTokenReusedError
-
+    # The successor has never been presented, so retrying the old token is a lost response.
+    recovered = await runtime.sessions.refresh(result["refresh_token"])
+    assert recovered["session_id"] == result["session_id"]
+    await runtime.access.authenticate("Bearer " + rotated["access_token"])
+    await runtime.sessions.refresh(recovered["refresh_token"])
     with pytest.raises(DshRefreshTokenReusedError):
         await runtime.sessions.refresh(result["refresh_token"])
     with pytest.raises(DshSessionRevokedError):
@@ -135,6 +145,100 @@ async def test_native_tokens_validate_and_replay_revokes_the_family(native):
         # SQL assertion proves revocation committed before the replay error.
         assert all(row.state == "REVOKED" for row in session.exec(select(DshSession)).all())
         assert all(row.state == "REVOKED" for row in session.exec(select(DshRefreshToken)).all())
+
+
+def rewrite_used_at(engine, used_at):
+    with Session(engine) as session, principal_scope(DshPrincipal(tenant_id="2", user_id="20", session_id="test")):
+        row = session.exec(select(DshRefreshToken).where(DshRefreshToken.state == "USED")).one()
+        row.used_at = used_at
+        session.add(row)
+        session.commit()
+
+
+async def test_replaced_successor_revokes_after_grace_reissue(native):
+    runtime, _ = native
+    issued = await login(runtime)
+    lost = await runtime.sessions.refresh(issued["refresh_token"])
+    recovered = await runtime.sessions.refresh(issued["refresh_token"])
+    await runtime.access.authenticate("Bearer " + recovered["access_token"])
+    with pytest.raises(DshRefreshTokenReusedError):
+        await runtime.sessions.refresh(lost["refresh_token"])
+    with pytest.raises(DshSessionRevokedError):
+        await runtime.access.authenticate("Bearer " + recovered["access_token"])
+
+
+async def test_repeated_lost_refresh_keeps_only_the_latest_successor(native):
+    runtime, _ = native
+    issued = await login(runtime)
+    await runtime.sessions.refresh(issued["refresh_token"])
+    replaced = await runtime.sessions.refresh(issued["refresh_token"])
+    latest = await runtime.sessions.refresh(issued["refresh_token"])
+    continued = await runtime.sessions.refresh(latest["refresh_token"])
+    await runtime.access.authenticate("Bearer " + continued["access_token"])
+    with pytest.raises(DshRefreshTokenReusedError):
+        await runtime.sessions.refresh(replaced["refresh_token"])
+    with pytest.raises(DshSessionRevokedError):
+        await runtime.access.authenticate("Bearer " + continued["access_token"])
+
+
+async def test_refresh_replay_outside_grace_revokes_the_session(native):
+    runtime, engine = native
+    issued = await login(runtime)
+    rotated = await runtime.sessions.refresh(issued["refresh_token"])
+    rewrite_used_at(engine, datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=601))
+    with pytest.raises(DshRefreshTokenReusedError):
+        await runtime.sessions.refresh(issued["refresh_token"])
+    with pytest.raises(DshSessionRevokedError):
+        await runtime.access.authenticate("Bearer " + rotated["access_token"])
+
+
+async def test_historical_used_token_without_timestamp_revokes(native):
+    runtime, engine = native
+    issued = await login(runtime)
+    rotated = await runtime.sessions.refresh(issued["refresh_token"])
+    rewrite_used_at(engine, None)
+    with pytest.raises(DshRefreshTokenReusedError):
+        await runtime.sessions.refresh(issued["refresh_token"])
+    with pytest.raises(DshSessionRevokedError):
+        await runtime.access.authenticate("Bearer " + rotated["access_token"])
+
+
+async def test_zero_grace_keeps_strict_replay(native):
+    runtime, engine = native
+    runtime.sessions.refresh_grace_seconds = 0
+    issued = await login(runtime)
+    await runtime.sessions.refresh(issued["refresh_token"])
+    with pytest.raises(DshRefreshTokenReusedError):
+        await runtime.sessions.refresh(issued["refresh_token"])
+    with Session(engine) as session, principal_scope(DshPrincipal(tenant_id="2", user_id="20", session_id="test")):
+        assert all(row.state == "REVOKED" for row in session.exec(select(DshSession)).all())
+
+
+async def test_grace_on_one_device_leaves_the_other_session_active(native):
+    runtime, _ = native
+    first, second = await login(runtime), await login(runtime)
+    lost = await runtime.sessions.refresh(first["refresh_token"])
+    await runtime.sessions.refresh(first["refresh_token"])
+    await runtime.access.authenticate("Bearer " + second["access_token"])
+    with pytest.raises(DshRefreshTokenReusedError):
+        await runtime.sessions.refresh(lost["refresh_token"])
+    await runtime.access.authenticate("Bearer " + second["access_token"])
+
+
+async def test_grace_follows_behavior_after_a_long_rotation_chain(native):
+    runtime, _ = native
+    current = await login(runtime)
+    history = [current["refresh_token"]]
+    for _ in range(30):
+        current = await runtime.sessions.refresh(current["refresh_token"])
+        history.append(current["refresh_token"])
+    recovered = await runtime.sessions.refresh(history[-2])
+    continued = await runtime.sessions.refresh(recovered["refresh_token"])
+    await runtime.access.authenticate("Bearer " + continued["access_token"])
+    with pytest.raises(DshRefreshTokenReusedError):
+        await runtime.sessions.refresh(history[-4])
+    with pytest.raises(DshSessionRevokedError):
+        await runtime.access.authenticate("Bearer " + continued["access_token"])
 
 
 async def test_logout_is_idempotent_and_does_not_revoke_other_devices(native):
@@ -230,8 +334,16 @@ def test_pkce_browser_ticket_exchange_and_refresh_end_to_end(native, path):
             path + "/token", json={"grant_type": "refresh_token", "refresh_token": token.json()["refresh_token"]}
         )
         assert refreshed.status_code == 200, refreshed.text
+        held = refreshed.json()["refresh_token"]
+        lost = client.post(path + "/token", json={"grant_type": "refresh_token", "refresh_token": held})
+        assert lost.status_code == 200, lost.text
+        recovered = client.post(path + "/token", json={"grant_type": "refresh_token", "refresh_token": held})
+        assert recovered.status_code == 200, recovered.text
+        assert recovered.json()["refresh_token"] != lost.json()["refresh_token"]
+        principal = asyncio.run(runtime.access.authenticate("Bearer " + recovered.json()["access_token"]))
+        assert principal.user_id == "20"
         assert (
-            client.post(path + "/logout", json={"refresh_token": refreshed.json()["refresh_token"]}).status_code == 204
+            client.post(path + "/logout", json={"refresh_token": recovered.json()["refresh_token"]}).status_code == 204
         )
 
 
