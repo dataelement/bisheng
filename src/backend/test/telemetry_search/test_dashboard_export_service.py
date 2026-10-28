@@ -41,11 +41,12 @@ def _dashboard(user_id=1, status="published"):
     return SimpleNamespace(id=1, user_id=user_id, status=status)
 
 
-def _component(dataset_code=_NON_REALTIME_DATASET, data_config=None):
+def _component(dataset_code=_NON_REALTIME_DATASET, data_config=None, component_type="bar"):
     return SimpleNamespace(
         id="comp-1",
         dashboard_id=1,
         dataset_code=dataset_code,
+        type=component_type,
         data_config=data_config
         or {
             "dimensions": [{"fieldId": "belonging_department_name", "displayName": "所属部门"}],
@@ -171,9 +172,7 @@ async def test_export_detail_writes_one_row_per_record(monkeypatch, service_modu
     monkeypatch.setattr(
         export_module.pd.DataFrame,
         "to_excel",
-        lambda self_df, writer, sheet_name, index: captured.append(
-            (list(self_df.columns), self_df.values.tolist())
-        ),
+        lambda self_df, writer, sheet_name, index: captured.append((list(self_df.columns), self_df.values.tolist())),
     )
     monkeypatch.setattr(export_module, "_upload_excel", AsyncMock(return_value="https://minio/detail.xlsx"))
 
@@ -229,13 +228,62 @@ async def test_export_all_groups_rows_by_outer_dimension(monkeypatch, service_mo
     time_filters = [TimeFilter(type="recent_days", mode="dynamic", recentDays=7)]
     dimension_filters = [DimensionQueryFilter(fieldId="uploader_user_name", values=["张三"])]
     url = await service.export_component_all(
-        dashboard_id=1, component_id="comp-1", time_filters=time_filters, dimension_filters=dimension_filters,
+        dashboard_id=1,
+        component_id="comp-1",
+        time_filters=time_filters,
+        dimension_filters=dimension_filters,
     )
 
     assert url == "https://minio/all.xlsx"
     assert sorted(captured_sheets) == [("部门A", 2), ("部门B", 1)]
     assert _query_mock.await_args.kwargs["time_filters"] == time_filters
     assert _query_mock.await_args.kwargs["dimension_filters"] == dimension_filters
+
+
+async def test_new_file_count_pivot_export_keeps_every_person_on_one_sheet(monkeypatch, service_module):
+    """A new-file-count pivot lists every person's files on one detail sheet."""
+    export_module, dashboard_module = service_module
+    component = _component(
+        component_type="pivot-table",
+        data_config={
+            "dimensions": [{"fieldId": "uploader_user_name", "displayName": "上传人"}],
+            "metrics": [{"fieldId": "new_file_count", "displayName": "新增文件数"}],
+        },
+    )
+    detail = _detail(
+        columns=[("file_name", "文件名"), ("uploader_user_name", "上传人")],
+        rows=[
+            {"file_name": "a.pdf", "uploader_user_name": "张三"},
+            {"file_name": "b.pdf", "uploader_user_name": "李四"},
+            {"file_name": "c.pdf", "uploader_user_name": "张三"},
+        ],
+    )
+    login_user, _query_mock = _patch_common(
+        monkeypatch,
+        dashboard_module,
+        dashboard=_dashboard(),
+        component=component,
+        detail=detail,
+    )
+
+    captured_sheets: list[tuple[str, list]] = []
+    monkeypatch.setattr(export_module.pd, "ExcelWriter", lambda *_a, **_k: _FakeWriter())
+    monkeypatch.setattr(
+        export_module.pd.DataFrame,
+        "to_excel",
+        lambda self_df, writer, sheet_name, index: captured_sheets.append((sheet_name, self_df.values.tolist())),
+    )
+    monkeypatch.setattr(export_module, "_upload_excel", AsyncMock(return_value="https://minio/all.xlsx"))
+
+    service = export_module.DashboardExportService(request=None, login_user=login_user)
+    await service.export_component_all(dashboard_id=1, component_id="comp-1")
+
+    assert captured_sheets == [
+        (
+            "明细",
+            [["a.pdf", "张三"], ["b.pdf", "李四"], ["c.pdf", "张三"]],
+        )
+    ]
 
 
 async def test_export_all_row_limit_exceeded(monkeypatch, service_module):
@@ -303,7 +351,11 @@ async def test_export_all_rejects_truncated_scan_across_multiple_sheets(monkeypa
         ],
     )
     login_user, _ = _patch_common(
-        monkeypatch, dashboard_module, dashboard=_dashboard(), component=_component(), detail=detail,
+        monkeypatch,
+        dashboard_module,
+        dashboard=_dashboard(),
+        component=_component(),
+        detail=detail,
     )
     upload = AsyncMock()
     monkeypatch.setattr(export_module, "_upload_excel", upload)

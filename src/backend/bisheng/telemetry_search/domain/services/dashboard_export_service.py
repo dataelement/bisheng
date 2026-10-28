@@ -24,11 +24,40 @@ from .dashboard_export_detail import DetailRows, query_detail_rows
 
 EXPORT_ROW_LIMIT_PER_SHEET = 50_000
 _INVALID_SHEET_NAME_CHARS = re.compile(r"[:\\/?*\[\]]")
+_NEW_FILE_COUNT_METRIC = "new_file_count"
+_PIVOT_TABLE_TYPE = "pivot-table"
+_DETAIL_SHEET_NAME = "明细"
 
 
 def _sanitize_sheet_name(name: str) -> str:
     name = _INVALID_SHEET_NAME_CHARS.sub("_", str(name)).strip() or "Sheet1"
     return name[:31]
+
+
+def _single_detail_sheet(component_type: str, data_config: ComponentDataConfig) -> bool:
+    """Keep every new-file-count pivot detail row on one sheet.
+
+    Splitting on the outer dimension turns a person row into its own sheet.
+    The person stays as a column.
+    """
+    metric = data_config.metrics[0].field_id if data_config.metrics else None
+    return component_type == _PIVOT_TABLE_TYPE and metric == _NEW_FILE_COUNT_METRIC
+
+
+def _export_groups(
+    component_type: str,
+    data_config: ComponentDataConfig,
+    detail: DetailRows,
+) -> dict[str, list[int]]:
+    if _single_detail_sheet(component_type, data_config):
+        return {_DETAIL_SHEET_NAME: list(range(len(detail.rows)))}
+
+    group_field = data_config.dimensions[0].field_id if data_config.dimensions else None
+    groups: dict[str, list[int]] = {}
+    for row_index, row in enumerate(detail.rows):
+        group_key = str(row.get(group_field) or "Sheet1") if group_field else "Sheet1"
+        groups.setdefault(group_key, []).append(row_index)
+    return groups
 
 
 def _build_dataframe(detail: DetailRows, row_indices: list[int] | None = None) -> pd.DataFrame:
@@ -107,7 +136,11 @@ class DashboardExportService:
         time_filters: list[TimeFilter] | None = None,
         dimension_filters: list[DimensionQueryFilter] | None = None,
     ) -> str:
-        """AC-10: export every record behind the chart, one sheet per outermost dimension value."""
+        """AC-10: export every record behind the chart.
+
+        Most charts still use one sheet per outermost dimension value. A pivot table whose
+        first metric is new_file_count writes every detail row onto a single sheet instead.
+        """
         dashboard_service = DashboardService(request=self.request, login_user=self.login_user)
         _dashboard, component = await dashboard_service._authorize_component_access(dashboard_id, component_id)
 
@@ -127,14 +160,7 @@ class DashboardExportService:
         if len(detail.rows) > EXPORT_ROW_LIMIT_PER_SHEET:
             raise DashboardExportLimitExceededError()
 
-        # Sheets still split on the chart's outermost dimension, so the workbook keeps the
-        # same shape as before — only each sheet's contents changed from one aggregated row
-        # per category to the records that make up that category.
-        group_field = data_config.dimensions[0].field_id if data_config.dimensions else None
-        groups: dict[str, list[int]] = {}
-        for row_index, row in enumerate(detail.rows):
-            group_key = str(row.get(group_field) or "Sheet1") if group_field else "Sheet1"
-            groups.setdefault(group_key, []).append(row_index)
+        groups = _export_groups(component.type, data_config, detail)
 
         if any(len(indices) > EXPORT_ROW_LIMIT_PER_SHEET for indices in groups.values()):
             raise DashboardExportLimitExceededError()
