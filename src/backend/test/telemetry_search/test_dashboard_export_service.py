@@ -171,9 +171,7 @@ async def test_export_detail_writes_one_row_per_record(monkeypatch, service_modu
     monkeypatch.setattr(
         export_module.pd.DataFrame,
         "to_excel",
-        lambda self_df, writer, sheet_name, index: captured.append(
-            (list(self_df.columns), self_df.values.tolist())
-        ),
+        lambda self_df, writer, sheet_name, index: captured.append((list(self_df.columns), self_df.values.tolist())),
     )
     monkeypatch.setattr(export_module, "_upload_excel", AsyncMock(return_value="https://minio/detail.xlsx"))
 
@@ -229,7 +227,10 @@ async def test_export_all_groups_rows_by_outer_dimension(monkeypatch, service_mo
     time_filters = [TimeFilter(type="recent_days", mode="dynamic", recentDays=7)]
     dimension_filters = [DimensionQueryFilter(fieldId="uploader_user_name", values=["张三"])]
     url = await service.export_component_all(
-        dashboard_id=1, component_id="comp-1", time_filters=time_filters, dimension_filters=dimension_filters,
+        dashboard_id=1,
+        component_id="comp-1",
+        time_filters=time_filters,
+        dimension_filters=dimension_filters,
     )
 
     assert url == "https://minio/all.xlsx"
@@ -303,13 +304,152 @@ async def test_export_all_rejects_truncated_scan_across_multiple_sheets(monkeypa
         ],
     )
     login_user, _ = _patch_common(
-        monkeypatch, dashboard_module, dashboard=_dashboard(), component=_component(), detail=detail,
+        monkeypatch,
+        dashboard_module,
+        dashboard=_dashboard(),
+        component=_component(),
+        detail=detail,
     )
     upload = AsyncMock()
     monkeypatch.setattr(export_module, "_upload_excel", upload)
     service = export_module.DashboardExportService(request=None, login_user=login_user)
     with pytest.raises(DashboardExportLimitExceededError):
         await service.export_component_all(dashboard_id=1, component_id="comp-1")
+    upload.assert_not_awaited()
+
+
+def _pivot_component():
+    component = _component()
+    component.type = "pivot-table"
+    return component
+
+
+def _pivot_sheet():
+    from bisheng.telemetry_search.domain.schemas.component import PivotSheet
+
+    return PivotSheet(
+        has_table=True,
+        rows=[
+            ["序号", "所属部门", "文件数", "合计"],
+            [1, "生产部", 2, 2],
+            ["合计", None, 2, 2],
+        ],
+        merges=[{"row": 2, "column": 0, "row_span": 1, "column_span": 2}],
+    )
+
+
+async def _capture_workbook(monkeypatch, export_module):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    captured: dict[str, bytes] = {}
+
+    async def capture(bio, _name):
+        bio.seek(0)
+        captured["bytes"] = bio.read()
+        return "https://minio/pivot.xlsx"
+
+    monkeypatch.setattr(export_module, "_upload_excel", capture)
+    return captured, lambda: load_workbook(BytesIO(captured["bytes"]))
+
+
+async def test_pivot_export_writes_the_visible_table_and_one_detail_sheet(monkeypatch, service_module):
+    export_module, dashboard_module = service_module
+    detail = _detail(
+        columns=[("file_name", "文件名"), ("belonging_department_name", "所属部门")],
+        rows=[
+            {"file_name": "a.pdf", "belonging_department_name": "部门A"},
+            {"file_name": "b.pdf", "belonging_department_name": "部门B"},
+        ],
+    )
+    login_user, _query_mock = _patch_common(
+        monkeypatch,
+        dashboard_module,
+        dashboard=_dashboard(),
+        component=_pivot_component(),
+        detail=detail,
+    )
+    captured, workbook_of = await _capture_workbook(monkeypatch, export_module)
+    service = export_module.DashboardExportService(request=None, login_user=login_user)
+
+    url = await service.export_component_all(dashboard_id=1, component_id="comp-1", pivot_sheet=_pivot_sheet())
+
+    assert url == "https://minio/pivot.xlsx"
+    workbook = workbook_of()
+    assert workbook.sheetnames == ["交叉表", "明细"]
+    view = workbook["交叉表"]
+    assert view["A2"].value == 1
+    assert view["B2"].value == "生产部"
+    assert view["C2"].value == 2
+    assert "A3:B3" in {str(item) for item in view.merged_cells.ranges}
+    detail_sheet = workbook["明细"]
+    assert [cell.value for cell in detail_sheet[1]] == ["文件名", "所属部门"]
+    assert [detail_sheet["A2"].value, detail_sheet["A3"].value] == ["a.pdf", "b.pdf"]
+    assert captured["bytes"]
+
+
+async def test_pivot_export_keeps_both_sheets_when_the_table_has_numbers_but_no_detail(monkeypatch, service_module):
+    export_module, dashboard_module = service_module
+    login_user, _query_mock = _patch_common(
+        monkeypatch,
+        dashboard_module,
+        dashboard=_dashboard(),
+        component=_pivot_component(),
+        detail=_detail(columns=[("file_name", "文件名")]),
+    )
+    _captured, workbook_of = await _capture_workbook(monkeypatch, export_module)
+    service = export_module.DashboardExportService(request=None, login_user=login_user)
+
+    await service.export_component_all(dashboard_id=1, component_id="comp-1", pivot_sheet=_pivot_sheet())
+
+    workbook = workbook_of()
+    assert workbook.sheetnames == ["交叉表", "明细"]
+    assert workbook["明细"]["A1"].value == "文件名"
+    assert workbook["明细"]["A2"].value is None
+
+
+async def test_pivot_export_fails_without_a_file_when_both_sheets_are_empty(monkeypatch, service_module):
+    export_module, dashboard_module = service_module
+    from bisheng.telemetry_search.domain.schemas.component import PivotSheet
+
+    login_user, _query_mock = _patch_common(
+        monkeypatch,
+        dashboard_module,
+        dashboard=_dashboard(),
+        component=_pivot_component(),
+        detail=_detail(),
+    )
+    upload = AsyncMock()
+    monkeypatch.setattr(export_module, "_upload_excel", upload)
+    service = export_module.DashboardExportService(request=None, login_user=login_user)
+
+    with pytest.raises(DashboardExportEmptyError):
+        await service.export_component_all(
+            dashboard_id=1,
+            component_id="comp-1",
+            pivot_sheet=PivotSheet(has_table=False, rows=[["当前图表无数据"]]),
+        )
+    upload.assert_not_awaited()
+
+
+async def test_pivot_export_rejects_a_missing_view_before_reading_details(monkeypatch, service_module):
+    export_module, dashboard_module = service_module
+    from bisheng.common.errcode.telemetry import DashboardExportPivotViewInvalidError
+
+    login_user, query_mock = _patch_common(
+        monkeypatch,
+        dashboard_module,
+        dashboard=_dashboard(),
+        component=_pivot_component(),
+    )
+    upload = AsyncMock()
+    monkeypatch.setattr(export_module, "_upload_excel", upload)
+    service = export_module.DashboardExportService(request=None, login_user=login_user)
+
+    with pytest.raises(DashboardExportPivotViewInvalidError):
+        await service.export_component_all(dashboard_id=1, component_id="comp-1")
+    query_mock.assert_not_awaited()
     upload.assert_not_awaited()
 
 

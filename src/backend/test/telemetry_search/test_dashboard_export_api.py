@@ -93,6 +93,25 @@ def test_export_all_endpoint_returns_file_url(client):
     assert call_args[1] == "comp-1"
 
 
+def test_export_all_forwards_the_visible_pivot_sheet(client):
+    test_client, export_service = client
+    resp = test_client.post(
+        "/api/v1/telemetry/dashboard/component/comp-1/export-all",
+        json={
+            "dashboard_id": 1,
+            "pivot_sheet": {
+                "has_table": True,
+                "rows": [["序号", "合计"], [1, 2]],
+                "merges": [{"row": 0, "column": 0, "row_span": 1, "column_span": 1}],
+            },
+        },
+    )
+    assert resp.status_code == 200
+    pivot_sheet = export_service.export_component_all.await_args.kwargs["pivot_sheet"]
+    assert pivot_sheet.has_table is True
+    assert pivot_sheet.rows[1] == [1, 2]
+
+
 def test_export_detail_requires_dimension_value_even_when_null_is_allowed(client):
     test_client, export_service = client
     response = test_client.post(

@@ -1,13 +1,14 @@
 "use client"
 
 import { Download } from "lucide-react"
-import { memo, useMemo } from "react"
+import { memo, useEffect, useMemo } from "react"
 
 import { PivotTableDataResponse } from "../../types/chartData"
 import { DataConfig } from "../../types/dataConfig"
 import { GroupedPivotRows, groupCrossTabRows } from "../../utils/groupCrossTabRows"
 import { useComponentExport } from "../export/useComponentExport"
 import { unitConversion } from "./MetricCard"
+import { buildHeaderRows, buildVisiblePivotSheet, PIVOT_EXACT_TOTAL_NOTICE, PIVOT_TRUNCATED_NOTICE, publishVisiblePivotSheet } from "./visiblePivotSheet"
 
 type DisplayRow =
   | { kind: "subtotal"; group: GroupedPivotRows }
@@ -21,40 +22,6 @@ interface PivotTableProps {
   // saved dashboard/component id yet).
   dashboardId?: string
   componentId?: string
-}
-
-interface PivotHeaderCell {
-  label: string
-  path: string[]
-  colSpan: number
-}
-
-const buildHeaderRows = (columnPaths: string[][]): PivotHeaderCell[][] => {
-  const depth = Math.max(1, ...columnPaths.map(path => path.length))
-  return Array.from({ length: depth }, (_, level) => {
-    const cells: PivotHeaderCell[] = []
-    let columnIndex = 0
-
-    while (columnIndex < columnPaths.length) {
-      const currentPath = columnPaths[columnIndex]
-      const prefix = currentPath.slice(0, level + 1)
-      let colSpan = 1
-      while (
-        columnIndex + colSpan < columnPaths.length
-        && JSON.stringify(columnPaths[columnIndex + colSpan].slice(0, level + 1)) === JSON.stringify(prefix)
-      ) {
-        colSpan += 1
-      }
-      cells.push({
-        label: currentPath[level] || "未分类",
-        path: currentPath,
-        colSpan,
-      })
-      columnIndex += colSpan
-    }
-
-    return cells
-  })
 }
 
 const formatValue = (value: number, dataConfig: DataConfig) => {
@@ -99,6 +66,11 @@ export const PivotTable = memo(function PivotTable({
   )
   const headerRows = useMemo(() => buildHeaderRows(columnPaths), [columnPaths])
   const headerDepth = headerRows.length
+  const visibleSheet = useMemo(() => buildVisiblePivotSheet(data), [data])
+  useEffect(() => {
+    publishVisiblePivotSheet(componentId || "", visibleSheet)
+    return () => publishVisiblePivotSheet(componentId || "", null)
+  }, [componentId, visibleSheet])
 
   // F058 AC-12/AC-13: when the query resolved a group dimension (see transformPivotData),
   // re-cluster rows so same-group rows are contiguous, then rowSpan-merge the group's
@@ -127,7 +99,7 @@ export const PivotTable = memo(function PivotTable({
     <div className="flex size-full min-h-0 flex-col gap-2">
       {data.exactDocumentTotals && (
         <p className="shrink-0 text-xs text-muted-foreground" role="note">
-          合计按全部筛选结果重新计算；同一知识跨组出现时只计一次，合计可能不等于各项相加。
+          {PIVOT_EXACT_TOTAL_NOTICE}
         </p>
       )}
       {data.truncated && (
@@ -135,7 +107,7 @@ export const PivotTable = memo(function PivotTable({
           className="shrink-0 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100"
           role="status"
         >
-          数据超过交叉表上限，当前仅展示前 500 行、100 列，请增加筛选条件后查看。
+          {PIVOT_TRUNCATED_NOTICE}
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-background">
