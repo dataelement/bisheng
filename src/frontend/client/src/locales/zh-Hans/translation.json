@@ -1656,6 +1656,7 @@
     "back_to_channel_list": "返回频道列表",
     "cancel": "取消",
     "channel_content_needs_approval": "该频道内容需申请通过后方可查看",
+    "channel_content_access_required": "订阅审批通过或获得授权后，即可查看频道内容。",
     "channel_create_success": "频道创建成功",
     "channel_name_colon": "频道名称：",
     "channel_description_colon": "频道描述：",

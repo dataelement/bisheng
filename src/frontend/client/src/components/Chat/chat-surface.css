@@ -47,9 +47,9 @@ body[data-dsh-chat-theme=dark] .dsh-chat-hero {
 .dsh-chat-attachment { display: flex; align-items: center; gap: 10px; width: 240px; max-width: 100%; min-height: 64px; border: .5px solid rgb(var(--border-base)); border-radius: 20px; background: rgb(var(--dsh-composer-bg)); padding: 8px 12px; text-align: left; }
 .dsh-chat-attachment:hover { background: rgb(var(--fill-1)); }
 .dsh-chat-attachment:focus-visible { outline: 2px solid rgb(var(--brand-500)); outline-offset: 2px; }
-/* Harness 0.2.0-rc.2 conversation geometry and semantic surface palette. */
-body[data-dsh-chat-theme] :is(.dsh-web-chat, .dsh-chat-menu, .dsh-chat-preview-modal, .dsh-knowledge-dialog) { --bg-page:255 255 255; --fill-1:248 249 250; --fill-2:242 242 244; --text-1:15 17 21; --dsh-composer-bg:255 255 255; --dsh-bubble-bg:237 243 254; --dsh-menu-bg:248 249 250; --text-2:88 90 94; --text-3:129 133 140; --border-base:232 233 235; }
-body[data-dsh-chat-theme=dark] :is(.dsh-web-chat, .dsh-chat-menu, .dsh-chat-preview-modal, .dsh-knowledge-dialog) { --bg-page:20 20 22; --fill-1:27 27 28; --fill-2:44 44 46; --text-1:249 250 251; --dsh-composer-bg:44 44 46; --dsh-bubble-bg:44 44 46; --dsh-menu-bg:48 49 54; --text-2:182 184 190; --text-3:129 133 140; --border-base:51 51 54; --border-deep:83 85 91; color:rgb(var(--text-1)); color-scheme:dark; }
+/* Keep the chat palette inside its content pane and portals; the shared sidebar owns its theme. */
+body[data-dsh-chat-theme] :is(.dsh-web-chat > main, .dsh-chat-menu, .dsh-chat-preview-modal, .dsh-knowledge-dialog) { --bg-page:255 255 255; --fill-1:248 249 250; --fill-2:242 242 244; --text-1:15 17 21; --dsh-composer-bg:255 255 255; --dsh-bubble-bg:237 243 254; --dsh-menu-bg:248 249 250; --text-2:88 90 94; --text-3:129 133 140; --border-base:232 233 235; }
+body[data-dsh-chat-theme=dark] :is(.dsh-web-chat > main, .dsh-chat-menu, .dsh-chat-preview-modal, .dsh-knowledge-dialog) { --bg-page:20 20 22; --fill-1:27 27 28; --fill-2:44 44 46; --text-1:249 250 251; --dsh-composer-bg:44 44 46; --dsh-bubble-bg:44 44 46; --dsh-menu-bg:48 49 54; --text-2:182 184 190; --text-3:129 133 140; --border-base:51 51 54; --border-deep:83 85 91; color:rgb(var(--text-1)); color-scheme:dark; }
 body[data-dsh-chat-theme] .dsh-web-chat { background:rgb(var(--bg-page)); }
 .dsh-web-chat .dsh-mobile-chat-header { background:rgb(var(--bg-page)); color:rgb(var(--text-1)); }
 .dsh-web-chat .dsh-mobile-chat-header :is(button,span,svg) { color:inherit; }
@@ -57,7 +57,7 @@ body[data-dsh-chat-theme] .dsh-web-chat { background:rgb(var(--bg-page)); }
 .dsh-web-chat { width:var(--dsh-chat-viewport-width,100vw); height:var(--dsh-chat-viewport-height,100dvh); }
 .dsh-web-chat > main { padding:0; height:var(--dsh-chat-viewport-height,100dvh); }
 .dsh-web-chat [data-workbench-panel], .dsh-web-chat .dsh-chat-root { height:var(--dsh-chat-viewport-height,100dvh); max-height:var(--dsh-chat-viewport-height,100dvh); border-radius:0; box-shadow:none; background:rgb(var(--bg-page)); }
-/* Match the Harness sidebar dimensions and surfaces. */
+/* Legacy chat drawer styles stay inside its own sidebar, away from WorkbenchSidebar. */
 .dsh-web-chat .dsh-history-sidebar { --fill-1:244 244 246; --fill-2:228 228 232; background:rgb(var(--fill-1)); color:rgb(var(--text-1)); border-color:rgb(var(--border-base)); }
 body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-sidebar { --fill-1:48 48 51; --fill-2:64 64 68; }
 .dsh-history-header { flex:none; padding-bottom:24px; }
@@ -68,22 +68,22 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-sidebar { --fill-1:48 
 .dsh-web-chat:has(.dsh-history-reopen) .dsh-chat-header { padding-left:52px; }
 .dsh-web-chat .dsh-history-new-chat { width:calc(100% - 4px); height:38px; margin:0 2px; padding:8px 12px; display:flex; justify-content:center; align-items:center; gap:6px; font-size:14px; font-weight:500; line-height:22px; border:1px solid rgb(var(--border-deep)/35%); border-radius:10px; color:rgb(var(--text-1)); background:rgb(var(--bg-page)/60%); box-shadow:none; }
 body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:rgb(255 255 255 / 15%); }
-.dsh-web-chat .dsh-history-row { height:32px; padding:0 8px 0 28px; margin-bottom:2px; border-radius:8px; }
+.dsh-web-chat .dsh-history-sidebar .dsh-history-row { height:32px; padding:0 8px 0 28px; margin-bottom:2px; border-radius:8px; }
 .dsh-history-group { padding:4px 8px 12px; }
 .dsh-history-time { flex:none; font-size:10px; color:rgb(var(--text-3)); white-space:nowrap; }
 .dsh-history-row:has(.dsh-history-options:hover) .dsh-history-time,
 .dsh-history-row:hover .dsh-history-time,
 .dsh-history-row:focus-within .dsh-history-time { display:none; }
-.dsh-web-chat .dsh-history-row[data-active=true] { background:rgb(var(--fill-2)); }
-.dsh-web-chat .dsh-history-row a:focus-visible { outline:2px solid rgb(var(--brand-500)); outline-offset:2px; border-radius:4px; }
+.dsh-web-chat .dsh-history-sidebar .dsh-history-row[data-active=true] { background:rgb(var(--fill-2)); }
+.dsh-web-chat .dsh-history-sidebar .dsh-history-row a:focus-visible { outline:2px solid rgb(var(--brand-500)); outline-offset:2px; border-radius:4px; }
 @media (hover:hover) and (pointer:fine) {
-  .dsh-history-toggle:hover, .dsh-web-chat .dsh-history-row:hover { background:rgb(var(--fill-2)); }
+  .dsh-history-toggle:hover, .dsh-web-chat .dsh-history-sidebar .dsh-history-row:hover { background:rgb(var(--fill-2)); }
   .dsh-web-chat .dsh-history-new-chat:hover { background:rgb(var(--fill-2)); }
   body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat:hover { background:rgb(255 255 255 / 20%); }
 }
 @media (max-width:767px) {
   .dsh-history-sidebar { max-width:calc(100vw - 48px); }
-  .dsh-web-chat .dsh-history-row { min-height:40px; }
+  .dsh-web-chat .dsh-history-sidebar .dsh-history-row { min-height:40px; }
 }
 /* Harness reserves a 5px scrollbar and 2px trailing margin in its conversation column. */
 

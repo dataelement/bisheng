@@ -3,7 +3,7 @@
 ## 范围与基线
 
 - 修改仓库：`dataelement/bisheng`，目标 `feat/bisheng-work-120-main`。
-- 开始基线：`e468e2f2bcfe3c855e159193c0f96e18aec1453d`；PR 交付基线：`174394b3237d10460477fdefd0d4ba8871c7a913`。
+- 开始基线：`e468e2f2bcfe3c855e159193c0f96e18aec1453d`；PR 交付基线：`174394b3237d10460477fdefd0d4ba8871c7a913`；冲突处理同步目标：`d9cb1394a4fa1370f2fe40d7de41ab3f37194a70`。
 - 工作目录：`.worktrees/bisheng-app-explore-chat-return`；分支：`codex/app-explore-chat-return`。
 - 本次修改平台网页客户端。参考 macOS 测试运行时：Electron `43.0.0`；本机毕昇 Work 依赖 Harness `0.2.1-rc.2`。DSH Desktop v0.9.0 集成目录已查为干净，本次源码归属毕昇客户端。
 
@@ -22,6 +22,11 @@
 - macOS Electron 43.0.0 本地组件窗口：应用中心会话 → 广场分类 → 新会话 → 返回广场应用，随后应用中心会话 → 返回应用中心，两条路径通过。
 - 提交 PR 前同步知识空间聊天导航修复，应用与知识空间组合回归 5 组 / 26 项通过；客户端 1,490 个严格类型文件、ESLint 与生产构建通过。平台 619 个严格类型文件及 ESLint 检查记录保留在前轮证据。
 - 证据目录：`outputs/app-explore-chat-return-20261028/`，包含原始失败、回归、静态检查、构建和 Electron 结果。
+
+## PR 冲突处理
+
+- `docs/STATUS.md` 的并发末尾追加产生冲突；保留双方记录，将本条记录放入独立位置，验证详情继续由本文件承载。
+- 同步目标分支后应用返回、知识空间导航、频道导航、助手详情兼容回归共 6 组 / 33 项通过；客户端 ESLint、1,495 个严格类型文件、生产构建、i18n、架构守卫和差异检查通过。
 
 ## 交付边界
 

@@ -1,3 +1,4 @@
+import { refreshChannelState, useChannelAccessGuard, useChannelStateRefresh } from "./hooks/useChannelStateRefresh";
 import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -395,6 +396,14 @@ export default function Subscription() {
     // Page owns channel list + auto-select on both PC and H5 so the page lands on a real channel
     // by default. Channel switching UI is route-driven (system menu reveal on H5).
     const channelPluginEnabled = channelPluginGate === "enabled";
+    useChannelStateRefresh(() => { void refreshChannelState(queryClient); }, channelPluginEnabled);
+    useChannelAccessGuard(activeChannel?.id, () => {
+        const channelId = activeChannel?.id;
+        setActiveChannel(null);
+        setFullScreenArticle(null);
+        setShowAiAssistant(false);
+        if (channelId) navigate(`/channel/share/${encodeURIComponent(channelId)}`, { replace: true });
+    });
     const { data: createdChannelsForAuto = [], isFetched: createdAutoFetched } = useQuery({
         queryKey: ["channels", "created", SortType.RECENT_UPDATE],
         queryFn: () => getChannelsApi({ type: "created", sortBy: SortType.RECENT_UPDATE }),

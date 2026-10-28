@@ -1652,6 +1652,7 @@
     "back_to_channel_list": "チャンネル一覧に戻る",
     "cancel": "キャンセル",
     "channel_content_needs_approval": "このチャンネルのコンテンツを表示するには承認が必要です",
+    "channel_content_access_required": "購読が承認されるか閲覧権限が付与されると、チャンネルの内容を閲覧できます。",
     "channel_create_success": "チャンネルの作成に成功しました",
     "channel_name_colon": "チャンネル名:",
     "channel_description_colon": "チャンネル説明:",

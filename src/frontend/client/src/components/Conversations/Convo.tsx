@@ -21,14 +21,15 @@ import { useTitleReveal } from "./useTitleReveal";
 
 type KeyEvent = KeyboardEvent<HTMLInputElement>;
 
-type ConversationProps = {
+interface ConversationProps {
   conversation: TConversation;
   retainView: () => void;
   toggleNav: () => void;
   isLatestConvo: boolean;
   /** Workbench sidebar rows: 8px side padding and a 22px line (Figma 13139:111616). */
   compact?: boolean;
-};
+  className?: string;
+}
 
 export default function Conversation({
   conversation,
@@ -36,6 +37,7 @@ export default function Conversation({
   toggleNav,
   isLatestConvo,
   compact = false,
+  className,
 }: ConversationProps) {
   const params = useParams();
 
@@ -210,6 +212,7 @@ export default function Conversation({
         // #ECECEC hairline + soft drop shadow, both as shadows so the row
         // keeps its borderless box size.
         renaming && "shadow-[0_0_0_1px_#ECECEC,0_0_8px_rgba(3,7,117,0.05)]",
+        className,
       )}
     >
       {renaming ? (
