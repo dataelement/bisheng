@@ -14,7 +14,7 @@
 
 ## 基线与验证
 
-- 目标：dataelement/bisheng 的 feat/bisheng-work-120-main；初始远端 SHA e83fad4b8f3f9081e0d68a071402ecf5217e9a87，经 GitHub 连接器核验。合并前快进同步 fd6c95ca1b7986c60ea72d16d896a3de0ed4e9c2，新增内容为侧栏缩进调整，随后验证组合代码。
+- 目标：dataelement/bisheng 的 feat/bisheng-work-120-main；初始远端 SHA e83fad4b8f3f9081e0d68a071402ecf5217e9a87，经 GitHub 连接器核验。合并前快进同步 fd6c95ca1b7986c60ea72d16d896a3de0ed4e9c2，新增内容为侧栏缩进调整，随后验证组合代码。CI 通过后目标更新到 1a8ac45e1（频道导航修复）；合并保留双方状态文档条目，继续执行组合回归与构建。
 - 工作目录：.worktrees/bisheng-workflow-offline；分支 codex/workflow-offline。
 - 截图入口属于桌面内嵌 Client。本机 BISHENG 1.2.0-test.2、包内 Harness 0.2.1-rc.2；DSH v0.9.0 远端分支搜索为空，既有 v090 集成目录干净。本次改动归属毕昇服务端与 Client。
 - 自动回归：后端 16 项，覆盖同一连接上线到下线、旧输入、运行状态过期、草稿预览和历史会话重开；前端 21 项，覆盖会话切换、下线错误、后到事件、四种重复提交及正常完成，并联跑自动重跑、文件接收与媒体附件回归。
