@@ -9,6 +9,7 @@
  * conversation neither closes its stream nor refetches over its live bucket.
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 
 import type { SSESubmission } from "./useAiChatSSE";
 
@@ -49,6 +50,8 @@ jest.mock("~/store/linsight", () => ({
     SopStatus: { Running: "running", Stoped: "stoped", SopGenerating: "sop_generating" },
     taskModeSkillsState: () => ({ __testValue: mockSelectedSkills }),
 }));
+
+jest.mock("~/hooks/AuthContext", () => ({ useAuthContext: () => ({ user: { id: "test-user" } }) }));
 
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
 jest.mock("~/Providers", () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
@@ -103,6 +106,7 @@ const renderChat = (conversationId: string) =>
 const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 
 beforeEach(() => {
+    localStorage.clear();
     mockOpenedStreams.length = 0;
     mockSelectedSkills = [];
     mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
@@ -369,4 +373,102 @@ test('an incomplete upload rejects submission before starting a stream', async (
   });
   expect(accepted).toBe(false);
   expect(mockOpenedStreams).toHaveLength(0);
+});
+
+describe('conversation knowledge isolation', () => {
+    const k1 = [{ id: '101', name: 'K1', type: 'space' }];
+    const k2 = [{ id: '202', name: 'K2', type: 'space' }];
+    const scope = () => latestStream().submission.payload.use_knowledge_base;
+
+    it('restores C1 and C2 independently and sends their saved scopes after reopening', async () => {
+        const chat = renderChat('c1');
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+        act(() => chat.result.current.setSelectedOrgKbs(k1));
+        chat.rerender({ cid: 'c2' });
+        expect(chat.result.current.selectedOrgKbs).toEqual([]);
+        act(() => chat.result.current.setSelectedOrgKbs(k2));
+        for (const [cid, knowledge] of [['c1', k1], ['c2', k2], ['c1', k1]] as const) {
+            chat.rerender({ cid });
+            expect(chat.result.current.selectedOrgKbs).toEqual(knowledge);
+        }
+        chat.unmount();
+        const reopened = renderChat('c1');
+        await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
+        expect(reopened.result.current.selectedOrgKbs).toEqual(k1);
+        act(() => reopened.result.current.sendMessage('search C1'));
+        expect(scope()).toMatchObject({ knowledge_space_ids: [101], organization_knowledge_ids: [] });
+        reopened.rerender({ cid: 'c2' });
+        await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
+        expect(reopened.result.current.selectedOrgKbs).toEqual(k2);
+        act(() => reopened.result.current.sendMessage('search C2'));
+        expect(scope()).toMatchObject({ knowledge_space_ids: [202] });
+    });
+
+    it('commits the destination conversation and selection together on a route switch', async () => {
+        const commits: Array<{ route: string; active: string; ids: string[] }> = [];
+        const chat = renderHook(({ cid }) => {
+            const value = useAiChat(cid);
+            useLayoutEffect(() => {
+                commits.push({ route: cid, active: value.conversationId,
+                    ids: value.selectedOrgKbs.map((item) => item.id) });
+            });
+            return value;
+        }, { initialProps: { cid: 'c1' } });
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+        act(() => chat.result.current.setSelectedOrgKbs(k1));
+        chat.rerender({ cid: 'c2' });
+        expect(commits.filter((entry) => entry.route === 'c2')).toEqual(
+            expect.arrayContaining([{ route: 'c2', active: 'c2', ids: [] }]),
+        );
+        expect(commits.every((entry) => entry.route === entry.active)).toBe(true);
+        expect(commits.filter((entry) => entry.route === 'c2').every((entry) => entry.ids.length === 0)).toBe(true);
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+    });
+
+    it('regenerates from the current conversation and persists an explicit empty scope', async () => {
+        const chat = renderChat('c1');
+        await waitFor(() => expect(chat.result.current.messages).toHaveLength(1));
+        act(() => chat.result.current.setSelectedOrgKbs(k1));
+        chat.rerender({ cid: 'c2' });
+        await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe('c2-q'));
+        act(() => chat.result.current.setSelectedOrgKbs(k2));
+        chat.rerender({ cid: 'c1' });
+        await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe('c1-q'));
+        act(() => chat.result.current.regenerate('c1-q'));
+        expect(scope()).toMatchObject({ knowledge_space_ids: [101] });
+        act(() => {
+            latestStream().submission.onEnd();
+            chat.result.current.setSelectedOrgKbs([]);
+        });
+        chat.unmount();
+        const reopened = renderChat('c1');
+        await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
+        expect(reopened.result.current.selectedOrgKbs).toEqual([]);
+        act(() => reopened.result.current.sendMessage('empty selection'));
+        expect(scope()).toMatchObject({ knowledge_space_ids: [], organization_knowledge_ids: [] });
+    });
+
+    it('carries the first turn scope into its server id while C2 stays selected', async () => {
+        const chat = renderChat('new');
+        act(() => chat.result.current.setSelectedOrgKbs(k1));
+        act(() => chat.result.current.sendMessage('first turn'));
+        const first = latestStream();
+        chat.rerender({ cid: 'c2' });
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+        act(() => chat.result.current.setSelectedOrgKbs(k2));
+        act(() => first.submission.onFinal({ conversation: { conversationId: 'created-c1' } }));
+        expect(chat.result.current.conversationId).toBe('c2');
+        expect(chat.result.current.selectedOrgKbs).toEqual(k2);
+        chat.rerender({ cid: 'created-c1' });
+        expect(chat.result.current.selectedOrgKbs).toEqual(k1);
+        chat.rerender({ cid: 'new' });
+        expect(chat.result.current.selectedOrgKbs).toEqual([]);
+    });
+
+    it('starts historical sessions with their own scope when only legacy account memory exists', async () => {
+        localStorage.setItem('bs:test-user:selectedOrgKbs', JSON.stringify(k2));
+        const chat = renderChat('c1');
+        await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
+        expect(chat.result.current.selectedOrgKbs).toEqual([]);
+    });
 });
