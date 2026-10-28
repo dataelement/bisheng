@@ -148,10 +148,9 @@ export function SidebarProjects() {
             </div>
             {open && (
               <>
-                {/* Real rows, so a conversation filed here keeps its click / rename /
-                    ⋯ menu — indented to the sample rows' 32px. */}
+                {/* Real rows retain conversation navigation, rename, and menu actions. */}
                 {conversations.map((convo) => (
-                  <div key={convo.conversationId} className="pl-6">
+                  <div key={convo.conversationId}>
                     <Convo
                       compact
                       isLatestConvo={false}
