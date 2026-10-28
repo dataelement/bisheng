@@ -16,6 +16,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { SSESubmission } from "./useAiChatSSE";
 
 /** Every SSE turn opened during a test, in order. */
+let mockSelectedKbs: Array<{ id: string; name: string; type: string }> = [];
+jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
+
 let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
 
@@ -26,8 +29,6 @@ jest.mock("./useAiChatSSE", () => ({
         return { close };
     },
 }));
-
-jest.mock("react-activation", () => ({ useActivate: () => undefined }));
 
 const mockGetAgentMessages = jest.fn();
 const mockGetSessionName = jest.fn();
@@ -45,7 +46,7 @@ jest.mock("~/store", () => ({
     __esModule: true,
     default: {
         chatModel: { __testValue: { id: 1, name: "test-model" } },
-        selectedOrgKbs: { __testValue: [] },
+        selectedOrgKbs: { get __testValue() { return mockSelectedKbs; } },
         searchType: { __testValue: "" },
         selectedAgentTools: { __testValue: [] },
     },
@@ -110,6 +111,7 @@ const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 beforeEach(() => {
     mockOpenedStreams.length = 0;
     mockSelectedSkills = [];
+    mockSelectedKbs = [];
     mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
     mockGetSessionName.mockResolvedValue("");
 });
@@ -377,21 +379,68 @@ test('an incomplete upload rejects submission before starting a stream', async (
 });
 
 
+describe('knowledge-space asks across cached conversations', () => {
+    it.each([
+        ['same space after completion', '101', true],
+        ['same space during generation', '101', false],
+        ['different space after completion', '102', true],
+        ['different space during generation', '102', false],
+    ] as const)('starts a fresh second conversation: %s', async (_case, spaceId, finishFirst) => {
+        parkChatAsk({ text: 'first question', space: { id: '101', name: 'Space one' } });
+        const { result, rerender } = renderHook(({ cid, locationKey }) => {
+            const [selectedKbs, setSelectedKbs] = useState(mockSelectedKbs);
+            mockSelectedKbs = selectedKbs;
+            const chat = useAiChat(cid);
+            useChatAskHandoff({
+                conversationId: cid,
+                activeConversationId: chat.conversationId,
+                locationKey,
+                selectedKbs,
+                setSelectedKbs,
+                sendMessage: chat.sendMessage,
+                ready: true, selectedModelId: 1, selectModel: jest.fn(() => true), onModelUnavailable: jest.fn(),
+            });
+            return chat;
+        }, { initialProps: { cid: 'new', locationKey: 'first' } });
+
+        expect(mockOpenedStreams).toHaveLength(1);
+        const first = latestStream();
+        act(() => {
+            first.submission.onCreated('first-chat', {
+                ...first.submission.userMessage, conversationId: 'first-chat',
+            });
+            if (finishFirst) first.submission.onEnd();
+        });
+        rerender({ cid: 'first-chat', locationKey: 'first-rewrite' });
+        parkChatAsk({ text: 'second question', space: { id: spaceId, name: spaceId } });
+        rerender({ cid: 'new', locationKey: 'second' });
+
+        await waitFor(() => expect(mockOpenedStreams).toHaveLength(2));
+        expect(latestStream().submission.payload).toMatchObject({
+            conversationId: null,
+            use_knowledge_base: { knowledge_space_ids: [Number(spaceId)] },
+        });
+        expect(result.current.messages[0].text).toBe('second question');
+        if (!finishFirst) expect(first.close).not.toHaveBeenCalled();
+        rerender({ cid: 'new', locationKey: 'second-again' });
+        expect(mockOpenedStreams).toHaveLength(2);
+    });
+});
+
 test("knowledge handoff submits the chosen model ID and space in the real chat payload", () => {
     const modelAtom = store.chatModel as unknown as { __testValue: { id: number; name: string } };
-    const kbAtom = store.selectedOrgKbs as unknown as { __testValue: Array<{ id: string; name: string; type: string }> };
     const initialModel = modelAtom.__testValue;
-    const initialKbs = kbAtom.__testValue;
+    const initialKbs = mockSelectedKbs;
     parkChatAsk({ text: "Count entries", modelId: 2, space: { id: "28", name: "Knowledge" } });
     try {
         renderHook(() => {
             const [model, setModel] = useState(initialModel);
             const [kbs, setKbs] = useState(initialKbs);
             modelAtom.__testValue = model;
-            kbAtom.__testValue = kbs;
+            mockSelectedKbs = kbs;
             const chat = useAiChat("new");
             useChatAskHandoff({
-                conversationId: "new", locationKey: "knowledge", selectedKbs: kbs, setSelectedKbs: setKbs,
+                conversationId: "new", activeConversationId: chat.conversationId, locationKey: "knowledge", selectedKbs: kbs, setSelectedKbs: setKbs,
                 sendMessage: chat.sendMessage, ready: true, selectedModelId: model.id,
                 selectModel: (id) => { setModel({ id, name: "Beta" }); return true; },
                 onModelUnavailable: jest.fn(),
@@ -405,6 +454,6 @@ test("knowledge handoff submits the chosen model ID and space in the real chat p
         expect(latestStream().submission.userMessage.text).toBe("Count entries");
     } finally {
         modelAtom.__testValue = initialModel;
-        kbAtom.__testValue = initialKbs;
+        mockSelectedKbs = initialKbs;
     }
 });

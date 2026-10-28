@@ -509,11 +509,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   }, [showToast, t]);
   const { attachmentAsk, retireAttachmentAsk } = useChatAskHandoff({
     conversationId,
+    activeConversationId: activeConvoId,
     locationKey: location.key,
     selectedKbs: selectedOrgKbs,
     setSelectedKbs: setSelectedOrgKbs,
     sendMessage,
-    ready: modelMode === 'daily' && activeConvoId === 'new' && !!user?.id && !!bsConfig?.models,
+    ready: modelMode === 'daily' && !!user?.id && !!bsConfig?.models,
     selectedModelId: chatModel.id,
     selectModel: selectAskModel,
     onModelUnavailable: handleAskModelUnavailable,

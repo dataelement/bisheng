@@ -45,11 +45,13 @@ export function parkChatAsk(ask: ChatAsk) {
 
 interface UseChatAskHandoffParams {
   conversationId: string;
+  /** Conversation currently bound to the send callback. */
+  activeConversationId: string;
   /** Changes on every navigation — the usual wake-up call. */
   locationKey: string;
   selectedKbs: KbSelection[];
   setSelectedKbs: (next: KbSelection[]) => void;
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string) => boolean;
   /** Daily mode, model catalog and the fresh chat state are ready. */
   ready: boolean;
   selectedModelId: number;
@@ -65,6 +67,7 @@ interface UseChatAskHandoffParams {
  */
 export function useChatAskHandoff({
   conversationId,
+  activeConversationId,
   locationKey,
   selectedKbs,
   setSelectedKbs,
@@ -76,25 +79,27 @@ export function useChatAskHandoff({
   onTake,
 }: UseChatAskHandoffParams) {
   const [mountedAsk, setMountedAsk] = useState<ChatAsk | null>(null);
+  const submittedAskRef = useRef<ChatAsk | null>(null);
   const preparedAskRef = useRef<ChatAsk | null>(null);
   const [attachmentAsk, setAttachmentAsk] = useState<AttachmentAsk | null>(null);
 
   const takePendingAsk = useCallback(() => {
     // A fresh conversation owns the imported question.
-    if (!pendingAsk || conversationId !== 'new') return;
+    if (!pendingAsk || conversationId !== 'new' || activeConversationId !== 'new') return;
     const ask = pendingAsk;
     pendingAsk = null;
     preparedAskRef.current = null;
     onTake?.();
     setMountedAsk(ask);
-  }, [conversationId, onTake]);
+  }, [conversationId, activeConversationId, onTake]);
 
   useEffect(takePendingAsk, [takePendingAsk, locationKey]);
   useActivate(takePendingAsk);
 
   useEffect(() => {
     const ask = mountedAsk;
-    if (!ask || conversationId !== 'new' || !ready) return;
+    if (!ask || submittedAskRef.current === ask) return;
+    if (conversationId !== 'new' || activeConversationId !== 'new' || !ready) return;
     if (preparedAskRef.current !== ask) {
       setSelectedKbs(ask.space
         ? [{ id: ask.space.id, name: ask.space.name, type: 'space' }]
@@ -113,14 +118,17 @@ export function useChatAskHandoff({
       ? selectedKbs.length === 1 && selectedKbs[0].type === 'space' && String(selectedKbs[0].id) === ask.space.id
       : selectedKbs.length === 0;
     if (!mounted) return;
-    setMountedAsk(null);
     if (ask.attachment) {
       askSeq += 1;
+      submittedAskRef.current = ask;
       setAttachmentAsk({ key: `ask-${askSeq}`, text: ask.text, file: ask.attachment });
-    } else {
-      sendMessage(ask.text);
+      setMountedAsk(null);
+    } else if (sendMessage(ask.text)) {
+      // A rejected send stays staged until the sender accepts it.
+      submittedAskRef.current = ask;
+      setMountedAsk(null);
     }
-  }, [mountedAsk, conversationId, ready, selectedModelId, selectModel, onModelUnavailable, selectedKbs, setSelectedKbs, sendMessage]);
+  }, [mountedAsk, conversationId, activeConversationId, ready, selectedModelId, selectModel, onModelUnavailable, selectedKbs, setSelectedKbs, sendMessage]);
 
   const retireAttachmentAsk = useCallback(() => setAttachmentAsk(null), []);
 
