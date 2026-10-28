@@ -4,25 +4,39 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## Built-in knowledge retrieval tool
 
-`register_work_knowledge_tool.py` registers `bisheng_knowledge_search` in an existing
-database. Fresh installations use the seed catalog. Run from `src/backend` using
-the live service `config`, with one registration process during release maintenance:
+`register_work_knowledge_tool.py` completes the Work knowledge-search upgrade in
+an existing database: register `bisheng_knowledge_search`, reconcile its category
+through the F048 permission facade, and verify the projection is CURRENT. Fresh
+installations use the seed catalog. Run one process during release maintenance
+from `src/backend` with the live service `config`:
 
 ```bash
 python scripts/register_work_knowledge_tool.py
-python scripts/register_work_knowledge_tool.py --apply
-python scripts/reconcile_f048_system_owned_resources.py
-python scripts/reconcile_f048_system_owned_resources.py --apply --confirm-store-id <store-id> --operator-id <user-id>
+python scripts/register_work_knowledge_tool.py --apply --confirm-store-id <store-id-from-preview> --operator-id <user-id>
 ```
 
-The first command previews changes; apply creates missing catalog rows with database
-assigned IDs in one transaction. Existing entries and administrator configuration
-are preserved; conflicting ownership, duplicate keys or deleted entries require
-operator resolution. The F048 reconciler separately provisions the tool permission
-projection through the existing permission facade. Verify its preview before apply.
-Deploy the backend code before registration; then verify discovery and execution
-with an ordinary user. Cloud callers supply the actual execution user and tenant,
-and selected knowledge IDs; the tool returns permission-filtered passages and sources.
+The preview returns the Store/model identity, catalog plan, permission state and
+`ready`. Apply validates the selected Store and runtime readiness before writing,
+creates missing catalog rows with database-assigned IDs in one transaction, and
+projects exactly the knowledge category. Existing entries, account switches,
+administrator configuration and current permission modes are preserved. Conflicting
+ownership, duplicate keys, deleted entries or a pending projection require operator
+resolution. A permission failure exits with an error; repeat the same command after
+recovering the service to complete the committed catalog's projection.
+
+Both container entrypoints expose the same upgrade operation. After deploying the
+backend code, use the service's working directory and configuration:
+
+```bash
+docker compose exec backend sh entrypoint.sh upgrade-work-knowledge
+docker compose exec backend sh entrypoint.sh upgrade-work-knowledge --apply --confirm-store-id <store-id-from-preview> --operator-id <user-id>
+```
+
+Completion requires `ready: true`, then ordinary-user discovery and execution.
+Verify single-space retrieval and K1/K2 multi-selection with distinct source markers
+and citations in Work. Keep the account enable switch and document permissions in
+the acceptance path. Code deployment, successful data upgrade, and real Work task
+acceptance are separate delivery states.
 
 ## Diagnostic Scripts
 
