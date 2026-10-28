@@ -3168,7 +3168,7 @@
   },
   "src/pages/knowledge/sidebar/KnowledgeSpaceSidebar.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
