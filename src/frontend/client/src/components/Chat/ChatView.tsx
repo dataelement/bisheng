@@ -34,7 +34,7 @@ import {
   type ChatModelMode,
   type ChatModelOption,
 } from '~/hooks/useChatModelResolution';
-import { useChatAskHandoff } from './chatAskHandoff';
+import { useChatAskHandoff, type ChatAsk } from './chatAskHandoff';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
@@ -168,18 +168,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     localStorage.setItem(`bs:${user.id}:searchType`, searchType ?? '');
   }, [searchType, user?.id]);
 
-
-  const leaveTaskMode = useCallback(() => setTaskMode(false), [setTaskMode]);
-  // Questions asked from a module page's ask bar land here (see chatAskHandoff).
-  const { attachmentAsk, retireAttachmentAsk } = useChatAskHandoff({
-    conversationId: conversationId ?? '',
-    locationKey: location.key,
-    selectedKbs: selectedOrgKbs,
-    setSelectedKbs: setSelectedOrgKbs,
-    sendMessage,
-    // A knowledge question is a daily-chat turn, whatever mode the tab was left in.
-    onTake: leaveTaskMode,
-  });
 
   // ── F028: workstation conversation export / import-to-knowledge ──
   // Auto-exit selection mode whenever the user switches to another chat.
@@ -464,6 +452,31 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key, conversationId, isTaskConversation, canUseTaskMode]);
+
+  const leaveTaskMode = useCallback(() => setTaskMode(false), [setTaskMode]);
+  const selectAskModel = useCallback((modelId: number) => {
+    const available = bsConfig?.models?.some((model) => String(model.id) === String(modelId));
+    if (!available) return false;
+    handleModelChange(modelId);
+    return true;
+  }, [bsConfig?.models, handleModelChange]);
+  const handleAskModelUnavailable = useCallback((ask: ChatAsk) => {
+    setInputText(ask.text);
+    showToast?.({ message: t('com_knowledge.ask_model_unavailable'), severity: NotificationSeverity.WARNING });
+  }, [showToast, t]);
+  const { attachmentAsk, retireAttachmentAsk } = useChatAskHandoff({
+    conversationId,
+    activeConversationId: activeConvoId,
+    locationKey: location.key,
+    selectedKbs: selectedOrgKbs,
+    setSelectedKbs: setSelectedOrgKbs,
+    sendMessage,
+    ready: modelMode === 'daily' && !!user?.id && !!bsConfig?.models,
+    selectedModelId: chatModel.id,
+    selectModel: selectAskModel,
+    onModelUnavailable: handleAskModelUnavailable,
+    onTake: leaveTaskMode,
+  });
 
   // Flipping the toggle by hand pins the mode for the rest of this conversation
   // — without the flag, the effect above would re-derive it from the history on

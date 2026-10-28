@@ -1613,6 +1613,7 @@
     "sort_by_size_label": "サイズで並べ替え",
     "select_all": "すべて選択",
     "folder_abnormal": "異常あり",
+    "ask_model_unavailable": "選択したモデルが変更されました。モデルを選び直して質問を送信してください。",
     "ask_bar_placeholder": "このナレッジスペースについて質問すると、回答は新しいチャットで開きます…"
   },
   "com_subscription": {

@@ -1,17 +1,20 @@
 /* Harness ModelSelect geometry, using the shared Chat theme palette. */
-.dsh-chat-surface .dsh-model-trigger {
+.dsh-model-trigger {
   display:flex; align-items:center; gap:4px; min-width:0;
-  max-width:min(360px,45cqw); height:28px; padding:0 4px 0 8px;
+  max-width:100%; height:28px; padding:0 4px 0 8px;
   border-radius:8px; font-size:13px; font-weight:400; line-height:20px;
   color:rgb(var(--text-2));
-  /* Work reserves an activity slot between the model and the primary action. */
-  margin-inline-end:12px;
   background:transparent; border:0; cursor:pointer;
 }
-.dsh-model-trigger span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsh-chat-surface .dsh-model-trigger {
+  max-width:min(360px,45cqw);
+  /* Chat reserves an activity slot before the primary action. */
+  margin-inline-end:12px;
+}
+.dsh-model-trigger span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsh-model-trigger svg { flex:none; color:#adb2b8; transition:transform .12s; }
 body[data-dsh-chat-theme=dark] .dsh-model-trigger svg { color:#81858c; }
-.dsh-chat-surface .dsh-model-trigger:hover:enabled { background:rgb(var(--fill-1)); }
+.dsh-model-trigger:hover:enabled { background:rgb(var(--fill-1)); }
 @container (width <= 560px) {
   .dsh-chat-surface .dsh-model-trigger { margin-inline-end:8px; }
 }
