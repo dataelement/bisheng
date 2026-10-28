@@ -251,6 +251,9 @@ class AppQueryService:
     @classmethod
     async def _load_visible(cls, app_id: str, actor, *, entry: str = LOG_ENTRY_DETAIL) -> App:
         app = await cls._load(app_id)
+        from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
+
+        require_app_request_tenant(app.tenant_id, actor, allow_global_super=entry not in OWNER_ONLY_ENTRIES)
         user_id = int(getattr(actor, "user_id", 0) or 0)
         actor_tenant = int(getattr(actor, "tenant_id", 0) or 0)
         is_super = bool(getattr(actor, "is_global_super", False))
@@ -281,6 +284,9 @@ class AppQueryService:
 
     @staticmethod
     async def _require_log_access(app: App, actor, *, entry: str) -> None:
+        from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
+
+        require_app_request_tenant(app.tenant_id, actor, allow_global_super=entry not in OWNER_ONLY_ENTRIES)
         user_id = int(getattr(actor, "user_id", 0) or 0)
         if entry in OWNER_ONLY_ENTRIES and int(app.tenant_id or 0) != int(getattr(actor, "tenant_id", 0) or 0):
             # **Owner equality is not enough on a credential door**, so the

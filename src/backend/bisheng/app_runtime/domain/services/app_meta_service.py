@@ -24,6 +24,7 @@ from __future__ import annotations
 from loguru import logger
 
 from bisheng.app_runtime.domain.constants import AppAuditAction, AppState
+from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
 from bisheng.common.errcode.app_factory import AppManageForbiddenError, AppNotFoundError
 from bisheng.common.permission_identity import check_tenant_admin
 from bisheng.core.context.tenant import set_current_tenant_id
@@ -51,29 +52,39 @@ class AppMetaService:
     ) -> App:
         """Apply the metadata patch and audit it. ``None`` means "leave alone".
 
-        ``actor`` is optional because the publish pipeline runs on a service
-        account that has already been authorised upstream (it owns the app by
-        F055's ownership check). When a human calls through the HTTP surface the
-        actor is present and the owner or administrator rule applies.
+        A human actor is required here. The publish pipeline uses the separate
+        deployment-provenance entry and never borrows a human identity.
         """
         async with get_async_db_session() as session:
             row = await AppDao.aget(session, app_id)
-            if row is None or row.state == AppState.DELETED.value:
-                raise AppNotFoundError(app_id=app_id)
-            set_current_tenant_id(int(row.tenant_id or 0))
-            if actor is not None:
-                await cls._require_editor(row, actor)
+        if row is None or row.state == AppState.DELETED.value:
+            raise AppNotFoundError(app_id=app_id)
+        await cls._require_editor(row, actor)
+        return await cls._apply_patch(row, name=name, description=description, logo=logo, actor=actor)
 
-            patch = {"name": name, "description": description, "logo": logo}
-            changed = {key: value for key, value in patch.items() if value is not None and value != getattr(row, key)}
-            if not changed:
-                return row
+    @classmethod
+    async def update_meta_for_release(
+        cls, deployment_id: str, *, app_id: str, name=None, description=None, logo=None
+    ) -> App:
+        from bisheng.app_publish.application.release_tenancy import require_release_eligible
+
+        rows = await require_release_eligible(app_id, deployment_id=deployment_id)
+        return await cls._apply_patch(rows.app, name=name, description=description, logo=logo)
+
+    @classmethod
+    async def _apply_patch(cls, row: App, *, name, description, logo, actor=None) -> App:
+        # Both callers authorize before this private writer. None is only audit attribution.
+        set_current_tenant_id(int(row.tenant_id or 0))
+        patch = {"name": name, "description": description, "logo": logo}
+        changed = {key: value for key, value in patch.items() if value is not None and value != getattr(row, key)}
+        if not changed:
+            return row
+        async with get_async_db_session() as session:
             for key, value in changed.items():
                 setattr(row, key, value)
             session.add(row)
             await session.commit()
             await session.refresh(row)
-
         await AuditLogDao.ainsert_v2(
             tenant_id=int(row.tenant_id or 0),
             operator_id=int(getattr(actor, "user_id", 0) or 0),
@@ -85,11 +96,12 @@ class AppMetaService:
             object_name=row.name,
             metadata={"fields": sorted(changed), "state": row.state},
         )
-        logger.info("app_runtime.update_meta app_id={} fields={}", app_id, sorted(changed))
+        logger.info("app_runtime.update_meta app_id={} fields={}", row.id, sorted(changed))
         return row
 
     @staticmethod
     async def _require_editor(app: App, actor) -> None:
+        require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
         user_id = int(getattr(actor, "user_id", 0) or 0)
         if user_id == int(app.owner_user_id or 0) or bool(getattr(actor, "is_global_super", False)):
             return

@@ -2904,6 +2904,13 @@
       "tightenConfirmOk": "Restrict",
       "revokeConfirmTitle": "Revoke this key?",
       "revokeConfirmBody": "The key stops working immediately and the holder's AI assistant loses access; the holder can generate a new one at any time."
+    },
+    "tenantScope": {
+      "label": "Tenant to manage",
+      "choose": "Select a tenant to manage",
+      "hint": "Choose where to view and create service accounts. Existing accounts stay in their tenant. This selection is shared with other administration pages.",
+      "changed": "The management tenant has changed. Refresh and confirm your action again. The original request will not be retried automatically.",
+      "refresh": "Refresh"
     }
   },
   "mediaPreview": {

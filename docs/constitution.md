@@ -144,6 +144,8 @@ grep -rhoE "Code(:\s*int)?\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.
 - **280 is assigned** to isolation-environment (sandbox) execution (`sandbox`). Do not reuse it.
 - When you claim a number, add it here in the same change.
 
+- **F113 allocations (2026-10-28)**: 26071 owner/account tenant mismatch (403), 26072 owner current tenant unresolved (403), 26073 service-account management scope changed (409), in `common/errcode/open_api.py`. These continue the occupied 26070 management band; they do not allocate a new module.
+
 ## C6. No Hardcoded Secrets (RULE-7)
 
 No `password` / `secret_key` / `api_key` / `access_token` literals in code. Use config + Fernet encryption (passwords in `config.yaml` are Fernet-encrypted; never write plaintext).

@@ -148,6 +148,9 @@ class PreviewInstanceService:
         whatever the approver had already typed into it.
         """
         app, _role = await cls._require_access(app_id, version_id, actor)
+        from bisheng.app_publish.application.release_tenancy import require_release_eligible
+
+        await require_release_eligible(app.id, version_id=version_id)
         version = await cls._load_version(app.id, version_id)
         user_id = cls._user_id(actor)
 

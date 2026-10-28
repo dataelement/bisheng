@@ -670,5 +670,8 @@
   "15031": "Invalid MCP service URL. Use a complete http:// or https:// address.",
   "15032": "Failed to retrieve MCP tools. Check the service status and configuration.",
   "25016": "The selected user is no longer an active member of this tenant. Refresh the candidate list and select again.",
-  "16233": "Release notes must not exceed 2,000 characters"
+  "16233": "Release notes must not exceed 2,000 characters",
+  "26071": "The owner's tenant differs from the service account tenant. Contact an administrator.",
+  "26072": "The owner's current tenant cannot be determined. Contact an administrator.",
+  "26073": "The service account management tenant has changed. Select the tenant and refresh before retrying."
 }

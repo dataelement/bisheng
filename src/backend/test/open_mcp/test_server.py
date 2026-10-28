@@ -1,5 +1,6 @@
 import json
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -7,11 +8,36 @@ from mcp import types
 
 from bisheng.open_api.domain.context import (
     OpenApiPrincipal,
+    get_current_open_api_principal,
     reset_current_open_api_principal,
     set_current_open_api_principal,
 )
+from bisheng.open_mcp.auth import current_mcp_scope
 from bisheng.open_mcp.contracts import ResourceListData
 from bisheng.open_mcp.server import MCP_PATH, OpenMcpDispatchMiddleware, create_open_mcp_runtime
+
+
+@pytest.fixture(autouse=True)
+def direct_handler_admission(request, monkeypatch):
+    if not request.node.name.startswith(("test_call_tool", "test_list_tools")):
+        yield
+        return
+    # Existing handler tests own the tool contract, not the SDK transport or
+    # membership provider (covered with real SQL by F113's separate tests).
+    monkeypatch.setattr(
+        "bisheng.open_mcp.server.StreamableHTTPSessionManager", lambda **kwargs: SimpleNamespace(app=kwargs["app"])
+    )
+
+    async def validate(header):
+        assert header == "Bearer handler-fixture"
+        return get_current_open_api_principal()
+
+    monkeypatch.setattr("bisheng.open_mcp.server.validate_bearer", validate)
+    token = current_mcp_scope.set({"type": "http", "headers": [(b"authorization", b"Bearer handler-fixture")]})
+    try:
+        yield
+    finally:
+        current_mcp_scope.reset(token)
 
 
 def _principal(*, scopes=frozenset({"knowledge:read", "knowledge:write"})):
@@ -158,9 +184,7 @@ async def test_call_tool_unknown_name_is_rejected_by_mcp_protocol_before_executi
     token = set_current_open_api_principal(_principal())
     try:
         result = await _handler(runtime, types.CallToolRequest)(
-            types.CallToolRequest(
-                params=types.CallToolRequestParams(name="not_allowlisted", arguments={})
-            )
+            types.CallToolRequest(params=types.CallToolRequestParams(name="not_allowlisted", arguments={}))
         )
     finally:
         reset_current_open_api_principal(token)
@@ -215,10 +239,13 @@ async def test_real_streamable_http_initialize_then_stateless_list(monkeypatch):
     runtime = create_open_mcp_runtime()
     headers = {"Accept": "application/json, text/event-stream"}
     transport = httpx.ASGITransport(app=runtime.app)
-    async with runtime.lifespan(), httpx.AsyncClient(
-        transport=transport,
-        base_url="http://localhost",
-    ) as client:
+    async with (
+        runtime.lifespan(),
+        httpx.AsyncClient(
+            transport=transport,
+            base_url="http://localhost",
+        ) as client,
+    ):
         initialized = await client.post(
             MCP_PATH,
             headers=headers,

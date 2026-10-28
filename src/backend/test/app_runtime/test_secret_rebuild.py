@@ -171,3 +171,23 @@ async def test_approval_preview_injects_names_with_empty_values(secret_runtime, 
     )
     op = await repo.get(RuntimeOperation, result["operation_id"])
     assert unseal(op.payload["sealed_env"])["API_KEY"] == ""
+
+
+async def test_f113_frozen_owner_tenant_is_revalidated_before_config_restart(secret_runtime):
+    """F113 覆盖 AC: AC-16、AC-34、AC-36; rejected rebuild creates no runtime operation."""
+    from sqlmodel import select
+
+    from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeOperation
+    from bisheng.app_runtime.domain.services.secret_rebuild_service import AppSecretRebuildService
+    from bisheng.common.errcode.open_api import ServiceAccountOwnerTenantMismatchError
+    from bisheng.database.models.tenant import UserTenant
+
+    repo, app, _ = secret_runtime
+    async with repo.transaction() as session:
+        membership = (await session.exec(select(UserTenant).where(UserTenant.user_id == 7))).one()
+        membership.tenant_id = 2
+        session.add(membership)
+    with pytest.raises(ServiceAccountOwnerTenantMismatchError):
+        await AppSecretRebuildService(repository=repo).rebuild_current(app.id, request=confirmation(), actor=actor())
+    assert len(await repo.find(RuntimeOperation, app_id=app.id)) == 1
+    assert app.current_version_id == "v1" and app.pending_version_id == "pending-v2"

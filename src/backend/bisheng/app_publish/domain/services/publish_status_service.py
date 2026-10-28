@@ -158,6 +158,9 @@ class PublishStatusService:
         handed to the client would be trusting the client.
         """
         app = await cls._load(app_id)
+        from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
+
+        require_app_request_tenant(app.tenant_id, actor)
         if not cls._is_owner(app, actor):
             raise AppPublishOwnerOnlyError(
                 msg="仅应用负责人可以手动上线",
@@ -202,6 +205,9 @@ class PublishStatusService:
         ``visible_tenant_ids`` with the Root tenant, so the tenant is compared
         first, exactly as ``AppQueryService._require_log_access`` does it.
         """
+        from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
+
+        require_app_request_tenant(app.tenant_id, actor, allow_global_super=entry not in OWNER_ONLY_ENTRIES)
         if entry in OWNER_ONLY_ENTRIES:
             if int(app.tenant_id or 0) != int(getattr(actor, "tenant_id", 0) or 0):
                 raise cls._not_visible(app)
