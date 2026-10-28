@@ -111,7 +111,11 @@ async def get_chat_attachment_url(
 def add_chat_messages(
     *, request: Request, data: AddChatMessages, login_user: UserPayload = Depends(UserPayload.get_login_user)
 ):
-    """Add a full Q&A record. Security check write usage."""
+    """Persist Q&A records for Gateway's violation-message logging.
+
+    This endpoint is dedicated to messages flagged by Gateway moderation.
+    The user message and session are intentionally marked as violations.
+    """
     message_dbs = ChatMessageService.add_qa_messages(data, login_user, get_request_ip(request))
     return resp_200(data=message_dbs)
 
@@ -124,7 +128,11 @@ def update_chat_message(
     category: str = Body(default=None, embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """Update the content of a message. Security check usage."""
+    """Update messages for Gateway's violation-message logging.
+
+    This endpoint is dedicated to messages flagged by Gateway moderation.
+    The updated message and its session are intentionally marked as violations.
+    """
     ChatMessageService.update_message(message_id, message, category, login_user)
     return resp_200()
 
