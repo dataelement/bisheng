@@ -2403,9 +2403,6 @@
   "src/pages/Subscription/ChannelDiscoveryHome.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 6
-    },
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/pages/Subscription/ChannelLayout.tsx": {

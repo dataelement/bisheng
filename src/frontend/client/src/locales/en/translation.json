@@ -1729,6 +1729,7 @@
     "back_to_channel_list": "Back to channels",
     "cancel": "Cancel",
     "channel_content_needs_approval": "Channel content requires approval to view",
+    "channel_content_access_required": "Channel content is available after your subscription is approved or access is granted.",
     "channel_create_success": "Channel created successfully",
     "channel_name_colon": "Channel name:",
     "channel_description_colon": "Channel description:",
