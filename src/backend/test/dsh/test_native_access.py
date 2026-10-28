@@ -33,7 +33,7 @@ from bisheng.dsh.domain.services.access import DshAccessService, DshPrincipal, p
 from bisheng.dsh.domain.services.authorization import DshAuthorizationService
 from bisheng.dsh.domain.services.identity import IdentityService
 from bisheng.dsh.domain.services.local_session import DshLocalSessionService
-from bisheng.dsh.infrastructure.token_keys import ISSUER, LocalTokenKeys
+from bisheng.dsh.infrastructure.token_keys import ISSUER, LocalTokenKeys, successor_refresh_token
 
 
 class RedisStore:
@@ -132,9 +132,10 @@ async def test_native_tokens_validate_and_replay_revokes_the_family(native):
         rotated = await runtime.sessions.refresh(result["refresh_token"])
     assert rotated["session_id"] == result["session_id"]
     assert rotated["refresh_token"] != result["refresh_token"]
-    # The successor has never been presented, so retrying the old token is a lost response.
+    # The successor has never been presented, so retrying the old token returns that same successor.
     recovered = await runtime.sessions.refresh(result["refresh_token"])
     assert recovered["session_id"] == result["session_id"]
+    assert recovered["refresh_token"] == rotated["refresh_token"]
     await runtime.access.authenticate("Bearer " + rotated["access_token"])
     await runtime.sessions.refresh(recovered["refresh_token"])
     with pytest.raises(DshRefreshTokenReusedError):
@@ -155,30 +156,81 @@ def rewrite_used_at(engine, used_at):
         session.commit()
 
 
-async def test_replaced_successor_revokes_after_grace_reissue(native):
+async def test_lost_refresh_returns_the_same_successor_until_it_is_used(native):
     runtime, _ = native
     issued = await login(runtime)
     lost = await runtime.sessions.refresh(issued["refresh_token"])
     recovered = await runtime.sessions.refresh(issued["refresh_token"])
+    assert recovered["refresh_token"] == lost["refresh_token"]
     await runtime.access.authenticate("Bearer " + recovered["access_token"])
+    continued = await runtime.sessions.refresh(recovered["refresh_token"])
+    await runtime.access.authenticate("Bearer " + continued["access_token"])
     with pytest.raises(DshRefreshTokenReusedError):
-        await runtime.sessions.refresh(lost["refresh_token"])
+        await runtime.sessions.refresh(issued["refresh_token"])
     with pytest.raises(DshSessionRevokedError):
         await runtime.access.authenticate("Bearer " + recovered["access_token"])
 
 
-async def test_repeated_lost_refresh_keeps_only_the_latest_successor(native):
+async def test_repeated_lost_refresh_returns_the_same_successor(native):
     runtime, _ = native
     issued = await login(runtime)
-    await runtime.sessions.refresh(issued["refresh_token"])
-    replaced = await runtime.sessions.refresh(issued["refresh_token"])
-    latest = await runtime.sessions.refresh(issued["refresh_token"])
-    continued = await runtime.sessions.refresh(latest["refresh_token"])
+    first = await runtime.sessions.refresh(issued["refresh_token"])
+    second = await runtime.sessions.refresh(issued["refresh_token"])
+    third = await runtime.sessions.refresh(issued["refresh_token"])
+    assert first["refresh_token"] == second["refresh_token"] == third["refresh_token"]
+    continued = await runtime.sessions.refresh(third["refresh_token"])
     await runtime.access.authenticate("Bearer " + continued["access_token"])
     with pytest.raises(DshRefreshTokenReusedError):
-        await runtime.sessions.refresh(replaced["refresh_token"])
+        await runtime.sessions.refresh(issued["refresh_token"])
     with pytest.raises(DshSessionRevokedError):
         await runtime.access.authenticate("Bearer " + continued["access_token"])
+
+
+def test_successor_refresh_is_determined_by_the_server_key():
+    import hmac
+    import re
+
+    key_a = hmac.digest(b"master-a", b"bisheng:dsh:refresh-successor:v1", hashlib.sha256)
+    key_b = hmac.digest(b"master-b", b"bisheng:dsh:refresh-successor:v1", hashlib.sha256)
+    refresh = "A" * 43
+    first = successor_refresh_token(key_a, refresh)
+    assert first == successor_refresh_token(key_a, refresh)
+    assert first != successor_refresh_token(key_b, refresh)
+    assert re.fullmatch(r"[A-Za-z0-9_-]{43}", first)
+
+
+async def test_refresh_returns_the_derived_successor(native):
+    runtime, _ = native
+    issued = await login(runtime)
+    key = await runtime.sessions.keys.resolve_refresh_successor_key()
+    rotated = await runtime.sessions.refresh(issued["refresh_token"])
+    assert rotated["refresh_token"] == successor_refresh_token(key, issued["refresh_token"])
+    again = await runtime.sessions.refresh(issued["refresh_token"])
+    assert again["refresh_token"] == rotated["refresh_token"]
+
+
+async def test_unspent_successor_survives_a_long_sleep_inside_the_window(native):
+    runtime, engine = native
+    runtime.sessions.refresh_grace_seconds = 86400
+    issued = await login(runtime)
+    rotated = await runtime.sessions.refresh(issued["refresh_token"])
+    rewrite_used_at(engine, datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2))
+    recovered = await runtime.sessions.refresh(issued["refresh_token"])
+    assert recovered["refresh_token"] == rotated["refresh_token"]
+    continued = await runtime.sessions.refresh(recovered["refresh_token"])
+    await runtime.access.authenticate("Bearer " + continued["access_token"])
+
+
+async def test_unspent_successor_expires_after_the_grace_window(native):
+    runtime, engine = native
+    runtime.sessions.refresh_grace_seconds = 86400
+    issued = await login(runtime)
+    rotated = await runtime.sessions.refresh(issued["refresh_token"])
+    rewrite_used_at(engine, datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=25))
+    with pytest.raises(DshRefreshTokenReusedError):
+        await runtime.sessions.refresh(issued["refresh_token"])
+    with pytest.raises(DshSessionRevokedError):
+        await runtime.access.authenticate("Bearer " + rotated["access_token"])
 
 
 async def test_refresh_replay_outside_grace_revokes_the_session(native):
@@ -217,11 +269,13 @@ async def test_zero_grace_keeps_strict_replay(native):
 async def test_grace_on_one_device_leaves_the_other_session_active(native):
     runtime, _ = native
     first, second = await login(runtime), await login(runtime)
-    lost = await runtime.sessions.refresh(first["refresh_token"])
-    await runtime.sessions.refresh(first["refresh_token"])
+    rotated = await runtime.sessions.refresh(first["refresh_token"])
+    recovered = await runtime.sessions.refresh(first["refresh_token"])
+    assert recovered["refresh_token"] == rotated["refresh_token"]
     await runtime.access.authenticate("Bearer " + second["access_token"])
+    await runtime.sessions.refresh(recovered["refresh_token"])
     with pytest.raises(DshRefreshTokenReusedError):
-        await runtime.sessions.refresh(lost["refresh_token"])
+        await runtime.sessions.refresh(first["refresh_token"])
     await runtime.access.authenticate("Bearer " + second["access_token"])
 
 
@@ -233,6 +287,7 @@ async def test_grace_follows_behavior_after_a_long_rotation_chain(native):
         current = await runtime.sessions.refresh(current["refresh_token"])
         history.append(current["refresh_token"])
     recovered = await runtime.sessions.refresh(history[-2])
+    assert recovered["refresh_token"] == current["refresh_token"]
     continued = await runtime.sessions.refresh(recovered["refresh_token"])
     await runtime.access.authenticate("Bearer " + continued["access_token"])
     with pytest.raises(DshRefreshTokenReusedError):
@@ -339,7 +394,7 @@ def test_pkce_browser_ticket_exchange_and_refresh_end_to_end(native, path):
         assert lost.status_code == 200, lost.text
         recovered = client.post(path + "/token", json={"grant_type": "refresh_token", "refresh_token": held})
         assert recovered.status_code == 200, recovered.text
-        assert recovered.json()["refresh_token"] != lost.json()["refresh_token"]
+        assert recovered.json()["refresh_token"] == lost.json()["refresh_token"]
         principal = asyncio.run(runtime.access.authenticate("Bearer " + recovered.json()["access_token"]))
         assert principal.user_id == "20"
         assert (

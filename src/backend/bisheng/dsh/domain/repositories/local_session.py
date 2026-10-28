@@ -86,18 +86,13 @@ class DshSessionRepository:
         if row is None or token is None:
             return None, "invalid_refresh_token"
         if token.state == "USED":
-            if self._reissue_lost_refresh(row, token, next_digest, now, grace_seconds):
+            if self._return_unspent_successor(row, token, next_digest, now, grace_seconds):
+                logger.info(
+                    "dsh refresh grace return session_id={} generation={}",
+                    row.session_id,
+                    token.generation + 1,
+                )
                 return self.snapshot(row), None
-            self.revoke(row)
-            return None, "refresh_token_reused"
-        # A revoked token on a still-active session is the successor replaced by a
-        # grace reissue. Presenting it means another party raced the lost retry.
-        if token.state == "REVOKED" and row.state == "ACTIVE":
-            logger.info(
-                "dsh refresh grace successor replay session_id={} generation={}",
-                row.session_id,
-                token.generation,
-            )
             self.revoke(row)
             return None, "refresh_token_reused"
         if row.state != "ACTIVE":
@@ -121,8 +116,12 @@ class DshSessionRepository:
         self.session.flush()
         return self.snapshot(row), None
 
-    def _reissue_lost_refresh(self, row, token, next_digest: str, now: datetime, grace_seconds: int) -> bool:
-        """Replace one undelivered successor when the client retries inside the grace window."""
+    def _return_unspent_successor(self, row, token, next_digest: str, now: datetime, grace_seconds: int) -> bool:
+        """Return the already issued successor when the client never received it.
+
+        The successor digest is derived from the presented token, so a retry names
+        the same row. Returning it leaves the database unchanged.
+        """
         if (
             grace_seconds <= 0
             or token.used_at is None
@@ -132,45 +131,16 @@ class DshSessionRepository:
             or now >= token.expires_at
         ):
             return False
-        used_descendant = self.session.exec(
-            select(DshRefreshToken.generation)
+        successor = self.session.exec(
+            select(DshRefreshToken)
             .where(
                 DshRefreshToken.session_id == row.session_id,
-                DshRefreshToken.generation > token.generation,
-                DshRefreshToken.state == "USED",
+                DshRefreshToken.token_hash == next_digest,
+                DshRefreshToken.generation == token.generation + 1,
             )
-            .limit(1)
-        ).first()
-        if used_descendant is not None:
-            return False
-        latest = self.session.exec(
-            select(DshRefreshToken)
-            .where(DshRefreshToken.session_id == row.session_id)
-            .order_by(DshRefreshToken.generation.desc())
-            .limit(1)
             .execution_options(populate_existing=True)
-        ).first()
-        if (
-            latest is None
-            or latest.generation <= token.generation
-            or latest.state != "ACTIVE"
-            or latest.generation >= 9223372036854775807
-        ):
-            return False
-        latest.state = "REVOKED"
-        self.session.add(latest)
-        self.session.add(
-            DshRefreshToken(
-                token_hash=next_digest,
-                tenant_id=row.tenant_id,
-                session_id=row.session_id,
-                generation=latest.generation + 1,
-                expires_at=row.expires_at,
-            )
-        )
-        self.session.flush()
-        logger.info("dsh refresh grace reissue session_id={} generation={}", row.session_id, latest.generation + 1)
-        return True
+        ).one_or_none()
+        return successor is not None and successor.state == "ACTIVE"
 
     @strict_tenant_filter()
     def page(self, user_id, *, cursor=None, limit=20):
