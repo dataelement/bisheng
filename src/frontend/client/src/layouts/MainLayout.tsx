@@ -472,6 +472,9 @@ export default function MainLayout() {
           name={cacheKey}
           id={cacheKey}
           saveScroll={true}
+          // React 18 chat consumers stay live so cached navigation and streaming
+          // state advance together when returning from a module.
+          autoFreeze={cacheKey !== 'chat_tab'}
         >
           <div
             ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
