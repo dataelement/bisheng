@@ -76,6 +76,7 @@
   "com_app_no_description_placeholder": "No description yet...",
   "com_app_share_link_copied": "App link copied to clipboard",
   "com_app_share_link_copy_failed": "Failed to copy app link",
+  "com_app_featured_tag": "Featured",
   "com_app_start_chat": "Start chat",
   "com_app_chat_sidebar_title": "App chat",
   "com_app_chat_empty_line1": "No conversations yet, ",

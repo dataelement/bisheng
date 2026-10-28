@@ -2879,9 +2879,6 @@
   "src/pages/apps/components/AgentCard.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/pages/apps/components/AgentGrid.tsx": {

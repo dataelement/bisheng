@@ -74,6 +74,7 @@
   "com_app_no_description_placeholder": "説明はまだありません…",
   "com_app_share_link_copied": "アプリのリンクをクリップボードにコピーしました",
   "com_app_share_link_copy_failed": "リンクのコピーに失敗しました",
+  "com_app_featured_tag": "おすすめ",
   "com_app_start_chat": "チャットを開始",
   "com_app_chat_sidebar_title": "アプリでの会話",
   "com_settings_general": "一般",
