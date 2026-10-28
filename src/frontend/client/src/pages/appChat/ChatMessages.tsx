@@ -55,7 +55,7 @@ export default function ChatMessages({
     selectionActive = false,
 }: ChatMessagesProps) {
     const { messageScrollRef, messages } = useMessage(readOnly);
-    const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState);
+    const { inputForm, guideWord, inputDisabled, error } = useRecoilValue(currentRunningState);
     const chatState = useRecoilValue(currentChatState);
     const localize = useLocalize();
 
@@ -143,7 +143,7 @@ export default function ChatMessages({
                             key={msg.id}
                             data={msg}
                             logo={logo}
-                            disabled={readOnly}
+                            disabled={readOnly || !!error?.code}
                             flow={chatState.flow}
                         />;
                     case 'output_with_input_msg':
@@ -152,7 +152,7 @@ export default function ChatMessages({
                             key={msg.id}
                             data={msg}
                             logo={logo}
-                            disabled={readOnly}
+                            disabled={readOnly || !!error?.code}
                             flow={chatState.flow}
                         />;
                     case 'node_run':
