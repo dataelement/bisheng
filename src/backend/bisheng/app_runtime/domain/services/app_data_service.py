@@ -36,6 +36,7 @@ from typing import Any
 
 from bisheng.app_runtime.domain.constants import AppAuditAction, AppState
 from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
+from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
 from bisheng.common.errcode.app_factory import AppDataForbiddenError, AppDataInvalidError, AppNotFoundError
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import set_current_tenant_id
@@ -208,6 +209,7 @@ class AppDataService:
         check: this is the one surface where an administrator's reach ends,
         and the check must not have a branch that could widen it.
         """
+        require_app_request_tenant(app.tenant_id, actor)
         if int(getattr(actor, "user_id", 0) or 0) != int(app.owner_user_id or 0):
             raise AppDataForbiddenError(app_id=app.id)
 

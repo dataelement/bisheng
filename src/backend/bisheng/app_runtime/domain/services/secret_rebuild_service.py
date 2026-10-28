@@ -45,6 +45,8 @@ class AppSecretRebuildService:
         # Replay is checked after current authorization, before new-attempt CAS.
         app = await self.repo.get(App, app_id)
         self._owner(app, actor)
+        from bisheng.app_publish.application.release_tenancy import require_release_eligible
+
         key = "secret-rebuild:" + hashlib.sha256(request.request_id.encode()).hexdigest()
         digest = content_digest(request.model_dump(mode="json"))
         existing = await self.repo.find(RuntimeOperation, scope_key=f"{app.tenant_id}/{app.id}", idempotency_key=key)
@@ -71,6 +73,7 @@ class AppSecretRebuildService:
                     return {"operation_id": replay[0].id, "status": replay[0].status}
                 if app.state != "online" or app.current_version_id != request.expected_version_id:
                     raise AppSecretRebuildConflictError(reason="application_changed")
+                await require_release_eligible(app.id, version_id=app.current_version_id)
                 routes = await self.repo.find(RuntimeRoute, route_key=f"app:{app.id}")
                 if not routes:
                     raise AppSecretRebuildConflictError(reason="runtime_unknown")

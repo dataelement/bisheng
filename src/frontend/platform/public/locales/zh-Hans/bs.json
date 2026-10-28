@@ -2837,6 +2837,13 @@
       "tightenConfirmOk": "确定收紧",
       "revokeConfirmTitle": "吊销这把密钥？",
       "revokeConfirmBody": "吊销后立即失效，持有人的 AI 助手将无法访问平台知识；持有人可自行重新生成。"
+    },
+    "tenantScope": {
+      "label": "管理租户",
+      "choose": "请选择管理租户",
+      "hint": "选择查看和创建服务账号的租户，不改变已有账号的归属。此选择与其他管理页面共享。",
+      "changed": "管理租户已变化。请刷新后重新确认操作，原请求不会自动重试。",
+      "refresh": "刷新"
     }
   },
   "mediaPreview": {

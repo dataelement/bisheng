@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 
 from bisheng.common.errcode.open_api import (
+    ServiceAccountManagementScopeChangedError,
     ServiceAccountNameTakenError,
     ServiceAccountNotFoundError,
     ServiceAccountOwnerInvalidError,
@@ -38,6 +39,7 @@ from bisheng.open_api.domain.schemas.service_account import (
     ServiceAccountUpdate,
 )
 from bisheng.open_api.domain.services.credential_service import CredentialService
+from bisheng.open_api.domain.services.service_account_scope_service import ServiceAccountScopeService
 
 AUDIT_TARGET_TYPE = "service_account"
 
@@ -49,6 +51,13 @@ class ManagementActor(Protocol):
 
 
 class ServiceAccountService:
+    @classmethod
+    async def owner_candidates(cls, *, keyword: str | None, page: int, page_size: int):
+        tenant_id = ServiceAccountScopeService.admitted_tenant()
+        if tenant_id is None:
+            raise ServiceAccountManagementScopeChangedError()
+        return await OwnerRepository.list_management_owners(tenant_id, keyword=keyword, page=page, page_size=page_size)
+
     @classmethod
     async def get_row(cls, service_account_id: int, *, include_deleted: bool = False) -> ServiceAccount:
         """Load one account, refusing anything outside the caller's tenant.
@@ -231,17 +240,21 @@ class ServiceAccountService:
 
     @staticmethod
     async def _resolve_owner(user_id: int) -> NaturalPersonRecord:
-        owner = await OwnerRepository.get_active_natural_person(user_id)
+        owner = await OwnerRepository.get_unique_management_owner(user_id)
         if owner is None:
             raise ServiceAccountOwnerInvalidError()
         return owner
 
     @staticmethod
     def _creation_tenant(operator: ManagementActor, owner: NaturalPersonRecord) -> int:
-        scoped_tenant = get_current_tenant_id()
-        if bool(getattr(operator, "is_global_super", False)) and scoped_tenant is None:
-            return owner.tenant_id
-        return int(scoped_tenant or operator.tenant_id or DEFAULT_TENANT_ID)
+        if not settings.multi_tenant.enabled:
+            return DEFAULT_TENANT_ID
+        if bool(getattr(operator, "is_global_super", False)):
+            tenant = ServiceAccountScopeService.admitted_tenant()
+            if tenant is None:
+                raise ServiceAccountManagementScopeChangedError()
+            return tenant
+        return int(operator.tenant_id)
 
     @classmethod
     async def _audit(cls, operator: ManagementActor, action: str, row: ServiceAccount) -> None:

@@ -36,6 +36,7 @@ from typing import Any
 
 from loguru import logger
 
+from bisheng.app_publish.application.release_tenancy import ApprovedReleaseSource, require_release_eligible
 from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
 from bisheng.app_runtime.domain.constants import (
     DEFAULT_TIER_ID,
@@ -300,6 +301,36 @@ class AppStateService:
     ) -> ActionResult:
         app = await cls._load(app_id)
         await cls._require_operator(app, actor)
+        await require_release_eligible(app.id, version_id=str(cls._pick_version(app) or ""))
+        return await cls._start_authorized(
+            app,
+            actor=actor,
+            audit_action=audit_action,
+            shortage_state=shortage_state,
+        )
+
+    @classmethod
+    async def publish_approved(cls, source: ApprovedReleaseSource) -> ActionResult:
+        if not isinstance(source, ApprovedReleaseSource) or source.audit_source != "approval_outbox":
+            raise AppStateConflictError(action="approved_source_invalid")
+        app = await cls._load(source.app_id)
+        if (
+            app.id != source.app_id
+            or app.tenant_id != source.tenant_id
+            or app.owner_user_id != source.owner_user_id
+            or cls._pick_version(app) != source.version_id
+        ):
+            raise AppStateConflictError(app_id=app.id, action="approved_source_changed")
+        return await cls._start_authorized(
+            app,
+            actor=source,
+            audit_action=AppAuditAction.PUBLISH,
+            shortage_state=AppState.PENDING_CAPACITY,
+        )
+
+    @classmethod
+    async def _start_authorized(cls, app: App, *, actor, audit_action: AppAuditAction, shortage_state: AppState | None):
+        app_id = app.id
         if not is_transition_allowed(app.state, AppState.ONLINE.value):
             raise AppStateConflictError(msg="当前状态不支持该操作", app_id=app_id, state=app.state)
 
@@ -593,7 +624,7 @@ class AppStateService:
         ``app.state_transition`` event (§7), so the question "why is this app in
         this state" is answerable from the log of this one function.
         """
-        actor_id = int(getattr(actor, "user_id", 0) or 0) or None
+        actor_id = _audit_operator_id(actor) or None
         event = logger.bind(
             event=EVENT_STATE_TRANSITION,
             app_id=app_id,
@@ -752,6 +783,9 @@ class AppStateService:
         administrators who may already stop it (``_require_operator``) may also
         delete it.
         """
+        from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
+
+        require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
         if int(getattr(actor, "user_id", 0) or 0) == int(app.owner_user_id or 0):
             return
         owner = await UserDao.aget_user(int(app.owner_user_id or 0))
@@ -763,6 +797,9 @@ class AppStateService:
     @staticmethod
     async def _require_operator(app: App, actor) -> None:
         """Owner or this tenant's administrator or platform super admin (AC-41)."""
+        from bisheng.app_runtime.domain.services.tenant_access import require_app_request_tenant
+
+        require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
         user_id = int(getattr(actor, "user_id", 0) or 0)
         if user_id == int(app.owner_user_id or 0):
             return
@@ -797,7 +834,7 @@ class AppStateService:
     ) -> None:
         await AuditLogDao.ainsert_v2(
             tenant_id=int(app.tenant_id or 0),
-            operator_id=int(getattr(actor, "user_id", 0) or 0),
+            operator_id=_audit_operator_id(actor),
             operator_tenant_id=int(getattr(actor, "tenant_id", 0) or app.tenant_id or 0),
             operator_name=getattr(actor, "user_name", None),
             action=action.value,
@@ -805,8 +842,31 @@ class AppStateService:
             target_id=app.id,
             object_name=app.name,
             reason=reason or None,
-            metadata={"version_id": version_id, "state": app.state, "reason": reason, **(detail or {})},
+            metadata={
+                "version_id": version_id,
+                "state": app.state,
+                "reason": reason,
+                **(detail or {}),
+                **_audit_source(actor),
+            },
         )
+
+
+def _audit_operator_id(actor) -> int:
+    # Provenance supplies attribution only; it never passes a human permission gate.
+    if isinstance(actor, ApprovedReleaseSource):
+        return actor.owner_user_id
+    return int(getattr(actor, "user_id", 0) or 0)
+
+
+def _audit_source(actor) -> dict:
+    if not isinstance(actor, ApprovedReleaseSource):
+        return {}
+    return {
+        "execution_source": actor.audit_source,
+        "approval_instance_id": actor.approval_instance_id,
+        "deployment_id": actor.deployment_id,
+    }
 
 
 async def _mark_version_online(app_id: str, version_id: str) -> None:

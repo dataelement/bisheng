@@ -41,7 +41,9 @@ from bisheng.app_publish.domain.services import package_service
 from bisheng.app_publish.domain.services.app_publish_scenario_handler import SCENARIO_CODE
 from bisheng.app_publish.domain.services.secret_scanner import mask_secrets, skip_reason
 from bisheng.app_publish.domain.services.version_service import VersionService
+from bisheng.app_runtime.application.tenant_access import require_app_request_tenant
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+from bisheng.common.errcode.app_factory import AppNotFoundError
 from bisheng.common.errcode.app_publish import (
     AppPackageInvalidError,
     AppSnapshotFileNotFoundError,
@@ -99,6 +101,10 @@ class ReviewAccess:
         approver needs is "pending version against the last published one",
         and the published side has no request of its own to hold a task on.
         """
+        try:
+            require_app_request_tenant(app.tenant_id, actor, allow_global_super=True)
+        except AppNotFoundError as exc:
+            raise AppVersionReviewForbiddenError() from exc
         user_id = int(getattr(actor, "user_id", 0) or 0)
         if user_id and user_id == int(app.owner_user_id or 0):
             return ROLE_OWNER

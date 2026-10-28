@@ -45,6 +45,7 @@ from typing import Any
 
 from loguru import logger
 
+from bisheng.app_publish.application.release_tenancy import require_release_eligible
 from bisheng.app_publish.domain.constants import AppReleaseAuditAction
 from bisheng.app_publish.domain.models.app_deployment import (
     STAGE_PRECHECK_BUILD,
@@ -80,6 +81,7 @@ from bisheng.core.context.tenant import get_current_tenant_id, set_current_tenan
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.app import AppDao
+from bisheng.open_api.application.service_account_tenancy import require_owner_tenant, revalidate_service_account
 from bisheng.utils import generate_uuid
 
 #: The asynchronous stage machine, in order. Reordering this tuple is the whole
@@ -223,7 +225,11 @@ class PublishPipelineService:
 
         release_notes = normalize_release_notes(release_notes)
         tenant = tenant_id if tenant_id is not None else get_current_tenant_id()
+        principal = await revalidate_service_account(principal)
+        if tenant != principal.tenant_id:
+            raise AppNotOwnedBySubjectError()
         owner_user_id = resource_owner_of(principal)
+        await require_owner_tenant(owner_user_id, tenant)
         package_service.check_upload_size(Path(package_path).stat().st_size)
 
         workdir = Path(tempfile.mkdtemp(prefix="bisheng-app-"))
@@ -517,6 +523,7 @@ class PublishPipelineService:
 
         workdir = Path(tempfile.mkdtemp(prefix="bisheng-app-run-"))
         try:
+            await require_release_eligible(deployment.app_id, deployment_id=deployment.id)
             root = await cls._materialise_snapshot(deployment, workdir)
             context: dict[str, Any] = {"manifest": manifest, "root": root, "image_ref": None}
             for stage, step in PIPELINE_STAGES:
@@ -631,11 +638,13 @@ class PublishPipelineService:
         through the same method, and a second implementation here would drift
         from it the first time either side gains a rule.
         """
-        from bisheng.app_runtime.domain.services.app_meta_service import AppMetaService
+        from bisheng.app_runtime.application.release_metadata import update_meta_for_release
 
+        await require_release_eligible(deployment.app_id, deployment_id=deployment.id)
         manifest: AppManifest = context["manifest"]
         logo, hints = await cls._store_icon(manifest, context["root"])
-        await AppMetaService.update_meta(
+        await update_meta_for_release(
+            deployment.id,
             app_id=deployment.app_id,
             name=manifest.name,
             description=manifest.description,
@@ -688,6 +697,7 @@ class PublishPipelineService:
         """Approval request first, version record second — design D6, owned by ``VersionService``."""
         from bisheng.app_publish.domain.services import publish_approval_service
 
+        await require_release_eligible(deployment.app_id, deployment_id=deployment.id)
         await VersionService.record_version(
             deployment,
             approval=publish_approval_service,
