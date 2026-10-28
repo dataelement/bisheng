@@ -1167,6 +1167,9 @@
   "subscribe_success": "订阅成功",
   "subscribed": "已加入",
   "website": "网站",
+  "com_system_notice": {
+    "title": "系统通知"
+  },
   "com_auth": {
     "got_it": "知道了",
     "session_kicked_title": "会话已注销"

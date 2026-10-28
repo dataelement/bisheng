@@ -230,6 +230,10 @@ export default function MainLayout() {
   /** Pages that read their view from the query string: a page react-activation froze keeps
    *  its old router context, so they are mounted fresh instead of cached. */
   const isQueryDrivenRoute = isSkillsRoute || isSquareRoute || isCapabilitiesRoute;
+  // Channel list, detail, sharing and settings all render from the live router.
+  // Keep their outlet in the active tree so cached route contexts cannot retain
+  // a previous channel after navigation or a return from another module.
+  const isLiveRoute = isQueryDrivenRoute || isChannelRoute;
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏
@@ -421,11 +425,8 @@ export default function MainLayout() {
             className="absolute inset-0 z-[60] cursor-default bg-transparent"
           />
         ) : null}
-        {isMenuUnavailableRoute || isQueryDrivenRoute ? (
-          // Bypass KeepAlive for menu-unavailable: always mount fresh so
-          // useEffect fires on every navigation and re-checks pending status.
-          // 技能 bypasses it too: a page react-activation froze keeps its old router
-          // context, so `useSearchParams` stops seeing `?skill=` / `?view=` after a return.
+        {isMenuUnavailableRoute || isLiveRoute ? (
+          // Route-driven pages consume the current router context directly.
           <div
             className={cn(
               'flex flex-col bg-white',
@@ -433,8 +434,8 @@ export default function MainLayout() {
               // Match the main panel: when the left system menu is revealed, round
               // the exposed left edge and clip content to it (parity with KeepAlive branch).
               systemMenuRevealing && 'rounded-l-3xl',
-              // 技能 / 广场 are fixed-height shells that scroll inside the page, like the module homes.
-              isQueryDrivenRoute
+              // Live route shells use page-owned scrolling, like the cached module homes.
+              isLiveRoute
                 ? 'h-[100dvh] min-h-0 overflow-hidden overscroll-y-none'
                 : isMobile
                   ? 'h-auto min-h-[100dvh] overflow-visible'
@@ -444,7 +445,7 @@ export default function MainLayout() {
           >
             {/* 移动端顶栏:无权限占位页本身没有汉堡入口,这里补一个,与会话/知识页一致,
                 避免收起侧栏后用户无法唤出系统菜单。 */}
-            {shouldHideSidebarOnMobileAppsArea ? (
+            {shouldHideSidebarOnMobileAppsArea && !isChannelRoute ? (
               <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                 <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
                   <button
@@ -464,7 +465,7 @@ export default function MainLayout() {
                 </div>
               </div>
             ) : null}
-            {isQueryDrivenRoute ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{outlet}</div> : outlet}
+            {isLiveRoute ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{outlet}</div> : outlet}
           </div>
         ) : (
         <KeepAlive
@@ -542,7 +543,7 @@ export default function MainLayout() {
       >
         <DialogContent className="sm:max-w-md w-[calc(100%-40px)] rounded-2xl mx-auto top-[50%] -translate-y-[50%]">
           <DialogHeader>
-            <DialogTitle className="text-center text-lg font-medium">系统通知</DialogTitle>
+            <DialogTitle className="text-center text-lg font-medium">{localize('com_system_notice.title')}</DialogTitle>
           </DialogHeader>
           <div className="py-6 px-2">
             <div className="text-sm text-gray-700 leading-relaxed text-center whitespace-pre-wrap">
@@ -551,7 +552,7 @@ export default function MainLayout() {
           </div>
           <DialogFooter className="sm:justify-center flex-row justify-center pb-2">
             <Button onClick={closeSystemNotice} className="w-[120px] rounded-full">
-              我知道了
+              {localize('com_auth.got_it')}
             </Button>
           </DialogFooter>
         </DialogContent>

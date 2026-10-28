@@ -1164,6 +1164,9 @@
   "subscribe_success": "購読に成功しました",
   "subscribed": "購読済み",
   "website": "ウェブサイト",
+  "com_system_notice": {
+    "title": "システム通知"
+  },
   "com_auth": {
     "got_it": "了解",
     "session_kicked_title": "セッションが終了しました"

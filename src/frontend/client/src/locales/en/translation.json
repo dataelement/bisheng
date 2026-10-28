@@ -1240,6 +1240,9 @@
   "subscribe_success": "Subscribed successfully",
   "subscribed": "Joined",
   "website": "Website",
+  "com_system_notice": {
+    "title": "System notice"
+  },
   "com_auth": {
     "got_it": "Got it",
     "session_kicked_title": "Signed out"
