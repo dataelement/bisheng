@@ -153,6 +153,7 @@ export function SidebarProjects() {
                   <div key={convo.conversationId}>
                     <Convo
                       compact
+                      className="pl-8"
                       isLatestConvo={false}
                       conversation={convo}
                       retainView={noop}
