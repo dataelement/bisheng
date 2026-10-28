@@ -15,6 +15,7 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 class ActorDepartmentContext:
     user_id: int
     subtree_department_ids: tuple[int, ...]
+    member_tenant_ids: tuple[int, ...] = ()
 
 
 class DepartmentContextPort(Protocol):
@@ -52,10 +53,19 @@ def configure_department_context(client: PermissionRuntimeClientPort, provider: 
         ids = sorted(set(context.subtree_department_ids))
         if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in ids):
             raise FGAClientError("Invalid department context identifier")
-        return tuple({"user": user, "relation": "subtree_member", "object": f"department:{value}"} for value in ids)
+        tenant_ids = sorted(set(context.member_tenant_ids))
+        if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in tenant_ids):
+            raise FGAClientError("Invalid tenant context identifier")
+        return (
+            *({"user": user, "relation": "subtree_member", "object": f"department:{value}"} for value in ids),
+            *({"user": user, "relation": "member", "object": f"tenant:{value}"} for value in tenant_ids),
+        )
 
     client.configure_contextual_tuple_provider(
         contextual_tuples,
         transient_relations=frozenset({("department", "subtree_member")}),
-        affected_relations=dependent_relations(build_authorization_model_f048(), "department", "subtree_member"),
+        affected_relations=(
+            dependent_relations(build_authorization_model_f048(), "department", "subtree_member")
+            | dependent_relations(build_authorization_model_f048(), "tenant", "member")
+        ),
     )

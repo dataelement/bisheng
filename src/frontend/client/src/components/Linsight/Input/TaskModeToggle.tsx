@@ -40,6 +40,7 @@ export function TaskModeToggle({ active, disabled = false, onClick, compact = fa
         <button
             type="button"
             disabled={disabled}
+            aria-pressed={active}
             onClick={onClick}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}

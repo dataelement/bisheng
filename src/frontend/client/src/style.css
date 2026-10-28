@@ -3152,3 +3152,37 @@ button.scroll-convo {
   -webkit-backdrop-filter: blur(var(--bs-frosted-glass-blur, 16px));
   backdrop-filter: blur(var(--bs-frosted-glass-blur, 16px));
 }
+
+/* File canvases preserve document colors while their surrounding controls follow the theme. */
+.document-canvas {
+  color-scheme: light;
+  background-color: #fff;
+  color: #1d2129;
+  --bg-page: 255 255 255;
+  --text-1: 29 33 41;
+  --text-2: 78 89 105;
+  --text-3: 134 144 156;
+  --border-base: 229 230 235;
+}
+
+/* Markdown previews use the same semantic palette as prose in Chat and task results. */
+.preview-prose,
+body[data-dsh-chat-theme] .dsh-web-chat .prose,
+body[data-dsh-chat-theme] .dsh-chat-preview-modal .prose {
+  --tw-prose-body: rgb(var(--text-1));
+  --tw-prose-headings: rgb(var(--text-1));
+  --tw-prose-lead: rgb(var(--text-2));
+  --tw-prose-links: rgb(var(--brand-500));
+  --tw-prose-bold: rgb(var(--text-1));
+  --tw-prose-counters: rgb(var(--text-3));
+  --tw-prose-bullets: rgb(var(--text-3));
+  --tw-prose-hr: rgb(var(--border-base));
+  --tw-prose-quotes: rgb(var(--text-2));
+  --tw-prose-quote-borders: rgb(var(--border-base));
+  --tw-prose-captions: rgb(var(--text-3));
+  --tw-prose-code: rgb(var(--text-1));
+  --tw-prose-pre-code: rgb(var(--text-1));
+  --tw-prose-pre-bg: rgb(var(--fill-2));
+  --tw-prose-th-borders: rgb(var(--border-deep));
+  --tw-prose-td-borders: rgb(var(--border-base));
+}

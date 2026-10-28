@@ -10,9 +10,10 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string, valu
 vi.mock('@/controllers/API/dshSettings', () => ({ getDshBrowserConfig: vi.fn(), saveDshManagementSettings: vi.fn() }))
 vi.mock('@/controllers/API/finetune', () => ({ getModelListApi: vi.fn() }))
 vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: { role: 'admin' } }) }))
-vi.mock('./PolicyView', () => ({ PolicyView: () => null }))
+vi.mock('./CreditRulesView', () => ({ CreditRulesView: () => <p>credit-content</p> }))
+vi.mock('./PolicyView', () => ({ PolicyView: () => <p>usage-content</p> }))
 vi.mock('./OperationStatus', () => ({ OperationStatus: () => null }))
-vi.mock('@/pages/ModelPage/manage/dsh/DshDesktopModelConfig', () => ({ DshDesktopModelConfig: () => <p>model-content</p> }))
+vi.mock('@/pages/ModelPage/manage/tabs/WorkbenchModel', () => ({ default: () => <p>model-content</p> }))
 
 beforeEach(() => {
     vi.resetAllMocks()
@@ -22,18 +23,26 @@ beforeEach(() => {
 })
 
 describe('DSH deployment and business settings', () => {
-    it('opens models without any commercial license request or seat controls', async () => {
+    it('opens credit settings by default and displays usage in its own section', async () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
-        render(<DshManagement />)
+        const { rerender } = render(<DshManagement />)
+        expect(await screen.findByText('credit-content')).toBeInTheDocument()
+        expect(screen.queryByText('usage-content')).toBeNull()
+        rerender(<DshManagement section="usage" />)
+        expect(screen.getByText('usage-content')).toBeInTheDocument()
+        expect(screen.queryByText('credit-content')).toBeNull()
+    })
+    it('opens the shared model permissions section', async () => {
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
+        render(<DshManagement section="models" />)
         expect(await screen.findByText('model-content')).toBeInTheDocument()
-        expect(screen.queryByText('dsh.commercialLicense')).toBeNull()
-        expect(screen.queryByText('dsh.getCommercialLicense')).toBeNull()
+        expect(screen.queryByText('credit-content')).toBeNull()
     })
     it('keeps settings accessible while business is disabled and avoids license/seat calls', async () => {
         render(<DshManagement />)
         await screen.findByRole('textbox', { name: /dsh.launchAddress/ })
         expect(screen.queryByRole('switch')).toBeNull()
-        expect(screen.queryByText('model-content')).toBeNull()
+        expect(screen.queryByText('credit-content')).toBeNull()
     })
     it('does not render management when deployment is disabled', async () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: false, enabled: false, download_url: null, launch_url: 'dsh-desktop://login' })
@@ -81,9 +90,9 @@ describe('DSH deployment and business settings', () => {
     it('removes active management content on a fresh disabled response', async () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValueOnce({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
         render(<DshManagement />)
-        await screen.findByText('model-content')
+        await screen.findByText('credit-content')
         await act(async () => { window.dispatchEvent(new Event('dsh-settings-changed')) })
-        await waitFor(() => expect(screen.queryByText('model-content')).toBeNull())
+        await waitFor(() => expect(screen.queryByText('credit-content')).toBeNull())
         expect(screen.getByRole('textbox', { name: /dsh.launchAddress/ })).toBeTruthy()
     })
 })

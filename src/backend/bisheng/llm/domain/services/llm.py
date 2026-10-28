@@ -609,7 +609,19 @@ class LLMService:
 
     @classmethod
     async def get_dsh_model_snapshot(cls, model_id: int) -> tuple[LLMModel, LLMServer]:
-        """Read the current governed model/provider pair for one DSH invocation.
+        """Read an online governed model/provider pair for one DSH invocation."""
+        return await cls._get_governed_dsh_model_snapshot(model_id, online_required=True)
+
+    @classmethod
+    async def get_dsh_model_metadata_snapshot(cls, model_id: int) -> tuple[LLMModel, LLMServer]:
+        """Read governed metadata so authorized administrators can restrict offline models."""
+        return await cls._get_governed_dsh_model_snapshot(model_id, online_required=False)
+
+    @classmethod
+    async def _get_governed_dsh_model_snapshot(
+        cls, model_id: int, *, online_required: bool
+    ) -> tuple[LLMModel, LLMServer]:
+        """Keep canonical tenant/Root-share checks common to both named operations.
 
         Ordinary callers retain their existing caching behavior. Root access is
         still decided by get_model_for_call; bypass only resolves the provider
@@ -627,7 +639,7 @@ class LLMService:
             raise
         if (
             model.tenant_id not in {tenant_id, ROOT_TENANT_ID}
-            or not model.online
+            or (online_required and not model.online)
             or model.model_type != LLMModelType.LLM.value
         ):
             raise DshModelNotAllowedError()

@@ -206,3 +206,14 @@ export async function setPersonalSkillEnabled(skillId: number, enabled: boolean)
 export async function deletePersonalSkill(skillId: number): Promise<void> {
   unwrap(await request.delete<Envelope<Record<string, never>>>(`${SKILL_API}/personal/${skillId}`));
 }
+
+export async function getSkillScope(userId: string): Promise<string> {
+  const body = await request.get<Envelope<{ leaf_tenant_id: number }>>("/api/v1/user/current-tenant");
+  const data = unwrap(body);
+  if (!Number.isSafeInteger(data.leaf_tenant_id)) throw new Error("Invalid tenant identity");
+  return JSON.stringify([data.leaf_tenant_id, String(userId)]);
+}
+
+export async function setSkillAvailability(skill: SkillRecord, enabled: boolean): Promise<void> {
+  unwrap(await request.put(`/api/v1/dsh/skills/${skill.id}/availability`, { enabled }));
+}

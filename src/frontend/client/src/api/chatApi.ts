@@ -4,6 +4,7 @@ import { getCitationAccessScope } from './citationScope';
  * Direct API calls for the AI chat system.
  */
 import { isApiError, normalizeApiError } from "@bisheng/api-client";
+import { readCitationFailure } from "~/api/citationFailure";
 import http from "~/api/request";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 import { getShareTokenFromPath } from "~/utils/shareToken";
@@ -326,8 +327,9 @@ export function getCitationUnresolvedReason(citationId: string): CitationUnresol
     return citationReasonCache[citationCacheKey(citationId)];
 }
 
-function citationReasonFromPayload(payload: any): CitationUnresolvedReason {
-    const reason = payload?.data?.reason ?? payload?.reason;
+function citationReasonFromPayload(value: unknown): CitationUnresolvedReason {
+    const payload = readCitationFailure(value);
+    const reason = payload.data?.reason ?? payload.reason;
     if (reason === "expired") {
         return "expired";
     }
@@ -355,7 +357,7 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
     }
 
     try {
-        const res = await http.get<any>(API.citationDetail(citationId), citationShareHeaders());
+        const res = await http.get<ChatCitation & { status_code?: number; data?: ChatCitation & { status_code?: number } }>(API.citationDetail(citationId), citationShareHeaders());
         // 404 = not found, no permission, or the temp object is gone. Read `reason`
         // so expired and forbidden stay distinct (F054/F062).
         if (res?.status_code === 404 || res?.data?.status_code === 404) {
@@ -368,11 +370,12 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
         }
         citationDetailMemoryCache[citationCacheKey(citationId, scope)] = detail;
         return detail;
-    } catch (error: any) {
-        if (error?.citationForbidden || error?.citationExpired) {
+    } catch (error: unknown) {
+        const failure = readCitationFailure(error);
+        if (failure.citationForbidden || failure.citationExpired) {
             throw error;
         }
-        const status = error?.status_code || error?.response?.data?.status_code;
+        const status = failure.status_code || failure.response?.data?.status_code;
         if (status === 404) {
             throwCitationResolveError(citationId, isApiError(error) ? error : error?.response?.data ?? error, error, scope);
         }

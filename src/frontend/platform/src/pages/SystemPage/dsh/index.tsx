@@ -2,10 +2,12 @@ import { Button } from '@bisheng/ui'
 import { getModelListApi } from '@/controllers/API/finetune'
 import { userContext } from '@/contexts/userContext'
 import { useDshBrowserConfig } from '@/hooks/useDshBrowserConfig'
-import { DshDesktopModelConfig } from '@/pages/ModelPage/manage/dsh/DshDesktopModelConfig'
+import WorkbenchModel from '@/pages/ModelPage/manage/tabs/WorkbenchModel'
+import type { ModelServer } from '@/pages/ModelPage/manage/userModelMetadata'
 import type { DshSection } from '@/pages/DshPage/sections'
 import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { CreditRulesView } from './CreditRulesView'
 import { AuditHistory } from './AuditHistory'
 import { PolicyView } from './PolicyView'
 import { SettingsPanel } from './SettingsPanel'
@@ -13,9 +15,10 @@ import { ModelAuditPanel } from './ModelAuditPanel'
 
 interface DshManagementProps {
     section?: DshSection
+    usageToolbarTarget?: HTMLDivElement | null
 }
 
-export function DshManagement({ section = 'models' }: DshManagementProps) {
+export function DshManagement({ section = 'credits', usageToolbarTarget }: DshManagementProps) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
@@ -25,7 +28,8 @@ export function DshManagement({ section = 'models' }: DshManagementProps) {
     return <div className="flex h-full min-h-0 flex-col px-2 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}
-            {activeSection === 'usage' && <PolicyView />}
+            {activeSection === 'credits' && <CreditRulesView />}
+            {activeSection === 'usage' && <PolicyView toolbarTarget={usageToolbarTarget} />}
             {activeSection === 'model-audit' && <ModelAuditPanel />}
             {activeSection === 'operations' && <AuditHistory revision={0} />}
             {activeSection === 'access' && <SettingsPanel settings={config} canEdit={user?.role === 'admin' || !!user?.is_global_super} />}
@@ -35,7 +39,7 @@ export function DshManagement({ section = 'models' }: DshManagementProps) {
 
 function DshModelsView() {
     const { t } = useTranslation()
-    const [data, setData] = useState<Parameters<typeof DshDesktopModelConfig>[0]['data'] | null>(null)
+    const [data, setData] = useState<ModelServer[] | null>(null)
     const [error, setError] = useState(false)
     const [revision, setRevision] = useState(0)
 
@@ -73,5 +77,5 @@ function DshModelsView() {
         )
     }
 
-    return <DshDesktopModelConfig data={data} />
+    return <WorkbenchModel data={data} onBack={() => window.history.back()} />
 }

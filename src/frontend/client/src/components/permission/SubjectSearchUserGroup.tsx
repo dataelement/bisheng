@@ -1,6 +1,6 @@
 import { SubjectIdentity } from "./SubjectIdentity";
 import { useSubjectKeyword } from "./useSubjectKeyword";
-import { Checkbox } from '@bisheng/ui';
+import { Checkbox } from "@bisheng/ui";
 import { Button, SearchInput, Tag } from "@bisheng/ui";
 import { getCreationUserGroups, getUserGroups } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
@@ -65,7 +65,8 @@ export function SubjectSearchUserGroup({
   const [resolvedPage, setResolvedPage] = useState(0);
   const [resolvedScope, setResolvedScope] = useState("");
   const blocked = tooLong || composing;
-  const busy = loading || resolvedQuery !== normalized || resolvedPage !== page || resolvedScope !== scope || blocked;
+  const busy =
+    loading || resolvedQuery !== normalized || resolvedPage !== page || resolvedScope !== scope || blocked;
 
   useEffect(() => {
     setPagingScope(scope);
@@ -80,19 +81,49 @@ export function SubjectSearchUserGroup({
     if (blocked || !resourceType || !resourceId) return;
     setLoading(true);
     setFailed(false);
-    const timer = window.setTimeout(() => {
-      const params = { keyword: normalized, page, pageSize: 50 };
-      const request = mode === "create" && !userGroupsApiRef.current && (resourceType === "channel" || resourceType === "knowledge_space")
-        ? getCreationUserGroups(resourceType, { signal: controller.signal }, params)
-        : (userGroupsApiRef.current ?? getUserGroups)(resourceType, resourceId, { signal: controller.signal }, params);
-      request.then((result) => {
-        if (cancelled) return;
-        setGroups((current) => page === 1 ? result.data : [...current, ...result.data.filter((item) => !current.some((old) => old.id === item.id))]);
-        setTotal(result.total);
-      }).catch(() => { if (!cancelled && !controller.signal.aborted) setFailed(true); })
-        .finally(() => { if (!cancelled) { setLoading(false); setResolvedQuery(normalized); setResolvedPage(page); setResolvedScope(scope); } });
-    }, normalized ? 300 : 0);
-    return () => { cancelled = true; window.clearTimeout(timer); controller.abort(); };
+    const timer = window.setTimeout(
+      () => {
+        const params = { keyword: normalized, page, pageSize: 50 };
+        const request =
+          mode === "create" &&
+          !userGroupsApiRef.current &&
+          (resourceType === "channel" || resourceType === "knowledge_space")
+            ? getCreationUserGroups(resourceType, { signal: controller.signal }, params)
+            : (userGroupsApiRef.current ?? getUserGroups)(
+                resourceType,
+                resourceId,
+                { signal: controller.signal },
+                params,
+              );
+        request
+          .then((result) => {
+            if (cancelled) return;
+            setGroups((current) =>
+              page === 1
+                ? result.data
+                : [...current, ...result.data.filter((item) => !current.some((old) => old.id === item.id))],
+            );
+            setTotal(result.total);
+          })
+          .catch(() => {
+            if (!cancelled && !controller.signal.aborted) setFailed(true);
+          })
+          .finally(() => {
+            if (!cancelled) {
+              setLoading(false);
+              setResolvedQuery(normalized);
+              setResolvedPage(page);
+              setResolvedScope(scope);
+            }
+          });
+      },
+      normalized ? 300 : 0,
+    );
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [resourceId, resourceType, normalized, page, attempt, blocked, mode, scope]);
 
   const selectedIds = new Set(value.filter((s) => s.type === "user_group").map((s) => s.id));
@@ -117,22 +148,45 @@ export function SubjectSearchUserGroup({
           clearLabel={localize("com_ui_clear")}
           placeholder={localize("com_permission.search_user_group")}
           value={keyword}
-          onChange={(e) => { setKeyword(e.target.value); setPage(1); }}
+          onChange={(e) => {
+            setKeyword(e.target.value);
+            setPage(1);
+          }}
           onCompositionStart={input.onCompositionStart}
-          onCompositionEnd={(event) => { input.onCompositionEnd(event); setPage(1); }}
-          onPaste={(event) => { input.onPaste(event); setPage(1); }}
+          onCompositionEnd={(event) => {
+            input.onCompositionEnd(event);
+            setPage(1);
+          }}
+          onPaste={(event) => {
+            input.onPaste(event);
+            setPage(1);
+          }}
           aria-invalid={tooLong}
           className="w-full"
         />
       </div>
-      {tooLong && <p role="alert" className="text-caption text-danger">{localize("com_permission.search_too_long")}</p>}
+      {tooLong && (
+        <p role="alert" className="text-caption text-danger">
+          {localize("com_permission.search_too_long")}
+        </p>
+      )}
       <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-border-base">
         {busy && !blocked && (
-          <div className="py-4 text-center text-sm text-text-3">
-            {localize("com_ui_loading")}
+          <div className="py-4 text-center text-sm text-text-3">{localize("com_ui_loading")}</div>
+        )}
+        {!busy && failed && (
+          <div className="flex flex-col items-center gap-2 py-4 text-body-sm text-text-3">
+            <span>{localize("com_permission.load_failed")}</span>
+            <Button
+              size="small"
+              color="default"
+              variant="outlined"
+              onClick={() => setAttempt((value) => value + 1)}
+            >
+              {localize("com_ui_retry")}
+            </Button>
           </div>
         )}
-        {!busy && failed && <div className="flex flex-col items-center gap-2 py-4 text-body-sm text-text-3"><span>{localize("com_permission.load_failed")}</span><Button size="small" color="default" variant="outlined" onClick={() => setAttempt((value) => value + 1)}>{localize("com_ui_retry")}</Button></div>}
         {!busy && !failed && groups.length === 0 && (
           <PermissionEmptyState
             message={localize(keyword ? "com_permission.empty_search" : "com_permission.empty_user_groups")}
@@ -186,7 +240,16 @@ export function SubjectSearchUserGroup({
             })}
           </div>
         )}
-        {!busy && !failed && groups.length < total && <Button size="small" color="default" variant="outlined" onClick={() => setPage((value) => value + 1)}>{localize("com_permission.load_more")}</Button>}
+        {!busy && !failed && groups.length < total && (
+          <Button
+            size="small"
+            color="default"
+            variant="outlined"
+            onClick={() => setPage((value) => value + 1)}
+          >
+            {localize("com_permission.load_more")}
+          </Button>
+        )}
       </div>
     </div>
   );

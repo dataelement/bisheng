@@ -12,10 +12,12 @@ class UsageEvent(DshTokenUsage):
     request_id: str = Field(min_length=1, max_length=36)
     tenant_id: int = Field(gt=0)
     user_id: int = Field(gt=0)
+    # Historical events retain these fields for immutable audit replay.
     seat_id: str | None = Field(default=None, min_length=1, max_length=36)
     session_id: str = Field(min_length=1, max_length=36)
     grant_version: int | None = Field(default=None, gt=0)
     model_id: int = Field(gt=0)
+    credit_rate: int = Field(default=100, ge=1, le=100000, strict=True)
     usage_month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     billing_timezone: str = Field(min_length=1, max_length=64)
     policy_version: int = Field(gt=0)
@@ -34,8 +36,15 @@ class UsageEvent(DshTokenUsage):
     operation_generation: int | None = Field(default=None, gt=0)
     payload_hash: str | None = Field(default=None, max_length=64)
 
+    @property
+    def billed_tokens(self) -> int | None:
+        """Round each call up to one microcredit using integer arithmetic."""
+        return None if self.total_tokens is None else (self.total_tokens * self.credit_rate + 99) // 100
+
     @model_validator(mode="after")
     def validate_state(self):
+        if self.billed_tokens is not None and self.billed_tokens > 9_223_372_036_854_775_807:
+            raise ValueError("Billed usage must fit the accounting range")
         reliable = self.total_tokens is not None
         if reliable != (self.status not in {"RUNNING", "USAGE_UNKNOWN"}):
             raise ValueError("Terminal events require reliable usage; unresolved events require NULL")

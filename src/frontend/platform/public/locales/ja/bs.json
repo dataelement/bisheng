@@ -1013,7 +1013,7 @@
     "assistant": "アシスタント",
     "workflow": "ワークフロー",
     "skill": "スキル",
-    "tools": "ツール",
+    "tools": "ツールとスキル",
     "tagLibrary": "タグライブラリ",
     "createTagLibrary": "タグライブラリを作成",
     "editTagLibrary": "タグライブラリを編集",
@@ -1310,7 +1310,8 @@
     "gaodeMap": "高徳地図",
     "gaodeMapSSE": "高徳地図（SSE プロトコル）",
     "gaodeMapStreamable": "高徳地図（streamable プロトコル）",
-    "gaodeMapDesc": "高徳地図 API。ジオコーディング、逆ジオコーディング、IP 位置情報、天気情報、サイクリングルート、徒歩ルート、ドライブルート、バスルート、距離計測、キーワード検索、周辺検索、詳細検索などを提供します。"
+    "gaodeMapDesc": "高徳地図 API。ジオコーディング、逆ジオコーディング、IP 位置情報、天気情報、サイクリングルート、徒歩ルート、ドライブルート、バスルート、距離計測、キーワード検索、周辺検索、詳細検索などを提供します。",
+    "skills": "スキル"
   },
   "test": {
     "test": "テスト",
@@ -2546,7 +2547,8 @@
       "githubFetch": "GitHub からの取得に失敗：リポジトリ / ブランチ / パスが存在しないか、ネットワークエラーです。URL を確認して再試行してください",
       "githubRateLimit": "GitHub のレート制限に達しました。しばらくしてから再試行してください",
       "unknown": "操作に失敗しました。再試行してください"
-    }
+    },
+    "catalogHint": "保存したスキルは企業権限に従って提供され、タスクごとに選択します。無効化すると提供を停止します。"
   },
   "citation": {
     "unsupportedPreview": "この形式のファイルはプレビューできません",
@@ -3263,7 +3265,6 @@
         "branch_pending": "子会話を含む集計を更新中",
         "child_level": "子 Agent · 第 {{level}} 階層",
         "children": "子 Agent の会話",
-        "continue": "この会話の詳細を表示",
         "known_abnormal": "異常を記録済み · 集計を更新中",
         "no_children": "条件に一致する子会話はありません",
         "own_count": "この会話 {{count}} 件",
@@ -3283,7 +3284,8 @@
         "refresh_required": "会話一覧が更新されました。レコードを再読み込みしてください。",
         "retry": "再試行",
         "summary_pending": "集計を更新中",
-        "updating": "最新の関係または集計を整理中です。完了済みの一覧を表示しています。リクエスト詳細は確認できます。"
+        "updating": "最新の関係または集計を整理中です。完了済みの一覧を表示しています。リクエスト詳細は確認できます。",
+        "depth_limit": "会話階層の表示上限に達しました。"
       },
       "summary_status": "状態",
       "status_pending": "処理中または記録の更新待ち",
@@ -3295,8 +3297,6 @@
       "group_abnormal": "異常 {{count}} 件",
       "group_scope": "条件に一致するリクエストのみ表示しています。集計は会話内の登録済み全件が対象で、反映が遅れる場合があります。",
       "group_all": "保存済み全リクエストを表示",
-      "all_scope": "このユーザーと会話の保存済み全件を表示中です。他の条件は解除されました。",
-      "return_results": "検索結果に戻る",
       "scan_limited": "このバッチには他の一致がありません。次のページで検索を続けられます。",
       "more_reasons": "他 {{count}} 件",
       "summary": {
@@ -3307,8 +3307,7 @@
       },
       "views": {
         "groups": "会話ログ",
-        "unassociated": "未関連リクエスト",
-        "requests": "リクエスト明細"
+        "unassociated": "未関連リクエスト"
       },
       "reasons": {
         "model_result_FAILED": "モデル呼び出し失敗",
@@ -3325,7 +3324,7 @@
         "INVALID_STATE": "記録状態を認識できません"
       },
       "advanced_hint": "モデル、状態、完全な識別番号で絞り込みます。名前と番号は完全一致で検索します。",
-      "all_time": "全期間",
+      "all_time": "過去7日間（既定）",
       "async_hint": "非同期で記録するため、欠落する場合があります",
       "capture_status": "収集状態",
       "clear_advanced": "詳細条件をクリア",
@@ -3336,8 +3335,8 @@
       "log_title": "監査ログ",
       "managed_tenant": "管理対象テナント",
       "model_placeholder": "モデルを選択、または過去の完全な名前を入力",
-      "no_end": "終了制限なし",
-      "no_start": "開始制限なし",
+      "no_end": "既定：現在の日時",
+      "no_start": "既定：終了日時の7日前",
       "query_info": "対象範囲と検索の説明",
       "refresh_mode": "状態を更新",
       "refresh_records": "ログを更新",
@@ -3425,7 +3424,7 @@
       "noModels": "一致する利用可能なモデルがありません。過去の完全な名前を入力して検索できます。",
       "loadMoreModels": "モデルをさらに読み込む",
       "mode": "記録モード",
-      "modeHint": "無効化すると新規記録を停止します。保存済み記録は引き続き閲覧できます。モデル入出力の原文保存には追加のストレージを使用します。",
+      "modeHint": "入力・出力の原文を保存すると、ストレージ使用量が増えます。収集モードを変更しても、既存の記録は削除されません。",
       "contentKeyMissing": "このサービスに有効な監査暗号鍵がなく、原文記録を有効にできません。運用担当者に設定を依頼し、更新してください。",
       "contentKeyLost": "原文記録は設定済みですが、このサービスの暗号鍵を利用できず、新しい原文を保存できません。モデル呼び出しには影響しません。運用担当者に連絡してください。",
       "contentKeyReady": "このサービスの監査暗号鍵は利用可能です。実際の保存状態は各監査記録を確認してください。",
@@ -3499,7 +3498,8 @@
         "loading": "原文を読み込み中…",
         "completed": "転送が完了しました。",
         "interrupted": "読み込みが中断しました。閉じて再試行してください。保存状態は変わりません。"
-      }
+      },
+      "collectionHint": "監査収集を無効にしても、機密語チェックが有効な場合は、入力・出力の本文を保存せずにリクエストの概要とチェック結果を記録します。両方を無効にすると、新しいリクエストの概要は記録されません。既存の記録は引き続き閲覧できます。"
     },
     "searchUsername": "ユーザー名で検索",
     "departmentAndMember": "部門 / メンバー",
@@ -3904,7 +3904,213 @@
     "useDepartmentQuota": "部門の既定枠を継承",
     "inlineQuotaHelp": "部門枠の変更は既定のメンバーに反映されます。個別設定は維持されます。保存すると適用されます。",
     "monthlyQuotaWan": "月間利用枠（万 Token）",
-    "usageDimension": "集計単位"
+    "usageDimension": "集計単位",
+    "contentSafety": {
+      "actions": {
+        "close": "閉じる",
+        "load_more": "さらに読み込む",
+        "refresh": "更新",
+        "retry": "再試行",
+        "save": "保存",
+        "saved": "保存しました。5 秒以内に新しいリクエストに適用されます。",
+        "saving": "保存中",
+        "view_details": "チェックの詳細を表示"
+      },
+      "association": {
+        "ASSOCIATED": "監査記録に関連付け済み",
+        "UNASSOCIATED": "監査記録に未関連付け"
+      },
+      "delivery": {
+        "backlog": "一部のチェック記録はまだ届いていません。表示中の結果は不完全な可能性があります。",
+        "committed": "記録を保存済み",
+        "pending": "記録の送信待ち",
+        "quarantined": "記録が受け付けられませんでした。管理者に確認を依頼してください。",
+        "retrying": "記録を再送中"
+      },
+      "description": "現在のテナントの語句リストで Desktop のモデル入力と出力をチェックし、一致した内容の配信を停止します。",
+      "details": {
+        "backend_request_id": "モデルリクエスト ID",
+        "builtin_digest": "組み込み語句リストの識別子",
+        "drain_status": "配信停止後の読み取り状況",
+        "empty": "チェック記録はありません。チェックに合格したとは判断できません。",
+        "event_id": "チェック記録 ID",
+        "event_kind": "記録の種類",
+        "event_version": "記録のバージョン",
+        "events": "チェック記録",
+        "forwarded": "モデルリクエストを転送済み",
+        "gateway_request_id": "転送リクエスト ID",
+        "hit_count": "一致回数",
+        "hit_count_truncated": "一致回数は上限で切り捨てられています。実際の回数はさらに多い可能性があります。",
+        "input": "入力チェック",
+        "model_started_at": "モデル実行開始時刻",
+        "no_matched_text": "チェック記録には一致した原文を保存しません。",
+        "not_forwarded": "モデルリクエストは未転送",
+        "occurred_at": "チェック時刻",
+        "output": "出力チェック",
+        "policy_version": "チェック設定のバージョン",
+        "received_at": "記録の受信時刻",
+        "request_started_at": "リクエスト開始時刻",
+        "rule_refs": "一致したルールの ID",
+        "source": "記録元",
+        "summary": "全体のチェック結果",
+        "title": "禁止語チェックの詳細",
+        "unknown": "未確認",
+        "matched_words": "一致した機密ワード",
+        "matched_words_unavailable": "このチェック記録には一致したワードが保存されていないため、復元できません。",
+        "no_matches": "一致したワードの記録はありません。"
+      },
+      "details_status": {
+        "AVAILABLE": "詳細を表示可能",
+        "PENDING": "詳細はまだ届いていません。後で更新してください。",
+        "PURGED": "詳細は保存期間の規則に従って削除されました。確認済みのチェック結果は保持されています。",
+        "UNREPORTED": "チェックの詳細はまだ受信していません。"
+      },
+      "directions": {
+        "BOTH": "入力と出力の両方が一致",
+        "INPUT": "入力が一致",
+        "OUTPUT": "出力が一致"
+      },
+      "drain": {
+        "DISCONNECTED": "読み取り接続が切断",
+        "FINISHED": "応答の読み取り完了",
+        "LIMITED": "読み取り容量の上限に到達",
+        "NOT_REQUIRED": "追加の読み取りは不要",
+        "RUNNING": "モデル応答の終了を待機中",
+        "TIMED_OUT": "読み取りの制限時間に到達",
+        "usage_hint": "この状態はモデルの停止や課金の終了を示すものではありません。使用量はモデルの記録を確認してください。"
+      },
+      "errors": {
+        "capabilities_unknown": "禁止語チェックを利用できるか確認できません。更新するか、管理者にお問い合わせください。",
+        "check_unavailable": "内容のチェックを完了できなかったため、配信を停止しました。しばらくしてから再試行するか、管理者にお問い合わせください。",
+        "content_blocked": "内容が禁止語に一致したため、配信を停止しました。",
+        "deployment_disabled": "この環境では禁止語の管理が有効になっていません。管理者にお問い合わせください。",
+        "events_load_failed": "チェックの詳細を読み込めませんでした。再試行してください。",
+        "load_failed": "禁止語の設定を読み込めませんでした。更新して再試行してください。",
+        "save_failed": "保存できませんでした。編集内容は保持されています。再試行してください。",
+        "unavailable": "禁止語チェックを利用できません。管理者にサービスの状態確認を依頼してください。",
+        "version_conflict": "設定が更新されています。編集内容は保持されています。最新の設定に更新してから、もう一度保存してください。"
+      },
+      "event_kinds": {
+        "DECISION": "ブロック判定",
+        "DRAIN": "後続の読み取り結果",
+        "FINAL": "チェック終了"
+      },
+      "filters": {
+        "all": "すべて",
+        "direction": "一致した対象",
+        "has_hit": "一致あり",
+        "hit": "禁止語への一致",
+        "no_known_hit": "確認された一致なし",
+        "no_known_hit_hint": "確認された一致がない場合も、チェックに合格したとは限りません。",
+        "state": "チェック結果"
+      },
+      "model_entry": {
+        "ENTERED": "モデル処理を開始",
+        "NOT_APPLICABLE": "対象外",
+        "NOT_ENTERED": "モデル未呼び出し",
+        "UNOBSERVED": "モデル実行結果を未観測"
+      },
+      "origins": {
+        "EXTERNAL_SAFETY": "外部チェック記録",
+        "MODEL": "モデル呼び出し記録"
+      },
+      "readiness": {
+        "all_count": "集計済みの全リクエストのうち {{count}} 件が一致",
+        "as_of": "集計の更新時刻：{{time}}",
+        "matching_count": "現在の条件に合うリクエストのうち {{count}} 件が一致",
+        "pending": "一致件数を更新しています。後で更新してください。個々のリクエストは引き続き表示できます。",
+        "ready": "一致件数を更新済み",
+        "scan_limited": "今回の検索は走査上限に達しました。条件を絞るか、続きを表示してください。",
+        "version": "集計バージョン",
+        "own_hits": "この会話で該当したリクエスト数",
+        "branch_hits": "子会話を含めて該当したリクエスト数",
+        "all_hits": "会話全体で該当したリクエスト数",
+        "matching_hits": "現在の条件に該当したリクエスト数"
+      },
+      "settings": {
+        "activation_hint": "保存した変更は 5 秒以内に新しいリクエストに適用されます。実行中のリクエストには開始時の設定が使用されます。",
+        "auto_reply": "ブロック時のメッセージ",
+        "auto_reply_hint": "ブロック時に表示します。機密情報を含めないでください。",
+        "builtin_digest": "組み込み語句リストの識別子",
+        "builtin_words": "組み込み語句リスト",
+        "custom_words": "カスタム禁止語",
+        "custom_words_hint": "1 行に 1 語を入力してください。文字どおりに、大文字と小文字を区別して照合します。",
+        "custom_words_limit": "カスタム語句は最大 {{bytes}} バイトです。",
+        "default_off": "設定はまだ保存されていません。初期状態ではチェックは無効です。",
+        "disabled_hint": "無効にすると新しいリクエストのチェックを停止します。記録済みの結果は保持されます。",
+        "effective_words": "有効な語句数",
+        "effective_words_limit": "有効なリストは最大 {{count}} 語、{{bytes}} バイトで、1 語あたり最大 {{length}} 文字です。",
+        "enabled": "チェックを有効にする",
+        "input_enabled": "入力をチェックする",
+        "output_enabled": "出力をチェックする",
+        "scope_hint": "この設定は選択中のテナントのみに適用されます。",
+        "version": "現在の設定バージョン",
+        "word_sources": "語句リストの種類"
+      },
+      "states": {
+        "BLOCKED": "一致",
+        "DISABLED": "無効",
+        "ERROR": "チェック失敗",
+        "NOT_APPLICABLE": "対象外",
+        "PASSED": "合格",
+        "UNREPORTED": "完全な結果を未受信"
+      },
+      "title": "禁止語の管理",
+      "validation": {
+        "custom_words_too_large": "カスタム禁止語がサイズ上限を超えています。語句を減らして再試行してください。",
+        "reply_required": "チェックを有効にする前に、ブロック時のメッセージを入力してください。",
+        "too_many_words": "有効な語句数が上限を超えています。語句または選択するリストを減らしてください。",
+        "word_too_long": "語句が長さの上限を超えています。短くして再試行してください。",
+        "words_required": "チェックを有効にする前に、有効な語句リストを選択するか、カスタム禁止語を入力してください。",
+        "checks_required": "チェックを有効にする前に、入力または出力のチェックを選択してください。",
+        "reply_too_long": "ブロック時のメッセージは2048文字以内にしてください。",
+        "range_too_large": "期間は31日以内で指定してください。"
+      }
+    },
+    "unified": {
+      "overview": "クレジットと使用状況",
+      "models": "モデル権限",
+      "credits": "クレジット設定",
+      "usage": "使用状況",
+      "visibility": "公開範囲",
+      "addToDraft": "権限リストに追加",
+      "canUse": "利用可能",
+      "everyoneVisible": "全メンバーに公開",
+      "everyoneVisibleHelp": "企業内のすべてのメンバーがこのモデルを利用できます。",
+      "role": "ロール",
+      "saved": "保存しました",
+      "searchDepartment": "部門を検索…",
+      "searchRole": "ロールを検索…",
+      "searchUser": "ユーザーを検索…",
+      "selectedSubjects": "{{count}} 件を選択済み",
+      "selectedVisible": "一部のメンバーに公開",
+      "selectedVisibleHelp": "以下で許可されたユーザー、部門、ロールのみがこのモデルを利用できます。",
+      "visibilityHelp": "Chat と Work で公開範囲を共有します。許可されたメンバーはモデルを選択し、個人クレジットを使用します。",
+      "modelSettings": "モデル権限と倍率",
+      "multiplier": "クレジット倍率",
+      "multiplierHelp": "初期値は 1 倍、小数点以下 2 桁まで。消費クレジット = トークン数 ÷ 100 万 × 倍率。Chat と Work で共有し、保存後の新しい呼び出しに適用します。",
+      "multiplierInvalid": "0.01～1000 の倍率を小数点以下 2 桁までで入力してください。",
+      "everyone": "全メンバー",
+      "DEPARTMENT": "部署",
+      "ROLE": "ロール",
+      "USER": "メンバー",
+      "userTab": "ユーザー",
+      "addCredits": "割り当てを追加",
+      "emptyCredits": "クレジット設定がありません",
+      "ruleHelp": "ユーザー・部門・ロールごとに月間クレジットを設定します。有効な設定が複数該当する場合は最大値が適用され、Chat と Work で共有されます。",
+      "scope": "対象範囲",
+      "monthlyCredits": "1 人あたりの月間クレジット",
+      "creditRangeHint": "0 から {{max}} までのクレジットを、小数点以下 6 桁以内で入力してください。",
+      "enabled": "ルールを有効化",
+      "selectSubject": "対象を選択",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "キャンセル",
+      "edit": "編集",
+      "yes": "有効",
+      "no": "無効",
+      "usedCredits": "この期間の使用ポイント: {{value}}"
+    }
   },
   "request": {
     "session_expired": "セッションの有効期限が切れました",

@@ -503,6 +503,8 @@ export type TStartupConfig = {
 };
 
 export type BsConfig = {
+  /** Visible organization knowledge bases configured as new-chat defaults. */
+  orgKbs?: Array<{ id: string | number; name: string; default_checked?: boolean }>;
   applicationCenterWelcomeMessage: string;
   applicationCenterDescription: string;
   /**

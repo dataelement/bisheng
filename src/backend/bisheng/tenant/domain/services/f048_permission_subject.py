@@ -180,7 +180,7 @@ class TenantPermissionSubjectDirectory:
     ) -> frozenset[str]:
         if actor.subject_type == "service_account":
             return frozenset({actor.fga_subject})
-        projected = {actor.fga_subject}
+        projected = {actor.fga_subject, f"tenant:{actor.current_tenant_id}#member"}
         memberships = await UserDepartmentDao.aget_user_departments(actor.user_id)
         departments = await DepartmentDao.aget_by_ids([row.department_id for row in memberships])
         for department in departments:
@@ -215,10 +215,10 @@ class TenantPermissionSubjectDirectory:
         if not normalized_id.isdigit():
             raise PermissionInvalidResourceError()
         identifier = int(normalized_id)
-        if normalized_type == "user":
-            # A ``user`` subject is always a natural person: service accounts
-            # are their own subject type below, not rows of ``user`` (F053
-            # design K15 / K17), so no per-row type check is needed here.
+        if normalized_type == "tenant":
+            valid = identifier == tenant_id
+            source_type = "TENANT"
+        elif normalized_type == "user":
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
             if not valid:

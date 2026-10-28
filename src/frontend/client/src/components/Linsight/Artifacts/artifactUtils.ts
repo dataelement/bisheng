@@ -18,6 +18,8 @@ import { getShareTokenFromPath } from '~/utils/shareToken';
 
 /** Output file shape of `output_result.final_files` (= store `file_list`). */
 export interface ArtifactFile {
+    /** Original uploaded attachment URL, already authorized by the conversation. */
+    directUrl?: string;
     file_id: string;
     file_name: string;
     file_url: string;
@@ -44,7 +46,7 @@ const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
 // Rich file types rendered inline by the shared FilePreview viewer (pdfjs /
 // mammoth / xlsx). Explicitly excludes `doc` (legacy binary mammoth can't parse),
 // which stays 'unsupported' and keeps the "download to view" fallback.
-const DOCUMENT_EXTS = ['pdf', 'docx', 'xls', 'xlsx', 'csv'];
+const DOCUMENT_EXTS = ['pdf', 'docx', 'xls', 'xlsx', 'csv', 'html', 'htm'];
 // F111: slide decks are previewed through a backend pptx→pdf conversion
 // (see useSlidesPreview), then rendered by the same PDF viewer.
 const SLIDES_EXTS = ['ppt', 'pptx'];
@@ -505,7 +507,7 @@ export async function fetchArtifactBlob(
   versionId: string,
   options?: ArtifactBlobOptions,
 ): Promise<{ blob: Blob; fileName: string }> {
-  const url = await resolveArtifactUrl(file.file_url, versionId);
+  const url = file.directUrl || await resolveArtifactUrl(file.file_url, versionId);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.status}`);

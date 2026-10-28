@@ -1,11 +1,18 @@
 // @ts-strict-ignore
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate, type ErrorPresentation } from '@bisheng/api-client';
-import axios, { AxiosRequestConfig } from 'axios';
+import {
+  decodeErrorEnvelope,
+  isApiError,
+  isErrorEnvelope,
+  normalizeApiError,
+  resolveErrorMessageTemplate,
+  type ErrorPresentation,
+} from "@bisheng/api-client";
+import axios, { AxiosRequestConfig } from "axios";
 import i18next from "i18next";
-import { redirectToLogin } from '~/utils/loginRedirect';
-import * as endpoints from '~/api/chat/api-endpoints';
-import type * as t from '~/types/chat/types';
+import { redirectToLogin } from "~/utils/loginRedirect";
+import * as endpoints from "~/api/chat/api-endpoints";
+import type * as t from "~/types/chat/types";
 
 // Controls automatic error notifications.
 type ErrorOptions = {
@@ -17,7 +24,7 @@ type ErrorOptions = {
 };
 
 const customAxios = axios.create({
-  baseURL: import.meta.env.BASE_URL
+  baseURL: import.meta.env.BASE_URL,
 });
 
 async function _get<T>(url: string, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
@@ -31,25 +38,29 @@ async function _getResponse<T>(url: string, options?: AxiosRequestConfig & Error
 
 async function _post(url: string, data?: any, config?: AxiosRequestConfig & ErrorOptions) {
   const response = await customAxios.post(url, config ? data : JSON.stringify(data), {
-    headers: { 'Content-Type': 'application/json' },
-    ...config
+    headers: { "Content-Type": "application/json" },
+    ...config,
   });
   return response.data;
 }
 
-async function _postResponse<T>(url: string, data?: any, config?: AxiosRequestConfig & ErrorOptions): Promise<T> {
+async function _postResponse<T>(
+  url: string,
+  data?: any,
+  config?: AxiosRequestConfig & ErrorOptions,
+): Promise<T> {
   // Mirror of _getResponse: returns the full Axios response so callers can
   // read headers (e.g. Content-Disposition for file downloads).
-  return await customAxios.post(url, config ? data : JSON.stringify(data), {
-    headers: { 'Content-Type': 'application/json' },
+  return (await customAxios.post(url, config ? data : JSON.stringify(data), {
+    headers: { "Content-Type": "application/json" },
     ...config,
-  }) as unknown as T;
+  })) as unknown as T;
 }
 
 async function _postMultiPart(url: string, formData: FormData, options?: AxiosRequestConfig & ErrorOptions) {
   const response = await customAxios.post(url, formData, {
     ...options,
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: { "Content-Type": "multipart/form-data" },
   });
   return response.data;
 }
@@ -57,8 +68,8 @@ async function _postMultiPart(url: string, formData: FormData, options?: AxiosRe
 async function _postTTS(url: string, formData: FormData, options?: AxiosRequestConfig & ErrorOptions) {
   const response = await customAxios.post(url, formData, {
     ...options,
-    headers: { 'Content-Type': 'multipart/form-data' },
-    responseType: 'arraybuffer',
+    headers: { "Content-Type": "multipart/form-data" },
+    responseType: "arraybuffer",
   });
   return response.data;
 }
@@ -66,7 +77,7 @@ async function _postTTS(url: string, formData: FormData, options?: AxiosRequestC
 async function _put(url: string, data?: any, options?: AxiosRequestConfig & ErrorOptions) {
   const response = await customAxios.put(url, JSON.stringify(data), {
     ...options,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { "Content-Type": "application/json" },
   });
   return response.data;
 }
@@ -81,10 +92,14 @@ async function _deleteWithOptions<T>(url: string, options?: AxiosRequestConfig &
   return response.data;
 }
 
-async function _patch<T = unknown>(url: string, data?: any, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
+async function _patch<T = unknown>(
+  url: string,
+  data?: any,
+  options?: AxiosRequestConfig & ErrorOptions,
+): Promise<T> {
   const response = await customAxios.patch(url, JSON.stringify(data), {
     ...options,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { "Content-Type": "application/json" },
   });
   return response.data;
 }
@@ -93,38 +108,47 @@ const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefi
   _post(endpoints.refreshToken(retry));
 
 export const translateApiErrorMessage = (data: any) => {
-  const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : '';
-  const statusMessage = typeof data?.status_message === 'string' ? data.status_message : '';
-  const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : '';
-  const message = statusCodeKey && i18next.exists(statusCodeKey) ? String(i18next.t(statusCodeKey))
-    : statusMessageKey && i18next.exists(statusMessageKey) ? String(i18next.t(statusMessageKey))
-    : '';
-  const translatedFallback = i18next.t('api_errors.fallback', { defaultValue: 'Request failed. Please try again.' });
-  const fallback = typeof translatedFallback === 'string' && translatedFallback.trim() && translatedFallback !== 'api_errors.fallback'
-    ? translatedFallback : 'Request failed. Please try again.';
-  return resolveErrorMessageTemplate(message || '', data?.data, fallback);
+  const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : "";
+  const statusMessage = typeof data?.status_message === "string" ? data.status_message : "";
+  const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : "";
+  const message =
+    statusCodeKey && i18next.exists(statusCodeKey)
+      ? String(i18next.t(statusCodeKey))
+      : statusMessageKey && i18next.exists(statusMessageKey)
+        ? String(i18next.t(statusMessageKey))
+        : "";
+  const translatedFallback = i18next.t("api_errors.fallback", {
+    defaultValue: "Request failed. Please try again.",
+  });
+  const fallback =
+    typeof translatedFallback === "string" &&
+    translatedFallback.trim() &&
+    translatedFallback !== "api_errors.fallback"
+      ? translatedFallback
+      : "Request failed. Please try again.";
+  return resolveErrorMessageTemplate(message || "", data?.data, fallback);
 };
 
-const SESSION_KICKED_CODE = 10604
-const SESSION_KICK_ACK_KEY = "bs:session-kicked-ack"
-let sessionKickInProgress = false
-let sessionKickHandler: ((message: string) => void) | null = null
+const SESSION_KICKED_CODE = 10604;
+const SESSION_KICK_ACK_KEY = "bs:session-kicked-ack";
+let sessionKickInProgress = false;
+let sessionKickHandler: ((message: string) => void) | null = null;
 
 export function setSessionKickHandler(handler: ((message: string) => void) | null) {
-  sessionKickHandler = handler
+  sessionKickHandler = handler;
 }
 
 function hasSessionKickAck(): boolean {
   try {
-    return sessionStorage.getItem(SESSION_KICK_ACK_KEY) === "1"
+    return sessionStorage.getItem(SESSION_KICK_ACK_KEY) === "1";
   } catch {
-    return false
+    return false;
   }
 }
 
 export function markSessionKickAck() {
   try {
-    sessionStorage.setItem(SESSION_KICK_ACK_KEY, "1")
+    sessionStorage.setItem(SESSION_KICK_ACK_KEY, "1");
   } catch {
     /* storage disabled */
   }
@@ -132,7 +156,7 @@ export function markSessionKickAck() {
 
 function clearSessionKickAck() {
   try {
-    sessionStorage.removeItem(SESSION_KICK_ACK_KEY)
+    sessionStorage.removeItem(SESSION_KICK_ACK_KEY);
   } catch {
     /* storage disabled */
   }
@@ -142,20 +166,20 @@ function isSessionKickedEnvelope(envelope: unknown): boolean {
   return Boolean(
     envelope &&
     typeof envelope === "object" &&
-    (envelope as { status_code?: number }).status_code === SESSION_KICKED_CODE
-  )
+    (envelope as { status_code?: number }).status_code === SESSION_KICKED_CODE,
+  );
 }
 
 function beginSessionKick(envelope: unknown): boolean {
   if (hasSessionKickAck()) {
-    sessionKickInProgress = true
-    return true
+    sessionKickInProgress = true;
+    return true;
   }
-  if (sessionKickInProgress) return true
-  if (!sessionKickHandler) return false
-  sessionKickInProgress = true
-  sessionKickHandler(translateApiErrorMessage(envelope))
-  return true
+  if (sessionKickInProgress) return true;
+  if (!sessionKickHandler) return false;
+  sessionKickInProgress = true;
+  sessionKickHandler(translateApiErrorMessage(envelope));
+  return true;
 }
 
 // License degradation (gateway returns 11001): throttle the toast so a burst of
@@ -174,27 +198,27 @@ const responsePresentation = new WeakMap<object, ErrorPresentation>();
 
 customAxios.interceptors.response.use(
   async (response) => {
-    const envelope = await decodeErrorEnvelope(response.data) ?? response.data;
-    const url = response.config?.url || ""
+    const envelope = (await decodeErrorEnvelope(response.data)) ?? response.data;
+    const url = response.config?.url || "";
     if (
       response.status >= 200 &&
       response.status < 300 &&
       (envelope?.status_code === 200 || envelope?.status_code == null) &&
       (url.includes("/user/login") || url.includes("/user/info") || url.includes("/api/user/me"))
     ) {
-      clearSessionKickAck()
+      clearSessionKickAck();
     }
 
     // License expired (gateway degradation): always surface a clear toast and reject,
     // regardless of per-call error flags, so end users learn it's an authorization
     // issue rather than a transient glitch. See feature 037.
     if (envelope?.status_code === 11001) {
-      responsePresentation.set(response, 'global');
+      responsePresentation.set(response, "global");
       const message = translateApiErrorMessage(envelope);
       if (message && shouldToastLicenseExpired()) {
-        window.showToast?.({ message, status: 'warning' });
+        window.showToast?.({ message, status: "warning" });
       }
-      const err: any = new Error(message || 'license expired (11001)');
+      const err: any = new Error(message || "license expired (11001)");
       err.status_code = 11001;
       err.status_message = envelope.status_message;
       err.response = response;
@@ -202,7 +226,7 @@ customAxios.interceptors.response.use(
     }
 
     if (isSessionKickedEnvelope(envelope) && beginSessionKick(envelope)) {
-      responsePresentation.set(response, 'global');
+      responsePresentation.set(response, "global");
       const err: any = new Error(translateApiErrorMessage(envelope));
       err.status_code = SESSION_KICKED_CODE;
       err.status_message = envelope.status_message;
@@ -215,34 +239,30 @@ customAxios.interceptors.response.use(
     // HTTP-500 branch below and raise the global maintenance overlay here too.
     // Return early — the overlay covers the screen, no toast needed underneath.
     if (envelope?.status_code === 500 && !response.config.skipMaintenance) {
-      responsePresentation.set(response, 'global');
-      window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
+      responsePresentation.set(response, "global");
+      window.dispatchEvent(new CustomEvent("bs:service-maintenance"));
       return response;
     }
 
     // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
     // explicitly opts out via skip403Redirect.
     if (envelope?.status_code === 403 && !response.config.skip403Redirect) {
-      responsePresentation.set(response, 'global');
-      localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
+      responsePresentation.set(response, "global");
+      localStorage.setItem("ERROR_REQUEST_PATH", response.config.url || "");
       location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
-      return response
+      return response;
     }
 
     // Unified business-error pipeline for callers that opted out of the 403
     // redirect: translate the api_errors.<code> i18n key, toast it, and reject
     // the promise so the caller's onError / .catch fires. Old call sites that
     // rely on silent failure (no skip403Redirect) keep the previous behavior.
-    if (
-      response.config.skip403Redirect
-      && isErrorEnvelope(envelope)
-      && envelope.status_code !== 200
-    ) {
+    if (response.config.skip403Redirect && isErrorEnvelope(envelope) && envelope.status_code !== 200) {
       const message = translateApiErrorMessage(envelope);
       const display = message;
       if (display && response.config.showError !== false) {
-        if (window.showToast) responsePresentation.set(response, 'toast');
-        window.showToast?.({ message: display, status: 'warning' });
+        if (window.showToast) responsePresentation.set(response, "toast");
+        window.showToast?.({ message: display, status: "warning" });
       }
       const err: any = new Error(display || `request failed (${envelope.status_code})`);
       err.status_code = envelope.status_code;
@@ -252,8 +272,8 @@ customAxios.interceptors.response.use(
     }
 
     if (response.config.showError && isErrorEnvelope(envelope) && envelope.status_code !== 200) {
-      if (window.showToast) responsePresentation.set(response, 'toast');
-      window.showToast?.({ message: translateApiErrorMessage(envelope), status: 'warning' });
+      if (window.showToast) responsePresentation.set(response, "toast");
+      window.showToast?.({ message: translateApiErrorMessage(envelope), status: "warning" });
     }
     return response;
   },
@@ -266,25 +286,26 @@ customAxios.interceptors.response.use(
     // Gateway/backend service exception → surface the global maintenance overlay.
     // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
     if (error.response.status === 500 && !originalRequest?.skipMaintenance) {
-      responsePresentation.set(error.response, 'global');
-      window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
+      responsePresentation.set(error.response, "global");
+      window.dispatchEvent(new CustomEvent("bs:service-maintenance"));
     }
 
-    if (originalRequest.url?.includes('/api/auth/2fa') === true) {
+    if (originalRequest.url?.includes("/api/auth/2fa") === true) {
       return Promise.reject(error);
     }
-    if (originalRequest.url?.includes('/api/auth/logout') === true) {
+    if (originalRequest.url?.includes("/api/auth/logout") === true) {
       return Promise.reject(error);
     }
 
     if (error.response.status === 401) {
       if (sessionKickInProgress) {
-        responsePresentation.set(error.response, 'global');
+        responsePresentation.set(error.response, "global");
         return Promise.reject(error);
       }
-      const envelope = await decodeErrorEnvelope(error.response.data, { httpFailure: true }) ?? error.response.data;
+      const envelope =
+        (await decodeErrorEnvelope(error.response.data, { httpFailure: true })) ?? error.response.data;
       if (isSessionKickedEnvelope(envelope) && beginSessionKick(envelope)) {
-        responsePresentation.set(error.response, 'global');
+        responsePresentation.set(error.response, "global");
         return Promise.reject(error);
       }
     }
@@ -295,8 +316,7 @@ customAxios.interceptors.response.use(
       // Standalone guest chat links (/chat/flow/:flowId, /chat/assistant/:flowId)
       // are passwordless — never redirect to the login page from here.
       // Auth variants (/chat/flow/auth/..., /chat/assistant/auth/...) are excluded.
-      const isGuestStandaloneChat =
-        /\/chat\/(flow|assistant)\/(?!auth\/)[^/]+\/?$/.test(location.pathname);
+      const isGuestStandaloneChat = /\/chat\/(flow|assistant)\/(?!auth\/)[^/]+\/?$/.test(location.pathname);
       if (isGuestStandaloneChat) {
         return Promise.reject(error);
       }
@@ -309,8 +329,8 @@ customAxios.interceptors.response.use(
       // Still gated on MODE: bouncing local dev to the platform origin on every
       // 401 makes debugging painful. Routes where a blank page is useless carry
       // their own unconditional guard instead (see routes/RequireLogin.tsx).
-      if (import.meta.env.MODE === 'production') {
-        responsePresentation.set(error.response, 'global');
+      if (import.meta.env.MODE === "production") {
+        responsePresentation.set(error.response, "global");
         redirectToLogin();
       }
     }
@@ -326,17 +346,21 @@ function normalizeRequestError(cause: unknown, options: Parameters<typeof normal
   return normalizeApiError(error, {
     ...options,
     transportMessages: {
-      network: i18next.exists('api_errors.network_error') ? String(i18next.t('api_errors.network_error')) : undefined,
-      timeout: i18next.exists('api_errors.request_timeout') ? String(i18next.t('api_errors.request_timeout')) : undefined,
+      network: i18next.exists("api_errors.network_error")
+        ? String(i18next.t("api_errors.network_error"))
+        : undefined,
+      timeout: i18next.exists("api_errors.request_timeout")
+        ? String(i18next.t("api_errors.request_timeout"))
+        : undefined,
     },
   });
 }
 
 export function showApiError(cause: unknown) {
   const error = normalizeRequestError(cause, { message: translateApiErrorMessage(cause) });
-  if (error.kind !== 'canceled' && error.presentation === 'none' && window.showToast) {
-    window.showToast({ message: error.message, status: 'warning' });
-    error.presentation = 'toast';
+  if (error.kind !== "canceled" && error.presentation === "none" && window.showToast) {
+    window.showToast({ message: error.message, status: "warning" });
+    error.presentation = "toast";
   }
   return error;
 }
@@ -344,39 +368,51 @@ export function showApiError(cause: unknown) {
 async function normalizeRequestFailure(cause, response?) {
   if (isApiError(cause)) return normalizeRequestError(cause, { message: cause.message });
   const original = response ?? cause?.response;
-  const envelope = await decodeErrorEnvelope(original?.data, { httpFailure: original?.status >= 400 }) ?? original?.data;
+  const envelope =
+    (await decodeErrorEnvelope(original?.data, { httpFailure: original?.status >= 400 })) ?? original?.data;
   const error = normalizeRequestError(cause, {
     response: original,
     envelope,
     message: translateApiErrorMessage(envelope),
   });
-  if (original && responsePresentation.has(original)) error.presentation = responsePresentation.get(original)!;
+  if (original && responsePresentation.has(original))
+    error.presentation = responsePresentation.get(original)!;
   return error;
 }
 
 // A second response stage changes only the failure carrier. Authentication,
 // maintenance, token-refresh queues and their ordering remain in the first stage.
-customAxios.interceptors.response.use(async response => {
-  const envelope = await decodeErrorEnvelope(response.data) ?? response.data;
-  if (!isErrorEnvelope(envelope) || envelope.status_code === 200) return response;
-  return Promise.reject(await normalizeRequestFailure(envelope, response));
-}, async cause => Promise.reject(await normalizeRequestFailure(cause)));
+customAxios.interceptors.response.use(
+  async (response) => {
+    const envelope = (await decodeErrorEnvelope(response.data)) ?? response.data;
+    if (!isErrorEnvelope(envelope) || envelope.status_code === 200) return response;
+    return Promise.reject(await normalizeRequestFailure(envelope, response));
+  },
+  async (cause) => Promise.reject(await normalizeRequestFailure(cause)),
+);
+
+// DEV only, opt-in: pad the workbench module lists with sample rows (~/mock/demo).
+// The DEV guard is a build-time constant, so the branch — and the dynamic import's
+// chunk with it — is dropped from production bundles.
+if (import.meta.env.DEV) {
+  void import("~/mock/demo").then(({ installDemoData }) => installDemoData(customAxios));
+}
 
 const paramsSerializer = (params) => {
   return Object.keys(params)
-    .map(key => {
+    .map((key) => {
       const value = params[key];
       if (value === undefined) {
         return null; // Omit undefined values.
       }
       if (Array.isArray(value)) {
-        return value.map(val => `${key}=${val}`).join('&');
+        return value.map((val) => `${key}=${val}`).join("&");
       }
       return `${key}=${value}`;
     })
-    .filter(item => item !== null) // Remove omitted entries.
-    .join('&');
-}
+    .filter((item) => item !== null) // Remove omitted entries.
+    .join("&");
+};
 
 export default {
   get: _get,
@@ -390,5 +426,5 @@ export default {
   deleteWithOptions: _deleteWithOptions,
   patch: _patch,
   refreshToken,
-  paramsSerializer
+  paramsSerializer,
 };

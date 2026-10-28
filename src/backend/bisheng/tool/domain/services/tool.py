@@ -154,6 +154,14 @@ class ToolServices(BaseModel):
             all_tool_type = [one for one in all_tool_type if action in action_map.get(str(one.id), frozenset())]
             permission_elapsed_ms = (perf_counter() - permission_start) * 1000
             permission_strategy = "candidate_action_check"
+        if action == "visible":
+            action_map = await batch_check_business_actions(
+                self.login_user,
+                resource_type="tool",
+                resource_ids=(one.id for one in all_tool_type),
+                actions=("visible",),
+            )
+            all_tool_type = [one for one in all_tool_type if "visible" in action_map.get(str(one.id), ())]
         logger.info(
             "[perf][tool.list.permission] user_id={} tenant_id={} is_preset={} action={} strategy={} "
             "candidates={} kept={} took_ms={:.2f}",

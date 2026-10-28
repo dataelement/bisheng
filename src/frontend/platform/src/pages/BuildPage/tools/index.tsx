@@ -14,7 +14,7 @@ import { userContext } from "@/contexts/userContext";
 import { refreshMcpApi } from "@/controllers/API/assistant";
 import { getToolsApi } from "@/controllers/API/tools";
 import { showApiError } from "@/controllers/request";
-import { CpuIcon,Star } from "lucide-react";
+import { CpuIcon,Sparkles,Star,User } from "lucide-react";
 import { useCallback,useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -22,6 +22,8 @@ import McpServerDialog from "./EditMcp";
 import EditTool from "./EditTool";
 import ToolItem from "./ToolItem";
 import ToolSet from "./ToolSet";
+import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
+import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 const MANAGED_TOOLS = [
     'Dalle3绘画', 'Bing web搜索', '天眼查',
@@ -58,14 +60,12 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
     const isBuiltinTool = type === "";
     const { actions, load: loadToolActions } = useLazyResourceActions('tool', ['edit', 'delete', 'manage_permission']);
-    // Built-in tools expose no resource-level management actions. Their separate
-    // configuration entry is restricted to the global super admin below.
     const canManageTool = (id: string | number) =>
-        !isBuiltinTool && hasResourceAction(actions, id, 'manage_permission');
+        hasResourceAction(actions, id, 'manage_permission');
     const handleHoverToolPermissions = useCallback((tool) => {
-        if (isBuiltinTool || !tool?.id) return;
+        if (!tool?.id) return;
         void loadToolActions(String(tool.id));
-    }, [isBuiltinTool, loadToolActions]);
+    }, [loadToolActions]);
 
     const loadData = async (_type = "custom") => {
         await getToolsApi(_type, { action: 'visible' }).then((res) => {
@@ -80,6 +80,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         setLoading(false)
     }
     useEffect(() => {
+        if (type === 'skill') { setLoading(false); return; }
         setLoading(true)
         if (type === 'mcp') {
             loadMcpData()
@@ -118,7 +119,11 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
             <div className="relative w-full flex h-full overflow-y-scroll scrollbar-hide bg-background-main border-t">
                 <div className="relative w-fit p-6">
-                    <SearchInput placeholder={t("tools.search")} onChange={(e) => setKeyword(e.target.value)} className={"mt-6"} />
+                    {type !== 'skill' && <SearchInput
+                        placeholder={t("tools.search")}
+                        className="mt-6"
+                        onChange={(e) => setKeyword(e.target.value)}
+                    />}
                     <div className="mt-4">
                         <div
                             className={`flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${type === "" && "bg-muted-foreground/10"
@@ -144,17 +149,23 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             <CpuIcon />
                             <span>{t("tools.mcpTools")}</span>
                         </div>
+                        {select === null && canManageWorkbenchConfig(user) && <button
+                            type="button"
+                            className={`mt-1 flex w-full items-center gap-2 rounded-md px-4 py-2 text-left transition-colors hover:bg-muted-foreground/10 ${type === 'skill' ? 'bg-muted-foreground/10' : ''}`}
+                            onClick={() => setType('skill')}
+                        ><Sparkles /><span>{t('tools.skills')}</span></button>}
                     </div>
-                    <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between px-6">
+                    {type !== 'skill' && <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between px-6">
                         <div className="flex items-center gap-2">
                             <p className="text-sm text-muted-foreground break-keep">
                                 {t("tools.manageCustomTools")}
                             </p>
                             {/* F027 AC-12: "总记录数" badge removed from the tool list UI; backend response shape unchanged. */}
                         </div>
-                    </div>
+                    </div>}
                 </div>
                 <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-2 scrollbar-hide">
+                    {type === 'skill' ? <SkillManagement /> : <>
                     {
                         loading && <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary/5 z-10">
                             <LoadingIcon className="size-24" />
@@ -186,7 +197,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                         data={el}
                                         onSelect={onSelect}
                                         onSetClick={hasSet(el) ? () => toolsetRef.current.edit(el) : null}
-                                        onEdit={(id) => {
+                                        onEdit={() => {
                                             type === 'mcp' ? mcpDialogRef.current.open(el) :
                                                 editRef.current.edit(el)
                                         }}
@@ -203,6 +214,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             )}
                         </Accordion>
                     }
+                    </>}
                 </div>
             </div>
 
@@ -228,6 +240,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                 <PermissionDialog
                     open={permDialogOpen}
                     onOpenChange={setPermDialogOpen}
+                    allowAllMembers={isBuiltinTool}
                     resourceType="tool"
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
@@ -269,6 +282,7 @@ const useToolType = (setType) => {
         setSearchParams({})
         if (!type) return
 
+        if (type === 'skill') { setType('skill'); return; }
         setType(type === 'mcp' ? type : 'edit')
         setTimeout(() => {
             document.getElementById(type === 'mcp' ? 'create-mcptool' : 'create-apitool')?.click()

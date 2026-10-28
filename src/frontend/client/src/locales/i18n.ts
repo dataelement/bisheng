@@ -1,6 +1,7 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
+import { isNativeDesktop, readDesktopLocale, rememberDesktopLocale } from './desktopLocale';
 
 // Import your JSON translations
 import translationEn from './en/translation.json';
@@ -13,23 +14,28 @@ import apiErrorsZh_Hans from './zh-Hans/api_errors.gen.json';
 import sharedEn from './en/shared.gen.json';
 import sharedJa from './ja/shared.gen.json';
 import sharedZh_Hans from './zh-Hans/shared.gen.json';
+import toolEn from './en/tool.gen.json';
+import toolJa from './ja/tool.gen.json';
+import toolZh_Hans from './zh-Hans/tool.gen.json';
 
 export const defaultNS = 'translation';
 
 // 'shared' is a real namespace (addressed shared:<key>) so cross-app components
 // in packages/* use one addressing form on both apps.
 export const resources = {
-  'en': { translation: { ...translationEn, api_errors: apiErrorsEn }, shared: sharedEn },
-  'zh-Hans': { translation: { ...translationZh_Hans, api_errors: apiErrorsZh_Hans }, shared: sharedZh_Hans },
-  'ja': { translation: { ...translationJa, api_errors: apiErrorsJa }, shared: sharedJa },
+  'en': { translation: { ...translationEn, api_errors: apiErrorsEn }, shared: sharedEn, tool: toolEn },
+  'zh-Hans': { translation: { ...translationZh_Hans, api_errors: apiErrorsZh_Hans }, shared: sharedZh_Hans, tool: toolZh_Hans },
+  'ja': { translation: { ...translationJa, api_errors: apiErrorsJa }, shared: sharedJa, tool: toolJa },
 } as const;
 
 const config = window.BRAND_CONFIG || {};
+const desktopLocale = readDesktopLocale();
+if (desktopLocale) rememberDesktopLocale(desktopLocale === 'zh-Hans' ? 'zh' : 'en');
 
 // APP_CONFIG.disableJa (config.js): drop any saved Japanese choice so
 // LanguageDetector below doesn't auto-restore it on this load.
 const jaDisabled = !!(window.APP_CONFIG && window.APP_CONFIG.disableJa);
-if (jaDisabled) {
+if (jaDisabled && !isNativeDesktop()) {
   try {
     const saved = localStorage.getItem('i18nextLng');
     if (saved && saved.toLowerCase().startsWith('ja')) {
@@ -42,6 +48,9 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
+    lng: desktopLocale,
+    // The host's temporary choice must never become the standalone website's preference.
+    ...(isNativeDesktop() ? { detection: { caches: [] } } : {}),
     fallbackLng: {
       'zh-TW': ['zh-Hant', 'en'],
       'zh-HK': ['zh-Hant', 'en'],
@@ -52,7 +61,7 @@ i18n
       default: ['en'],
     },
     fallbackNS: 'translation',
-    ns: ['translation', 'shared'],
+    ns: ['translation', 'shared', 'tool'],
     debug: false,
     defaultNS,
     resources,

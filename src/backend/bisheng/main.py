@@ -1,5 +1,5 @@
 import os
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
@@ -19,6 +19,7 @@ from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
 from bisheng.common.services.config_service import settings
 from bisheng.core.context import close_app_context, initialize_app_context
 from bisheng.core.logger import set_logger_config
+from bisheng.dsh.work_mcp import create_work_mcp_runtime
 from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
 from bisheng.open_api.api.middleware import OpenApiAuditMiddleware
 from bisheng.open_api.api.openapi_schema import install_open_api_schema
@@ -53,10 +54,11 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
-    # A custom validator that raises ValueError puts the exception object in
-    # ``ctx``; encoding it raw fails and turns a 422 into a 500 with a reset
-    # connection. ``jsonable_encoder`` is what FastAPI's own handler uses.
-    msg = {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": jsonable_encoder(exc.errors())}
+    # Pydantic validator context can contain ValueError instances.
+    msg = jsonable_encoder(
+        {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()},
+        custom_encoder={ValueError: str},
+    )
     logger.error(f"{req.method} {req.url} {str(exc.errors())[:100]}")
     return JSONResponse(content=msg)
 
@@ -113,7 +115,9 @@ def _register_app_publish_composition() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with app.state.open_mcp_runtime.lifespan():
+    async with AsyncExitStack() as stack:
+        await stack.enter_async_context(app.state.open_mcp_runtime.lifespan())
+        await stack.enter_async_context(app.state.work_mcp_runtime.run())
         await initialize_app_context(config=settings)
         _register_permission_runtime_contexts()
         _register_app_publish_composition()
@@ -200,6 +204,7 @@ def create_app():
     # and picks the first registered class, so the narrower handlers win for
     # their own errors and ``handle_http_exception`` keeps every other error
     # unchanged.
+    app.state.work_mcp_runtime = create_work_mcp_runtime()
     register_open_api_exception_handlers(app)
     install_open_api_schema(app)
     register_public_exception_handlers(app)

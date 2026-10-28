@@ -1,4 +1,5 @@
 import { SubjectSelectionSummary } from "./SubjectSelectionSummary";
+import { permissionModelLabel } from "./permissionModelLabel";
 import { Outlined } from "bisheng-icons";
 // `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
 import { LockKeyhole } from "lucide-react";
@@ -182,13 +183,13 @@ export function PermissionGrantTab({
       if (assignee.subject.type !== subjectType) continue;
       if (assignee.scope !== "LOCAL") continue;
       const id = String(assignee.subject.id);
-      const modelName = assignee.model.name || assignee.model.key;
+      const modelName = permissionModelLabel(assignee.model.key, assignee.model.name, localize);
       (names[id] ??= []).push(modelName);
     }
     return Object.fromEntries(
       Object.entries(names).map(([id, list]) => [id, list.join(", ")]),
     ) as Record<string, string>;
-  }, [assignees, subjectType]);
+  }, [assignees, localize, subjectType]);
 
   const pendingChanges = useMemo<PermissionGrantMutationChange[]>(() => {
     const changes: PermissionGrantMutationChange[] = [];
@@ -360,7 +361,7 @@ export function PermissionGrantTab({
             >
               {models.map((model) => (
                 <option key={model.key} value={model.key}>
-                  {model.name}
+                  {permissionModelLabel(model.key, model.name, localize)}
                 </option>
               ))}
             </select>
@@ -457,12 +458,12 @@ export function PermissionGrantTab({
                 >
                   {!currentIsGrantable && (
                     <option value={assignee.model.key}>
-                      {assignee.model.name}
+                      {permissionModelLabel(assignee.model.key, assignee.model.name, localize)}
                     </option>
                   )}
                   {models.map((model) => (
                     <option key={model.key} value={model.key}>
-                      {model.name}
+                      {permissionModelLabel(model.key, model.name, localize)}
                     </option>
                   ))}
                 </select>
@@ -547,7 +548,7 @@ export function PermissionGrantTab({
               >
                 {models.map((model) => (
                   <option key={model.key} value={model.key}>
-                    {model.name}
+                    {permissionModelLabel(model.key, model.name, localize)}
                   </option>
                 ))}
               </select>

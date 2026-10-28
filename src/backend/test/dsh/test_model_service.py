@@ -66,7 +66,7 @@ class Ledger:
         assert expected_version == 1
         self.events.append(event)
         if event.total_tokens is not None:
-            self.used += event.total_tokens
+            self.used += event.billed_tokens
         return event
 
 
@@ -78,7 +78,9 @@ def service_setup():
         quota_epoch=1,
         quota_sync_state="READY",
         allowed_model_ids=[42],
-        rows=[SimpleNamespace(model_id=42, version=1, quota_sync_state="READY", monthly_token_limit=100)],
+        rows=[
+            SimpleNamespace(model_id=42, version=1, quota_sync_state="READY", credit_rate=100, monthly_token_limit=100)
+        ],
         monthly_token_limit=100,
     )
     model = SimpleNamespace(
@@ -129,6 +131,26 @@ async def test_models_empty_policy_and_immediate_offline(service_setup):
     policy.allowed_model_ids = []
     assert (await service.list_models(principal()))["data"] == []
     assert llm.calls == 0
+
+
+async def test_catalog_refreshes_configured_label_without_changing_route_or_usage(service_setup):
+    from bisheng.core.context.tenant import get_current_tenant_id
+
+    service, llm, ledger, _policy, _state = service_setup
+    names = {"42": "Custom name"}
+
+    async def read_names():
+        assert get_current_tenant_id() == 2
+        return names
+
+    service.display_names_reader = read_names
+    before = (await service.list_models(principal()))["data"][0]
+    assert before["display_name"] == "OpenAI / Custom name"
+    names["42"] = "Updated name"
+    after = (await service.list_models(principal()))["data"][0]
+    assert after["display_name"] == "OpenAI / Updated name"
+    assert before["id"] == after["id"] == "bisheng:42"
+    assert llm.calls == 0 and ledger.events == []
 
 
 @pytest.mark.parametrize(
@@ -300,7 +322,7 @@ async def test_real_redis_settlement_and_changed_model_keep_total(service_setup,
     service, llm, _ledger, policy, _state = service_setup
     policy.allowed_model_ids = [4, 5]
     policy.rows = [
-        SimpleNamespace(model_id=model, version=1, quota_sync_state="READY", monthly_token_limit=1000)
+        SimpleNamespace(model_id=model, version=1, quota_sync_state="READY", credit_rate=100, monthly_token_limit=1000)
         for model in (4, 5)
     ]
     policy.monthly_token_limit = 1000
@@ -327,9 +349,9 @@ async def test_real_redis_settlement_and_changed_model_keep_total(service_setup,
     assert await real_quota.redis.hget(real_quota.keys(running())[1], "used") == "1110"
     with pytest.raises(DshMonthlyTokenLimitExceededError):
         await service.complete(principal(), request().model_copy(update={"model": "bisheng:4"}))
-    other = await service.complete(principal(), request().model_copy(update={"model": "bisheng:5"}))
-    assert other["usage"]["total_tokens"] == 210
-    assert llm.calls == 2
+    with pytest.raises(DshMonthlyTokenLimitExceededError):
+        await service.complete(principal(), request().model_copy(update={"model": "bisheng:5"}))
+    assert llm.calls == 1
 
 
 async def test_context_length_refusal_preserves_client_error_without_freezing(service_setup):
@@ -352,3 +374,41 @@ async def test_context_length_refusal_preserves_client_error_without_freezing(se
         await service.complete(principal(), request())
     assert ledger.events[-1].total_tokens is None
     assert not ledger.frozen
+
+
+async def test_work_admission_snapshots_model_multiplier(service_setup):
+    service, llm, ledger, policy, _state = service_setup
+    policy.rows[0].credit_rate = 125
+    llm.measured = lambda: {"input_tokens": 30, "output_tokens": 50, "total_tokens": 80}
+    result = await service.complete(principal(), request())
+    assert result["usage"]["total_tokens"] == 80
+    assert ledger.events[0].credit_rate == 125
+    assert ledger.events[-1].billed_tokens == 100
+    assert ledger.used == 190
+
+
+@pytest.mark.parametrize("outcome", ["known", "unknown", "unavailable"])
+async def test_work_settlement_preserves_audit_boundary(service_setup, outcome):
+    from unittest.mock import AsyncMock, Mock
+
+    from bisheng.common.errcode.dsh import DshUsageUnavailableError
+    from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
+
+    service, *_ = service_setup
+    terminal = SimpleNamespace(total_tokens=12 if outcome == "known" else None)
+    service.settle_usage = AsyncMock(return_value=terminal)
+    if outcome == "unavailable":
+        service.settle_usage.side_effect = DshUsageUnavailableError()
+    event = object()
+    execution = SimpleNamespace(usage=DshTokenUsage(), provider_request_id="provider", failure_code=None, audit=Mock())
+    if outcome == "unavailable":
+        with pytest.raises(DshUsageUnavailableError):
+            await service._settle(event, execution, "SUCCEEDED")
+    else:
+        await service._settle(event, execution, "SUCCEEDED")
+    service.settle_usage.assert_awaited_once_with(
+        event, execution.usage, "SUCCEEDED", None, provider_request_id="provider"
+    )
+    execution.audit.assert_called_once_with(
+        "usage", {"known": "SETTLED", "unknown": "USAGE_UNKNOWN", "unavailable": "UNCERTAIN"}[outcome]
+    )

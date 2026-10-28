@@ -345,6 +345,35 @@ class F048PermissionRuntime:
     ) -> dict[tuple[int, str, str], PermissionResourceSnapshot]:
         return await self._state.permission_snapshots(resources)
 
+    def tenant_use_grant(self, target, catalog):
+        """Build a revocable grant for the current tenant's members."""
+        candidates = [
+            row.snapshot
+            for row in catalog.models
+            if row.snapshot.active
+            and row.snapshot.derived_level is not None
+            and "use" in row.snapshot.action_codes
+            and set(row.snapshot.action_codes) <= {"use", "download"}
+        ]
+        if not candidates:
+            raise PermissionPublishNotReadyError(msg="A use-only permission model is required")
+        model = min(candidates, key=lambda item: (item.derived_level or 0, item.model_key))
+        grant = self._empty_grant(target=target, model=model)
+        source = self._sources.canonicalize_source(
+            source_id=1,
+            subject_type="tenant",
+            subject_id=str(target.tenant_id),
+            source_type="TENANT",
+        )
+        source = replace(
+            source,
+            source_id=stable_assignee_id(
+                grant_key=grant.grant_id,
+                source_fingerprint=source.source_fingerprint,
+            ),
+        )
+        return self._sources.add_source(grant, source)
+
     async def authorize_created(
         self,
         *,
@@ -354,6 +383,7 @@ class F048PermissionRuntime:
         mode: str,
         source_type: str = "CREATOR",
         protected: bool = True,
+        shared_with_tenant: bool = False,
         idempotency_key: str | None = None,
     ):
         if (
@@ -380,6 +410,12 @@ class F048PermissionRuntime:
         )
         creation_grants: tuple[GrantSnapshot, ...] = ()
         creation_deltas: tuple[ProjectionTupleDelta, ...] = ()
+        if shared_with_tenant:
+            if target.resource_type != "linsight_skill":
+                raise PermissionInvalidResourceError()
+            shared = self.tenant_use_grant(target, catalog)
+            creation_grants = (shared.grant,)
+            creation_deltas = shared.deltas
         if actor.subject_type == "service_account" and mode.upper() == "CUSTOM":
             manager_model = next(
                 (
@@ -408,8 +444,8 @@ class F048PermissionRuntime:
                 ),
             )
             creator_mutation = self._sources.add_source(manager_grant, creator_source)
-            creation_grants = (creator_mutation.grant,)
-            creation_deltas = creator_mutation.deltas
+            creation_grants += (creator_mutation.grant,)
+            creation_deltas += creator_mutation.deltas
         return await self._owner.project_created(
             OwnerProjectionContext(
                 target=target,
@@ -452,9 +488,12 @@ class F048PermissionRuntime:
         if expected_mode != "CUSTOM":
             raise InvalidPermissionModeError()
         catalog = await self._runtime_catalog()
+        shared = self.tenant_use_grant(target, catalog) if target.resource_type in {"tool", "linsight_skill"} else None
         return await self._owner.project_created(
             OwnerProjectionContext(
                 target=target,
+                creation_grants=(shared.grant,) if shared else (),
+                creation_deltas=shared.deltas if shared else (),
                 owner_grant=None,
                 source_id=1,
                 owner_user_id=None,
@@ -967,6 +1006,36 @@ class F048PermissionRuntime:
             expected_resource_version=expected_resource_version,
             expected_catalog_release_id=expected_catalog_release_id,
             idempotency_key=idempotency_key,
+        )
+
+    async def migrate_capability_default(self, *, actor, target, remove_public_markers: bool):
+        """Replace legacy public access with an ordinary tenant grant atomically."""
+        if target.resource_type not in {"tool", "linsight_skill"} or not actor.super_admin:
+            raise PermissionInvalidResourceError()
+        context = await self.build_grant_context(actor=actor, target=target)
+        shared = self.tenant_use_grant(target, await self.current_catalog())
+        deltas = tuple(
+            ProjectionTupleDelta(
+                phase="STAGE",
+                sequence=index,
+                action="DELETE",
+                user="user:*",
+                relation=relation,
+                object=f"{target.resource_type}:{target.resource_id}",
+            )
+            for index, relation in enumerate(("visible", "system_use_marker") if remove_public_markers else ())
+        )
+        return await self._grants.mutate(
+            context,
+            changes=(
+                CanonicalGrantChange(
+                    operation="ADD", model_key=shared.grant.model.model_key, source=shared.grant.sources[0]
+                ),
+            ),
+            expected_resource_version=target.resource_version,
+            expected_catalog_release_id=context.current_catalog_release_id,
+            idempotency_key=f"capability-default-v1:{target.tenant_id}:{target.resource_type}:{target.resource_id}",
+            migration_deltas=deltas,
         )
 
     async def remove_absent_resource_sources(

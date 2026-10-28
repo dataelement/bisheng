@@ -7,6 +7,7 @@ from uuid import uuid4
 from celery.signals import worker_shutting_down
 
 from bisheng.dsh.domain.services.profile import profile_scope
+from bisheng.worker.dsh.content_safety import register_content_safety_tasks
 from bisheng.worker.dsh.model_audit import register_model_audit_tasks
 from bisheng.worker.dsh.model_audit_tree import register_audit_tree_tasks
 from bisheng.worker.dsh.operations import register_operation_tasks
@@ -16,6 +17,7 @@ from bisheng.worker.dsh.usage import register_usage_tasks
 def register_dsh_tasks(app):
     register_model_audit_tasks(app)
     register_audit_tree_tasks(app)
+    register_content_safety_tasks(app)
     from bisheng.dsh.operations_runtime import (
         active_tenant_ids,
         administration_worker_runtime,

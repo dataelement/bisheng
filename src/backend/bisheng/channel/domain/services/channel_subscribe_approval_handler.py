@@ -70,8 +70,6 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
         if not channel_info:
             return
 
-        membership.status = MembershipStatusEnum.ACTIVE
-        await self.space_channel_member_repository.update(membership)
         # Mirror the activated membership into an explicit ReBAC viewer grant so the
         # member surfaces in the channel authorization list, matching direct subscribe.
         from bisheng.channel.domain.services.channel_service import ChannelService
@@ -83,6 +81,8 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
             is_active=True,
             operator_user_id=operator_user_id,
         )
+        membership.status = MembershipStatusEnum.ACTIVE
+        await self.space_channel_member_repository.update(membership)
         operator_user_info = await UserDao.aget_user(operator_user_id)
         await self.notify_sender(
             operator_user_id,

@@ -3,12 +3,13 @@ import { MEDIA_SUFFIXES } from '~/pages/appChat/fileAcceptUtils';
 const BASE_ACCEPT =
     '.pdf,.txt,.docx,.doc,.ppt,.pptx,.md,.html,.xls,.xlsx,.wps,.dps,.et';
 
-const BASE_WITH_IMAGES =
-    '.pdf,.txt,.docx,.doc,.ppt,.pptx,.md,.html,.xls,.xlsx,.doc,.png,.jpg,.jpeg,.bmp,.wps,.dps,.et';
+const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.bmp';
+// Keep aligned with workstation/domain/services/constants.py.
+const VISION_IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif';
 
 const OFD_SUFFIX = '.ofd';
 
-const VISION_IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif';
+
 
 const MEDIA_ACCEPT = MEDIA_SUFFIXES.join(',').toLowerCase();
 
@@ -51,17 +52,18 @@ export function isFileNameAccepted(fileName: string, accepts: string): boolean {
 
 export interface BuildChatAcceptOptions {
     enableMedia: boolean;
-    enableEtl4lm: boolean;
     includeOfd: boolean;
     /** Allow image attachments that a selected vision model can consume directly. */
     enableVision?: boolean;
+    enableEtl4lm?: boolean;
     /** Task mode additionally accepts data/config/source files. */
     taskMode?: boolean;
 }
 
 /** Runtime accept string for workbench chat file picker (replaces const enum). */
 export function buildChatAccept(opts: BuildChatAcceptOptions): string {
-    let base = opts.enableEtl4lm ? BASE_WITH_IMAGES : BASE_ACCEPT;
+    // Attachment intake is independent of the selected processing capability.
+    let base = `${BASE_ACCEPT},${IMAGE_ACCEPT}`;
     if (opts.includeOfd) {
         base = `${base},${OFD_SUFFIX}`;
     }
@@ -77,4 +79,10 @@ export function buildChatAccept(opts: BuildChatAcceptOptions): string {
         base = `${base},${TASK_MODE_DATA_ACCEPT}`;
     }
     return base;
+}
+
+/** Check processing at send time while keeping image attachment intake available. */
+export function canProcessChatImage(fileName: string, vision: boolean, imageParser: boolean): boolean {
+    if (!isFileNameAccepted(fileName, IMAGE_ACCEPT)) return true;
+    return imageParser || (vision && isFileNameAccepted(fileName, VISION_IMAGE_ACCEPT));
 }

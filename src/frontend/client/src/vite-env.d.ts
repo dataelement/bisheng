@@ -54,5 +54,6 @@ interface Window {
     /** Hide Japanese from the language switcher and locale auto-detection. */
     disableJa?: boolean;
     /** Override the build-time Skill Center preview setting for this deployment. */
+    skillCenterPreviewEnabled?: boolean;
   };
 }

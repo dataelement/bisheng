@@ -673,5 +673,12 @@
   "16233": "Release notes must not exceed 2,000 characters",
   "26071": "The owner's tenant differs from the service account tenant. Contact an administrator.",
   "26072": "The owner's current tenant cannot be determined. Contact an administrator.",
-  "26073": "The service account management tenant has changed. Select the tenant and refresh before retrying."
+  "26073": "The service account management tenant has changed. Select the tenant and refresh before retrying.",
+  "26170": "Check record authentication failed. Contact an administrator.",
+  "26171": "The check record format is invalid. Ask an administrator to check the sending service.",
+  "26172": "The check record conflicts with saved information. Ask an administrator to review it.",
+  "26173": "The check record is older than the retained reporting range and cannot be accepted again.",
+  "26174": "The check record receiving service is temporarily unavailable. Try again later.",
+  "26175": "The check record exceeds the size or item limit and cannot be accepted.",
+  "28010": "The task mode code executor configuration is invalid. Contact your administrator to check the local, container, or e2b configuration, then try again."
 }

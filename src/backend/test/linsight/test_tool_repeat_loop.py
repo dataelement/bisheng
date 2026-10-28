@@ -334,3 +334,58 @@ def test_build_tolerates_conf_without_repeat_limits():
     mw = build_tool_loop_breaker_middleware(_OldConf(), is_subagent=True)
     assert mw.repeat_soft_limit == 3
     assert mw.repeat_hard_limit == 8
+
+
+# The 3006 regression alternated successful writes and unchanged task updates.
+def _cycle_turns(repeats, period=2):
+    steps = [
+        ("write_file", {"file_path": "scratch/build_sheet.py", "content": "print('same')"}),
+        ("write_todos", {"todos": [{"content": "生成 Excel", "status": "in_progress"}]}),
+        ("read_file", {"file_path": "scratch/build_sheet.py"}),
+    ][:period]
+    return [
+        message
+        for _ in range(repeats)
+        for name, args in steps
+        for message in (_ai_call(name, args), _offloaded_tm(name))
+    ]
+
+
+@pytest.mark.parametrize("period", [2, 3])
+def test_alternating_success_cycle_aborts(period):
+    messages = _cycle_turns(8, period)
+    with pytest.raises(LinsightToolLoopError) as exc:
+        _mw().after_model({"messages": messages}, None)
+    assert exc.value.reason == "repeat"
+
+
+async def test_alternating_success_cycle_receives_early_nudge():
+    request = _request(_cycle_turns(3))
+    received = await _run_nudge(_mw(), request)
+    assert len(received.messages) == len(request.messages) + 1
+    assert "write_file" in received.messages[-1].content
+    assert "write_todos" in received.messages[-1].content
+
+
+def test_changing_file_content_establishes_progress():
+    messages = _cycle_turns(7)
+    messages.extend(
+        [
+            _ai_call("write_file", {"file_path": "scratch/build_sheet.py", "content": "print('new')"}),
+            _offloaded_tm("write_file"),
+        ]
+    )
+    _mw().after_model({"messages": messages}, None)
+
+
+def test_new_user_input_resets_alternating_cycle():
+    messages = [*_cycle_turns(7), HumanMessage(content="换一个方案"), *_cycle_turns(1)]
+    _mw().after_model({"messages": messages}, None)
+
+
+def test_interactive_cycle_resets_repetition():
+    messages = []
+    for _ in range(9):
+        messages.extend(_cycle_turns(1))
+        messages.extend([_ai_call("ask_user", {"question": "继续吗"}), _offloaded_tm("ask_user")])
+    _mw().after_model({"messages": messages}, None)

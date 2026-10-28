@@ -385,9 +385,6 @@
   "src/components/bs-ui/input/avator.tsx": {
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/components/bs-ui/input/textInput.tsx": {
@@ -647,7 +644,7 @@
   },
   "src/controllers/API/index.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 52
+      "count": 51
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
@@ -660,11 +657,6 @@
     },
     "no-restricted-syntax": {
       "count": 18
-    }
-  },
-  "src/controllers/API/license.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/controllers/API/linsight.ts": {
@@ -1066,11 +1058,6 @@
   "src/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx": {
     "no-restricted-syntax": {
       "count": 1
-    }
-  },
-  "src/pages/BuildPage/bench/IconUploadSection.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
     }
   },
   "src/pages/BuildPage/bench/KnowledgeSpace.tsx": {
@@ -2447,9 +2434,6 @@
   },
   "src/pages/ModelPage/manage/tabs/WorkbenchModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-console": {
       "count": 1
     },
     "no-restricted-syntax": {
