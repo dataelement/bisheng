@@ -113,6 +113,7 @@ def dao_engine():
                 dislike INTEGER DEFAULT 0,
                 copied INTEGER DEFAULT 0,
                 sensitive_status INTEGER DEFAULT 1,
+                answer_abnormal INTEGER NOT NULL DEFAULT 0,
                 create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
             )

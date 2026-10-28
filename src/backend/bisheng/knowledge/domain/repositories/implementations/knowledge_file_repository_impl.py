@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import and_, case, delete, exists, func, or_, update
@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
     KnowledgeDocumentLifecycleStatus,
@@ -25,6 +26,10 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileProjectionStatus,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import (
+    KnowledgeSpaceLevelEnum,
+    KnowledgeSpaceScope,
+)
 from bisheng.knowledge.domain.models.knowledge_tag_library_link import KnowledgeTagLibraryLink
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.schemas.knowledge_similarity_context import KnowledgeSimilarityContext
@@ -32,6 +37,33 @@ from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import 
     commit_tracked_fulltext_changes,
     track_fulltext_file_changes,
 )
+
+_ABNORMAL_UPLOAD_STATUSES = (
+    KnowledgeFileStatus.FAILED.value,
+    KnowledgeFileStatus.TIMEOUT.value,
+    KnowledgeFileStatus.VIOLATION.value,
+)
+_SOURCE_SPACE_LEVELS = (
+    KnowledgeSpaceLevelEnum.PUBLIC.value,
+    KnowledgeSpaceLevelEnum.DEPARTMENT.value,
+    KnowledgeSpaceLevelEnum.TEAM.value,
+    KnowledgeSpaceLevelEnum.TEAM_KS.value,
+    KnowledgeSpaceLevelEnum.PERSONAL.value,
+)
+
+
+def _source_upload_filters():
+    """源文件: 知识空间、未删除、文件而非文件夹, 入口为空或 manager."""
+    return and_(
+        KnowledgeFile.deleted_at.is_(None),
+        KnowledgeFile.file_type == FileType.FILE.value,
+        Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+        KnowledgeSpaceScope.level.in_(_SOURCE_SPACE_LEVELS),
+        or_(
+            KnowledgeFile.entry_type.is_(None),
+            KnowledgeFile.entry_type == KnowledgeFileEntryType.MANAGER.value,
+        ),
+    )
 
 
 class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], KnowledgeFileRepository):
@@ -81,27 +113,40 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         ).all()
         return sorted({int(item) for item in resources if str(item).isdigit()})
 
-    async def list_qa_subtree_page(self, *, space_id: int, prefix: str,
-                                   after_id: int, limit: int) -> list[KnowledgeFile]:
-        statement = select(KnowledgeFile).where(
-            KnowledgeFile.knowledge_id == space_id,
-            KnowledgeFile.id > after_id,
-            KnowledgeFile.file_type == FileType.FILE.value,
-            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
-            col(KnowledgeFile.deleted_at).is_(None),
-            or_(KnowledgeFile.file_level_path == prefix,
-                col(KnowledgeFile.file_level_path).startswith(prefix + '/', autoescape=True)),
-        ).order_by(KnowledgeFile.id).limit(max(1, min(limit, 500)))
+    async def list_qa_subtree_page(
+        self, *, space_id: int, prefix: str, after_id: int, limit: int
+    ) -> list[KnowledgeFile]:
+        statement = (
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.knowledge_id == space_id,
+                KnowledgeFile.id > after_id,
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                col(KnowledgeFile.deleted_at).is_(None),
+                or_(
+                    KnowledgeFile.file_level_path == prefix,
+                    col(KnowledgeFile.file_level_path).startswith(prefix + "/", autoescape=True),
+                ),
+            )
+            .order_by(KnowledgeFile.id)
+            .limit(max(1, min(limit, 500)))
+        )
         return list((await self.session.exec(statement)).all())
 
     async def list_qa_favorite_page(self, *, space_id: int, after_id: int, limit: int) -> list[KnowledgeFile]:
-        statement = select(KnowledgeFile).where(
-            KnowledgeFile.knowledge_id == space_id,
-            KnowledgeFile.id > after_id,
-            KnowledgeFile.file_source == "favorite_reference",
-            KnowledgeFile.file_type == FileType.FILE.value,
-            col(KnowledgeFile.deleted_at).is_(None),
-        ).order_by(KnowledgeFile.id).limit(max(1, min(limit, 500)))
+        statement = (
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.knowledge_id == space_id,
+                KnowledgeFile.id > after_id,
+                KnowledgeFile.file_source == "favorite_reference",
+                KnowledgeFile.file_type == FileType.FILE.value,
+                col(KnowledgeFile.deleted_at).is_(None),
+            )
+            .order_by(KnowledgeFile.id)
+            .limit(max(1, min(limit, 500)))
+        )
         return list((await self.session.exec(statement)).all())
 
     async def list_qa_category_candidates(
@@ -199,6 +244,98 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         stmt = (
             select(KnowledgeFile)
             .where(KnowledgeFile.id == entity_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    def _source_upload_select(self):
+        return (
+            select(KnowledgeFile)
+            .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
+            .join(KnowledgeSpaceScope, KnowledgeSpaceScope.space_id == Knowledge.id)
+        )
+
+    async def list_abnormal_source_uploads(
+        self,
+        *,
+        offset: int,
+        limit: int,
+        status: int | None = None,
+        space_level: str | None = None,
+        keyword: str | None = None,
+        knowledge_name: str | None = None,
+        uploader_name: str | None = None,
+        update_time_from: date | None = None,
+        update_time_to: date | None = None,
+    ) -> tuple[list[dict], int]:
+        status_filter = (status,) if status is not None else _ABNORMAL_UPLOAD_STATUSES
+        filters = [and_(_source_upload_filters(), KnowledgeFile.status.in_(status_filter))]
+        if space_level:
+            filters.append(KnowledgeSpaceScope.level == space_level)
+        if keyword:
+            filters.append(KnowledgeFile.file_name.like(f"%{keyword}%"))
+        if knowledge_name:
+            filters.append(Knowledge.name.like(f"%{knowledge_name}%"))
+        if uploader_name:
+            filters.append(KnowledgeFile.user_name.like(f"%{uploader_name}%"))
+        if update_time_from is not None:
+            filters.append(KnowledgeFile.update_time >= datetime.combine(update_time_from, time.min))
+        if update_time_to is not None:
+            filters.append(KnowledgeFile.update_time < datetime.combine(update_time_to + timedelta(days=1), time.min))
+        filters = and_(*filters)
+        count_stmt = (
+            select(func.count(KnowledgeFile.id))
+            .select_from(KnowledgeFile)
+            .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
+            .join(KnowledgeSpaceScope, KnowledgeSpaceScope.space_id == Knowledge.id)
+            .where(filters)
+        )
+        total = int((await self.session.execute(count_stmt)).scalar_one())
+        rows = (
+            await self.session.execute(
+                select(
+                    KnowledgeFile.id,
+                    KnowledgeFile.file_name,
+                    KnowledgeFile.knowledge_id,
+                    Knowledge.name,
+                    KnowledgeSpaceScope.level,
+                    KnowledgeFile.status,
+                    KnowledgeFile.user_name,
+                    KnowledgeFile.remark,
+                    KnowledgeFile.update_time,
+                )
+                .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
+                .join(KnowledgeSpaceScope, KnowledgeSpaceScope.space_id == Knowledge.id)
+                .where(filters)
+                .order_by(KnowledgeFile.update_time.desc(), KnowledgeFile.id.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+        ).all()
+        items = []
+        for row in rows:
+            updated = row.update_time
+            items.append(
+                {
+                    "file_id": int(row.id),
+                    "file_name": row.file_name,
+                    "knowledge_id": int(row.knowledge_id),
+                    "knowledge_name": row.name,
+                    "space_level": getattr(row.level, "value", row.level),
+                    "status": int(row.status),
+                    "uploader_name": row.user_name or "",
+                    "remark": row.remark or "",
+                    "update_time": updated.isoformat() if updated is not None else "",
+                }
+            )
+        return items, total
+
+    async def lock_abnormal_source_file(self, file_id: int) -> KnowledgeFile | None:
+        stmt = (
+            self._source_upload_select()
+            .where(KnowledgeFile.id == file_id, _source_upload_filters())
             .with_for_update()
             .execution_options(populate_existing=True)
         )
@@ -391,11 +528,13 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             .execution_options(populate_existing=True)
         )
         if ignore_deleting_shares:
-            stmt = stmt.where(or_(
-                KnowledgeFile.entry_type.is_(None),
-                KnowledgeFile.entry_type != KnowledgeFileEntryType.SHARE.value,
-                KnowledgeFile.entry_status != KnowledgeFileEntryStatus.DELETING.value,
-            ))
+            stmt = stmt.where(
+                or_(
+                    KnowledgeFile.entry_type.is_(None),
+                    KnowledgeFile.entry_type != KnowledgeFileEntryType.SHARE.value,
+                    KnowledgeFile.entry_status != KnowledgeFileEntryStatus.DELETING.value,
+                )
+            )
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
@@ -559,7 +698,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             result = await self.session.execute(
                 update(KnowledgeFile)
                 .where(
-                    col(KnowledgeFile.id).in_(ids[offset:offset + 500]),
+                    col(KnowledgeFile.id).in_(ids[offset : offset + 500]),
                     KnowledgeFile.reference_document_id.is_not(None),
                     col(KnowledgeFile.entry_type).in_(["manager", "publish", "share"]),
                     KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
@@ -651,9 +790,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             lease_available,
         ]
         if max_retries is not None:
-            predicates.append(
-                KnowledgeFile.projection_retry_count < max(int(max_retries), 1)
-            )
+            predicates.append(KnowledgeFile.projection_retry_count < max(int(max_retries), 1))
         return and_(*predicates)
 
     async def find_projection_candidates(
@@ -734,17 +871,11 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                     ),
                     else_=KnowledgeFileProjectionStatus.PENDING.value,
                 ),
-                projection_retry_count=(
-                    KnowledgeFile.projection_retry_count if retain_cleanup_lease else 0
-                ),
+                projection_retry_count=(KnowledgeFile.projection_retry_count if retain_cleanup_lease else 0),
                 projection_next_retry_at=None,
                 projection_lease_owner=(lease_owner if retain_cleanup_lease else None),
-                projection_lease_until=(
-                    KnowledgeFile.projection_lease_until if retain_cleanup_lease else None
-                ),
-                projection_last_error=(
-                    KnowledgeFile.projection_last_error if retain_cleanup_lease else None
-                ),
+                projection_lease_until=(KnowledgeFile.projection_lease_until if retain_cleanup_lease else None),
+                projection_last_error=(KnowledgeFile.projection_last_error if retain_cleanup_lease else None),
                 projection_previous_file_id=case(
                     (
                         and_(
@@ -768,14 +899,24 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 KnowledgeBackgroundRepositoryImpl,
             )
 
-            entry = (await self.session.exec(select(KnowledgeFile).where(KnowledgeFile.id == entry_id).execution_options(populate_existing=True))).first()
+            entry = (
+                await self.session.exec(
+                    select(KnowledgeFile).where(KnowledgeFile.id == entry_id).execution_options(populate_existing=True)
+                )
+            ).first()
             if entry is not None:
-                await self.session.run_sync(lambda sync: KnowledgeBackgroundRepositoryImpl(sync).request_similarity_refresh(entry))
+                await self.session.run_sync(
+                    lambda sync: KnowledgeBackgroundRepositoryImpl(sync).request_similarity_refresh(entry)
+                )
         return int(result.rowcount or 0) == 1
 
     async def defer_projection_lease(
-        self, *, entry_id: int, lease_owner: str,
-        next_retry_at: datetime, error_summary: str,
+        self,
+        *,
+        entry_id: int,
+        lease_owner: str,
+        next_retry_at: datetime,
+        error_summary: str,
     ) -> bool:
         result = await self.session.execute(
             update(KnowledgeFile)
@@ -795,21 +936,26 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         return int(result.rowcount or 0) == 1
 
     async def recover_failed_projection(
-        self, *, entry_id: int, now: datetime, audit_summary: str,
+        self,
+        *,
+        entry_id: int,
+        now: datetime,
+        audit_summary: str,
     ) -> bool:
         result = await self.session.execute(
             update(KnowledgeFile)
             .where(
                 KnowledgeFile.id == entry_id,
                 KnowledgeFile.reference_document_id.is_not(None),
-                col(KnowledgeFile.entry_status).in_([
-                    KnowledgeFileEntryStatus.ACTIVE.value,
-                    KnowledgeFileEntryStatus.DELETING.value,
-                    KnowledgeFileEntryStatus.INVALID.value,
-                ]),
+                col(KnowledgeFile.entry_status).in_(
+                    [
+                        KnowledgeFileEntryStatus.ACTIVE.value,
+                        KnowledgeFileEntryStatus.DELETING.value,
+                        KnowledgeFileEntryStatus.INVALID.value,
+                    ]
+                ),
                 KnowledgeFile.projection_status == KnowledgeFileProjectionStatus.FAILED.value,
-                or_(KnowledgeFile.projection_lease_until.is_(None),
-                    KnowledgeFile.projection_lease_until <= now),
+                or_(KnowledgeFile.projection_lease_until.is_(None), KnowledgeFile.projection_lease_until <= now),
             )
             .values(
                 projection_status=KnowledgeFileProjectionStatus.PENDING.value,
@@ -918,12 +1064,14 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
 
     async def has_preparing_approval_entries(self, approval_instance_id: int) -> bool:
         result = await self.session.execute(
-            select(KnowledgeFile.id).where(
+            select(KnowledgeFile.id)
+            .where(
                 KnowledgeFile.approval_instance_id == approval_instance_id,
                 KnowledgeFile.entry_status == KnowledgeFileEntryStatus.PREPARING.value,
                 KnowledgeFile.reference_document_id.is_not(None),
                 KnowledgeFile.deleted_at.is_(None),
-            ).limit(1)
+            )
+            .limit(1)
         )
         return result.first() is not None
 

@@ -10,7 +10,6 @@ lerna-debug.log*
 qdrant_storage
 autogen_coding/
 .coaligne/
-.coaligneignore
 
 # Mac
 .DS_Store

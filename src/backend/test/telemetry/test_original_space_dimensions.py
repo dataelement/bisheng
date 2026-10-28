@@ -60,12 +60,7 @@ def test_original_space_after_publish_and_legacy_fallback(monkeypatch, origin_te
         "首次上传库" if origin_tenant == 1 else None,
         "发布目标库",
     ]
-    assert [getattr(records[0], field) for field in ORIGINAL_DIMENSION_FIELDS[1:]] == [
-        "原始公司",
-        "原始部门",
-        "原始科室",
-        "原始班组",
-    ]
+    assert "original_upload_department_name" not in records[0].model_dump()
     assert records[0].space_name == "发布目标库"
     assert records[0].belonging_department_name is None
     worker._build_knowledge_space_content_records([(files[0], space)], {}, **kwargs)
@@ -92,7 +87,7 @@ def test_original_dimensions_keep_daily_identity_and_reach_both_write_paths(monk
         "uploader_user_id": 7,
         "uploader_user_name": "上传人",
     }
-    original = dict(zip(ORIGINAL_DIMENSION_FIELDS, ["首次上传库", "公司", "部门", "科室", "班组"], strict=True))
+    original = {"original_space_name": "首次上传库"}
     old_id = build_daily_document_id(
         record_type=record_type, file_id=11, local_date="2026-10-15", dimensions=dimensions
     )

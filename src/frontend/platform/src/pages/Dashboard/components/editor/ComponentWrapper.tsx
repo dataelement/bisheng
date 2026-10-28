@@ -9,6 +9,7 @@ import { ChartType, Dashboard, DashboardComponent } from "../../types/dataConfig
 import { ChartContainer } from "../charts/ChartContainer"
 import { DimensionFilter } from "../charts/DimensionFilter"
 import { QueryFilter } from "../charts/QueryFilter"
+import { emptyVisiblePivotSheet, readVisiblePivotSheet } from "../charts/visiblePivotSheet"
 import { useComponentExport } from "../export/useComponentExport"
 import "./index.css"
 import { cn } from "@/utils"
@@ -311,7 +312,13 @@ export const ComponentWrapper = memo(({
                             )}
                             onClick={(e) => {
                                 e.stopPropagation()
-                                void exportAll()
+                                if (!isPivotTable) {
+                                    void exportAll()
+                                    return
+                                }
+                                void exportAll({
+                                    pivotSheet: readVisiblePivotSheet(component.id) ?? emptyVisiblePivotSheet(t("noDataInChart")),
+                                })
                             }}
                         >
                             {isExportingAll
@@ -348,4 +355,3 @@ export const ComponentWrapper = memo(({
         </div>
     )
 });
-

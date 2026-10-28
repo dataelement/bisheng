@@ -21,11 +21,13 @@ def test_knowledge_space_content_dataset_exposes_new_organization_dimensions_onl
         "belonging_office_name": "所属科室",
         "belonging_squad_name": "所属班组",
         "original_space_name": "原始上传库",
-        "original_upload_company_name": "原始所属公司",
-        "original_upload_department_name": "原始所属部门",
-        "original_upload_office_name": "原始所属科室",
-        "original_upload_squad_name": "原始所属班组",
     }.items() <= dimensions.items()
+    assert not {
+        "original_upload_company_name",
+        "original_upload_department_name",
+        "original_upload_office_name",
+        "original_upload_squad_name",
+    }.intersection(dimensions)
     assert not {
         "primary_department_id",
         "primary_department_name",

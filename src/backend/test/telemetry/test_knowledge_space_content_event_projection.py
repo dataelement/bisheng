@@ -131,10 +131,6 @@ async def test_success_event_builds_fresh_versioned_snapshot_before_enqueue(monk
             "uploader_company_name": "新公司名称",
             "belonging_department_name": "质量部",
             "original_space_name": "最初的科室库",
-            "original_upload_company_name": "原始公司",
-            "original_upload_department_name": "原始部门",
-            "original_upload_office_name": "原始科室",
-            "original_upload_squad_name": "原始班组",
         }
     )
     event_record = SimpleNamespace(**dimensions)
@@ -193,7 +189,7 @@ async def test_success_event_builds_fresh_versioned_snapshot_before_enqueue(monk
     assert payload.local_date == "2026-08-20"
     assert payload.dimensions["uploader_company_name"] == "新公司名称"
     assert payload.dimensions["original_space_name"] == "最初的科室库"
-    assert payload.dimensions["original_upload_squad_name"] == "原始班组"
+    assert "original_upload_squad_name" not in payload.dimensions
     assert "uploader_department_name" not in payload.dimensions
     assert payload.daily_id.startswith("preview_daily:11:2026-08-20:")
     zadd.assert_awaited_once()

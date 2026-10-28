@@ -1,5 +1,5 @@
 from abc import ABC
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
@@ -36,8 +36,9 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         """批量解析空间原有标签及绑定标签库，返回关联的文件 ID。"""
         ...
 
-    async def list_qa_subtree_page(self, *, space_id: int, prefix: str,
-                                   after_id: int, limit: int) -> list[KnowledgeFile]:
+    async def list_qa_subtree_page(
+        self, *, space_id: int, prefix: str, after_id: int, limit: int
+    ) -> list[KnowledgeFile]:
         """按入口 ID 游标读取指定子树的有效文件，业务层继续检查权限。"""
         ...
 
@@ -55,6 +56,26 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
 
     async def find_by_id_for_update(self, entity_id: int) -> KnowledgeFile | None:
         """锁定文件行，用于串行化申请创建与绑定校验。"""
+        ...
+
+    async def list_abnormal_source_uploads(
+        self,
+        *,
+        offset: int,
+        limit: int,
+        status: int | None = None,
+        space_level: str | None = None,
+        keyword: str | None = None,
+        knowledge_name: str | None = None,
+        uploader_name: str | None = None,
+        update_time_from: date | None = None,
+        update_time_to: date | None = None,
+    ) -> tuple[list[dict], int]:
+        """当前租户知识空间里, 解析失败、超时、违规的源文件."""
+        ...
+
+    async def lock_abnormal_source_file(self, file_id: int) -> KnowledgeFile | None:
+        """锁定一条仍在库内的源文件. 分享、发布副本和不在范围内的行返回空."""
         ...
 
     async def set_parse_priority_if_unset(
@@ -211,14 +232,22 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         ...
 
     async def defer_projection_lease(
-        self, *, entry_id: int, lease_owner: str,
-        next_retry_at: datetime, error_summary: str,
+        self,
+        *,
+        entry_id: int,
+        lease_owner: str,
+        next_retry_at: datetime,
+        error_summary: str,
     ) -> bool:
         """等待依赖, 释放租约但不消耗失败次数。"""
         ...
 
     async def recover_failed_projection(
-        self, *, entry_id: int, now: datetime, audit_summary: str,
+        self,
+        *,
+        entry_id: int,
+        now: datetime,
+        audit_summary: str,
     ) -> bool:
         """显式恢复失败入口; 不能抢占未过期租约。"""
         ...

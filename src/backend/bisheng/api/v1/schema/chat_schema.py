@@ -29,6 +29,7 @@ class AppChatList(BaseModel):
     copied_count: Optional[int] = None
     comment_count: int = 0
     feedback_comments: list[AppChatFeedback] = Field(default_factory=list)
+    answer_abnormal: int = 0
     sensitive_status: Optional[int] = None  # Sensitive word review status
     user_groups: Optional[List[Any]] = None  # Groups to which the user belongs
     mark_user: Optional[str] = None

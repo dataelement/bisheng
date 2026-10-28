@@ -1,3 +1,4 @@
+from .endpoints.abnormal_upload import router as knowledge_abnormal_upload_router
 from .endpoints.knowledge import router as knowledge_router
 from .endpoints.knowledge_file_correction import router as knowledge_file_correction_router
 from .endpoints.knowledge_migration import router as knowledge_migration_router
@@ -10,9 +11,10 @@ from .endpoints.qa import router as qa_router
 from .endpoints.shougang_portal import router as shougang_portal_router
 
 __all__ = [
+    'knowledge_abnormal_upload_router',
+    'knowledge_file_correction_router',
     'knowledge_migration_router',
     'knowledge_recycle_router',
-    'knowledge_file_correction_router',
     'knowledge_router',
     'knowledge_space_router',
     'knowledge_space_tag_library_router',

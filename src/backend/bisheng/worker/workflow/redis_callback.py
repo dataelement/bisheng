@@ -33,6 +33,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.common.utils.title_generator import generate_conversation_title_sync
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.logger import trace_id_var
+from bisheng.database.models.answer_failure import node_failure_should_persist, note_answer_failure
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -177,7 +178,7 @@ class RedisCallback(BaseCallback):
         return response
 
     def build_chat_response(self, category, category_type, message, extra=None, files=None):
-        return ChatResponse(
+        response = ChatResponse(
             user_id=self.user_id,
             chat_id=self.chat_id,
             flow_id=self.workflow_id,
@@ -187,6 +188,13 @@ class RedisCallback(BaseCallback):
             extra=extra,
             files=files,
         )
+        # 工作流失败原先只推给前端, 审计列表看不到. 这里落一条错误消息, 会话会被标成异常.
+        if category == WorkflowEventType.Error.value and self.chat_id:
+            try:
+                self.save_chat_message(response)
+            except Exception:
+                logger.exception("store workflow answer failure chat_id={}", self.chat_id)
+        return response
 
     def parse_workflow_failed(self, status_info: dict) -> ChatResponse | None:
         if status_info["reason"].find("-- has run more than the maximum number of times") != -1:
@@ -592,6 +600,8 @@ class RedisCallback(BaseCallback):
 
             self.create_session = True
 
+        # 消息插入时会话可能还不存在, 建完会话后再标一次.
+        note_answer_failure(message)
         return message.id
 
     @staticmethod
@@ -670,6 +680,17 @@ class RedisCallback(BaseCallback):
                 chat_id=self.chat_id,
             )
         )
+        # 节点执行失败要留在会话里, 审计详情才能看到原因. 用户停止不记.
+        if node_failure_should_persist(data.reason):
+            self.save_chat_message(
+                ChatResponse(
+                    message={"name": data.name, "reason": data.reason},
+                    category=WorkflowEventType.NodeRun.value,
+                    type="end",
+                    flow_id=self.workflow_id,
+                    chat_id=self.chat_id,
+                )
+            )
 
     def on_user_input(self, data: UserInputData):
         """user input event"""
