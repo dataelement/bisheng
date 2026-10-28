@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Pagination, Button, SearchInput, notification } from '@bisheng/ui';
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { Outlined } from "bisheng-icons";
 import { EditQa } from "./components/EditQa";
@@ -16,7 +16,7 @@ import { Link,useParams } from "react-router-dom";
 
 
 
-import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import {
 Table,
 TableBody,
@@ -33,6 +33,7 @@ import { ImportQa } from "./components/ImportQa";
 
 export default function QasPage() {
     const { t } = useTranslation('knowledge')
+    const paginationLocale = usePaginationLocale();
 
     const { id } = useParams()
     const [title, setTitle] = useState('')
@@ -420,8 +421,8 @@ export default function QasPage() {
             </div>
             <div className="bisheng-table-footer px-6 justify-end">
                 <div>
-                    <AutoPagination
-                        page={page}
+                    <Pagination locale={paginationLocale}
+                        current={page}
                         pageSize={pageSize}
                         total={total}
                         showTotal={true}

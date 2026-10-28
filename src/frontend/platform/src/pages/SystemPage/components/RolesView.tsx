@@ -1,4 +1,4 @@
-import { Button, Input, SearchInput } from '@bisheng/ui';
+import { Pagination, Button, Input, SearchInput } from '@bisheng/ui';
 import { Switch } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
@@ -8,7 +8,7 @@ import { TreeDepartmentSelect } from "@/components/bs-comp/department";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { ColumnResizeHandle } from "@/components/bs-ui/table/useResizableColumns";
 import { cname } from "@/components/bs-ui/utils";
@@ -73,6 +73,7 @@ export function RolesView({ controller }: RolesViewProps) {
     isSaving,
     submitRole,
   } = controller;
+  const paginationLocale = usePaginationLocale();
   return (
     <div className="relative h-full">
       <div className="h-full overflow-y-auto pb-10 pt-2">
@@ -225,9 +226,9 @@ export function RolesView({ controller }: RolesViewProps) {
             )}
           </TableBody>
         </Table>
-        <AutoPagination
+        <Pagination locale={paginationLocale}
           className="m-0 w-auto justify-end"
-          page={page}
+          current={page}
           pageSize={20}
           total={total}
           showTotal={true}

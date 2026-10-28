@@ -25,6 +25,22 @@ import { getBrandAssetUrl } from "../utils/brand";
 import { HeaderMenu } from "./HeaderMenu";
 import { LicenseBanner } from "./LicenseBanner";
 
+const PRIMARY_PAGE_PATHS = new Set([
+    "/dashboard",
+    "/build/client",
+    "/filelib",
+    "/dataset",
+    "/model/management",
+    "/model/finetune",
+    "/dsh",
+    "/evaluation",
+    "/label",
+    "/log",
+    "/approval",
+    "/sys",
+    "/tenant",
+]);
+
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
     const { appConfig } = useContext(locationContext);
@@ -96,6 +112,7 @@ export default function MainLayout() {
     // NavLink matches on pathname only, so every link falling back to
     // /menu-pending?menu=<key> would light up together; disambiguate by `menu`.
     const location = useLocation();
+    const isPrimaryPage = PRIMARY_PAGE_PATHS.has(location.pathname.replace(/\/$/, ""));
     const pendingNavClass =
         (menuKey: string) =>
         ({ isActive }: { isActive: boolean }) => {
@@ -117,9 +134,9 @@ export default function MainLayout() {
 
     return (
         <div className="flex">
-            <div className="bg-background-main w-full h-screen flex flex-col">
+            <div className="bg-[#f8f8f8] dark:bg-background-main w-full h-screen flex flex-col">
                 {isGlobalSuper && <LicenseBanner />}
-                <div className="flex justify-between h-[64px] shrink-0 bg-background-main relative z-[21]">
+                <div className="flex justify-between h-[64px] shrink-0 bg-[#f8f8f8] dark:bg-background-main relative z-[21]">
                     <div className="flex h-9 my-[14px]">
                         <div className="inline-block">
                             {/* @ts-ignore */}
@@ -212,7 +229,7 @@ export default function MainLayout() {
                     </div>
                 </div>
                 <div className="flex flex-1 min-h-0">
-                    <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
+                    <div className="relative z-10 bg-[#f8f8f8] dark:bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
                         <nav
                             className="overflow-y-auto overflow-x-hidden [&_.navlink>svg]:text-text-2 [&_.navlink.active>svg]:text-inherit"
                             style={{ maxHeight: "calc(100vh - 64px - 90px - var(--license-banner-h, 0px))" }}
@@ -375,7 +392,7 @@ export default function MainLayout() {
                         </nav>
                         {!appConfig.noFace && (
                             <div className="absolute left-0 bottom-0 w-[180px] p-2">
-                                <div className="help flex items-between my-3">
+                                <div className="help flex items-between my-2">
                                     <TooltipProvider>
                                         <Tooltip
                                             content={
@@ -431,7 +448,8 @@ export default function MainLayout() {
                     document scrollbar, so calc(100vw-184px) overshot the free space
                     by the scrollbar width and forced a horizontal document scrollbar
                     (which then cost vertical space and produced a second, outer scrollbar). */}
-                    <div className="flex-1 min-w-0 bg-background-main-content rounded-lg">
+                    {/* Clip child backgrounds to the shared radius without creating a scroll container. */}
+                    <div className={`flex-1 min-w-0 bg-background-main-content rounded-lg${isPrimaryPage ? " mr-4 mb-4 overflow-clip" : ""}`}>
                         <Suspense
                             fallback={
                                 <div className="flex items-center justify-center h-full">
@@ -468,11 +486,14 @@ export default function MainLayout() {
 }
 
 const useLanguage = (user: User) => {
+    const { t } = useTranslation();
     // APP_CONFIG.disableJa (config.js) hides Japanese from the switcher.
     const jaDisabled = !!(window as any).APP_CONFIG?.disableJa;
-    const options: Record<string, string> = jaDisabled
-        ? { "zh-Hans": "中文", "en-US": "English" }
-        : { "zh-Hans": "中文", "en-US": "English", ja: "日本語" };
+    const options: Record<string, string> = {
+        "zh-Hans": t("menu.languageChinese"),
+        "en-US": "English",
+        ...(!jaDisabled && { ja: t("menu.languageJapanese") }),
+    };
     // Source of truth for the displayed label is whatever i18next resolved
     // during init (which already honors disableJa).
     const initialLanguage = options[i18next.language] ? i18next.language : "zh-Hans";
@@ -485,7 +506,6 @@ const useLanguage = (user: User) => {
         }
     }, [user]);
 
-    const { t } = useTranslation();
     const changLanguage = (ln: string) => {
         setLanguage(ln);
         localStorage.setItem("i18nextLng", ln);

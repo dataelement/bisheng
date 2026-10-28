@@ -1,11 +1,11 @@
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Pagination, Button, SearchInput, notification } from '@bisheng/ui';
 import { Tag } from "@bisheng/ui";
 import { useSubjectTable } from "@/components/bs-comp/selectComponent/useSubjectTable";
 import { SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import {
@@ -31,6 +31,7 @@ const isRootTenant = (tenant: Tenant) => tenant.id === 1;
 
 export function TenantUserDialog({ tenant, onClose }: Props) {
   const { t } = useTranslation("bs");
+  const paginationLocale = usePaginationLocale();
   const [adminIds, setAdminIds] = useState<Set<number>>(new Set());
   const rootTenant = isRootTenant(tenant);
 
@@ -168,8 +169,8 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
         </div>
 
         <div className="flex items-center justify-between mt-4">
-          <AutoPagination
-            page={page}
+          <Pagination locale={paginationLocale} size="small" simple
+            current={page}
             pageSize={pageSize}
             total={total}
             onChange={(newPage: number) => setPage(newPage)}

@@ -32,7 +32,9 @@ helm upgrade --install bisheng docker/helm/bisheng \
 NetworkPolicy on the sandbox chart only allows TCP/8080 from pods in namespace
 `bisheng` labeled `app.kubernetes.io/component=worker`, `backend` or `linsight`
 (automatic `kubernetes.io/metadata.name` label). Change `networkPolicy.allowFrom`
-if you use other names.
+if you use other names. Egress is allowed by default
+(`networkPolicy.denyEgress: false`). Set it to `true` to block all outbound
+traffic from the runner pods.
 
 ## Why not one ClusterIP for runners
 

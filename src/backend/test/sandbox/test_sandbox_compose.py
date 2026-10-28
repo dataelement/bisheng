@@ -57,7 +57,7 @@ def test_dockerfile_is_single_multiarch_image_without_platform_payload():
 
 def test_compose_named_runners_and_hardening():
     data = yaml.safe_load(_COMPOSE.read_text(encoding="utf-8"))
-    assert data["networks"]["sandbox_net"]["internal"] is True
+    assert data["networks"]["sandbox_net"]["internal"] is False
     worker = data["services"]["backend_worker"]
     assert "sandbox_net" in worker["networks"]
     assert "default" in worker["networks"]

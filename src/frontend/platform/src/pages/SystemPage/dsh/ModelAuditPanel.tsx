@@ -1,4 +1,4 @@
-import { Button } from "@bisheng/ui";
+import { Button, Segmented } from "@bisheng/ui";
 import { userContext } from "@/contexts/userContext";
 import type {
   ModelAuditQuery,
@@ -284,27 +284,24 @@ export function ModelAuditRequests({
         onReset={() => handleApply(initialQuery)}
       />
       <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-        {(["groups", "unassociated", "requests"] as const).map((value) => (
-          <Button
-            key={value}
-            type="button"
-            size="small"
-            variant={view === value ? "filled" : "text"}
-            aria-pressed={view === value}
-            className="text-sm [@media(pointer:coarse)]:min-h-11"
-            onClick={() => {
-              setHasReturn(false);
-              saved.current = null;
-              setView(value);
-              setHistory([]);
-              setExpanded(null);
-              setOpenGroup(null);
-              setQuery((old) => ({ ...old, cursor: undefined }));
-            }}
-          >
-            {t("dsh.modelAuditView.views." + value)}
-          </Button>
-        ))}
+        <Segmented
+          size="small"
+          aria-label={t("dsh.modelAuditView.title")}
+          value={view}
+          options={(["groups", "unassociated", "requests"] as const).map((value) => ({
+            value,
+            label: t("dsh.modelAuditView.views." + value),
+          }))}
+          onChange={(value) => {
+            setHasReturn(false);
+            saved.current = null;
+            setView(value as typeof view);
+            setHistory([]);
+            setExpanded(null);
+            setOpenGroup(null);
+            setQuery((old) => ({ ...old, cursor: undefined }));
+          }}
+        />
         {view === "groups" && (
           <span className="text-xs text-muted-foreground">
             {t("dsh.modelAuditView.group_order")}

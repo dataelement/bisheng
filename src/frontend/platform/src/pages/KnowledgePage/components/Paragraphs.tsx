@@ -1,11 +1,11 @@
-import { notification } from '@bisheng/ui';
+import { Pagination, notification } from '@bisheng/ui';
 // @ts-strict-ignore
 import { Button, SearchInput } from '@bisheng/ui';
 import { FileIcon } from "@/components/bs-icons/file";
 
 import { Dialog,DialogContent } from '@/components/bs-ui/dialog';
 
-import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 
 import { delChunkApi,getFileBboxApi,getFilePathApi,getKnowledgeChunkApi,readFileByLibDatabase,updateChunkApi } from '@/controllers/API';
 import { showApiError } from '@/controllers/request';
@@ -25,6 +25,7 @@ import PreviewParagraph from './PreviewParagraph';
 export default function Paragraphs({ fileId, onBack, canEditKb = false, canDeleteKb = false }) {
     console.log('Props fileId:', fileId);
     const { t } = useTranslation('knowledge');
+    const paginationLocale = usePaginationLocale();
     const { id } = useParams();
     const navigate = useNavigate();
     const { selectedBbox } = useKnowledgeStore();
@@ -491,9 +492,9 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             </div>
             {/* Pagination */}
             <div className="bisheng-table-footer px-6">
-                <AutoPagination
+                <Pagination locale={paginationLocale}
                     className="justify-end"
-                    page={page}
+                    current={page}
                     pageSize={pageSize}
                     total={total}
                     showTotal={true}

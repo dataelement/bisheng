@@ -1,7 +1,8 @@
 import { readAuditBody } from "@/controllers/API/dshModelAudit";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DshPager } from "./common";
+import { Pagination } from "@bisheng/ui";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { AuditMessageAssembler } from "./auditMessages";
 import { ModelAuditMessage } from "./ModelAuditMessage";
 
@@ -11,6 +12,7 @@ interface ModelAuditBodyProps {
 }
 export function ModelAuditBody({ requestId, tenantId }: ModelAuditBodyProps) {
   const { t } = useTranslation();
+  const paginationLocale = usePaginationLocale();
   const messages = useRef(new AuditMessageAssembler());
   const [, setRevision] = useState(0);
   const [segment, setSegment] = useState(0);
@@ -89,14 +91,6 @@ export function ModelAuditBody({ requestId, tenantId }: ModelAuditBodyProps) {
             )}
           </p>
         )}
-        {count > 100 && (
-          <p>
-            {t("dsh.modelAuditView.bodySegment", {
-              page: segment + 1,
-              pages: Math.ceil(count / 100),
-            })}
-          </p>
-        )}
       </div>
       {entries.slice(segment * 100, (segment + 1) * 100).map((entry) =>
         entry.type === "message" ? (
@@ -107,13 +101,17 @@ export function ModelAuditBody({ requestId, tenantId }: ModelAuditBodyProps) {
           </p>
         ),
       )}
-      <DshPager
-        hideUnavailable
-        previous={segment > 0}
-        next={(segment + 1) * 100 < count}
-        onPrevious={() => setSegment((old) => old - 1)}
-        onNext={() => setSegment((old) => old + 1)}
-      />
+      {count > 100 && (
+        <Pagination
+          locale={paginationLocale}
+          size="small"
+          simple
+          current={segment + 1}
+          pageSize={100}
+          total={count}
+          onChange={(nextPage) => setSegment(nextPage - 1)}
+        />
+      )}
     </div>
   );
 }
