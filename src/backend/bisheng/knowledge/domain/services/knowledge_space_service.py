@@ -1054,8 +1054,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return space, folder
 
     @staticmethod
-    def _is_square_preview_space(space: Knowledge) -> bool:
-        return space.is_released and space.auth_type in {
+    def _is_joinable_preview_space(space: Knowledge) -> bool:
+        """Share previews follow the join policy; release controls square discovery."""
+        return space.auth_type in {
             AuthTypeEnum.PUBLIC,
             AuthTypeEnum.APPROVAL,
         }
@@ -1070,7 +1071,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "visible",
         ):
             return space, True
-        if self._is_square_preview_space(space):
+        if self._is_joinable_preview_space(space):
             return space, False
         raise SpacePermissionDeniedError()
 
@@ -1608,7 +1609,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # gets. Report the effective actions the way the space list and the
         # channel detail already do, so `visible` answers it outright.
         #
-        # Only for a caller who holds the space. The square preview deliberately
+        # Only for a caller who holds the space. The share/square preview deliberately
         # answers without `visible` — asking the permission runtime for a viewer
         # who has none would both cost a lookup and require a runtime the preview
         # path does not depend on. No actions is the honest answer there.
