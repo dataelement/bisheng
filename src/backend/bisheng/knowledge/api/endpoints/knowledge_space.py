@@ -50,7 +50,7 @@ from bisheng.workstation.domain.services.workstation_service import WorkStationS
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
 
-SPACE_FILE_PREVIEW_PERMISSION_ACTION = None
+SPACE_FILE_PREVIEW_PERMISSION_ACTION = "visible"
 SPACE_FILE_DOWNLOAD_PERMISSION_ACTION = "download"
 
 
@@ -347,7 +347,7 @@ async def batch_create_department_spaces(
 async def get_knowledge_square(
     page: int = 1,
     page_size: int = 20,
-    keyword: str = None,
+    keyword: str | None = None,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_knowledge_square(keyword, page, page_size)
@@ -598,7 +598,7 @@ async def get_file_preview(
     file_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    urls = await svc.get_file_preview(file_id)
+    urls = await svc.get_file_preview(file_id, space_id=space_id)
     return resp_200(urls)
 
 
@@ -691,7 +691,7 @@ async def subscribe_space(
 
 
 @router.post("/{space_id}/unsubscribe", response_model=None)
-async def subscribe_space(
+async def unsubscribe_space(
     space_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
@@ -764,7 +764,7 @@ async def create_chat_folder_session(
 
 
 @router.delete("/{space_id}/chat/folder/session")
-async def create_chat_folder_session(
+async def delete_chat_folder_session(
     space_id: int,
     folder_id: int = Body(default=0, description="folder id"),
     chat_id: str = Body(..., description="Chat ID"),
@@ -787,7 +787,7 @@ async def get_chat_folder_history(
 
 
 @router.delete("/{space_id}/chat/folder/history")
-async def get_chat_folder_history(
+async def delete_chat_folder_history(
     space_id: int,
     folder_id: int = Query(default=0, description="folder id"),
     chat_id: str = Query(..., description="Chat ID"),
