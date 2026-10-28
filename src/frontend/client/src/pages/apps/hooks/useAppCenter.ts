@@ -132,7 +132,10 @@ export function useAppCenter() {
       if (blockDemoApp(app)) return;
       const shouldPin = !app.is_pinned;
       try {
-        await pinAppApi(app.id, shouldPin);
+        const response = await pinAppApi(app.id, shouldPin);
+        if (response?.status_code !== 200) {
+          throw new Error("App pin request failed");
+        }
         // Refresh the list to get updated pin state from backend
         await fetchApps();
       } catch {
