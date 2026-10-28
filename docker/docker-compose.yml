@@ -522,5 +522,10 @@ networks:
     name: bisheng-build
     driver: bridge
     internal: true
+  # User code shares the runner network namespace. Not internal, so the
+  # sandbox can reach the public internet. Runners still do not join the
+  # middleware network and do not publish host ports. Docker applies
+  # `internal` only when the network is created; an existing internal
+  # sandbox_net stays closed until it is recreated.
   sandbox_net:
-    internal: true
+    internal: false
