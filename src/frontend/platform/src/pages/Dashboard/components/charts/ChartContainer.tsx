@@ -4,11 +4,13 @@ import { queryChartData } from '@/controllers/API/dashboard'
 import { ChartDataResponse, MetricDataResponse, PivotTableDataResponse } from '@/pages/Dashboard/types/chartData'
 import { ChartType, DashboardComponent, DataConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEditorDashboardStore } from '@/store/dashboardStore'
+import { useEffect } from 'react'
 import { useQuery } from 'react-query'
+import { useTranslation } from 'react-i18next'
 import { BaseChart } from './BaseChart'
 import { MetricCard } from './MetricCard'
-import { useTranslation } from 'react-i18next'
 import { PivotTable } from './PivotTable'
+import { emptyVisiblePivotSheet, publishVisiblePivotSheet } from './visiblePivotSheet'
 
 interface ChartContainerProps {
   isDark: boolean;
@@ -26,7 +28,6 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   const queryParams = refreshInfo?.queryParams || []
   const dataConfig = component.data_config as DataConfig
 
-  // Query chart data
   const { data, isLoading, error } = useQuery({
     queryKey: ['chartData', component.id, refreshTrigger],
     queryFn: () => queryChartData({
@@ -38,6 +39,17 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
     enabled: refreshTrigger > 0 && Boolean(dataConfig.isConfigured),
     keepPreviousData: true,
   });
+  const showingPivotTable = component.type === ChartType.PivotTable
+    && !isLoading
+    && !error
+    && Boolean(dataConfig.isConfigured)
+    && Boolean(data)
+
+  useEffect(() => {
+    if (component.type !== ChartType.PivotTable || showingPivotTable || isLoading) return
+    publishVisiblePivotSheet(component.id, emptyVisiblePivotSheet(t("noDataInChart")))
+    return () => publishVisiblePivotSheet(component.id, null)
+  }, [component.id, component.type, isLoading, showingPivotTable, t])
 
   // Loading state
   if (isLoading) {

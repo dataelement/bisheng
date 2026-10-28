@@ -8,6 +8,7 @@ import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { componentQueryFilters } from "../../utils/componentQueryFilters"
+import type { VisiblePivotSheet } from "../charts/visiblePivotSheet"
 
 interface UseComponentExportArgs {
   dashboardId: string
@@ -75,7 +76,7 @@ export function useComponentExport({
     }
   }
 
-  const exportAll = async () => {
+  const exportAll = async (options?: { pivotSheet?: VisiblePivotSheet | null }) => {
     if (!canExport) return warnUnsaved()
     setExportingAll(true)
     try {
@@ -84,6 +85,7 @@ export function useComponentExport({
         componentId,
         timeFilters: exportTimeFilters,
         dimensionFilters: exportDimensionFilters,
+        pivotSheet: options?.pivotSheet ?? undefined,
       })
       downloadFile(file_url)
     } catch (error) {

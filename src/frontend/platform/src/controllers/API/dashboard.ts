@@ -433,7 +433,7 @@ export async function queryChartData(params: {
         case ChartType.StackedArea:
             return {
                 dimensions,// xAxis.data
-                series // legend && series(chart line) 
+                series // legend && series(chart line)
             }
         case ChartType.Pie:
         case ChartType.Donut:
@@ -487,6 +487,11 @@ export async function exportComponentAll(params: {
     componentId: string
     timeFilters?: any[]
     dimensionFilters?: { fieldId: string, values: unknown[] }[]
+    pivotSheet?: {
+        hasTable: boolean
+        rows: (string | number | null)[][]
+        merges: { row: number, column: number, rowSpan: number, columnSpan: number }[]
+    } | null
 }): Promise<{ file_url: string }> {
     return await axios.post(
         `/api/v1/telemetry/dashboard/component/${params.componentId}/export-all`,
@@ -494,6 +499,18 @@ export async function exportComponentAll(params: {
             dashboard_id: params.dashboardId,
             time_filters: params.timeFilters || [],
             dimension_filters: params.dimensionFilters || [],
+            ...(params.pivotSheet ? {
+                pivot_sheet: {
+                    has_table: params.pivotSheet.hasTable,
+                    rows: params.pivotSheet.rows,
+                    merges: params.pivotSheet.merges.map(merge => ({
+                        row: merge.row,
+                        column: merge.column,
+                        row_span: merge.rowSpan,
+                        column_span: merge.columnSpan,
+                    })),
+                },
+            } : {}),
         },
     );
 }

@@ -131,6 +131,20 @@ describe("useComponentExport", () => {
     )
   })
 
+  it("forwards the visible pivot sheet when the caller has one", async () => {
+    mockedExportAll.mockResolvedValue({ file_url: "https://minio/all.xlsx" })
+    const pivotSheet = { hasTable: true, rows: [["序号", "合计"]], merges: [] }
+    const { result } = renderHook(() =>
+      useComponentExport({ dashboardId: "d1", componentId: "c1" }),
+    )
+
+    await act(async () => {
+      await result.current.exportAll({ pivotSheet })
+    })
+
+    expect(mockedExportAll).toHaveBeenCalledWith(expect.objectContaining({ pivotSheet }))
+  })
+
   it("does not throw and clears the loading flag when the API call fails", async () => {
     mockedExportAll.mockRejectedValue(new Error("network error"))
     const { result } = renderHook(() =>
