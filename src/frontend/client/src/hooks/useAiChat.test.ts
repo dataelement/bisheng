@@ -9,6 +9,7 @@
  * conversation neither closes its stream nor refetches over its live bucket.
  */
 import { useState } from "react";
+import store from "~/store";
 import { parkChatAsk, useChatAskHandoff } from "~/components/Chat/chatAskHandoff";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
@@ -397,6 +398,7 @@ describe('knowledge-space asks across cached conversations', () => {
                 selectedKbs,
                 setSelectedKbs,
                 sendMessage: chat.sendMessage,
+                ready: true, selectedModelId: 1, selectModel: jest.fn(() => true), onModelUnavailable: jest.fn(),
             });
             return chat;
         }, { initialProps: { cid: 'new', locationKey: 'first' } });
@@ -423,4 +425,35 @@ describe('knowledge-space asks across cached conversations', () => {
         rerender({ cid: 'new', locationKey: 'second-again' });
         expect(mockOpenedStreams).toHaveLength(2);
     });
+});
+
+test("knowledge handoff submits the chosen model ID and space in the real chat payload", () => {
+    const modelAtom = store.chatModel as unknown as { __testValue: { id: number; name: string } };
+    const initialModel = modelAtom.__testValue;
+    const initialKbs = mockSelectedKbs;
+    parkChatAsk({ text: "Count entries", modelId: 2, space: { id: "28", name: "Knowledge" } });
+    try {
+        renderHook(() => {
+            const [model, setModel] = useState(initialModel);
+            const [kbs, setKbs] = useState(initialKbs);
+            modelAtom.__testValue = model;
+            mockSelectedKbs = kbs;
+            const chat = useAiChat("new");
+            useChatAskHandoff({
+                conversationId: "new", activeConversationId: chat.conversationId, locationKey: "knowledge", selectedKbs: kbs, setSelectedKbs: setKbs,
+                sendMessage: chat.sendMessage, ready: true, selectedModelId: model.id,
+                selectModel: (id) => { setModel({ id, name: "Beta" }); return true; },
+                onModelUnavailable: jest.fn(),
+            });
+        });
+        expect(mockOpenedStreams).toHaveLength(1);
+        expect(latestStream().submission.payload).toEqual(expect.objectContaining({
+            text: "Count entries", model: "2", task_mode: false,
+            use_knowledge_base: { personal_knowledge_enabled: false, organization_knowledge_ids: [], knowledge_space_ids: [28] },
+        }));
+        expect(latestStream().submission.userMessage.text).toBe("Count entries");
+    } finally {
+        modelAtom.__testValue = initialModel;
+        mockSelectedKbs = initialKbs;
+    }
 });

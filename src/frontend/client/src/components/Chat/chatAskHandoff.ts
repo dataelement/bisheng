@@ -19,6 +19,8 @@ import { useActivate } from 'react-activation';
  */
 export interface ChatAsk {
   text: string;
+  /** Stable model ID chosen in the originating input. */
+  modelId?: number;
   space?: { id: string; name: string };
   attachment?: File;
 }
@@ -50,6 +52,11 @@ interface UseChatAskHandoffParams {
   selectedKbs: KbSelection[];
   setSelectedKbs: (next: KbSelection[]) => void;
   sendMessage: (text: string) => boolean;
+  /** Daily mode, model catalog and the fresh chat state are ready. */
+  ready: boolean;
+  selectedModelId: number;
+  selectModel: (id: number) => boolean;
+  onModelUnavailable: (ask: ChatAsk) => void;
   /** Runs as the ask is taken — the cached chat tab may still be in some other mode. */
   onTake?: () => void;
 }
@@ -65,51 +72,63 @@ export function useChatAskHandoff({
   selectedKbs,
   setSelectedKbs,
   sendMessage,
+  ready,
+  selectedModelId,
+  selectModel,
+  onModelUnavailable,
   onTake,
 }: UseChatAskHandoffParams) {
-  // Commit the ask together with its selection before using the send callback.
-  const [stagedAsk, setStagedAsk] = useState<ChatAsk | null>(null);
+  const [mountedAsk, setMountedAsk] = useState<ChatAsk | null>(null);
   const submittedAskRef = useRef<ChatAsk | null>(null);
+  const preparedAskRef = useRef<ChatAsk | null>(null);
   const [attachmentAsk, setAttachmentAsk] = useState<AttachmentAsk | null>(null);
 
   const takePendingAsk = useCallback(() => {
-    // The route and the chat hook commit their conversation changes separately.
-    // Take the ask once both identify the fresh conversation.
+    // A fresh conversation owns the imported question.
     if (!pendingAsk || conversationId !== 'new' || activeConversationId !== 'new') return;
     const ask = pendingAsk;
     pendingAsk = null;
+    preparedAskRef.current = null;
     onTake?.();
-    if (ask.attachment) {
-      // The article is the whole context; a knowledge source left mounted from an
-      // earlier chat would only blur the answer.
-      setSelectedKbs([]);
-      askSeq += 1;
-      setAttachmentAsk({ key: `ask-${askSeq}`, text: ask.text, file: ask.attachment });
-      return;
-    }
-    if (ask.space) {
-      setSelectedKbs([{ id: ask.space.id, name: ask.space.name, type: 'space' }]);
-    }
-    setStagedAsk(ask);
-  }, [conversationId, activeConversationId, setSelectedKbs, onTake]);
+    setMountedAsk(ask);
+  }, [conversationId, activeConversationId, onTake]);
 
   useEffect(takePendingAsk, [takePendingAsk, locationKey]);
   useActivate(takePendingAsk);
 
   useEffect(() => {
-    if (!stagedAsk || submittedAskRef.current === stagedAsk) return;
-    if (conversationId !== 'new' || activeConversationId !== 'new') return;
-    if (stagedAsk.space) {
-      const mounted = selectedKbs.length === 1 && selectedKbs[0].type === 'space'
-        && String(selectedKbs[0].id) === stagedAsk.space.id;
-      if (!mounted) return;
+    const ask = mountedAsk;
+    if (!ask || submittedAskRef.current === ask) return;
+    if (conversationId !== 'new' || activeConversationId !== 'new' || !ready) return;
+    if (preparedAskRef.current !== ask) {
+      setSelectedKbs(ask.space
+        ? [{ id: ask.space.id, name: ask.space.name, type: 'space' }]
+        : []);
+      if (ask.modelId !== undefined && !selectModel(ask.modelId)) {
+        setMountedAsk(null);
+        onModelUnavailable(ask);
+        return;
+      }
+      preparedAskRef.current = ask;
+      // Apply after config hydration; send reads both selections on the next render.
+      return;
     }
-    // A rejected send remains staged until the chat is ready to accept it.
-    if (sendMessage(stagedAsk.text)) {
-      submittedAskRef.current = stagedAsk;
-      setStagedAsk(null);
+    if (ask.modelId !== undefined && selectedModelId !== ask.modelId) return;
+    const mounted = ask.space
+      ? selectedKbs.length === 1 && selectedKbs[0].type === 'space' && String(selectedKbs[0].id) === ask.space.id
+      : selectedKbs.length === 0;
+    if (!mounted) return;
+    if (ask.attachment) {
+      askSeq += 1;
+      submittedAskRef.current = ask;
+      setAttachmentAsk({ key: `ask-${askSeq}`, text: ask.text, file: ask.attachment });
+      setMountedAsk(null);
+    } else if (sendMessage(ask.text)) {
+      // A rejected send stays staged until the sender accepts it.
+      submittedAskRef.current = ask;
+      setMountedAsk(null);
     }
-  }, [stagedAsk, conversationId, activeConversationId, selectedKbs, sendMessage]);
+  }, [mountedAsk, conversationId, activeConversationId, ready, selectedModelId, selectModel, onModelUnavailable, selectedKbs, setSelectedKbs, sendMessage]);
 
   const retireAttachmentAsk = useCallback(() => setAttachmentAsk(null), []);
 
