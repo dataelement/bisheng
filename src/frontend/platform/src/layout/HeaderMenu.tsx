@@ -62,5 +62,9 @@ export function HeaderMenu() {
         );
     }
 
+    if (location.pathname.replace(__APP_ENV__.BASE_URL, "") === "/approval") {
+        return <div id="approval-header-menu" className="flex h-[65px] items-center justify-center" />;
+    }
+
     return null;
 }

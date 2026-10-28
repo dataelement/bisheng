@@ -133,9 +133,9 @@ export default function MainLayout() {
 
     return (
         <div className="flex">
-            <div className="bg-background-main w-full h-screen flex flex-col">
+            <div className="bg-[#f8f8f8] dark:bg-background-main w-full h-screen flex flex-col">
                 {isGlobalSuper && <LicenseBanner />}
-                <div className="flex justify-between h-[64px] shrink-0 bg-background-main relative z-[21]">
+                <div className="flex justify-between h-[64px] shrink-0 bg-[#f8f8f8] dark:bg-background-main relative z-[21]">
                     <div className="flex h-9 my-[14px]">
                         <div className="inline-block">
                             {/* @ts-ignore */}
@@ -228,7 +228,7 @@ export default function MainLayout() {
                     </div>
                 </div>
                 <div className="flex flex-1 min-h-0">
-                    <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
+                    <div className="relative z-10 bg-[#f8f8f8] dark:bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
                         <nav
                             className="overflow-y-auto overflow-x-hidden [&_.navlink>svg]:text-text-2 [&_.navlink.active>svg]:text-inherit"
                             style={{ maxHeight: "calc(100vh - 64px - 90px - var(--license-banner-h, 0px))" }}

@@ -74,25 +74,22 @@ export function ModelAuditFilters({
               (!!draft.model_name && !nameReady) ||
               (!!draft.audit_status && !statusReady)
             }
-            size="small"
-            className="text-sm [@media(pointer:coarse)]:min-h-11"
+            size="medium"
           >
             {t("dsh.modelAuditView.search")}
           </Button>
           <Button
             type="button"
-            size="small"
+            size="medium"
             variant="outlined" color="default"
-            className="text-sm [@media(pointer:coarse)]:min-h-11"
             onClick={onReset}
           >
             {t("dsh.modelAuditView.resetFilters")}
           </Button>
           <Button
             type="button"
-            size="small"
+            size="medium"
             variant="text" color="default"
-            className="text-sm [@media(pointer:coarse)]:min-h-11"
             aria-expanded={advancedOpen}
             aria-controls="audit-advanced-filters"
             onClick={() => setAdvancedOpen((old) => !old)}

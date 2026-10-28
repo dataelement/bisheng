@@ -1,4 +1,4 @@
-import { Button } from "@bisheng/ui";
+import { Alert, Button } from "@bisheng/ui";
 import { getAuditMode, saveAuditMode } from "@/controllers/API/dshModelAudit";
 import type { AuditMode, AuditModeSnapshot } from "@/types/dshModelAudit";
 import { useEffect, useId, useState } from "react";
@@ -107,18 +107,18 @@ export function ModelAuditMode({
         </Button>
       </div>
       {snapshot && !canCaptureContent && (
-        <p
-          role="alert"
-          className="col-span-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm"
-        >
-          {t(
+        <Alert
+          live
+          type="warning"
+          className="col-span-full m-0"
+          description={t(
             snapshot.content_available === undefined
               ? "dsh.modelAuditView.contentReadinessUnknown"
               : snapshot.mode === "CONTENT"
                 ? "dsh.modelAuditView.contentKeyLost"
                 : "dsh.modelAuditView.contentKeyMissing",
           )}
-        </p>
+        />
       )}
       {(failed || saveFailed) && (
         <p role="alert" className="col-span-full text-sm text-destructive">
