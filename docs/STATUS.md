@@ -370,8 +370,8 @@
 
 ## 2026-10-28 — 发现广场应用卡片暗色主题
 
-- 应用卡片及其操作区统一使用主题表面颜色，暗色沿用知识空间配色。同步目标 `d3d832a0e` 后，Client / Platform 静态检查、Client 构建、i18n、3 项权限回归及 12 组组件渲染验证通过。
-- 交付仓库为 `dataelement/bisheng`，发布位置为 Client 网页资源。环境发布、13001 真实账号及 Windows 验收待执行。[修复记录](status/app-square-dark-theme-20261028.md)。
+- 应用卡片及其操作区统一使用主题表面颜色，暗色沿用知识空间配色。同步目标 `9a077fdce` 后，Client 静态检查与构建、18 项权限与导航组合回归通过；卡片保持已通过 12 组组件渲染验证的代码。
+- 已创建 [PR #2544](https://github.com/dataelement/bisheng/pull/2544)，发布位置为 Client 网页资源。环境发布、13001 真实账号及 Windows 验收待执行。[修复记录](status/app-square-dark-theme-20261028.md)。
 
 ## 2026-10-28 — 订阅审批、关注列表与访问状态一致性
 
