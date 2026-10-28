@@ -3850,6 +3850,7 @@
     "downloadAddress": "客户端下载地址",
     "downloadAddressHelp": "从工作台下载客户端",
     "saveSettings": "保存配置",
+    "editSettings": "编辑配置",
     "settingsAdminOnly": "仅超级管理员可修改实例配置。",
     "settingsSaved": "配置已保存",
     "settingsSaveFailed": "保存失败，请检查下载地址或稍后重试。",

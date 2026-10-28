@@ -3850,6 +3850,7 @@
     "downloadAddress": "クライアント ダウンロード URL",
     "downloadAddressHelp": "ワークスペースから クライアント をダウンロード",
     "saveSettings": "設定を保存",
+    "editSettings": "設定を編集",
     "settingsAdminOnly": "インスタンス設定を変更できるのは全体管理者のみです。",
     "settingsSaved": "設定を保存しました",
     "settingsSaveFailed": "保存できませんでした。ダウンロード URL を確認するか、後で再試行してください。",
