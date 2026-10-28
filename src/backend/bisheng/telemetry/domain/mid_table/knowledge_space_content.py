@@ -19,8 +19,8 @@ from bisheng.knowledge.domain.constants import (
     get_file_category_code_from_file,
     normalize_file_category_code,
 )
-from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.document_identity import document_identity
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.telemetry.domain.mid_table import queue_retry
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
@@ -79,11 +79,8 @@ class KnowledgeSpaceContentRecord(BaseModel):
     belonging_department_name: str | None = None
     belonging_office_name: str | None = None
     belonging_squad_name: str | None = None
-    # 原始上传库XX (2026-09-01): 库->组织映射规则同 belonging_*, but evaluated against the
-    # file's ORIGINAL upload space (KnowledgeFile.original_knowledge_id, F081) and frozen
-    # forever once set — never recomputed from who currently holds the file or their
-    # department. Kept separate from uploader_* (which stays on its original "current
-    # uploader's current department" logic, per product's own naming/semantics).
+    # 原始上传库按原始知识库的库到组织映射计算, 与上传人组织无关.
+    # 上传人组织只读 knowledgefile.belonging_organization_id, 空值不回退到当前主组织.
     original_upload_company_name: str | None = None
     original_upload_department_name: str | None = None
     original_upload_office_name: str | None = None
@@ -1020,7 +1017,14 @@ return removed
         keys += [cls.LOCK_KEY] + [getattr(cls, prefix + name) for name in ("ATTEMPTS_KEY", "DEAD_KEY", "ERRORS_KEY")]
         return int(
             redis_client.connection.eval(
-                queue_retry.FAIL, len(keys), *keys, owner_token, cls._now_ms(), MAX_ATTEMPTS, str(error)[:2000], *members
+                queue_retry.FAIL,
+                len(keys),
+                *keys,
+                owner_token,
+                cls._now_ms(),
+                MAX_ATTEMPTS,
+                str(error)[:2000],
+                *members,
             )
         )
 
@@ -1133,7 +1137,8 @@ return removed
             space_level=normalized_space_level,
             space_level_name=SPACE_LEVEL_LABELS[normalized_space_level],
             file_id=int(file_record.id),
-            knowledge_identity=knowledge_identity or document_identity(file_record.id, getattr(file_record, "reference_document_id", None)),
+            knowledge_identity=knowledge_identity
+            or document_identity(file_record.id, getattr(file_record, "reference_document_id", None)),
             tenant_id=int(getattr(file_record, "tenant_id", None) or getattr(space, "tenant_id", None) or 1),
             file_name=file_record.file_name,
             file_type=int(file_record.file_type),

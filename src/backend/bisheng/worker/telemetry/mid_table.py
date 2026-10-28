@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta
 from time import monotonic
-from typing import Any, List
+from typing import Any
 
 from elasticsearch import exceptions as es_exceptions
 from elasticsearch import helpers
@@ -14,7 +14,7 @@ from bisheng.common.constants.enums.telemetry import (
     BaseTelemetryTypeEnum,
 )
 from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS
-from bisheng.common.schemas.telemetry.base_telemetry_schema import UserGroupInfo, UserRoleInfo, UserDepartmentInfo
+from bisheng.common.schemas.telemetry.base_telemetry_schema import UserDepartmentInfo, UserGroupInfo, UserRoleInfo
 from bisheng.common.schemas.telemetry.event_data_schema import (
     PortalDocumentDownloadEventData,
     PortalDocumentReadEventData,
@@ -30,29 +30,32 @@ from bisheng.core.search.elasticsearch.manager import (
     get_statistics_es_connection_sync,
 )
 from bisheng.database.models.department import Department, UserDepartment, UserDepartmentDao
-from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.database.models.flow import FlowType
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
-from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpace,
 )
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileDao,
+    KnowledgeFileStatus,
+)
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
     KnowledgeSpaceScope,
     KnowledgeSpaceScopeDao,
 )
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.file_classification_label_service import (
     FileClassificationLabelService,
 )
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.telemetry.domain.mid_table.app_increment import AppIncrement, AppIncrementRecord
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
 from bisheng.telemetry.domain.mid_table.content_stat_reconcile import BatchWriteError, ContentStatReconciler
-from bisheng.telemetry.domain.mid_table.retry_budget import bounded_telemetry_task, checkpoint, frozen_value, recover_due_jobs
-from bisheng.telemetry.domain.mid_table.queue_retry import QueuedProjectionFailure
 from bisheng.telemetry.domain.mid_table.daily_participation import (
     CHINA_STANDARD_TIME,
     DailyParticipationFact,
@@ -62,22 +65,29 @@ from bisheng.telemetry.domain.mid_table.daily_participation import (
 )
 from bisheng.telemetry.domain.mid_table.knowledge_increment import KnowledgeIncrement, KnowledgeIncrementRecord
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
-from bisheng.telemetry.domain.repositories.implementations.knowledge_statistics_repository_impl import (
-    KnowledgeStatisticsRepositoryImpl as KnowledgeStatisticsRepository,
-)
 from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import (
     resolve_organization_names,
 )
+from bisheng.telemetry.domain.mid_table.queue_retry import QueuedProjectionFailure
+from bisheng.telemetry.domain.mid_table.retry_budget import (
+    bounded_telemetry_task,
+    checkpoint,
+    frozen_value,
+    recover_due_jobs,
+)
 from bisheng.telemetry.domain.mid_table.user_increment import UserIncrement, UserIncrementRecord
 from bisheng.telemetry.domain.mid_table.user_interact import UserInteract, UserInteractRecord
-from bisheng.user.domain.services.user import UserService
+from bisheng.telemetry.domain.repositories.implementations.knowledge_statistics_repository_impl import (
+    KnowledgeStatisticsRepositoryImpl as KnowledgeStatisticsRepository,
+)
 from bisheng.user.domain.models.user import User
+from bisheng.user.domain.services.user import UserService
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
 
 
 def get_yesterday_date_range(
-    mid_table: BaseMidTable, start_date: str = None, end_date: str = None
+    mid_table: BaseMidTable, start_date: str | None = None, end_date: str | None = None
 ) -> (datetime, datetime):
     if start_date is None or end_date is None:
         # default to yesterday's date
@@ -107,7 +117,7 @@ def convert_flow_type(flow_type: int) -> ApplicationTypeEnum:
 
 
 @bisheng_celery.task()
-def sync_mid_user_increment(start_date: str = None, end_date: str = None):
+def sync_mid_user_increment(start_date: str | None = None, end_date: str | None = None):
     trace_id_var.set(f"sync_mid_user_increment_task_{generate_uuid()}")
     mid_table = UserIncrement()
     start_date, end_date = get_yesterday_date_range(mid_table, start_date, end_date)
@@ -471,7 +481,7 @@ def backfill_mid_user_daily_participation_fact(
     return result
 
 
-def get_user_from_ids_with_cache(user_ids: List[int], user_map: dict):
+def get_user_from_ids_with_cache(user_ids: list[int], user_map: dict):
     if user_ids:
         with bypass_tenant_filter():
             user_list = UserService.get_user_all_info(user_ids=user_ids, page=0, page_size=0)
@@ -579,7 +589,7 @@ def _get_success_space_file_rows_by_space_id(space_id: int, page: int, page_size
             return session.exec(statement).all()
 
 
-def _get_knowledge_space_content_rows_by_file_ids(file_ids: List[int]):
+def _get_knowledge_space_content_rows_by_file_ids(file_ids: list[int]):
     if not file_ids:
         return []
     statement = (
@@ -684,6 +694,34 @@ def _get_knowledge_space_department_map(
     return result
 
 
+def _get_departments_by_ids(department_ids: list[int]) -> dict[int, Department]:
+    """按组织 ID 读取部门行, 供上传人组织展开路径."""
+    normalized_ids = sorted({int(department_id) for department_id in department_ids if department_id})
+    if not normalized_ids:
+        return {}
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            rows = session.exec(select(Department).where(Department.id.in_(normalized_ids))).all()
+    return {int(row.id): row for row in rows if row.id is not None}
+
+
+def _registered_uploader_department(department, tenant_id: int):
+    """文件登记组织仍有效且属于文件租户时才用于上传人组织.
+
+    空值, 跨租户, 停用或已删除都不改用当前主组织.
+    """
+    if department is None:
+        return None
+    department_tenant_id = getattr(department, "tenant_id", None)
+    if department_tenant_id is None or int(department_tenant_id) != int(tenant_id):
+        return None
+    if str(getattr(department, "status", "") or "") != "active":
+        return None
+    if getattr(department, "is_deleted", 0):
+        return None
+    return department
+
+
 def _get_dimension_department_map(start_departments: list[Department | None]) -> dict[int, Department]:
     department_ids: set[int] = set()
     for department in start_departments:
@@ -747,13 +785,14 @@ def _build_knowledge_space_content_records(
     rows,
     user_map: dict,
     *,
-    sync_run_id: str = None,
+    sync_run_id: str | None = None,
     space_scope_map: dict | None = None,
     space_department_map: dict | None = None,
     original_space_scope_map: dict | None = None,
     original_space_department_map: dict | None = None,
     original_space_name_map: dict | None = None,
     primary_department_map: dict | None = None,
+    registered_organization_map: dict | None = None,
     category_label_cache: dict | None = None,
 ):
     if not rows:
@@ -763,10 +802,9 @@ def _build_knowledge_space_content_records(
     space_scope_map = space_scope_map if space_scope_map is not None else {}
     space_department_map = space_department_map if space_department_map is not None else {}
     original_space_scope_map = original_space_scope_map if original_space_scope_map is not None else {}
-    original_space_department_map = (
-        original_space_department_map if original_space_department_map is not None else {}
-    )
+    original_space_department_map = original_space_department_map if original_space_department_map is not None else {}
     primary_department_map = primary_department_map if primary_department_map is not None else {}
+    registered_organization_map = registered_organization_map if registered_organization_map is not None else {}
     category_label_cache = category_label_cache if category_label_cache is not None else {}
     user_ids = {
         int(file_record.user_id)
@@ -832,11 +870,24 @@ def _build_knowledge_space_content_records(
         primary_department_map.update(
             UserDepartmentDao.get_primary_department_map_by_user_ids(missing_primary_user_ids)
         )
+    organization_ids = sorted(
+        {
+            int(getattr(file_record, "belonging_organization_id", 0) or 0)
+            for file_record, _ in rows
+            if getattr(file_record, "belonging_organization_id", None)
+        }
+    )
+    missing_organization_ids = [
+        organization_id for organization_id in organization_ids if organization_id not in registered_organization_map
+    ]
+    if missing_organization_ids:
+        registered_organization_map.update(_get_departments_by_ids(missing_organization_ids))
 
     departments_by_id = _get_dimension_department_map(
         list(primary_department_map.values())
         + list(space_department_map.values())
         + list(original_space_department_map.values())
+        + [registered_organization_map.get(organization_id) for organization_id in organization_ids]
     )
     company_departments = [
         department
@@ -852,11 +903,12 @@ def _build_knowledge_space_content_records(
             category_label_cache[tenant_id] = FileClassificationLabelService.get_label_lookup_for_tenant(tenant_id)
         category_labels, subcategory_labels = category_label_cache[tenant_id]
         scope = space_scope_map.get(int(space.id))
-        # 上传人XX keeps its original, unchanged meaning: whoever is currently on record as
-        # this file's uploader (file_record.user_id), in THEIR current department — product
-        # wants this field's semantics untouched. 原始上传库XX is the new, separate,
-        # library->org mapping frozen at the file's ORIGINAL upload space.
-        uploader_department = primary_department_map.get(int(file_record.user_id or 0))
+        # 上传人组织只读文件登记的 belonging_organization_id. 空值或组织失效时留空.
+        organization_id = int(getattr(file_record, "belonging_organization_id", 0) or 0)
+        uploader_department = _registered_uploader_department(
+            registered_organization_map.get(organization_id),
+            tenant_id,
+        )
         original_space_id = _original_space_id_for(file_record, space)
         origin = original_space_name_map.get(original_space_id)
         original_upload_department = _resolve_belonging_start_department(
@@ -903,9 +955,7 @@ def build_knowledge_space_content_event_record(file_id: int):
     """Build one fresh dimension snapshot for a successful user action."""
     rows = _get_knowledge_space_content_rows_by_file_ids([int(file_id)])
     visible_rows = [
-        (file_record, space)
-        for file_record, space in rows
-        if _is_file_content_stat_visible(file_record, space)
+        (file_record, space) for file_record, space in rows if _is_file_content_stat_visible(file_record, space)
     ]
     records, _ = _build_knowledge_space_content_records(visible_rows, {})
     return records[0] if records else None
@@ -914,9 +964,7 @@ def build_knowledge_space_content_event_record(file_id: int):
 def _expand_content_stat_user_work(user_id: int) -> tuple[list[int], list[int]]:
     with bypass_tenant_filter():
         with get_sync_db_session() as session:
-            file_ids = session.exec(
-                select(KnowledgeFile.id).where(KnowledgeFile.user_id == int(user_id))
-            ).all()
+            file_ids = session.exec(select(KnowledgeFile.id).where(KnowledgeFile.user_id == int(user_id))).all()
             space_ids = session.exec(
                 select(KnowledgeSpaceScope.space_id).where(
                     or_(
@@ -937,9 +985,7 @@ def _expand_content_stat_user_work(user_id: int) -> tuple[list[int], list[int]]:
 def _expand_content_stat_department_work(department_id: int) -> tuple[list[int], list[int]]:
     with bypass_tenant_filter():
         with get_sync_db_session() as session:
-            department = session.exec(
-                select(Department).where(Department.id == int(department_id))
-            ).first()
+            department = session.exec(select(Department).where(Department.id == int(department_id))).first()
             if department is None or not department.path:
                 return [], []
             user_ids = session.exec(
@@ -1017,16 +1063,8 @@ def _get_portal_download_aggregation_page(
                     "bool": {
                         "filter": [
                             {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD.value}},
-                            {
-                                "term": {
-                                    "event_data.portal_document_download_source_app.keyword": "shougang_portal"
-                                }
-                            },
-                            {
-                                "term": {
-                                    "event_data.portal_document_download_status.keyword": "success"
-                                }
-                            },
+                            {"term": {"event_data.portal_document_download_source_app.keyword": "shougang_portal"}},
+                            {"term": {"event_data.portal_document_download_status.keyword": "success"}},
                         ]
                     }
                 },
@@ -1077,6 +1115,7 @@ def rebuild_knowledge_space_content_download_projection(
     original_space_department_map: dict[int, Any] = {}
     original_space_name_map: dict[int, Any] = {}
     primary_department_map: dict[int, Any] = {}
+    registered_organization_map: dict[int, Any] = {}
     category_label_cache: dict[int, tuple[dict[str, str], dict[str, str]]] = {}
     synced_count = 0
 
@@ -1103,6 +1142,7 @@ def rebuild_knowledge_space_content_download_projection(
             original_space_department_map=original_space_department_map,
             original_space_name_map=original_space_name_map,
             primary_department_map=primary_department_map,
+            registered_organization_map=registered_organization_map,
             category_label_cache=category_label_cache,
         )
         file_record_map = {record.file_id: record for record in file_records}
@@ -1153,6 +1193,7 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
     original_space_department_map = {}
     original_space_name_map = {}
     primary_department_map = {}
+    registered_organization_map = {}
     category_label_cache = {}
     counters = {"checked": 0, "unchanged": 0, "created": 0, "updated": 0, "conflicts": 0, "blocked": 0}
 
@@ -1207,6 +1248,7 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
             original_space_department_map=original_space_department_map,
             original_space_name_map=original_space_name_map,
             primary_department_map=primary_department_map,
+            registered_organization_map=registered_organization_map,
             category_label_cache=category_label_cache,
         )
         guard()
@@ -1295,7 +1337,7 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
 
 @bisheng_celery.task()
 @bounded_telemetry_task
-def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str = None):
+def sync_mid_knowledge_space_content_stat(start_date: str | None = None, end_date: str | None = None):
     del start_date, end_date
     trace_id_var.set(f"sync_mid_knowledge_space_content_stat_task_{generate_uuid()}")
     logger.info("Syncing mid_knowledge_space_content_stat file records...")
@@ -1351,6 +1393,7 @@ def sync_pending_knowledge_space_content_stat():
         original_space_department_map = {}
         original_space_name_map = {}
         primary_department_map = {}
+        registered_organization_map = {}
         category_label_cache = {}
 
         claimed = KnowledgeSpaceContentStat.claim_pending_sync(
@@ -1432,6 +1475,7 @@ def sync_pending_knowledge_space_content_stat():
                 original_space_department_map=original_space_department_map,
                 original_space_name_map=original_space_name_map,
                 primary_department_map=primary_department_map,
+                registered_organization_map=registered_organization_map,
                 category_label_cache=category_label_cache,
             )
             if records:
@@ -1487,6 +1531,7 @@ def sync_pending_knowledge_space_content_stat():
                     original_space_department_map=original_space_department_map,
                     original_space_name_map=original_space_name_map,
                     primary_department_map=primary_department_map,
+                    registered_organization_map=registered_organization_map,
                     category_label_cache=category_label_cache,
                 )
                 if records:
@@ -1783,7 +1828,7 @@ def recover_knowledge_space_content_stat_leases():
 
 
 @bisheng_celery.task()
-def sync_mid_app_increment(start_date: str = None, end_date: str = None):
+def sync_mid_app_increment(start_date: str | None = None, end_date: str | None = None):
     # Placeholder for syncing mid_app_increment table
     trace_id_var.set(f"sync_mid_app_increment_task_{generate_uuid()}")
     logger.info("Syncing mid_app_increment table...")
@@ -1848,7 +1893,7 @@ def sync_mid_app_increment(start_date: str = None, end_date: str = None):
 
 
 @bisheng_celery.task()
-def sync_mid_knowledge_increment(start_date: str = None, end_date: str = None):
+def sync_mid_knowledge_increment(start_date: str | None = None, end_date: str | None = None):
     # Placeholder for syncing mid_knowledge_increment table
     trace_id_var.set(f"sync_mid_knowledge_increment_task_{generate_uuid()}")
     logger.info("Syncing mid_knowledge_increment table...")
@@ -1910,7 +1955,7 @@ def sync_mid_knowledge_increment(start_date: str = None, end_date: str = None):
 
 
 @bisheng_celery.task()
-def sync_mid_user_interact_dtl(start_date: str = None, end_date: str = None):
+def sync_mid_user_interact_dtl(start_date: str | None = None, end_date: str | None = None):
     # Placeholder for syncing mid_user_interact_dtl table
     trace_id_var.set(f"sync_mid_user_interact_dtl_task_{generate_uuid()}")
     logger.info("Syncing mid_user_interact_dtl table...")

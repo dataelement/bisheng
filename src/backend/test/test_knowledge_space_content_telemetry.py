@@ -151,7 +151,7 @@ _MISSING = object()
 def _import_worker_mid_table():
     class _DummyTask:
         def __init__(self, fn):
-            # 这里验证业务处理；持久预算由独立 Lua/调度契约测试验证。
+            # 这里验证业务处理; 持久预算由独立 Lua/调度契约测试验证.
             self.run = getattr(fn, "__wrapped__", fn)
 
         def __call__(self, *args, **kwargs):
@@ -222,6 +222,7 @@ def _stub_file_dimension_lookups(worker_module, monkeypatch):
 @pytest.mark.asyncio
 async def test_knowledge_space_content_log_preview_success_queues_fresh_event(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
     enqueue = AsyncMock(return_value=True)
     monkeypatch.setattr(module.KnowledgeSpaceContentStat, "enqueue_success_event_async", enqueue)
 
@@ -257,6 +258,7 @@ async def test_knowledge_space_content_log_preview_success_queues_fresh_event(mo
 @pytest.mark.asyncio
 async def test_favorite_space_preview_is_not_projected(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
     enqueue = AsyncMock(return_value=True)
     monkeypatch.setattr(module.KnowledgeSpaceContentStat, "enqueue_success_event_async", enqueue)
 
@@ -273,6 +275,7 @@ async def test_favorite_space_preview_is_not_projected(monkeypatch):
 @pytest.mark.asyncio
 async def test_knowledge_space_content_log_preview_success_does_not_raise_on_enqueue_failure(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
     monkeypatch.setattr(
         module.KnowledgeSpaceContentStat,
         "enqueue_success_event_async",
@@ -405,14 +408,7 @@ def test_content_sync_keeps_team_and_clinic_levels_separate(
 
 
 def test_original_upload_organization_follows_original_space_not_current_uploader_department(monkeypatch):
-    """Customer correction (2026-09-01): 原始上传库XX is a NEW, separate dimension — the
-    library->org mapping of the file's ORIGINAL upload space (frozen forever, via
-    KnowledgeFile.original_knowledge_id — see F081), not "whichever department the
-    uploading person currently sits in". A file originally uploaded into dept-库A (bound
-    to department A), later moved to dept-库B (bound to department B) by a DIFFERENT user
-    who now belongs to department B, must report 原始上传库部门=A (frozen at the original
-    space) while 上传人部门 keeps its OLD, UNCHANGED meaning — the current uploader-of-record's
-    current department, B — and belonging follows the CURRENT space, also B."""
+    """原始上传库部门跟原始知识库走. 上传人部门只读文件登记组织, 不读搬运者当前主组织."""
     worker_module = _import_worker_mid_table()
     monkeypatch.setattr(
         worker_module,
@@ -420,24 +416,26 @@ def test_original_upload_organization_follows_original_space_not_current_uploade
         lambda _ids, user_map: user_map,
     )
     department_a = SimpleNamespace(id=101, org_level="dept", name="部门A", path="/101", status="active")
-    department_b = SimpleNamespace(id=102, org_level="dept", name="部门B", path="/102", status="active")
+    department_b = SimpleNamespace(
+        id=102, org_level="dept", name="部门B", path="/102", status="active", tenant_id=1, is_deleted=0
+    )
+    current_department = SimpleNamespace(
+        id=103, org_level="dept", name="当前部门", path="/103", status="active", tenant_id=1, is_deleted=0
+    )
     monkeypatch.setattr(
         worker_module,
         "_get_dimension_department_map",
-        lambda _departments: {101: department_a, 102: department_b},
+        lambda _departments: {101: department_a, 102: department_b, 103: current_department},
     )
 
-    # Current entry: file now lives in space 20 (bound to department B), moved there by
-    # user 2, who — per primary_department_map — currently sits in department B. Under the
-    # OLD (buggy) logic, 原始上传库 would resolve to department B via this mover's own
-    # department; under the fix it must resolve to department A (space 10, where the file
-    # was ORIGINALLY uploaded), regardless of who moved it or where they sit today.
+    # 文件现在在部门 B 的库, 搬运者当前主组织是「当前部门」. 上传人组织必须来自登记的部门 B.
     file_record = SimpleNamespace(
         id=11,
         tenant_id=1,
         user_id=2,
         user_name="搬运者",
         original_knowledge_id=10,
+        belonging_organization_id=102,
         create_time=None,
         file_name="方案.pdf",
         file_type=1,
@@ -454,7 +452,8 @@ def test_original_upload_organization_follows_original_space_not_current_uploade
         space_department_map={20: department_b},
         original_space_scope_map={10: SimpleNamespace(level="department")},
         original_space_department_map={10: department_a},
-        primary_department_map={2: department_b},
+        primary_department_map={2: current_department},
+        registered_organization_map={102: department_b},
         category_label_cache={1: ({}, {})},
     )
 
@@ -778,11 +777,7 @@ def test_portal_download_aggregation_query_filters_source_and_uses_after_key(mon
     body = call["body"]
     assert body["query"]["bool"]["filter"] == [
         {"term": {"event_type": "portal_document_download"}},
-        {
-            "term": {
-                "event_data.portal_document_download_source_app.keyword": "shougang_portal"
-            }
-        },
+        {"term": {"event_data.portal_document_download_source_app.keyword": "shougang_portal"}},
         {"term": {"event_data.portal_document_download_status.keyword": "success"}},
     ]
     composite = body["aggs"]["download_daily"]["composite"]
@@ -979,9 +974,7 @@ def test_full_file_projection_does_not_rebuild_or_clean_daily_records(monkeypatc
     monkeypatch.setattr(
         worker_module,
         "rebuild_knowledge_space_content_download_projection",
-        lambda **_kwargs: (_ for _ in ()).throw(
-            AssertionError("daily history must not be rebuilt")
-        ),
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("daily history must not be rebuilt")),
     )
 
     result = worker_module.rebuild_knowledge_space_content_file_projection("owner-a")
