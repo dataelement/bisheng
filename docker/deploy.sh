@@ -8,7 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
-COMPOSE_CMD="docker compose -f ${COMPOSE_FILE}"
+COMPOSE_CMD=(docker compose -f "${COMPOSE_FILE}")
 
 # 容器名常量（与 docker-compose.yml 对应）
 BACKEND_CONTAINER="bisheng-backend"
@@ -47,8 +47,11 @@ usage() {
   echo "  $0 exec worker               进入 backend_worker 容器"
   echo ""
   echo -e "${BOLD}更新镜像并重启：${RESET}"
-  echo "  $0 update                    拉取最新镜像并重启 backend + worker"
-  echo "  $0 update backend            只更新并重启 backend"
+  echo "  $0 upgrade-preview           使用目标镜像预览知识工具升级，读取 Store ID"
+  echo "  $0 update --confirm-store-id <Store ID> --operator-id <用户 ID>"
+  echo "                               更新服务并完成知识工具登记和权限校准"
+  echo "  $0 update backend --confirm-store-id <Store ID> --operator-id <用户 ID>"
+  echo "                               更新 backend 并完成知识工具升级"
   echo "  $0 update worker             只更新并重启 worker"
   echo ""
   echo -e "${BOLD}重启容器：${RESET}"
@@ -111,10 +114,10 @@ cmd_logs() {
 
   if [ "$lines" -eq 0 ]; then
     info "实时跟踪 ${service} 所有历史日志（Ctrl+C 退出）..."
-    ${COMPOSE_CMD} logs -f "${service}"
+    "${COMPOSE_CMD[@]}" logs -f "${service}"
   else
     info "实时跟踪 ${service} 最近 ${lines} 行日志（Ctrl+C 退出）..."
-    ${COMPOSE_CMD} logs -f --tail="${lines}" "${service}"
+    "${COMPOSE_CMD[@]}" logs -f --tail="${lines}" "${service}"
   fi
 }
 
@@ -142,7 +145,7 @@ cmd_version() {
 
   info "✅ 版本修改完成："
   grep -E "image:.*dataelement/bisheng-(backend|frontend):" "$COMPOSE_FILE" | awk '{$1=$1};1'
-  warn "注意：只是修改了配置文件，若要生效请执行 '$0 update'"
+  warn "版本配置已保存。请先运行 '$0 upgrade-preview'，再携带 Store ID 和操作人 ID 执行 update。"
 }
 
 # ─── 进入容器 ─────────────────────────────────────────────────
@@ -165,25 +168,77 @@ cmd_exec() {
 }
 
 # ─── 更新镜像并重启 ───────────────────────────────────────────
+cmd_upgrade_preview() {
+  if [[ $# -gt 0 ]]; then
+    error "用法：$0 upgrade-preview"
+    return 2
+  fi
+  info "使用目标 backend 镜像及服务配置预览知识工具升级"
+  "${COMPOSE_CMD[@]}" pull backend
+  "${COMPOSE_CMD[@]}" run --rm --no-deps -T --pull never backend \
+    python scripts/register_work_knowledge_tool.py
+}
+
 cmd_update() {
   local targets=()
+  local remaining=()
+  local store_id="" operator_id="" has_backend=false
+  local target
 
-  if [[ $# -eq 0 ]]; then
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --confirm-store-id|--operator-id)
+        if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+          error "$1 需要参数值"
+          return 2
+        fi
+        if [[ "$1" == --confirm-store-id ]]; then store_id="$2"; else operator_id="$2"; fi
+        shift 2
+        ;;
+      --*) error "未知参数：$1"; return 2 ;;
+      *) targets+=("$(resolve_service "$1")"); shift ;;
+    esac
+  done
+  if [[ ${#targets[@]} -eq 0 ]]; then
     targets=("backend" "backend_worker" "frontend")
-  else
-    for t in "$@"; do
-      targets+=("$(resolve_service "$t")")
-    done
+  fi
+  for target in "${targets[@]}"; do
+    if [[ "$target" == backend ]]; then has_backend=true; else remaining+=("$target"); fi
+  done
+  if [[ "$has_backend" == true ]]; then
+    if [[ -z "$store_id" || ! "$operator_id" =~ ^[1-9][0-9]*$ ]]; then
+      error "backend 更新需要 --confirm-store-id 和正整数 --operator-id；先运行 '$0 upgrade-preview'"
+      return 2
+    fi
+  elif [[ -n "$store_id" || -n "$operator_id" ]]; then
+    error "知识工具升级参数需要同时选择 backend"
+    return 2
   fi
 
   info "拉取最新镜像：${targets[*]}"
-  ${COMPOSE_CMD} pull "${targets[@]}"
+  "${COMPOSE_CMD[@]}" pull "${targets[@]}"
 
-  info "重启服务（不重建依赖）：${targets[*]}"
-  ${COMPOSE_CMD} up -d --no-deps "${targets[@]}"
+  if [[ "$has_backend" == true ]]; then
+    # API startup owns schema migration; maintenance uses the resulting live configuration.
+    info "启动 backend 并等待服务就绪"
+    "${COMPOSE_CMD[@]}" up -d --no-deps --pull never --wait --wait-timeout 180 backend
+    info "执行知识工具登记和权限校准"
+    if "${COMPOSE_CMD[@]}" exec -T backend python scripts/register_work_knowledge_tool.py \
+        --apply --confirm-store-id "$store_id" --operator-id "$operator_id"; then
+      info "知识工具升级已完成"
+    else
+      local upgrade_status=$?
+      error "backend 已更新，知识工具升级失败。请保持维护窗口，处理上方错误后重试本次 update。"
+      return "$upgrade_status"
+    fi
+  fi
+  if [[ ${#remaining[@]} -gt 0 ]]; then
+    info "更新其余服务：${remaining[*]}"
+    "${COMPOSE_CMD[@]}" up -d --no-deps --pull never --wait --wait-timeout 180 "${remaining[@]}"
+  fi
 
+  "${COMPOSE_CMD[@]}" ps "${targets[@]}"
   info "✅ 更新完成"
-  ${COMPOSE_CMD} ps "${targets[@]}"
 }
 
 # ─── 重启容器 ─────────────────────────────────────────────────
@@ -199,10 +254,10 @@ cmd_restart() {
   fi
 
   info "重启服务：${targets[*]}"
-  ${COMPOSE_CMD} restart "${targets[@]}"
+  "${COMPOSE_CMD[@]}" restart "${targets[@]}"
 
   info "✅ 重启完成"
-  ${COMPOSE_CMD} ps "${targets[@]}"
+  "${COMPOSE_CMD[@]}" ps "${targets[@]}"
 }
 
 # ─── 入口 ────────────────────────────────────────────────────
@@ -219,6 +274,7 @@ main() {
     version)        cmd_version "$@" ;;
     exec)           cmd_exec "$@" ;;
     update)         cmd_update "$@" ;;
+    upgrade-preview) cmd_upgrade_preview "$@" ;;
     restart)        cmd_restart "$@" ;;
     help|-h|--help) usage ;;
     *)

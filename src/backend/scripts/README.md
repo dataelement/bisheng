@@ -32,6 +32,13 @@ docker compose exec backend sh entrypoint.sh upgrade-work-knowledge
 docker compose exec backend sh entrypoint.sh upgrade-work-knowledge --apply --confirm-store-id <store-id-from-preview> --operator-id <user-id>
 ```
 
+For repository-managed Compose updates, `docker/deploy.sh update` includes this
+operation as a required release stage whenever `backend` is selected. It requires
+the confirmed Store and audit operator, waits for backend readiness, runs the
+upgrade, then updates the remaining services. See the
+[deployment procedure](../../../docker/README.md) for preview, failure recovery
+and external-pipeline integration.
+
 Completion requires `ready: true`, then ordinary-user discovery and execution.
 Verify single-space retrieval and K1/K2 multi-selection with distinct source markers
 and citations in Work. Keep the account enable switch and document permissions in
