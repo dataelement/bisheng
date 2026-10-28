@@ -1690,6 +1690,7 @@
     "sort_by_size_label": "Sort by size",
     "select_all": "Select all",
     "folder_abnormal": "Has issues",
+    "ask_model_unavailable": "The selected model has changed. Choose a model and send your question again.",
     "ask_bar_placeholder": "Ask about this knowledge space — the answer opens in a new chat…"
   },
   "com_subscription": {

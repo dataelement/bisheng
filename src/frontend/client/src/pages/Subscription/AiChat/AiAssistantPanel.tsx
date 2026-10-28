@@ -93,7 +93,7 @@ export function AiAssistantPanel({
     });
 
     // All three hooks always called (React hooks rules); only the active one runs
-    const workstationChat = useAiChat(isSimpleMode ? "new" : conversationId);
+    const workstationChat = useAiChat(isSimpleMode ? "new" : conversationId, false, "", "subscription");
     const channelChat = useChannelChat(isChannelMode ? articleDocId! : "", surfaceModel);
     const fileChatHook = useFileChat(
         isFileChatMode ? fileChat!.spaceId : "",
@@ -125,7 +125,7 @@ export function AiAssistantPanel({
     const isParsingMedia = isSimpleMode ? false : workstationChat.isParsingMedia;
 
     const [chatModel, setChatModel] = useRecoilState(store.chatModel);
-    const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
+    const { selectedOrgKbs, setSelectedOrgKbs } = workstationChat;
     const [searchType, setSearchType] = useRecoilState(store.searchType);
     const [inputText, setInputText] = useState("");
 

@@ -136,7 +136,7 @@ export function KnowledgeAiInput({
         if (inputText.trim()) setTagDeleteHighlight(false);
     }, [inputText]);
 
-    // 已选 tag 时仅用短文案；部分浏览器不会随 React placeholder 属性刷新，需同步到 DOM
+    // Keep the DOM placeholder synchronized when a tag selects the shorter prompt.
     const resolvedPlaceholder = selectedTag
         ? localize("com_knowledge.ai_input_placeholder_short")
         : placeholder ?? localize("com_knowledge.ai_input_placeholder");
@@ -341,7 +341,7 @@ export function KnowledgeAiInput({
             )}
 
             {/* Single-row: model on the left, inline with the textarea. */}
-            {!stacked && <div className="shrink-0">{modelSelect}</div>}
+            {!stacked && <div className="min-w-0 max-w-[min(200px,40%)] shrink-0">{modelSelect}</div>}
 
             {/* Textarea + tag badge. The badge overlays the first line; outer wrapper scrolls so the badge moves with text. */}
             <div className={cn(stacked ? "w-full" : "min-w-0 flex-1")}>
@@ -396,8 +396,8 @@ export function KnowledgeAiInput({
             </div>
 
             {/* Controls. Single-row: mic + send pinned right. Stacked: model on the left, mic + send on the right. */}
-            <div className={cn("flex items-center", stacked ? "w-full justify-between" : "shrink-0")}>
-                {stacked && <div className="shrink-0">{modelSelect}</div>}
+            <div className={cn("flex items-center", stacked ? "w-full justify-between gap-2" : "shrink-0")}>
+                {stacked && <div className="min-w-0 max-w-[min(240px,60%)]">{modelSelect}</div>}
                 {sendControls}
             </div>
         </div>

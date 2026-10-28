@@ -1617,6 +1617,7 @@
     "sort_by_size_label": "大小",
     "select_all": "全选",
     "folder_abnormal": "存在异常",
+    "ask_model_unavailable": "所选模型已更新，请重新选择模型后发送。",
     "ask_bar_placeholder": "基于当前知识空间提问，回答会在新对话中打开…"
   },
   "com_subscription": {
