@@ -13,6 +13,7 @@ from bisheng.core.database.subject_search import (
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.group import Group
 from bisheng.database.models.tenant import UserTenant
+from bisheng.tenant.domain.repositories.grant_department_repository import GrantDepartmentRepository
 from bisheng.user.domain.models.user import User
 
 
@@ -87,16 +88,5 @@ class GrantSubjectSearchRepository:
 
     @staticmethod
     async def departments(scope, *, keyword: str, limit: int):
-        statement = select(Department).where(
-            Department.tenant_id == scope.tenant_id,
-            Department.status == "active",
-            subject_match_condition(Department.id, Department.name, Department.external_id, keyword, name_prefix=False),
-        )
-        if scope.department_path is not None:
-            statement = statement.where(col(Department.path).like(f"{scope.department_path}%"))
-        statement = statement.order_by(exact_id_priority(Department.external_id, keyword), col(Department.id)).limit(
-            limit
-        )
-        with bypass_tenant_filter():
-            async with get_async_db_session() as session:
-                return list((await session.exec(statement)).all())
+        _, rows = await GrantDepartmentRepository.search(scope, keyword=keyword, limit=limit)
+        return rows

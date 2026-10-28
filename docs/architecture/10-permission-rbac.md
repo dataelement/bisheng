@@ -1,7 +1,7 @@
 # 用户、菜单与资源权限架构
 
 > 现状版本：v3.0.0-beta1 / F048
-> 最后更新：2026-08-13
+> 最后更新：2026-10-28
 > 规范来源：`features/v3.0.0-beta1/048-rebac-permission-model-grants/`
 
 BiSheng 的权限体系分为三个互不替代的层面：
@@ -504,6 +504,29 @@ draft 绑定 base release、impact checksum、过期时间和 idempotency key。
 
 roster 使用 opaque cursor，page size 1～100。mutation 支持 ADD / MOVE /
 REMOVE，必须携带 resource、Catalog 和 assignee 乐观版本。
+
+#### 8.2.1 部门授权候选范围
+
+`/resources/{type}/{id}/grant-subjects/departments/children`、`search` 和
+`{dept_id}/path-tree` 检查资源的 `manage_permission`，不要求调用者拥有
+部门管理身份。候选范围由已验证资源的租户确定；部门知识空间再与绑定
+部门子树取交集。创建知识空间、频道时的部门授权候选复用同一范围逻辑。
+
+租户根以 `tenant.root_dept_id` 为准。挂载子租户不会改写部门原来的
+`parent_id`、`tenant_id`，因此不能用 `parent_id IS NULL` 或部门存储租户
+等于资源租户来识别其根节点。`GrantDepartmentRepository` 验证根指针、
+挂载双向关系及活动状态后，按根部门的存储租户和物化路径限定查询；
+首层返回该范围根，展开只接受范围内的父部门，搜索和定位截断根之上的
+祖先。`has_children` 同样在此范围内计算，祖先和子节点存在性查询按
+100 个 ID 分批读取。
+
+保存部门授权时也复用该租户范围校验，再进入原有 F048 Grant mutation
+和投影流水。失效根指针、归档根、异常路径或不一致挂载关系返回空候选，
+对应非法部门授权被拒绝，不回退为无边界查询。
+
+回归入口：`test/tenant/test_grant_department_scope.py`。其 SQLite SQL、
+ASGI 接口及 mutation 调用链测试覆盖挂载根、独立根、部门空间限制、
+普通用户权限入口和跨租户拒绝；真实 OpenFGA、MySQL/DM8 验证仍按 §14。
 
 ### 8.3 决策
 
