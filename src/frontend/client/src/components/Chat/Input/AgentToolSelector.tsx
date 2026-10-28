@@ -1,4 +1,3 @@
-// @ts-strict-ignore
 /**
  * AgentToolSelector — v2.5 Agent-mode tool picker for the daily chat input bar.
  *
@@ -10,9 +9,9 @@
 import { Outlined } from "bisheng-icons";
 import { useEffect, useRef } from "react";
 import { useRecoilState } from "recoil";
-import { Switch } from "~/components/ui";
+import { Button, Select, Switch } from "@bisheng/ui";
+import useSelectCopy from "~/hooks/useSelectCopy";
 import ApiAppIcon from "~/components/ui/icon/ApiApp";
-import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
 import { useAuthContext, useLocalize } from "~/hooks";
 import store from "~/store";
 import { cn } from "~/utils";
@@ -167,7 +166,6 @@ export function AgentToolList({ availableTools, selection, disabled }: AgentTool
               </span>
             </div>
             <Switch
-              variant="tool"
               aria-label={label}
               className="shrink-0"
               disabled={disabled}
@@ -183,42 +181,36 @@ export function AgentToolList({ availableTools, selection, disabled }: AgentTool
 
 export default function AgentToolSelector({ availableTools, selection, disabled, compact = false }: Props) {
   const localize = useLocalize();
+  const selectCopy = useSelectCopy();
   const isActive = selection.isActive;
 
   if (!availableTools || availableTools.length === 0) return null;
 
   return (
-    <Select disabled={disabled}>
-      <SelectTrigger
-        className={cn(
-          // Tools Select never sets a value (selection is via inner switches), so
-          // Radix keeps the trigger in [data-placeholder] state; without this the
-          // base `data-[placeholder]:text-gray-500` would override to #595959 and
-          // mismatch the knowledge/model selects. Pin it to the shared #4E5969.
-          "dsh-composer-control h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-2 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
-        )}
-      >
-        <div className="flex min-w-0 gap-1.5 items-center">
-          {/* Icon is neutral by default (matches the + button) and turns
-              brand-blue once a tool is selected — mirrors the knowledge-space
-              selector (ChatKnowledge) so both pickers signal an active selection. */}
-          <div className="relative shrink-0">
-            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-text-2")} strokeWidth={1.5} />
-          </div>
-          {/* Compact: collapse to icon + chevron only to save horizontal space. */}
-          {!compact && (
-            <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(20vw,60px)]">
-              {localize("com_tools_title")}
-            </span>
-          )}
-        </div>
-      </SelectTrigger>
-      <SelectContent
-        className="dsh-chat-menu bg-page rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
-        viewportClassName="flex flex-col gap-1 p-3"
-      >
-        <AgentToolList availableTools={availableTools} selection={selection} disabled={disabled} />
-      </SelectContent>
-    </Select>
+    <Select
+      {...selectCopy}
+      multiple
+      disabled={disabled}
+      options={availableTools.map((group) => ({
+        value: group.id,
+        label: labelForGroup(group, localize),
+        icon: iconForGroup(group),
+        disabled: !isToolGroupEnabled(group),
+      }))}
+      value={availableTools.filter((group) => selection.isChecked(group.id)).map((group) => group.id)}
+      onChange={(ids) => {
+        const changed = availableTools.find((group) => ids.includes(group.id) !== selection.isChecked(group.id));
+        if (changed) selection.toggle(changed);
+      }}
+      aria-label={localize("com_tools_title")}
+      trigger={
+        <Button color="default" variant="text" disabled={disabled} aria-label={localize("com_tools_title")}
+          className="min-w-0 max-w-[min(52vw,220px)] gap-1.5 px-2 text-text-2">
+          <ApiAppIcon className={cn("shrink-0", isActive ? "text-blue-500" : "text-text-2")} />
+          {!compact && <span className="truncate text-sm font-normal max-w-[min(20vw,60px)]">{localize("com_tools_title")}</span>}
+          <Outlined.Down className="size-4 shrink-0" />
+        </Button>
+      }
+    />
   );
 }
