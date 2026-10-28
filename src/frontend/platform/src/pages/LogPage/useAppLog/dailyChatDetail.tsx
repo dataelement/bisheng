@@ -10,6 +10,7 @@ import { useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
 import { MessageContent } from "./DailyMessageContent"
+import { extractDailyDisplayText } from "./dailyChatDetailText"
 import MessageFeedback from "./MessageFeedback"
 import { locationContext } from "@/contexts/locationContext"
 
@@ -24,59 +25,6 @@ interface Message {
     comment?: string;
 }
 
-// v2.5: backend stores daily-mode `message.message` as JSON
-// (`{query}` for questions, `{msg, events}` / older `{content, reasoning_content}`
-// for agent answers). The admin `/chat/messages/:id` endpoint returns the raw
-// column untransformed, so we normalize here to the same display string the
-// client builds in parseStreamHistoryItem — plain text plus an optional
-// `:::thinking\n...\n:::\n...` prefix that DailyMessageContent already renders.
-function extractDisplayText(msg: any): string {
-    const raw = msg?.text ?? "";
-    if (typeof raw !== "string" || !raw) return "";
-    const trimmed = raw.trim();
-    if (!trimmed.startsWith("{")) return raw;
-
-    let parsed: any;
-    try {
-        parsed = JSON.parse(trimmed);
-    } catch {
-        return raw;
-    }
-    if (!parsed || typeof parsed !== "object") return raw;
-
-    if (msg.isCreatedByUser) {
-        if (typeof parsed.query === "string") return parsed.query;
-        if (typeof parsed.text === "string") return parsed.text;
-        return raw;
-    }
-
-    const content =
-        typeof parsed.msg === "string"
-            ? parsed.msg
-            : typeof parsed.content === "string"
-                ? parsed.content
-                : "";
-
-    let reasoning = "";
-    if (Array.isArray(parsed.events)) {
-        reasoning = parsed.events
-            .filter((e: any) => e && e.type === "thinking")
-            .map((e: any) => (typeof e?.content === "string" ? e.content : ""))
-            .filter(Boolean)
-            .join("\n\n");
-    } else if (Array.isArray(parsed.thinking_segments) && parsed.thinking_segments.length) {
-        reasoning = parsed.thinking_segments
-            .map((s: any) => (typeof s?.content === "string" ? s.content : ""))
-            .filter(Boolean)
-            .join("\n\n");
-    } else if (typeof parsed.reasoning_content === "string") {
-        reasoning = parsed.reasoning_content;
-    }
-
-    if (reasoning) return `:::thinking\n${reasoning}\n:::\n${content}`;
-    return content || raw;
-}
-
 export default function DailyChatDetail() {
     const { cid } = useParams()
     const [messages, setMessages] = useState<Message[]>([])
@@ -89,7 +37,7 @@ export default function DailyChatDetail() {
     useEffect(() => {
         getChatHistoryApi(cid).then((res: any) => {
             const items = Array.isArray(res) ? res : []
-            const normalised = items.map((m: any) => ({ ...m, text: extractDisplayText(m) }))
+            const normalised = items.map((m: any) => ({ ...m, text: extractDailyDisplayText(m) }))
             setMessages(normalised)
             setLoading(false)
         }).catch(() => setLoading(false))

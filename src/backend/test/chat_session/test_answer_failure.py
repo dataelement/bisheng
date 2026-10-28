@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 from bisheng.database.models.answer_failure import (
     message_has_answer_failure,
+    node_failure_should_persist,
     note_answer_failure,
     payload_has_answer_failure,
     tool_output_error,
@@ -33,6 +34,42 @@ def test_tool_call_failure_inside_answer_events_is_abnormal():
     assert message_has_answer_failure(_message(category="agent_answer", message=body))
     empty = '{"events": [{"type": "tool_call", "error": null}]}'
     assert message_has_answer_failure(_message(category="agent_answer", message=empty)) is False
+
+
+def test_unused_tool_prep_failure_is_not_abnormal():
+    body = (
+        '{"msg": "你好", "events": [{"type": "tool_call", "tool_call_id": "init_fail_abc", '
+        '"tool_name": "web_search", "error": "联网搜索未配置"}]}'
+    )
+    assert message_has_answer_failure(_message(category="agent_answer", message=body)) is False
+    mixed = (
+        '{"msg": "部分结果", "events": ['
+        '{"type": "tool_call", "tool_call_id": "init_fail_abc", "error": "联网搜索未配置"},'
+        '{"type": "tool_call", "tool_call_id": "call_1", "error": "网络中断"}]}'
+    )
+    assert message_has_answer_failure(_message(category="agent_answer", message=mixed))
+
+
+def test_node_failure_counts_and_user_stop_does_not():
+    assert payload_has_answer_failure(
+        is_bot=True,
+        category="node_run",
+        extra="{}",
+        message='{"name": "检索", "reason": "连接超时"}',
+    )
+    assert (
+        payload_has_answer_failure(
+            is_bot=True,
+            category="node_run",
+            extra="{}",
+            message='{"name": "检索", "reason": "stop by user"}',
+        )
+        is False
+    )
+    assert node_failure_should_persist("连接超时")
+    assert node_failure_should_persist("workflow stop by user") is False
+    assert node_failure_should_persist("") is False
+    assert node_failure_should_persist(None) is False
 
 
 def test_tool_status_and_error_category_are_abnormal():
