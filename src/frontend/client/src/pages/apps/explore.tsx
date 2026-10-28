@@ -1,7 +1,7 @@
 import { ArrowLeft } from "lucide-react"
 import { LoadingIcon } from "~/components/ui/icon/Loading"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { useToastContext } from "~/Providers"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
 import { NotificationSeverity } from "~/common"
@@ -14,6 +14,7 @@ import { getAppShareUrl } from './appUtils'
 import { AgentCard } from './components/AgentCard'
 import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
+import { squareTypePath } from '~/pages/square/squarePaths'
 
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = 'app-last-origin';
@@ -36,6 +37,7 @@ export default function ExplorePlaza() {
     const pageSize = 20;
 
     const navigate = useNavigate()
+    const location = useLocation()
     const { showToast } = useToastContext()
     const localize = useLocalize()
     const { data: bsConfig } = useGetBsConfig()
@@ -128,6 +130,7 @@ export default function ExplorePlaza() {
     const handleCardClick = (agent: any) => {
         const flowId = agent.id
         const flowType = agent.flow_type || agent.type
+        const returnTo = location.pathname === '/square' ? squareTypePath('apps') : '/apps/explore';
         try {
             sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'explore');
             sessionStorage.setItem(appLastOriginKey, 'explore');
@@ -136,8 +139,8 @@ export default function ExplorePlaza() {
         }
         // Enter without chatId — AppChatEntry will resolve to most recent conversation,
         // or create a new one if the user has no conversations for this app yet.
-        navigate(`/app/${flowId}/${flowType}?from=explore&returnTo=%2Fapps%2Fexplore`, {
-            state: { appSurfaceReturn: '/apps/explore' as const },
+        navigate(`/app/${flowId}/${flowType}?from=explore&returnTo=${encodeURIComponent(returnTo)}`, {
+            state: { appSurfaceReturn: returnTo },
         });
     }
 

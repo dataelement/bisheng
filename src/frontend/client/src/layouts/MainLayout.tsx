@@ -230,10 +230,9 @@ export default function MainLayout() {
   /** Pages that read their view from the query string: a page react-activation froze keeps
    *  its old router context, so they are mounted fresh instead of cached. */
   const isQueryDrivenRoute = isSkillsRoute || isSquareRoute || isCapabilitiesRoute;
-  // Channel list, detail, sharing and settings all render from the live router.
-  // Keep their outlet in the active tree so cached route contexts cannot retain
-  // a previous channel after navigation or a return from another module.
-  const isLiveRoute = isQueryDrivenRoute || isChannelRoute;
+  // Channel pages and app conversations use the active router context, including
+  // the current conversation and its entry surface when returning from discovery.
+  const isLiveRoute = isQueryDrivenRoute || isChannelRoute || isAppChatRoute;
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏
@@ -445,7 +444,7 @@ export default function MainLayout() {
           >
             {/* 移动端顶栏:无权限占位页本身没有汉堡入口,这里补一个,与会话/知识页一致,
                 避免收起侧栏后用户无法唤出系统菜单。 */}
-            {shouldHideSidebarOnMobileAppsArea && !isChannelRoute ? (
+            {shouldHideSidebarOnMobileAppsArea && !isChannelRoute && !isAppChatRoute ? (
               <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                 <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
                   <button
