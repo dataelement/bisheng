@@ -55,6 +55,13 @@ export function ModelAuditCard({
     input: row.stage_results?.input ?? "UNREPORTED",
     output: row.stage_results?.output ?? "UNREPORTED",
   } as const;
+  const canShowSafetyDetails =
+    row.has_sensitive_hit === true ||
+    row.input_sensitive_hit === true ||
+    row.output_sensitive_hit === true ||
+    safetyStates.summary !== "PASSED" ||
+    safetyStates.input !== "PASSED" ||
+    safetyStates.output !== "PASSED";
   const detailsId = useId();
   const bodyId = useId();
   const originalButton = useRef<HTMLButtonElement>(null);
@@ -130,20 +137,22 @@ export function ModelAuditCard({
                 t("dsh.contentSafety.states." + safetyStates[stage])}
             </Tag>
           ))}
-          <SafetyButton
-            type="button"
-            variant="text"
-            size="small"
-            className="text-xs [@media(pointer:coarse)]:min-h-11"
-            aria-expanded={safetyOpen}
-            aria-controls={safetyOpen ? safetyId : undefined}
-            onClick={() => setSafetyOpen((old) => !old)}
-          >
-            {t("dsh.contentSafety.actions.view_details")}
-          </SafetyButton>
+          {canShowSafetyDetails && (
+            <SafetyButton
+              type="button"
+              variant="text"
+              size="small"
+              className="text-xs [@media(pointer:coarse)]:min-h-11"
+              aria-expanded={safetyOpen}
+              aria-controls={safetyOpen ? safetyId : undefined}
+              onClick={() => setSafetyOpen((old) => !old)}
+            >
+              {t("dsh.contentSafety.actions.view_details")}
+            </SafetyButton>
+          )}
         </div>
       </div>
-      {safetyOpen && (
+      {canShowSafetyDetails && safetyOpen && (
         <div id={safetyId}>
           <ContentSafetyDetails
             requestId={row.request_id}

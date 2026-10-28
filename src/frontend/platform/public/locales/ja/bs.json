@@ -2620,7 +2620,7 @@
         "model_started_at": "モデル実行開始時刻",
         "no_matched_text": "チェック記録には一致した原文を保存しません。",
         "not_forwarded": "モデルリクエストは未転送",
-        "occurred_at": "チェック結果の発生時刻",
+        "occurred_at": "チェック時刻",
         "output": "出力チェック",
         "policy_version": "チェック設定のバージョン",
         "received_at": "記録の受信時刻",
@@ -2631,7 +2631,8 @@
         "title": "禁止語チェックの詳細",
         "unknown": "未確認",
         "matched_words": "一致した機密ワード",
-        "matched_words_unavailable": "このチェック記録には一致したワードが保存されていないため、復元できません。"
+        "matched_words_unavailable": "このチェック記録には一致したワードが保存されていないため、復元できません。",
+        "no_matches": "一致したワードの記録はありません。"
       },
       "details_status": {
         "AVAILABLE": "詳細を表示可能",

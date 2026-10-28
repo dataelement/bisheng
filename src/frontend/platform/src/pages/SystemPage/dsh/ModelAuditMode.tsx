@@ -98,16 +98,6 @@ export function ModelAuditMode({
             {t("dsh.modelAuditView.configure")}
           </Button>
         )}
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="text-sm [@media(pointer:coarse)]:min-h-11"
-          disabled={busy}
-          onClick={() => setRevision((old) => old + 1)}
-        >
-          {t("dsh.modelAuditView.refresh_mode")}
-        </Button>
       </div>
       <p
         id={`${panelId}-collection-hint`}

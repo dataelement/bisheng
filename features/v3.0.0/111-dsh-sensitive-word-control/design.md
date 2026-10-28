@@ -331,7 +331,11 @@ AC-61 的采集说明放在 ModelAuditMode 状态栏下方，始终占满既有�
 
 词库、输入/输出方向、提示等作为一次原子保存，使用 Checkbox 和保存按钮；不把“拨动后仍需保存”的行为伪装成 Switch 即时设置。运行开关若使用 Switch 则独立立即提交，等待锁定、失败回弹，并基于已保存的有效词库校验。沿用现有表单/审计布局，不增加新的组件样式。
 
-依据当前 UI 规范，状态使用 Tag，计数才使用 Badge。已落地组件优先；无已落地组件时沿用当前页面实现。过滤切换清游标和缓存，列表显示输入/输出命中及汇总，详情显示阶段和策略。外部条目隐藏原文入口；N/A、未知、已清理均区别展示。
+依据当前 UI 规范，状态使用 Tag，计数才使用 Badge。已落地组件优先；无已落地组件时沿用当前页面实现。过滤切换清游标和缓存，列表显示输入/输出命中及汇总，检查详情仅展示命中词与检查时间。外部条目隐藏原文入口；N/A、未知、已清理均区别展示。
+
+AC-68、AC-69界面收敛：ModelAuditMode移除配置旁的“刷新状态”，保留配置保存失败后的revision自动重读及租户变更取消；ModelAuditPanel移除范围说明入口、状态及面板，保留采集关闭时的安全摘要说明、刷新记录、原文权限和请求信息展开。ModelAuditFilters及查询API不改，模型名称、审计状态、有命中、方向、检查结果、请求编号、会话编号全部保留，仍显式点击查询后应用。
+
+ModelAuditCard仅在汇总与两个阶段均PASSED且has_sensitive_hit/input_sensitive_hit/output_sensitive_hit均不为true时隐藏检查详情，未知字段不补成通过；条件更新后立即卸载详情并由原cleanup中止请求。ContentSafetyEventDetails只保留命中词和事件occurred_at，不显示重复阶段状态、来源、UUID、规则编号、策略/词库版本、读取状态及计量提示；词值合并去重后用React纯文本显示，缺失的旧阻断快照明确无法还原，其他无词值状态显示“无已记录的命中词”，不等同通过。明细原有分页、刷新、失败重试和租户隔离继续保留，每个已保存事件分别显示其检查时间，不改变后端快照和保留规则。
 
 API wrapper 留在 controllers/API，新取数遵循当前根 AGENTS 约定的 @tanstack/react-query v4，不新增 react-query v3 用法或开展全站迁移。当前分支 platform/package.json 只直接声明 v3；tasks 单列补充 workspace 已锁定的 v4.44.0 直接依赖，并在本特性设置组件内提供局部 QueryClientProvider，不更换全站 v3 Provider。新键补齐 zh-Hans/en/ja；错误文案只写 packages/locales 源文件并走生成流程，触及旧硬编码文件时按项目规则迁出。
 
@@ -463,7 +467,7 @@ AC-64 移除独立未关联检查产品界面：删除 ModelAuditViews 的入口
 
 AC-66命中词展示：CompiledPolicy.wordsForRules仅在有命中引用时对本请求不可变rules映射做一次有界检索（词库≤30000项），不请求当前配置、不复制整份词库或请求正文、不新增网络调用。Manager按输入/输出提取去重词值，Observation深复制并覆盖toString以不显示词值；DECISION与DRAIN沿同一冻结词值快照。Outbox把可选matched_words加入v1事件；新backend兼容旧发送方省略/null，旧backend严格拒绝未知字段，因此上线必须先迁移及更新全部backend实例、确认均能接收该字段，再更新Gateway，前端可独立兼容旧数据；回退先停止新Gateway字段，再退backend，新增列保留。
 
-事件表增加可空JsonType列matched_words，不回填旧记录，不改schema_version=1约束、请求摘要表或列表索引。append_event保存规范JSON，saved_fact严格比较新增字段，原始wire哈希仍区分省略/null/有值；metadata只通过原授权请求事件查询返回。主列表不联表、不逐行查词值，用户展开检查详情时按方向显示命中词；React按文本渲染，历史缺失或无可用快照明确提示无法还原，不从当前rule_ref配置反推。原命中截断标识继续提示有界观察，不能保证已发现全部命中。原审计OFF时也可保存这份配置词值证据，输入/输出正文仍按采集模式控制，两开关OFF仍不新增事件。
+事件表增加可空JsonType列matched_words，不回填旧记录，不改schema_version=1约束、请求摘要表或列表索引。append_event保存规范JSON，saved_fact严格比较新增字段，原始wire哈希仍区分省略/null/有值；metadata只通过原授权请求事件查询返回。主列表不联表、不逐行查词值，用户展开检查详情时合并输入/输出词值并去重显示命中词，保留事件occurred_at作为检查时间；React按文本渲染，历史缺失或无可用快照明确提示无法还原，不从当前rule_ref配置反推。命中快照仍是有界观察，不能保证已发现全部命中；截断标记留在后端诊断数据中，检查详情不显示技术字段。原审计OFF时也可保存这份配置词值证据，输入/输出正文仍按采集模式控制，两开关OFF仍不新增事件。
 
 迁移revision=f111_matched_words，down_revision由实际alembic heads核实为f111_dsh_content_safety；使用column_exists/table_exists与既有JsonType，只有幂等ADD COLUMN，NULL兼容历史，无数据迁移。默认拒绝破坏性downgrade；MySQL实测与Linux DM8实测分开记录，不把SQLite/类型编译当双库验收。命中词属于获授权的平台审计数据，AC-29的模型内容接收方仍不得收到命中词；普通日志、客户端错误/终止帧和指标标签不携带词值。
 
@@ -572,6 +576,7 @@ curl --fail-with-body -N "$GATEWAY_ORIGIN/api/v1/dsh/responses" \
 
 | 日期 | 改动 | 原因 |
 |---|---|---|
+| 2026-10-28 | AC-68、AC-69：审计界面简化，全部通过隐藏检查详情；保留全部高级筛选与后端诊断数据 | 用户确认demo并补充全部通过不展示详情，授权修改项目代码 |
 | 2026-10-27 | AC-65、AC-66：移除请求明细导航；冻结命中词快照入库并在授权检查详情展示 | 用户明确要求；覆盖前版只保留规则编号的取舍，不记录周边正文或普通日志 |
 | 2026-10-27 | AC-64：移除未关联检查入口、专属页面和前端查询；未关联事件仅保留数据库用于debug | 用户明确移除产品功能，保留会话和未关联请求；不改数据保留与归并 |
 | 2026-10-27 | AC-62、AC-63：Gateway 预生成并透传模型 UUID，backend 通用复用；无响应头可关联外部摘要，保留历史异常入口 | 用户确认统一编号方案并要求实现、测试与文档同步；不提交、不推送、不部署 |

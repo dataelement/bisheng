@@ -237,47 +237,77 @@ describe("independent safety, model and retained-detail facts", () => {
     await screen.findByText("dsh.contentSafety.details_status." + status);
     expect(screen.queryByText(/states.PASSED/)).toBeNull();
   });
-  it("displays distinct observation times and bounded escaped rule references without billing claims", () => {
-    render(<ContentSafetyEventDetails event={event} />);
+  // Coverage AC: AC-68, AC-69.
+  it("shows only escaped matched words and check time, without technical identifiers", () => {
+    render(<ContentSafetyEventDetails event={{ ...event, matched_words: { input: [], output: ["<script>synthetic</script>"] } }} />);
     expect(screen.getByText("<script>synthetic</script>")).toBeVisible();
     expect(document.querySelector("script")).toBeNull();
-    for (const key of ["request_started_at", "occurred_at", "received_at", "hit_count_truncated"])
-      expect(screen.getByText("dsh.contentSafety.details." + key)).toBeVisible();
-    expect(screen.getByText("dsh.contentSafety.drain.usage_hint")).toBeVisible();
-    expect(screen.getByText("dsh.contentSafety.details.unknown")).toBeVisible();
+    expect(screen.getByText("dsh.contentSafety.details.occurred_at")).toBeVisible();
+    expect(screen.getAllByRole("term")).toHaveLength(1);
+    for (const key of ["source", "event_id", "event_kind", "event_version", "gateway_request_id", "backend_request_id", "policy_version", "builtin_digest", "hit_count", "request_started_at", "received_at", "drain_status", "rule_refs", "hit_count_truncated"])
+      expect(screen.queryByText("dsh.contentSafety.details." + key)).toBeNull();
+    for (const value of [event.event_id, event.gateway_request_id, event.source_id, event.builtin_digest, "dsh.contentSafety.drain.usage_hint"])
+      expect(screen.queryByText(value)).toBeNull();
+  });
+  it("hides details and never loads events when all checks passed", () => {
+    card({ content_safety_state: "PASSED", stage_results: { input: "PASSED", output: "PASSED" }, has_sensitive_hit: false });
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.view_details" })).toBeNull();
+    expect(api.events).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/states.PASSED/)).toHaveLength(3);
+  });
+  it.each([
+    { has_sensitive_hit: true },
+    { input_sensitive_hit: true },
+    { output_sensitive_hit: true },
+  ])("retains details for historical hit facts even if the latest stages passed: %j", async (hit) => {
+    api.events.mockResolvedValue(page());
+    card({ content_safety_state: "PASSED", stage_results: { input: "PASSED", output: "PASSED" }, ...hit });
+    fireEvent.click(button("dsh.contentSafety.actions.view_details"));
+    await waitFor(() => expect(api.events).toHaveBeenCalledTimes(1));
+  });
+  it("aborts opened details when an updated row reports all checks passed", async () => {
+    api.events.mockImplementation(() => new Promise(() => {}));
+    const view = card({ content_safety_state: "UNREPORTED" });
+    fireEvent.click(button("dsh.contentSafety.actions.view_details"));
+    await waitFor(() => expect(api.events).toHaveBeenCalledTimes(1));
+    const signal = api.events.mock.calls[0][2] as AbortSignal;
+    view.rerender(<ModelAuditCard row={{ ...row, content_safety_state: "PASSED", stage_results: { input: "PASSED", output: "PASSED" }, has_sensitive_hit: false }} tenantId={101} expanded={false} onToggle={vi.fn()} />);
+    expect(signal.aborted).toBe(true);
+    expect(screen.queryByRole("button", { name: "dsh.contentSafety.actions.view_details" })).toBeNull();
+    expect(screen.queryByLabelText("dsh.contentSafety.details.title")).toBeNull();
   });
   it("retains earlier events after next-page failure and retries exactly that cursor", async () => {
     api.events
-      .mockResolvedValueOnce(page([event], "page2"))
+      .mockResolvedValueOnce(page([{ ...event, matched_words: { input: [], output: ["initial-word"] } }], "page2"))
       .mockRejectedValueOnce(Error("synthetic private SQL"))
-      .mockResolvedValueOnce(page([{ ...event, event_id: "second" }]));
+      .mockResolvedValueOnce(page([{ ...event, event_id: "second", matched_words: { input: [], output: ["second-word"] } }]));
     render(<ContentSafetyDetails requestId={row.request_id} tenantId={101} />);
     fireEvent.click(await screen.findByRole("button", { name: "dsh.contentSafety.actions.load_more" }));
     await screen.findByRole("alert");
-    expect(screen.getByText(event.event_id)).toBeVisible();
+    expect(screen.getByText("initial-word")).toBeVisible();
     expect(screen.queryByText("synthetic private SQL")).toBeNull();
     fireEvent.click(button("dsh.contentSafety.actions.retry"));
-    await screen.findByText("second");
+    await screen.findByText("second-word");
     expect(api.events.mock.calls.slice(1).every((call) => call[1].cursor === "page2")).toBe(true);
-    expect(screen.getByText(event.event_id)).toBeVisible();
+    expect(screen.getByText("initial-word")).toBeVisible();
   });
   it("retries failed refresh from the first page, not the stale next cursor", async () => {
     api.events
-      .mockResolvedValueOnce(page([event], "stale-next"))
+      .mockResolvedValueOnce(page([{ ...event, matched_words: { input: [], output: ["initial-word"] } }], "stale-next"))
       .mockRejectedValueOnce(Error("offline"))
-      .mockResolvedValueOnce(page([{ ...event, event_id: "fresh" }], "new-next"));
+      .mockResolvedValueOnce(page([{ ...event, event_id: "fresh", matched_words: { input: [], output: ["fresh-word"] } }], "new-next"));
     render(<ContentSafetyDetails requestId={row.request_id} tenantId={101} />);
-    await screen.findByText(event.event_id);
+    await screen.findByText("initial-word");
     fireEvent.click(button("dsh.contentSafety.actions.refresh"));
     await screen.findByRole("alert");
     fireEvent.click(button("dsh.contentSafety.actions.retry"));
-    await screen.findByText("fresh");
+    await screen.findByText("fresh-word");
     expect(api.events).toHaveBeenLastCalledWith(
       row.request_id,
       { tenant_id: 101, cursor: undefined, limit: 20 },
       expect.any(AbortSignal),
     );
-    expect(screen.queryByText(event.event_id)).toBeNull();
+    expect(screen.queryByText("initial-word")).toBeNull();
   });
   it("aborts old request scope and ignores a late old-tenant detail response", async () => {
     let finish!: (value: ContentSafetyEventPage) => void;
@@ -294,8 +324,8 @@ describe("independent safety, model and retained-detail facts", () => {
     view.rerender(<ContentSafetyDetails requestId="new" tenantId={202} />);
     await screen.findByText("dsh.contentSafety.details_status.PENDING");
     expect(signal.aborted).toBe(true);
-    await act(async () => finish(page()));
-    expect(screen.queryByText(event.event_id)).toBeNull();
+    await act(async () => finish(page([{ ...event, matched_words: { input: [], output: ["initial-word"] } }])));
+    expect(screen.queryByText("initial-word")).toBeNull();
   });
 });
 

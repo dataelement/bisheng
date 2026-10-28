@@ -2675,7 +2675,7 @@
         "model_started_at": "Model execution started at",
         "no_matched_text": "Check records do not store matched text.",
         "not_forwarded": "Model request not forwarded",
-        "occurred_at": "Check result observed",
+        "occurred_at": "Check time",
         "output": "Output check",
         "policy_version": "Check settings version",
         "received_at": "Record received",
@@ -2686,7 +2686,8 @@
         "title": "Sensitive word check details",
         "unknown": "Unconfirmed",
         "matched_words": "Matched sensitive words",
-        "matched_words_unavailable": "This check did not save the matched words; they cannot be recovered."
+        "matched_words_unavailable": "This check did not save the matched words; they cannot be recovered.",
+        "no_matches": "No matched words recorded."
       },
       "details_status": {
         "AVAILABLE": "Details available",

@@ -5,7 +5,7 @@ import type {
   ContentSafetyState,
   SafetyDetailsStatus,
 } from "@/types/dshContentSafety";
-import { Button, Tag } from "@bisheng/ui";
+import { Button } from "@bisheng/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dshTime } from "./common";
@@ -30,87 +30,29 @@ export function ContentSafetyEventDetails({
 }: ContentSafetyEventDetailsProps) {
   const { t } = useTranslation();
   const blocked = event.stage_results.input === "BLOCKED" || event.stage_results.output === "BLOCKED";
-  const matched = event.matched_words;
-  const fields = [
-    ["source", event.source_id],
-    ["event_id", event.event_id],
-    ["event_kind", t("dsh.contentSafety.event_kinds." + event.event_kind)],
-    ["event_version", event.event_version],
-    ["gateway_request_id", event.gateway_request_id],
-    ["backend_request_id", event.backend_request_id],
-    ["policy_version", event.policy_version],
-    ["builtin_digest", event.builtin_digest],
-    ["hit_count", event.hit_count],
-    ["request_started_at", dshTime(event.request_started_at)],
-    ["occurred_at", dshTime(event.occurred_at)],
-    ["received_at", dshTime(event.received_at)],
-    ["drain_status", t("dsh.contentSafety.drain." + event.drain_status)],
-  ] as const;
+  const words = [...new Set([
+    ...(event.matched_words?.input ?? []),
+    ...(event.matched_words?.output ?? []),
+  ])];
   return (
     <div className="dsh-content-safety">
-      <article className="min-w-0 space-y-3 rounded-lg border p-3">
-        <div className="flex flex-wrap gap-2">
-          {(["input", "output"] as const).map((stage) => (
-            <Tag
-              key={stage}
-              color={safetyTagColor(event.stage_results[stage])}
-              size="small"
-            >
-              {t("dsh.contentSafety.details." + stage) +
-                ": " +
-                t("dsh.contentSafety.states." + event.stage_results[stage])}
-            </Tag>
-          ))}
-        </div>
-        {blocked && (
-          <section aria-label={t("dsh.contentSafety.details.matched_words")} className="space-y-2 text-xs">
-            <h4 className="font-medium">{t("dsh.contentSafety.details.matched_words")}</h4>
-            {matched && (matched.input.length > 0 || matched.output.length > 0) ? (
-              <dl className="space-y-2">
-                {(["input", "output"] as const).filter((direction) => matched[direction].length > 0).map((direction) => (
-                  <div key={direction}>
-                    <dt className="text-muted-foreground">{t("dsh.contentSafety.details." + direction)}</dt>
-                    <dd className="break-all">{matched[direction].map((word) => <p key={word}>{word}</p>)}</dd>
-                  </div>
-                ))}
-              </dl>
-            ) : <p className="text-muted-foreground">{t("dsh.contentSafety.details.matched_words_unavailable")}</p>}
-          </section>
-        )}
-        <dl className="grid min-w-0 gap-2 text-xs sm:grid-cols-2">
-          {fields.map(([key, value]) => (
-            <div key={key} className="min-w-0 space-y-1">
-              <dt className="text-muted-foreground">
-                {t("dsh.contentSafety.details." + key)}
-              </dt>
-              <dd className="break-all">
-                {value ?? t("dsh.contentSafety.details.unknown")}
-              </dd>
+      <article className="grid min-w-0 gap-4 rounded-lg border p-3 text-xs sm:grid-cols-2">
+        <section aria-label={t("dsh.contentSafety.details.matched_words")} className="min-w-0 space-y-2">
+          <h4 className="font-medium">{t("dsh.contentSafety.details.matched_words")}</h4>
+          {words.length ? (
+            <div className="space-y-1 break-all">
+              {words.map((word) => <p key={word}>{word}</p>)}
             </div>
-          ))}
-          <div className="min-w-0 space-y-1">
-            <dt className="text-muted-foreground">
-              {t("dsh.contentSafety.details.rule_refs")}
-            </dt>
-            <dd className="break-all font-mono">
-              {event.rule_refs.length ? event.rule_refs.join(", ") : "—"}
-            </dd>
-          </div>
-        </dl>
-        <p className="text-xs">
-          {t(
-            "dsh.contentSafety.details." +
-              (event.forwarded ? "forwarded" : "not_forwarded"),
+          ) : (
+            <p className="text-muted-foreground">
+              {t("dsh.contentSafety.details." + (blocked ? "matched_words_unavailable" : "no_matches"))}
+            </p>
           )}
-        </p>
-        {event.hit_count_truncated && (
-          <p className="text-xs text-muted-foreground">
-            {t("dsh.contentSafety.details.hit_count_truncated")}
-          </p>
-        )}
-        <p className="text-xs text-muted-foreground">
-          {t("dsh.contentSafety.drain.usage_hint")}
-        </p>
+        </section>
+        <dl className="min-w-0 space-y-1">
+          <dt className="text-muted-foreground">{t("dsh.contentSafety.details.occurred_at")}</dt>
+          <dd><time dateTime={event.occurred_at}>{dshTime(event.occurred_at)}</time></dd>
+        </dl>
       </article>
     </div>
   );
@@ -260,9 +202,6 @@ function ContentSafetyDetailsPage({
             {t("dsh.contentSafety.actions.load_more")}
           </Button>
         )}
-        <p className="text-xs text-muted-foreground">
-          {t("dsh.contentSafety.details.no_matched_text")}
-        </p>
       </section>
     </div>
   );

@@ -2620,7 +2620,7 @@
         "model_started_at": "模型执行开始时间",
         "no_matched_text": "检查记录不保存命中原文。",
         "not_forwarded": "未转发模型请求",
-        "occurred_at": "检查结果产生时间",
+        "occurred_at": "检查时间",
         "output": "输出检查",
         "policy_version": "检查配置版本",
         "received_at": "记录接收时间",
@@ -2631,7 +2631,8 @@
         "title": "敏感词检查详情",
         "unknown": "未确认",
         "matched_words": "命中敏感词",
-        "matched_words_unavailable": "该检查记录未保存命中词，无法还原。"
+        "matched_words_unavailable": "该检查记录未保存命中词，无法还原。",
+        "no_matches": "无已记录的命中词。"
       },
       "details_status": {
         "AVAILABLE": "明细可查看",

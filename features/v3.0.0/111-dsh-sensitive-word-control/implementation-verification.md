@@ -917,3 +917,47 @@ python -m pytest -q -p no:cacheprovider test/dsh/test_safety_summary_metadata.py
 | T248 接线 | PASS | PASS | PASS | PASS（复用受控读取，无Service SQL） | N/A | PASS（仅固定异常类型） | PASS | PASS / T245 / PASS | PASS |
 
 主agent已读取实际实现与新增测试全文并对照设计；没有新增公开事件字段、密钥、模型正文或跨租户直接读取。该任务自审不替代完整特性L2审查和真实环境验收。
+
+
+## 2026-10-28 Wave49：审计界面简化（T249–T255）
+
+用户确认demo后要求保留全部高级筛选，并补充全部通过时不显示检查详情。此次仅修改Platform四个组件、四个既有测试文件及三语bs.json，不修改backend/Gateway/Desktop、API、数据采集或数据库。
+
+### 实现与自审边界
+
+- ModelAuditMode仅移除“刷新状态”按钮；保留配置、只读权限、采集关闭的说明、密钥就绪提示、租户变更取消和保存失败revision重读。HTTP测试使用真实API wrapper、mock请求传输，改为重新挂载核对保存结果，不声称真实网络验收。
+- ModelAuditPanel移除“范围与查询说明”按钮、状态和面板。ModelAuditFilters.tsx零改动：实际组件仍有模型名称、状态、有命中、方向、检查结果、请求编号、会话编号七项高级筛选，用户和时间范围、显式查询、重置、游标逻辑继续原样。
+- ModelAuditCard只有汇总、输入和输出三者均PASSED且全部已知命中标记均非true时隐藏检查详情入口，不挂载、不取事件；展开后收到全通过更新会卸载并abort旧请求。has_sensitive_hit或任一方向历史命中true时保留入口；未上报等未知值保持未知。
+- ContentSafetyEventDetails仅保留冻结命中词及事件occurred_at（检查时间）；方向词值合并去重、React纯文本渲染，不显示来源、UUID、版本、规则编号、读取状态、转发说明和计量提示。每条已保存事件分别显示，原分页、刷新、失败重试和租户取消保留。旧阻断记录缺词明确无法还原；其他无词值记录不被渲染为通过。不改数据留存或后端诊断字段。
+
+### 实际验证
+
+所有命令在既有隔离工作树执行，pnpm=9.15.9；未安装依赖、未改锁文件和质量基线。
+
+| 验证 | 命令 / 证据 | 结果 |
+|---|---|---|
+| 定向回归 | cwd=src/frontend；pnpm --filter bisheng exec vitest run src/pages/SystemPage/dsh --reporter=dot | **25文件、276 PASS**；最终日志/private/tmp/dsh-audit-simplification-final-tests.log |
+| 完整前端lint | cwd=src/frontend；pnpm lint | **PASS**；包含Platform、Client、UI、file-viewers，日志/private/tmp/dsh-audit-simplification-final-lint.log |
+| 完整前端typecheck | cwd=src/frontend；pnpm typecheck | **PASS**；日志/private/tmp/dsh-audit-simplification-final-typecheck.log |
+| 三语和错误码生成检查 | cwd=src/frontend；pnpm check-i18n；pnpm locales:check | **PASS**；日志/private/tmp/dsh-audit-simplification-i18n.log（check-i18n另输出OK），无新增漂移 |
+| Platform构建 | cwd=src/frontend；pnpm --filter bisheng build | **PASS**；日志/private/tmp/dsh-audit-simplification-final-build.log，原有chunk体积提示不作为功能验收 |
+| 架构守卫 / 差异 | 八个修改TS/TSX逐文件bash scripts/arch-guard.sh；git diff --check | **PASS** |
+| 真实组件桌面 / 窄屏 | 本机Vite挂载实际ModelAuditMode、ModelAuditRequests及卡片和事件组件，API wrapper下方替换为合成响应；1440px、500px触摸模式 | **PASS**；七项筛选完整；全通过无详情；命中详情仅词和时间；500px的document.clientWidth=scrollWidth=485，无横向溢出 |
+
+新增规则先在旧组件运行：四个定向文件15 FAIL / 53 PASS，失败包含仍存在的两个入口、旧诊断字段以及全通过明细入口/取消行为。实现转绿后第一轮全DSH为273 PASS；自审补充三种历史命中标记及保存失败恢复后，修正新测试中的配置展开时序与多个合法alert的选择器歧义，最终276 PASS，未放宽业务恢复或信息泄漏断言。保留分页失败后当前数据、下一页cursor重试、刷新从首页重试、迟到旧租户响应屏障、转义词值及正文权限等既有回归。
+
+实际组件截图：[桌面](/private/tmp/dsh-audit-simplification-desktop.png)、[500px](/private/tmp/dsh-audit-simplification-mobile-500.png)。临时挂载入口和本轮两台Vite服务已清理；不是先前静态demo的截图。首次核验因既有HTML插件将导航改写至登录页，改用临时配置去除该HTML重写后重新核对；临时配置未进入交付。浏览器使用合成数据，**没有访问或变更109部署，不是生产验收**。
+
+### Task Review（主agent读取实际文件、按仓库清单自审）
+
+| 任务 | 类型 | 命名 / 前端约定 | 信息泄漏 | 设计同步 | 范围 / 配对 / 依赖 | 结论 |
+|---|---|---|---|---|---|---|
+| T249 | 测试 | PASS；覆盖AC-46、AC-66、AC-68、AC-69 | PASS；合成词值及拒绝内部错误展示 | PASS | PASS / N/A / T248 | PASS |
+| T250 | 测试 | PASS；覆盖AC-61、AC-68 | PASS；保存异常仅固定提示 | PASS | PASS / N/A / T248 | PASS |
+| T251 | 实现 | PASS；原组件/配置机制 | PASS；不改查询与权限 | PASS | PASS / T249、T250 / PASS | PASS |
+| T252 | 实现 | PASS；原组件/纯文本 | PASS；不还原旧词、不触碰正文 | PASS | PASS / T249 / PASS | PASS |
+| T253 | 文案 | PASS；中文/英文键一致 | PASS | PASS | PASS / T249 / PASS | PASS |
+| T254 | 文案 | PASS；日文键一致 | PASS | PASS | PASS / T249 / PASS | PASS |
+| T255 | 验收 | PASS；真实组件及质量门禁 | PASS；仅合成数据 | PASS；spec AC-46、AC-66、AC-68、AC-69及design§4.10、§6已同步 | PASS / T251–T254 / PASS | PASS |
+
+后端分层、序列化、双库项本轮N/A，没有新增接口、状态库或组件库。无章节重编号；原15项DM8/容量/完整特性验收保持待验。本轮完成后任务为240/255；未提交、推送、合并或部署。

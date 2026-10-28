@@ -114,7 +114,6 @@ function ModelAuditRequestPage({
   const [history, setHistory] = useState<(string | undefined)[]>([]);
   const [revision, setRevision] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [infoOpen, setInfoOpen] = useState(false);
   const [view, setView] = useState(initialView);
   const [groups, setGroups] = useState<AuditGroupPage | AuditTreePage | null>(
     null,
@@ -226,28 +225,7 @@ function ModelAuditRequestPage({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium">{t("dsh.modelAuditView.log_title")}</h2>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="text-sm [@media(pointer:coarse)]:min-h-11"
-          aria-expanded={infoOpen}
-          aria-controls="audit-query-info"
-          onClick={() => setInfoOpen((old) => !old)}
-        >
-          {t("dsh.modelAuditView.query_info")}
-        </Button>
       </div>
-      {infoOpen && (
-        <div
-          id="audit-query-info"
-          className="space-y-2 rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground"
-        >
-          <p>{t("dsh.modelAuditView.scopeHint")}</p>
-          <p>{t("dsh.modelAuditView.modelHint")}</p>
-          <p>{t("dsh.modelAuditView.backlogUnknown")}</p>
-        </div>
-      )}
       <ModelAuditFilters
         pending={pending}
         tenantId={tenantId}
