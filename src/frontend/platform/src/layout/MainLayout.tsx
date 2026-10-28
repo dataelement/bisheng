@@ -27,6 +27,7 @@ import { LicenseBanner } from "./LicenseBanner";
 
 const PRIMARY_PAGE_PATHS = new Set([
     "/dashboard",
+    "/build/client",
     "/filelib",
     "/dataset",
     "/model/management",
@@ -391,7 +392,7 @@ export default function MainLayout() {
                         </nav>
                         {!appConfig.noFace && (
                             <div className="absolute left-0 bottom-0 w-[180px] p-2">
-                                <div className="help flex items-between my-3">
+                                <div className="help flex items-between my-2">
                                     <TooltipProvider>
                                         <Tooltip
                                             content={
@@ -448,7 +449,7 @@ export default function MainLayout() {
                     by the scrollbar width and forced a horizontal document scrollbar
                     (which then cost vertical space and produced a second, outer scrollbar). */}
                     {/* Clip child backgrounds to the shared radius without creating a scroll container. */}
-                    <div className={`flex-1 min-w-0 bg-background-main-content rounded-lg${isPrimaryPage ? " overflow-clip" : ""}`}>
+                    <div className={`flex-1 min-w-0 bg-background-main-content rounded-lg${isPrimaryPage ? " mr-4 mb-4 overflow-clip" : ""}`}>
                         <Suspense
                             fallback={
                                 <div className="flex items-center justify-center h-full">

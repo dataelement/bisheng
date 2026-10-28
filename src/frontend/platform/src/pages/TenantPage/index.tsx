@@ -119,7 +119,7 @@ function TenantPageInner() {
     <div className="relative h-full px-2 py-4 overflow-hidden">
       <div className="flex justify-between items-center mb-4">
         <span className="pl-2 text-lg font-bold">{t("tenant.management")}</span>
-        <div className="flex gap-4 items-center">
+        <div className="mr-2 flex gap-4 items-center">
           <SearchInput placeholder={t("tenant.search")} onChange={(e) => search(e.target.value)} />
         </div>
       </div>
@@ -235,7 +235,7 @@ function TenantPageInner() {
         </Table>
       </div>
 
-      <div className="bisheng-table-footer bg-background-login justify-end">
+      <div className="bisheng-table-footer bg-background-login justify-end px-6">
         <Pagination locale={paginationLocale}
           current={page}
           pageSize={pageSize}

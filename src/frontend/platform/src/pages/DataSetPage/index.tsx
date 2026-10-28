@@ -54,7 +54,7 @@ export default function DataSetPage() {
                 </div>
             )}
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10">
-                <div className="flex justify-end gap-4 items-center">
+                <div className="mr-2 flex justify-end gap-4 items-center">
                     <SearchInput placeholder={t('dataset.name')} onChange={(e) => search(e.target.value)} className={"w-56 shrink-0"} />
                     <Button onClick={() => modelRef.current.open()}>{t('dataset.create')}</Button>
                 </div>
@@ -92,8 +92,7 @@ export default function DataSetPage() {
                 </Table>
             </div>
             <div className="bisheng-table-footer px-6 bg-background-login">
-                <p className="desc">{t('dataset.collection')}</p>
-                <div>
+                <div className="ml-auto">
                     <Pagination locale={paginationLocale}
                         current={page}
                         pageSize={pageSize}

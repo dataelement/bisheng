@@ -340,12 +340,6 @@ export default function KnowledgeQa({ toolbarTarget }: KnowledgeQaProps) {
                     `overflow-y-auto` scroll container. */}
                 {hasMore && <LoadMore onScrollLoad={loadMore} />}
             </div>
-            <div className="bisheng-table-footer px-6 bg-background-login">
-                <div className="flex items-center gap-2">
-                    <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
-                </div>
-            </div>
-
             {/* Create modal */}
             <QaLibraryDialog
                 datalist={datalist}

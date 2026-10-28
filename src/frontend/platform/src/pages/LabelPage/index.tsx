@@ -185,7 +185,7 @@ export default function Tasks() {
     return (
         <div className="relative px-2 pt-4 h-full">
             <div className="h-full overflow-y-auto pb-20">
-                <div className="flex justify-end gap-6">
+                <div className="mr-2 flex justify-end gap-6">
                     {user.role === 'admin' && <Button onClick={() => setOpen(true)}>
                         {t('label.createTask')}
                     </Button>}

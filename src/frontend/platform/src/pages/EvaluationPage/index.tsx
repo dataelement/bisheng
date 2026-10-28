@@ -93,7 +93,7 @@ export default function EvaluationPage() {
       )}
       <div className="h-full overflow-y-auto pb-10">
         <div className="mb-10 w-full">
-            <div className="flex items-center justify-end gap-4">
+            <div className="mr-2 flex items-center justify-end gap-4">
               <Button onClick={() => navigate("/evaluation/create")}>
                 {t("create")}
               </Button>
@@ -199,8 +199,7 @@ export default function EvaluationPage() {
           </div>
       </div>
       <div className="bisheng-table-footer px-6 bg-background-login">
-        <p className="desc">{t("evaluation.evaluationCollection")}</p>
-        <div>
+        <div className="ml-auto">
           <Pagination locale={paginationLocale}
             current={page}
             pageSize={pageSize}

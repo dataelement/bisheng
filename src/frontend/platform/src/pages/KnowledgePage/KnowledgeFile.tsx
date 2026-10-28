@@ -464,12 +464,6 @@ export default function KnowledgeFile({ toolbarTarget }: KnowledgeFileProps) {
                     keeps the footer always-visible and stalls pagination. */}
                 {hasMore && <LoadMore onScrollLoad={loadMore} />}
             </div>
-            <div className="bisheng-table-footer px-6 bg-background-login">
-                <div className="flex items-center gap-2">
-                    <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
-                </div>
-            </div>
-
             {/* Create modal */}
             <KnowledgeLibraryDialog
                 datalist={datalist}
