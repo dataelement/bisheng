@@ -2971,6 +2971,24 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
   **类型**：测试。**目标文件**：src/backend/test/dsh/test_content_safety_recovery_e2e.py；src/backend/test/dsh/test_content_safety_recovery_contract.py。
   **逻辑与验证**：AC-66；保留旧缺失/null，严格校验新增方向、状态、数量、重复、Unicode及词长，继续拒绝其他字段；11项边界与相关组合201PASS，主agent任务自审PASS。**依赖**：T233、T243。不代表原完整现场验收已完成。
 
+### Wave 48 — 2026-10-28 敏感词摘要保留标题与模型名称
+
+- [x] **T245 摘要元数据与无正文回归**
+  **类型**：测试。**目标文件**：src/backend/test/dsh/test_safety_summary_metadata.py。
+  **逻辑与验证**：AC-60、AC-67、标题AC-T04、AC-T05；11个场景覆盖输入阻断/检查通过、先标题后回传、重复/乱序、范围隔离、读模式失败、名称超时/坏值、名称快照和原生名称优先、两项关闭无新摘要/标题及正文存储为空。旧逻辑OFF反例RED，最终相关310PASS。**依赖**：T244。
+
+- [x] **T246 OFF模式按保留检查摘要接收标题**
+  **类型**：实现。**目标文件**：src/backend/bisheng/dsh/domain/services/model_audit_title.py；src/backend/bisheng/dsh/domain/repositories/model_audit_title.py。
+  **逻辑与验证**：配对T245；读失败仍DISABLED，OFF只有同本人/租户且关联可信安全来源、至少一阶段实际检查的既有摘要可维护标题；不创建请求或读正文，不引入Gateway实时配置依赖。保留标题CAS和事务边界。**依赖**：T245。
+
+- [x] **T247 外部摘要保存名称快照**
+  **类型**：实现。**目标文件**：src/backend/bisheng/dsh/domain/repositories/content_safety_projection.py。
+  **逻辑与验证**：配对T245；随摘要保存可选名称及其摘要，后到仅补空值、不覆盖非空或原生名称；无新增执行/用量事实和正文记录。**依赖**：T245。
+
+- [x] **T248 复用受控模型元数据读取并完成接线**
+  **类型**：实现。**目标文件**：src/backend/bisheng/dsh/domain/services/content_safety_ingest.py；src/backend/bisheng/dsh/content_safety_runtime.py。
+  **逻辑与验证**：配对T245；原租户/Root共享校验和离线模型元数据，200ms可选读取包含于2秒总预算，失败不丢检查事实；生产装配与租户scope回归通过。**依赖**：T245、T247。
+
 ## 5. AC → 测试任务追溯
 
 本表只列测试/验收任务；配对实现见各任务依赖。每条 AC 至少一个针对性测试或端到端场景，末端 E2E 和特性审查不能代替前置测试。
@@ -3045,6 +3063,8 @@ AC-64 → T219；界面、调用和文案清理及验收见 T220–T224。
 
 AC-65 → T225、T228、T229；AC-66 → T225、T230、T233、T237；实现及验收见 T226–T243。
 
+AC-67 → T245；标题、名称投影与生产接线见 T246–T248。
+
 ## 6. 共享文件与发布边界
 
 共享 HMAC helper 只调整签名计算复用，旧 SSO 协议/错误码/正文回放原样回归；HTTP middleware 仅精确新接收路由，不改模型认证。model_audit_write/writer、会话查询及 ModelAuditPanel 分步只改本任务区域；状态、事件、投影和查询方法分工明确。Gateway 应用敏感词/PathRate/默认路由的改动必须跑旧应用与WS回归。Desktop 保持宿主插件边界，不改第三方 tgz 或直接修 node_modules。
@@ -3057,7 +3077,7 @@ AC-65 → T225、T228、T229；AC-66 → T225、T230、T233、T237；实现及�
 
 ## 8. 文档与执行检查
 
-初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后205项；2026-10-27补充至T244后当前244项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。66条AC追溯按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
+初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后205项；2026-10-27补充至T244；2026-10-28补充至T248后当前248项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。67条AC追溯按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
 
 ## 9. 执行记录
 
@@ -3131,3 +3151,6 @@ AC-65 → T225、T228、T229；AC-66 → T225、T230、T233、T237；实现及�
 2026-10-27 Wave47：用户确认移除请求明细及相关跳转，增加具体命中词。T225–T243完成，当前228/243；Gateway冻结策略词快照→严格事件DTO/可空JsonType迁移→授权检查详情按输入/输出显示，旧记录明确无法还原。B定向170PASS，G完整905PASS/10真实DB SKIP，Platform269PASS及typecheck/i18n/目标lint/构建通过；真实隔离MySQL8.0.46迁移往返通过且自有容器已清理，Java实际事件经Python真实DTO校验通过。扩大backend回归与干净HEAD完全相同16FAIL/102ERROR case ID，新增38PASS；完整前端lint仍95项既有错误。逐项/task-review见implementation-verification；原15项待验不勾选。必须全部backend先升级再升级Gateway；未提交、推送、部署。
 
 2026-10-27 发布前：T244修正旧现场测试白名单未接入matched_words的验收兼容问题，11项新增边界和相关组合201PASS；仅测试/文档，不改业务。用户已追加授权合并推送、构建和仅109 DSH13001部署；原15项待验不勾选，当前229/244。
+
+
+2026-10-28 Wave48：用户授权仅开敏感词检查时保留标题与模型名称，正文仍OFF。T245–T248完成，当前233/248；11项新增场景及相关13文件共310PASS，Ruff、架构守卫、diff检查通过。主agent按task-review清单逐项自审PASS；正文和manifest保持原边界，不新增Gateway或Desktop改动、迁移、历史批量回填。原15项待验不勾选；未提交、推送或部署。详细证据见implementation-verification同日小节。

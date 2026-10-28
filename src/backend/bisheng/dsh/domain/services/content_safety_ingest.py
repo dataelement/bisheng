@@ -5,7 +5,7 @@ Coverage AC: AC-03, AC-35, AC-38, AC-39, AC-40, AC-41, AC-42, AC-43, AC-58.
 
 import asyncio
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 from time import monotonic
@@ -79,8 +79,30 @@ def _validated(raw_event: Mapping) -> tuple[ContentSafetyEvent, str]:
 
 
 class ContentSafetyIngestService:
-    def __init__(self, session_factory: Callable[[], Session]):
+    def __init__(
+        self,
+        session_factory: Callable[[], Session],
+        *,
+        model_name_reader: Callable[[int], Awaitable[str]] | None = None,
+    ):
         self.session_factory = session_factory
+        self.model_name_reader = model_name_reader
+
+    async def _model_name(self, event: ContentSafetyEvent) -> str:
+        if self.model_name_reader is None:
+            return ""
+        try:
+            # Optional catalog I/O shares the ingest budget and cannot prevent
+            # committing a valid check when a model was deleted or unavailable.
+            async with asyncio.timeout(0.2):
+                name = await self.model_name_reader(int(event.model_id))
+            if not isinstance(name, str) or not name.strip() or len(name) > 2048:
+                raise ValueError("Invalid safety model label")
+            name.encode("utf8")
+            return name
+        except Exception as error:
+            logger.warning("DSH safety model label unavailable ({})", type(error).__name__)
+            return ""
 
     async def ingest(self, raw_event: Mapping, verified_source: VerifiedSource) -> ContentSafetyReceipt:
         deadline = monotonic() + 2.0
@@ -98,14 +120,15 @@ class ContentSafetyIngestService:
             # a lost commit confirmation is recovered by immutable-event retry.
             with profile_scope(verified_source.tenant_id):
                 async with asyncio.timeout(max(0, deadline - monotonic())):
+                    model_name = await self._model_name(event)
                     return await run_audit_blocking(
-                        self._persist, event, payload_hash, verified_source.tenant_id, deadline
+                        self._persist, event, payload_hash, verified_source.tenant_id, deadline, model_name
                     )
         except (SQLAlchemyError, RuntimeError, TimeoutError) as error:
             logger.warning("DSH content-safety ingestion unavailable ({})", type(error).__name__)
             raise DshContentSafetyUnavailableError() from None
 
-    def _persist(self, event, payload_hash, tenant_id, deadline):
+    def _persist(self, event, payload_hash, tenant_id, deadline, model_name=""):
         merge_collisions = 0
         # A retry always leaves the failed transaction and closes its Session.
         # Never parse vendor SQL errors or query through a failed begin block.
@@ -132,7 +155,7 @@ class ContentSafetyIngestService:
                                 and merge_collisions < 2
                                 and (not merge_collisions or self._target_visible(session, event))
                             ):
-                                content_safety_projection.merge_audit(session, event)
+                                content_safety_projection.merge_audit(session, event, model_name=model_name)
                             # A visible target does not prove the global safety
                             # binding is available: another tenant may own it.
                             # Two failed merges leave a final fresh transaction

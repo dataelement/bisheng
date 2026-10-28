@@ -886,3 +886,34 @@ T225–T243共19项完成，当前**228/243**。原15项T119、T120、T121、T12
 发布前自审确证既有test_content_safety_recovery_e2e.validate_event_shape使用严格旧字段白名单；新详情会固定返回matched_words，即使旧数据NULL也会被旧验收脚本错误拒绝。T244仅在该脚本增加可选字段严格校验，保留旧缺失/null，拒绝词值越界、错误阶段、重复/Unicode及其他额外字段；新增test_content_safety_recovery_contract.py共11项。相关最终组合**201PASS**（3.61s），Ruff通过，业务文件未增加修改。文件范围、配对、边界、泄漏与设计自审PASS。原全特性15项待验不变，当前229/244。
 
 本地本轮发布证据目录/private/tmp/dsh-id-audit-release-20261027。CI SHA/digest及实际部署、权限模型维护和现场验收结果继续单独记录，不以本条预告冒充部署完成。
+
+
+## 2026-10-28 Wave48：仅开启敏感词检查时保留标题与模型名称（T245–T248）
+
+用户确认规则：敏感词检查开启、审计OFF时也保存会话标题与模型名称，方便定位；不保存输入、输出正文。沿既有接口与数据库结构实现，不改Gateway/客户端、不新增配置或迁移，不提交推送部署。
+
+- 标题：模式读取失败仍DISABLED；正常OFF按认证本人/租户的既有摘要核验可信安全来源及PASSED/BLOCKED/ERROR阶段。无摘要NOT_READY，现有V1.2.0客户端可有界重试；仅有普通历史/全DISABLED条目DISABLED。只有保留的检查摘要允许补齐/改名，不从标题创建请求、目录或正文。该规则依据已接收请求的冻结检查事实，允许维护历史摘要标题，不查询Gateway当前全局开关；两个开关都关闭的新请求无安全事实，不产生新摘要或独立标题记录。无全量客户端历史扫描或数据回填。
+- 名称：生产接收器复用受控模型元数据入口，沿租户/Root共享与离线模型规则，保存服务商/模型标签和SHA-256摘要。可选名称读取上限200ms，含在既有2秒回传总预算中；异常/超时/非法标签保留空名称和模型编号、照常提交检查结果。重发可补空名称，不覆盖非空快照和原生MODEL名称。不实例化模型，不改变模型鉴权/计量，不保存输入输出正文或周边词文本。
+- 正文：未调整AuditCapture，OFF仍不发entered/body/terminal采集。安全专用场景实际验证对象存储、正文块、occurrence和manifest均为空；METADATA原生对照保持原有空manifest不变，不误将其当正文采集。
+
+验证环境：已有Python3.11虚拟环境；`config=/private/tmp/dsh-credit-limit-fix-20261027/test-config.yaml`，`PYTHONDONTWRITEBYTECODE=1`，pytest禁cacheprovider。新增测试为真实ASGI标题/查询、SQL与接收事务，身份和模型目录合成；SQLite不代表真实MySQL/DM8、并发锁或部署验收。
+
+```bash
+# cwd: src/backend; python使用既有Python3.11环境
+python -m pytest -q -p no:cacheprovider test/dsh/test_safety_summary_metadata.py test/dsh/test_model_audit_title.py test/dsh/test_content_safety_runtime.py test/dsh/test_content_safety_api.py test/dsh/test_content_safety_ingest.py test/dsh/test_content_safety_merge.py test/dsh/test_content_safety_native_writer.py test/dsh/test_model_audit_capture.py test/dsh/test_model_audit_flow.py test/dsh/test_content_safety_group_query_api.py test/dsh/test_content_safety_queries.py test/dsh/test_model_audit_groups.py test/dsh/test_model_audit_tree_http.py --tb=short
+```
+
+结果：**310 PASS**（7.63秒），其中新增11个场景；日志`/private/tmp/dsh-safety-summary-metadata-final-tests.log`。最初旧逻辑的OFF标题反例直接返回DISABLED，新增读取端口缺失；转绿后原相关205项通过。扩大组合首轮新增METADATA对照误断言manifest为空（该模式既有空manifest合法），修正为前后原manifest不变且正文块/对象均为空，最终全组合310项通过，未放宽OFF专用场景的空manifest断言。
+
+本次6个Python文件Ruff check/format通过；5个业务文件逐项arch-guard通过；git diff --check通过。规格AC-67、标题AC-T04、两份design与标题接口契约同步，无章节重编号。真实MySQL/DM8、109部署、正式Desktop联调均未执行；保持原15个待验任务不勾选。
+
+### 任务自审
+
+| 任务 | 架构 | 命名 | 序列化 | 数据库 | 前端 | 信息泄漏 | 设计同步 | 范围/配对/依赖 | 结果 |
+|---|---|---|---|---|---|---|---|---|---|
+| T245 测试 | N/A | PASS | N/A | N/A | N/A | PASS | PASS | PASS / N/A / PASS | PASS |
+| T246 标题 | PASS | PASS | PASS（原固定结果） | PASS（原索引前缀、租户和模式锁） | N/A | PASS | PASS | PASS / T245 / PASS | PASS |
+| T247 投影 | PASS | PASS | PASS | PASS（原字段、原租户事务） | N/A | PASS | PASS | PASS / T245 / PASS | PASS |
+| T248 接线 | PASS | PASS | PASS | PASS（复用受控读取，无Service SQL） | N/A | PASS（仅固定异常类型） | PASS | PASS / T245 / PASS | PASS |
+
+主agent已读取实际实现与新增测试全文并对照设计；没有新增公开事件字段、密钥、模型正文或跨租户直接读取。该任务自审不替代完整特性L2审查和真实环境验收。

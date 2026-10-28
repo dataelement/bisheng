@@ -289,7 +289,7 @@ backend 新表 dsh_content_safety_event 采用现有 SQLModel 基类和 dialect_
 
 输入阻断用 gateway_request_id 建外部审计条目，model_entered=false，不生成 dsh_model_call。Gateway 转发前将该 UUID 作为 X-Request-ID 覆盖客户端同名头并透传，backend 复用；backend_request_id 在发起转发前即设为该编号，不依赖响应头。转发异常时依既有投影建立 EXTERNAL_SAFETY 摘要：model_entered=NULL，不生成模型调用或用量事实。有 conversation_id 的摘要进入会话记录，无 conversation_id 的摘要进入未关联请求。事件明细仍单独持久化在 dsh_content_safety_event，请求摘要在 dsh_model_audit_request。历史无编号、可信身份不匹配或唯一约束冲突时，事件继续保留在数据库供debug，不在界面提供“未关联检查”；不按用户、时间或模型猜关联。
 
-外部条目的 effective_mode、model_result、response_result、usage_settlement 和 session_id 等未确认字段允许 NULL；content_status=NOT_CAPTURED，audit_status=NOT_APPLICABLE，不计入模型 NORMAL/ABNORMAL。状态派生先按 record_origin 分支，停滞扫描仅扫描真实模型条目；外部条目不要求模型终态或原文 manifest，不参与原文密钥就绪门槛。未知 model_name 用空字符串及其摘要建立可索引占位，界面仅显示模型编号；原生审计后到补齐名称和摘要，不让未知名称卡住全租户 readiness。输入阻断展示“不适用”，缺少原生审计的输出条目展示“未观测”；usage 缺失为 null，不用数值 0 替代。
+外部条目的 effective_mode、model_result、response_result、usage_settlement 和 session_id 等未确认字段允许 NULL；content_status=NOT_CAPTURED，audit_status=NOT_APPLICABLE，不计入模型 NORMAL/ABNORMAL。状态派生先按 record_origin 分支，停滞扫描仅扫描真实模型条目；外部条目不要求模型终态或原文 manifest，不参与原文密钥就绪门槛。安全事件接收后在认证租户scope内，复用LLMService.get_dsh_model_metadata_snapshot（含Root共享与离线模型元数据规则）取得服务商/模型名称，并随EXTERNAL_SAFETY摘要及其名称摘要保存。标签读取最多200ms，包含在既有2秒回传预算中，不实例化模型、不调用Gateway；失败或模型删除则以空名称及其摘要占位、界面回退模型编号，检查事实仍须可靠入库。后到或重发事件可补齐空名称，已保存的非空名称快照不随当前配置重命名；原生MODEL名称始终优先，原生审计后到仍按原提升规则补齐。保持未知名称不阻塞租户readiness。仅开启敏感词检查时也可通过现有标题接口补齐本人、本租户保留摘要的标题；以已接收检查事实为绑定依据，不依赖Gateway实时开关，详见审计设计§4.7.3。正文模式仍为OFF，无body/manifest/对象存储写入；标题和名称不证明模型执行成功或实际用量。输入阻断展示“不适用”，缺少原生审计的输出条目展示“未观测”；usage 缺失为 null，不用数值 0 替代。
 
 仅有外部事件不证明模型执行；接收端可读取相同 tenant/user/model/request_id 的 dsh_model_call 或原生证据确认 model_entered，但不能由 forwarded 或收到响应头推断执行成功。查到调用用量可按既有补数逻辑展示，模型审计模式和 ASGI 交付结果仍不能编造。
 

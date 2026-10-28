@@ -41,7 +41,20 @@ def _session_factory():
 
 
 def get_content_safety_service(*, session_factory=None):
-    return ContentSafetyIngestService(_session_factory if session_factory is None else session_factory)
+    return ContentSafetyIngestService(
+        _session_factory if session_factory is None else session_factory,
+        model_name_reader=read_safety_model_name,
+    )
+
+
+async def read_safety_model_name(model_id: int) -> str:
+    # Reuse tenant/Root-share authorization, including offline model metadata.
+    # This is an optional label lookup, never model admission or construction.
+    from bisheng.dsh.domain.services.model_display import model_display_name
+    from bisheng.llm.domain.services.llm import LLMService
+
+    model, server = await LLMService.get_dsh_model_metadata_snapshot(model_id)
+    return model_display_name(model, server)
 
 
 def _object(pairs):
