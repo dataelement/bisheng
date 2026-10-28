@@ -3,6 +3,7 @@
 - 根因：对象存储地址被加上 `/workspace` 页面前缀，13001 返回 HTML；修复后使用文件根路径，统一 PDF、PPTX 转换预览及列表/预览页下载。
 - 69 项相关回归、客户端 ESLint、1484 个严格类型文件与生产构建通过；macOS Chrome 本地组件成功渲染实际 file/4 的 2 页 PDF。PPTX 使用转换结果夹具验证。原工具栏测试的 ESM 加载问题在参考分支同样复现。
 - 当前为源码交付；13001 部署、Windows Chrome 与同事原始 PPTX 待验收。[修复与复测记录](status/knowledge-preview-resource-routing-20261028.md)。
+- TXT 专项复核：macOS 从搜索结果打开实际 file/6，确认同一地址前缀问题；#2535 已合并的共享修复覆盖正文加载。新增 5 项正文回归、相关 33 项检查及客户端静态检查通过，实际 TXT 本地组件显示正常。13001 部署后完整验收与 Safari 验收待执行。[TXT 证据](status/knowledge-txt-preview-20261028.md)。
 
 ## 2026-10-28 — 普通 Chat 知识空间按会话隔离
 
