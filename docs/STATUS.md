@@ -352,6 +352,11 @@
 - 本次按用户要求直接交付 `feat/bisheng-work-120-main`；测试环境部署与 macOS 真实账号验收待执行。
 - 记录：[分享介绍修复](status/knowledge-share-preview-20261028.md)。
 
+## 2026-10-28 — 应用对话简介字段统一
+
+- 助手详情读取层统一将已保存的 `desc` 映射为会话使用的 `description`，应用对话显示实际简介。
+- 28 项相关回归、Client ESLint、1,488 个文件的严格类型检查、生产构建、i18n 与改动文件架构检查通过。测试环境部署及 macOS 原生客户端验收待执行。[修复记录](status/app-description-20261028.md)。
+
 ## 2026-10-28 — 知识空间跳转新聊天自动提交
 
 - 聊天缓存保持路由更新，发送准备完成使用独立状态驱动提交；覆盖相同模型与知识空间的连续提问。
@@ -366,3 +371,11 @@
 - 基线：本地缓存 `dataelement/bisheng:feat/bisheng-work-120-main@174394b3237d10460477fdefd0d4ba8871c7a913`；远端拉取遇到 GitHub TLS/DNS 连接故障。目录 `.worktrees/bisheng-app-square-dark-theme`，分支 `codex/app-square-dark-theme`。
 - 交付边界：本地源码修复与组件验证完成。远端同步、代码发布、13001 真实账号及 Windows 验收待执行；发布位置为毕昇 Client 网页资源。组件验证的账号数据、权限服务和头像使用夹具。
 - 证据：工作区 `outputs/app-square-dark-theme-20261028/`，含 12 张渲染截图、计算样式、点击检查与构建日志。
+
+## 2026-10-28 — 订阅审批、关注列表与访问状态一致性
+
+- 归属：毕昇平台共用的频道服务和网页客户端；桌面端呈现内嵌页面。初始基线 `1a8ac45e1`，构建验证基线 `c8ae351ee`，合入前保留 `8821e490d` 的应用描述更新，独立分支 `codex/channel-state-consistency`。
+- 实现：详情、广场和关注列表统一使用有效访问权限；授权投影成功后激活成员；自动审批统一交给持久化审批任务。前端采用服务端返回的订阅结果，并在页面恢复、窗口切回和可见状态每 30 秒刷新；广场刷新保留已加载页面，访问撤回收起内容。
+- 验证：后端 55 项通过；相同用例在初始基线产生 12 项失败、43 项通过。前端 15 项组件与 Hook 回归通过。client/platform 全量 ESLint、严格类型、共享包检查、i18n、Ruff、架构与差异检查、客户端生产构建通过。
+- 交付：用户授权直接合入 `dataelement/bisheng:feat/bisheng-work-120-main`；13100 部署、真实审批记录与权限数据核验、原生 macOS 验收待执行。
+- [修复与验证记录](status/channel-state-consistency-20261028.md)。
