@@ -16,7 +16,7 @@
   },
   "src/api/apps.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 15
+      "count": 14
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
