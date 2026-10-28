@@ -1,5 +1,6 @@
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import i18next from "i18next";
+import { resolveKnowledgePreviewUrl } from "./FilePreview/previewUrlUtils";
 
 /**
  * Which semantic color a file's status tag speaks in (组件-Tag标签.md §3.1),
@@ -270,14 +271,11 @@ export function getFileTypeFromName(name: string): FileType {
 /**
  * Trigger browser download from a URL.
  * Supports both absolute URLs (http/https) and relative paths from the backend.
- * For relative paths: Full URL = window.location.origin + BASE_URL + relativeUrl
+ * Uses the same object-storage routing as file previews.
  */
 export function triggerUrlDownload(url: string, filename?: string) {
-    const fullUrl = /^https?:\/\//.test(url)
-        ? url
-        : `${window.location.origin}${__APP_ENV__.BASE_URL}${url}`;
     const a = document.createElement("a");
-    a.href = fullUrl;
+    a.href = resolveKnowledgePreviewUrl(url);
     if (filename) a.download = filename;
     a.target = "_blank";
     document.body.appendChild(a);
