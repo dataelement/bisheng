@@ -76,7 +76,7 @@ const AiModelSelect = memo(
         return (
             <Popover open={open && !disabled} onOpenChange={(next) => { setOpen(next); setQuery(""); }}>
                 <PopoverTrigger asChild>
-                    <button type="button" disabled={disabled} className="dsh-model-trigger">
+                    <button type="button" disabled={disabled} className="dsh-model-trigger" title={label || localize("com_ui_select_model")}>
                         <span>{label || localize("com_ui_select_model")}</span>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" strokeWidth="1"
                             aria-hidden="true" className={open ? "rotate-180" : ""}>

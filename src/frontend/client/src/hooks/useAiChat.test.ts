@@ -8,6 +8,9 @@
  * reply. These tests pin the two properties that fix depends on: leaving a
  * conversation neither closes its stream nor refetches over its live bucket.
  */
+import { useState } from "react";
+import store from "~/store";
+import { parkChatAsk, useChatAskHandoff } from "~/components/Chat/chatAskHandoff";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import type { SSESubmission } from "./useAiChatSSE";
@@ -23,6 +26,8 @@ jest.mock("./useAiChatSSE", () => ({
         return { close };
     },
 }));
+
+jest.mock("react-activation", () => ({ useActivate: () => undefined }));
 
 const mockGetAgentMessages = jest.fn();
 const mockGetSessionName = jest.fn();
@@ -369,4 +374,37 @@ test('an incomplete upload rejects submission before starting a stream', async (
   });
   expect(accepted).toBe(false);
   expect(mockOpenedStreams).toHaveLength(0);
+});
+
+
+test("knowledge handoff submits the chosen model ID and space in the real chat payload", () => {
+    const modelAtom = store.chatModel as unknown as { __testValue: { id: number; name: string } };
+    const kbAtom = store.selectedOrgKbs as unknown as { __testValue: Array<{ id: string; name: string; type: string }> };
+    const initialModel = modelAtom.__testValue;
+    const initialKbs = kbAtom.__testValue;
+    parkChatAsk({ text: "Count entries", modelId: 2, space: { id: "28", name: "Knowledge" } });
+    try {
+        renderHook(() => {
+            const [model, setModel] = useState(initialModel);
+            const [kbs, setKbs] = useState(initialKbs);
+            modelAtom.__testValue = model;
+            kbAtom.__testValue = kbs;
+            const chat = useAiChat("new");
+            useChatAskHandoff({
+                conversationId: "new", locationKey: "knowledge", selectedKbs: kbs, setSelectedKbs: setKbs,
+                sendMessage: chat.sendMessage, ready: true, selectedModelId: model.id,
+                selectModel: (id) => { setModel({ id, name: "Beta" }); return true; },
+                onModelUnavailable: jest.fn(),
+            });
+        });
+        expect(mockOpenedStreams).toHaveLength(1);
+        expect(latestStream().submission.payload).toEqual(expect.objectContaining({
+            text: "Count entries", model: "2", task_mode: false,
+            use_knowledge_base: { personal_knowledge_enabled: false, organization_knowledge_ids: [], knowledge_space_ids: [28] },
+        }));
+        expect(latestStream().submission.userMessage.text).toBe("Count entries");
+    } finally {
+        modelAtom.__testValue = initialModel;
+        kbAtom.__testValue = initialKbs;
+    }
 });
