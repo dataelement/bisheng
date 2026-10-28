@@ -1,8 +1,4 @@
-import {
-    ChevronDown,
-    Plus,
-    X
-} from "lucide-react";
+import { Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { KnowledgeSpace, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi, getDepartmentSpacesApi } from "~/api/knowledge";
@@ -10,8 +6,7 @@ import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import KnowledgeSpaceCardItem from "./KnowledgeSpaceCardItem";
-import { KnowledgeSpaceGhostTile } from "./KnowledgeSpaceGhostTile";
-import { SectionHeader } from "./SectionHeader";
+import { KnowledgeSpaceSections, type KnowledgeSpaceSection } from "./KnowledgeSpaceSections";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
@@ -22,7 +17,6 @@ import { Outlined } from "bisheng-icons";
 import { cn } from "~/utils";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { UserPopMenu } from "~/layouts/UserPopMenu";
-import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
 import { MobileSidebarHeaderTabs } from "~/components/Nav/MobileSidebarHeaderTabs";
 import {
     hasKnowledgeSpaceAction,
@@ -40,15 +34,15 @@ interface KnowledgeSpaceSidebarProps {
     onCollapsedChange?: (collapsed: boolean) => void;
     /** When true, hide ONLY the expand toggle in collapsed mode (expand is provided elsewhere). */
     hideExpandToggleWhenCollapsed?: boolean;
-    /** H5：置于移动端抽屉内，隐藏 PC 折叠把手，宽度随父容器 */
+    /** Mobile drawer: fill the parent width and hide the desktop collapse handle. */
     mobileDrawerMode?: boolean;
-    /** H5 抽屉：右上角关闭 */
+    /** Close the mobile drawer from its top-right action. */
     onDrawerClose?: () => void;
-    /** H5 标题下拉：跳过模块 Tabs 与顶部创建按钮,只渲染空间树形列表 */
+    /** Mobile title dropdown: render only the space tree, without module tabs or create action. */
     compactMode?: boolean;
-    /** H5 整页列表：占满父容器、卡片式行、无折叠把手/拖拽,且不自动选中首个空间 */
+    /** Mobile list page: full width, card rows, no resizing/collapse or automatic selection. */
     mobilePageMode?: boolean;
-    /** With mobilePageMode: lay each section's spaces out as a card grid (desktop home). */
+    /** With mobilePageMode: show the selected category as a card grid on the desktop home. */
     pageGrid?: boolean;
     /** The URL already names a space, so there is nothing to choose a default for.
      *  Auto-select must stand down until the host's own route effect lands, or it
@@ -93,7 +87,7 @@ export function KnowledgeSpaceSidebar({
         aiAccessStatus?.enabled,
     );
     const [aiAccessDialogOpen, setAiAccessDialogOpen] = useState(false);
-    // 模块标题跟随后台配置的菜单显示名称
+    // Module titles follow the menu display names configured by the administrator.
     const menuNames = useWorkbenchMenuNames();
     // Drawer and full-page list both occupy the full parent width (no resize/toggle).
     const fullWidthMode = mobileDrawerMode || mobilePageMode;
@@ -206,18 +200,7 @@ export function KnowledgeSpaceSidebar({
     const departmentSpaceIds = new Set(departmentSpaces.map(s => s.id));
     const filteredCreatedSpaces = createdSpaces.filter(s => !departmentSpaceIds.has(s.id));
     const filteredJoinedSpaces = joinedSpaces.filter(s => !departmentSpaceIds.has(s.id));
-    // The list fills its scroll viewport and the LAST section ("joined") absorbs all
-    // leftover height. Sections above it therefore keep a fixed empty-state height and
-    // never move when a sibling is collapsed or gains data — collapsing a section only
-    // ever pulls the content below it upwards. Compact dropdown keeps natural heights —
-    // it is a popover sized to content.
-    const departmentEmpty = !departmentSpaces.length;
-    const createdEmpty = !filteredCreatedSpaces.length;
-    const joinedEmpty = !filteredJoinedSpaces.length;
-    // The desktop home grid keeps natural heights too: a stretched last section
-    // would turn its grid into a flex column.
     const fillListHeight = !compactMode && !pageGrid;
-    const stretchJoined = fillListHeight && !joinedCollapsed;
     const permissionSpaceIds = useMemo(
         () => Array.from(new Set([
             ...departmentSpaces.map(s => s.id),
@@ -343,65 +326,39 @@ export function KnowledgeSpaceSidebar({
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
                 onMenuOpen={() => ensureSpaceActions(s.id)}
+                hideMoreMenu={compactMode}
+                compact={compactMode}
+                onAfterNavigate={compactMode ? onNavigateAway : undefined}
                 {...getItemPermissions(s)}
             />
         );
 
-    // Mobile list area: 8px top/bottom, 16px left/right. Item rows carry their own 12px
-    // vertical padding so no inter-item gap is needed.
-    // w-[100cqi] pins the area to the scroll container's visible inline width (it has
-    // container-type:inline-size) even inside the shared w-max wrapper, so card rows
-    // truncate instead of overflowing horizontally — preserving the v1 vertical scroll.
-    const listRowClassName = pageGrid
-        // No side padding: cards run the full width of the home's 1000px column.
-        ? "grid w-[100cqi] grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-x-5 gap-y-5 py-3"
-        : mobilePageMode ? "w-[100cqi] px-4 py-2" : "space-y-0.5 px-3";
-    // Mobile: 8px gap above each section group.
-    const sectionWrapClassName = mobilePageMode ? "pt-2" : "pb-4";
-
-    // ─── Compact dropdown: tree-style list (mirrors the PC sidebar). Each
-    // section keeps its own collapse + sort state; per-row "..." menu is
-    // hidden because the dropdown is a navigation surface, not a manager.
-    const renderCompactItem = (s: KnowledgeSpace, sectionType: "created" | "joined" | "department") => (
-        <KnowledgeSpaceItem
-            key={s.id}
-            space={s}
-            type={sectionType}
-            isActive={s.id === activeSpaceId}
-            onSelect={onSpaceSelect}
-            onUpdate={handleUpdateSpace}
-            onDelete={handleDeleteSpace}
-            onLeave={handleLeaveSpace}
-            onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
-            onSettings={onSpaceSettings}
-            hideMoreMenu
-            compact
-            onAfterNavigate={onNavigateAway}
-            {...getItemPermissions(s)}
-        />
-    );
-
-    // Empty-state block. Sections with a fixed slot keep a constant 96px height so their
-    // neighbours never shift; the section absorbing the leftover height centers its text
-    // in whatever space is left.
-    // pinnedEmptyClassName sizes the row to the scroll container's visible inline width
-    // (100cqi, same trick as SectionHeader) instead of the shared w-max wrapper's scroll
-    // width, so the text centers on the sidebar rather than on the widest folder name, and
-    // sticky left-0 keeps it there while the tree scrolls sideways. -mx-3 cancels the
-    // list row's own px-3 so the centering is exact. mobilePageMode rows are already
-    // w-[100cqi] px-4, so they opt out.
-    const pinnedEmptyClassName = "sticky left-0 -mx-3 w-[100cqi]";
-
-    const renderEmptyState = (stretch: boolean) => (
-        <div className={cn(
-            "flex items-center justify-center text-center text-sm text-text-3",
-            !mobilePageMode && pinnedEmptyClassName,
-            pageGrid && "col-span-full",
-            stretch ? "flex-1 py-6" : "h-24",
-        )}>
-            {localize("com_knowledge.no_data")}
-        </div>
-    );
+    const sections: KnowledgeSpaceSection[] = [
+        {
+            type: "department",
+            title: localize("com_knowledge.department_spaces"),
+            spaces: departmentSpaces,
+            collapsed: departmentCollapsed,
+            onToggle: () => setDepartmentCollapsed(!departmentCollapsed),
+            sortValue: departmentSortBy,
+        },
+        {
+            type: "created",
+            title: localize("com_knowledge.created_by_me"),
+            spaces: filteredCreatedSpaces,
+            collapsed: createdCollapsed,
+            onToggle: () => setCreatedCollapsed(!createdCollapsed),
+            sortValue: createdSortBy,
+        },
+        {
+            type: "joined",
+            title: localize("com_knowledge.joined_by_me"),
+            spaces: filteredJoinedSpaces,
+            collapsed: joinedCollapsed,
+            onToggle: () => setJoinedCollapsed(!joinedCollapsed),
+            sortValue: joinedSortBy,
+        },
+    ];
 
     const handleListScroll = () => {
         setIsListScrolling(true);
@@ -506,170 +463,17 @@ export function KnowledgeSpaceSidebar({
                                 fillListHeight && "flex min-h-full flex-col",
                             )}
                         >
-                            {compactMode ? (
-                                /* File-page title dropdown: same 3-section tree as the PC sidebar,
-                                   ordered 部门 → 我创建的 → 我加入的. Per-row "..." menus stay hidden
-                                   via renderCompactItem so the dropdown only navigates. */
-                                <>
-                                    {/* Shown even with nothing in it, like the two sections below —
-                                        the category is part of how the page is organised, not a
-                                        result that appears once you happen to have a space. */}
-                                    <div className="pb-4">
-                                        <SectionHeader
-                                            title={localize("com_knowledge.department_spaces")}
-                                            collapsed={departmentCollapsed}
-                                            onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
-                                            sortValue={departmentSortBy}
-                                            sortOptions={sortOptions}
-                                            sortFieldLabel={localize("com_knowledge.sort_field")}
-                                            onSortChange={(v) => setSort("department", v as SpaceSortType)}
-                                            compact
-                                        />
-                                        {!departmentCollapsed && (
-                                            <div className="space-y-1 px-3">
-                                                {departmentSpaces.map(s => renderCompactItem(s, "department"))}
-                                                {!departmentSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="pb-4">
-                                        <SectionHeader
-                                            title={localize("com_knowledge.created_by_me")}
-                                            collapsed={createdCollapsed}
-                                            onToggle={() => setCreatedCollapsed(!createdCollapsed)}
-                                            sortValue={createdSortBy}
-                                            sortOptions={sortOptions}
-                                            sortFieldLabel={localize("com_knowledge.sort_field")}
-                                            onSortChange={(v) => setSort("created", v as SpaceSortType)}
-                                            onAdd={onCreateSpace}
-                                            addLabel={localize("com_knowledge.create")}
-                                            compact
-                                        />
-                                        {!createdCollapsed && (
-                                            <div className="space-y-1 px-3">
-                                                {filteredCreatedSpaces.map(s => renderCompactItem(s, "created"))}
-                                                {!filteredCreatedSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="pb-4">
-                                        <SectionHeader
-                                            title={localize("com_knowledge.joined_by_me")}
-                                            collapsed={joinedCollapsed}
-                                            onToggle={() => setJoinedCollapsed(!joinedCollapsed)}
-                                            sortValue={joinedSortBy}
-                                            sortOptions={sortOptions}
-                                            sortFieldLabel={localize("com_knowledge.sort_field")}
-                                            onSortChange={(v) => setSort("joined", v as SpaceSortType)}
-                                            onSquare={() => onKnowledgeSquare?.()}
-                                            squareLabel={localize("com_knowledge.go_to_square")}
-                                            compact
-                                        />
-                                        {!joinedCollapsed && (
-                                            <div className="space-y-1 px-3">
-                                                {filteredJoinedSpaces.map(s => renderCompactItem(s, "joined"))}
-                                                {!filteredJoinedSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </>
-                            ) : (
-                            <>
-                            {/* Department spaces — always on top per PRD, and always present:
-                                the category is part of how the page is organised, so it shows
-                                its empty state like 我创建的 / 我加入的 rather than disappearing. */}
-                            <div className="pt-0 pb-4">
-                                <SectionHeader
-                                    title={localize("com_knowledge.department_spaces")}
-                                    collapsed={departmentCollapsed}
-                                    onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
-                                    sortValue={departmentSortBy}
-                                    sortOptions={sortOptions}
-                                    sortFieldLabel={localize("com_knowledge.sort_field")}
-                                    onSortChange={(v) => setSort("department", v as SpaceSortType)}
-                                    mobile={mobilePageMode}
-                                />
-                                {!departmentCollapsed && (
-                                    <div className={listRowClassName}>
-                                        {departmentSpaces.map(s => renderSpaceItem(s, "department"))}
-                                        {departmentEmpty && renderEmptyState(false)}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* My created */}
-                            <div className="pb-4">
-                                <SectionHeader
-                                    title={localize("com_knowledge.created_by_me")}
-                                    collapsed={createdCollapsed}
-                                    onToggle={() => setCreatedCollapsed(!createdCollapsed)}
-                                    sortValue={createdSortBy}
-                                    sortOptions={sortOptions}
-                                    sortFieldLabel={localize("com_knowledge.sort_field")}
-                                    onSortChange={(v) => setSort("created", v as SpaceSortType)}
-                                    // The home grid opens with a dashed create tile, so the header
-                                    // would offer the same action twice. Every other mode keeps its
-                                    // "+" — that is their only create entry.
-                                    onAdd={pageGrid ? undefined : onCreateSpace}
-                                    addLabel={localize("com_knowledge.create")}
-                                    mobile={mobilePageMode}
-                                />
-                                {!createdCollapsed && (
-                                    <div className={listRowClassName}>
-                                        {/* The grid opens with a dashed folder instead of an empty state:
-                                            it is the invitation AND the create action, so an empty 我创建的
-                                            still shows something to do rather than "暂无数据". */}
-                                        {pageGrid && (
-                                            <KnowledgeSpaceGhostTile
-                                                tone="created"
-                                                label={localize("com_knowledge.create_knowledge_space")}
-                                                onClick={onCreateSpace}
-                                            />
-                                        )}
-                                        {filteredCreatedSpaces.map(s => renderSpaceItem(s, "created"))}
-                                        {createdEmpty && !pageGrid && renderEmptyState(false)}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Joined — last section, so it absorbs the list's leftover height.
-                                `flex-1` here keeps its automatic min-height, so a long list still
-                                grows past the viewport and scrolls instead of being squeezed. */}
-                            <div className={cn("pb-4", stretchJoined && "flex flex-1 flex-col")}>
-                                <SectionHeader
-                                    title={localize("com_knowledge.joined_by_me")}
-                                    collapsed={joinedCollapsed}
-                                    onToggle={() => setJoinedCollapsed(!joinedCollapsed)}
-                                    sortValue={joinedSortBy}
-                                    sortOptions={sortOptions}
-                                    sortFieldLabel={localize("com_knowledge.sort_field")}
-                                    onSortChange={(v) => setSort("joined", v as SpaceSortType)}
-                                    mobile={mobilePageMode}
-                                />
-                                {!joinedCollapsed && (
-                                    <div className={cn(listRowClassName, stretchJoined && "flex flex-1 flex-col")}>
-                                        {/* Same idea as 我创建的, but you don't create a space you join —
-                                            the dashed folder sends you to 广场 to find one. */}
-                                        {pageGrid && (
-                                            <KnowledgeSpaceGhostTile
-                                                tone="joined"
-                                                label={localize("com_knowledge.go_to_knowledge_square")}
-                                                onClick={() => onKnowledgeSquare?.()}
-                                            />
-                                        )}
-                                        {filteredJoinedSpaces.map(s => renderSpaceItem(s, "joined"))}
-                                        {joinedEmpty && !pageGrid && renderEmptyState(stretchJoined)}
-                                    </div>
-                                )}
-                            </div>
-                            </>
-                            )}
+                            <KnowledgeSpaceSections
+                                sections={sections}
+                                sortOptions={sortOptions}
+                                onSortChange={setSort}
+                                renderSpaceItem={renderSpaceItem}
+                                onCreateSpace={onCreateSpace}
+                                onKnowledgeSquare={onKnowledgeSquare}
+                                compactMode={compactMode}
+                                mobilePageMode={mobilePageMode}
+                                pageGrid={pageGrid}
+                            />
                         </div>
                     </div>
                 </div>
