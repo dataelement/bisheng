@@ -57,8 +57,16 @@ def find_manifest(pptx_path: str, explicit: str | None = None) -> str | None:
     return None
 
 
-def load_manifest(path: str, slide_count: int) -> tuple[dict | None, str]:
-    """Return (manifest, note). A manifest whose page count no longer matches is ignored."""
+MANIFEST_SHAPE_MATCH = 0.6
+
+
+def load_manifest(path: str, prs) -> tuple[dict | None, str]:
+    """Return (manifest, note). A manifest that no longer describes ``prs`` is ignored.
+
+    The page count must match, and when the manifest records each page's shape
+    names (``Deck.save`` does), most of them must still be on that page: a deck
+    rebuilt from scratch under the same file name keeps the count but not the names.
+    """
     try:
         with open(path, encoding="utf-8") as fh:
             manifest = json.load(fh)
@@ -67,11 +75,19 @@ def load_manifest(path: str, slide_count: int) -> tuple[dict | None, str]:
             manifest["_layouts"] = {item["layout_id"]: item for item in json.load(fh)["layouts"]}
     except Exception as exc:  # a broken manifest must not kill the report
         return None, f"模板清单 {path} 读取失败（{type(exc).__name__}），按从零生成的文稿检查"
-    if len(manifest["pages"]) != slide_count:
+    slides = list(prs.slides)
+    if len(manifest["pages"]) != len(slides):
         return None, (
-            f"模板清单 {path} 记录 {len(manifest['pages'])} 页，文件实际 {slide_count} 页"
+            f"模板清单 {path} 记录 {len(manifest['pages'])} 页，文件实际 {len(slides)} 页"
             f"（保存后又改过页数？）→ 忽略清单，按从零生成的文稿检查"
         )
+    recorded = total = 0
+    for page, slide in zip(manifest["pages"], slides, strict=True):
+        names = set(page.get("shapes") or [])
+        recorded += len(names)
+        total += len(names & {shape.name for shape in slide.shapes})
+    if recorded and total / recorded < MANIFEST_SHAPE_MATCH:
+        return None, f"模板清单 {path} 和文件的页面对不上（文稿可能已重新生成）→ 忽略清单，按从零生成的文稿检查"
     return manifest, f"模板清单：{path}（模板 {manifest['template']}）"
 
 
@@ -79,7 +95,10 @@ def load_manifest(path: str, slide_count: int) -> tuple[dict | None, str]:
 # baseline diff for the existing inspect checks
 # --------------------------------------------------------------------------- #
 def _finding_key(finding) -> tuple:
-    return finding.level, finding.where, finding.message[:4]
+    # The whole message, numbers included: a template's own structure (rules,
+    # badges, footer text) yields the same message on every clone, while a filled
+    # slot that overflows by more than the sample did yields a different one.
+    return finding.level, finding.where, finding.message
 
 
 def apply_baseline(findings_by_slide: dict, manifest: dict, check_slide, slide_w: float, slide_h: float) -> int:

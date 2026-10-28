@@ -403,9 +403,11 @@ class ChatSessionService:
         login_user: UserPayload,
         request_ip: str,
     ) -> MessageSession | None:
-        """Get existing session or create a new one with audit log and telemetry.
+        """Get or create a session for Gateway's violation-message logging.
 
-        Used when adding messages to ensure a session exists.
+        Called by ``ChatMessageService.add_qa_messages`` when Gateway persists a
+        violation Q&A record. New sessions are intentionally marked as
+        ``SensitiveStatus.VIOLATIONS``; existing sessions are returned unchanged.
 
         F017 §5.4: new MessageSession rows carry ``tenant_id = user's leaf
         tenant`` (NOT the resource tenant) per INV-T13. Refuse to persist

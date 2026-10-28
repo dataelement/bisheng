@@ -389,7 +389,7 @@ export default function Apps() {
 
     const tempTypeRef = useRef(null)
     return <div className="h-full relative">
-        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
+        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-[#f8f8f8] dark:bg-background-main border-t">
             <div className="flex gap-4">
                 <SearchInput className="w-64" placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)}></SearchInput>
                 <SelectType all includeHosted={hostedAppEnabled} onChange={(v) => {
@@ -523,7 +523,7 @@ export default function Apps() {
         {/* add template */}
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
-        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10 z-20">
+        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#f8f8f8] dark:bg-background-main h-16 items-center px-10 z-20">
             <div className="flex items-center gap-2">
                 <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
             </div>

@@ -240,6 +240,13 @@ class AppWebSocketDeclarationError(AppPublishError):
     Msg: str = "WebSocket needs no declaration in bisheng-app.yaml; remove the key"
 
 
+class AppReleaseNotesInvalidError(AppPublishError):
+    """Release notes exceed the normalized Unicode code-point limit."""
+
+    Code: int = 16233
+    Msg: str = "Release notes must not exceed 2,000 characters"
+
+
 # ---------------------------------------------------------------------------
 # 16240-16249 — secret scan
 # ---------------------------------------------------------------------------

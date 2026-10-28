@@ -29,7 +29,17 @@
   "pagination": {
     "totalRecords": "共 {{total}} 条记录",
     "totalPrefix": "共 ",
-    "totalSuffixWithPageSize": " 条数据，每页 {{pageSize}} 条"
+    "totalSuffixWithPageSize": " 条数据，每页 {{pageSize}} 条",
+    "jumpAria": "跳转到页码",
+    "jumpError": "请输入 1–{{totalPages}}",
+    "jumpPrefix": "跳至",
+    "jumpSuffix": "页",
+    "nav": "分页",
+    "next": "下一页",
+    "pageSize": "{{size}} 条/页",
+    "pageSizeAria": "每页条数",
+    "prev": "上一页",
+    "total": "共 {{total}} 条"
   },
   "example": {
     "buttons": "按钮",
@@ -186,6 +196,8 @@
     "otherMethods": "其他登录方式"
   },
   "menu": {
+    "languageChinese": "中文",
+    "languageJapanese": "日本語",
     "user": "用户",
     "bookopen": "帮助文档",
     "github": "GitHub",
@@ -3201,6 +3213,10 @@
         "unknown": "暂时无法确认当前实例的配置，请刷新查看。",
         "not_running": "应用未在线，下次上线时会注入最新保存值。"
       }
+    },
+    "releaseNotes": {
+      "title": "发布说明",
+      "empty": "未填写发布说明"
     }
   },
   "dsh": {
@@ -3834,6 +3850,7 @@
     "downloadAddress": "客户端下载地址",
     "downloadAddressHelp": "从工作台下载客户端",
     "saveSettings": "保存配置",
+    "editSettings": "编辑配置",
     "settingsAdminOnly": "仅超级管理员可修改实例配置。",
     "settingsSaved": "配置已保存",
     "settingsSaveFailed": "保存失败，请检查下载地址或稍后重试。",

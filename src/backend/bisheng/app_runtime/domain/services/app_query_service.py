@@ -130,6 +130,7 @@ class AppQueryService:
             {
                 "version_id": row.id,
                 "version_no": row.version_no,
+                "release_notes": row.release_notes,
                 "kind": row.kind,
                 "terminal_state": row.terminal_state,
                 "submitted_at": row.submitted_at,

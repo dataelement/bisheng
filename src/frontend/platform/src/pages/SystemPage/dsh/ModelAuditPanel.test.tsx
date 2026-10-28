@@ -173,7 +173,7 @@ describe("audit tenant selection", () => {
     );
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
-        screen.getByRole("button", {
+        screen.getByRole("radio", {
           name: "dsh.modelAuditView.views.requests",
         }),
       );
@@ -193,7 +193,7 @@ describe("audit tenant selection", () => {
     expect(screen.queryByLabelText("dsh.modelAuditView.tenant")).toBeNull();
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
-        screen.getByRole("button", {
+        screen.getByRole("radio", {
           name: "dsh.modelAuditView.views.requests",
         }),
       );
@@ -274,7 +274,7 @@ describe("audit tenant selection", () => {
     renderPanel(false, 2);
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
-        screen.getByRole("button", {
+        screen.getByRole("radio", {
           name: "dsh.modelAuditView.views.requests",
         }),
       );
@@ -371,7 +371,7 @@ describe("request-card audit UI", () => {
     render(<ModelAuditRequests tenantId={2} initialView="requests" />);
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
-        screen.getByRole("button", {
+        screen.getByRole("radio", {
           name: "dsh.modelAuditView.views.requests",
         }),
       );
@@ -390,7 +390,7 @@ describe("request-card audit UI", () => {
     );
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
-        screen.getByRole("button", {
+        screen.getByRole("radio", {
           name: "dsh.modelAuditView.views.requests",
         }),
       );
@@ -413,7 +413,7 @@ describe("request-card audit UI", () => {
     );
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
-        screen.getByRole("button", {
+        screen.getByRole("radio", {
           name: "dsh.modelAuditView.views.requests",
         }),
       );

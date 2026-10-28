@@ -160,7 +160,7 @@ export default function Management() {
             {/* v2.5.1 F019: scope switcher lives here (LLM is the only page
                 whose data actually changes with scope). System-level config
                 stays super-admin only regardless of active scope. */}
-            <div className="flex items-center justify-between gap-4">
+            <div className="ml-4 mr-2 flex items-center justify-between gap-4">
                 <div>
                     {appConfig.multiTenantEnabled && <ScopeBar user={user} onScopeChange={reload} />}
                 </div>
@@ -176,7 +176,7 @@ export default function Management() {
             </div>
             <div className="h-[85%]">
                 <div className="flex h-10 justify-between items-center font-medium text-muted-foreground text-sm">
-                    <span className="ml-5">{t('model.serviceProvider')}</span>
+                    <span className="ml-4">{t('model.serviceProvider')}</span>
                     <span className="mr-5">{t('model.actions')}</span>
                 </div>
                 <div className="pb-20">
@@ -193,9 +193,6 @@ export default function Management() {
                     }
                 </div>
             </div>
-        </div>
-        <div className="bisheng-table-footer bg-background-login px-6">
-            <p className="desc">{t('model.modelCollectionCaption')}.</p>
         </div>
     </div>
 

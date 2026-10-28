@@ -6,4 +6,4 @@ Single source of truth for the version: `--version`, the compatibility probe in
 starts advertising a version that is not the one inside the wheel.
 """
 
-__version__ = "3.0.0"
+__version__ = "3.0.0.post1"

@@ -1,4 +1,4 @@
-import { Button, SearchInput, Select, notification } from '@bisheng/ui';
+import { Pagination, Button, SearchInput, Select, notification } from '@bisheng/ui';
 // F035 (PRD §4.5): tenant custom skill management section, mounted in the
 // merged 日常 tab of 构建-工作台配置 (replaces the legacy SOP manual library).
 // List shows display_name only — the skill ID stays detail-level; no
@@ -6,7 +6,7 @@ import { Button, SearchInput, Select, notification } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Switch } from "@bisheng/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
@@ -37,6 +37,7 @@ interface SkillManagementProps {
 
 export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntryToggle }: SkillManagementProps) {
     const { t } = useTranslation();
+    const paginationLocale = usePaginationLocale();
     const [skills, setSkills] = useState<SkillBrief[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -258,22 +259,14 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                     </TableBody>
                 </Table>
             </div>
-            {total > 0 && (
-                <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {t("skillManage.count", { count: total })}
-                    </span>
-                    {total > PAGE_SIZE && (
-                        <AutoPagination
-                            className="w-auto justify-end"
-                            page={page}
-                            pageSize={PAGE_SIZE}
-                            total={total}
-                            onChange={(p) => setPage(p)}
-                        />
-                    )}
-                </div>
-            )}
+            <Pagination locale={paginationLocale}
+                className="mt-2"
+                current={page}
+                pageSize={PAGE_SIZE}
+                total={total}
+                showTotal
+                onChange={(p) => setPage(p)}
+            />
             <SkillUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} onUploaded={refresh} />
             <SkillFormDrawer open={formOpen} editing={editing} onOpenChange={setFormOpen} onSaved={refresh} />
             <SkillDetailSheet

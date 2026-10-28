@@ -28,7 +28,17 @@
   "pagination": {
     "totalRecords": "Total {{total}}",
     "totalPrefix": "Total ",
-    "totalSuffixWithPageSize": " items, {{pageSize}} per page"
+    "totalSuffixWithPageSize": " items, {{pageSize}} per page",
+    "jumpAria": "Go to page",
+    "jumpError": "Enter 1–{{totalPages}}",
+    "jumpPrefix": "Go to",
+    "jumpSuffix": "",
+    "nav": "Pagination",
+    "next": "Next page",
+    "pageSize": "{{size}} / page",
+    "pageSizeAria": "Items per page",
+    "prev": "Previous page",
+    "total": "Total {{total}}"
   },
   "example": {
     "buttons": "Buttons",
@@ -186,6 +196,8 @@
     "bottomText": "Bisheng"
   },
   "menu": {
+    "languageChinese": "中文",
+    "languageJapanese": "日本語",
     "user": "User",
     "github": "GitHub",
     "bookopen": "Document",
@@ -3256,6 +3268,10 @@
         "unknown": "The current instance configuration cannot be confirmed yet. Refresh to check.",
         "not_running": "The app is offline. The next deployment will inject the latest saved values."
       }
+    },
+    "releaseNotes": {
+      "title": "Release notes",
+      "empty": "No release notes provided"
     }
   },
   "dsh": {
@@ -3889,6 +3905,7 @@
     "downloadAddress": "Client download URL",
     "downloadAddressHelp": "Download Client from the workspace",
     "saveSettings": "Save settings",
+    "editSettings": "Edit settings",
     "settingsAdminOnly": "Only a global administrator can change instance settings.",
     "settingsSaved": "Settings saved",
     "settingsSaveFailed": "Could not save. Check the download URL or try again later.",

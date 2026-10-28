@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, SearchInput } from '@bisheng/ui';
+import { Pagination, Button, SearchInput } from '@bisheng/ui';
 import { SubjectBusinessId,SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus";
 import { useSubjectTable } from "@/components/bs-comp/selectComponent/useSubjectTable";
 import { Outlined } from "bisheng-icons";
@@ -18,7 +18,7 @@ import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
 import { useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import {
 Table,
 TableBody,
@@ -92,6 +92,7 @@ function UsersFilter({ options, onChecked, nameKey, placeholder, onFilter }) {
 export default function Users(params) {
     const { user } = useContext(userContext);
     const { t } = useTranslation()
+    const paginationLocale = usePaginationLocale();
 
     const { page, pageSize, data: users, total, setPage, reload, filterData, subjectSearch } = useSubjectTable({ pageSize: 20 }, (param, signal) =>
         getUsersApi({
@@ -277,14 +278,14 @@ export default function Users(params) {
             </Table>
         </div>
         {/* 分页 */}
-        {/* <Pagination count={10}></Pagination> */}
+
         <div className="bisheng-table-footer px-6 bg-background-login">
             <div className="flex items-center gap-2">
                 <p className="desc">{t('system.userList')}</p>
             </div>
-            <AutoPagination
+            <Pagination locale={paginationLocale}
                 className="float-right justify-end w-full mr-6"
-                page={page}
+                current={page}
                 pageSize={pageSize}
                 total={total}
                 showTotal={true}

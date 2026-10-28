@@ -52,7 +52,7 @@ export default function SystemPage() {
   const defaultTab = showOrgTab ? "organization" : showUserGroupTab ? "userGroup" : "user";
 
   return (
-    <div className="flex h-full w-full flex-col px-2 pt-4">
+    <div className="flex h-full w-full flex-col px-4 pt-4">
       <Tabs
         defaultActiveKey={defaultTab}
         className="flex min-h-0 w-full flex-1 flex-col [&>div:first-child]:shrink-0 [&>[role=tabpanel][data-state=active]]:flex [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1 [&>[role=tabpanel]]:flex-col [&>[role=tabpanel]]:overflow-hidden [&>[role=tabpanel]>div]:mt-2"

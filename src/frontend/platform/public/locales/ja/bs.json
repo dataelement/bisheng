@@ -28,7 +28,17 @@
   "pagination": {
     "totalRecords": "合計 {{total}} 件の記録",
     "totalPrefix": "合計 ",
-    "totalSuffixWithPageSize": " 件、1ページ {{pageSize}} 件"
+    "totalSuffixWithPageSize": " 件、1ページ {{pageSize}} 件",
+    "jumpAria": "ページに移動",
+    "jumpError": "1–{{totalPages}} を入力してください",
+    "jumpPrefix": "移動先",
+    "jumpSuffix": "ページ",
+    "nav": "ページ切り替え",
+    "next": "次のページ",
+    "pageSize": "{{size}} 件/ページ",
+    "pageSizeAria": "1ページの件数",
+    "prev": "前のページ",
+    "total": "全 {{total}} 件"
   },
   "example": {
     "buttons": "ボタン一覧",
@@ -185,6 +195,8 @@
     "otherMethods": "その他のログイン方法"
   },
   "menu": {
+    "languageChinese": "中文",
+    "languageJapanese": "日本語",
     "user": "ユーザー",
     "bookopen": "ヘルプドキュメント",
     "github": "GitHub",
@@ -3201,6 +3213,10 @@
         "unknown": "現在のインスタンス設定をまだ確認できません。再読み込みしてください。",
         "not_running": "アプリはオフラインです。次回デプロイ時に最新の保存値が適用されます。"
       }
+    },
+    "releaseNotes": {
+      "title": "リリースノート",
+      "empty": "リリースノートは未入力です"
     }
   },
   "dsh": {
@@ -3834,6 +3850,7 @@
     "downloadAddress": "クライアント ダウンロード URL",
     "downloadAddressHelp": "ワークスペースから クライアント をダウンロード",
     "saveSettings": "設定を保存",
+    "editSettings": "設定を編集",
     "settingsAdminOnly": "インスタンス設定を変更できるのは全体管理者のみです。",
     "settingsSaved": "設定を保存しました",
     "settingsSaveFailed": "保存できませんでした。ダウンロード URL を確認するか、後で再試行してください。",

@@ -36,7 +36,7 @@ from sqlmodel import Field, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.utils import generate_uuid
 
 # ---------------------------------------------------------------------------
@@ -114,6 +114,7 @@ class AppDeployment(SQLModelSerializable, table=True):
     )
 
     id: str = Field(default_factory=generate_uuid, primary_key=True)
+    release_notes: str | None = Field(default=None, sa_column=Column(LargeText, nullable=True))
     # ``default=None`` on purpose: the before_flush hook fills it from the
     # current tenant context. A Python default would silently write
     # child-tenant rows to Root (same guard as ``app`` / ``api_credential``).

@@ -13,7 +13,6 @@ from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTrans
 from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.image_upload import ImageUploadTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
-from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 
 
@@ -32,13 +31,13 @@ class PreviewFilePipeline(BaseFilePipeline):
     """
 
     def __init__(
-            self,
-            invoke_user_id: int,
-            local_file_path: str,
-            file_name: str,
-            knowledge_id: int,
-            file_rule: FileProcessBase = None,
-            **kwargs,
+        self,
+        invoke_user_id: int,
+        local_file_path: str,
+        file_name: str,
+        knowledge_id: int,
+        file_rule: FileProcessBase = None,
+        **kwargs,
     ):
         super().__init__(
             invoke_user_id,
@@ -57,14 +56,11 @@ class PreviewFilePipeline(BaseFilePipeline):
         return generate_uuid()
 
     def _get_image_object_dir(self) -> str | None:
-        return KnowledgeUtils.get_knowledge_file_image_dir(
-            self._preview_doc_id, self.knowledge_id
-        )
+        return KnowledgeUtils.get_knowledge_file_image_dir(self._preview_doc_id, self.knowledge_id)
 
     @cached_property
     def file_metadata(self) -> dict:
-        uploader = UserDao.get_user(self.invoke_user_id)
-        uploader_name = uploader.user_name if uploader else None
+        uploader_name = self._get_display_user_name(self.invoke_user_id)
 
         now = int(time.time())
         return Metadata(
@@ -84,31 +80,37 @@ class PreviewFilePipeline(BaseFilePipeline):
     def _init_common_transformers(self) -> list[BaseDocumentTransformer]:
         transformers = self._init_abstract_transformers()
         preview_doc_id = generate_uuid()
-        transformers.append(ExtraFileTransformer(
-            loader=self.loader,
-            document_id=preview_doc_id,
-            knowledge_id=self.knowledge_id,
-            knowledge_file=None,
-            source_file_path=self.local_file_path,
-        ))
-        transformers.append(ImageUploadTransformer(
-            loader=self.loader,
-            document_id=preview_doc_id,
-            knowledge_id=self.knowledge_id,
-            retain_images=self.file_split_rule.retain_images == 1,
-        ))
+        transformers.append(
+            ExtraFileTransformer(
+                loader=self.loader,
+                document_id=preview_doc_id,
+                knowledge_id=self.knowledge_id,
+                knowledge_file=None,
+                source_file_path=self.local_file_path,
+            )
+        )
+        transformers.append(
+            ImageUploadTransformer(
+                loader=self.loader,
+                document_id=preview_doc_id,
+                knowledge_id=self.knowledge_id,
+                retain_images=self.file_split_rule.retain_images == 1,
+            )
+        )
         if self.should_use_ppt_page_split():
             transformers.append(DirectChunkTransformer())
         elif self.should_use_hierarchical_split():
-            transformers.append(HierarchicalSplitterTransformer(
-                hierarchy_level=self.file_split_rule.hierarchy_level,
-                append_title=self.file_split_rule.append_title,
-                max_chunk_size=self.file_split_rule.max_chunk_size,
-                fallback_separator=self.file_split_rule.separator,
-                fallback_separator_rule=self.file_split_rule.separator_rule,
-                fallback_chunk_size=self.file_split_rule.chunk_size,
-                fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
-            ))
+            transformers.append(
+                HierarchicalSplitterTransformer(
+                    hierarchy_level=self.file_split_rule.hierarchy_level,
+                    append_title=self.file_split_rule.append_title,
+                    max_chunk_size=self.file_split_rule.max_chunk_size,
+                    fallback_separator=self.file_split_rule.separator,
+                    fallback_separator_rule=self.file_split_rule.separator_rule,
+                    fallback_chunk_size=self.file_split_rule.chunk_size,
+                    fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
+                )
+            )
         else:
             transformers.append(SplitterTransformer(**self.get_splitter_kwargs()))
         return transformers
@@ -116,17 +118,21 @@ class PreviewFilePipeline(BaseFilePipeline):
     def _init_excel_transformers(self) -> list[BaseDocumentTransformer]:
         transformers = self._init_abstract_transformers()
         preview_doc_id = generate_uuid()
-        transformers.append(ExtraFileTransformer(
-            loader=self.loader,
-            document_id=preview_doc_id,
-            knowledge_id=self.knowledge_id,
-            knowledge_file=None,
-            source_file_path=self.local_file_path,
-        ))
-        transformers.append(ImageUploadTransformer(
-            loader=self.loader,
-            document_id=preview_doc_id,
-            knowledge_id=self.knowledge_id,
-            retain_images=self.file_split_rule.retain_images == 1,
-        ))
+        transformers.append(
+            ExtraFileTransformer(
+                loader=self.loader,
+                document_id=preview_doc_id,
+                knowledge_id=self.knowledge_id,
+                knowledge_file=None,
+                source_file_path=self.local_file_path,
+            )
+        )
+        transformers.append(
+            ImageUploadTransformer(
+                loader=self.loader,
+                document_id=preview_doc_id,
+                knowledge_id=self.knowledge_id,
+                retain_images=self.file_split_rule.retain_images == 1,
+            )
+        )
         return transformers

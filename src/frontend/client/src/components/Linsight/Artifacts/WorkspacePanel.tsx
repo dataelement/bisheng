@@ -19,7 +19,8 @@ import { useEffect, useState } from 'react';
 import type { ChatCitation } from '~/api/chatApi';
 
 import { useLocalize } from '~/hooks';
-import { EmptyStateIllustration } from '~/components/illustrations';
+import { EmptyStateIllustration, SystemMaintenanceIllustration } from '~/components/illustrations';
+import { Skeleton } from '~/components/ui/Skeleton';
 import { cn } from '~/utils';
 import { type ArtifactFile } from './artifactUtils';
 import { NewTabHint } from './NewTabHint';
@@ -32,6 +33,10 @@ import type { SourcePreview } from './useWorkspacePanel';
 
 interface WorkspacePanelProps {
     files: ArtifactFile[];
+    /** Task-turn details are still loading — show a skeleton, not the empty state. */
+    loading?: boolean;
+    /** A task-turn detail failed to load — the list is unknown, not empty. */
+    loadFailed?: boolean;
     versionId: string;
     citations?: ChatCitation[] | null;
     messageId?: string;
@@ -61,6 +66,8 @@ type CompareTab = 'report' | 'source';
 
 export function WorkspacePanel({
     files,
+    loading = false,
+    loadFailed = false,
     versionId,
     citations,
     messageId,
@@ -273,6 +280,21 @@ export function WorkspacePanel({
                     <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os px-3 pt-1 pb-4">
                         {files.length ? (
                             <div className="flex flex-col gap-2">{files.map(renderRow)}</div>
+                        ) : loading ? (
+                            // Skeleton rows match the file-row height; the State spec forbids an empty state while loading.
+                            <div className="flex flex-col gap-2" aria-busy="true">
+                                <span className="sr-only">{localize('com_linsight_loading')}</span>
+                                {[0, 1, 2].map((i) => (
+                                    <div key={i} className="py-2 pl-1 pr-1">
+                                        <Skeleton className="h-5 w-3/5 rounded" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : loadFailed ? (
+                            <div className="flex h-full flex-col items-center justify-center text-center">
+                                <SystemMaintenanceIllustration className="mb-4 size-[120px]" />
+                                <p className="text-[14px] font-normal text-text-3">{localize('com_linsight_detail_load_failed')}</p>
+                            </div>
                         ) : (
                             <div className="flex h-full flex-col items-center justify-center text-center">
                                 <EmptyStateIllustration className="mb-4 size-[120px]" />

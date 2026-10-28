@@ -12,7 +12,7 @@ import {
   getHostedAppVersionsApi,
   type HostedAppVersion,
 } from "@/controllers/API/hostedApp"
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { versionTerminalStateI18nKey } from "../types"
 
@@ -29,19 +29,29 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
   const [failure, setFailure] = useState("")
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
+    setVersions([])
+    setFailure("")
     getHostedAppVersionsApi(appId)
       .then((rows) => {
+        if (cancelled) return
         setVersions(rows || [])
         setFailure("")
       })
       .catch((error) => {
+        if (cancelled) return
         setVersions([])
         setFailure(
           getHostedAppErrorMessage(error) || t("hostedApp.versions.loadFailed"),
         )
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [appId, t])
 
   return (
@@ -50,8 +60,12 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
         <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-background-login text-xs text-muted-foreground">
             <tr>
-              <th className="px-3 py-2 text-left">{t("hostedApp.versions.no")}</th>
-              <th className="px-3 py-2 text-left">{t("hostedApp.versions.kind")}</th>
+              <th className="px-3 py-2 text-left">
+                {t("hostedApp.versions.no")}
+              </th>
+              <th className="px-3 py-2 text-left">
+                {t("hostedApp.versions.kind")}
+              </th>
               <th className="px-3 py-2 text-left">
                 {t("hostedApp.versions.terminalState")}
               </th>
@@ -74,32 +88,45 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
                 version.terminal_state,
               )
               return (
-                <tr key={version.version_id} className="border-t">
-                  <td className="px-3 py-2">{`v${version.version_no}`}</td>
-                  <td className="px-3 py-2">
-                    {t(
-                      version.kind === "initial"
-                        ? "hostedApp.versions.kindInitial"
-                        : "hostedApp.versions.kindIteration",
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {outcomeKey ? t(outcomeKey) : "-"}
-                  </td>
-                  <td className="px-3 py-2">{version.submitted_at || "-"}</td>
-                  <td className="px-3 py-2">
-                    {version.is_current && (
-                      <span className="mr-1 rounded-sm bg-emerald-100 px-1 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                        {t("hostedApp.versions.current")}
-                      </span>
-                    )}
-                    {version.is_pending && (
-                      <span className="rounded-sm bg-amber-100 px-1 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                        {t("hostedApp.versions.pending")}
-                      </span>
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={version.version_id}>
+                  <tr className="border-t">
+                    <td className="px-3 py-2">{`v${version.version_no}`}</td>
+                    <td className="px-3 py-2">
+                      {t(
+                        version.kind === "initial"
+                          ? "hostedApp.versions.kindInitial"
+                          : "hostedApp.versions.kindIteration",
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {outcomeKey ? t(outcomeKey) : "-"}
+                    </td>
+                    <td className="px-3 py-2">{version.submitted_at || "-"}</td>
+                    <td className="px-3 py-2">
+                      {version.is_current && (
+                        <span className="mr-1 rounded-sm bg-emerald-100 px-1 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          {t("hostedApp.versions.current")}
+                        </span>
+                      )}
+                      {version.is_pending && (
+                        <span className="rounded-sm bg-amber-100 px-1 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                          {t("hostedApp.versions.pending")}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={5} className="max-w-0 px-3 py-2">
+                      <div className="text-caption text-text-3">
+                        {t("hostedApp.releaseNotes.title")}
+                      </div>
+                      <p className="max-w-[calc(100vw-6rem)] whitespace-pre-wrap break-words text-body-sm text-text-1 [overflow-wrap:anywhere] sm:max-w-none">
+                        {version.release_notes ||
+                          t("hostedApp.releaseNotes.empty")}
+                      </p>
+                    </td>
+                  </tr>
+                </Fragment>
               )
             })}
           </tbody>
