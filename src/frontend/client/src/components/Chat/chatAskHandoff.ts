@@ -43,11 +43,13 @@ export function parkChatAsk(ask: ChatAsk) {
 
 interface UseChatAskHandoffParams {
   conversationId: string;
+  /** Conversation currently bound to the send callback. */
+  activeConversationId: string;
   /** Changes on every navigation — the usual wake-up call. */
   locationKey: string;
   selectedKbs: KbSelection[];
   setSelectedKbs: (next: KbSelection[]) => void;
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string) => boolean;
   /** Runs as the ask is taken — the cached chat tab may still be in some other mode. */
   onTake?: () => void;
 }
@@ -58,21 +60,22 @@ interface UseChatAskHandoffParams {
  */
 export function useChatAskHandoff({
   conversationId,
+  activeConversationId,
   locationKey,
   selectedKbs,
   setSelectedKbs,
   sendMessage,
   onTake,
 }: UseChatAskHandoffParams) {
-  /** A space ask whose space has been mounted and which is waiting for that to land —
-   *  `sendMessage` closes over the knowledge selection, so it takes a second render. */
-  const mountedAskRef = useRef<ChatAsk | null>(null);
+  // Commit the ask together with its selection before using the send callback.
+  const [stagedAsk, setStagedAsk] = useState<ChatAsk | null>(null);
+  const submittedAskRef = useRef<ChatAsk | null>(null);
   const [attachmentAsk, setAttachmentAsk] = useState<AttachmentAsk | null>(null);
 
   const takePendingAsk = useCallback(() => {
-    // Only a fresh conversation may take it: on /c/<id> the question would be appended
-    // to whatever conversation the cached chat tab last showed.
-    if (!pendingAsk || conversationId !== 'new') return;
+    // The route and the chat hook commit their conversation changes separately.
+    // Take the ask once both identify the fresh conversation.
+    if (!pendingAsk || conversationId !== 'new' || activeConversationId !== 'new') return;
     const ask = pendingAsk;
     pendingAsk = null;
     onTake?.();
@@ -85,25 +88,28 @@ export function useChatAskHandoff({
       return;
     }
     if (ask.space) {
-      mountedAskRef.current = ask;
       setSelectedKbs([{ id: ask.space.id, name: ask.space.name, type: 'space' }]);
-      return;
     }
-    sendMessage(ask.text);
-  }, [conversationId, setSelectedKbs, sendMessage, onTake]);
+    setStagedAsk(ask);
+  }, [conversationId, activeConversationId, setSelectedKbs, onTake]);
 
   useEffect(takePendingAsk, [takePendingAsk, locationKey]);
   useActivate(takePendingAsk);
 
   useEffect(() => {
-    const ask = mountedAskRef.current;
-    if (!ask?.space || conversationId !== 'new') return;
-    const mounted =
-      selectedKbs.length === 1 && selectedKbs[0].type === 'space' && String(selectedKbs[0].id) === ask.space.id;
-    if (!mounted) return;
-    mountedAskRef.current = null;
-    sendMessage(ask.text);
-  }, [conversationId, selectedKbs, sendMessage]);
+    if (!stagedAsk || submittedAskRef.current === stagedAsk) return;
+    if (conversationId !== 'new' || activeConversationId !== 'new') return;
+    if (stagedAsk.space) {
+      const mounted = selectedKbs.length === 1 && selectedKbs[0].type === 'space'
+        && String(selectedKbs[0].id) === stagedAsk.space.id;
+      if (!mounted) return;
+    }
+    // A rejected send remains staged until the chat is ready to accept it.
+    if (sendMessage(stagedAsk.text)) {
+      submittedAskRef.current = stagedAsk;
+      setStagedAsk(null);
+    }
+  }, [stagedAsk, conversationId, activeConversationId, selectedKbs, sendMessage]);
 
   const retireAttachmentAsk = useCallback(() => setAttachmentAsk(null), []);
 

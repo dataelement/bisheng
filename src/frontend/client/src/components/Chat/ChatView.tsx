@@ -216,6 +216,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // Questions asked from a module page's ask bar land here (see chatAskHandoff).
   const { attachmentAsk, retireAttachmentAsk } = useChatAskHandoff({
     conversationId: conversationId ?? '',
+    activeConversationId: activeConvoId,
     locationKey: location.key,
     selectedKbs: selectedOrgKbs,
     setSelectedKbs: setSelectedOrgKbs,

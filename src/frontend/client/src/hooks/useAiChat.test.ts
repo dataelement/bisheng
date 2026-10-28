@@ -8,11 +8,16 @@
  * reply. These tests pin the two properties that fix depends on: leaving a
  * conversation neither closes its stream nor refetches over its live bucket.
  */
+import { useState } from "react";
+import { parkChatAsk, useChatAskHandoff } from "~/components/Chat/chatAskHandoff";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import type { SSESubmission } from "./useAiChatSSE";
 
 /** Every SSE turn opened during a test, in order. */
+let mockSelectedKbs: Array<{ id: string; name: string; type: string }> = [];
+jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
+
 let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
 
@@ -40,7 +45,7 @@ jest.mock("~/store", () => ({
     __esModule: true,
     default: {
         chatModel: { __testValue: { id: 1, name: "test-model" } },
-        selectedOrgKbs: { __testValue: [] },
+        selectedOrgKbs: { get __testValue() { return mockSelectedKbs; } },
         searchType: { __testValue: "" },
         selectedAgentTools: { __testValue: [] },
     },
@@ -105,6 +110,7 @@ const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 beforeEach(() => {
     mockOpenedStreams.length = 0;
     mockSelectedSkills = [];
+    mockSelectedKbs = [];
     mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
     mockGetSessionName.mockResolvedValue("");
 });
@@ -369,4 +375,52 @@ test('an incomplete upload rejects submission before starting a stream', async (
   });
   expect(accepted).toBe(false);
   expect(mockOpenedStreams).toHaveLength(0);
+});
+
+
+describe('knowledge-space asks across cached conversations', () => {
+    it.each([
+        ['same space after completion', '101', true],
+        ['same space during generation', '101', false],
+        ['different space after completion', '102', true],
+        ['different space during generation', '102', false],
+    ] as const)('starts a fresh second conversation: %s', async (_case, spaceId, finishFirst) => {
+        parkChatAsk({ text: 'first question', space: { id: '101', name: 'Space one' } });
+        const { result, rerender } = renderHook(({ cid, locationKey }) => {
+            const [selectedKbs, setSelectedKbs] = useState(mockSelectedKbs);
+            mockSelectedKbs = selectedKbs;
+            const chat = useAiChat(cid);
+            useChatAskHandoff({
+                conversationId: cid,
+                activeConversationId: chat.conversationId,
+                locationKey,
+                selectedKbs,
+                setSelectedKbs,
+                sendMessage: chat.sendMessage,
+            });
+            return chat;
+        }, { initialProps: { cid: 'new', locationKey: 'first' } });
+
+        expect(mockOpenedStreams).toHaveLength(1);
+        const first = latestStream();
+        act(() => {
+            first.submission.onCreated('first-chat', {
+                ...first.submission.userMessage, conversationId: 'first-chat',
+            });
+            if (finishFirst) first.submission.onEnd();
+        });
+        rerender({ cid: 'first-chat', locationKey: 'first-rewrite' });
+        parkChatAsk({ text: 'second question', space: { id: spaceId, name: spaceId } });
+        rerender({ cid: 'new', locationKey: 'second' });
+
+        await waitFor(() => expect(mockOpenedStreams).toHaveLength(2));
+        expect(latestStream().submission.payload).toMatchObject({
+            conversationId: null,
+            use_knowledge_base: { knowledge_space_ids: [Number(spaceId)] },
+        });
+        expect(result.current.messages[0].text).toBe('second question');
+        if (!finishFirst) expect(first.close).not.toHaveBeenCalled();
+        rerender({ cid: 'new', locationKey: 'second-again' });
+        expect(mockOpenedStreams).toHaveLength(2);
+    });
 });
