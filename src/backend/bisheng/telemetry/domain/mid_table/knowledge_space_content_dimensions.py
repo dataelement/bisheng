@@ -50,13 +50,7 @@ DAILY_ID_DIMENSION_FIELDS = (
     "belonging_squad_name",
 )
 
-ORIGINAL_DIMENSION_FIELDS = (
-    "original_space_name",
-    "original_upload_company_name",
-    "original_upload_department_name",
-    "original_upload_office_name",
-    "original_upload_squad_name",
-)
+ORIGINAL_DIMENSION_FIELDS = ("original_space_name",)
 
 CONTENT_DIMENSION_FIELDS = DAILY_ID_DIMENSION_FIELDS + ORIGINAL_DIMENSION_FIELDS
 

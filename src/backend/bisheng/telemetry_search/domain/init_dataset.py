@@ -727,15 +727,7 @@ DASHBOARD_DATASET = [
                 DimensionConfig(name="所属部门", field="belonging_department_name"),
                 DimensionConfig(name="所属科室", field="belonging_office_name"),
                 DimensionConfig(name="所属班组", field="belonging_squad_name"),
-                # 原始上传库XX (2026-09-01): NEW, separate dimension — library->org mapping
-                # (same rule as belonging_*) frozen at the file's ORIGINAL upload space
-                # (KnowledgeFile.original_knowledge_id, F081), never recomputed afterward.
-                # See mid_table.py::_build_knowledge_space_content_records.
                 DimensionConfig(name="原始上传库", field="original_space_name"),
-                DimensionConfig(name="原始所属公司", field="original_upload_company_name"),
-                DimensionConfig(name="原始所属部门", field="original_upload_department_name"),
-                DimensionConfig(name="原始所属科室", field="original_upload_office_name"),
-                DimensionConfig(name="原始所属班组", field="original_upload_squad_name"),
                 DimensionConfig(name="上传人ID", field="uploader_user_id"),
                 DimensionConfig(name="上传人名称", field="uploader_user_name"),
                 DimensionConfig(name="文件ID", field="file_id"),

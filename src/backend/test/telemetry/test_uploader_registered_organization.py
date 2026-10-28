@@ -86,7 +86,7 @@ def test_uploader_organization_expands_registered_department(monkeypatch, worker
     assert record.uploader_office_name == "炼铁科"
     assert record.uploader_squad_name == "一班"
     assert record.belonging_department_name == "制造部"
-    assert record.original_upload_squad_name == "一班"
+    assert "original_upload_squad_name" not in record.model_dump()
     assert loaded == []
 
 
@@ -106,7 +106,7 @@ def test_missing_registered_organization_stays_empty(monkeypatch, worker):
     assert record.uploader_office_name is None
     assert record.uploader_squad_name is None
     assert record.belonging_department_name == "制造部"
-    assert record.original_upload_squad_name == "一班"
+    assert "original_upload_squad_name" not in record.model_dump()
 
 
 @pytest.mark.parametrize(

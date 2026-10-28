@@ -801,8 +801,6 @@ def _build_knowledge_space_content_records(
         identity_map = KnowledgeStatisticsRepository.identities([int(file_record.id) for file_record, _ in rows])
     space_scope_map = space_scope_map if space_scope_map is not None else {}
     space_department_map = space_department_map if space_department_map is not None else {}
-    original_space_scope_map = original_space_scope_map if original_space_scope_map is not None else {}
-    original_space_department_map = original_space_department_map if original_space_department_map is not None else {}
     primary_department_map = primary_department_map if primary_department_map is not None else {}
     registered_organization_map = registered_organization_map if registered_organization_map is not None else {}
     category_label_cache = category_label_cache if category_label_cache is not None else {}
@@ -826,11 +824,7 @@ def _build_knowledge_space_content_records(
             )
         )
 
-    # 原始上传库: same library->org mapping rule as 所属 (_resolve_belonging_start_department),
-    # but evaluated against each file's ORIGINAL space instead of its current one, so moving a
-    # file (or the uploader changing department) never changes this figure — only ever set once,
-    # at first upload. A file's original space may no longer be one of the CURRENT spaces above
-    # (the file could have since moved away from it), so it needs its own scope/department fetch.
+    # 原始上传库只保留空间名称. 原始所属公司到班组不再投影.
     original_space_ids = sorted({_original_space_id_for(file_record, space) for file_record, space in rows})
     original_space_name_map = original_space_name_map if original_space_name_map is not None else {}
     for _, space in rows:
@@ -840,30 +834,14 @@ def _build_knowledge_space_content_records(
         with bypass_tenant_filter():
             names = KnowledgeStatisticsRepository.space_names(missing_name_ids)
         original_space_name_map.update({space_id: names.get(space_id) for space_id in missing_name_ids})
-    missing_original_space_ids = [
-        space_id for space_id in original_space_ids if space_id not in original_space_scope_map
-    ]
-    if missing_original_space_ids:
-        original_space_scope_map.update(KnowledgeSpaceScopeDao.get_map_by_space_ids(missing_original_space_ids))
-    missing_original_space_department_ids = [
-        space_id for space_id in original_space_ids if space_id not in original_space_department_map
-    ]
-    if missing_original_space_department_ids:
-        original_space_department_map.update(
-            _get_knowledge_space_department_map(
-                missing_original_space_department_ids,
-                original_space_scope_map,
-            )
-        )
 
     all_user_ids = {int(file_record.user_id) for file_record, _ in rows if file_record.user_id}
-    for scope_map in (space_scope_map, original_space_scope_map):
-        for scope in scope_map.values():
-            level = _resolve_content_stat_space_level(scope)
-            if level == KnowledgeSpaceLevelEnum.TEAM.value and getattr(scope, "created_by", None):
-                all_user_ids.add(int(scope.created_by))
-            elif level == KnowledgeSpaceLevelEnum.PERSONAL.value and getattr(scope, "owner_id", None):
-                all_user_ids.add(int(scope.owner_id))
+    for scope in space_scope_map.values():
+        level = _resolve_content_stat_space_level(scope)
+        if level == KnowledgeSpaceLevelEnum.TEAM.value and getattr(scope, "created_by", None):
+            all_user_ids.add(int(scope.created_by))
+        elif level == KnowledgeSpaceLevelEnum.PERSONAL.value and getattr(scope, "owner_id", None):
+            all_user_ids.add(int(scope.owner_id))
     all_user_ids = sorted(all_user_ids)
     missing_primary_user_ids = [user_id for user_id in all_user_ids if user_id not in primary_department_map]
     if missing_primary_user_ids:
@@ -886,7 +864,6 @@ def _build_knowledge_space_content_records(
     departments_by_id = _get_dimension_department_map(
         list(primary_department_map.values())
         + list(space_department_map.values())
-        + list(original_space_department_map.values())
         + [registered_organization_map.get(organization_id) for organization_id in organization_ids]
     )
     company_departments = [
@@ -911,12 +888,6 @@ def _build_knowledge_space_content_records(
         )
         original_space_id = _original_space_id_for(file_record, space)
         origin = original_space_name_map.get(original_space_id)
-        original_upload_department = _resolve_belonging_start_department(
-            scope=original_space_scope_map.get(original_space_id),
-            space_department=original_space_department_map.get(original_space_id),
-            primary_department_map=primary_department_map,
-            company_departments=company_departments,
-        )
         belonging_department = _resolve_belonging_start_department(
             scope=scope,
             space_department=space_department_map.get(int(space.id)),
@@ -935,10 +906,6 @@ def _build_knowledge_space_content_records(
                 ),
                 belonging_organization=resolve_organization_names(
                     belonging_department,
-                    departments_by_id,
-                ),
-                original_upload_organization=resolve_organization_names(
-                    original_upload_department,
                     departments_by_id,
                 ),
                 original_space_name=origin[1] if origin and origin[0] == tenant_id else None,

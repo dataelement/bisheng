@@ -458,7 +458,7 @@ def test_original_upload_organization_follows_original_space_not_current_uploade
     )
 
     record = records[0]
-    assert record.original_upload_department_name == "部门A"
+    assert "original_upload_department_name" not in record.model_dump()
     assert record.uploader_department_name == "部门B"
     assert record.belonging_department_name == "部门B"
 
@@ -505,7 +505,8 @@ def test_original_upload_organization_falls_back_to_current_space_when_original_
         category_label_cache={1: ({}, {})},
     )
 
-    assert records[0].original_upload_department_name == "部门A"
+    assert records[0].original_space_name == "部门A知识库"
+    assert "original_upload_department_name" not in records[0].model_dump()
 
 
 def test_knowledge_space_content_mapping_keeps_tenant_without_common_user_context():
