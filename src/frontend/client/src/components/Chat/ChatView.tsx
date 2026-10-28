@@ -85,11 +85,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const { data: bsConfig } = useGetBsConfig();
   const { user } = useAuthContext();
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
-  const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
   // Landing-only: the input box reports whether its attachment bar is showing
   // so the welcome subtitle can hide without shifting the title / input box.
   const [landingHasSelection, setLandingHasSelection] = useState(false);
+
+  // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
+  const {
+    selectedOrgKbs,
+    setSelectedOrgKbs,
+    messages,
+    conversationId: activeConvoId,
+    title: chatTitle,
+    isLoading,
+    isStreaming,
+    isParsingMedia,
+    sendMessage,
+    stopGenerating,
+    regenerate,
+  } = useAiChat(conversationId, false, shareToken);
+
 
   const selectedOrgKbIds = useMemo(
     () => selectedOrgKbs.filter((item) => item.type === 'org').map((item) => String(item.id)),
@@ -122,13 +137,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     setSelectedOrgKbs,
   ]);
 
-  // v2.5 interaction memory — per-user localStorage snapshots for the input
-  // bar (KBs handled in the effect below). Rules:
-  //  - KB space: default empty; remember user toggles
-  //  - org KB: default per bsConfig.orgKbs[].default_checked; remember toggles
-  // Tool preferences are restored once by MainLayout through useAgentToolPreferences.
-  // The model selection is NOT here — it is scoped per conversation, resolved
-  // further down (search: useChatModelResolution) once isTaskConversation is known.
+  // Model and knowledge selections are owned by their conversation.
   const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
   const modelMode: ChatModelMode = taskMode ? 'task' : 'daily';
   const adminDefaultModelId = useMemo(
@@ -142,39 +151,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     if (memoReadyRef.current) return;
     const prefix = `bs:${user.id}:`;
 
-    // Org KBs + knowledge spaces (unified selectedOrgKbs atom).
-    // Priority: any localStorage entry (including empty) wins so the user's
-    // explicit clear is preserved across refresh; admin-configured
-    // default_checked only applies on first session (key absent).
-    // When org-KB is disabled by admin, keep knowledge-space selections and
-    // only drop org KB entries.
-    try {
-      const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
-      let saved: any[] | null = null;
-      if (raw !== null) {
-        try {
-          const v = JSON.parse(raw);
-          if (Array.isArray(v)) saved = v;
-        } catch { /* ignore parse errors */ }
-      }
-
-      const orgKbDisabled = (bsConfig as any)?.knowledgeBase?.enabled === false;
-      if (saved !== null) {
-        setSelectedOrgKbs(
-          orgKbDisabled
-            ? saved.filter((item: any) => item?.type !== 'org')
-            : saved
-        );
-      } else {
-        const defaults = orgKbDisabled
-          ? []
-          : ((bsConfig as any)?.orgKbs || [])
-            .filter((k: any) => k.default_checked)
-            .map((k: any) => ({ id: String(k.id), name: k.name, type: 'org' }));
-        setSelectedOrgKbs(defaults);
-      }
-    } catch { /* ignore */ }
-
     // Web search toggle. ChatForm clears searchType on conversation change,
     // but its effect runs before this one (children commit first), so the
     // hydrated value wins on initial mount and survives refresh / new tab.
@@ -184,14 +160,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     } catch { /* ignore */ }
 
     memoReadyRef.current = true;
-  }, [bsConfig, user?.id, setSelectedOrgKbs, setSearchType]);
-
-
-  // Persist on change (after initial hydrate completes).
-  useEffect(() => {
-    if (!memoReadyRef.current || !user?.id) return;
-    localStorage.setItem(`bs:${user.id}:selectedOrgKbs`, JSON.stringify(selectedOrgKbs));
-  }, [selectedOrgKbs, user?.id]);
+  }, [bsConfig, user?.id, setSearchType]);
 
 
   useEffect(() => {
@@ -199,18 +168,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     localStorage.setItem(`bs:${user.id}:searchType`, searchType ?? '');
   }, [searchType, user?.id]);
 
-  // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
-  const {
-    messages,
-    conversationId: activeConvoId,
-    title: chatTitle,
-    isLoading,
-    isStreaming,
-    isParsingMedia,
-    sendMessage,
-    stopGenerating,
-    regenerate,
-  } = useAiChat(conversationId, false, shareToken);
 
   // ── F028: workstation conversation export / import-to-knowledge ──
   // Auto-exit selection mode whenever the user switches to another chat.
