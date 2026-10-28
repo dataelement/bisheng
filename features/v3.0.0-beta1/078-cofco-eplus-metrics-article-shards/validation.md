@@ -47,3 +47,11 @@ python -m pytest -p no:cacheprovider   test/eplus/ test/metric_log/   test/chann
 - 测试警告为既有依赖弃用与 ES Tasks API technical-preview 警告；没有忽略测试失败。
 
 真实 E+ 双 Worker、MySQL/DM8、部署配置/采集与频道 API 验收清单见 [e2e-checklist.md](./e2e-checklist.md)；这些未执行项不标通过。
+
+## 2026-10-28：迁移批量参数补充
+
+- 按用户要求新增 `--batch-size`，严格正整数，默认 5；统一传入所有全量指纹分页与备份/目标 reindex 的 `source.size`，报告和运行元数据记录实际值。参数不改变分片配置来源或故障恢复规则。
+- RED：新增参数和分页用例后、实现前，定向运行 11 failed、5 passed、22 deselected；失败包含 CLI 缺少参数及运行函数未接收参数。随后实现通过。
+- 定向回归：`test/channel/test_article_reshard_cli.py`、`test/channel/test_article_reshard_plan.py`、`test/channel/test_repartition_channel_articles.py`，**38 passed**，7 项既有依赖警告。覆盖 CLI 默认/覆盖/非法值、初始化前拒绝非法值、真实编排的五轮全量扫描及两次 reindex 参数、完整跨页内容指纹、只读 status 返回运行批量。
+- 真实 ES 8.12.2：专用本机容器 `codex-f078-batch-es-20261028`，cluster_name=`codex-f078-batch-20261028`，仅绑定 `127.0.0.1:32772`，512 MB 堆、1 GB 容器内存。既有 E2E 文件 **3 passed**，13 项既有依赖/Tasks API 警告；具体索引和 alias 两个迁移用例显式使用 `batch_size=1` 迁移两篇文档，证明跨页全量校验及复制；恢复用例使用默认批量。仅使用测试数据，完成后停止专用容器并通过 `--rm` 清理。
+- 上述测试不证明 105 环境 MemoryError 已解决；批量按文档条数控制，单篇大文档仍需足够内存。本次未部署、未重新执行生产迁移，也未清理或解锁旧运行。

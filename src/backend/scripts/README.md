@@ -16,16 +16,27 @@ Run from `src/backend/` with the service virtualenv active:
 
 ```bash
 export config=config.yaml
-python scripts/repartition_channel_articles.py --run-id maintenance-20261027
+python scripts/repartition_channel_articles.py --run-id maintenance-20261027 --batch-size 1
 # Stop and drain every channel article writer across all nodes/tenants first.
 python scripts/repartition_channel_articles.py \
-  --apply --writers-paused --run-id maintenance-20261027
+  --apply --writers-paused --run-id maintenance-20261027 --batch-size 1
 python scripts/repartition_channel_articles.py \
   --status --run-id maintenance-20261027
 ```
 
 The first command is read-only; `--dry-run` can also be explicit. `--apply` needs
 an explicit run ID and `--writers-paused`. There is no command-line shard override.
+`--batch-size` sets the number of documents in every full-content verification
+page and in each ES reindex scroll batch (`source.size`), for both the recovery
+copy and target. It must be a positive integer and defaults to **5**. For large
+articles or limited memory, start with `--batch-size 1`. Smaller batches increase
+request overhead; this is a document count, not a byte or memory limit, so a
+single large document can still require substantial memory. Full verification
+still scans every document. The chosen value is included in dry-run/completion
+reports, copy progress and run metadata; `--status` reports the stored value
+(`null` for runs created before this parameter existed). Pass the same value to
+dry-run and apply. Changing this parameter does not resume or clear a failed run.
+
 Already matching primary shards are skipped. Missing sources, multi-index aliases,
 pre-existing artifacts/blocks, template alias injection, red clusters and inadequate
 estimated disk/shard headroom stop the operation. Plan for the original index plus

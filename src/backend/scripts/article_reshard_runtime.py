@@ -7,6 +7,7 @@ import uuid
 from copy import deepcopy
 
 from scripts.article_reshard_plan import (
+    DEFAULT_BATCH_SIZE,
     LOGICAL_INDEX,
     RUN_META_KEY,
     MigrationError,
@@ -21,6 +22,7 @@ from scripts.article_reshard_plan import (
     normalized_policy,
     safe_index_name,
     source_state,
+    validate_batch_size,
 )
 
 
@@ -76,7 +78,7 @@ async def copy_data(es, plan, destination, *, report, poll_seconds, timeout_seco
     await mark(es, plan, destination, "COPY_PENDING")
     response = await es.reindex(
         body={
-            "source": {"index": plan.source},
+            "source": {"index": plan.source, "size": plan.batch_size},
             "dest": {"index": destination, "op_type": "create", "routing": "keep", "pipeline": "_none"},
         },
         wait_for_completion=False,
@@ -85,7 +87,15 @@ async def copy_data(es, plan, destination, *, report, poll_seconds, timeout_seco
     if not task_id:
         raise MigrationError("reindex task identifier missing; inspect active tasks before retry", 3)
     if report:
-        report({"phase": "COPYING", "run_id": plan.run_id, "target": destination, "task_id": task_id})
+        report(
+            {
+                "phase": "COPYING",
+                "run_id": plan.run_id,
+                "target": destination,
+                "task_id": task_id,
+                "batch_size": plan.batch_size,
+            }
+        )
     await mark(es, plan, destination, "COPYING", task_id=task_id)
     started = time.monotonic()
     while True:
@@ -117,7 +127,7 @@ async def verify_entity(es, plan, name, shards, basis, *, restored=False):
         raise MigrationError("copied index policy differs from source business policy", 4)
     if business_mapping(current.get("mappings", {})) != plan.mappings:
         raise MigrationError("copied mappings differ from source business mappings", 4)
-    if await fingerprint_index(es, name) != basis:
+    if await fingerprint_index(es, name, batch_size=plan.batch_size) != basis:
         raise MigrationError("full document identity, routing or content verification failed", 4)
 
 
@@ -134,7 +144,18 @@ async def existing_status(es, run_id):
         raise MigrationError("artifact belongs to another migration run", 6)
     result = {
         key: meta.get(key)
-        for key in ("run_id", "phase", "source", "source_uuid", "target", "backup", "target_shards", "task_id", "basis")
+        for key in (
+            "run_id",
+            "phase",
+            "source",
+            "source_uuid",
+            "target",
+            "backup",
+            "target_shards",
+            "task_id",
+            "basis",
+            "batch_size",
+        )
     }
     result["mode"] = "status"
     result["write_block"] = enabled(data["settings"]["index"].get("blocks", {}).get("write", False))
@@ -182,7 +203,9 @@ async def run_migration(
     report=None,
     poll_seconds=1,
     timeout_seconds=3600,
+    batch_size=DEFAULT_BATCH_SIZE,
 ):
+    validate_batch_size(batch_size)
     if run_id is not None and not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", run_id):
         raise MigrationError("run-id must contain 1-64 lowercase letters, digits or hyphens")
     if apply and (not writers_paused or not run_id):
@@ -192,7 +215,7 @@ async def run_migration(
             raise MigrationError("status requires --run-id")
         return await existing_status(es, run_id)
     run_id = run_id or uuid.uuid4().hex
-    plan = await make_plan(es, shards, run_id)
+    plan = await make_plan(es, shards, run_id, batch_size=batch_size)
     _, source = await source_state(es)
     prior = source.get("mappings", {}).get("_meta", {}).get(RUN_META_KEY, {})
     if prior and prior.get("phase") != "COMPLETE":
@@ -215,7 +238,7 @@ async def run_migration(
     await create_entity(es, plan, plan.backup, plan.source_shards, "RESERVED")
     await block_and_refresh(es, plan.source)
     await assert_source_unchanged(es, plan)
-    basis = await fingerprint_index(es, plan.source)
+    basis = await fingerprint_index(es, plan.source, batch_size=plan.batch_size)
     await mark(es, plan, plan.backup, "BASELINED", basis=basis)
     await copy_data(es, plan, plan.backup, report=report, poll_seconds=poll_seconds, timeout_seconds=timeout_seconds)
     await block_and_refresh(es, plan.backup)
@@ -229,7 +252,7 @@ async def run_migration(
     require_ack(await es.indices.put_settings(index=plan.target, body={"index": pipelines}), "pipeline restoration")
     await verify_entity(es, plan, plan.target, plan.target_shards, basis, restored=True)
     await assert_source_unchanged(es, plan)
-    if await fingerprint_index(es, plan.source) != basis:
+    if await fingerprint_index(es, plan.source, batch_size=plan.batch_size) != basis:
         raise MigrationError("source content changed after baseline", 4)
     await mark(es, plan, plan.target, "CUTOVER_PENDING", basis=basis)
     actions, expected = alias_actions(plan)

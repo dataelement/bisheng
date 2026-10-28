@@ -1,8 +1,8 @@
 """Repartition existing channel articles using the live service configuration.
 
 From src/backend, export the same `config` as the running service:
-    python scripts/repartition_channel_articles.py --run-id maintenance-20261027
-    python scripts/repartition_channel_articles.py --apply --writers-paused --run-id maintenance-20261027
+    python scripts/repartition_channel_articles.py --run-id maintenance-20261027 --batch-size 1
+    python scripts/repartition_channel_articles.py --apply --writers-paused --run-id maintenance-20261027 --batch-size 1
     python scripts/repartition_channel_articles.py --status --run-id maintenance-20261027
 
 Default mode only inspects the cluster. Apply requires operators to stop and
@@ -22,8 +22,18 @@ _BACKEND_ROOT = str(Path(__file__).resolve().parents[1])
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
-from scripts.article_reshard_plan import MigrationError  # noqa: E402
+from scripts.article_reshard_plan import DEFAULT_BATCH_SIZE, MigrationError  # noqa: E402
 from scripts.article_reshard_runtime import run_migration  # noqa: E402
+
+
+def positive_int(value):
+    try:
+        result = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("batch size must be a positive integer") from exc
+    if result < 1:
+        raise argparse.ArgumentTypeError("batch size must be a positive integer")
+    return result
 
 
 def parser():
@@ -36,6 +46,12 @@ def parser():
         "--writers-paused", action="store_true", help="All article writers have been stopped and drained"
     )
     value.add_argument("--run-id", help="Explicit maintenance identity, lowercase letters/digits/hyphens")
+    value.add_argument(
+        "--batch-size",
+        type=positive_int,
+        default=DEFAULT_BATCH_SIZE,
+        help=f"Documents per verification page and reindex scroll batch (default: {DEFAULT_BATCH_SIZE})",
+    )
     return value
 
 
@@ -59,6 +75,7 @@ async def run(args):
             run_id=args.run_id,
             status=args.status,
             report=output,
+            batch_size=args.batch_size,
         )
     finally:
         await close_app_context()

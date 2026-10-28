@@ -3,7 +3,7 @@
 **状态**：实现及本地验证已完成；用户已授权合并推送目标线，交付状态以 Git 记录为准；未执行生产迁移。验证边界见 [validation.md](./validation.md)。
 **关联**：[Spec](./spec.md) · [版本契约](../release-contract.md) · [需求确认](../../../docs/cofco-1028-eplus-es-shards-discovery.md#6-确认记录)
 **版本**：v3.0.0-beta1 / 中粮定制线；基线 `8ebcfdcc270fbfa1c20b100262ccd5d83844c76c`。
-**最后更新**：2026-10-27。
+**最后更新**：2026-10-28；补充迁移批量参数。
 
 ## 1. 目标与非目标
 
@@ -135,7 +135,7 @@ channel_article_index:
 
 新增 `scripts/repartition_channel_articles.py` 及可选薄 shell wrapper，README 登记。脚本 bootstrap backend 路径并使用 argparse；`config` 环境变量和共享 settings 与服务一致。`initialize_app_context(config=settings)` 后取得默认 `get_es_connection`，finally 执行 `close_app_context`；不得调用 init_config、create_all 或权限运行时。默认 dry-run 不调用任何业务/ES 写 API，初始化过程也须用测试验证不产生持久化配置或业务写入。
 
-脚本参数：默认 dry-run；`--apply` 执行；apply 需要显式 `--writers-paused` 表示已停并排空全部写入方；`--run-id` 标识一次维护；`--status` 只读检查已有 run。run-id 限定安全的小写字母数字连字符；无值时 dry-run 展示新建议值，apply 要求使用该明确值。没有目标分片命令行覆盖，也不允许任意源索引或通配符。
+脚本参数：默认 dry-run；`--apply` 执行；apply 需要显式 `--writers-paused` 表示已停并排空全部写入方；`--run-id` 标识一次维护；`--status` 只读检查已有 run；`--batch-size` 为严格正整数，默认 5，在访问 ES 前校验，统一控制全量指纹校验分页及备份/目标 reindex 的 `source.size`，dry-run 与 apply 分别传入相同值。run-id 限定安全的小写字母数字连字符；无值时 dry-run 展示新建议值，apply 要求使用该明确值。没有目标分片命令行覆盖，也不允许任意源索引或通配符。
 
 1. **解析与预检**：解析 `channel_articles` 为一个具体实体，记录名称、UUID、原 mappings/settings、所有关联 alias 元数据、当前分片和文档数；缺失与多实体 alias 分别报错。若分片已达标仅报告跳过。源关闭、不可读、缺少 `_source`、集群 red、磁盘水位/分片容量不满足、原有只读限制未解释时停止；展示源/备份/目标的占用估计与分配条件，不能把估计当成空间保证。
 2. **互斥与恢复前提**：同一源一次只允许一个运维执行者；所创建固定恢复实体名同时作为原子执行资格，创建失败不能进行后续源写操作。先检查活跃 reindex 任务及已有本功能目标/恢复副本，发现未完成 run 就只报告状态、拒绝新 apply。使用源 UUID 派生的固定恢复副本名，在任何源写屏障之前原子 create 恢复实体，create 请求内一次性写入 RESERVED 阶段及 run/源身份元数据；成功者才拥有本次执行资格，并发 create 失败方停止，不自行接管。该实体尚无数据，不作为有效备份；已有副本不被覆盖。
@@ -147,7 +147,7 @@ channel_article_index:
 8. **切换**：源为具体 `channel_articles` 时，一个 aliases 请求中 remove_index 原实体并 add 目标为同名 alias；源已是别名时 remove 原关系（must_exist=true）再 add 新关系。原实体的其他 alias 关系同步迁移到目标，保留 filter、routing、is_hidden 及原写入规则；业务 alias 明确唯一写索引。所有名称精确列举，不使用通配符。检查 errors/action_results，并重新解析所有受影响 alias；HTTP 超时或结果不确定进入待核实，不能重发删除动作。
 9. **结束检查**：仅确认所有关系正确后解除目标的本次 write block，检查逻辑入口可查询且指向唯一可写实体；保留恢复副本的写保护。输出目标分片、基准/目标文档数与指纹、任务及恢复资料。脚本不写入测试文章；真实写入/更新/删除通过验收环境验证，运维据报告恢复应用写入。
 
-迁移元数据记录在已创建副本/目标的 `_meta`：run-id、源 UUID、目标分片、阶段、任务 ID、原设置/alias 摘要、基准指纹。完整原 mappings/settings/alias 快照作为同一元数据的嵌套字段保存，用于恢复；快照单独保存源业务 `_meta`，剥离本功能历次运维标记以避免递归嵌套，不保存凭据。它是运维恢复资料，不新增应用运行时查询或全局业务状态。源 UUID 和 run-id 均用 SHA256 的前 32 位生成固定长度安全索引片段；不得直接拼接未校验原 UUID。
+迁移元数据记录在已创建副本/目标的 `_meta`：run-id、源 UUID、目标分片、batch_size、阶段、任务 ID、原设置/alias 摘要、基准指纹。dry-run/完成报告及复制进度输出本次 batch_size；status 返回运行元数据内的值，历史运行缺少该字段时返回 null。完整原 mappings/settings/alias 快照作为同一元数据的嵌套字段保存，用于恢复；快照单独保存源业务 `_meta`，剥离本功能历次运维标记以避免递归嵌套，不保存凭据。它是运维恢复资料，不新增应用运行时查询或全局业务状态。源 UUID 和 run-id 均用 SHA256 的前 32 位生成固定长度安全索引片段；不得直接拼接未校验原 UUID。
 
 **不自动续跑**：重试相同 run 先读上述元数据、实际 alias 和任务状态，只显示 phase/任务/恢复动作；不会重新 launch 已有任务、重新创建已有目标或猜测成功。进程在任务提交与记录 ID 之间退出时，已写入的 COPY_PENDING 表示任务状态未知，保留停写，运维先检查/取消遗留任务并核实数据后再处理。`--status` 和默认 dry-run 均保持只读。用户需要可靠自动续跑时另立需求。
 
@@ -157,7 +157,7 @@ channel_article_index:
 
 复制期间显式禁用目标与恢复副本的 default/final ingest pipeline，reindex 请求 `pipeline=_none`，避免既有数据被再次转换；完成后恢复原设置并核验。创建前解析匹配的 composable/legacy 模板及其有效配置，若会给任一临时实体自动附加 alias，先拒绝创建，避免提前污染业务查询；无法确定模板效果也停止。创建后再核验实际 mappings、aliases 和 settings，无法保持源合同则在切换前失败，不修改集群模板。[ES ingest 设置](https://www.elastic.co/docs/reference/elasticsearch/index-settings/index-modules)。
 
-mappings 核验排除单独比较的本功能运维标记；源原有业务 `_meta` 与其他 mappings 内容仍须一致。全量指纹：逐文档规范化 JSON `[_id, _routing, _source]` 后 SHA256，累加 256-bit sum 和 xor 并记录 count，顺序无关、内存有界。对相同冻结基准比较三项及 mappings/settings；这是全量内容指纹核验，不将它写成逐字节人工比对或现网验收结论。扫描内存仅保留一个批次，默认 500 条；任一批次/分片失败均拒绝切换。
+mappings 核验排除单独比较的本功能运维标记；源原有业务 `_meta` 与其他 mappings 内容仍须一致。全量指纹：逐文档规范化 JSON `[_id, _routing, _source]` 后 SHA256，累加 256-bit sum 和 xor 并记录 count，顺序无关、内存有界。对相同冻结基准比较三项及 mappings/settings；这是全量内容指纹核验，不将它写成逐字节人工比对或现网验收结论。扫描按 `--batch-size` 分页，默认 5 条，大文章或内存紧张时建议传 1；备份和目标 reindex 同样显式传入 `source.size=batch_size`。该参数控制文档条数，不限制响应字节或单篇文档内存占用，不能保证消除 MemoryError；减小批量会增加请求开销，仍须完成全量校验。任一批次/分片失败均拒绝切换。修改批量参数不接管、不清理、不续跑旧失败 run。
 
 恢复规则：
 
@@ -231,8 +231,8 @@ mappings 核验排除单独比较的本功能运维标记；源原有业务 `_me
 ```bash
 cd src/backend
 export config=config.yaml
-python scripts/repartition_channel_articles.py
-python scripts/repartition_channel_articles.py --apply --writers-paused --run-id maintenance-20261027
+python scripts/repartition_channel_articles.py --batch-size 1
+python scripts/repartition_channel_articles.py --apply --writers-paused --run-id maintenance-20261027 --batch-size 1
 python scripts/repartition_channel_articles.py --status --run-id maintenance-20261027
 ```
 

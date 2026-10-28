@@ -111,3 +111,45 @@ async def test_final_metadata_ack_failure_is_classified_as_cutover_uncertainty()
         await run_migration(es, 3, apply=True, writers_paused=True, run_id="final-ack")
     assert error.value.code == 5
     assert next(iter(await es.indices.get(index=LOGICAL_INDEX))) != es.source
+
+
+async def test_batch_size_reaches_every_fingerprint_and_both_reindex_tasks():
+    from unittest.mock import AsyncMock
+
+    from scripts.article_reshard_plan import RUN_META_KEY
+
+    es = FakeEs()
+    es.search = AsyncMock(wraps=es.search)
+    es.scroll = AsyncMock(wraps=es.scroll)
+    es.reindex = AsyncMock(wraps=es.reindex)
+    result = await run_migration(
+        es,
+        3,
+        apply=True,
+        writers_paused=True,
+        run_id="small-batch",
+        batch_size=1,
+    )
+    assert result["mode"] == "complete" and result["documents"] == 2
+    assert result["batch_size"] == 1
+    assert es.search.await_count == 5
+    assert all(call.kwargs["size"] == 1 for call in es.search.call_args_list)
+    assert es.scroll.await_count == 10
+    assert es.reindex.await_count == 2
+    assert all(call.kwargs["body"]["source"]["size"] == 1 for call in es.reindex.call_args_list)
+    for name in (result["backup"], result["target"]):
+        assert es.indexes[name]["mappings"]["_meta"][RUN_META_KEY]["batch_size"] == 1
+    before = list(es.writes)
+    status = await run_migration(es, 3, run_id="small-batch", status=True)
+    assert status["batch_size"] == 1 and es.writes == before
+
+
+@pytest.mark.parametrize("value", [0, -1, True, False, 1.5, "5", None])
+async def test_invalid_runtime_batch_size_fails_before_any_es_operation(value):
+    from unittest.mock import Mock
+
+    es = Mock()
+    with pytest.raises(MigrationError) as error:
+        await run_migration(es, 3, batch_size=value)
+    assert error.value.code == 2
+    assert es.mock_calls == []

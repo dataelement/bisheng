@@ -133,3 +133,8 @@
 - T018：无新增 HTTP/UI；真实演练直接调用维护编排及专用 ES，不创建应用租户或触碰正式业务集群。真实 E+ 双 Worker、MySQL/DM8 与生产验收保持待执行。
 
 逐任务 L1 审查见 [task-review.md](./task-review.md)，最终七维度审查见 [code-review.md](./code-review.md)。
+
+## 2026-10-28：按用户要求补充批量参数
+
+- [x] T012–T017 补充 `--batch-size` 默认值、正整数校验、全量分页与两次 reindex 参数传递、运行报告/元数据及运维说明。
+- [x] T018 使用批量 1 完成两篇文档的真实 ES 具体索引/alias 迁移与恢复回归；结果和环境边界见 [validation.md](./validation.md#2026-10-28迁移批量参数补充)。

@@ -113,15 +113,20 @@ class FakeEs:
 
     async def search(self, *, index, **kwargs):
         cursor = "scroll-" + index
-        self.cursor[cursor] = index
+        hits = list(deepcopy(self.docs[index]).values())
+        size = kwargs["size"]
+        self.cursor[cursor] = {"hits": hits[size:], "size": size}
         return {
             "_scroll_id": cursor,
             "_shards": {"failed": 0},
-            "hits": {"hits": list(deepcopy(self.docs[index]).values())},
+            "hits": {"hits": hits[:size]},
         }
 
     async def scroll(self, *, scroll_id, **kwargs):
-        return {"_scroll_id": scroll_id, "_shards": {"failed": 0}, "hits": {"hits": []}}
+        state = self.cursor[scroll_id]
+        page = state["hits"][: state["size"]]
+        state["hits"] = state["hits"][state["size"] :]
+        return {"_scroll_id": scroll_id, "_shards": {"failed": 0}, "hits": {"hits": page}}
 
     async def clear_scroll(self, **kwargs):
         return {"succeeded": True}

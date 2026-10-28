@@ -36,3 +36,28 @@ def test_fingerprint_is_order_independent_and_includes_identity_routing_and_all_
 def test_index_names_are_deterministic_and_safe():
     assert safe_index_name("backup", "ABC_uuid+X") == safe_index_name("backup", "ABC_uuid+X")
     assert "ABC" not in safe_index_name("backup", "ABC_uuid+X")
+
+
+async def test_configurable_fingerprint_page_size_keeps_all_pages_and_full_identity():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from scripts.article_reshard_plan import fingerprint_index
+
+    hits = [{"_id": str(n), "_routing": f"route-{n}", "_source": {"text": f"body-{n}"}} for n in range(5)]
+
+    def page(values):
+        return {"_scroll_id": "cursor", "_shards": {"failed": 0}, "hits": {"hits": values}}
+
+    es = SimpleNamespace(
+        search=AsyncMock(return_value=page(hits[:2])),
+        scroll=AsyncMock(side_effect=[page(hits[2:4]), page(hits[4:]), page([])]),
+        clear_scroll=AsyncMock(),
+    )
+    actual = await fingerprint_index(es, "article-test", batch_size=2)
+    assert actual == document_fingerprint(hits)
+    assert es.search.call_args.kwargs["size"] == 2
+    assert es.search.call_args.kwargs["source"] is True
+    assert es.search.call_args.kwargs["allow_partial_search_results"] is False
+    assert es.scroll.await_count == 3
+    es.clear_scroll.assert_awaited_once_with(scroll_id="cursor")

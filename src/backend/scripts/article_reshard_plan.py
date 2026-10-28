@@ -11,12 +11,18 @@ from loguru import logger
 
 LOGICAL_INDEX = "channel_articles"
 RUN_META_KEY = "bisheng_article_reshard"
+DEFAULT_BATCH_SIZE = 5
 
 
 class MigrationError(RuntimeError):
     def __init__(self, message, code=2):
         super().__init__(message)
         self.code = code
+
+
+def validate_batch_size(value):
+    if type(value) is not int or value < 1:
+        raise MigrationError("batch-size must be a positive integer")
 
 
 def safe_index_name(kind, identity):
@@ -96,7 +102,8 @@ def check_shards(response):
         raise MigrationError("a read or refresh returned failed shards", 4)
 
 
-async def fingerprint_index(es, index):
+async def fingerprint_index(es, index, *, batch_size=DEFAULT_BATCH_SIZE):
+    validate_batch_size(batch_size)
     count, total, xor = 0, 0, 0
     scroll_id = None
     try:
@@ -104,7 +111,7 @@ async def fingerprint_index(es, index):
             index=index,
             query={"match_all": {}},
             sort=["_doc"],
-            size=500,
+            size=batch_size,
             scroll="2m",
             stored_fields=["_routing"],
             source=True,
@@ -146,6 +153,7 @@ class MigrationPlan:
     aliases: dict
     documents: int
     run_id: str
+    batch_size: int = DEFAULT_BATCH_SIZE
 
     def report(self):
         return {key: value for key, value in asdict(self).items() if key not in {"mappings", "settings"}}
@@ -167,7 +175,8 @@ async def source_state(es):
     return name, state
 
 
-async def make_plan(es, shards, run_id):
+async def make_plan(es, shards, run_id, *, batch_size=DEFAULT_BATCH_SIZE):
+    validate_batch_size(batch_size)
     if type(shards) is not int or shards < 1:
         raise MigrationError("requested primary shards must be a positive integer")
     source, state = await source_state(es)
@@ -189,6 +198,7 @@ async def make_plan(es, shards, run_id):
         deepcopy(state.get("aliases", {})),
         int(response["count"]),
         run_id,
+        batch_size=batch_size,
     )
 
 

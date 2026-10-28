@@ -78,10 +78,12 @@ async def test_migration_freezes_all_acknowledged_operations_and_restores_live_a
         await es.index(index=source, id=PREFIX + "new", document={"title": "new"})
         await es.delete(index=source, id=PREFIX + "deleted")
         # Default inspection must not refresh the unsearchable operations.
-        plan = await run_migration(es, 3, run_id=run_id)
+        plan = await run_migration(es, 3, run_id=run_id, batch_size=1)
         assert plan["mode"] == "dry_run"
-        result = await run_migration(es, 3, apply=True, writers_paused=True, run_id=run_id, poll_seconds=0.05)
-        assert result["mode"] == "complete" and result["documents"] == 2
+        result = await run_migration(
+            es, 3, apply=True, writers_paused=True, run_id=run_id, poll_seconds=0.05, batch_size=1
+        )
+        assert result["mode"] == "complete" and result["documents"] == 2 and result["batch_size"] == 1
         data = await es.get(index="channel_articles", id=PREFIX + "updated", routing="r")
         assert data["_source"] == {"title": "after", "ingest_count": 2}
         assert not await es.exists(index="channel_articles", id=PREFIX + "deleted")
