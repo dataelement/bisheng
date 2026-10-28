@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 用户已确认，后续取舍已同步 |
 | design.md | ✅ 已评审 | 用户于本轮明确“设计可以”，包含现有共享 HMAC、可信身份变化和既有分页取舍 |
 | tasks.md | ✅ 已拆解 | 经 sdd-review tasks 静态评审 LGTM；不代表任务已执行 |
-| 实现 | 🔄 进行中 | 229 / 244；本轮 Wave47 请求明细移除、命中词展示及本地自审完成，旧15项完整现场/双库/容量/最终门禁仍待验 |
+| 实现 | 🔄 进行中 | 254 / 269；本轮 Wave53 请求详情分类简化及本地自审完成，旧15项完整现场/双库/容量/最终门禁仍待验 |
 
 ## 2. 执行约定与仓库范围
 
@@ -3041,6 +3041,48 @@ Wave 由依赖图最长路径计算；实施中发现的必要兼容补齐按已
   **类型**：验收。**目标文件**：features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md。
   **覆盖 AC**：AC-70。DSH回归、完整前端lint/typecheck、i18n/生成检查、Platform构建、桌面及500px实际组件核验，保留旧15项环境待验。**依赖**：T257、T258、T259。
 
+### Wave 51 — 2026-10-28 请求检查详情汇总去重
+
+- [x] **T261 重复快照与分页汇总回归**
+  **类型**：测试。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx。
+  **覆盖 AC**：AC-71。DECISION/DRAIN正反顺序只显示一份词值与首次命中时间、跨页新词与更早时间、后续无命中不清历史词、缺词值与已知词并存、无命中最早检查时间；先RED后GREEN。**依赖**：T260。
+
+- [x] **T262 按请求展示单份命中摘要**
+  **类型**：实现。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ContentSafetyDetails.tsx。
+  **逻辑与验证**：配对T261；跨已加载事件及输入/输出去重，保留首次命中时间和旧快照无法还原提示，不改存储、权限、取数及分页取消逻辑。**依赖**：T261。
+
+- [x] **T263 汇总去重一致性验收与自审**
+  **类型**：验收。**目标文件**：features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md。
+  **覆盖 AC**：AC-71。完整DSH回归、前端lint/typecheck/i18n/生成检查、Platform构建与架构/差异审查；原15项环境门禁不变。**依赖**：T262。
+
+### Wave 52 — 2026-10-28 隐藏审计统计版本
+
+- [x] **T264 统计版本隐藏回归**
+  **类型**：测试。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx。
+  **覆盖 AC**：AC-68。已就绪及更新中都不显示统计版本，保留原状态、更新时间、命中事实和已就绪计数；先RED后GREEN。**依赖**：T263。
+
+- [x] **T265 移除统计版本渲染**
+  **类型**：实现。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditGroup.tsx。
+  **逻辑与验证**：配对T264；只删除版本取值和显示，保留共享组件的会话/子会话命中计数、状态与时间，后端/API协议不变。**依赖**：T264。
+
+- [x] **T266 统计展示自审与验收**
+  **类型**：验收。**目标文件**：features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md。
+  **覆盖 AC**：AC-68。DSH回归、前端lint/typecheck、架构和差异检查，原15项环境待验不变。**依赖**：T265。
+
+### Wave 53 — 2026-10-28 请求详情分类与简化
+
+- [x] **T267 请求详情分类与语义回归**
+  **类型**：测试。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditCard.test.tsx；src/frontend/platform/src/pages/SystemPage/dsh/ContentSafetyDetails.test.tsx。
+  **覆盖 AC**：AC-72。独立分类标题、四项业务状态、隐藏技术字段/重复名称、未知与未调用不混淆、保留失败归类/折叠与正文权限；更新旧重复展示及执行时间用例，先RED后GREEN。**依赖**：T266。
+
+- [x] **T268 简化请求详情区域**
+  **类型**：实现。**目标文件**：src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditCard.tsx。
+  **逻辑与验证**：配对T267；复用现有分类布局、标题/状态翻译，四项状态及归类失败保留，模型结果只展示一次；不改取数/权限/计量和原文控制。**依赖**：T267。
+
+- [x] **T269 请求详情一致性验收与自审**
+  **类型**：验收。**目标文件**：features/v3.0.0/111-dsh-sensitive-word-control/implementation-verification.md。
+  **覆盖 AC**：AC-72。完整DSH及前端门禁、生产构建、1440px/500px实际组件核验、架构与差异检查；原15项环境待验保留。**依赖**：T268。
+
 ## 5. AC → 测试任务追溯
 
 本表只列测试/验收任务；配对实现见各任务依赖。每条 AC 至少一个针对性测试或端到端场景，末端 E2E 和特性审查不能代替前置测试。
@@ -3117,9 +3159,13 @@ AC-65 → T225、T228、T229；AC-66 → T225、T230、T233、T237；实现及�
 
 AC-67 → T245；标题、名称投影与生产接线见 T246–T248。
 
-AC-68 → T249、T250、T255；AC-69 → T249、T255；界面与三语实现见T251–T254。
+AC-68 → T249、T250、T255、T264、T266；AC-69 → T249、T255；界面与三语实现见T251–T254。
 
 AC-70 → T256、T260；配置页与三语实现见T257–T259。
+
+AC-71 → T261、T263；请求汇总渲染见T262。
+
+AC-72 → T267、T269；请求详情实现见T268。
 
 ## 6. 共享文件与发布边界
 
@@ -3133,7 +3179,7 @@ AC-70 → T256、T260；配置页与三语实现见T257–T259。
 
 ## 8. 文档与执行检查
 
-初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后205项；2026-10-27补充至T244；2026-10-28补充至T260后当前260项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。70条AC追溯按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
+初版132项/43个Wave静态评审见[tasks-review.md](./tasks-review.md)；实施中确证的兼容与接线补齐按§9留记录，原Wave1–43共175项；交付补充后205项；2026-10-27补充至T244；2026-10-28补充至T269后当前269项。新增任务逐项/task-review与配对测试验收，不把初版静态LGTM当新增任务已执行。72条AC追溯按当前测试任务覆盖补齐；保持依赖无环、每任务人工目标文件至多两个。
 
 ## 9. 执行记录
 
@@ -3216,3 +3262,12 @@ AC-70 → T256、T260；配置页与三语实现见T257–T259。
 
 
 2026-10-28 Wave50：按用户要求精简敏感词配置页，T256–T260逐项验证及task-review自审PASS，当前245/260。所有配置项保留，移除技术展示/冗余说明，正常仅保存、失败或冲突时刷新；保留可见草稿、错误去重、最新CAS后显式保存。DSH 25文件279PASS，完整前端lint/typecheck/i18n/生成检查、Platform构建、架构和diff通过，1440px及500px真实组件合成数据核验通过。原15项待验保留；无backend/Gateway/数据库改动，未提交、推送或部署。细节见implementation-verification同日小节。
+
+
+2026-10-28 Wave51：用户确认修复同一命中词被DECISION/DRAIN重复展示。T261–T263逐项验证及task-review自审PASS，当前248/263。详情按请求汇总已加载事件，词值跨阶段/分页去重，时间为最早命中观测（无命中时为最早检查）；旧快照缺词值提示继续保留。6新增反例先RED后GREEN；DSH 25文件285PASS，完整前端lint/typecheck/i18n/生成检查、Platform构建、架构守卫和diff通过。不改backend/Gateway事件、数据库和真实109环境；原15项待验不变。本轮未提交、推送或部署，详见implementation-verification。
+
+
+2026-10-28 Wave52：用户要求去掉统计版本。T264–T266完成并task-review自审PASS，当前251/266。共享统计组件删除版本展示，保留状态、更新时间、命中事实及正确计数可见性；两项反例先RED后GREEN，DSH 25文件287PASS，完整lint/typecheck、架构及差异检查通过。前轮命中词汇总改动保留；原15项待验不变。本轮未提交、推送或部署。
+
+
+2026-10-28 Wave53：用户要求简化请求详情并加分类标题。T267–T269逐项验证和task-review自审PASS，当前254/269。详情收敛四项业务轴及白名单失败原因，隐藏技术/重复字段，模型结果合并且区分未知/未调用；原文权限、头部时间及统计/安全逻辑保留。DSH 25文件287PASS，完整前端lint/typecheck/i18n/生成检查、生产构建、1440px/500px实际组件及架构/diff通过。临时预览设施已清理，原15项待验不变；未提交、推送或部署。

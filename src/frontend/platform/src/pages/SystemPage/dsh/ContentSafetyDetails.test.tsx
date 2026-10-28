@@ -5,8 +5,9 @@ import request from "@/controllers/request";
 import { contentSafetyStates } from "@/types/dshContentSafety";
 import type { ContentSafetyEventMetadata, ContentSafetyEventPage } from "@/types/dshContentSafety";
 import type { ModelAuditQuery, ModelAuditRecord } from "@/types/dshModelAudit";
-import { ContentSafetyDetails, ContentSafetyEventDetails } from "./ContentSafetyDetails";
+import { ContentSafetyDetails, ContentSafetyRequestDetails } from "./ContentSafetyDetails";
 import { ModelAuditCard } from "./ModelAuditCard";
+import { ModelAuditSafetySummary } from "./ModelAuditGroup";
 import { ModelAuditFilters } from "./ModelAuditFilters";
 import { ModelAuditModelSelect } from "./ModelAuditModelSelect";
 import { ModelAuditRequests } from "./ModelAuditPanel";
@@ -175,7 +176,7 @@ describe("independent safety, model and retained-detail facts", () => {
     card({ model_name: name, model_id: 271828, record_origin: "EXTERNAL_SAFETY", model_entered: false });
     expect(screen.getByTitle("dsh.auditHistory.fields.model_id: 271828")).toBeVisible();
     fireEvent.click(button("dsh.modelAuditView.request_details"));
-    expect(screen.getAllByText("dsh.auditHistory.fields.model_id: 271828")).toHaveLength(2);
+    expect(screen.getAllByText("dsh.auditHistory.fields.model_id: 271828")).toHaveLength(1);
     expect(api.body).not.toHaveBeenCalled();
   });
   it.each(contentSafetyStates)("shows %s independently for summary and both stages", (state) => {
@@ -239,7 +240,7 @@ describe("independent safety, model and retained-detail facts", () => {
   });
   // Coverage AC: AC-68, AC-69.
   it("shows only escaped matched words and check time, without technical identifiers", () => {
-    render(<ContentSafetyEventDetails event={{ ...event, matched_words: { input: [], output: ["<script>synthetic</script>"] } }} />);
+    render(<ContentSafetyRequestDetails events={[{ ...event, matched_words: { input: [], output: ["<script>synthetic</script>"] } }]} />);
     expect(screen.getByText("<script>synthetic</script>")).toBeVisible();
     expect(document.querySelector("script")).toBeNull();
     expect(screen.getByText("dsh.contentSafety.details.occurred_at")).toBeVisible();
@@ -326,6 +327,108 @@ describe("independent safety, model and retained-detail facts", () => {
     expect(signal.aborted).toBe(true);
     await act(async () => finish(page([{ ...event, matched_words: { input: [], output: ["initial-word"] } }])));
     expect(screen.queryByText("initial-word")).toBeNull();
+  });
+});
+
+// Coverage AC: AC-68.
+describe("audit statistics without internal versions", () => {
+  it.each([true, false])("keeps status and update time when ready=%s", (ready) => {
+    const watermark = "2026-10-28T08:24:23Z";
+    render(<ModelAuditSafetySummary
+      progress={{ status_ready: true, name_ready: true, indexing_pending: !ready, safety_ready: ready, safety_summary_version: 987654321, safety_summary_as_of: watermark }}
+      own={{ label: "own_hits", ready, count: 3, hasHit: true }}
+      branch={{ label: "branch_hits", ready, count: 5, hasHit: true }}
+    />);
+    expect(screen.queryByText(/dsh.contentSafety.readiness.version/)).toBeNull();
+    expect(screen.queryByText(/987654321/)).toBeNull();
+    expect(screen.getByText(ready ? "dsh.contentSafety.readiness.ready" : "dsh.modelAuditView.summary.PREPARING")).toBeVisible();
+    expect(document.querySelector("time")).toHaveAttribute("datetime", watermark);
+    expect(screen.getByText("dsh.contentSafety.states.BLOCKED")).toBeVisible();
+    if (ready) {
+      expect(screen.getByLabelText("dsh.contentSafety.readiness.own_hits: 3")).toBeVisible();
+      expect(screen.getByLabelText("dsh.contentSafety.readiness.branch_hits: 5")).toBeVisible();
+    } else {
+      expect(screen.queryByLabelText("dsh.contentSafety.readiness.own_hits: 3")).toBeNull();
+    }
+  });
+});
+
+// Coverage AC: AC-71.
+describe("request-level matched-word summary", () => {
+  const decision = {
+    ...event,
+    event_id: "decision",
+    event_kind: "DECISION" as const,
+    event_version: 1,
+    occurred_at: "2026-10-28T08:50:02.019855Z",
+    matched_words: { input: [], output: ["repeated-word"] },
+  };
+  const drain = {
+    ...decision,
+    event_id: "drain",
+    event_kind: "DRAIN" as const,
+    event_version: 2,
+    occurred_at: "2026-10-28T08:50:02.121031Z",
+  };
+  const passed = {
+    ...event,
+    event_id: "passed",
+    stage_results: { input: "PASSED" as const, output: "PASSED" as const },
+    occurred_at: "2026-10-28T08:50:01Z",
+    matched_words: { input: [], output: [] },
+  };
+  it.each([false, true])("merges decision and drain in either arrival order: %s", async (reverse) => {
+    api.events.mockResolvedValue(page([passed, ...(reverse ? [drain, decision] : [decision, drain])]));
+    render(<ContentSafetyDetails requestId={row.request_id} tenantId={101} />);
+    await screen.findByText("repeated-word");
+    expect(screen.getAllByText("repeated-word")).toHaveLength(1);
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(document.querySelectorAll("time")).toHaveLength(1);
+    expect(document.querySelector("time")).toHaveAttribute("datetime", decision.occurred_at);
+  });
+  it("merges cross-page words and moves the time back to the earliest loaded hit", async () => {
+    api.events
+      .mockResolvedValueOnce(page([drain], "older"))
+      .mockResolvedValueOnce(page([
+        decision,
+        { ...decision, event_id: "other-hit", occurred_at: "2026-10-28T08:50:02.010Z", matched_words: { input: ["other-word"], output: ["repeated-word"] } },
+      ]));
+    render(<ContentSafetyDetails requestId={row.request_id} tenantId={101} />);
+    await screen.findByText("repeated-word");
+    expect(document.querySelector("time")).toHaveAttribute("datetime", drain.occurred_at);
+    fireEvent.click(button("dsh.contentSafety.actions.load_more"));
+    await screen.findByText("other-word");
+    expect(screen.getAllByText("repeated-word")).toHaveLength(1);
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(document.querySelector("time")).toHaveAttribute("datetime", "2026-10-28T08:50:02.010Z");
+    expect(api.events.mock.calls[1][1].cursor).toBe("older");
+  });
+  it("retains known words when later snapshots contain no hit", async () => {
+    api.events.mockResolvedValue(page([
+      decision,
+      { ...passed, occurred_at: "2026-10-28T08:51:00Z" },
+      { ...passed, event_id: "error", occurred_at: "2026-10-28T08:52:00Z", stage_results: { input: "PASSED", output: "ERROR" } },
+    ]));
+    render(<ContentSafetyDetails requestId={row.request_id} tenantId={101} />);
+    await screen.findByText("repeated-word");
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(screen.queryByText("dsh.contentSafety.details.no_matches")).toBeNull();
+    expect(document.querySelector("time")).toHaveAttribute("datetime", decision.occurred_at);
+  });
+  it("keeps unavailable historical hit evidence alongside known words", async () => {
+    api.events.mockResolvedValue(page([decision, { ...event, occurred_at: "2026-10-28T08:49:00Z" }]));
+    render(<ContentSafetyDetails requestId={row.request_id} tenantId={101} />);
+    await screen.findByText("repeated-word");
+    expect(screen.getByText("dsh.contentSafety.details.matched_words_unavailable")).toBeVisible();
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(document.querySelector("time")).toHaveAttribute("datetime", "2026-10-28T08:49:00Z");
+  });
+  it("uses the earliest check time when no hit was recorded", async () => {
+    api.events.mockResolvedValue(page([{ ...passed, event_id: "later", occurred_at: "2026-10-28T08:51:00Z" }, passed]));
+    render(<ContentSafetyDetails requestId={row.request_id} tenantId={101} />);
+    await screen.findByText("dsh.contentSafety.details.no_matches");
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(document.querySelector("time")).toHaveAttribute("datetime", passed.occurred_at);
   });
 });
 
@@ -441,13 +544,13 @@ describe("matched rule words in authorized check details", () => {
     const word = "<img src=x onerror=synthetic>";
     const words = { input: direction === "input" ? [word] : [], output: direction === "output" ? [word] : [] };
     const stages = direction === "input" ? { input: "BLOCKED" as const, output: "NOT_APPLICABLE" as const } : event.stage_results;
-    render(<ContentSafetyEventDetails event={{ ...event, stage_results: stages, matched_words: words }} />);
+    render(<ContentSafetyRequestDetails events={[{ ...event, stage_results: stages, matched_words: words }]} />);
     expect(screen.getByText(word)).toBeVisible();
     expect(document.querySelector("img")).toBeNull();
     expect(screen.getByLabelText("dsh.contentSafety.details.matched_words")).toBeVisible();
   });
   it("shows unknown instead of reconstructing words for legacy blocked events", () => {
-    render(<ContentSafetyEventDetails event={event} />);
+    render(<ContentSafetyRequestDetails events={[event]} />);
     expect(screen.getByText("dsh.contentSafety.details.matched_words_unavailable")).toBeVisible();
   });
   it("validates and retains a captured word snapshot in the actual API wrapper", async () => {

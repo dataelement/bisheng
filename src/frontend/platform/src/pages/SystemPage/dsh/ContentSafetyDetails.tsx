@@ -15,8 +15,8 @@ interface ContentSafetyDetailsProps {
   tenantId?: number;
   detailsStatus?: SafetyDetailsStatus;
 }
-interface ContentSafetyEventDetailsProps {
-  event: ContentSafetyEventMetadata;
+interface ContentSafetyRequestDetailsProps {
+  events: readonly ContentSafetyEventMetadata[];
 }
 
 export function safetyTagColor(state: ContentSafetyState) {
@@ -25,33 +25,48 @@ export function safetyTagColor(state: ContentSafetyState) {
   return "default";
 }
 
-export function ContentSafetyEventDetails({
-  event,
-}: ContentSafetyEventDetailsProps) {
+export function ContentSafetyRequestDetails({
+  events,
+}: ContentSafetyRequestDetailsProps) {
   const { t } = useTranslation();
-  const blocked = event.stage_results.input === "BLOCKED" || event.stage_results.output === "BLOCKED";
-  const words = [...new Set([
-    ...(event.matched_words?.input ?? []),
-    ...(event.matched_words?.output ?? []),
-  ])];
+  if (!events.length) return null;
+  const words = new Set<string>();
+  const hits: ContentSafetyEventMetadata[] = [];
+  let missingWords = false;
+  for (const event of events) {
+    const matched = [
+      ...(event.matched_words?.input ?? []),
+      ...(event.matched_words?.output ?? []),
+    ];
+    const blocked = event.stage_results.input === "BLOCKED" || event.stage_results.output === "BLOCKED";
+    for (const word of matched) words.add(word);
+    if (blocked || matched.length) hits.push(event);
+    if (blocked && !matched.length) missingWords = true;
+  }
+  // Progress snapshots retain hit facts; display their earliest observation once.
+  const observations = hits.length ? hits : events;
+  const occurredAt = observations.reduce((first, event) =>
+    Date.parse(event.occurred_at) < Date.parse(first.occurred_at) ? event : first,
+  ).occurred_at;
   return (
     <div className="dsh-content-safety">
       <article className="grid min-w-0 gap-4 rounded-lg border p-3 text-xs sm:grid-cols-2">
         <section aria-label={t("dsh.contentSafety.details.matched_words")} className="min-w-0 space-y-2">
           <h4 className="font-medium">{t("dsh.contentSafety.details.matched_words")}</h4>
-          {words.length ? (
+          {words.size > 0 && (
             <div className="space-y-1 break-all">
-              {words.map((word) => <p key={word}>{word}</p>)}
+              {[...words].map((word) => <p key={word}>{word}</p>)}
             </div>
-          ) : (
+          )}
+          {(missingWords || !words.size) && (
             <p className="text-muted-foreground">
-              {t("dsh.contentSafety.details." + (blocked ? "matched_words_unavailable" : "no_matches"))}
+              {t("dsh.contentSafety.details." + (missingWords ? "matched_words_unavailable" : "no_matches"))}
             </p>
           )}
         </section>
         <dl className="min-w-0 space-y-1">
           <dt className="text-muted-foreground">{t("dsh.contentSafety.details.occurred_at")}</dt>
-          <dd><time dateTime={event.occurred_at}>{dshTime(event.occurred_at)}</time></dd>
+          <dd><time dateTime={occurredAt}>{dshTime(occurredAt)}</time></dd>
         </dl>
       </article>
     </div>
@@ -171,14 +186,7 @@ function ContentSafetyDetailsPage({
             {t("dsh.contentSafety.details.empty")}
           </p>
         )}
-        {items.map((event) => (
-          <ContentSafetyEventDetails
-            key={
-              event.source_id + ":" + event.event_id + ":" + event.event_version
-            }
-            event={event}
-          />
-        ))}
+        <ContentSafetyRequestDetails events={items} />
         {failed && (
           <div role="alert" className="space-y-2 text-sm">
             <p>{t("dsh.contentSafety.errors.events_load_failed")}</p>

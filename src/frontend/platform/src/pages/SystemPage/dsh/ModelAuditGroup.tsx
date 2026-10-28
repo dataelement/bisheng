@@ -123,7 +123,6 @@ export function ModelAuditSafetySummary({
   const knownHit = counts.some((value) =>
     value.hasHit === true || (knownSafetyCount(value.count) && value.count > 0),
   );
-  const version = progress?.safety_summary_version;
   const watermark = progress?.safety_summary_as_of;
   return (
     <div className="dsh-content-safety">
@@ -163,7 +162,6 @@ export function ModelAuditSafetySummary({
             {t("dsh.contentSafety.states.BLOCKED")}
           </Tag>
         )}
-        {knownSafetyCount(version) && <span>{t(prefix + "version")}: {version}</span>}
         {watermark && !Number.isNaN(Date.parse(watermark)) && (
           <time dateTime={watermark}>
             {t(prefix + "as_of", { time: dshTime(watermark) })}

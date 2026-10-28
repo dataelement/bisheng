@@ -162,117 +162,82 @@ export function ModelAuditCard({
         </div>
       )}
       {detailsOpen && (
-        <dl
+        <section
           id={detailsId}
-          className="space-y-1 border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
+          aria-labelledby={detailsId + "-title"}
+          className="dsh-content-safety space-y-3 border-t p-4"
         >
-          <div className="flex gap-2">
-            <dt className="shrink-0">
-              {t("dsh.modelAuditView.filters.request_id")}
-            </dt>
-            <dd className="min-w-0 break-all font-mono">{row.request_id}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="shrink-0">{t("dsh.modelAuditView.conversation")}</dt>
-            <dd className="min-w-0 break-all font-mono">
-              {row.conversation_id ??
-                t("dsh.modelAuditView.states.UNASSOCIATED")}
-            </dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="shrink-0">
-              {t("dsh.modelAuditView.filters.model_name")}
-            </dt>
-            <dd className="min-w-0 break-all">{modelDisplay}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt>{t("dsh.contentSafety.details.source")}</dt>
-            <dd>
-              {t("dsh.contentSafety.origins." + (row.record_origin ?? "MODEL"))}
-            </dd>
-          </div>
-          <div className="flex gap-2">
-            <dt>{t("dsh.modelAuditView.axes.model_result")}</dt>
-            <dd>
-              {t(
-                "dsh.contentSafety.model_entry." +
-                  (row.model_entered === true
-                    ? "ENTERED"
-                    : row.model_entered === false
-                      ? "NOT_ENTERED"
-                      : "UNOBSERVED"),
-              )}
-            </dd>
-          </div>
-          <div className="flex gap-2">
-            <dt>{t("dsh.contentSafety.details.model_started_at")}</dt>
-            <dd>
-              {row.model_entered === false
-                ? t("dsh.contentSafety.model_entry.NOT_APPLICABLE")
-                : row.model_started_at
-                  ? dshTime(row.model_started_at)
-                  : t("dsh.contentSafety.details.unknown")}
-            </dd>
-          </div>
-          {statusAxes.map((key) => (
-            <div key={key} className="flex gap-2">
-              <dt>{t("dsh.modelAuditView.axes." + key)}</dt>
-              <dd className={statusColor(row[key] ?? "UNKNOWN")}>
-                {t(
-                  row[key] == null && external && row.model_entered === false
-                    ? "dsh.contentSafety.model_entry.NOT_APPLICABLE"
-                    : "dsh.modelAuditView.states." + (row[key] ?? "UNKNOWN"),
-                )}
-              </dd>
-            </div>
-          ))}
-          {(
-            [
+          <h3 id={detailsId + "-title"} className="text-sm font-medium">
+            {t("dsh.modelAuditView.request_details")}
+          </h3>
+          <dl className="grid min-w-0 gap-4 rounded-lg border p-3 text-xs sm:grid-cols-2">
+            {statusAxes.map((key) => {
+              let statusKey = "dsh.modelAuditView.states." + (row[key] ?? "UNKNOWN");
+              if (row[key] == null && external) {
+                if (key === "model_result") {
+                  statusKey = "dsh.contentSafety.model_entry." +
+                    (row.model_entered === false ? "NOT_ENTERED" : "UNOBSERVED");
+                } else if (row.model_entered === false) {
+                  statusKey = "dsh.contentSafety.model_entry.NOT_APPLICABLE";
+                }
+              }
+              return (
+                <div key={key} className="min-w-0 space-y-1">
+                  <dt className="text-muted-foreground">{t("dsh.modelAuditView.axes." + key)}</dt>
+                  <dd className={"break-all " + statusColor(row[key] ?? "UNKNOWN")}>
+                    {t(statusKey)}
+                  </dd>
+                </div>
+              );
+            })}
+            {(
               [
-                "model",
-                row.model_error_code,
-                ["FAILED", "CANCELLED", "UNKNOWN"].includes(
-                  row.model_result ?? "",
-                ),
-              ],
-              [
-                "response",
-                row.response_error_code,
-                ["ERROR", "INTERRUPTED", "UNKNOWN"].includes(
-                  row.response_result ?? "",
-                ),
-              ],
-            ] as const
-          ).map(([axis, code, failed]) => {
-            if (!failed) return null;
-            const reason = auditFailure(code, axis);
-            return (
-              <div key={axis} className="flex gap-2">
-                <dt className="shrink-0">
-                  {t("dsh.modelAuditView.failures." + axis)}
-                </dt>
-                <dd className="min-w-0 break-all">
-                  {t("dsh.modelAuditView.failures." + reason.key)}
-                  {reason.status && (
-                    <span className="whitespace-nowrap">
-                      {" · " +
-                        t("dsh.modelAuditView.failures.http_status", {
-                          status: reason.status,
-                        })}
-                    </span>
-                  )}
-                </dd>
-              </div>
-            );
-          })}
+                [
+                  "model",
+                  row.model_error_code,
+                  ["FAILED", "CANCELLED", "UNKNOWN"].includes(
+                    row.model_result ?? "",
+                  ),
+                ],
+                [
+                  "response",
+                  row.response_error_code,
+                  ["ERROR", "INTERRUPTED", "UNKNOWN"].includes(
+                    row.response_result ?? "",
+                  ),
+                ],
+              ] as const
+            ).map(([axis, code, failed]) => {
+              if (!failed) return null;
+              const reason = auditFailure(code, axis);
+              return (
+                <div key={axis} className="flex gap-2">
+                  <dt className="shrink-0">
+                    {t("dsh.modelAuditView.failures." + axis)}
+                  </dt>
+                  <dd className="min-w-0 break-all">
+                    {t("dsh.modelAuditView.failures." + reason.key)}
+                    {reason.status && (
+                      <span className="whitespace-nowrap">
+                        {" · " +
+                          t("dsh.modelAuditView.failures.http_status", {
+                            status: reason.status,
+                          })}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
           {(row.status_reasons || []).map((reason) => (
-            <div key={reason}>
+            <p key={reason} className="text-xs text-muted-foreground">
               {t("dsh.modelAuditView.reasons." + reason.replace(":", "_"), {
                 defaultValue: t("dsh.modelAuditView.reasons.INVALID_STATE"),
               })}
-            </div>
+            </p>
           ))}
-        </dl>
+        </section>
       )}
       {row.context_invalid && (
         <p
