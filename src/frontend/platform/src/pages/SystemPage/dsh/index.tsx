@@ -13,10 +13,9 @@ import { ModelAuditPanel } from './ModelAuditPanel'
 
 interface DshManagementProps {
     section?: DshSection
-    usageToolbarTarget?: HTMLDivElement | null
 }
 
-export function DshManagement({ section = 'models', usageToolbarTarget }: DshManagementProps) {
+export function DshManagement({ section = 'models' }: DshManagementProps) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
@@ -26,7 +25,7 @@ export function DshManagement({ section = 'models', usageToolbarTarget }: DshMan
     return <div className="flex h-full min-h-0 flex-col px-2 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}
-            {activeSection === 'usage' && <PolicyView toolbarTarget={usageToolbarTarget} />}
+            {activeSection === 'usage' && <PolicyView />}
             {activeSection === 'model-audit' && <ModelAuditPanel />}
             {activeSection === 'operations' && <AuditHistory revision={0} />}
             {activeSection === 'access' && <SettingsPanel settings={config} canEdit={user?.role === 'admin' || !!user?.is_global_super} />}
