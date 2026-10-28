@@ -39,7 +39,9 @@ def _login_participation_metrics() -> list[MetricConfig]:
             name=name,
             is_virtual=True,
             calculation=VirtualMetricCalculationEnum.LOGIN_PARTICIPATION,
-            filter=None if field == "participation_rate" else FilterExpression(
+            filter=None
+            if field == "participation_rate"
+            else FilterExpression(
                 bool_operator="must",
                 filters=[
                     TermOp(field="metric_source", value="participation"),
@@ -49,7 +51,8 @@ def _login_participation_metrics() -> list[MetricConfig]:
             aggregations=[AggregationExpression(name=field, type=AggsTypeEnum.CARDINALITY, field="user_id")],
             default_number_format=(
                 {"type": "percent", "decimalPlaces": 2, "thousandSeparator": False}
-                if field == "participation_rate" else None
+                if field == "participation_rate"
+                else None
             ),
         )
         for field, name in (
@@ -83,19 +86,13 @@ DASHBOARD_DATASET = [
                     name="总用户数",
                     is_virtual=True,
                     aggregations=[
+                        AggregationExpression(name="user_count", type=AggsTypeEnum.CARDINALITY, field="user_id"),
                         AggregationExpression(
-                            name="user_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="user_id"
+                            name="total_user_count", type=PipelineTypeEnum.CUMULATIVE_SUM, field="user_count"
                         ),
-                        AggregationExpression(
-                            name="total_user_count",
-                            type=PipelineTypeEnum.CUMULATIVE_SUM,
-                            field="user_count"
-                        )
                     ],
                     index=1,
-                    sum_field="user_id"
+                    sum_field="user_id",
                 ),
                 MetricConfig(
                     field="new_user_count",
@@ -106,12 +103,8 @@ DASHBOARD_DATASET = [
                         filters=[TermOp(field="metric_source", value=METRIC_SOURCE_INCREMENT)],
                     ),
                     aggregations=[
-                        AggregationExpression(
-                            name="new_user_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="user_id"
-                        )
-                    ]
+                        AggregationExpression(name="new_user_count", type=AggsTypeEnum.CARDINALITY, field="user_id")
+                    ],
                 ),
                 active_user_metric(),
                 *_login_participation_metrics(),
@@ -126,32 +119,20 @@ DASHBOARD_DATASET = [
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
                 DimensionConfig(name="自然日", field="local_date"),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                ),
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
                 DimensionConfig(name="人员主部门ID", field="primary_department_id"),
                 DimensionConfig(name="人员主部门", field="primary_department_name"),
                 DimensionConfig(name="部门口径来源", field="department_source"),
                 DimensionConfig(name="人员ID", field="user_id"),
                 DimensionConfig(name="人员姓名", field="user_name"),
-            ]
-        ).model_dump()
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="活跃用户表",
@@ -173,26 +154,14 @@ DASHBOARD_DATASET = [
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="应用数量表",
@@ -207,39 +176,29 @@ DASHBOARD_DATASET = [
                     name="总应用数",
                     is_virtual=True,
                     aggregations=[
+                        AggregationExpression(name="app_count", type=AggsTypeEnum.CARDINALITY, field="app_id"),
                         AggregationExpression(
-                            name="app_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="app_id"
+                            name="total_app_count", type=PipelineTypeEnum.CUMULATIVE_SUM, field="app_count"
                         ),
-                        AggregationExpression(
-                            name="total_app_count",
-                            type=PipelineTypeEnum.CUMULATIVE_SUM,
-                            field="app_count"
-                        )
                     ],
                     index=1,
-                    sum_field="app_id"
+                    sum_field="app_id",
                 ),
                 MetricConfig(
                     field="new_app_count",
                     name="新增应用数",
                     is_virtual=True,
                     aggregations=[
-                        AggregationExpression(
-                            name="new_app_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="app_id"
-                        )
-                    ]
-                )
+                        AggregationExpression(name="new_app_count", type=AggsTypeEnum.CARDINALITY, field="app_id")
+                    ],
+                ),
             ],
             dimensions=[
                 DimensionConfig(
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
                 DimensionConfig(
                     name="用户ID",
@@ -249,28 +208,13 @@ DASHBOARD_DATASET = [
                     name="用户名称",
                     field="user_name",
                 ),
-                DimensionConfig(
-                    name="应用类型",
-                    field="app_type"
-                ),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="应用类型", field="app_type"),
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="会话数量表",
@@ -285,89 +229,48 @@ DASHBOARD_DATASET = [
                     name="会话次数",
                     is_virtual=True,
                     aggregations=[
-                        AggregationExpression(
-                            name="session_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="session_id"
-                        )
-                    ]
+                        AggregationExpression(name="session_count", type=AggsTypeEnum.CARDINALITY, field="session_id")
+                    ],
                 ),
                 MetricConfig(
                     field="platform_user_count",
                     name="使用人数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="source", value="platform")
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="source", value="platform")]),
                     aggregations=[
                         AggregationExpression(
-                            name="platform_user_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="user_id"
+                            name="platform_user_count", type=AggsTypeEnum.CARDINALITY, field="user_id"
                         )
-                    ]
+                    ],
                 ),
                 MetricConfig(
                     field="api_call_count",
                     name="API调用次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="source", value="api")
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="source", value="api")]),
                     aggregations=[
-                        AggregationExpression(
-                            name="api_call_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="session_id"
-                        )
-                    ]
-                )
+                        AggregationExpression(name="api_call_count", type=AggsTypeEnum.CARDINALITY, field="session_id")
+                    ],
+                ),
             ],
             dimensions=[
                 DimensionConfig(
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
-                DimensionConfig(
-                    name="用户ID",
-                    field="user_id"
-                ),
-                DimensionConfig(
-                    name="用户名称",
-                    field="user_name"
-                ),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                ),
-                DimensionConfig(
-                    name="应用ID",
-                    field="app_id"
-                ),
-                DimensionConfig(
-                    name="应用名称",
-                    field="app_name"
-                ),
-                DimensionConfig(
-                    name="来源类型（平台/API）",
-                    field="source"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="用户ID", field="user_id"),
+                DimensionConfig(name="用户名称", field="user_name"),
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+                DimensionConfig(name="应用ID", field="app_id"),
+                DimensionConfig(name="应用名称", field="app_name"),
+                DimensionConfig(name="来源类型（平台/API）", field="source"),  # noqa: RUF001
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="会话运行时长表",
@@ -381,84 +284,49 @@ DASHBOARD_DATASET = [
                     field="duration_seconds",
                     name="会话运行时长",
                     is_virtual=False,
-                    filter=FilterExpression(bool_operator="must_not", filters=[
-                        TermOp(field="duration_seconds", value=0)
-                    ])
+                    filter=FilterExpression(
+                        bool_operator="must_not", filters=[TermOp(field="duration_seconds", value=0)]
+                    ),
                 ),
                 MetricConfig(
                     field="max_concurrent_sessions",
                     name="最大同时在线会话数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="duration_seconds", value=0)
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="duration_seconds", value=0)]),
                     aggregations=[
                         AggregationExpression(
                             name="per_minute",
                             type=AggsTypeEnum.DATE_HISTOGRAM,
                             field="minute_ts",
-                            custom_params={
-                                "fixed_interval": "1m",
-                                "min_doc_count": 1
-                            },
+                            custom_params={"fixed_interval": "1m", "min_doc_count": 1},
                             aggs=[
-                                AggregationExpression(
-                                    name="online",
-                                    type=AggsTypeEnum.CARDINALITY,
-                                    field="event_id"
-                                )
-                            ]
+                                AggregationExpression(name="online", type=AggsTypeEnum.CARDINALITY, field="event_id")
+                            ],
                         ),
                         AggregationExpression(
-                            name="max_online",
-                            type=PipelineTypeEnum.MAX_BUCKET,
-                            field="per_minute>online"
-                        )
+                            name="max_online", type=PipelineTypeEnum.MAX_BUCKET, field="per_minute>online"
+                        ),
                     ],
-                    index=1
-                )
+                    index=1,
+                ),
             ],
             dimensions=[
                 DimensionConfig(
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day", "hour"],
-                    field_type="date"
+                    field_type="date",
                 ),
-                DimensionConfig(
-                    name="用户ID",
-                    field="user_id"
-                ),
-                DimensionConfig(
-                    name="用户名称",
-                    field="user_name"
-                ),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                ),
-                DimensionConfig(
-                    name="应用ID",
-                    field="app_id"
-                ),
-                DimensionConfig(
-                    name="应用名称",
-                    field="app_name"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="用户ID", field="user_id"),
+                DimensionConfig(name="用户名称", field="user_name"),
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+                DimensionConfig(name="应用ID", field="app_id"),
+                DimensionConfig(name="应用名称", field="app_name"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="工具调用时长表",
@@ -473,106 +341,59 @@ DASHBOARD_DATASET = [
                     name="工具调用次数",
                     is_virtual=True,
                     aggregations=[
-                        AggregationExpression(
-                            name="tool_call_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        )
-                    ]
+                        AggregationExpression(name="tool_call_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id")
+                    ],
                 ),
                 MetricConfig(
                     field="tool_call_success_count",
                     name="工具调用成功次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="status", value="success")
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="status", value="success")]),
                     aggregations=[
                         AggregationExpression(
-                            name="tool_call_success_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
+                            name="tool_call_success_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id"
                         )
-                    ]
+                    ],
                 ),
                 MetricConfig(
                     field="tool_call_success_rate",
                     name="工具调用成功率",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must",
-                                            filters=[TermOp(field="status", value="success"), MatchAllOp(field="")]),
+                    filter=FilterExpression(
+                        bool_operator="must", filters=[TermOp(field="status", value="success"), MatchAllOp(field="")]
+                    ),
                     aggregations=[
                         AggregationExpression(
-                            name="tool_call_success_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        ), AggregationExpression(
-                            name="tool_call_total_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        )
+                            name="tool_call_success_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id"
+                        ),
+                        AggregationExpression(
+                            name="tool_call_total_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id"
+                        ),
                     ],
-                    formula=FormulaEnum.DIVIDE
-                )
+                    formula=FormulaEnum.DIVIDE,
+                ),
             ],
             dimensions=[
                 DimensionConfig(
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
-
-                DimensionConfig(
-                    name="用户ID",
-                    field="user_id"
-                ),
-                DimensionConfig(
-                    name="用户名称",
-                    field="user_name"
-                ),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                ),
-                DimensionConfig(
-                    name="工具名称",
-                    field="tool_name"
-                ),
-                DimensionConfig(
-                    name="工具ID",
-                    field="tool_id"
-                ),
-                DimensionConfig(
-                    name="工具类型",
-                    field="tool_type"
-                ),
-                DimensionConfig(
-                    name="应用类型",
-                    field="app_type"
-                ),
-                DimensionConfig(
-                    name="应用ID",
-                    field="app_id"
-                ),
-                DimensionConfig(
-                    name="应用名称",
-                    field="app_name"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="用户ID", field="user_id"),
+                DimensionConfig(name="用户名称", field="user_name"),
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+                DimensionConfig(name="工具名称", field="tool_name"),
+                DimensionConfig(name="工具ID", field="tool_id"),
+                DimensionConfig(name="工具类型", field="tool_type"),
+                DimensionConfig(name="应用类型", field="app_type"),
+                DimensionConfig(name="应用ID", field="app_id"),
+                DimensionConfig(name="应用名称", field="app_name"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="知识库存量表",
@@ -586,110 +407,78 @@ DASHBOARD_DATASET = [
                     field="total_document_knowledge_base_count",
                     name="总文档知识库数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="knowledge_type", value=0)
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="knowledge_type", value=0)]),
                     aggregations=[
                         AggregationExpression(
-                            name="document_knowledge_base_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="knowledge_id"
+                            name="document_knowledge_base_count", type=AggsTypeEnum.CARDINALITY, field="knowledge_id"
                         ),
                         AggregationExpression(
                             name="total_document_knowledge_base_count",
                             type=PipelineTypeEnum.CUMULATIVE_SUM,
-                            field="document_knowledge_base_count"
-                        )
+                            field="document_knowledge_base_count",
+                        ),
                     ],
                     index=1,
-                    sum_field="knowledge_id"
+                    sum_field="knowledge_id",
                 ),
                 MetricConfig(
                     field="total_qa_knowledge_base_count",
                     name="总QA知识库数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="knowledge_type", value=1)
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="knowledge_type", value=1)]),
                     aggregations=[
                         AggregationExpression(
-                            name="qa_knowledge_base_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="knowledge_id"
+                            name="qa_knowledge_base_count", type=AggsTypeEnum.CARDINALITY, field="knowledge_id"
                         ),
                         AggregationExpression(
                             name="total_qa_knowledge_base_count",
                             type=PipelineTypeEnum.CUMULATIVE_SUM,
-                            field="qa_knowledge_base_count"
-                        )
+                            field="qa_knowledge_base_count",
+                        ),
                     ],
                     index=1,
-                    sum_field="knowledge_id"
+                    sum_field="knowledge_id",
                 ),
                 MetricConfig(
                     field="new_document_knowledge_base_count",
                     name="新增文档知识库数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="knowledge_type", value=0)
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="knowledge_type", value=0)]),
                     aggregations=[
                         AggregationExpression(
                             name="new_document_knowledge_base_count",
                             type=AggsTypeEnum.CARDINALITY,
-                            field="knowledge_id"
+                            field="knowledge_id",
                         )
-                    ]
+                    ],
                 ),
                 MetricConfig(
                     field="new_qa_knowledge_base_count",
                     name="新增QA知识库数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="knowledge_type", value=1)
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="knowledge_type", value=1)]),
                     aggregations=[
                         AggregationExpression(
-                            name="new_qa_knowledge_base_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="knowledge_id"
+                            name="new_qa_knowledge_base_count", type=AggsTypeEnum.CARDINALITY, field="knowledge_id"
                         )
-                    ]
-                )
+                    ],
+                ),
             ],
             dimensions=[
                 DimensionConfig(
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
-                DimensionConfig(
-                    name="用户ID",
-                    field="user_id"
-                ),
-                DimensionConfig(
-                    name="用户名称",
-                    field="user_name"
-                ),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="用户ID", field="user_id"),
+                DimensionConfig(name="用户名称", field="user_name"),
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="知识库文件存量表",
@@ -703,88 +492,58 @@ DASHBOARD_DATASET = [
                     field="total_file_count",
                     name="总文件数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="knowledge_base_type", value="文档知识库")
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must", filters=[TermOp(field="knowledge_base_type", value="文档知识库")]
+                    ),
                     aggregations=[
+                        AggregationExpression(name="file_count", type=AggsTypeEnum.VALUE_COUNT, field="file_id"),
                         AggregationExpression(
-                            name="file_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="file_id"
+                            name="total_file_count", type=PipelineTypeEnum.CUMULATIVE_SUM, field="file_count"
                         ),
-                        AggregationExpression(
-                            name="total_file_count",
-                            type=PipelineTypeEnum.CUMULATIVE_SUM,
-                            field="file_count"
-                        )
                     ],
                     index=1,
-                    sum_field="file_id"
+                    sum_field="file_id",
                 ),
                 MetricConfig(
                     field="total_qa_count",
                     name="总QA对数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="knowledge_base_type", value="QA知识库")
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must", filters=[TermOp(field="knowledge_base_type", value="QA知识库")]
+                    ),
                     aggregations=[
+                        AggregationExpression(name="qa_count", type=AggsTypeEnum.VALUE_COUNT, field="file_id"),
                         AggregationExpression(
-                            name="qa_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="file_id"
+                            name="total_qa_count", type=PipelineTypeEnum.CUMULATIVE_SUM, field="qa_count"
                         ),
-                        AggregationExpression(
-                            name="total_qa_count",
-                            type=PipelineTypeEnum.CUMULATIVE_SUM,
-                            field="qa_count"
-                        )
                     ],
                     index=1,
-                    sum_field="file_id"
+                    sum_field="file_id",
                 ),
                 MetricConfig(
                     field="file_size",
                     name="文件大小",
                     is_virtual=False,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="knowledge_base_type", value="文档知识库")
-                    ])
-                )
+                    filter=FilterExpression(
+                        bool_operator="must", filters=[TermOp(field="knowledge_base_type", value="文档知识库")]
+                    ),
+                ),
             ],
             dimensions=[
                 DimensionConfig(
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
-                DimensionConfig(
-                    name="用户ID",
-                    field="user_id"
-                ),
-                DimensionConfig(
-                    name="用户名称",
-                    field="user_name"
-                ),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="用户ID", field="user_id"),
+                DimensionConfig(name="用户名称", field="user_name"),
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="知识空间内容统计",
@@ -798,25 +557,22 @@ DASHBOARD_DATASET = [
                     field="total_file_count",
                     name="总文件数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="record_type", value="file"),
-                        TermOp(field="file_type", value=1),
-                        TermsOp(
-                            field="space_level",
-                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
-                        ),
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            TermOp(field="record_type", value="file"),
+                            TermOp(field="file_type", value=1),
+                            TermsOp(
+                                field="space_level",
+                                value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                            ),
+                        ],
+                    ),
                     aggregations=[
+                        AggregationExpression(name="file_count", type=AggsTypeEnum.VALUE_COUNT, field="file_id"),
                         AggregationExpression(
-                            name="file_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="file_id"
+                            name="total_file_count", type=PipelineTypeEnum.CUMULATIVE_SUM, field="file_count"
                         ),
-                        AggregationExpression(
-                            name="total_file_count",
-                            type=PipelineTypeEnum.CUMULATIVE_SUM,
-                            field="file_count"
-                        )
                     ],
                     index=1,
                     sum_field="file_id",
@@ -826,97 +582,94 @@ DASHBOARD_DATASET = [
                     field="new_file_count",
                     name="新增文件数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="record_type", value="file"),
-                        TermOp(field="file_type", value=1),
-                        TermsOp(
-                            field="space_level",
-                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
-                        ),
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            TermOp(field="record_type", value="file"),
+                            TermOp(field="file_type", value=1),
+                            TermsOp(
+                                field="space_level",
+                                value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                            ),
+                        ],
+                    ),
                     aggregations=[
-                        AggregationExpression(
-                            name="new_file_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="file_id"
-                        )
-                    ]
+                        AggregationExpression(name="new_file_count", type=AggsTypeEnum.VALUE_COUNT, field="file_id")
+                    ],
                 ),
                 MetricConfig(
                     field="contributor_count",
                     name="内容贡献人数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="record_type", value="file"),
-                        TermsOp(
-                            field="space_level",
-                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
-                        ),
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            TermOp(field="record_type", value="file"),
+                            TermsOp(
+                                field="space_level",
+                                value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                            ),
+                        ],
+                    ),
                     aggregations=[
                         AggregationExpression(
-                            name="contributor_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="uploader_user_id"
+                            name="contributor_count", type=AggsTypeEnum.CARDINALITY, field="uploader_user_id"
                         )
-                    ]
+                    ],
                 ),
                 MetricConfig(
                     field="preview_count",
                     name="预览次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="record_type", value="preview_daily"),
-                        TermsOp(
-                            field="space_level",
-                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
-                        ),
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            TermOp(field="record_type", value="preview_daily"),
+                            TermsOp(
+                                field="space_level",
+                                value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                            ),
+                        ],
+                    ),
                     aggregations=[
-                        AggregationExpression(
-                            name="preview_count",
-                            type=AggsTypeEnum.SUM,
-                            field="preview_count"
-                        )
-                    ]
+                        AggregationExpression(name="preview_count", type=AggsTypeEnum.SUM, field="preview_count")
+                    ],
                 ),
                 MetricConfig(
                     field="download_count",
                     name="下载次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="record_type", value="download_daily"),
-                        TermsOp(
-                            field="space_level",
-                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
-                        ),
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            TermOp(field="record_type", value="download_daily"),
+                            TermsOp(
+                                field="space_level",
+                                value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                            ),
+                        ],
+                    ),
                     aggregations=[
-                        AggregationExpression(
-                            name="download_count",
-                            type=AggsTypeEnum.SUM,
-                            field="download_count"
-                        )
-                    ]
+                        AggregationExpression(name="download_count", type=AggsTypeEnum.SUM, field="download_count")
+                    ],
                 ),
                 MetricConfig(
                     field="favorite_count",
                     name="收藏次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="record_type", value="favorite_daily"),
-                        TermsOp(
-                            field="space_level",
-                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
-                        ),
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            TermOp(field="record_type", value="favorite_daily"),
+                            TermsOp(
+                                field="space_level",
+                                value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                            ),
+                        ],
+                    ),
                     aggregations=[
-                        AggregationExpression(
-                            name="favorite_count",
-                            type=AggsTypeEnum.SUM,
-                            field="favorite_count"
-                        )
-                    ]
+                        AggregationExpression(name="favorite_count", type=AggsTypeEnum.SUM, field="favorite_count")
+                    ],
                 ),
                 MetricConfig(
                     field="knowledge_contribution_ratio",
@@ -928,14 +681,17 @@ DASHBOARD_DATASET = [
                         "decimalPlaces": 1,
                         "thousandSeparator": False,
                     },
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="record_type", value="file"),
-                        TermOp(field="file_type", value=1),
-                        TermsOp(
-                            field="space_level",
-                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
-                        ),
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            TermOp(field="record_type", value="file"),
+                            TermOp(field="file_type", value=1),
+                            TermsOp(
+                                field="space_level",
+                                value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                            ),
+                        ],
+                    ),
                     aggregations=[
                         AggregationExpression(
                             name="knowledge_contribution_ratio",
@@ -950,50 +706,19 @@ DASHBOARD_DATASET = [
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
-                DimensionConfig(
-                    name="知识空间ID",
-                    field="space_id"
-                ),
-                DimensionConfig(
-                    name="知识空间名称",
-                    field="space_name"
-                ),
-                DimensionConfig(
-                    name="知识库大类编码",
-                    field="space_level"
-                ),
-                DimensionConfig(
-                    name="知识库大类",
-                    field="space_level_name"
-                ),
-                DimensionConfig(
-                    name="知识分类编码",
-                    field="file_category_code"
-                ),
-                DimensionConfig(
-                    name="知识分类",
-                    field="file_category_name"
-                ),
-                DimensionConfig(
-                    name="二级知识分类编码",
-                    field="file_subcategory_code"
-                ),
-                DimensionConfig(
-                    name="二级知识分类",
-                    field="file_subcategory_name"
-                ),
-                DimensionConfig(
-                    name="业务域编码",
-                    field="business_domain_code"
-                ),
-                DimensionConfig(
-                    name="业务域",
-                    field="business_domain_name"
-                ),
-                # 上传人XX (2026-09-01): reverted to its original meaning — "current
-                # uploader's current department" — product wants this untouched.
+                DimensionConfig(name="知识空间ID", field="space_id"),
+                DimensionConfig(name="知识空间名称", field="space_name"),
+                DimensionConfig(name="知识库大类编码", field="space_level"),
+                DimensionConfig(name="知识库大类", field="space_level_name"),
+                DimensionConfig(name="知识分类编码", field="file_category_code"),
+                DimensionConfig(name="知识分类", field="file_category_name"),
+                DimensionConfig(name="二级知识分类编码", field="file_subcategory_code"),
+                DimensionConfig(name="二级知识分类", field="file_subcategory_name"),
+                DimensionConfig(name="业务域编码", field="business_domain_code"),
+                DimensionConfig(name="业务域", field="business_domain_name"),
+                # 上传人组织读 knowledgefile.belonging_organization_id, 空值不回退到当前主组织.
                 DimensionConfig(name="上传人公司", field="uploader_company_name"),
                 DimensionConfig(name="上传人部门", field="uploader_department_name"),
                 DimensionConfig(name="上传人科室", field="uploader_office_name"),
@@ -1002,33 +727,13 @@ DASHBOARD_DATASET = [
                 DimensionConfig(name="所属部门", field="belonging_department_name"),
                 DimensionConfig(name="所属科室", field="belonging_office_name"),
                 DimensionConfig(name="所属班组", field="belonging_squad_name"),
-                # 原始上传库XX (2026-09-01): NEW, separate dimension — library->org mapping
-                # (same rule as belonging_*) frozen at the file's ORIGINAL upload space
-                # (KnowledgeFile.original_knowledge_id, F081), never recomputed afterward.
-                # See mid_table.py::_build_knowledge_space_content_records.
                 DimensionConfig(name="原始上传库", field="original_space_name"),
-                DimensionConfig(name="原始所属公司", field="original_upload_company_name"),
-                DimensionConfig(name="原始所属部门", field="original_upload_department_name"),
-                DimensionConfig(name="原始所属科室", field="original_upload_office_name"),
-                DimensionConfig(name="原始所属班组", field="original_upload_squad_name"),
-                DimensionConfig(
-                    name="上传人ID",
-                    field="uploader_user_id"
-                ),
-                DimensionConfig(
-                    name="上传人名称",
-                    field="uploader_user_name"
-                ),
-                DimensionConfig(
-                    name="文件ID",
-                    field="file_id"
-                ),
-                DimensionConfig(
-                    name="文件名称",
-                    field="file_name"
-                ),
-            ]
-        ).model_dump()
+                DimensionConfig(name="上传人ID", field="uploader_user_id"),
+                DimensionConfig(name="上传人名称", field="uploader_user_name"),
+                DimensionConfig(name="文件ID", field="file_id"),
+                DimensionConfig(name="文件名称", field="file_name"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="文件解析事件表",
@@ -1043,119 +748,96 @@ DASHBOARD_DATASET = [
                     name="文档上传次数",
                     is_virtual=True,
                     aggregations=[
-                        AggregationExpression(
-                            name="doc_parse_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        )
-                    ]
+                        AggregationExpression(name="doc_parse_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id")
+                    ],
                 ),
                 MetricConfig(
                     field="doc_parse_success_count",
                     name="文档入库成功次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="status", value="success")
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="status", value="success")]),
                     aggregations=[
                         AggregationExpression(
-                            name="doc_parse_success_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
+                            name="doc_parse_success_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id"
                         )
-                    ]
+                    ],
                 ),
                 MetricConfig(
                     field="doc_parse_success_rate",
                     name="文档入库成功率",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="status", value="success"),
-                        MatchAllOp(field="")
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must", filters=[TermOp(field="status", value="success"), MatchAllOp(field="")]
+                    ),
                     aggregations=[
                         AggregationExpression(
-                            name="doc_parse_success_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
+                            name="doc_parse_success_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id"
                         ),
                         AggregationExpression(
-                            name="doc_parse_total_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        )
+                            name="doc_parse_total_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id"
+                        ),
                     ],
-                    formula=FormulaEnum.DIVIDE
+                    formula=FormulaEnum.DIVIDE,
                 ),
                 MetricConfig(
                     field="etl_parse_count",
                     name="ETL处理次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="parse_type", value="etl4lm")
-                    ]),
+                    filter=FilterExpression(bool_operator="must", filters=[TermOp(field="parse_type", value="etl4lm")]),
                     aggregations=[
-                        AggregationExpression(
-                            name="etl_parse_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        )
-                    ]
-
+                        AggregationExpression(name="etl_parse_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id")
+                    ],
                 ),
                 MetricConfig(
                     field="etl_parse_success_count",
                     name="ETL处理成功次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="parse_type", value="etl4lm"),
-                        TermOp(field="status", value="success")
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[TermOp(field="parse_type", value="etl4lm"), TermOp(field="status", value="success")],
+                    ),
                     aggregations=[
                         AggregationExpression(
-                            name="etl_parse_success_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
+                            name="etl_parse_success_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id"
                         )
-                    ]
+                    ],
                 ),
                 MetricConfig(
                     name="ETL处理成功率",
                     field="etl_parse_success_rate",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        FilterExpression(bool_operator="must", filters=[
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[
+                            FilterExpression(
+                                bool_operator="must",
+                                filters=[
+                                    TermOp(field="parse_type", value="etl4lm"),
+                                    TermOp(field="status", value="success"),
+                                ],
+                            ),
                             TermOp(field="parse_type", value="etl4lm"),
-                            TermOp(field="status", value="success")
-                        ]),
-                        TermOp(field="parse_type", value="etl4lm"),
-                    ]),
+                        ],
+                    ),
                     aggregations=[
                         AggregationExpression(
-                            name="etl_parse_success_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
+                            name="etl_parse_success_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id"
                         ),
                         AggregationExpression(
-                            name="etl_parse_total_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        )
+                            name="etl_parse_total_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id"
+                        ),
                     ],
-                    formula=FormulaEnum.DIVIDE
-                )
+                    formula=FormulaEnum.DIVIDE,
+                ),
             ],
             dimensions=[
                 DimensionConfig(
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
-                DimensionConfig(
-                    name="用户ID",
-                    field="user_id"
-                ),
+                DimensionConfig(name="用户ID", field="user_id"),
                 DimensionConfig(
                     name="用户名称",
                     field="user_name",
@@ -1164,32 +846,14 @@ DASHBOARD_DATASET = [
                     name="用户组ID",
                     field="user_group_infos.user_group_id",
                 ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                ),
-                DimensionConfig(
-                    name="解析类型",
-                    field="parse_type"
-                ),
-                DimensionConfig(
-                    name="文件最终状态",
-                    field="status"
-                ),
-                DimensionConfig(
-                    name="应用类型",
-                    field="app_type"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+                DimensionConfig(name="解析类型", field="parse_type"),
+                DimensionConfig(name="文件最终状态", field="status"),
+                DimensionConfig(name="应用类型", field="app_type"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="模型调用事件表",
@@ -1199,44 +863,31 @@ DASHBOARD_DATASET = [
         is_commercial_only=True,
         schema_config=SchemaConfig(
             metrics=[
-                MetricConfig(
-                    field="total_token",
-                    name="Token消耗量",
-                    is_virtual=False
-                ),
+                MetricConfig(field="total_token", name="Token消耗量", is_virtual=False),
                 MetricConfig(
                     field="model_call_count",
                     name="模型调用次数",
                     is_virtual=True,
                     aggregations=[
-                        AggregationExpression(
-                            name="model_call_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="event_id"
-                        )
-                    ]
+                        AggregationExpression(name="model_call_count", type=AggsTypeEnum.CARDINALITY, field="event_id")
+                    ],
                 ),
                 MetricConfig(
                     field="model_call_success_rate",
                     name="模型调用成功率",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="status", value="success"),
-                        MatchAllOp(field="")
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must", filters=[TermOp(field="status", value="success"), MatchAllOp(field="")]
+                    ),
                     aggregations=[
                         AggregationExpression(
-                            name="model_call_success_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="event_id"
+                            name="model_call_success_count", type=AggsTypeEnum.CARDINALITY, field="event_id"
                         ),
                         AggregationExpression(
-                            name="model_call_total_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="event_id"
-                        )
+                            name="model_call_total_count", type=AggsTypeEnum.CARDINALITY, field="event_id"
+                        ),
                     ],
-                    formula=FormulaEnum.DIVIDE
+                    formula=FormulaEnum.DIVIDE,
                 ),
                 MetricConfig(
                     field="max_concurrent_llm_sessions",
@@ -1247,25 +898,18 @@ DASHBOARD_DATASET = [
                             name="per_minute",
                             type=AggsTypeEnum.DATE_HISTOGRAM,
                             field="minute_ts",
-                            custom_params={
-                                "fixed_interval": "1m",
-                                "min_doc_count": 1
-                            },
+                            custom_params={"fixed_interval": "1m", "min_doc_count": 1},
                             aggs=[
-                                AggregationExpression(
-                                    name="online",
-                                    type=AggsTypeEnum.CARDINALITY,
-                                    field="event_id"
-                                )
-                            ]
+                                AggregationExpression(name="online", type=AggsTypeEnum.CARDINALITY, field="event_id")
+                            ],
                         ),
                         AggregationExpression(
                             name="max_concurrent_llm_sessions",
                             type=PipelineTypeEnum.MAX_BUCKET,
-                            field="per_minute>online"
-                        )
+                            field="per_minute>online",
+                        ),
                     ],
-                    index=1
+                    index=1,
                 ),
                 MetricConfig(
                     field="avg_first_token_cost_time",
@@ -1273,82 +917,35 @@ DASHBOARD_DATASET = [
                     is_virtual=True,
                     aggregations=[
                         AggregationExpression(
-                            name="first_token_cost_time",
-                            type=AggsTypeEnum.AVG,
-                            field="first_token_cost_time"
+                            name="first_token_cost_time", type=AggsTypeEnum.AVG, field="first_token_cost_time"
                         )
-                    ]
-                )
+                    ],
+                ),
             ],
             dimensions=[
                 DimensionConfig(
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day", "hour"],
-                    field_type="date"
+                    field_type="date",
                 ),
-                DimensionConfig(
-                    name="用户ID",
-                    field="user_id"
-                ),
-                DimensionConfig(
-                    name="用户名称",
-                    field="user_name"
-                ),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                ),
-                DimensionConfig(
-                    name="角色ID",
-                    field="user_role_infos.role_id"
-                ),
-                DimensionConfig(
-                    name="角色名称",
-                    field="user_role_infos.role_name"
-                ),
-                DimensionConfig(
-                    name="应用ID",
-                    field="app_id"
-                ),
-                DimensionConfig(
-                    name="应用名称",
-                    field="app_name"
-                ),
-                DimensionConfig(
-                    name="模型ID",
-                    field="model_id"
-                ),
-                DimensionConfig(
-                    name="模型类型",
-                    field="model_type"
-                ),
-                DimensionConfig(
-                    name="模型名称",
-                    field="model_name"
-                ),
-                DimensionConfig(
-                    name="服务方ID",
-                    field="model_server_id"
-                ),
-                DimensionConfig(
-                    name="服务方名称",
-                    field="model_server_name"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="用户ID", field="user_id"),
+                DimensionConfig(name="用户名称", field="user_name"),
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+                DimensionConfig(name="角色ID", field="user_role_infos.role_id"),
+                DimensionConfig(name="角色名称", field="user_role_infos.role_name"),
+                DimensionConfig(name="应用ID", field="app_id"),
+                DimensionConfig(name="应用名称", field="app_name"),
+                DimensionConfig(name="模型ID", field="model_id"),
+                DimensionConfig(name="模型类型", field="model_type"),
+                DimensionConfig(name="模型名称", field="model_name"),
+                DimensionConfig(name="服务方ID", field="model_server_id"),
+                DimensionConfig(name="服务方名称", field="model_server_name"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="用户反馈指标表",
@@ -1365,90 +962,53 @@ DASHBOARD_DATASET = [
                     field="like_count",
                     name="点赞次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="interact_type", value="like")
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must", filters=[TermOp(field="interact_type", value="like")]
+                    ),
                     aggregations=[
-                        AggregationExpression(
-                            name="like_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        )
-                    ]
+                        AggregationExpression(name="like_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id")
+                    ],
                 ),
                 MetricConfig(
                     name="点踩次数",
                     field="dislike_count",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="interact_type", value="dislike")
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must", filters=[TermOp(field="interact_type", value="dislike")]
+                    ),
                     aggregations=[
-                        AggregationExpression(
-                            name="dislike_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        )
-                    ]
+                        AggregationExpression(name="dislike_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id")
+                    ],
                 ),
                 MetricConfig(
                     field="copy_count",
                     name="复制次数",
                     is_virtual=True,
-                    filter=FilterExpression(bool_operator="must", filters=[
-                        TermOp(field="interact_type", value="copy")
-                    ]),
+                    filter=FilterExpression(
+                        bool_operator="must", filters=[TermOp(field="interact_type", value="copy")]
+                    ),
                     aggregations=[
-                        AggregationExpression(
-                            name="copy_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="event_id"
-                        )
-                    ]
-                )
-
+                        AggregationExpression(name="copy_count", type=AggsTypeEnum.VALUE_COUNT, field="event_id")
+                    ],
+                ),
             ],
             dimensions=[
                 DimensionConfig(
                     name="时间",
                     field="timestamp",
                     time_granularitys=["year", "month", "week", "day"],
-                    field_type="date"
+                    field_type="date",
                 ),
-                DimensionConfig(
-                    name="用户ID",
-                    field="user_id"
-                ),
-                DimensionConfig(
-                    name="用户名称",
-                    field="user_name"
-                ),
-                DimensionConfig(
-                    name="用户组ID",
-                    field="user_group_infos.user_group_id"
-                ),
-                DimensionConfig(
-                    name="用户组名称",
-                    field="user_group_infos.user_group_name"
-                ),
-                DimensionConfig(
-                    name="部门ID",
-                    field="user_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="部门名称",
-                    field="user_department_infos.department_name"
-                ),
-                DimensionConfig(
-                    name="应用ID",
-                    field="app_id"
-                ),
-                DimensionConfig(
-                    name="应用名称",
-                    field="app_name"
-                )
-            ]
-        ).model_dump()
+                DimensionConfig(name="用户ID", field="user_id"),
+                DimensionConfig(name="用户名称", field="user_name"),
+                DimensionConfig(name="用户组ID", field="user_group_infos.user_group_id"),
+                DimensionConfig(name="用户组名称", field="user_group_infos.user_group_name"),
+                DimensionConfig(name="部门ID", field="user_department_infos.department_id"),
+                DimensionConfig(name="部门名称", field="user_department_infos.department_name"),
+                DimensionConfig(name="应用ID", field="app_id"),
+                DimensionConfig(name="应用名称", field="app_name"),
+            ],
+        ).model_dump(),
     ),
     DashboardDataset(
         dataset_name="实时问答统计",
@@ -1650,9 +1210,7 @@ async def _upgrade_datasets_add_department_dimensions(
             continue
         dimensions = schema.get("dimensions", [])
         # Check if department dimensions already present
-        has_dept = any(
-            d.get("field", "").startswith("user_department_infos.") for d in dimensions
-        )
+        has_dept = any(d.get("field", "").startswith("user_department_infos.") for d in dimensions)
         if has_dept:
             continue
         # Find insertion point: right after user_group_infos dimensions
@@ -1675,25 +1233,32 @@ def _clone_dashboard_dataset(dataset: DashboardDataset) -> DashboardDataset:
 
 
 def _configure_document_statistics() -> None:
-    """保留已保存图表的指标 ID，改由精确文档统计路径计算。"""
+    """保留已保存图表的指标 ID, 改由精确文档统计路径计算."""
     dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == KNOWLEDGE_SPACE_CONTENT_STAT_INDEX)
     metrics = dataset.schema_config["metrics"]
     for metric in metrics:
         if metric["field"] in {"total_file_count", "new_file_count", "knowledge_contribution_ratio"}:
             metric.update(
-                calculation="document_statistics", aggregations=None,
-                sum_field=None, index=None,
+                calculation="document_statistics",
+                aggregations=None,
+                sum_field=None,
+                index=None,
             )
     for field, name in [
         ("called_document_count", "被系统化调用知识数"),
         ("document_usage_ratio", "调用比例"),
     ]:
-        metrics.append(MetricConfig(
-            field=field, name=name, is_virtual=True,
-            calculation=VirtualMetricCalculationEnum.DOCUMENT_STATISTICS,
-            default_number_format={"type": "percent", "decimalPlaces": 2, "thousandSeparator": False}
-            if field == "document_usage_ratio" else None,
-        ).model_dump())
+        metrics.append(
+            MetricConfig(
+                field=field,
+                name=name,
+                is_virtual=True,
+                calculation=VirtualMetricCalculationEnum.DOCUMENT_STATISTICS,
+                default_number_format={"type": "percent", "decimalPlaces": 2, "thousandSeparator": False}
+                if field == "document_usage_ratio"
+                else None,
+            ).model_dump()
+        )
 
 
 _configure_document_statistics()
@@ -1724,13 +1289,9 @@ async def _upgrade_dashboard_datasets(
     }
     for dataset_code in DASHBOARD_DATASET_REFRESH_CODES:
         seed_dataset = seed_by_code[dataset_code]
-        existing_dataset = await dashboard_dataset_repository.find_one(
-            dataset_code=dataset_code
-        )
+        existing_dataset = await dashboard_dataset_repository.find_one(dataset_code=dataset_code)
         if not existing_dataset:
-            await dashboard_dataset_repository.save(
-                _clone_dashboard_dataset(seed_dataset)
-            )
+            await dashboard_dataset_repository.save(_clone_dashboard_dataset(seed_dataset))
             continue
 
         existing_dataset.dataset_name = seed_dataset.dataset_name
@@ -1758,19 +1319,15 @@ async def init_dashboard_datasets():
     if not preset_dashboard:
         await DashboardDao.exec_sql_str(preset_oss_dashboard_sql)
         await DashboardDao.exec_sql_str(preset_commercial_dashboard_sql)
-        await GroupResourceDao.ainsert_group_batch([
-            GroupResource(
-                group_id=DefaultGroup,
-                third_id=str(10),
-                type=ResourceTypeEnum.DASHBOARD.value),
-            GroupResource(
-                group_id=DefaultGroup,
-                third_id=str(11),
-                type=ResourceTypeEnum.DASHBOARD.value),
-        ])
+        await GroupResourceDao.ainsert_group_batch(
+            [
+                GroupResource(group_id=DefaultGroup, third_id=str(10), type=ResourceTypeEnum.DASHBOARD.value),
+                GroupResource(group_id=DefaultGroup, third_id=str(11), type=ResourceTypeEnum.DASHBOARD.value),
+            ]
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import asyncio
 
     asyncio.run(init_dashboard_datasets())
