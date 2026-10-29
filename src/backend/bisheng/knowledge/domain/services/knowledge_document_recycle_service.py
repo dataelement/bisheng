@@ -46,7 +46,7 @@ class KnowledgeDocumentRecycleService:
         *,
         actor_id: int = 0,
         actor_name: str = "system",
-    ) -> None:
+    ) -> list[int]:
         _, _, versions, physical = await self.repository.load_document(int(document.id))
         if any(int(file.tenant_id or 0) != int(document.tenant_id) for file in [*entries, *physical]):
             raise ValueError("文档版本或关联入口的租户不一致, 无法安全回收")
@@ -132,6 +132,7 @@ class KnowledgeDocumentRecycleService:
         document.lifecycle_status = KnowledgeDocumentLifecycleStatus.RECYCLED.value
         self.session.add(document)
         await self.session.flush()
+        return sorted(records)
 
     async def _load_recycled(
         self, item: KnowledgeRecycleItem

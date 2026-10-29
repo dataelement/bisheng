@@ -250,6 +250,15 @@ class KnowledgeDocumentDistributionService:
             trigger_type="document_distribution_updated",
         )
 
+    async def _enqueue_content_stat_files(self, file_ids: Sequence[int]) -> None:
+        # 入口离开有效库存后通知看板删掉文件快照. 入队失败不回滚已经提交的删除.
+        try:
+            from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
+
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async(int(file_id) for file_id in file_ids)
+        except Exception:
+            logger.exception("knowledge space content stat enqueue failed after document entry removal")
+
     async def _lock_published_spaces(self, space_ids: set[int], *, retiring_space_ids: set[int] | None = None) -> None:
         normalized = sorted({int(item) for item in space_ids})
         result = await self.session.execute(
@@ -345,10 +354,7 @@ class KnowledgeDocumentDistributionService:
         allowed_statuses = {KnowledgeFileStatus.SUCCESS.value}
         if allow_processing:
             allowed_statuses.add(KnowledgeFileStatus.PROCESSING.value)
-        if (
-            source_file.file_type != FileType.FILE.value
-            or source_file.status not in allowed_statuses
-        ):
+        if source_file.file_type != FileType.FILE.value or source_file.status not in allowed_statuses:
             raise KnowledgeDocumentDistributionError("only a parsed file can become manager")
         if source_file.entry_type in {
             KnowledgeFileEntryType.PUBLISH.value,
@@ -431,13 +437,9 @@ class KnowledgeDocumentDistributionService:
             source_file_id=source_file_id,
             allow_processing=True,
         )
-        version = await self.version_repository.find_by_knowledge_file_id(
-            source_file_id
-        )
+        version = await self.version_repository.find_by_knowledge_file_id(source_file_id)
         if version is None or int(version.document_id) != int(document.id):
-            raise KnowledgeDocumentDistributionError(
-                "source canonical version is unavailable"
-            )
+            raise KnowledgeDocumentDistributionError("source canonical version is unavailable")
 
         is_active_manager = (
             int(source_file.reference_document_id or 0) == int(document.id)
@@ -448,23 +450,16 @@ class KnowledgeDocumentDistributionService:
             source_file.reference_document_id = int(document.id)
             source_file.entry_type = KnowledgeFileEntryType.MANAGER.value
             source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
-            source_file.desired_entry_generation = (
-                int(source_file.desired_entry_generation or 0) + 1
-            )
+            source_file.desired_entry_generation = int(source_file.desired_entry_generation or 0) + 1
             source_file.applied_entry_generation = 0
 
         current_generation = int(document.content_generation or 0)
         desired_generation = int(source_file.desired_content_generation or 0)
         applied_generation = int(source_file.applied_content_generation or 0)
-        reuse_pending_generation = (
-            desired_generation > applied_generation
-            and desired_generation == current_generation
-        )
+        reuse_pending_generation = desired_generation > applied_generation and desired_generation == current_generation
         if reuse_pending_generation:
             content_generation = desired_generation
-            source_file.projection_status = (
-                KnowledgeFileProjectionStatus.PENDING.value
-            )
+            source_file.projection_status = KnowledgeFileProjectionStatus.PENDING.value
             source_file.projection_retry_count = 0
             source_file.projection_next_retry_at = None
             source_file.projection_lease_owner = None
@@ -483,9 +478,7 @@ class KnowledgeDocumentDistributionService:
                 content_generation,
             )
             source_file.desired_content_generation = content_generation
-            source_file.projection_status = (
-                KnowledgeFileProjectionStatus.PENDING.value
-            )
+            source_file.projection_status = KnowledgeFileProjectionStatus.PENDING.value
             self.session.add(source_file)
             await self.session.flush()
 
@@ -500,8 +493,7 @@ class KnowledgeDocumentDistributionService:
                 "shared ingestion requires at least one active knowledge membership"
             )
         membership_generation = max(
-            [content_generation]
-            + [int(entry.desired_entry_generation or 0) for entry in entries]
+            [content_generation] + [int(entry.desired_entry_generation or 0) for entry in entries]
         )
         await self._commit()
         return SharedContentIngestionTarget(
@@ -519,28 +511,18 @@ class KnowledgeDocumentDistributionService:
         *,
         target: SharedContentIngestionTarget,
     ) -> None:
-        """共享存储均收敛后，将已准备的 generation 标记为就绪。"""
-        source_file = await self.file_repository.find_by_id_for_update(
-            int(target.content_file_id)
-        )
+        """共享存储均收敛后, 将已准备的 generation 标记为就绪。"""
+        source_file = await self.file_repository.find_by_id_for_update(int(target.content_file_id))
         if source_file is None:
-            raise KnowledgeDocumentDistributionError(
-                "shared ingestion source file disappeared"
-            )
+            raise KnowledgeDocumentDistributionError("shared ingestion source file disappeared")
         if (
             int(source_file.tenant_id or 0) != int(target.tenant_id)
-            or int(source_file.reference_document_id or 0)
-            != int(target.canonical_document_id)
-            or int(source_file.desired_content_generation or 0)
-            != int(target.content_generation)
+            or int(source_file.reference_document_id or 0) != int(target.canonical_document_id)
+            or int(source_file.desired_content_generation or 0) != int(target.content_generation)
         ):
-            raise KnowledgeDocumentDistributionError(
-                "shared ingestion target changed before finalization"
-            )
+            raise KnowledgeDocumentDistributionError("shared ingestion target changed before finalization")
         source_file.applied_content_generation = int(target.content_generation)
-        source_file.applied_entry_generation = int(
-            source_file.desired_entry_generation or 0
-        )
+        source_file.applied_entry_generation = int(source_file.desired_entry_generation or 0)
         source_file.projection_status = KnowledgeFileProjectionStatus.READY.value
         source_file.projection_retry_count = 0
         source_file.projection_next_retry_at = None
@@ -1740,8 +1722,10 @@ class KnowledgeDocumentDistributionService:
 
         if not command.metadata_only_migration:
             await KnowledgeFileOrganizationService(self.session).apply_publish(
-                document_id=int(document.id), source_space_id=int(document.knowledge_id),
-                target_space_id=command.target_space_id, tenant_id=command.tenant_id,
+                document_id=int(document.id),
+                source_space_id=int(document.knowledge_id),
+                target_space_id=command.target_space_id,
+                tenant_id=command.tenant_id,
             )
         if not command.metadata_only_migration:
             document.content_generation += 1
@@ -1919,8 +1903,10 @@ class KnowledgeDocumentDistributionService:
         )
         if not command.metadata_only_migration:
             await organization_service.apply_publish(
-                document_id=int(target_document.id), source_space_id=int(source_document.knowledge_id),
-                target_space_id=command.target_space_id, tenant_id=command.tenant_id,
+                document_id=int(target_document.id),
+                source_space_id=int(source_document.knowledge_id),
+                target_space_id=command.target_space_id,
+                tenant_id=command.tenant_id,
             )
         await self.file_repository.mark_document_entries_content_generation(
             int(target_document.id),
@@ -2222,10 +2208,13 @@ class KnowledgeDocumentDistributionService:
         self,
         command: ShareKnowledgeDocumentCommand,
     ) -> ShareKnowledgeDocumentResult:
-        from bisheng.approval.domain.services.knowledge_file_share_history_service import KnowledgeFileShareHistoryService
+        from bisheng.approval.domain.services.knowledge_file_share_history_service import (
+            KnowledgeFileShareHistoryService,
+        )
 
         if await KnowledgeFileShareHistoryService(self.session).revoked(
-            tenant_id=command.tenant_id, instance_id=command.approval_instance_id,
+            tenant_id=command.tenant_id,
+            instance_id=command.approval_instance_id,
         ):
             raise KnowledgeDocumentDistributionError("share approval has been revoked")
         source_entry = await self.file_repository.find_by_id(command.source_entry_id)
@@ -2333,13 +2322,20 @@ class KnowledgeDocumentDistributionService:
         already_deleting = share.entry_status == KnowledgeFileEntryStatus.DELETING.value
         if not already_deleting and share.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
             raise KnowledgeDocumentDistributionError("share entry is not active")
-        from bisheng.approval.domain.services.knowledge_file_share_history_service import KnowledgeFileShareHistoryService
+        from bisheng.approval.domain.services.knowledge_file_share_history_service import (
+            KnowledgeFileShareHistoryService,
+        )
 
         try:
             await KnowledgeFileShareHistoryService(self.session).record(
-                tenant_id=tenant_id, instance_id=share.approval_instance_id, document_id=document_id,
-                share_entry_id=share_entry_id, target_space_id=int(share.knowledge_id), actor_entry_id=actor_entry_id,
-                operator_user_id=operator_user_id, operator_user_name=operator_user_name,
+                tenant_id=tenant_id,
+                instance_id=share.approval_instance_id,
+                document_id=document_id,
+                share_entry_id=share_entry_id,
+                target_space_id=int(share.knowledge_id),
+                actor_entry_id=actor_entry_id,
+                operator_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
             )
             if not already_deleting and not await self.file_repository.mark_entry_deleting(share_entry_id):
                 raise KnowledgeDocumentDistributionError("share entry state changed concurrently")
@@ -2347,6 +2343,7 @@ class KnowledgeDocumentDistributionService:
         except Exception:
             await self.session.rollback()
             raise
+        await self._enqueue_content_stat_files([share_entry_id])
         if already_deleting:
             return RemoveShareEntryResult(document_id=document_id, share_entry_id=share_entry_id, idempotent=True)
 
@@ -2469,6 +2466,7 @@ class KnowledgeDocumentDistributionService:
         ):
             raise KnowledgeDocumentDistributionError("target entry is not a publish")
         if publish.entry_status == KnowledgeFileEntryStatus.DELETING.value:
+            await self._enqueue_content_stat_files([publish_entry_id])
             return RemovePublishEntryResult(
                 document_id=document_id,
                 publish_entry_id=publish_entry_id,
@@ -2501,6 +2499,7 @@ class KnowledgeDocumentDistributionService:
                 publish_entry_id,
             )
 
+        await self._enqueue_content_stat_files([publish_entry_id])
         return RemovePublishEntryResult(
             document_id=document_id,
             publish_entry_id=publish_entry_id,
@@ -2542,6 +2541,7 @@ class KnowledgeDocumentDistributionService:
         ):
             raise KnowledgeDocumentDistributionError("target entry is not a publish")
         if publish.entry_status == KnowledgeFileEntryStatus.DELETING.value:
+            await self._enqueue_content_stat_files([publish_entry_id])
             return ForceDetachPublishEntryResult(
                 document_id=document_id,
                 publish_entry_id=publish_entry_id,
@@ -2577,6 +2577,7 @@ class KnowledgeDocumentDistributionService:
                 publish_entry_id,
             )
 
+        await self._enqueue_content_stat_files([publish_entry_id])
         return ForceDetachPublishEntryResult(
             document_id=document_id,
             publish_entry_id=publish_entry_id,
@@ -2620,6 +2621,7 @@ class KnowledgeDocumentDistributionService:
         entry.projection_lease_until = None
         self.session.add(entry)
         await self._commit()
+        await self._enqueue_content_stat_files([entry_id])
         return RemoveShareEntryResult(
             document_id=document_id,
             share_entry_id=entry_id,
@@ -2754,8 +2756,10 @@ class KnowledgeDocumentDistributionService:
             raise KnowledgeDocumentDistributionError("delete target is not the canonical manager")
         if document.lifecycle_status == KnowledgeDocumentLifecycleStatus.RECYCLED.value:
             return DeleteManagerResult(
-                document_id=document_id, manager_file_id=manager_file_id,
-                action="recycle", idempotent=True,
+                document_id=document_id,
+                manager_file_id=manager_file_id,
+                action="recycle",
+                idempotent=True,
             )
         if (
             document.lifecycle_status == KnowledgeDocumentLifecycleStatus.DELETING.value
@@ -2805,12 +2809,17 @@ class KnowledgeDocumentDistributionService:
         from bisheng.knowledge.domain.services.knowledge_document_recycle_service import KnowledgeDocumentRecycleService
 
         try:
-            await KnowledgeDocumentRecycleService(self.session).recycle(
-                document, manager, entries, actor_id=actor_id, actor_name=actor_name,
+            left_ids = await KnowledgeDocumentRecycleService(self.session).recycle(
+                document,
+                manager,
+                entries,
+                actor_id=actor_id,
+                actor_name=actor_name,
             )
         except ValueError as exc:
             raise KnowledgeDocumentDistributionError(str(exc)) from exc
         await self._commit()
+        await self._enqueue_content_stat_files(left_ids)
         return DeleteManagerResult(
             document_id=document_id,
             manager_file_id=manager_file_id,
@@ -3008,6 +3017,7 @@ class KnowledgeDocumentDistributionService:
                 document.id,
             )
 
+        await self._enqueue_content_stat_files([int(manager.id), int(predecessor.id), int(tombstone.id)])
         return DeleteManagerResult(
             document_id=int(document.id),
             manager_file_id=int(manager.id),

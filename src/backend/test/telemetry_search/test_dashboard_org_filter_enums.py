@@ -109,6 +109,16 @@ async def test_uploader_prefix_maps_to_same_org_level(monkeypatch):
     assert [opt["value"] for opt in result["options"]] == ["生产制造部"]
 
 
+async def test_asker_prefix_maps_to_department_org_level(monkeypatch):
+    tree = [
+        _node(1, "首钢股份", "company", children=[_node(6, "制造部", "dept")]),
+    ]
+
+    result = await _call(monkeypatch, field="asker_department_name", tree=tree)
+
+    assert [opt["value"] for opt in result["options"]] == ["制造部"]
+
+
 async def test_options_use_resolved_short_name_label(monkeypatch):
     tree = [_node(1, "生产制造部", "company", short_name="生产部")]
 

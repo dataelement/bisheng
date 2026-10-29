@@ -23,7 +23,7 @@ ORGANIZATION_DIMENSIONS = {
     "user_department_infos.department_name",
     *(
         f"{prefix}_{field}"
-        for prefix in ("uploader", "belonging", "original_upload")
+        for prefix in ("uploader", "belonging", "original_upload", "asker")
         for field in ORGANIZATION_NAME_FIELDS
     ),
 }

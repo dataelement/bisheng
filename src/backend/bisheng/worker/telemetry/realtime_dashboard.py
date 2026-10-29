@@ -16,13 +16,17 @@ from bisheng.core.logger import trace_id_var
 from bisheng.core.search.elasticsearch.manager import (
     get_statistics_es_connection_sync,
 )
-from bisheng.database.models.department import Department, UserDepartmentDao
+from bisheng.database.models.department import Department, DepartmentDao, UserDepartmentDao
 from bisheng.database.models.qa_expert import Question
 from bisheng.database.models.tenant import UserTenant
 from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
+    ASKER_ORG_RESOLVED,
     QA_TYPE_LABELS,
     RealtimeQaQuestionFact,
     RealtimeQaQuestionRecord,
+    asker_organization_document,
+    asker_organization_fields,
+    collect_path_department_ids,
 )
 from bisheng.telemetry.domain.mid_table.retry_budget import bounded_telemetry_task, checkpoint, frozen_value
 from bisheng.user.domain.models.user import User
@@ -74,6 +78,20 @@ def _department_fields(
     return int(department.id), department.name
 
 
+def _departments_by_id(primary_departments: dict[int, Department]) -> dict[int, Department]:
+    """Load path ancestors so each primary department can be split by org level."""
+    department_ids = collect_path_department_ids(primary_departments.values())
+    loaded: dict[int, Department] = {}
+    if department_ids:
+        with bypass_tenant_filter():
+            rows = DepartmentDao.get_by_ids(department_ids)
+        loaded = {int(row.id): row for row in rows if row.id is not None}
+    for department in primary_departments.values():
+        if getattr(department, "id", None) is not None:
+            loaded.setdefault(int(department.id), department)
+    return loaded
+
+
 def _build_record(
     *,
     tenant_id: int,
@@ -83,6 +101,7 @@ def _build_record(
     user_id: int,
     user_name: str,
     department: Department | None,
+    departments_by_id: dict[int, Department],
     scene: str,
     source_app: str,
     space_id: Any = None,
@@ -92,6 +111,7 @@ def _build_record(
     projection_updated_at: int,
 ) -> RealtimeQaQuestionRecord:
     department_id, department_name = _department_fields(department)
+    org_fields = asker_organization_fields(department, departments_by_id)
     return RealtimeQaQuestionRecord(
         es_id=f"qa_{tenant_id}_{qa_type}_{question_id}",
         tenant_id=tenant_id,
@@ -108,6 +128,9 @@ def _build_record(
         source_app=source_app,
         primary_department_id=department_id,
         primary_department_name=department_name,
+        asker_company_name=org_fields["asker_company_name"],
+        asker_department_name=org_fields["asker_department_name"],
+        asker_office_name=org_fields["asker_office_name"],
         department_source="current_primary_backfill",
         space_id=_optional_int(space_id),
         file_id=_optional_int(file_id),
@@ -168,6 +191,7 @@ def _sync_expert_questions(
         user_ids = [int(question.user_id) for question, _, _ in rows]
         with bypass_tenant_filter():
             departments = UserDepartmentDao.get_primary_department_map_by_user_ids(user_ids)
+        departments_by_id = _departments_by_id(departments)
         records = [
             _build_record(
                 tenant_id=int(tenant_id or 1),
@@ -177,6 +201,7 @@ def _sync_expert_questions(
                 user_id=int(question.user_id),
                 user_name=(user.user_name if user is not None else question.created_by or str(question.user_id)),
                 department=departments.get(int(question.user_id)),
+                departments_by_id=departments_by_id,
                 scene="expert_question",
                 source_app="expert_qa",
                 business_domain_code=question.business_domain,
@@ -194,6 +219,7 @@ def _portal_record_from_hit(
     hit: dict[str, Any],
     *,
     departments: dict[int, Department],
+    departments_by_id: dict[int, Department],
     projection_updated_at: int,
 ) -> RealtimeQaQuestionRecord | None:
     source = hit.get("_source") or {}
@@ -219,6 +245,7 @@ def _portal_record_from_hit(
         user_id=user_id,
         user_name=str(user_context.get("user_name") or user_id),
         department=departments.get(user_id),
+        departments_by_id=departments_by_id,
         scene=scene,
         source_app=str(event_data.get("portal_qa_source_app") or "shougang_portal"),
         space_id=event_data.get("portal_qa_space_id"),
@@ -241,6 +268,7 @@ def _flush_portal_hits(
     ]
     with bypass_tenant_filter():
         departments = UserDepartmentDao.get_primary_department_map_by_user_ids(user_ids)
+    departments_by_id = _departments_by_id(departments)
     records = [
         record
         for hit in hits
@@ -248,6 +276,7 @@ def _flush_portal_hits(
             record := _portal_record_from_hit(
                 hit,
                 departments=departments,
+                departments_by_id=departments_by_id,
                 projection_updated_at=projection_updated_at,
             )
         )
@@ -312,6 +341,57 @@ def _sync_portal_questions(
     return synced
 
 
+def backfill_missing_asker_organizations() -> dict[str, int]:
+    """Fill company/department/office from the department already stored on each question.
+
+    Charts group with a terms aggregation, which drops documents that do not have the
+    field. Questions written before those fields existed therefore show an empty table.
+    """
+    fact = RealtimeQaQuestionFact()
+    client = fact._es_client_sync
+    if not client.indices.exists(index=fact._index_name):
+        return {"checked": 0, "updated": 0}
+
+    hits = helpers.scan(
+        client=client,
+        index=fact._index_name,
+        query={"query": {"bool": {"must_not": [{"term": {ASKER_ORG_RESOLVED: "1"}}]}}},
+        source=["primary_department_id"],
+        size=PAGE_SIZE,
+    )
+    pending: list[tuple[str, int | None]] = []
+    try:
+        for hit in hits:
+            source = hit.get("_source") or {}
+            pending.append((str(hit["_id"]), _optional_int(source.get("primary_department_id"))))
+    finally:
+        hits.close()
+    if not pending:
+        return {"checked": 0, "updated": 0}
+
+    department_ids = [department_id for _, department_id in pending if department_id is not None]
+    with bypass_tenant_filter():
+        departments = {
+            int(row.id): row for row in DepartmentDao.get_by_ids(department_ids) if getattr(row, "id", None) is not None
+        }
+    departments_by_id = _departments_by_id(departments)
+    actions = [
+        {
+            "_op_type": "update",
+            "_index": fact._index_name,
+            "_id": doc_id,
+            "doc": asker_organization_document(
+                departments.get(department_id) if department_id is not None else None,
+                departments_by_id,
+            ),
+        }
+        for doc_id, department_id in pending
+    ]
+    helpers.bulk(client, actions, refresh="wait_for")
+    logger.info("qa.backfill.asker_org checked={} updated={}", len(pending), len(actions))
+    return {"checked": len(pending), "updated": len(actions)}
+
+
 @bisheng_celery.task()
 @bounded_telemetry_task
 def sync_mid_realtime_qa_question_fact(
@@ -342,11 +422,17 @@ def sync_mid_realtime_qa_question_fact(
         end=end,
         projection_updated_at=projection_updated_at,
     )
+    backfill = backfill_missing_asker_organizations()
     logger.info(
-        "Reconciled real-time QA facts. start={}, end={}, expert={}, portal={}",
+        "Reconciled real-time QA facts. start={}, end={}, expert={}, portal={}, asker_org={}",
         start.isoformat() if start else "beginning",
         end.isoformat(),
         expert_count,
         portal_count,
+        backfill,
     )
-    return {"expert": expert_count, "portal": portal_count}
+    return {
+        "expert": expert_count,
+        "portal": portal_count,
+        "asker_org_updated": backfill["updated"],
+    }

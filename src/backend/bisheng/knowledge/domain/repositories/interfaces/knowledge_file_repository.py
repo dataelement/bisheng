@@ -1,3 +1,4 @@
+# ruff: noqa: RUF002
 from abc import ABC
 from datetime import date, datetime
 from typing import Any
@@ -68,10 +69,17 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         keyword: str | None = None,
         knowledge_name: str | None = None,
         uploader_name: str | None = None,
+        uploader_company: str | None = None,
+        uploader_department: str | None = None,
+        uploader_office: str | None = None,
         update_time_from: date | None = None,
         update_time_to: date | None = None,
     ) -> tuple[list[dict], int]:
         """当前租户知识空间里, 解析失败、超时、违规的源文件."""
+        ...
+
+    async def list_abnormal_uploader_org_options(self) -> dict[str, list[str]]:
+        """异常源文件里出现过的上传人公司、部门、科室名称."""
         ...
 
     async def lock_abnormal_source_file(self, file_id: int) -> KnowledgeFile | None:

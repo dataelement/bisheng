@@ -211,7 +211,7 @@ class Department(SQLModelSerializable, table=True):
             comment="Dept-wide max concurrent daily-mode chat users; 0=unlimited (F030)",
         ),
     )
-    # 积分部门榜使用的业务标签；不参与部门树拓扑和用户挂载。
+    # 积分部门榜使用的业务标签; 不参与部门树拓扑和用户挂载。
     org_level: str | None = Field(
         default=None,
         sa_column=Column(
@@ -316,10 +316,14 @@ class DepartmentDao:
         """按父关系重建目标子树, 调用者负责同一事务的提交与回滚。"""
         from bisheng.common.errcode.department import DepartmentCircularMoveError, DepartmentNotFoundError
 
-        root = (await session.exec(
-            select(Department).where(Department.id == department.id)
-            .with_for_update().execution_options(populate_existing=True)
-        )).first()
+        root = (
+            await session.exec(
+                select(Department)
+                .where(Department.id == department.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).first()
         if root is None or root.tenant_id != department.tenant_id:
             raise DepartmentNotFoundError()
 
@@ -331,10 +335,14 @@ class DepartmentDao:
             if ancestor_id in seen:
                 raise DepartmentCircularMoveError()
             seen.add(ancestor_id)
-            ancestor = (await session.exec(
-                select(Department).where(Department.id == ancestor_id)
-                .with_for_update().execution_options(populate_existing=True)
-            )).first()
+            ancestor = (
+                await session.exec(
+                    select(Department)
+                    .where(Department.id == ancestor_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).first()
             if ancestor is None or ancestor.tenant_id != root.tenant_id:
                 raise DepartmentNotFoundError(msg="父组织不存在于当前组织所属租户")
             ancestors.append(int(ancestor.id))
@@ -348,10 +356,15 @@ class DepartmentDao:
         while frontier:
             following = []
             for offset in range(0, len(frontier), 400):
-                children = (await session.exec(
-                    select(Department).where(Department.parent_id.in_(frontier[offset:offset + 400]))
-                    .order_by(Department.id).with_for_update().execution_options(populate_existing=True)
-                )).all()
+                children = (
+                    await session.exec(
+                        select(Department)
+                        .where(Department.parent_id.in_(frontier[offset : offset + 400]))
+                        .order_by(Department.id)
+                        .with_for_update()
+                        .execution_options(populate_existing=True)
+                    )
+                ).all()
                 for child in children:
                     child_id = int(child.id)
                     if child.tenant_id != root.tenant_id:
@@ -1415,10 +1428,7 @@ class UserDepartmentDao:
                     UserDepartment.is_primary == 1,
                 )
             )
-            return {
-                int(user_id): department
-                for user_id, department in result.all()
-            }
+            return {int(user_id): department for user_id, department in result.all()}
 
     # -----------------------------------------------------------------------
     # v2.5.1 F014: membership lookups + primary flag management used by
@@ -1462,6 +1472,24 @@ class UserDepartmentDao:
                 )
             )
             return result.all()
+
+    @classmethod
+    async def aget_primary_user_ids_by_department_ids(cls, department_ids: list[int]) -> list[int]:
+        """Primary members of these departments.
+
+        ``department_id`` is indexed. ``is_primary`` is applied after that lookup.
+        """
+        ids = sorted({int(department_id) for department_id in department_ids if department_id})
+        if not ids:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment.user_id).where(
+                    UserDepartment.is_primary == 1,
+                    UserDepartment.department_id.in_(ids),
+                )
+            )
+            return sorted(set(_normalize_id_scalar_rows(result.all())))
 
     @classmethod
     async def aget_user_ids_by_department(

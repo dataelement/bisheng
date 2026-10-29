@@ -18,6 +18,8 @@ interface ClearableFilterSelectProps {
     options: FilterOption[]
     triggerClassName?: string
     contentClassName?: string
+    searchable?: boolean
+    searchPlaceholder?: string
     onValueChange: (value: string) => void
     onOpenChange?: (open: boolean) => void
 }
@@ -34,15 +36,22 @@ export function ClearableFilterSelect({
     options,
     triggerClassName,
     contentClassName,
+    searchable = false,
+    searchPlaceholder = "搜索",
     onValueChange,
     onOpenChange,
 }: ClearableFilterSelectProps) {
     const [open, setOpen] = useState(false)
+    const [keyword, setKeyword] = useState("")
     const selected = String(value || "")
     const selectedLabel = options.find((option) => option.value === selected)?.label
+    const visibleOptions = searchable && keyword.trim()
+        ? options.filter((option) => String(option.label ?? "").toLowerCase().includes(keyword.trim().toLowerCase()))
+        : options
 
     const handleOpenChange = (next: boolean) => {
         setOpen(next)
+        if (!next) setKeyword("")
         onOpenChange?.(next)
     }
 
@@ -66,7 +75,17 @@ export function ClearableFilterSelect({
             </SelectTrigger>
             <SelectContent className={contentClassName}>
                 <div className="w-full min-w-[var(--radix-select-trigger-width)]">
-                    {options.map((option) => {
+                    {searchable && (
+                        <input
+                            className="mb-2 h-8 w-full rounded-md border bg-background px-2 text-sm outline-none"
+                            value={keyword}
+                            placeholder={searchPlaceholder}
+                            onChange={(event) => setKeyword(event.target.value)}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                        />
+                    )}
+                    {visibleOptions.map((option) => {
                         const active = selected === option.value
                         return (
                             <div

@@ -36,6 +36,7 @@ ABNORMAL_UPLOAD_STATUSES = frozenset(
 MAX_PAGE_SIZE = 100
 MAX_BATCH_SIZE = 100
 MAX_KEYWORD_LENGTH = 100
+MAX_ORG_NAME_LENGTH = 128
 _SOURCE_SPACE_LEVELS = frozenset(item.value for item in KnowledgeSpaceLevelEnum)
 
 ParseDispatcher = Callable[..., Awaitable[Any]]
@@ -67,6 +68,9 @@ class AbnormalUploadService:
         keyword: str | None = None,
         knowledge_name: str | None = None,
         uploader_name: str | None = None,
+        uploader_company: str | None = None,
+        uploader_department: str | None = None,
+        uploader_office: str | None = None,
         update_time_from: str | None = None,
         update_time_to: str | None = None,
     ) -> dict:
@@ -78,6 +82,9 @@ class AbnormalUploadService:
             keyword=keyword,
             knowledge_name=knowledge_name,
             uploader_name=uploader_name,
+            uploader_company=uploader_company,
+            uploader_department=uploader_department,
+            uploader_office=uploader_office,
             update_time_from=update_time_from,
             update_time_to=update_time_to,
         )
@@ -87,6 +94,10 @@ class AbnormalUploadService:
             **filters,
         )
         return {"data": items, "total": total}
+
+    async def list_org_options(self) -> dict[str, list[str]]:
+        self._require_operator()
+        return await self.file_repository.list_abnormal_uploader_org_options()
 
     async def retry(self, file_id: int) -> None:
         self._require_operator()
@@ -111,6 +122,25 @@ class AbnormalUploadService:
             await self.file_repository.session.commit()
             raise AbnormalUploadRetryFailedError() from None
         await self._audit(file_id, "abnormal_upload.retry")
+
+    async def retry_batch(self, file_ids: list[int]) -> dict[str, int]:
+        """逐条重新解析. 已派发的不回滚."""
+        self._require_operator()
+        unique_ids = self._require_batch_ids(file_ids)
+        retried = 0
+        failed = 0
+        for file_id in unique_ids:
+            try:
+                await self.retry(file_id)
+                retried += 1
+            except BaseErrorCode as exc:
+                if int(getattr(exc, "code", 0) or 0) == 403:
+                    raise
+                failed += 1
+            except Exception:
+                logger.exception("abnormal upload batch retry failed file_id=%s", file_id)
+                failed += 1
+        return {"retried": retried, "failed": failed}
 
     async def delete(self, file_id: int) -> None:
         """普通回收删除. 不调用违规删除, 不扣分."""
@@ -183,6 +213,9 @@ class AbnormalUploadService:
         keyword: str | None,
         knowledge_name: str | None,
         uploader_name: str | None,
+        uploader_company: str | None,
+        uploader_department: str | None,
+        uploader_office: str | None,
         update_time_from: str | None,
         update_time_to: str | None,
     ) -> dict:
@@ -202,9 +235,19 @@ class AbnormalUploadService:
             "keyword": cls._require_text(keyword),
             "knowledge_name": cls._require_text(knowledge_name),
             "uploader_name": cls._require_text(uploader_name),
+            "uploader_company": cls._require_org_name(uploader_company),
+            "uploader_department": cls._require_org_name(uploader_department),
+            "uploader_office": cls._require_org_name(uploader_office),
             "update_time_from": from_day,
             "update_time_to": to_day,
         }
+
+    @staticmethod
+    def _require_org_name(value: str | None) -> str | None:
+        text = (value or "").strip() or None
+        if text is not None and len(text) > MAX_ORG_NAME_LENGTH:
+            raise ValueError("invalid abnormal upload filter")
+        return text
 
     @staticmethod
     def _require_batch_ids(file_ids: list[int]) -> list[int]:

@@ -48,6 +48,9 @@ async def list_abnormal_uploads(
     keyword: str | None = Query(default=None),
     knowledge_name: str | None = Query(default=None),
     uploader_name: str | None = Query(default=None),
+    uploader_company: str | None = Query(default=None),
+    uploader_department: str | None = Query(default=None),
+    uploader_office: str | None = Query(default=None),
     update_time_from: str | None = Query(default=None),
     update_time_to: str | None = Query(default=None),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -63,12 +66,44 @@ async def list_abnormal_uploads(
             keyword=keyword,
             knowledge_name=knowledge_name,
             uploader_name=uploader_name,
+            uploader_company=uploader_company,
+            uploader_department=uploader_department,
+            uploader_office=uploader_office,
             update_time_from=update_time_from,
             update_time_to=update_time_to,
         )
     except ValueError as exc:
         return resp_500(code=422, message=_list_error_message(exc))
     return resp_200(data)
+
+
+@router.get("/abnormal-uploads/org-options")
+async def list_abnormal_upload_org_options(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    service = _service(request, session, login_user)
+    return resp_200(await service.list_org_options())
+
+
+@router.post("/abnormal-uploads/retry-batch")
+async def retry_abnormal_uploads_batch(
+    body: AbnormalUploadBatchDeleteBody,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    service = _service(request, session, login_user)
+    try:
+        data = await service.retry_batch(body.file_ids)
+    except ValueError:
+        return resp_500(code=422, message="批量解析参数不正确")
+    if data["failed"]:
+        message = f"已开始重新解析 {data['retried']} 条，{data['failed']} 条未解析"  # noqa: RUF001
+    else:
+        message = f"已开始重新解析 {data['retried']} 条"
+    return resp_200(data, message=message)
 
 
 @router.post("/abnormal-uploads/delete-batch")

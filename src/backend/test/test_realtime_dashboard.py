@@ -40,42 +40,28 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
     }.issubset(datasets)
 
     participation = datasets["mid_user_daily_participation"]
-    metrics = {
-        metric["field"]: metric
-        for metric in participation.schema_config["metrics"]
-    }
+    metrics = {metric["field"]: metric for metric in participation.schema_config["metrics"]}
     assert metrics["participation_rate"]["calculation"] == "login_participation"
     assert metrics["participation_rate"]["formula"] is None
-    assert {
-        aggregation["type"]
-        for aggregation in metrics["participation_rate"]["aggregations"]
-    } == {"cardinality"}
+    assert {aggregation["type"] for aggregation in metrics["participation_rate"]["aggregations"]} == {"cardinality"}
     # F058 follow-up (2026-09-01): mid_user_daily_participation's ES index was repointed to
     # the merged user-engagement index (see user_engagement_shared.py / init_dataset.py) —
     # the dataset_code itself, and its role as a REALTIME_DATASETS entry, are unchanged.
     assert participation.es_index_name == USER_ENGAGEMENT_ES_INDEX
-    assert "department_source" in {
-        dimension["field"]
-        for dimension in participation.schema_config["dimensions"]
-    }
+    assert "department_source" in {dimension["field"] for dimension in participation.schema_config["dimensions"]}
 
     qa_dataset = datasets["mid_realtime_qa_question_fact"]
-    qa_metrics = {
-        metric["field"]: metric
-        for metric in qa_dataset.schema_config["metrics"]
-    }
+    qa_metrics = {metric["field"]: metric for metric in qa_dataset.schema_config["metrics"]}
     assert qa_metrics["total_qa_count"]["name"] == "总问答数"
     assert qa_metrics["total_qa_count"]["aggregations"][0]["type"] == "value_count"
-    assert "department_source" in {
-        dimension["field"]
-        for dimension in qa_dataset.schema_config["dimensions"]
-    }
+    qa_dimensions = {dimension["field"]: dimension["name"] for dimension in qa_dataset.schema_config["dimensions"]}
+    assert "department_source" in qa_dimensions
+    assert qa_dimensions["asker_company_name"] == "提问人公司"
+    assert qa_dimensions["asker_department_name"] == "提问人部门"
+    assert qa_dimensions["asker_office_name"] == "提问人科室"
 
     knowledge_dataset = datasets["mid_knowledge_space_content_stat"]
-    knowledge_metrics = {
-        metric["field"]: metric
-        for metric in knowledge_dataset.schema_config["metrics"]
-    }
+    knowledge_metrics = {metric["field"]: metric for metric in knowledge_dataset.schema_config["metrics"]}
     assert knowledge_metrics["total_file_count"]["sum_type"] == "value_count"
     assert knowledge_metrics["new_file_count"]["calculation"] == "document_statistics"
     assert knowledge_metrics["new_file_count"]["aggregations"] is None
@@ -89,9 +75,7 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
     ]
     for metric_name in ("total_file_count", "new_file_count", "contributor_count"):
         level_filter = next(
-            item
-            for item in knowledge_metrics[metric_name]["filter"]["filters"]
-            if item["field"] == "space_level"
+            item for item in knowledge_metrics[metric_name]["filter"]["filters"] if item["field"] == "space_level"
         )
         assert level_filter["value"] == [
             "public",
@@ -115,8 +99,7 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
     assert download_aggregation["type"] == "sum"
     assert download_aggregation["field"] == "download_count"
     knowledge_dimensions = {
-        dimension["field"]: dimension["name"]
-        for dimension in knowledge_dataset.schema_config["dimensions"]
+        dimension["field"]: dimension["name"] for dimension in knowledge_dataset.schema_config["dimensions"]
     }
     assert knowledge_dimensions["belonging_department_name"] == "所属部门"
     assert knowledge_dimensions["uploader_department_name"] == "上传人部门"
@@ -149,13 +132,9 @@ def test_participation_day_uses_china_local_midnight():
         participation_day,
     )
 
-    local_date, timestamp = participation_day(
-        datetime(2026, 7, 26, 16, 30, tzinfo=timezone.utc)
-    )
+    local_date, timestamp = participation_day(datetime(2026, 7, 26, 16, 30, tzinfo=timezone.utc))
     assert local_date == "2026-07-27"
-    assert datetime.fromtimestamp(timestamp, timezone.utc).isoformat() == (
-        "2026-07-26T16:00:00+00:00"
-    )
+    assert datetime.fromtimestamp(timestamp, timezone.utc).isoformat() == ("2026-07-26T16:00:00+00:00")
 
 
 def test_historical_login_backfill_aggregates_by_china_local_day():
@@ -163,12 +142,8 @@ def test_historical_login_backfill_aggregates_by_china_local_day():
         aggregate_historical_login_hits,
     )
 
-    first = int(
-        datetime(2026, 7, 26, 16, 30, tzinfo=timezone.utc).timestamp()
-    )
-    second = int(
-        datetime(2026, 7, 27, 3, 15, tzinfo=timezone.utc).timestamp()
-    )
+    first = int(datetime(2026, 7, 26, 16, 30, tzinfo=timezone.utc).timestamp())
+    second = int(datetime(2026, 7, 27, 3, 15, tzinfo=timezone.utc).timestamp())
     aggregates = aggregate_historical_login_hits(
         [
             {
@@ -252,6 +227,38 @@ async def test_daily_participation_login_is_atomic_and_department_scoped(
     assert "login_count" in call["script"]["source"]
 
 
+def test_asker_organization_document_marks_resolved_levels():
+    from bisheng.telemetry.domain.mid_table.realtime_qa_question import asker_organization_document
+
+    company = SimpleNamespace(id=1, name="北京首钢股份有限公司", org_level="company", status="active")
+    department = SimpleNamespace(id=4, name="测试111", org_level="dept", path="/1/4/", status="active")
+    nodes = {1: company, 4: department}
+
+    assert asker_organization_document(department, nodes) == {
+        "asker_company_name": "北京首钢股份有限公司",
+        "asker_department_name": "测试111",
+        "asker_org_resolved": "1",
+    }
+    assert asker_organization_document(None, {}) == {"asker_org_resolved": "1"}
+
+
+def test_asker_organization_keeps_office_when_primary_is_a_squad():
+    from bisheng.telemetry.domain.mid_table.realtime_qa_question import asker_organization_fields
+
+    nodes = {
+        1: SimpleNamespace(id=1, name="首钢股份", org_level="company", status="active"),
+        6: SimpleNamespace(id=6, name="制造部", org_level="dept", status="active"),
+        8: SimpleNamespace(id=8, name="炼钢科", org_level="office", status="active"),
+        9: SimpleNamespace(id=9, name="甲班", org_level="squad", path="/1/6/8/9/", status="active"),
+    }
+
+    assert asker_organization_fields(nodes[9], nodes) == {
+        "asker_company_name": "首钢股份",
+        "asker_department_name": "制造部",
+        "asker_office_name": "炼钢科",
+    }
+
+
 @pytest.mark.asyncio
 async def test_realtime_qa_question_uses_event_time_primary_department(
     monkeypatch,
@@ -267,16 +274,25 @@ async def test_realtime_qa_question_uses_event_time_primary_department(
         "bisheng.telemetry.domain.mid_table.base.get_es_connection",
         fake_get_es_connection,
     )
+    company = SimpleNamespace(id=1, name="首钢股份", org_level="company", path="/1/", status="active")
+    department = SimpleNamespace(id=6, name="制造部", org_level="dept", path="/1/6/", status="active")
+    office = SimpleNamespace(id=8, name="炼钢科", org_level="office", path="/1/6/8/", status="active")
     monkeypatch.setattr(
         module.UserDepartmentDao,
         "aget_user_primary_department",
-        AsyncMock(return_value=SimpleNamespace(department_id=6)),
+        AsyncMock(return_value=SimpleNamespace(department_id=8)),
     )
     monkeypatch.setattr(
         module.DepartmentDao,
         "aget_by_id",
-        AsyncMock(return_value=SimpleNamespace(id=6, name="制造部")),
+        AsyncMock(return_value=office),
     )
+
+    async def fake_get_by_ids(department_ids):
+        by_id = {1: company, 6: department, 8: office}
+        return [by_id[department_id] for department_id in department_ids if department_id in by_id]
+
+    monkeypatch.setattr(module.DepartmentDao, "aget_by_ids", fake_get_by_ids)
 
     record = await module.RealtimeQaQuestionFact.record_success(
         tenant_id=3,
@@ -292,9 +308,17 @@ async def test_realtime_qa_question_uses_event_time_primary_department(
 
     assert record.es_id == "qa_3_document_q-001"
     assert record.qa_type_name == "文档内AI对话"
-    assert record.primary_department_id == 6
+    assert record.primary_department_id == 8
+    assert record.primary_department_name == "炼钢科"
+    assert record.asker_company_name == "首钢股份"
+    assert record.asker_department_name == "制造部"
+    assert record.asker_office_name == "炼钢科"
     assert record.department_source == "event_time"
-    assert fake_es.index_calls[0]["document"]["question_id"] == "q-001"
+    document = fake_es.index_calls[0]["document"]
+    assert document["question_id"] == "q-001"
+    assert document["asker_company_name"] == "首钢股份"
+    assert document["asker_department_name"] == "制造部"
+    assert document["asker_office_name"] == "炼钢科"
 
 
 @pytest.mark.asyncio
@@ -526,9 +550,7 @@ async def test_date_field_enums_keep_raw_value_and_format_display_label(
     assert result["options"] == [
         {
             "value": timestamp_ms,
-            "label": datetime.fromtimestamp(timestamp_ms / 1000).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
+            "label": datetime.fromtimestamp(timestamp_ms / 1000).strftime("%Y-%m-%d %H:%M:%S"),
         }
     ]
 
@@ -539,7 +561,7 @@ async def test_date_field_enums_keep_raw_value_and_format_display_label(
         (
             "department_source",
             ["event_time", "current_primary_backfill"],
-            ["提问时所属主部门", "当前主部门（历史回填）"],
+            ["提问时所属主部门", "当前主部门（历史回填）"],  # noqa: RUF001
         ),
         (
             "scene",
@@ -626,8 +648,7 @@ async def test_realtime_qa_field_enums_keep_codes_and_use_readable_labels(
 
     assert result["enums"] == values
     assert result["options"] == [
-        {"value": value, "label": label}
-        for value, label in zip(values, expected_labels, strict=True)
+        {"value": value, "label": label} for value, label in zip(values, expected_labels, strict=True)
     ]
 
 
@@ -681,9 +702,7 @@ async def test_realtime_qa_explicit_time_filter_includes_today_and_can_be_cleare
     filters, seven_day_range = await service.convert_filters({}, {})
     assert len(filters) == 1
     assert filters[0].filters[0].field == "timestamp"
-    assert datetime.fromtimestamp(seven_day_range[0] / 1000).date() == (
-        today - timedelta(days=6)
-    )
+    assert datetime.fromtimestamp(seven_day_range[0] / 1000).date() == (today - timedelta(days=6))
     assert datetime.fromtimestamp(seven_day_range[1] / 1000).date() == today
 
     service.data_config.time_filter = None
@@ -704,17 +723,9 @@ async def test_department_admin_cannot_edit_realtime_dashboard(monkeypatch):
     monkeypatch.setattr(
         module.DashboardDao,
         "get_components",
-        AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    dataset_code="mid_knowledge_space_content_stat"
-                )
-            ]
-        ),
+        AsyncMock(return_value=[SimpleNamespace(dataset_code="mid_knowledge_space_content_stat")]),
     )
-    service = module.DashboardService.model_construct(
-        login_user=SimpleNamespace(is_admin=lambda: False)
-    )
+    service = module.DashboardService.model_construct(login_user=SimpleNamespace(is_admin=lambda: False))
 
     with pytest.raises(TestUnauthorizedError):
         await service._ensure_realtime_dashboard_write(12)

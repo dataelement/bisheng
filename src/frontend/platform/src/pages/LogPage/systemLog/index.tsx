@@ -15,6 +15,7 @@ import { TooltipProvider } from "@/components/bs-ui/tooltip";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { useResizableColumns } from "@/components/bs-ui/table/useResizableColumns";
 import { ResizableTableHead, TruncatedTableCell } from "@/components/bs-ui/table/TruncatedTableCell";
+import { UserOrgMoreFilters } from "../UserOrgMoreFilters";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -120,7 +121,10 @@ export default function SystemLog() {
         start: undefined,
         end: undefined,
         moduleId: '',
-        action: ''
+        action: '',
+        userDepartment: '',
+        userCompany: '',
+        userOffice: '',
     }
 
     const [actions, setActions] = useState<any[]>([])
@@ -138,6 +142,9 @@ export default function SystemLog() {
             { defaultWidth: 200, minWidth: 80 },
             { defaultWidth: 140, minWidth: 80 },
             { defaultWidth: 280, minWidth: 120 },
+            { defaultWidth: 140, minWidth: 80 },
+            { defaultWidth: 140, minWidth: 80 },
+            { defaultWidth: 140, minWidth: 80 },
         ],
         []
     )
@@ -154,6 +161,9 @@ export default function SystemLog() {
         t('log.operationObject'),
         t('log.ipAddress'),
         t('log.remark'),
+        t('log.userCompany'),
+        t('log.userDepartment'),
+        t('log.userOffice'),
     ]
 
     const handleActionOpen = async () => {
@@ -236,6 +246,14 @@ export default function SystemLog() {
                         onValueChange={(value) => setKeys({ ...keys, action: value })}
                     />
                 </div>
+                <UserOrgMoreFilters
+                    value={{
+                        userDepartment: keys.userDepartment,
+                        userCompany: keys.userCompany,
+                        userOffice: keys.userOffice,
+                    }}
+                    onChange={(patch) => setKeys({ ...keys, ...patch })}
+                />
                 <div>
                     <Button className="mr-3 px-6" onClick={handleSearch}>
                         {t('log.searchButton')}
@@ -280,12 +298,15 @@ export default function SystemLog() {
                             <TruncatedTableCell tdProps={rc.getTdProps(8)} text={renderObjectName(log, t)} />
                             <TruncatedTableCell tdProps={rc.getTdProps(9)} text={log.ip_address || "-"} />
                             <TruncatedTableCell tdProps={rc.getTdProps(10)} text={renderRemark(log, t)} full />
+                            <TruncatedTableCell tdProps={rc.getTdProps(11)} text={log.company_name || "-"} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(12)} text={log.department_name || "-"} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(13)} text={log.office_name || "-"} />
                         </TableRow>
                     ))}
                 </TableBody>
                 {!logs.length && <TableFooter>
                     <TableRow>
-                        <TableCell colSpan={11} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                        <TableCell colSpan={14} className="text-center text-gray-400">{t('build.empty')}</TableCell>
                     </TableRow>
                 </TableFooter>}
                 </Table>

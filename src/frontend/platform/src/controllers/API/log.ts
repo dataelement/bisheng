@@ -22,7 +22,15 @@ export async function getResponsiblePersonsApi(): Promise<Array<{
 }
 
 // 分页获取审计列表
-export async function getLogsApi({ page, pageSize, userIds, responsibleUserIds, groupId = '', start, end, moduleId = '', action = '' }: {
+export async function getAuditUserOrgOptionsApi(): Promise<{
+    departments: string[]
+    companies: string[]
+    offices: string[]
+}> {
+    return await axios.get('/api/v1/audit/user-org-options')
+}
+
+export async function getLogsApi({ page, pageSize, userIds, responsibleUserIds, groupId = '', start, end, moduleId = '', action = '', userDepartment = '', userCompany = '', userOffice = '' }: {
     page: number,
     pageSize: number,
     userIds?: number[],
@@ -31,7 +39,10 @@ export async function getLogsApi({ page, pageSize, userIds, responsibleUserIds, 
     start?: string,
     end?: string,
     moduleId?: string,
-    action?: string
+    action?: string,
+    userDepartment?: string,
+    userCompany?: string,
+    userOffice?: string,
 }): Promise<{ data: any[], total: number }> {
     const uids = userIds?.reduce((pre, val) => `${pre}&operator_ids=${val}`, '') || ''
     const responsibleIds = responsibleUserIds?.reduce(
@@ -40,9 +51,14 @@ export async function getLogsApi({ page, pageSize, userIds, responsibleUserIds, 
     ) || ''
     const startStr = start ? `&start_time=${start}` : ''
     const endStr = end ? `&end_time=${end}` : ''
+    const org = [
+        userDepartment ? `&user_department=${encodeURIComponent(userDepartment)}` : '',
+        userCompany ? `&user_company=${encodeURIComponent(userCompany)}` : '',
+        userOffice ? `&user_office=${encodeURIComponent(userOffice)}` : '',
+    ].join('')
     return await axios.get(
         `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId}${uids}${responsibleIds}` +
-        `&system_id=${moduleId}&event_type=${action}` + startStr + endStr
+        `&system_id=${moduleId}&event_type=${action}` + startStr + endStr + org
     )
 }
 
@@ -261,6 +277,9 @@ export async function getAuditAppListApi(params: {
     feedback,
     sensitive_status,
     answer_abnormal,
+    user_department,
+    user_company,
+    user_office,
     page,
     page_size
 }) {
@@ -279,7 +298,10 @@ export async function exportCsvApi(params: {
     end_date,
     feedback,
     sensitive_status,
-    answer_abnormal
+    answer_abnormal,
+    user_department,
+    user_company,
+    user_office
 }) {
     return await axios.get('/api/v1/audit/session/export', {
         params, paramsSerializer
@@ -295,7 +317,10 @@ export async function exportCsvDataApi(params: {
     end_date,
     feedback,
     sensitive_status,
-    answer_abnormal
+    answer_abnormal,
+    user_department,
+    user_company,
+    user_office
 }) {
     return await axios.get('/api/v1/audit/session/export/data', {
         params, paramsSerializer

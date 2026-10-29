@@ -32,6 +32,11 @@ vi.mock("@/controllers/API/log", () => ({
     getActionsApi: async () => [{ value: "action-1", name: "测试操作" }],
     getActionsByModuleApi: async () => [{ value: "action-1", name: "测试操作" }],
     getLogsApi: vi.fn(), getAuditAppListApi: vi.fn(), exportCsvDataApi: vi.fn(),
+    getAuditUserOrgOptionsApi: async () => ({
+        departments: ["炼铁部"],
+        companies: ["首钢"],
+        offices: ["一科室"],
+    }),
 }))
 
 beforeAll(() => {
@@ -120,5 +125,40 @@ describe("审计筛选清除", () => {
         expect(screen.queryByRole("button", { name: /log.actionBehavior/ })).not.toBeInTheDocument()
         await userEvent.click(screen.getByRole("button", { name: "log.searchButton" }))
         expect(filterData).toHaveBeenLastCalledWith(expect.objectContaining({ userIds: [], responsibleUserIds: [], groupId: "", moduleId: "", action: "" }))
+    })
+
+    it("应用使用和系统操作的三列在表尾，更多展开后筛选进入查询", async () => {
+        const { unmount } = render(<MemoryRouter><AppUseLog /></MemoryRouter>)
+        expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent).slice(-3)).toEqual([
+            "log.userCompany", "log.userDepartment", "log.userOffice",
+        ])
+        await userEvent.click(screen.getByRole("button", { name: "log.moreFilters" }))
+        for (const [placeholder, label] of [
+            ["log.userDepartment", "炼铁部"],
+            ["log.userCompany", "首钢"],
+            ["log.userOffice", "一科室"],
+        ]) {
+            await userEvent.click(screen.getByRole("button", { name: placeholder }))
+            await userEvent.click(await screen.findByRole("option", { name: label }))
+        }
+        await userEvent.click(screen.getByRole("button", { name: "log.searchButton" }))
+        expect(filterData).toHaveBeenLastCalledWith(expect.objectContaining({
+            userDepartment: "炼铁部", userCompany: "首钢", userOffice: "一科室",
+        }))
+        unmount()
+
+        render(<SystemLog />)
+        expect(screen.getAllByRole("columnheader").map((cell) => cell.textContent).slice(-3)).toEqual([
+            "log.userCompany", "log.userDepartment", "log.userOffice",
+        ])
+        await userEvent.click(screen.getByRole("button", { name: "log.moreFilters" }))
+        await userEvent.click(screen.getByRole("button", { name: "log.userDepartment" }))
+        await userEvent.click(await screen.findByRole("option", { name: "炼铁部" }))
+        await userEvent.click(screen.getByRole("button", { name: "log.searchButton" }))
+        expect(filterData).toHaveBeenLastCalledWith(expect.objectContaining({ userDepartment: "炼铁部" }))
+        await userEvent.click(screen.getByRole("button", { name: "log.resetButton" }))
+        expect(filterData).toHaveBeenLastCalledWith(expect.objectContaining({
+            userDepartment: "", userCompany: "", userOffice: "",
+        }))
     })
 })
