@@ -30,7 +30,15 @@ body[data-dsh-chat-theme] .dsh-add-menu [role^="menuitem"]:not(.dsh-command-skil
   transform:translateY(-2px); color:white; background:rgb(var(--brand-500));
   transition:background-color 150ms ease-out,transform 150ms ease-out;
 }
-.dsh-chat-surface .dsh-composer-submit:disabled { background:rgb(var(--brand-500) / 40%); color:white; opacity:1; }
+.dsh-chat-surface .dsh-composer-submit:disabled { background:rgb(var(--fill-3)); color:rgb(var(--text-3)); opacity:1; }
+.dsh-chat-surface .dsh-composer-voice {
+  display:inline-flex; flex:none; align-items:center; justify-content:center;
+  width:34px; height:34px; padding:0; border:0; border-radius:50%;
+  transform:translateY(-2px); color:white; background:rgb(var(--brand-500));
+  box-shadow:none;
+}
+.dsh-chat-surface .dsh-composer-voice svg { width:18px; height:18px; color:white; }
+.dsh-chat-surface .dsh-composer-voice:disabled { opacity:.45; cursor:default; }
 .dsh-chat-surface .dsh-composer-submit svg { color:inherit; }
 .dsh-chat-surface .dsh-composer-submit:active:enabled { transform:translateY(-2px) scale(.96); }
 .dsh-chat-surface .dsh-composer-toolbar button:focus-visible,
