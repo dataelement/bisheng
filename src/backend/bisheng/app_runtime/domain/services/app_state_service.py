@@ -227,7 +227,7 @@ class AppStateService:
         # Read the permission record while the row still carries a live state, and
         # before anything destructive runs. The app adapter refuses to build a
         # target for a deleted app (one error for absent / foreign / deleted,
-        # AC-29), so loading it after the transition failed every delete with 19003
+        # AC-29), so loading it after the transition failed every delete with 25022
         # once the state had already flipped — and skipped the audit, the grant
         # cleanup and the lifecycle hooks. The permission mirror compares versions,
         # not app state, so the pre-transition record still projects the removal.

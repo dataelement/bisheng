@@ -104,7 +104,7 @@ class ResourceAuthorizationRegistry:
     ) -> bool:
         """Return True only when the owning business Service has no record.
 
-        ``resolve`` raises the same 19003 for a missing resource, a cross-tenant
+        ``resolve`` raises the same 25022 for a missing resource, a cross-tenant
         resource and a resource in a state that cannot be authorized. Cleanup
         paths need to tell "the resource is gone" apart from the other cases,
         so this asks the business loader directly. An unregistered type or a

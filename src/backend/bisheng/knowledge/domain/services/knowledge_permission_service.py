@@ -371,7 +371,7 @@ def _container_rejection(
     """Name why a container cannot serve as a permission target, or None.
 
     The reason never reaches the caller: `permission_error_response` flattens
-    every rejection into the same 19003 body so that a missing resource and one
+    every rejection into the same 25022 body so that a missing resource and one
     in another tenant stay indistinguishable. It goes to the log instead —
     without it, "Invalid resource type or ID" covers seven different causes, and
     a space stuck at status=FAILED reads exactly like a typo in the id.
