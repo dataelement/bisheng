@@ -2577,6 +2577,7 @@
       "title": "スキルをインポート",
       "tabFile": "ローカルファイル",
       "tabGithub": "GitHub URL",
+      "tabGitee": "Gitee URL",
       "dropHint": "ドラッグ＆ドロップまたはクリック",
       "dropSub": ".md ファイル、.zip / .skill アーカイブに対応（ルートに SKILL.md 必須）",
       "selected": "選択済み",
@@ -2589,6 +2590,9 @@
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "スキルディレクトリを指す GitHub URL を貼り付け（SKILL.md を含むこと）",
       "githubReqHost": "公開 github.com リポジトリのみ対応",
+      "giteeUrlPlaceholder": "https://gitee.com/owner/repo/tree/master/path/to/skill",
+      "giteeHint": "スキルディレクトリを指す Gitee URL を貼り付け（SKILL.md を含むこと）",
+      "giteeReqHost": "公開 gitee.com リポジトリのみ対応",
       "githubReqDir": "URL は SKILL.md を含むディレクトリを指すこと。スラッシュを含むブランチ名は非対応",
       "unsupported": "未対応のファイル形式です（.md / .zip / .skill）",
       "confirm": "インポート",
@@ -2611,6 +2615,9 @@
       "githubUrlInvalid": "GitHub URL の形式が不正です（例: https://github.com/{owner}/{repo}/tree/{branch}/{path}）",
       "githubFetch": "GitHub からの取得に失敗：リポジトリ / ブランチ / パスが存在しないか、ネットワークエラーです。URL を確認して再試行してください",
       "githubRateLimit": "GitHub のレート制限に達しました。しばらくしてから再試行してください",
+      "giteeUrlInvalid": "Gitee URL の形式が不正です（例: https://gitee.com/{owner}/{repo}/tree/{branch}/{path}）",
+      "giteeFetch": "Gitee からの取得に失敗：リポジトリ / ブランチ / パスが存在しないか、ネットワークエラーです。URL を確認して再試行してください",
+      "giteeRateLimit": "Gitee のレート制限に達しました。しばらくしてから再試行してください",
       "unknown": "操作に失敗しました。再試行してください"
     },
     "catalogHint": "保存したスキルは企業権限に従って提供され、タスクごとに選択します。無効化すると提供を停止します。"
