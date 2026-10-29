@@ -36,6 +36,14 @@ from ..schemas.component import AggregationType, ComponentDataConfig, DimensionQ
 from ..schemas.query_builder import AggsTypeEnum, FilterExpression
 from .component import DataQueryService
 from .login_participation import login_day_key
+from .qa_detail_columns import (
+    QA_DETAIL_COLUMNS,
+    QA_DETAIL_DATASET,
+    QA_DETAIL_FIELDS,
+    QA_DETAIL_SOURCE_FIELDS,
+    enrich_qa_detail_rows,
+    visible_detail_columns,
+)
 from .user_metric_definitions import USER_STAT_DATASETS
 
 # Per-dataset "which one is this" columns, in display order. These are read straight off
@@ -325,6 +333,8 @@ async def query_detail_rows(
     identity_columns = [
         DetailColumn(field=field, label=label) for field, label in DETAIL_IDENTITY_COLUMNS.get(dataset_code, [])
     ]
+    if dataset_code == QA_DETAIL_DATASET:
+        identity_columns.extend(DetailColumn(field=field, label=label) for field, label in QA_DETAIL_COLUMNS)
     if daily_login_metric:
         identity_columns.extend(
             [
@@ -341,6 +351,8 @@ async def query_detail_rows(
 
     source_fields = {column.field for column in columns}
     source_fields.add(_TIMESTAMP_FIELD)
+    if dataset_code == QA_DETAIL_DATASET:
+        source_fields.update(QA_DETAIL_SOURCE_FIELDS)
     if deduplicate_field:
         source_fields.add(deduplicate_field)
 
@@ -369,16 +381,26 @@ async def query_detail_rows(
             {
                 _TIMESTAMP_FIELD: source.get(_TIMESTAMP_FIELD),
                 **{column.field: _source_value(source, column.field) for column in columns},
+                **(
+                    {field: _source_value(source, field) for field in QA_DETAIL_SOURCE_FIELDS}
+                    if dataset_code == QA_DETAIL_DATASET
+                    else {}
+                ),
             }
         )
         if len(rows) > row_limit:
             break
 
+    if dataset_code == QA_DETAIL_DATASET:
+        await enrich_qa_detail_rows(rows)
     rows.sort(key=lambda row: row.get(_TIMESTAMP_FIELD) or 0, reverse=True)
     for row in rows:
         row.pop(_TIMESTAMP_FIELD, None)
+        for field in QA_DETAIL_SOURCE_FIELDS:
+            row.pop(field, None)
 
     # Columns that are empty for every row carry no information — a mixed-grain index
-    # (file rows vs. per-day rows) always produces a few of these.
-    populated = [column for column in columns if any(row.get(column.field) not in (None, "") for row in rows)]
-    return DetailRows(columns=populated or columns, rows=rows)
+    # (file rows vs. per-day rows) always produces a few of these. Realtime QA keeps
+    # its four content columns even when every cell is blank.
+    keep_fields = QA_DETAIL_FIELDS if dataset_code == QA_DETAIL_DATASET else set()
+    return DetailRows(columns=visible_detail_columns(columns, rows, keep_fields), rows=rows)

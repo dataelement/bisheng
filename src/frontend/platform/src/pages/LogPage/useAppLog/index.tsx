@@ -25,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useStandalonePrefix } from "@/routes/standalone";
 import AuditFeedbackButton from "./AuditFeedbackButton";
+import { UserOrgMoreFilters } from "../UserOrgMoreFilters";
 
 const getStrTime = (date) => {
     const start_date = date[0] && (formatDate(date[0], 'yyyy-MM-dd') + ' 00:00:00')
@@ -40,6 +41,9 @@ type FilterState = {
     feedback: string;
     sensitive_status: string;
     answer_abnormal: string;
+    userDepartment: string;
+    userCompany: string;
+    userOffice: string;
 };
 
 type Action =
@@ -61,6 +65,9 @@ const createEmptyFilters = (): FilterState => ({
     feedback: '',
     sensitive_status: '',
     answer_abnormal: '',
+    userDepartment: '',
+    userCompany: '',
+    userOffice: '',
 });
 
 const filterReducer = (state: FilterState, action: Action): FilterState => {
@@ -105,6 +112,9 @@ export default function AppUseLog() {
             ...(param.answer_abnormal === '0' || param.answer_abnormal === '1'
                 ? { answer_abnormal: Number(param.answer_abnormal) }
                 : {}),
+            user_department: param.userDepartment || undefined,
+            user_company: param.userCompany || undefined,
+            user_office: param.userOffice || undefined,
         })
     }, restored?.page ?? 1);
     const processedData = useMemo(() =>
@@ -129,6 +139,9 @@ export default function AppUseLog() {
             cols.push({ defaultWidth: 140, minWidth: 100 })
         }
         cols.push({ defaultWidth: 100, minWidth: 80 })
+        cols.push({ defaultWidth: 140, minWidth: 80 })
+        cols.push({ defaultWidth: 140, minWidth: 80 })
+        cols.push({ defaultWidth: 140, minWidth: 80 })
         return cols
     }, [appConfig.isPro])
     const rc = useResizableColumns(appLogTableCols)
@@ -143,6 +156,9 @@ export default function AppUseLog() {
         { label: t('log.answerAbnormal') },
         ...(appConfig.isPro ? [{ label: t('log.sensitiveReviewResult') }] : []),
         { label: t('operations'), className: 'text-right' },
+        { label: t('log.userCompany') },
+        { label: t('log.userDepartment') },
+        { label: t('log.userOffice') },
     ]
 
     const resetClick = () => {
@@ -246,6 +262,9 @@ export default function AppUseLog() {
             ...(filters.answer_abnormal === '0' || filters.answer_abnormal === '1'
                 ? { answer_abnormal: Number(filters.answer_abnormal) }
                 : {}),
+            user_department: filters.userDepartment || undefined,
+            user_company: filters.userCompany || undefined,
+            user_office: filters.userOffice || undefined,
         }).then(async res => {
             const data = [
                 [
@@ -371,6 +390,14 @@ export default function AppUseLog() {
                         onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['sensitive_status']: value } })}
                     />
                 </div>}
+                <UserOrgMoreFilters
+                    value={{
+                        userDepartment: filters.userDepartment || "",
+                        userCompany: filters.userCompany || "",
+                        userOffice: filters.userOffice || "",
+                    }}
+                    onChange={(patch) => dispatch({ type: "SET_FILTER", payload: patch })}
+                />
                 <Button onClick={() => {
                     const dateRange = filters.dateRange || [];
                     let originalStart = dateRange[0];
@@ -419,6 +446,9 @@ export default function AppUseLog() {
                             const abnormalIdx = 6
                             const sensitiveIdx = appConfig.isPro ? 7 : -1
                             const opsIdx = appConfig.isPro ? 8 : 7
+                            const companyIdx = opsIdx + 1
+                            const departmentIdx = opsIdx + 2
+                            const officeIdx = opsIdx + 3
                             return (
                                 <TableRow key={el.id}>
                                     <TruncatedTableCell tdProps={rc.getTdProps(0)} text={flowName} />
@@ -467,6 +497,9 @@ export default function AppUseLog() {
                                             >{t('lib.details')}</Link>
                                         )}
                                     </TableCell>
+                                    <TruncatedTableCell tdProps={rc.getTdProps(companyIdx)} text={el.company_name || "-"} />
+                                    <TruncatedTableCell tdProps={rc.getTdProps(departmentIdx)} text={el.department_name || "-"} />
+                                    <TruncatedTableCell tdProps={rc.getTdProps(officeIdx)} text={el.office_name || "-"} />
                                 </TableRow>
                             )
                         })}
