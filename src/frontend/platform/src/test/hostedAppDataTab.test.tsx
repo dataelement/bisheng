@@ -162,11 +162,12 @@ describe("DataTab — table list → rows", () => {
     )
     renderTab()
     const user = userEvent.setup()
+    await waitFor(() => expect(getHostedAppTableRowsApi).toHaveBeenCalled())
     await user.click(await screen.findByRole("button", { name: /orders/ }))
-    expect(await screen.findByText("order-nine")).toBeTruthy()
-
-    // The first table's answer arrives late; it must not replace the grid.
+    // A second read must wait for the first helper to release the app lock.
+    expect((getHostedAppTableRowsApi as Mock).mock.calls.filter((call) => call[1] === "orders")).toHaveLength(0)
     releaseUsers(usersPage)
+    expect(await screen.findByText("order-nine")).toBeTruthy()
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(screen.getByText("order-nine")).toBeTruthy()
     expect(screen.queryByText("alice")).toBeNull()
@@ -295,4 +296,46 @@ describe("DataTab — export", () => {
     await waitFor(() => expect(saveBlob).toHaveBeenCalledTimes(1))
     expect((saveBlob as Mock).mock.calls[0][1]).toBe("sales-users.csv")
   })
+})
+
+describe("DataTab — serialized reads and schema reuse", () => {
+  it("waits for schema before requesting rows", async () => {
+    let release: (schema: HostedAppTableSchema) => void = () => undefined
+    ;(getHostedAppTableSchemaApi as Mock).mockImplementation(
+      () => new Promise<HostedAppTableSchema>((resolve) => { release = resolve }),
+    )
+    renderTab()
+    await waitFor(() => expect(getHostedAppTableSchemaApi).toHaveBeenCalledOnce())
+    expect(getHostedAppTableRowsApi).not.toHaveBeenCalled()
+    release(usersSchema)
+    expect(await screen.findByText("alice")).toBeTruthy()
+  })
+
+  it("reuses schema when sorting and refreshes it on explicit refresh", async () => {
+    renderTab()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole("button", { name: "name" }))
+    await waitFor(() => expect(getHostedAppTableRowsApi).toHaveBeenCalledTimes(2))
+    expect(getHostedAppTableSchemaApi).toHaveBeenCalledOnce()
+    await user.click(screen.getByRole("button", { name: "hostedApp.data.refresh" }))
+    await waitFor(() => expect(getHostedAppTableSchemaApi).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(getHostedAppTableRowsApi).toHaveBeenCalledTimes(3))
+  })
+
+  it("shows localized busy text instead of a misleading maintenance message", async () => {
+    ;(getHostedAppTableRowsApi as Mock).mockRejectedValue(envelope(16167, "Application data is under maintenance"))
+    renderTab()
+    expect(await screen.findByText("api_errors:16167")).toBeTruthy()
+    expect(screen.queryByText("Application data is under maintenance")).toBeNull()
+  })
+  it("allows retry after a failed read without leaving the queue blocked", async () => {
+    ;(getHostedAppTableSchemaApi as Mock).mockRejectedValueOnce(envelope(16167))
+    renderTab()
+    const user = userEvent.setup()
+    await screen.findByText("api_errors:16167")
+    await user.click(screen.getByRole("button", { name: "hostedApp.data.refresh" }))
+    expect(await screen.findByText("alice")).toBeTruthy()
+    expect(getHostedAppTableSchemaApi).toHaveBeenCalledTimes(2)
+  })
+
 })
