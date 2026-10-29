@@ -134,7 +134,7 @@ async def authorize_entry(
             "reason": "permission_engine_unavailable",
         }
     except PermissionInvalidResourceError:
-        # The F048 target resolver raises this (19003) when the app is not a
+        # The F048 target resolver raises this (25022) when the app is not a
         # legitimate target for THIS actor — most commonly a cross-tenant
         # visitor, whom AC-29 says must not even learn the app exists. Answered
         # as NOT_FOUND, not FORBIDDEN. Critically, it must be caught here: it is

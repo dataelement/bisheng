@@ -690,5 +690,12 @@
   "appStartApprovalExecuting": "Approval has passed and deployment is being prepared. Refresh the release status shortly.",
   "appStartApprovalExecuteFailed": "Execution after approval failed. Ask a platform administrator to review and retry it in the approval center.",
   "appStartPublishFailed": "Release preparation failed; no version can go online. Review the failure and resubmit.",
-  "appStartPublishPreparing": "Release preparation is in progress. Refresh the release status shortly."
+  "appStartPublishPreparing": "Release preparation is in progress. Refresh the release status shortly.",
+  "25020": "Permission check failed. Please try again later.",
+  "25021": "The authorization service is temporarily unavailable. Please try again later.",
+  "25022": "The resource is unavailable or you do not have access. Refresh and try again.",
+  "25023": "Permission update failed. Please try again later.",
+  "25024": "This permission relation is not supported.",
+  "25025": "A permission model with this name already exists.",
+  "25026": "The last owner of this resource cannot be removed."
 }

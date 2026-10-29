@@ -58,7 +58,7 @@ FGA_DOWN = os.environ.get("F052_E2E_FGA_DOWN") == "1"
 #: identity. The point of the code is that it is *not* a quietly shorter list.
 ERR_UNREACHABLE = 26321
 #: F052 / F049 — the permission engine could not decide.
-PERMISSION_OUTAGE_CODES = frozenset({19002, 19201})
+PERMISSION_OUTAGE_CODES = frozenset({25021, 19201})
 
 pytestmark = [
     pytest.mark.e2e,

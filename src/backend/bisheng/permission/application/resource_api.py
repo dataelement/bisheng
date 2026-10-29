@@ -280,7 +280,7 @@ class F048ResourcePermissionApi:
                         actor=actor,
                     )
                 except PermissionInvalidResourceError:
-                    # 19003 also covers cross-tenant and unauthorizable states.
+                    # 25022 also covers cross-tenant and unauthorizable states.
                     # Only a business-confirmed absence may skip the resource
                     # check; every other case keeps the deletion blocked.
                     if not await self._resources.confirm_absent(

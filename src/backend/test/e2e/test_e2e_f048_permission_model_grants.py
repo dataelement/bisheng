@@ -403,7 +403,7 @@ class TestE2EF048PermissionModelGrants:
             headers=auth_headers(cross_tenant_token),
         )
         assert response.status_code == 200
-        assert_resp_error(response, 19003)
+        assert_resp_error(response, 25022)
 
     async def test_ac48_top_level_workflow_cannot_inherit(
         self,
