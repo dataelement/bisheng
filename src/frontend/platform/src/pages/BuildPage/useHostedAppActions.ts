@@ -17,6 +17,7 @@ import { notification } from "@bisheng/ui"
 import {
   deleteHostedAppApi,
   getHostedAppErrorMessage,
+  getHostedAppErrorCode,
   manualPublishHostedAppApi,
   resumeHostedAppApi,
   stopHostedAppApi,
@@ -25,6 +26,7 @@ import {
 import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { HostedAppRef } from "./hostedApp/types"
+import { startRefusalI18nKey } from "./hostedApp/startRefusal"
 
 export type HostedAppActionKind = "stop" | "resume" | "manualPublish" | "delete"
 
@@ -102,11 +104,12 @@ export function useHostedAppActions(options: UseHostedAppActionsOptions = {}) {
         onChanged?.(kind, result)
         return true
       } catch (error) {
+        const reasonKey = getHostedAppErrorCode(error) === 16102 ? startRefusalI18nKey(error) : null
         notification.open({
           title: t("prompt"),
           type: "error",
           description:
-            getHostedAppErrorMessage(error) || t("hostedApp.actions.failed"),
+            (reasonKey ? t(reasonKey) : getHostedAppErrorMessage(error)) || t("hostedApp.actions.failed"),
         })
         onChanged?.(kind, null)
         return false

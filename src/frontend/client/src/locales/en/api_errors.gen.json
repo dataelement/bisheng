@@ -673,5 +673,15 @@
   "personIdAlreadyExists": "Person ID already exists",
   "network_error": "Unable to connect to the server. Check your network connection and try again.",
   "request_timeout": "The request timed out. Check whether the operation completed before trying again.",
-  "fallback": "The operation failed. Please try again later."
+  "fallback": "The operation failed. Please try again later.",
+  "appStartNoApprovedVersion": "This app has no approved version. Submit a release with bisheng deploy and complete approval first.",
+  "appStartApprovalPending": "This release is awaiting approval and cannot go online yet.",
+  "appStartApprovalRejected": "Release approval was rejected. Review the reason, make changes and resubmit with bisheng deploy.",
+  "appStartApprovalWithdrawn": "Release approval was withdrawn. Resubmit with bisheng deploy.",
+  "appStartApprovalCancelled": "Release approval was cancelled. Resubmit with bisheng deploy.",
+  "appStartApprovalException": "Release approval needs attention. Ask a platform administrator to resolve the exception in the approval center.",
+  "appStartApprovalExecuting": "Approval has passed and deployment is being prepared. Refresh the release status shortly.",
+  "appStartApprovalExecuteFailed": "Execution after approval failed. Ask a platform administrator to review and retry it in the approval center.",
+  "appStartPublishFailed": "Release preparation failed; no version can go online. Review the failure and resubmit.",
+  "appStartPublishPreparing": "Release preparation is in progress. Refresh the release status shortly."
 }

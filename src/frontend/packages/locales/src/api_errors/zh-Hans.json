@@ -673,5 +673,15 @@
   "16233": "发布说明不能超过 2,000 个字符",
   "26071": "归属人租户与服务账号租户不一致，请联系管理员处理",
   "26072": "无法确认归属人所属租户，请联系管理员处理",
-  "26073": "服务账号的管理租户已变化，请重新选择租户并刷新后重试"
+  "26073": "服务账号的管理租户已变化，请重新选择租户并刷新后重试",
+  "appStartNoApprovedVersion": "此应用还没有审批通过的版本。请先使用 bisheng deploy 提交发布并完成审批。",
+  "appStartApprovalPending": "发布仍在审批中，暂时不能上线。请等待审批完成。",
+  "appStartApprovalRejected": "发布审批已驳回。请查看驳回原因，修改后使用 bisheng deploy 重新提交。",
+  "appStartApprovalWithdrawn": "发布审批已撤回。请使用 bisheng deploy 重新提交发布。",
+  "appStartApprovalCancelled": "发布审批已取消。请使用 bisheng deploy 重新提交发布。",
+  "appStartApprovalException": "发布审批异常，暂时不能上线。请联系平台超级管理员在审批中心处理异常。",
+  "appStartApprovalExecuting": "审批已通过，平台正在准备上线。请稍后刷新发布状态。",
+  "appStartApprovalExecuteFailed": "审批后的执行失败。请联系平台超级管理员在审批中心查看并重试。",
+  "appStartPublishFailed": "发布准备失败，还没有可上线的版本。请查看发布失败原因后重新提交。",
+  "appStartPublishPreparing": "发布正在准备中，还没有可上线的版本。请稍后刷新发布状态。"
 }

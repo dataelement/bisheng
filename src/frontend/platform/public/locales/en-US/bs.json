@@ -3046,7 +3046,7 @@
     "data": {
       "loading": "Loading…",
       "forbidden": "You do not have permission to access this application's data; only the owner can.",
-      "notReady": "The application has not created its database yet.",
+      "notReady": "The app has not created a database. Publish and approve draft apps first. Apps that only use browser storage do not have tables here.",
       "noTables": "The application's database has no tables yet.",
       "noRows": "This table has no rows yet.",
       "loadFailed": "Failed to load application data",

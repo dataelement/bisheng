@@ -25,6 +25,20 @@ async def get_business_approval(instance_id: int) -> BusinessApproval | None:
     row = await ApprovalInstanceRepository.get_instance(instance_id)
     if row is None:
         return None
+    return _project(row)
+
+
+async def get_business_approvals(instance_ids: list[int]) -> dict[int, BusinessApproval]:
+    """Read bounded batches for business version histories."""
+    result = {}
+    ids = sorted(set(instance_ids))
+    for offset in range(0, len(ids), 100):
+        rows = await ApprovalInstanceRepository.get_instances_by_ids(ids[offset : offset + 100])
+        result.update({row.id: _project(row) for row in rows})
+    return result
+
+
+def _project(row) -> BusinessApproval:
     return BusinessApproval(
         id=row.id,
         tenant_id=row.tenant_id,

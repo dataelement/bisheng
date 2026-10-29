@@ -17,6 +17,7 @@
  *   consumers can keep using this configured full address.
  */
 import axios from "@/controllers/request"
+import { isApiError } from "@bisheng/api-client"
 
 /** The five application states (design D8 / AC-03). */
 export type HostedAppState =
@@ -65,6 +66,7 @@ export interface HostedAppVersion {
   version_no: number
   kind: "initial" | "iteration"
   terminal_state: "online" | "rejected" | "withdrawn" | null
+  approval_status?: string | null
   submitted_at: string | null
   is_current: boolean
   is_pending: boolean
@@ -231,7 +233,7 @@ export async function updateHostedAppMetaApi(
 export async function deleteHostedAppApi(
   appId: string,
 ): Promise<HostedAppActionResult> {
-  return await axios.delete(`${APPS_BASE}/${appId}`)
+  return await axios.delete(`${APPS_BASE}/${appId}`, { showError: false })
 }
 
 export async function publishHostedAppApi(
@@ -244,19 +246,19 @@ export async function publishHostedAppApi(
 export async function manualPublishHostedAppApi(
   appId: string,
 ): Promise<HostedAppActionResult> {
-  return await axios.post(`${APPS_BASE}/${appId}/actions/manual-publish`)
+  return await axios.post(`${APPS_BASE}/${appId}/actions/manual-publish`, undefined, { showError: false })
 }
 
 export async function stopHostedAppApi(
   appId: string,
 ): Promise<HostedAppActionResult> {
-  return await axios.post(`${APPS_BASE}/${appId}/actions/stop`)
+  return await axios.post(`${APPS_BASE}/${appId}/actions/stop`, undefined, { showError: false })
 }
 
 export async function resumeHostedAppApi(
   appId: string,
 ): Promise<HostedAppActionResult> {
-  return await axios.post(`${APPS_BASE}/${appId}/actions/resume`)
+  return await axios.post(`${APPS_BASE}/${appId}/actions/resume`, undefined, { showError: false })
 }
 
 // ---------------------------------------------------------------------------
@@ -563,6 +565,7 @@ export function getHostedAppErrorCode(error: unknown): number | undefined {
 
 /** Human-readable text carried by a rejected envelope, if any. */
 export function getHostedAppErrorMessage(error: unknown): string {
+  if (isApiError(error)) return error.message
   if (error && typeof error === "object" && "status_message" in error) {
     const message = (error as { status_message?: unknown }).status_message
     if (typeof message === "string") return message

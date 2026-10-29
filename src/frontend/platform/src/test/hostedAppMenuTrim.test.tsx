@@ -36,6 +36,10 @@ vi.mock("i18next", () => ({
 
 // `*.svg?react` has no svgr plugin under vitest; this icon is on the render path.
 vi.mock("@/components/bs-icons/user", () => ({ UserIcon: () => null }))
+vi.mock("bisheng-icons", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("bisheng-icons")>()
+  return { ...actual, Outlined: { ...actual.Outlined, Setting: () => null } }
+})
 
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }))
 
@@ -69,7 +73,7 @@ async function openMenu() {
 
 function menuItemTexts(): string[] {
   return Array.from(
-    document.querySelectorAll("[data-slot='dropdown-menu-item']"),
+    document.querySelectorAll("[role='menuitem']"),
   ).map((node) => (node.textContent || "").trim())
 }
 
@@ -186,11 +190,11 @@ describe("⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-
     await openMenu()
 
     const items = Array.from(
-      document.querySelectorAll("[data-slot='dropdown-menu-item']"),
+      document.querySelectorAll("[role='menuitem']"),
     )
     const deleteItem = items.find((node) => node.textContent?.trim() === MENU_LABELS.delete)
     expect(deleteItem).toBeTruthy()
-    expect(deleteItem?.getAttribute("data-disabled")).not.toBeNull()
+    expect(deleteItem?.getAttribute("aria-disabled")).toBe("true")
     // Disabled, not missing: "you cannot delete a running application" has to
     // read as a rule, and an absent entry reads as a missing feature.
     expect(menuItemTexts()).toEqual([
@@ -205,4 +209,9 @@ describe("⚙️ menu — hosted application keeps two entries (AC-16 / F054 AC-
 
     expect(menuItemTexts()).toEqual([MENU_LABELS.delete])
   })
+  it("disables the version dropdown of an online hosted app", () => {
+    renderHosted({ item: { app_state: "online", status: 2 } })
+    expect(screen.getByRole("combobox")).toBeDisabled()
+  })
+
 })

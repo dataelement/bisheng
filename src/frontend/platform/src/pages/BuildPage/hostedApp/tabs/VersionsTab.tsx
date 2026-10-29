@@ -14,7 +14,7 @@ import {
 } from "@/controllers/API/hostedApp"
 import { Fragment, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { versionTerminalStateI18nKey } from "../types"
+import { versionApprovalI18nKey } from "../types"
 
 interface VersionsTabProps {
   appId: string
@@ -79,14 +79,7 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
           </thead>
           <tbody>
             {versions.map((version) => {
-              // Mapped, never printed raw: `online` / `rejected` / `withdrawn`
-              // are wire values, and an owner reading "withdrawn" in a Chinese
-              // UI is reading a database column. A version with no latched
-              // outcome keeps the dash — the marker column next door already
-              // says whether it is staged or still under approval.
-              const outcomeKey = versionTerminalStateI18nKey(
-                version.terminal_state,
-              )
+              const outcomeKey = versionApprovalI18nKey(version)
               return (
                 <Fragment key={version.version_id}>
                   <tr className="border-t">

@@ -60,6 +60,7 @@ export interface HostedAppListItem {
 
 interface HostedAppVersionSelectProps {
   appId: string
+  disabled?: boolean
 }
 
 /**
@@ -69,7 +70,7 @@ interface HostedAppVersionSelectProps {
  * fire 14 requests nobody asked for. Picking an item is deliberately inert —
  * there is no version switch for hosted applications.
  */
-function HostedAppVersionSelect({ appId }: HostedAppVersionSelectProps) {
+function HostedAppVersionSelect({ appId, disabled = false }: HostedAppVersionSelectProps) {
   const { t } = useTranslation()
   const [versions, setVersions] = useState<HostedAppVersion[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -98,7 +99,7 @@ function HostedAppVersionSelect({ appId }: HostedAppVersionSelectProps) {
     : t("hostedApp.version.placeholder")
 
   return (
-    <Select value="" onOpenChange={handleOpenChange}>
+    <Select value="" disabled={disabled} onOpenChange={handleOpenChange}>
       <SelectTrigger
         className="w-[120px] h-6"
         onClick={(event) => event.stopPropagation()}
@@ -221,7 +222,7 @@ export function HostedAppCard({
       }
       showSwitch={canSwitch}
       canSwitch={canSwitch}
-      headSelecter={<HostedAppVersionSelect appId={String(item.id)} />}
+      headSelecter={<HostedAppVersionSelect appId={String(item.id)} disabled={online} />}
       labelPannel={labelPannel}
       footer={
         <div className="absolute right-0 bottom-0 flex items-center gap-1">
