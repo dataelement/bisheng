@@ -21,6 +21,8 @@ describe("queryDimensionCategoryForField", () => {
   it("categorizes org-hierarchy fields (both belonging_* and uploader_*) as 组织架构", () => {
     expect(queryDimensionCategoryForField("belonging_department_name")).toBe("org_hierarchy")
     expect(queryDimensionCategoryForField("uploader_office_name")).toBe("org_hierarchy")
+    expect(queryDimensionCategoryForField("asker_company_name")).toBe("org_hierarchy")
+    expect(queryDimensionCategoryForField("asker_office_name")).toBe("org_hierarchy")
   })
 
   it("returns null for fields outside the 4 categories (e.g. code fields, unrelated dimensions)", () => {

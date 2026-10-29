@@ -62,6 +62,13 @@ describe("resolveGroupDimensionIndex", () => {
 
     expect(resolveGroupDimensionIndex(rowFieldIds, filters)).toBe(0)
   })
+
+  it("recognizes asker company, department, and office as org levels", () => {
+    const rowFieldIds = ["asker_company_name", "asker_department_name", "asker_office_name"]
+    const filters = [{ fieldId: "asker_department_name", values: ["制造部"] }]
+
+    expect(resolveGroupDimensionIndex(rowFieldIds, filters)).toBe(1)
+  })
 })
 
 describe("groupCrossTabRows", () => {

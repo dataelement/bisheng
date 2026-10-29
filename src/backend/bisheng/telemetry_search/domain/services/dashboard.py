@@ -1,5 +1,6 @@
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, ClassVar, Dict, List, Sequence
+from typing import Any, ClassVar
 
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict
@@ -13,11 +14,10 @@ from bisheng.core.database import get_async_db_session
 from bisheng.core.search.elasticsearch.manager import get_es_connection
 from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, WebMenuResource
-from bisheng.user.domain.services.user import UserService
-from bisheng.utils import generate_uuid, get_request_ip
-
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import ORG_LEVEL_FIELD_NAMES
+from bisheng.user.domain.services.user import UserService
+from bisheng.utils import generate_uuid, get_request_ip
 
 from ..models.dashboard import Dashboard, DashboardComponent, DashboardDefault, DashboardStatus, DashboardType
 from ..models.dashboard_dao import DashboardDao
@@ -31,14 +31,14 @@ from .department_label_resolver import resolve_short_name
 # variants) are name-text snapshots of Department rows at ETL time, not a live join. Filter
 # options for these fields must come from the live Department tree (AC-01: show org units with
 # no data too), not from an ES terms aggregation over the dataset index.
-_NAME_FIELD_TO_ORG_LEVEL: Dict[str, str] = {value: key for key, value in ORG_LEVEL_FIELD_NAMES.items()}
-_ORG_FIELD_PREFIXES = ("belonging_", "uploader_", "original_upload_")
+_NAME_FIELD_TO_ORG_LEVEL: dict[str, str] = {value: key for key, value in ORG_LEVEL_FIELD_NAMES.items()}
+_ORG_FIELD_PREFIXES = ("belonging_", "uploader_", "original_upload_", "asker_")
 
 
 def _org_level_for_field(field: str) -> str | None:
     for prefix in _ORG_FIELD_PREFIXES:
         if field.startswith(prefix):
-            return _NAME_FIELD_TO_ORG_LEVEL.get(field[len(prefix):])
+            return _NAME_FIELD_TO_ORG_LEVEL.get(field[len(prefix) :])
     return None
 
 
@@ -84,9 +84,7 @@ class DashboardService(BaseModel):
         "failed": "失败",
         "parse_failed": "解析失败",
     }
-    DASHBOARD_ENUM_LABELS: ClassVar[
-        dict[str, dict[str, dict[str, str]]]
-    ] = {
+    DASHBOARD_ENUM_LABELS: ClassVar[dict[str, dict[str, dict[str, str]]]] = {
         "mid_knowledge_space_content_stat": {
             "space_level": FILE_SPACE_LEVEL_LABELS,
         },
@@ -137,7 +135,7 @@ class DashboardService(BaseModel):
         "mid_realtime_qa_question_fact": {
             "department_source": {
                 "event_time": "提问时所属主部门",
-                "current_primary_backfill": "当前主部门（历史回填）",
+                "current_primary_backfill": "当前主部门（历史回填）",  # noqa: RUF001
             },
             "scene": {
                 "expert_question": "专家问答",
@@ -155,8 +153,8 @@ class DashboardService(BaseModel):
             "department_source": {
                 "event_time": "登录时所属主部门",
                 "current_roster": "当前在职名册",
-                "current_roster_backfill": "当前名册（历史回填）",
-                "current_primary_backfill": "当前主部门（历史登录回填）",
+                "current_roster_backfill": "当前名册（历史回填）",  # noqa: RUF001
+                "current_primary_backfill": "当前主部门（历史登录回填）",  # noqa: RUF001
             },
         },
     }
@@ -180,10 +178,7 @@ class DashboardService(BaseModel):
         cls,
         components: Sequence[DashboardComponent],
     ) -> bool:
-        return any(
-            component.dataset_code in cls.REALTIME_DATASETS
-            for component in components
-        )
+        return any(component.dataset_code in cls.REALTIME_DATASETS for component in components)
 
     def _can_operate_dashboards(self) -> bool:
         """超管或运营岗: 看板列表/实时写与超管同一口径."""
@@ -196,11 +191,7 @@ class DashboardService(BaseModel):
             return True
         from bisheng.database.models.department import DepartmentDao
 
-        return bool(
-            await DepartmentDao.aget_user_admin_departments(
-                self.login_user.user_id
-            )
-        )
+        return bool(await DepartmentDao.aget_user_admin_departments(self.login_user.user_id))
 
     async def _ensure_realtime_dashboard_write(
         self,
@@ -210,13 +201,13 @@ class DashboardService(BaseModel):
         if self._can_operate_dashboards():
             return
         existing_components = await DashboardDao.get_components(dashboard_id)
-        if self._uses_realtime_dataset(
-            [*existing_components, *incoming_components]
-        ):
+        if self._uses_realtime_dataset([*existing_components, *incoming_components]):
             raise UnAuthorizedError()
 
     @classmethod
-    async def get_simple_dashboards(cls, keyword: str = None, filter_ids: List[int] = None) -> List[Dashboard]:
+    async def get_simple_dashboards(
+        cls, keyword: str | None = None, filter_ids: list[int] | None = None
+    ) -> list[Dashboard]:
         """
         Get a list of simple Kanban boards
         :param keyword: Search by keywords
@@ -229,7 +220,7 @@ class DashboardService(BaseModel):
         res = await DashboardDao.get_dashboards(dashboard_type=filter_types, keyword=keyword, filter_ids=filter_ids)
         return res
 
-    async def get_dashboards(self, keyword: str = None) -> List[DashboardRead]:
+    async def get_dashboards(self, keyword: str | None = None) -> list[DashboardRead]:
         """
         Get a list of Kanban boards
         :param keyword: Search by keywords
@@ -245,8 +236,7 @@ class DashboardService(BaseModel):
             res = await DashboardDao.get_dashboards(keyword=keyword, dashboard_type=filter_types)
         else:
             # find extra dashboard ids
-            manage_ids = await self.login_user.aget_user_access_resource_ids(
-                access_types=[AccessType.DASHBOARD_WRITE])
+            manage_ids = await self.login_user.aget_user_access_resource_ids(access_types=[AccessType.DASHBOARD_WRITE])
             manage_ids = [int(one) for one in manage_ids]
             extra_ids = await self.login_user.aget_user_access_resource_ids(access_types=[AccessType.DASHBOARD])
             extra_ids = [int(one) for one in extra_ids]
@@ -263,9 +253,7 @@ class DashboardService(BaseModel):
             res = accessible_dashboards
             is_department_admin = await self._is_department_admin()
             if is_department_admin:
-                accessible_ids = {
-                    dashboard.id for dashboard in accessible_dashboards
-                }
+                accessible_ids = {dashboard.id for dashboard in accessible_dashboards}
                 all_dashboards = await DashboardDao.get_dashboards(
                     keyword=keyword,
                     dashboard_type=filter_types,
@@ -289,20 +277,13 @@ class DashboardService(BaseModel):
                 components = await DashboardDao.get_components(one.id)
             uses_realtime = self._uses_realtime_dataset(components)
             if uses_realtime and not self._can_operate_dashboards():
-                if (
-                    one.status != DashboardStatus.PUBLISHED.value
-                    or not is_department_admin
-                ):
+                if one.status != DashboardStatus.PUBLISHED.value or not is_department_admin:
                     continue
             tmp = DashboardRead.model_validate(one)
             if default_dashboard and one.id == default_dashboard.dashboard_id:
                 tmp.is_default = True
             if (
-                not uses_realtime
-                and (
-                    tmp.user_id == self.login_user.user_id
-                    or tmp.id in manage_ids
-                )
+                not uses_realtime and (tmp.user_id == self.login_user.user_id or tmp.id in manage_ids)
             ) or self._can_operate_dashboards():
                 tmp.write = True
             result.append(tmp)
@@ -316,12 +297,14 @@ class DashboardService(BaseModel):
         """
         if not is_commercial():
             raise UnAuthorizedError()
-        if not await self.login_user.async_access_check(0, target_id=WebMenuResource.CREATE_DASHBOARD.value,
-                                                        access_type=AccessType.WEB_MENU):
+        if not await self.login_user.async_access_check(
+            0, target_id=WebMenuResource.CREATE_DASHBOARD.value, access_type=AccessType.WEB_MENU
+        ):
             raise UnAuthorizedError()
 
         user_total = await DashboardDao.count_dashboards(
-            dashboard_type=[DashboardType.PRESET_COMMERCIAL, DashboardType.CUSTOM])
+            dashboard_type=[DashboardType.PRESET_COMMERCIAL, DashboardType.CUSTOM]
+        )
         if user_total >= 20:
             raise DashboardMaxError()
 
@@ -345,13 +328,13 @@ class DashboardService(BaseModel):
         if group_ids:
             batch_resource = []
             for one in group_ids:
-                batch_resource.append(GroupResource(
-                    group_id=one,
-                    third_id=dashboard.id,
-                    type=ResourceTypeEnum.DASHBOARD.value))
+                batch_resource.append(
+                    GroupResource(group_id=one, third_id=dashboard.id, type=ResourceTypeEnum.DASHBOARD.value)
+                )
             await GroupResourceDao.ainsert_group_batch(batch_resource)
-        await AuditLogService.create_dashboard(self.login_user, get_request_ip(self.request), str(dashboard.id),
-                                               dashboard.title, group_ids=group_ids)
+        await AuditLogService.create_dashboard(
+            self.login_user, get_request_ip(self.request), str(dashboard.id), dashboard.title, group_ids=group_ids
+        )
 
     async def delete_dashboard(self, dashboard_id: int) -> bool:
         dashboard = await DashboardDao.get_one(dashboard_id)
@@ -360,8 +343,9 @@ class DashboardService(BaseModel):
         if dashboard.dashboard_type == DashboardType.PRESET_OSS.value:
             raise UnAuthorizedError()
         await self._ensure_realtime_dashboard_write(dashboard_id)
-        if not await self.login_user.async_access_check(dashboard.user_id, target_id=str(dashboard.id),
-                                                        access_type=AccessType.DASHBOARD_WRITE):
+        if not await self.login_user.async_access_check(
+            dashboard.user_id, target_id=str(dashboard.id), access_type=AccessType.DASHBOARD_WRITE
+        ):
             raise UnAuthorizedError()
 
         await self.delete_dashboard_hook(dashboard)
@@ -376,16 +360,18 @@ class DashboardService(BaseModel):
         """
         resource_group = await GroupResourceDao.aget_resource_group(ResourceTypeEnum.DASHBOARD, str(dashboard.id))
         group_ids = [int(one.group_id) for one in resource_group]
-        await AuditLogService.delete_dashboard(self.login_user, get_request_ip(self.request), str(dashboard.id),
-                                               dashboard.title, group_ids=group_ids)
+        await AuditLogService.delete_dashboard(
+            self.login_user, get_request_ip(self.request), str(dashboard.id), dashboard.title, group_ids=group_ids
+        )
 
     async def update_dashboard_title(self, dashboard_id: int, new_title: str) -> bool:
         dashboard = await DashboardDao.get_one(dashboard_id)
         if not dashboard:
             return True
         await self._ensure_realtime_dashboard_write(dashboard_id)
-        if not await self.login_user.async_access_check(dashboard.user_id, target_id=str(dashboard.id),
-                                                        access_type=AccessType.DASHBOARD_WRITE):
+        if not await self.login_user.async_access_check(
+            dashboard.user_id, target_id=str(dashboard.id), access_type=AccessType.DASHBOARD_WRITE
+        ):
             raise UnAuthorizedError()
 
         await DashboardDao.update_dashboard_title(dashboard_id, new_title)
@@ -401,16 +387,18 @@ class DashboardService(BaseModel):
         """
         resource_group = await GroupResourceDao.aget_resource_group(ResourceTypeEnum.DASHBOARD, str(dashboard.id))
         group_ids = [int(one.group_id) for one in resource_group]
-        await AuditLogService.update_dashboard(self.login_user, get_request_ip(self.request), str(dashboard.id),
-                                               dashboard.title, group_ids=group_ids)
+        await AuditLogService.update_dashboard(
+            self.login_user, get_request_ip(self.request), str(dashboard.id), dashboard.title, group_ids=group_ids
+        )
 
     async def update_dashboard_status(self, dashboard_id: int, new_status: DashboardStatus) -> bool:
         dashboard = await DashboardDao.get_one(dashboard_id)
         if not dashboard:
             return True
         await self._ensure_realtime_dashboard_write(dashboard_id)
-        if not await self.login_user.async_access_check(dashboard.user_id, target_id=str(dashboard.id),
-                                                        access_type=AccessType.DASHBOARD_WRITE):
+        if not await self.login_user.async_access_check(
+            dashboard.user_id, target_id=str(dashboard.id), access_type=AccessType.DASHBOARD_WRITE
+        ):
             raise UnAuthorizedError()
         if dashboard.status == new_status.value:
             return True
@@ -428,8 +416,9 @@ class DashboardService(BaseModel):
         if not is_commercial() and dashboard.dashboard_type != DashboardType.PRESET_OSS.value:
             raise NotFoundError()
         can_operate = self._can_operate_dashboards()
-        write_flag = await self.login_user.async_access_check(dashboard.user_id, target_id=str(dashboard.id),
-                                                              access_type=AccessType.DASHBOARD_WRITE)
+        write_flag = await self.login_user.async_access_check(
+            dashboard.user_id, target_id=str(dashboard.id), access_type=AccessType.DASHBOARD_WRITE
+        )
         read_flag = write_flag or await self.login_user.async_access_check(
             dashboard.user_id,
             target_id=str(dashboard.id),
@@ -454,15 +443,10 @@ class DashboardService(BaseModel):
             raise UnAuthorizedError()
 
         if uses_realtime and not self._can_operate_dashboards():
-            if (
-                dashboard.status != DashboardStatus.PUBLISHED.value
-                or not await self._is_department_admin()
-            ):
+            if dashboard.status != DashboardStatus.PUBLISHED.value or not await self._is_department_admin():
                 raise UnAuthorizedError()
         result = DashboardRead.model_validate(dashboard)
-        result.write = write_flag and (
-            self._can_operate_dashboards() or not uses_realtime
-        )
+        result.write = write_flag and (self._can_operate_dashboards() or not uses_realtime)
         default_dashboard = await DashboardDao.get_default_dashboard(user_id=self.login_user.user_id)
         if default_dashboard and default_dashboard.dashboard_id == result.id:
             result.is_default = True
@@ -480,12 +464,14 @@ class DashboardService(BaseModel):
         if not dashboard:
             raise NotFoundError()
         await self._ensure_realtime_dashboard_write(dashboard_id)
-        if not await self.login_user.async_access_check(dashboard.user_id, target_id=str(dashboard.id),
-                                                        access_type=AccessType.DASHBOARD):
+        if not await self.login_user.async_access_check(
+            dashboard.user_id, target_id=str(dashboard.id), access_type=AccessType.DASHBOARD
+        ):
             raise UnAuthorizedError()
 
         user_total = await DashboardDao.count_dashboards(
-            dashboard_type=[DashboardType.PRESET_COMMERCIAL, DashboardType.CUSTOM])
+            dashboard_type=[DashboardType.PRESET_COMMERCIAL, DashboardType.CUSTOM]
+        )
         if user_total >= 20:
             raise DashboardMaxError()
 
@@ -510,7 +496,7 @@ class DashboardService(BaseModel):
 
         # update filter components data config
         for one in new_components:
-            if one.type in {'query', 'dimension-filter'}:
+            if one.type in {"query", "dimension-filter"}:
                 linked_components = one.data_config.get("linkedComponentIds", [])
                 if linked_components:
                     new_linked_components = []
@@ -541,8 +527,9 @@ class DashboardService(BaseModel):
             dashboard.id,
             dashboard.components,
         )
-        if not await self.login_user.async_access_check(old_dashboard.user_id, target_id=str(old_dashboard.id),
-                                                        access_type=AccessType.DASHBOARD_WRITE):
+        if not await self.login_user.async_access_check(
+            old_dashboard.user_id, target_id=str(old_dashboard.id), access_type=AccessType.DASHBOARD_WRITE
+        ):
             raise UnAuthorizedError()
 
         # update dashboard basic info
@@ -564,14 +551,16 @@ class DashboardService(BaseModel):
     async def query_component_data(
         self,
         dashboard_id: int,
-        component_id: str = None,
-        component: DashboardComponent = None,
-        time_filters: List[TimeFilter] = None,
+        component_id: str | None = None,
+        component: DashboardComponent | None = None,
+        time_filters: list[TimeFilter] | None = None,
         dimension_filters=None,
     ) -> Any:
-        """ query component telemetry data """
+        """query component telemetry data"""
         _dashboard, component = await self._authorize_component_access(
-            dashboard_id, component_id, component,
+            dashboard_id,
+            component_id,
+            component,
         )
         data_config = ComponentDataConfig(**component.data_config)
         res = await DataQueryService(
@@ -585,8 +574,8 @@ class DashboardService(BaseModel):
     async def _authorize_component_access(
         self,
         dashboard_id: int,
-        component_id: str = None,
-        component: DashboardComponent = None,
+        component_id: str | None = None,
+        component: DashboardComponent | None = None,
     ) -> "tuple[Dashboard, DashboardComponent]":
         """Shared access + component-ownership check for anything that reads one
         dashboard component's telemetry data (chart query, F058 detail/all export).
@@ -594,10 +583,14 @@ class DashboardService(BaseModel):
         dashboard = await DashboardDao.get_one(dashboard_id)
         if not dashboard:
             raise NotFoundError()
-        read_flag = True if self._can_operate_dashboards() else await self.login_user.async_access_check(
-            dashboard.user_id,
-            target_id=str(dashboard.id),
-            access_type=AccessType.DASHBOARD,
+        read_flag = (
+            True
+            if self._can_operate_dashboards()
+            else await self.login_user.async_access_check(
+                dashboard.user_id,
+                target_id=str(dashboard.id),
+                access_type=AccessType.DASHBOARD,
+            )
         )
         if not read_flag:
             stored_components = await DashboardDao.get_components(dashboard_id)
@@ -610,10 +603,7 @@ class DashboardService(BaseModel):
                 raise UnAuthorizedError()
         if component_id is not None:
             component = await DashboardDao.get_one_component(component_id)
-            if (
-                not component
-                or str(component.dashboard_id) != str(dashboard_id)
-            ):
+            if not component or str(component.dashboard_id) != str(dashboard_id):
                 raise NotFoundError()
         if component is None:
             raise NotFoundError()
@@ -638,7 +628,8 @@ class DashboardService(BaseModel):
                 datasets = await dashboard_dataset_repository.find_all(is_visible=True)
             else:
                 datasets = await dashboard_dataset_repository.find_all(
-                    is_commercial_only=False, is_visible=True,
+                    is_commercial_only=False,
+                    is_visible=True,
                 )
 
         return datasets
@@ -647,12 +638,12 @@ class DashboardService(BaseModel):
         self,
         dataset_code: str,
         field: str,
-        keyword: str = None,
+        keyword: str | None = None,
         size: int = 20,
         page: int = 1,
-        label_field: str = None,
-        exact_values: str = None,
-    ) -> Dict[str, Any]:
+        label_field: str | None = None,
+        exact_values: str | None = None,
+    ) -> dict[str, Any]:
         """
         Get dataset field enum value with server-side pagination using aggregation filters
         """
@@ -668,14 +659,15 @@ class DashboardService(BaseModel):
             if dimension.get("field")
         }
         allowed_fields = set(dimension_by_field)
-        if field not in allowed_fields or (
-            label_field and label_field not in allowed_fields
-        ):
+        if field not in allowed_fields or (label_field and label_field not in allowed_fields):
             raise UnAuthorizedError()
         org_level = _org_level_for_field(field)
         if org_level is not None:
             return await self._get_org_unit_field_enums(
-                org_level=org_level, keyword=keyword, size=size, page=page,
+                org_level=org_level,
+                keyword=keyword,
+                size=size,
+                page=page,
             )
 
         label_dimension = dimension_by_field[label_field or field]
@@ -686,11 +678,7 @@ class DashboardService(BaseModel):
 
         core_aggs = {
             "enum_values": {
-                "terms": {
-                    "field": field,
-                    "size": 65536,
-                    "order": {"_key": "asc"}
-                },
+                "terms": {"field": field, "size": 65536, "order": {"_key": "asc"}},
                 "aggs": {
                     **(
                         {
@@ -705,19 +693,10 @@ class DashboardService(BaseModel):
                         if label_field
                         else {}
                     ),
-                    "pagination": {
-                        "bucket_sort": {
-                            "from": skip,
-                            "size": size
-                        }
-                    }
-                }
+                    "pagination": {"bucket_sort": {"from": skip, "size": size}},
+                },
             },
-            "total_count": {
-                "cardinality": {
-                    "field": field
-                }
-            }
+            "total_count": {"cardinality": {"field": field}},
         }
 
         current_aggs = core_aggs
@@ -731,8 +710,7 @@ class DashboardService(BaseModel):
                 matched_values = [
                     value
                     for value, label in enum_labels.items()
-                    if normalized_keyword in value.casefold()
-                    or normalized_keyword in label.casefold()
+                    if normalized_keyword in value.casefold() or normalized_keyword in label.casefold()
                 ]
                 search_filters = [text_filter]
                 if matched_values:
@@ -746,34 +724,17 @@ class DashboardService(BaseModel):
             else:
                 filter_query = text_filter
 
-            current_aggs = {
-                "filter_wrapper": {
-                    "filter": filter_query,
-                    "aggs": core_aggs
-                }
-            }
+            current_aggs = {"filter_wrapper": {"filter": filter_query, "aggs": core_aggs}}
 
         if "." in field:
-            path = field.rsplit('.', 1)[0]
-            aggs_body = {
-                "nested_agg": {
-                    "nested": {"path": path},
-                    "aggs": current_aggs
-                }
-            }
+            path = field.rsplit(".", 1)[0]
+            aggs_body = {"nested_agg": {"nested": {"path": path}, "aggs": current_aggs}}
         else:
             aggs_body = current_aggs
 
-        body = {
-            "size": 0,
-            "aggs": aggs_body
-        }
+        body = {"size": 0, "aggs": aggs_body}
         query_filters = []
-        normalized_exact_values = [
-            value.strip()
-            for value in (exact_values or "").split(",")
-            if value.strip()
-        ]
+        normalized_exact_values = [value.strip() for value in (exact_values or "").split(",") if value.strip()]
         if normalized_exact_values:
             query_filters.append({"terms": {field: normalized_exact_values}})
         if query_filters:
@@ -800,11 +761,7 @@ class DashboardService(BaseModel):
         for bucket in buckets:
             value = bucket.get("key")
             label_buckets = bucket.get("label_value", {}).get("buckets", [])
-            label = (
-                label_buckets[0].get("key")
-                if label_buckets
-                else value
-            )
+            label = label_buckets[0].get("key") if label_buckets else value
             if label_field_type == "date":
                 label = self._format_date_enum_label(label)
             else:
@@ -831,8 +788,12 @@ class DashboardService(BaseModel):
         }
 
     async def _get_org_unit_field_enums(
-        self, org_level: str, keyword: str | None, size: int, page: int,
-    ) -> Dict[str, Any]:
+        self,
+        org_level: str,
+        keyword: str | None,
+        size: int,
+        page: int,
+    ) -> dict[str, Any]:
         """F058 AC-01/AC-02/AC-03: full Department roster for one org tier, independent of
         whether the tier has any data in the current dataset's ES index."""
         roots = await DepartmentService.aget_tree(self.login_user)
@@ -860,7 +821,7 @@ class DashboardService(BaseModel):
 
         total = len(matches)
         skip = (page - 1) * size
-        page_matches = matches[skip: skip + size]
+        page_matches = matches[skip : skip + size]
 
         options = []
         for node in page_matches:

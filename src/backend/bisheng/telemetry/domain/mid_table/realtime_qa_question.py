@@ -1,9 +1,11 @@
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
 
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable, BaseRecord
 from bisheng.telemetry.domain.mid_table.content_stat_reconcile import ContentStatReconciler
+from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import resolve_organization_names
 
 QA_TYPE_LABELS = {
     "expert": "专家问答",
@@ -11,15 +13,110 @@ QA_TYPE_LABELS = {
     "document": "文档内AI对话",
 }
 
+# Asker's primary department, split by org_level on the materialized path.
+# Squad stays on primary_department_name; these three are the dashboard dimensions.
+ASKER_ORGANIZATION_FIELDS = (
+    "asker_company_name",
+    "asker_department_name",
+    "asker_office_name",
+)
+ASKER_ORG_RESOLVED = "asker_org_resolved"
+_EVENT_DEPARTMENT_FIELDS = (
+    "primary_department_id",
+    "primary_department_name",
+    "department_source",
+)
+
+
+def path_department_ids(department: Any | None) -> list[int]:
+    """Department ids on the materialized path, including the start node."""
+    if department is None:
+        return []
+    ordered: list[int] = []
+    for value in str(getattr(department, "path", None) or "").strip("/").split("/"):
+        if not value.isdigit():
+            continue
+        department_id = int(value)
+        if department_id not in ordered:
+            ordered.append(department_id)
+    start_id = getattr(department, "id", None)
+    if start_id is not None and int(start_id) not in ordered:
+        ordered.append(int(start_id))
+    return ordered
+
+
+def collect_path_department_ids(departments: Iterable[Any]) -> list[int]:
+    ordered: list[int] = []
+    seen: set[int] = set()
+    for department in departments:
+        for department_id in path_department_ids(department):
+            if department_id not in seen:
+                seen.add(department_id)
+                ordered.append(department_id)
+    return ordered
+
+
+def asker_organization_fields(
+    department: Any | None,
+    departments_by_id: Mapping[int, Any],
+) -> dict[str, str | None]:
+    """First active company, department, and office on the asker's primary path."""
+    snapshot = resolve_organization_names(department, departments_by_id)
+    return {
+        "asker_company_name": snapshot.company_name,
+        "asker_department_name": snapshot.department_name,
+        "asker_office_name": snapshot.office_name,
+    }
+
+
+def asker_organization_document(
+    department: Any | None,
+    departments_by_id: Mapping[int, Any],
+) -> dict[str, str]:
+    """Org names plus a resolved marker. Empty levels are omitted so terms aggs skip them."""
+    document = {
+        field: value for field, value in asker_organization_fields(department, departments_by_id).items() if value
+    }
+    document[ASKER_ORG_RESOLVED] = "1"
+    return document
+
+
+async def _departments_by_ids(department_ids: list[int]) -> dict[int, Any]:
+    if not department_ids:
+        return {}
+    rows = await DepartmentDao.aget_by_ids(department_ids)
+    return {int(row.id): row for row in rows if getattr(row, "id", None) is not None}
+
+
+def _same_department_id(left: Any, right: Any) -> bool:
+    if left is None or right is None:
+        return False
+    return str(left) == str(right)
+
 
 def merge_qa_document(current: dict, desired: dict) -> dict:
     result = dict(desired)
-    if current.get("department_source") == "event_time":
-        for field in ("primary_department_id", "primary_department_name", "department_source"):
-            if field in current:
-                result[field] = current[field]
-            else:
-                result.pop(field, None)
+    if current.get(ASKER_ORG_RESOLVED):
+        result[ASKER_ORG_RESOLVED] = current[ASKER_ORG_RESOLVED]
+    if current.get("department_source") != "event_time":
+        return result
+    for field in _EVENT_DEPARTMENT_FIELDS:
+        if field in current:
+            result[field] = current[field]
+        else:
+            result.pop(field, None)
+    # Repair computes org names from today's primary department. Reuse them only
+    # when that department is still the one snapshotted at question time.
+    same_department = _same_department_id(
+        current.get("primary_department_id"),
+        desired.get("primary_department_id"),
+    )
+    for field in ASKER_ORGANIZATION_FIELDS:
+        current_value = current.get(field)
+        if current_value not in (None, ""):
+            result[field] = current_value
+        elif not same_department:
+            result.pop(field, None)
     return result
 
 
@@ -32,6 +129,10 @@ class RealtimeQaQuestionRecord(BaseRecord):
     source_app: str
     primary_department_id: int | None = None
     primary_department_name: str | None = None
+    asker_company_name: str | None = None
+    asker_department_name: str | None = None
+    asker_office_name: str | None = None
+    asker_org_resolved: str | None = None
     department_source: str
     space_id: int | None = None
     file_id: int | None = None
@@ -49,6 +150,7 @@ class RealtimeQaQuestionFact(BaseMidTable):
             {record.es_id: record.model_dump(exclude={"es_id"}) for record in records}, merge_qa_document
         )
         return result
+
     _mappings: dict[str, Any] = {
         "tenant_id": {"type": "keyword"},
         "question_id": {"type": "keyword"},
@@ -64,6 +166,19 @@ class RealtimeQaQuestionFact(BaseMidTable):
             "type": "keyword",
             "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
         },
+        "asker_company_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
+        "asker_department_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
+        "asker_office_name": {
+            "type": "keyword",
+            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+        },
+        "asker_org_resolved": {"type": "keyword"},
         "department_source": {"type": "keyword"},
         "space_id": {"type": "keyword"},
         "file_id": {"type": "keyword"},
@@ -132,6 +247,10 @@ class RealtimeQaQuestionFact(BaseMidTable):
         primary_department = (
             await DepartmentDao.aget_by_id(primary_membership.department_id) if primary_membership else None
         )
+        departments_by_id = await _departments_by_ids(path_department_ids(primary_department))
+        if primary_department is not None and getattr(primary_department, "id", None) is not None:
+            departments_by_id.setdefault(int(primary_department.id), primary_department)
+        org_fields = asker_organization_document(primary_department, departments_by_id)
         now = int(datetime.now().timestamp())
         record = RealtimeQaQuestionRecord(
             es_id=f"qa_{int(tenant_id or 1)}_{qa_type}_{normalized_question_id}",
@@ -149,6 +268,10 @@ class RealtimeQaQuestionFact(BaseMidTable):
             source_app=source_app,
             primary_department_id=(int(primary_department.id) if primary_department else None),
             primary_department_name=(primary_department.name if primary_department else None),
+            asker_company_name=org_fields.get("asker_company_name"),
+            asker_department_name=org_fields.get("asker_department_name"),
+            asker_office_name=org_fields.get("asker_office_name"),
+            asker_org_resolved=org_fields.get(ASKER_ORG_RESOLVED),
             department_source="event_time",
             space_id=int(space_id) if str(space_id or "").isdigit() else None,
             file_id=int(file_id) if str(file_id or "").isdigit() else None,

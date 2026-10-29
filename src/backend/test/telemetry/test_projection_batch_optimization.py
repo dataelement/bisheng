@@ -58,10 +58,39 @@ def test_qa_repair_preserves_event_time_department():
     es = FakeES()
     es.docs["q1"] = {"question_id": "q1", "department_source": "event_time", "primary_department_id": 8}
     result = ContentStatReconciler(es, "qa", str).reconcile(
-        {"q1": {"question_id": "q1", "department_source": "current_primary_backfill", "primary_department_id": 99}},
+        {
+            "q1": {
+                "question_id": "q1",
+                "department_source": "current_primary_backfill",
+                "primary_department_id": 99,
+                "asker_department_name": "新部门",
+            }
+        },
         merge_qa_document,
     )
     assert not es.writes and result["unchanged"] == 1
+
+
+def test_qa_repair_fills_asker_org_when_primary_department_is_unchanged():
+    from bisheng.telemetry.domain.mid_table.realtime_qa_question import merge_qa_document
+
+    merged = merge_qa_document(
+        {"question_id": "q1", "department_source": "event_time", "primary_department_id": "8"},
+        {
+            "question_id": "q1",
+            "department_source": "current_primary_backfill",
+            "primary_department_id": 8,
+            "asker_company_name": "首钢股份",
+            "asker_department_name": "制造部",
+            "asker_office_name": "炼钢科",
+        },
+    )
+
+    assert merged["department_source"] == "event_time"
+    assert merged["primary_department_id"] == "8"
+    assert merged["asker_company_name"] == "首钢股份"
+    assert merged["asker_department_name"] == "制造部"
+    assert merged["asker_office_name"] == "炼钢科"
 
 
 def test_history_reuses_roster_and_merges_login_before_one_write(monkeypatch):
