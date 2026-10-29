@@ -10,6 +10,7 @@ import {
     resolvePersonDedupIndices,
 } from "@/pages/Dashboard/utils/groupCrossTabRows";
 import axios from "../request";
+import { reconcileShareRatios } from "@/pages/Dashboard/utils/controlledRounding";
 import { dimensionValueKey, documentRollupLookup } from "@/pages/Dashboard/utils/documentRollups";
 import { normalizeUserMetricLabels } from "@/pages/Dashboard/utils/userMetricLabels";
 
@@ -295,6 +296,34 @@ export function transformPivotData(
             columnTotals[index] = exactTotal(columnIndexes, path);
         });
     }
+    let grandTotal = exactTotal ? exactTotal([], []) : columnTotals.reduce((sum, value) => sum + value, 0);
+    const metric = config.metrics?.[0];
+    let shareRounded = false;
+    if (
+        metric?.fieldId === "knowledge_contribution_ratio"
+        && metric.numberFormat?.type === "percent"
+        && !truncated
+        && pivotRows.length > 0
+        && columnTotals.length > 0
+    ) {
+        const reconciled = reconcileShareRatios({
+            cells: pivotRows.map(row => row.values),
+            rowTotals: pivotRows.map(row => row.total),
+            columnTotals,
+            grandTotal,
+        }, metric.numberFormat.decimalPlaces ?? 1);
+        if (reconciled) {
+            pivotRows.forEach((row, index) => {
+                row.values = reconciled.cells[index];
+                row.total = reconciled.rowTotals[index];
+            });
+            reconciled.columnTotals.forEach((value, index) => {
+                columnTotals[index] = value;
+            });
+            grandTotal = reconciled.grandTotal;
+            shareRounded = true;
+        }
+    }
 
     // F058 AC-11: when both a person-name field (e.g. uploader_user_name) and its
     // paired department field are configured as row dimensions, merge them into one
@@ -349,16 +378,28 @@ export function transformPivotData(
     const groupDimensionIndex = resolveGroupDimensionIndex(mergedRowFieldIds, dimensionFilters);
     const groupTotals: Record<string, { values: number[], total: number }> = {};
     if (exactTotal && groupDimensionIndex !== null) {
-        const field = mergedRowFieldIds[groupDimensionIndex];
-        const rawIndex = rawRowFieldIds.indexOf(field);
-        for (const row of pivotRows) {
-            const value = row.rawKey[groupDimensionIndex];
-            groupTotals[dimensionValueKey([value])] = {
-                total: exactTotal([rawIndex], [value]),
-                values: rawColumnPaths.map(path => exactTotal(
-                    [rawIndex, ...columnIndexes], [value, ...path],
-                )),
-            };
+        if (shareRounded) {
+            for (const row of pivotRows) {
+                const key = dimensionValueKey([(row.rawKey ?? row.key)[groupDimensionIndex]]);
+                const bucket = groupTotals[key] ?? { values: row.values.map(() => 0), total: 0 };
+                row.values.forEach((value, index) => {
+                    bucket.values[index] += value;
+                });
+                bucket.total += row.total;
+                groupTotals[key] = bucket;
+            }
+        } else {
+            const field = mergedRowFieldIds[groupDimensionIndex];
+            const rawIndex = rawRowFieldIds.indexOf(field);
+            for (const row of pivotRows) {
+                const value = row.rawKey[groupDimensionIndex];
+                groupTotals[dimensionValueKey([value])] = {
+                    total: exactTotal([rawIndex], [value]),
+                    values: rawColumnPaths.map(path => exactTotal(
+                        [rawIndex, ...columnIndexes], [value, ...path],
+                    )),
+                };
+            }
         }
     }
 
@@ -376,7 +417,7 @@ export function transformPivotData(
         rows: pivotRows,
         rowLabels,
         columnTotals,
-        grandTotal: exactTotal ? exactTotal([], []) : columnTotals.reduce((sum, value) => sum + value, 0),
+        grandTotal,
         groupTotals: exactTotal ? groupTotals : undefined,
         exactDocumentTotals: Boolean(exactTotal),
         truncated,
