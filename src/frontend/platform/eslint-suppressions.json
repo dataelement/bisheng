@@ -2132,9 +2132,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/pages/KnowledgePage/components/RuleTable.tsx": {

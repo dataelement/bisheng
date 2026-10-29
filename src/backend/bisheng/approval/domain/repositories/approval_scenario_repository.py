@@ -45,10 +45,10 @@ class ApprovalScenarioRepository:
             return await session.get(ApprovalScenario, scenario_id)
 
     @classmethod
-    async def list_scenarios(cls, tenant_id: int) -> list[ApprovalScenario]:
+    async def list_scenarios(cls, tenant_id: int | None) -> list[ApprovalScenario]:
         statement = (
             select(ApprovalScenario)
-            .where(ApprovalScenario.tenant_id == tenant_id)
+            .where(True if tenant_id is None else ApprovalScenario.tenant_id == tenant_id)
             .order_by(ApprovalScenario.id.desc())
         )
         async with get_async_db_session() as session:
@@ -85,7 +85,7 @@ class ApprovalScenarioRepository:
         statement = (
             select(ApprovalRouteRule)
             .where(
-                ApprovalRouteRule.tenant_id == tenant_id,
+                True if tenant_id is None else ApprovalRouteRule.tenant_id == tenant_id,
                 ApprovalRouteRule.scenario_id == scenario_id,
             )
             .order_by(ApprovalRouteRule.sort_order.asc(), ApprovalRouteRule.id.asc())
@@ -111,7 +111,7 @@ class ApprovalScenarioRepository:
         cls, tenant_id: int, flow_definition_id: int
     ) -> list[ApprovalRouteRule]:
         statement = select(ApprovalRouteRule).where(
-            ApprovalRouteRule.tenant_id == tenant_id,
+            True if tenant_id is None else ApprovalRouteRule.tenant_id == tenant_id,
             ApprovalRouteRule.flow_definition_id == flow_definition_id,
         )
         async with get_async_db_session() as session:
@@ -145,7 +145,7 @@ class ApprovalScenarioRepository:
         statement = (
             select(ApprovalFlowDefinition)
             .where(
-                ApprovalFlowDefinition.tenant_id == tenant_id,
+                True if tenant_id is None else ApprovalFlowDefinition.tenant_id == tenant_id,
                 ApprovalFlowDefinition.scenario_id == scenario_id,
             )
             .order_by(ApprovalFlowDefinition.id.desc())
@@ -242,9 +242,7 @@ class ApprovalScenarioRepository:
 
     @classmethod
     async def delete_nodes_by_flow_version(cls, flow_version_id: int) -> None:
-        statement = select(ApprovalNodeDefinition).where(
-            ApprovalNodeDefinition.flow_version_id == flow_version_id
-        )
+        statement = select(ApprovalNodeDefinition).where(ApprovalNodeDefinition.flow_version_id == flow_version_id)
         async with get_async_db_session() as session:
             rows = list((await session.exec(statement)).all())
             for row in rows:

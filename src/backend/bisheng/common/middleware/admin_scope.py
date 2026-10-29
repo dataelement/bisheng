@@ -38,6 +38,8 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import (
     set_admin_scope_tenant_id,
     set_is_management_api,
+    set_management_all_tenants,
+    set_visible_tenant_ids,
 )
 from bisheng.utils.http_middleware import (
     _check_is_global_super,
@@ -45,20 +47,8 @@ from bisheng.utils.http_middleware import (
     _extract_http_access_token,
 )
 
-# Path prefixes considered "management APIs" for the purpose of admin-scope.
-# The list is deliberately conservative: admin-scope is a read-time filter,
-# and wrapping the whole API surface with it would change business flows
-# (chat, workflow execute, knowledge ingest) — not wanted. Adding a new
-# prefix is a small, auditable change; keep it narrow.
-#
-# v2.5.1 originally listed ``/api/v1/roles`` and ``/api/v1/audit_log`` here.
-# A product review concluded super admins don't need scope switching for
-# either: roles use a global-view + field-filter pattern, and audit logs
-# are global for super admins / naturally subtree-bounded for child admins
-# via ``visible_tenant_ids`` (CustomMiddleware). The ``/api/v1/audit_log``
-# literal was also dead code — the real router prefix is ``/api/v1/audit``,
-# so it never matched. Both prefixes were removed; scope now only affects
-# the LLM management surface (and the admin endpoints used to set it).
+# Browser management views share one scope. RPC, chat execution and internal
+# runtime callbacks retain their independently bound tenant identities.
 MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     "/api/v1/llm",
     "/api/v1/workstation",
@@ -69,11 +59,30 @@ MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     "/api/v1/admin",
     "/api/v1/service-accounts",
     "/api/v1/personal-tokens",
+    "/api/v1/workflow/list",
+    "/api/v1/workflow/get_one_flow",
+    "/api/v1/workflow/create",
+    "/api/v1/workflow/update",
+    "/api/v1/workflow/versions",
+    "/api/v1/workflow/change_version",
+    "/api/v1/workflow/status",
+    "/api/v1/workflow/write/auth",
+    "/api/v1/flows",
+    "/api/v1/assistant",
+    "/api/v1/apps",
+    "/api/v1/approval/admin",
+    "/api/v1/audit",
+    "/api/v1/app-runtime-audit",
+    "/api/v1/permissions",
+    "/api/v1/roles",
+    "/api/v1/user-groups",
+    "/api/v1/tag",
+    "/api/v1/evaluation",
 )
 
 
 def _is_management_api_path(path: str, prefixes: Iterable[str] = MANAGEMENT_API_PREFIXES) -> bool:
-    return any(path.startswith(p) for p in prefixes)
+    return any(path == p or path.startswith(p + "/") for p in prefixes)
 
 
 def _redis_key(user_id: int) -> str:
@@ -86,6 +95,8 @@ class AdminScopeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         is_mgmt = _is_management_api_path(request.url.path)
         set_is_management_api(is_mgmt)
+        set_admin_scope_tenant_id(None)
+        set_management_all_tenants(False)
 
         if not is_mgmt:
             # Business APIs are unaffected by scope (AC-07). Fast path: no
@@ -103,10 +114,14 @@ class AdminScopeMiddleware(BaseHTTPMiddleware):
         if not user_id:
             return await call_next(request)
 
+        tenant_id = int(subject.get("tenant_id", 0) or 0)
+        if tenant_id > 0:
+            # Management lists never inherit the readable root-tenant union.
+            set_visible_tenant_ids(frozenset({tenant_id}))
         try:
             is_super = await _check_is_global_super(int(user_id))
         except Exception as exc:
-            logger.debug("AdminScopeMiddleware: super check failed: %s", exc)
+            logger.debug("AdminScopeMiddleware: super check failed: {}", exc)
             return await call_next(request)
 
         if not is_super:
@@ -121,14 +136,19 @@ class AdminScopeMiddleware(BaseHTTPMiddleware):
             key = _redis_key(int(user_id))
             raw = await redis.aget(key)
         except Exception as exc:
-            logger.debug("AdminScopeMiddleware: Redis read failed: %s", exc)
+            logger.debug("AdminScopeMiddleware: Redis read failed: {}", exc)
             return await call_next(request)
 
         if raw is None:
+            set_management_all_tenants(True)
             return await call_next(request)
 
         try:
-            set_admin_scope_tenant_id(int(raw))
+            selected = int(raw)
+            if selected <= 0:
+                raise ValueError("invalid management tenant")
+            set_admin_scope_tenant_id(selected)
+            set_visible_tenant_ids(frozenset({selected}))
         except (TypeError, ValueError):
             # Corrupt value (non-numeric) — skip injection and move on.
             return await call_next(request)

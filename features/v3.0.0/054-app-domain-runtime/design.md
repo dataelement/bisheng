@@ -255,3 +255,11 @@ F054-B1 修订：宿主 unit 为规则漂移的实际消费者，先修复并配
 ### 2026-10-27 停用提示页返回应用广场
 
 “返回广场”服务于访问应用的业务用户，目标为 client 的 `/workspace/apps/explore`（ExplorePlaza），而非 platform 构建页；不假设访问者有构建权限。原默认 `/workspace` 在116命中 platform SPA 后进入404，且即使进入client首页也不是应用广场。`app_proxy.config.DEFAULT_SQUARE_URL` 与页面渲染器共享正确路由，保留 `APP_PROXY_SQUARE_URL` 供自定义前缀部署覆盖；不改认证、应用状态或可见性。定向覆盖默认/空配置回退、自定义前缀和实际停用页链接，8例通过。
+
+### 2026-10-29 管理视角及详情访问修复
+
+依据用户本次十项缺陷要求，平台管理查询使用统一 F019 视角：非超管仅本租户，超管全平台或选中租户，JWT 人员归属不变。SQL 自动过滤与 UNION 手写过滤保持一致，background tenant_execution_scope 清除全平台标记，RPC/个人审批不受管理视角影响。平台详情、实例和发布状态允许同租户 F048 `edit`，与 managed 构建列表一致；CLI/MCP、数据、密钥写入/重建和原删除规则保持各自业务限制。
+
+构建列表以已有批量用户查询投射 `owner_active`，不新增逐卡查询。托管应用删除入口同时检查 F048 grant 与原创建人业务限制：创建人有效时，其他用户包括管理员没有入口；创建人停用/移除时，管理员可沿既有清理逻辑删除。全平台视角不等于可删除其他创建人的数据。二次确认、线上不可删除和后端校验继续生效。
+
+已知坑：部署结束后 RuntimeOperation.stage 会变成 completed，仍被 serving 路由引用；仅接受 serving 会误报无法比较环境变量。运行配置只读关联现在接受合法 serving/completed 组合，并继续校验实例、路由、version、generation、owner_epoch 和密文存在；失败终态不接受。116 一次性只读进程验证旧关联失败、新关联成功，不代表线上服务已更新。

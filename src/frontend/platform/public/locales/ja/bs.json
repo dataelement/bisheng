@@ -2087,7 +2087,7 @@
   "more": "もっと見る",
   "tenant.management": "テナント管理",
   "tenant.adminScope.label": "管理ビュー",
-  "tenant.adminScope.global": "全ツリー（デフォルト）",
+  "tenant.adminScope.global": "プラットフォーム全体",
   "tenant.adminScope.switched": "管理ビューを {{name}} に切り替えました",
   "tenant.adminScope.cleared": "全ツリービューに戻しました",
   "tenant.adminScope.loading": "読み込み中...",
@@ -2854,7 +2854,7 @@
     },
     "tenantScope": {
       "label": "管理するテナント",
-      "choose": "管理するテナントを選択してください",
+      "choose": "先に右上で管理対象のテナントを選択してください",
       "hint": "サービスアカウントの表示先と作成先を選択します。既存アカウントの所属は変わりません。この選択は他の管理画面と共有されます。",
       "changed": "管理するテナントが変更されました。更新して操作を再確認してください。元のリクエストは自動的に再試行されません。",
       "refresh": "更新"

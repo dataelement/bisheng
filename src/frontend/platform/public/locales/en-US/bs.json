@@ -2137,7 +2137,7 @@
   "more": "more",
   "tenant.management": "Tenant",
   "tenant.adminScope.label": "Admin View",
-  "tenant.adminScope.global": "Full tree (default)",
+  "tenant.adminScope.global": "Entire platform",
   "tenant.adminScope.switched": "Switched admin view to {{name}}",
   "tenant.adminScope.cleared": "Restored full tree view",
   "tenant.adminScope.loading": "Loading...",
@@ -2909,7 +2909,7 @@
     },
     "tenantScope": {
       "label": "Tenant to manage",
-      "choose": "Select a tenant to manage",
+      "choose": "Select a management tenant in the top-right corner first",
       "hint": "Choose where to view and create service accounts. Existing accounts stay in their tenant. This selection is shared with other administration pages.",
       "changed": "The management tenant has changed. Refresh and confirm your action again. The original request will not be retried automatically.",
       "refresh": "Refresh"

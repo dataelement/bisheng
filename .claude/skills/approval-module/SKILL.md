@@ -438,3 +438,10 @@ cd src/backend && uv run pytest test/approval test/app_publish
 - `test/app_publish/test_publish_notification.py` —— 六类事件触达与「消息不承载操作」的发送契约
 
 > ⚠️ 2026-08-19 实测：`test/approval` 有 13 例失败，**全部是本批之前就红的既有漂移**（本地 MySQL 未起 4–5 例、fake 与被测 API 漂移 6 例、断言漂移 2 例），不是新引入的。改审批模块前先跑一次拿基线，别把既有红当成自己弄坏的。
+
+
+## 2026-10-29 管理视角与异常进度修复
+
+平台右上角复用 F019 管理视角：非超管管理查询严格限定所属租户，超管可选全平台或指定租户；不改变 JWT 的人员归属和 SDK/RPC 身份。`approval/admin` 加入共享管理查询范围。管理列表按当前视角读取，创建/更新仍携带具体租户；个人审批接口不使用管理视角。`list_scenarios` 和异常列表允许受信管理端传 `tenant_id=None` 读取全平台。
+
+异常列表进度改用 `GET /api/v1/approval/admin/instances/{instance_id}`：先 `_ensure_admin`，再 `ApprovalCenterService.get_instance_detail(management=True)` 复核选中租户和超管/该租户管理员资格；不要求管理员必须是申请人或审批任务持有人。原个人实例详情仍检查申请/任务归属；新增只读入口不授予同意/拒绝权限。API 锚点：`approval_admin.get_admin_instance_detail`。配对测试：`test/approval/test_admin_instance_progress.py` 与 `test/admin/test_management_view_filtering.py`；未改审批人来源解析和节点流转。
