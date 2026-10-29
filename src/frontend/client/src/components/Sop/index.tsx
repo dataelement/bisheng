@@ -5,6 +5,7 @@ import { useActivate } from 'react-activation';
 import { getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
 import { useLinsightManager, useLinsightSubmit } from '~/hooks/useLinsightManager';
+import { useSessionPresence } from '~/hooks/useSessionPresence';
 import { formatTime } from '~/utils';
 import { TaskModeChatInput } from '~/components/Linsight/Input/TaskModeChatInput';
 import Landing from '~/components/Chat/Landing';
@@ -13,7 +14,7 @@ import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsP
 import { LoadingIcon } from '../ui/icon/Loading';
 import { Header } from './Header';
 
-export default function index({ id = '', vid = '', shareToken = '' }) {
+export default function SopPage({ id = '', vid = '', shareToken = '' }) {
     // 获取url参数
     const { conversationId: cid, sopId: sid } = useParams();
     const conversationId = cid || id;
@@ -22,7 +23,12 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
     const sopId = conversationId ? (conversationId.match(/case(\d+)/)?.[1] || '') : sid; // Compatible with historical cases 
 
     const { loading, versionId, setVersionId, switchVersion, versions, setVersions } = useLinsightData({ conversationId, sopId, vid, shareToken });
-    const [isLoading, error] = useLinsightSubmit(versionId, setVersionId, setVersions)
+    // Department concurrency: one page lease for this task page. A share page
+    // (`vid`) only displays somebody else's task and must not take a slot.
+    const presence = useSessionPresence(conversationId === 'new' ? '' : conversationId, {
+        disabled: Boolean(shareToken || vid),
+    });
+    const [isLoading, error] = useLinsightSubmit(versionId, setVersionId, setVersions, presence.ensureLeaseId)
     const { getLinsight } = useLinsightManager()
     const artifactsPanel = useArtifactsPanel(versionId);
 

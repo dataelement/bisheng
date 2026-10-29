@@ -43,6 +43,12 @@ export interface SSESubmission {
     userMessage: ChatMessage;
     /** Optional SSE endpoint URL override. Defaults to workstation SSE URL. */
     sseUrl?: string;
+    /**
+     * Department page lease held by this session page. Sent as
+     * `X-Flow-Lease-Id` so the backend re-asserts that lease instead of taking a
+     * second execution lease for the reply.
+     */
+    flowLeaseId?: string | null;
     onCreated: (conversationId: string, userMsg: ChatMessage) => void;
     /** Legacy callback — emits an envelope string for old `:::thinking:::` UI. */
     onMessage: (text: string, messageId: string) => void;
@@ -146,7 +152,10 @@ export function openChatStream(
     const sseUrl = submission.sseUrl || getSSEUrl();
     const sse = new SSE(sseUrl, {
         payload: JSON.stringify(payload),
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            ...(submission.flowLeaseId ? { 'X-Flow-Lease-Id': submission.flowLeaseId } : {}),
+        },
     });
 
     // Watchdog: if SSE closes (server done / network drop) without firing

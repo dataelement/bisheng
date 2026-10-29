@@ -6,7 +6,7 @@ from io import BytesIO
 from typing import Literal, Union
 from urllib import parse
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Query, Request, UploadFile
 from loguru import logger
 from sse_starlette import EventSourceResponse
 from starlette.responses import StreamingResponse
@@ -29,6 +29,7 @@ from bisheng.common.errcode.linsight import (
     LinsightUseUpError,
 )
 from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloadError
+from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -37,6 +38,11 @@ from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_ten
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao
+from bisheng.department.domain.services.department_flow_service import (
+    DepartmentFlowService,
+    SlotOutcome,
+    lease_id_from_headers,
+)
 from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum
 from bisheng.linsight.domain.models.linsight_session_version import (
@@ -167,6 +173,7 @@ async def linsight_file_preview(
 # Submit an Idea User Issue Request
 @router.post("/workbench/submit", summary="Submit an Idea User Issue Request")
 async def submit_linsight_workbench(
+    request: Request,
     submit_obj: LinsightQuestionSubmitSchema = Body(..., description="Idea User Issue Submitter"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> EventSourceResponse:
@@ -201,6 +208,24 @@ async def submit_linsight_workbench(
         """
         Event generator for generatingSSE events
         """
+        # A page lease sent by the session page's heartbeat already covers this
+        # session, so only renew it here. Without one, hold an execution lease
+        # for exactly this submit call.
+        execution_lease = None
+        execution_task = None
+        page_lease_id = lease_id_from_headers(getattr(request, "headers", None))
+        if page_lease_id is not None:
+            outcome, _ = await DepartmentFlowService.ensure_lease(login_user, page_lease_id)
+            if outcome is SlotOutcome.REJECTED:
+                yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance()
+                return
+        else:
+            outcome, execution_lease = await DepartmentFlowService.ensure_lease(login_user)
+            if outcome is SlotOutcome.REJECTED:
+                yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance()
+                return
+            if outcome is SlotOutcome.HELD and execution_lease is not None:
+                execution_task = DepartmentFlowService.start_renewal(execution_lease)
         try:
             system_config = await settings.aget_all_config()
 
@@ -228,6 +253,11 @@ async def submit_linsight_workbench(
         except Exception as e:
             yield LinsightQuestionError(exception=e).to_sse_event_instance()
             return
+        finally:
+            # The lease covers the submit only — title generation below runs after
+            # the slot is handed back.
+            if execution_task is not None or execution_lease is not None:
+                await DepartmentFlowService.stop_renewal(execution_task, execution_lease)
 
         yield {"event": "linsight_workbench_submit", "data": json.dumps(response_data)}
 

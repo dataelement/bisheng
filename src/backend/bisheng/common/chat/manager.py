@@ -215,6 +215,7 @@ class ChatManager:
         graph_data: dict | None = None,
         session_subject=None,
         execution_snapshot: dict | None = None,
+        flow_lease_id: str | None = None,
     ):
         start_time = time.time()
         client_key = generate_uuid()
@@ -231,6 +232,7 @@ class ChatManager:
                 graph_data=graph_data,
                 session_subject=session_subject,
                 execution_snapshot=execution_snapshot,
+                flow_lease_id=flow_lease_id,
             )
         else:
             chat_client = WorkflowClient(
@@ -244,6 +246,7 @@ class ChatManager:
                 websocket,
                 session_subject=session_subject,
                 execution_snapshot=execution_snapshot,
+                flow_lease_id=flow_lease_id,
             )
         await self.accept_client(client_key, chat_client, websocket)
         logger.debug(f"act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}")
@@ -310,6 +313,12 @@ class ChatManager:
             except Exception as e:
                 logger.exception(e)
             self.clear_client(client_key)
+            # Department concurrency: cancel the renewal task first, then hand the
+            # slot back. Runs however the connection ended. A page lease belongs
+            # to the browser tab, so nothing is released for it.
+            from bisheng.common.chat.clients.base import release_client_execution_lease
+
+            await release_client_execution_lease(chat_client)
             if work_type == WorkType.GPTS:
                 app_info = await AssistantService.get_one_assistant(client_id)
                 app_type = ApplicationTypeEnum.ASSISTANT

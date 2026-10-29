@@ -29,6 +29,7 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
 import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
 import useAiChat from '~/hooks/useAiChat';
+import { useSessionPresence } from '~/hooks/useSessionPresence';
 import {
   moveConversationModel,
   readAdminDefaultModelId,
@@ -227,6 +228,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     localStorage.setItem(`bs:${user.id}:searchType`, searchType ?? '');
   }, [searchType, user?.id]);
 
+  // Department concurrency: one page lease per session page. Share pages are
+  // read-only views of somebody else's session and must not consume a slot.
+  const presence = useSessionPresence(conversationId === 'new' ? '' : conversationId, {
+    disabled: Boolean(shareToken),
+  });
+
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
     messages,
@@ -241,7 +248,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     sendMessage,
     stopGenerating,
     regenerate,
-  } = useAiChat(conversationId, false, shareToken);
+  } = useAiChat(conversationId, false, shareToken, presence.ensureLeaseId);
 
   // ── F028: workstation conversation export / import-to-knowledge ──
   // Auto-exit selection mode whenever the user switches to another chat.
@@ -390,7 +397,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const inviteOn = taskMode && canUseTaskMode && !!(bsConfig as { linsight_invitation_code?: boolean } | undefined)?.linsight_invitation_code;
   const { bar: inviteQuotaBar, dialog: inviteQuotaDialog, allowSend: allowInviteSend } = useTaskInviteQuota(inviteOn);
 
-  const handleSend = useCallback((text: string, files?: any[] | null) => {
+  const handleSend = useCallback(async (text: string, files?: any[] | null) => {
     // F035 Track J (TJ-6): both modes go through the SAME unified entry now.
     // Task mode is just a per-turn flag — no /linsight navigation, no separate
     // submission pipeline. The turn stays in this daily conversation; the
@@ -404,13 +411,15 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       const trimmed = text.trim();
       if (!trimmed) return;
       if (!allowInviteSend()) return;
-      sendMessage(trimmed, files, { taskMode: true });
-      setInputText('');
+      // Keep the text in the composer when the department is full (`false`), so
+      // the user can press send again once a slot frees up.
+      const sent = await sendMessage(trimmed, files, { taskMode: true });
+      if (sent !== false) setInputText('');
       return;
     }
 
-    sendMessage(text, files);
-    setInputText('');
+    const sent = await sendMessage(text, files);
+    if (sent !== false) setInputText('');
   }, [taskMode, canUseTaskMode, sendMessage, allowInviteSend]);
 
   const isNew = conversationId === 'new';

@@ -96,7 +96,17 @@ interface OutgoingAttachment {
     file_name?: string;
 }
 
-export default function useAiChat(initialConversationId: string = "new", isLingsi: boolean = false, shareToken: string = "") {
+export default function useAiChat(
+    initialConversationId: string = "new",
+    isLingsi: boolean = false,
+    shareToken: string = "",
+    /**
+     * Department page lease accessor for this session page. Returns the lease id
+     * to send (or null for pages that do not count) and whether the department
+     * is full, in which case the turn must not be sent.
+     */
+    ensureFlowLeaseId?: () => Promise<{ leaseId: string | null; blocked: boolean }>,
+) {
     const [historyError, setHistoryError] = useState<unknown>(null);
     const [historyReload, setHistoryReload] = useState(0);
     const retryHistory = () => setHistoryReload(value => value + 1);
@@ -518,8 +528,16 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     }, [setIsParsingMedia, setMessages]);
 
     const sendMessage = useCallback(
-        (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
+        async (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if ((!text.trim() && !(files?.length)) || isStreaming) return;
+            // Department concurrency (docs/部门流量控制方案.md): take/refresh this
+            // page's lease before anything is written to the message list or sent.
+            // `blocked` means the department is full — leave the composer state
+            // untouched so the user can retry once a slot frees up.
+            const presence = ensureFlowLeaseId ? await ensureFlowLeaseId() : null;
+            if (presence?.blocked) {
+                return false;
+            }
             // This turn belongs to the conversation it started in, and every
             // write below must land there even if the user walks away mid-answer.
             // Shadowing the viewed-conversation writers with turn-scoped ones is
@@ -665,6 +683,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             const submission: SSESubmission = {
                 payload,
                 userMessage,
+                flowLeaseId: presence?.leaseId ?? undefined,
                 onStart: () => {
                     console.log('[AiChat] SSE stream started');
                     setIsStreaming(true);
@@ -1111,8 +1130,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             // Lock input immediately — don't wait for SSE open event
             setIsStreaming(true);
             beginStream(turn.cid, submission);
+            return true;
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId]
     );
 
     // --- Stop generating ---
@@ -1135,8 +1155,15 @@ export default function useAiChat(initialConversationId: string = "new", isLings
 
     // --- Regenerate: add a new sibling response under the same parent ---
     const regenerate = useCallback(
-        (parentMessageId: string) => {
+        async (parentMessageId: string) => {
             if (isStreaming) return;
+            // Department concurrency: same rule as a fresh send — check before the
+            // placeholder bubble is added, so a full department leaves no stray
+            // empty answer behind.
+            const presence = ensureFlowLeaseId ? await ensureFlowLeaseId() : null;
+            if (presence?.blocked) {
+                return;
+            }
             // This turn belongs to the conversation it started in, and every
             // write below must land there even if the user walks away mid-answer.
             // Shadowing the viewed-conversation writers with turn-scoped ones is
@@ -1207,9 +1234,12 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 linsight: isLingsi,
             };
 
+            // Department concurrency: the lease was checked at the top of this
+            // callback, before any placeholder was added.
             const submission: SSESubmission = {
                 payload,
                 userMessage: parentMsg,
+                flowLeaseId: presence?.leaseId ?? undefined,
                 onStart: () => {
                     console.log("[AiChat] Regenerate SSE started");
                     setIsStreaming(true);
@@ -1299,7 +1329,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             beginStream(turn.cid, submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, localize]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, localize, ensureFlowLeaseId]
     );
 
     return {
